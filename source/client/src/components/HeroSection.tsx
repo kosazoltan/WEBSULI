@@ -29,152 +29,162 @@ export default function HeroSection({
     };
     updateCanvasSize();
 
-    // Molecule / Particle class
-    class Particle {
-      x: number;
-      y: number;
-      radius: number;
-      vx: number;
-      vy: number;
-      color: string;
+    let time = 0;
 
-      constructor(x: number, y: number) {
-        this.x = x;
-        this.y = y;
-        this.radius = Math.random() * 4 + 2;
-        this.vx = (Math.random() - 0.5) * 0.5;
-        this.vy = (Math.random() - 0.5) * 0.5;
-        // Randomly Gold or Purple
-        this.color = Math.random() > 0.5 ? 'rgba(255, 215, 0, 0.6)' : 'rgba(128, 0, 128, 0.6)';
+    // ALCHEMY GEOMETRY
+    const drawAlchemyCircle = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, time: number) => {
+      // Outer Circle
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.2)'; // Amber
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Inner Rotating Triangle
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(time * 0.5);
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * 2 * Math.PI) / 3;
+        const px = radius * Math.cos(angle);
+        const py = radius * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
       }
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.3)'; // Purple
+      ctx.stroke();
+      ctx.restore();
 
-      update() {
-        this.x += this.vx;
-        this.y += this.vy;
-
-        if (this.x < 0 || this.x > canvas!.width) this.vx *= -1;
-        if (this.y < 0 || this.y > canvas!.height) this.vy *= -1;
-      }
-
-      draw() {
-        if (!ctx) return;
-
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-      }
-    }
-
-    // Create particles
-    const particles: Particle[] = [];
-    for (let i = 0; i < 20; i++) {
-      particles.push(new Particle(
-        Math.random() * canvas.width,
-        Math.random() * canvas.height
-      ));
-    }
-
-    // Draw connections (Chemical Bonds)
-    const drawBonds = () => {
-      if (!ctx) return;
-
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance < 120) {
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-
-            const opacity = 1 - distance / 120;
-            // Gradient line from particle i color to particle j color? Simplified to goldish
-            ctx.strokeStyle = `rgba(200, 180, 50, ${opacity * 0.4})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
-        }
-      }
+      // Counter-rotating Square
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-time * 0.3);
+      const sqSize = radius * 0.7;
+      ctx.strokeRect(-sqSize / 2, -sqSize / 2, sqSize, sqSize);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.15)';
+      ctx.restore();
     };
 
-    // Animation loop
-    let animationFrameId: number;
     const animate = () => {
       if (!ctx) return;
-
       ctx.clearRect(0, 0, canvas!.width, canvas!.height);
+      time += 0.01;
 
-      drawBonds();
-      particles.forEach(p => {
-        p.update();
-        p.draw();
-      });
+      // Draw Main Central Seal
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
 
-      animationFrameId = requestAnimationFrame(animate);
+      // Layered Geometries
+      drawAlchemyCircle(ctx, cx, cy, 180, time); // Large background
+      drawAlchemyCircle(ctx, cx, cy, 120, -time * 1.5); // Medium reverse
+
+      // Floating small runes/particles
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 + time * 0.2;
+        const r = 220 + Math.sin(time * 2 + i) * 10;
+        const px = cx + Math.cos(angle) * r;
+        const py = cy + Math.sin(angle) * r;
+
+        ctx.beginPath();
+        ctx.arc(px, py, 2, 0, Math.PI * 2);
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(251, 191, 36, 0.6)' : 'rgba(168, 85, 247, 0.6)';
+        ctx.fill();
+      }
+
+      requestAnimationFrame(animate);
     };
 
-    animate();
+    const animId = requestAnimationFrame(animate);
 
     const handleResize = () => updateCanvasSize();
     window.addEventListener('resize', handleResize);
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
     };
   }, []);
 
   return (
-    // GLASSMORPHISM CONTAINER (Semi-transparent)
-    <div className="relative text-center mb-6 sm:mb-8 fold:py-6 py-8 sm:py-10 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-background/30 backdrop-blur-md shadow-xl sm:shadow-2xl overflow-hidden border border-primary/20">
+    // ENHANCED ALCHEMY CONTAINER
+    <div className="relative text-center mb-6 sm:mb-8 fold:py-6 py-8 sm:py-12 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl shadow-2xl overflow-hidden border border-purple-500/20 dark:border-purple-400/20 group">
 
-      {/* Canvas background - Local Molecule animation */}
+      {/* Background Gradient Mesh - Subtle */}
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-100/10 via-purple-500/5 to-indigo-900/10 pointer-events-none" />
+
+      {/* Hero Canvas - Alchemy Geometry */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none opacity-40"
-        style={{ width: '100%', height: '100%' }}
+        className="absolute inset-0 w-full h-full pointer-events-none opacity-60"
       />
 
+      {/* Decorative Corner Runes (CSS based) */}
+      <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-amber-500/30 rounded-tl-lg" />
+      <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-purple-500/30 rounded-tr-lg" />
+      <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-purple-500/30 rounded-bl-lg" />
+      <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-amber-500/30 rounded-br-lg" />
+
       <div className="relative z-10">
-        {/* Logo with REDUCED pulse animation (controlled by index.css) */}
-        <div className="inline-block p-3 rounded-full bg-gradient-to-br from-primary to-accent mb-4 shadow-2xl animate-pulse-glow border-4 border-white/20">
-          <Rocket className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 text-white drop-shadow-lg" />
+        {/* Logo with ALCHEMICAL SEAL HALO */}
+        <div className="relative inline-block mb-6 scale-110">
+
+          {/* Rotating Seals CSS - The 'Magic Circle' */}
+          <div className="absolute inset-0 -m-12 animate-[spin_12s_linear_infinite]">
+            <svg className="w-full h-full text-purple-500/20" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="10 5" />
+            </svg>
+          </div>
+          <div className="absolute inset-0 -m-8 animate-[spin_8s_linear_infinite_reverse]">
+            <svg className="w-full h-full text-amber-500/30" viewBox="0 0 100 100">
+              <polygon points="50,5 95,95 5,95" fill="none" stroke="currentColor" strokeWidth="1" />
+            </svg>
+          </div>
+
+          {/* Core Icon Container - The Philosopher's Stone */}
+          <div className="relative p-5 rounded-full bg-gradient-to-br from-indigo-600 via-purple-700 to-amber-600 shadow-[0_0_50px_rgba(168,85,247,0.6)] border-2 border-amber-200/50 dark:border-amber-400/30 z-10">
+            <Rocket className="w-10 h-10 xs:w-12 xs:h-12 sm:w-14 sm:h-14 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
+          </div>
+
+          {/* Mana Sparkles */}
+          <div className="absolute -top-2 -right-2 w-4 h-4 bg-amber-400 rounded-full blur-[2px] animate-pulse" />
+          <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-purple-400 rounded-full blur-[2px] animate-pulse delay-75" />
         </div>
 
-        {/* Title: Gold & Purple Gradient */}
-        <h1 className="text-xl xs:text-2xl sm:text-3xl lg:text-4xl font-extrabold mb-2 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent drop-shadow-sm">
+        {/* Title: Metallic Gold & Deep Purple Gradient */}
+        <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-black mb-3 text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-purple-700 to-amber-600 dark:from-amber-400 dark:via-purple-400 dark:to-amber-400 drop-shadow-sm tracking-tight pb-2">
           Anyagok Profiknak
         </h1>
 
         {/* Tagline */}
-        <p className="text-xs xs:text-sm text-muted-foreground font-semibold uppercase mb-4 sm:mb-6 tracking-wider opacity-90" data-testid="text-quote-inspiration">
-          „Ha arra számítasz, hogy egyszerű dolgod lesz. Tudd, igen nagyot fogsz csalódni!"
+        <p className="text-xs xs:text-sm text-muted-foreground font-bold uppercase mb-6 tracking-[0.2em] opacity-80" data-testid="text-quote-inspiration">
+          ALAPOK · TUDÁS · MESTERSÉG
         </p>
 
-        {/* Stats */}
+        {/* Stats - Tech styling */}
         {totalFiles > 0 && (
-          <div className="flex flex-col fold:gap-2 xs:flex-row xs:items-center xs:justify-center xs:gap-4 sm:gap-6 text-xs xs:text-sm mb-4 sm:mb-5">
-            <div className="flex items-center justify-center gap-1.5 xs:gap-2 bg-primary/10 px-3 py-2 rounded-full border border-primary/20">
-              <BookOpen className="w-3.5 h-3.5 xs:w-4 xs:h-4 text-primary" />
-              <span className="font-semibold text-foreground">{totalFiles} anyag</span>
+          <div className="flex flex-col fold:gap-3 xs:flex-row xs:items-center xs:justify-center xs:gap-5 sm:gap-8 text-xs xs:text-sm mb-6 sm:mb-8 font-mono">
+            <div className="flex items-center justify-center gap-2 text-purple-700 dark:text-purple-300">
+              <BookOpen className="w-4 h-4" />
+              <span className="font-bold">{totalFiles} FILE</span>
             </div>
-            <div className="flex items-center justify-center gap-1.5 xs:gap-2 bg-primary/10 px-3 py-2 rounded-full border border-primary/20">
-              <Users className="w-3.5 h-3.5 xs:w-4 xs:h-4 text-primary" />
-              <span className="font-semibold text-foreground">{totalClassrooms} osztály</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 hidden xs:block" />
+            <div className="flex items-center justify-center gap-2 text-purple-700 dark:text-purple-300">
+              <Users className="w-4 h-4" />
+              <span className="font-bold">{totalClassrooms} OSZTÁLY</span>
             </div>
-            <div className="flex items-center justify-center gap-1.5 xs:gap-2 bg-accent/10 px-3 py-2 rounded-full border border-accent/20">
-              <Sparkles className="w-3.5 h-3.5 xs:w-4 xs:h-4 text-accent" />
-              <span className="font-semibold text-foreground">Ingyenes</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 hidden xs:block" />
+            <div className="flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400">
+              <Sparkles className="w-4 h-4" />
+              <span className="font-bold">FREE ACCESS</span>
             </div>
           </div>
         )}
 
         {/* Email Subscribe Button */}
         {showEmailSubscribe && (
-          <div className="flex justify-center">
+          <div className="flex justify-center relative z-20">
             <EmailSubscribeDialog />
           </div>
         )}

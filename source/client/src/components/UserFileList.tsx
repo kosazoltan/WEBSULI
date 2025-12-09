@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
 import HeroSection from "@/components/HeroSection";
 import LikeButton from "@/components/LikeButton";
+import ScientificBackground from "@/components/ScientificBackground";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 
 interface HtmlFileApi {
@@ -46,7 +47,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
   const allClassrooms = new Set(files.map(f => f.classroom ?? 1));
   const totalClassrooms = allClassrooms.size;
   const availableClassrooms = Array.from(allClassrooms).sort((a, b) => a - b);
-  
+
   // All classrooms 0-12 for filter buttons (regardless of data presence)
   const allClassroomButtons = CLASSROOM_VALUES;
 
@@ -106,8 +107,11 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-gray-900 dark:via-orange-950 dark:to-amber-950">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-4 sm:py-6 lg:py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-amber-50/20 dark:from-gray-950 dark:via-purple-950/30 dark:to-gray-900 relative">
+      {/* Tudományos háttér animáció */}
+      <ScientificBackground />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-4 sm:py-6 lg:py-8">
         {/* Admin Toggle */}
         {onToggleView && (
           <div className="flex justify-end mb-4 sm:mb-6">
@@ -125,10 +129,10 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
         )}
 
         {/* Hero Section */}
-        <HeroSection 
-          totalFiles={totalFiles} 
-          totalClassrooms={totalClassrooms} 
-          showEmailSubscribe={true} 
+        <HeroSection
+          totalFiles={totalFiles}
+          totalClassrooms={totalClassrooms}
+          showEmailSubscribe={true}
         />
 
         {/* Classroom Filter Buttons */}
@@ -141,11 +145,10 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
               variant="outline"
               size="default"
               onClick={() => setSelectedClassroom(null)}
-              className={`text-xs xs:text-sm min-h-12 relative overflow-hidden ${
-                selectedClassroom === null
-                  ? "bg-primary text-primary-foreground border-primary shadow-lg"
-                  : "bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm hover-elevate"
-              }`}
+              className={`text-xs xs:text-sm min-h-12 relative overflow-hidden ${selectedClassroom === null
+                ? "bg-primary text-primary-foreground border-primary shadow-lg"
+                : "bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm hover-elevate"
+                }`}
               data-testid="button-filter-all"
             >
               {/* Dotted pattern sarok */}
@@ -161,11 +164,10 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
                 <Badge
                   key={classroom}
                   variant={isActive ? "default" : "outline"}
-                  className={`cursor-pointer text-xs sm:text-sm ${
-                    isActive 
-                      ? "bg-blue-900 hover:bg-blue-950 text-white border-blue-900" 
-                      : "border-blue-900 text-blue-900"
-                  } ${!hasFiles ? "opacity-50" : ""}`}
+                  className={`cursor-pointer text-xs sm:text-sm ${isActive
+                    ? "bg-blue-900 hover:bg-blue-950 text-white border-blue-900"
+                    : "border-blue-900 text-blue-900"
+                    } ${!hasFiles ? "opacity-50" : ""}`}
                   onClick={() => !hasFiles ? null : setSelectedClassroom(classroom)}
                   data-testid={`button-filter-classroom-${classroom}`}
                 >
@@ -201,30 +203,38 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
               return (
                 <Card
                   key={file.id}
-                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 hover:scale-105 bg-gradient-to-br from-white via-orange-50/30 to-amber-50/30 dark:from-gray-900 dark:via-orange-950/20 dark:to-amber-950/20 backdrop-blur-sm border-4 border-orange-400/60 hover:border-orange-500 dark:border-orange-600/60 dark:hover:border-orange-500 relative rounded-2xl shadow-lg"
+                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(147,51,234,0.15),0_10px_30px_rgba(245,158,11,0.1)] hover:-translate-y-2 hover:scale-[1.03] bg-gradient-to-br from-white/90 via-purple-50/40 to-amber-50/30 dark:from-gray-900/90 dark:via-purple-950/30 dark:to-gray-800/40 backdrop-blur-lg border-2 border-purple-200/50 hover:border-purple-400/70 dark:border-purple-800/40 dark:hover:border-purple-500/60 relative rounded-2xl shadow-lg nebula-glow"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                 >
-                  {/* Dotted pattern sarok - kártyás dizájn stílus */}
-                  <div className="absolute top-0 right-0 w-16 h-16 dotted-pattern opacity-30 pointer-events-none"></div>
-                  <div className="absolute bottom-0 left-0 w-16 h-16 dotted-pattern opacity-30 pointer-events-none"></div>
-                  
-                  <CardContent className="fold:p-3 p-4 sm:p-5">
+                  {/* Scientific shimmer effect */}
+                  <div className="absolute inset-0 scientific-shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl" />
+
+                  {/* Corner decorations - scientific grid */}
+                  <div className="absolute top-0 right-0 w-20 h-20 opacity-20 pointer-events-none">
+                    <svg className="w-full h-full text-purple-400" viewBox="0 0 80 80">
+                      <line x1="0" y1="20" x2="80" y2="20" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 4" />
+                      <line x1="20" y1="0" x2="20" y2="80" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 4" />
+                      <circle cx="20" cy="20" r="3" fill="currentColor" fillOpacity="0.5" />
+                    </svg>
+                  </div>
+
+                  <CardContent className="fold:p-3 p-4 sm:p-5 relative">
                     {/* Icon + Badge */}
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-gradient-to-br from-orange-200 via-amber-200 to-yellow-200 dark:from-orange-900/50 dark:via-amber-900/50 dark:to-yellow-900/50 group-hover:from-orange-300 group-hover:via-amber-300 group-hover:to-yellow-300 dark:group-hover:from-orange-800/70 dark:group-hover:via-amber-800/70 dark:group-hover:to-yellow-800/70 transition-colors shadow-md">
-                        <Icon className="w-7 h-7 text-orange-600 dark:text-orange-400" />
+                      <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-200 via-purple-100 to-amber-100 dark:from-purple-900/50 dark:via-purple-800/40 dark:to-amber-900/30 group-hover:from-purple-300 group-hover:via-amber-200 group-hover:to-amber-100 dark:group-hover:from-purple-700/60 dark:group-hover:via-purple-600/50 dark:group-hover:to-amber-800/40 transition-all duration-300 shadow-md group-hover:shadow-[0_0_20px_rgba(147,51,234,0.3)]">
+                        <Icon className="w-7 h-7 text-purple-600 dark:text-purple-400 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors" />
                       </div>
-                      <Badge 
+                      <Badge
                         variant="secondary"
-                        className="bg-blue-900 text-white border-blue-900 font-semibold text-xs"
+                        className="bg-gradient-to-r from-purple-700 to-purple-900 text-white border-purple-600 font-semibold text-xs shadow-md"
                       >
                         {getClassroomLabel(classroom, true)}
                       </Badge>
                     </div>
 
                     {/* Title */}
-                    <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-2 line-clamp-2 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-2 line-clamp-2 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
                       {file.title}
                     </h3>
 
@@ -236,13 +246,13 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
                     )}
 
                     {/* Like Button + Hover Indicator */}
-                    <div className="pt-3 border-t border-orange-200 dark:border-orange-800 flex items-center justify-between gap-2">
-                      <LikeButton 
-                        materialId={file.id} 
-                        className="flex-shrink-0" 
+                    <div className="pt-3 border-t border-purple-200/50 dark:border-purple-800/50 flex items-center justify-between gap-2">
+                      <LikeButton
+                        materialId={file.id}
+                        className="flex-shrink-0"
                       />
-                      <span className="text-xs text-orange-600 dark:text-orange-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                        👉 Kattints a megtekintéshez!
+                      <span className="text-xs text-purple-600 dark:text-purple-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                        ⚗️ Megtekintés
                       </span>
                     </div>
                   </CardContent>

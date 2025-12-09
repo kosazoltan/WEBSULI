@@ -4,15 +4,16 @@
 
 /* LIGHT MODE */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, .10);
+  --badge-outline: rgba(0, 0, 0, .05);
 
   /* Automatic computation of border around primary / danger buttons */
-  --opaque-button-border-intensity: -8; /* In terms of percentages */
+  --opaque-button-border-intensity: -8;
+  /* In terms of percentages */
 
   /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(0, 0, 0, .03);
+  --elevate-2: rgba(0, 0, 0, .08);
 
   /* Grey Background */
   --background: 210 10% 96%;
@@ -25,9 +26,11 @@
   --sidebar: 210 10% 94%;
   --sidebar-foreground: 220 15% 15%;
   --sidebar-border: 210 10% 85%;
-  --sidebar-primary: 270 60% 35%; /* Purple */
+  --sidebar-primary: 270 60% 35%;
+  /* Purple */
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 45 90% 50%; /* Gold */
+  --sidebar-accent: 45 90% 50%;
+  /* Gold */
   --sidebar-accent-foreground: 220 15% 15%;
   --sidebar-ring: 270 60% 35%;
   --popover: 0 0% 100%;
@@ -109,14 +112,15 @@
 }
 
 .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --button-outline: rgba(255, 255, 255, .10);
+  --badge-outline: rgba(255, 255, 255, .05);
 
-  --opaque-button-border-intensity: 9;  /* In terms of percentages */
+  --opaque-button-border-intensity: 9;
+  /* In terms of percentages */
 
   /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(255, 255, 255, .04);
+  --elevate-2: rgba(255, 255, 255, .09);
 
   /* Dark Mode Grey Background */
   --background: 220 15% 10%;
@@ -129,9 +133,11 @@
   --sidebar: 220 15% 13%;
   --sidebar-foreground: 210 10% 90%;
   --sidebar-border: 220 12% 18%;
-  --sidebar-primary: 270 50% 50%; /* Lighter Purple */
+  --sidebar-primary: 270 50% 50%;
+  /* Lighter Purple */
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 45 80% 50%; /* Gold */
+  --sidebar-accent: 45 80% 50%;
+  /* Gold */
   --sidebar-accent-foreground: 220 15% 10%;
   --sidebar-ring: 270 60% 35%;
   --popover: 220 15% 18%;
@@ -289,29 +295,85 @@
 
   /* Pontozott/halftone pattern a kártyás dizájnhoz */
   .dotted-pattern {
-    background-image: radial-gradient(circle, rgba(0,0,0,0.1) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
     background-size: 8px 8px;
   }
 
   .dotted-pattern-light {
-    background-image: radial-gradient(circle, rgba(255,255,255,0.3) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.3) 1px, transparent 1px);
     background-size: 8px 8px;
   }
 
-  /* Pulse glow animation for hero logo - Educational Constellation */
-  /* Reduced Halo Size for Pulse Glow */
+  /* Pulse glow animation for hero logo - Enhanced Scientific Halo */
   @keyframes pulse-glow {
-    0%, 100% {
+
+    0%,
+    100% {
       transform: scale(1);
-      box-shadow: 0 0 15px rgba(255, 193, 7, 0.4), 0 0 30px rgba(128, 0, 128, 0.2);
+      box-shadow:
+        0 0 30px rgba(147, 51, 234, 0.5),
+        0 0 60px rgba(245, 158, 11, 0.3),
+        0 0 90px rgba(147, 51, 234, 0.2),
+        inset 0 0 20px rgba(255, 255, 255, 0.1);
     }
+
     50% {
-      transform: scale(1.02);
-      box-shadow: 0 0 25px rgba(255, 193, 7, 0.6), 0 0 45px rgba(128, 0, 128, 0.3);
+      transform: scale(1.05);
+      box-shadow:
+        0 0 50px rgba(147, 51, 234, 0.6),
+        0 0 100px rgba(245, 158, 11, 0.4),
+        0 0 150px rgba(147, 51, 234, 0.3),
+        inset 0 0 30px rgba(255, 255, 255, 0.15);
     }
   }
 
   .animate-pulse-glow {
-    animation: pulse-glow 2s ease-in-out infinite;
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+
+  /* Scientific shimmer effect */
+  @keyframes scientific-shimmer {
+    0% {
+      background-position: -200% center;
+    }
+
+    100% {
+      background-position: 200% center;
+    }
+  }
+
+  .scientific-shimmer {
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(147, 51, 234, 0.1) 25%,
+        rgba(245, 158, 11, 0.15) 50%,
+        rgba(147, 51, 234, 0.1) 75%,
+        transparent 100%);
+    background-size: 200% 100%;
+    animation: scientific-shimmer 8s ease-in-out infinite;
+  }
+
+  /* Nebula glow for cards */
+  .nebula-glow {
+    position: relative;
+  }
+
+  .nebula-glow::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: linear-gradient(135deg,
+        rgba(147, 51, 234, 0.3) 0%,
+        rgba(245, 158, 11, 0.2) 50%,
+        rgba(147, 51, 234, 0.3) 100%);
+    z-index: -1;
+    filter: blur(8px);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .nebula-glow:hover::before {
+    opacity: 1;
   }
 }
