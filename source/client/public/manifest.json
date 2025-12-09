@@ -1,0 +1,35 @@
+{
+  "name": "Anyagok Profiknak - HTML Oktatóanyagok Platform",
+  "short_name": "Anyagok Profiknak",
+  "description": "Professzionális platform HTML oktatóanyagok feltöltésére és megosztására",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "hu",
+  "dir": "ltr",
+  "scope": "/",
+  "prefer_related_applications": false
+}

@@ -1,0 +1,8 @@
+source/node_modules/
+source/.env
+source/dist/
+source/backups/
+.DS_Store
+*.log
+.gemini/
+.agent/

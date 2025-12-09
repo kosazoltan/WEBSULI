@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Server (npm run dev)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "console": "integratedTerminal",
+            "env": {
+                "NODE_ENV": "development",
+                "PORT": "5000"
+            },
+            "serverReadyAction": {
+                "pattern": "serving on port ([0-9]+)",
+                "uriFormat": "http://localhost:%s",
+                "action": "debugWithChrome"
+            }
+        },
+        {
+            "name": "Debug Server (Direct TSX)",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/server/index.ts",
+            "runtimeArgs": [
+                "--loader",
+                "tsx"
+            ],
+            "env": {
+                "NODE_ENV": "development",
+                "PORT": "5000",
+                "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/websuli",
+                "SESSION_SECRET": "local_dev_secret"
+            },
+            "console": "integratedTerminal"
+        }
+    ]
+}
