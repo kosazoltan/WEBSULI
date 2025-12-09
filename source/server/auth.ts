@@ -6,8 +6,16 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
 
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+
 export function setupAuth(app: Express) {
     const sessionSecret = process.env.SESSION_SECRET;
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    // Determine the base URL dynamically or fallback to localhost
+    const baseUrl = process.env.BASE_URL || (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'http://localhost:5000');
+
+
     if (!sessionSecret) {
         throw new Error("SESSION_SECRET must be set");
     }
@@ -46,6 +54,57 @@ export function setupAuth(app: Express) {
             return done(err);
         }
     }));
+
+    if (googleClientId && googleClientSecret) {
+        console.log('[AUTH] Setting up Google OAuth Strategy...');
+        console.log(`[AUTH] Callback URL: ${baseUrl}/auth/google/callback`);
+
+        passport.use(new GoogleStrategy({
+            clientID: googleClientId,
+            clientSecret: googleClientSecret,
+            callbackURL: `${baseUrl}/auth/google/callback`,
+            scope: ['profile', 'email']
+        }, async (accessToken, refreshToken, profile, done) => {
+            try {
+                console.log(`[AUTH] Google login attempt for ${profile.emails?.[0]?.value}`);
+                const email = profile.emails?.[0]?.value;
+
+                if (!email) {
+                    return done(new Error("No email found in Google profile"));
+                }
+
+                // Upsert user with Google ID
+                const user = await storage.upsertUser({
+                    googleId: profile.id,
+                    email: email,
+                    firstName: profile.name?.givenName || '',
+                    lastName: profile.name?.familyName || '',
+                    profileImageUrl: profile.photos?.[0]?.value,
+                    // If the user is specifically the admin email, make them admin automatically
+                    isAdmin: email === process.env.ADMIN_EMAIL
+                });
+
+                return done(null, user);
+            } catch (err) {
+                console.error(`[AUTH] Error during Google authentication:`, err);
+                return done(err);
+            }
+        }));
+
+        // Google Auth Routes
+        app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+        app.get('/auth/google/callback',
+            passport.authenticate('google', { failureRedirect: '/login' }),
+            (req, res) => {
+                // Successful authentication, redirect home or admin
+                console.log('[AUTH] Google auth successful, redirecting...');
+                res.redirect('/admin');
+            }
+        );
+    } else {
+        console.warn('[AUTH] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing. Google Auth disabled.');
+    }
 
     passport.serializeUser((user: any, done) => {
         done(null, user.id);

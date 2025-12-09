@@ -60,13 +60,13 @@ export interface IStorage {
   createUser(email: string, hashedPassword: string, firstName?: string, lastName?: string): Promise<User>;
   updatePassword(userId: string, hashedPassword: string): Promise<void>;
   updateLastSeenAt(userId: string): Promise<void>;
-  
+
   // Admin user management operations
   getAllUsers(): Promise<User[]>;
   deleteUser(userId: string): Promise<boolean>;
   toggleUserBan(userId: string, banned: boolean): Promise<boolean>;
   toggleUserAdmin(userId: string, isAdmin: boolean): Promise<boolean>;
-  
+
   // HTML file operations
   getAllHtmlFiles(): Promise<HtmlFile[]>;
   getHtmlFile(id: string): Promise<HtmlFile | undefined>;
@@ -75,29 +75,29 @@ export interface IStorage {
   deleteHtmlFile(id: string, userId: string): Promise<boolean>;
   getNewFilesCount(userId: string): Promise<number>;
   getNewFiles(userId: string): Promise<HtmlFile[]>;
-  
+
   // Email subscription operations
   getEmailSubscription(userId: string): Promise<EmailSubscription | undefined>;
   upsertEmailSubscription(subscription: InsertEmailSubscription): Promise<EmailSubscription>;
   getActiveEmailSubscriptions(): Promise<Array<EmailSubscription & { user?: User }>>;
-  
+
   // Extra email operations
   addExtraEmail(email: string, classrooms: number[], addedBy: string | null): Promise<ExtraEmail>;
   updateExtraEmailClassrooms(id: string, classrooms: number[]): Promise<ExtraEmail | null>;
   getActiveExtraEmails(): Promise<ExtraEmail[]>;
   deleteExtraEmail(id: string): Promise<boolean>;
-  
+
   // Email log operations
   createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
   getEmailLogsByFileId(fileId: string): Promise<EmailLog[]>;
   getRecentEmailLogs(limit?: number): Promise<EmailLog[]>;
-  
+
   // AI generation request operations
   createAiGenerationRequest(request: InsertAiGenerationRequest): Promise<AiGenerationRequest>;
   updateAiGenerationRequest(id: string, updates: Partial<InsertAiGenerationRequest>): Promise<AiGenerationRequest | null>;
   getAiGenerationRequestsByUser(userId: string): Promise<AiGenerationRequest[]>;
   getRecentAiGenerationRequests(limit?: number): Promise<AiGenerationRequest[]>;
-  
+
   // Backup operations
   createBackup(name: string, createdBy: string): Promise<Backup>;
   getAllBackups(): Promise<Backup[]>;
@@ -105,20 +105,20 @@ export interface IStorage {
   deleteBackup(id: string): Promise<boolean>;
   deleteOldBackups(keepCount: number): Promise<number>;
   restoreBackup(id: string): Promise<boolean>;
-  
+
   // Material view tracking operations
   createMaterialView(view: InsertMaterialView): Promise<MaterialView>;
   getMaterialViewsByFile(materialId: string): Promise<MaterialView[]>;
   getRecentMaterialViews(limit?: number): Promise<Array<MaterialView & { user?: User; material?: HtmlFile }>>;
   getMaterialViewsCount(materialId: string): Promise<number>;
-  
+
   // Push subscription operations
   createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription>;
   deletePushSubscription(endpoint: string): Promise<boolean>;
   getPushSubscription(endpoint: string): Promise<PushSubscription | undefined>;
   getAllPushSubscriptions(): Promise<PushSubscription[]>;
   getUserPushSubscriptions(userId: string): Promise<PushSubscription[]>;
-  
+
   // Backup export operation
   exportBackupSnapshot(): Promise<{
     htmlFiles: HtmlFile[];
@@ -130,7 +130,7 @@ export interface IStorage {
     systemPrompts: any[];
     emailLogs: EmailLog[];
   }>;
-  
+
   // Backup import operation (restore from file-based backup)
   importBackupSnapshot(snapshotData: {
     htmlFiles: HtmlFile[];
@@ -142,7 +142,7 @@ export interface IStorage {
     systemPrompts?: any[];
     emailLogs?: EmailLog[];
   }): Promise<void>;
-  
+
   // Statistics operations
   getOverallStats(): Promise<{
     totalMaterials: number;
@@ -164,7 +164,7 @@ export interface IStorage {
   }>>;
   getEmailDeliveryStats(): Promise<{ sent: number; failed: number }>;
   updateMaterialStats(materialId: string): Promise<void>;
-  
+
   // Tag operations
   getAllTags(): Promise<Tag[]>;
   getTag(id: string): Promise<Tag | undefined>;
@@ -174,12 +174,15 @@ export interface IStorage {
   getMaterialTags(materialId: string): Promise<Tag[]>;
   addMaterialTag(materialId: string, tagId: string): Promise<MaterialTag>;
   removeMaterialTag(materialId: string, tagId: string): Promise<boolean>;
-  
+
   // Like operations
   addMaterialLike(materialId: string, fingerprint: string, userId?: string): Promise<MaterialLike>;
   removeMaterialLike(materialId: string, fingerprint: string): Promise<boolean>;
   getMaterialLikes(materialId: string): Promise<number>;
   hasUserLiked(materialId: string, fingerprint: string): Promise<boolean>;
+  getUserByGoogleId(googleId: string): Promise<User | null>;
+  getUserByEmail(email: string): Promise<User | null>;
+  upsertUser(user: UpsertUser): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -189,51 +192,66 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByGoogleId(googleId: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
+    return user || null;
+  }
+
   async upsertUser(userData: UpsertUser): Promise<User> {
-    // First, try to find the user by email if email is provided
-    if (userData.email) {
-      const [existingUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, userData.email));
-      
-      if (existingUser) {
-        // User exists, update it
-        const updateData: Partial<typeof users.$inferInsert> = {
-          firstName: userData.firstName,
-          lastName: userData.lastName,
-          profileImageUrl: userData.profileImageUrl,
-          updatedAt: new Date(),
-        };
-        
-        // Only update isAdmin if it's explicitly set in userData
-        if (userData.isAdmin !== undefined) {
-          updateData.isAdmin = userData.isAdmin;
-        }
-        
-        const [updatedUser] = await db
-          .update(users)
-          .set(updateData)
-          .where(eq(users.email, userData.email))
-          .returning();
-        return updatedUser;
-      }
+    // Strategy:
+    // 1. If googleId provided, try to find by googleId
+    // 2. If valid email provided, try to find by email
+    // 3. Update existing or insert new
+
+    let existingUser: User | undefined;
+
+    if (userData.googleId) {
+      [existingUser] = await db.select().from(users).where(eq(users.googleId, userData.googleId));
     }
-    
+
+    if (!existingUser && userData.email) {
+      [existingUser] = await db.select().from(users).where(eq(users.email, userData.email));
+    }
+
+    if (existingUser) {
+      // User exists, update it
+      const updateData: Partial<typeof users.$inferInsert> = {
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        profileImageUrl: userData.profileImageUrl,
+        updatedAt: new Date(),
+      };
+
+      // If linking Google Account to existing email account
+      if (userData.googleId && !existingUser.googleId) {
+        updateData.googleId = userData.googleId;
+      }
+
+      // Only update isAdmin if it's explicitly set in userData
+      if (userData.isAdmin !== undefined) {
+        updateData.isAdmin = userData.isAdmin;
+      }
+
+      const [updatedUser] = await db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, existingUser.id))
+        .returning();
+      return updatedUser;
+    }
+
     // If no existing user, insert new one
     const [user] = await db
       .insert(users)
       .values(userData)
       .onConflictDoUpdate({
-        target: users.id,
+        target: users.id, // Fallback, though logic above handles most cases
         set: {
           firstName: userData.firstName,
           lastName: userData.lastName,
           profileImageUrl: userData.profileImageUrl,
-          // Only update isAdmin if it's explicitly set
-          ...(userData.isAdmin !== undefined && { isAdmin: userData.isAdmin }),
           updatedAt: new Date(),
-        },
+        }
       })
       .returning();
     return user;
@@ -276,7 +294,7 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(users.id, userId));
   }
-  
+
   // Admin user management operations
   async getAllUsers(): Promise<User[]> {
     return await db
@@ -284,7 +302,7 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .orderBy(desc(users.createdAt));
   }
-  
+
   async deleteUser(userId: string): Promise<boolean> {
     const result = await db
       .delete(users)
@@ -292,11 +310,11 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result.length > 0;
   }
-  
+
   async toggleUserBan(userId: string, banned: boolean): Promise<boolean> {
     const result = await db
       .update(users)
-      .set({ 
+      .set({
         isBanned: banned,
         updatedAt: new Date()
       })
@@ -304,11 +322,11 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result.length > 0;
   }
-  
+
   async toggleUserAdmin(userId: string, isAdmin: boolean): Promise<boolean> {
     const result = await db
       .update(users)
-      .set({ 
+      .set({
         isAdmin: isAdmin,
         updatedAt: new Date()
       })
@@ -321,13 +339,25 @@ export class DatabaseStorage implements IStorage {
   async getAllHtmlFiles(): Promise<HtmlFile[]> {
     // Order by displayOrder (if set), then createdAt DESC
     // displayOrder=0 means no manual order (use createdAt)
+    // OPTIMIZATION: Do NOT fetch the full 'content' (which can be 100MB+) for the list view
+    // Return empty string for content to satisfy type interface
     return await db
-      .select()
+      .select({
+        id: htmlFiles.id,
+        userId: htmlFiles.userId,
+        title: htmlFiles.title,
+        content: sql<string>`''`.as('content'), // Empty content for list view optimization
+        description: htmlFiles.description,
+        classroom: htmlFiles.classroom,
+        contentType: htmlFiles.contentType,
+        displayOrder: htmlFiles.displayOrder,
+        createdAt: htmlFiles.createdAt
+      })
       .from(htmlFiles)
       .orderBy(
         sql`CASE WHEN ${htmlFiles.displayOrder} = 0 THEN NULL ELSE ${htmlFiles.displayOrder} END ASC`,
         desc(htmlFiles.createdAt)
-      );
+      ) as Promise<HtmlFile[]>;
   }
 
   async getHtmlFile(id: string): Promise<HtmlFile | undefined> {
@@ -346,12 +376,12 @@ export class DatabaseStorage implements IStorage {
         classroom,
         userId
       });
-      
+
       const [file] = await db
         .insert(htmlFiles)
         .values({ ...insertFile, userId, classroom })
         .returning();
-      
+
       console.log('[STORAGE] File created successfully:', file.id);
       return file;
     } catch (error) {
@@ -367,13 +397,13 @@ export class DatabaseStorage implements IStorage {
     if (!file) {
       return null;
     }
-    
+
     const [updatedFile] = await db
       .update(htmlFiles)
       .set(updates)
       .where(eq(htmlFiles.id, id))
       .returning();
-    
+
     return updatedFile || null;
   }
 
@@ -384,7 +414,7 @@ export class DatabaseStorage implements IStorage {
     if (!file) {
       return false;
     }
-    
+
     const result = await db
       .delete(htmlFiles)
       .where(eq(htmlFiles.id, id))
@@ -404,7 +434,7 @@ export class DatabaseStorage implements IStorage {
       .select({ count: sql<number>`count(*)` })
       .from(htmlFiles)
       .where(gt(htmlFiles.createdAt, user.lastSeenAt));
-    
+
     return Number(result[0]?.count || 0);
   }
 
@@ -448,7 +478,7 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
-    
+
     return subscription;
   }
 
@@ -486,17 +516,17 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(users)
       .where(sql`${users.email} IS NOT NULL AND ${users.email} != ''`);
-    
+
     // Szűrjük ki a teszt és example.com címeket
-    return registeredUsers.filter(user => 
-      user.email && 
-      !user.email.includes('@example.com') && 
-      !user.email.includes('@empty.com') && 
-      !user.email.includes('@test.com') && 
+    return registeredUsers.filter(user =>
+      user.email &&
+      !user.email.includes('@example.com') &&
+      !user.email.includes('@empty.com') &&
+      !user.email.includes('@test.com') &&
       !user.email.includes('@toggle.com')
     );
   }
-  
+
   // Extra email address operations
   async addExtraEmail(email: string, classrooms: number[], addedBy: string | null): Promise<ExtraEmail> {
     // Check if email already exists
@@ -505,11 +535,11 @@ export class DatabaseStorage implements IStorage {
       .from(extraEmailAddresses)
       .where(eq(extraEmailAddresses.email, email))
       .limit(1);
-    
+
     if (existingEmail.length > 0) {
       throw new Error('duplicate key value violates unique constraint');
     }
-    
+
     const [extraEmail] = await db
       .insert(extraEmailAddresses)
       .values({
@@ -519,20 +549,20 @@ export class DatabaseStorage implements IStorage {
         isActive: true,
       })
       .returning();
-    
+
     return extraEmail;
   }
 
   async updateExtraEmailClassrooms(id: string, classrooms: number[]): Promise<ExtraEmail | null> {
     const [updated] = await db
       .update(extraEmailAddresses)
-      .set({ 
+      .set({
         classrooms,
         updatedAt: new Date()
       })
       .where(eq(extraEmailAddresses.id, id))
       .returning();
-    
+
     return updated || null;
   }
 
@@ -614,7 +644,7 @@ export class DatabaseStorage implements IStorage {
   async createBackup(name: string, createdBy: string): Promise<Backup> {
     // Get all HTML files to backup
     const allFiles = await this.getAllHtmlFiles();
-    
+
     // Create backup with all files data
     const [backup] = await db
       .insert(backups)
@@ -624,10 +654,10 @@ export class DatabaseStorage implements IStorage {
         createdBy,
       })
       .returning();
-    
+
     // Automatically delete old backups (keep only last 3)
     await this.deleteOldBackups(3);
-    
+
     return backup;
   }
 
@@ -661,20 +691,20 @@ export class DatabaseStorage implements IStorage {
       .select({ id: backups.id })
       .from(backups)
       .orderBy(desc(backups.createdAt));
-    
+
     // If we have more than keepCount, delete the old ones
     if (allBackups.length > keepCount) {
       const backupsToDelete = allBackups.slice(keepCount);
       const idsToDelete = backupsToDelete.map(b => b.id);
-      
+
       // Bulk delete instead of loop
       if (idsToDelete.length > 0) {
         await db.delete(backups).where(inArray(backups.id, idsToDelete));
       }
-      
+
       return idsToDelete.length;
     }
-    
+
     return 0;
   }
 
@@ -683,13 +713,13 @@ export class DatabaseStorage implements IStorage {
     if (!backup) {
       return false;
     }
-    
+
     // Delete all current HTML files
     await db.delete(htmlFiles);
-    
+
     // Restore files from backup - bulk insert instead of loop
     const filesToRestore = backup.data as HtmlFile[];
-    
+
     if (filesToRestore.length > 0) {
       await db.insert(htmlFiles).values(
         filesToRestore.map(file => ({
@@ -703,7 +733,7 @@ export class DatabaseStorage implements IStorage {
         }))
       );
     }
-    
+
     return true;
   }
 
@@ -733,7 +763,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(htmlFiles, eq(materialViews.materialId, htmlFiles.id))
       .orderBy(desc(materialViews.viewedAt))
       .limit(limit);
-    
+
     // Transform results to match expected return type
     return results.map(row => ({
       id: row.material_views.id,
@@ -751,7 +781,7 @@ export class DatabaseStorage implements IStorage {
       .select({ count: sql<number>`count(*)` })
       .from(materialViews)
       .where(eq(materialViews.materialId, materialId));
-    
+
     return Number(result[0]?.count || 0);
   }
 
@@ -762,7 +792,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
-    
+
     if (existing) {
       // Update existing subscription
       const [updated] = await db
@@ -775,16 +805,16 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(pushSubscriptions.endpoint, subscription.endpoint))
         .returning();
-      
+
       return updated;
     }
-    
+
     // Create new subscription
     const [newSubscription] = await db
       .insert(pushSubscriptions)
       .values(subscription)
       .returning();
-    
+
     return newSubscription;
   }
 
@@ -801,7 +831,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.endpoint, endpoint));
-    
+
     return subscription;
   }
 
@@ -827,7 +857,7 @@ export class DatabaseStorage implements IStorage {
     const [viewsCount] = await db.select({ count: sql<number>`count(*)` }).from(materialViews);
     const [likesCount] = await db.select({ count: sql<number>`count(*)` }).from(materialLikes);
     const [commentsCount] = await db.select({ count: sql<number>`count(*)` }).from(materialComments);
-    
+
     return {
       totalMaterials: Number(materialsCount?.count || 0),
       totalViews: Number(viewsCount?.count || 0),
@@ -884,12 +914,12 @@ export class DatabaseStorage implements IStorage {
       .select({ count: sql<number>`count(*)` })
       .from(emailLogs)
       .where(eq(emailLogs.status, 'sent'));
-    
+
     const [failedCount] = await db
       .select({ count: sql<number>`count(*)` })
       .from(emailLogs)
       .where(eq(emailLogs.status, 'failed'));
-    
+
     return {
       sent: Number(sentCount?.count || 0),
       failed: Number(failedCount?.count || 0),
@@ -901,7 +931,7 @@ export class DatabaseStorage implements IStorage {
     const [uniqueViewersResult] = await db.select({ count: sql<number>`count(DISTINCT user_id)` }).from(materialViews).where(eq(materialViews.materialId, materialId));
     const [likesResult] = await db.select({ count: sql<number>`count(*)` }).from(materialLikes).where(eq(materialLikes.materialId, materialId));
     const [lastViewResult] = await db.select({ viewedAt: materialViews.viewedAt }).from(materialViews).where(eq(materialViews.materialId, materialId)).orderBy(desc(materialViews.viewedAt)).limit(1);
-    
+
     await db.insert(materialStats).values({
       materialId,
       totalViews: Number(viewsResult?.count || 0),
@@ -996,25 +1026,25 @@ export class DatabaseStorage implements IStorage {
     // Fetch all data from database tables
     const htmlFilesData = await this.getAllHtmlFiles();
     const usersData = await this.getAllUsers();
-    
+
     // Fetch extra emails
     const extraEmailsData = await db.select().from(extraEmailAddresses).orderBy(desc(extraEmailAddresses.createdAt));
-    
+
     // Fetch material views
     const materialViewsData = await db.select().from(materialViews).orderBy(desc(materialViews.viewedAt));
-    
+
     // Fetch email subscriptions
     const emailSubscriptionsData = await db.select().from(emailSubscriptions);
-    
+
     // Fetch tags
     const tagsData = await this.getAllTags();
-    
+
     // Fetch system prompts
     const systemPromptsData = await db.select().from(systemPrompts).orderBy(systemPrompts.name);
-    
+
     // Fetch email logs
     const emailLogsData = await this.getRecentEmailLogs(10000); // Get all email logs
-    
+
     return {
       htmlFiles: htmlFilesData,
       users: usersData,
@@ -1058,7 +1088,7 @@ export class DatabaseStorage implements IStorage {
     // Single transaction for atomic restore
     await db.transaction(async (tx) => {
       console.log('[RESTORE] Transaction started - deleting existing data...');
-      
+
       // Delete in reverse FK dependency order
       await tx.delete(materialLikes);
       await tx.delete(materialRatings);
@@ -1078,7 +1108,7 @@ export class DatabaseStorage implements IStorage {
       await tx.delete(users);
       await tx.delete(weeklyEmailReports);
       await tx.delete(scheduledJobs);
-      
+
       console.log('[RESTORE] All tables cleared');
 
       // Insert parent tables first
