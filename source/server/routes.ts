@@ -536,18 +536,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PUBLIC endpoint - Returns user data if authenticated, null if not
   app.get('/api/auth/user', async (req: any, res) => {
     try {
-      if (!req.isAuthenticated() || !req.user?.claims) {
+      if (!req.isAuthenticated() || !req.user) {
         return res.json(null);
       }
 
       // Try to find user by email (primary lookup) since upsertUser may update
       // existing users by email without changing their ID
-      const userEmail = req.user.claims.email;
+      const userEmail = req.user.email;
       let user = await storage.getUserByEmail(userEmail);
 
       // Fallback to ID lookup if email lookup fails
       if (!user) {
-        const userId = req.user.claims.sub;
+        const userId = req.user.id;
         user = await storage.getUser(userId) || null;
       }
 
@@ -2217,7 +2217,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
 
     try {
       // Admin authentication required
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       console.log('🔵 [UPLOAD] Admin user:', userId)
 
       console.log('🔵 [UPLOAD] Starting validation...');
@@ -2364,7 +2364,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
   app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: any, res) => {
     try {
       // Admin authentication required
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       const updates: { title?: string; description?: string; classroom?: number; displayOrder?: number } = {};
 
@@ -2423,7 +2423,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
   app.post("/api/html-files/reorder", isAuthenticatedAdmin, async (req: any, res) => {
     try {
       // Admin authentication required
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       // Validate request body: array of {id, displayOrder}
       const { items } = req.body;
@@ -2467,7 +2467,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
   app.delete("/api/html-files/:id", isAuthenticatedAdmin, async (req: any, res) => {
     try {
       // Admin authentication required
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const deleted = await storage.deleteHtmlFile(req.params.id, userId);
       if (!deleted) {
         return res.status(404).json({ message: "File not found or unauthorized" });
@@ -2484,7 +2484,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
   // ADMIN-ONLY route - Send email notification for a specific material
   app.post("/api/html-files/:id/send-email", isAuthenticatedAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       const { email } = req.body;
       if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -2529,7 +2529,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
   // ADMIN-ONLY route - Get extra email addresses (PII data)
   app.get("/api/extra-emails", isAuthenticatedAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       const extraEmails = await storage.getActiveExtraEmails();
       res.json(extraEmails);
@@ -2543,7 +2543,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
   // ADMIN-ONLY route - Update extra email classrooms (PII data)
   app.patch("/api/extra-emails/:id/classrooms", isAuthenticatedAdmin, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
 
       const { classrooms } = req.body;
       if (!Array.isArray(classrooms) || classrooms.length === 0) {

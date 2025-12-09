@@ -26,6 +26,7 @@ export const insertSystemPromptSchema = createInsertSchema(systemPrompts).omit({
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  googleId: varchar("google_id").unique(),
   email: varchar("email").unique(),
   password: varchar("password"),
   firstName: varchar("first_name"),
