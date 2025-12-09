@@ -357,7 +357,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(
         sql`CASE WHEN ${htmlFiles.displayOrder} = 0 THEN NULL ELSE ${htmlFiles.displayOrder} END ASC`,
         desc(htmlFiles.createdAt)
-      ) as Promise<HtmlFile[]>;
+      ) as unknown as Promise<HtmlFile[]>;
   }
 
   async getHtmlFile(id: string): Promise<HtmlFile | undefined> {
