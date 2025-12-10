@@ -73,6 +73,9 @@ export function setupAuth(app: Express) {
                     return done(new Error("No email found in Google profile"));
                 }
 
+                // Check if user already exists to preserve their admin status
+                const existingUser = await storage.getUserByEmail(email);
+
                 // Upsert user with Google ID
                 const user = await storage.upsertUser({
                     googleId: profile.id,
@@ -80,8 +83,8 @@ export function setupAuth(app: Express) {
                     firstName: profile.name?.givenName || '',
                     lastName: profile.name?.familyName || '',
                     profileImageUrl: profile.photos?.[0]?.value,
-                    // If the user is specifically the admin email, make them admin automatically
-                    isAdmin: email === process.env.ADMIN_EMAIL
+                    // Only set isAdmin if: 1) new user AND matches ADMIN_EMAIL, or 2) existing user keeps their status
+                    isAdmin: existingUser ? existingUser.isAdmin : (email === process.env.ADMIN_EMAIL)
                 });
 
                 return done(null, user);
