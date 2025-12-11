@@ -304,6 +304,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(userId: string): Promise<boolean> {
+    // IMPORTANT: Delete or nullify all related records first to avoid foreign key constraint violations
+    // The following tables have foreign key references to users:
+    // - ai_generation_requests (user_id)
+    // - email_subscriptions (user_id)
+    // - html_files (user_id) - nullify, don't delete the files
+    // - material_views (user_id) - nullify, keep the view record
+    // - extra_email_addresses (added_by) - nullify
+    // - material_comments (user_id, approved_by) - nullify
+    // - material_likes (user_id) - nullify
+    // - material_ratings (user_id) - nullify
+    // - push_subscriptions (user_id)
+    // - scheduled_jobs (created_by) - nullify
+
+    // Delete owned records (completely remove)
+    await db.delete(aiGenerationRequests).where(eq(aiGenerationRequests.userId, userId));
+    await db.delete(emailSubscriptions).where(eq(emailSubscriptions.userId, userId));
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+
+    // Nullify references in related tables (keep records but remove user link)
+    await db.update(htmlFiles).set({ userId: null }).where(eq(htmlFiles.userId, userId));
+    await db.update(materialViews).set({ userId: null }).where(eq(materialViews.userId, userId));
+    await db.update(extraEmailAddresses).set({ addedBy: null }).where(eq(extraEmailAddresses.addedBy, userId));
+    await db.update(materialComments).set({ userId: null }).where(eq(materialComments.userId, userId));
+    await db.update(materialComments).set({ approvedBy: null }).where(eq(materialComments.approvedBy, userId));
+    await db.update(materialLikes).set({ userId: null }).where(eq(materialLikes.userId, userId));
+    await db.update(materialRatings).set({ userId: null }).where(eq(materialRatings.userId, userId));
+    await db.update(scheduledJobs).set({ createdBy: null }).where(eq(scheduledJobs.createdBy, userId));
+
+    // Now we can safely delete the user
     const result = await db
       .delete(users)
       .where(eq(users.id, userId))
@@ -415,6 +444,26 @@ export class DatabaseStorage implements IStorage {
       return false;
     }
 
+    // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
+    // The following tables have foreign key references to html_files:
+    // - email_logs (html_file_id)
+    // - material_stats (material_id)
+    // - material_tags (material_id)
+    // - material_likes (material_id)
+    // - material_ratings (material_id)
+    // - material_comments (material_id)
+    // - material_views (material_id)
+
+    // Delete in order of dependencies
+    await db.delete(emailLogs).where(eq(emailLogs.htmlFileId, id));
+    await db.delete(materialStats).where(eq(materialStats.materialId, id));
+    await db.delete(materialTags).where(eq(materialTags.materialId, id));
+    await db.delete(materialLikes).where(eq(materialLikes.materialId, id));
+    await db.delete(materialRatings).where(eq(materialRatings.materialId, id));
+    await db.delete(materialComments).where(eq(materialComments.materialId, id));
+    await db.delete(materialViews).where(eq(materialViews.materialId, id));
+
+    // Now we can safely delete the html_file
     const result = await db
       .delete(htmlFiles)
       .where(eq(htmlFiles.id, id))
@@ -714,7 +763,17 @@ export class DatabaseStorage implements IStorage {
       return false;
     }
 
-    // Delete all current HTML files
+    // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
+    // Clear all related tables before deleting html_files
+    await db.delete(emailLogs);
+    await db.delete(materialStats);
+    await db.delete(materialTags);
+    await db.delete(materialLikes);
+    await db.delete(materialRatings);
+    await db.delete(materialComments);
+    await db.delete(materialViews);
+
+    // Now we can safely delete all HTML files
     await db.delete(htmlFiles);
 
     // Restore files from backup - bulk insert instead of loop
@@ -972,6 +1031,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTag(id: string): Promise<boolean> {
+    // IMPORTANT: Delete related material_tags first to avoid foreign key constraint violations
+    await db.delete(materialTags).where(eq(materialTags.tagId, id));
+
+    // Now we can safely delete the tag
     const result = await db.delete(tags).where(eq(tags.id, id)).returning();
     return result.length > 0;
   }
