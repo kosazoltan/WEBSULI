@@ -23,6 +23,11 @@ const ALLOWED_ORIGINS = [
   'https://www.websuli.org',
   'https://websuli.vip',
   'https://www.websuli.vip',
+  // NOTE: HTTP versions needed because Nginx doesn't force HTTPS redirect
+  'http://websuli.org',
+  'http://www.websuli.org',
+  'http://websuli.vip',
+  'http://www.websuli.vip',
   // SECURITY: localhost ONLY in development
   ...(isDevelopment ? ['http://localhost:5173', 'http://localhost:5000'] : []),
   process.env.CUSTOM_DOMAIN && `https://${process.env.CUSTOM_DOMAIN}`,

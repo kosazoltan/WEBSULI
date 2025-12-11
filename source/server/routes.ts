@@ -2717,6 +2717,19 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
         return res.status(400).json({ message: "A backup fájl nem tartalmaz anyagokat" });
       }
 
+      // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
+      // Import the necessary tables
+      const { emailLogs, materialStats, materialTags, materialLikes, materialRatings, materialComments, materialViews } = await import("@shared/schema");
+
+      await db.delete(emailLogs);
+      await db.delete(materialStats);
+      await db.delete(materialTags);
+      await db.delete(materialLikes);
+      await db.delete(materialRatings);
+      await db.delete(materialComments);
+      await db.delete(materialViews);
+
+      // Now we can safely delete all html_files
       await db.delete(htmlFiles);
 
       await db.insert(htmlFiles).values(
@@ -3350,7 +3363,20 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
 
       const { materialIds } = result.data;
 
-      // Optimized: Single DB query using inArray instead of loop
+      // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
+      // Import the necessary tables first
+      const { emailLogs, materialStats, materialTags, materialLikes, materialRatings, materialComments, materialViews } = await import("@shared/schema");
+
+      // Delete related records for all materials in bulk
+      await db.delete(emailLogs).where(inArray(emailLogs.htmlFileId, materialIds));
+      await db.delete(materialStats).where(inArray(materialStats.materialId, materialIds));
+      await db.delete(materialTags).where(inArray(materialTags.materialId, materialIds));
+      await db.delete(materialLikes).where(inArray(materialLikes.materialId, materialIds));
+      await db.delete(materialRatings).where(inArray(materialRatings.materialId, materialIds));
+      await db.delete(materialComments).where(inArray(materialComments.materialId, materialIds));
+      await db.delete(materialViews).where(inArray(materialViews.materialId, materialIds));
+
+      // Now we can safely delete the html_files
       const deleteResult = await db
         .delete(htmlFiles)
         .where(inArray(htmlFiles.id, materialIds));
@@ -3365,6 +3391,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
       res.status(500).json({ message: error.message });
     }
   });
+
 
   // BULK EMAIL send - Admin only
   adminRouter.post("/materials/bulk-email", async (req, res) => {

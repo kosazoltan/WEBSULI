@@ -20,12 +20,32 @@ export function setupAuth(app: Express) {
         throw new Error("SESSION_SECRET must be set");
     }
 
+    // Determine if we're in production (HTTPS) environment
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    // Trust proxy for correct IP and protocol detection behind Nginx
+    app.set('trust proxy', 1);
+
     app.use(session({
         secret: sessionSecret,
         resave: false,
         saveUninitialized: false,
-        // Secure false to prevent redirect loops behind proxy without proper headers
-        cookie: { secure: false, maxAge: 1000 * 60 * 60 * 24 }
+        // CRITICAL: Proper cookie settings for Google OAuth
+        cookie: {
+            // SECURITY: secure=true in production (HTTPS now configured on Nginx)
+            // Nginx redirects HTTP->HTTPS so all production traffic is HTTPS
+            secure: isProduction,
+            // Session duration: 24 hours
+            maxAge: 1000 * 60 * 60 * 24,
+            // CRITICAL for Google OAuth: 'lax' allows cookie to be sent on redirect from Google
+            // 'strict' would block the cookie on the OAuth callback redirect
+            sameSite: 'lax',
+            // SECURITY: httpOnly prevents JavaScript access to session cookie
+            httpOnly: true,
+        },
+        // CRITICAL: Required when behind a reverse proxy (Nginx, Hostinger)
+        // This ensures session works correctly with X-Forwarded-Proto header
+        proxy: isProduction,
     }));
 
     app.use(passport.initialize());
@@ -154,13 +174,8 @@ export function setupAuth(app: Express) {
         });
     });
 
-    app.get("/api/auth/user", (req, res) => {
-        if (req.isAuthenticated()) {
-            res.json(req.user);
-        } else {
-            res.sendStatus(401);
-        }
-    });
+    // NOTE: /api/auth/user is now handled in routes.ts to ensure
+    // isAdmin is always fetched fresh from database (not stale session data)
 }
 
 // Middleware: Require authentication
