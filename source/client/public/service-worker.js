@@ -1,8 +1,8 @@
 // Service Worker for Web Push Notifications + PWA
 // Anyagok Profiknak Platform
-// Version: 3.0.0 - Force cache clear on every install
+// Version: 3.1.0 - Force cache clear on every install + hero gray fix
 
-const CACHE_VERSION = Date.now(); // Force new cache version on every deploy
+const CACHE_VERSION = '3.1.0-' + Date.now(); // Force new cache version on every deploy
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
