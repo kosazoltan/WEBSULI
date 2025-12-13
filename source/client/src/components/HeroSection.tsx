@@ -8,29 +8,40 @@ interface HeroSectionProps {
   showEmailSubscribe?: boolean;
 }
 
-// Animated Scientific Symbol Component
-const ScientificSymbol = ({ 
+// Cyberpunk Animated Scientific Symbol Component
+const CyberpunkSymbol = ({ 
   symbol, 
   x, 
   y, 
-  delay = 0 
+  delay = 0,
+  color = 'cyan'
 }: { 
   symbol: string; 
   x: string; 
   y: string; 
   delay?: number;
+  color?: 'cyan' | 'magenta' | 'purple';
 }) => {
+  const colorClasses = {
+    cyan: 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]',
+    magenta: 'text-pink-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]',
+    purple: 'text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]'
+  };
+
   return (
     <div 
-      className="absolute text-2xl opacity-20 animate-float"
+      className={`absolute text-2xl sm:text-3xl opacity-80 animate-cyberpunk-float ${colorClasses[color]}`}
       style={{ 
         left: x, 
         top: y,
         animationDelay: `${delay}s`,
-        animationDuration: `${3 + Math.random() * 2}s`
+        animationDuration: `${4 + Math.random() * 3}s`
       }}
     >
-      {symbol}
+      <div className="relative">
+        <div className="absolute inset-0 blur-sm opacity-50 animate-pulse">{symbol}</div>
+        <div className="relative">{symbol}</div>
+      </div>
     </div>
   );
 };
@@ -135,33 +146,50 @@ export default function HeroSection({
         else ctx.lineTo(px, py);
       }
       ctx.closePath();
-      ctx.strokeStyle = 'rgba(156, 163, 175, 0.3)'; // Gray
+      // Cyberpunk neon hexagon
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.4)'; // Cyan
       ctx.lineWidth = 2;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = 'rgba(34, 211, 238, 0.6)';
       ctx.stroke();
+      ctx.shadowBlur = 0;
 
       // Inner rotating elements
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(-time * 0.5);
       
-      // Draw electrons orbits
+      // Draw electrons orbits with cyberpunk colors
+      const orbitColors = [
+        'rgba(34, 211, 238, 0.3)', // cyan
+        'rgba(236, 72, 153, 0.3)', // magenta
+        'rgba(192, 132, 252, 0.3)' // purple
+      ];
       for (let i = 0; i < 3; i++) {
         ctx.beginPath();
         ctx.ellipse(0, 0, radius * 0.6, radius * 0.3, (i * Math.PI) / 3, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(209, 213, 219, 0.2)'; // Light gray
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = orbitColors[i];
+        ctx.lineWidth = 1.5;
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = orbitColors[i];
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }
       ctx.restore();
 
-      // Nucleus
+      // Nucleus with cyberpunk glow
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(229, 231, 235, 0.8)'; // Light gray
+      ctx.fillStyle = 'rgba(34, 211, 238, 0.9)'; // Cyan
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(34, 211, 238, 1)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(156, 163, 175, 0.6)';
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.8)'; // Purple border
       ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(192, 132, 252, 1)';
       ctx.stroke();
+      ctx.shadowBlur = 0;
     };
 
     const animate = () => {
@@ -187,15 +215,19 @@ export default function HeroSection({
         if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
         if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
 
-        // Draw particle
+        // Draw particle with cyberpunk neon colors
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        ctx.fillStyle = i % 3 === 0 
-          ? 'rgba(156, 163, 175, 0.6)' // gray-400
-          : i % 3 === 1 
-          ? 'rgba(209, 213, 219, 0.6)' // gray-300  
-          : 'rgba(229, 231, 235, 0.6)'; // gray-200
+        const colors = [
+          'rgba(34, 211, 238, 0.8)', // cyan-400
+          'rgba(236, 72, 153, 0.8)', // pink-500
+          'rgba(192, 132, 252, 0.8)' // purple-400
+        ];
+        ctx.fillStyle = colors[i % 3];
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = colors[i % 3];
         ctx.fill();
+        ctx.shadowBlur = 0;
 
         // Draw connections between nearby particles
         particles.forEach((other, j) => {
@@ -208,9 +240,20 @@ export default function HeroSection({
             ctx.beginPath();
             ctx.moveTo(particle.x, particle.y);
             ctx.lineTo(other.x, other.y);
-            ctx.strokeStyle = `rgba(156, 163, 175, ${0.15 * (1 - distance / 120)})`;
-            ctx.lineWidth = 0.5;
+            // Cyberpunk neon connection lines
+            const colors = [
+              'rgba(34, 211, 238, ', // cyan
+              'rgba(236, 72, 153, ', // magenta
+              'rgba(192, 132, 252, ' // purple
+            ];
+            const colorIndex = (i + j) % 3;
+            const opacity = 0.3 * (1 - distance / 120);
+            ctx.strokeStyle = colors[colorIndex] + opacity + ')';
+            ctx.lineWidth = 1;
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = colors[colorIndex].replace(', ', ', 1)');
             ctx.stroke();
+            ctx.shadowBlur = 0;
           }
         });
       });
@@ -230,21 +273,29 @@ export default function HeroSection({
         const px = cx + Math.cos(angle) * r;
         const py = cy + Math.sin(angle) * r;
 
-        // Small molecular structure
+        // Small molecular structure with cyberpunk colors
         ctx.beginPath();
         ctx.arc(px, py, 4, 0, Math.PI * 2);
-        ctx.fillStyle = i % 2 === 0 
-          ? 'rgba(156, 163, 175, 0.8)' 
-          : 'rgba(209, 213, 219, 0.8)';
+        const moleculeColors = [
+          'rgba(34, 211, 238, 0.9)', // cyan
+          'rgba(236, 72, 153, 0.9)' // magenta
+        ];
+        ctx.fillStyle = moleculeColors[i % 2];
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = moleculeColors[i % 2];
         ctx.fill();
+        ctx.shadowBlur = 0;
         
-        // Connection to center
+        // Connection to center with neon glow
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(px, py);
-        ctx.strokeStyle = 'rgba(156, 163, 175, 0.1)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = `rgba(34, 211, 238, ${0.2 + Math.sin(time + i) * 0.1})`;
+        ctx.lineWidth = 1.5;
+        ctx.shadowBlur = 3;
+        ctx.shadowColor = 'rgba(34, 211, 238, 0.5)';
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }
 
       requestAnimationFrame(animate);
@@ -262,8 +313,8 @@ export default function HeroSection({
   }, []);
 
   return (
-    // GRAY CONTAINER
-    <div className="relative text-center mb-6 sm:mb-8 fold:py-8 py-12 sm:py-16 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-gray-500/30 group">
+    // GRAY CONTAINER - HALF SIZE
+    <div className="relative text-center mb-3 sm:mb-4 fold:py-4 py-6 sm:py-8 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-gray-500/30 group">
 
       {/* Gray Texture Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(156,163,175,0.1),transparent_50%)] pointer-events-none" />
@@ -280,17 +331,22 @@ export default function HeroSection({
         className="absolute inset-0 w-full h-full pointer-events-none"
       />
 
-      {/* Floating Scientific Symbols */}
-      <ScientificSymbol symbol="⚛" x="5%" y="15%" delay={0} />
-      <ScientificSymbol symbol="∑" x="92%" y="20%" delay={0.5} />
-      <ScientificSymbol symbol="∫" x="8%" y="75%" delay={1} />
-      <ScientificSymbol symbol="π" x="88%" y="80%" delay={1.5} />
-      <ScientificSymbol symbol="√" x="15%" y="45%" delay={0.8} />
-      <ScientificSymbol symbol="∞" x="85%" y="50%" delay={1.2} />
-      <ScientificSymbol symbol="α" x="10%" y="90%" delay={0.3} />
-      <ScientificSymbol symbol="β" x="90%" y="10%" delay={1.8} />
-      <ScientificSymbol symbol="Δ" x="20%" y="25%" delay={2} />
-      <ScientificSymbol symbol="Ω" x="80%" y="70%" delay={0.6} />
+      {/* Cyberpunk Floating Scientific Symbols with Neon Glow */}
+      <CyberpunkSymbol symbol="⚛" x="5%" y="15%" delay={0} color="cyan" />
+      <CyberpunkSymbol symbol="∑" x="92%" y="20%" delay={0.5} color="magenta" />
+      <CyberpunkSymbol symbol="∫" x="8%" y="75%" delay={1} color="purple" />
+      <CyberpunkSymbol symbol="π" x="88%" y="80%" delay={1.5} color="cyan" />
+      <CyberpunkSymbol symbol="√" x="15%" y="45%" delay={0.8} color="magenta" />
+      <CyberpunkSymbol symbol="∞" x="85%" y="50%" delay={1.2} color="purple" />
+      <CyberpunkSymbol symbol="α" x="10%" y="90%" delay={0.3} color="cyan" />
+      <CyberpunkSymbol symbol="β" x="90%" y="10%" delay={1.8} color="magenta" />
+      <CyberpunkSymbol symbol="Δ" x="20%" y="25%" delay={2} color="purple" />
+      <CyberpunkSymbol symbol="Ω" x="80%" y="70%" delay={0.6} color="cyan" />
+      <CyberpunkSymbol symbol="∇" x="50%" y="10%" delay={1.3} color="magenta" />
+      <CyberpunkSymbol symbol="∂" x="5%" y="50%" delay={0.7} color="purple" />
+      <CyberpunkSymbol symbol="λ" x="95%" y="60%" delay={1.6} color="cyan" />
+      <CyberpunkSymbol symbol="θ" x="12%" y="30%" delay={0.4} color="magenta" />
+      <CyberpunkSymbol symbol="σ" x="88%" y="40%" delay={1.1} color="purple" />
 
       {/* DNA Helix Decorations */}
       <div className="absolute top-4 left-4 w-16 h-16 text-gray-400 opacity-20">
@@ -307,8 +363,8 @@ export default function HeroSection({
       <div className="absolute bottom-4 right-4 w-12 h-12 border-b-2 border-r-2 border-gray-400/40 rounded-br-xl" />
 
       <div className="relative z-10">
-        {/* Scientific Icon with Atom Orbit */}
-        <div className="relative inline-flex items-center justify-center mb-8">
+        {/* Scientific Icon with Atom Orbit - Reduced margin */}
+        <div className="relative inline-flex items-center justify-center mb-4 sm:mb-6">
           
           {/* Background Glow */}
           <div className="absolute inset-0 -m-16 bg-gray-500/20 rounded-full blur-3xl animate-pulse" />
@@ -335,13 +391,13 @@ export default function HeroSection({
           </div>
         </div>
 
-        {/* Title */}
-        <h1 className="text-3xl xs:text-4xl sm:text-5xl lg:text-6xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-gray-200 via-white to-gray-200 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tight pb-2">
+        {/* Title - Reduced size */}
+        <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-black mb-2 sm:mb-3 text-transparent bg-clip-text bg-gradient-to-r from-gray-200 via-white to-gray-200 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tight pb-1">
           Anyagok Profiknak
         </h1>
 
-        {/* Tagline */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+        {/* Tagline - Reduced margin */}
+        <div className="flex items-center justify-center gap-2 mb-4 sm:mb-6">
           <div className="h-px w-12 bg-gradient-to-r from-transparent via-gray-400 to-transparent" />
           <p className="text-xs xs:text-sm text-gray-300/90 font-bold uppercase tracking-[0.3em] opacity-90 font-mono" data-testid="text-quote-inspiration">
             TUDOMÁNY · INNOVÁCIÓ · TECH
@@ -349,9 +405,9 @@ export default function HeroSection({
           <div className="h-px w-12 bg-gradient-to-r from-transparent via-gray-400 to-transparent" />
         </div>
 
-        {/* Enhanced Stats with Icons and Animations */}
+        {/* Enhanced Stats with Icons and Animations - Reduced margin */}
         {totalFiles > 0 && (
-          <div className="flex flex-col fold:gap-4 xs:flex-row xs:items-center xs:justify-center xs:gap-6 sm:gap-10 text-sm xs:text-base mb-8 sm:mb-10">
+          <div className="flex flex-col fold:gap-2 xs:flex-row xs:items-center xs:justify-center xs:gap-4 sm:gap-6 text-xs xs:text-sm mb-4 sm:mb-6">
             <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-gray-700/50 backdrop-blur-sm rounded-full border border-gray-500/30 hover:border-gray-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(156,163,175,0.3)]">
               <BookOpen className="w-5 h-5 text-gray-300 group-hover/stat:animate-bounce" />
               <span className="font-bold text-gray-200 font-mono">{totalFiles}</span>
@@ -383,24 +439,24 @@ export default function HeroSection({
           </div>
         )}
 
-        {/* Feature Highlights */}
-        <div className="grid grid-cols-1 xs:grid-cols-3 gap-4 mb-8 max-w-3xl mx-auto">
-          <div className="flex flex-col items-center gap-2 p-4 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-gray-400/50 transition-all hover:scale-105 group/feature">
-            <Rocket className="w-8 h-8 text-gray-300 group-hover/feature:translate-y-[-4px] transition-transform" />
-            <span className="text-sm font-semibold text-gray-200">Gyors Hozzáférés</span>
-            <span className="text-xs text-gray-400 text-center">Azonnal elérhető anyagok</span>
+        {/* Feature Highlights - Reduced margin and size */}
+        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6 max-w-3xl mx-auto">
+          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-cyan-400/50 transition-all hover:scale-105 group/feature">
+            <Rocket className="w-6 h-6 sm:w-7 sm:h-7 text-gray-300 group-hover/feature:text-cyan-400 group-hover/feature:translate-y-[-4px] transition-transform drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+            <span className="text-xs sm:text-sm font-semibold text-gray-200">Gyors Hozzáférés</span>
+            <span className="text-[10px] xs:text-xs text-gray-400 text-center">Azonnal elérhető</span>
           </div>
           
-          <div className="flex flex-col items-center gap-2 p-4 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-gray-400/50 transition-all hover:scale-105 group/feature">
-            <Atom className="w-8 h-8 text-gray-300 group-hover/feature:rotate-180 transition-transform duration-500" />
-            <span className="text-sm font-semibold text-gray-200">Modern Tudás</span>
-            <span className="text-xs text-gray-400 text-center">Naprakész tartalom</span>
+          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-pink-500/50 transition-all hover:scale-105 group/feature">
+            <Atom className="w-6 h-6 sm:w-7 sm:h-7 text-gray-300 group-hover/feature:text-pink-500 group-hover/feature:rotate-180 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.6)]" />
+            <span className="text-xs sm:text-sm font-semibold text-gray-200">Modern Tudás</span>
+            <span className="text-[10px] xs:text-xs text-gray-400 text-center">Naprakész tartalom</span>
           </div>
           
-          <div className="flex flex-col items-center gap-2 p-4 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-gray-400/50 transition-all hover:scale-105 group/feature">
-            <Zap className="w-8 h-8 text-gray-300 group-hover/feature:scale-125 transition-transform" />
-            <span className="text-sm font-semibold text-gray-200">Hatékony Tanulás</span>
-            <span className="text-xs text-gray-400 text-center">Optimalizált módszerek</span>
+          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-purple-400/50 transition-all hover:scale-105 group/feature">
+            <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-gray-300 group-hover/feature:text-purple-400 group-hover/feature:scale-125 transition-transform drop-shadow-[0_0_8px_rgba(192,132,252,0.6)]" />
+            <span className="text-xs sm:text-sm font-semibold text-gray-200">Hatékony Tanulás</span>
+            <span className="text-[10px] xs:text-xs text-gray-400 text-center">Optimalizált módszerek</span>
           </div>
         </div>
 
