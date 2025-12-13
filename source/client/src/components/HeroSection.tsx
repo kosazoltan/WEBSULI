@@ -35,7 +35,7 @@ const CyberpunkSymbol = ({
         left: x, 
         top: y,
         animationDelay: `${delay}s`,
-        animationDuration: `${4 + Math.random() * 3}s`
+        animationDuration: `${(4 + Math.random() * 3) / 0.3}s` // 70% slower
       }}
     >
       <div className="relative">
@@ -78,10 +78,10 @@ const AtomOrbit = ({ size = 120 }: { size?: number }) => {
       <div className="absolute inset-0 animate-spin-slow">
         <div className="absolute top-1/2 left-0 w-2 h-2 bg-gray-400 rounded-full -translate-y-1/2 shadow-[0_0_10px_rgba(156,163,175,0.6)]" />
       </div>
-      <div className="absolute inset-0 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '4s' }}>
+      <div className="absolute inset-0 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '13.33s' }}> {/* 70% slower */}
         <div className="absolute top-0 left-1/2 w-2 h-2 bg-gray-300 rounded-full -translate-x-1/2 shadow-[0_0_10px_rgba(209,213,219,0.6)]" />
       </div>
-      <div className="absolute inset-0 animate-spin-slow" style={{ animationDuration: '6s' }}>
+      <div className="absolute inset-0 animate-spin-slow" style={{ animationDuration: '20s' }}> {/* 70% slower */}
         <div className="absolute bottom-0 right-0 w-2 h-2 bg-gray-500 rounded-full shadow-[0_0_10px_rgba(107,114,128,0.6)]" />
       </div>
       <div className="absolute top-1/2 left-1/2 w-4 h-4 bg-gray-300 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_15px_rgba(209,213,219,0.8)]" />
@@ -139,7 +139,7 @@ export default function HeroSection({
       // Hexagonal molecular structure
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
-        const angle = (i * Math.PI) / 3 + time * 0.3;
+        const angle = (i * Math.PI) / 3 + time * 0.09; // 70% slower (0.3 * 0.3)
         const px = x + radius * Math.cos(angle);
         const py = y + radius * Math.sin(angle);
         if (i === 0) ctx.moveTo(px, py);
@@ -157,7 +157,7 @@ export default function HeroSection({
       // Inner rotating elements
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(-time * 0.5);
+      ctx.rotate(-time * 0.15); // 70% slower (0.5 * 0.3)
       
       // Draw electrons orbits with cyberpunk colors
       const orbitColors = [
@@ -204,7 +204,7 @@ export default function HeroSection({
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      time += 0.01;
+      time += 0.003; // 70% slower (30% speed) for smoother performance
 
       // Update and draw particles
       particles.forEach((particle, i) => {
@@ -262,14 +262,14 @@ export default function HeroSection({
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
 
-      // Multiple layered molecular structures
+      // Multiple layered molecular structures - 70% slower
       drawScientificPattern(ctx, cx, cy, 100, time);
-      drawScientificPattern(ctx, cx, cy, 60, -time * 1.3);
+      drawScientificPattern(ctx, cx, cy, 60, -time * 0.39); // 70% slower (1.3 * 0.3)
       
       // Orbiting molecules
       for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2 + time * 0.3;
-        const r = 150 + Math.sin(time * 2 + i) * 15;
+        const angle = (i / 6) * Math.PI * 2 + time * 0.09; // 70% slower (0.3 * 0.3)
+        const r = 150 + Math.sin(time * 0.6 + i) * 15; // 70% slower (2 * 0.3)
         const px = cx + Math.cos(angle) * r;
         const py = cy + Math.sin(angle) * r;
 
@@ -380,13 +380,13 @@ export default function HeroSection({
           </div>
 
           {/* Floating Science Icons */}
-          <div className="absolute -top-2 -right-2 p-2 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '3s' }}>
+          <div className="absolute -top-2 -right-2 p-2 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '10s' }}> {/* 70% slower */}
             <Atom className="w-5 h-5 text-gray-300" />
           </div>
-          <div className="absolute -bottom-2 -left-2 p-2 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}>
+          <div className="absolute -bottom-2 -left-2 p-2 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '8.33s', animationDelay: '1.67s' }}> {/* 70% slower */}
             <FlaskConical className="w-5 h-5 text-gray-300" />
           </div>
-          <div className="absolute top-0 -left-4 p-1.5 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '2.8s', animationDelay: '1s' }}>
+          <div className="absolute top-0 -left-4 p-1.5 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '9.33s', animationDelay: '3.33s' }}> {/* 70% slower */}
             <Zap className="w-4 h-4 text-gray-300" />
           </div>
         </div>

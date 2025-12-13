@@ -340,7 +340,7 @@
   }
 
   .animate-pulse-glow {
-    animation: pulse-glow 3s ease-in-out infinite;
+    animation: pulse-glow 10s ease-in-out infinite; /* 70% slower (3s / 0.3) */
   }
 
   /* Float animation for scientific symbols */
@@ -356,7 +356,7 @@
   }
 
   .animate-float {
-    animation: float 4s ease-in-out infinite;
+    animation: float 13.33s ease-in-out infinite; /* 70% slower (4s / 0.3) */
   }
 
   /* Cyberpunk float animation with glow and glitch */
@@ -384,7 +384,7 @@
   }
 
   .animate-cyberpunk-float {
-    animation: cyberpunk-float 5s ease-in-out infinite;
+    animation: cyberpunk-float 16.67s ease-in-out infinite; /* 70% slower (5s / 0.3) */
   }
 
   /* Cyberpunk glitch effect */
@@ -436,7 +436,7 @@
   }
 
   .animate-spin-slow {
-    animation: spin-slow 8s linear infinite;
+    animation: spin-slow 26.67s linear infinite; /* 70% slower (8s / 0.3) */
   }
 
   /* Scientific shimmer effect */
@@ -458,7 +458,7 @@
         rgba(147, 51, 234, 0.1) 75%,
         transparent 100%);
     background-size: 200% 100%;
-    animation: scientific-shimmer 8s ease-in-out infinite;
+    animation: scientific-shimmer 26.67s ease-in-out infinite; /* 70% slower (8s / 0.3) */
   }
 
   /* Nebula glow for cards */

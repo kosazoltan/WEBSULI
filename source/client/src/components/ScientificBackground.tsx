@@ -110,7 +110,7 @@ export function ScientificBackground() {
         size: (1.2 + Math.random() * 2) * el.size,
         baseOpacity: 0.3 + Math.random() * 0.4, // Fényesebb cyberpunk elemek
         rotation: Math.random() * 360,
-        animationDuration: 20 + Math.random() * 40, // Gyorsabb, dinamikusabb mozgás
+        animationDuration: (20 + Math.random() * 40) / 0.3, // 70% slower for smoother performance
         animationDelay: Math.random() * -50,
         colorClass,
         glowColor,
@@ -148,7 +148,7 @@ export function ScientificBackground() {
       const isGold = i % 2 === 0;
       rings.push({
         radius: baseRadius + (i * 35) + (Math.random() * 10),
-        speed: (Math.random() * 0.004 + 0.001) * (i % 2 === 0 ? 1 : -1),
+        speed: (Math.random() * 0.004 + 0.001) * 0.3 * (i % 2 === 0 ? 1 : -1), // 70% slower
         width: Math.random() < 0.3 ? 2 : 1, // Néha vastagabb
         dashArray: Math.random() > 0.5 ? [Math.random() * 20 + 5, Math.random() * 30 + 10] : [], // Szaggatott vagy sima
         // Cyberpunk neon színek
@@ -166,7 +166,7 @@ export function ScientificBackground() {
     const hexagon = {
       radius: baseRadius * 0.8,
       angle: 0,
-      speed: 0.003, // Gyorsabb rotáció
+      speed: 0.0009, // 70% slower (0.003 * 0.3) for smoother performance
       color: 'rgba(34, 211, 238, 0.3)' // Cyan neon
     };
 
@@ -214,7 +214,7 @@ export function ScientificBackground() {
       ctx.clearRect(0, 0, width, height);
 
       // Enyhe pulsálás
-      time += 0.01;
+      time += 0.003; // 70% slower (30% speed) for smoother performance
       const pulse = 1 + Math.sin(time) * 0.02;
 
       // Transzformáció középre
