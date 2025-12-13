@@ -69,11 +69,21 @@ export async function setupVite(app: Express, server: Server) {
 
 export function serveStatic(app: Express) {
   // CRITICAL: Use dist/public (build output), not server/public
-  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  // In production build, import.meta.dirname points to dist/, so we need to go to dist/public
+  // In source, import.meta.dirname points to server/, so we need to go to ../dist/public
+  // Check both paths to handle both cases
+  let distPath = path.resolve(import.meta.dirname, "public");
+  if (!fs.existsSync(distPath)) {
+    distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  }
+  if (!fs.existsSync(distPath)) {
+    // Final fallback: try relative to process.cwd()
+    distPath = path.resolve(process.cwd(), "dist", "public");
+  }
 
   if (!fs.existsSync(distPath)) {
     throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
+      `Could not find the build directory. Tried: ${path.resolve(import.meta.dirname, "public")}, ${path.resolve(import.meta.dirname, "..", "dist", "public")}, ${path.resolve(process.cwd(), "dist", "public")}`,
     );
   }
 
