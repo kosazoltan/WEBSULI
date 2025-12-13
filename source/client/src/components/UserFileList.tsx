@@ -203,10 +203,11 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
               return (
                 <Card
                   key={file.id}
-                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(34,211,238,0.3),0_10px_30px_rgba(236,72,153,0.2)] hover:-translate-y-2 hover:scale-[1.03] bg-gradient-to-br from-gray-800/90 via-gray-700/50 to-gray-800/90 dark:from-gray-900/90 dark:via-gray-800/50 dark:to-gray-900/90 backdrop-blur-lg border-2 border-cyan-400/30 hover:border-cyan-400/70 dark:border-cyan-400/40 dark:hover:border-cyan-400/80 relative rounded-2xl shadow-lg shadow-cyan-500/10 hover:shadow-cyan-500/20"
+                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(34,211,238,0.3),0_10px_30px_rgba(236,72,153,0.2)] hover:-translate-y-2 hover:scale-[1.03] backdrop-blur-lg border-2 border-cyan-400/30 hover:border-cyan-400/70 dark:border-cyan-400/40 dark:hover:border-cyan-400/80 relative rounded-2xl shadow-lg shadow-cyan-500/10 hover:shadow-cyan-500/20"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                   style={{
+                    background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(34, 211, 238, 0.15) 25%, rgba(236, 72, 153, 0.15) 50%, rgba(192, 132, 252, 0.15) 75%, rgba(31, 41, 55, 0.95) 100%)',
                     boxShadow: '0 0 20px rgba(34, 211, 238, 0.1), inset 0 0 20px rgba(34, 211, 238, 0.05)'
                   }}
                 >
