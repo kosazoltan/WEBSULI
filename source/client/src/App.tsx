@@ -5,28 +5,32 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
-import Preview from "@/pages/Preview";
-import PdfView from "@/pages/pdf-view";
-import Admin from "@/pages/admin";
-import AdminStats from "@/pages/AdminStats";
-import AdminDocumentation from "@/pages/AdminDocumentation";
 import Login from "@/pages/Login";
 import { ChemicalBackground } from "@/components/ChemicalBackground";
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
+
+// Lazy load heavy components for better code splitting
+const Preview = lazy(() => import("@/pages/Preview"));
+const PdfView = lazy(() => import("@/pages/pdf-view"));
+const Admin = lazy(() => import("@/pages/admin"));
+const AdminStats = lazy(() => import("@/pages/AdminStats"));
+const AdminDocumentation = lazy(() => import("@/pages/AdminDocumentation"));
 
 function Router() {
   // Platform is fully public - no authentication required for any page
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/preview/:id" component={Preview} />
-      <Route path="/materials/pdf/:id" component={PdfView} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/admin/stats" component={AdminStats} />
-      <Route path="/admin/help" component={AdminDocumentation} />
-      <Route path="/login" component={Login} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Betöltés...</div>}>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/preview/:id" component={Preview} />
+        <Route path="/materials/pdf/:id" component={PdfView} />
+        <Route path="/admin" component={Admin} />
+        <Route path="/admin/stats" component={AdminStats} />
+        <Route path="/admin/help" component={AdminDocumentation} />
+        <Route path="/login" component={Login} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
