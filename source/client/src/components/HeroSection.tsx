@@ -344,7 +344,7 @@ export default function HeroSection({
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="h-px w-12 bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
           <p className="text-xs xs:text-sm text-cyan-300/90 font-bold uppercase tracking-[0.3em] opacity-90 font-mono" data-testid="text-quote-inspiration">
-            TUDOMÁNY · INNOVÁCIÓ · JÖVŐ
+            TUDOMÁNY · INNOVÁCIÓ · TECH
           </p>
           <div className="h-px w-12 bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
         </div>
