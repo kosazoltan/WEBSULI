@@ -1,8 +1,8 @@
 // Service Worker for Web Push Notifications + PWA
 // Anyagok Profiknak Platform
-// Version: 3.1.0 - Force cache clear on every install + hero gray fix
+// Version: 3.2.0 - Never cache CSS/JS assets to prevent stale styles
 
-const CACHE_VERSION = '3.1.0-' + Date.now(); // Force new cache version on every deploy
+const CACHE_VERSION = '3.2.0-' + Date.now(); // Force new cache version on every deploy
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -93,13 +93,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // CRITICAL: Never cache CSS/JS files - they have hashes and should always be fresh
+  // This prevents old CSS from being served after updates
+  if (url.pathname.startsWith('/assets/') && (url.pathname.endsWith('.css') || url.pathname.endsWith('.js'))) {
+    event.respondWith(fetch(event.request)); // <-- NO CACHING for CSS/JS assets
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         // Clone the response before caching
         const responseToCache = response.clone();
         
-        // Cache successful responses
+        // Cache successful responses (but NOT CSS/JS assets - handled above)
         if (response.status === 200) {
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
