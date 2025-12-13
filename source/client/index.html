@@ -4,6 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     
+    <!-- Critical CSS to prevent FOUC (Flash of Unstyled Content) - Gray background -->
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #f3f4f6 !important; /* gray-100 - prevents yellow flash */
+        min-height: 100vh;
+      }
+      body.dark {
+        background-color: #111827 !important; /* gray-900 */
+      }
+      #root {
+        min-height: 100vh;
+        background-color: #f3f4f6; /* gray-100 */
+      }
+      body.dark #root {
+        background-color: #111827; /* gray-900 */
+      }
+    </style>
+    
     <!-- Primary Meta Tags -->
     <title>Anyagok Profiknak - HTML Oktat\u00f3anyagok Platform</title>
     <meta name="title" content="Anyagok Profiknak - HTML Oktat\u00f3anyagok Platform" />
