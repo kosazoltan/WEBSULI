@@ -53,7 +53,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
           <div className="animate-pulse">
             <div className="h-8 w-48 bg-muted rounded mx-auto mb-4"></div>
@@ -66,7 +66,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
 
   if (files.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           {/* Admin Toggle */}
           {onToggleView && (
@@ -89,7 +89,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
 
           {/* Empty State */}
           <div className="text-center py-16">
-            <Card className="max-w-md mx-auto bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+            <Card className="max-w-md mx-auto bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-2 border-cyan-400/30 shadow-lg shadow-cyan-500/10">
               <CardContent className="pt-12 pb-12">
                 <FileCode className="w-20 h-20 mx-auto mb-6 text-muted-foreground" />
                 <h3 className="text-2xl font-semibold text-foreground mb-3">
@@ -107,7 +107,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100/50 to-gray-50/30 dark:from-gray-950 dark:via-gray-900/30 dark:to-gray-900 relative">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 relative">
       {/* Tudományos háttér animáció */}
       <ScientificBackground />
 
@@ -137,7 +137,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
 
         {/* Classroom Filter Buttons */}
         <div className="mb-6 sm:mb-8">
-          <h2 className="text-base xs:text-lg font-semibold text-foreground mb-3 sm:mb-4 text-center xs:text-left">
+          <h2 className="text-base xs:text-lg font-semibold text-gray-100 mb-3 sm:mb-4 text-center xs:text-left drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">
             Válassz osztályt:
           </h2>
           <div className="flex flex-wrap gap-2 xs:gap-2.5 sm:gap-3 justify-center xs:justify-start">
@@ -146,8 +146,8 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
               size="default"
               onClick={() => setSelectedClassroom(null)}
               className={`text-xs xs:text-sm min-h-12 relative overflow-hidden ${selectedClassroom === null
-                ? "bg-primary text-primary-foreground border-primary shadow-lg"
-                : "bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm hover-elevate"
+                ? "bg-gradient-to-r from-cyan-600 to-purple-600 text-white border-cyan-400 shadow-lg shadow-cyan-500/30"
+                : "bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-cyan-400/30 hover:border-cyan-400/70 text-gray-100 hover-elevate"
                 }`}
               data-testid="button-filter-all"
             >
@@ -165,8 +165,8 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
                   key={classroom}
                   variant={isActive ? "default" : "outline"}
                   className={`cursor-pointer text-xs sm:text-sm ${isActive
-                    ? "bg-blue-900 hover:bg-blue-950 text-white border-blue-900"
-                    : "border-blue-900 text-blue-900"
+                    ? "bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white border-cyan-400 shadow-md shadow-cyan-500/30"
+                    : "border-cyan-400/50 text-cyan-400 bg-gray-800/50 hover:bg-gray-700/50"
                     } ${!hasFiles ? "opacity-50" : ""}`}
                   onClick={() => !hasFiles ? null : setSelectedClassroom(classroom)}
                   data-testid={`button-filter-classroom-${classroom}`}
@@ -188,7 +188,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
               placeholder="Keresés cím vagy leírás alapján..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 xs:pl-12 h-10 xs:h-11 sm:h-12 text-sm xs:text-base bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-2 shadow-md"
+              className="pl-10 xs:pl-12 h-10 xs:h-11 sm:h-12 text-sm xs:text-base bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-2 border-cyan-400/30 focus:border-cyan-400/70 text-gray-100 placeholder:text-gray-400 shadow-md shadow-cyan-500/10 focus:shadow-cyan-500/20"
               data-testid="input-search"
             />
           </div>
@@ -203,38 +203,53 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
               return (
                 <Card
                   key={file.id}
-                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(107,114,128,0.15),0_10px_30px_rgba(75,85,99,0.1)] hover:-translate-y-2 hover:scale-[1.03] bg-gradient-to-br from-white/90 via-gray-50/40 to-gray-50/30 dark:from-gray-900/90 dark:via-gray-800/30 dark:to-gray-800/40 backdrop-blur-lg border-2 border-gray-200/50 hover:border-gray-400/70 dark:border-gray-700/40 dark:hover:border-gray-500/60 relative rounded-2xl shadow-lg nebula-glow"
+                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(34,211,238,0.3),0_10px_30px_rgba(236,72,153,0.2)] hover:-translate-y-2 hover:scale-[1.03] bg-gradient-to-br from-gray-800/90 via-gray-700/50 to-gray-800/90 dark:from-gray-900/90 dark:via-gray-800/50 dark:to-gray-900/90 backdrop-blur-lg border-2 border-cyan-400/30 hover:border-cyan-400/70 dark:border-cyan-400/40 dark:hover:border-cyan-400/80 relative rounded-2xl shadow-lg shadow-cyan-500/10 hover:shadow-cyan-500/20"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
+                  style={{
+                    boxShadow: '0 0 20px rgba(34, 211, 238, 0.1), inset 0 0 20px rgba(34, 211, 238, 0.05)'
+                  }}
                 >
-                  {/* Scientific shimmer effect */}
-                  <div className="absolute inset-0 scientific-shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl" />
+                  {/* Cyberpunk neon shimmer effect */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl" 
+                    style={{
+                      background: 'linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.1) 25%, rgba(236, 72, 153, 0.1) 50%, rgba(192, 132, 252, 0.1) 75%, transparent 100%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'cyberpunk-shimmer 3s ease-in-out infinite'
+                    }}
+                  />
+                  
+                  {/* Cyberpunk corner accents */}
+                  <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400/50 rounded-tl-xl opacity-50 group-hover:opacity-100 group-hover:border-cyan-400 transition-opacity" />
+                  <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-pink-500/50 rounded-tr-xl opacity-50 group-hover:opacity-100 group-hover:border-pink-500 transition-opacity" />
+                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-purple-400/50 rounded-bl-xl opacity-50 group-hover:opacity-100 group-hover:border-purple-400 transition-opacity" />
+                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400/50 rounded-br-xl opacity-50 group-hover:opacity-100 group-hover:border-cyan-400 transition-opacity" />
 
-                  {/* Corner decorations - scientific grid */}
-                  <div className="absolute top-0 right-0 w-20 h-20 opacity-20 pointer-events-none">
-                    <svg className="w-full h-full text-purple-400" viewBox="0 0 80 80">
+                  {/* Cyberpunk grid decoration */}
+                  <div className="absolute top-0 right-0 w-20 h-20 opacity-30 group-hover:opacity-60 pointer-events-none transition-opacity">
+                    <svg className="w-full h-full text-cyan-400" viewBox="0 0 80 80" style={{ filter: 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.6))' }}>
                       <line x1="0" y1="20" x2="80" y2="20" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 4" />
                       <line x1="20" y1="0" x2="20" y2="80" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 4" />
-                      <circle cx="20" cy="20" r="3" fill="currentColor" fillOpacity="0.5" />
+                      <circle cx="20" cy="20" r="3" fill="currentColor" fillOpacity="0.8" />
                     </svg>
                   </div>
 
                   <CardContent className="fold:p-3 p-4 sm:p-5 relative">
                     {/* Icon + Badge */}
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-gradient-to-br from-gray-200 via-gray-100 to-gray-100 dark:from-gray-700/50 dark:via-gray-600/40 dark:to-gray-600/30 group-hover:from-gray-300 group-hover:via-gray-200 group-hover:to-gray-200 dark:group-hover:from-gray-600/60 dark:group-hover:via-gray-500/50 dark:group-hover:to-gray-500/40 transition-all duration-300 shadow-md group-hover:shadow-[0_0_20px_rgba(107,114,128,0.3)]">
-                        <Icon className="w-7 h-7 text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors" />
+                      <div className="p-3 rounded-2xl bg-gradient-to-br from-gray-700/80 via-gray-600/60 to-gray-700/80 dark:from-gray-800/80 dark:via-gray-700/60 dark:to-gray-800/80 group-hover:from-cyan-500/20 group-hover:via-pink-500/20 group-hover:to-purple-500/20 transition-all duration-300 shadow-md group-hover:shadow-[0_0_20px_rgba(34,211,238,0.4)] border border-gray-600/30 group-hover:border-cyan-400/50">
+                        <Icon className="w-7 h-7 text-gray-300 dark:text-gray-300 group-hover:text-cyan-400 dark:group-hover:text-cyan-400 transition-colors drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
                       </div>
                       <Badge
                         variant="secondary"
-                        className="bg-gradient-to-r from-purple-700 to-purple-900 text-white border-purple-600 font-semibold text-xs shadow-md"
+                        className="bg-gradient-to-r from-cyan-600 to-purple-600 text-white border-cyan-400/50 font-semibold text-xs shadow-md shadow-cyan-500/30"
                       >
                         {getClassroomLabel(classroom, true)}
                       </Badge>
                     </div>
 
                     {/* Title */}
-                    <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-2 line-clamp-2 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
+                    <h3 className="text-base font-bold text-gray-100 dark:text-gray-100 mb-2 line-clamp-2 group-hover:text-cyan-400 dark:group-hover:text-cyan-400 transition-colors drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">
                       {file.title}
                     </h3>
 
@@ -246,12 +261,12 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
                     )}
 
                     {/* Like Button + Hover Indicator */}
-                    <div className="pt-3 border-t border-purple-200/50 dark:border-purple-800/50 flex items-center justify-between gap-2">
+                    <div className="pt-3 border-t border-cyan-400/30 dark:border-cyan-400/30 group-hover:border-cyan-400/60 transition-colors flex items-center justify-between gap-2">
                       <LikeButton
                         materialId={file.id}
                         className="flex-shrink-0"
                       />
-                      <span className="text-xs text-purple-600 dark:text-purple-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                      <span className="text-xs text-cyan-400 dark:text-cyan-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">
                         ⚗️ Megtekintés
                       </span>
                     </div>
@@ -262,7 +277,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
           </div>
         ) : (
           <div className="text-center py-16">
-            <Card className="max-w-md mx-auto bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+            <Card className="max-w-md mx-auto bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-2 border-cyan-400/30 shadow-lg shadow-cyan-500/10">
               <CardContent className="pt-12 pb-12">
                 <Search className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-lg text-muted-foreground mb-2">
