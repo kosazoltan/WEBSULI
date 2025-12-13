@@ -102,8 +102,8 @@ export async function sendNewMaterialNotification(
   try {
     const gmail = await getUncachableGmailClient();
     
-    // Always use websuli.org for email notifications (PRODUCTION)
-    const baseUrl = 'https://websuli.org';
+    // Always use websuli.vip for email notifications (PRODUCTION)
+    const baseUrl = 'https://websuli.vip';
     
     // XSS Protection: Sanitize all user-generated content for email
     const safeRecipientName = sanitizeText(recipientName);
