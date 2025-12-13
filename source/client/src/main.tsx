@@ -33,17 +33,39 @@ import "./index.css";
 // Register Service Worker for PWA functionality + Push Notifications
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Register the unified service worker with cache busting
-    navigator.serviceWorker.register('/service-worker.js?v=' + Date.now(), { scope: '/' })
-      .then((registration) => {
-        console.log('[PWA] Service Worker registered:', registration.scope);
-        
-        // Force update check
-        registration.update();
-      })
-      .catch((error) => {
-        console.error('[PWA] Service Worker registration failed:', error);
+    // Unregister all existing service workers first
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((registration) => {
+        registration.unregister();
       });
+      
+      // Wait a bit, then register new one with cache busting
+      setTimeout(() => {
+        navigator.serviceWorker.register('/service-worker.js?v=3.1.0-' + Date.now(), { scope: '/' })
+          .then((registration) => {
+            console.log('[PWA] Service Worker registered:', registration.scope);
+            
+            // Force update check
+            registration.update();
+            
+            // Force reload if update available
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New service worker available, reload page
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          })
+          .catch((error) => {
+            console.error('[PWA] Service Worker registration failed:', error);
+          });
+      }, 100);
+    });
   });
 }
 
