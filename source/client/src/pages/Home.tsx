@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import Header from "@/components/Header";
 import UserFileList from "@/components/UserFileList";
@@ -17,9 +16,7 @@ interface HtmlFileApi {
 }
 
 export default function Home() {
-  const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const isMobile = useIsMobile();
   const { isAdmin } = useAuth();
 
   const { data: files = [], isLoading } = useQuery<HtmlFileApi[]>({
