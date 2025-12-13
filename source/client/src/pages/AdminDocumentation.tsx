@@ -868,7 +868,7 @@ export default function AdminDocumentation() {
         <Card className="mt-8 bg-gradient-to-r from-cyan-50 to-purple-50 dark:from-background dark:to-background">
           <CardContent className="p-6 text-center">
             <p className="text-muted-foreground mb-4">
-              További kérdések esetén lépj kapcsolatba az admin-nal vagy nézd meg a Replit dokumentációt.
+              További kérdések esetén lépj kapcsolatba az admin-nal.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Link href="/admin">
