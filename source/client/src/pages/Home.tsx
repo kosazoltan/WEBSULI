@@ -96,13 +96,17 @@ export default function Home() {
 
   const uploadMutation = useMutation({
     mutationFn: async (data: { title: string; content: string; description?: string; classroom: number }) => {
-      console.log('[UPLOAD MUTATION] Starting upload, content size:', data.content.length);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[UPLOAD MUTATION] Starting upload, content size:', data.content.length);
+      }
       const startTime = Date.now();
 
       try {
         const result = await apiRequest("POST", "/api/html-files", data);
-        const duration = Date.now() - startTime;
-        console.log('[UPLOAD MUTATION] ✅ Upload successful in', duration, 'ms');
+        if (process.env.NODE_ENV === 'development') {
+          const duration = Date.now() - startTime;
+          console.log('[UPLOAD MUTATION] ✅ Upload successful in', duration, 'ms');
+        }
         return result;
       } catch (error: any) {
         const duration = Date.now() - startTime;
@@ -111,7 +115,6 @@ export default function Home() {
       }
     },
     onSuccess: (response: any) => {
-      console.log('[UPLOAD MUTATION] onSuccess called');
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       setShowUploadZone(false);
       const classroom = response.classroom || 1;
@@ -145,26 +148,15 @@ export default function Home() {
   };
 
   const handleViewFile = (file: HtmlFileApi) => {
-    console.log('[VIEW FILE] Viewing file:', {
-      id: file.id,
-      title: file.title,
-      contentType: file.contentType,
-      hasContentType: 'contentType' in file,
-      allKeys: Object.keys(file)
-    });
-
     // PDF anyagok külön viewer oldalra mennek
     if (file.contentType === 'pdf') {
-      console.log('[VIEW FILE] Routing to PDF viewer:', `/materials/pdf/${file.id}`);
       setLocation(`/materials/pdf/${file.id}`);
     } else {
-      console.log('[VIEW FILE] Routing to preview:', `/preview/${file.id}`);
       setLocation(`/preview/${file.id}`);
     }
   };
 
   const handleUpload = (file: { title: string; content: string; description?: string; classroom: number }) => {
-    console.log('[HANDLE UPLOAD] Called with title:', file.title, 'content length:', file.content.length);
 
     // Show immediate feedback
     toast({

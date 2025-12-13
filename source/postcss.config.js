@@ -5,4 +5,5 @@ export default {
   plugins: [tailwindcss, autoprefixer],
   // Fix PostCSS warning: provide 'from' option to postcss.parse
   map: false, // Disable inline source maps to prevent warning
+  from: undefined, // Explicitly set to prevent warning
 };

@@ -396,7 +396,7 @@ export default function EnhancedMaterialCreator() {
             const result = await mammoth.convertToHtml({ arrayBuffer });
             
             // Check for conversion messages/warnings
-            if (result.messages && result.messages.length > 0) {
+            if (result.messages && result.messages.length > 0 && process.env.NODE_ENV === 'development') {
               console.warn('[DOCX] Conversion warnings:', result.messages);
             }
             
@@ -404,12 +404,6 @@ export default function EnhancedMaterialCreator() {
             fileData = result.value; // This is the HTML string
             fileType = 'text/html';
             fileName = file.name;
-            
-            console.log('[DOCX] Converted to HTML:', {
-              fileName,
-              htmlLength: fileData.length,
-              warningCount: result.messages?.length || 0
-            });
           } catch (docxError: any) {
             console.error('[DOCX] Conversion failed:', docxError);
             throw new Error(
@@ -430,7 +424,9 @@ export default function EnhancedMaterialCreator() {
               pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.js';
               pdfjsInitialized = true;
             } catch (workerError) {
-              console.error('[PDF Worker] Betöltési hiba:', workerError);
+              if (process.env.NODE_ENV === 'development') {
+                console.error('[PDF Worker] Betöltési hiba:', workerError);
+              }
               throw new Error(
                 'PDF worker inicializálása sikertelen. ' +
                 'Kérlek próbáld újra vagy használj JPG/PNG formátumot.'
@@ -451,7 +447,6 @@ export default function EnhancedMaterialCreator() {
           }).promise;
           
           const totalPages = pdf.numPages;
-          console.log(`[PDF] Processing ${totalPages} pages from ${file.name}`);
           
           // Show toast for multi-page PDFs
           if (totalPages > 1) {
@@ -474,10 +469,12 @@ export default function EnhancedMaterialCreator() {
             const context = canvas.getContext('2d');
             
             if (!context) {
-              console.error('[Canvas] Context létrehozása sikertelen', {
-                canvas: canvas,
-                browser: navigator.userAgent
-              });
+              if (process.env.NODE_ENV === 'development') {
+                console.error('[Canvas] Context létrehozása sikertelen', {
+                  canvas: canvas,
+                  browser: navigator.userAgent
+                });
+              }
               
               throw new Error(
                 'A böngésző nem támogatja a Canvas 2D renderelést. ' +
@@ -506,8 +503,6 @@ export default function EnhancedMaterialCreator() {
               fileType: 'image/png',
               fileName: `${file.name.replace('.pdf', '')}_page${pageNum}.png`
             });
-            
-            console.log(`[PDF] Page ${pageNum}/${totalPages} converted`);
           }
           
           // Skip the normal push since we added pages directly
@@ -523,11 +518,6 @@ export default function EnhancedMaterialCreator() {
           });
           fileType = 'text/plain';
           fileName = file.name;
-          
-          console.log('[TXT] Text file loaded:', {
-            fileName,
-            textLength: fileData.length
-          });
         } else {
           // For images: read directly as base64
           const reader = new FileReader();
@@ -880,13 +870,15 @@ export default function EnhancedMaterialCreator() {
         variant: "destructive"
       });
       
-      // ✅ JAVÍTÁS: Konzol logolás debug céljából
-      console.error('[EnhancedMaterialCreator] Publikálási hiba:', {
-        error: error,
-        title: title,
-        classroom: classroom,
-        hasHtml: !!generatedHtml
-      });
+      // Log error only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[EnhancedMaterialCreator] Publikálási hiba:', {
+          error: error,
+          title: title,
+          classroom: classroom,
+          hasHtml: !!generatedHtml
+        });
+      }
     } finally {
       setIsPublishing(false);
     }
