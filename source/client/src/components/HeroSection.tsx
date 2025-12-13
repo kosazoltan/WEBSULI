@@ -314,7 +314,7 @@ export default function HeroSection({
 
   return (
     // GRAY CONTAINER - HALF SIZE
-    <div className="relative text-center mb-3 sm:mb-4 fold:py-1 py-1.5 sm:py-2 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-gray-500/30 group">
+    <div className="relative text-center mb-3 sm:mb-4 fold:py-0.5 py-1 sm:py-1.5 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-gray-500/30 group">
 
       {/* Gray Texture Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(156,163,175,0.1),transparent_50%)] pointer-events-none" />
@@ -364,7 +364,7 @@ export default function HeroSection({
 
       <div className="relative z-10">
         {/* Scientific Icon with Atom Orbit - Reduced margin */}
-        <div className="relative inline-flex items-center justify-center mb-4 sm:mb-6">
+        <div className="relative inline-flex items-center justify-center mb-2 sm:mb-3">
           
           {/* Background Glow */}
           <div className="absolute inset-0 -m-16 bg-gray-500/20 rounded-full blur-3xl animate-pulse" />
@@ -392,12 +392,12 @@ export default function HeroSection({
         </div>
 
         {/* Title - Reduced size */}
-        <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-black mb-2 sm:mb-3 text-transparent bg-clip-text bg-gradient-to-r from-gray-200 via-white to-gray-200 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tight pb-1">
+        <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-black mb-1 sm:mb-2 text-transparent bg-clip-text bg-gradient-to-r from-gray-200 via-white to-gray-200 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tight pb-0.5">
           Anyagok Profiknak
         </h1>
 
         {/* Tagline - Reduced margin */}
-        <div className="flex items-center justify-center gap-2 mb-4 sm:mb-6">
+        <div className="flex items-center justify-center gap-2 mb-2 sm:mb-3">
           <div className="h-px w-12 bg-gradient-to-r from-transparent via-gray-400 to-transparent" />
           <p className="text-xs xs:text-sm text-gray-300/90 font-bold uppercase tracking-[0.3em] opacity-90 font-mono" data-testid="text-quote-inspiration">
             TUDOMÁNY · INNOVÁCIÓ · TECH
@@ -407,7 +407,7 @@ export default function HeroSection({
 
         {/* Enhanced Stats with Icons and Animations - Reduced margin */}
         {totalFiles > 0 && (
-          <div className="flex flex-col fold:gap-2 xs:flex-row xs:items-center xs:justify-center xs:gap-4 sm:gap-6 text-xs xs:text-sm mb-4 sm:mb-6">
+          <div className="flex flex-col fold:gap-2 xs:flex-row xs:items-center xs:justify-center xs:gap-4 sm:gap-6 text-xs xs:text-sm mb-2 sm:mb-3">
             <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-gray-700/50 backdrop-blur-sm rounded-full border border-gray-500/30 hover:border-gray-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(156,163,175,0.3)]">
               <BookOpen className="w-5 h-5 text-gray-300 group-hover/stat:animate-bounce" />
               <span className="font-bold text-gray-200 font-mono">{totalFiles}</span>
@@ -440,7 +440,7 @@ export default function HeroSection({
         )}
 
         {/* Feature Highlights - Reduced margin and size */}
-        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6 max-w-3xl mx-auto">
+        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:gap-3 mb-2 sm:mb-3 max-w-3xl mx-auto">
           <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-cyan-400/50 transition-all hover:scale-105 group/feature">
             <Rocket className="w-6 h-6 sm:w-7 sm:h-7 text-gray-300 group-hover/feature:text-cyan-400 group-hover/feature:translate-y-[-4px] transition-transform drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
             <span className="text-xs sm:text-sm font-semibold text-gray-200">Gyors Hozzáférés</span>
