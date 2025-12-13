@@ -331,6 +331,36 @@
     animation: pulse-glow 3s ease-in-out infinite;
   }
 
+  /* Float animation for scientific symbols */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px) rotate(0deg);
+      opacity: 0.2;
+    }
+    50% {
+      transform: translateY(-20px) rotate(10deg);
+      opacity: 0.4;
+    }
+  }
+
+  .animate-float {
+    animation: float 4s ease-in-out infinite;
+  }
+
+  /* Slow spin for DNA and atoms */
+  @keyframes spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-spin-slow {
+    animation: spin-slow 8s linear infinite;
+  }
+
   /* Scientific shimmer effect */
   @keyframes scientific-shimmer {
     0% {
