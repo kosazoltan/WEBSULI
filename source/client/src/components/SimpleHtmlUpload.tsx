@@ -29,11 +29,8 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
     
     const file = event.target.files?.[0];
     if (!file) {
-      console.log('[FILE UPLOAD] No file selected');
       return;
     }
-
-    console.log('[FILE UPLOAD] File selected:', file.name, 'size:', file.size);
     toast({
       title: "Fájl beolvasása...",
       description: `${file.name} (${Math.round(file.size / 1024)} KB)`,
@@ -42,10 +39,11 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
-      console.log('[FILE UPLOAD] FileReader onload, length:', result?.length);
       
       if (!result || result.trim().length === 0) {
-        console.error('[FILE UPLOAD] Empty file result');
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[FILE UPLOAD] Empty file result');
+        }
         toast({ 
           title: "Üres fájl", 
           description: "A kiválasztott fájl üres",
@@ -54,13 +52,11 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
         return;
       }
       
-      console.log('[FILE UPLOAD] Setting content state, length:', result.length);
       setContent(result);
       setFileName(file.name);
       
       if (!title) {
         const extractedTitle = file.name.replace(/\.(html|htm)$/i, '');
-        console.log('[FILE UPLOAD] Auto-filling title:', extractedTitle);
         setTitle(extractedTitle);
       }
       
@@ -71,7 +67,9 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
     };
     
     reader.onerror = (error) => {
-      console.error('[FILE UPLOAD] FileReader error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[FILE UPLOAD] FileReader error:', error);
+      }
       toast({
         title: "Fájl olvasási hiba",
         description: "Nem sikerült beolvasni a fájlt",
@@ -79,7 +77,6 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
       });
     };
     
-    console.log('[FILE UPLOAD] Starting FileReader.readAsText...');
     reader.readAsText(file, 'UTF-8');
   };
 
@@ -87,10 +84,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
     e.preventDefault();
     e.stopPropagation(); // Prevent event bubbling
     
-    console.log('[SUBMIT] Form submit triggered, title:', title.substring(0, 50), 'content length:', content.length);
-    
     if (!title.trim() || !content.trim()) {
-      console.warn('[SUBMIT] Validation failed - empty title or content');
       toast({
         title: "Hiányzó adatok",
         description: "A cím és a tartalom mezők kitöltése kötelező",
@@ -105,7 +99,6 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
       ? title.trim() 
       : `${getClassroomLabel(classroom, false)} - ${title.trim()}`;
 
-    console.log('[SUBMIT] Calling onUpload with final title:', finalTitle, 'classroom:', classroom);
     onUpload({
       title: finalTitle,
       content: content.trim(),
@@ -218,12 +211,10 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('[BUTTON CLICK] File input button clicked');
                     const input = document.getElementById('file-input') as HTMLInputElement;
                     if (input) {
-                      console.log('[BUTTON CLICK] Input element found, triggering click');
                       input.click();
-                    } else {
+                    } else if (process.env.NODE_ENV === 'development') {
                       console.error('[BUTTON CLICK] Input element NOT found!');
                     }
                   }}
@@ -237,7 +228,6 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                   type="file"
                   accept=".html,.htm"
                   onChange={(e) => {
-                    console.log('[INPUT CHANGE] File input onChange triggered');
                     handleFileUpload(e);
                   }}
                   className="hidden"
@@ -251,7 +241,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 value={content}
                 onChange={(e) => {
                   const newValue = e.target.value;
-                  console.log('[DEBUG] Content onChange triggered, length:', newValue.length);
+                  // Removed debug console.log for production
                   setContent(newValue);
                 }}
                 placeholder="Illeszd be a HTML kódot ide..."
