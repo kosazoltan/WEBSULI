@@ -307,7 +307,6 @@ export default function BackupManager() {
                   <li>Frontend & Backend forráskód</li>
                   <li>Konfigurációs fájlok</li>
                   <li>README telepítési útmutatóval</li>
-                  <li>Dokumentáció (replit.md)</li>
                 </ul>
               </div>
             </div>

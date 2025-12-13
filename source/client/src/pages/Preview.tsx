@@ -15,7 +15,7 @@ export default function Preview() {
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
-  // Get correct base URL from backend (REPLIT_DEV_DOMAIN in dev, CUSTOM_DOMAIN in prod)
+  // Get correct base URL from backend (CUSTOM_DOMAIN in prod, localhost in dev)
   const { baseUrl, isLoading: configLoading } = useConfig();
   
   // Fetch full material data (including content for inline rendering)

@@ -1,13 +1,13 @@
 // Service Worker for Web Push Notifications + PWA
 // Anyagok Profiknak Platform
-// Version: 2.1.0 - Fixed mobile Chrome POST blocking bug
+// Version: 3.0.0 - Force cache clear on every install
 
-const CACHE_NAME = 'anyagok-profiknak-v2';
+const CACHE_VERSION = Date.now(); // Force new cache version on every deploy
+const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
-// Assets to cache on install
+// Minimal assets to cache
 const STATIC_ASSETS = [
-  '/',
   '/offline.html',
   '/manifest.json',
   '/favicon.svg',
@@ -15,11 +15,24 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service Worker installing...');
+  console.log('[SW] Service Worker installing - clearing ALL caches...');
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    // First, delete ALL existing caches
+    caches.keys()
+      .then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            console.log('[SW] Deleting cache:', cacheName);
+            return caches.delete(cacheName);
+          })
+        );
+      })
+      .then(() => {
+        // Then create new cache with minimal assets
+        return caches.open(CACHE_NAME);
+      })
       .then((cache) => {
-        console.log('[SW] Caching static assets');
+        console.log('[SW] Caching minimal static assets');
         return cache.addAll(STATIC_ASSETS);
       })
       .then(() => self.skipWaiting())
@@ -27,13 +40,14 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Service Worker activating...');
+  console.log('[SW] Service Worker activating - clearing old caches...');
   
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
+            // Delete ANY cache that isn't the current version
             if (cacheName !== CACHE_NAME) {
               console.log('[SW] Deleting old cache:', cacheName);
               return caches.delete(cacheName);
@@ -41,7 +55,19 @@ self.addEventListener('activate', (event) => {
           })
         );
       })
-      .then(() => self.clients.claim())
+      .then(() => {
+        // Claim all clients immediately
+        return self.clients.claim();
+      })
+      .then(() => {
+        // Notify all clients to reload
+        return self.clients.matchAll();
+      })
+      .then((clients) => {
+        clients.forEach(client => {
+          client.postMessage({ type: 'SW_ACTIVATED_RELOAD' });
+        });
+      })
   );
 });
 

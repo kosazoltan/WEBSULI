@@ -53,7 +53,7 @@ import { eq, desc, asc, gt, and, sql, inArray } from "drizzle-orm";
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
 
 export interface IStorage {
-  // User operations - Required for Replit Auth and Email/Password Auth
+  // User operations - Required for Google OAuth and Email/Password Auth
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | null>;
   upsertUser(user: UpsertUser): Promise<User>;
@@ -186,7 +186,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // User operations - Required for Replit Auth
+  // User operations - Required for Auth
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;

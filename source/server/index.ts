@@ -52,13 +52,6 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // SECURITY: Development ONLY - Allow Replit dev domains (*.replit.dev)
-    // This is safe in dev because credentials are test-only
-    // Format: https://[uuid].[workspace-name].replit.dev
-    if (isDevelopment && origin.match(/^https:\/\/[\w-]+\.[\w-]+\.replit\.dev$/)) {
-      return callback(null, true);
-    }
-
     // SECURITY: Production - NEVER use wildcards with credentials
     // Block ALL unauthorized origins to prevent CSRF attacks
     return callback(new Error(`CORS policy blocked: ${origin}`));
@@ -115,14 +108,9 @@ const helmetMiddleware = helmet({
       ],
       frameSrc: [
         "'self'",
-        // DEVELOPMENT: Allow Replit dev subdomains for iframe previews
-        ...(isDevelopment ? ["https://*.replit.dev"] : []),
       ],
-      // CRITICAL: Allow embedding in Replit Webview iframe
       frameAncestors: [
         "'self'",
-        "https://replit.com",
-        "https://*.replit.dev",
         ...(process.env.CUSTOM_DOMAIN ? [`https://${process.env.CUSTOM_DOMAIN}`] : []),
       ],
       objectSrc: ["'none'"],
@@ -136,9 +124,8 @@ const helmetMiddleware = helmet({
     preload: true,
   },
   noSniff: true, // X-Content-Type-Options: nosniff
-  // DEVELOPMENT: Disable frameguard to allow Replit Webview iframe embedding
   // PRODUCTION: Enable SAMEORIGIN for security
-  frameguard: isDevelopment ? false : { action: 'sameorigin' },
+  frameguard: { action: 'sameorigin' },
   xssFilter: true, // X-XSS-Protection: 1; mode=block
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 });
@@ -165,14 +152,9 @@ app.use((req, res, next) => {
           connectSrc: ["'self'", "https://cdnjs.cloudflare.com", ...ALLOWED_ORIGINS], // PDF.js CMap/font files + trusted frontends
           frameSrc: [
             "'self'",
-            // DEVELOPMENT: Allow Replit dev subdomains for iframe previews
-            ...(isDevelopment ? ["https://*.replit.dev"] : []),
           ],
-          // CRITICAL: Allow embedding in Replit Webview iframe
           frameAncestors: [
             "'self'",
-            "https://replit.com",
-            "https://*.replit.dev",
             ...(process.env.CUSTOM_DOMAIN ? [`https://${process.env.CUSTOM_DOMAIN}`] : []),
           ],
           objectSrc: ["'self'", "data:"], // CRITICAL: Allow <embed> tag for native PDF viewer
@@ -185,8 +167,7 @@ app.use((req, res, next) => {
         preload: true,
       },
       noSniff: true,
-      // DEVELOPMENT: Disable frameguard to allow Replit Webview iframe embedding
-      frameguard: false, // CRITICAL: Must be false for Replit Webview
+      frameguard: { action: 'sameorigin' },
       xssFilter: true,
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
       crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow iframe embedding
