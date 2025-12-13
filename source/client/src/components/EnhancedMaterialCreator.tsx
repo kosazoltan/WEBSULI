@@ -610,7 +610,8 @@ export default function EnhancedMaterialCreator() {
         body: JSON.stringify({
           message,
           conversationHistory: updatedHistory,
-          context: fileAnalysis
+          context: fileAnalysis,
+          systemPrompt: chatGptSystemPrompt || undefined
         })
       });
 
