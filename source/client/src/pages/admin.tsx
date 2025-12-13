@@ -409,7 +409,7 @@ export default function Admin() {
   // CRITICAL SECURITY: Show loading while checking auth (prevents flash of admin UI)
   if (isAuthLoading) {
     return (
-      <div className="container mx-auto p-4 sm:p-6 max-w-full flex items-center justify-center min-h-screen">
+      <div className="container mx-auto p-4 sm:p-6 max-w-full flex items-center justify-center min-h-screen relative z-10">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-4">
@@ -562,7 +562,10 @@ export default function Admin() {
 
   return (
     <>
-      <div className={`container mx-auto p-4 sm:p-6 max-w-full ${isMobile ? 'pb-20' : ''}`} data-testid="admin-panel">
+      {/* Simple static background for admin - no animations to save resources */}
+      <div className="fixed inset-0 bg-gray-50 dark:bg-gray-950 -z-10" />
+      
+      <div className={`container mx-auto p-4 sm:p-6 max-w-full ${isMobile ? 'pb-20' : ''} relative z-10`} data-testid="admin-panel">
         <div className="mb-4 sm:mb-6">
           <Link href="/">
             <Button 
