@@ -30,7 +30,9 @@ import {
   Eye,
   Tag,
   HelpCircle,
-  Download
+  Download,
+  FolderOpen,
+  Upload
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -62,6 +64,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import BackupManager from "@/components/BackupManager";
 import TagManager from "@/components/TagManager";
+import FileEditDialog from "@/components/FileEditDialog";
+import EmailSendDialog from "@/components/EmailSendDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { AuthStatus } from "@/components/AuthStatus";
@@ -74,6 +78,8 @@ import { useLocation } from "wouter";
 const EnhancedMaterialCreator = lazy(() => import("@/components/EnhancedMaterialCreator"));
 const DatabaseManager = lazy(() => import("@/components/DatabaseManager"));
 const PdfUpload = lazy(() => import("@/components/PdfUpload"));
+const AdminFileDashboard = lazy(() => import("@/components/AdminFileDashboard"));
+const SimpleHtmlUpload = lazy(() => import("@/components/SimpleHtmlUpload"));
 
 export default function Admin() {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -98,8 +104,8 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
-    const validTabs = ["users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database"];
-    return tabParam && validTabs.includes(tabParam) ? tabParam : "users";
+    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database"];
+    return tabParam && validTabs.includes(tabParam) ? tabParam : "files";
   });
 
   // Material views interface (moved before hooks)
@@ -468,7 +474,12 @@ export default function Admin() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Desktop: TabsList látható, Mobil: elrejtve (bottom nav használja) */}
-          <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 mb-6 ${isMobile ? 'hidden' : ''}`}>
+          <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 mb-6 ${isMobile ? 'hidden' : ''}`}>
+            <TabsTrigger value="files" className="flex items-center gap-2" data-testid="tab-files">
+              <FolderOpen className="h-4 w-4" />
+              <span className="hidden lg:inline">Fájlok</span>
+              <span className="lg:hidden">Fájlok</span>
+            </TabsTrigger>
             <TabsTrigger value="enhanced" className="flex items-center gap-2" data-testid="tab-enhanced">
               <Wand2 className="h-4 w-4" />
               <span className="hidden lg:inline">Fejlett készítő</span>
@@ -505,6 +516,10 @@ export default function Admin() {
               <span className="sm:hidden">DB</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="files" className="space-y-4">
+            {activeTab === "files" && <AdminFilesTab />}
+          </TabsContent>
 
           <TabsContent value="enhanced" className="space-y-4">
         {activeTab === "enhanced" && (
