@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { insertHtmlFileSchema, insertEmailSubscriptionSchema, insertExtraEmailSchema, insertMaterialCommentSchema, type EmailSubscription, type User, type HtmlFile } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
-import { sendNewMaterialNotification, sendAdminNotification } from "./gmail";
+import { sendNewMaterialNotification, sendAdminNotification } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial, sendMaterialViewNotification } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
 

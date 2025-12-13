@@ -1,58 +1,29 @@
 import { Resend } from 'resend';
 import { storage } from './storage';
+import { sanitizeText } from './utils/sanitize';
 
-let connectionSettings: any;
+let resendClient: Resend | null = null;
+let fromEmail: string = '';
 
-async function getCredentials() {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+function getResendClient() {
+  if (resendClient) {
+    return { client: resendClient, fromEmail };
   }
 
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=resend',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  if (!connectionSettings || (!connectionSettings.settings.api_key)) {
-    throw new Error('Resend not connected');
+  const apiKey = process.env.RESEND_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY environment variable is not set');
   }
-  return {apiKey: connectionSettings.settings.api_key, fromEmail: connectionSettings.settings.from_email};
-}
 
-export async function getUncachableResendClient() {
-  try {
-    const credentials = await getCredentials();
-    // Always use onboarding@resend.dev for testing as it's a verified domain
-    // Ignore the connector's from_email setting if it's a gmail.com address
-    let fromEmail = connectionSettings.settings.from_email || 'Anyagok Profiknak <onboarding@resend.dev>';
-    
-    // Override gmail addresses as they require domain verification
-    if (fromEmail.includes('gmail.com')) {
-      fromEmail = 'Anyagok Profiknak <onboarding@resend.dev>';
-      console.log('[RESEND] Gmail cím detektálva, használjuk a Resend teszt címet helyette');
-    }
-    
-    console.log('[RESEND] Email küldés inicializálása, from:', fromEmail);
-    return {
-      client: new Resend(credentials.apiKey),
-      fromEmail: fromEmail
-    };
-  } catch (error) {
-    console.error('[RESEND] Hiba a Resend client létrehozásakor:', error);
-    throw error;
-  }
+  resendClient = new Resend(apiKey);
+  
+  // Use configured from email or default to Resend test email
+  fromEmail = process.env.RESEND_FROM_EMAIL || 'Anyagok Profiknak <onboarding@resend.dev>';
+  
+  console.log('[RESEND] Client initialized, from:', fromEmail);
+  
+  return { client: resendClient, fromEmail };
 }
 
 export async function sendNewMaterialNotification(
@@ -63,11 +34,18 @@ export async function sendNewMaterialNotification(
   fileId: string
 ) {
   try {
-    const { client, fromEmail } = await getUncachableResendClient();
+    const { client, fromEmail } = getResendClient();
     
-    const baseUrl = process.env.REPLIT_DOMAINS 
-      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-      : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+    // Always use websuli.org for production
+    const baseUrl = process.env.CUSTOM_DOMAIN 
+      ? `https://${process.env.CUSTOM_DOMAIN}`
+      : 'https://websuli.org';
+    
+    // XSS Protection: Sanitize all user-generated content
+    const safeRecipientName = sanitizeText(recipientName);
+    const safeMaterialTitle = sanitizeText(materialTitle);
+    const safeMaterialDescription = materialDescription ? sanitizeText(materialDescription) : '';
+    const safeFileId = sanitizeText(fileId);
     
     const htmlContent = `
       <!DOCTYPE html>
@@ -91,21 +69,21 @@ export async function sendNewMaterialNotification(
               <h1>Új Tananyag Elérhető</h1>
             </div>
             <div class="content">
-              <p>Kedves ${recipientName}!</p>
+              <p>Kedves ${safeRecipientName}!</p>
               <p>Örömmel értesítünk, hogy egy új tananyag került feltöltésre az <strong>Anyagok Profiknak</strong> platformra.</p>
               
-              <div class="material-title">${materialTitle}</div>
-              ${materialDescription ? `<div class="material-description">${materialDescription}</div>` : ''}
+              <div class="material-title">${safeMaterialTitle}</div>
+              ${safeMaterialDescription ? `<div class="material-description">${safeMaterialDescription}</div>` : ''}
               
               <p>Kattints az alábbi linkre a tananyag közvetlen megtekintéséhez:</p>
-              <a href="${baseUrl}/preview/${fileId}" class="button">
+              <a href="${baseUrl}/preview/${safeFileId}" class="button">
                 Tananyag Megtekintése
               </a>
               
               <p style="margin-top: 15px; font-size: 14px;">
-                <strong>Közvetlen link:</strong> <a href="${baseUrl}/preview/${fileId}">${baseUrl}/preview/${fileId}</a><br>
-                <strong>Új anyag:</strong> ${materialTitle}<br>
-                ${materialDescription ? `<em style="color: #6b7280;">${materialDescription}</em>` : ''}
+                <strong>Közvetlen link:</strong> <a href="${baseUrl}/preview/${safeFileId}">${baseUrl}/preview/${safeFileId}</a><br>
+                <strong>Új anyag:</strong> ${safeMaterialTitle}<br>
+                ${safeMaterialDescription ? `<em style="color: #6b7280;">${safeMaterialDescription}</em>` : ''}
               </p>
             </div>
             <div class="footer">
@@ -122,7 +100,7 @@ export async function sendNewMaterialNotification(
     const result = await client.emails.send({
       from: fromEmail,
       to: recipientEmail,
-      subject: `Új Tananyag: ${materialTitle}`,
+      subject: `Új Tananyag: ${safeMaterialTitle}`,
       html: htmlContent
     });
 
@@ -153,7 +131,7 @@ export async function sendNewMaterialNotification(
     
     return result;
   } catch (error: any) {
-    console.error('Email küldési hiba:', error);
+    console.error('[RESEND] Email küldési hiba:', error);
     
     // Log failed email to database
     try {
@@ -164,9 +142,41 @@ export async function sendNewMaterialNotification(
         error: error.message || 'Unknown error',
       });
     } catch (logError) {
-      console.error('Email log mentési hiba:', logError);
+      console.error('[RESEND] Email log mentési hiba:', logError);
     }
     
+    throw error;
+  }
+}
+
+// Admin notification email
+export async function sendAdminNotification(
+  subject: string,
+  htmlBody: string,
+  adminEmail?: string
+) {
+  try {
+    const { client, fromEmail } = getResendClient();
+    
+    const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'kosa.zoltan.ebc@gmail.com';
+    
+    console.log(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
+    
+    const result = await client.emails.send({
+      from: fromEmail,
+      to: recipientEmail,
+      subject: subject,
+      html: htmlBody
+    });
+
+    if (result && 'error' in result && result.error) {
+      throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
+    }
+
+    console.log(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
+    return result;
+  } catch (error: any) {
+    console.error('[RESEND] Admin értesítés küldési hiba:', error);
     throw error;
   }
 }
