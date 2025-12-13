@@ -81,6 +81,175 @@ const PdfUpload = lazy(() => import("@/components/PdfUpload"));
 const AdminFileDashboard = lazy(() => import("@/components/AdminFileDashboard"));
 const SimpleHtmlUpload = lazy(() => import("@/components/SimpleHtmlUpload"));
 
+// Admin Files Tab Component - handles file management
+function AdminFilesTab() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [showUploadZone, setShowUploadZone] = useState(false);
+  const [editingFile, setEditingFile] = useState<any>(null);
+  const [sendingEmailFile, setSendingEmailFile] = useState<any>(null);
+  const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
+
+  const { data: files = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/html-files"],
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (data: { title: string; content: string; description?: string; classroom: number }) => {
+      return apiRequest("POST", "/api/html-files", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
+      setShowUploadZone(false);
+      toast({
+        title: "✅ Sikeres feltöltés!",
+        description: "A HTML fájl sikeresen feltöltve.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "❌ Hiba történt",
+        description: error.message || "Ismeretlen hiba történt a feltöltés során",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: { title?: string; description?: string; classroom?: number } }) => {
+      return apiRequest("PATCH", `/api/html-files/${id}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
+      setEditingFile(null);
+      toast({
+        title: "Módosítva",
+        description: "A fájl sikeresen módosítva.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Hiba történt",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/html-files/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
+      setDeletingFileId(null);
+      toast({
+        title: "Törölve",
+        description: "A fájl sikeresen törölve.",
+      });
+    },
+    onError: (error: Error) => {
+      setDeletingFileId(null);
+      toast({
+        title: "Hiba történt",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleViewFile = (file: any) => {
+    if (file.contentType === 'pdf') {
+      setLocation(`/materials/pdf/${file.id}`);
+    } else {
+      setLocation(`/preview/${file.id}`);
+    }
+  };
+
+  const handleEdit = (id: string, updates: { title?: string; description?: string; classroom?: number }) => {
+    editMutation.mutate({ id, updates });
+  };
+
+  const handleDelete = (id: string) => {
+    setDeletingFileId(id);
+  };
+
+  const confirmDelete = () => {
+    if (deletingFileId) {
+      deleteMutation.mutate(deletingFileId);
+    }
+  };
+
+  const handleUpload = (file: { title: string; content: string; description?: string; classroom: number }) => {
+    uploadMutation.mutate(file);
+  };
+
+  if (showUploadZone) {
+    return (
+      <Suspense fallback={<Card><CardContent className="pt-6"><Skeleton className="h-64" /></CardContent></Card>}>
+        <SimpleHtmlUpload
+          onUpload={handleUpload}
+          onCancel={() => setShowUploadZone(false)}
+          isPending={uploadMutation.isPending}
+        />
+      </Suspense>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Suspense fallback={<Card><CardContent className="pt-6"><Skeleton className="h-64" /></CardContent></Card>}>
+        <AdminFileDashboard
+          files={files}
+          isLoading={isLoading}
+          currentUserId={undefined}
+          onViewFile={handleViewFile}
+          onEditFile={setEditingFile}
+          onDeleteFile={handleDelete}
+          onToggleView={() => setLocation("/")}
+          onSendEmail={setSendingEmailFile}
+          onUploadClick={() => setShowUploadZone(true)}
+        />
+      </Suspense>
+
+      {editingFile && (
+        <FileEditDialog
+          file={editingFile}
+          onSave={handleEdit}
+          onCancel={() => setEditingFile(null)}
+        />
+      )}
+
+      {sendingEmailFile && (
+        <EmailSendDialog
+          isOpen={true}
+          onClose={() => setSendingEmailFile(null)}
+          fileId={sendingEmailFile.id}
+          fileName={sendingEmailFile.title}
+          classroom={sendingEmailFile.classroom}
+        />
+      )}
+
+      <AlertDialog open={deletingFileId !== null} onOpenChange={(open) => !open && setDeletingFileId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Törlés megerősítése</AlertDialogTitle>
+            <AlertDialogDescription>
+              Biztosan törölni szeretnéd ezt a tananyagot? Ez a művelet nem vonható vissza.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Mégse</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">
+              Törlés
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { user, isLoading: isAuthLoading } = useAuth();
   const [, setLocation] = useLocation();
