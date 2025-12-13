@@ -2,7 +2,7 @@
 // Anyagok Profiknak Platform
 // Version: 3.2.0 - Never cache CSS/JS assets to prevent stale styles
 
-const CACHE_VERSION = '3.2.0-' + Date.now(); // Force new cache version on every deploy
+const CACHE_VERSION = '3.2.0'; // Fixed version - change this when deploying new version
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -56,17 +56,8 @@ self.addEventListener('activate', (event) => {
         );
       })
       .then(() => {
-        // Claim all clients immediately
+        // Claim all clients immediately (but don't force reload)
         return self.clients.claim();
-      })
-      .then(() => {
-        // Notify all clients to reload
-        return self.clients.matchAll();
-      })
-      .then((clients) => {
-        clients.forEach(client => {
-          client.postMessage({ type: 'SW_ACTIVATED_RELOAD' });
-        });
       })
   );
 });
