@@ -419,7 +419,7 @@ export default function EnhancedMaterialCreator() {
             );
           }
         }
-        // For PDFs: convert first page to PNG image
+        // For PDFs: convert ALL pages to PNG images
         else if (file.type === 'application/pdf') {
           if (!pdfjsInitialized) {
             const pdfjs = await import('pdfjs-dist');
@@ -450,47 +450,68 @@ export default function EnhancedMaterialCreator() {
             useSystemFonts: false,
           }).promise;
           
-          // Get first page
-          const page = await pdf.getPage(1);
+          const totalPages = pdf.numPages;
+          console.log(`[PDF] Processing ${totalPages} pages from ${file.name}`);
           
-          // Set scale for good quality (2x for high DPI)
-          const scale = 2.0;
-          const viewport = page.getViewport({ scale });
-          
-          // Create canvas
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          
-          if (!context) {
-            console.error('[Canvas] Context létrehozása sikertelen', {
-              canvas: canvas,
-              browser: navigator.userAgent
+          // Show toast for multi-page PDFs
+          if (totalPages > 1) {
+            toast({
+              title: `📄 PDF feldolgozás`,
+              description: `${file.name}: ${totalPages} oldal konvertálása...`,
             });
-            
-            throw new Error(
-              'A böngésző nem támogatja a Canvas 2D renderelést. ' +
-              'Kérlek használj egy modern böngészőt (Chrome, Firefox, Safari, Edge). ' +
-              'Alternatívaként tölts fel JPG/PNG képet a PDF helyett.'
-            );
           }
           
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
+          // Convert each page to PNG and add to processedFiles
+          for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            
+            // Set scale for good quality (1.5x for balance between quality and size)
+            const scale = 1.5;
+            const viewport = page.getViewport({ scale });
+            
+            // Create canvas
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            if (!context) {
+              console.error('[Canvas] Context létrehozása sikertelen', {
+                canvas: canvas,
+                browser: navigator.userAgent
+              });
+              
+              throw new Error(
+                'A böngésző nem támogatja a Canvas 2D renderelést. ' +
+                'Kérlek használj egy modern böngészőt (Chrome, Firefox, Safari, Edge). ' +
+                'Alternatívaként tölts fel JPG/PNG képet a PDF helyett.'
+              );
+            }
+            
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            
+            // Render PDF page to canvas
+            const renderContext = {
+              canvasContext: context,
+              viewport: viewport,
+              canvas: canvas
+            };
+            await page.render(renderContext).promise;
+            
+            // Convert canvas to PNG data URL
+            const pageData = canvas.toDataURL('image/png', 0.85); // Slightly compress for faster upload
+            
+            // Add each page as a separate file
+            processedFiles.push({
+              fileData: pageData,
+              fileType: 'image/png',
+              fileName: `${file.name.replace('.pdf', '')}_page${pageNum}.png`
+            });
+            
+            console.log(`[PDF] Page ${pageNum}/${totalPages} converted`);
+          }
           
-          // Render PDF page to canvas
-          const renderContext = {
-            canvasContext: context,
-            viewport: viewport,
-            canvas: canvas
-          };
-          await page.render(renderContext).promise;
-          
-          // Convert canvas to PNG data URL
-          fileData = canvas.toDataURL('image/png');
-          
-          // Update type to PNG since we converted it
-          fileType = 'image/png';
-          fileName = file.name.replace('.pdf', '_page1.png');
+          // Skip the normal push since we added pages directly
+          continue;
         } 
         // For TXT files: read as plain text
         else if (file.type === 'text/plain') {
