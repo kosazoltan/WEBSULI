@@ -35,12 +35,20 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ secrets.VPS_PORT }}
           script: |
             echo "🚀 Starting deployment..."
             
-            # Navigate to project directory
-            cd /var/www/websuli
+            # Check if project directory exists, if not clone it
+            if [ ! -d "/var/www/websuli" ]; then
+              echo "📦 Cloning repository..."
+              mkdir -p /var/www
+              cd /var/www
+              git clone https://github.com/kosazoltan/WEBSULI.git websuli
+            fi
+            
+            # Navigate to project source directory
+            cd /var/www/websuli/source
             
             # Pull latest changes
             echo "📥 Pulling latest code..."
@@ -48,7 +56,7 @@ jobs:
             
             # Install dependencies
             echo "📦 Installing dependencies..."
-            npm install --production=false
+            npm install
             
             # Build the application
             echo "🔨 Building application..."
@@ -60,7 +68,7 @@ jobs:
             
             # Restart application with PM2
             echo "♻️ Restarting application..."
-            pm2 restart websuli || pm2 start ecosystem.config.cjs
+            pm2 restart websuli || pm2 start deploy/ecosystem.config.cjs --name websuli
             
             # Save PM2 process list
             pm2 save
