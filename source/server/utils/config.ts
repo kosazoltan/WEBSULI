@@ -13,7 +13,7 @@ export function getBaseUrl(): string {
   }
 
   if (process.env.CUSTOM_DOMAIN) {
-    // Production: Use custom domain (websuli.org)
+    // Production: Use custom domain (websuli.vip)
     return `https://${process.env.CUSTOM_DOMAIN}`;
   }
 
@@ -29,7 +29,7 @@ export function getBaseUrl(): string {
     return `http://localhost:${port}`;
   }
 
-  return process.env.BASE_URL || 'https://websuli.org';
+  return process.env.BASE_URL || 'https://websuli.vip';
 }
 
 /**
