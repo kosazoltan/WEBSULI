@@ -216,7 +216,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
                     style={{
                       background: 'linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.1) 25%, rgba(236, 72, 153, 0.1) 50%, rgba(192, 132, 252, 0.1) 75%, transparent 100%)',
                       backgroundSize: '200% 100%',
-                      animation: 'cyberpunk-shimmer 3s ease-in-out infinite'
+                      animation: 'cyberpunk-shimmer 10s ease-in-out infinite' // 70% slower (3s / 0.3)
                     }}
                   />
                   
