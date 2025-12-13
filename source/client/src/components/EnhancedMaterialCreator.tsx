@@ -1341,13 +1341,12 @@ Miben segíthetek? Szeretnéd, hogy készítsek egy strukturált tananyag szöve
                 onClick={() => {
                   finalizeChatGptPhase();
                   
-                  // Initialize Claude chat with text content if empty
-                  if (claudeMessages.length === 0) {
-                    const lastAssistantMessage = [...chatGptMessages].reverse().find(m => m.role === 'assistant');
-                    if (lastAssistantMessage) {
-                      const contextMessage: ChatMessage = {
-                        role: 'assistant',
-                        content: `🎨 **Szöveg véglegesítve!**
+                  // Always initialize/update Claude chat with the latest text content
+                  const lastAssistantMessage = [...chatGptMessages].reverse().find(m => m.role === 'assistant');
+                  if (lastAssistantMessage) {
+                    const contextMessage: ChatMessage = {
+                      role: 'assistant',
+                      content: `🎨 **Szöveg véglegesítve!**
 
 Most készítsük el az interaktív HTML tananyagot. Itt van a szöveges tartalom:
 
@@ -1358,9 +1357,11 @@ ${lastAssistantMessage.content}
 ---
 
 Miben segíthetek? Szeretnél egy interaktív HTML-t ezzel a tartalommal?`
-                      };
-                      setClaudeMessages([contextMessage]);
-                    }
+                    };
+                    // Always reset Claude messages with the new content
+                    setClaudeMessages([contextMessage]);
+                    // Also reset generated HTML since we have new content
+                    setGeneratedHtml("");
                   }
                   
                   setCurrentPhase('claude');
