@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
-import { ChemicalBackground } from "@/components/ChemicalBackground";
 import { useEffect, lazy, Suspense } from "react";
 
 // Lazy load heavy components for better code splitting
@@ -47,7 +46,6 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ChemicalBackground />
         <div className="relative z-10 min-h-screen">
           <Toaster />
           <Router />
