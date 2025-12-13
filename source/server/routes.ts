@@ -1507,11 +1507,11 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
-      console.log('[CHATGPT] Request timeout (60s)');
-    }, 60000); // 60 second timeout
+      console.log('[CHATGPT] Request timeout (120s)');
+    }, 120000); // 120 second timeout for longer content
 
     try {
-      const { message, conversationHistory, context } = req.body;
+      const { message, conversationHistory, context, systemPrompt } = req.body;
 
       if (!message || !message.trim()) {
         clearTimeout(timeout);
@@ -1529,25 +1529,51 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
       });
 
-      // Build conversation messages
+      // Default detailed system prompt
+      const defaultPrompt = `Te ChatGPT vagy, egy szakértő oktatási tananyag szövegíró és dokumentum elemző.
+
+🎯 ELSŐDLEGES FELADATOD:
+- A feltöltött dokumentumok (PDF, DOCX, képek) PONTOS és HITELES elemzése
+- Készíts strukturált, részletes tananyag szöveget KIZÁRÓLAG a dokumentum tartalma alapján
+- TILOS hallucináció: csak azt írd le, ami ténylegesen szerepel a dokumentumban
+- Ha valamit nem tudsz kiolvasni, jelezd egyértelműen
+
+📚 TANANYAG KÉSZÍTÉSI IRÁNYELVEK:
+- Helyezz el OK-OKOZATI ÖSSZEFÜGGÉSEKET minden témánál (pl. "Azért..., mert...", "Ennek következménye...")
+- Adj TANÁRI MAGYARÁZATOKAT: úgy fejts ki mindent, mintha egy türelmes tanár lennél
+- Használj VALÓS PÉLDÁKAT a fogalmak szemléltetésére
+- Minden fogalmat RÉSZLETESEN fejtsd ki, ne feltételezd az előzetes tudást
+- A tananyag ÖNMAGÁBAN is érthető legyen, külső források nélkül
+
+✏️ STÍLUS IRÁNYELVEK (${context?.suggestedClassroom || '?'}. osztály):
+- 1-3. osztály: Egyszerű, rövid mondatok, sok példa, játékos hangnem, "Tudtad, hogy...?"
+- 4. osztály: Vidám, barátságos stílus, kérdések beépítése, érdekességek
+- 5-7. osztály: Energikus, izgalmas témák, fiúkhoz szóló példák (autók, sport, technológia)
+- 8. osztály+: Komolyabb, részletesebb, kamaszoknak szóló stílus
+
+📋 FORMÁTUM:
+- Használj címeket, alcímeket (hierarchikus struktúra)
+- Bontsd bekezdésekre (max 3-4 mondat/bekezdés)
+- Emelj ki KULCSFONTOSSÁGÚ információkat
+- A válaszodban KIZÁRÓLAG a tananyag szövege jelenjen meg, semmi más
+
+⚠️ FONTOS SZABÁLYOK:
+- NE találj ki információkat, amik nincsenek a dokumentumban
+- NE használj általános közhelyeket konkrét tények helyett
+- MINDIG hivatkozz a forrásanyagra, ha bizonytalan vagy`;
+
+      // Use custom prompt if provided, otherwise default
+      const finalPrompt = systemPrompt || defaultPrompt;
+
+      // Build conversation messages with document context
+      const contextInfo = context?.extractedText 
+        ? `\n\n📄 DOKUMENTUM TARTALMA (ezt kell feldolgoznod):\n${context.extractedText}\n\n📌 TÉMÁK: ${context.topics?.join(', ') || 'nincs megadva'}\n📖 JAVASOLT OSZTÁLY: ${context.suggestedClassroom || 'nincs megadva'}. osztály`
+        : '';
+
       const messages: Array<any> = [
         {
           role: "system",
-          content: `Te ChatGPT vagy, egy barátságos oktatási tartalomkészítő asszisztens.
-
-FELADATOD:
-1. Segíts a felhasználónak tananyag szöveget készíteni
-2. Kezdetben kapni fogsz egy elemzett dokumentumot (PDF/kép)
-3. Beszélgess a felhasználóval és finomítsd a szöveget
-4. Adj világos, strukturált, tanulásra alkalmas szöveget
-
-${context?.extractedText ? `DOKUMENTUM TARTALMA:\n${context.extractedText}\n\nTÉMÁK: ${context.topics?.join(', ') || 'nincs'}\n` : ''}
-
-STÍLUS:
-- Barátságos, támogató
-- Világos, strukturált
-- Gyerekeknek érthető (${context?.suggestedClassroom || '?'}. osztály)
-- Kérdezz vissza, ha kell tisztázni valamit`
+          content: finalPrompt + contextInfo
         }
       ];
 
@@ -1565,10 +1591,10 @@ STÍLUS:
       console.log(`[CHATGPT CHAT] Streaming response...`);
 
       const stream = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-4o",
         messages,
         stream: true,
-        max_completion_tokens: 2048
+        max_completion_tokens: 4096
       }, {
         signal: controller.signal
       });
