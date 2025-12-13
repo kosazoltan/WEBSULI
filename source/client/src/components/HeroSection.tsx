@@ -314,7 +314,7 @@ export default function HeroSection({
 
   return (
     // GRAY CONTAINER - HALF SIZE
-    <div className="relative text-center mb-3 sm:mb-4 fold:py-2 py-3 sm:py-4 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-gray-500/30 group">
+    <div className="relative text-center mb-3 sm:mb-4 fold:py-1 py-1.5 sm:py-2 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-gray-500/30 group">
 
       {/* Gray Texture Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(156,163,175,0.1),transparent_50%)] pointer-events-none" />
