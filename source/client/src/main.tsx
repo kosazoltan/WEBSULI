@@ -41,7 +41,7 @@ if ('serviceWorker' in navigator) {
       
       // Wait a bit, then register new one with cache busting
       setTimeout(() => {
-        navigator.serviceWorker.register('/service-worker.js?v=3.1.0-' + Date.now(), { scope: '/' })
+        navigator.serviceWorker.register('/service-worker.js?v=3.2.0-' + Date.now(), { scope: '/' })
           .then((registration) => {
             console.log('[PWA] Service Worker registered:', registration.scope);
             
