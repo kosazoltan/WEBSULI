@@ -66,9 +66,10 @@ jobs:
             echo "🗄️ Running database migrations..."
             npm run db:push || true
             
-            # Restart application with PM2
+            # Restart application with PM2 (use fork mode, not cluster)
             echo "♻️ Restarting application..."
-            pm2 restart websuli || pm2 start deploy/ecosystem.config.cjs --name websuli
+            pm2 delete websuli 2>/dev/null || true
+            pm2 start deploy/ecosystem.config.cjs --name websuli
             
             # Save PM2 process list
             pm2 save
