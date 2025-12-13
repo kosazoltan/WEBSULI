@@ -1,0 +1,77 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'source/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: ./source
+        run: npm ci
+      
+      - name: Build application
+        working-directory: ./source
+        run: npm run build
+      
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            echo "🚀 Starting deployment..."
+            
+            # Navigate to project directory
+            cd /var/www/websuli
+            
+            # Pull latest changes
+            echo "📥 Pulling latest code..."
+            git pull origin main
+            
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            npm install --production=false
+            
+            # Build the application
+            echo "🔨 Building application..."
+            npm run build
+            
+            # Run database migrations if needed
+            echo "🗄️ Running database migrations..."
+            npm run db:push || true
+            
+            # Restart application with PM2
+            echo "♻️ Restarting application..."
+            pm2 restart websuli || pm2 start ecosystem.config.cjs
+            
+            # Save PM2 process list
+            pm2 save
+            
+            echo "✅ Deployment completed successfully!"
+      
+      - name: Deployment notification
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Deployment completed successfully!"
+          else
+            echo "❌ Deployment failed!"
+          fi
