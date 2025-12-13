@@ -7,7 +7,7 @@ interface AppConfig {
 
 /**
  * Hook to fetch application configuration from backend
- * Returns the correct base URL for iframe previews (REPLIT_DEV_DOMAIN in dev, CUSTOM_DOMAIN in prod)
+ * Returns the correct base URL for iframe previews (CUSTOM_DOMAIN in prod, localhost in dev)
  * Falls back to window.location.origin if API call fails
  */
 export function useConfig() {

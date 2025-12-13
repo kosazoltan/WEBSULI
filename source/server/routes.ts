@@ -480,7 +480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // await setupAuth(app);
 
   // SECURITY: CSRF Protection using modern csrf-sync library
-  // CRITICAL: Required because sameSite:'none' cookies (for Replit iframe OAuth) are vulnerable to CSRF
+  // Double Submit Cookie pattern with signed HMAC tokens
   // Double Submit Cookie pattern with signed HMAC tokens
   const { generateToken, csrfSynchronisedProtection } = csrfSync({
     // Use a strong secret for HMAC signing (falls back to SESSION_SECRET if not provided)
@@ -590,7 +590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PUBLIC endpoint - Get base URL configuration
-  // Frontend needs this to construct correct iframe URLs (REPLIT_DEV_DOMAIN in dev, CUSTOM_DOMAIN in prod)
+  // Frontend needs this to construct correct URLs
   app.get('/api/config', (_req, res) => {
     res.json({
       baseUrl: getBaseUrl(),
@@ -654,7 +654,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Use Claude (Anthropic) to analyze and fix HTML errors
-      // Using Replit AI Integrations - Claude Sonnet 4.5 (Teams credits)
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -732,7 +731,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Use Claude (Anthropic) to apply theme colors
-      // Using Replit AI Integrations - Claude Sonnet 4.5 (Teams credits)
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -803,7 +801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 4. HTML Fix Chat Stream - Interactive streaming endpoint with Replit AI (OpenAI-compatible)
+  // 4. HTML Fix Chat Stream - Interactive streaming endpoint (OpenAI-compatible)
   adminRouter.post("/html-fix/chat", async (req, res) => {
     try {
       const result = htmlFixChatSchema.safeParse(req.body);
@@ -824,9 +822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      // Use Replit AI (OpenAI-compatible) instead of Anthropic
-      // Blueprint reference: javascript_openai_ai_integrations
-      // Note: the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+      // Use OpenAI API for streaming chat
       const OpenAI = (await import('openai')).default;
       const {
         htmlErrorsResponseSchema,
@@ -924,10 +920,10 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       // Send initial message
       res.write(`data: ${JSON.stringify({
         type: 'start',
-        message: `🤖 Replit AI elindítja a ${taskDescription}...`
+        message: `🤖 AI elindítja a ${taskDescription}...`
       })}\n\n`);
 
-      // TWO-PHASE APPROACH with Replit AI (OpenAI-compatible):
+      // TWO-PHASE APPROACH with OpenAI:
       // Phase 1: Stream explanatory text for UX
       // Phase 2: Structured JSON call with response_format
 
@@ -1078,7 +1074,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      // Using Replit AI Integrations - Claude Sonnet 4.5 (Teams credits)
+      // Using Claude (Anthropic) API
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -1685,7 +1681,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      // Using Replit AI Integrations - Claude Sonnet 4.5 (Teams credits)
+      // Using Claude (Anthropic) API
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
@@ -3721,7 +3717,7 @@ ${publishedMaterials.map((material: any) => `  <url>
 
       // Key directories to include
       const directories = ['client', 'server', 'shared'];
-      const rootFiles = ['package.json', 'tsconfig.json', 'vite.config.ts', 'drizzle.config.ts', 'tailwind.config.ts', 'postcss.config.js', 'replit.md'];
+      const rootFiles = ['package.json', 'tsconfig.json', 'vite.config.ts', 'drizzle.config.ts', 'tailwind.config.ts', 'postcss.config.js'];
 
       // Add directories
       for (const dir of directories) {
@@ -3762,8 +3758,9 @@ ${publishedMaterials.map((material: any) => `  <url>
    - DATABASE_URL
    - ADMIN_EMAIL
    - ANTHROPIC_API_KEY
-   - CLIENT_ID, CLIENT_SECRET (Replit Auth)
+   - OPENAI_API_KEY
    - VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
+   - RESEND_API_KEY, RESEND_FROM_EMAIL
    - További változók a projekt dokumentációjában
 
 4. Indítsd el a fejlesztői szervert:
@@ -3773,7 +3770,7 @@ ${publishedMaterials.map((material: any) => `  <url>
 
 ## Dokumentáció
 
-Részletes információk: replit.md
+Részletes információk a README fájlokban.
 
 ## Letöltés dátuma
 ${new Date().toLocaleString('hu-HU')}

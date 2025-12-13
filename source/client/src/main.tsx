@@ -2,31 +2,44 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Clear browser cache on every page load
-// This ensures users always get the latest version of the app
-if ('caches' in window) {
-  caches.keys().then((cacheNames) => {
-    cacheNames.forEach((cacheName) => {
-      caches.delete(cacheName);
-    });
-  });
-}
+// Force clear ALL caches and cookies on page load
+// This ensures users always get the latest version
+(async () => {
+  // 1. Clear Service Worker caches
+  if ('caches' in window) {
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map(name => caches.delete(name)));
+    console.log('[Cache] All caches cleared');
+  }
+
+  // 2. Unregister ALL service workers and force reload
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+      await registration.unregister();
+      console.log('[SW] Unregistered:', registration.scope);
+    }
+  }
+
+  // 3. Clear sessionStorage
+  try {
+    sessionStorage.clear();
+    console.log('[Storage] sessionStorage cleared');
+  } catch (e) {
+    console.warn('[Storage] Could not clear sessionStorage');
+  }
+})();
 
 // Register Service Worker for PWA functionality + Push Notifications
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Clean up legacy /sw.js service worker registration if it exists
-    navigator.serviceWorker.getRegistration('/sw.js').then((registration) => {
-      if (registration) {
-        console.log('[PWA] Unregistering legacy /sw.js service worker');
-        registration.unregister();
-      }
-    });
-
-    // Register the unified service worker
-    navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+    // Register the unified service worker with cache busting
+    navigator.serviceWorker.register('/service-worker.js?v=' + Date.now(), { scope: '/' })
       .then((registration) => {
         console.log('[PWA] Service Worker registered:', registration.scope);
+        
+        // Force update check
+        registration.update();
       })
       .catch((error) => {
         console.error('[PWA] Service Worker registration failed:', error);

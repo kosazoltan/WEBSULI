@@ -13,7 +13,7 @@ export function setupAuth(app: Express) {
     const googleClientId = process.env.GOOGLE_CLIENT_ID;
     const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
     // Determine the base URL dynamically or fallback to localhost
-    const baseUrl = process.env.BASE_URL || (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'http://localhost:5000');
+    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
 
 
     if (!sessionSecret) {
