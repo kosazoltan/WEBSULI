@@ -36,10 +36,10 @@ export async function sendNewMaterialNotification(
   try {
     const { client, fromEmail } = getResendClient();
     
-    // Always use websuli.org for production
+    // Always use websuli.vip for production
     const baseUrl = process.env.CUSTOM_DOMAIN 
       ? `https://${process.env.CUSTOM_DOMAIN}`
-      : 'https://websuli.org';
+      : 'https://websuli.vip';
     
     // XSS Protection: Sanitize all user-generated content
     const safeRecipientName = sanitizeText(recipientName);

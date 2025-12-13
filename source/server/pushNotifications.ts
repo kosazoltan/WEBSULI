@@ -187,12 +187,12 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
  */
 export async function sendNewMaterialNotification(materialTitle: string, materialId: string): Promise<void> {
   try {
-    // Use CUSTOM_DOMAIN for production (websuli.org)
+    // Use CUSTOM_DOMAIN for production (websuli.vip)
     const baseUrl = process.env.CUSTOM_DOMAIN 
       ? `https://${process.env.CUSTOM_DOMAIN}`
       : (process.env.REPL_ID 
         ? `https://${process.env.REPL_ID}.replit.dev`
-        : 'https://websuli.org');
+        : 'https://websuli.vip');
     
     const materialUrl = `${baseUrl}/preview/${materialId}`;
     
@@ -220,12 +220,12 @@ export async function sendMaterialViewNotification(
   materialId: string
 ): Promise<void> {
   try {
-    // Use CUSTOM_DOMAIN for production (websuli.org)
+    // Use CUSTOM_DOMAIN for production (websuli.vip)
     const baseUrl = process.env.CUSTOM_DOMAIN 
       ? `https://${process.env.CUSTOM_DOMAIN}`
       : (process.env.REPL_ID 
         ? `https://${process.env.REPL_ID}.replit.dev`
-        : 'https://websuli.org');
+        : 'https://websuli.vip');
     
     const materialUrl = `${baseUrl}/preview/${materialId}`;
     
