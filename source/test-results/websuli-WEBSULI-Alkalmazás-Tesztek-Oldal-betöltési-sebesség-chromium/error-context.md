@@ -1,0 +1,1470 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic:
+    - generic: 🧪
+    - generic: E=mc²
+    - generic: Fe²⁺
+    - generic: ∑
+    - generic: C₆H₁₂O₆
+    - generic: Fe²⁺
+    - generic: ∑
+    - generic: Au
+    - generic: E=mc²
+    - generic: E=mc²
+    - generic: π
+    - generic: ∫
+    - generic: E=mc²
+    - generic: H₂SO₄
+    - generic: H₂SO₄
+    - generic: Au
+    - generic: E=mc²
+    - generic: Au
+    - generic: ⏣
+    - generic: Fe²⁺
+    - generic: NaCl
+    - generic: H₂O
+    - generic: DNA
+    - generic: ∫
+    - generic: C₆H₁₂O₆
+    - generic: NaCl
+    - generic: F=ma
+    - generic: C₆H₁₂O₆
+    - generic: NaCl
+    - generic: NaCl
+    - generic: ⚛
+    - generic: ∑
+    - generic: Au
+    - generic: E=mc²
+    - generic: E=mc²
+  - generic [ref=e3]:
+    - region "Notifications (F8)":
+      - list
+    - generic [ref=e4]:
+      - banner [ref=e5]:
+        - generic [ref=e7]:
+          - generic [ref=e8]:
+            - img [ref=e10]
+            - heading "Anyagok Profiknak" [level=1] [ref=e14]
+          - generic [ref=e15]:
+            - button "Bejelentkezés" [ref=e17] [cursor=pointer]:
+              - img
+              - text: Bejelentkezés
+            - button [ref=e18] [cursor=pointer]:
+              - img
+      - generic [ref=e20]:
+        - generic:
+          - generic: 🜍
+          - generic: Au
+          - generic: Hg
+          - generic: ΔS≥0
+          - generic: Hg
+          - generic: φ
+          - generic: ⌬
+          - generic: E=mc²
+          - generic: 🜄
+          - generic: ☽
+          - generic: ∞
+          - generic: ☉
+          - generic: 🜃
+          - generic: 🜄
+          - generic: Au
+          - generic: ⎔
+          - generic: Au
+          - generic: 🜃
+          - generic: ☉
+          - generic: Au
+          - generic: 🜃
+          - generic: 🜄
+          - generic: Au
+          - generic: 🜂
+          - generic: ∫
+          - generic: Hg
+          - generic: ☉
+          - generic: 🜁
+          - generic: ⌬
+          - generic: 🜔
+          - generic: ⎔
+          - generic: ∑
+          - generic: ☽
+          - generic: ⚗
+          - generic: ☽
+        - generic [ref=e21]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - img [ref=e30]
+              - img [ref=e33]
+              - img [ref=e36]
+            - heading "Anyagok Profiknak" [level=1] [ref=e43]
+            - paragraph [ref=e44]: ALAPOK · TUDÁS · MESTERSÉG
+            - generic [ref=e45]:
+              - generic [ref=e46]:
+                - img [ref=e47]
+                - generic [ref=e49]: 101 FILE
+              - generic [ref=e51]:
+                - img [ref=e52]
+                - generic [ref=e57]: 5 OSZTÁLY
+              - generic [ref=e59]:
+                - img [ref=e60]
+                - generic [ref=e62]: FREE ACCESS
+            - button "Email értesítést kérek" [ref=e64] [cursor=pointer]:
+              - img
+              - generic [ref=e65]: Email értesítést kérek
+          - generic [ref=e66]:
+            - heading "Válassz osztályt:" [level=2] [ref=e67]
+            - generic [ref=e68]:
+              - button "Minden osztály" [ref=e69] [cursor=pointer]:
+                - img
+                - generic [ref=e70]: Minden osztály
+              - generic [ref=e72] [cursor=pointer]: Programozási alapismeretek
+              - generic [ref=e73] [cursor=pointer]:
+                - generic [ref=e74]: 1. osztály
+                - generic [ref=e75]: (0)
+              - generic [ref=e76] [cursor=pointer]:
+                - generic [ref=e77]: 2. osztály
+                - generic [ref=e78]: (0)
+              - generic [ref=e80] [cursor=pointer]: 3. osztály
+              - generic [ref=e82] [cursor=pointer]: 4. osztály
+              - generic [ref=e84] [cursor=pointer]: 5. osztály
+              - generic [ref=e85] [cursor=pointer]:
+                - generic [ref=e86]: 6. osztály
+                - generic [ref=e87]: (0)
+              - generic [ref=e88] [cursor=pointer]:
+                - generic [ref=e89]: 7. osztály
+                - generic [ref=e90]: (0)
+              - generic [ref=e92] [cursor=pointer]: 8. osztály
+              - generic [ref=e93] [cursor=pointer]:
+                - generic [ref=e94]: 9. osztály
+                - generic [ref=e95]: (0)
+              - generic [ref=e96] [cursor=pointer]:
+                - generic [ref=e97]: 10. osztály
+                - generic [ref=e98]: (0)
+              - generic [ref=e99] [cursor=pointer]:
+                - generic [ref=e100]: 11. osztály
+                - generic [ref=e101]: (0)
+              - generic [ref=e102] [cursor=pointer]:
+                - generic [ref=e103]: 12. osztály
+                - generic [ref=e104]: (0)
+          - generic [ref=e106]:
+            - img [ref=e107]
+            - textbox "Keresés cím vagy leírás alapján..." [ref=e110]
+          - generic [ref=e111]:
+            - generic [ref=e112] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e113]:
+                - generic [ref=e114]:
+                  - img [ref=e116]
+                  - generic [ref=e121]: "3."
+                - heading "3. osztály - angol_temazaro_3osztaly" [level=3] [ref=e122]
+                - generic [ref=e123]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e124]: ⚗️ Megtekintés
+            - generic [ref=e125] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e126]:
+                - generic [ref=e127]:
+                  - img [ref=e129]
+                  - generic [ref=e134]: "3."
+                - heading "3. osztály - Kivonás tízesátlépéssel - Autós Matek Kaland" [level=3] [ref=e135]
+                - generic [ref=e136]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e137]: ⚗️ Megtekintés
+            - generic [ref=e138] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e139]:
+                - generic [ref=e140]:
+                  - img [ref=e142]
+                  - generic [ref=e147]: "8."
+                - heading "8. osztály - Anyagforgalom és Légzés - Interaktív Tananyag" [level=3] [ref=e148]
+                - generic [ref=e149]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e150]: ⚗️ Megtekintés
+            - generic [ref=e151] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e152]:
+                - generic [ref=e153]:
+                  - img [ref=e155]
+                  - generic [ref=e160]: "8."
+                - heading "8. osztály - Csokis Muffin Készítés - Kezdőknek" [level=3] [ref=e161]
+                - generic [ref=e162]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e163]: ⚗️ Megtekintés
+            - generic [ref=e164] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e165]:
+                - generic [ref=e166]:
+                  - img [ref=e168]
+                  - generic [ref=e173]: "3."
+                - heading "3. Osztályos Angol Témazáró - Decemberi Felkészítő" [level=3] [ref=e174]
+                - generic [ref=e175]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e176]: ⚗️ Megtekintés
+            - generic [ref=e177] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e178]:
+                - generic [ref=e179]:
+                  - img [ref=e181]
+                  - generic [ref=e186]: "8."
+                - heading "8. osztály - Reakciótípusok - Kémia Kaland" [level=3] [ref=e187]
+                - generic [ref=e188]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e189]: ⚗️ Megtekintés
+            - generic [ref=e190] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e191]:
+                - generic [ref=e192]:
+                  - img [ref=e194]
+                  - generic [ref=e199]: "4."
+                - heading "Hossz mértékegységei - 4. osztály" [level=3] [ref=e200]
+                - generic [ref=e201]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e202]: ⚗️ Megtekintés
+            - generic [ref=e203] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e204]:
+                - generic [ref=e205]:
+                  - img [ref=e207]
+                  - generic [ref=e212]: "4."
+                - heading "4. osztály - Who's vs Whose - Bilingual Interactive Lesson" [level=3] [ref=e213]
+                - generic [ref=e214]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e215]: ⚗️ Megtekintés
+            - generic [ref=e216] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e217]:
+                - generic [ref=e218]:
+                  - img [ref=e220]
+                  - generic [ref=e225]: "3."
+                - heading "10-es átlépéses kivonás - 3. osztály" [level=3] [ref=e226]
+                - generic [ref=e227]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e228]: ⚗️ Megtekintés
+            - generic [ref=e229] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e230]:
+                - generic [ref=e231]:
+                  - img [ref=e233]
+                  - generic [ref=e237]: Prog.
+                - heading "🎵 Suno AI - Zenekészítés mesterséges intelligenciával" [level=3] [ref=e238]
+                - generic [ref=e239]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e240]: ⚗️ Megtekintés
+            - generic [ref=e241] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e242]:
+                - generic [ref=e243]:
+                  - img [ref=e245]
+                  - generic [ref=e250]: "5."
+                - heading "A kereszténység és az iszlám - Témazáró tananyag 5. osztály" [level=3] [ref=e251]
+                - generic [ref=e252]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e253]: ⚗️ Megtekintés
+            - generic [ref=e254] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e255]:
+                - generic [ref=e256]:
+                  - img [ref=e258]
+                  - generic [ref=e263]: "8."
+                - heading "Egyszerű mondat elemzése – 8. osztály" [level=3] [ref=e264]
+                - generic [ref=e265]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e266]: ⚗️ Megtekintés
+            - generic [ref=e267] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e268]:
+                - generic [ref=e269]:
+                  - img [ref=e271]
+                  - generic [ref=e276]: "8."
+                - heading "🫁 Légzőrendszer - 8. osztály" [level=3] [ref=e277]
+                - generic [ref=e278]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e279]: ⚗️ Megtekintés
+            - generic [ref=e280] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e281]:
+                - generic [ref=e282]:
+                  - img [ref=e284]
+                  - generic [ref=e289]: "4."
+                - heading "🏔️ Északi-középhegység 4. osztály" [level=3] [ref=e290]
+                - generic [ref=e291]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e292]: ⚗️ Megtekintés
+            - generic [ref=e293] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e294]:
+                - generic [ref=e295]:
+                  - img [ref=e297]
+                  - generic [ref=e302]: "8."
+                - heading "Elektromosságtan - Fizika 8. osztály" [level=3] [ref=e303]
+                - generic [ref=e304]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e305]: ⚗️ Megtekintés
+            - generic [ref=e306] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e307]:
+                - generic [ref=e308]:
+                  - img [ref=e310]
+                  - generic [ref=e315]: "5."
+                - heading "5. Osztályos Komplex Kompetenciamérés Felkészítő" [level=3] [ref=e316]
+                - generic [ref=e317]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e318]: ⚗️ Megtekintés
+            - generic [ref=e319] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e320]:
+                - generic [ref=e321]:
+                  - img [ref=e323]
+                  - generic [ref=e328]: "5."
+                - heading "5. osztályos kompetenciamérés felkészítő" [level=3] [ref=e329]
+                - generic [ref=e330]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e331]: ⚗️ Megtekintés
+            - generic [ref=e332] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e333]:
+                - generic [ref=e334]:
+                  - img [ref=e336]
+                  - generic [ref=e341]: "8."
+                - heading "8. Osztályos Matematika Témazáró | Interaktív Tananyag" [level=3] [ref=e342]
+                - generic [ref=e343]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e344]: ⚗️ Megtekintés
+            - generic [ref=e345] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e346]:
+                - generic [ref=e347]:
+                  - img [ref=e349]
+                  - generic [ref=e354]: "8."
+                - heading "🇫🇷 8. Osztályos Francia Témazáró" [level=3] [ref=e355]
+                - generic [ref=e356]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e357]: ⚗️ Megtekintés
+            - generic [ref=e358] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e359]:
+                - generic [ref=e360]:
+                  - img [ref=e362]
+                  - generic [ref=e367]: "4."
+                - heading "🦋 Maradékos osztás és szorzás - 4. osztály" [level=3] [ref=e368]
+                - generic [ref=e369]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e370]: ⚗️ Megtekintés
+            - generic [ref=e371] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e372]:
+                - generic [ref=e373]:
+                  - img [ref=e375]
+                  - generic [ref=e380]: "3."
+                - heading "3. osztály - 🏎️ Számoló Verseny - 1000-es számkör" [level=3] [ref=e381]
+                - generic [ref=e382]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e383]: ⚗️ Megtekintés
+            - generic [ref=e384] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e385]:
+                - generic [ref=e386]:
+                  - img [ref=e388]
+                  - generic [ref=e393]: "8."
+                - heading "🖥️ Tömbök és Véletlen Számok - Digitális Kultúra 8. osztály" [level=3] [ref=e394]
+                - generic [ref=e395]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e396]: ⚗️ Megtekintés
+            - generic [ref=e397] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e398]:
+                - generic [ref=e399]:
+                  - img [ref=e401]
+                  - generic [ref=e406]: "4."
+                - heading "4. osztály - 🎄✨ Christmas in Poland - 4th Grade English ✨🎄" [level=3] [ref=e407]
+                - generic [ref=e408]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e409]: ⚗️ Megtekintés
+            - generic [ref=e410] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e411]:
+                - generic [ref=e412]:
+                  - img [ref=e414]
+                  - generic [ref=e418]: "8."
+                - heading "Magyar Népzene - 8. osztály" [level=3] [ref=e419]
+                - generic [ref=e420]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e421]: ⚗️ Megtekintés
+            - generic [ref=e422] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e423]:
+                - generic [ref=e424]:
+                  - img [ref=e426]
+                  - generic [ref=e431]: "3."
+                - heading "I Built a Little Snowman - Angol 3. osztály" [level=3] [ref=e432]
+                - generic [ref=e433]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e434]: ⚗️ Megtekintés
+            - generic [ref=e435] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e436]:
+                - generic [ref=e437]:
+                  - img [ref=e439]
+                  - generic [ref=e444]: "8."
+                - heading "8. osztály - Nyugat költői - Tananyag" [level=3] [ref=e445]
+                - generic [ref=e446]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e447]: ⚗️ Megtekintés
+            - generic [ref=e448] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e449]:
+                - generic [ref=e450]:
+                  - img [ref=e452]
+                  - generic [ref=e457]: "4."
+                - heading "4. osztály - Polish Christmas - 4th Grade English" [level=3] [ref=e458]
+                - generic [ref=e459]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e460]: ⚗️ Megtekintés
+            - generic [ref=e461] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e462]:
+                - generic [ref=e463]:
+                  - img [ref=e465]
+                  - generic [ref=e470]: "5."
+                - heading "🏎️ Elválasztás és Betűrend Verseny - 5. osztály" [level=3] [ref=e471]
+                - generic [ref=e472]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e473]: ⚗️ Megtekintés
+            - generic [ref=e474] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e475]:
+                - generic [ref=e476]:
+                  - img [ref=e478]
+                  - generic [ref=e483]: "8."
+                - heading "8. osztály - Fizika 8. - Elektromos áram" [level=3] [ref=e484]
+                - generic [ref=e485]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e486]: ⚗️ Megtekintés
+            - generic [ref=e487] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e488]:
+                - generic [ref=e489]:
+                  - img [ref=e491]
+                  - generic [ref=e496]: "5."
+                - heading "Have Got - Angol 5. osztály" [level=3] [ref=e497]
+                - generic [ref=e498]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e499]: ⚗️ Megtekintés
+            - generic [ref=e500] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e501]:
+                - generic [ref=e502]:
+                  - img [ref=e504]
+                  - generic [ref=e509]: "8."
+                - heading "Modern Magyar Líra | 8. osztály" [level=3] [ref=e510]
+                - generic [ref=e511]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e512]: ⚗️ Megtekintés
+            - generic [ref=e513] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e514]:
+                - generic [ref=e515]:
+                  - img [ref=e517]
+                  - generic [ref=e522]: "3."
+                - heading "Life in Peru - 3. osztályos Angol Tananyag" [level=3] [ref=e523]
+                - generic [ref=e524]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e525]: ⚗️ Megtekintés
+            - generic [ref=e526] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e527]:
+                - generic [ref=e528]:
+                  - img [ref=e530]
+                  - generic [ref=e535]: "4."
+                - heading "🏔️ Dunántúli-középhegység - Földrajz 4. osztály" [level=3] [ref=e536]
+                - generic [ref=e537]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e538]: ⚗️ Megtekintés
+            - generic [ref=e539] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e540]:
+                - generic [ref=e541]:
+                  - img [ref=e543]
+                  - generic [ref=e548]: "8."
+                - heading "8. osztály - 🫁 Légzőrendszer - Interaktív Tananyag" [level=3] [ref=e549]
+                - generic [ref=e550]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e551]: ⚗️ Megtekintés
+            - generic [ref=e552] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e553]:
+                - generic [ref=e554]:
+                  - img [ref=e556]
+                  - generic [ref=e561]: "5."
+                - heading "Matematika - Közönséges és Vegyes Törtek (5. osztály) - Racing Edition" [level=3] [ref=e562]
+                - generic [ref=e563]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e564]: ⚗️ Megtekintés
+            - generic [ref=e565] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e566]:
+                - generic [ref=e567]:
+                  - img [ref=e569]
+                  - generic [ref=e574]: "4."
+                - heading "4. osztály - Írásbeli műveletek és szöveges feladatok" [level=3] [ref=e575]
+                - generic [ref=e576]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e577]: ⚗️ Megtekintés
+            - generic [ref=e578] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e579]:
+                - generic [ref=e580]:
+                  - img [ref=e582]
+                  - generic [ref=e585]: Prog.
+                - heading "Informatika - Replit Fiók Létrehozása" [level=3] [ref=e586]
+                - generic [ref=e587]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e588]: ⚗️ Megtekintés
+            - generic [ref=e589] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e590]:
+                - generic [ref=e591]:
+                  - img [ref=e593]
+                  - generic [ref=e595]: Prog.
+                - heading "ChatGPT 3 – Mester Tananyag | Professzionális AI Promptolás" [level=3] [ref=e596]
+                - generic [ref=e597]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e598]: ⚗️ Megtekintés
+            - generic [ref=e599] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e600]:
+                - generic [ref=e601]:
+                  - img [ref=e603]
+                  - generic [ref=e606]: Prog.
+                - heading "Informatika - ChatGPT 2 PRO Tananyag" [level=3] [ref=e607]
+                - generic [ref=e608]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e609]: ⚗️ Megtekintés
+            - generic [ref=e610] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e611]:
+                - generic [ref=e612]:
+                  - img [ref=e614]
+                  - generic [ref=e617]: Prog.
+                - heading "Informatika - ChatGPT Használata Kezdőknek" [level=3] [ref=e618]
+                - generic [ref=e619]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e620]: ⚗️ Megtekintés
+            - generic [ref=e621] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e622]:
+                - generic [ref=e623]:
+                  - img [ref=e625]
+                  - generic [ref=e630]: Prog.
+                - heading "Modern Authentikációs Rendszerek" [level=3] [ref=e631]
+                - generic [ref=e632]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e633]: ⚗️ Megtekintés
+            - generic [ref=e634] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e635]:
+                - generic [ref=e636]:
+                  - img [ref=e638]
+                  - generic [ref=e643]: Prog.
+                - heading "Replit AI - Professzionális Fejlesztés" [level=3] [ref=e644]
+                - generic [ref=e645]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e646]: ⚗️ Megtekintés
+            - generic [ref=e647] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e648]:
+                - generic [ref=e649]:
+                  - img [ref=e651]
+                  - generic [ref=e656]: "5."
+                - heading "5. osztály Angol - My Cousin Danny" [level=3] [ref=e657]
+                - generic [ref=e658]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e659]: ⚗️ Megtekintés
+            - generic [ref=e660] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e661]:
+                - generic [ref=e662]:
+                  - img [ref=e664]
+                  - generic [ref=e669]: "3."
+                - heading "Peru / Life in Peru - 3. osztályos Angol Tananyag" [level=3] [ref=e670]
+                - generic [ref=e671]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e672]: ⚗️ Megtekintés
+            - generic [ref=e673] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e674]:
+                - generic [ref=e675]:
+                  - img [ref=e677]
+                  - generic [ref=e682]: "3."
+                - heading "Jobs - Foglalkozások 🎨 | 3. osztály Angol - Teljes Tananyag" [level=3] [ref=e683]
+                - generic [ref=e684]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e685]: ⚗️ Megtekintés
+            - generic [ref=e686] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e687]:
+                - generic [ref=e688]:
+                  - img [ref=e690]
+                  - generic [ref=e695]: "8."
+                - heading "Molekulák, ionok és vegyületek - 8. osztály" [level=3] [ref=e696]
+                - generic [ref=e697]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e698]: ⚗️ Megtekintés
+            - generic [ref=e699] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e700]:
+                - generic [ref=e701]:
+                  - img [ref=e703]
+                  - generic [ref=e708]: "5."
+                - 'heading "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona" [level=3] [ref=e709]'
+                - generic [ref=e710]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e711]: ⚗️ Megtekintés
+            - generic [ref=e712] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e713]:
+                - generic [ref=e714]:
+                  - img [ref=e716]
+                  - generic [ref=e721]: "8."
+                - heading "8. osztályos Matematika - Szöveges Feladatok" [level=3] [ref=e722]
+                - generic [ref=e723]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e724]: ⚗️ Megtekintés
+            - generic [ref=e725] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e726]:
+                - generic [ref=e727]:
+                  - img [ref=e729]
+                  - generic [ref=e734]: "5."
+                - 'heading "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona" [level=3] [ref=e735]'
+                - generic [ref=e736]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e737]: ⚗️ Megtekintés
+            - generic [ref=e738] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e739]:
+                - generic [ref=e740]:
+                  - img [ref=e742]
+                  - generic [ref=e747]: "5."
+                - heading "5. osztály - Magyar Népmesék - Fehérlófia és Tündérszép Ilona" [level=3] [ref=e748]
+                - generic [ref=e749]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e750]: ⚗️ Megtekintés
+            - generic [ref=e751] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e752]:
+                - generic [ref=e753]:
+                  - img [ref=e755]
+                  - generic [ref=e760]: "8."
+                - heading "Ókori Keleti Civilizációk 2 - 8. osztály" [level=3] [ref=e761]
+                - paragraph [ref=e762]: 2. bővített ókori kelet tananyag
+                - generic [ref=e763]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e764]: ⚗️ Megtekintés
+            - generic [ref=e765] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e766]:
+                - generic [ref=e767]:
+                  - img [ref=e769]
+                  - generic [ref=e774]: "8."
+                - heading "A testek elektromos állapota - 8. osztály" [level=3] [ref=e775]
+                - paragraph [ref=e776]: A testek elektromos állapota
+                - generic [ref=e777]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e778]: ⚗️ Megtekintés
+            - generic [ref=e779] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e780]:
+                - generic [ref=e781]:
+                  - img [ref=e783]
+                  - generic [ref=e788]: "5."
+                - heading "5. osztály - Hagyomány szerinti és egyszerűsítő írásmód" [level=3] [ref=e789]
+                - generic [ref=e790]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e791]: ⚗️ Megtekintés
+            - generic [ref=e792] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e793]:
+                - generic [ref=e794]:
+                  - img [ref=e796]
+                  - generic [ref=e801]: "5."
+                - heading "5. osztály - A mézelő méh - Interaktív tananyag" [level=3] [ref=e802]
+                - generic [ref=e803]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e804]: ⚗️ Megtekintés
+            - generic [ref=e805] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e806]:
+                - generic [ref=e807]:
+                  - img [ref=e809]
+                  - generic [ref=e814]: "3."
+                - heading "3. osztály - Szorzás és maradékos osztás - Interaktív tananyag" [level=3] [ref=e815]
+                - generic [ref=e816]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e817]: ⚗️ Megtekintés
+            - generic [ref=e818] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e819]:
+                - generic [ref=e820]:
+                  - img [ref=e822]
+                  - generic [ref=e827]: Prog.
+                - heading "Programozási alapismeretek - VS Code & GitHub Fejlesztői Útmutató - Claude Code-dal" [level=3] [ref=e828]
+                - generic [ref=e829]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e830]: ⚗️ Megtekintés
+            - generic [ref=e831] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e832]:
+                - generic [ref=e833]:
+                  - img [ref=e835]
+                  - generic [ref=e840]: "4."
+                - heading "4. osztály - Halloween Poems - Angol Nyelv Lecke" [level=3] [ref=e841]
+                - generic [ref=e842]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e843]: ⚗️ Megtekintés
+            - generic [ref=e844] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e845]:
+                - generic [ref=e846]:
+                  - img [ref=e848]
+                  - generic [ref=e853]: "5."
+                - 'heading "5. osztály - Arany János: Családi kör - Interaktív Tananyag" [level=3] [ref=e854]'
+                - generic [ref=e855]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e856]: ⚗️ Megtekintés
+            - generic [ref=e857] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e858]:
+                - generic [ref=e859]:
+                  - img [ref=e861]
+                  - generic [ref=e866]: "8."
+                - heading "Az Ókori Kelet Civilizációi - 8. osztály" [level=3] [ref=e867]
+                - generic [ref=e868]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e869]: ⚗️ Megtekintés
+            - generic [ref=e870] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e871]:
+                - generic [ref=e872]:
+                  - img [ref=e874]
+                  - generic [ref=e879]: "8."
+                - heading "A család és a nemzeti identitás - 8. osztály" [level=3] [ref=e880]
+                - generic [ref=e881]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e882]: ⚗️ Megtekintés
+            - generic [ref=e883] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e884]:
+                - generic [ref=e885]:
+                  - img [ref=e887]
+                  - generic [ref=e892]: "3."
+                - heading "3. osztály - Daily Routines - Napi Rutinok Angolul" [level=3] [ref=e893]
+                - generic [ref=e894]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e895]: ⚗️ Megtekintés
+            - generic [ref=e896] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e897]:
+                - generic [ref=e898]:
+                  - img [ref=e900]
+                  - generic [ref=e905]: Prog.
+                - heading "Programozási alapismeretek - Windows Fejlesztői Környezet" [level=3] [ref=e906]
+                - generic [ref=e907]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e908]: ⚗️ Megtekintés
+            - generic [ref=e909] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e910]:
+                - generic [ref=e911]:
+                  - img [ref=e913]
+                  - generic [ref=e918]: Prog.
+                - heading "Programozási alapismeretek - GitHub Kezdőknek" [level=3] [ref=e919]
+                - generic [ref=e920]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e921]: ⚗️ Megtekintés
+            - generic [ref=e922] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e923]:
+                - generic [ref=e924]:
+                  - img [ref=e926]
+                  - generic [ref=e931]: "8."
+                - heading "Határozók A, Á - 8. osztályos nyelvtan" [level=3] [ref=e932]
+                - generic [ref=e933]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e934]: ⚗️ Megtekintés
+            - generic [ref=e935] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e936]:
+                - generic [ref=e937]:
+                  - img [ref=e939]
+                  - generic [ref=e944]: "5."
+                - heading "5. osztály - ĐURAĐ (GYÖRGY) BRANKOVIĆ" [level=3] [ref=e945]
+                - generic [ref=e946]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e947]: ⚗️ Megtekintés
+            - generic [ref=e948] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e949]:
+                - generic [ref=e950]:
+                  - img [ref=e952]
+                  - generic [ref=e957]: "8."
+                - heading "8. osztály - Bolyai Természettudományi Felkészítő" [level=3] [ref=e958]
+                - generic [ref=e959]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e960]: ⚗️ Megtekintés
+            - generic [ref=e961] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e962]:
+                - generic [ref=e963]:
+                  - img [ref=e965]
+                  - generic [ref=e970]: "5."
+                - heading "5. osztály törtek Egyszerűsítése és bővítése" [level=3] [ref=e971]
+                - generic [ref=e972]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e973]: ⚗️ Megtekintés
+            - generic [ref=e974] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e975]:
+                - generic [ref=e976]:
+                  - img [ref=e978]
+                  - generic [ref=e983]: "4."
+                - heading "4. osztály - Igekötők és igék" [level=3] [ref=e984]
+                - paragraph [ref=e985]: Magyar nyelv tananyag - Igekötők használata, értelmezés, gyakorlatok
+                - generic [ref=e986]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e987]: ⚗️ Megtekintés
+            - generic [ref=e988] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e989]:
+                - generic [ref=e990]:
+                  - img [ref=e992]
+                  - generic [ref=e997]: "8."
+                - heading "8. Osztály Szabo Magda Abigel A regény" [level=3] [ref=e998]
+                - generic [ref=e999]:
+                  - button "0" [ref=e1000]:
+                    - img
+                    - generic [ref=e1001]: "0"
+                  - generic [ref=e1002]: ⚗️ Megtekintés
+            - generic [ref=e1003] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1004]:
+                - generic [ref=e1005]:
+                  - img [ref=e1007]
+                  - generic [ref=e1012]: "8."
+                - heading "8. Osztály Abigél" [level=3] [ref=e1013]
+                - generic [ref=e1014]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1015]: ⚗️ Megtekintés
+            - generic [ref=e1016] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1017]:
+                - generic [ref=e1018]:
+                  - img [ref=e1020]
+                  - generic [ref=e1025]: "5."
+                - heading "5. Osztály növények testfelépítése" [level=3] [ref=e1026]
+                - generic [ref=e1027]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1028]: ⚗️ Megtekintés
+            - generic [ref=e1029] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1030]:
+                - generic [ref=e1031]:
+                  - img [ref=e1033]
+                  - generic [ref=e1038]: "3."
+                - heading "3. osztályos matek űrkaland alapműveletek" [level=3] [ref=e1039]
+                - generic [ref=e1040]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1041]: ⚗️ Megtekintés
+            - generic [ref=e1042] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1043]:
+                - generic [ref=e1044]:
+                  - img [ref=e1046]
+                  - generic [ref=e1051]: "8."
+                - heading "8. osztály nyelvtan határozók" [level=3] [ref=e1052]
+                - generic [ref=e1053]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1054]: ⚗️ Megtekintés
+            - generic [ref=e1055] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1056]:
+                - generic [ref=e1057]:
+                  - img [ref=e1059]
+                  - generic [ref=e1064]: "8."
+                - heading "8 osztályos tananyag Savak és savmaradékok" [level=3] [ref=e1065]
+                - generic [ref=e1066]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1067]: ⚗️ Megtekintés
+            - generic [ref=e1068] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1069]:
+                - generic [ref=e1070]:
+                  - img [ref=e1072]
+                  - generic [ref=e1077]: "4."
+                - heading "4. Osztály Alpokalja Dunántúl" [level=3] [ref=e1078]
+                - generic [ref=e1079]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1080]: ⚗️ Megtekintés
+            - generic [ref=e1081] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1082]:
+                - generic [ref=e1083]:
+                  - img [ref=e1085]
+                  - generic [ref=e1090]: "4."
+                - heading "4. Osztály all about me" [level=3] [ref=e1091]
+                - generic [ref=e1092]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1093]: ⚗️ Megtekintés
+            - generic [ref=e1094] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1095]:
+                - generic [ref=e1096]:
+                  - img [ref=e1098]
+                  - generic [ref=e1103]: "4."
+                - heading "4. Osztály all about me english" [level=3] [ref=e1104]
+                - generic [ref=e1105]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1106]: ⚗️ Megtekintés
+            - generic [ref=e1107] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1108]:
+                - generic [ref=e1109]:
+                  - img [ref=e1111]
+                  - generic [ref=e1116]: "5."
+                - heading "5. osztály hívatlan látogató természettan" [level=3] [ref=e1117]
+                - generic [ref=e1118]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1119]: ⚗️ Megtekintés
+            - generic [ref=e1120] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1121]:
+                - generic [ref=e1122]:
+                  - img [ref=e1124]
+                  - generic [ref=e1129]: "5."
+                - heading "5 osztály Magyar Irodalom Jókai Mór" [level=3] [ref=e1130]
+                - generic [ref=e1131]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1132]: ⚗️ Megtekintés
+            - generic [ref=e1133] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1134]:
+                - generic [ref=e1135]:
+                  - img [ref=e1137]
+                  - generic [ref=e1142]: "8."
+                - heading "8. osztály algebra" [level=3] [ref=e1143]
+                - generic [ref=e1144]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1145]: ⚗️ Megtekintés
+            - generic [ref=e1146] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1147]:
+                - generic [ref=e1148]:
+                  - img [ref=e1150]
+                  - generic [ref=e1155]: "8."
+                - heading "8. Osztály Az emberré válás folyamata és a történelem forrásai" [level=3] [ref=e1156]
+                - generic [ref=e1157]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1158]: ⚗️ Megtekintés
+            - generic [ref=e1159] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1160]:
+                - generic [ref=e1161]:
+                  - img [ref=e1163]
+                  - generic [ref=e1168]: "4."
+                - heading "4 osztályos környezetismeret Budapest, barangolás, Alföld" [level=3] [ref=e1169]
+                - generic [ref=e1170]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1171]: ⚗️ Megtekintés
+            - generic [ref=e1172] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1173]:
+                - generic [ref=e1174]:
+                  - img [ref=e1176]
+                  - generic [ref=e1181]: "8."
+                - heading "8. Osztály Energia és energiaváltozások" [level=3] [ref=e1182]
+                - generic [ref=e1183]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1184]: ⚗️ Megtekintés
+            - generic [ref=e1185] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1186]:
+                - generic [ref=e1187]:
+                  - img [ref=e1189]
+                  - generic [ref=e1194]: "5."
+                - heading "5. Osztály Arany János családi kör teljes tananyag" [level=3] [ref=e1195]
+                - generic [ref=e1196]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1197]: ⚗️ Megtekintés
+            - generic [ref=e1198] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1199]:
+                - generic [ref=e1200]:
+                  - img [ref=e1202]
+                  - generic [ref=e1207]: "8."
+                - heading "8. Osztály Green war novell" [level=3] [ref=e1208]
+                - generic [ref=e1209]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1210]: ⚗️ Megtekintés
+            - generic [ref=e1211] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1212]:
+                - generic [ref=e1213]:
+                  - img [ref=e1215]
+                  - generic [ref=e1220]: "8."
+                - heading "8. Osztály földrajz Magyarország gazdasága" [level=3] [ref=e1221]
+                - generic [ref=e1222]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1223]: ⚗️ Megtekintés
+            - generic [ref=e1224] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1225]:
+                - generic [ref=e1226]:
+                  - img [ref=e1228]
+                  - generic [ref=e1233]: "5."
+                - heading "5. Osztály Történelem görögország" [level=3] [ref=e1234]
+                - generic [ref=e1235]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1236]: ⚗️ Megtekintés
+            - generic [ref=e1237] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1238]:
+                - generic [ref=e1239]:
+                  - img [ref=e1241]
+                  - generic [ref=e1246]: "5."
+                - heading "5. Osztály kommunikáció tananyag teljes" [level=3] [ref=e1247]
+                - generic [ref=e1248]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1249]: ⚗️ Megtekintés
+            - generic [ref=e1250] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1251]:
+                - generic [ref=e1252]:
+                  - img [ref=e1254]
+                  - generic [ref=e1259]: "4."
+                - heading "4. osztály Cselekvés, Történés, Igék - Témazáró Felkészítő" [level=3] [ref=e1260]
+                - generic [ref=e1261]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1262]: ⚗️ Megtekintés
+            - generic [ref=e1263] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1264]:
+                - generic [ref=e1265]:
+                  - img [ref=e1267]
+                  - generic [ref=e1272]: "8."
+                - heading "8. Osztály TESZT Az anyagforgalom jelentősége és az előbél felépítése" [level=3] [ref=e1273]
+                - generic [ref=e1274]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1275]: ⚗️ Megtekintés
+            - generic [ref=e1276] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1277]:
+                - generic [ref=e1278]:
+                  - img [ref=e1280]
+                  - generic [ref=e1285]: "5."
+                - heading "Az emberré válás folyamata - 5. osztály" [level=3] [ref=e1286]
+                - paragraph [ref=e1287]: "Interaktív tananyag az emberré válás folyamatáról: 25 kérdéses kvíz, 15 szöveges feladat, TTS felolvasás funkció."
+                - generic [ref=e1288]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1289]: ⚗️ Megtekintés
+            - generic [ref=e1290] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1291]:
+                - generic [ref=e1292]:
+                  - img [ref=e1294]
+                  - generic [ref=e1299]: "5."
+                - heading "5. Osztály Bibliaismeret a biblia könyvei" [level=3] [ref=e1300]
+                - generic [ref=e1301]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1302]: ⚗️ Megtekintés
+            - generic [ref=e1303] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1304]:
+                - generic [ref=e1305]:
+                  - img [ref=e1307]
+                  - generic [ref=e1312]: "8."
+                - heading "8. Osztály Az ember testfelépítése és mozgása" [level=3] [ref=e1313]
+                - generic [ref=e1314]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1315]: ⚗️ Megtekintés
+            - generic [ref=e1316] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1317]:
+                - generic [ref=e1318]:
+                  - img [ref=e1320]
+                  - generic [ref=e1325]: "8."
+                - heading "8. Osztály Ady endre tananyag teljes" [level=3] [ref=e1326]
+                - generic [ref=e1327]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1328]: ⚗️ Megtekintés
+            - generic [ref=e1329] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1330]:
+                - generic [ref=e1331]:
+                  - img [ref=e1333]
+                  - generic [ref=e1338]: "8."
+                - heading "8. Osztály Francia október" [level=3] [ref=e1339]
+                - generic [ref=e1340]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1341]: ⚗️ Megtekintés
+            - generic [ref=e1342] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1343]:
+                - generic [ref=e1344]:
+                  - img [ref=e1346]
+                  - generic [ref=e1351]: "4."
+                - heading "4. Osztály Telling the Time Az óra kifejezése" [level=3] [ref=e1352]
+                - generic [ref=e1353]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1354]: ⚗️ Megtekintés
+            - generic [ref=e1355] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1356]:
+                - generic [ref=e1357]:
+                  - img [ref=e1359]
+                  - generic [ref=e1364]: "4."
+                - heading "4. Osztály Angol Nyelvtan - Témazáró Felkészítő" [level=3] [ref=e1365]
+                - generic [ref=e1366]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1367]: ⚗️ Megtekintés
+            - generic [ref=e1368] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1369]:
+                - generic [ref=e1370]:
+                  - img [ref=e1372]
+                  - generic [ref=e1377]: "3."
+                - heading "3. Osztály matek szorzás" [level=3] [ref=e1378]
+                - generic [ref=e1379]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1380]: ⚗️ Megtekintés
+            - generic [ref=e1381] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1382]:
+                - generic [ref=e1383]:
+                  - img [ref=e1385]
+                  - generic [ref=e1390]: "3."
+                - heading "Harmadik osztályos matek angol-magyar" [level=3] [ref=e1391]
+                - generic [ref=e1392]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1393]: ⚗️ Megtekintés
+            - generic [ref=e1394] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1395]:
+                - generic [ref=e1396]:
+                  - img [ref=e1398]
+                  - generic [ref=e1403]: "8."
+                - heading "8. osztályos hőtan" [level=3] [ref=e1404]
+                - generic [ref=e1405]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1406]: ⚗️ Megtekintés
+            - generic [ref=e1407] [cursor=pointer]:
+              - generic:
+                - img
+              - generic [ref=e1408]:
+                - generic [ref=e1409]:
+                  - img [ref=e1411]
+                  - generic [ref=e1416]: "8."
+                - heading "8.osztály anyagforgalom jelentősége és az előbél felépítése" [level=3] [ref=e1417]
+                - generic [ref=e1418]:
+                  - button "-" [disabled]:
+                    - img
+                    - generic: "-"
+                  - generic [ref=e1419]: ⚗️ Megtekintés
+```
