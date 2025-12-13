@@ -1341,22 +1341,33 @@ Miben segíthetek? Szeretnéd, hogy készítsek egy strukturált tananyag szöve
                 onClick={() => {
                   finalizeChatGptPhase();
                   
-                  // Always initialize/update Claude chat with the latest text content
-                  const lastAssistantMessage = [...chatGptMessages].reverse().find(m => m.role === 'assistant');
-                  if (lastAssistantMessage) {
+                  // Get the last REAL assistant message (skip intro messages with emojis like 📚)
+                  const assistantMessages = chatGptMessages.filter(m => m.role === 'assistant');
+                  // Find the last message that doesn't start with intro patterns
+                  const lastRealContent = [...assistantMessages].reverse().find(m => 
+                    !m.content.startsWith('📚') && 
+                    !m.content.includes('**Dokumentum elemezve!**') &&
+                    !m.content.includes('Miben segíthetek?')
+                  ) || assistantMessages[assistantMessages.length - 1];
+                  
+                  if (lastRealContent) {
+                    // Clean the content - remove any markdown formatting artifacts
+                    const cleanContent = lastRealContent.content
+                      .replace(/^---\s*/gm, '')  // Remove --- separators at start of lines
+                      .replace(/\s*---$/gm, '')  // Remove --- separators at end
+                      .trim();
+                    
                     const contextMessage: ChatMessage = {
                       role: 'assistant',
-                      content: `🎨 **Szöveg véglegesítve!**
+                      content: `🎨 **Szöveg átvéve!**
 
-Most készítsük el az interaktív HTML tananyagot. Itt van a szöveges tartalom:
+Itt van a tananyag szöveg:
 
----
-
-${lastAssistantMessage.content}
+${cleanContent}
 
 ---
 
-Miben segíthetek? Szeretnél egy interaktív HTML-t ezzel a tartalommal?`
+Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: "Készíts interaktív HTML-t", "Adj hozzá kvízt", stb.)`
                     };
                     // Always reset Claude messages with the new content
                     setClaudeMessages([contextMessage]);
