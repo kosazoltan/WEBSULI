@@ -415,6 +415,16 @@
     animation: cyberpunk-glitch 0.3s infinite;
   }
 
+  /* Cyberpunk shimmer animation for cards */
+  @keyframes cyberpunk-shimmer {
+    0% {
+      background-position: -200% center;
+    }
+    100% {
+      background-position: 200% center;
+    }
+  }
+
   /* Slow spin for DNA and atoms */
   @keyframes spin-slow {
     from {

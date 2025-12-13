@@ -78,30 +78,28 @@ export function ScientificBackground() {
     for (let i = 0; i < count; i++) {
       const el = SCIENTIFIC_ELEMENTS[Math.floor(Math.random() * SCIENTIFIC_ELEMENTS.length)];
 
-      // Színpaletta: Arany és Mély Lila dominancia
+      // Cyberpunk színpaletta: Cyan, Magenta, Purple
       let colorClass = '';
       let glowColor = '';
 
-      // Véletlenszerűen választunk a két fő téma közül, kategóriától függetlenül is keverhetjük kicsit
-      const isGold = Math.random() > 0.4 || el.category.includes('gold') || el.category === 'math';
-
-      if (isGold) {
-        // Gold / Amber Theme
-        colorClass = 'text-amber-400/80 dark:text-amber-300/80';
-        glowColor = 'rgba(251, 191, 36, 0.6)';
+      // Véletlenszerűen választunk cyberpunk színek közül
+      const colorChoice = Math.random();
+      if (colorChoice < 0.33) {
+        // Cyan Theme
+        colorClass = 'text-cyan-400/80 dark:text-cyan-300/80';
+        glowColor = 'rgba(34, 211, 238, 0.8)';
+      } else if (colorChoice < 0.66) {
+        // Magenta Theme
+        colorClass = 'text-pink-500/80 dark:text-pink-400/80';
+        glowColor = 'rgba(236, 72, 153, 0.8)';
       } else {
-        // Deep Purple / Magic Theme
-        colorClass = 'text-purple-500/80 dark:text-purple-400/80';
-        glowColor = 'rgba(168, 85, 247, 0.6)';
+        // Purple Theme
+        colorClass = 'text-purple-400/80 dark:text-purple-300/80';
+        glowColor = 'rgba(192, 132, 252, 0.8)';
       }
 
-      // Különleges elemek kiemelése
-      if (el.category === 'chemistry') {
-        colorClass = 'text-emerald-500/70 dark:text-emerald-400/70';
-        glowColor = 'rgba(16, 185, 129, 0.4)';
-      }
-
-      const directions: FloatingElement['direction'][] = ['up', 'down', 'diagonal-up', 'diagonal-down'];
+      // Véletlenszerű irányok cyberpunk mozgáshoz
+      const directions: FloatingElement['direction'][] = ['up', 'down', 'left', 'right', 'diagonal-up', 'diagonal-down'];
 
       newElements.push({
         id: i,
@@ -110,10 +108,10 @@ export function ScientificBackground() {
         x: Math.random() * 100,
         y: Math.random() * 100,
         size: (1.2 + Math.random() * 2) * el.size,
-        baseOpacity: 0.1 + Math.random() * 0.2,
+        baseOpacity: 0.3 + Math.random() * 0.4, // Fényesebb cyberpunk elemek
         rotation: Math.random() * 360,
-        animationDuration: 40 + Math.random() * 60,
-        animationDelay: Math.random() * -100,
+        animationDuration: 20 + Math.random() * 40, // Gyorsabb, dinamikusabb mozgás
+        animationDelay: Math.random() * -50,
         colorClass,
         glowColor,
         direction: directions[Math.floor(Math.random() * directions.length)],
@@ -153,18 +151,23 @@ export function ScientificBackground() {
         speed: (Math.random() * 0.004 + 0.001) * (i % 2 === 0 ? 1 : -1),
         width: Math.random() < 0.3 ? 2 : 1, // Néha vastagabb
         dashArray: Math.random() > 0.5 ? [Math.random() * 20 + 5, Math.random() * 30 + 10] : [], // Szaggatott vagy sima
-        color: isGold ? 'rgba(251, 191, 36, 0.15)' : 'rgba(168, 85, 247, 0.15)',
+        // Cyberpunk neon színek
+        color: i % 3 === 0 
+          ? 'rgba(34, 211, 238, 0.2)' // cyan
+          : i % 3 === 1 
+          ? 'rgba(236, 72, 153, 0.2)' // magenta
+          : 'rgba(192, 132, 252, 0.2)', // purple
         angle: Math.random() * Math.PI * 2,
         opacity: 0.1 + Math.random() * 0.2
       });
     }
 
-    // Hexagon a közepén
+    // Hexagon a közepén - cyberpunk neon
     const hexagon = {
       radius: baseRadius * 0.8,
       angle: 0,
-      speed: 0.002,
-      color: 'rgba(251, 191, 36, 0.2)'
+      speed: 0.003, // Gyorsabb rotáció
+      color: 'rgba(34, 211, 238, 0.3)' // Cyan neon
     };
 
     const drawHexagon = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, angle: number, color: string) => {
@@ -179,7 +182,10 @@ export function ScientificBackground() {
       ctx.closePath();
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = color;
       ctx.stroke();
+      ctx.shadowBlur = 0;
 
       // Belső vonalak
       ctx.beginPath();
@@ -189,9 +195,12 @@ export function ScientificBackground() {
         ctx.moveTo(x + r * Math.cos(theta1), y + r * Math.sin(theta1));
         ctx.lineTo(x + r * Math.cos(theta2), y + r * Math.sin(theta2));
       }
-      ctx.strokeStyle = color.replace('0.2', '0.1');
+      ctx.strokeStyle = color.replace('0.3', '0.15');
       ctx.lineWidth = 1;
+      ctx.shadowBlur = 5;
+      ctx.shadowColor = color;
       ctx.stroke();
+      ctx.shadowBlur = 0;
     };
 
     let time = 0;
@@ -231,7 +240,10 @@ export function ScientificBackground() {
 
         ctx.strokeStyle = ring.color;
         ctx.lineWidth = ring.width;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = ring.color;
         ctx.stroke();
+        ctx.shadowBlur = 0;
 
         // Díszítő pontok a körökön
         if (Math.random() > 0.5) {
@@ -242,8 +254,11 @@ export function ScientificBackground() {
             const dy = Math.sin(dotAngle) * ring.radius;
             ctx.beginPath();
             ctx.arc(dx, dy, 2, 0, Math.PI * 2);
-            ctx.fillStyle = ring.color.replace('0.15', '0.4');
+            ctx.fillStyle = ring.color.replace('0.2', '0.6');
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = ring.color;
             ctx.fill();
+            ctx.shadowBlur = 0;
           }
         }
       });
@@ -282,11 +297,13 @@ export function ScientificBackground() {
 
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-[0]" aria-hidden="true">
-      {/* Mély, misztikus háttér gradient - Dark Purple to Black */}
-      <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/[0.15] via-purple-950/[0.1] to-background" />
+      {/* Cyberpunk háttér gradient - Dark Gray with Neon accents */}
+      <div className="absolute inset-0 bg-gradient-to-b from-gray-950/[0.3] via-gray-900/[0.2] to-background" />
 
-      {/* Radial glow a közepén (Arany/Lila keverék) */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.08)_0%,transparent_60%)]" />
+      {/* Cyberpunk radial glows - multiple neon colors */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(34,211,238,0.1)_0%,transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_70%,rgba(236,72,153,0.1)_0%,transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(192,132,252,0.08)_0%,transparent_60%)]" />
 
       {/* Canvas az Alkímia Körökhöz */}
       <canvas
@@ -307,8 +324,8 @@ export function ScientificBackground() {
             animation: `${getAnimationName(el.direction)} ${el.animationDuration}s infinite ease-in-out`,
             animationDelay: `${el.animationDelay}s`,
             transform: `rotate(${el.rotation}deg)`,
-            textShadow: `0 0 15px ${el.glowColor}`,
-            filter: 'blur(0.3px)',
+            textShadow: `0 0 20px ${el.glowColor}, 0 0 40px ${el.glowColor}`,
+            filter: 'blur(0.2px)',
             willChange: 'transform, opacity',
           }}
         >
@@ -316,32 +333,52 @@ export function ScientificBackground() {
         </div>
       ))}
 
-      {/* Grid Overlay - Tech hatás */}
+      {/* Cyberpunk Grid Overlay - Neon grid */}
       <div
-        className="absolute inset-0 opacity-[0.03]"
+        className="absolute inset-0 opacity-[0.05]"
         style={{
-          backgroundImage: 'linear-gradient(rgba(251, 191, 36, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(251, 191, 36, 0.3) 1px, transparent 1px)',
-          backgroundSize: '100px 100px'
+          backgroundImage: 'linear-gradient(rgba(34, 211, 238, 0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(34, 211, 238, 0.4) 1px, transparent 1px)',
+          backgroundSize: '80px 80px'
         }}
       />
 
       {/* Animációk definíciója */}
       <style>{`
         @keyframes floatUp {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-30px) rotate(5deg); }
+          0%, 100% { transform: translateY(0) translateX(0) rotate(0deg) scale(1); }
+          25% { transform: translateY(-20px) translateX(10px) rotate(5deg) scale(1.1); }
+          50% { transform: translateY(-40px) translateX(-5px) rotate(-5deg) scale(1.05); }
+          75% { transform: translateY(-20px) translateX(5px) rotate(3deg) scale(1.08); }
         }
         @keyframes floatDown {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(30px) rotate(-5deg); }
+          0%, 100% { transform: translateY(0) translateX(0) rotate(0deg) scale(1); }
+          25% { transform: translateY(20px) translateX(-10px) rotate(-5deg) scale(1.1); }
+          50% { transform: translateY(40px) translateX(5px) rotate(5deg) scale(1.05); }
+          75% { transform: translateY(20px) translateX(-5px) rotate(-3deg) scale(1.08); }
+        }
+        @keyframes floatLeft {
+          0%, 100% { transform: translateX(0) translateY(0) rotate(0deg) scale(1); }
+          25% { transform: translateX(-20px) translateY(10px) rotate(-5deg) scale(1.1); }
+          50% { transform: translateX(-40px) translateY(-5px) rotate(5deg) scale(1.05); }
+          75% { transform: translateX(-20px) translateY(5px) rotate(-3deg) scale(1.08); }
+        }
+        @keyframes floatRight {
+          0%, 100% { transform: translateX(0) translateY(0) rotate(0deg) scale(1); }
+          25% { transform: translateX(20px) translateY(-10px) rotate(5deg) scale(1.1); }
+          50% { transform: translateX(40px) translateY(5px) rotate(-5deg) scale(1.05); }
+          75% { transform: translateX(20px) translateY(-5px) rotate(3deg) scale(1.08); }
         }
         @keyframes floatDiagonalUp {
-          0%, 100% { transform: translate(0, 0) rotate(0deg); }
-          50% { transform: translate(30px, -30px) rotate(10deg); }
+          0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+          25% { transform: translate(25px, -25px) rotate(10deg) scale(1.1); }
+          50% { transform: translate(50px, -50px) rotate(-10deg) scale(1.05); }
+          75% { transform: translate(25px, -25px) rotate(5deg) scale(1.08); }
         }
         @keyframes floatDiagonalDown {
-          0%, 100% { transform: translate(0, 0) rotate(0deg); }
-          50% { transform: translate(-30px, 30px) rotate(-10deg); }
+          0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+          25% { transform: translate(-25px, 25px) rotate(-10deg) scale(1.1); }
+          50% { transform: translate(-50px, 50px) rotate(10deg) scale(1.05); }
+          75% { transform: translate(-25px, 25px) rotate(-5deg) scale(1.08); }
         }
       `}</style>
     </div>
