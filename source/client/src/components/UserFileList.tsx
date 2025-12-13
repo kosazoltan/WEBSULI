@@ -53,7 +53,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-gray-900 dark:via-orange-950 dark:to-amber-950">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
           <div className="animate-pulse">
             <div className="h-8 w-48 bg-muted rounded mx-auto mb-4"></div>
@@ -66,7 +66,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
 
   if (files.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-gray-900 dark:via-orange-950 dark:to-amber-950">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           {/* Admin Toggle */}
           {onToggleView && (
@@ -107,7 +107,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-amber-50/20 dark:from-gray-950 dark:via-purple-950/30 dark:to-gray-900 relative">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100/50 to-gray-50/30 dark:from-gray-950 dark:via-gray-900/30 dark:to-gray-900 relative">
       {/* Tudományos háttér animáció */}
       <ScientificBackground />
 
@@ -203,7 +203,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
               return (
                 <Card
                   key={file.id}
-                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(147,51,234,0.15),0_10px_30px_rgba(245,158,11,0.1)] hover:-translate-y-2 hover:scale-[1.03] bg-gradient-to-br from-white/90 via-purple-50/40 to-amber-50/30 dark:from-gray-900/90 dark:via-purple-950/30 dark:to-gray-800/40 backdrop-blur-lg border-2 border-purple-200/50 hover:border-purple-400/70 dark:border-purple-800/40 dark:hover:border-purple-500/60 relative rounded-2xl shadow-lg nebula-glow"
+                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(107,114,128,0.15),0_10px_30px_rgba(75,85,99,0.1)] hover:-translate-y-2 hover:scale-[1.03] bg-gradient-to-br from-white/90 via-gray-50/40 to-gray-50/30 dark:from-gray-900/90 dark:via-gray-800/30 dark:to-gray-800/40 backdrop-blur-lg border-2 border-gray-200/50 hover:border-gray-400/70 dark:border-gray-700/40 dark:hover:border-gray-500/60 relative rounded-2xl shadow-lg nebula-glow"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                 >
@@ -222,8 +222,8 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
                   <CardContent className="fold:p-3 p-4 sm:p-5 relative">
                     {/* Icon + Badge */}
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-200 via-purple-100 to-amber-100 dark:from-purple-900/50 dark:via-purple-800/40 dark:to-amber-900/30 group-hover:from-purple-300 group-hover:via-amber-200 group-hover:to-amber-100 dark:group-hover:from-purple-700/60 dark:group-hover:via-purple-600/50 dark:group-hover:to-amber-800/40 transition-all duration-300 shadow-md group-hover:shadow-[0_0_20px_rgba(147,51,234,0.3)]">
-                        <Icon className="w-7 h-7 text-purple-600 dark:text-purple-400 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors" />
+                      <div className="p-3 rounded-2xl bg-gradient-to-br from-gray-200 via-gray-100 to-gray-100 dark:from-gray-700/50 dark:via-gray-600/40 dark:to-gray-600/30 group-hover:from-gray-300 group-hover:via-gray-200 group-hover:to-gray-200 dark:group-hover:from-gray-600/60 dark:group-hover:via-gray-500/50 dark:group-hover:to-gray-500/40 transition-all duration-300 shadow-md group-hover:shadow-[0_0_20px_rgba(107,114,128,0.3)]">
+                        <Icon className="w-7 h-7 text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors" />
                       </div>
                       <Badge
                         variant="secondary"
