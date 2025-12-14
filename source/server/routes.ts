@@ -328,7 +328,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -337,7 +337,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' data: 'unsafe-inline' 'unsafe-eval'; script-src-attr 'unsafe-inline'; style-src 'self' data: 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src https: data:; media-src 'self' data: blob:; object-src 'self';">
   <style>
     /* Global responsive reset for all uploaded HTML content */
-    /* Cross-browser compatibility: Opera, Edge, Safari */
+    /* Cross-browser compatibility: Opera, Edge, Safari, Samsung Z Fold */
     * {
       box-sizing: border-box;
       -webkit-box-sizing: border-box; /* Safari */
@@ -351,17 +351,23 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
       text-size-adjust: 100%;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      /* Support for foldable devices */
+      height: 100%;
+      width: 100%;
     }
     
     body {
       margin: 0;
       padding: 0;
       width: 100%;
+      min-height: 100vh;
       overflow-x: hidden;
       line-height: 1.6;
       word-wrap: break-word;
       overflow-wrap: break-word;
       -webkit-overflow-scrolling: touch; /* Safari smooth scrolling */
+      /* Support for foldable devices - use full viewport */
+      min-height: -webkit-fill-available; /* iOS Safari */
     }
     
     /* Responsive images and media */
@@ -394,18 +400,57 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
       word-break: break-word;
     }
     
-    /* Responsive container - minimal padding, user content controls own layout */
+    /* Responsive container - optimized for all screen sizes */
     .responsive-container {
       width: 100%;
       max-width: 100%;
       padding: 0.5rem; /* Minimal padding to prevent edge overflow */
       margin: 0 auto;
+      min-height: 100%;
     }
     
     /* Mobile: minimal padding */
     @media (max-width: 640px) {
       .responsive-container {
         padding: 0.25rem;
+      }
+    }
+    
+    /* Tablet: optimized padding */
+    @media (min-width: 641px) and (max-width: 1024px) {
+      .responsive-container {
+        padding: 0.75rem;
+      }
+    }
+    
+    /* Samsung Z Fold inner display and large tablets: optimal viewing */
+    @media (min-width: 1025px) and (max-width: 1600px) {
+      .responsive-container {
+        padding: 1rem;
+        max-width: 100%;
+      }
+    }
+    
+    /* Desktop and ultra-wide: centered with max-width for readability */
+    @media (min-width: 1601px) {
+      .responsive-container {
+        padding: 1.5rem;
+        max-width: 1600px; /* Optimal reading width */
+        margin: 0 auto;
+      }
+    }
+    
+    /* Samsung Z Fold specific optimizations */
+    @media (min-width: 1200px) and (max-width: 1800px) and (min-height: 2000px) {
+      /* Z Fold inner display: 1768x2208px */
+      .responsive-container {
+        padding: 1.25rem;
+        max-width: 100%;
+      }
+      
+      /* Optimize font sizes for foldable */
+      html {
+        font-size: clamp(16px, 1.2vw, 18px);
       }
     }
   </style>
@@ -3071,7 +3116,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <title>${sanitizeText(file.title)}</title>
   <style>
     * {
@@ -3082,12 +3127,25 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
     html, body {
       width: 100%;
       height: 100%;
+      min-height: 100vh;
       overflow: hidden;
+      /* Support for foldable devices */
+      min-height: -webkit-fill-available; /* iOS Safari */
     }
     embed {
       width: 100%;
       height: 100%;
+      min-height: 100vh;
+      min-height: -webkit-fill-available; /* iOS Safari */
       border: none;
+      display: block;
+    }
+    /* Optimize for Samsung Z Fold and large tablets */
+    @media (min-width: 1200px) and (max-width: 1800px) and (min-height: 2000px) {
+      embed {
+        width: 100%;
+        height: 100vh;
+      }
     }
   </style>
 </head>

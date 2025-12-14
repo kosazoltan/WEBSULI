@@ -36,8 +36,12 @@ export default function ReactPdfViewer({ pdfUrl, title }: ReactPdfViewerProps) {
     <div 
       className="h-full w-full bg-background"
       style={{ 
-        height: 'calc(100vh - 200px)',
-        minHeight: '600px'
+        // Responsive height: adapts to screen size
+        // Mobile: full viewport minus header
+        // Tablet/Fold: optimized for larger screens
+        // Desktop: full available space
+        height: '100%',
+        minHeight: '400px', // Minimum for very small screens
       }}
       data-testid="react-pdf-viewer-container"
     >
