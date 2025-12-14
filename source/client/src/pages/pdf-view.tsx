@@ -106,9 +106,9 @@ export default function PdfView() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Header - Responsive padding */}
       <div className="border-b bg-card sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3">
+        <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 sm:py-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <Button
@@ -156,8 +156,8 @@ export default function PdfView() {
         </div>
       </div>
 
-      {/* PDF Viewer */}
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 h-[calc(100vh-80px)]">
+      {/* PDF Viewer - Responsive container optimized for all screen sizes */}
+      <div className="w-full mx-auto px-0 sm:px-2 tablet:px-4 xl:px-6 py-2 sm:py-4 h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] tablet:h-[calc(100vh-6rem)]">
         <ReactPdfViewer 
           pdfUrl={pdfUrl} 
           title={material.title}

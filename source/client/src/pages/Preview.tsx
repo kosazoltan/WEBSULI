@@ -123,7 +123,7 @@ export default function Preview() {
   return (
     <div className="min-h-screen bg-background">
       <div className="fixed top-0 left-0 right-0 z-50 border-b bg-card/95 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 flex items-center justify-between gap-2">
+        <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 flex items-center justify-between gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -193,7 +193,8 @@ export default function Preview() {
           </Button>
         </div>
       </div>
-      <div className="pt-14 h-[calc(100vh-3.5rem)]">
+      {/* Responsive container - optimized for all screen sizes including Samsung Z Fold */}
+      <div className="pt-12 sm:pt-14 h-[calc(100vh-3rem)] sm:h-[calc(100vh-3.5rem)] tablet:h-[calc(100vh-4rem)]">
         {isLoading ? (
           <div className="w-full h-full flex items-center justify-center py-20">
             <p className="text-muted-foreground">Betöltés...</p>
@@ -209,6 +210,9 @@ export default function Preview() {
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
             allow="autoplay; fullscreen; clipboard-write; microphone"
             data-testid="iframe-preview"
+            style={{
+              minHeight: '400px', // Minimum height for very small screens
+            }}
           />
         )}
       </div>
