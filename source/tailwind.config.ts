@@ -10,7 +10,8 @@ export default {
         'xs': '320px',
         'tablet': '900px',
         'xl': '1440px',
-        'foldable': '1600px',
+        'foldable': '1600px', // Samsung Z Fold inner display and similar foldables
+        'zfold': '1768px', // Samsung Z Fold inner display specific (1768x2208px)
         'uw': '1920px',
       },
       borderRadius: {

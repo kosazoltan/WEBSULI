@@ -17,7 +17,7 @@ export default function CodeViewer({
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2">
+        <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2">
           <Button
             variant="ghost"
             size="sm"
@@ -30,15 +30,19 @@ export default function CodeViewer({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4">
-        <Card className="overflow-hidden">
+      {/* Responsive container - optimized for all screen sizes */}
+      <div className="w-full mx-auto px-0 sm:px-2 tablet:px-4 xl:px-6 py-2 sm:py-4">
+        <Card className="overflow-hidden h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] tablet:h-[calc(100vh-6rem)]">
           <iframe
             src={`/dev/${materialId}`}
-            className="w-full h-[700px] border-0"
+            className="w-full h-full border-0"
             title={title}
             sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
             allow="autoplay; microphone; clipboard-write"
             data-testid="iframe-preview"
+            style={{
+              minHeight: '400px', // Minimum height for very small screens
+            }}
           />
         </Card>
       </div>
