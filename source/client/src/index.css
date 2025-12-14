@@ -341,6 +341,7 @@
 
   .animate-pulse-glow {
     animation: pulse-glow 10s ease-in-out infinite; /* 70% slower (3s / 0.3) */
+    will-change: opacity, filter;
   }
 
   /* Float animation for scientific symbols */
@@ -357,6 +358,7 @@
 
   .animate-float {
     animation: float 13.33s ease-in-out infinite; /* 70% slower (4s / 0.3) */
+    will-change: transform, opacity;
   }
 
   /* Cyberpunk float animation with glow and glitch */
@@ -385,6 +387,7 @@
 
   .animate-cyberpunk-float {
     animation: cyberpunk-float 16.67s ease-in-out infinite; /* 70% slower (5s / 0.3) */
+    will-change: transform, opacity, filter;
   }
 
   /* Cyberpunk glitch effect */
@@ -413,6 +416,7 @@
 
   .animate-cyberpunk-glitch {
     animation: cyberpunk-glitch 0.3s infinite;
+    will-change: transform, filter;
   }
 
   /* Cyberpunk shimmer animation for cards */
@@ -437,6 +441,7 @@
 
   .animate-spin-slow {
     animation: spin-slow 26.67s linear infinite; /* 70% slower (8s / 0.3) */
+    will-change: transform;
   }
 
   /* Scientific shimmer effect */
