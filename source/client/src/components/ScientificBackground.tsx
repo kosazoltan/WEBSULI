@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, memo } from 'react';
 
 // Tudományos és Alkímiai szimbólumok
 const SCIENTIFIC_ELEMENTS = [
@@ -65,7 +65,7 @@ interface CircleRing {
   opacity: number;
 }
 
-export function ScientificBackground() {
+function ScientificBackground() {
   const [elements, setElements] = useState<FloatingElement[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
@@ -73,7 +73,7 @@ export function ScientificBackground() {
   // Lebegő elemek inicializálása
   useEffect(() => {
     const newElements: FloatingElement[] = [];
-    const count = 35; // Kevesebb, de hangsúlyosabb elem
+    const count = 20; // Reduced from 35 to 20 for better performance
 
     for (let i = 0; i < count; i++) {
       const el = SCIENTIFIC_ELEMENTS[Math.floor(Math.random() * SCIENTIFIC_ELEMENTS.length)];
@@ -180,14 +180,12 @@ export function ScientificBackground() {
         else ctx.lineTo(px, py);
       }
       ctx.closePath();
-      ctx.strokeStyle = color;
+      // Removed shadowBlur for performance - increased opacity to compensate
+      ctx.strokeStyle = color.replace('0.3', '0.5');
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = color;
       ctx.stroke();
-      ctx.shadowBlur = 0;
 
-      // Belső vonalak
+      // Belső vonalak - Removed shadowBlur for performance
       ctx.beginPath();
       for (let i = 0; i < 3; i++) {
         const theta1 = angle + (i * Math.PI * 2) / 6;
@@ -195,12 +193,9 @@ export function ScientificBackground() {
         ctx.moveTo(x + r * Math.cos(theta1), y + r * Math.sin(theta1));
         ctx.lineTo(x + r * Math.cos(theta2), y + r * Math.sin(theta2));
       }
-      ctx.strokeStyle = color.replace('0.3', '0.15');
+      ctx.strokeStyle = color.replace('0.3', '0.25'); // Increased opacity
       ctx.lineWidth = 1;
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = color;
       ctx.stroke();
-      ctx.shadowBlur = 0;
     };
 
     let time = 0;
@@ -238,28 +233,21 @@ export function ScientificBackground() {
           ctx.setLineDash([]);
         }
 
-        ctx.strokeStyle = ring.color;
+        // Removed shadowBlur for performance - increased opacity to compensate
+        ctx.strokeStyle = ring.color.replace('0.2', '0.4');
         ctx.lineWidth = ring.width;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = ring.color;
         ctx.stroke();
-        ctx.shadowBlur = 0;
 
-        // Díszítő pontok a körökön
-        if (Math.random() > 0.5) {
-          const numDots = 3;
-          for (let d = 0; d < numDots; d++) {
-            const dotAngle = ring.angle + (d * (Math.PI * 2 / numDots));
-            const dx = Math.cos(dotAngle) * ring.radius;
-            const dy = Math.sin(dotAngle) * ring.radius;
-            ctx.beginPath();
-            ctx.arc(dx, dy, 2, 0, Math.PI * 2);
-            ctx.fillStyle = ring.color.replace('0.2', '0.6');
-            ctx.shadowBlur = 5;
-            ctx.shadowColor = ring.color;
-            ctx.fill();
-            ctx.shadowBlur = 0;
-          }
+        // Díszítő pontok a körökön - Removed shadowBlur and random check for performance
+        const numDots = 3;
+        for (let d = 0; d < numDots; d++) {
+          const dotAngle = ring.angle + (d * (Math.PI * 2 / numDots));
+          const dx = Math.cos(dotAngle) * ring.radius;
+          const dy = Math.sin(dotAngle) * ring.radius;
+          ctx.beginPath();
+          ctx.arc(dx, dy, 2, 0, Math.PI * 2);
+          ctx.fillStyle = ring.color.replace('0.2', '0.7'); // Increased opacity
+          ctx.fill();
         }
       });
 
@@ -309,6 +297,7 @@ export function ScientificBackground() {
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full opacity-100" // Canvas kezeli az opacity-t
+        style={{ willChange: 'contents' }}
       />
 
       {/* Lebegő szimbólumok */}
@@ -324,9 +313,10 @@ export function ScientificBackground() {
             animation: `${getAnimationName(el.direction)} ${el.animationDuration}s infinite ease-in-out`,
             animationDelay: `${el.animationDelay}s`,
             transform: `rotate(${el.rotation}deg)`,
-            textShadow: `0 0 20px ${el.glowColor}, 0 0 40px ${el.glowColor}`,
-            filter: 'blur(0.2px)',
+            textShadow: `0 0 15px ${el.glowColor}, 0 0 30px ${el.glowColor}`, // Reduced blur for performance
+            filter: 'blur(0.1px)', // Reduced blur
             willChange: 'transform, opacity',
+            contain: 'layout style paint', // CSS containment for performance
           }}
         >
           {el.text}
@@ -385,4 +375,4 @@ export function ScientificBackground() {
   );
 }
 
-export default ScientificBackground;
+export default memo(ScientificBackground);

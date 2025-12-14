@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { Rocket, BookOpen, Users, Sparkles, Atom, Beaker, Zap, FlaskConical } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 
@@ -8,8 +8,8 @@ interface HeroSectionProps {
   showEmailSubscribe?: boolean;
 }
 
-// Cyberpunk Animated Scientific Symbol Component
-const CyberpunkSymbol = ({ 
+// Cyberpunk Animated Scientific Symbol Component - Memoized for performance
+const CyberpunkSymbol = memo(({ 
   symbol, 
   x, 
   y, 
@@ -35,7 +35,9 @@ const CyberpunkSymbol = ({
         left: x, 
         top: y,
         animationDelay: `${delay}s`,
-        animationDuration: `${(4 + Math.random() * 3) / 0.3}s` // 70% slower
+        animationDuration: `${(4 + Math.random() * 3) / 0.3}s`, // 70% slower
+        willChange: 'transform, opacity',
+        contain: 'layout style paint'
       }}
     >
       <div className="relative">
@@ -44,7 +46,8 @@ const CyberpunkSymbol = ({
       </div>
     </div>
   );
-};
+});
+CyberpunkSymbol.displayName = 'CyberpunkSymbol';
 
 // DNA Helix Component
 const DNAHelix = ({ className = "" }: { className?: string }) => {
@@ -89,7 +92,7 @@ const AtomOrbit = ({ size = 120 }: { size?: number }) => {
   );
 };
 
-export default function HeroSection({
+function HeroSection({
   totalFiles = 0,
   totalClassrooms = 0,
   showEmailSubscribe = true
@@ -98,11 +101,30 @@ export default function HeroSection({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
+    let rafId: number | null = null;
+    let lastUpdate = 0;
+    const throttleMs = 100; // Throttle to 10fps for mouse tracking
+    
     const handleMouseMove = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - lastUpdate < throttleMs) {
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            setMousePos({ x: e.clientX, y: e.clientY });
+            lastUpdate = Date.now();
+            rafId = null;
+          });
+        }
+        return;
+      }
       setMousePos({ x: e.clientX, y: e.clientY });
+      lastUpdate = now;
     };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,11 +143,11 @@ export default function HeroSection({
 
     let time = 0;
 
-    // Scientific particles and connections
+    // Scientific particles and connections - Reduced count for performance
     const particles: Array<{x: number, y: number, vx: number, vy: number, size: number}> = [];
     
-    // Initialize particles
-    for (let i = 0; i < 30; i++) {
+    // Initialize particles - Reduced from 30 to 15 for better performance
+    for (let i = 0; i < 15; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
@@ -136,7 +158,7 @@ export default function HeroSection({
     }
 
     const drawScientificPattern = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, time: number) => {
-      // Hexagonal molecular structure
+      // Hexagonal molecular structure - Removed shadowBlur for performance
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
         const angle = (i * Math.PI) / 3 + time * 0.09; // 70% slower (0.3 * 0.3)
@@ -146,50 +168,39 @@ export default function HeroSection({
         else ctx.lineTo(px, py);
       }
       ctx.closePath();
-      // Cyberpunk neon hexagon
-      ctx.strokeStyle = 'rgba(34, 211, 238, 0.4)'; // Cyan
+      // Cyberpunk neon hexagon - Increased opacity to compensate for no shadow
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.6)'; // Cyan - Increased opacity
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = 'rgba(34, 211, 238, 0.6)';
       ctx.stroke();
-      ctx.shadowBlur = 0;
 
       // Inner rotating elements
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(-time * 0.15); // 70% slower (0.5 * 0.3)
       
-      // Draw electrons orbits with cyberpunk colors
+      // Draw electrons orbits with cyberpunk colors - Removed shadowBlur for performance
       const orbitColors = [
-        'rgba(34, 211, 238, 0.3)', // cyan
-        'rgba(236, 72, 153, 0.3)', // magenta
-        'rgba(192, 132, 252, 0.3)' // purple
+        'rgba(34, 211, 238, 0.5)', // cyan - Increased opacity
+        'rgba(236, 72, 153, 0.5)', // magenta
+        'rgba(192, 132, 252, 0.5)' // purple
       ];
       for (let i = 0; i < 3; i++) {
         ctx.beginPath();
         ctx.ellipse(0, 0, radius * 0.6, radius * 0.3, (i * Math.PI) / 3, 0, Math.PI * 2);
         ctx.strokeStyle = orbitColors[i];
         ctx.lineWidth = 1.5;
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = orbitColors[i];
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
       ctx.restore();
 
-      // Nucleus with cyberpunk glow
+      // Nucleus with cyberpunk glow - Removed shadowBlur for performance
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(34, 211, 238, 0.9)'; // Cyan
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = 'rgba(34, 211, 238, 1)';
+      ctx.fillStyle = 'rgba(34, 211, 238, 1)'; // Cyan - Full opacity
       ctx.fill();
-      ctx.strokeStyle = 'rgba(192, 132, 252, 0.8)'; // Purple border
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.9)'; // Purple border - Increased opacity
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = 'rgba(192, 132, 252, 1)';
       ctx.stroke();
-      ctx.shadowBlur = 0;
     };
 
     const animate = () => {
@@ -215,47 +226,43 @@ export default function HeroSection({
         if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
         if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
 
-        // Draw particle with cyberpunk neon colors
+        // Draw particle with cyberpunk neon colors - Removed shadowBlur for performance
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
         const colors = [
-          'rgba(34, 211, 238, 0.8)', // cyan-400
-          'rgba(236, 72, 153, 0.8)', // pink-500
-          'rgba(192, 132, 252, 0.8)' // purple-400
+          'rgba(34, 211, 238, 0.9)', // cyan-400 - Increased opacity to compensate for no shadow
+          'rgba(236, 72, 153, 0.9)', // pink-500
+          'rgba(192, 132, 252, 0.9)' // purple-400
         ];
         ctx.fillStyle = colors[i % 3];
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = colors[i % 3];
         ctx.fill();
-        ctx.shadowBlur = 0;
 
-        // Draw connections between nearby particles
-        particles.forEach((other, j) => {
-          if (i >= j) return;
+        // Draw connections between nearby particles - Optimized with distance check first
+        // Only check particles ahead to avoid duplicate checks
+        for (let j = i + 1; j < particles.length; j++) {
+          const other = particles[j];
           const dx = particle.x - other.x;
           const dy = particle.y - other.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
+          const distanceSq = dx * dx + dy * dy; // Use squared distance to avoid sqrt
 
-          if (distance < 120) {
+          if (distanceSq < 14400) { // 120^2 = 14400
+            const distance = Math.sqrt(distanceSq);
             ctx.beginPath();
             ctx.moveTo(particle.x, particle.y);
             ctx.lineTo(other.x, other.y);
-            // Cyberpunk neon connection lines
+            // Cyberpunk neon connection lines - Removed shadowBlur for performance
             const colors = [
               'rgba(34, 211, 238, ', // cyan
               'rgba(236, 72, 153, ', // magenta
               'rgba(192, 132, 252, ' // purple
             ];
             const colorIndex = (i + j) % 3;
-            const opacity = 0.3 * (1 - distance / 120);
+            const opacity = 0.4 * (1 - distance / 120); // Slightly increased opacity
             ctx.strokeStyle = colors[colorIndex] + opacity + ')';
             ctx.lineWidth = 1;
-            ctx.shadowBlur = 5;
-            ctx.shadowColor = colors[colorIndex].replace(', ', ', 1)');
             ctx.stroke();
-            ctx.shadowBlur = 0;
           }
-        });
+        }
       });
 
       // Draw Main Central Scientific Pattern
@@ -273,29 +280,23 @@ export default function HeroSection({
         const px = cx + Math.cos(angle) * r;
         const py = cy + Math.sin(angle) * r;
 
-        // Small molecular structure with cyberpunk colors
+        // Small molecular structure with cyberpunk colors - Removed shadowBlur for performance
         ctx.beginPath();
         ctx.arc(px, py, 4, 0, Math.PI * 2);
         const moleculeColors = [
-          'rgba(34, 211, 238, 0.9)', // cyan
-          'rgba(236, 72, 153, 0.9)' // magenta
+          'rgba(34, 211, 238, 1)', // cyan - Full opacity
+          'rgba(236, 72, 153, 1)' // magenta
         ];
         ctx.fillStyle = moleculeColors[i % 2];
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = moleculeColors[i % 2];
         ctx.fill();
-        ctx.shadowBlur = 0;
         
-        // Connection to center with neon glow
+        // Connection to center with neon glow - Removed shadowBlur for performance
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(px, py);
-        ctx.strokeStyle = `rgba(34, 211, 238, ${0.2 + Math.sin(time + i) * 0.1})`;
+        ctx.strokeStyle = `rgba(34, 211, 238, ${0.3 + Math.sin(time + i) * 0.15})`; // Increased opacity
         ctx.lineWidth = 1.5;
-        ctx.shadowBlur = 3;
-        ctx.shadowColor = 'rgba(34, 211, 238, 0.5)';
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
 
       requestAnimationFrame(animate);
@@ -329,6 +330,7 @@ export default function HeroSection({
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ willChange: 'contents' }}
       />
 
       {/* Cyberpunk Floating Scientific Symbols with Neon Glow */}
@@ -473,3 +475,5 @@ export default function HeroSection({
     </div>
   );
 }
+
+export default memo(HeroSection);
