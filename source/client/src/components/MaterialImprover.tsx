@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -224,11 +224,33 @@ export default function MaterialImprover() {
   };
 
   const renderedOriginal = useMemo(
-    () => makeRunnableHtml(previewData?.originalFile?.content),
+    () => {
+      const result = makeRunnableHtml(previewData?.originalFile?.content);
+      console.log('[RENDERED] Original HTML structure check:', {
+        hasDocType: result.includes('<!DOCTYPE'),
+        hasHtml: result.includes('<html'),
+        hasHead: result.includes('<head'),
+        hasBody: result.includes('<body'),
+        headBeforeBody: result.indexOf('<head') < result.indexOf('<body') || result.indexOf('<body') === -1,
+        preview: result.substring(0, 500)
+      });
+      return result;
+    },
     [previewData?.originalFile?.content]
   );
 
-  const renderedImproved = useMemo(() => makeRunnableHtml(previewData?.content), [previewData?.content]);
+  const renderedImproved = useMemo(() => {
+    const result = makeRunnableHtml(previewData?.content);
+    console.log('[RENDERED] Improved HTML structure check:', {
+      hasDocType: result.includes('<!DOCTYPE'),
+      hasHtml: result.includes('<html'),
+      hasHead: result.includes('<head'),
+      hasBody: result.includes('<body'),
+      headBeforeBody: result.indexOf('<head') < result.indexOf('<body') || result.indexOf('<body') === -1,
+      preview: result.substring(0, 500)
+    });
+    return result;
+  }, [previewData?.content]);
 
   // Improve material mutation
   const improveMutation = useMutation({
@@ -662,13 +684,23 @@ export default function MaterialImprover() {
                       }}
                       onLoad={(ev) => {
                         console.log('[IFRAME] Improved HTML loaded, length:', renderedImproved.length);
-                        console.log('[IFRAME] HTML content preview:', renderedImproved.substring(0, 500));
+                        console.log('[IFRAME] HTML content preview (BEFORE iframe):', renderedImproved.substring(0, 500));
                         // Try to access iframe content to check if it loaded
                         const iframe = ev.target as HTMLIFrameElement;
                         try {
                           const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
                           if (iframeDoc) {
                             console.log('[IFRAME] Iframe document found');
+                            const docHtml = iframeDoc.documentElement.outerHTML;
+                            console.log('[IFRAME] Document HTML (AFTER iframe):', docHtml.substring(0, 500));
+                            console.log('[IFRAME] Document structure:', {
+                              htmlTag: iframeDoc.documentElement.tagName,
+                              headExists: !!iframeDoc.head,
+                              bodyExists: !!iframeDoc.body,
+                              headIndex: docHtml.indexOf('<head'),
+                              bodyIndex: docHtml.indexOf('<body'),
+                              headBeforeBody: docHtml.indexOf('<head') < docHtml.indexOf('<body') || docHtml.indexOf('<body') === -1
+                            });
                             console.log('[IFRAME] Body exists:', !!iframeDoc.body);
                             console.log('[IFRAME] Body innerHTML length:', iframeDoc.body?.innerHTML?.length || 0);
                             console.log('[IFRAME] Body text content length:', iframeDoc.body?.textContent?.length || 0);
