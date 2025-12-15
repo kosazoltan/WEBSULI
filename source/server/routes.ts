@@ -4581,31 +4581,28 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         let fixedCss = cssContent;
         
         // Fix empty rules - match { ... } blocks that are not preceded by a selector
-        // Pattern: start of line or after newline, then {, then content with reset properties, then }
-        // Use a more flexible approach: find { ... } that doesn't have a selector before it
+        // Pattern: { at start of line (or after whitespace), then content, then } at start of line (or before whitespace)
+        // More robust: match { that is NOT preceded by a selector (word character before {)
         
-        // First, try single-line empty rules
-        fixedCss = fixedCss.replace(/^\s*\{\s*((?:box-sizing|margin|padding|border)[^}]*)\}\s*$/gm, (match, content) => {
-          // Check if this looks like a reset rule (contains margin, padding, or box-sizing)
-          if (content.match(/(?:margin|padding|box-sizing)/i)) {
-            return `* { ${content.trim()} }`;
-          }
-          return match;
-        });
-        
-        // Then handle multi-line empty rules - match { at start of line, then content, then } at start of line
-        fixedCss = fixedCss.replace(/(?:^|\n)\s*\{\s*((?:box-sizing|margin|padding|border)[\s\S]*?)\}\s*(?:\n|$)/gm, (match, content) => {
+        // First, handle multi-line empty rules - this is more common
+        // Match: { at start of line, then content (can span multiple lines), then } at start of line
+        fixedCss = fixedCss.replace(/(?:^|\n)(\s*)\{\s*((?:box-sizing|margin|padding|border)[\s\S]*?)\}\s*(?=\n|$)/gm, (match, indent, content) => {
           const cleanContent = content.trim();
           // Check if it's a reset rule and doesn't contain nested selectors or other CSS rules
           if (cleanContent.match(/(?:margin|padding|box-sizing)/i) && 
               !cleanContent.match(/[a-zA-Z][\w\-]*\s*\{/) && 
               !cleanContent.match(/@/)) {
-            // Preserve the newline structure
-            const hasLeadingNewline = match.startsWith('\n');
-            const hasTrailingNewline = match.endsWith('\n');
-            const prefix = hasLeadingNewline ? '\n' : '';
-            const suffix = hasTrailingNewline ? '\n' : '';
-            return `${prefix}* { ${cleanContent} }${suffix}`;
+            // Preserve indentation and newline structure
+            return `${indent}* { ${cleanContent} }`;
+          }
+          return match;
+        });
+        
+        // Also handle single-line empty rules (fallback)
+        fixedCss = fixedCss.replace(/^\s*\{\s*((?:box-sizing|margin|padding|border)[^}]*)\}\s*$/gm, (match, content) => {
+          // Check if this looks like a reset rule (contains margin, padding, or box-sizing)
+          if (content.match(/(?:margin|padding|box-sizing)/i)) {
+            return `* { ${content.trim()} }`;
           }
           return match;
         });
