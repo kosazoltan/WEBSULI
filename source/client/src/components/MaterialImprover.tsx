@@ -150,7 +150,7 @@ export default function MaterialImprover() {
   // Apply improved file mutation
   const applyMutation = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
-      return apiRequest("POST", `/api/admin/improved-files/${id}/apply", {
+      return apiRequest("POST", "/api/admin/improved-files/" + id + "/apply", {
         createBackup: true,
         notes,
       });
@@ -516,4 +516,3 @@ export default function MaterialImprover() {
     </div>
   );
 }
-
