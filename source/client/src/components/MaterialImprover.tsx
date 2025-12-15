@@ -94,7 +94,7 @@ export default function MaterialImprover() {
 
   // Get single improved file with original for preview
   const { data: previewData } = useQuery<ImprovedFile>({
-    queryKey: [`/api/admin/improved-files/${previewImprovedId}`],
+    queryKey: previewImprovedId ? ["/api/admin/improved-files", previewImprovedId] : ["/api/admin/improved-files"],
     enabled: !!previewImprovedId,
   });
 
@@ -177,7 +177,7 @@ export default function MaterialImprover() {
   // Delete improved file mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/admin/improved-files/${id}`);
+      return apiRequest("DELETE", "/api/admin/improved-files/" + id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
