@@ -559,7 +559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Skip CSRF for AI endpoints (Enhanced Material Creator uses direct API calls)
     // These endpoints have their own authentication checks
-    if (path.startsWith('/api/ai/')) {
+    if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/')) {
       return next();
     }
 
