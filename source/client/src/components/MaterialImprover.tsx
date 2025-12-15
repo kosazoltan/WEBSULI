@@ -289,75 +289,125 @@ export default function MaterialImprover() {
   // Improve material mutation - STREAMING MODE
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
-      return new Promise<any>((resolve, reject) => {
-        const response = fetch(`/api/admin/improve-material/${fileId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            customPrompt: customPrompt || undefined,
-          }),
-        });
+      const res = await fetch(`/api/admin/improve-material/${fileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          customPrompt: customPrompt || undefined,
+        }),
+      });
 
-        response.then(async (res) => {
-          if (!res.ok) {
-            const error = await res.json().catch(() => ({ message: 'Network error' }));
-            reject(new Error(error.message || 'Request failed'));
-            return;
-          }
-
-          if (!res.body) {
-            reject(new Error('No response body'));
-            return;
-          }
-
-          const reader = res.body.getReader();
+      if (!res.ok) {
+        // For SSE responses, we need to read the stream to get the error message
+        if (res.headers.get('content-type')?.includes('text/event-stream')) {
+          const reader = res.body?.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
-          let improvedFile: any = null;
+          let errorMessage = 'Request failed';
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          if (reader) {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') continue;
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') continue;
 
-                try {
-                  const parsed = JSON.parse(data);
-
-                  if (parsed.type === 'progress') {
-                    // Show progress in toast
-                    toast({
-                      title: parsed.message,
-                      duration: 2000,
-                    });
-                  } else if (parsed.type === 'complete') {
-                    improvedFile = parsed.improvedFile;
-                  } else if (parsed.type === 'error') {
-                    reject(new Error(parsed.message || 'Unknown error'));
-                    return;
+                    try {
+                      const parsed = JSON.parse(data);
+                      if (parsed.type === 'error') {
+                        errorMessage = parsed.message || errorMessage;
+                        break;
+                      }
+                    } catch {
+                      // Ignore parse errors
+                    }
                   }
-                } catch (e) {
-                  // Ignore parse errors
                 }
+              }
+            } finally {
+              reader.releaseLock();
+            }
+          }
+          throw new Error(errorMessage);
+        } else {
+          // Try to parse error message from JSON response
+          let errorMessage = 'Request failed';
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.message || errorMessage;
+          } catch {
+            // If response is not JSON, use status text
+            errorMessage = res.statusText || `HTTP ${res.status}`;
+          }
+          throw new Error(errorMessage);
+        }
+      }
+
+      if (!res.body) {
+        throw new Error('No response body');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let improvedFile: any = null;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+
+                if (parsed.type === 'progress') {
+                  // Show progress in toast
+                  toast({
+                    title: parsed.message,
+                    duration: 2000,
+                  });
+                } else if (parsed.type === 'complete') {
+                  improvedFile = parsed.improvedFile;
+                } else if (parsed.type === 'error') {
+                  throw new Error(parsed.message || 'Unknown error');
+                }
+              } catch (e: any) {
+                // If it's an error from parsing, throw it
+                if (e.message && e.message !== 'Unexpected end of JSON input') {
+                  throw e;
+                }
+                // Otherwise ignore parse errors for incomplete JSON
               }
             }
           }
+        }
 
-          if (improvedFile) {
-            resolve(improvedFile);
-          } else {
-            reject(new Error('No improved file received'));
-          }
-        }).catch(reject);
-      });
+        if (improvedFile) {
+          return improvedFile;
+        } else {
+          throw new Error('No improved file received');
+        }
+      } finally {
+        reader.releaseLock();
+      }
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
