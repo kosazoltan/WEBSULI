@@ -4520,7 +4520,12 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       
       // Step 7: Fix common CSS and HTML syntax errors
       // Fix CSS variable declarations (missing -- prefix)
-      improvedHtml = improvedHtml.replace(/(:root\s*\{[^}]*?)(\bprimary\b|\bsecondary\b|\baccent\b|\bsuccess\b|\berror\b|\bwarning\b)(\s*:)/gi, '$1--$2$3');
+      // First, find all :root blocks and fix variables inside them
+      improvedHtml = improvedHtml.replace(/:root\s*\{([\s\S]*?)\}/gi, (match, content) => {
+        // Fix variable declarations inside :root block (e.g., primary: -> --primary:)
+        const fixedContent = content.replace(/(\b)(primary|secondary|accent|success|error|warning|info)(\s*:)/gi, '$1--$2$3');
+        return `:root {${fixedContent}}`;
+      });
       
       // Fix CSS variable usage (missing -- prefix in var() or direct usage)
       improvedHtml = improvedHtml.replace(/var\((\w+)\)/gi, (match, varName) => {
@@ -4531,17 +4536,70 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         return match;
       });
       
-      // Fix direct CSS variable usage without var() (e.g., color: var(--primary);)
-      improvedHtml = improvedHtml.replace(/(:\s*)(primary|secondary|accent|success|error|warning)(\s*;)/gi, (match, prefix, varName, suffix) => {
-        // Check if it's already in a var() call
-        if (!match.includes('var(')) {
-          return `${prefix}var(--${varName})${suffix}`;
+      // Fix direct CSS variable usage without var() (e.g., color: primary; -> color: var(--primary);)
+      // Process within style tags to avoid false positives
+      improvedHtml = improvedHtml.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (styleTag, cssContent) => {
+        // Fix variable usage in CSS - only if not already in var() call
+        // Use a more robust approach: find all matches first, then process them
+        const variablePattern = /(:\s*)(primary|secondary|accent|success|error|warning|info)(\s*;)/gi;
+        let fixedCss = cssContent;
+        let match;
+        const replacements: Array<{ index: number; length: number; replacement: string }> = [];
+        
+        // Find all matches and collect replacements
+        while ((match = variablePattern.exec(cssContent)) !== null) {
+          const matchIndex = match.index;
+          const beforeMatch = cssContent.substring(0, matchIndex);
+          const lastVarIndex = beforeMatch.lastIndexOf('var(');
+          const lastSemicolonBefore = beforeMatch.lastIndexOf(';');
+          const lastParenBefore = beforeMatch.lastIndexOf(')');
+          
+          // If there's a var( before this match and no closing ) after it (or ) comes after ;), it's inside var()
+          const isInsideVar = lastVarIndex !== -1 && (lastParenBefore < lastVarIndex || lastParenBefore < lastSemicolonBefore);
+          
+          if (!isInsideVar) {
+            replacements.push({
+              index: matchIndex,
+              length: match[0].length,
+              replacement: `${match[1]}var(--${match[2]})${match[3]}`
+            });
+          }
         }
-        return match;
+        
+        // Apply replacements in reverse order to maintain indices
+        replacements.reverse().forEach(({ index, length, replacement }) => {
+          fixedCss = fixedCss.substring(0, index) + replacement + fixedCss.substring(index + length);
+        });
+        
+        return styleTag.replace(cssContent, fixedCss);
       });
       
-      // Fix empty CSS rules (selector missing)
-      improvedHtml = improvedHtml.replace(/^\s*\{\s*margin:\s*0;\s*padding:\s*0;\s*box-sizing:\s*border-box;\s*\}\s*$/gm, '* { margin: 0; padding: 0; box-sizing: border-box; }');
+      // Fix empty CSS rules (selector missing) - find standalone { ... } blocks
+      // Process style tags separately to avoid false positives
+      const styleTagRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+      improvedHtml = improvedHtml.replace(styleTagRegex, (styleTag, cssContent) => {
+        // Fix empty rules in CSS content
+        // Match { ... } that starts at beginning of line or after whitespace/newline
+        let fixedCss = cssContent.replace(/^\s*\{\s*((?:box-sizing|margin|padding|border)[^}]*)\}\s*$/gm, (match, content) => {
+          // Check if this looks like a reset rule (contains margin, padding, or box-sizing)
+          if (content.match(/(?:margin|padding|box-sizing)/i)) {
+            return `* { ${content.trim()} }`;
+          }
+          return match;
+        });
+        
+        // Also handle multi-line empty rules
+        fixedCss = fixedCss.replace(/\n\s*\{\s*((?:box-sizing|margin|padding|border)[\s\S]*?)\}\s*\n/g, (match, content) => {
+          const cleanContent = content.trim();
+          // Check if it's a reset rule and doesn't contain nested selectors
+          if (cleanContent.match(/(?:margin|padding|box-sizing)/i) && !cleanContent.match(/[a-zA-Z][\w\-]*\s*\{/)) {
+            return `\n* { ${cleanContent} }\n`;
+          }
+          return match;
+        });
+        
+        return styleTag.replace(cssContent, fixedCss);
+      });
       
       // Fix incomplete keyframes (if @keyframes slideIn is cut off)
       if (improvedHtml.includes('@keyframes slideIn') && !improvedHtml.includes('@keyframes slideIn') || improvedHtml.match(/@keyframes slideIn\s*\{[^}]*$/)) {
