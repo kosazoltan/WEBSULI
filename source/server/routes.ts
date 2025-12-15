@@ -1760,68 +1760,69 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         content: message
       });
 
-      const systemPrompt = `Te Claude Opus vagy, a legfejlettebb HTML tananyag készítő szakértő.
+      const systemPrompt = `Te egy HTML tananyag készítő szakértő vagy.
 
-🎯 ELSŐDLEGES FELADATOD:
-1. A felhasználótól kapott SZÖVEGES TARTALMAT alakítsd LÁTVÁNYOS, INTERAKTÍV HTML tananyaggá
-2. A tananyag vizuálisan FIGYELEMFELKELTŐ és MOTIVÁLÓ legyen a diákok számára
-3. TELJES RESPONSIVITÁS: 280px mobiltól 1920px+ monitorig
+FELADATOD:
+1. Beszélgess a felhasználóval a HTML struktúráról, stílusról
+2. Ha a felhasználó kéri ("készítsd el", "generáld", "csináld meg"), készíts TELJES HTML-t
+3. HTML generálásnál MINDIG kezd: <!-- HTML_START --> (ez kötelező!)
 
-${textContent ? `SZÖVEGES TARTALOM:\n${textContent}\n` : ''}
+${textContent ? `SZÖVEGES TARTALOM (ezt alakítsd HTML-lé):\n${textContent}\n` : ''}
 
 METADATA:
 ${metadata?.title ? `Cím: ${metadata.title}` : ''}
 ${metadata?.description ? `Leírás: ${metadata.description}` : ''}
 ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
 
-📝 KÖTELEZŐ FELADAT STRUKTÚRA:
-1. SZÖVEGES FELADATOK: Generálj 45 db előre elkészített szöveges kérdést/feladatot
-   - Ebből 15 db jelenjen meg véletlenszerűen a tanulónak
-   - A feladatok végén ELLENŐRZÉS gomb:
-     * Hibás válaszok PIROS háttérrel (#ef4444)
-     * Helyes válaszok ZÖLD háttérrel (#22c55e)
-     * Pontszám és ÉRDEMJEGY megjelenítése (1-5 skála)
+HTML STRUKTÚRA (3+ lap):
+- 1. lap: Tananyag tartalom (kognitív komponensekkel)
+- 2. lap: Ha hosszú a tananyag, folytatás ide
+- 3. lap: Szöveges feladatok (generálj 45-öt, jeleníts meg 15-öt random)
+- 4. lap: Kvíz (generálj 75-öt, jeleníts meg 25-öt random)
 
-2. KVÍZ KÉRDÉSEK: Generálj 75 db előre elkészített kvíz kérdést (A/B/C/D válaszok)
-   - Ebből 25 db jelenjen meg véletlenszerűen
-   - Kvíz végén ELLENŐRZÉS:
-     * Hibás: PIROS jelölés
-     * Helyes: ZÖLD jelölés
-     * Összpontszám és OSZTÁLYZAT megjelenítése
+KOGNITÍV KOMPONENSEK (min. 8-10 db):
+prediction-box, gate-question (2-3 db), myth-box, dragdrop-box, conflict-box, self-check, cause-effect, popup
 
-💻 CSS KÖVETELMÉNYEK:
-- Minden osztály "edu-" prefixszel kezdődjön
-- TELJES RESPONSIVE DESIGN:
-  * Mobil (280px-480px): Egyoszlopos, nagy gombok, érintésbarát
-  * Tablet (481px-768px): Kétoszlopos ahol lehet
-  * Desktop (769px-1920px+): TELJES SZÉLESSÉG kihasználása
-- Smooth animációk és átmenetek
-- Könnyen olvasható tipográfia (min 16px)
-- Dark/Light mode támogatás
+ELLENŐRZÉS/PONTOZÁS:
+- Szöveges feladatok: ellenőrzés, pontozás (hibás: piros #ef4444, helyes: zöld #22c55e)
+- Kvíz: ellenőrzés, pontozás, osztályozás (90%=5, 75%=4, 60%=3, 40%=2, <40%=1)
+- Megerősítő modal: "🤔 Biztos?" → Igen/Nem
 
-🎨 VIZUÁLIS STÍLUS (osztályonként):
-- 4. osztály: Játékos, vidám, élénk színek (sárga, narancs, zöld)
-- 5-7. osztály: Fiús, sportos, dinamikus (kék, piros, fekete)
-- 8. osztály+: Melankolikus, minimalista (szürke, lila, kék árnyalatok)
+RESZPONZÍV (280px-1920px+):
+- CSS: edu- prefix osztályok, -- prefix változók, var(--name) használat
+- Font: csak system fontok ('Segoe UI', 'Noto Sans', system-ui, sans-serif)
+- SOHA @font-face vagy Google Fonts!
 
-🔧 INTERAKTIVITÁS:
-- Kattintható elemek, hover effektek
-- Összecsukható szekciók (accordion)
-- Progress bar a haladáshoz
-- JavaScript alapú kvíz és feladat logika beágyazva
+HTML PÉLDA KEZDÉS:
+<!-- HTML_START -->
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>[CÍM]</title>
+  <style>
+    :root { --primary: #4CAF50; --secondary: #FF9800; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .edu-page { display:none; } .edu-page.active { display:block; }
+  </style>
+</head>
+<body>
+  <!-- navigáció, lapok, script -->
+</body>
+</html>
 
-⚠️ FONTOS:
-- A HTML kód ÖNÁLLÓAN futtatható legyen
-- Minden CSS és JavaScript beágyazva a HTML-be
-- Ha HTML-t generálsz, MINDIG kezdd: <!-- HTML_START -->`;
+BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
-      console.log(`[CLAUDE HTML] Streaming HTML generation with Opus...`);
+      console.log(`[CLAUDE HTML] Streaming HTML generation...`);
+      console.log(`[CLAUDE HTML] System prompt length: ${systemPrompt.length}`);
+      console.log(`[CLAUDE HTML] Messages count: ${messages.length}`);
 
       const stream = await anthropic.messages.stream({
-        model: "claude-opus-4-1",
-        max_tokens: 16384,
+        model: "claude-sonnet-4-5",
+        max_tokens: 12288, // Increased for full HTML generation
         system: systemPrompt,
-        messages
+        messages,
+        signal: controller.signal
       });
 
       // Handle abort on client disconnect
@@ -1831,6 +1832,7 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
         console.log('[CLAUDE] Client disconnected, stream aborted');
       });
 
+      let fullContent = '';
       let htmlContent = '';
       let isCollectingHtml = false;
       let totalEvents = 0;
@@ -1851,12 +1853,17 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
           }
 
           totalEvents++;
+          fullContent += text;
 
-          // Check for HTML start marker
-          if (text.includes('<!-- HTML_START -->')) {
+          // Check if HTML generation started
+          if (fullContent.includes('<!-- HTML_START -->')) {
             isCollectingHtml = true;
+            // Extract HTML from the marker onwards
+            const htmlStartIndex = fullContent.indexOf('<!-- HTML_START -->');
+            htmlContent = fullContent.substring(htmlStartIndex);
           }
-
+          
+          // If already collecting HTML, add to htmlContent
           if (isCollectingHtml) {
             htmlContent += text;
           }
@@ -1868,15 +1875,18 @@ ${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
         }
       }
 
-      console.log(`[CLAUDE] ✅ Stream complete (${totalEvents} events, ${htmlContent.length} chars HTML)`);
+      console.log(`[CLAUDE] ✅ Stream complete (${totalEvents} events, full: ${fullContent.length} chars, HTML: ${htmlContent.length} chars, isCollectingHtml: ${isCollectingHtml})`);
 
       // Send HTML if generated
-      if (htmlContent.length > 100) {
+      if (isCollectingHtml && htmlContent.length > 100) {
         const cleanHtml = htmlContent.replace('<!-- HTML_START -->', '').trim();
         res.write(`data: ${JSON.stringify({
           type: 'html_generated',
           html: cleanHtml
         })}\n\n`);
+        console.log(`[CLAUDE] ✅ HTML generated and sent (${cleanHtml.length} chars)`);
+      } else {
+        console.warn(`[CLAUDE] ⚠️ No HTML generated (isCollectingHtml: ${isCollectingHtml}, htmlContent.length: ${htmlContent.length})`);
       }
 
       res.write(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
