@@ -100,29 +100,80 @@ export default function MaterialImprover() {
 
   // Precompute rendered HTML documents for side-by-side live preview
   const makeRunnableHtml = (html?: string) => {
-    if (!html) return "";
+    if (!html) {
+      console.log('[makeRunnableHtml] Input HTML is empty.');
+      return "";
+    }
     
-    // If HTML already has full structure (DOCTYPE or html tag), use it as-is
-    if (html.includes('<!DOCTYPE') || html.includes('<!doctype') || html.trim().startsWith('<html')) {
+    console.log('[makeRunnableHtml] Input HTML length:', html.length);
+    console.log('[makeRunnableHtml] Input HTML preview:', html.substring(0, 200));
+    
+    // Check if HTML already has full structure (DOCTYPE or html tag)
+    const hasDocType = html.includes('<!DOCTYPE') || html.includes('<!doctype');
+    const hasHtmlTag = html.includes('<html') || html.toLowerCase().includes('<html');
+    
+    if (hasDocType || hasHtmlTag) {
+      console.log('[makeRunnableHtml] HTML already has full structure.');
+      
+      // Ensure it has proper charset meta tag if missing
+      if (!html.includes('charset') && !html.includes('charset')) {
+        html = html.replace(
+          /<head[^>]*>/i,
+          (match) => `${match}<meta charset="UTF-8">`
+        );
+        // If no head tag, add it after html tag
+        if (!html.includes('<head')) {
+          html = html.replace(
+            /<html[^>]*>/i,
+            (match) => `${match}<head><meta charset="UTF-8"></head>`
+          );
+        }
+      }
+      
       // Ensure it has proper viewport meta tag if missing
       if (!html.includes('viewport')) {
         html = html.replace(
           /<head[^>]*>/i,
           (match) => `${match}<meta name="viewport" content="width=device-width, initial-scale=1.0" />`
         );
-        // If no head tag, add it before html tag
+        // If no head tag, add it after html tag
         if (!html.includes('<head')) {
           html = html.replace(
             /<html[^>]*>/i,
-            (match) => `${match}<head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>`
+            (match) => {
+              if (html.includes('</head>')) {
+                return match;
+              }
+              return `${match}<head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>`;
+            }
           );
         }
       }
+      
+      // Ensure it has a body tag
+      if (!html.includes('<body') && !html.toLowerCase().includes('<body')) {
+        // Find where to insert body (after </head> or after <html>)
+        const headCloseIndex = html.indexOf('</head>');
+        if (headCloseIndex !== -1) {
+          html = html.slice(0, headCloseIndex + 7) + '<body>' + html.slice(headCloseIndex + 7) + '</body>';
+        } else {
+          // No head tag, add body after html tag
+          html = html.replace(
+            /<html[^>]*>/i,
+            (match) => `${match}<body>`
+          );
+          html = html + '</body>';
+        }
+      }
+      
+      console.log('[makeRunnableHtml] Returning full HTML structure, length:', html.length);
       return html;
     }
     
     // Otherwise, wrap the content in a full HTML structure
-    return `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`;
+    const wrappedHtml = `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`;
+    console.log('[makeRunnableHtml] Wrapped HTML with basic structure, length:', wrappedHtml.length);
+    return wrappedHtml;
   };
 
   const renderedOriginal = useMemo(
@@ -492,17 +543,37 @@ export default function MaterialImprover() {
                       srcDoc={renderedOriginal}
                       className="w-full h-[600px] border-0"
                       title="Eredeti HTML Preview"
-                      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
+                      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads allow-top-navigation-by-user-activation"
                       allow="autoplay; fullscreen; clipboard-write; microphone"
                       data-testid="iframe-preview-original"
                       style={{
                         minHeight: '400px',
+                        backgroundColor: 'white',
                       }}
                       onError={(e) => {
                         console.error('[IFRAME] Error loading original HTML:', e);
+                        console.error('[IFRAME] HTML content length:', renderedOriginal.length);
+                        console.error('[IFRAME] HTML content preview:', renderedOriginal.substring(0, 500));
                       }}
-                      onLoad={() => {
+                      onLoad={(ev) => {
                         console.log('[IFRAME] Original HTML loaded, length:', renderedOriginal.length);
+                        const iframe = ev.target as HTMLIFrameElement;
+                        try {
+                          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                          if (iframeDoc) {
+                            console.log('[IFRAME] Iframe document found');
+                            console.log('[IFRAME] Body exists:', !!iframeDoc.body);
+                            console.log('[IFRAME] Body innerHTML length:', iframeDoc.body?.innerHTML?.length || 0);
+                            console.log('[IFRAME] Body text content length:', iframeDoc.body?.textContent?.length || 0);
+                            if (iframeDoc.body && iframeDoc.body.innerHTML.length === 0) {
+                              console.warn('[IFRAME] Body is empty - HTML may not have rendered correctly');
+                            }
+                          } else {
+                            console.warn('[IFRAME] Cannot access iframe document (sandbox restrictions)');
+                          }
+                        } catch (err) {
+                          console.warn('[IFRAME] Error accessing iframe content:', err);
+                        }
                       }}
                     />
                   </div>
@@ -530,28 +601,42 @@ export default function MaterialImprover() {
                       srcDoc={renderedImproved}
                       className="w-full h-[600px] border-0"
                       title="Javított HTML Preview"
-                      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
+                      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads allow-top-navigation-by-user-activation"
                       allow="autoplay; fullscreen; clipboard-write; microphone"
                       data-testid="iframe-preview-improved"
                       style={{
                         minHeight: '400px',
+                        backgroundColor: 'white',
                       }}
                       onError={(ev) => {
                         console.error('[IFRAME] Error loading improved HTML:', ev);
+                        console.error('[IFRAME] HTML content length:', renderedImproved.length);
+                        console.error('[IFRAME] HTML content preview:', renderedImproved.substring(0, 500));
                       }}
                       onLoad={(ev) => {
                         console.log('[IFRAME] Improved HTML loaded, length:', renderedImproved.length);
+                        console.log('[IFRAME] HTML content preview:', renderedImproved.substring(0, 500));
                         // Try to access iframe content to check if it loaded
                         const iframe = ev.target as HTMLIFrameElement;
                         try {
                           const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
                           if (iframeDoc) {
-                            console.log('[IFRAME] Iframe document found, body content length:', iframeDoc.body?.innerHTML?.length || 0);
-                            console.log('[IFRAME] Iframe body classes:', iframeDoc.body?.className || 'none');
-                            console.log('[IFRAME] Iframe body styles:', iframeDoc.body?.style?.cssText || 'none');
+                            console.log('[IFRAME] Iframe document found');
+                            console.log('[IFRAME] Body exists:', !!iframeDoc.body);
+                            console.log('[IFRAME] Body innerHTML length:', iframeDoc.body?.innerHTML?.length || 0);
+                            console.log('[IFRAME] Body text content length:', iframeDoc.body?.textContent?.length || 0);
+                            console.log('[IFRAME] Body classes:', iframeDoc.body?.className || 'none');
+                            console.log('[IFRAME] Body styles:', iframeDoc.body?.style?.cssText || 'none');
+                            if (iframeDoc.body && iframeDoc.body.innerHTML.length === 0) {
+                              console.warn('[IFRAME] Body is empty - HTML may not have rendered correctly');
+                              console.warn('[IFRAME] Document readyState:', iframeDoc.readyState);
+                              console.warn('[IFRAME] Document title:', iframeDoc.title);
+                            }
+                          } else {
+                            console.warn('[IFRAME] Cannot access iframe document (sandbox restrictions)');
                           }
                         } catch (err) {
-                          console.warn('[IFRAME] Cannot access iframe content (CORS/sandbox):', err);
+                          console.warn('[IFRAME] Error accessing iframe content:', err);
                         }
                       }}
                     />
