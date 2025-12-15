@@ -4079,6 +4079,13 @@ Crawl-delay: 1`;
 
   // POST /api/admin/improve-material/:id - Create improved version using Claude
   adminRouter.post("/improve-material/:id", async (req: any, res) => {
+    // AbortController for timeout handling (5 minutes timeout)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+      console.log('[IMPROVE] Request timeout (300s)');
+    }, 300000); // 5 minutes timeout (matches frontend timeout)
+    
     try {
       const { id } = req.params;
       const { customPrompt } = req.body || {};
@@ -4743,10 +4750,20 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           role: 'user',
           content: userPrompt,
         }],
+      }, {
+        signal: controller.signal, // Add abort signal for timeout handling
       }).catch((error: any) => {
+        clearTimeout(timeout);
+        // Handle abort/timeout errors
+        if (error.name === 'AbortError' || controller.signal.aborted) {
+          console.error('[IMPROVE] Request aborted (timeout)');
+          throw new Error('Időtúllépés: A művelet túl sokáig tartott (5 perc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.');
+        }
         console.error('[IMPROVE] Claude API error:', error);
         throw new Error(`Claude API hiba: ${error.message || 'Ismeretlen hiba'}`);
       });
+      
+      clearTimeout(timeout); // Clear timeout on success
       
       console.log('[IMPROVE] Claude API response received');
       console.log('[IMPROVE] Response stop_reason:', message.stop_reason);
@@ -4997,8 +5014,19 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         createdBy: userId,
       });
 
+      clearTimeout(timeout); // Ensure timeout is cleared
       res.status(201).json(improvedFile);
     } catch (error: any) {
+      clearTimeout(timeout); // Ensure timeout is cleared on error
+      
+      // Handle abort/timeout errors specifically
+      if (error.name === 'AbortError' || error.message?.includes('Időtúllépés')) {
+        console.error('[IMPROVE] Timeout error:', error.message);
+        return res.status(408).json({ 
+          message: error.message || 'Időtúllépés: A művelet túl sokáig tartott' 
+        });
+      }
+      
       console.error('[IMPROVE] Error:', error);
       res.status(500).json({ 
         message: error.message || 'Hiba történt a javítás során' 
