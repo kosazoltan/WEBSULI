@@ -4129,6 +4129,58 @@ metadata:
 
 ## KRITIKUS SZABÁLYOK
 
+### CSS SZINTAXIS - KÖTELEZŐ SZABÁLYOK
+
+🚨 **FONTOS: MINDIG helyesen írd a CSS-t!**
+
+#### CSS VÁLTOZÓK (CSS Variables):
+- **MINDIG** használj -- prefix-et a változó nevek előtt!
+- ✅ HELYES: --primary: #4CAF50;
+- ❌ HELYTELEN: primary: #4CAF50; (HIÁNYZIK A -- PREFIX!)
+
+#### CSS VÁLTOZÓ HASZNÁLAT:
+- **MINDIG** használj var() függvényt a változók használatakor!
+- ✅ HELYES: color: var(--primary); vagy background: var(--secondary);
+- ❌ HELYTELEN: color: primary; vagy background: secondary; (HIÁNYZIK A var()!)
+
+#### CSS SZABÁLYOK:
+- **SOHA** ne írj üres CSS szabályt selector nélkül!
+- ❌ HELYTELEN: 
+  {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  }
+- ✅ HELYES: 
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  VAGY
+  body {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+#### :root BLOKK:
+- **MINDIG** helyesen deklaráld a CSS változókat a :root blokkban!
+- ✅ HELYES:
+  :root {
+    --primary: #4CAF50;
+    --secondary: #FF9800;
+    --accent: #2196F3;
+    --success: #00b894;
+    --error: #e17055;
+    --warning: #fdcb6e;
+  }
+- ❌ HELYTELEN:
+  :root {
+    primary: #4CAF50;  /* HIÁNYZIK A -- */
+    secondary: #FF9800;  /* HIÁNYZIK A -- */
+  }
+
 ### TARTALOM FORRÁS
 - **CSAK** a felhasználó által megadott forrásból dolgozz
 - **SOHA** ne használj saját példákat
@@ -4183,7 +4235,23 @@ font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
   <meta charset="UTF-8">
   <title>[CÍM]</title>
   <style>
-    :root { --primary: [SZÍN]; --success: #00b894; --error: #e17055; }
+    /* FONTOS: CSS változók MINDIG -- prefix-szel! */
+    :root { 
+      --primary: [SZÍN]; 
+      --secondary: #FF9800;
+      --accent: #2196F3;
+      --success: #00b894; 
+      --error: #e17055; 
+      --warning: #fdcb6e;
+    }
+    
+    /* FONTOS: Reset szabályok MINDIG selectorral! */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
     @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
     @keyframes popIn { 0%{opacity:0;transform:scale(0.5)} 100%{opacity:1;transform:scale(1)} }
     @keyframes shake { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-8px)} }
