@@ -4352,7 +4352,40 @@ UTF-8: 'Segoe UI', 'Noto Sans', system-ui
       }
 
       // Use the system prompt from database (or fallback to default)
-      // CRITICAL: Add explicit instruction to return ONLY HTML code, no explanations
+      // CRITICAL: Prepend explicit HTML-only instruction to ensure Claude understands
+      const criticalInstruction = `🚨 KRITIKUS UTASÍTÁS - EZT OLVASD ELŐSZÖR! 🚨
+
+A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást!
+
+❌ TILTOTT:
+- Leírás vagy magyarázat
+- Markdown formátum (code block-ok vagy backtick-ek)
+- "Íme a javított HTML:" vagy hasonló szövegek
+- "Átdolgoztam a tananyagot" vagy hasonló bevezető szövegek
+- "Főbb változtatások:" vagy hasonló listák
+- Bármilyen szöveg a HTML kód előtt vagy után
+
+✅ KÖTELEZŐ:
+- CSAK a teljes, működő HTML kódot add vissza
+- A válaszodnak közvetlenül <!DOCTYPE html> vagy <html> tag-gel kell kezdődnie
+- A kód azonnal használható legyen, másolás-kivágás nélkül
+- Nincs markdown, nincs leírás, CSAK HTML
+
+PÉLDA HELYES VÁLASZ (CSAK EZT ÍRD!):
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>...</title>
+</head>
+<body>
+  ...
+</body>
+</html>
+
+---
+`;
+
       let systemPrompt = customSystemPrompt?.prompt || `Te egy HTML tananyag javító szakértő vagy. A feladatod, hogy régebbi, kevésbé fejlett HTML tananyagokat modern, responsive, interaktív tananyaggá alakíts.
 
 FONTOS SZABÁLYOK:
@@ -4374,42 +4407,8 @@ KRITIKUS VÁLASZ FORMATUM:
 - CSAK A TELJES HTML KÓDOT, AZONNAL HASZNÁLHATÓ FORMÁTBAN
 - A válaszodnak közvetlenül <!DOCTYPE html> vagy <html> tag-gel kell kezdődnie`;
 
-      // If using tananyag-okosito prompt, add explicit HTML-only instruction
-      if (customSystemPrompt?.prompt) {
-        systemPrompt = customSystemPrompt.prompt + `
-
----
-## KRITIKUS VÁLASZ FORMATUM - OLVASD FIGYELMESEN!
-
-**FONTOS:** Amikor HTML-t generálsz, a válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia!
-
-- ❌ NEM írj leírást vagy magyarázatot
-- ❌ NEM használj markdown formátumot
-- ❌ NEM írj "Íme a javított HTML:" vagy hasonló szövegeket
-- ✅ CSAK a teljes, működő HTML kódot add vissza
-- ✅ A válaszodnak közvetlenül <!DOCTYPE html> vagy <html> tag-gel kell kezdődnie
-- ✅ A kód azonnal használható legyen, másolás-kivágás nélkül
-
-PÉLDA HELYES VÁLASZ:
-<!DOCTYPE html>
-<html lang="hu">
-<head>
-  <meta charset="UTF-8">
-  ...
-</head>
-<body>
-  ...
-</body>
-</html>
-
-PÉLDA HELYTELEN VÁLASZ (NE ÍRJ ÍGY!):
-"Íme a javított HTML tananyag:
-\`\`\`html
-<!DOCTYPE html>
-...
-\`\`\`
-Ez a tananyag tartalmazza..."`;
-      }
+      // Prepend critical instruction to the beginning of the prompt
+      systemPrompt = criticalInstruction + systemPrompt;
 
       const userPrompt = `Javítsd az alábbi HTML tananyagot modern, responsive, interaktív tananyaggá a tananyag-okosito rendszer szabályai szerint.
 
@@ -4449,19 +4448,79 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       // Validate improved HTML
       let improvedHtml = improvedContent.text.trim();
       
-      // Extract HTML from markdown code blocks if present
-      const markdownHtmlMatch = improvedHtml.match(/```html\s*([\s\S]*?)\s*```/i) || 
-                                improvedHtml.match(/```\s*([\s\S]*?)\s*```/);
-      if (markdownHtmlMatch && markdownHtmlMatch[1]) {
-        improvedHtml = markdownHtmlMatch[1].trim();
-        console.log('[IMPROVE] Extracted HTML from markdown code block');
+      console.log('[IMPROVE] Raw response length:', improvedHtml.length);
+      console.log('[IMPROVE] Raw response preview:', improvedHtml.substring(0, 200));
+      
+      // Step 1: Extract HTML from markdown code blocks (try multiple patterns)
+      const markdownPatterns = [
+        /```html\s*([\s\S]*?)\s*```/i,           // ```html ... ```
+        /```\s*([\s\S]*?)\s*```/s,                // ``` ... ``` (any language)
+        /`([\s\S]*?)`/s,                          // ` ... ` (inline code)
+      ];
+      
+      for (const pattern of markdownPatterns) {
+        const match = improvedHtml.match(pattern);
+        if (match && match[1]) {
+          const extracted = match[1].trim();
+          // Check if extracted content looks like HTML
+          if (extracted.includes('<!DOCTYPE') || extracted.includes('<html') || extracted.includes('<head') || extracted.includes('<body')) {
+            improvedHtml = extracted;
+            console.log('[IMPROVE] Extracted HTML from markdown code block');
+            break;
+          }
+        }
       }
       
-      // Remove common prefixes like "Íme a javított HTML:" or "Here is the improved HTML:"
-      improvedHtml = improvedHtml.replace(/^[^\<]*?(?=<!DOCTYPE|<html)/i, '');
+      // Step 2: Find HTML start (look for DOCTYPE or html tag)
+      const htmlStartMatch = improvedHtml.match(/(<!DOCTYPE[\s\S]*?<html[\s\S]*?>|<\s*html[\s\S]*?>)/i);
+      if (htmlStartMatch) {
+        const startIndex = improvedHtml.indexOf(htmlStartMatch[0]);
+        improvedHtml = improvedHtml.substring(startIndex);
+        console.log('[IMPROVE] Found HTML start at index:', startIndex);
+      }
       
-      // Basic HTML structure validation - wrap if needed
+      // Step 3: Remove everything before HTML tags
+      improvedHtml = improvedHtml.replace(/^[\s\S]*?(?=<!DOCTYPE|<html|<head|<body)/i, '');
+      
+      // Step 4: Remove markdown formatting characters if still present
+      improvedHtml = improvedHtml.replace(/^[#*`\-\s]+/gm, ''); // Remove markdown headers, lists, code markers
+      improvedHtml = improvedHtml.replace(/```html\s*/gi, '');
+      improvedHtml = improvedHtml.replace(/```\s*/g, '');
+      
+      // Step 5: Remove common prefixes and explanations
+      const prefixPatterns = [
+        /^[^\<]*?(?=<!DOCTYPE|<html)/i,
+        /^.*?Átdolgoztam.*?(?=<!DOCTYPE|<html)/i,
+        /^.*?Az új verzió.*?(?=<!DOCTYPE|<html)/i,
+        /^.*?Főbb változtatások.*?(?=<!DOCTYPE|<html)/i,
+        /^.*?KOGNITÍV AKTIVÁLÁS.*?(?=<!DOCTYPE|<html)/i,
+        /^.*?FELADATOK.*?(?=<!DOCTYPE|<html)/i,
+        /^.*?MODERN DIZÁJN.*?(?=<!DOCTYPE|<html)/i,
+        /^.*?UTF-8.*?(?=<!DOCTYPE|<html)/i,
+        /^.*?LETÖLTÉS.*?(?=<!DOCTYPE|<html)/i,
+      ];
+      
+      for (const pattern of prefixPatterns) {
+        improvedHtml = improvedHtml.replace(pattern, '');
+      }
+      
+      // Step 6: Clean up any remaining markdown at the start
+      improvedHtml = improvedHtml.trim();
+      if (!improvedHtml.startsWith('<!DOCTYPE') && !improvedHtml.startsWith('<html')) {
+        // Try to find first HTML tag
+        const firstHtmlTag = improvedHtml.match(/<[a-zA-Z]+/);
+        if (firstHtmlTag) {
+          const tagIndex = improvedHtml.indexOf(firstHtmlTag[0]);
+          improvedHtml = improvedHtml.substring(tagIndex);
+        }
+      }
+      
+      console.log('[IMPROVE] Cleaned HTML length:', improvedHtml.length);
+      console.log('[IMPROVE] Cleaned HTML preview:', improvedHtml.substring(0, 200));
+      
+      // Step 7: Basic HTML structure validation - wrap if needed
       if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
+        console.warn('[IMPROVE] No HTML structure found, wrapping content');
         // If no full HTML structure, wrap it
         improvedHtml = wrapHtmlWithResponsiveContainer(improvedHtml);
       }
