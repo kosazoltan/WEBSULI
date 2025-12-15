@@ -4450,13 +4450,13 @@ font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
     @keyframes popIn { 0%{opacity:0;transform:scale(0.5)} 100%{opacity:1;transform:scale(1)} }
     @keyframes shake { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-8px)} }
     @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
-    .page { display:none; } .page.active { display:block; }
+    .edu-page { display:none; } .edu-page.active { display:block; }
   </style>
 </head>
 <body>
   <!-- Megerősítő modal -->
-  <div class="confirm-overlay" id="confirmOverlay">
-    <div class="confirm-modal">
+  <div class="edu-confirm-overlay" id="confirmOverlay">
+    <div class="edu-confirm-modal">
       <h3>🤔 Biztos?</h3>
       <button onclick="closeConfirm()">Átgondolom</button>
       <button onclick="proceedEvaluation()">Igen!</button>
@@ -4464,23 +4464,23 @@ font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
   </div>
 
   <!-- Navigáció -->
-  <nav class="nav-tabs">
+  <nav class="edu-nav-tabs">
     <button onclick="showPage('content')">📚 Tananyag</button>
     <button onclick="showPage('exercises')">✍️ Feladatok</button>
     <button onclick="showPage('quiz')">❓ Kvíz</button>
   </nav>
 
   <!-- TANANYAG oldal: tartalom + kognitív komponensek -->
-  <div class="page active" id="content">...</div>
+  <div class="edu-page active" id="content">...</div>
 
   <!-- FELADATOK oldal -->
-  <div class="page" id="exercises">
+  <div class="edu-page" id="exercises">
     <div id="exercises-container"></div>
     <button onclick="requestConfirm('exercises')">Ellenőrzés</button>
   </div>
 
   <!-- KVÍZ oldal -->
-  <div class="page" id="quiz">
+  <div class="edu-page" id="quiz">
     <div id="quiz-container"></div>
     <button onclick="requestConfirm('quiz')">Ellenőrzés</button>
   </div>
@@ -4502,18 +4502,18 @@ font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
 
 **Kapu kérdés:**
 \`\`\`html
-<div class="gate-question">
+<div class="edu-gate-question">
   <h4>🚧 KAPU</h4>
   <p>Kérdés?</p>
   <div onclick="checkGate(1,this,false)">A) Rossz</div>
   <div onclick="checkGate(1,this,true)">B) Helyes</div>
-  <div class="gate-feedback" id="gate-fb-1"></div>
+  <div class="edu-gate-feedback" id="gate-fb-1"></div>
 </div>
 \`\`\`
 
 **Előrejelzés:**
 \`\`\`html
-<div class="prediction-box">
+<div class="edu-prediction-box">
   <h4>🔮 Tippelj!</h4>
   <textarea id="pred-1"></textarea>
   <button onclick="savePrediction(1)">Mentés</button>
@@ -4522,30 +4522,30 @@ font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
 
 **Tévhit:**
 \`\`\`html
-<div class="myth-box">
-  <p class="myth-statement">"Téves állítás"</p>
+<div class="edu-myth-box">
+  <p class="edu-myth-statement">"Téves állítás"</p>
   <button onclick="voteMy(1,this,true)">Igaz</button>
   <button onclick="voteMy(1,this,false)">Hamis</button>
-  <div class="truth-reveal" id="myth-truth-1">Valójában: ...</div>
+  <div class="edu-truth-reveal" id="myth-truth-1">Valójában: ...</div>
 </div>
 \`\`\`
 
 **Ok-okozat:**
 \`\`\`html
-<div class="cause-effect">
-  <div class="cause">OK: Ha...</div>
-  <div class="arrow">→</div>
-  <div class="effect">OKOZAT: Akkor...</div>
+<div class="edu-cause-effect">
+  <div class="edu-cause">OK: Ha...</div>
+  <div class="edu-arrow">→</div>
+  <div class="edu-effect">OKOZAT: Akkor...</div>
 </div>
 \`\`\`
 
 **Drag & drop:**
 \`\`\`html
-<div class="dragdrop-box">
-  <p>Mondat <span class="drop-zone" data-answer="helyes"></span> folytatás.</p>
-  <div class="drag-items">
-    <div class="drag-item" draggable="true" data-value="helyes">helyes</div>
-    <div class="drag-item" draggable="true" data-value="rossz">rossz</div>
+<div class="edu-dragdrop-box">
+  <p>Mondat <span class="edu-drop-zone" data-answer="helyes"></span> folytatás.</p>
+  <div class="edu-drag-items">
+    <div class="edu-drag-item" draggable="true" data-value="helyes">helyes</div>
+    <div class="edu-drag-item" draggable="true" data-value="rossz">rossz</div>
   </div>
 </div>
 \`\`\`
@@ -4617,68 +4617,26 @@ UTF-8: 'Segoe UI', 'Noto Sans', system-ui
       // CRITICAL: Prepend explicit HTML-only instruction to ensure Claude understands
       const criticalInstruction = `🚨 KRITIKUS UTASÍTÁS - EZT OLVASD ELŐSZÖR! 🚨
 
-A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást!
+VÁLASZ FORMATUM - KIZÁRÓLAG HTML KÓD, SEMMI MÁS!
+
+A válaszodnak KÖZVETLENÜL <!DOCTYPE html> tag-gel kell kezdődnie, semmi szöveg, semmi markdown, semmi magyarázat előtte!
 
 ❌ TILTOTT:
-- Leírás vagy magyarázat
-- Markdown formátum (code block-ok vagy backtick-ek)
-- "Íme a javított HTML:" vagy hasonló szövegek
-- "Átdolgoztam a tananyagot" vagy hasonló bevezető szövegek
-- "Főbb változtatások:" vagy hasonló listák
+- "Íme a javított HTML:" vagy bármilyen bevezető szöveg
+- Markdown code block-ok (\`\`\`html ... \`\`\`)
+- Magyarázat vagy leírás
 - Bármilyen szöveg a HTML kód előtt vagy után
 
 ✅ KÖTELEZŐ:
-- CSAK a teljes, működő HTML kódot add vissza
-- A válaszodnak közvetlenül <!DOCTYPE html> vagy <html> tag-gel kell kezdődnie
-- A kód azonnal használható legyen, másolás-kivágás nélkül
+- CSAK a teljes HTML kódot add vissza
+- Közvetlenül <!DOCTYPE html> vagy <html> tag-gel kezdj
 - Nincs markdown, nincs leírás, CSAK HTML
 
-🎨 CSS KRITIKUS SZABÁLYOK (MINDIG ELLENŐRIZD MINDEN VÁLTOZÓT ÉS OSZTÁLYT!):
-1. MINDEN CSS változó deklarációnak KÖTELEZŐEN -- prefix-szel kell kezdődnie!
-   ✅ HELYES: --primary: #4CAF50; --secondary: #FF9800; --tertiary: #9C27B0;
-   ❌ HELYTELEN: primary: #4CAF50; secondary: #FF9800; tertiary: #9C27B0;
-   ⚠️ FIGYELEM: MINDEN változó nevet ellenőrizd, hogy -- prefix-szel kezdődik-e!
-2. MINDIG használj var() függvényt változók használatakor!
-   ✅ HELYES: color: var(--primary); background: var(--tertiary);
-   ❌ HELYTELEN: color: primary; background: tertiary;
-3. MINDEN CSS osztály nevet "edu-" prefix-szel kezdj!
-   ✅ HELYES: .edu-header, .edu-button, .edu-success-box, .edu-prediction-box
-   ❌ HELYTELEN: .header, .button, .success-box (HIÁNYZIK AZ edu- PREFIX!)
-   ⚠️ FIGYELEM: MINDEN osztály nevet ellenőrizd, hogy "edu-" prefix-szel kezdődik-e!
-4. SOHA ne írj üres CSS szabályt selector nélkül!
-   ✅ HELYES: * { margin: 0; padding: 0; }
-   ❌ HELYTELEN: { margin: 0; padding: 0; }
-
-PÉLDA HELYES VÁLASZ (CSAK EZT ÍRD!):
-<!DOCTYPE html>
-<html lang="hu">
-<head>
-  <meta charset="UTF-8">
-  <title>...</title>
-  <style>
-    :root {
-      --primary: #4CAF50;
-      --secondary: #FF9800;
-      --tertiary: #9C27B0;
-    }
-    * {
-      margin: 0;
-      padding: 0;
-    }
-    .edu-header {
-      background: var(--primary);
-      color: white;
-    }
-    .edu-button {
-      background: var(--secondary);
-      border-color: var(--tertiary);
-    }
-  </style>
-</head>
-<body>
-  ...
-</body>
-</html>
+CSS SZABÁLYOK - MINDIG ELLENŐRIZD:
+1. CSS változók: MINDIG -- prefix (--primary, --secondary, NEM primary, secondary)
+2. Változó használat: MINDIG var(--name) (var(--primary), NEM primary)
+3. CSS osztályok: MINDIG edu- prefix (.edu-header, .edu-button, NEM .header, .button)
+4. Reset szabályok: MINDIG selectorral (* { ... }, NEM { ... })
 
 ---
 `;
@@ -4709,18 +4667,13 @@ KRITIKUS VÁLASZ FORMATUM:
 
       const userPrompt = `Javítsd az alábbi HTML tananyagot modern, responsive, interaktív tananyaggá a tananyag-okosito rendszer szabályai szerint.
 
-KRITIKUS: A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást! Ne írj leírást, magyarázatot vagy markdown formátumot. Csak a teljes HTML kódot add vissza, ami közvetlenül <!DOCTYPE html> vagy <html> tag-gel kezdődik.
+🚨 KRITIKUS: A válaszodnak KÖZVETLENÜL <!DOCTYPE html> tag-gel kell kezdődnie! Nincs markdown, nincs leírás, CSAK HTML kód!
 
-🎨 CSS KRITIKUS SZABÁLYOK - MINDIG ELLENŐRIZD:
-1. MINDEN CSS változó deklarációnak -- prefix-szel kell kezdődnie!
-   ✅ HELYES: --primary: #4CAF50; --secondary: #FF9800; --tertiary: #9C27B0;
-   ❌ HELYTELEN: primary: #4CAF50; secondary: #FF9800; tertiary: #9C27B0;
-2. MINDIG használj var() függvényt változók használatakor!
-   ✅ HELYES: color: var(--primary); background: var(--tertiary);
-   ❌ HELYTELEN: color: primary; background: tertiary;
-3. SOHA ne írj üres CSS szabályt selector nélkül!
-   ✅ HELYES: * { margin: 0; padding: 0; }
-   ❌ HELYTELEN: { margin: 0; padding: 0; }
+CSS SZABÁLYOK - MINDIG ELLENŐRIZD:
+- CSS változók: MINDIG -- prefix (--primary, NEM primary)
+- Változó használat: MINDIG var(--name) (var(--primary), NEM primary)
+- CSS osztályok: MINDIG edu- prefix (.edu-header, NEM .header)
+- Reset szabályok: MINDIG selectorral (* { ... }, NEM { ... })
 
 CÍM: ${originalFile.title}
 OSZTÁLY: ${originalFile.classroom}
