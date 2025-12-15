@@ -155,14 +155,61 @@ export default function MaterialImprover() {
         // Find where to insert body (after </head> or after <html>)
         const headCloseIndex = html.indexOf('</head>');
         if (headCloseIndex !== -1) {
-          html = html.slice(0, headCloseIndex + 7) + '<body>' + html.slice(headCloseIndex + 7) + '</body>';
+          // Insert body after </head>
+          html = html.slice(0, headCloseIndex + 7) + '<body>' + html.slice(headCloseIndex + 7);
+          // Add closing body tag before </html> or at the end
+          const htmlCloseIndex = html.indexOf('</html>');
+          if (htmlCloseIndex !== -1) {
+            html = html.slice(0, htmlCloseIndex) + '</body>' + html.slice(htmlCloseIndex);
+          } else {
+            html = html + '</body>';
+          }
         } else {
-          // No head tag, add body after html tag
-          html = html.replace(
-            /<html[^>]*>/i,
-            (match) => `${match}<body>`
-          );
-          html = html + '</body>';
+          // No </head> tag, check if there's a <head> opening tag
+          const headOpenIndex = html.indexOf('<head');
+          if (headOpenIndex !== -1) {
+            // Find where head content ends - look for </head> or next major tag (but not <head> itself)
+            const headEndIndex = html.indexOf('>', headOpenIndex) + 1;
+            // Look for the end of head content - find </head> or next tag that's not <head>
+            let insertIndex = headEndIndex;
+            // Search for closing </head> first
+            const headCloseMatch = html.substring(headEndIndex).match(/<\/head>/i);
+            if (headCloseMatch) {
+              insertIndex = headEndIndex + headCloseMatch.index! + headCloseMatch[0].length;
+            } else {
+              // No </head> found, find next tag that's not <head> or part of head content
+              // Look for tags like <body>, <script>, <style>, or </html>
+              const nextTagMatch = html.substring(headEndIndex).match(/<(body|script|style|html|meta|title|link|base)[\s>]/i);
+              if (nextTagMatch) {
+                insertIndex = headEndIndex + nextTagMatch.index!;
+              } else {
+                // If no next tag found, insert before </html> or at end
+                const htmlCloseIndex = html.indexOf('</html>');
+                insertIndex = htmlCloseIndex !== -1 ? htmlCloseIndex : html.length;
+              }
+            }
+            // Insert </head> and <body> at the correct position
+            html = html.slice(0, insertIndex) + '</head><body>' + html.slice(insertIndex);
+            // Ensure closing body tag exists
+            const htmlCloseIndex = html.indexOf('</html>');
+            if (htmlCloseIndex !== -1) {
+              html = html.slice(0, htmlCloseIndex) + '</body>' + html.slice(htmlCloseIndex);
+            } else {
+              html = html + '</body>';
+            }
+          } else {
+            // No head tag at all, add head and body after html tag
+            html = html.replace(
+              /<html[^>]*>/i,
+              (match) => `${match}<head></head><body>`
+            );
+            const htmlCloseIndex = html.indexOf('</html>');
+            if (htmlCloseIndex !== -1) {
+              html = html.slice(0, htmlCloseIndex) + '</body>' + html.slice(htmlCloseIndex);
+            } else {
+              html = html + '</body>';
+            }
+          }
         }
       }
       
