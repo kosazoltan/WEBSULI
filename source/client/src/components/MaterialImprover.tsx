@@ -286,14 +286,78 @@ export default function MaterialImprover() {
     }
   };
 
-  // Improve material mutation
+  // Improve material mutation - STREAMING MODE
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
-      // Timeout set to 60 seconds to avoid Cloudflare 504 Gateway Timeout errors
-      // Cloudflare has a default 100s timeout, but may timeout earlier in some cases
-      return apiRequest("POST", `/api/admin/improve-material/${fileId}`, {
-        customPrompt: customPrompt || undefined,
-      }, { timeout: 60000 }); // 60 seconds timeout (reduced from 95s to avoid Cloudflare timeout)
+      return new Promise<any>((resolve, reject) => {
+        const response = fetch(`/api/admin/improve-material/${fileId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            customPrompt: customPrompt || undefined,
+          }),
+        });
+
+        response.then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({ message: 'Network error' }));
+            reject(new Error(error.message || 'Request failed'));
+            return;
+          }
+
+          if (!res.body) {
+            reject(new Error('No response body'));
+            return;
+          }
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let improvedFile: any = null;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+
+                  if (parsed.type === 'progress') {
+                    // Show progress in toast
+                    toast({
+                      title: parsed.message,
+                      duration: 2000,
+                    });
+                  } else if (parsed.type === 'complete') {
+                    improvedFile = parsed.improvedFile;
+                  } else if (parsed.type === 'error') {
+                    reject(new Error(parsed.message || 'Unknown error'));
+                    return;
+                  }
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+
+          if (improvedFile) {
+            resolve(improvedFile);
+          } else {
+            reject(new Error('No improved file received'));
+          }
+        }).catch(reject);
+      });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
