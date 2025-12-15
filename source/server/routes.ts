@@ -4731,6 +4731,10 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
       });
 
+      console.log('[IMPROVE] Calling Claude API...');
+      console.log('[IMPROVE] System prompt length:', systemPrompt.length);
+      console.log('[IMPROVE] User prompt length:', userPrompt.length);
+      
       const message = await anthropic.messages.create({
         model: "claude-sonnet-4-5",
         max_tokens: 12288, // Háromszorosára emelve (4096 * 3) hogy befejezhesse a teljes HTML generálást
@@ -4739,7 +4743,14 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           role: 'user',
           content: userPrompt,
         }],
+      }).catch((error: any) => {
+        console.error('[IMPROVE] Claude API error:', error);
+        throw new Error(`Claude API hiba: ${error.message || 'Ismeretlen hiba'}`);
       });
+      
+      console.log('[IMPROVE] Claude API response received');
+      console.log('[IMPROVE] Response stop_reason:', message.stop_reason);
+      console.log('[IMPROVE] Response usage:', message.usage);
 
       const improvedContent = message.content[0];
       if (!improvedContent || improvedContent.type !== 'text') {
