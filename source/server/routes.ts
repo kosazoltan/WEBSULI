@@ -4919,7 +4919,16 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       
       console.log('[IMPROVE] Fixed CSS syntax errors');
       
-      // Step 8: Basic HTML structure validation - wrap if needed
+      // Step 8: Validate that we have actual HTML content
+      if (!improvedHtml || improvedHtml.trim().length < 100) {
+        console.error('[IMPROVE] Generated HTML is too short or empty:', improvedHtml.length);
+        return res.status(400).json({ 
+          message: "A generált HTML túl rövid vagy üres. Kérlek próbáld újra vagy módosítsd a promptot.",
+          details: `HTML hossz: ${improvedHtml?.length || 0} karakter`
+        });
+      }
+
+      // Step 9: Basic HTML structure validation - wrap if needed
       if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
         console.warn('[IMPROVE] No HTML structure found, wrapping content');
         // If no full HTML structure, wrap it
