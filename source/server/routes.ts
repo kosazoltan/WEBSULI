@@ -4080,13 +4080,20 @@ Crawl-delay: 1`;
 
   // POST /api/admin/improve-material/:id - Create improved version using Claude
   adminRouter.post("/improve-material/:id", async (req: any, res) => {
-    // AbortController for timeout handling (95 seconds - Cloudflare default timeout is 100s)
-    // Note: Cloudflare has a default 100s timeout, so we use 95s to ensure we respond before Cloudflare
+    // AbortController for timeout handling (60 seconds - shorter to avoid Cloudflare issues)
+    // Note: Cloudflare has a default 100s timeout, but may timeout earlier in some cases
+    // We use 60s to be safe and provide better error messages
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
-      console.log('[IMPROVE] Request timeout (95s)');
-    }, 95000); // 95 seconds timeout (Cloudflare default is 100s)
+      console.log('[IMPROVE] Request timeout (60s)');
+      if (!res.headersSent) {
+        res.status(408).json({ 
+          message: 'Időtúllépés: A művelet túl sokáig tartott (60 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.',
+          timeout: true
+        });
+      }
+    }, 60000); // 60 seconds timeout (reduced from 95s to avoid Cloudflare timeout)
     
     try {
       const { id } = req.params;
@@ -4722,7 +4729,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         // Handle abort/timeout errors
         if (error.name === 'AbortError' || controller.signal.aborted) {
           console.error('[IMPROVE] Request aborted (timeout)');
-          throw new Error('Időtúllépés: A művelet túl sokáig tartott (95 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.');
+          throw new Error('Időtúllépés: A művelet túl sokáig tartott (60 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.');
         }
         console.error('[IMPROVE] Claude API error:', error);
         throw new Error(`Claude API hiba: ${error.message || 'Ismeretlen hiba'}`);
