@@ -4733,7 +4733,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
 
       const message = await anthropic.messages.create({
         model: "claude-sonnet-4-5",
-        max_tokens: 4096,
+        max_tokens: 12288, // Háromszorosára emelve (4096 * 3) hogy befejezhesse a teljes HTML generálást
         system: systemPrompt,
         messages: [{
           role: 'user',
