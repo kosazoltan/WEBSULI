@@ -287,20 +287,23 @@ export default function MaterialImprover() {
   // Improve material mutation
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
+      // Increase timeout to 5 minutes (300000ms) for Claude API calls
+      // Claude needs time to generate complete HTML with all components
       return apiRequest("POST", `/api/admin/improve-material/${fileId}`, {
         customPrompt: customPrompt || undefined,
-      });
+      }, { timeout: 300000 }); // 5 minutes timeout
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
       setSelectedFileId("");
       setCustomPrompt("");
       toast({
-        title: "✅ Javítás elkezdve",
-        description: "A Claude AI most dolgozik a javításon...",
+        title: "✅ Javítás elkészült",
+        description: data?.title ? `A "${data.title}" javítása sikeresen elkészült!` : "A javítás sikeresen elkészült!",
       });
     },
     onError: (error: Error) => {
+      console.error('[IMPROVE] Mutation error:', error);
       toast({
         title: "❌ Hiba",
         description: error.message || "Nem sikerült elindítani a javítást",
