@@ -99,10 +99,31 @@ export default function MaterialImprover() {
   });
 
   // Precompute rendered HTML documents for side-by-side live preview
-  const makeRunnableHtml = (html?: string) =>
-    html
-      ? `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`
-      : "";
+  const makeRunnableHtml = (html?: string) => {
+    if (!html) return "";
+    
+    // If HTML already has full structure (DOCTYPE or html tag), use it as-is
+    if (html.includes('<!DOCTYPE') || html.includes('<!doctype') || html.trim().startsWith('<html')) {
+      // Ensure it has proper viewport meta tag if missing
+      if (!html.includes('viewport')) {
+        html = html.replace(
+          /<head[^>]*>/i,
+          (match) => `${match}<meta name="viewport" content="width=device-width, initial-scale=1.0" />`
+        );
+        // If no head tag, add it before html tag
+        if (!html.includes('<head')) {
+          html = html.replace(
+            /<html[^>]*>/i,
+            (match) => `${match}<head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>`
+          );
+        }
+      }
+      return html;
+    }
+    
+    // Otherwise, wrap the content in a full HTML structure
+    return `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`;
+  };
 
   const renderedOriginal = useMemo(
     () => makeRunnableHtml(previewData?.originalFile?.content),
@@ -458,9 +479,14 @@ export default function MaterialImprover() {
               <TabsContent value="run-original" className="mt-4">
                 {renderedOriginal ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
-                    <div className="bg-muted px-3 py-2 border-b flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Eredeti HTML futás közben</span>
+                    <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Eredeti HTML futás közben</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {Math.round(renderedOriginal.length / 1024)} KB
+                      </span>
                     </div>
                     <iframe
                       srcDoc={renderedOriginal}
@@ -471,6 +497,12 @@ export default function MaterialImprover() {
                       data-testid="iframe-preview-original"
                       style={{
                         minHeight: '400px',
+                      }}
+                      onError={(e) => {
+                        console.error('[IFRAME] Error loading original HTML:', e);
+                      }}
+                      onLoad={() => {
+                        console.log('[IFRAME] Original HTML loaded, length:', renderedOriginal.length);
                       }}
                     />
                   </div>
@@ -485,9 +517,14 @@ export default function MaterialImprover() {
               <TabsContent value="run-improved" className="mt-4">
                 {renderedImproved ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
-                    <div className="bg-muted px-3 py-2 border-b flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Javított HTML futás közben</span>
+                    <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Javított HTML futás közben</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {Math.round(renderedImproved.length / 1024)} KB
+                      </span>
                     </div>
                     <iframe
                       srcDoc={renderedImproved}
@@ -498,6 +535,24 @@ export default function MaterialImprover() {
                       data-testid="iframe-preview-improved"
                       style={{
                         minHeight: '400px',
+                      }}
+                      onError={(e) => {
+                        console.error('[IFRAME] Error loading improved HTML:', e);
+                      }}
+                      onLoad={() => {
+                        console.log('[IFRAME] Improved HTML loaded, length:', renderedImproved.length);
+                        // Try to access iframe content to check if it loaded
+                        const iframe = e.target as HTMLIFrameElement;
+                        try {
+                          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                          if (iframeDoc) {
+                            console.log('[IFRAME] Iframe document found, body content length:', iframeDoc.body?.innerHTML?.length || 0);
+                            console.log('[IFRAME] Iframe body classes:', iframeDoc.body?.className || 'none');
+                            console.log('[IFRAME] Iframe body styles:', iframeDoc.body?.style?.cssText || 'none');
+                          }
+                        } catch (err) {
+                          console.warn('[IFRAME] Cannot access iframe content (CORS/sandbox):', err);
+                        }
                       }}
                     />
                   </div>
