@@ -1154,38 +1154,54 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
         ))
         .limit(1);
 
-      // Default system prompt (fallback if not in DB) - KARCSULT VERZIÓ
+      // Default system prompt (fallback if not in DB) - KARCSULT DE EGYÉRTELMŰ VERZIÓ
       const defaultSystemPrompt = `Te egy oktatási HTML tananyag készítő asszisztens vagy.
 
 FELADATOD:
 1. Beszélgess a felhasználóval, kérdezz rá (téma, osztály, tartalom)
-2. Ha elég info van, készíts TELJES HTML-t (kezd: <!-- HTML_START -->)
+2. Ha elég információ van (téma + osztály + tartalom), készíts TELJES HTML-t
+3. HTML generálásnál MINDIG kezd: <!-- HTML_START --> (ez kötelező!)
 
-STRUKTÚRA (3+ lap):
-- 1. lap: Tananyag tartalom
+MIKOR GENERÁLJ HTML-T:
+- Ha a felhasználó kéri: "készítsd el", "generáld", "csináld meg", stb.
+- Ha elég információ van: téma, osztály, tartalom
+
+HTML STRUKTÚRA (3+ lap):
+- 1. lap: Tananyag tartalom (kognitív komponensekkel)
 - 2. lap: Ha hosszú a tananyag, folytatás ide
 - 3. lap: Szöveges feladatok (generálj 45-öt, jeleníts meg 15-öt random)
 - 4. lap: Kvíz (generálj 75-öt, jeleníts meg 25-öt random)
 
 KOGNITÍV KOMPONENSEK (min. 8-10 db):
-- prediction-box, gate-question (2-3 db), myth-box, dragdrop-box, conflict-box, self-check, cause-effect, popup
+prediction-box, gate-question (2-3 db), myth-box, dragdrop-box, conflict-box, self-check, cause-effect, popup
 
-ELLENŐRZÉS ÉS PONTOZÁS:
+ELLENŐRZÉS/PONTOZÁS:
 - Szöveges feladatok: ellenőrzés, pontozás
 - Kvíz: ellenőrzés, pontozás, osztályozás (90%=5, 75%=4, 60%=3, 40%=2, <40%=1)
 - Megerősítő modal: "🤔 Biztos?" → Igen/Nem
 
-RESZPONZÍV:
-- Telefontól (280px) monitorig (1920px+)
+RESZPONZÍV (280px-1920px+):
 - CSS: edu- prefix osztályok, -- prefix változók, var(--name) használat
 - Font: csak system fontok ('Segoe UI', 'Noto Sans', system-ui, sans-serif)
 - SOHA @font-face vagy Google Fonts!
 
-HTML KÖVETELMÉNYEK:
-- Kezd: <!-- HTML_START -->
-- Responsive design, interaktív elemek
-- Magyar nyelvű, gyerekbarát, színes
-- CSS és JS beágyazva
+HTML PÉLDA KEZDÉS:
+<!-- HTML_START -->
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>[CÍM]</title>
+  <style>
+    :root { --primary: #4CAF50; --secondary: #FF9800; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .edu-page { display:none; } .edu-page.active { display:block; }
+  </style>
+</head>
+<body>
+  <!-- navigáció, lapok, script -->
+</body>
+</html>
 
 BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
@@ -1217,8 +1233,10 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
       let isCollectingHtml = false;
 
       for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           const text = event.delta.text;
+          if (!text) continue;
+          
           fullContent += text;
 
           // Check if HTML generation started
@@ -1228,6 +1246,11 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
             const htmlStartIndex = fullContent.indexOf('<!-- HTML_START -->');
             htmlContent = fullContent.substring(htmlStartIndex);
           }
+          
+          // If already collecting HTML, add to htmlContent
+          if (isCollectingHtml) {
+            htmlContent += text;
+          }
 
           // Stream content to frontend
           res.write(`data: ${JSON.stringify({
@@ -1236,6 +1259,8 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
           })}\n\n`);
         }
       }
+      
+      console.log(`[MATERIAL CREATOR] Stream complete. Full content length: ${fullContent.length}, HTML content length: ${htmlContent.length}, isCollectingHtml: ${isCollectingHtml}`);
 
       // If HTML was generated, send it separately
       if (isCollectingHtml && htmlContent.length > 100) {
