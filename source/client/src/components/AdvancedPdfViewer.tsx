@@ -95,7 +95,10 @@ export default function AdvancedPdfViewer({ pdfUrl, title, onClose }: AdvancedPd
         const viewport = page.getViewport({ scale: thumbnailScale });
         
         const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { 
+          willReadFrequently: false, // Optimize for rendering performance
+          alpha: false // Disable alpha channel for better performance
+        });
         
         if (!context) continue;
         
