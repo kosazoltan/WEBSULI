@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import express from "express";
 import { csrfSync } from "csrf-sync";
 import { storage } from "./storage";
-import { insertHtmlFileSchema, insertEmailSubscriptionSchema, insertExtraEmailSchema, insertMaterialCommentSchema, type EmailSubscription, type User, type HtmlFile } from "@shared/schema";
+import { insertHtmlFileSchema, insertEmailSubscriptionSchema, insertExtraEmailSchema, insertMaterialCommentSchema, insertImprovedHtmlFileSchema, type EmailSubscription, type User, type HtmlFile, type ImprovedHtmlFile, type MaterialImprovementBackup } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
 import { sendNewMaterialNotification, sendAdminNotification } from "./resend";
@@ -4072,6 +4072,579 @@ Crawl-delay: 1`;
   // NOTE: DO NOT add a catch-all 404 handler here!
   // The Vite middleware (in development) or static file server (in production)
   // will handle all non-API routes and serve the SPA.
+
+  // ========================================
+  // MATERIAL IMPROVEMENT ENDPOINTS
+  // ========================================
+
+  // POST /api/admin/improve-material/:id - Create improved version using Claude
+  adminRouter.post("/improve-material/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { customPrompt } = req.body || {};
+      const userId = req.user.id;
+
+      // Get original file
+      const originalFile = await storage.getHtmlFile(id);
+      if (!originalFile) {
+        return res.status(404).json({ message: "Fájl nem található" });
+      }
+
+      // Validate content size (max 5MB)
+      const contentSizeMB = Buffer.byteLength(originalFile.content, 'utf8') / (1024 * 1024);
+      if (contentSizeMB > 5) {
+        return res.status(400).json({ message: "A fájl túl nagy (max 5MB)" });
+      }
+
+      // Load system prompt from database (tananyag-okosito)
+      const { systemPrompts } = await import('@shared/schema');
+      let [customSystemPrompt] = await db
+        .select()
+        .from(systemPrompts)
+        .where(
+          and(
+            eq(systemPrompts.id, 'tananyag-okosito'),
+            eq(systemPrompts.isActive, true)
+          )
+        )
+        .limit(1);
+
+      // If prompt doesn't exist, create it with the default professional prompt
+      if (!customSystemPrompt) {
+        const defaultPrompt = `name: tananyag-okosito
+description: Professzionális oktatási tananyagok készítése 3 oldalas HTML artifact formátumban. KOGNITÍV AKTIVÁLÁS technikákkal - váratlan kérdések, előrejelzés, kapu-rendszer, drag&drop, döntési elágazások. Szöveges feladatok (45→15), Kvízek (75→25). Megerősítő kérdés, animált dizájn. UTF-8 ékezetes betűtípusok.
+metadata:
+  version: "6.0"
+  author: "Zoltan"
+  last_updated: "2025-12-14"
+---
+
+# Tananyag Készítő v6.0 – Tömör verzió
+
+## MIKOR HASZNÁLD
+- Interaktív magyar tananyag kvízekkel és feladatokkal (K-8)
+- Animált, kognitív aktiválással
+
+---
+
+## KRITIKUS SZABÁLYOK
+
+### TARTALOM FORRÁS
+- **CSAK** a felhasználó által megadott forrásból dolgozz
+- **SOHA** ne használj saját példákat
+
+### MENNYISÉGEK
+| Típus | Generált | Megjelenített |
+|-------|----------|---------------|
+| Szöveges feladat | 45 | 15 |
+| Kvíz kérdés | 75 | 25 |
+
+### KOGNITÍV KOMPONENSEK (min. 8-10 db/tananyag)
+| Komponens | Leírás | Hol |
+|-----------|--------|-----|
+| prediction-box | Előrejelzés | Szakasz elején |
+| gate-question | Kapu kérdés (2-3 db) | Szekciók végén |
+| myth-box | Tévhit leleplezés | Gyakori tévedéseknél |
+| dragdrop-box | Drag & drop | Hiányzó szavak |
+| conflict-box | Kognitív konfliktus | Meglepő tényeknél |
+| self-check | Önértékelés slider | Tananyag végén |
+| cause-effect | Ok-okozat doboz | Összefüggéseknél |
+| popup | Váratlan kérdés | Bekezdések után |
+
+### MEGERŐSÍTÉS
+Beküldés előtt: "🤔 Biztos?" modal → Igen/Nem
+
+### UTF-8
+\`\`\`css
+font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
+\`\`\`
+\`\`\`html
+<meta charset="UTF-8">
+\`\`\`
+
+---
+
+## WORKFLOW
+
+\`\`\`
+1. ✅ [Téma] 📘 [Tantárgy] 👥 [Célcsoport] 🎨 [Szín/stílus]
+2. HTML mentés: C:\\Tananyagok\\[tema]-[evfolyam].html
+3. ✅ Kész
+\`\`\`
+
+---
+
+## HTML VÁZLAT
+
+\`\`\`html
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>[CÍM]</title>
+  <style>
+    :root { --primary: [SZÍN]; --success: #00b894; --error: #e17055; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes popIn { 0%{opacity:0;transform:scale(0.5)} 100%{opacity:1;transform:scale(1)} }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-8px)} }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+    .page { display:none; } .page.active { display:block; }
+  </style>
+</head>
+<body>
+  <!-- Megerősítő modal -->
+  <div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-modal">
+      <h3>🤔 Biztos?</h3>
+      <button onclick="closeConfirm()">Átgondolom</button>
+      <button onclick="proceedEvaluation()">Igen!</button>
+    </div>
+  </div>
+
+  <!-- Navigáció -->
+  <nav class="nav-tabs">
+    <button onclick="showPage('content')">📚 Tananyag</button>
+    <button onclick="showPage('exercises')">✍️ Feladatok</button>
+    <button onclick="showPage('quiz')">❓ Kvíz</button>
+  </nav>
+
+  <!-- TANANYAG oldal: tartalom + kognitív komponensek -->
+  <div class="page active" id="content">...</div>
+
+  <!-- FELADATOK oldal -->
+  <div class="page" id="exercises">
+    <div id="exercises-container"></div>
+    <button onclick="requestConfirm('exercises')">Ellenőrzés</button>
+  </div>
+
+  <!-- KVÍZ oldal -->
+  <div class="page" id="quiz">
+    <div id="quiz-container"></div>
+    <button onclick="requestConfirm('quiz')">Ellenőrzés</button>
+  </div>
+
+  <script>
+    const exerciseBank = [/* 45 db: {id, q, keywords:[], points} */];
+    const quizBank = [/* 75 db: {id, q, options:[], correct:0-3} */];
+    let currentExercises = shuffle(exerciseBank).slice(0,15);
+    let currentQuiz = shuffle(quizBank).slice(0,25);
+    // + navigáció, értékelés, osztályzat logika
+  </script>
+</body>
+</html>
+\`\`\`
+
+---
+
+## KOMPONENS MINTÁK
+
+**Kapu kérdés:**
+\`\`\`html
+<div class="gate-question">
+  <h4>🚧 KAPU</h4>
+  <p>Kérdés?</p>
+  <div onclick="checkGate(1,this,false)">A) Rossz</div>
+  <div onclick="checkGate(1,this,true)">B) Helyes</div>
+  <div class="gate-feedback" id="gate-fb-1"></div>
+</div>
+\`\`\`
+
+**Előrejelzés:**
+\`\`\`html
+<div class="prediction-box">
+  <h4>🔮 Tippelj!</h4>
+  <textarea id="pred-1"></textarea>
+  <button onclick="savePrediction(1)">Mentés</button>
+</div>
+\`\`\`
+
+**Tévhit:**
+\`\`\`html
+<div class="myth-box">
+  <p class="myth-statement">"Téves állítás"</p>
+  <button onclick="voteMy(1,this,true)">Igaz</button>
+  <button onclick="voteMy(1,this,false)">Hamis</button>
+  <div class="truth-reveal" id="myth-truth-1">Valójában: ...</div>
+</div>
+\`\`\`
+
+**Ok-okozat:**
+\`\`\`html
+<div class="cause-effect">
+  <div class="cause">OK: Ha...</div>
+  <div class="arrow">→</div>
+  <div class="effect">OKOZAT: Akkor...</div>
+</div>
+\`\`\`
+
+**Drag & drop:**
+\`\`\`html
+<div class="dragdrop-box">
+  <p>Mondat <span class="drop-zone" data-answer="helyes"></span> folytatás.</p>
+  <div class="drag-items">
+    <div class="drag-item" draggable="true" data-value="helyes">helyes</div>
+    <div class="drag-item" draggable="true" data-value="rossz">rossz</div>
+  </div>
+</div>
+\`\`\`
+
+---
+
+## ÉRTÉKELÉS
+
+\`\`\`javascript
+function getGrade(p) {
+  if (p >= 90) return {num:5, text:'Jeles'};
+  if (p >= 75) return {num:4, text:'Jó'};
+  if (p >= 60) return {num:3, text:'Közepes'};
+  if (p >= 40) return {num:2, text:'Elégséges'};
+  return {num:1, text:'Elégtelen'};
+}
+// 80%+ → confetti animáció
+\`\`\`
+
+---
+
+## GYORS REFERENCIA
+
+\`\`\`
+FELADAT: 45→15 | KVÍZ: 75→25
+KOGNITÍV: prediction, gate(2-3), myth, dragdrop, cause-effect, self-check
+MODAL: requestConfirm() → "Biztos?" → proceedEvaluation()
+OSZTÁLYZAT: 90=5, 75=4, 60=3, 40=2, <40=1
+ANIMÁCIÓ: fadeIn, popIn, shake, pulse, float, confetti
+OUTPUT: C:\\Tananyagok\\[tema]-[evfolyam].html
+UTF-8: 'Segoe UI', 'Noto Sans', system-ui
+\`\`\``;
+
+        // Create the system prompt in database (with conflict handling)
+        try {
+          [customSystemPrompt] = await db
+            .insert(systemPrompts)
+            .values({
+              id: 'tananyag-okosito',
+              name: 'tananyag-okosito',
+              prompt: defaultPrompt,
+              description: 'Professzionális oktatási tananyagok készítése 3 oldalas HTML artifact formátumban. KOGNITÍV AKTIVÁLÁS technikákkal.',
+              isActive: true,
+            })
+            .onConflictDoUpdate({
+              target: systemPrompts.id,
+              set: {
+                prompt: defaultPrompt,
+                description: 'Professzionális oktatási tananyagok készítése 3 oldalas HTML artifact formátumban. KOGNITÍV AKTIVÁLÁS technikákkal.',
+                isActive: true,
+                updatedAt: new Date(),
+              },
+            })
+            .returning();
+          
+          console.log('[IMPROVE] Created/updated tananyag-okosito system prompt');
+        } catch (error: any) {
+          // If insert fails, try to fetch existing one
+          console.warn('[IMPROVE] Failed to create system prompt, trying to fetch:', error.message);
+          [customSystemPrompt] = await db
+            .select()
+            .from(systemPrompts)
+            .where(eq(systemPrompts.id, 'tananyag-okosito'))
+            .limit(1);
+        }
+      }
+
+      // Use the system prompt from database (or fallback to default)
+      const systemPrompt = customSystemPrompt?.prompt || `Te egy HTML tananyag javító szakértő vagy. A feladatod, hogy régebbi, kevésbé fejlett HTML tananyagokat modern, responsive, interaktív tananyaggá alakíts.
+
+FONTOS SZABÁLYOK:
+1. Tartsd meg az eredeti tartalmat és struktúrát
+2. Modernizáld a HTML/CSS-t (responsive design, modern CSS)
+3. Javítsd a kódminőséget (semantic HTML, accessibility)
+4. Ne változtass a tananyag tartalmán, csak a megjelenésen és technikai minőségen
+5. Biztosítsd a mobil kompatibilitást
+6. Használj modern CSS-t (Flexbox, Grid, CSS Variables)
+7. Optimalizáld a teljesítményt
+8. Tartsd meg az eredeti funkcionalitást (quiz, interaktív elemek)
+9. Ne használj külső CDN-eket vagy külső scripteket (mindent inline)
+10. Biztosítsd a biztonságot (XSS védelem, sanitizáció)
+
+VÁLASZ FORMATUM:
+Csak a javított HTML kódot add vissza, magyarázat nélkül. A kód azonnal használható legyen.`;
+
+      const userPrompt = `Javítsd az alábbi HTML tananyagot modern, responsive, interaktív tananyaggá a tananyag-okosito rendszer szabályai szerint:
+
+CÍM: ${originalFile.title}
+OSZTÁLY: ${originalFile.classroom}
+LEÍRÁS: ${originalFile.description || 'Nincs leírás'}
+
+HTML KÓD:
+${originalFile.content}
+
+${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
+
+      // Call Claude API
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const anthropic = new Anthropic({
+        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+      });
+
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{
+          role: 'user',
+          content: userPrompt,
+        }],
+      });
+
+      const improvedContent = message.content[0];
+      if (!improvedContent || improvedContent.type !== 'text') {
+        throw new Error('Invalid response from Claude API');
+      }
+
+      // Validate improved HTML
+      let improvedHtml = improvedContent.text.trim();
+      
+      // Basic HTML structure validation - wrap if needed
+      if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
+        // If no full HTML structure, wrap it
+        improvedHtml = wrapHtmlWithResponsiveContainer(improvedHtml);
+      }
+
+      // Content size validation
+      const improvedSizeMB = Buffer.byteLength(improvedHtml, 'utf8') / (1024 * 1024);
+      if (improvedSizeMB > 5) {
+        return res.status(400).json({ message: "A javított fájl túl nagy (max 5MB)" });
+      }
+
+      // XSS and script injection checks
+      const dangerousPatterns = [
+        /eval\s*\(/i,
+        /Function\s*\(/i,
+        /setTimeout\s*\([^,]*['"]/i,
+        /setInterval\s*\([^,]*['"]/i,
+        /javascript:/i,
+        /onerror\s*=/i,
+        /onclick\s*=/i,
+      ];
+
+      for (const pattern of dangerousPatterns) {
+        if (pattern.test(improvedHtml)) {
+          return res.status(400).json({ message: "A javított HTML biztonsági problémákat tartalmaz" });
+        }
+      }
+
+      // Create improved file record
+      const improvedFile = await storage.createImprovedHtmlFile({
+        originalFileId: id,
+        title: originalFile.title,
+        content: improvedHtml,
+        description: originalFile.description,
+        classroom: originalFile.classroom,
+        contentType: originalFile.contentType || 'html',
+        improvementPrompt: customPrompt || 'Default improvement',
+        status: 'pending',
+        createdBy: userId,
+      });
+
+      res.status(201).json(improvedFile);
+    } catch (error: any) {
+      console.error('[IMPROVE] Error:', error);
+      res.status(500).json({ 
+        message: error.message || 'Hiba történt a javítás során' 
+      });
+    }
+  });
+
+  // GET /api/admin/improved-files - List all improved files
+  adminRouter.get("/improved-files", async (req: any, res) => {
+    try {
+      const { status, originalFileId } = req.query;
+      const files = await storage.getAllImprovedHtmlFiles(
+        status as string | undefined,
+        originalFileId as string | undefined
+      );
+      res.json(files);
+    } catch (error: any) {
+      console.error('[IMPROVED-FILES] Error:', error);
+      res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
+
+  // GET /api/admin/improved-files/:id - Get single improved file with original
+  adminRouter.get("/improved-files/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const improved = await storage.getImprovedHtmlFile(id);
+      if (!improved) {
+        return res.status(404).json({ message: "Javított fájl nem található" });
+      }
+
+      const original = await storage.getHtmlFile(improved.originalFileId);
+      res.json({
+        ...improved,
+        originalFile: original,
+      });
+    } catch (error: any) {
+      console.error('[IMPROVED-FILE] Error:', error);
+      res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
+
+  // POST /api/admin/improved-files/:id/apply - Apply improved file to original
+  adminRouter.post("/improved-files/:id/apply", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { createBackup = true, notes } = req.body || {};
+      const userId = req.user.id;
+
+      // Validate improved file exists and is approved
+      const improved = await storage.getImprovedHtmlFile(id);
+      if (!improved) {
+        return res.status(404).json({ message: "Javított fájl nem található" });
+      }
+
+      if (improved.status !== 'approved') {
+        return res.status(400).json({ 
+          message: `Csak 'approved' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}` 
+        });
+      }
+
+      // Apply improved file (with transaction and backup)
+      const result = await storage.applyImprovedFileToOriginal(id, userId, createBackup, notes);
+
+      res.json({
+        success: true,
+        originalFile: result.originalFile,
+        backupId: result.backupId,
+        message: 'Javított fájl sikeresen alkalmazva',
+      });
+    } catch (error: any) {
+      console.error('[APPLY-IMPROVED] Error:', error);
+      res.status(500).json({ 
+        message: error.message || 'Hiba történt az alkalmazás során' 
+      });
+    }
+  });
+
+  // PATCH /api/admin/improved-files/:id - Update improved file status/notes
+  adminRouter.patch("/improved-files/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, improvementNotes } = req.body || {};
+
+      if (!status || !['pending', 'approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ message: "Érvénytelen státusz" });
+      }
+
+      const updated = await storage.updateImprovedHtmlFileStatus(id, status, undefined, improvementNotes);
+      if (!updated) {
+        return res.status(404).json({ message: "Javított fájl nem található" });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error('[UPDATE-IMPROVED] Error:', error);
+      res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
+
+  // DELETE /api/admin/improved-files/:id - Delete improved file
+  adminRouter.delete("/improved-files/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      // Validate status (only pending or rejected can be deleted)
+      const improved = await storage.getImprovedHtmlFile(id);
+      if (!improved) {
+        return res.status(404).json({ message: "Javított fájl nem található" });
+      }
+
+      if (!['pending', 'rejected'].includes(improved.status)) {
+        return res.status(400).json({ 
+          message: `Csak 'pending' vagy 'rejected' státuszú fájlok törölhetők. Jelenlegi státusz: ${improved.status}` 
+        });
+      }
+
+      const deleted = await storage.deleteImprovedHtmlFile(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Javított fájl nem található" });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[DELETE-IMPROVED] Error:', error);
+      res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
+
+  // ========================================
+  // MATERIAL IMPROVEMENT BACKUP ENDPOINTS
+  // ========================================
+
+  // GET /api/admin/improvement-backups - List all improvement backups
+  adminRouter.get("/improvement-backups", async (req: any, res) => {
+    try {
+      const { originalFileId } = req.query;
+      const backups = await storage.getAllMaterialImprovementBackups(
+        originalFileId as string | undefined
+      );
+      res.json(backups);
+    } catch (error: any) {
+      console.error('[IMPROVEMENT-BACKUPS] Error:', error);
+      res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
+
+  // GET /api/admin/improvement-backups/:id - Get single backup
+  adminRouter.get("/improvement-backups/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const backup = await storage.getMaterialImprovementBackup(id);
+      if (!backup) {
+        return res.status(404).json({ message: "Backup nem található" });
+      }
+      res.json(backup);
+    } catch (error: any) {
+      console.error('[IMPROVEMENT-BACKUP] Error:', error);
+      res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
+
+  // POST /api/admin/improvement-backups/:id/restore - Restore from backup
+  adminRouter.post("/improvement-backups/:id/restore", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      const result = await storage.restoreFromMaterialImprovementBackup(id, userId);
+      res.json({
+        success: true,
+        restoredFile: result.restoredFile,
+        message: 'Fájl sikeresen visszaállítva',
+      });
+    } catch (error: any) {
+      console.error('[RESTORE-BACKUP] Error:', error);
+      res.status(500).json({ 
+        message: error.message || 'Hiba történt a visszaállítás során' 
+      });
+    }
+  });
+
+  // DELETE /api/admin/improvement-backups/:id - Delete backup
+  adminRouter.delete("/improvement-backups/:id", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteMaterialImprovementBackup(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Backup nem található" });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[DELETE-BACKUP] Error:', error);
+      res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
 
   // Register admin router with authentication middleware
   // ALL /api/admin/* routes require admin authentication

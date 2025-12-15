@@ -1,4 +1,4 @@
-import { Home, FileText, Wand2, Settings, Database } from "lucide-react";
+import { Home, FileText, Wand2, Settings, Database, Sparkles } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import {
@@ -36,6 +36,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
       tabs: [
         { value: "enhanced", label: "AI Készítő", icon: Wand2 },
         { value: "pdf-upload", label: "PDF Feltöltés", icon: FileText },
+        { value: "improve-materials", label: "Okosítás", icon: Sparkles },
       ]
     },
     { 
@@ -45,6 +46,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
       tabs: [
         { value: "tags", label: "Tag-ek", icon: Tag },
         { value: "backup", label: "Backup", icon: Database },
+        { value: "improvement-backups", label: "Okosítás Backup", icon: Database },
       ]
     },
     { 

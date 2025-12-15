@@ -10,6 +10,7 @@ import { setupScheduledPublishing } from "./scheduledPublishing";
 import { setupDailyViewSummary } from "./dailyViewSummary";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
 import { startAutoBackupJob } from "./autoBackup";
+import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { setupAuth } from "./auth";
 
 const app = express();
@@ -327,6 +328,9 @@ app.use((req, res, next) => {
 
     // Phase 10: Start automatic backup system (daily + event-driven)
     startAutoBackupJob();
+
+    // Phase 11: Start cleanup job for old applied improved files (daily at midnight)
+    setupCleanupImprovedFiles();
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;

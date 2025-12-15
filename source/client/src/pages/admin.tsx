@@ -32,7 +32,8 @@ import {
   HelpCircle,
   Download,
   FolderOpen,
-  Upload
+  Upload,
+  Sparkles
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -80,6 +81,8 @@ const DatabaseManager = lazy(() => import("@/components/DatabaseManager"));
 const PdfUpload = lazy(() => import("@/components/PdfUpload"));
 const AdminFileDashboard = lazy(() => import("@/components/AdminFileDashboard"));
 const SimpleHtmlUpload = lazy(() => import("@/components/SimpleHtmlUpload"));
+const MaterialImprover = lazy(() => import("@/components/MaterialImprover"));
+const MaterialImprovementBackups = lazy(() => import("@/components/MaterialImprovementBackups"));
 
 // Admin Files Tab Component - handles file management
 function AdminFilesTab() {
@@ -273,7 +276,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
-    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database"];
+    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups"];
     return tabParam && validTabs.includes(tabParam) ? tabParam : "files";
   });
 
@@ -646,7 +649,7 @@ export default function Admin() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Desktop: TabsList látható, Mobil: elrejtve (bottom nav használja) */}
-          <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 mb-6 ${isMobile ? 'hidden' : ''}`}>
+          <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-11 mb-6 ${isMobile ? 'hidden' : ''}`}>
             <TabsTrigger value="files" className="flex items-center gap-2" data-testid="tab-files">
               <FolderOpen className="h-4 w-4" />
               <span className="hidden lg:inline">Fájlok</span>
@@ -686,6 +689,24 @@ export default function Admin() {
               <Database className="h-4 w-4" />
               <span className="hidden sm:inline">Adatbázis</span>
               <span className="sm:hidden">DB</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="improve-materials" 
+              className="flex items-center gap-2 text-red-600 border-red-300 data-[state=active]:bg-red-50 data-[state=active]:text-red-700 data-[state=active]:border-red-500" 
+              data-testid="tab-improve-materials"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">Okosítás</span>
+              <span className="sm:hidden">Okosítás</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="improvement-backups" 
+              className="flex items-center gap-2 text-red-600 border-red-300 data-[state=active]:bg-red-50 data-[state=active]:text-red-700 data-[state=active]:border-red-500" 
+              data-testid="tab-improvement-backups"
+            >
+              <Database className="h-4 w-4" />
+              <span className="hidden sm:inline">Okosítás Backup</span>
+              <span className="sm:hidden">Backup</span>
             </TabsTrigger>
           </TabsList>
 

@@ -392,3 +392,58 @@ export const insertWeeklyEmailReportSchema = createInsertSchema(weeklyEmailRepor
 
 export type InsertWeeklyEmailReport = z.infer<typeof insertWeeklyEmailReportSchema>;
 export type WeeklyEmailReport = typeof weeklyEmailReports.$inferSelect;
+
+// Improved HTML Files table - for AI-improved materials before applying
+export const improvedHtmlFiles = pgTable("improved_html_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  originalFileId: varchar("original_file_id").notNull().references(() => htmlFiles.id, { onDelete: 'cascade' }),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  description: text("description"),
+  classroom: integer("classroom").notNull().default(1),
+  contentType: varchar("content_type").notNull().default('html'),
+  improvementPrompt: text("improvement_prompt"),
+  improvementNotes: text("improvement_notes"),
+  status: varchar("status").notNull().default('pending'), // pending, approved, rejected, applied
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  appliedAt: timestamp("applied_at"),
+  appliedBy: varchar("applied_by").references(() => users.id),
+}, (table) => ({
+  originalFileIdx: index("improved_html_files_original_file_idx").on(table.originalFileId),
+  statusIdx: index("improved_html_files_status_idx").on(table.status),
+  createdAtIdx: index("improved_html_files_created_at_idx").on(table.createdAt),
+  appliedAtIdx: index("improved_html_files_applied_at_idx").on(table.appliedAt),
+}));
+
+export const insertImprovedHtmlFileSchema = createInsertSchema(improvedHtmlFiles).omit({
+  id: true,
+  createdAt: true,
+  appliedAt: true,
+  appliedBy: true,
+});
+
+export type InsertImprovedHtmlFile = z.infer<typeof insertImprovedHtmlFileSchema>;
+export type ImprovedHtmlFile = typeof improvedHtmlFiles.$inferSelect;
+
+// Material Improvement Backups table - backups before applying improvements
+export const materialImprovementBackups = pgTable("material_improvement_backups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  originalFileId: varchar("original_file_id").notNull().references(() => htmlFiles.id, { onDelete: 'cascade' }),
+  improvedFileId: varchar("improved_file_id").references(() => improvedHtmlFiles.id, { onDelete: 'set null' }),
+  backupData: jsonb("backup_data").notNull(), // Original file data before replacement
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  notes: text("notes"),
+}, (table) => ({
+  originalFileIdx: index("material_improvement_backups_original_file_idx").on(table.originalFileId),
+  createdAtIdx: index("material_improvement_backups_created_at_idx").on(table.createdAt),
+}));
+
+export const insertMaterialImprovementBackupSchema = createInsertSchema(materialImprovementBackups).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMaterialImprovementBackup = z.infer<typeof insertMaterialImprovementBackupSchema>;
+export type MaterialImprovementBackup = typeof materialImprovementBackups.$inferSelect;
