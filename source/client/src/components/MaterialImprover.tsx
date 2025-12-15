@@ -61,6 +61,7 @@ interface ImprovedFile {
   improvementNotes: string | null;
   createdAt: string;
   appliedAt: string | null;
+  content?: string; // HTML content of the improved file
   originalFile?: {
     id: string;
     title: string;
@@ -120,13 +121,13 @@ export default function MaterialImprover() {
       if (!html.includes('charset') && !html.includes('charset')) {
         html = html.replace(
           /<head[^>]*>/i,
-          (match) => `${match}<meta charset="UTF-8">`
+          (match: string) => `${match}<meta charset="UTF-8">`
         );
         // If no head tag, add it after html tag
         if (!html.includes('<head')) {
           html = html.replace(
             /<html[^>]*>/i,
-            (match) => `${match}<head><meta charset="UTF-8"></head>`
+            (match: string) => `${match}<head><meta charset="UTF-8"></head>`
           );
         }
       }
@@ -135,14 +136,15 @@ export default function MaterialImprover() {
       if (!html.includes('viewport')) {
         html = html.replace(
           /<head[^>]*>/i,
-          (match) => `${match}<meta name="viewport" content="width=device-width, initial-scale=1.0" />`
+          (match: string) => `${match}<meta name="viewport" content="width=device-width, initial-scale=1.0" />`
         );
         // If no head tag, add it after html tag
         if (!html.includes('<head')) {
+          const hasHeadClose = html.includes('</head>');
           html = html.replace(
             /<html[^>]*>/i,
-            (match) => {
-              if (html.includes('</head>')) {
+            (match: string) => {
+              if (hasHeadClose) {
                 return match;
               }
               return `${match}<head><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>`;
@@ -202,7 +204,7 @@ export default function MaterialImprover() {
             // No head tag at all, add head and body after html tag
             html = html.replace(
               /<html[^>]*>/i,
-              (match) => `${match}<head></head><body>`
+              (match: string) => `${match}<head></head><body>`
             );
             const htmlCloseIndex = html.indexOf('</html>');
             if (htmlCloseIndex !== -1) {
