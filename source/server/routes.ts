@@ -4129,79 +4129,151 @@ metadata:
 
 ## KRITIKUS SZABÁLYOK
 
-### CSS SZINTAXIS - KÖTELEZŐ SZABÁLYOK
+### CSS SZINTAXIS - KÖTELEZŐ SZABÁLYOK ÉS KONKRÉT KÓD PÉLDÁK
 
 🚨 **KRITIKUSAN FONTOS: MINDIG helyesen írd a CSS-t! EZEK A LEGGYAKORIBB HIBÁK!**
 
 #### CSS VÁLTOZÓK (CSS Variables) - KÖTELEZŐ SZABÁLY:
-- **MINDEN CSS változó deklarációnak KÖTELEZŐEN -- prefix-szel kell kezdődnie!**
-- **SOHA ne írj változót -- nélkül!**
-- ✅ HELYES PÉLDÁK:
-  :root {
-    --primary: #4CAF50;
-    --secondary: #FF9800;
-    --tertiary: #9C27B0;
-    --accent: #2196F3;
-    --success: #00b894;
-    --error: #e17055;
-    --warning: #fdcb6e;
-  }
-- ❌ HELYTELEN PÉLDÁK (SOHA NE ÍRD ÍGY!):
-  :root {
-    primary: #4CAF50;  /* HIÁNYZIK A -- */
-    secondary: #FF9800;  /* HIÁNYZIK A -- */
-    tertiary: #9C27B0;  /* HIÁNYZIK A -- */
-  }
+
+**✅ HELYES KÓD PÉLDA - ÍRD ÍGY MINDIG:**
+\`\`\`css
+:root {
+  --primary: #4CAF50;
+  --secondary: #FF9800;
+  --tertiary: #9C27B0;
+  --accent: #2196F3;
+  --success: #00b894;
+  --error: #e17055;
+  --warning: #fdcb6e;
+  --info: #74b9ff;
+}
+\`\`\`
+
+**❌ HELYTELEN KÓD PÉLDÁK - SOHA NE ÍRD ÍGY:**
+\`\`\`css
+:root {
+  primary: #4CAF50;  /* HIÁNYZIK A -- */
+  secondary: #FF9800;  /* HIÁNYZIK A -- */
+  tertiary: #9C27B0;  /* HIÁNYZIK A -- */
+  accent: #2196F3;  /* HIÁNYZIK A -- */
+}
+\`\`\`
+
+**FIGYELEM:** MINDEN változó nevet ellenőrizd, hogy -- prefix-szel kezdődik-e! Ha új változót adsz hozzá (pl. tertiary, accent, info), MINDIG -- prefix-szel kezd!
 
 #### CSS VÁLTOZÓ HASZNÁLAT - KÖTELEZŐ SZABÁLY:
-- **MINDIG használj var() függvényt a változók használatakor!**
-- **SOHA ne írj közvetlenül változó nevet CSS property értéknek!**
-- ✅ HELYES PÉLDÁK:
-  color: var(--primary);
+
+**✅ HELYES KÓD PÉLDÁK - ÍRD ÍGY MINDIG:**
+\`\`\`css
+.header {
+  background: var(--primary);
+  color: white;
+}
+.button {
   background: var(--secondary);
   border-color: var(--tertiary);
-- ❌ HELYTELEN PÉLDÁK (SOHA NE ÍRD ÍGY!):
-  color: primary;  /* HIÁNYZIK A var(--) */
+}
+.success-box {
+  background: var(--success);
+  color: white;
+}
+.error-message {
+  color: var(--error);
+  border-left: 3px solid var(--error);
+}
+\`\`\`
+
+**❌ HELYTELEN KÓD PÉLDÁK - SOHA NE ÍRD ÍGY:**
+\`\`\`css
+.header {
+  background: primary;  /* HIÁNYZIK A var(--) */
+  color: white;
+}
+.button {
   background: secondary;  /* HIÁNYZIK A var(--) */
   border-color: tertiary;  /* HIÁNYZIK A var(--) */
+}
+\`\`\`
 
-#### CSS SZABÁLYOK:
-- **SOHA** ne írj üres CSS szabályt selector nélkül!
-- ❌ HELYTELEN: 
-  {
+**FIGYELEM:** MINDIG használj var(--variable-name) formátumot! SOHA ne írj közvetlenül változó nevet!
+
+#### CSS RESET SZABÁLYOK - KÖTELEZŐ SZABÁLY:
+
+**✅ HELYES KÓD PÉLDA - ÍRD ÍGY MINDIG:**
+\`\`\`css
+* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  }
-- ✅ HELYES: 
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-  VAGY
-  body {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
+}
+\`\`\`
 
-#### :root BLOKK:
-- **MINDIG** helyesen deklaráld a CSS változókat a :root blokkban!
-- ✅ HELYES:
-  :root {
-    --primary: #4CAF50;
-    --secondary: #FF9800;
-    --accent: #2196F3;
-    --success: #00b894;
-    --error: #e17055;
-    --warning: #fdcb6e;
-  }
-- ❌ HELYTELEN:
-  :root {
-    primary: #4CAF50;  /* HIÁNYZIK A -- */
-    secondary: #FF9800;  /* HIÁNYZIK A -- */
-  }
+VAGY
+
+\`\`\`css
+body {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
+}
+\`\`\`
+
+**❌ HELYTELEN KÓD PÉLDÁK - SOHA NE ÍRD ÍGY:**
+\`\`\`css
+{
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+\`\`\`
+
+VAGY
+
+\`\`\`css
+box-sizing: border-box;
+margin: 0;
+padding: 0;
+\`\`\`
+
+**FIGYELEM:** MINDIG kell selector (* vagy body vagy más)! SOHA ne írj üres CSS szabályt!
+
+#### TELJES HELYES CSS PÉLDA - ÍRD ÍGY MINDIG:
+
+\`\`\`css
+:root {
+  --primary: #4CAF50;
+  --secondary: #FF9800;
+  --tertiary: #9C27B0;
+  --accent: #2196F3;
+  --success: #00b894;
+  --error: #e17055;
+  --warning: #fdcb6e;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.header {
+  background: var(--primary);
+  color: white;
+  padding: 30px;
+}
+
+.button {
+  background: var(--secondary);
+  color: white;
+  border: 2px solid var(--tertiary);
+}
+\`\`\`
 
 ### TARTALOM FORRÁS
 - **CSAK** a felhasználó által megadott forrásból dolgozz
@@ -4257,21 +4329,53 @@ font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
   <meta charset="UTF-8">
   <title>[CÍM]</title>
   <style>
-    /* FONTOS: CSS változók MINDIG -- prefix-szel! */
+    /* FONTOS: CSS változók MINDIG -- prefix-szel! MÁSOLD EZT PONTOSAN! */
     :root { 
       --primary: [SZÍN]; 
       --secondary: #FF9800;
+      --tertiary: #9C27B0;
       --accent: #2196F3;
       --success: #00b894; 
       --error: #e17055; 
       --warning: #fdcb6e;
+      --info: #74b9ff;
     }
     
-    /* FONTOS: Reset szabályok MINDIG selectorral! */
+    /* FONTOS: Reset szabályok MINDIG selectorral! MÁSOLD EZT PONTOSAN! */
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+    }
+    
+    /* FONTOS: Változók használata MINDIG var(--variable) formátumban! */
+    body {
+      font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    /* PÉLDA: Helyes változó használat */
+    .header {
+      background: var(--primary);
+      color: white;
+      padding: 30px;
+    }
+    
+    .button {
+      background: var(--secondary);
+      color: white;
+      border: 2px solid var(--tertiary);
+    }
+    
+    .success-box {
+      background: var(--success);
+      color: white;
+    }
+    
+    .error-text {
+      color: var(--error);
     }
     
     @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
