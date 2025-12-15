@@ -247,11 +247,42 @@ export default function MaterialImprover() {
       hasHtml: result.includes('<html'),
       hasHead: result.includes('<head'),
       hasBody: result.includes('<body'),
+      headIndex: result.indexOf('<head'),
+      bodyIndex: result.indexOf('<body'),
       headBeforeBody: result.indexOf('<head') < result.indexOf('<body') || result.indexOf('<body') === -1,
       preview: result.substring(0, 500)
     });
     return result;
   }, [previewData?.content]);
+
+  // Create Blob URL for opening in external browser
+  const improvedBlobUrl = useMemo(() => {
+    if (!renderedImproved) return null;
+    const blob = new Blob([renderedImproved], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    console.log('[BLOB] Created Blob URL for improved HTML, length:', renderedImproved.length);
+    return url;
+  }, [renderedImproved]);
+
+  // Cleanup Blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (improvedBlobUrl) {
+        URL.revokeObjectURL(improvedBlobUrl);
+        console.log('[BLOB] Revoked Blob URL');
+      }
+    };
+  }, [improvedBlobUrl]);
+
+  const handleOpenInExternalBrowser = () => {
+    if (improvedBlobUrl) {
+      window.open(improvedBlobUrl, '_blank', 'noopener,noreferrer');
+      toast({
+        title: "Megnyitva külső böngészőben",
+        description: "Az HTML új ablakban nyílt meg.",
+      });
+    }
+  };
 
   // Improve material mutation
   const improveMutation = useMutation({
