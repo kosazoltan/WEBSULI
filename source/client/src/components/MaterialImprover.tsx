@@ -102,9 +102,9 @@ export default function MaterialImprover() {
 
   // Precompute rendered HTML documents for side-by-side live preview
   const makeRunnableHtml = (html?: string) => {
-    if (!html) {
-      console.log('[makeRunnableHtml] Input HTML is empty.');
-      return "";
+    if (!html || html.trim().length === 0) {
+      console.log('[makeRunnableHtml] Input HTML is empty, returning placeholder.');
+      return '<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Üres tartalom</title></head><body style="padding: 2rem; font-family: system-ui, sans-serif;"><p style="color: #666;">Nincs megjeleníthető tartalom.</p></body></html>';
     }
     
     console.log('[makeRunnableHtml] Input HTML length:', html.length);
