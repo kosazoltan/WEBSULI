@@ -289,11 +289,11 @@ export default function MaterialImprover() {
   // Improve material mutation
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
-      // Increase timeout to 5 minutes (300000ms) for Claude API calls
+      // Increase timeout to 95 seconds for Claude API calls (Cloudflare default is 100s)
       // Claude needs time to generate complete HTML with all components
       return apiRequest("POST", `/api/admin/improve-material/${fileId}`, {
         customPrompt: customPrompt || undefined,
-      }, { timeout: 300000 }); // 5 minutes timeout
+      }, { timeout: 95000 }); // 95 seconds timeout (Cloudflare default is 100s)
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });

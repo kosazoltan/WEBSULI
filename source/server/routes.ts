@@ -330,6 +330,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
@@ -4079,12 +4080,13 @@ Crawl-delay: 1`;
 
   // POST /api/admin/improve-material/:id - Create improved version using Claude
   adminRouter.post("/improve-material/:id", async (req: any, res) => {
-    // AbortController for timeout handling (5 minutes timeout)
+    // AbortController for timeout handling (95 seconds - Cloudflare default timeout is 100s)
+    // Note: Cloudflare has a default 100s timeout, so we use 95s to ensure we respond before Cloudflare
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
-      console.log('[IMPROVE] Request timeout (300s)');
-    }, 300000); // 5 minutes timeout (matches frontend timeout)
+      console.log('[IMPROVE] Request timeout (95s)');
+    }, 95000); // 95 seconds timeout (Cloudflare default is 100s)
     
     try {
       const { id } = req.params;
@@ -4710,7 +4712,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         // Handle abort/timeout errors
         if (error.name === 'AbortError' || controller.signal.aborted) {
           console.error('[IMPROVE] Request aborted (timeout)');
-          throw new Error('Időtúllépés: A művelet túl sokáig tartott (5 perc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.');
+          throw new Error('Időtúllépés: A művelet túl sokáig tartott (95 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.');
         }
         console.error('[IMPROVE] Claude API error:', error);
         throw new Error(`Claude API hiba: ${error.message || 'Ismeretlen hiba'}`);

@@ -104,6 +104,8 @@ const helmetMiddleware = helmet({
       connectSrc: [
         "'self'",
         ...ALLOWED_ORIGINS, // Allow API calls from trusted frontends
+        "https://fonts.googleapis.com", // Allow Google Fonts API
+        "https://fonts.gstatic.com", // Allow Google Fonts static files
         // SECURITY: ws/wss for Vite HMR in dev + future WebSocket support
         ...(isDevelopment ? ["ws:", "wss:"] : ["wss:"]),
       ],

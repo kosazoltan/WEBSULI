@@ -131,12 +131,17 @@ export default function AdvancedPdfViewer({ pdfUrl, title, onClose }: AdvancedPd
       const viewport = page.getViewport({ scale, rotation });
       
       const canvas = canvasRef.current;
-      const context = canvas.getContext('2d');
+      // Use '2d' context, not 'webgl' to avoid WebGL context limit issues
+      const context = canvas.getContext('2d', { 
+        willReadFrequently: false, // Optimize for rendering performance
+        alpha: false // Disable alpha channel for better performance
+      });
       
       if (!context) {
         throw new Error('Canvas context nem elérhető');
       }
 
+      // Set canvas dimensions (this clears the canvas)
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       
