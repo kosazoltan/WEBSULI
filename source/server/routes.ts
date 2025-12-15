@@ -4238,6 +4238,52 @@ padding: 0;
 
 **FIGYELEM:** MINDIG kell selector (* vagy body vagy más)! SOHA ne írj üres CSS szabályt!
 
+#### CSS OSZTÁLY NEVEK - KÖTELEZŐ SZABÁLY:
+
+**✅ HELYES CSS OSZTÁLY PÉLDÁK - ÍRD ÍGY MINDIG:**
+\`\`\`css
+.edu-header {
+  background: var(--primary);
+  color: white;
+  padding: 30px;
+}
+.edu-button {
+  background: var(--secondary);
+  color: white;
+  border: 2px solid var(--tertiary);
+  padding: 15px 30px;
+  border-radius: 25px;
+}
+.edu-success-box {
+  background: var(--success);
+  color: white;
+  padding: 20px;
+}
+.edu-error-text {
+  color: var(--error);
+}
+.edu-prediction-box {
+  background: linear-gradient(135deg, #fdcb6e, #ffeaa7);
+  padding: 25px;
+}
+.edu-gate-question {
+  background: linear-gradient(135deg, #ff7675, #fab1a0);
+  padding: 25px;
+}
+\`\`\`
+
+**❌ HELYTELEN CSS OSZTÁLY PÉLDÁK - SOHA NE ÍRD ÍGY:**
+\`\`\`css
+.header {  /* HIÁNYZIK AZ edu- PREFIX */
+  background: var(--primary);
+}
+.button {  /* HIÁNYZIK AZ edu- PREFIX */
+  background: var(--secondary);
+}
+\`\`\`
+
+**FIGYELEM:** MINDEN CSS osztály nevet "edu-" prefix-szel kezdj! Ez biztosítja, hogy ne legyenek ütközések más CSS-sel!
+
 #### TELJES HELYES CSS PÉLDA - ÍRD ÍGY MINDIG:
 
 \`\`\`css
@@ -4262,13 +4308,13 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-.header {
+.edu-header {
   background: var(--primary);
   color: white;
   padding: 30px;
 }
 
-.button {
+.edu-button {
   background: var(--secondary);
   color: white;
   border: 2px solid var(--tertiary);
@@ -4356,26 +4402,41 @@ font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
       padding: 20px;
     }
     
-    /* PÉLDA: Helyes változó használat */
-    .header {
+    /* PÉLDA: Helyes változó használat és osztály prefix */
+    .edu-header {
       background: var(--primary);
       color: white;
       padding: 30px;
     }
     
-    .button {
+    .edu-button {
       background: var(--secondary);
       color: white;
       border: 2px solid var(--tertiary);
+      padding: 15px 30px;
+      border-radius: 25px;
     }
     
-    .success-box {
+    .edu-success-box {
       background: var(--success);
       color: white;
+      padding: 20px;
     }
     
-    .error-text {
+    .edu-error-text {
       color: var(--error);
+    }
+    
+    .edu-prediction-box {
+      background: linear-gradient(135deg, #fdcb6e, #ffeaa7);
+      padding: 25px;
+      border-radius: 15px;
+    }
+    
+    .edu-gate-question {
+      background: linear-gradient(135deg, #ff7675, #fab1a0);
+      padding: 25px;
+      border-radius: 15px;
     }
     
     @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
@@ -4565,7 +4626,7 @@ A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást!
 - A kód azonnal használható legyen, másolás-kivágás nélkül
 - Nincs markdown, nincs leírás, CSAK HTML
 
-🎨 CSS KRITIKUS SZABÁLYOK (MINDIG ELLENŐRIZD MINDEN VÁLTOZÓT!):
+🎨 CSS KRITIKUS SZABÁLYOK (MINDIG ELLENŐRIZD MINDEN VÁLTOZÓT ÉS OSZTÁLYT!):
 1. MINDEN CSS változó deklarációnak KÖTELEZŐEN -- prefix-szel kell kezdődnie!
    ✅ HELYES: --primary: #4CAF50; --secondary: #FF9800; --tertiary: #9C27B0;
    ❌ HELYTELEN: primary: #4CAF50; secondary: #FF9800; tertiary: #9C27B0;
@@ -4573,7 +4634,11 @@ A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást!
 2. MINDIG használj var() függvényt változók használatakor!
    ✅ HELYES: color: var(--primary); background: var(--tertiary);
    ❌ HELYTELEN: color: primary; background: tertiary;
-3. SOHA ne írj üres CSS szabályt selector nélkül!
+3. MINDEN CSS osztály nevet "edu-" prefix-szel kezdj!
+   ✅ HELYES: .edu-header, .edu-button, .edu-success-box, .edu-prediction-box
+   ❌ HELYTELEN: .header, .button, .success-box (HIÁNYZIK AZ edu- PREFIX!)
+   ⚠️ FIGYELEM: MINDEN osztály nevet ellenőrizd, hogy "edu-" prefix-szel kezdődik-e!
+4. SOHA ne írj üres CSS szabályt selector nélkül!
    ✅ HELYES: * { margin: 0; padding: 0; }
    ❌ HELYTELEN: { margin: 0; padding: 0; }
 
@@ -4592,6 +4657,14 @@ PÉLDA HELYES VÁLASZ (CSAK EZT ÍRD!):
     * {
       margin: 0;
       padding: 0;
+    }
+    .edu-header {
+      background: var(--primary);
+      color: white;
+    }
+    .edu-button {
+      background: var(--secondary);
+      border-color: var(--tertiary);
     }
   </style>
 </head>
