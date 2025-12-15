@@ -1236,7 +1236,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           const text = event.delta.text;
           if (!text) continue;
-          
+
           fullContent += text;
 
           // Check if HTML generation started
@@ -1246,7 +1246,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
             const htmlStartIndex = fullContent.indexOf('<!-- HTML_START -->');
             htmlContent = fullContent.substring(htmlStartIndex);
           }
-          
+
           // If already collecting HTML, add to htmlContent
           if (isCollectingHtml) {
             htmlContent += text;
@@ -1259,7 +1259,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
           })}\n\n`);
         }
       }
-      
+
       console.log(`[MATERIAL CREATOR] Stream complete. Full content length: ${fullContent.length}, HTML content length: ${htmlContent.length}, isCollectingHtml: ${isCollectingHtml}`);
 
       // If HTML was generated, send it separately
@@ -1619,7 +1619,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       const finalPrompt = systemPrompt || defaultPrompt;
 
       // Build conversation messages with document context
-      const contextInfo = context?.extractedText 
+      const contextInfo = context?.extractedText
         ? `\n\n📄 DOKUMENTUM TARTALMA (ezt kell feldolgoznod):\n${context.extractedText}\n\n📌 TÉMÁK: ${context.topics?.join(', ') || 'nincs megadva'}\n📖 JAVASOLT OSZTÁLY: ${context.suggestedClassroom || 'nincs megadva'}. osztály`
         : '';
 
@@ -1818,10 +1818,11 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       console.log(`[CLAUDE HTML] Messages count: ${messages.length}`);
 
       const stream = await anthropic.messages.stream({
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 12288, // Increased for full HTML generation
         system: systemPrompt,
         messages,
+      }, {
         signal: controller.signal
       });
 
@@ -1862,7 +1863,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
             const htmlStartIndex = fullContent.indexOf('<!-- HTML_START -->');
             htmlContent = fullContent.substring(htmlStartIndex);
           }
-          
+
           // If already collecting HTML, add to htmlContent
           if (isCollectingHtml) {
             htmlContent += text;
@@ -4101,16 +4102,37 @@ Crawl-delay: 1`;
 
   // POST /api/admin/improve-material/:id - Create improved version using Claude (STREAMING)
   adminRouter.post("/improve-material/:id", async (req: any, res) => {
+    console.log(`[IMPROVE] Request received for file ID: ${req.params?.id}`);
+
+    // Validate authentication immediately
+    if (!req.user || !req.user.id) {
+      console.error('[IMPROVE] User not authenticated or missing ID');
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    console.log(`[IMPROVE] User verified: ${req.user.id}`);
+
+    // Check for API Key
+    if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
+      console.error('[IMPROVE] Missing Anthropic API Key');
+      return res.status(500).json({ message: 'Server configuration error: Missing AI API Key' });
+    }
+
     // Setup SSE (Server-Sent Events) for streaming - prevents timeout issues
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    
+
+    console.log('[IMPROVE] SSE headers sent');
+
     // AbortController for timeout handling (90 seconds - longer for streaming)
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
       console.log('[IMPROVE] Request timeout (90s)');
+      if (!res.headersSent) {
+        res.status(504).end();
+        return;
+      }
       res.write(`data: ${JSON.stringify({
         type: 'error',
         message: 'Időtúllépés: A művelet túl sokáig tartott (90 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.',
@@ -4118,10 +4140,11 @@ Crawl-delay: 1`;
       })}\n\n`);
       res.end();
     }, 90000); // 90 seconds timeout (longer for streaming)
-    
+
     try {
       const { id } = req.params;
       const { customPrompt } = req.body || {};
+      console.log(`[IMPROVE] Processing body. Custom prompt present: ${!!customPrompt}`);
       const userId = req.user.id;
 
       // Send initial progress message
@@ -4661,7 +4684,7 @@ UTF-8: 'Segoe UI', 'Noto Sans', system-ui
               },
             })
             .returning();
-          
+
           console.log('[IMPROVE] Created/updated tananyag-okosito system prompt');
         } catch (error: any) {
           // If insert fails, try to fetch existing one
@@ -4772,7 +4795,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       });
 
       const stream = await anthropic.messages.stream({
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 12288,
         system: systemPrompt,
         messages: [{
@@ -4840,10 +4863,10 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
 
       // Validate improved HTML
       let improvedHtml = htmlContent.trim();
-      
+
       console.log('[IMPROVE] Raw response length:', improvedHtml.length);
       console.log('[IMPROVE] Raw response preview:', improvedHtml.substring(0, 200));
-      
+
       // Step 1: Extract HTML from markdown code blocks (try multiple patterns)
       // Note: Using [\s\S] instead of . with /s flag for ES2017 compatibility
       const markdownPatterns = [
@@ -4851,7 +4874,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         /```\s*([\s\S]*?)\s*```/i,                // ``` ... ``` (any language) - removed /s flag, using [\s\S]
         /`([\s\S]*?)`/i,                          // ` ... ` (inline code) - removed /s flag, using [\s\S]
       ];
-      
+
       for (const pattern of markdownPatterns) {
         const match = improvedHtml.match(pattern);
         if (match && match[1]) {
@@ -4864,7 +4887,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           }
         }
       }
-      
+
       // Step 2: Find HTML start (look for DOCTYPE or html tag)
       const htmlStartMatch = improvedHtml.match(/(<!DOCTYPE[\s\S]*?<html[\s\S]*?>|<\s*html[\s\S]*?>)/i);
       if (htmlStartMatch) {
@@ -4872,15 +4895,15 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         improvedHtml = improvedHtml.substring(startIndex);
         console.log('[IMPROVE] Found HTML start at index:', startIndex);
       }
-      
+
       // Step 3: Remove everything before HTML tags
       improvedHtml = improvedHtml.replace(/^[\s\S]*?(?=<!DOCTYPE|<html|<head|<body)/i, '');
-      
+
       // Step 4: Remove markdown formatting characters if still present
       improvedHtml = improvedHtml.replace(/^[#*`\-\s]+/gm, ''); // Remove markdown headers, lists, code markers
       improvedHtml = improvedHtml.replace(/```html\s*/gi, '');
       improvedHtml = improvedHtml.replace(/```\s*/g, '');
-      
+
       // Step 5: Remove common prefixes and explanations
       const prefixPatterns = [
         /^[^\<]*?(?=<!DOCTYPE|<html)/i,
@@ -4893,11 +4916,11 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         /^.*?UTF-8.*?(?=<!DOCTYPE|<html)/i,
         /^.*?LETÖLTÉS.*?(?=<!DOCTYPE|<html)/i,
       ];
-      
+
       for (const pattern of prefixPatterns) {
         improvedHtml = improvedHtml.replace(pattern, '');
       }
-      
+
       // Step 6: Clean up any remaining markdown at the start
       improvedHtml = improvedHtml.trim();
       if (!improvedHtml.startsWith('<!DOCTYPE') && !improvedHtml.startsWith('<html')) {
@@ -4908,10 +4931,10 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           improvedHtml = improvedHtml.substring(tagIndex);
         }
       }
-      
+
       console.log('[IMPROVE] Cleaned HTML length:', improvedHtml.length);
       console.log('[IMPROVE] Cleaned HTML preview:', improvedHtml.substring(0, 200));
-      
+
       // Step 7: Fix common CSS and HTML syntax errors
       // Fix CSS variable declarations (missing -- prefix)
       // First, find all :root blocks and fix variables inside them
@@ -4920,7 +4943,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         const fixedContent = content.replace(/(\b)(primary|secondary|accent|success|error|warning|info)(\s*:)/gi, '$1--$2$3');
         return `:root {${fixedContent}}`;
       });
-      
+
       // Fix CSS variable usage (missing -- prefix in var() or direct usage)
       improvedHtml = improvedHtml.replace(/var\((\w+)\)/gi, (match, varName) => {
         // If varName doesn't start with --, add it
@@ -4929,7 +4952,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         }
         return match;
       });
-      
+
       // Fix direct CSS variable usage without var() (e.g., color: primary; -> color: var(--primary);)
       // Process within style tags to avoid false positives
       improvedHtml = improvedHtml.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (styleTag, cssContent) => {
@@ -4939,7 +4962,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         let fixedCss = cssContent;
         let match;
         const replacements: Array<{ index: number; length: number; replacement: string }> = [];
-        
+
         // Find all matches and collect replacements
         while ((match = variablePattern.exec(cssContent)) !== null) {
           const matchIndex = match.index;
@@ -4947,10 +4970,10 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           const lastVarIndex = beforeMatch.lastIndexOf('var(');
           const lastSemicolonBefore = beforeMatch.lastIndexOf(';');
           const lastParenBefore = beforeMatch.lastIndexOf(')');
-          
+
           // If there's a var( before this match and no closing ) after it (or ) comes after ;), it's inside var()
           const isInsideVar = lastVarIndex !== -1 && (lastParenBefore < lastVarIndex || lastParenBefore < lastSemicolonBefore);
-          
+
           if (!isInsideVar) {
             replacements.push({
               index: matchIndex,
@@ -4959,39 +4982,39 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
             });
           }
         }
-        
+
         // Apply replacements in reverse order to maintain indices
         replacements.reverse().forEach(({ index, length, replacement }) => {
           fixedCss = fixedCss.substring(0, index) + replacement + fixedCss.substring(index + length);
         });
-        
+
         return styleTag.replace(cssContent, fixedCss);
       });
-      
+
       // Fix empty CSS rules (selector missing) - find standalone { ... } blocks
       // Process style tags separately to avoid false positives
       const styleTagRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
       improvedHtml = improvedHtml.replace(styleTagRegex, (styleTag, cssContent) => {
         let fixedCss = cssContent;
-        
+
         // Fix empty rules - match { ... } blocks that are not preceded by a selector
         // Pattern: { at start of line (or after whitespace), then content, then } at start of line (or before whitespace)
         // More robust: match { that is NOT preceded by a selector (word character before {)
-        
+
         // First, handle multi-line empty rules - this is more common
         // Match: { at start of line, then content (can span multiple lines), then } at start of line
         fixedCss = fixedCss.replace(/(?:^|\n)(\s*)\{\s*((?:box-sizing|margin|padding|border)[\s\S]*?)\}\s*(?=\n|$)/gm, (match: string, indent: string, content: string) => {
           const cleanContent = content.trim();
           // Check if it's a reset rule and doesn't contain nested selectors or other CSS rules
-          if (cleanContent.match(/(?:margin|padding|box-sizing)/i) && 
-              !cleanContent.match(/[a-zA-Z][\w\-]*\s*\{/) && 
-              !cleanContent.match(/@/)) {
+          if (cleanContent.match(/(?:margin|padding|box-sizing)/i) &&
+            !cleanContent.match(/[a-zA-Z][\w\-]*\s*\{/) &&
+            !cleanContent.match(/@/)) {
             // Preserve indentation and newline structure
             return `${indent}* { ${cleanContent} }`;
           }
           return match;
         });
-        
+
         // Also handle single-line empty rules (fallback)
         fixedCss = fixedCss.replace(/^\s*\{\s*((?:box-sizing|margin|padding|border)[^}]*)\}\s*$/gm, (match: string, content: string) => {
           // Check if this looks like a reset rule (contains margin, padding, or box-sizing)
@@ -5000,16 +5023,16 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           }
           return match;
         });
-        
+
         return styleTag.replace(cssContent, fixedCss);
       });
-      
+
       // Fix incomplete keyframes (if @keyframes slideIn is cut off)
       if (improvedHtml.includes('@keyframes slideIn') && !improvedHtml.includes('@keyframes slideIn') || improvedHtml.match(/@keyframes slideIn\s*\{[^}]*$/)) {
         // Try to complete the keyframe or remove it
         improvedHtml = improvedHtml.replace(/@keyframes slideIn\s*\{[^}]*$/m, '@keyframes slideIn {\n  from { transform: translateX(100%); opacity: 0; }\n  to { transform: translateX(0); opacity: 1; }\n}');
       }
-      
+
       // Fix incomplete CSS (if style tag is not closed properly)
       const styleTagMatches = improvedHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
       if (styleTagMatches) {
@@ -5025,9 +5048,72 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           }
         });
       }
-      
+
       console.log('[IMPROVE] Fixed CSS syntax errors');
-      
+
+      // Step 7.2: Fix generic CSS class names (add edu- prefix)
+      // This enforces the rule: .header -> .edu-header, .button -> .edu-button
+      const genericClasses = [
+        'header', 'footer', 'nav', 'content', 'container', 'wrapper', 'sidebar',
+        'menu', 'button', 'btn', 'card', 'box', 'section', 'modal', 'overlay',
+        'active', 'hidden', 'visible', 'row', 'col', 'grid', 'flex'
+      ];
+
+      // 1. Fix in CSS styles (e.g., .header { ... })
+      // Use negative lookbehind to ensure we don't double-prefix (e.g. .edu-edu-header)
+      // And ensure we don't break classes like .page-header
+      try {
+        const cssClassRegex = new RegExp(`\\.((?!edu-)[a-zA-Z0-9_-]*\\b(${genericClasses.join('|')})\\b)`, 'gi');
+
+        // We need to be careful with CSS replacement. 
+        // Only replace exact matches of generic classes that don't have the prefix
+        // .header -> .edu-header
+        // .main-header -> .main-header (don't touch)
+        // .header-inner -> .header-inner (don't touch)
+        // Simplification: only target exact generic names
+        const exactCssClassRegex = new RegExp(`\\.(${genericClasses.join('|')})\\b`, 'gi');
+
+        improvedHtml = improvedHtml.replace(exactCssClassRegex, (match, className) => {
+          return `.edu-${className}`;
+        });
+
+        // 2. Fix in HTML class attributes (e.g., class="header main")
+        improvedHtml = improvedHtml.replace(/class=["']([^"']*)["']/gi, (match, classList) => {
+          // Replace exact words in class list
+          // We must ensure we don't match parts of other words (e.g. 'header' in 'page-header')
+          // And don't match if already prefixed (e.g. 'header' in 'edu-header' - wait, - is a boundary!)
+
+          let newClassList = classList;
+
+          for (const generic of genericClasses) {
+            // Regex to match the word 'generic' but NOT when preceded by 'edu-'
+            // \b matches before 'header'. If we have 'edu-header', \b matches between - and h.
+            // So we need: (?<!edu-)\bheader\b
+
+            // Fallback for environments without lookbehind:
+            // Match word boundary-word-word boundary. Then check valid match manually?
+            // Safer approach: Split by spaces and process each class
+            const classes = newClassList.split(/\s+/);
+            const fixedClasses = classes.map((cls: string) => {
+              if (cls.toLowerCase() === generic.toLowerCase()) {
+                return `edu-${cls}`;
+              }
+              return cls;
+            });
+            newClassList = fixedClasses.join(' ');
+          }
+
+          if (newClassList !== classList) {
+            return match.replace(classList, newClassList);
+          }
+          return match;
+        });
+
+        console.log('[IMPROVE] Fixed generic CSS class names (added edu- prefix)');
+      } catch (e) {
+        console.warn('[IMPROVE] Failed to fix CSS class names:', e);
+      }
+
       // Step 7.5: Remove @font-face declarations (they're too verbose and unnecessary)
       // Remove all @font-face blocks from style tags
       improvedHtml = improvedHtml.replace(/@font-face\s*\{[^}]*\}/gi, '');
@@ -5039,7 +5125,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       // Clean up empty style blocks or multiple consecutive empty lines
       improvedHtml = improvedHtml.replace(/\n\s*\n\s*\n/g, '\n\n');
       console.log('[IMPROVE] Removed @font-face declarations and Google Fonts links');
-      
+
       // Step 8: Validate that we have actual HTML content
       if (!improvedHtml || improvedHtml.trim().length < 100) {
         console.error('[IMPROVE] Generated HTML is too short or empty:', improvedHtml.length);
@@ -5120,7 +5206,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       res.end();
     } catch (error: any) {
       clearTimeout(timeout);
-      
+
       // Handle abort/timeout errors specifically
       if (error.name === 'AbortError' || error.message?.includes('Időtúllépés') || controller.signal.aborted) {
         console.error('[IMPROVE] Timeout error:', error.message);
@@ -5133,7 +5219,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         }
         return;
       }
-      
+
       console.error('[IMPROVE] Error:', error);
       if (!res.headersSent) {
         res.write(`data: ${JSON.stringify({
@@ -5194,8 +5280,8 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       }
 
       if (improved.status !== 'approved') {
-        return res.status(400).json({ 
-          message: `Csak 'approved' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}` 
+        return res.status(400).json({
+          message: `Csak 'approved' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}`
         });
       }
 
@@ -5210,8 +5296,8 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       });
     } catch (error: any) {
       console.error('[APPLY-IMPROVED] Error:', error);
-      res.status(500).json({ 
-        message: error.message || 'Hiba történt az alkalmazás során' 
+      res.status(500).json({
+        message: error.message || 'Hiba történt az alkalmazás során'
       });
     }
   });
@@ -5250,8 +5336,8 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       }
 
       if (!['pending', 'rejected'].includes(improved.status)) {
-        return res.status(400).json({ 
-          message: `Csak 'pending' vagy 'rejected' státuszú fájlok törölhetők. Jelenlegi státusz: ${improved.status}` 
+        return res.status(400).json({
+          message: `Csak 'pending' vagy 'rejected' státuszú fájlok törölhetők. Jelenlegi státusz: ${improved.status}`
         });
       }
 
@@ -5314,8 +5400,8 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       });
     } catch (error: any) {
       console.error('[RESTORE-BACKUP] Error:', error);
-      res.status(500).json({ 
-        message: error.message || 'Hiba történt a visszaállítás során' 
+      res.status(500).json({
+        message: error.message || 'Hiba történt a visszaállítás során'
       });
     }
   });
