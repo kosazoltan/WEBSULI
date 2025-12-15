@@ -8,7 +8,7 @@ interface HeroSectionProps {
   showEmailSubscribe?: boolean;
 }
 
-// Cyberpunk Animated Scientific Symbol Component - Memoized for performance
+// Cyberpunk Static Scientific Symbol Component - Static decorative element (no animation)
 const CyberpunkSymbol = memo(({ 
   symbol, 
   x, 
@@ -30,18 +30,15 @@ const CyberpunkSymbol = memo(({
 
   return (
     <div 
-      className={`absolute text-2xl sm:text-3xl opacity-80 animate-cyberpunk-float ${colorClasses[color]}`}
+      className={`absolute text-2xl sm:text-3xl opacity-60 ${colorClasses[color]}`}
       style={{ 
         left: x, 
         top: y,
-        animationDelay: `${delay}s`,
-        animationDuration: `${(4 + Math.random() * 3) / 0.3}s`, // 70% slower
-        willChange: 'transform, opacity',
+        // No animation - static decorative element
         contain: 'layout style paint'
       }}
     >
       <div className="relative">
-        <div className="absolute inset-0 blur-sm opacity-50 animate-pulse">{symbol}</div>
         <div className="relative">{symbol}</div>
       </div>
     </div>
@@ -143,16 +140,16 @@ function HeroSection({
 
     let time = 0;
 
-    // Scientific particles and connections - Reduced count for performance
+    // Scientific particles and connections - Further reduced for better performance
     const particles: Array<{x: number, y: number, vx: number, vy: number, size: number}> = [];
     
-    // Initialize particles - Reduced from 30 to 15 for better performance
-    for (let i = 0; i < 15; i++) {
+    // Initialize particles - Reduced from 15 to 5 for much better performance
+    for (let i = 0; i < 5; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: (Math.random() - 0.5) * 0.5,
+        vx: (Math.random() - 0.5) * 0.3, // Slower movement
+        vy: (Math.random() - 0.5) * 0.3, // Slower movement
         size: Math.random() * 2 + 1
       });
     }
@@ -215,7 +212,7 @@ function HeroSection({
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      time += 0.003; // 70% slower (30% speed) for smoother performance
+      time += 0.001; // Much slower animation for better performance
 
       // Update and draw particles
       particles.forEach((particle, i) => {
@@ -237,65 +234,65 @@ function HeroSection({
         ctx.fillStyle = colors[i % 3];
         ctx.fill();
 
-        // Draw connections between nearby particles - Optimized with distance check first
-        // Only check particles ahead to avoid duplicate checks
+        // Draw connections between nearby particles - Reduced connections for performance
+        // Only check particles ahead to avoid duplicate checks, and reduce connection distance
         for (let j = i + 1; j < particles.length; j++) {
           const other = particles[j];
           const dx = particle.x - other.x;
           const dy = particle.y - other.y;
           const distanceSq = dx * dx + dy * dy; // Use squared distance to avoid sqrt
 
-          if (distanceSq < 14400) { // 120^2 = 14400
+          // Reduced connection distance from 120 to 80 for fewer connections
+          if (distanceSq < 6400) { // 80^2 = 6400
             const distance = Math.sqrt(distanceSq);
             ctx.beginPath();
             ctx.moveTo(particle.x, particle.y);
             ctx.lineTo(other.x, other.y);
-            // Cyberpunk neon connection lines - Removed shadowBlur for performance
+            // Cyberpunk neon connection lines - Reduced opacity for subtlety
             const colors = [
               'rgba(34, 211, 238, ', // cyan
               'rgba(236, 72, 153, ', // magenta
               'rgba(192, 132, 252, ' // purple
             ];
             const colorIndex = (i + j) % 3;
-            const opacity = 0.4 * (1 - distance / 120); // Slightly increased opacity
+            const opacity = 0.2 * (1 - distance / 80); // Reduced opacity
             ctx.strokeStyle = colors[colorIndex] + opacity + ')';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 0.5; // Thinner lines
             ctx.stroke();
           }
         }
       });
 
-      // Draw Main Central Scientific Pattern
+      // Draw Main Central Scientific Pattern - Simplified, less animated
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
 
-      // Multiple layered molecular structures - 70% slower
-      drawScientificPattern(ctx, cx, cy, 100, time);
-      drawScientificPattern(ctx, cx, cy, 60, -time * 0.39); // 70% slower (1.3 * 0.3)
+      // Single static molecular structure (no animation)
+      drawScientificPattern(ctx, cx, cy, 100, 0);
       
-      // Orbiting molecules
-      for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2 + time * 0.09; // 70% slower (0.3 * 0.3)
-        const r = 150 + Math.sin(time * 0.6 + i) * 15; // 70% slower (2 * 0.3)
+      // Reduced orbiting molecules - only 3 instead of 6
+      for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2 + time * 0.05; // Much slower
+        const r = 150; // Fixed radius, no pulsing
         const px = cx + Math.cos(angle) * r;
         const py = cy + Math.sin(angle) * r;
 
-        // Small molecular structure with cyberpunk colors - Removed shadowBlur for performance
+        // Small molecular structure with cyberpunk colors - Static
         ctx.beginPath();
         ctx.arc(px, py, 4, 0, Math.PI * 2);
         const moleculeColors = [
-          'rgba(34, 211, 238, 1)', // cyan - Full opacity
-          'rgba(236, 72, 153, 1)' // magenta
+          'rgba(34, 211, 238, 0.8)', // cyan - Reduced opacity
+          'rgba(236, 72, 153, 0.8)' // magenta
         ];
         ctx.fillStyle = moleculeColors[i % 2];
         ctx.fill();
         
-        // Connection to center with neon glow - Removed shadowBlur for performance
+        // Connection to center - Static, less animated
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(px, py);
-        ctx.strokeStyle = `rgba(34, 211, 238, ${0.3 + Math.sin(time + i) * 0.15})`; // Increased opacity
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(34, 211, 238, 0.3)'; // Fixed opacity
+        ctx.lineWidth = 1;
         ctx.stroke();
       }
 
@@ -333,22 +330,14 @@ function HeroSection({
         style={{ willChange: 'contents' }}
       />
 
-      {/* Cyberpunk Floating Scientific Symbols with Neon Glow */}
+      {/* Cyberpunk Floating Scientific Symbols - Reduced count, kept as static decorative elements */}
+      {/* Only 6 symbols instead of 15 - positioned as static decorative elements */}
       <CyberpunkSymbol symbol="⚛" x="5%" y="15%" delay={0} color="cyan" />
-      <CyberpunkSymbol symbol="∑" x="92%" y="20%" delay={0.5} color="magenta" />
-      <CyberpunkSymbol symbol="∫" x="8%" y="75%" delay={1} color="purple" />
-      <CyberpunkSymbol symbol="π" x="88%" y="80%" delay={1.5} color="cyan" />
-      <CyberpunkSymbol symbol="√" x="15%" y="45%" delay={0.8} color="magenta" />
-      <CyberpunkSymbol symbol="∞" x="85%" y="50%" delay={1.2} color="purple" />
-      <CyberpunkSymbol symbol="α" x="10%" y="90%" delay={0.3} color="cyan" />
-      <CyberpunkSymbol symbol="β" x="90%" y="10%" delay={1.8} color="magenta" />
-      <CyberpunkSymbol symbol="Δ" x="20%" y="25%" delay={2} color="purple" />
-      <CyberpunkSymbol symbol="Ω" x="80%" y="70%" delay={0.6} color="cyan" />
-      <CyberpunkSymbol symbol="∇" x="50%" y="10%" delay={1.3} color="magenta" />
-      <CyberpunkSymbol symbol="∂" x="5%" y="50%" delay={0.7} color="purple" />
-      <CyberpunkSymbol symbol="λ" x="95%" y="60%" delay={1.6} color="cyan" />
-      <CyberpunkSymbol symbol="θ" x="12%" y="30%" delay={0.4} color="magenta" />
-      <CyberpunkSymbol symbol="σ" x="88%" y="40%" delay={1.1} color="purple" />
+      <CyberpunkSymbol symbol="∑" x="92%" y="20%" delay={0} color="magenta" />
+      <CyberpunkSymbol symbol="∫" x="8%" y="75%" delay={0} color="purple" />
+      <CyberpunkSymbol symbol="π" x="88%" y="80%" delay={0} color="cyan" />
+      <CyberpunkSymbol symbol="∞" x="85%" y="50%" delay={0} color="purple" />
+      <CyberpunkSymbol symbol="Δ" x="20%" y="25%" delay={0} color="purple" />
 
       {/* DNA Helix Decorations */}
       <div className="absolute top-4 left-4 w-16 h-16 text-gray-400 opacity-20">
