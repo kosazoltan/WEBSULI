@@ -17,6 +17,8 @@ import {
   scheduledJobs,
   weeklyEmailReports,
   systemPrompts,
+  improvedHtmlFiles,
+  materialImprovementBackups,
   type HtmlFile,
   type InsertHtmlFile,
   type User,
@@ -45,10 +47,14 @@ import {
   type ScheduledJob,
   type WeeklyEmailReport,
   type SystemPrompt,
+  type ImprovedHtmlFile,
+  type InsertImprovedHtmlFile,
+  type MaterialImprovementBackup,
+  type InsertMaterialImprovementBackup,
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, desc, asc, gt, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, asc, gt, lt, and, sql, inArray } from "drizzle-orm";
 
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
 
@@ -183,6 +189,27 @@ export interface IStorage {
   getUserByGoogleId(googleId: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | null>;
   upsertUser(user: UpsertUser): Promise<User>;
+
+  // Improved files operations
+  createImprovedHtmlFile(file: InsertImprovedHtmlFile): Promise<ImprovedHtmlFile>;
+  getImprovedHtmlFile(id: string): Promise<ImprovedHtmlFile | undefined>;
+  getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]>;
+  getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]>;
+  updateImprovedHtmlFileStatus(id: string, status: string, appliedBy?: string, notes?: string): Promise<ImprovedHtmlFile | null>;
+  deleteImprovedHtmlFile(id: string): Promise<boolean>;
+  
+  // Apply improved file to original (TRANSACTION)
+  applyImprovedFileToOriginal(improvedFileId: string, userId: string, createBackup: boolean, notes?: string): Promise<{ success: boolean; originalFile: HtmlFile; backupId?: string }>;
+  
+  // Material improvement backup operations
+  createMaterialImprovementBackup(backup: InsertMaterialImprovementBackup): Promise<MaterialImprovementBackup>;
+  getMaterialImprovementBackup(id: string): Promise<MaterialImprovementBackup | undefined>;
+  getAllMaterialImprovementBackups(originalFileId?: string): Promise<MaterialImprovementBackup[]>;
+  deleteMaterialImprovementBackup(id: string): Promise<boolean>;
+  restoreFromMaterialImprovementBackup(backupId: string, userId: string): Promise<{ success: boolean; restoredFile: HtmlFile }>;
+  
+  // Cleanup old applied improved files (older than 7 days)
+  cleanupOldAppliedImprovedFiles(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1233,6 +1260,284 @@ export class DatabaseStorage implements IStorage {
     });
 
     console.log('[RESTORE] ✅ Backup restoration complete!');
+  }
+
+  // ==================== Improved Files Operations ====================
+
+  async createImprovedHtmlFile(file: InsertImprovedHtmlFile): Promise<ImprovedHtmlFile> {
+    const [improved] = await db
+      .insert(improvedHtmlFiles)
+      .values(file)
+      .returning();
+    return improved;
+  }
+
+  async getImprovedHtmlFile(id: string): Promise<ImprovedHtmlFile | undefined> {
+    const [improved] = await db
+      .select()
+      .from(improvedHtmlFiles)
+      .where(eq(improvedHtmlFiles.id, id));
+    return improved;
+  }
+
+  async getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]> {
+    let query = db.select().from(improvedHtmlFiles);
+    
+    const conditions = [];
+    if (status) {
+      conditions.push(eq(improvedHtmlFiles.status, status));
+    }
+    if (originalFileId) {
+      conditions.push(eq(improvedHtmlFiles.originalFileId, originalFileId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(improvedHtmlFiles.createdAt));
+  }
+
+  async getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]> {
+    return await db
+      .select()
+      .from(improvedHtmlFiles)
+      .where(eq(improvedHtmlFiles.originalFileId, originalFileId))
+      .orderBy(desc(improvedHtmlFiles.createdAt));
+  }
+
+  async updateImprovedHtmlFileStatus(
+    id: string, 
+    status: string, 
+    appliedBy?: string, 
+    notes?: string
+  ): Promise<ImprovedHtmlFile | null> {
+    const updates: any = { status };
+    if (notes !== undefined) {
+      updates.improvementNotes = notes;
+    }
+    if (status === 'applied' && appliedBy) {
+      updates.appliedAt = new Date();
+      updates.appliedBy = appliedBy;
+    }
+
+    const [updated] = await db
+      .update(improvedHtmlFiles)
+      .set(updates)
+      .where(eq(improvedHtmlFiles.id, id))
+      .returning();
+    
+    return updated || null;
+  }
+
+  async deleteImprovedHtmlFile(id: string): Promise<boolean> {
+    const [deleted] = await db
+      .delete(improvedHtmlFiles)
+      .where(eq(improvedHtmlFiles.id, id))
+      .returning();
+    return !!deleted;
+  }
+
+  async applyImprovedFileToOriginal(
+    improvedFileId: string,
+    userId: string,
+    createBackup: boolean,
+    notes?: string
+  ): Promise<{ success: boolean; originalFile: HtmlFile; backupId?: string }> {
+    // CRITICAL: Use transaction for atomic operation
+    return await db.transaction(async (tx) => {
+      // 1. Get improved file
+      const [improved] = await tx
+        .select()
+        .from(improvedHtmlFiles)
+        .where(eq(improvedHtmlFiles.id, improvedFileId));
+      
+      if (!improved) {
+        throw new Error('Improved file not found');
+      }
+
+      // 2. Validate status
+      if (improved.status !== 'approved') {
+        throw new Error(`Cannot apply improved file with status: ${improved.status}. Only 'approved' files can be applied.`);
+      }
+
+      // 3. Validate age (max 30 days)
+      const ageInDays = (Date.now() - new Date(improved.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageInDays > 30) {
+        throw new Error('Improved file is too old (max 30 days). Please create a new improvement.');
+      }
+
+      // 4. Get original file
+      const [original] = await tx
+        .select()
+        .from(htmlFiles)
+        .where(eq(htmlFiles.id, improved.originalFileId));
+      
+      if (!original) {
+        throw new Error('Original file not found');
+      }
+
+      // 5. Create backup if requested
+      let backupId: string | undefined;
+      if (createBackup) {
+        const [backup] = await tx
+          .insert(materialImprovementBackups)
+          .values({
+            originalFileId: original.id,
+            improvedFileId: improved.id,
+            backupData: {
+              id: original.id,
+              title: original.title,
+              content: original.content,
+              description: original.description,
+              classroom: original.classroom,
+              contentType: original.contentType,
+              displayOrder: original.displayOrder,
+              userId: original.userId,
+              createdAt: original.createdAt,
+            },
+            createdBy: userId,
+            notes: notes || `Backup before applying improvement ${improved.id}`,
+          })
+          .returning();
+        backupId = backup.id;
+      }
+
+      // 6. Update original file content (CRITICAL: Direct SQL update for content)
+      const [updated] = await tx
+        .update(htmlFiles)
+        .set({
+          content: improved.content,
+          title: improved.title, // Update title if changed
+          description: improved.description || original.description, // Update description if provided
+        })
+        .where(eq(htmlFiles.id, original.id))
+        .returning();
+
+      if (!updated) {
+        throw new Error('Failed to update original file');
+      }
+
+      // 7. Update improved file status
+      await tx
+        .update(improvedHtmlFiles)
+        .set({
+          status: 'applied',
+          appliedAt: new Date(),
+          appliedBy: userId,
+          improvementNotes: notes || improved.improvementNotes,
+        })
+        .where(eq(improvedHtmlFiles.id, improvedFileId));
+
+      return {
+        success: true,
+        originalFile: updated,
+        backupId,
+      };
+    });
+  }
+
+  // ==================== Material Improvement Backup Operations ====================
+
+  async createMaterialImprovementBackup(backup: InsertMaterialImprovementBackup): Promise<MaterialImprovementBackup> {
+    const [created] = await db
+      .insert(materialImprovementBackups)
+      .values(backup)
+      .returning();
+    return created;
+  }
+
+  async getMaterialImprovementBackup(id: string): Promise<MaterialImprovementBackup | undefined> {
+    const [backup] = await db
+      .select()
+      .from(materialImprovementBackups)
+      .where(eq(materialImprovementBackups.id, id));
+    return backup;
+  }
+
+  async getAllMaterialImprovementBackups(originalFileId?: string): Promise<MaterialImprovementBackup[]> {
+    if (originalFileId) {
+      return await db
+        .select()
+        .from(materialImprovementBackups)
+        .where(eq(materialImprovementBackups.originalFileId, originalFileId))
+        .orderBy(desc(materialImprovementBackups.createdAt));
+    }
+    return await db
+      .select()
+      .from(materialImprovementBackups)
+      .orderBy(desc(materialImprovementBackups.createdAt));
+  }
+
+  async deleteMaterialImprovementBackup(id: string): Promise<boolean> {
+    const [deleted] = await db
+      .delete(materialImprovementBackups)
+      .where(eq(materialImprovementBackups.id, id))
+      .returning();
+    return !!deleted;
+  }
+
+  async restoreFromMaterialImprovementBackup(
+    backupId: string,
+    userId: string
+  ): Promise<{ success: boolean; restoredFile: HtmlFile }> {
+    return await db.transaction(async (tx) => {
+      // 1. Get backup
+      const [backup] = await tx
+        .select()
+        .from(materialImprovementBackups)
+        .where(eq(materialImprovementBackups.id, backupId));
+      
+      if (!backup) {
+        throw new Error('Backup not found');
+      }
+
+      // 2. Validate backup data structure
+      const backupData = backup.backupData as any;
+      if (!backupData || !backupData.id || !backupData.content) {
+        throw new Error('Invalid backup data structure');
+      }
+
+      // 3. Restore original file
+      const [restored] = await tx
+        .update(htmlFiles)
+        .set({
+          content: backupData.content,
+          title: backupData.title || 'Restored',
+          description: backupData.description || null,
+        })
+        .where(eq(htmlFiles.id, backup.originalFileId))
+        .returning();
+
+      if (!restored) {
+        throw new Error('Failed to restore file');
+      }
+
+      return {
+        success: true,
+        restoredFile: restored,
+      };
+    });
+  }
+
+  // ==================== Cleanup Operations ====================
+
+  async cleanupOldAppliedImprovedFiles(): Promise<number> {
+    // Delete applied files older than 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const deleted = await db
+      .delete(improvedHtmlFiles)
+      .where(
+        and(
+          eq(improvedHtmlFiles.status, 'applied'),
+          lt(improvedHtmlFiles.appliedAt, sevenDaysAgo)
+        )
+      )
+      .returning();
+    
+    return deleted.length || 0;
   }
 }
 
