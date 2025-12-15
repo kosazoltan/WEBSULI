@@ -4518,7 +4518,56 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       console.log('[IMPROVE] Cleaned HTML length:', improvedHtml.length);
       console.log('[IMPROVE] Cleaned HTML preview:', improvedHtml.substring(0, 200));
       
-      // Step 7: Basic HTML structure validation - wrap if needed
+      // Step 7: Fix common CSS and HTML syntax errors
+      // Fix CSS variable declarations (missing -- prefix)
+      improvedHtml = improvedHtml.replace(/(:root\s*\{[^}]*?)(\bprimary\b|\bsecondary\b|\baccent\b|\bsuccess\b|\berror\b|\bwarning\b)(\s*:)/gi, '$1--$2$3');
+      
+      // Fix CSS variable usage (missing -- prefix in var() or direct usage)
+      improvedHtml = improvedHtml.replace(/var\((\w+)\)/gi, (match, varName) => {
+        // If varName doesn't start with --, add it
+        if (!varName.startsWith('--')) {
+          return `var(--${varName})`;
+        }
+        return match;
+      });
+      
+      // Fix direct CSS variable usage without var() (e.g., color: var(--primary);)
+      improvedHtml = improvedHtml.replace(/(:\s*)(primary|secondary|accent|success|error|warning)(\s*;)/gi, (match, prefix, varName, suffix) => {
+        // Check if it's already in a var() call
+        if (!match.includes('var(')) {
+          return `${prefix}var(--${varName})${suffix}`;
+        }
+        return match;
+      });
+      
+      // Fix empty CSS rules (selector missing)
+      improvedHtml = improvedHtml.replace(/^\s*\{\s*margin:\s*0;\s*padding:\s*0;\s*box-sizing:\s*border-box;\s*\}\s*$/gm, '* { margin: 0; padding: 0; box-sizing: border-box; }');
+      
+      // Fix incomplete keyframes (if @keyframes slideIn is cut off)
+      if (improvedHtml.includes('@keyframes slideIn') && !improvedHtml.includes('@keyframes slideIn') || improvedHtml.match(/@keyframes slideIn\s*\{[^}]*$/)) {
+        // Try to complete the keyframe or remove it
+        improvedHtml = improvedHtml.replace(/@keyframes slideIn\s*\{[^}]*$/m, '@keyframes slideIn {\n  from { transform: translateX(100%); opacity: 0; }\n  to { transform: translateX(0); opacity: 1; }\n}');
+      }
+      
+      // Fix incomplete CSS (if style tag is not closed properly)
+      const styleTagMatches = improvedHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+      if (styleTagMatches) {
+        styleTagMatches.forEach((styleBlock) => {
+          // Check if style block has unclosed braces
+          const openBraces = (styleBlock.match(/\{/g) || []).length;
+          const closeBraces = (styleBlock.match(/\}/g) || []).length;
+          if (openBraces > closeBraces) {
+            // Try to fix by adding missing closing braces
+            const missingBraces = openBraces - closeBraces;
+            const fixedStyleBlock = styleBlock + '\n' + '}'.repeat(missingBraces);
+            improvedHtml = improvedHtml.replace(styleBlock, fixedStyleBlock);
+          }
+        });
+      }
+      
+      console.log('[IMPROVE] Fixed CSS syntax errors');
+      
+      // Step 8: Basic HTML structure validation - wrap if needed
       if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
         console.warn('[IMPROVE] No HTML structure found, wrapping content');
         // If no full HTML structure, wrap it
