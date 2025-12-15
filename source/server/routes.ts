@@ -4352,7 +4352,8 @@ UTF-8: 'Segoe UI', 'Noto Sans', system-ui
       }
 
       // Use the system prompt from database (or fallback to default)
-      const systemPrompt = customSystemPrompt?.prompt || `Te egy HTML tananyag javító szakértő vagy. A feladatod, hogy régebbi, kevésbé fejlett HTML tananyagokat modern, responsive, interaktív tananyaggá alakíts.
+      // CRITICAL: Add explicit instruction to return ONLY HTML code, no explanations
+      let systemPrompt = customSystemPrompt?.prompt || `Te egy HTML tananyag javító szakértő vagy. A feladatod, hogy régebbi, kevésbé fejlett HTML tananyagokat modern, responsive, interaktív tananyaggá alakíts.
 
 FONTOS SZABÁLYOK:
 1. Tartsd meg az eredeti tartalmat és struktúrát
@@ -4366,10 +4367,53 @@ FONTOS SZABÁLYOK:
 9. Ne használj külső CDN-eket vagy külső scripteket (mindent inline)
 10. Biztosítsd a biztonságot (XSS védelem, sanitizáció)
 
-VÁLASZ FORMATUM:
-Csak a javított HTML kódot add vissza, magyarázat nélkül. A kód azonnal használható legyen.`;
+KRITIKUS VÁLASZ FORMATUM:
+- CSAK HTML KÓDOT ADJ VISSZA, SEMMI MÁST
+- NEM LEÍRÁST, NEM MAGYARÁZATOT, NEM MARKDOWN-T
+- NEM "Íme a javított HTML:" vagy hasonló szövegeket
+- CSAK A TELJES HTML KÓDOT, AZONNAL HASZNÁLHATÓ FORMÁTBAN
+- A válaszodnak közvetlenül <!DOCTYPE html> vagy <html> tag-gel kell kezdődnie`;
 
-      const userPrompt = `Javítsd az alábbi HTML tananyagot modern, responsive, interaktív tananyaggá a tananyag-okosito rendszer szabályai szerint:
+      // If using tananyag-okosito prompt, add explicit HTML-only instruction
+      if (customSystemPrompt?.prompt) {
+        systemPrompt = customSystemPrompt.prompt + `
+
+---
+## KRITIKUS VÁLASZ FORMATUM - OLVASD FIGYELMESEN!
+
+**FONTOS:** Amikor HTML-t generálsz, a válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia!
+
+- ❌ NEM írj leírást vagy magyarázatot
+- ❌ NEM használj markdown formátumot
+- ❌ NEM írj "Íme a javított HTML:" vagy hasonló szövegeket
+- ✅ CSAK a teljes, működő HTML kódot add vissza
+- ✅ A válaszodnak közvetlenül <!DOCTYPE html> vagy <html> tag-gel kell kezdődnie
+- ✅ A kód azonnal használható legyen, másolás-kivágás nélkül
+
+PÉLDA HELYES VÁLASZ:
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  ...
+</head>
+<body>
+  ...
+</body>
+</html>
+
+PÉLDA HELYTELEN VÁLASZ (NE ÍRJ ÍGY!):
+"Íme a javított HTML tananyag:
+\`\`\`html
+<!DOCTYPE html>
+...
+\`\`\`
+Ez a tananyag tartalmazza..."`;
+      }
+
+      const userPrompt = `Javítsd az alábbi HTML tananyagot modern, responsive, interaktív tananyaggá a tananyag-okosito rendszer szabályai szerint.
+
+KRITIKUS: A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást! Ne írj leírást, magyarázatot vagy markdown formátumot. Csak a teljes HTML kódot add vissza, ami közvetlenül <!DOCTYPE html> vagy <html> tag-gel kezdődik.
 
 CÍM: ${originalFile.title}
 OSZTÁLY: ${originalFile.classroom}
@@ -4404,6 +4448,17 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
 
       // Validate improved HTML
       let improvedHtml = improvedContent.text.trim();
+      
+      // Extract HTML from markdown code blocks if present
+      const markdownHtmlMatch = improvedHtml.match(/```html\s*([\s\S]*?)\s*```/i) || 
+                                improvedHtml.match(/```\s*([\s\S]*?)\s*```/);
+      if (markdownHtmlMatch && markdownHtmlMatch[1]) {
+        improvedHtml = markdownHtmlMatch[1].trim();
+        console.log('[IMPROVE] Extracted HTML from markdown code block');
+      }
+      
+      // Remove common prefixes like "Íme a javított HTML:" or "Here is the improved HTML:"
+      improvedHtml = improvedHtml.replace(/^[^\<]*?(?=<!DOCTYPE|<html)/i, '');
       
       // Basic HTML structure validation - wrap if needed
       if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
