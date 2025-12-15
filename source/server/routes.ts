@@ -4355,13 +4355,20 @@ body {
 ### MEGERŐSÍTÉS
 Beküldés előtt: "🤔 Biztos?" modal → Igen/Nem
 
-### UTF-8
+### UTF-8 ÉS FONTOK
 \`\`\`css
 font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
 \`\`\`
 \`\`\`html
 <meta charset="UTF-8">
 \`\`\`
+
+**🚨 KRITIKUS FONT SZABÁLYOK:**
+- **SOHA** ne használj @font-face deklarációkat!
+- **SOHA** ne használj Google Fonts linkeket!
+- **SOHA** ne használj külső font betöltéseket!
+- **CSAK** system fontokat használj: 'Segoe UI', 'Noto Sans', system-ui, sans-serif
+- **TILTOTT** minden @font-face blokk, Google Fonts CDN, külső font fájlok
 
 ---
 
@@ -4639,6 +4646,8 @@ CSS SZABÁLYOK - MINDIG ELLENŐRIZD:
 2. Változó használat: MINDIG var(--name) (var(--primary), NEM primary)
 3. CSS osztályok: MINDIG edu- prefix (.edu-header, .edu-button, NEM .header, .button)
 4. Reset szabályok: MINDIG selectorral (* { ... }, NEM { ... })
+5. FONTOK: SOHA ne használj @font-face deklarációkat! CSAK system fontokat: 'Segoe UI', 'Noto Sans', system-ui, sans-serif
+6. FONTOK: TILTOTT minden @font-face blokk, Google Fonts linkek, külső font betöltések
 
 ---
 `;
@@ -4676,6 +4685,7 @@ CSS SZABÁLYOK - MINDIG ELLENŐRIZD:
 - Változó használat: MINDIG var(--name) (var(--primary), NEM primary)
 - CSS osztályok: MINDIG edu- prefix (.edu-header, NEM .header)
 - Reset szabályok: MINDIG selectorral (* { ... }, NEM { ... })
+- FONTOK: SOHA ne használj @font-face deklarációkat! CSAK system fontokat használj!
 
 CÍM: ${originalFile.title}
 OSZTÁLY: ${originalFile.classroom}
@@ -4918,6 +4928,18 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       }
       
       console.log('[IMPROVE] Fixed CSS syntax errors');
+      
+      // Step 7.5: Remove @font-face declarations (they're too verbose and unnecessary)
+      // Remove all @font-face blocks from style tags
+      improvedHtml = improvedHtml.replace(/@font-face\s*\{[^}]*\}/gi, '');
+      // Remove multi-line @font-face blocks
+      improvedHtml = improvedHtml.replace(/@font-face\s*\{[\s\S]*?\}/gi, '');
+      // Remove Google Fonts links from head
+      improvedHtml = improvedHtml.replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '');
+      improvedHtml = improvedHtml.replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
+      // Clean up empty style blocks or multiple consecutive empty lines
+      improvedHtml = improvedHtml.replace(/\n\s*\n\s*\n/g, '\n\n');
+      console.log('[IMPROVE] Removed @font-face declarations and Google Fonts links');
       
       // Step 8: Validate that we have actual HTML content
       if (!improvedHtml || improvedHtml.trim().length < 100) {
