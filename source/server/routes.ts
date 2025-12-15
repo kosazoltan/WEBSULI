@@ -4099,41 +4099,65 @@ Crawl-delay: 1`;
   // MATERIAL IMPROVEMENT ENDPOINTS
   // ========================================
 
-  // POST /api/admin/improve-material/:id - Create improved version using Claude
+  // POST /api/admin/improve-material/:id - Create improved version using Claude (STREAMING)
   adminRouter.post("/improve-material/:id", async (req: any, res) => {
-    // AbortController for timeout handling (60 seconds - shorter to avoid Cloudflare issues)
-    // Note: Cloudflare has a default 100s timeout, but may timeout earlier in some cases
-    // We use 60s to be safe and provide better error messages
+    // Setup SSE (Server-Sent Events) for streaming - prevents timeout issues
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    
+    // AbortController for timeout handling (90 seconds - longer for streaming)
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
-      console.log('[IMPROVE] Request timeout (60s)');
-      if (!res.headersSent) {
-        res.status(408).json({ 
-          message: 'Időtúllépés: A művelet túl sokáig tartott (60 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.',
-          timeout: true
-        });
-      }
-    }, 60000); // 60 seconds timeout (reduced from 95s to avoid Cloudflare timeout)
+      console.log('[IMPROVE] Request timeout (90s)');
+      res.write(`data: ${JSON.stringify({
+        type: 'error',
+        message: 'Időtúllépés: A művelet túl sokáig tartott (90 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.',
+        timeout: true
+      })}\n\n`);
+      res.end();
+    }, 90000); // 90 seconds timeout (longer for streaming)
     
     try {
       const { id } = req.params;
       const { customPrompt } = req.body || {};
       const userId = req.user.id;
 
+      // Send initial progress message
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        message: '📂 Fájl betöltése...'
+      })}\n\n`);
+
       // Get original file
       const originalFile = await storage.getHtmlFile(id);
       if (!originalFile) {
-        return res.status(404).json({ message: "Fájl nem található" });
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: 'Fájl nem található'
+        })}\n\n`);
+        res.end();
+        return;
       }
 
       // Validate content size (max 5MB)
       const contentSizeMB = Buffer.byteLength(originalFile.content, 'utf8') / (1024 * 1024);
       if (contentSizeMB > 5) {
-        return res.status(400).json({ message: "A fájl túl nagy (max 5MB)" });
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: 'A fájl túl nagy (max 5MB)'
+        })}\n\n`);
+        res.end();
+        return;
       }
 
-      // Load system prompt from database (tananyag-okosito)
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        message: '📝 System prompt betöltése...'
+      })}\n\n`);
+
+      // Load system prompt from database (tananyag-okosito) - KARCSULT VERZIÓ
       const { systemPrompts } = await import('@shared/schema');
       let [customSystemPrompt] = await db
         .select()
@@ -4724,51 +4748,98 @@ ${originalFile.content}
 
 ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
 
-      // Call Claude API
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        message: '🤖 Claude API hívása...'
+      })}\n\n`);
+
+      // Call Claude API - STREAMING MODE
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
       });
 
-      console.log('[IMPROVE] Calling Claude API...');
+      console.log('[IMPROVE] Streaming Claude API response...');
       console.log('[IMPROVE] System prompt length:', systemPrompt.length);
       console.log('[IMPROVE] User prompt length:', userPrompt.length);
-      
-      const message = await anthropic.messages.create({
+
+      // Handle abort on client disconnect
+      req.on('close', () => {
+        controller.abort();
+        clearTimeout(timeout);
+        console.log('[IMPROVE] Client disconnected, stream aborted');
+      });
+
+      const stream = await anthropic.messages.stream({
         model: "claude-sonnet-4-5",
-        max_tokens: 12288, // Háromszorosára emelve (4096 * 3) hogy befejezhesse a teljes HTML generálást
+        max_tokens: 12288,
         system: systemPrompt,
         messages: [{
           role: 'user',
           content: userPrompt,
         }],
       }, {
-        signal: controller.signal, // Add abort signal for timeout handling
-      }).catch((error: any) => {
-        clearTimeout(timeout);
-        // Handle abort/timeout errors
-        if (error.name === 'AbortError' || controller.signal.aborted) {
-          console.error('[IMPROVE] Request aborted (timeout)');
-          throw new Error('Időtúllépés: A művelet túl sokáig tartott (60 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.');
-        }
-        console.error('[IMPROVE] Claude API error:', error);
-        throw new Error(`Claude API hiba: ${error.message || 'Ismeretlen hiba'}`);
+        signal: controller.signal,
       });
-      
-      clearTimeout(timeout); // Clear timeout on success
-      
-      console.log('[IMPROVE] Claude API response received');
-      console.log('[IMPROVE] Response stop_reason:', message.stop_reason);
-      console.log('[IMPROVE] Response usage:', message.usage);
 
-      const improvedContent = message.content[0];
-      if (!improvedContent || improvedContent.type !== 'text') {
-        throw new Error('Invalid response from Claude API');
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        message: '📝 HTML generálása...'
+      })}\n\n`);
+
+      let fullContent = '';
+      let htmlContent = '';
+      let isCollectingHtml = false;
+      let totalEvents = 0;
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          const text = event.delta.text;
+          if (!text) continue;
+
+          totalEvents++;
+          fullContent += text;
+
+          // Check if HTML generation started
+          if (!isCollectingHtml && (fullContent.includes('<!DOCTYPE') || fullContent.includes('<html'))) {
+            isCollectingHtml = true;
+            // Extract HTML from the start marker
+            const htmlStartIndex = Math.max(
+              fullContent.indexOf('<!DOCTYPE'),
+              fullContent.indexOf('<html')
+            );
+            if (htmlStartIndex !== -1) {
+              htmlContent = fullContent.substring(htmlStartIndex);
+            } else {
+              htmlContent = fullContent;
+            }
+          }
+
+          // If already collecting HTML, add to htmlContent
+          if (isCollectingHtml) {
+            htmlContent += text;
+          }
+
+          // Stream progress to frontend
+          res.write(`data: ${JSON.stringify({
+            type: 'content_delta',
+            content: text
+          })}\n\n`);
+        }
       }
 
+      clearTimeout(timeout);
+
+      console.log(`[IMPROVE] ✅ Stream complete (${totalEvents} events, full: ${fullContent.length} chars, HTML: ${htmlContent.length} chars)`);
+
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        message: '🔧 HTML tisztítása és validálása...'
+      })}\n\n`);
+
       // Validate improved HTML
-      let improvedHtml = improvedContent.text.trim();
+      let improvedHtml = htmlContent.trim();
       
       console.log('[IMPROVE] Raw response length:', improvedHtml.length);
       console.log('[IMPROVE] Raw response preview:', improvedHtml.substring(0, 200));
@@ -4972,48 +5043,58 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       // Step 8: Validate that we have actual HTML content
       if (!improvedHtml || improvedHtml.trim().length < 100) {
         console.error('[IMPROVE] Generated HTML is too short or empty:', improvedHtml.length);
-        return res.status(400).json({ 
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
           message: "A generált HTML túl rövid vagy üres. Kérlek próbáld újra vagy módosítsd a promptot.",
           details: `HTML hossz: ${improvedHtml?.length || 0} karakter`
-        });
+        })}\n\n`);
+        res.end();
+        return;
       }
 
       // Step 9: Basic HTML structure validation - wrap if needed
       if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
         console.warn('[IMPROVE] No HTML structure found, wrapping content');
-        // If no full HTML structure, wrap it
         improvedHtml = wrapHtmlWithResponsiveContainer(improvedHtml);
       }
 
       // Content size validation
       const improvedSizeMB = Buffer.byteLength(improvedHtml, 'utf8') / (1024 * 1024);
       if (improvedSizeMB > 5) {
-        return res.status(400).json({ message: "A javított fájl túl nagy (max 5MB)" });
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: "A javított fájl túl nagy (max 5MB)"
+        })}\n\n`);
+        res.end();
+        return;
       }
 
       // XSS and script injection checks
-      // NOTE: onclick and onerror are allowed because:
-      // 1. HTML is rendered in sandboxed iframe (MaterialImprover.tsx uses sandbox="allow-scripts allow-same-origin")
-      // 2. Interactive materials (quizzes, exercises) require onclick handlers
-      // 3. CSP headers prevent most XSS attacks
       const dangerousPatterns = [
-        /eval\s*\(/i,                    // eval() is dangerous
-        /Function\s*\(/i,                 // Function constructor is dangerous
-        /setTimeout\s*\([^,]*['"]/i,     // setTimeout with string code is dangerous
-        /setInterval\s*\([^,]*['"]/i,    // setInterval with string code is dangerous
-        /javascript:\s*[^'"]/i,          // javascript: protocol (but allow in onclick="javascript:void(0)")
-        // onclick and onerror are ALLOWED - they're safe in sandboxed iframe
+        /eval\s*\(/i,
+        /Function\s*\(/i,
+        /setTimeout\s*\([^,]*['"]/i,
+        /setInterval\s*\([^,]*['"]/i,
+        /javascript:\s*[^'"]/i,
       ];
 
       for (const pattern of dangerousPatterns) {
         if (pattern.test(improvedHtml)) {
           console.warn('[IMPROVE] Dangerous pattern detected:', pattern.toString());
-          return res.status(400).json({ 
+          res.write(`data: ${JSON.stringify({
+            type: 'error',
             message: "A javított HTML biztonsági problémákat tartalmaz",
             details: `Blokkolt mintázat: ${pattern.toString()}`
-          });
+          })}\n\n`);
+          res.end();
+          return;
         }
       }
+
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        message: '💾 Javított fájl mentése...'
+      })}\n\n`);
 
       // Create improved file record
       const improvedFile = await storage.createImprovedHtmlFile({
@@ -5028,23 +5109,39 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         createdBy: userId,
       });
 
-      clearTimeout(timeout); // Ensure timeout is cleared
-      res.status(201).json(improvedFile);
+      clearTimeout(timeout);
+
+      // Send final result
+      res.write(`data: ${JSON.stringify({
+        type: 'complete',
+        improvedFile: improvedFile
+      })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
     } catch (error: any) {
-      clearTimeout(timeout); // Ensure timeout is cleared on error
+      clearTimeout(timeout);
       
       // Handle abort/timeout errors specifically
-      if (error.name === 'AbortError' || error.message?.includes('Időtúllépés')) {
+      if (error.name === 'AbortError' || error.message?.includes('Időtúllépés') || controller.signal.aborted) {
         console.error('[IMPROVE] Timeout error:', error.message);
-        return res.status(408).json({ 
-          message: error.message || 'Időtúllépés: A művelet túl sokáig tartott' 
-        });
+        if (!res.headersSent) {
+          res.write(`data: ${JSON.stringify({
+            type: 'error',
+            message: error.message || 'Időtúllépés: A művelet túl sokáig tartott (90 másodperc)'
+          })}\n\n`);
+          res.end();
+        }
+        return;
       }
       
       console.error('[IMPROVE] Error:', error);
-      res.status(500).json({ 
-        message: error.message || 'Hiba történt a javítás során' 
-      });
+      if (!res.headersSent) {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: error.message || 'Hiba történt a javítás során'
+        })}\n\n`);
+        res.end();
+      }
     }
   });
 
