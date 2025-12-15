@@ -4131,17 +4131,39 @@ metadata:
 
 ### CSS SZINTAXIS - KÖTELEZŐ SZABÁLYOK
 
-🚨 **FONTOS: MINDIG helyesen írd a CSS-t!**
+🚨 **KRITIKUSAN FONTOS: MINDIG helyesen írd a CSS-t! EZEK A LEGGYAKORIBB HIBÁK!**
 
-#### CSS VÁLTOZÓK (CSS Variables):
-- **MINDIG** használj -- prefix-et a változó nevek előtt!
-- ✅ HELYES: --primary: #4CAF50;
-- ❌ HELYTELEN: primary: #4CAF50; (HIÁNYZIK A -- PREFIX!)
+#### CSS VÁLTOZÓK (CSS Variables) - KÖTELEZŐ SZABÁLY:
+- **MINDEN CSS változó deklarációnak KÖTELEZŐEN -- prefix-szel kell kezdődnie!**
+- **SOHA ne írj változót -- nélkül!**
+- ✅ HELYES PÉLDÁK:
+  :root {
+    --primary: #4CAF50;
+    --secondary: #FF9800;
+    --tertiary: #9C27B0;
+    --accent: #2196F3;
+    --success: #00b894;
+    --error: #e17055;
+    --warning: #fdcb6e;
+  }
+- ❌ HELYTELEN PÉLDÁK (SOHA NE ÍRD ÍGY!):
+  :root {
+    primary: #4CAF50;  /* HIÁNYZIK A -- */
+    secondary: #FF9800;  /* HIÁNYZIK A -- */
+    tertiary: #9C27B0;  /* HIÁNYZIK A -- */
+  }
 
-#### CSS VÁLTOZÓ HASZNÁLAT:
-- **MINDIG** használj var() függvényt a változók használatakor!
-- ✅ HELYES: color: var(--primary); vagy background: var(--secondary);
-- ❌ HELYTELEN: color: primary; vagy background: secondary; (HIÁNYZIK A var()!)
+#### CSS VÁLTOZÓ HASZNÁLAT - KÖTELEZŐ SZABÁLY:
+- **MINDIG használj var() függvényt a változók használatakor!**
+- **SOHA ne írj közvetlenül változó nevet CSS property értéknek!**
+- ✅ HELYES PÉLDÁK:
+  color: var(--primary);
+  background: var(--secondary);
+  border-color: var(--tertiary);
+- ❌ HELYTELEN PÉLDÁK (SOHA NE ÍRD ÍGY!):
+  color: primary;  /* HIÁNYZIK A var(--) */
+  background: secondary;  /* HIÁNYZIK A var(--) */
+  border-color: tertiary;  /* HIÁNYZIK A var(--) */
 
 #### CSS SZABÁLYOK:
 - **SOHA** ne írj üres CSS szabályt selector nélkül!
@@ -4439,12 +4461,35 @@ A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást!
 - A kód azonnal használható legyen, másolás-kivágás nélkül
 - Nincs markdown, nincs leírás, CSAK HTML
 
+🎨 CSS KRITIKUS SZABÁLYOK (MINDIG ELLENŐRIZD MINDEN VÁLTOZÓT!):
+1. MINDEN CSS változó deklarációnak KÖTELEZŐEN -- prefix-szel kell kezdődnie!
+   ✅ HELYES: --primary: #4CAF50; --secondary: #FF9800; --tertiary: #9C27B0;
+   ❌ HELYTELEN: primary: #4CAF50; secondary: #FF9800; tertiary: #9C27B0;
+   ⚠️ FIGYELEM: MINDEN változó nevet ellenőrizd, hogy -- prefix-szel kezdődik-e!
+2. MINDIG használj var() függvényt változók használatakor!
+   ✅ HELYES: color: var(--primary); background: var(--tertiary);
+   ❌ HELYTELEN: color: primary; background: tertiary;
+3. SOHA ne írj üres CSS szabályt selector nélkül!
+   ✅ HELYES: * { margin: 0; padding: 0; }
+   ❌ HELYTELEN: { margin: 0; padding: 0; }
+
 PÉLDA HELYES VÁLASZ (CSAK EZT ÍRD!):
 <!DOCTYPE html>
 <html lang="hu">
 <head>
   <meta charset="UTF-8">
   <title>...</title>
+  <style>
+    :root {
+      --primary: #4CAF50;
+      --secondary: #FF9800;
+      --tertiary: #9C27B0;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
 </head>
 <body>
   ...
@@ -4481,6 +4526,17 @@ KRITIKUS VÁLASZ FORMATUM:
       const userPrompt = `Javítsd az alábbi HTML tananyagot modern, responsive, interaktív tananyaggá a tananyag-okosito rendszer szabályai szerint.
 
 KRITIKUS: A válaszodnak KIZÁRÓLAG HTML KÓDOT kell tartalmaznia, semmi mást! Ne írj leírást, magyarázatot vagy markdown formátumot. Csak a teljes HTML kódot add vissza, ami közvetlenül <!DOCTYPE html> vagy <html> tag-gel kezdődik.
+
+🎨 CSS KRITIKUS SZABÁLYOK - MINDIG ELLENŐRIZD:
+1. MINDEN CSS változó deklarációnak -- prefix-szel kell kezdődnie!
+   ✅ HELYES: --primary: #4CAF50; --secondary: #FF9800; --tertiary: #9C27B0;
+   ❌ HELYTELEN: primary: #4CAF50; secondary: #FF9800; tertiary: #9C27B0;
+2. MINDIG használj var() függvényt változók használatakor!
+   ✅ HELYES: color: var(--primary); background: var(--tertiary);
+   ❌ HELYTELEN: color: primary; background: tertiary;
+3. SOHA ne írj üres CSS szabályt selector nélkül!
+   ✅ HELYES: * { margin: 0; padding: 0; }
+   ❌ HELYTELEN: { margin: 0; padding: 0; }
 
 CÍM: ${originalFile.title}
 OSZTÁLY: ${originalFile.classroom}
