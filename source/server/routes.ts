@@ -730,7 +730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
@@ -817,7 +817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
@@ -1222,7 +1222,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
 
       // Stream Claude's response
       const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 8192, // Larger for full HTML generation
         system: systemPrompt,
         messages: messages
