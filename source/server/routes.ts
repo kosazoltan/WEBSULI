@@ -4764,10 +4764,11 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       console.log('[IMPROVE] Raw response preview:', improvedHtml.substring(0, 200));
       
       // Step 1: Extract HTML from markdown code blocks (try multiple patterns)
+      // Note: Using [\s\S] instead of . with /s flag for ES2017 compatibility
       const markdownPatterns = [
         /```html\s*([\s\S]*?)\s*```/i,           // ```html ... ```
-        /```\s*([\s\S]*?)\s*```/s,                // ``` ... ``` (any language)
-        /`([\s\S]*?)`/s,                          // ` ... ` (inline code)
+        /```\s*([\s\S]*?)\s*```/i,                // ``` ... ``` (any language) - removed /s flag, using [\s\S]
+        /`([\s\S]*?)`/i,                          // ` ... ` (inline code) - removed /s flag, using [\s\S]
       ];
       
       for (const pattern of markdownPatterns) {
@@ -4898,7 +4899,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         
         // First, handle multi-line empty rules - this is more common
         // Match: { at start of line, then content (can span multiple lines), then } at start of line
-        fixedCss = fixedCss.replace(/(?:^|\n)(\s*)\{\s*((?:box-sizing|margin|padding|border)[\s\S]*?)\}\s*(?=\n|$)/gm, (match, indent, content) => {
+        fixedCss = fixedCss.replace(/(?:^|\n)(\s*)\{\s*((?:box-sizing|margin|padding|border)[\s\S]*?)\}\s*(?=\n|$)/gm, (match: string, indent: string, content: string) => {
           const cleanContent = content.trim();
           // Check if it's a reset rule and doesn't contain nested selectors or other CSS rules
           if (cleanContent.match(/(?:margin|padding|box-sizing)/i) && 
@@ -4911,7 +4912,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         });
         
         // Also handle single-line empty rules (fallback)
-        fixedCss = fixedCss.replace(/^\s*\{\s*((?:box-sizing|margin|padding|border)[^}]*)\}\s*$/gm, (match, content) => {
+        fixedCss = fixedCss.replace(/^\s*\{\s*((?:box-sizing|margin|padding|border)[^}]*)\}\s*$/gm, (match: string, content: string) => {
           // Check if this looks like a reset rule (contains margin, padding, or box-sizing)
           if (content.match(/(?:margin|padding|box-sizing)/i)) {
             return `* { ${content.trim()} }`;
