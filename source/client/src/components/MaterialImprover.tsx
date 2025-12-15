@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -97,6 +97,19 @@ export default function MaterialImprover() {
     queryKey: previewImprovedId ? ["/api/admin/improved-files", previewImprovedId] : ["/api/admin/improved-files"],
     enabled: !!previewImprovedId,
   });
+
+  // Precompute rendered HTML documents for side-by-side live preview
+  const makeRunnableHtml = (html?: string) =>
+    html
+      ? `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`
+      : "";
+
+  const renderedOriginal = useMemo(
+    () => makeRunnableHtml(previewData?.originalFile?.content),
+    [previewData?.originalFile?.content]
+  );
+
+  const renderedImproved = useMemo(() => makeRunnableHtml(previewData?.content), [previewData?.content]);
 
   // Improve material mutation
   const improveMutation = useMutation({
@@ -433,19 +446,79 @@ export default function MaterialImprover() {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="improved" className="w-full">
-              <TabsList>
-                <TabsTrigger value="original">Eredeti</TabsTrigger>
-                <TabsTrigger value="improved">Javított</TabsTrigger>
+            <Tabs defaultValue="run-improved" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="run-original">Eredeti (futó)</TabsTrigger>
+                <TabsTrigger value="run-improved">Javított (futó)</TabsTrigger>
+                <TabsTrigger value="code-original">Eredeti (kód)</TabsTrigger>
+                <TabsTrigger value="code-improved">Javított (kód)</TabsTrigger>
               </TabsList>
-              <TabsContent value="original" className="mt-4">
+              
+              {/* Running HTML Preview - Original */}
+              <TabsContent value="run-original" className="mt-4">
+                {renderedOriginal ? (
+                  <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
+                    <div className="bg-muted px-3 py-2 border-b flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Eredeti HTML futás közben</span>
+                    </div>
+                    <iframe
+                      srcDoc={renderedOriginal}
+                      className="w-full h-[600px] border-0"
+                      title="Eredeti HTML Preview"
+                      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
+                      allow="autoplay; fullscreen; clipboard-write; microphone"
+                      data-testid="iframe-preview-original"
+                      style={{
+                        minHeight: '400px',
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-[600px] flex items-center justify-center rounded-md border text-muted-foreground">
+                    Nincs elérhető tartalom
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Running HTML Preview - Improved */}
+              <TabsContent value="run-improved" className="mt-4">
+                {renderedImproved ? (
+                  <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
+                    <div className="bg-muted px-3 py-2 border-b flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Javított HTML futás közben</span>
+                    </div>
+                    <iframe
+                      srcDoc={renderedImproved}
+                      className="w-full h-[600px] border-0"
+                      title="Javított HTML Preview"
+                      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
+                      allow="autoplay; fullscreen; clipboard-write; microphone"
+                      data-testid="iframe-preview-improved"
+                      style={{
+                        minHeight: '400px',
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-[600px] flex items-center justify-center rounded-md border text-muted-foreground">
+                    Nincs elérhető tartalom
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Code View - Original */}
+              <TabsContent value="code-original" className="mt-4">
                 <ScrollArea className="h-[600px] w-full rounded-md border p-4">
                   <pre className="text-xs whitespace-pre-wrap font-mono">
                     {previewData.originalFile?.content || "Nincs elérhető tartalom"}
                   </pre>
                 </ScrollArea>
               </TabsContent>
-              <TabsContent value="improved" className="mt-4">
+
+              {/* Code View - Improved */}
+              <TabsContent value="code-improved" className="mt-4">
                 <ScrollArea className="h-[600px] w-full rounded-md border p-4">
                   <pre className="text-xs whitespace-pre-wrap font-mono">
                     {previewData.content || "Nincs elérhető tartalom"}
