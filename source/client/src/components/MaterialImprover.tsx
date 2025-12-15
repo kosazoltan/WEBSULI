@@ -43,6 +43,7 @@ import {
   ArrowRight,
   FileText,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -662,9 +663,21 @@ export default function MaterialImprover() {
                         <Eye className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-medium">Javított HTML futás közben</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {Math.round(renderedImproved.length / 1024)} KB
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleOpenInExternalBrowser}
+                          className="h-7 text-xs"
+                          disabled={!improvedBlobUrl}
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1.5" />
+                          Külső böngészőben
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                          {Math.round(renderedImproved.length / 1024)} KB
+                        </span>
+                      </div>
                     </div>
                     <iframe
                       srcDoc={renderedImproved}
