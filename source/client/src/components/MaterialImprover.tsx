@@ -536,13 +536,13 @@ export default function MaterialImprover() {
                       style={{
                         minHeight: '400px',
                       }}
-                      onError={(e) => {
-                        console.error('[IFRAME] Error loading improved HTML:', e);
+                      onError={(ev) => {
+                        console.error('[IFRAME] Error loading improved HTML:', ev);
                       }}
-                      onLoad={() => {
+                      onLoad={(ev) => {
                         console.log('[IFRAME] Improved HTML loaded, length:', renderedImproved.length);
                         // Try to access iframe content to check if it loaded
-                        const iframe = e.target as HTMLIFrameElement;
+                        const iframe = ev.target as HTMLIFrameElement;
                         try {
                           const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
                           if (iframeDoc) {
