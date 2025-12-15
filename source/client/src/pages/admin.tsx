@@ -785,6 +785,44 @@ export default function Admin() {
         )}
       </TabsContent>
 
+      <TabsContent value="improve-materials" className="space-y-4">
+        {activeTab === "improve-materials" && (
+          <Suspense fallback={
+            <Card className="border-red-500 border-2">
+              <CardHeader>
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-96 mt-2" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-48 w-full" />
+              </CardContent>
+            </Card>
+          }>
+            <MaterialImprover />
+          </Suspense>
+        )}
+      </TabsContent>
+
+      <TabsContent value="improvement-backups" className="space-y-4">
+        {activeTab === "improvement-backups" && (
+          <Suspense fallback={
+            <Card className="border-red-500 border-2">
+              <CardHeader>
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-96 mt-2" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-48 w-full" />
+              </CardContent>
+            </Card>
+          }>
+            <MaterialImprovementBackups />
+          </Suspense>
+        )}
+      </TabsContent>
+
       <TabsContent value="material-views" className="space-y-4">
         <Card>
           <CardHeader>
