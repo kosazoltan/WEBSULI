@@ -70,10 +70,10 @@ function ScientificBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
 
-  // Lebegő elemek inicializálása
+  // Lebegő elemek inicializálása - Further reduced for better performance
   useEffect(() => {
     const newElements: FloatingElement[] = [];
-    const count = 20; // Reduced from 35 to 20 for better performance
+    const count = 8; // Reduced from 20 to 8 for much better performance
 
     for (let i = 0; i < count; i++) {
       const el = SCIENTIFIC_ELEMENTS[Math.floor(Math.random() * SCIENTIFIC_ELEMENTS.length)];
@@ -143,8 +143,8 @@ function ScientificBackground() {
     const rings: CircleRing[] = [];
     const baseRadius = Math.min(window.innerWidth, window.innerHeight) * 0.15;
 
-    // Generáljunk koncentrikus köröket
-    for (let i = 0; i < 8; i++) {
+    // Generáljunk koncentrikus köröket - Reduced count
+    for (let i = 0; i < 4; i++) { // Reduced from 8 to 4
       const isGold = i % 2 === 0;
       rings.push({
         radius: baseRadius + (i * 35) + (Math.random() * 10),
@@ -208,22 +208,22 @@ function ScientificBackground() {
 
       ctx.clearRect(0, 0, width, height);
 
-      // Enyhe pulsálás
-      time += 0.003; // 70% slower (30% speed) for smoother performance
-      const pulse = 1 + Math.sin(time) * 0.02;
+      // Enyhe pulsálás - Much slower
+      time += 0.001; // Much slower for better performance
+      const pulse = 1 + Math.sin(time) * 0.01; // Reduced pulse effect
 
       // Transzformáció középre
       ctx.save();
       ctx.translate(centerX, centerY);
       ctx.scale(pulse, pulse);
 
-      // Hexagon rajzolása
-      hexagon.angle += hexagon.speed;
+      // Hexagon rajzolása - Static or very slow
+      hexagon.angle += hexagon.speed * 0.3; // Much slower rotation
       drawHexagon(ctx, 0, 0, hexagon.radius, hexagon.angle, hexagon.color);
 
-      // Körök rajzolása
+      // Körök rajzolása - Much slower rotation
       rings.forEach(ring => {
-        ring.angle += ring.speed;
+        ring.angle += ring.speed * 0.3; // Much slower rotation
         ctx.beginPath();
         ctx.arc(0, 0, ring.radius, ring.angle, ring.angle + Math.PI * 2);
 
