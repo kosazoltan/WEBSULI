@@ -286,9 +286,16 @@ export default function MaterialImprover() {
     }
   };
 
-  // Improve material mutation - STREAMING MODE
+  // Improve material mutation - Simple JSON API (no streaming)
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
+      // Show loading toast
+      toast({
+        title: "🤖 AI feldolgozás...",
+        description: "A tananyag javítása folyamatban, ez akár 1-2 percig is tarthat.",
+        duration: 60000,
+      });
+
       const res = await fetch(`/api/admin/improve-material/${fileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -298,120 +305,17 @@ export default function MaterialImprover() {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        // For SSE responses, we need to read the stream to get the error message
-        if (res.headers.get('content-type')?.includes('text/event-stream')) {
-          const reader = res.body?.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-          let errorMessage = 'Request failed';
-
-          if (reader) {
-            try {
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                  if (line.startsWith('data: ')) {
-                    const data = line.slice(6).trim();
-                    if (data === '[DONE]') continue;
-
-                    try {
-                      const parsed = JSON.parse(data);
-                      if (parsed.type === 'error') {
-                        errorMessage = parsed.message || errorMessage;
-                        break;
-                      }
-                    } catch {
-                      // Ignore parse errors
-                    }
-                  }
-                }
-              }
-            } finally {
-              reader.releaseLock();
-            }
-          }
-          throw new Error(errorMessage);
-        } else {
-          // Try to parse error message from JSON response
-          let errorMessage = 'Request failed';
-          try {
-            const errorData = await res.json();
-            errorMessage = errorData.message || errorMessage;
-          } catch {
-            // If response is not JSON, use status text
-            errorMessage = res.statusText || `HTTP ${res.status}`;
-          }
-          throw new Error(errorMessage);
-        }
+        throw new Error(data.message || 'Hiba történt a javítás során');
       }
 
-      if (!res.body) {
-        throw new Error('No response body');
+      if (!data.success || !data.improvedFile) {
+        throw new Error('Nem érkezett javított fájl');
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let improvedFile: any = null;
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6).trim();
-              if (data === '[DONE]') continue;
-
-              try {
-                const parsed = JSON.parse(data);
-
-                if (parsed.type === 'progress') {
-                  // Show progress in toast
-                  toast({
-                    title: parsed.message,
-                    duration: 2000,
-                  });
-                } else if (parsed.type === 'complete') {
-                  improvedFile = parsed.improvedFile;
-                } else if (parsed.type === 'error') {
-                  throw new Error(parsed.message || 'Unknown error');
-                }
-              } catch (e: any) {
-                // If it's an error from parsing, throw it
-                if (e.message && e.message !== 'Unexpected end of JSON input') {
-                  throw e;
-                }
-                // Otherwise ignore parse errors for incomplete JSON
-              }
-            }
-          }
-        }
-
-        if (improvedFile) {
-          return improvedFile;
-        } else {
-          throw new Error('No improved file received');
-        }
-      } catch (error: any) {
-        throw error;
-      } finally {
-        reader.releaseLock();
-      }
+      return data.improvedFile;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
@@ -426,7 +330,7 @@ export default function MaterialImprover() {
       console.error('[IMPROVE] Mutation error:', error);
       toast({
         title: "❌ Hiba",
-        description: error.message || "Nem sikerült elindítani a javítást",
+        description: error.message || "Nem sikerült a javítás",
         variant: "destructive",
       });
     },

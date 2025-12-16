@@ -4100,1088 +4100,126 @@ Crawl-delay: 1`;
   // MATERIAL IMPROVEMENT ENDPOINTS
   // ========================================
 
-  // POST /api/admin/improve-material/:id - Create improved version using Claude (STREAMING)
+  // POST /api/admin/improve-material/:id - Create improved version using AI (NON-STREAMING)
+  // Simplified approach: Single API call with retry and fallback via AIProviderFactory
   adminRouter.post("/improve-material/:id", async (req: any, res) => {
     console.log(`[IMPROVE] Request received for file ID: ${req.params?.id}`);
 
-    // Validate authentication immediately
+    // Validate authentication
     if (!req.user || !req.user.id) {
-      console.error('[IMPROVE] User not authenticated or missing ID');
+      console.error('[IMPROVE] User not authenticated');
       return res.status(401).json({ message: 'Unauthorized' });
     }
-    console.log(`[IMPROVE] User verified: ${req.user.id}`);
 
-    // Check for API Key
-    if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
-      console.error('[IMPROVE] Missing Anthropic API Key');
-      return res.status(500).json({ message: 'Server configuration error: Missing AI API Key' });
-    }
-
-    // Setup SSE (Server-Sent Events) for streaming - prevents timeout issues
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    console.log('[IMPROVE] SSE headers sent');
-
-    // AbortController for timeout handling (90 seconds - longer for streaming)
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-      console.log('[IMPROVE] Request timeout (90s)');
-      if (!res.headersSent) {
-        res.status(504).end();
-        return;
-      }
-      res.write(`data: ${JSON.stringify({
-        type: 'error',
-        message: 'Időtúllépés: A művelet túl sokáig tartott (90 másodperc). Próbáld újra kisebb fájllal vagy rövidebb prompttal.',
-        timeout: true
-      })}\n\n`);
-      res.end();
-    }, 90000); // 90 seconds timeout (longer for streaming)
+    const { id } = req.params;
+    const { customPrompt } = req.body || {};
+    const userId = req.user.id;
 
     try {
-      const { id } = req.params;
-      const { customPrompt } = req.body || {};
-      console.log(`[IMPROVE] Processing body. Custom prompt present: ${!!customPrompt}`);
-      const userId = req.user.id;
-
-      // Send initial progress message
-      res.write(`data: ${JSON.stringify({
-        type: 'progress',
-        message: '📂 Fájl betöltése...'
-      })}\n\n`);
-
-      // Get original file
+      // 1. Load original file
       const originalFile = await storage.getHtmlFile(id);
       if (!originalFile) {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: 'Fájl nem található'
-        })}\n\n`);
-        res.end();
-        return;
+        return res.status(404).json({ message: 'Fájl nem található' });
       }
 
-      // Validate content size (max 5MB)
-      const contentSizeMB = Buffer.byteLength(originalFile.content, 'utf8') / (1024 * 1024);
-      if (contentSizeMB > 5) {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: 'A fájl túl nagy (max 5MB)'
-        })}\n\n`);
-        res.end();
-        return;
+      // Validate content size (max 500KB for AI processing - larger files cause issues)
+      const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
+      if (contentSizeKB > 500) {
+        return res.status(400).json({
+          message: `A fájl túl nagy az AI feldolgozáshoz (${Math.round(contentSizeKB)}KB, max 500KB)`
+        });
       }
 
-      res.write(`data: ${JSON.stringify({
-        type: 'progress',
-        message: '📝 System prompt betöltése...'
-      })}\n\n`);
-
-      // Load system prompt from database (tananyag-okosito)
-      const { systemPrompts } = await import('@shared/schema');
-      let [customSystemPrompt] = await db
-        .select()
-        .from(systemPrompts)
-        .where(
-          and(
-            eq(systemPrompts.id, 'tananyag-okosito'),
-            eq(systemPrompts.isActive, true)
-          )
-        )
-        .limit(1);
-
-      // If prompt doesn't exist, create it with the default professional prompt
-      if (!customSystemPrompt) {
-        const defaultPrompt = `name: tananyag-okosito
-description: Professzionális oktatási tananyagok készítése 3 oldalas HTML artifact formátumban. KOGNITÍV AKTIVÁLÁS technikákkal - váratlan kérdések, előrejelzés, kapu-rendszer, drag&drop, döntési elágazások. Szöveges feladatok (45→15), Kvízek (75→25). Megerősítő kérdés, animált dizájn. UTF-8 ékezetes betűtípusok.
-metadata:
-  version: "6.0"
-  author: "Zoltan"
-  last_updated: "2025-12-14"
----
-
-# Tananyag Készítő v6.0 – Tömör verzió
-
-## MIKOR HASZNÁLD
-- Interaktív magyar tananyag kvízekkel és feladatokkal (K-8)
-- Animált, kognitív aktiválással
-
----
-
-## KRITIKUS SZABÁLYOK
-
-### CSS SZINTAXIS - KÖTELEZŐ SZABÁLYOK ÉS KONKRÉT KÓD PÉLDÁK
-
-🚨 **KRITIKUSAN FONTOS: MINDIG helyesen írd a CSS-t! EZEK A LEGGYAKORIBB HIBÁK!**
-
-#### CSS VÁLTOZÓK (CSS Variables) - KÖTELEZŐ SZABÁLY:
-
-**✅ HELYES KÓD PÉLDA - ÍRD ÍGY MINDIG:**
-\`\`\`css
-:root {
-  --primary: #4CAF50;
-  --secondary: #FF9800;
-  --tertiary: #9C27B0;
-  --accent: #2196F3;
-  --success: #00b894;
-  --error: #e17055;
-  --warning: #fdcb6e;
-  --info: #74b9ff;
-}
-\`\`\`
-
-**❌ HELYTELEN KÓD PÉLDÁK - SOHA NE ÍRD ÍGY:**
-\`\`\`css
-:root {
-  primary: #4CAF50;  /* HIÁNYZIK A -- */
-  secondary: #FF9800;  /* HIÁNYZIK A -- */
-  tertiary: #9C27B0;  /* HIÁNYZIK A -- */
-  accent: #2196F3;  /* HIÁNYZIK A -- */
-}
-\`\`\`
-
-**FIGYELEM:** MINDEN változó nevet ellenőrizd, hogy -- prefix-szel kezdődik-e! Ha új változót adsz hozzá (pl. tertiary, accent, info), MINDIG -- prefix-szel kezd!
-
-#### CSS VÁLTOZÓ HASZNÁLAT - KÖTELEZŐ SZABÁLY:
-
-**✅ HELYES KÓD PÉLDÁK - ÍRD ÍGY MINDIG:**
-\`\`\`css
-.header {
-  background: var(--primary);
-  color: white;
-}
-.button {
-  background: var(--secondary);
-  border-color: var(--tertiary);
-}
-.success-box {
-  background: var(--success);
-  color: white;
-}
-.error-message {
-  color: var(--error);
-  border-left: 3px solid var(--error);
-}
-\`\`\`
-
-**❌ HELYTELEN KÓD PÉLDÁK - SOHA NE ÍRD ÍGY:**
-\`\`\`css
-.header {
-  background: primary;  /* HIÁNYZIK A var(--) */
-  color: white;
-}
-.button {
-  background: secondary;  /* HIÁNYZIK A var(--) */
-  border-color: tertiary;  /* HIÁNYZIK A var(--) */
-}
-\`\`\`
-
-**FIGYELEM:** MINDIG használj var(--variable-name) formátumot! SOHA ne írj közvetlenül változó nevet!
-
-#### CSS RESET SZABÁLYOK - KÖTELEZŐ SZABÁLY:
-
-**✅ HELYES KÓD PÉLDA - ÍRD ÍGY MINDIG:**
-\`\`\`css
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-\`\`\`
-
-VAGY
-
-\`\`\`css
-body {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
-}
-\`\`\`
-
-**❌ HELYTELEN KÓD PÉLDÁK - SOHA NE ÍRD ÍGY:**
-\`\`\`css
-{
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-\`\`\`
-
-VAGY
-
-\`\`\`css
-box-sizing: border-box;
-margin: 0;
-padding: 0;
-\`\`\`
-
-**FIGYELEM:** MINDIG kell selector (* vagy body vagy más)! SOHA ne írj üres CSS szabályt!
-
-#### CSS OSZTÁLY NEVEK - KÖTELEZŐ SZABÁLY:
-
-**✅ HELYES CSS OSZTÁLY PÉLDÁK - ÍRD ÍGY MINDIG:**
-\`\`\`css
-.edu-header {
-  background: var(--primary);
-  color: white;
-  padding: 30px;
-}
-.edu-button {
-  background: var(--secondary);
-  color: white;
-  border: 2px solid var(--tertiary);
-  padding: 15px 30px;
-  border-radius: 25px;
-}
-.edu-success-box {
-  background: var(--success);
-  color: white;
-  padding: 20px;
-}
-.edu-error-text {
-  color: var(--error);
-}
-.edu-prediction-box {
-  background: linear-gradient(135deg, #fdcb6e, #ffeaa7);
-  padding: 25px;
-}
-.edu-gate-question {
-  background: linear-gradient(135deg, #ff7675, #fab1a0);
-  padding: 25px;
-}
-\`\`\`
-
-**❌ HELYTELEN CSS OSZTÁLY PÉLDÁK - SOHA NE ÍRD ÍGY:**
-\`\`\`css
-.header {  /* HIÁNYZIK AZ edu- PREFIX */
-  background: var(--primary);
-}
-.button {  /* HIÁNYZIK AZ edu- PREFIX */
-  background: var(--secondary);
-}
-\`\`\`
-
-**FIGYELEM:** MINDEN CSS osztály nevet "edu-" prefix-szel kezdj! Ez biztosítja, hogy ne legyenek ütközések más CSS-sel!
-
-#### TELJES HELYES CSS PÉLDA - ÍRD ÍGY MINDIG:
-
-\`\`\`css
-:root {
-  --primary: #4CAF50;
-  --secondary: #FF9800;
-  --tertiary: #9C27B0;
-  --accent: #2196F3;
-  --success: #00b894;
-  --error: #e17055;
-  --warning: #fdcb6e;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.edu-header {
-  background: var(--primary);
-  color: white;
-  padding: 30px;
-}
-
-.edu-button {
-  background: var(--secondary);
-  color: white;
-  border: 2px solid var(--tertiary);
-}
-\`\`\`
-
-### TARTALOM FORRÁS
-- **CSAK** a felhasználó által megadott forrásból dolgozz
-- **SOHA** ne használj saját példákat
-
-### MENNYISÉGEK
-| Típus | Generált | Megjelenített |
-|-------|----------|---------------|
-| Szöveges feladat | 45 | 15 |
-| Kvíz kérdés | 75 | 25 |
-
-### KOGNITÍV KOMPONENSEK (min. 8-10 db/tananyag)
-| Komponens | Leírás | Hol |
-|-----------|--------|-----|
-| prediction-box | Előrejelzés | Szakasz elején |
-| gate-question | Kapu kérdés (2-3 db) | Szekciók végén |
-| myth-box | Tévhit leleplezés | Gyakori tévedéseknél |
-| dragdrop-box | Drag & drop | Hiányzó szavak |
-| conflict-box | Kognitív konfliktus | Meglepő tényeknél |
-| self-check | Önértékelés slider | Tananyag végén |
-| cause-effect | Ok-okozat doboz | Összefüggéseknél |
-| popup | Váratlan kérdés | Bekezdések után |
-
-### MEGERŐSÍTÉS
-Beküldés előtt: "🤔 Biztos?" modal → Igen/Nem
-
-### UTF-8 ÉS FONTOK
-\`\`\`css
-font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
-\`\`\`
-\`\`\`html
-<meta charset="UTF-8">
-\`\`\`
-
-**🚨 KRITIKUS FONT SZABÁLYOK:**
-- **SOHA** ne használj @font-face deklarációkat!
-- **SOHA** ne használj Google Fonts linkeket!
-- **SOHA** ne használj külső font betöltéseket!
-- **CSAK** system fontokat használj: 'Segoe UI', 'Noto Sans', system-ui, sans-serif
-- **TILTOTT** minden @font-face blokk, Google Fonts CDN, külső font fájlok
-
----
-
-## WORKFLOW
-
-\`\`\`
-1. ✅ [Téma] 📘 [Tantárgy] 👥 [Célcsoport] 🎨 [Szín/stílus]
-2. HTML mentés: C:\\Tananyagok\\[tema]-[evfolyam].html
-3. ✅ Kész
-\`\`\`
-
----
-
-## HTML VÁZLAT
-
-\`\`\`html
-<!DOCTYPE html>
-<html lang="hu">
-<head>
-  <meta charset="UTF-8">
-  <title>[CÍM]</title>
-  <style>
-    /* FONTOS: CSS változók MINDIG -- prefix-szel! MÁSOLD EZT PONTOSAN! */
-    :root { 
-      --primary: [SZÍN]; 
-      --secondary: #FF9800;
-      --tertiary: #9C27B0;
-      --accent: #2196F3;
-      --success: #00b894; 
-      --error: #e17055; 
-      --warning: #fdcb6e;
-      --info: #74b9ff;
-    }
-    
-    /* FONTOS: Reset szabályok MINDIG selectorral! MÁSOLD EZT PONTOSAN! */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    
-    /* FONTOS: Változók használata MINDIG var(--variable) formátumban! */
-    body {
-      font-family: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      padding: 20px;
-    }
-    
-    /* PÉLDA: Helyes változó használat és osztály prefix */
-    .edu-header {
-      background: var(--primary);
-      color: white;
-      padding: 30px;
-    }
-    
-    .edu-button {
-      background: var(--secondary);
-      color: white;
-      border: 2px solid var(--tertiary);
-      padding: 15px 30px;
-      border-radius: 25px;
-    }
-    
-    .edu-success-box {
-      background: var(--success);
-      color: white;
-      padding: 20px;
-    }
-    
-    .edu-error-text {
-      color: var(--error);
-    }
-    
-    .edu-prediction-box {
-      background: linear-gradient(135deg, #fdcb6e, #ffeaa7);
-      padding: 25px;
-      border-radius: 15px;
-    }
-    
-    .edu-gate-question {
-      background: linear-gradient(135deg, #ff7675, #fab1a0);
-      padding: 25px;
-      border-radius: 15px;
-    }
-    
-    @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes popIn { 0%{opacity:0;transform:scale(0.5)} 100%{opacity:1;transform:scale(1)} }
-    @keyframes shake { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-8px)} }
-    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
-    .edu-page { display:none; } .edu-page.active { display:block; }
-  </style>
-</head>
-<body>
-  <!-- Megerősítő modal -->
-  <div class="edu-confirm-overlay" id="confirmOverlay">
-    <div class="edu-confirm-modal">
-      <h3>🤔 Biztos?</h3>
-      <button onclick="closeConfirm()">Átgondolom</button>
-      <button onclick="proceedEvaluation()">Igen!</button>
-    </div>
-  </div>
-
-  <!-- Navigáció -->
-  <nav class="edu-nav-tabs">
-    <button onclick="showPage('content')">📚 Tananyag</button>
-    <button onclick="showPage('exercises')">✍️ Feladatok</button>
-    <button onclick="showPage('quiz')">❓ Kvíz</button>
-  </nav>
-
-  <!-- TANANYAG oldal: tartalom + kognitív komponensek -->
-  <div class="edu-page active" id="content">...</div>
-
-  <!-- FELADATOK oldal -->
-  <div class="edu-page" id="exercises">
-    <div id="exercises-container"></div>
-    <button onclick="requestConfirm('exercises')">Ellenőrzés</button>
-  </div>
-
-  <!-- KVÍZ oldal -->
-  <div class="edu-page" id="quiz">
-    <div id="quiz-container"></div>
-    <button onclick="requestConfirm('quiz')">Ellenőrzés</button>
-  </div>
-
-  <script>
-    const exerciseBank = [/* 45 db: {id, q, keywords:[], points} */];
-    const quizBank = [/* 75 db: {id, q, options:[], correct:0-3} */];
-    let currentExercises = shuffle(exerciseBank).slice(0,15);
-    let currentQuiz = shuffle(quizBank).slice(0,25);
-    // + navigáció, értékelés, osztályzat logika
-  </script>
-</body>
-</html>
-\`\`\`
-
----
-
-## KOMPONENS MINTÁK
-
-**Kapu kérdés:**
-\`\`\`html
-<div class="edu-gate-question">
-  <h4>🚧 KAPU</h4>
-  <p>Kérdés?</p>
-  <div onclick="checkGate(1,this,false)">A) Rossz</div>
-  <div onclick="checkGate(1,this,true)">B) Helyes</div>
-  <div class="edu-gate-feedback" id="gate-fb-1"></div>
-</div>
-\`\`\`
-
-**Előrejelzés:**
-\`\`\`html
-<div class="edu-prediction-box">
-  <h4>🔮 Tippelj!</h4>
-  <textarea id="pred-1"></textarea>
-  <button onclick="savePrediction(1)">Mentés</button>
-</div>
-\`\`\`
-
-**Tévhit:**
-\`\`\`html
-<div class="edu-myth-box">
-  <p class="edu-myth-statement">"Téves állítás"</p>
-  <button onclick="voteMy(1,this,true)">Igaz</button>
-  <button onclick="voteMy(1,this,false)">Hamis</button>
-  <div class="edu-truth-reveal" id="myth-truth-1">Valójában: ...</div>
-</div>
-\`\`\`
-
-**Ok-okozat:**
-\`\`\`html
-<div class="edu-cause-effect">
-  <div class="edu-cause">OK: Ha...</div>
-  <div class="edu-arrow">→</div>
-  <div class="edu-effect">OKOZAT: Akkor...</div>
-</div>
-\`\`\`
-
-**Drag & drop:**
-\`\`\`html
-<div class="edu-dragdrop-box">
-  <p>Mondat <span class="edu-drop-zone" data-answer="helyes"></span> folytatás.</p>
-  <div class="edu-drag-items">
-    <div class="edu-drag-item" draggable="true" data-value="helyes">helyes</div>
-    <div class="edu-drag-item" draggable="true" data-value="rossz">rossz</div>
-  </div>
-</div>
-\`\`\`
-
----
-
-## ÉRTÉKELÉS
-
-\`\`\`javascript
-function getGrade(p) {
-  if (p >= 90) return {num:5, text:'Jeles'};
-  if (p >= 75) return {num:4, text:'Jó'};
-  if (p >= 60) return {num:3, text:'Közepes'};
-  if (p >= 40) return {num:2, text:'Elégséges'};
-  return {num:1, text:'Elégtelen'};
-}
-// 80%+ → confetti animáció
-\`\`\`
-
----
-
-## GYORS REFERENCIA
-
-\`\`\`
-FELADAT: 45→15 | KVÍZ: 75→25
-KOGNITÍV: prediction, gate(2-3), myth, dragdrop, cause-effect, self-check
-MODAL: requestConfirm() → "Biztos?" → proceedEvaluation()
-OSZTÁLYZAT: 90=5, 75=4, 60=3, 40=2, <40=1
-ANIMÁCIÓ: fadeIn, popIn, shake, pulse, float, confetti
-OUTPUT: C:\\Tananyagok\\[tema]-[evfolyam].html
-UTF-8: 'Segoe UI', 'Noto Sans', system-ui
-\`\`\``;
-
-        // Create the system prompt in database (with conflict handling)
-        try {
-          [customSystemPrompt] = await db
-            .insert(systemPrompts)
-            .values({
-              id: 'tananyag-okosito',
-              name: 'tananyag-okosito',
-              prompt: defaultPrompt,
-              description: 'Professzionális oktatási tananyagok készítése 3 oldalas HTML artifact formátumban. KOGNITÍV AKTIVÁLÁS technikákkal.',
-              isActive: true,
-            })
-            .onConflictDoUpdate({
-              target: systemPrompts.id,
-              set: {
-                prompt: defaultPrompt,
-                description: 'Professzionális oktatási tananyagok készítése 3 oldalas HTML artifact formátumban. KOGNITÍV AKTIVÁLÁS technikákkal.',
-                isActive: true,
-                updatedAt: new Date(),
-              },
-            })
-            .returning();
-
-          console.log('[IMPROVE] Created/updated tananyag-okosito system prompt');
-        } catch (error: any) {
-          // If insert fails, try to fetch existing one
-          console.warn('[IMPROVE] Failed to create system prompt, trying to fetch:', error.message);
-          [customSystemPrompt] = await db
-            .select()
-            .from(systemPrompts)
-            .where(eq(systemPrompts.id, 'tananyag-okosito'))
-            .limit(1);
-        }
-      }
-
-      // Use the system prompt from database (or fallback to default)
-      // CRITICAL: Prepend explicit HTML-only instruction to ensure Claude understands
-      const criticalInstruction = `🚨 KRITIKUS UTASÍTÁS - EZT OLVASD ELŐSZÖR! 🚨
-
-VÁLASZ FORMATUM - KIZÁRÓLAG HTML KÓD, SEMMI MÁS!
-
-A válaszodnak KÖZVETLENÜL <!DOCTYPE html> tag-gel kell kezdődnie, semmi szöveg, semmi markdown, semmi magyarázat előtte!
-
-❌ TILTOTT:
-- "Íme a javított HTML:" vagy bármilyen bevezető szöveg
-- Markdown code block-ok (\`\`\`html ... \`\`\`)
-- Magyarázat vagy leírás
-- Bármilyen szöveg a HTML kód előtt vagy után
-
-✅ KÖTELEZŐ:
-- CSAK a teljes HTML kódot add vissza
-- Közvetlenül <!DOCTYPE html> vagy <html> tag-gel kezdj
-- Nincs markdown, nincs leírás, CSAK HTML
-
-CSS SZABÁLYOK - MINDIG ELLENŐRIZD:
-1. CSS változók: MINDIG -- prefix (--primary, --secondary, NEM primary, secondary)
-2. Változó használat: MINDIG var(--name) (var(--primary), NEM primary)
-3. CSS osztályok: MINDIG edu- prefix (.edu-header, .edu-button, NEM .header, .button)
-4. Reset szabályok: MINDIG selectorral (* { ... }, NEM { ... })
-5. FONTOK: SOHA ne használj @font-face deklarációkat! CSAK system fontokat: 'Segoe UI', 'Noto Sans', system-ui, sans-serif
-6. FONTOK: TILTOTT minden @font-face blokk, Google Fonts linkek, külső font betöltések
-
----
-`;
-
-      let systemPrompt = customSystemPrompt?.prompt || `Te egy HTML tananyag javító szakértő vagy. A feladatod, hogy régebbi, kevésbé fejlett HTML tananyagokat modern, responsive, interaktív tananyaggá alakíts.
-
-FONTOS SZABÁLYOK:
-1. Tartsd meg az eredeti tartalmat és struktúrát
-2. Modernizáld a HTML/CSS-t (responsive design, modern CSS)
-3. Javítsd a kódminőséget (semantic HTML, accessibility)
-4. Ne változtass a tananyag tartalmán, csak a megjelenésen és technikai minőségen
-5. Biztosítsd a mobil kompatibilitást
-6. Használj modern CSS-t (Flexbox, Grid, CSS Variables)
-7. Optimalizáld a teljesítményt
-8. Tartsd meg az eredeti funkcionalitást (quiz, interaktív elemek)
-9. Ne használj külső CDN-eket vagy külső scripteket (mindent inline)
-10. Biztosítsd a biztonságot (XSS védelem, sanitizáció)
-
-KRITIKUS VÁLASZ FORMATUM:
-- CSAK HTML KÓDOT ADJ VISSZA, SEMMI MÁST
-- NEM LEÍRÁST, NEM MAGYARÁZATOT, NEM MARKDOWN-T
-- NEM "Íme a javított HTML:" vagy hasonló szövegeket
-- CSAK A TELJES HTML KÓDOT, AZONNAL HASZNÁLHATÓ FORMÁTBAN
-- A válaszodnak közvetlenül <!DOCTYPE html> vagy <html> tag-gel kell kezdődnie`;
-
-      // Prepend critical instruction to the beginning of the prompt
-      systemPrompt = criticalInstruction + systemPrompt;
-
-      const userPrompt = `Javítsd az alábbi HTML tananyagot modern, responsive, interaktív tananyaggá a tananyag-okosito rendszer szabályai szerint.
-
-🚨 KRITIKUS: A válaszodnak KÖZVETLENÜL <!DOCTYPE html> tag-gel kell kezdődnie! Nincs markdown, nincs leírás, CSAK HTML kód!
-
-CSS SZABÁLYOK - MINDIG ELLENŐRIZD:
-- CSS változók: MINDIG -- prefix (--primary, NEM primary)
-- Változó használat: MINDIG var(--name) (var(--primary), NEM primary)
-- CSS osztályok: MINDIG edu- prefix (.edu-header, NEM .header)
-- Reset szabályok: MINDIG selectorral (* { ... }, NEM { ... })
-- FONTOK: SOHA ne használj @font-face deklarációkat! CSAK system fontokat használj!
+      console.log(`[IMPROVE] Processing file: ${originalFile.title} (${Math.round(contentSizeKB)}KB)`);
+
+      // 2. Build prompts
+      const systemPrompt = `Te egy HTML tananyag javító szakértő vagy. Modernizálj HTML tananyagokat.
+
+KRITIKUS SZABÁLYOK:
+1. A válaszod KÖZVETLENÜL <!DOCTYPE html> tag-gel kezdődik - SEMMI szöveg, markdown, vagy magyarázat előtte/utána!
+2. CSS változók: MINDIG -- prefix (:root { --primary: #4CAF50; })
+3. CSS változó használat: MINDIG var(--name) formátum
+4. CSS osztályok: MINDIG edu- prefix (.edu-header, .edu-button)
+5. Reset: MINDIG selectorral (* { margin: 0; })
+6. Fontok: CSAK system fontok ('Segoe UI', 'Noto Sans', system-ui, sans-serif) - TILOS @font-face és Google Fonts!
+7. Tartsd meg az eredeti tartalmat, csak modernizáld a megjelenést
+8. Responsive design (mobil kompatibilis)
+9. Minden inline (nincs külső CDN vagy script)
+
+VÁLASZ: CSAK a teljes HTML kód, semmi más!`;
+
+      const userPrompt = `Javítsd az alábbi HTML-t modern, interaktív tananyaggá.
 
 CÍM: ${originalFile.title}
-OSZTÁLY: ${originalFile.classroom}
-LEÍRÁS: ${originalFile.description || 'Nincs leírás'}
+OSZTÁLY: ${originalFile.classroom || 'N/A'}
 
-HTML KÓD:
-${originalFile.content}
+${customPrompt ? `EGYEDI INSTRUKCIÓK: ${customPrompt}\n\n` : ''}HTML:
+${originalFile.content}`;
 
-${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
+      // 3. Call AI using AIProviderFactory (has retry + fallback built-in)
+      const { getAIFactory } = await import('./ai/AIProviderFactory');
+      const aiFactory = getAIFactory();
 
-      res.write(`data: ${JSON.stringify({
-        type: 'progress',
-        message: '🤖 Claude API hívása...'
-      })}\n\n`);
+      console.log('[IMPROVE] Calling AI...');
+      const startTime = Date.now();
 
-      // Call Claude API - STREAMING MODE
-      const Anthropic = (await import('@anthropic-ai/sdk')).default;
-      const anthropic = new Anthropic({
-        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-      });
+      const aiResponse = await aiFactory.chat([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ], undefined, false); // No caching for improvements
 
-      console.log('[IMPROVE] Streaming Claude API response...');
-      console.log('[IMPROVE] System prompt length:', systemPrompt.length);
-      console.log('[IMPROVE] User prompt length:', userPrompt.length);
+      const duration = Date.now() - startTime;
+      console.log(`[IMPROVE] AI responded in ${duration}ms`);
 
-      // Handle abort on client disconnect
-      req.on('close', () => {
-        controller.abort();
-        clearTimeout(timeout);
-        console.log('[IMPROVE] Client disconnected, stream aborted');
-      });
-
-      const stream = await anthropic.messages.stream({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 12288,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: userPrompt,
-        }],
-      }, {
-        signal: controller.signal,
-      });
-
-      res.write(`data: ${JSON.stringify({
-        type: 'progress',
-        message: '📝 HTML generálása...'
-      })}\n\n`);
-
-      let fullContent = '';
-      let htmlContent = '';
-      let isCollectingHtml = false;
-      let totalEvents = 0;
-
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-          const text = event.delta.text;
-          if (!text) continue;
-
-          totalEvents++;
-          fullContent += text;
-
-          // Check if HTML generation started
-          if (!isCollectingHtml && (fullContent.includes('<!DOCTYPE') || fullContent.includes('<html'))) {
-            isCollectingHtml = true;
-            // Extract HTML from the start marker - use fullContent which already includes current text
-            const htmlStartIndex = Math.max(
-              fullContent.indexOf('<!DOCTYPE'),
-              fullContent.indexOf('<html')
-            );
-            if (htmlStartIndex !== -1) {
-              htmlContent = fullContent.substring(htmlStartIndex);
-            } else {
-              htmlContent = fullContent;
-            }
-            // DON'T add text again - it's already in fullContent!
-          } else if (isCollectingHtml) {
-            // Only add text if we were ALREADY collecting (not on first detection)
-            htmlContent += text;
-          }
-
-          // Stream progress to frontend
-          res.write(`data: ${JSON.stringify({
-            type: 'content_delta',
-            content: text
-          })}\n\n`);
-        }
+      if (!aiResponse || !aiResponse.content) {
+        throw new Error('Az AI nem adott vissza választ');
       }
 
-      clearTimeout(timeout);
+      // 4. Extract and clean HTML from response
+      let improvedHtml = aiResponse.content.trim();
 
-      console.log(`[IMPROVE] ✅ Stream complete (${totalEvents} events, full: ${fullContent.length} chars, HTML: ${htmlContent.length} chars)`);
-
-      res.write(`data: ${JSON.stringify({
-        type: 'progress',
-        message: '🔧 HTML tisztítása és validálása...'
-      })}\n\n`);
-
-      // Validate improved HTML
-      let improvedHtml = htmlContent.trim();
-
-      console.log('[IMPROVE] Raw response length:', improvedHtml.length);
-      console.log('[IMPROVE] Raw response preview:', improvedHtml.substring(0, 200));
-
-      // Step 1: Extract HTML from markdown code blocks (try multiple patterns)
-      // Note: Using [\s\S] instead of . with /s flag for ES2017 compatibility
-      const markdownPatterns = [
-        /```html\s*([\s\S]*?)\s*```/i,           // ```html ... ```
-        /```\s*([\s\S]*?)\s*```/i,                // ``` ... ``` (any language) - removed /s flag, using [\s\S]
-        /`([\s\S]*?)`/i,                          // ` ... ` (inline code) - removed /s flag, using [\s\S]
-      ];
-
-      for (const pattern of markdownPatterns) {
-        const match = improvedHtml.match(pattern);
-        if (match && match[1]) {
-          const extracted = match[1].trim();
-          // Check if extracted content looks like HTML
-          if (extracted.includes('<!DOCTYPE') || extracted.includes('<html') || extracted.includes('<head') || extracted.includes('<body')) {
-            improvedHtml = extracted;
-            console.log('[IMPROVE] Extracted HTML from markdown code block');
-            break;
-          }
-        }
+      // Remove markdown code blocks if present
+      const codeBlockMatch = improvedHtml.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
+      if (codeBlockMatch) {
+        improvedHtml = codeBlockMatch[1].trim();
       }
 
-      // Step 2: Find HTML start (look for DOCTYPE or html tag)
-      const htmlStartMatch = improvedHtml.match(/(<!DOCTYPE[\s\S]*?<html[\s\S]*?>|<\s*html[\s\S]*?>)/i);
-      if (htmlStartMatch) {
-        const startIndex = improvedHtml.indexOf(htmlStartMatch[0]);
-        improvedHtml = improvedHtml.substring(startIndex);
-        console.log('[IMPROVE] Found HTML start at index:', startIndex);
+      // Find HTML start
+      const htmlStart = improvedHtml.search(/<!DOCTYPE|<html/i);
+      if (htmlStart > 0) {
+        improvedHtml = improvedHtml.substring(htmlStart);
       }
 
-      // Step 3: Remove everything before HTML tags
-      improvedHtml = improvedHtml.replace(/^[\s\S]*?(?=<!DOCTYPE|<html|<head|<body)/i, '');
-
-      // Step 4: Remove markdown formatting characters if still present
-      improvedHtml = improvedHtml.replace(/^[#*`\-\s]+/gm, ''); // Remove markdown headers, lists, code markers
-      improvedHtml = improvedHtml.replace(/```html\s*/gi, '');
-      improvedHtml = improvedHtml.replace(/```\s*/g, '');
-
-      // Step 5: Remove common prefixes and explanations
-      const prefixPatterns = [
-        /^[^\<]*?(?=<!DOCTYPE|<html)/i,
-        /^.*?Átdolgoztam.*?(?=<!DOCTYPE|<html)/i,
-        /^.*?Az új verzió.*?(?=<!DOCTYPE|<html)/i,
-        /^.*?Főbb változtatások.*?(?=<!DOCTYPE|<html)/i,
-        /^.*?KOGNITÍV AKTIVÁLÁS.*?(?=<!DOCTYPE|<html)/i,
-        /^.*?FELADATOK.*?(?=<!DOCTYPE|<html)/i,
-        /^.*?MODERN DIZÁJN.*?(?=<!DOCTYPE|<html)/i,
-        /^.*?UTF-8.*?(?=<!DOCTYPE|<html)/i,
-        /^.*?LETÖLTÉS.*?(?=<!DOCTYPE|<html)/i,
-      ];
-
-      for (const pattern of prefixPatterns) {
-        improvedHtml = improvedHtml.replace(pattern, '');
+      // Remove any text after </html>
+      const htmlEnd = improvedHtml.lastIndexOf('</html>');
+      if (htmlEnd !== -1) {
+        improvedHtml = improvedHtml.substring(0, htmlEnd + 7);
       }
 
-      // Step 6: Clean up any remaining markdown at the start
-      improvedHtml = improvedHtml.trim();
-      if (!improvedHtml.startsWith('<!DOCTYPE') && !improvedHtml.startsWith('<html')) {
-        // Try to find first HTML tag
-        const firstHtmlTag = improvedHtml.match(/<[a-zA-Z]+/);
-        if (firstHtmlTag) {
-          const tagIndex = improvedHtml.indexOf(firstHtmlTag[0]);
-          improvedHtml = improvedHtml.substring(tagIndex);
-        }
+      // Quick CSS fixes
+      improvedHtml = improvedHtml
+        // Fix CSS variable declarations without --
+        .replace(/:root\s*\{([^}]*)\}/gi, (match, content) => {
+          const fixed = content.replace(/\b(primary|secondary|accent|success|error|warning|info)\s*:/gi, '--$1:');
+          return `:root {${fixed}}`;
+        })
+        // Fix var() without --
+        .replace(/var\(([a-z]+)\)/gi, 'var(--$1)')
+        // Remove @font-face and Google Fonts
+        .replace(/@font-face\s*\{[^}]*\}/gi, '')
+        .replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '')
+        .replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
+
+      // 5. Validate result
+      if (!improvedHtml || improvedHtml.length < 100) {
+        throw new Error('A generált HTML túl rövid vagy üres');
       }
 
-      console.log('[IMPROVE] Cleaned HTML length:', improvedHtml.length);
-      console.log('[IMPROVE] Cleaned HTML preview:', improvedHtml.substring(0, 200));
-
-      // Step 7: Fix common CSS and HTML syntax errors
-      // Fix CSS variable declarations (missing -- prefix)
-      // First, find all :root blocks and fix variables inside them
-      improvedHtml = improvedHtml.replace(/:root\s*\{([\s\S]*?)\}/gi, (match, content) => {
-        // Fix variable declarations inside :root block (e.g., primary: -> --primary:)
-        const fixedContent = content.replace(/(\b)(primary|secondary|accent|success|error|warning|info)(\s*:)/gi, '$1--$2$3');
-        return `:root {${fixedContent}}`;
-      });
-
-      // Fix CSS variable usage (missing -- prefix in var() or direct usage)
-      improvedHtml = improvedHtml.replace(/var\((\w+)\)/gi, (match, varName) => {
-        // If varName doesn't start with --, add it
-        if (!varName.startsWith('--')) {
-          return `var(--${varName})`;
-        }
-        return match;
-      });
-
-      // Fix direct CSS variable usage without var() (e.g., color: primary; -> color: var(--primary);)
-      // Process within style tags to avoid false positives
-      improvedHtml = improvedHtml.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (styleTag, cssContent) => {
-        // Fix variable usage in CSS - only if not already in var() call
-        // Use a more robust approach: find all matches first, then process them
-        const variablePattern = /(:\s*)(primary|secondary|accent|success|error|warning|info)(\s*;)/gi;
-        let fixedCss = cssContent;
-        let match;
-        const replacements: Array<{ index: number; length: number; replacement: string }> = [];
-
-        // Find all matches and collect replacements
-        while ((match = variablePattern.exec(cssContent)) !== null) {
-          const matchIndex = match.index;
-          const beforeMatch = cssContent.substring(0, matchIndex);
-          const lastVarIndex = beforeMatch.lastIndexOf('var(');
-          const lastSemicolonBefore = beforeMatch.lastIndexOf(';');
-          const lastParenBefore = beforeMatch.lastIndexOf(')');
-
-          // If there's a var( before this match and no closing ) after it (or ) comes after ;), it's inside var()
-          const isInsideVar = lastVarIndex !== -1 && (lastParenBefore < lastVarIndex || lastParenBefore < lastSemicolonBefore);
-
-          if (!isInsideVar) {
-            replacements.push({
-              index: matchIndex,
-              length: match[0].length,
-              replacement: `${match[1]}var(--${match[2]})${match[3]}`
-            });
-          }
-        }
-
-        // Apply replacements in reverse order to maintain indices
-        replacements.reverse().forEach(({ index, length, replacement }) => {
-          fixedCss = fixedCss.substring(0, index) + replacement + fixedCss.substring(index + length);
-        });
-
-        return styleTag.replace(cssContent, fixedCss);
-      });
-
-      // Fix empty CSS rules (selector missing) - find standalone { ... } blocks
-      // Process style tags separately to avoid false positives
-      const styleTagRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-      improvedHtml = improvedHtml.replace(styleTagRegex, (styleTag, cssContent) => {
-        let fixedCss = cssContent;
-
-        // Fix empty rules - match { ... } blocks that are not preceded by a selector
-        // Pattern: { at start of line (or after whitespace), then content, then } at start of line (or before whitespace)
-        // More robust: match { that is NOT preceded by a selector (word character before {)
-
-        // First, handle multi-line empty rules - this is more common
-        // Match: { at start of line, then content (can span multiple lines), then } at start of line
-        fixedCss = fixedCss.replace(/(?:^|\n)(\s*)\{\s*((?:box-sizing|margin|padding|border)[\s\S]*?)\}\s*(?=\n|$)/gm, (match: string, indent: string, content: string) => {
-          const cleanContent = content.trim();
-          // Check if it's a reset rule and doesn't contain nested selectors or other CSS rules
-          if (cleanContent.match(/(?:margin|padding|box-sizing)/i) &&
-            !cleanContent.match(/[a-zA-Z][\w\-]*\s*\{/) &&
-            !cleanContent.match(/@/)) {
-            // Preserve indentation and newline structure
-            return `${indent}* { ${cleanContent} }`;
-          }
-          return match;
-        });
-
-        // Also handle single-line empty rules (fallback)
-        fixedCss = fixedCss.replace(/^\s*\{\s*((?:box-sizing|margin|padding|border)[^}]*)\}\s*$/gm, (match: string, content: string) => {
-          // Check if this looks like a reset rule (contains margin, padding, or box-sizing)
-          if (content.match(/(?:margin|padding|box-sizing)/i)) {
-            return `* { ${content.trim()} }`;
-          }
-          return match;
-        });
-
-        return styleTag.replace(cssContent, fixedCss);
-      });
-
-      // Fix incomplete keyframes (if @keyframes slideIn is cut off)
-      if (improvedHtml.includes('@keyframes slideIn') && !improvedHtml.includes('@keyframes slideIn') || improvedHtml.match(/@keyframes slideIn\s*\{[^}]*$/)) {
-        // Try to complete the keyframe or remove it
-        improvedHtml = improvedHtml.replace(/@keyframes slideIn\s*\{[^}]*$/m, '@keyframes slideIn {\n  from { transform: translateX(100%); opacity: 0; }\n  to { transform: translateX(0); opacity: 1; }\n}');
-      }
-
-      // Fix incomplete CSS (if style tag is not closed properly)
-      const styleTagMatches = improvedHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
-      if (styleTagMatches) {
-        styleTagMatches.forEach((styleBlock) => {
-          // Check if style block has unclosed braces
-          const openBraces = (styleBlock.match(/\{/g) || []).length;
-          const closeBraces = (styleBlock.match(/\}/g) || []).length;
-          if (openBraces > closeBraces) {
-            // Try to fix by adding missing closing braces
-            const missingBraces = openBraces - closeBraces;
-            const fixedStyleBlock = styleBlock + '\n' + '}'.repeat(missingBraces);
-            improvedHtml = improvedHtml.replace(styleBlock, fixedStyleBlock);
-          }
-        });
-      }
-
-      console.log('[IMPROVE] Fixed CSS syntax errors');
-
-      // Step 7.2: Fix generic CSS class names (add edu- prefix)
-      // This enforces the rule: .header -> .edu-header, .button -> .edu-button
-      const genericClasses = [
-        'header', 'footer', 'nav', 'content', 'container', 'wrapper', 'sidebar',
-        'menu', 'button', 'btn', 'card', 'box', 'section', 'modal', 'overlay',
-        'active', 'hidden', 'visible', 'row', 'col', 'grid', 'flex'
-      ];
-
-      // 1. Fix in CSS styles (e.g., .header { ... })
-      // Use negative lookbehind to ensure we don't double-prefix (e.g. .edu-edu-header)
-      // And ensure we don't break classes like .page-header
-      try {
-        const cssClassRegex = new RegExp(`\\.((?!edu-)[a-zA-Z0-9_-]*\\b(${genericClasses.join('|')})\\b)`, 'gi');
-
-        // We need to be careful with CSS replacement. 
-        // Only replace exact matches of generic classes that don't have the prefix
-        // .header -> .edu-header
-        // .main-header -> .main-header (don't touch)
-        // .header-inner -> .header-inner (don't touch)
-        // Simplification: only target exact generic names
-        const exactCssClassRegex = new RegExp(`\\.(${genericClasses.join('|')})\\b`, 'gi');
-
-        improvedHtml = improvedHtml.replace(exactCssClassRegex, (match, className) => {
-          return `.edu-${className}`;
-        });
-
-        // 2. Fix in HTML class attributes (e.g., class="header main")
-        improvedHtml = improvedHtml.replace(/class=["']([^"']*)["']/gi, (match, classList) => {
-          // Replace exact words in class list
-          // We must ensure we don't match parts of other words (e.g. 'header' in 'page-header')
-          // And don't match if already prefixed (e.g. 'header' in 'edu-header' - wait, - is a boundary!)
-
-          let newClassList = classList;
-
-          for (const generic of genericClasses) {
-            // Regex to match the word 'generic' but NOT when preceded by 'edu-'
-            // \b matches before 'header'. If we have 'edu-header', \b matches between - and h.
-            // So we need: (?<!edu-)\bheader\b
-
-            // Fallback for environments without lookbehind:
-            // Match word boundary-word-word boundary. Then check valid match manually?
-            // Safer approach: Split by spaces and process each class
-            const classes = newClassList.split(/\s+/);
-            const fixedClasses = classes.map((cls: string) => {
-              if (cls.toLowerCase() === generic.toLowerCase()) {
-                return `edu-${cls}`;
-              }
-              return cls;
-            });
-            newClassList = fixedClasses.join(' ');
-          }
-
-          if (newClassList !== classList) {
-            return match.replace(classList, newClassList);
-          }
-          return match;
-        });
-
-        console.log('[IMPROVE] Fixed generic CSS class names (added edu- prefix)');
-      } catch (e) {
-        console.warn('[IMPROVE] Failed to fix CSS class names:', e);
-      }
-
-      // Step 7.5: Remove @font-face declarations (they're too verbose and unnecessary)
-      // Remove all @font-face blocks from style tags
-      improvedHtml = improvedHtml.replace(/@font-face\s*\{[^}]*\}/gi, '');
-      // Remove multi-line @font-face blocks
-      improvedHtml = improvedHtml.replace(/@font-face\s*\{[\s\S]*?\}/gi, '');
-      // Remove Google Fonts links from head
-      improvedHtml = improvedHtml.replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '');
-      improvedHtml = improvedHtml.replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
-      // Clean up empty style blocks or multiple consecutive empty lines
-      improvedHtml = improvedHtml.replace(/\n\s*\n\s*\n/g, '\n\n');
-      console.log('[IMPROVE] Removed @font-face declarations and Google Fonts links');
-
-      // Step 8: Validate that we have actual HTML content
-      if (!improvedHtml || improvedHtml.trim().length < 100) {
-        console.error('[IMPROVE] Generated HTML is too short or empty:', improvedHtml.length);
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: "A generált HTML túl rövid vagy üres. Kérlek próbáld újra vagy módosítsd a promptot.",
-          details: `HTML hossz: ${improvedHtml?.length || 0} karakter`
-        })}\n\n`);
-        res.end();
-        return;
-      }
-
-      // Step 9: Basic HTML structure validation - wrap if needed
       if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
-        console.warn('[IMPROVE] No HTML structure found, wrapping content');
-        improvedHtml = wrapHtmlWithResponsiveContainer(improvedHtml);
+        throw new Error('A generált válasz nem tartalmaz érvényes HTML struktúrát');
       }
 
-      // Content size validation
-      const improvedSizeMB = Buffer.byteLength(improvedHtml, 'utf8') / (1024 * 1024);
-      if (improvedSizeMB > 5) {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: "A javított fájl túl nagy (max 5MB)"
-        })}\n\n`);
-        res.end();
-        return;
-      }
-
-      // XSS and script injection checks
-      const dangerousPatterns = [
-        /eval\s*\(/i,
-        /Function\s*\(/i,
-        /setTimeout\s*\([^,]*['"]/i,
-        /setInterval\s*\([^,]*['"]/i,
-        /javascript:\s*[^'"]/i,
-      ];
-
-      for (const pattern of dangerousPatterns) {
-        if (pattern.test(improvedHtml)) {
-          console.warn('[IMPROVE] Dangerous pattern detected:', pattern.toString());
-          res.write(`data: ${JSON.stringify({
-            type: 'error',
-            message: "A javított HTML biztonsági problémákat tartalmaz",
-            details: `Blokkolt mintázat: ${pattern.toString()}`
-          })}\n\n`);
-          res.end();
-          return;
-        }
-      }
-
-      res.write(`data: ${JSON.stringify({
-        type: 'progress',
-        message: '💾 Javított fájl mentése...'
-      })}\n\n`);
-
-      // Create improved file record
+      // 6. Save improved file
       const improvedFile = await storage.createImprovedHtmlFile({
         originalFileId: id,
         title: originalFile.title,
@@ -5194,39 +4232,39 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         createdBy: userId,
       });
 
-      clearTimeout(timeout);
+      console.log(`[IMPROVE] ✅ Success! Saved improved file: ${improvedFile.id}`);
 
-      // Send final result
-      res.write(`data: ${JSON.stringify({
-        type: 'complete',
-        improvedFile: improvedFile
-      })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-    } catch (error: any) {
-      clearTimeout(timeout);
-
-      // Handle abort/timeout errors specifically
-      if (error.name === 'AbortError' || error.message?.includes('Időtúllépés') || controller.signal.aborted) {
-        console.error('[IMPROVE] Timeout error:', error.message);
-        if (!res.headersSent) {
-          res.write(`data: ${JSON.stringify({
-            type: 'error',
-            message: error.message || 'Időtúllépés: A művelet túl sokáig tartott (90 másodperc)'
-          })}\n\n`);
-          res.end();
+      // Return success response
+      return res.json({
+        success: true,
+        improvedFile,
+        stats: {
+          originalSize: originalFile.content.length,
+          improvedSize: improvedHtml.length,
+          processingTime: duration
         }
-        return;
+      });
+
+    } catch (error: any) {
+      console.error('[IMPROVE] Error:', error.message);
+
+      // Provide helpful error messages
+      let userMessage = 'Hiba történt a javítás során';
+
+      if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+        userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott. Próbáld kisebb fájllal.';
+      } else if (error.message?.includes('rate') || error.message?.includes('429')) {
+        userMessage = 'Túl sok kérés. Várj egy percet és próbáld újra.';
+      } else if (error.message?.includes('auth') || error.message?.includes('401') || error.message?.includes('403')) {
+        userMessage = 'API hitelesítési hiba. Ellenőrizd a beállításokat.';
+      } else if (error.message) {
+        userMessage = error.message;
       }
 
-      console.error('[IMPROVE] Error:', error);
-      if (!res.headersSent) {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: error.message || 'Hiba történt a javítás során'
-        })}\n\n`);
-        res.end();
-      }
+      return res.status(500).json({
+        message: userMessage,
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   });
 
