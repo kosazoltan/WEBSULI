@@ -289,9 +289,6 @@ export default function MaterialImprover() {
   // Improve material mutation - STREAMING MODE
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:292',message:'FRONTEND: Kérés indítása',data:{fileId,hasCustomPrompt:!!customPrompt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-      // #endregion
       const res = await fetch(`/api/admin/improve-material/${fileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -300,14 +297,8 @@ export default function MaterialImprover() {
           customPrompt: customPrompt || undefined,
         }),
       });
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:300',message:'FRONTEND: Válasz érkezett',data:{ok:res.ok,status:res.status,statusText:res.statusText,contentType:res.headers.get('content-type'),hasBody:!!res.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-      // #endregion
 
       if (!res.ok) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:301',message:'FRONTEND: res.ok=false',data:{status:res.status,statusText:res.statusText,contentType:res.headers.get('content-type')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-        // #endregion
         // For SSE responses, we need to read the stream to get the error message
         if (res.headers.get('content-type')?.includes('text/event-stream')) {
           const reader = res.body?.getReader();
@@ -362,9 +353,6 @@ export default function MaterialImprover() {
       }
 
       if (!res.body) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:355',message:'FRONTEND: Nincs response body',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-        // #endregion
         throw new Error('No response body');
       }
 
@@ -372,17 +360,11 @@ export default function MaterialImprover() {
       const decoder = new TextDecoder();
       let buffer = '';
       let improvedFile: any = null;
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:362',message:'FRONTEND: Stream olvasás kezdés',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-      // #endregion
 
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:367',message:'FRONTEND: Stream befejezve',data:{hasImprovedFile:!!improvedFile,bufferLength:buffer.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-            // #endregion
             break;
           }
 
@@ -399,23 +381,14 @@ export default function MaterialImprover() {
                 const parsed = JSON.parse(data);
 
                 if (parsed.type === 'progress') {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:381',message:'FRONTEND: Progress üzenet',data:{message:parsed.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-                  // #endregion
                   // Show progress in toast
                   toast({
                     title: parsed.message,
                     duration: 2000,
                   });
                 } else if (parsed.type === 'complete') {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:387',message:'FRONTEND: Complete üzenet',data:{hasImprovedFile:!!parsed.improvedFile,improvedFileId:parsed.improvedFile?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-                  // #endregion
                   improvedFile = parsed.improvedFile;
                 } else if (parsed.type === 'error') {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:392',message:'FRONTEND: Error üzenet',data:{errorMessage:parsed.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-                  // #endregion
                   throw new Error(parsed.message || 'Unknown error');
                 }
               } catch (e: any) {
@@ -435,18 +408,12 @@ export default function MaterialImprover() {
           throw new Error('No improved file received');
         }
       } catch (error: any) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:408',message:'FRONTEND: Exception a stream olvasásban',data:{errorName:error?.name,errorMessage:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-        // #endregion
         throw error;
       } finally {
         reader.releaseLock();
       }
     },
     onSuccess: (data) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:onSuccess',message:'FRONTEND: onSuccess callback',data:{hasData:!!data,dataId:data?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-      // #endregion
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
       setSelectedFileId("");
       setCustomPrompt("");
@@ -456,9 +423,6 @@ export default function MaterialImprover() {
       });
     },
     onError: (error: Error) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaterialImprover.tsx:onError',message:'FRONTEND: onError callback',data:{errorName:error?.name,errorMessage:error?.message,errorStack:error?.stack?.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'FRONTEND'})}).catch(()=>{});
-      // #endregion
       console.error('[IMPROVE] Mutation error:', error);
       toast({
         title: "❌ Hiba",

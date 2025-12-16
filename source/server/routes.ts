@@ -4154,13 +4154,7 @@ Crawl-delay: 1`;
       })}\n\n`);
 
       // Get original file
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4157',message:'H1: Fájl betöltés előtt',data:{fileId:id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       const originalFile = await storage.getHtmlFile(id);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4160',message:'H1: Fájl betöltés után',data:{fileFound:!!originalFile,hasContent:!!originalFile?.content,contentLength:originalFile?.content?.length||0,title:originalFile?.title||'N/A'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       if (!originalFile) {
         res.write(`data: ${JSON.stringify({
           type: 'error',
@@ -4186,10 +4180,7 @@ Crawl-delay: 1`;
         message: '📝 System prompt betöltése...'
       })}\n\n`);
 
-      // Load system prompt from database (tananyag-okosito) - KARCSULT VERZIÓ
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4184',message:'H2: System prompt betöltés előtt',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
+      // Load system prompt from database (tananyag-okosito)
       const { systemPrompts } = await import('@shared/schema');
       let [customSystemPrompt] = await db
         .select()
@@ -4201,9 +4192,6 @@ Crawl-delay: 1`;
           )
         )
         .limit(1);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4195',message:'H2: System prompt betöltés után',data:{found:!!customSystemPrompt,promptLength:customSystemPrompt?.prompt?.length||0,promptPreview:customSystemPrompt?.prompt?.substring(0,100)||'N/A'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
 
       // If prompt doesn't exist, create it with the default professional prompt
       if (!customSystemPrompt) {
@@ -4782,9 +4770,6 @@ HTML KÓD:
 ${originalFile.content}
 
 ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4784',message:'H3: User prompt létrehozva',data:{systemPromptLength:systemPrompt.length,userPromptLength:userPrompt.length,originalHtmlIncluded:userPrompt.includes(originalFile.content),originalHtmlLength:originalFile.content.length,originalHtmlPreview:originalFile.content.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
 
       res.write(`data: ${JSON.stringify({
         type: 'progress',
@@ -4809,9 +4794,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         console.log('[IMPROVE] Client disconnected, stream aborted');
       });
 
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4797',message:'H4: Claude API hívás előtt',data:{hasApiKey:!!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,hasBaseUrl:!!process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,model:'claude-3-5-sonnet-20241022',maxTokens:12288},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
       const stream = await anthropic.messages.stream({
         model: "claude-3-5-sonnet-20241022",
         max_tokens: 12288,
@@ -4823,9 +4805,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       }, {
         signal: controller.signal,
       });
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4808',message:'H4: Claude API stream létrehozva',data:{streamCreated:!!stream},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
 
       res.write(`data: ${JSON.stringify({
         type: 'progress',
@@ -4837,9 +4816,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       let isCollectingHtml = false;
       let totalEvents = 0;
 
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4814',message:'H5: Stream feldolgozás kezdés',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-      // #endregion
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           const text = event.delta.text;
@@ -4851,10 +4827,7 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
           // Check if HTML generation started
           if (!isCollectingHtml && (fullContent.includes('<!DOCTYPE') || fullContent.includes('<html'))) {
             isCollectingHtml = true;
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4828',message:'H5: HTML kezdet detektálva',data:{hasDocType:fullContent.includes('<!DOCTYPE'),hasHtml:fullContent.includes('<html'),fullContentLength:fullContent.length,fullContentPreview:fullContent.substring(0,300)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-            // #endregion
-            // Extract HTML from the start marker
+            // Extract HTML from the start marker - use fullContent which already includes current text
             const htmlStartIndex = Math.max(
               fullContent.indexOf('<!DOCTYPE'),
               fullContent.indexOf('<html')
@@ -4864,10 +4837,9 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
             } else {
               htmlContent = fullContent;
             }
-          }
-
-          // If already collecting HTML, add to htmlContent
-          if (isCollectingHtml) {
+            // DON'T add text again - it's already in fullContent!
+          } else if (isCollectingHtml) {
+            // Only add text if we were ALREADY collecting (not on first detection)
             htmlContent += text;
           }
 
@@ -4882,9 +4854,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       clearTimeout(timeout);
 
       console.log(`[IMPROVE] ✅ Stream complete (${totalEvents} events, full: ${fullContent.length} chars, HTML: ${htmlContent.length} chars)`);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4855',message:'H5: Stream feldolgozás befejezve',data:{totalEvents,fullContentLength:fullContent.length,htmlContentLength:htmlContent.length,isCollectingHtml,fullContentPreview:fullContent.substring(0,300),htmlContentPreview:htmlContent.substring(0,300)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-      // #endregion
 
       res.write(`data: ${JSON.stringify({
         type: 'progress',
@@ -4893,9 +4862,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
 
       // Validate improved HTML
       let improvedHtml = htmlContent.trim();
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:4865',message:'H6: Post-processing előtt',data:{improvedHtmlLength:improvedHtml.length,improvedHtmlPreview:improvedHtml.substring(0,300),hasDocType:improvedHtml.includes('<!DOCTYPE'),hasHtml:improvedHtml.includes('<html')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H6'})}).catch(()=>{});
-      // #endregion
 
       console.log('[IMPROVE] Raw response length:', improvedHtml.length);
       console.log('[IMPROVE] Raw response preview:', improvedHtml.substring(0, 200));
@@ -5158,9 +5124,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       // Clean up empty style blocks or multiple consecutive empty lines
       improvedHtml = improvedHtml.replace(/\n\s*\n\s*\n/g, '\n\n');
       console.log('[IMPROVE] Removed @font-face declarations and Google Fonts links');
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:5160',message:'H6: Post-processing után',data:{improvedHtmlLength:improvedHtml.length,improvedHtmlPreview:improvedHtml.substring(0,300),hasDocType:improvedHtml.includes('<!DOCTYPE'),hasHtml:improvedHtml.includes('<html')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H6'})}).catch(()=>{});
-      // #endregion
 
       // Step 8: Validate that we have actual HTML content
       if (!improvedHtml || improvedHtml.trim().length < 100) {
@@ -5219,9 +5182,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       })}\n\n`);
 
       // Create improved file record
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:5222',message:'H7: Mentés előtt',data:{originalFileId:id,title:originalFile.title,contentLength:improvedHtml.length,hasContent:!!improvedHtml},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H7'})}).catch(()=>{});
-      // #endregion
       const improvedFile = await storage.createImprovedHtmlFile({
         originalFileId: id,
         title: originalFile.title,
@@ -5233,9 +5193,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
         status: 'pending',
         createdBy: userId,
       });
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:5232',message:'H7: Mentés után',data:{improvedFileId:improvedFile?.id,success:!!improvedFile,hasContent:!!improvedFile?.content,contentLength:improvedFile?.content?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H7'})}).catch(()=>{});
-      // #endregion
 
       clearTimeout(timeout);
 
@@ -5248,9 +5205,6 @@ ${customPrompt ? `\n\nEgyedi instrukciók:\n${customPrompt}` : ''}`;
       res.end();
     } catch (error: any) {
       clearTimeout(timeout);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'routes.ts:5249',message:'ERROR: Exception történt',data:{errorName:error?.name,errorMessage:error?.message,errorStack:error?.stack?.substring(0,500),isAbortError:error?.name==='AbortError',signalAborted:controller?.signal?.aborted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'ALL'})}).catch(()=>{});
-      // #endregion
 
       // Handle abort/timeout errors specifically
       if (error.name === 'AbortError' || error.message?.includes('Időtúllépés') || controller.signal.aborted) {
