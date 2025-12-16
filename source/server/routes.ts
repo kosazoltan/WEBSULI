@@ -4156,17 +4156,34 @@ OSZTÁLY: ${originalFile.classroom || 'N/A'}
 ${customPrompt ? `EGYEDI INSTRUKCIÓK: ${customPrompt}\n\n` : ''}HTML:
 ${originalFile.content}`;
 
-      // 3. Call AI using AIProviderFactory (has retry + fallback built-in)
-      const { getAIFactory } = await import('./ai/AIProviderFactory');
-      const aiFactory = getAIFactory();
+      // 3. Call AI with extended timeout (3 minutes for large files)
+      const { ClaudeProvider } = await import('./ai/ClaudeProvider');
 
-      console.log('[IMPROVE] Calling AI...');
+      // Create a dedicated provider with longer timeout for improvements
+      const improveProvider = new ClaudeProvider({
+        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY!,
+        model: 'claude-sonnet-4-20250514',
+        timeout: 180000, // 3 minutes timeout for AI response
+      });
+
+      // AbortController for request cancellation
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 180000); // 3 minutes total
+
+      console.log('[IMPROVE] Calling AI (timeout: 3 min)...');
       const startTime = Date.now();
 
-      const aiResponse = await aiFactory.chat([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ], undefined, false); // No caching for improvements
+      let aiResponse;
+      try {
+        aiResponse = await improveProvider.chat([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ], controller.signal);
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const duration = Date.now() - startTime;
       console.log(`[IMPROVE] AI responded in ${duration}ms`);
@@ -4251,7 +4268,9 @@ ${originalFile.content}`;
       // Provide helpful error messages
       let userMessage = 'Hiba történt a javítás során';
 
-      if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+        userMessage = 'Időtúllépés: Az AI feldolgozás túl sokáig tartott (3 perc). Próbáld kisebb fájllal.';
+      } else if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
         userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott. Próbáld kisebb fájllal.';
       } else if (error.message?.includes('rate') || error.message?.includes('429')) {
         userMessage = 'Túl sok kérés. Várj egy percet és próbáld újra.';
