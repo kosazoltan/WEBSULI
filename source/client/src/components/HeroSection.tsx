@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Rocket, BookOpen, Users, Sparkles, Star, Gift, Zap, Snowflake, TreePine, Bell } from "lucide-react";
+import { Rocket, BookOpen, Users, Sparkles, Star, Gift, Zap, TreePine } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 
 interface HeroSectionProps {
@@ -16,21 +16,17 @@ function HeroSection({
   return (
     <div className="relative text-center mb-3 sm:mb-4 py-6 sm:py-8 px-6 sm:px-10 rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 group">
 
-      {/* Elegant gradient background - no animation for performance */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-red-950/40 to-green-950/40" />
-
-      {/* Subtle snow overlay pattern - static, no animation */}
+      {/* Christmas background image */}
       <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }}
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: 'url("/christmas-bg.png")' }}
       />
 
-      {/* Glowing orbs - static positioned, subtle */}
-      <div className="absolute top-0 left-1/4 w-32 h-32 bg-red-500/20 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 right-1/4 w-40 h-40 bg-green-500/15 rounded-full blur-3xl" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-yellow-500/10 rounded-full blur-3xl" />
+      {/* Dark overlay for better text readability */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/80 via-slate-900/70 to-slate-900/80" />
+
+      {/* Subtle vignette effect */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
 
       {/* Corner decorations - elegant gold accents */}
       <div className="absolute top-3 left-3 w-16 h-16">
@@ -50,30 +46,6 @@ function HeroSection({
         <div className="absolute bottom-0 right-0 w-[2px] h-8 bg-gradient-to-t from-yellow-400/60 to-transparent" />
       </div>
 
-      {/* Floating Christmas symbols - static positions */}
-      <div className="absolute top-[10%] left-[5%] text-2xl sm:text-3xl opacity-60 text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">
-        <Star className="w-6 h-6 fill-yellow-400" />
-      </div>
-      <div className="absolute top-[15%] right-[8%] text-xl opacity-50 text-white/70">
-        <Snowflake className="w-5 h-5" />
-      </div>
-      <div className="absolute bottom-[15%] left-[8%] text-2xl opacity-60 text-red-400">
-        <Gift className="w-6 h-6" />
-      </div>
-      <div className="absolute bottom-[20%] right-[5%] text-xl opacity-50 text-green-400">
-        <TreePine className="w-5 h-5" />
-      </div>
-      <div className="absolute top-[50%] left-[3%] text-lg opacity-40 text-yellow-400">
-        <Bell className="w-4 h-4" />
-      </div>
-      <div className="absolute top-[40%] right-[3%] text-lg opacity-40 text-white/60">
-        <Snowflake className="w-4 h-4" />
-      </div>
-
-      {/* Grincs - sneaking in from the corner */}
-      <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 text-3xl sm:text-4xl opacity-80 hover:opacity-100 hover:scale-110 transition-all cursor-pointer" title="A Grincs figyel...">
-        🤢
-      </div>
 
       {/* Main content */}
       <div className="relative z-10">
