@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, memo } from "react";
-import { Rocket, BookOpen, Users, Sparkles, Atom, Beaker, Zap, FlaskConical } from "lucide-react";
+import { Rocket, BookOpen, Users, Sparkles, Star, Gift, Zap, Snowflake } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 
 interface HeroSectionProps {
@@ -8,83 +8,72 @@ interface HeroSectionProps {
   showEmailSubscribe?: boolean;
 }
 
-// Cyberpunk Static Scientific Symbol Component - Static decorative element (no animation)
-const CyberpunkSymbol = memo(({ 
+// Christmas Symbol Component - Static decorative element
+const ChristmasSymbol = memo(({ 
   symbol, 
   x, 
   y, 
   delay = 0,
-  color = 'cyan'
+  color = 'red'
 }: { 
   symbol: string; 
   x: string; 
   y: string; 
   delay?: number;
-  color?: 'cyan' | 'magenta' | 'purple';
+  color?: 'red' | 'green' | 'gold';
 }) => {
   const colorClasses = {
-    cyan: 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]',
-    magenta: 'text-pink-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]',
-    purple: 'text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]'
+    red: 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]',
+    green: 'text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.8)]',
+    gold: 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]'
   };
 
   return (
     <div 
-      className={`absolute text-2xl sm:text-3xl opacity-60 ${colorClasses[color]}`}
+      className={`absolute text-2xl sm:text-3xl opacity-70 ${colorClasses[color]}`}
       style={{ 
         left: x, 
         top: y,
-        // No animation - static decorative element
         contain: 'layout style paint'
       }}
     >
       <div className="relative">
-        <div className="relative">{symbol}</div>
+        <div className="relative animate-pulse" style={{ animationDelay: `${delay}s` }}>{symbol}</div>
       </div>
     </div>
   );
 });
-CyberpunkSymbol.displayName = 'CyberpunkSymbol';
+ChristmasSymbol.displayName = 'ChristmasSymbol';
 
-// DNA Helix Component
-const DNAHelix = ({ className = "" }: { className?: string }) => {
+// Snowflake Component
+const SnowflakeIcon = ({ className = "" }: { className?: string }) => {
   return (
     <svg className={`animate-spin-slow ${className}`} viewBox="0 0 100 100" fill="none">
       <path 
-        d="M20,50 Q35,20 50,50 T80,50" 
+        d="M50,10 L50,90 M10,50 L90,50 M25,25 L75,75 M75,25 L25,75 M30,15 L50,50 L70,15 M30,85 L50,50 L70,85 M15,30 L50,50 L15,70 M85,30 L50,50 L85,70" 
         stroke="currentColor" 
         strokeWidth="2" 
-        fill="none"
-        opacity="0.3"
+        strokeLinecap="round"
+        opacity="0.6"
       />
-      <path 
-        d="M20,50 Q35,80 50,50 T80,50" 
-        stroke="currentColor" 
-        strokeWidth="2" 
-        fill="none"
-        opacity="0.3"
-      />
-      <circle cx="20" cy="50" r="3" fill="currentColor" opacity="0.5" />
-      <circle cx="50" cy="50" r="3" fill="currentColor" opacity="0.5" />
-      <circle cx="80" cy="50" r="3" fill="currentColor" opacity="0.5" />
     </svg>
   );
 };
 
-// Atom Orbit Component
-const AtomOrbit = ({ size = 120 }: { size?: number }) => {
+// Star Orbit Component (Christmas themed)
+const StarOrbit = ({ size = 120 }: { size?: number }) => {
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <div className="absolute inset-0 animate-spin-slow">
-        <div className="absolute top-1/2 left-0 w-2 h-2 bg-gray-400 rounded-full -translate-y-1/2 shadow-[0_0_10px_rgba(156,163,175,0.6)]" />
+        <div className="absolute top-1/2 left-0 w-3 h-3 bg-yellow-400 rounded-full -translate-y-1/2 shadow-[0_0_15px_rgba(250,204,21,0.8)]" />
       </div>
-      <div className="absolute inset-0 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '13.33s' }}> {/* 70% slower */}
-        <div className="absolute top-0 left-1/2 w-2 h-2 bg-gray-300 rounded-full -translate-x-1/2 shadow-[0_0_10px_rgba(209,213,219,0.6)]" />
+      <div className="absolute inset-0 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '13.33s' }}>
+        <div className="absolute top-0 left-1/2 w-2.5 h-2.5 bg-red-500 rounded-full -translate-x-1/2 shadow-[0_0_12px_rgba(239,68,68,0.7)]" />
       </div>
-      <div className="absolute inset-0 animate-spin-slow" style={{ animationDuration: '20s' }}> {/* 70% slower */}
-        <div className="absolute bottom-0 right-0 w-2 h-2 bg-gray-500 rounded-full shadow-[0_0_10px_rgba(107,114,128,0.6)]" />
+      <div className="absolute inset-0 animate-spin-slow" style={{ animationDuration: '20s' }}>
+        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.7)]" />
       </div>
-      <div className="absolute top-1/2 left-1/2 w-4 h-4 bg-gray-300 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_15px_rgba(209,213,219,0.8)]" />
+      <div className="absolute top-1/2 left-1/2 w-5 h-5 bg-yellow-400 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_20px_rgba(250,204,21,0.9)]" />
     </div>
   );
 };
@@ -140,64 +129,116 @@ function HeroSection({
 
     let time = 0;
 
-    // Scientific particles and connections - Further reduced for better performance
-    const particles: Array<{x: number, y: number, vx: number, vy: number, size: number}> = [];
+    // Christmas snowflakes and stars - Optimized for performance
+    const snowflakes: Array<{x: number, y: number, vx: number, vy: number, size: number, rotation: number, rotationSpeed: number}> = [];
     
-    // Initialize particles - Reduced from 15 to 5 for much better performance
-    for (let i = 0; i < 5; i++) {
-      particles.push({
+    // Initialize snowflakes - Reduced count for better performance
+    for (let i = 0; i < 8; i++) {
+      snowflakes.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.3, // Slower movement
-        vy: (Math.random() - 0.5) * 0.3, // Slower movement
-        size: Math.random() * 2 + 1
+        vx: (Math.random() - 0.5) * 0.2,
+        vy: Math.random() * 0.3 + 0.1, // Falling down
+        size: Math.random() * 3 + 2,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.02
       });
     }
 
-    const drawScientificPattern = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, time: number) => {
-      // Hexagonal molecular structure - Removed shadowBlur for performance
-      ctx.beginPath();
+    // Christmas stars
+    const stars: Array<{x: number, y: number, size: number, twinkle: number, twinkleSpeed: number}> = [];
+    for (let i = 0; i < 12; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 1,
+        twinkle: Math.random() * Math.PI * 2,
+        twinkleSpeed: Math.random() * 0.05 + 0.02
+      });
+    }
+
+    const drawSnowflake = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, rotation: number) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rotation);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 1;
+      
+      // Draw 6-armed snowflake
       for (let i = 0; i < 6; i++) {
-        const angle = (i * Math.PI) / 3 + time * 0.09; // 70% slower (0.3 * 0.3)
-        const px = x + radius * Math.cos(angle);
-        const py = y + radius * Math.sin(angle);
+        const angle = (i * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
+        ctx.stroke();
+        
+        // Side branches
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * size * 0.6, Math.sin(angle) * size * 0.6);
+        ctx.lineTo(Math.cos(angle + Math.PI / 6) * size * 0.4, Math.sin(angle + Math.PI / 6) * size * 0.4);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * size * 0.6, Math.sin(angle) * size * 0.6);
+        ctx.lineTo(Math.cos(angle - Math.PI / 6) * size * 0.4, Math.sin(angle - Math.PI / 6) * size * 0.4);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+
+    const drawStar = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, twinkle: number) => {
+      const opacity = 0.5 + Math.sin(twinkle) * 0.5;
+      ctx.beginPath();
+      // 5-pointed star
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+        const px = x + Math.cos(angle) * size;
+        const py = y + Math.sin(angle) * size;
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
       ctx.closePath();
-      // Cyberpunk neon hexagon - Increased opacity to compensate for no shadow
-      ctx.strokeStyle = 'rgba(34, 211, 238, 0.6)'; // Cyan - Increased opacity
-      ctx.lineWidth = 2;
+      ctx.fillStyle = `rgba(250, 204, 21, ${opacity})`; // Gold
+      ctx.fill();
+      ctx.strokeStyle = `rgba(250, 204, 21, ${opacity * 0.8})`;
+      ctx.lineWidth = 1;
       ctx.stroke();
+    };
 
-      // Inner rotating elements
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(-time * 0.15); // 70% slower (0.5 * 0.3)
+    const drawChristmasTree = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+      // Tree trunk
+      ctx.fillStyle = 'rgba(139, 69, 19, 0.8)'; // Brown
+      ctx.fillRect(x - size * 0.1, y + size * 0.6, size * 0.2, size * 0.3);
       
-      // Draw electrons orbits with cyberpunk colors - Removed shadowBlur for performance
-      const orbitColors = [
-        'rgba(34, 211, 238, 0.5)', // cyan - Increased opacity
-        'rgba(236, 72, 153, 0.5)', // magenta
-        'rgba(192, 132, 252, 0.5)' // purple
-      ];
-      for (let i = 0; i < 3; i++) {
+      // Tree layers (triangles)
+      const layers = 3;
+      for (let i = 0; i < layers; i++) {
+        const layerSize = size * (1 - i * 0.3);
+        const layerY = y - i * size * 0.2;
         ctx.beginPath();
-        ctx.ellipse(0, 0, radius * 0.6, radius * 0.3, (i * Math.PI) / 3, 0, Math.PI * 2);
-        ctx.strokeStyle = orbitColors[i];
-        ctx.lineWidth = 1.5;
+        ctx.moveTo(x, layerY);
+        ctx.lineTo(x - layerSize * 0.5, layerY + layerSize * 0.6);
+        ctx.lineTo(x + layerSize * 0.5, layerY + layerSize * 0.6);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(34, 197, 94, ${0.7 - i * 0.1})`; // Green
+        ctx.fill();
+        ctx.strokeStyle = `rgba(22, 163, 74, ${0.8 - i * 0.1})`;
+        ctx.lineWidth = 1;
         ctx.stroke();
       }
-      ctx.restore();
-
-      // Nucleus with cyberpunk glow - Removed shadowBlur for performance
+      
+      // Star on top
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(34, 211, 238, 1)'; // Cyan - Full opacity
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+        const px = x + Math.cos(angle) * size * 0.15;
+        const py = y - size * 0.5 + Math.sin(angle) * size * 0.15;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.9)'; // Gold star
       ctx.fill();
-      ctx.strokeStyle = 'rgba(192, 132, 252, 0.9)'; // Purple border - Increased opacity
-      ctx.lineWidth = 2;
-      ctx.stroke();
     };
 
     let animId: number | null = null;
@@ -222,96 +263,74 @@ function HeroSection({
         return;
       }
       
-      // Create gray gradient background
+      // Create Christmas gradient background (dark blue/navy with red-green hints)
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      gradient.addColorStop(0, 'rgba(55, 65, 81, 0.95)'); // gray-700
-      gradient.addColorStop(0.5, 'rgba(75, 85, 99, 0.95)'); // gray-600
-      gradient.addColorStop(1, 'rgba(107, 114, 128, 0.95)'); // gray-500
+      gradient.addColorStop(0, 'rgba(15, 23, 42, 0.95)'); // slate-900
+      gradient.addColorStop(0.3, 'rgba(30, 41, 59, 0.95)'); // slate-800
+      gradient.addColorStop(0.6, 'rgba(15, 23, 42, 0.95)'); // slate-900
+      gradient.addColorStop(1, 'rgba(20, 30, 50, 0.95)'); // dark blue
       
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      time += 0.001; // Much slower animation for better performance
+      time += 0.001;
 
-      // Update and draw particles
-      particles.forEach((particle, i) => {
-        particle.x += particle.vx;
-        particle.y += particle.vy;
+      // Update and draw snowflakes
+      snowflakes.forEach((snowflake) => {
+        snowflake.x += snowflake.vx;
+        snowflake.y += snowflake.vy;
+        snowflake.rotation += snowflake.rotationSpeed;
 
-        // Bounce off edges
-        if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
-        if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
-
-        // Draw particle with cyberpunk neon colors - Removed shadowBlur for performance
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        const colors = [
-          'rgba(34, 211, 238, 0.9)', // cyan-400 - Increased opacity to compensate for no shadow
-          'rgba(236, 72, 153, 0.9)', // pink-500
-          'rgba(192, 132, 252, 0.9)' // purple-400
-        ];
-        ctx.fillStyle = colors[i % 3];
-        ctx.fill();
-
-        // Draw connections between nearby particles - Reduced connections for performance
-        // Only check particles ahead to avoid duplicate checks, and reduce connection distance
-        for (let j = i + 1; j < particles.length; j++) {
-          const other = particles[j];
-          const dx = particle.x - other.x;
-          const dy = particle.y - other.y;
-          const distanceSq = dx * dx + dy * dy; // Use squared distance to avoid sqrt
-
-          // Reduced connection distance from 120 to 80 for fewer connections
-          if (distanceSq < 6400) { // 80^2 = 6400
-            const distance = Math.sqrt(distanceSq);
-            ctx.beginPath();
-            ctx.moveTo(particle.x, particle.y);
-            ctx.lineTo(other.x, other.y);
-            // Cyberpunk neon connection lines - Reduced opacity for subtlety
-            const colors = [
-              'rgba(34, 211, 238, ', // cyan
-              'rgba(236, 72, 153, ', // magenta
-              'rgba(192, 132, 252, ' // purple
-            ];
-            const colorIndex = (i + j) % 3;
-            const opacity = 0.2 * (1 - distance / 80); // Reduced opacity
-            ctx.strokeStyle = colors[colorIndex] + opacity + ')';
-            ctx.lineWidth = 0.5; // Thinner lines
-            ctx.stroke();
-          }
+        // Reset snowflake when it goes off screen
+        if (snowflake.y > canvas.height) {
+          snowflake.y = -10;
+          snowflake.x = Math.random() * canvas.width;
         }
+        if (snowflake.x < 0) snowflake.x = canvas.width;
+        if (snowflake.x > canvas.width) snowflake.x = 0;
+
+        drawSnowflake(ctx, snowflake.x, snowflake.y, snowflake.size, snowflake.rotation);
       });
 
-      // Draw Main Central Scientific Pattern - Simplified, less animated
+      // Update and draw twinkling stars
+      stars.forEach((star) => {
+        star.twinkle += star.twinkleSpeed;
+        drawStar(ctx, star.x, star.y, star.size, star.twinkle);
+      });
+
+      // Draw central Christmas tree
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-
-      // Single static molecular structure (no animation)
-      drawScientificPattern(ctx, cx, cy, 100, 0);
+      drawChristmasTree(ctx, cx, cy, 80);
       
-      // Reduced orbiting molecules - only 3 instead of 6
-      for (let i = 0; i < 3; i++) {
-        const angle = (i / 3) * Math.PI * 2 + time * 0.05; // Much slower
-        const r = 150; // Fixed radius, no pulsing
+      // Draw orbiting Christmas ornaments (gifts/stars)
+      for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2 + time * 0.03;
+        const r = 120;
         const px = cx + Math.cos(angle) * r;
         const py = cy + Math.sin(angle) * r;
 
-        // Small molecular structure with cyberpunk colors - Static
-        ctx.beginPath();
-        ctx.arc(px, py, 4, 0, Math.PI * 2);
-        const moleculeColors = [
-          'rgba(34, 211, 238, 0.8)', // cyan - Reduced opacity
-          'rgba(236, 72, 153, 0.8)' // magenta
+        // Draw ornament (colored circle)
+        const ornamentColors = [
+          'rgba(239, 68, 68, 0.9)', // red
+          'rgba(34, 197, 94, 0.9)', // green
+          'rgba(250, 204, 21, 0.9)', // gold
+          'rgba(239, 68, 68, 0.9)' // red
         ];
-        ctx.fillStyle = moleculeColors[i % 2];
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fillStyle = ornamentColors[i % 4];
         ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
         
-        // Connection to center - Static, less animated
+        // Connection line to center (subtle)
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(px, py);
-        ctx.strokeStyle = 'rgba(34, 211, 238, 0.3)'; // Fixed opacity
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.2)'; // Gold, very subtle
+        ctx.lineWidth = 0.5;
         ctx.stroke();
       }
 
@@ -335,151 +354,150 @@ function HeroSection({
   }, []);
 
   return (
-    // GRAY CONTAINER - HALF SIZE
-    <div className="relative text-center mb-3 sm:mb-4 fold:py-0.5 py-1 sm:py-1.5 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-800 via-gray-700 to-gray-800 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-gray-500/30 group">
+    // CHRISTMAS CONTAINER - RED-GREEN-GOLD THEME
+    <div className="relative text-center mb-3 sm:mb-4 fold:py-0.5 py-1 sm:py-1.5 fold:px-4 px-6 sm:px-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-red-950 via-green-950 to-red-950 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden border-2 border-red-500/30 group">
 
-      {/* Gray Texture Overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(156,163,175,0.1),transparent_50%)] pointer-events-none" />
+      {/* Christmas Texture Overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(239,68,68,0.1),transparent_50%)] pointer-events-none" />
       
-      {/* Grid Pattern */}
-      <div className="absolute inset-0 opacity-10" style={{
-        backgroundImage: 'linear-gradient(rgba(156, 163, 175, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(156, 163, 175, 0.3) 1px, transparent 1px)',
+      {/* Snowflake Pattern */}
+      <div className="absolute inset-0 opacity-5" style={{
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px), repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)',
         backgroundSize: '50px 50px'
       }} />
 
-      {/* Scientific Canvas Background */}
+      {/* Christmas Canvas Background */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full pointer-events-none"
         style={{ willChange: 'contents' }}
       />
 
-      {/* Cyberpunk Floating Scientific Symbols - Reduced count, kept as static decorative elements */}
-      {/* Only 6 symbols instead of 15 - positioned as static decorative elements */}
-      <CyberpunkSymbol symbol="⚛" x="5%" y="15%" delay={0} color="cyan" />
-      <CyberpunkSymbol symbol="∑" x="92%" y="20%" delay={0} color="magenta" />
-      <CyberpunkSymbol symbol="∫" x="8%" y="75%" delay={0} color="purple" />
-      <CyberpunkSymbol symbol="π" x="88%" y="80%" delay={0} color="cyan" />
-      <CyberpunkSymbol symbol="∞" x="85%" y="50%" delay={0} color="purple" />
-      <CyberpunkSymbol symbol="Δ" x="20%" y="25%" delay={0} color="purple" />
+      {/* Christmas Floating Symbols */}
+      <ChristmasSymbol symbol="⭐" x="5%" y="15%" delay={0} color="gold" />
+      <ChristmasSymbol symbol="❄️" x="92%" y="20%" delay={0.5} color="green" />
+      <ChristmasSymbol symbol="🎁" x="8%" y="75%" delay={1} color="red" />
+      <ChristmasSymbol symbol="⭐" x="88%" y="80%" delay={1.5} color="gold" />
+      <ChristmasSymbol symbol="🎄" x="85%" y="50%" delay={0.8} color="green" />
+      <ChristmasSymbol symbol="❄️" x="20%" y="25%" delay={0.3} color="red" />
 
-      {/* DNA Helix Decorations */}
-      <div className="absolute top-4 left-4 w-16 h-16 text-gray-400 opacity-20">
-        <DNAHelix />
+      {/* Snowflake Decorations */}
+      <div className="absolute top-4 left-4 w-16 h-16 text-white opacity-20">
+        <SnowflakeIcon />
       </div>
-      <div className="absolute bottom-4 right-4 w-16 h-16 text-gray-400 opacity-20">
-        <DNAHelix />
+      <div className="absolute bottom-4 right-4 w-16 h-16 text-white opacity-20">
+        <SnowflakeIcon />
       </div>
 
-      {/* Corner Tech Elements */}
-      <div className="absolute top-4 left-4 w-12 h-12 border-t-2 border-l-2 border-gray-400/40 rounded-tl-xl" />
-      <div className="absolute top-4 right-4 w-12 h-12 border-t-2 border-r-2 border-gray-400/40 rounded-tr-xl" />
-      <div className="absolute bottom-4 left-4 w-12 h-12 border-b-2 border-l-2 border-gray-400/40 rounded-bl-xl" />
-      <div className="absolute bottom-4 right-4 w-12 h-12 border-b-2 border-r-2 border-gray-400/40 rounded-br-xl" />
+      {/* Corner Christmas Elements */}
+      <div className="absolute top-4 left-4 w-12 h-12 border-t-2 border-l-2 border-red-500/40 rounded-tl-xl" />
+      <div className="absolute top-4 right-4 w-12 h-12 border-t-2 border-r-2 border-green-500/40 rounded-tr-xl" />
+      <div className="absolute bottom-4 left-4 w-12 h-12 border-b-2 border-l-2 border-green-500/40 rounded-bl-xl" />
+      <div className="absolute bottom-4 right-4 w-12 h-12 border-b-2 border-r-2 border-red-500/40 rounded-br-xl" />
 
       <div className="relative z-10">
-        {/* Scientific Icon with Atom Orbit - Reduced margin */}
+        {/* Christmas Icon with Star Orbit */}
         <div className="relative inline-flex items-center justify-center mb-2 sm:mb-3">
           
-          {/* Background Glow */}
-          <div className="absolute inset-0 -m-16 bg-gray-500/20 rounded-full blur-3xl animate-pulse" />
+          {/* Background Glow - Christmas colors */}
+          <div className="absolute inset-0 -m-16 bg-red-500/20 rounded-full blur-3xl animate-pulse" />
           
-          {/* Atom Orbits */}
+          {/* Star Orbits */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <AtomOrbit size={140} />
+            <StarOrbit size={140} />
           </div>
 
-          {/* Central Icon Container */}
-          <div className="relative p-6 rounded-full bg-gradient-to-br from-gray-600 via-gray-500 to-gray-600 shadow-[0_0_60px_rgba(156,163,175,0.4)] border-3 border-gray-400/60 z-10 backdrop-blur-sm">
-            <Beaker className="w-12 h-12 sm:w-16 sm:h-16 text-gray-200 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" />
+          {/* Central Icon Container - Christmas themed */}
+          <div className="relative p-6 rounded-full bg-gradient-to-br from-red-600 via-green-600 to-red-600 shadow-[0_0_60px_rgba(239,68,68,0.4)] border-3 border-yellow-400/60 z-10 backdrop-blur-sm">
+            <Star className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.8)] fill-yellow-400" />
           </div>
 
-          {/* Floating Science Icons */}
-          <div className="absolute -top-2 -right-2 p-2 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '10s' }}> {/* 70% slower */}
-            <Atom className="w-5 h-5 text-gray-300" />
+          {/* Floating Christmas Icons */}
+          <div className="absolute -top-2 -right-2 p-2 bg-red-600/80 rounded-full border border-red-400/40 animate-bounce" style={{ animationDuration: '10s' }}>
+            <Gift className="w-5 h-5 text-white" />
           </div>
-          <div className="absolute -bottom-2 -left-2 p-2 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '8.33s', animationDelay: '1.67s' }}> {/* 70% slower */}
-            <FlaskConical className="w-5 h-5 text-gray-300" />
+          <div className="absolute -bottom-2 -left-2 p-2 bg-green-600/80 rounded-full border border-green-400/40 animate-bounce" style={{ animationDuration: '8.33s', animationDelay: '1.67s' }}>
+            <Snowflake className="w-5 h-5 text-white" />
           </div>
-          <div className="absolute top-0 -left-4 p-1.5 bg-gray-600/80 rounded-full border border-gray-400/40 animate-bounce" style={{ animationDuration: '9.33s', animationDelay: '3.33s' }}> {/* 70% slower */}
-            <Zap className="w-4 h-4 text-gray-300" />
+          <div className="absolute top-0 -left-4 p-1.5 bg-yellow-500/80 rounded-full border border-yellow-400/40 animate-bounce" style={{ animationDuration: '9.33s', animationDelay: '3.33s' }}>
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
         </div>
 
-        {/* Title - Reduced size */}
-        <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-black mb-1 sm:mb-2 text-transparent bg-clip-text bg-gradient-to-r from-gray-200 via-white to-gray-200 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tight pb-0.5">
+        {/* Title - Christmas colors */}
+        <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-black mb-1 sm:mb-2 text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-400 to-green-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.5)] tracking-tight pb-0.5">
           Anyagok Profiknak
         </h1>
 
-        {/* Tagline - Reduced margin */}
+        {/* Tagline - Christmas themed */}
         <div className="flex items-center justify-center gap-2 mb-2 sm:mb-3">
-          <div className="h-px w-12 bg-gradient-to-r from-transparent via-gray-400 to-transparent" />
-          <p className="text-xs xs:text-sm text-gray-300/90 font-bold uppercase tracking-[0.3em] opacity-90 font-mono" data-testid="text-quote-inspiration">
-            TUDOMÁNY · INNOVÁCIÓ · TECH
+          <div className="h-px w-12 bg-gradient-to-r from-transparent via-red-400 to-transparent" />
+          <p className="text-xs xs:text-sm text-yellow-300/90 font-bold uppercase tracking-[0.3em] opacity-90 font-mono" data-testid="text-quote-inspiration">
+            KARÁCSONY · ÖRÖM · TANULÁS
           </p>
-          <div className="h-px w-12 bg-gradient-to-r from-transparent via-gray-400 to-transparent" />
+          <div className="h-px w-12 bg-gradient-to-r from-transparent via-green-400 to-transparent" />
         </div>
 
-        {/* Enhanced Stats with Icons and Animations - Reduced margin */}
+        {/* Enhanced Stats with Icons and Animations - Christmas themed */}
         {totalFiles > 0 && (
           <div className="flex flex-col fold:gap-2 xs:flex-row xs:items-center xs:justify-center xs:gap-4 sm:gap-6 text-xs xs:text-sm mb-2 sm:mb-3">
-            <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-gray-700/50 backdrop-blur-sm rounded-full border border-gray-500/30 hover:border-gray-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(156,163,175,0.3)]">
-              <BookOpen className="w-5 h-5 text-gray-300 group-hover/stat:animate-bounce" />
-              <span className="font-bold text-gray-200 font-mono">{totalFiles}</span>
-              <span className="text-gray-300 font-semibold">ANYAG</span>
+            <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-red-900/50 backdrop-blur-sm rounded-full border border-red-500/30 hover:border-red-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+              <BookOpen className="w-5 h-5 text-red-300 group-hover/stat:animate-bounce" />
+              <span className="font-bold text-white font-mono">{totalFiles}</span>
+              <span className="text-red-200 font-semibold">ANYAG</span>
             </div>
             
             <div className="hidden xs:flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
-              <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse" style={{ animationDelay: '0.3s' }} />
-              <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" style={{ animationDelay: '0.6s' }} />
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" style={{ animationDelay: '0.3s' }} />
+              <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" style={{ animationDelay: '0.6s' }} />
             </div>
             
-            <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-gray-700/50 backdrop-blur-sm rounded-full border border-gray-500/30 hover:border-gray-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(156,163,175,0.3)]">
-              <Users className="w-5 h-5 text-gray-300 group-hover/stat:animate-bounce" />
-              <span className="font-bold text-gray-200 font-mono">{totalClassrooms}</span>
-              <span className="text-gray-300 font-semibold">OSZTÁLY</span>
+            <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-green-900/50 backdrop-blur-sm rounded-full border border-green-500/30 hover:border-green-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]">
+              <Users className="w-5 h-5 text-green-300 group-hover/stat:animate-bounce" />
+              <span className="font-bold text-white font-mono">{totalClassrooms}</span>
+              <span className="text-green-200 font-semibold">OSZTÁLY</span>
             </div>
             
             <div className="hidden xs:flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
-              <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse" style={{ animationDelay: '0.3s' }} />
-              <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" style={{ animationDelay: '0.6s' }} />
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" style={{ animationDelay: '0.3s' }} />
+              <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" style={{ animationDelay: '0.6s' }} />
             </div>
             
-            <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-gray-700/50 backdrop-blur-sm rounded-full border border-gray-500/30 hover:border-gray-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(156,163,175,0.3)]">
-              <Sparkles className="w-5 h-5 text-gray-300 group-hover/stat:animate-spin" />
-              <span className="text-gray-300 font-bold">INGYENES</span>
+            <div className="group/stat flex items-center justify-center gap-3 px-4 py-2 bg-yellow-900/50 backdrop-blur-sm rounded-full border border-yellow-500/30 hover:border-yellow-400/60 transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(250,204,21,0.3)]">
+              <Sparkles className="w-5 h-5 text-yellow-300 group-hover/stat:animate-spin" />
+              <span className="text-yellow-200 font-bold">INGYENES</span>
             </div>
           </div>
         )}
 
-        {/* Feature Highlights - Reduced margin and size */}
+        {/* Feature Highlights - Christmas themed */}
         <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:gap-3 mb-2 sm:mb-3 max-w-3xl mx-auto">
-          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-cyan-400/50 transition-all hover:scale-105 group/feature">
-            <Rocket className="w-6 h-6 sm:w-7 sm:h-7 text-gray-300 group-hover/feature:text-cyan-400 group-hover/feature:translate-y-[-4px] transition-transform drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
-            <span className="text-xs sm:text-sm font-semibold text-gray-200">Gyors Hozzáférés</span>
-            <span className="text-[10px] xs:text-xs text-gray-400 text-center">Azonnal elérhető</span>
+          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-red-900/30 backdrop-blur-sm rounded-xl border border-red-500/20 hover:border-red-400/50 transition-all hover:scale-105 group/feature">
+            <Rocket className="w-6 h-6 sm:w-7 sm:h-7 text-red-300 group-hover/feature:text-red-400 group-hover/feature:translate-y-[-4px] transition-transform drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+            <span className="text-xs sm:text-sm font-semibold text-white">Gyors Hozzáférés</span>
+            <span className="text-[10px] xs:text-xs text-red-200 text-center">Azonnal elérhető</span>
           </div>
           
-          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-pink-500/50 transition-all hover:scale-105 group/feature">
-            <Atom className="w-6 h-6 sm:w-7 sm:h-7 text-gray-300 group-hover/feature:text-pink-500 group-hover/feature:rotate-180 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.6)]" />
-            <span className="text-xs sm:text-sm font-semibold text-gray-200">Modern Tudás</span>
-            <span className="text-[10px] xs:text-xs text-gray-400 text-center">Naprakész tartalom</span>
+          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-green-900/30 backdrop-blur-sm rounded-xl border border-green-500/20 hover:border-green-400/50 transition-all hover:scale-105 group/feature">
+            <Gift className="w-6 h-6 sm:w-7 sm:h-7 text-green-300 group-hover/feature:text-green-400 group-hover/feature:rotate-12 transition-transform duration-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+            <span className="text-xs sm:text-sm font-semibold text-white">Modern Tudás</span>
+            <span className="text-[10px] xs:text-xs text-green-200 text-center">Naprakész tartalom</span>
           </div>
           
-          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-gray-700/30 backdrop-blur-sm rounded-xl border border-gray-500/20 hover:border-purple-400/50 transition-all hover:scale-105 group/feature">
-            <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-gray-300 group-hover/feature:text-purple-400 group-hover/feature:scale-125 transition-transform drop-shadow-[0_0_8px_rgba(192,132,252,0.6)]" />
-            <span className="text-xs sm:text-sm font-semibold text-gray-200">Hatékony Tanulás</span>
-            <span className="text-[10px] xs:text-xs text-gray-400 text-center">Optimalizált módszerek</span>
+          <div className="flex flex-col items-center gap-1 p-2 sm:p-3 bg-yellow-900/30 backdrop-blur-sm rounded-xl border border-yellow-500/20 hover:border-yellow-400/50 transition-all hover:scale-105 group/feature">
+            <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-yellow-300 group-hover/feature:text-yellow-400 group-hover/feature:scale-125 transition-transform drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]" />
+            <span className="text-xs sm:text-sm font-semibold text-white">Hatékony Tanulás</span>
+            <span className="text-[10px] xs:text-xs text-yellow-200 text-center">Optimalizált módszerek</span>
           </div>
         </div>
 
-        {/* Email Subscribe Button with Enhanced Styling */}
+        {/* Email Subscribe Button with Christmas Styling */}
         {showEmailSubscribe && (
           <div className="flex justify-center relative z-20">
             <div className="relative group/btn">
-              <div className="absolute inset-0 bg-gradient-to-r from-gray-500 via-gray-400 to-gray-500 rounded-full blur-xl opacity-50 group-hover/btn:opacity-75 transition-opacity animate-pulse" />
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 rounded-full blur-xl opacity-50 group-hover/btn:opacity-75 transition-opacity animate-pulse" />
               <EmailSubscribeDialog />
             </div>
           </div>
