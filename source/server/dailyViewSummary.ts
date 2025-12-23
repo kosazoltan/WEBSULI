@@ -97,11 +97,9 @@ export function setupDailyViewSummary() {
         </div>
       `;
       
-      // Send to all admins
-      const adminEmails = [
-        process.env.ADMIN_EMAIL || 'kosa.zoltan.ebc@gmail.com',
-        'mszilva78@gmail.com'
-      ].filter(Boolean);
+      // Send to all admins from environment variable (comma-separated)
+      const adminEmailsEnv = process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '';
+      const adminEmails = adminEmailsEnv.split(',').map(e => e.trim()).filter(Boolean);
       
       for (const adminEmail of adminEmails) {
         await sendAdminNotification(emailSubject, emailBody, adminEmail);

@@ -20,9 +20,12 @@ if (isDevelopment && process.env.DEV_DATABASE_URL) {
   DATABASE_URL = "postgres://postgres:postgres@localhost:5432/websuli"; // Default fallback
 }
 
-// Create PG Pool
+// Create PG Pool with proper configuration
 const pool = new Pool({
   connectionString: DATABASE_URL,
+  max: 20, // Maximum number of connections in the pool
+  idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+  connectionTimeoutMillis: 5000, // Timeout after 5 seconds if connection fails
 });
 
 // Test connection on startup

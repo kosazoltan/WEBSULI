@@ -240,8 +240,8 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
      */
     if (typeof window.sendResultEmail === 'undefined') {
       window.sendResultEmail = function(subject, body) {
-        // Email címzettek (minden admin, vesszővel elválasztva)
-        var recipients = 'kosa.zoltan.ebc@gmail.com,mszilva78@gmail.com';
+        // Email címzettek (környezeti változóból, vesszővel elválasztva)
+        var recipients = '${process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "admin@websuli.org"}';
         
         // URL encode a tárgy és üzenet (szóközök, ékezetes betűk, speciális karakterek kezelése)
         var encodedSubject = encodeURIComponent(subject || 'Tananyag eredmény');
@@ -264,7 +264,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
       };
       
       window.sendResultEmailTo = function(to, subject, body) {
-        var recipient = to || 'kosa.zoltan.ebc@gmail.com,mszilva78@gmail.com';
+        var recipient = to || '${process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "admin@websuli.org"}';
         var encodedSubject = encodeURIComponent(subject || 'Tananyag eredmény');
         var encodedBody = encodeURIComponent(body || '');
         var mailtoLink = 'mailto:' + recipient + '?subject=' + encodedSubject + '&body=' + encodedBody;
@@ -2245,9 +2245,37 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
   // PUBLIC HTML file routes (viewing)
   // Anyone can view materials without authentication
+  // Helper function to invalidate HTML files cache
+  const invalidateHtmlFilesCache = async () => {
+    try {
+      const cache = (await import("./cache/HtmlFilesCache.js")).getHtmlFilesCache();
+      cache.invalidate();
+    } catch (error) {
+      // Cache module might not be available, ignore
+      console.warn("[CACHE] Failed to invalidate cache:", error);
+    }
+  };
+
   app.get("/api/html-files", async (_req, res) => {
     try {
+      // Try cache first
+      const cache = (await import("./cache/HtmlFilesCache.js")).getHtmlFilesCache();
+      const cachedFiles = cache.get();
+      
+      if (cachedFiles) {
+        // Set cache headers for client-side caching
+        res.set('Cache-Control', 'public, max-age=60'); // 1 minute client cache
+        return res.json(cachedFiles);
+      }
+
+      // Cache miss - fetch from database
       const files = await storage.getAllHtmlFiles();
+      
+      // Store in cache
+      cache.set(files);
+      
+      // Set cache headers
+      res.set('Cache-Control', 'public, max-age=60'); // 1 minute client cache
       res.json(files);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2562,6 +2590,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       if (!deleted) {
         return res.status(404).json({ message: "File not found or unauthorized" });
       }
+
+      // Invalidate cache after successful deletion
+      await invalidateHtmlFilesCache();
+
       res.status(204).send();
 
       // Trigger event-driven backup (debounced, non-blocking)
@@ -3447,6 +3479,30 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       await storage.updateMaterialStats(req.params.id);
 
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // BATCH GET material likes status - Public (optimized for landing page)
+  app.post("/api/materials/likes/batch", async (req, res) => {
+    try {
+      const { materialIds, fingerprint } = req.body;
+
+      if (!Array.isArray(materialIds) || materialIds.length === 0) {
+        return res.status(400).json({ message: "Material IDs array kötelező" });
+      }
+
+      if (!fingerprint || typeof fingerprint !== 'string') {
+        return res.status(400).json({ message: "Fingerprint kötelező" });
+      }
+
+      // Limit batch size to prevent abuse
+      const MAX_BATCH_SIZE = 100;
+      const idsToQuery = materialIds.slice(0, MAX_BATCH_SIZE);
+
+      const likesData = await storage.getBatchMaterialLikes(idsToQuery, fingerprint);
+      res.json(likesData);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
