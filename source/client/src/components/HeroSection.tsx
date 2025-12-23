@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, memo } from "react";
-import { Rocket, BookOpen, Users, Sparkles, Star, Gift, Zap, Snowflake } from "lucide-react";
+import { useEffect, useRef, memo } from "react";
+import { Rocket, BookOpen, Users, Sparkles, Star, Gift, Zap, Snowflake, TreePine, Bell } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 
 interface HeroSectionProps {
@@ -8,37 +8,48 @@ interface HeroSectionProps {
   showEmailSubscribe?: boolean;
 }
 
-// Christmas Symbol Component - Static decorative element
-const ChristmasSymbol = memo(({ 
-  symbol, 
-  x, 
-  y, 
+// Christmas Symbol Component - Animated decorative element
+const ChristmasSymbol = memo(({
+  symbol,
+  x,
+  y,
   delay = 0,
-  color = 'red'
-}: { 
-  symbol: string; 
-  x: string; 
-  y: string; 
+  color = 'red',
+  size = 'normal'
+}: {
+  symbol: string;
+  x: string;
+  y: string;
   delay?: number;
-  color?: 'red' | 'green' | 'gold';
+  color?: 'red' | 'green' | 'gold' | 'white';
+  size?: 'small' | 'normal' | 'large';
 }) => {
   const colorClasses = {
-    red: 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]',
-    green: 'text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.8)]',
-    gold: 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]'
+    red: 'text-red-500 drop-shadow-[0_0_12px_rgba(239,68,68,0.9)]',
+    green: 'text-green-500 drop-shadow-[0_0_12px_rgba(34,197,94,0.9)]',
+    gold: 'text-yellow-400 drop-shadow-[0_0_12px_rgba(250,204,21,0.9)]',
+    white: 'text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.8)]'
+  };
+
+  const sizeClasses = {
+    small: 'text-lg sm:text-xl',
+    normal: 'text-2xl sm:text-3xl',
+    large: 'text-3xl sm:text-4xl'
   };
 
   return (
-    <div 
-      className={`absolute text-2xl sm:text-3xl opacity-70 ${colorClasses[color]}`}
-      style={{ 
-        left: x, 
+    <div
+      className={`absolute ${sizeClasses[size]} opacity-80 ${colorClasses[color]} animate-float`}
+      style={{
+        left: x,
         top: y,
-        contain: 'layout style paint'
+        contain: 'layout style paint',
+        animationDelay: `${delay}s`,
+        animationDuration: `${3 + delay}s`
       }}
     >
-      <div className="relative">
-        <div className="relative animate-pulse" style={{ animationDelay: `${delay}s` }}>{symbol}</div>
+      <div className="relative animate-pulse" style={{ animationDelay: `${delay}s` }}>
+        {symbol}
       </div>
     </div>
   );
@@ -60,20 +71,32 @@ const SnowflakeIcon = ({ className = "" }: { className?: string }) => {
   );
 };
 
-// Star Orbit Component (Christmas themed)
-const StarOrbit = ({ size = 120 }: { size?: number }) => {
+// Christmas Ornament Orbit Component
+const ChristmasOrbit = ({ size = 140 }: { size?: number }) => {
   return (
     <div className="relative" style={{ width: size, height: size }}>
+      {/* Outer orbit - Red ornament */}
       <div className="absolute inset-0 animate-spin-slow">
-        <div className="absolute top-1/2 left-0 w-3 h-3 bg-yellow-400 rounded-full -translate-y-1/2 shadow-[0_0_15px_rgba(250,204,21,0.8)]" />
+        <div className="absolute top-1/2 left-0 -translate-y-1/2">
+          <div className="w-4 h-4 bg-gradient-to-br from-red-400 to-red-600 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.8)] border border-red-300/50" />
+        </div>
       </div>
-      <div className="absolute inset-0 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '13.33s' }}>
-        <div className="absolute top-0 left-1/2 w-2.5 h-2.5 bg-red-500 rounded-full -translate-x-1/2 shadow-[0_0_12px_rgba(239,68,68,0.7)]" />
+      {/* Middle orbit - Green ornament */}
+      <div className="absolute inset-2 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '12s' }}>
+        <div className="absolute top-0 left-1/2 -translate-x-1/2">
+          <div className="w-3.5 h-3.5 bg-gradient-to-br from-green-400 to-green-600 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.8)] border border-green-300/50" />
+        </div>
       </div>
-      <div className="absolute inset-0 animate-spin-slow" style={{ animationDuration: '20s' }}>
-        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.7)]" />
+      {/* Inner orbit - Gold star */}
+      <div className="absolute inset-4 animate-spin-slow" style={{ animationDuration: '18s' }}>
+        <div className="absolute bottom-0 right-0">
+          <div className="w-3 h-3 bg-gradient-to-br from-yellow-300 to-yellow-500 rounded-full shadow-[0_0_12px_rgba(250,204,21,0.9)]" />
+        </div>
       </div>
-      <div className="absolute top-1/2 left-1/2 w-5 h-5 bg-yellow-400 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_20px_rgba(250,204,21,0.9)]" />
+      {/* Center - Bethlehem Star */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div className="w-6 h-6 bg-gradient-to-br from-yellow-200 to-yellow-400 rounded-full shadow-[0_0_25px_rgba(250,204,21,1)] animate-pulse" />
+      </div>
     </div>
   );
 };
@@ -84,34 +107,6 @@ function HeroSection({
   showEmailSubscribe = true
 }: HeroSectionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    let rafId: number | null = null;
-    let lastUpdate = 0;
-    const throttleMs = 100; // Throttle to 10fps for mouse tracking
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      const now = Date.now();
-      if (now - lastUpdate < throttleMs) {
-        if (rafId === null) {
-          rafId = requestAnimationFrame(() => {
-            setMousePos({ x: e.clientX, y: e.clientY });
-            lastUpdate = Date.now();
-            rafId = null;
-          });
-        }
-        return;
-      }
-      setMousePos({ x: e.clientX, y: e.clientY });
-      lastUpdate = now;
-    };
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -129,80 +124,135 @@ function HeroSection({
 
     let time = 0;
 
-    // Christmas snowflakes and stars - Optimized for performance
-    const snowflakes: Array<{x: number, y: number, vx: number, vy: number, size: number, rotation: number, rotationSpeed: number}> = [];
-    
-    // Initialize snowflakes - Reduced count for better performance
-    for (let i = 0; i < 8; i++) {
+    // Christmas snowflakes - More snowflakes for festive feel
+    const snowflakes: Array<{x: number, y: number, vx: number, vy: number, size: number, rotation: number, rotationSpeed: number, opacity: number}> = [];
+
+    // Initialize snowflakes - 15 for a nice snowy effect
+    for (let i = 0; i < 15; i++) {
       snowflakes.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.2,
-        vy: Math.random() * 0.3 + 0.1, // Falling down
-        size: Math.random() * 3 + 2,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: Math.random() * 0.5 + 0.2, // Falling down
+        size: Math.random() * 4 + 2,
         rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.02
+        rotationSpeed: (Math.random() - 0.5) * 0.02,
+        opacity: Math.random() * 0.5 + 0.5
       });
     }
 
-    // Christmas stars
-    const stars: Array<{x: number, y: number, size: number, twinkle: number, twinkleSpeed: number}> = [];
-    for (let i = 0; i < 12; i++) {
+    // Christmas stars - twinkling in the background
+    const stars: Array<{x: number, y: number, size: number, twinkle: number, twinkleSpeed: number, color: string}> = [];
+    const starColors = ['rgba(250, 204, 21, 1)', 'rgba(255, 255, 255, 1)', 'rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'];
+    for (let i = 0; i < 20; i++) {
       stars.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        size: Math.random() * 2 + 1,
+        size: Math.random() * 2.5 + 1,
         twinkle: Math.random() * Math.PI * 2,
-        twinkleSpeed: Math.random() * 0.05 + 0.02
+        twinkleSpeed: Math.random() * 0.06 + 0.02,
+        color: starColors[Math.floor(Math.random() * starColors.length)]
       });
     }
 
-    const drawSnowflake = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, rotation: number) => {
+    // Christmas ornaments floating around
+    const ornaments: Array<{x: number, y: number, size: number, color: string, swing: number, swingSpeed: number}> = [];
+    const ornamentColors = ['#ef4444', '#22c55e', '#facc15', '#ef4444', '#22c55e'];
+    for (let i = 0; i < 6; i++) {
+      ornaments.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height * 0.6,
+        size: Math.random() * 6 + 4,
+        color: ornamentColors[i % ornamentColors.length],
+        swing: Math.random() * Math.PI * 2,
+        swingSpeed: Math.random() * 0.02 + 0.01
+      });
+    }
+
+    const drawSnowflake = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, rotation: number, opacity: number) => {
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(rotation);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.lineWidth = 1;
-      
-      // Draw 6-armed snowflake
+      ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+      ctx.lineWidth = 1.5;
+
+      // Draw 6-armed snowflake with more detail
       for (let i = 0; i < 6; i++) {
         const angle = (i * Math.PI) / 3;
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
         ctx.stroke();
-        
-        // Side branches
+
+        // Main branches
         ctx.beginPath();
-        ctx.moveTo(Math.cos(angle) * size * 0.6, Math.sin(angle) * size * 0.6);
-        ctx.lineTo(Math.cos(angle + Math.PI / 6) * size * 0.4, Math.sin(angle + Math.PI / 6) * size * 0.4);
+        ctx.moveTo(Math.cos(angle) * size * 0.5, Math.sin(angle) * size * 0.5);
+        ctx.lineTo(Math.cos(angle + Math.PI / 6) * size * 0.35, Math.sin(angle + Math.PI / 6) * size * 0.35);
         ctx.stroke();
-        
+
         ctx.beginPath();
-        ctx.moveTo(Math.cos(angle) * size * 0.6, Math.sin(angle) * size * 0.6);
-        ctx.lineTo(Math.cos(angle - Math.PI / 6) * size * 0.4, Math.sin(angle - Math.PI / 6) * size * 0.4);
+        ctx.moveTo(Math.cos(angle) * size * 0.5, Math.sin(angle) * size * 0.5);
+        ctx.lineTo(Math.cos(angle - Math.PI / 6) * size * 0.35, Math.sin(angle - Math.PI / 6) * size * 0.35);
+        ctx.stroke();
+
+        // Outer branches
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * size * 0.75, Math.sin(angle) * size * 0.75);
+        ctx.lineTo(Math.cos(angle + Math.PI / 8) * size * 0.55, Math.sin(angle + Math.PI / 8) * size * 0.55);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * size * 0.75, Math.sin(angle) * size * 0.75);
+        ctx.lineTo(Math.cos(angle - Math.PI / 8) * size * 0.55, Math.sin(angle - Math.PI / 8) * size * 0.55);
         ctx.stroke();
       }
       ctx.restore();
     };
 
-    const drawStar = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, twinkle: number) => {
-      const opacity = 0.5 + Math.sin(twinkle) * 0.5;
+    const drawStar = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, twinkle: number, color: string) => {
+      const opacity = 0.4 + Math.sin(twinkle) * 0.6;
       ctx.beginPath();
       // 5-pointed star
-      for (let i = 0; i < 5; i++) {
-        const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-        const px = x + Math.cos(angle) * size;
-        const py = y + Math.sin(angle) * size;
+      for (let i = 0; i < 10; i++) {
+        const radius = i % 2 === 0 ? size : size * 0.4;
+        const angle = (i * Math.PI) / 5 - Math.PI / 2;
+        const px = x + Math.cos(angle) * radius;
+        const py = y + Math.sin(angle) * radius;
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
       ctx.closePath();
-      ctx.fillStyle = `rgba(250, 204, 21, ${opacity})`; // Gold
+      ctx.fillStyle = color.replace('1)', `${opacity})`).replace('0.8)', `${opacity * 0.8})`);
       ctx.fill();
-      ctx.strokeStyle = `rgba(250, 204, 21, ${opacity * 0.8})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      // Glow effect
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    };
+
+    // Draw Christmas ornament ball
+    const drawOrnament = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) => {
+      // Ornament cap
+      ctx.fillStyle = '#d4af37';
+      ctx.fillRect(x - size * 0.2, y - size - 4, size * 0.4, 6);
+
+      // Main ball with gradient
+      const gradient = ctx.createRadialGradient(x - size * 0.3, y - size * 0.3, 0, x, y, size);
+      gradient.addColorStop(0, '#ffffff');
+      gradient.addColorStop(0.3, color);
+      gradient.addColorStop(1, color.replace('#', '#00'));
+
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      // Shine highlight
+      ctx.beginPath();
+      ctx.arc(x - size * 0.3, y - size * 0.3, size * 0.25, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fill();
     };
 
     const drawChristmasTree = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
@@ -275,63 +325,63 @@ function HeroSection({
       
       time += 0.001;
 
-      // Update and draw snowflakes
+      // Update and draw snowflakes (falling snow effect)
       snowflakes.forEach((snowflake) => {
-        snowflake.x += snowflake.vx;
+        snowflake.x += snowflake.vx + Math.sin(time * 2 + snowflake.rotation) * 0.1;
         snowflake.y += snowflake.vy;
         snowflake.rotation += snowflake.rotationSpeed;
 
         // Reset snowflake when it goes off screen
-        if (snowflake.y > canvas.height) {
+        if (snowflake.y > canvas.height + 10) {
           snowflake.y = -10;
           snowflake.x = Math.random() * canvas.width;
+          snowflake.opacity = Math.random() * 0.5 + 0.5;
         }
-        if (snowflake.x < 0) snowflake.x = canvas.width;
-        if (snowflake.x > canvas.width) snowflake.x = 0;
+        if (snowflake.x < -10) snowflake.x = canvas.width + 10;
+        if (snowflake.x > canvas.width + 10) snowflake.x = -10;
 
-        drawSnowflake(ctx, snowflake.x, snowflake.y, snowflake.size, snowflake.rotation);
+        drawSnowflake(ctx, snowflake.x, snowflake.y, snowflake.size, snowflake.rotation, snowflake.opacity);
       });
 
       // Update and draw twinkling stars
       stars.forEach((star) => {
         star.twinkle += star.twinkleSpeed;
-        drawStar(ctx, star.x, star.y, star.size, star.twinkle);
+        drawStar(ctx, star.x, star.y, star.size, star.twinkle, star.color);
+      });
+
+      // Draw floating ornaments with swinging motion
+      ornaments.forEach((ornament) => {
+        ornament.swing += ornament.swingSpeed;
+        const swingOffset = Math.sin(ornament.swing) * 5;
+        drawOrnament(ctx, ornament.x + swingOffset, ornament.y, ornament.size, ornament.color);
       });
 
       // Draw central Christmas tree
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      drawChristmasTree(ctx, cx, cy, 80);
-      
-      // Draw orbiting Christmas ornaments (gifts/stars)
-      for (let i = 0; i < 4; i++) {
-        const angle = (i / 4) * Math.PI * 2 + time * 0.03;
-        const r = 120;
-        const px = cx + Math.cos(angle) * r;
-        const py = cy + Math.sin(angle) * r;
+      drawChristmasTree(ctx, cx, cy, 70);
 
-        // Draw ornament (colored circle)
-        const ornamentColors = [
-          'rgba(239, 68, 68, 0.9)', // red
-          'rgba(34, 197, 94, 0.9)', // green
-          'rgba(250, 204, 21, 0.9)', // gold
-          'rgba(239, 68, 68, 0.9)' // red
-        ];
+      // Draw orbiting Christmas lights around tree
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 + time * 0.05;
+        const r = 100;
+        const px = cx + Math.cos(angle) * r;
+        const py = cy + Math.sin(angle) * r * 0.5; // Elliptical orbit
+
+        // Christmas light colors
+        const lightColors = ['#ef4444', '#22c55e', '#facc15', '#ef4444', '#22c55e', '#facc15'];
+        const glowIntensity = 0.6 + Math.sin(time * 3 + i) * 0.4;
+
+        // Glow effect
+        ctx.shadowColor = lightColors[i];
+        ctx.shadowBlur = 15;
         ctx.beginPath();
-        ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fillStyle = ornamentColors[i % 4];
+        ctx.arc(px, py, 4, 0, Math.PI * 2);
+        ctx.fillStyle = lightColors[i];
+        ctx.globalAlpha = glowIntensity;
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        
-        // Connection line to center (subtle)
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(px, py);
-        ctx.strokeStyle = 'rgba(250, 204, 21, 0.2)'; // Gold, very subtle
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
       }
 
       animId = requestAnimationFrame(animate);
@@ -373,19 +423,29 @@ function HeroSection({
         style={{ willChange: 'contents' }}
       />
 
-      {/* Christmas Floating Symbols */}
-      <ChristmasSymbol symbol="⭐" x="5%" y="15%" delay={0} color="gold" />
-      <ChristmasSymbol symbol="❄️" x="92%" y="20%" delay={0.5} color="green" />
-      <ChristmasSymbol symbol="🎁" x="8%" y="75%" delay={1} color="red" />
-      <ChristmasSymbol symbol="⭐" x="88%" y="80%" delay={1.5} color="gold" />
-      <ChristmasSymbol symbol="🎄" x="85%" y="50%" delay={0.8} color="green" />
-      <ChristmasSymbol symbol="❄️" x="20%" y="25%" delay={0.3} color="red" />
+      {/* Christmas Floating Symbols - More festive decorations */}
+      <ChristmasSymbol symbol="⭐" x="3%" y="12%" delay={0} color="gold" size="large" />
+      <ChristmasSymbol symbol="❄️" x="95%" y="15%" delay={0.5} color="white" size="normal" />
+      <ChristmasSymbol symbol="🎁" x="6%" y="78%" delay={1} color="red" size="normal" />
+      <ChristmasSymbol symbol="⭐" x="92%" y="82%" delay={1.5} color="gold" size="normal" />
+      <ChristmasSymbol symbol="🎄" x="88%" y="45%" delay={0.8} color="green" size="large" />
+      <ChristmasSymbol symbol="❄️" x="15%" y="22%" delay={0.3} color="white" size="small" />
+      <ChristmasSymbol symbol="🔔" x="10%" y="50%" delay={1.2} color="gold" size="normal" />
+      <ChristmasSymbol symbol="🎅" x="90%" y="60%" delay={0.7} color="red" size="normal" />
+      <ChristmasSymbol symbol="❄️" x="50%" y="8%" delay={0.4} color="white" size="small" />
+      <ChristmasSymbol symbol="🌟" x="75%" y="18%" delay={0.9} color="gold" size="small" />
 
-      {/* Snowflake Decorations */}
-      <div className="absolute top-4 left-4 w-16 h-16 text-white opacity-20">
+      {/* Snowflake Decorations - Corner accents */}
+      <div className="absolute top-3 left-3 w-14 h-14 text-white opacity-30">
         <SnowflakeIcon />
       </div>
-      <div className="absolute bottom-4 right-4 w-16 h-16 text-white opacity-20">
+      <div className="absolute bottom-3 right-3 w-14 h-14 text-white opacity-30">
+        <SnowflakeIcon />
+      </div>
+      <div className="absolute top-3 right-16 w-10 h-10 text-white opacity-20">
+        <SnowflakeIcon />
+      </div>
+      <div className="absolute bottom-3 left-16 w-10 h-10 text-white opacity-20">
         <SnowflakeIcon />
       </div>
 
@@ -404,22 +464,29 @@ function HeroSection({
           
           {/* Star Orbits */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <StarOrbit size={140} />
+            <ChristmasOrbit size={140} />
           </div>
 
-          {/* Central Icon Container - Christmas themed */}
-          <div className="relative p-6 rounded-full bg-gradient-to-br from-red-600 via-green-600 to-red-600 shadow-[0_0_60px_rgba(239,68,68,0.4)] border-3 border-yellow-400/60 z-10 backdrop-blur-sm">
-            <Star className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.8)] fill-yellow-400" />
+          {/* Central Icon Container - Christmas Tree themed */}
+          <div className="relative p-5 sm:p-6 rounded-full bg-gradient-to-br from-green-700 via-green-600 to-green-800 shadow-[0_0_60px_rgba(34,197,94,0.5)] border-4 border-yellow-400/70 z-10 backdrop-blur-sm">
+            <TreePine className="w-12 h-12 sm:w-16 sm:h-16 text-green-200 drop-shadow-[0_0_15px_rgba(34,197,94,0.9)]" />
+            {/* Star on top of tree */}
+            <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+              <Star className="w-6 h-6 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,1)] animate-pulse" />
+            </div>
           </div>
 
           {/* Floating Christmas Icons */}
-          <div className="absolute -top-2 -right-2 p-2 bg-red-600/80 rounded-full border border-red-400/40 animate-bounce" style={{ animationDuration: '10s' }}>
+          <div className="absolute -top-3 -right-3 p-2 bg-red-600/90 rounded-full border-2 border-red-400/50 animate-bounce shadow-lg shadow-red-500/30" style={{ animationDuration: '4s' }}>
             <Gift className="w-5 h-5 text-white" />
           </div>
-          <div className="absolute -bottom-2 -left-2 p-2 bg-green-600/80 rounded-full border border-green-400/40 animate-bounce" style={{ animationDuration: '8.33s', animationDelay: '1.67s' }}>
-            <Snowflake className="w-5 h-5 text-white" />
+          <div className="absolute -bottom-3 -left-3 p-2 bg-white/90 rounded-full border-2 border-blue-200/50 animate-bounce shadow-lg shadow-white/30" style={{ animationDuration: '5s', animationDelay: '1s' }}>
+            <Snowflake className="w-5 h-5 text-blue-400" />
           </div>
-          <div className="absolute top-0 -left-4 p-1.5 bg-yellow-500/80 rounded-full border border-yellow-400/40 animate-bounce" style={{ animationDuration: '9.33s', animationDelay: '3.33s' }}>
+          <div className="absolute top-1/2 -right-5 p-1.5 bg-yellow-500/90 rounded-full border-2 border-yellow-400/50 animate-bounce shadow-lg shadow-yellow-500/30" style={{ animationDuration: '4.5s', animationDelay: '2s' }}>
+            <Bell className="w-4 h-4 text-white" />
+          </div>
+          <div className="absolute top-1/2 -left-5 p-1.5 bg-red-500/90 rounded-full border-2 border-red-400/50 animate-bounce shadow-lg shadow-red-500/30" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }}>
             <Sparkles className="w-4 h-4 text-white" />
           </div>
         </div>
