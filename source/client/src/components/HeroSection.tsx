@@ -50,7 +50,7 @@ function HeroSection({
         <div className="absolute bottom-0 right-0 w-[2px] h-8 bg-gradient-to-t from-yellow-400/60 to-transparent" />
       </div>
 
-      {/* Floating Christmas symbols - static positions, subtle pulse only */}
+      {/* Floating Christmas symbols - static positions */}
       <div className="absolute top-[10%] left-[5%] text-2xl sm:text-3xl opacity-60 text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">
         <Star className="w-6 h-6 fill-yellow-400" />
       </div>
@@ -68,6 +68,11 @@ function HeroSection({
       </div>
       <div className="absolute top-[40%] right-[3%] text-lg opacity-40 text-white/60">
         <Snowflake className="w-4 h-4" />
+      </div>
+
+      {/* Grincs - sneaking in from the corner */}
+      <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 text-3xl sm:text-4xl opacity-80 hover:opacity-100 hover:scale-110 transition-all cursor-pointer" title="A Grincs figyel...">
+        🤢
       </div>
 
       {/* Main content */}
