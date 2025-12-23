@@ -4188,29 +4188,107 @@ Crawl-delay: 1`;
 
       console.log(`[IMPROVE] Processing file: ${originalFile.title} (${Math.round(contentSizeKB)}KB)`);
 
-      // 2. Build prompts
-      const systemPrompt = `Te egy HTML tananyag javító szakértő vagy. Modernizálj HTML tananyagokat.
+      // 2. Build prompts - Comprehensive AI instruction set for material improvement
+      const systemPrompt = `Te egy professzionális HTML oktatási anyag modernizáló szakértő vagy.
 
-KRITIKUS SZABÁLYOK:
-1. A válaszod KÖZVETLENÜL <!DOCTYPE html> tag-gel kezdődik - SEMMI szöveg, markdown, vagy magyarázat előtte/utána!
-2. CSS változók: MINDIG -- prefix (:root { --primary: #4CAF50; })
-3. CSS változó használat: MINDIG var(--name) formátum
-4. CSS osztályok: MINDIG edu- prefix (.edu-header, .edu-button)
-5. Reset: MINDIG selectorral (* { margin: 0; })
-6. Fontok: CSAK system fontok ('Segoe UI', 'Noto Sans', system-ui, sans-serif) - TILOS @font-face és Google Fonts!
-7. Tartsd meg az eredeti tartalmat, csak modernizáld a megjelenést
-8. Responsive design (mobil kompatibilis)
-9. Minden inline (nincs külső CDN vagy script)
+## FELADATOD
+Régi HTML tananyagokat alakítasz át modern, interaktív, reszponzív oktatási anyagokká. A cél: vizuálisan vonzó, könnyen olvasható, interaktív tananyag létrehozása.
 
-VÁLASZ: CSAK a teljes HTML kód, semmi más!`;
+## KRITIKUS FORMÁTUM SZABÁLYOK
+- A válaszod KIZÁRÓLAG HTML kóddal kezdődik (<!DOCTYPE html>)
+- TILOS bármilyen szöveg, magyarázat, markdown a HTML előtt vagy után
+- NE használj markdown kódblokkot (\`\`\`html) - csak tiszta HTML-t adj vissza
 
-      const userPrompt = `Javítsd az alábbi HTML-t modern, interaktív tananyaggá.
+## HTML STRUKTÚRA KÖVETELMÉNYEK
+1. Teljes HTML5 dokumentum: <!DOCTYPE html>, <html lang="hu">, <head>, <body>
+2. Meta tagek kötelezően: <meta charset="UTF-8">, <meta name="viewport" content="width=device-width, initial-scale=1.0">
+3. Szemantikus HTML elemek: <header>, <main>, <section>, <article>, <footer>, <nav>
+4. Megfelelő heading hierarchia: h1 → h2 → h3 (ne ugorj szintet!)
 
-CÍM: ${originalFile.title}
-OSZTÁLY: ${originalFile.classroom || 'N/A'}
+## CSS SZABÁLYOK (KRITIKUS!)
+1. CSS változók MINDIG dupla kötőjellel: :root { --edu-primary: #4CAF50; --edu-secondary: #2196F3; }
+2. Változó használat: var(--edu-primary) - MINDIG "edu-" prefixszel
+3. Osztálynevek MINDIG "edu-" prefixszel: .edu-card, .edu-button, .edu-header, .edu-section
+4. Reset stílusok kötelezően: * { margin: 0; padding: 0; box-sizing: border-box; }
+5. Betűtípusok CSAK rendszer fontok: font-family: 'Segoe UI', 'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+6. SZIGORÚAN TILOS: @font-face, Google Fonts linkek, külső CSS fájlok, CDN linkek
 
-${customPrompt ? `EGYEDI INSTRUKCIÓK: ${customPrompt}\n\n` : ''}HTML:
-${originalFile.content}`;
+## VIZUÁLIS DESIGN ELVÁRÁSOK
+1. Modern, letisztult megjelenés világos/sötét háttérrel
+2. Kártyás (card) elrendezés a tartalmi blokkokhoz
+3. Megfelelő padding és margin (min. 1rem)
+4. Lágy árnyékok: box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+5. Lekerekített sarkok: border-radius: 8px;
+6. Kellemes színátmenetek és hover effektek
+
+## INTERAKTIVITÁS (ha releváns)
+1. JavaScript: vanilla JS, inline <script> tagben a </body> előtt
+2. Lehetséges interaktív elemek: összecsukható szekciók, kvízek, tooltipek
+3. CSS animációk: transitions és keyframes (finoman, ne legyen zavaró)
+4. TILOS: külső CDN, jQuery, React, Vue, vagy bármilyen külső script
+
+## TARTALOM MEGŐRZÉSE (NAGYON FONTOS!)
+1. Az eredeti tananyag TELJES szöveges tartalmát MARADÉKTALANUL őrizd meg
+2. NE hagyj ki semmilyen információt, bekezdést, listát vagy adatot
+3. A struktúrát javíthatod, de a tartalom maradjon változatlan
+4. Címeket, alcímeket őrizd meg vagy javítsd a hierarchiát
+
+## AKADÁLYMENTESSÉG (A11Y)
+1. Alt attribútum minden képhez
+2. Aria-label interaktív elemekhez
+3. Megfelelő kontraszt arány (min. 4.5:1 szöveghez)
+4. Fókusz indikátor látható legyen (:focus stílus)
+5. Billentyűzet navigáció támogatás (tabindex ha szükséges)
+
+## RESZPONZÍV DESIGN
+1. Mobile-first megközelítés
+2. Flexbox és CSS Grid használata az elrendezéshez
+3. Media query breakpointok: @media (min-width: 768px), @media (min-width: 1024px)
+4. Touch-barát gombok és linkek (min. 44x44px kattintási terület)
+5. Olvasható betűméret mobilon (min. 16px body text)
+
+## PÉLDA STRUKTÚRA
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tananyag címe</title>
+  <style>
+    :root { --edu-primary: #4CAF50; --edu-bg: #f5f5f5; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    .edu-container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .edu-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <main class="edu-container">
+    <article class="edu-card">
+      <!-- Tartalom -->
+    </article>
+  </main>
+</body>
+</html>`;
+
+      const userPrompt = `# Tananyag Modernizálása
+
+## EREDETI TANANYAG ADATAI
+- **Cím:** ${originalFile.title}
+- **Évfolyam:** ${originalFile.classroom || 'Nincs megadva'}. osztály
+- **Leírás:** ${originalFile.description || 'Nincs leírás'}
+- **Fájl méret:** ${Math.round(contentSizeKB)} KB
+
+${customPrompt ? `## EGYEDI UTASÍTÁSOK (FONTOS - KÖVESD EZEKET!)
+${customPrompt}
+
+` : ''}## MODERNIZÁLANDÓ HTML TARTALOM
+Az alábbi HTML kódot alakítsd át a fenti szabályok szerint. ŐRIZD MEG A TELJES TARTALMAT!
+
+${originalFile.content}
+
+---
+⚠️ EMLÉKEZTETŐ: A válaszod CSAK a teljes, javított HTML kód legyen - semmi szöveg előtte vagy utána!`;
 
       // 3. Call AI with extended timeout (3 minutes for large files)
       const { ClaudeProvider } = await import('./ai/ClaudeProvider');
@@ -4269,19 +4347,39 @@ ${originalFile.content}`;
         improvedHtml = improvedHtml.substring(0, htmlEnd + 7);
       }
 
-      // Quick CSS fixes
+      // Comprehensive HTML/CSS post-processing and fixes
       improvedHtml = improvedHtml
-        // Fix CSS variable declarations without --
-        .replace(/:root\s*\{([^}]*)\}/gi, (match, content) => {
-          const fixed = content.replace(/\b(primary|secondary|accent|success|error|warning|info)\s*:/gi, '--$1:');
+        // Fix CSS variable declarations without -- prefix (common AI mistake)
+        .replace(/:root\s*\{([^}]*)\}/gi, (match: string, content: string) => {
+          const fixed = content.replace(
+            /(?<![a-z-])(\b(?:primary|secondary|accent|success|error|warning|info|background|text|border|shadow|spacing|radius)\b)\s*:/gi,
+            '--edu-$1:'
+          );
           return `:root {${fixed}}`;
         })
-        // Fix var() without --
-        .replace(/var\(([a-z]+)\)/gi, 'var(--$1)')
-        // Remove @font-face and Google Fonts
+        // Fix var() without -- prefix (ensure edu- prefix)
+        .replace(/var\((?!--)([a-z][a-z0-9-]*)\)/gi, 'var(--edu-$1)')
+        // Fix var() with single dash (var(-name) -> var(--edu-name))
+        .replace(/var\(-([a-z][a-z0-9-]*)\)/gi, 'var(--edu-$1)')
+        // Remove @font-face declarations (external fonts not allowed)
         .replace(/@font-face\s*\{[^}]*\}/gi, '')
+        // Remove Google Fonts links
         .replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '')
-        .replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
+        .replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '')
+        // Remove CDN links (security + offline support)
+        .replace(/<link[^>]*cdnjs\.cloudflare\.com[^>]*>/gi, '')
+        .replace(/<link[^>]*unpkg\.com[^>]*>/gi, '')
+        .replace(/<link[^>]*jsdelivr\.net[^>]*>/gi, '')
+        // Remove external script tags (security)
+        .replace(/<script[^>]*src=["'][^"']*(?:cdn|unpkg|jsdelivr|cloudflare)[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '')
+        // Ensure proper lang attribute on html tag
+        .replace(/<html(?![^>]*lang=)/i, '<html lang="hu"')
+        // Ensure viewport meta if missing
+        .replace(/<head>(?![\s\S]*viewport)/i, '<head>\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">')
+        // Ensure charset meta if missing
+        .replace(/<head>(?![\s\S]*charset)/i, '<head>\n  <meta charset="UTF-8">');
+
+      console.log(`[IMPROVE] Post-processing complete. Final size: ${improvedHtml.length} bytes`);
 
       // 5. Validate result
       if (!improvedHtml || improvedHtml.length < 100) {
