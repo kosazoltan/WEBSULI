@@ -158,7 +158,7 @@ export async function sendAdminNotification(
   try {
     const { client, fromEmail } = getResendClient();
     
-    const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'kosa.zoltan.ebc@gmail.com';
+    const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'admin@websuli.org';
     
     console.log(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
     

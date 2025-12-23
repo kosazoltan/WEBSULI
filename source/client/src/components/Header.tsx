@@ -48,6 +48,8 @@ export default function Header() {
                   size="icon"
                   variant="ghost"
                   onClick={toggleDarkMode}
+                  aria-label={darkMode ? "Világos mód bekapcsolása" : "Sötét mód bekapcsolása"}
+                  className="min-h-[44px] min-w-[44px]"
                   data-testid="button-theme-toggle"
                 >
                   {darkMode ? (
@@ -93,6 +95,8 @@ export default function Header() {
                   size="icon"
                   variant="ghost"
                   onClick={toggleDarkMode}
+                  aria-label={darkMode ? "Világos mód bekapcsolása" : "Sötét mód bekapcsolása"}
+                  className="min-h-[44px] min-w-[44px]"
                   data-testid="button-theme-toggle"
                 >
                   {darkMode ? (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import { Search, FileCode, ShieldCheck, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,9 @@ import HeroSection from "@/components/HeroSection";
 import LikeButton from "@/components/LikeButton";
 import ScientificBackground from "@/components/ScientificBackground";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { getFingerprint } from "@/lib/fingerprintCache";
 
 interface HtmlFileApi {
   id: string;
@@ -27,20 +30,44 @@ interface UserFileListProps {
   onToggleView?: () => void;
 }
 
-export default function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileListProps) {
+function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
 
-  // Filter by search query AND selected classroom
-  const filteredFiles = files
-    .filter(file => {
-      const matchesSearch = file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (file.description || "").toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesClassroom = selectedClassroom === null || file.classroom === selectedClassroom;
-      return matchesSearch && matchesClassroom;
-    })
-    // ALWAYS sort by newest first in normal view (ignore displayOrder from admin)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Load fingerprint once on mount
+  useEffect(() => {
+    getFingerprint().then(setFingerprint).catch(() => setFingerprint("anonymous"));
+  }, []);
+
+  // Filter by search query AND selected classroom - OPTIMIZED with useMemo
+  const filteredFiles = useMemo(() => {
+    return files
+      .filter(file => {
+        const matchesSearch = file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (file.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesClassroom = selectedClassroom === null || file.classroom === selectedClassroom;
+        return matchesSearch && matchesClassroom;
+      })
+      // ALWAYS sort by newest first in normal view (ignore displayOrder from admin)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [files, searchQuery, selectedClassroom]);
+
+  // Batch fetch likes for all visible files
+  const materialIds = useMemo(() => filteredFiles.map(f => f.id), [filteredFiles]);
+  
+  const { data: batchLikesData } = useQuery<Record<string, { liked: boolean; totalLikes: number }>>({
+    queryKey: ["/api/materials/likes/batch", materialIds.sort().join(","), fingerprint],
+    queryFn: async () => {
+      if (!fingerprint || materialIds.length === 0) return {};
+      return await apiRequest("POST", "/api/materials/likes/batch", {
+        materialIds,
+        fingerprint,
+      });
+    },
+    enabled: !!fingerprint && materialIds.length > 0,
+    staleTime: 30000, // Cache for 30 seconds
+  });
 
   // Stats - computed from FULL dataset (not filtered)
   const totalFiles = files.length;
@@ -266,6 +293,7 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
                       <LikeButton
                         materialId={file.id}
                         className="flex-shrink-0"
+                        initialLikeStatus={batchLikesData?.[file.id]}
                       />
                       <span className="text-xs text-cyan-400 dark:text-cyan-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">
                         ⚗️ Megtekintés
@@ -316,3 +344,5 @@ export default function UserFileList({ files, isLoading, onViewFile, onToggleVie
     </div>
   );
 }
+
+export default memo(UserFileList);

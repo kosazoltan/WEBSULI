@@ -70,10 +70,10 @@ function ScientificBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
 
-  // Lebegő elemek inicializálása - Further reduced for better performance
+  // Lebegő elemek inicializálása - Reduced for better performance
   useEffect(() => {
     const newElements: FloatingElement[] = [];
-    const count = 8; // Reduced from 20 to 8 for much better performance
+    const count = 6; // Reduced to 6 for optimal performance
 
     for (let i = 0; i < count; i++) {
       const el = SCIENTIFIC_ELEMENTS[Math.floor(Math.random() * SCIENTIFIC_ELEMENTS.length)];
@@ -143,8 +143,8 @@ function ScientificBackground() {
     const rings: CircleRing[] = [];
     const baseRadius = Math.min(window.innerWidth, window.innerHeight) * 0.15;
 
-    // Generáljunk koncentrikus köröket - Reduced count
-    for (let i = 0; i < 4; i++) { // Reduced from 8 to 4
+    // Generáljunk koncentrikus köröket - Reduced count for performance
+    for (let i = 0; i < 3; i++) { // Reduced to 3 for optimal performance
       const isGold = i % 2 === 0;
       rings.push({
         radius: baseRadius + (i * 35) + (Math.random() * 10),
@@ -199,8 +199,27 @@ function ScientificBackground() {
     };
 
     let time = 0;
+    let isVisible = !document.hidden;
+
+    // Pause animation when tab is not visible (Page Visibility API)
+    const handleVisibilityChange = () => {
+      isVisible = !document.hidden;
+      if (isVisible && animationRef.current === 0) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else if (!isVisible && animationRef.current !== 0) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = 0;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const animate = () => {
+      if (!isVisible) {
+        animationRef.current = 0;
+        return;
+      }
+
       const width = window.innerWidth;
       const height = window.innerHeight;
       const centerX = width / 2;
@@ -259,13 +278,18 @@ function ScientificBackground() {
       animationRef.current = requestAnimationFrame(animate);
     };
 
-    animate();
+    if (isVisible) {
+      animate();
+    }
 
     const handleResize = () => updateCanvasSize();
     window.addEventListener('resize', handleResize);
 
     return () => {
-      cancelAnimationFrame(animationRef.current);
+      if (animationRef.current !== 0) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('resize', handleResize);
     };
   }, []);

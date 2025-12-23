@@ -1,6 +1,10 @@
 // Web Push Notifications Client Library
 // Anyagok Profiknak Platform
 
+const isDev = import.meta.env.DEV;
+const log = (...args: unknown[]) => isDev && console.log('[Push]', ...args);
+const logError = (...args: unknown[]) => console.error('[Push]', ...args);
+
 /**
  * Convert VAPID public key from base64 to Uint8Array for browser API
  */
@@ -51,13 +55,13 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
       scope: '/'
     });
     
-    console.log('[Push] Service Worker registered:', registration);
+    log('Service Worker registered:', registration);
     
     // Listen for FORCE_RELOAD messages from service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data && event.data.type === 'FORCE_RELOAD') {
-          console.log('[Push] Received FORCE_RELOAD from service worker - clearing cache and reloading');
+          log('Received FORCE_RELOAD from service worker - clearing cache and reloading');
           
           // Clear browser cache and reload
           if ('caches' in window) {
@@ -77,7 +81,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     
     return registration;
   } catch (error) {
-    console.error('[Push] Service Worker registration failed:', error);
+    logError('Service Worker registration failed:', error);
     throw error;
   }
 }
@@ -91,7 +95,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   }
 
   const permission = await Notification.requestPermission();
-  console.log('[Push] Notification permission:', permission);
+  log('Notification permission:', permission);
   
   return permission;
 }
@@ -119,7 +123,7 @@ export async function subscribeToPush(vapidPublicKey: string): Promise<PushSubsc
   let subscription = await registration.pushManager.getSubscription();
   
   if (subscription) {
-    console.log('[Push] Already subscribed:', subscription);
+    log('Already subscribed:', subscription);
     return subscription;
   }
 
@@ -131,7 +135,7 @@ export async function subscribeToPush(vapidPublicKey: string): Promise<PushSubsc
     applicationServerKey: applicationServerKey
   });
 
-  console.log('[Push] New subscription:', subscription);
+  log('New subscription:', subscription);
   
   return subscription;
 }
@@ -150,13 +154,13 @@ export async function unsubscribeFromPush(): Promise<boolean> {
     
     if (subscription) {
       const successful = await subscription.unsubscribe();
-      console.log('[Push] Unsubscribed:', successful);
+      log('Unsubscribed:', successful);
       return successful;
     }
     
     return false;
   } catch (error) {
-    console.error('[Push] Error unsubscribing:', error);
+    logError('Error unsubscribing:', error);
     return false;
   }
 }
@@ -174,7 +178,7 @@ export async function getCurrentSubscription(): Promise<PushSubscription | null>
     const subscription = await registration.pushManager.getSubscription();
     return subscription;
   } catch (error) {
-    console.error('[Push] Error getting subscription:', error);
+    logError('Error getting subscription:', error);
     return null;
   }
 }
@@ -188,6 +192,7 @@ export async function sendSubscriptionToServer(subscription: PushSubscription): 
     headers: {
       'Content-Type': 'application/json'
     },
+    credentials: 'include',
     body: JSON.stringify(subscription)
   });
 
@@ -195,8 +200,6 @@ export async function sendSubscriptionToServer(subscription: PushSubscription): 
     const error = await response.json();
     throw new Error(error.message || 'Failed to save subscription');
   }
-
-  console.log('[Push] Subscription saved to server');
 }
 
 /**
@@ -208,6 +211,7 @@ export async function removeSubscriptionFromServer(subscription: PushSubscriptio
     headers: {
       'Content-Type': 'application/json'
     },
+    credentials: 'include',
     body: JSON.stringify({ endpoint: subscription.endpoint })
   });
 
@@ -215,8 +219,6 @@ export async function removeSubscriptionFromServer(subscription: PushSubscriptio
     const error = await response.json();
     throw new Error(error.message || 'Failed to remove subscription');
   }
-
-  console.log('[Push] Subscription removed from server');
 }
 
 /**

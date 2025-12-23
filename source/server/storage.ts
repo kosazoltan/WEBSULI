@@ -186,6 +186,7 @@ export interface IStorage {
   removeMaterialLike(materialId: string, fingerprint: string): Promise<boolean>;
   getMaterialLikes(materialId: string): Promise<number>;
   hasUserLiked(materialId: string, fingerprint: string): Promise<boolean>;
+  getBatchMaterialLikes(materialIds: string[], fingerprint: string): Promise<Record<string, { liked: boolean; totalLikes: number }>>;
   getUserByGoogleId(googleId: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | null>;
   upsertUser(user: UpsertUser): Promise<User>;
@@ -1100,6 +1101,68 @@ export class DatabaseStorage implements IStorage {
   async hasUserLiked(materialId: string, fingerprint: string): Promise<boolean> {
     const [result] = await db.select().from(materialLikes).where(and(eq(materialLikes.materialId, materialId), eq(materialLikes.fingerprint, fingerprint))).limit(1);
     return !!result;
+  }
+
+  async getBatchMaterialLikes(materialIds: string[], fingerprint: string): Promise<Record<string, { liked: boolean; totalLikes: number }>> {
+    if (materialIds.length === 0) {
+      return {};
+    }
+
+    // Get all likes for these materials in one query
+    const allLikes = await db
+      .select({
+        materialId: materialLikes.materialId,
+      })
+      .from(materialLikes)
+      .where(inArray(materialLikes.materialId, materialIds));
+
+    // Get total likes count for each material
+    const totalLikesResults = await db
+      .select({
+        materialId: materialLikes.materialId,
+        count: sql<number>`count(*)`,
+      })
+      .from(materialLikes)
+      .where(inArray(materialLikes.materialId, materialIds))
+      .groupBy(materialLikes.materialId);
+
+    // Get user's likes for these materials
+    const userLikes = await db
+      .select({
+        materialId: materialLikes.materialId,
+      })
+      .from(materialLikes)
+      .where(
+        and(
+          inArray(materialLikes.materialId, materialIds),
+          eq(materialLikes.fingerprint, fingerprint)
+        )
+      );
+
+    // Build result map
+    const result: Record<string, { liked: boolean; totalLikes: number }> = {};
+    const totalLikesMap = new Map<string, number>();
+    const userLikedSet = new Set<string>();
+
+    // Populate total likes map
+    for (const row of totalLikesResults) {
+      totalLikesMap.set(row.materialId, Number(row.count));
+    }
+
+    // Populate user liked set
+    for (const row of userLikes) {
+      userLikedSet.add(row.materialId);
+    }
+
+    // Build result for each material ID
+    for (const materialId of materialIds) {
+      result[materialId] = {
+        liked: userLikedSet.has(materialId),
+        totalLikes: totalLikesMap.get(materialId) || 0,
+      };
+    }
+
+    return result;
   }
 
   // Export complete backup snapshot
