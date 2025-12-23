@@ -27,8 +27,8 @@ export default function Login() {
         try {
             const res = await fetch("/api/login", {
                 method: "POST",
-                // Use text/plain to bypass global body-parser on server which seems broken
-                headers: { "Content-Type": "text/plain" },
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify({ email, password }),
             });
 
@@ -39,10 +39,11 @@ export default function Login() {
                 const data = await res.json();
                 throw new Error(data.message || "Hiba a bejelentkezés során");
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Ismeretlen hiba történt";
             toast({
                 title: "Sikertelen bejelentkezés",
-                description: error.message,
+                description: message,
                 variant: "destructive",
             });
         } finally {
@@ -97,7 +98,7 @@ export default function Login() {
                     </div>
 
                     <Button variant="outline" className="w-full" onClick={() => window.location.href = "/auth/google"}>
-                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-label="Google logo" role="img">
                             <path
                                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                                 fill="#4285F4"

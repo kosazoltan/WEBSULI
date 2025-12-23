@@ -17,8 +17,8 @@ export async function sendNewMaterialNotification(
 ) {
   console.warn('[GMAIL] DEPRECATED: This function is no longer available. Use resend.ts instead.');
   throw new Error('Gmail API is not available. Use Resend API instead. See resend.ts');
-}
-
+    }
+    
 export async function sendAdminNotification(
   subject: string,
   htmlBody: string,

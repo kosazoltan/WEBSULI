@@ -200,8 +200,27 @@ function HeroSection({
       ctx.stroke();
     };
 
+    let animId: number | null = null;
+    let isVisible = !document.hidden;
+
+    // Pause animation when tab is not visible (Page Visibility API)
+    const handleVisibilityChange = () => {
+      isVisible = !document.hidden;
+      if (isVisible && animId === null) {
+        animId = requestAnimationFrame(animate);
+      } else if (!isVisible && animId !== null) {
+        cancelAnimationFrame(animId);
+        animId = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const animate = () => {
-      if (!ctx) return;
+      if (!ctx || !isVisible) {
+        animId = null;
+        return;
+      }
       
       // Create gray gradient background
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
@@ -296,16 +315,21 @@ function HeroSection({
         ctx.stroke();
       }
 
-      requestAnimationFrame(animate);
+      animId = requestAnimationFrame(animate);
     };
 
-    const animId = requestAnimationFrame(animate);
+    if (isVisible) {
+      animId = requestAnimationFrame(animate);
+    }
 
     const handleResize = () => updateCanvasSize();
     window.addEventListener('resize', handleResize);
 
     return () => {
-      cancelAnimationFrame(animId);
+      if (animId !== null) {
+        cancelAnimationFrame(animId);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('resize', handleResize);
     };
   }, []);

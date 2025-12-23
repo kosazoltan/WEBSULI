@@ -6,6 +6,7 @@ import helmet from "helmet";
 import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
 import { setupDailyViewSummary } from "./dailyViewSummary";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
@@ -372,6 +373,38 @@ app.use((req, res, next) => {
     server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
     });
+
+    // Graceful shutdown handler
+    const gracefulShutdown = async (signal: string) => {
+      log(`${signal} received. Starting graceful shutdown...`);
+
+      // Stop accepting new connections
+      server.close(async () => {
+        log('HTTP server closed');
+
+        try {
+          // Close database pool
+          await dbPool.end();
+          log('Database pool closed');
+
+          log('Graceful shutdown completed');
+          process.exit(0);
+        } catch (err) {
+          console.error('Error during shutdown:', err);
+          process.exit(1);
+        }
+      });
+
+      // Force close after 30 seconds
+      setTimeout(() => {
+        console.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+      }, 30000);
+    };
+
+    // Listen for shutdown signals
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   } catch (error) {
     console.error('FATAL: Failed to start server');
     console.error('Error details:', error);

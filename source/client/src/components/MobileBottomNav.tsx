@@ -91,27 +91,29 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
   // CRITICAL SECURITY: Admin navigation - ONLY for authenticated admin users
   return (
       <>
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border lg:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border lg:hidden" aria-label="Admin navigáció">
           <div className="flex items-center justify-around h-16 px-1">
             {adminCategories.map((category) => {
               const isActive = category.tabs.some(tab => tab.value === activeTab);
-              
+
               return (
                 <button
                   key={category.value}
                   onClick={() => handleCategoryClick(category)}
+                  aria-label={`${category.label} menü megnyitása`}
+                  aria-current={isActive ? "page" : undefined}
                   className={`
-                    flex flex-col items-center justify-center flex-1 h-full gap-1
+                    flex flex-col items-center justify-center flex-1 min-h-[48px] gap-1
                     transition-colors hover-elevate active-elevate-2 rounded-lg
-                    ${isActive 
-                      ? "text-primary" 
+                    ${isActive
+                      ? "text-primary"
                       : "text-muted-foreground"
                     }
                   `}
                   data-testid={`mobile-nav-${category.label.toLowerCase()}`}
                 >
                   <category.icon className="w-5 h-5" />
-                  <span className="text-[10px] font-medium leading-tight text-center">{category.label}</span>
+                  <span className="text-xs font-medium leading-tight text-center">{category.label}</span>
                 </button>
               );
             })}
