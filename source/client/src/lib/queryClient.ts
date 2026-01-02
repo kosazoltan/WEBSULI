@@ -102,7 +102,7 @@ export async function apiRequest<T = any>(
   data?: unknown | undefined,
   options?: { retries?: number; timeout?: number }
 ): Promise<T> {
-  const retries = options?.retries ?? (method === 'POST' || method === 'PUT' ? 3 : 0); // Retry on write operations
+  const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
   const timeout = options?.timeout ?? 60000; // 60 second default timeout
   
   return retryWithBackoff(
