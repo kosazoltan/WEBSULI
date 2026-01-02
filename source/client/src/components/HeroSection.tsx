@@ -16,10 +16,10 @@ function HeroSection({
   return (
     <div className="relative text-center mb-3 sm:mb-4 py-6 sm:py-8 px-6 sm:px-10 rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 group">
 
-      {/* Christmas background image - High-tech Santa */}
+      {/* Christmas background image - Winter sledding */}
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: 'url("/christmas-bg.jpg")' }}
+        style={{ backgroundImage: 'url("/christmas-bg.jpg?v=2")' }}
       />
 
       {/* Dark overlay for better text readability */}
