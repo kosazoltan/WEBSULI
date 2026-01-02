@@ -147,10 +147,15 @@ function AdminFilesTab() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/html-files/${id}`);
+      console.log('[ADMIN DELETE] Deleting file:', id);
+      await apiRequest("DELETE", `/api/html-files/${id}`);
+      console.log('[ADMIN DELETE] Delete successful');
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (deletedId) => {
+      console.log('[ADMIN DELETE] Invalidating queries for deleted:', deletedId);
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
+      queryClient.refetchQueries({ queryKey: ["/api/html-files"] });
       setDeletingFileId(null);
       toast({
         title: "Törölve",
@@ -158,6 +163,7 @@ function AdminFilesTab() {
       });
     },
     onError: (error: Error) => {
+      console.error('[ADMIN DELETE] Error:', error);
       setDeletingFileId(null);
       toast({
         title: "Hiba történt",
