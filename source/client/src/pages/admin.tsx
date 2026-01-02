@@ -99,17 +99,23 @@ function AdminFilesTab() {
 
   const uploadMutation = useMutation({
     mutationFn: async (data: { title: string; content: string; description?: string; classroom: number }) => {
-      return apiRequest("POST", "/api/html-files", data);
+      console.log('[ADMIN UPLOAD] Starting upload, content size:', data.content?.length || 0);
+      const result = await apiRequest("POST", "/api/html-files", data);
+      console.log('[ADMIN UPLOAD] Upload response:', result);
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('[ADMIN UPLOAD] Success! Invalidating queries...', data);
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
+      queryClient.refetchQueries({ queryKey: ["/api/html-files"] });
       setShowUploadZone(false);
       toast({
         title: "✅ Sikeres feltöltés!",
-        description: "A HTML fájl sikeresen feltöltve.",
+        description: data?.title ? `"${data.title}" sikeresen feltöltve.` : "A HTML fájl sikeresen feltöltve.",
       });
     },
     onError: (error: Error) => {
+      console.error('[ADMIN UPLOAD] Error:', error);
       toast({
         title: "❌ Hiba történt",
         description: error.message || "Ismeretlen hiba történt a feltöltés során",
