@@ -104,10 +104,12 @@ function AdminFilesTab() {
       console.log('[ADMIN UPLOAD] Upload response:', result);
       return result;
     },
-    onSuccess: (data) => {
-      console.log('[ADMIN UPLOAD] Success! Invalidating queries...', data);
-      queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
-      queryClient.refetchQueries({ queryKey: ["/api/html-files"] });
+    onSuccess: async (data) => {
+      console.log('[ADMIN UPLOAD] Success! Force refetching...', data);
+      // Force remove cache and refetch fresh data
+      queryClient.removeQueries({ queryKey: ["/api/html-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/html-files"], type: 'all' });
+      console.log('[ADMIN UPLOAD] Refetch complete');
       setShowUploadZone(false);
       toast({
         title: "✅ Sikeres feltöltés!",
@@ -152,10 +154,11 @@ function AdminFilesTab() {
       console.log('[ADMIN DELETE] Delete successful');
       return id;
     },
-    onSuccess: (deletedId) => {
-      console.log('[ADMIN DELETE] Invalidating queries for deleted:', deletedId);
-      queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
-      queryClient.refetchQueries({ queryKey: ["/api/html-files"] });
+    onSuccess: async (deletedId) => {
+      console.log('[ADMIN DELETE] Force refetching for deleted:', deletedId);
+      queryClient.removeQueries({ queryKey: ["/api/html-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/html-files"], type: 'all' });
+      console.log('[ADMIN DELETE] Refetch complete');
       setDeletingFileId(null);
       toast({
         title: "Törölve",
