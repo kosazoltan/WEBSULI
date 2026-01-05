@@ -20,6 +20,7 @@ import { setupAuth, isAuthenticated, isAuthenticatedAdmin } from "./auth";
 import { db } from "./db";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from "./autoBackup";
+import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 
 // ========== AI Configuration Validation ==========
 function validateAIConfig() {
@@ -2248,7 +2249,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // Helper function to invalidate HTML files cache
   const invalidateHtmlFilesCache = async () => {
     try {
-      const cache = (await import("./cache/HtmlFilesCache.js")).getHtmlFilesCache();
+      const cache = getHtmlFilesCache();
       cache.invalidate();
     } catch (error) {
       // Cache module might not be available, ignore
@@ -2259,7 +2260,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   app.get("/api/html-files", async (_req, res) => {
     try {
       // Try cache first
-      const cache = (await import("./cache/HtmlFilesCache.js")).getHtmlFilesCache();
+      const cache = getHtmlFilesCache();
       const cachedFiles = cache.get();
       
       if (cachedFiles) {
@@ -2385,6 +2386,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       console.log('✅ [UPLOAD] File created in DB:', file.id);
 
       console.log('🔵 [UPLOAD] Sending response...');
+      // Invalidate cache immediately to ensure new file appears in list
+      await invalidateHtmlFilesCache();
+
       // Return response immediately before sending emails (non-blocking)
       res.status(201).json(file);
       console.log('✅ [UPLOAD] Response sent successfully!');
@@ -2528,6 +2532,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(404).json({ message: "Fájl nem található vagy nem engedélyezett" });
       }
 
+      await invalidateHtmlFilesCache();
       res.json(updatedFile);
 
       // Trigger event-driven backup (debounced, non-blocking)
@@ -2569,6 +2574,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const successCount = results.filter(r => r !== null).length;
       console.log(`[REORDER] ✅ Updated ${successCount}/${items.length} materials`);
+
+      await invalidateHtmlFilesCache();
 
       res.json({
         success: true,
