@@ -155,10 +155,70 @@ function AdminFilesTab() {
       return id;
     },
     onSuccess: async (deletedId) => {
-      console.log('[ADMIN DELETE] Force refetching for deleted:', deletedId);
+      console.log('[ADMIN DELETE] Force invalidating cache for deleted:', deletedId);
+      
+      // CRITICAL: Invalidate ALL cache entries related to this material
+      // 1. Invalidate material list query (used on Home and Admin pages)
       queryClient.removeQueries({ queryKey: ["/api/html-files"] });
+      
+      // 2. Invalidate individual material query (used on Preview page)
+      queryClient.removeQueries({ queryKey: [`/api/html-files/${deletedId}`] });
+      
+      // 3. Invalidate material likes query (used in LikeButton component)
+      queryClient.removeQueries({ queryKey: ["/api/materials", deletedId] });
+      
+      // 4. Invalidate batch likes query if exists
+      queryClient.setQueriesData(
+        { queryKey: ["/api/materials/likes/batch"] },
+        (oldData: any) => {
+          if (oldData && typeof oldData === 'object') {
+            const newData = { ...oldData };
+            delete newData[deletedId];
+            return newData;
+          }
+          return oldData;
+        }
+      );
+      
+      // 5. Clear Service Worker cache for this material's URLs
+      if ('caches' in window && 'serviceWorker' in navigator) {
+        try {
+          const cacheNames = await caches.keys();
+          const baseUrl = window.location.origin;
+          const relativeUrls = [
+            `/api/html-files/${deletedId}`,
+            `/api/materials/${deletedId}/likes`,
+            `/dev/${deletedId}`,
+            `/preview/${deletedId}`,
+            `/materials/pdf/${deletedId}`
+          ];
+          
+          // Create both relative and absolute URL versions
+          const urlsToDelete = [
+            ...relativeUrls,
+            ...relativeUrls.map(url => `${baseUrl}${url}`)
+          ];
+          
+          for (const cacheName of cacheNames) {
+            const cache = await caches.open(cacheName);
+            for (const url of urlsToDelete) {
+              try {
+                await cache.delete(url);
+              } catch (deleteError) {
+                // Ignore individual deletion errors (URL might not exist in this cache)
+              }
+            }
+          }
+          console.log('[ADMIN DELETE] Service Worker cache cleared for material:', deletedId);
+        } catch (swError) {
+          console.warn('[ADMIN DELETE] Service Worker cache clear warning:', swError);
+        }
+      }
+      
+      // 6. Force refetch material list to update UI immediately
       await queryClient.refetchQueries({ queryKey: ["/api/html-files"], type: 'all' });
-      console.log('[ADMIN DELETE] Refetch complete');
+      
+      console.log('[ADMIN DELETE] Cache invalidation complete');
       setDeletingFileId(null);
       toast({
         title: "Törölve",

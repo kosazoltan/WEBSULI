@@ -2593,13 +2593,25 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       // Admin authentication required
       const userId = req.user.id;
-      const deleted = await storage.deleteHtmlFile(req.params.id, userId);
+      const materialId = req.params.id;
+      const deleted = await storage.deleteHtmlFile(materialId, userId);
       if (!deleted) {
         return res.status(404).json({ message: "File not found or unauthorized" });
       }
 
-      // Invalidate cache after successful deletion
-      await invalidateHtmlFilesCache();
+      // CRITICAL: Set cache-control headers to prevent browser caching of deletion
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      
+      // Invalidate cache after successful deletion (if function exists)
+      try {
+        if (typeof invalidateHtmlFilesCache === 'function') {
+          await invalidateHtmlFilesCache();
+        }
+      } catch (cacheError: any) {
+        console.warn('[DELETE] Cache invalidation warning:', cacheError.message);
+      }
 
       res.status(204).send();
 
