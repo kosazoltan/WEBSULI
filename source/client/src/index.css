@@ -211,21 +211,24 @@
 @layer utilities {
 
   /* --- 🎮 FUN GAMING KÁRTYÁK (Duolingo style) --- */
-  .holographic-card {
+  /* Geodéziai kupola kártya háttér - nagyobb specificity */
+  .holographic-card,
+  div.holographic-card,
+  .shadcn-card.holographic-card {
     @apply relative overflow-hidden rounded-3xl transition-all duration-300 ease-out;
-    /* Geodéziai kupola - sötét alkony háttér */
+    /* Geodéziai kupola - sötét alkony háttér - !important a Tailwind override miatt */
     background: linear-gradient(135deg,
       hsl(230 60% 15%),
       hsl(240 50% 18%),
       hsl(230 55% 16%)
-    );
-    border: 2px solid hsl(30 100% 60% / 0.3);
+    ) !important;
+    border: 2px solid hsl(30 100% 60% / 0.3) !important;
     background-clip: padding-box;
     box-shadow:
       0 10px 40px rgba(0, 0, 0, 0.4),
       0 0 0 1px hsl(30 100% 50% / 0.2),
       inset 0 0 60px hsl(30 100% 55% / 0.15),
-      inset 0 2px 20px hsl(30 100% 65% / 0.1);
+      inset 0 2px 20px hsl(30 100% 65% / 0.1) !important;
     position: relative;
   }
 
@@ -243,16 +246,19 @@
     mix-blend-mode: overlay;
   }
 
-  .dark .holographic-card {
+  /* Dark mode geodéziai kupola - nagyobb specificity */
+  .dark .holographic-card,
+  .dark div.holographic-card,
+  .dark .shadcn-card.holographic-card {
     /* Geodéziai kupola - meleg narancs-sárga belső világítás a sötét háttérrel */
     background: linear-gradient(135deg,
       hsl(230 60% 12%),
       hsl(240 50% 15%),
       hsl(235 55% 14%)
-    );
+    ) !important;
     -webkit-backdrop-filter: blur(20px);
     backdrop-filter: blur(20px);
-    border: 2px solid hsl(30 100% 60% / 0.4);
+    border: 2px solid hsl(30 100% 60% / 0.4) !important;
     box-shadow:
       0 15px 50px rgba(0, 0, 0, 0.5),
       0 0 0 1px hsl(30 100% 50% / 0.3),
@@ -261,7 +267,7 @@
       inset 0 0 120px hsl(35 90% 50% / 0.15),
       inset 0 2px 30px hsl(30 100% 65% / 0.2),
       /* Felső glow - mintha belülről jönne a fény */
-      inset 0 -60px 100px hsl(30 100% 60% / 0.1);
+      inset 0 -60px 100px hsl(30 100% 60% / 0.1) !important;
     position: relative;
   }
 
