@@ -494,6 +494,35 @@
     }
   }
 
+  @keyframes alchemist-pulse {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scale(1.1);
+    }
+  }
+
+  @keyframes alchemist-rotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes alchemist-glow {
+    0%, 100% {
+      filter: drop-shadow(0 0 3px hsl(300 100% 70% / 0.5));
+    }
+    50% {
+      filter: drop-shadow(0 0 8px hsl(300 100% 70% / 0.8));
+    }
+  }
+
   @keyframes gradient-shift {
     0% {
       background-position: 0% 50%;
