@@ -261,16 +261,15 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               
               // 🎮 XP value based on classroom level
               const xpValue = 50 + (classroom * 5);
+
+              const staggerDelayClass = `stagger-delay-${Math.min(index, 10)}`;
               
               return (
                 <Card
                   key={file.id}
-                  className="group holographic-card cursor-pointer border-0 card-hover-lift relative overflow-visible game-card-3d"
+                  className={`group holographic-card cursor-pointer border-0 card-hover-lift relative overflow-visible game-card-3d staggered-card ${staggerDelayClass}`}
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
-                  style={{ 
-                    animation: `staggered-fade-in 0.5s ease-out ${Math.min(index * 0.08, 0.8)}s both`
-                  }}
                 >
                   {/* 🌈 Rainbow gradient border glow on hover */}
                   <div className={`absolute -inset-1 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-md ${
@@ -413,10 +412,10 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
             
             {/* 🎮 Floating decorative elements for empty state */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-              <div className="floating-emoji absolute top-10 left-10 text-4xl" style={{ animationDelay: '0s' }}>📚</div>
-              <div className="floating-emoji absolute top-20 right-20 text-3xl" style={{ animationDelay: '0.5s' }}>🎯</div>
-              <div className="floating-emoji absolute bottom-10 left-1/4 text-4xl" style={{ animationDelay: '1s' }}>🌟</div>
-              <div className="floating-emoji absolute bottom-20 right-1/3 text-3xl" style={{ animationDelay: '1.5s' }}>🚀</div>
+              <div className="floating-emoji float-delay-0 absolute top-10 left-10 text-4xl">📚</div>
+              <div className="floating-emoji float-delay-1 absolute top-20 right-20 text-3xl">🎯</div>
+              <div className="floating-emoji float-delay-2 absolute bottom-10 left-1/4 text-4xl">🌟</div>
+              <div className="floating-emoji float-delay-3 absolute bottom-20 right-1/3 text-3xl">🚀</div>
             </div>
           </div>
         )}
@@ -424,12 +423,12 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
       
       {/* 🎮 Global floating game decorations */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="floating-emoji absolute top-1/4 left-5 text-2xl opacity-40" style={{ animationDelay: '0s', animationDuration: '8s' }}>⭐</div>
-        <div className="floating-emoji absolute top-1/3 right-8 text-2xl opacity-40" style={{ animationDelay: '2s', animationDuration: '10s' }}>🎮</div>
-        <div className="floating-emoji absolute top-2/3 left-12 text-xl opacity-30" style={{ animationDelay: '4s', animationDuration: '12s' }}>🏆</div>
-        <div className="floating-emoji absolute bottom-1/4 right-16 text-2xl opacity-40" style={{ animationDelay: '1s', animationDuration: '9s' }}>💎</div>
-        <div className="floating-emoji absolute top-1/2 left-1/4 text-xl opacity-30" style={{ animationDelay: '3s', animationDuration: '11s' }}>🎯</div>
-        <div className="floating-emoji absolute bottom-1/3 right-1/4 text-2xl opacity-35" style={{ animationDelay: '5s', animationDuration: '7s' }}>🌈</div>
+        <div className="floating-emoji float-delay-0 float-dur-8 absolute top-1/4 left-5 text-2xl opacity-40">⭐</div>
+        <div className="floating-emoji float-delay-2 float-dur-10 absolute top-1/3 right-8 text-2xl opacity-40">🎮</div>
+        <div className="floating-emoji float-delay-4 float-dur-12 absolute top-2/3 left-12 text-xl opacity-30">🏆</div>
+        <div className="floating-emoji float-delay-1 float-dur-9 absolute bottom-1/4 right-16 text-2xl opacity-40">💎</div>
+        <div className="floating-emoji float-delay-3 float-dur-11 absolute top-1/2 left-1/4 text-xl opacity-30">🎯</div>
+        <div className="floating-emoji float-delay-5 float-dur-7 absolute bottom-1/3 right-1/4 text-2xl opacity-35">🌈</div>
       </div>
     </div>
   );
