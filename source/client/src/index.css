@@ -4,62 +4,69 @@
 
 @layer base {
   :root {
-    /* --- Light Mode (Solar Style) --- */
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    /* --- FIATALOS SZÍNVILÁG (6-18 éveseknek) --- */
+    /* Vibráns, energikus, motiváló színek */
+    --background: 240 100% 98%;
+    --foreground: 250 50% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 250 50% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 250 50% 10%;
 
-    /* Solar Accents */
-    --primary: 190 100% 40%;
-    --primary-foreground: 210 40% 98%;
+    /* Gaming/Gamification színek - jutalom érzés */
+    --primary: 280 100% 60%;      /* Élénk lila - Achievement */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 260 100% 60%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 340 100% 60%;    /* Vibráns pink - Energy */
+    --secondary-foreground: 0 0% 100%;
 
-    --accent: 330 100% 50%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 180 100% 50%;       /* Türkiz - Fresh & Cool */
+    --accent-foreground: 250 50% 10%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 190 100% 40%;
+    --success: 140 80% 50%;       /* Zöld - Siker, Level up */
+    --warning: 40 100% 55%;       /* Narancssárga - Figyelem */
+
+    --muted: 240 20% 96%;
+    --muted-foreground: 240 10% 45%;
+    --destructive: 0 90% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 20% 90%;
+    --input: 240 20% 95%;
+    --ring: 280 100% 60%;
     --radius: 1.5rem;
   }
 
   .dark {
-    /* --- Dark Mode (Aurora 2026) --- */
-    --background: 240 10% 4%;
+    /* --- SÖTÉT MÓD: Neon Gaming Aesthetic --- */
+    --background: 250 50% 5%;     /* Deep purple-black */
     --foreground: 0 0% 98%;
 
-    --card: 240 10% 4%;
+    --card: 250 40% 8%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 240 10% 4%;
+    --popover: 250 40% 8%;
     --popover-foreground: 0 0% 98%;
 
-    /* Neon Accents */
-    --primary: 190 100% 50%;
-    --primary-foreground: 240 10% 4%;
-    --secondary: 280 100% 60%;
-    --secondary-foreground: 0 0% 98%;
-    --accent: 320 100% 60%;
-    --accent-foreground: 240 10% 4%;
+    /* Neon Gaming színek */
+    --primary: 280 100% 65%;      /* Neon purple */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 340 100% 65%;    /* Hot pink */
+    --secondary-foreground: 0 0% 100%;
+    --accent: 180 100% 55%;       /* Cyan */
+    --accent-foreground: 250 50% 5%;
 
-    --muted: 240 4% 16%;
-    --muted-foreground: 240 5% 65%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 190 100% 50%;
+    --success: 140 80% 55%;
+    --warning: 40 100% 60%;
+
+    --muted: 250 30% 15%;
+    --muted-foreground: 240 10% 60%;
+    --destructive: 0 90% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 30% 18%;
+    --input: 250 30% 18%;
+    --ring: 280 100% 65%;
   }
 }
 
@@ -74,148 +81,400 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased overflow-x-hidden pt-24;
-    /* Subtle static gradient - no animation for performance */
-    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(240 10% 8%) 100%);
+    /* Dinamikus, energikus háttér */
+    background:
+      radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.15), transparent 50%),
+      radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.12), transparent 50%),
+      radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.08), transparent 60%),
+      hsl(var(--background));
     background-attachment: fixed;
     position: relative;
     min-height: 100vh;
   }
 
-  /* Light mode gradient */
-  body:not(.dark) {
-    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(210 40% 92%) 100%);
-  }
-
-  /* Static decorative blobs - NO ANIMATION for performance */
+  /* Animated floating shapes - FUN & PLAYFUL */
   body::before {
     content: '';
     position: fixed;
-    top: -20%;
-    right: -10%;
-    width: 60vw;
-    height: 60vh;
-    background: radial-gradient(circle, rgba(0, 240, 255, 0.08), transparent 70%);
+    top: -10%;
+    right: -5%;
+    width: 40vw;
+    height: 40vh;
+    background: radial-gradient(circle, hsl(340 100% 60% / 0.15), transparent 70%);
     border-radius: 50%;
     z-index: -1;
     pointer-events: none;
+    animation: float-bubble 20s ease-in-out infinite;
   }
 
   body::after {
     content: '';
     position: fixed;
-    bottom: -20%;
-    left: -10%;
-    width: 50vw;
-    height: 50vh;
-    background: radial-gradient(circle, rgba(170, 0, 255, 0.08), transparent 70%);
+    bottom: -10%;
+    left: -5%;
+    width: 35vw;
+    height: 35vh;
+    background: radial-gradient(circle, hsl(180 100% 55% / 0.15), transparent 70%);
     border-radius: 50%;
     z-index: -1;
     pointer-events: none;
+    animation: float-bubble 15s ease-in-out infinite reverse;
   }
 }
 
 @layer utilities {
 
-  /* --- Glassmorphism Card (2026 trend) --- */
+  /* --- FUN GAMING KÁRTYÁK (Duolingo style) --- */
   .holographic-card {
     @apply relative overflow-hidden rounded-3xl transition-all duration-300 ease-out;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.85)
+    );
+    border: 2px solid transparent;
+    background-clip: padding-box;
     box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      0 10px 40px rgba(0, 0, 0, 0.08),
+      0 0 0 1px rgba(255, 255, 255, 0.5),
+      inset 0 2px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .dark .holographic-card {
+    background: linear-gradient(135deg,
+      rgba(139, 92, 246, 0.08),
+      rgba(236, 72, 153, 0.06)
+    );
+    -webkit-backdrop-filter: blur(30px);
+    backdrop-filter: blur(30px);
+    box-shadow:
+      0 10px 40px rgba(139, 92, 246, 0.15),
+      0 0 0 1px rgba(139, 92, 246, 0.3),
+      inset 0 2px 0 rgba(255, 255, 255, 0.05);
   }
 
   .holographic-card:hover {
-    transform: translateY(-8px) scale(1.02);
+    transform: translateY(-12px) scale(1.03) rotate(-1deg);
     box-shadow:
-      0 20px 60px rgba(0, 240, 255, 0.15),
-      0 0 0 1px rgba(0, 240, 255, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      0 25px 60px rgba(236, 72, 153, 0.25),
+      0 0 0 2px rgba(236, 72, 153, 0.5),
+      inset 0 2px 0 rgba(255, 255, 255, 0.3);
+    border-color: rgba(236, 72, 153, 0.4);
   }
 
-  /* Gradient border animation on hover only */
+  /* Playful gradient border (like rewards) */
   .holographic-card::before {
     content: '';
     position: absolute;
-    inset: -1px;
+    inset: -2px;
     border-radius: inherit;
-    padding: 1px;
+    padding: 2px;
     background: linear-gradient(135deg,
-      rgba(0, 240, 255, 0.3),
-      rgba(170, 0, 255, 0.3),
-      rgba(255, 0, 153, 0.3)
+      hsl(280 100% 65%),
+      hsl(340 100% 65%),
+      hsl(180 100% 60%),
+      hsl(280 100% 65%)
     );
+    background-size: 300% 300%;
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.4s;
     pointer-events: none;
+    animation: gradient-rotate 4s ease infinite;
   }
 
   .holographic-card:hover::before {
     opacity: 1;
   }
 
-  /* Bento Box Cards - Modern tile layout */
-  .bento-card {
-    @apply holographic-card p-6;
+  /* Sparkle effect on hover */
+  .holographic-card::after {
+    content: '✨';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    opacity: 0;
+    transform: scale(0) rotate(-45deg);
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    pointer-events: none;
+  }
+
+  .holographic-card:hover::after {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+
+  /* Achievement Badge Style */
+  .achievement-badge {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm;
+    background: linear-gradient(135deg, hsl(140 80% 50%), hsl(140 80% 40%));
+    color: white;
+    box-shadow:
+      0 4px 15px hsl(140 80% 50% / 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    animation: badge-pulse 2s ease-in-out infinite;
+  }
+
+  /* Level Up Animation */
+  .level-up {
+    animation: level-up 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  /* Bouncy Buttons (fun interaction) */
+  .btn-bouncy {
+    @apply transition-all duration-200;
+  }
+
+  .btn-bouncy:active {
+    transform: scale(0.95);
+  }
+
+  .btn-bouncy:hover {
+    transform: translateY(-4px) scale(1.05);
+    box-shadow: 0 15px 35px rgba(139, 92, 246, 0.3);
+  }
+
+  /* Progress Bar (gaming style) */
+  .progress-bar {
+    @apply relative h-4 rounded-full overflow-hidden;
+    background: linear-gradient(90deg,
+      hsl(280 100% 65%),
+      hsl(340 100% 65%),
+      hsl(180 100% 60%)
+    );
+    background-size: 200% 100%;
+    animation: progress-shine 2s linear infinite;
+  }
+
+  /* Neon Text Glow */
+  .text-neon-purple {
+    color: hsl(280 100% 65%);
+    text-shadow:
+      0 0 10px hsl(280 100% 65% / 0.5),
+      0 0 20px hsl(280 100% 65% / 0.3),
+      0 0 30px hsl(280 100% 65% / 0.2);
+  }
+
+  .text-neon-pink {
+    color: hsl(340 100% 65%);
+    text-shadow:
+      0 0 10px hsl(340 100% 65% / 0.5),
+      0 0 20px hsl(340 100% 65% / 0.3),
+      0 0 30px hsl(340 100% 65% / 0.2);
+  }
+
+  .text-neon-cyan {
+    color: hsl(180 100% 60%);
+    text-shadow:
+      0 0 10px hsl(180 100% 60% / 0.5),
+      0 0 20px hsl(180 100% 60% / 0.3),
+      0 0 30px hsl(180 100% 60% / 0.2);
+  }
+
+  /* Konfetti particles */
+  .confetti {
+    animation: confetti-fall 3s ease-out infinite;
+  }
+
+  /* Sticker-like elements */
+  .sticker {
+    @apply relative;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15));
+    transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  .sticker:hover {
+    transform: rotate(-5deg) scale(1.1);
+  }
+
+  /* Comic-style borders */
+  .comic-border {
+    border: 3px solid currentColor;
+    box-shadow:
+      4px 4px 0 0 currentColor,
+      8px 8px 0 0 rgba(0, 0, 0, 0.1);
+  }
+
+  /* Gradient backgrounds (fun & colorful) */
+  .bg-gradient-fun {
     background: linear-gradient(135deg,
-      rgba(0, 240, 255, 0.05),
-      rgba(170, 0, 255, 0.05)
+      hsl(280 100% 65%),
+      hsl(340 100% 65%),
+      hsl(40 100% 60%)
     );
   }
 
-  .bento-card:hover {
+  .bg-gradient-cool {
     background: linear-gradient(135deg,
-      rgba(0, 240, 255, 0.1),
-      rgba(170, 0, 255, 0.1)
+      hsl(180 100% 60%),
+      hsl(200 100% 60%),
+      hsl(280 100% 65%)
     );
   }
 
-  /* Vibrant Text Gradients (2026 style) */
-  .text-gradient-aurora {
-    @apply bg-clip-text text-transparent font-extrabold tracking-tight;
-    background: linear-gradient(135deg, #00f0ff, #aa00ff, #ff0099);
-    background-size: 200% 200%;
+  .bg-gradient-warm {
+    background: linear-gradient(135deg,
+      hsl(340 100% 65%),
+      hsl(20 100% 60%),
+      hsl(40 100% 60%)
+    );
   }
 
-  .text-gradient-cyber {
-    @apply bg-clip-text text-transparent font-bold;
-    background: linear-gradient(90deg, #0ff, #f0f, #ff0, #0ff);
-    background-size: 300% 100%;
+  /* Wobble animation (playful) */
+  .wobble {
+    animation: wobble 1s ease-in-out;
   }
 
-  /* Neon glow effects */
-  .glow-cyan {
-    box-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+  /* --- ANIMÁCIÓK --- */
+
+  @keyframes float-bubble {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    25% {
+      transform: translate(10px, -20px) scale(1.05);
+    }
+    50% {
+      transform: translate(-15px, -10px) scale(0.95);
+    }
+    75% {
+      transform: translate(5px, -25px) scale(1.02);
+    }
   }
 
-  .glow-purple {
-    box-shadow: 0 0 20px rgba(170, 0, 255, 0.4);
+  @keyframes gradient-rotate {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
   }
 
-  .glow-pink {
-    box-shadow: 0 0 20px rgba(255, 0, 153, 0.4);
+  @keyframes badge-pulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow:
+        0 4px 15px hsl(140 80% 50% / 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    50% {
+      transform: scale(1.05);
+      box-shadow:
+        0 6px 25px hsl(140 80% 50% / 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
   }
 
-  /* Dotted pattern decoration */
-  .dotted-pattern {
-    background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
-    background-size: 8px 8px;
+  @keyframes level-up {
+    0% {
+      transform: scale(0.8) translateY(20px);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.1) translateY(-10px);
+    }
+    100% {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
   }
 
-  /* Smooth hover elevation */
-  .hover-elevate {
-    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+  @keyframes progress-shine {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 200% 50%;
+    }
   }
 
-  .hover-elevate:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+  @keyframes confetti-fall {
+    0% {
+      transform: translateY(-100%) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(100vh) rotate(720deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes wobble {
+    0%, 100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-5deg);
+    }
+    75% {
+      transform: rotate(5deg);
+    }
+  }
+
+  /* Smooth entrance animations */
+  @keyframes slide-in-up {
+    from {
+      transform: translateY(30px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-in-left {
+    from {
+      transform: translateX(-30px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(30px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-in-up {
+    animation: slide-in-up 0.6s ease-out;
+  }
+
+  .animate-slide-in-left {
+    animation: slide-in-left 0.6s ease-out;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.6s ease-out;
+  }
+
+  /* Staggered animation delays for hero elements */
+  .hero-title-delay {
+    animation-delay: 0.1s;
+  }
+
+  .hero-subtitle-delay {
+    animation-delay: 0.2s;
+  }
+
+  .hero-cta-delay {
+    animation-delay: 0.3s;
+  }
+
+  .hero-stats-delay {
+    animation-delay: 0.4s;
   }
 }
