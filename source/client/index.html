@@ -9,22 +9,34 @@
       html, body {
         margin: 0;
         padding: 0;
-        background-color: #111827 !important; /* gray-900 - dark mode alapértelmezett */
+        background-color: hsl(240, 100%, 9%) !important; /* Dark sci-fi háttér */
+        background-image: 
+          radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
+          radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
+          radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
+          hsl(240, 100%, 9%) !important;
+        background-attachment: fixed;
         min-height: 100vh;
         color: #f9fafb !important; /* gray-50 - világos szöveg */
       }
-      html.dark, html.dark body {
-        background-color: #111827 !important; /* gray-900 */
-      }
-      html:not(.dark), html:not(.dark) body {
-        background-color: #111827 !important; /* dark mode maradjon */
+      html.dark, html.dark body, html:not(.dark), html:not(.dark) body {
+        background-color: hsl(240, 100%, 9%) !important;
+        background-image: 
+          radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
+          radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
+          hsl(240, 100%, 9%) !important;
       }
       #root {
         min-height: 100vh;
-        background-color: #111827 !important; /* gray-900 - dark mode */
+        background-color: hsl(240, 100%, 9%) !important;
+        background-image: none !important;
       }
       html.dark #root, html:not(.dark) #root {
-        background-color: #111827 !important; /* gray-900 */
+        background-color: hsl(240, 100%, 9%) !important;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
       }
     </style>
     <script>

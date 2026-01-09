@@ -4,6 +4,18 @@ import defaultTheme from "tailwindcss/defaultTheme";
 export default {
   darkMode: ["class"],
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  safelist: [
+    // Custom osztályok, amiket ne purge-oljon
+    'holographic-card',
+    'hero-section-container',
+    'achievement-badge',
+    'xp-badge',
+    'streak-badge',
+    'geodesic-glow',
+    {
+      pattern: /^(bg|text|border)-(card|background|foreground|muted|primary|secondary)/,
+    },
+  ],
   theme: {
     container: {
       center: true,
