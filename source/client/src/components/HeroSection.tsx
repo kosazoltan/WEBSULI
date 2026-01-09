@@ -32,8 +32,41 @@ function HeroSection({
            boxShadow: '0 10px 40px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.05)',
          }}>
       
-      {/* Fujiama hegység tájkép háttér SVG */}
-      <div className="absolute inset-0 opacity-30 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
+      {/* MP4 Video háttér - teljesítmény-optimalizálva */}
+      <video
+        className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none"
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        style={{ 
+          zIndex: 0,
+          objectPosition: 'center center',
+        }}
+        onLoadedData={(e) => {
+          // Videó betöltése után smooth fade-in
+          const video = e.currentTarget;
+          video.style.opacity = '0.5';
+          video.style.transition = 'opacity 1s ease-in';
+        }}
+      >
+        <source src="/hero-video.mp4" type="video/mp4" />
+        {/* Fallback ha a videó nem töltődik be */}
+        Your browser does not support the video tag.
+      </video>
+
+      {/* Overlay gradienst a videó felett - grafit szürkétől magenta átmenet */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{ 
+          zIndex: 1,
+          background: 'linear-gradient(to bottom, hsl(220 10% 20% / 0.6) 0%, hsl(220 15% 25% / 0.5) 40%, hsl(280 80% 40% / 0.4) 70%, hsl(300 100% 50% / 0.3) 100%)',
+        }}
+      />
+
+      {/* Fujiama hegység tájkép háttér SVG - videó és overlay felett */}
+      <div className="absolute inset-0 opacity-25 pointer-events-none overflow-hidden" style={{ zIndex: 2 }}>
         <svg className="absolute bottom-0 left-0 w-full h-full" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMax slice">
           <defs>
             <linearGradient id="skyGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -142,8 +175,8 @@ function HeroSection({
         </svg>
       </div>
       
-      {/* Alkimista titkos jelek - animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 1 }}>
+      {/* Alkimista titkos jelek - animálva - videó és SVG felett */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 3 }}>
         {/* Körök - alkimista jel (pulzáló) */}
         <svg className="absolute top-10 left-10 w-24 h-24" style={{ 
           animation: 'float-rotate 8s ease-in-out infinite, alchemist-pulse 3s ease-in-out infinite, alchemist-glow 2s ease-in-out infinite',

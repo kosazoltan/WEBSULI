@@ -1668,6 +1668,32 @@
     }
   }
 
+  /* === VIDEO BACKGROUND === */
+  video[autoplay] {
+    will-change: contents;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  /* Video optimalizáció mobilra */
+  @media (max-width: 768px) {
+    video[autoplay] {
+      display: block;
+      /* Mobil esetén kisebb opacity a teljesítmény érdekében */
+    }
+  }
+
+  /* Video fade-in animáció */
+  @keyframes video-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 0.5;
+    }
+  }
+
   /* === PERFORMANCE OPTIMIZATIONS === */
   /* 1. will-change csak animált elemekre */
   .card-interactive,
