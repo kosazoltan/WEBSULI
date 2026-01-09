@@ -160,11 +160,12 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           showEmailSubscribe={true}
         />
 
-        {/* Classroom Filter Buttons - Gamified */}
+        {/* 🎮 Classroom Filter Buttons - Gamified with XP indicators */}
         <div className="mb-6 sm:mb-8">
-          <h2 className="text-base xs:text-lg font-black text-gray-100 mb-3 sm:mb-4 text-center xs:text-left drop-shadow-[0_0_10px_rgba(139,92,246,0.5)] flex items-center justify-center xs:justify-start gap-2">
+          <h2 className="text-base xs:text-lg font-black text-gray-100 mb-3 sm:mb-4 text-center xs:text-left drop-shadow-[0_0_15px_rgba(139,92,246,0.6)] flex items-center justify-center xs:justify-start gap-2">
             <span className="text-2xl animate-wobble">🎯</span>
             <span>Válassz osztályt:</span>
+            <span className="text-sm text-neon-gold ml-2 font-bold">+50 XP / tananyag</span>
           </h2>
           <div className="flex flex-wrap gap-2 xs:gap-2.5 sm:gap-3 justify-center xs:justify-start">
             <Button
@@ -172,7 +173,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               size="default"
               onClick={() => setSelectedClassroom(null)}
               className={`text-xs xs:text-sm min-h-12 relative overflow-hidden btn-bouncy transition-all duration-300 ${selectedClassroom === null
-                ? "bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-600 text-white border-purple-400 shadow-xl shadow-purple-500/40 animate-gradient-shift"
+                ? "bg-gradient-to-r from-purple-600 via-pink-600 to-cyan-600 text-white border-purple-400 shadow-xl shadow-purple-500/40 animate-gradient-shift energy-pulse"
                 : "bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-purple-400/30 hover:border-purple-400/70 text-gray-100 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/20"
                 }`}
               data-testid="button-filter-all"
@@ -225,25 +226,28 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           </div>
         </div>
 
-        {/* Search - Gamified */}
+        {/* 🔍 Search - Gamified with XP reward hint */}
         <div className="max-w-2xl mx-auto mb-8 sm:mb-10">
           <div className="relative group">
             <Search className="absolute left-3 xs:left-4 top-1/2 -translate-y-1/2 w-4 h-4 xs:w-5 xs:h-5 text-purple-400 group-focus-within:text-purple-300 transition-colors animate-wobble" />
             <Input
-              placeholder="🔍 Keresés cím vagy leírás alapján..."
+              placeholder="🔍 Keresés tananyag után... (+10 XP keresésért!)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 xs:pl-12 h-10 xs:h-11 sm:h-12 text-sm xs:text-base bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-2 border-purple-400/40 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/30 text-gray-100 placeholder:text-gray-400 shadow-md shadow-purple-500/10 focus:shadow-xl focus:shadow-purple-500/30 transition-all duration-300 rounded-2xl"
+              className="pl-10 xs:pl-12 h-10 xs:h-11 sm:h-12 text-sm xs:text-base bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-3 border-purple-400/50 focus:border-purple-400 focus:ring-4 focus:ring-purple-500/40 text-gray-100 placeholder:text-gray-400 shadow-lg shadow-purple-500/15 focus:shadow-xl focus:shadow-purple-500/40 transition-all duration-300 rounded-2xl hover:border-purple-400/70"
               data-testid="input-search"
             />
-            {/* Active indicator */}
+            {/* 🌟 Active indicator with sparkle */}
             {searchQuery && (
-              <span className="absolute right-3 xs:right-4 top-1/2 -translate-y-1/2 text-xs text-purple-400 animate-sparkle-twinkle">✨</span>
+              <span className="absolute right-3 xs:right-4 top-1/2 -translate-y-1/2 text-sm animate-sparkle-twinkle flex items-center gap-1">
+                <span className="text-purple-400">✨</span>
+                <span className="text-xs text-neon-gold font-bold">+10 XP</span>
+              </span>
             )}
           </div>
         </div>
 
-        {/* Files Grid - Chronological Order (Newest First) */}
+        {/* 🎮 Files Grid - Gamified Cards with XP rewards */}
         {filteredFiles.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 tablet:grid-cols-3 xl:grid-cols-4 foldable:grid-cols-5 uw:grid-cols-6 gap-4 sm:gap-6" data-testid="list-files" id="content-start">
             {filteredFiles.map((file, index) => {
@@ -255,43 +259,55 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               const isCyan = classroom > 4 && classroom <= 8;
               const isPink = classroom > 8;
               
+              // 🎮 XP value based on classroom level
+              const xpValue = 50 + (classroom * 5);
+              
               return (
                 <Card
                   key={file.id}
-                  className="group holographic-card cursor-pointer border-0 card-hover-lift relative overflow-visible"
+                  className="group holographic-card cursor-pointer border-0 card-hover-lift relative overflow-visible game-card-3d"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                   style={{ 
                     animation: `staggered-fade-in 0.5s ease-out ${Math.min(index * 0.08, 0.8)}s both`
                   }}
                 >
-                  {/* Gradient border glow on hover */}
-                  <div className={`absolute -inset-0.5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm ${
-                    isGreen ? "bg-gradient-to-r from-green-400 via-green-500 to-green-600" :
-                    isCyan ? "bg-gradient-to-r from-cyan-400 via-cyan-500 to-cyan-600" :
-                    "bg-gradient-to-r from-pink-400 via-pink-500 to-purple-600"
+                  {/* 🌈 Rainbow gradient border glow on hover */}
+                  <div className={`absolute -inset-1 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-md ${
+                    isGreen ? "bg-gradient-to-r from-green-400 via-green-500 to-emerald-600" :
+                    isCyan ? "bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-600" :
+                    "bg-gradient-to-r from-pink-400 via-purple-500 to-pink-600"
                   }`}></div>
                   
                   <CardContent className="p-5 sm:p-6 flex flex-col h-full relative bg-background rounded-3xl z-10">
 
+                    {/* 🏆 XP Badge - Top right corner */}
+                    <div className={`absolute -top-2 -right-2 px-2 py-1 rounded-full text-xs font-black shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:scale-110 ${
+                      isGreen ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-green-500/50" :
+                      isCyan ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-cyan-500/50" :
+                      "bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-pink-500/50"
+                    }`}>
+                      +{xpValue} XP ⭐
+                    </div>
+
                     {/* Top Row: Playful Icon & Badge with Sticker Effect */}
                     <div className="flex justify-between items-start mb-4">
-                        <div className={`sticker p-2.5 sm:p-3 rounded-2xl transition-all duration-300 group-hover:rotate-6 group-hover:scale-110 ${
-                             isGreen ? "bg-gradient-to-br from-green-400/30 to-green-600/30 text-green-400 shadow-lg shadow-green-500/30" :
-                             isCyan ? "bg-gradient-to-br from-cyan-400/30 to-cyan-600/30 text-cyan-400 shadow-lg shadow-cyan-500/30" :
-                             "bg-gradient-to-br from-pink-400/30 to-purple-600/30 text-pink-400 shadow-lg shadow-pink-500/30"
+                        <div className={`sticker p-2.5 sm:p-3 rounded-2xl transition-all duration-300 group-hover:rotate-12 group-hover:scale-115 ${
+                             isGreen ? "bg-gradient-to-br from-green-400/40 to-green-600/40 text-green-400 shadow-lg shadow-green-500/40" :
+                             isCyan ? "bg-gradient-to-br from-cyan-400/40 to-cyan-600/40 text-cyan-400 shadow-lg shadow-cyan-500/40" :
+                             "bg-gradient-to-br from-pink-400/40 to-purple-600/40 text-pink-400 shadow-lg shadow-pink-500/40"
                         }`}>
                             <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
-                            {/* Sparkle effect on icon */}
-                            <span className="absolute -top-1 -right-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity animate-sparkle-twinkle">✨</span>
+                            {/* ✨ Sparkle effect on icon */}
+                            <span className="absolute -top-2 -right-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity animate-sparkle-twinkle">✨</span>
                         </div>
 
-                        <Badge variant="outline" className={`text-xs font-black px-2.5 py-1 rounded-full comic-arrow-border transition-all ${
-                          isGreen ? "border-green-400/70 text-green-400 bg-green-400/15 group-hover:bg-green-400/25 group-hover:border-green-400 shadow-md shadow-green-500/20" :
-                          isCyan ? "border-cyan-400/70 text-cyan-400 bg-cyan-400/15 group-hover:bg-cyan-400/25 group-hover:border-cyan-400 shadow-md shadow-cyan-500/20" :
-                          "border-pink-400/70 text-pink-400 bg-pink-400/15 group-hover:bg-pink-400/25 group-hover:border-pink-400 shadow-md shadow-pink-500/20"
+                        <Badge variant="outline" className={`text-xs font-black px-3 py-1.5 rounded-full comic-arrow-border transition-all group-hover:scale-105 ${
+                          isGreen ? "border-green-400/80 text-green-400 bg-green-400/20 group-hover:bg-green-400/30 group-hover:border-green-400 shadow-lg shadow-green-500/25" :
+                          isCyan ? "border-cyan-400/80 text-cyan-400 bg-cyan-400/20 group-hover:bg-cyan-400/30 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/25" :
+                          "border-pink-400/80 text-pink-400 bg-pink-400/20 group-hover:bg-pink-400/30 group-hover:border-pink-400 shadow-lg shadow-pink-500/25"
                         }`}>
-                            <span className="mr-1">{isGreen ? "🟢" : isCyan ? "🔵" : "🩷"}</span>
+                            <span className="mr-1 animate-wobble inline-block">{isGreen ? "🟢" : isCyan ? "🔵" : "🩷"}</span>
                             {getClassroomLabel(classroom, true)}
                         </Badge>
                     </div>
@@ -299,9 +315,9 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     {/* Content */}
                     <div className="flex-1 mb-4">
                         <h3 className={`text-base sm:text-lg font-black mb-2 line-clamp-2 leading-tight group-hover:scale-105 transition-transform duration-300 ${
-                          isGreen ? "text-foreground group-hover:text-green-400 drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]" :
-                          isCyan ? "text-foreground group-hover:text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]" :
-                          "text-foreground group-hover:text-pink-400 drop-shadow-[0_0_8px_rgba(236,72,153,0.4)]"
+                          isGreen ? "text-foreground group-hover:text-green-400 drop-shadow-[0_0_12px_rgba(34,197,94,0.5)]" :
+                          isCyan ? "text-foreground group-hover:text-cyan-400 drop-shadow-[0_0_12px_rgba(6,182,212,0.5)]" :
+                          "text-foreground group-hover:text-pink-400 drop-shadow-[0_0_12px_rgba(236,72,153,0.5)]"
                         }`}>
                             {file.title}
                         </h3>
@@ -315,19 +331,29 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                         </p>
                     </div>
 
-                    {/* Fun Footer with Like & Arrow */}
+                    {/* 🎮 Fun Footer with Like, XP indicator & Arrow */}
                     <div className="mt-auto pt-4 border-t border-border/50 flex items-center justify-between">
-                         <LikeButton
-                            materialId={file.id}
-                            className="btn-bouncy"
-                            initialLikeStatus={batchLikesData?.[file.id]}
-                         />
+                         <div className="flex items-center gap-2">
+                           <LikeButton
+                              materialId={file.id}
+                              className="btn-bouncy"
+                              initialLikeStatus={batchLikesData?.[file.id]}
+                           />
+                           {/* 🏆 XP indicator */}
+                           <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                             isGreen ? "bg-green-400/20 text-green-400" :
+                             isCyan ? "bg-cyan-400/20 text-cyan-400" :
+                             "bg-pink-400/20 text-pink-400"
+                           }`}>
+                             ⭐ {xpValue} XP
+                           </span>
+                         </div>
 
-                         {/* Playful Arrow with Gradient and Comic Border */}
-                         <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:rotate-12 ${
-                           isGreen ? "border-2 border-green-400 text-green-400 group-hover:bg-green-400 group-hover:text-background shadow-lg shadow-green-500/30" :
-                           isCyan ? "border-2 border-cyan-400 text-cyan-400 group-hover:bg-cyan-400 group-hover:text-background shadow-lg shadow-cyan-500/30" :
-                           "border-2 border-pink-400 text-pink-400 group-hover:bg-pink-400 group-hover:text-background shadow-lg shadow-pink-500/30"
+                         {/* 🚀 Playful Arrow with Gradient and Comic Border */}
+                         <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-115 group-hover:rotate-6 ${
+                           isGreen ? "border-3 border-green-400 text-green-400 group-hover:bg-green-400 group-hover:text-background shadow-xl shadow-green-500/40" :
+                           isCyan ? "border-3 border-cyan-400 text-cyan-400 group-hover:bg-cyan-400 group-hover:text-background shadow-xl shadow-cyan-500/40" :
+                           "border-3 border-pink-400 text-pink-400 group-hover:bg-pink-400 group-hover:text-background shadow-xl shadow-pink-500/40"
                          }`}>
                             <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" />
@@ -335,11 +361,11 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                          </div>
                     </div>
                     
-                    {/* Decorative corner accent */}
-                    <div className={`absolute top-0 right-0 w-16 h-16 opacity-10 group-hover:opacity-20 transition-opacity ${
-                      isGreen ? "bg-gradient-to-br from-green-400 to-green-600" :
-                      isCyan ? "bg-gradient-to-br from-cyan-400 to-cyan-600" :
-                      "bg-gradient-to-br from-pink-400 to-purple-600"
+                    {/* 🌈 Decorative corner accent with rainbow gradient */}
+                    <div className={`absolute top-0 right-0 w-20 h-20 opacity-15 group-hover:opacity-30 transition-opacity ${
+                      isGreen ? "bg-gradient-to-br from-green-400 via-emerald-500 to-green-600" :
+                      isCyan ? "bg-gradient-to-br from-cyan-400 via-blue-500 to-cyan-600" :
+                      "bg-gradient-to-br from-pink-400 via-purple-500 to-pink-600"
                     } rounded-bl-full`}></div>
 
                   </CardContent>
@@ -348,41 +374,62 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
             })}
           </div>
         ) : (
+          /* 🎮 Empty state with gamified message */
           <div className="text-center py-16">
-            <Card className="max-w-md mx-auto bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-2 border-cyan-400/30 shadow-lg shadow-cyan-500/10">
+            <Card className="max-w-md mx-auto bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-3 border-cyan-400/40 shadow-xl shadow-cyan-500/20 holographic-card">
               <CardContent className="pt-12 pb-12">
-                <Search className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <div className="text-6xl mb-4 animate-wobble">🔍</div>
+                <Search className="w-16 h-16 mx-auto mb-4 text-muted-foreground animate-pulse" />
                 <p className="text-lg text-muted-foreground mb-2">
                   {selectedClassroom !== null ? (
                     <>
-                      Nincs találat a(z) <strong>{selectedClassroom}. osztályban</strong>
+                      Nincs találat a(z) <strong className="text-neon-cyan">{selectedClassroom}. osztályban</strong>
                       {searchQuery && (
                         <>
-                          {" "}a keresésre: <strong>"{searchQuery}"</strong>
+                          {" "}a keresésre: <strong className="text-neon-pink">"{searchQuery}"</strong>
                         </>
                       )}
                     </>
                   ) : (
                     <>
-                      Nincs találat a keresésre: <strong>"{searchQuery}"</strong>
+                      Nincs találat a keresésre: <strong className="text-neon-pink">"{searchQuery}"</strong>
                     </>
                   )}
                 </p>
+                <p className="text-sm text-cyan-400/80 mb-4 animate-pulse">💡 Próbálj más keresést, vagy nézz körül másik osztályban!</p>
                 <Button
                   variant="outline"
                   onClick={() => {
                     setSearchQuery("");
                     setSelectedClassroom(null);
                   }}
-                  className="mt-4"
+                  className="mt-4 btn-bouncy border-2 border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-background shadow-lg shadow-cyan-500/30"
                   data-testid="button-clear-filters"
                 >
-                  Szűrők törlése
+                  🔄 Szűrők törlése
                 </Button>
               </CardContent>
             </Card>
+            
+            {/* 🎮 Floating decorative elements for empty state */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              <div className="floating-emoji absolute top-10 left-10 text-4xl" style={{ animationDelay: '0s' }}>📚</div>
+              <div className="floating-emoji absolute top-20 right-20 text-3xl" style={{ animationDelay: '0.5s' }}>🎯</div>
+              <div className="floating-emoji absolute bottom-10 left-1/4 text-4xl" style={{ animationDelay: '1s' }}>🌟</div>
+              <div className="floating-emoji absolute bottom-20 right-1/3 text-3xl" style={{ animationDelay: '1.5s' }}>🚀</div>
+            </div>
           </div>
         )}
+      </div>
+      
+      {/* 🎮 Global floating game decorations */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="floating-emoji absolute top-1/4 left-5 text-2xl opacity-40" style={{ animationDelay: '0s', animationDuration: '8s' }}>⭐</div>
+        <div className="floating-emoji absolute top-1/3 right-8 text-2xl opacity-40" style={{ animationDelay: '2s', animationDuration: '10s' }}>🎮</div>
+        <div className="floating-emoji absolute top-2/3 left-12 text-xl opacity-30" style={{ animationDelay: '4s', animationDuration: '12s' }}>🏆</div>
+        <div className="floating-emoji absolute bottom-1/4 right-16 text-2xl opacity-40" style={{ animationDelay: '1s', animationDuration: '9s' }}>💎</div>
+        <div className="floating-emoji absolute top-1/2 left-1/4 text-xl opacity-30" style={{ animationDelay: '3s', animationDuration: '11s' }}>🎯</div>
+        <div className="floating-emoji absolute bottom-1/3 right-1/4 text-2xl opacity-35" style={{ animationDelay: '5s', animationDuration: '7s' }}>🌈</div>
       </div>
     </div>
   );
