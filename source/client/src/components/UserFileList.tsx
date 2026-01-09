@@ -79,7 +79,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      <div className="min-h-screen" style={{ backgroundColor: 'hsl(240 100% 9%)', minHeight: '100vh' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
           <div className="animate-pulse">
             <div className="h-8 w-48 bg-muted rounded mx-auto mb-4"></div>
@@ -92,7 +92,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
   if (files.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      <div className="min-h-screen" style={{ backgroundColor: 'hsl(240 100% 9%)', minHeight: '100vh' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           {/* Admin Toggle */}
           {onToggleView && (
@@ -100,7 +100,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               <Button
                 onClick={onToggleView}
                 variant="outline"
-                className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm"
+                className="bg-gray-900/80 backdrop-blur-sm"
                 data-testid="button-toggle-admin-view"
               >
                 <ShieldCheck className="w-4 h-4 mr-2" />
@@ -133,8 +133,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   }
 
   return (
-    <div className="min-h-screen relative">
-      {/* Background is handled by index.css global styles now */}
+    <div className="min-h-screen relative" style={{ backgroundColor: 'hsl(240 100% 9%)' }}>
+      {/* Background is handled by index.css global styles now - dark mode sci-fi háttér */}
 
       <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-4 sm:py-6 lg:py-8">
         {/* Admin Toggle */}
@@ -205,10 +205,10 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                         ? "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white border-cyan-400 shadow-xl shadow-cyan-500/40 animate-gradient-shift"
                         : "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white border-pink-400 shadow-xl shadow-pink-500/40 animate-gradient-shift"
                       : isGreen
-                      ? "border-green-400/50 text-green-400 bg-gray-800/50 hover:bg-green-400/10 hover:border-green-400 hover:scale-105"
+                      ? "border-green-400/50 text-green-400 bg-transparent hover:bg-green-400/10 hover:border-green-400 hover:scale-105"
                       : isCyan
-                      ? "border-cyan-400/50 text-cyan-400 bg-gray-800/50 hover:bg-cyan-400/10 hover:border-cyan-400 hover:scale-105"
-                      : "border-pink-400/50 text-pink-400 bg-gray-800/50 hover:bg-pink-400/10 hover:border-pink-400 hover:scale-105"
+                      ? "border-cyan-400/50 text-cyan-400 bg-transparent hover:bg-cyan-400/10 hover:border-cyan-400 hover:scale-105"
+                      : "border-pink-400/50 text-pink-400 bg-transparent hover:bg-pink-400/10 hover:border-pink-400 hover:scale-105"
                   } ${!hasFiles ? "opacity-50 cursor-not-allowed" : ""}`}
                   onClick={() => !hasFiles ? null : setSelectedClassroom(classroom)}
                   data-testid={`button-filter-classroom-${classroom}`}
@@ -234,7 +234,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               placeholder="🔍 Keresés tananyag után... (+10 XP keresésért!)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 xs:pl-12 h-10 xs:h-11 sm:h-12 text-sm xs:text-base bg-gray-800/80 dark:bg-gray-900/80 backdrop-blur-sm border-3 border-purple-400/50 focus:border-purple-400 focus:ring-4 focus:ring-purple-500/40 text-gray-100 placeholder:text-gray-400 shadow-lg shadow-purple-500/15 focus:shadow-xl focus:shadow-purple-500/40 transition-all duration-300 rounded-2xl hover:border-purple-400/70"
+              className="pl-10 xs:pl-12 h-10 xs:h-11 sm:h-12 text-sm xs:text-base backdrop-blur-sm border-3 border-purple-400/50 focus:border-purple-400 focus:ring-4 focus:ring-purple-500/40 text-gray-100 placeholder:text-gray-400 shadow-lg shadow-purple-500/15 focus:shadow-xl focus:shadow-purple-500/40 transition-all duration-300 rounded-2xl hover:border-purple-400/70"
+              style={{ backgroundColor: 'hsl(240 100% 18% / 0.8)' }}
               data-testid="input-search"
             />
             {/* 🌟 Active indicator with sparkle */}

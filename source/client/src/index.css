@@ -6,14 +6,15 @@
   :root {
     /* --- 🎮 GAMIFIED SZÍNVILÁG (6-18 éveseknek) --- */
     /* Duolingo + Fortnite + TikTok vizuális nyelvezet */
-    --background: 240 100% 98%;
-    --foreground: 250 50% 10%;
+    /* Dark mode alapértelmezett - sci-fi téma */
+    --background: 240 100% 9%; /* Dark sci-fi háttér */
+    --foreground: 0 0% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 250 50% 10%;
+    --card: 240 100% 18%; /* Dark card háttér - geodéziai kupola */
+    --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 250 50% 10%;
+    --popover: 240 100% 18%;
+    --popover-foreground: 0 0% 98%;
 
     /* === ACHIEVEMENT LILA === */
     --achievement-purple: 280 100% 60%;
@@ -57,13 +58,13 @@
     --warning: 40 100% 55%;
     --xp-gold: 45 100% 50%;
 
-    --muted: 240 20% 96%;
-    --muted-foreground: 240 10% 45%;
-    --destructive: 0 90% 60%;
+    --muted: 250 30% 15%; /* Dark muted háttér */
+    --muted-foreground: 240 10% 60%;
+    --destructive: 0 90% 65%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 20% 90%;
-    --input: 240 20% 95%;
-    --ring: 280 100% 60%;
+    --border: 250 30% 18%; /* Dark border */
+    --input: 250 30% 18%; /* Dark input háttér */
+    --ring: 280 100% 65%;
     --radius: 1.5rem;
   }
 
@@ -169,11 +170,11 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden pt-24;
-    /* Dark mode alapértelmezett háttér - sötét sci-fi */
+    @apply text-foreground font-sans antialiased overflow-x-hidden pt-24;
+    /* Dark mode alapértelmezett háttér - sötét sci-fi - MINDIG */
     background-color: hsl(240 100% 9%) !important; /* --bg-dark */
-    /* 🎮 Gamified háttér - Duolingo style - csak dark mode-ban */
-    background:
+    /* 🎮 Gamified háttér - Duolingo style - dark mode sci-fi */
+    background-image:
       radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
       radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
       radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
@@ -184,16 +185,56 @@
     min-height: 100vh;
   }
   
-  /* Dark mode body háttér - még sötétebb */
+  /* Dark mode body háttér - garantált dark */
   html.dark body,
-  body.dark {
+  body.dark,
+  html body {
     background-color: hsl(240 100% 9%) !important; /* --bg-dark */
-    background:
+    background-image:
       radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
       radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
       radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
       radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
       hsl(240 100% 9%) !important;
+  }
+  
+  /* Override minden világos háttért dark-ra */
+  html body #root,
+  html #root {
+    background-color: hsl(240 100% 9%) !important;
+    background-image: none !important;
+  }
+  
+  /* HeroSection háttér kényszerítése - sci-fi dark - MAXIMÁLIS SPECIFICITY */
+  .hero-section-container,
+  div.hero-section-container,
+  .relative.text-center.mb-12.hero-section-container,
+  div.relative.text-center.mb-12.hero-section-container,
+  .relative.text-center.mb-12[style*="hsl(230"],
+  .hero-section-container.relative.text-center {
+    background: linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%)) !important;
+    background-color: hsl(230 60% 12%) !important;
+    background-image: linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%)) !important;
+    /* Override minden Tailwind osztályt és inline style-t */
+    background-clip: padding-box !important;
+    /* Override minden gradient-et */
+    background-blend-mode: normal !important;
+  }
+  
+  /* Override minden lehetséges világos háttért a hero section-ben */
+  .hero-section-container *:not(.achievement-badge):not(.xp-badge):not(.streak-badge):not(video):not(svg):not(.sticker) {
+    /* Ne override-oljuk a badge-eket és SVG-ket */
+  }
+  
+  /* Garantált dark háttér a hero section container-nek */
+  div.hero-section-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%)) !important;
+    background-color: hsl(230 60% 12%) !important;
+    z-index: -1;
+    pointer-events: none;
   }
 
   /* 🌈 Animated floating bubbles - FUN & PLAYFUL */
@@ -475,6 +516,32 @@ div.holographic-card > *,
 [class*="holographic-card"] > * {
   position: relative;
   z-index: 2;
+}
+
+/* CardContent háttér eltávolítása holographic-card-nál - MAXIMÁLIS SPECIFICITY */
+.holographic-card > div,
+.holographic-card .p-6,
+.holographic-card [class*="p-6"],
+.holographic-card [class*="p-5"],
+.holographic-card [class*="p-6"][class*="pt-0"],
+.holographic-card [class*="p-5"][class*="pt-0"],
+.shadcn-card.holographic-card > div,
+.shadcn-card.holographic-card .p-6,
+.shadcn-card.holographic-card [class*="p-6"],
+.shadcn-card.holographic-card [class*="p-5"],
+[class*="holographic-card"] > div,
+[class*="holographic-card"] [class*="p-"] {
+  background-color: transparent !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+/* Override minden Tailwind bg- osztályt holographic-card-nál */
+.holographic-card [class*="bg-"],
+.shadcn-card.holographic-card [class*="bg-"],
+[class*="holographic-card"] [class*="bg-"]:not([class*="bg-gradient"]):not([class*="bg-orange"]):not([class*="bg-green"]):not([class*="bg-cyan"]):not([class*="bg-pink"]):not([class*="bg-purple"]) {
+  background-color: transparent !important;
+  background: none !important;
 }
 
 @layer utilities {

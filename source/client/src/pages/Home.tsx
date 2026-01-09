@@ -34,7 +34,7 @@ export default function Home() {
 
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={{ backgroundColor: 'hsl(240 100% 9%)', minHeight: '100vh' }}>
       <Header />
 
       {/* Normál felhasználói nézet - csak a fájlok listája */}

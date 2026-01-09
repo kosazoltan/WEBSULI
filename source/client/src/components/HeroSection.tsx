@@ -26,16 +26,19 @@ function HeroSection({
   };
 
   return (
-    <div className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0 animate-slide-in-up" 
-         style={{
-           background: 'linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))',
-           backdropFilter: 'blur(20px)',
-           boxShadow: '0 10px 40px rgba(30, 144, 255, 0.2), 0 0 0 1px rgba(255, 140, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.1)',
-         }}>
+    <div 
+      className="hero-section-container relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0 animate-slide-in-up" 
+      style={{
+        background: 'linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))',
+        backgroundColor: 'hsl(230 60% 12%)',
+        backdropFilter: 'blur(20px)',
+        boxShadow: '0 10px 40px rgba(30, 144, 255, 0.2), 0 0 0 1px rgba(255, 140, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.1)',
+        zIndex: 10,
+      } as React.CSSProperties}>
       
-      {/* MP4 Video háttér - űr/planéta témájú */}
+      {/* MP4 Video háttér - űr/planéta témájú - ELREJTVE ha nem töltődik be */}
       <video
-        className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
+        className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
         autoPlay
         loop
         muted
@@ -44,12 +47,13 @@ function HeroSection({
         style={{ 
           zIndex: 0,
           objectPosition: 'center center',
+          display: 'none', /* Videó elrejtése - csak sci-fi SVG háttér */
         }}
         onLoadedData={(e) => {
-          // Videó betöltése után smooth fade-in
+          // Videó betöltése után is maradjon elrejtve
           const video = e.currentTarget;
-          video.style.opacity = '0.6';
-          video.style.transition = 'opacity 1s ease-in';
+          video.style.opacity = '0';
+          video.style.display = 'none';
         }}
       >
         <source src="/hero-video.mp4" type="video/mp4" />
@@ -64,11 +68,11 @@ function HeroSection({
           zIndex: 1,
           background: `
             linear-gradient(to bottom, 
-              hsl(230 70% 15% / 0.7) 0%, 
-              hsl(240 60% 20% / 0.6) 30%,
-              hsl(25 90% 45% / 0.4) 60%,
-              hsl(30 100% 55% / 0.5) 75%,
-              hsl(15 80% 30% / 0.6) 100%
+              hsl(230 70% 15% / 0.5) 0%, 
+              hsl(240 60% 20% / 0.4) 30%,
+              hsl(25 90% 45% / 0.3) 60%,
+              hsl(30 100% 55% / 0.4) 75%,
+              hsl(15 80% 30% / 0.5) 100%
             )
           `,
         }}
