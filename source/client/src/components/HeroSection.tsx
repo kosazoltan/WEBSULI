@@ -21,11 +21,102 @@ function HeroSection({
   };
 
   return (
-    <div className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden holographic-card border-0 animate-slide-in-up card-hover-lift">
+    <div className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0 animate-slide-in-up card-hover-lift" 
+         style={{
+           background: 'linear-gradient(135deg, hsl(220 10% 20%) 0%, hsl(220 15% 25%) 30%, hsl(300 80% 40%) 70%, hsl(300 100% 50%) 100%)',
+           backdropFilter: 'blur(20px)',
+           boxShadow: '0 10px 40px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.05)',
+         }}>
       
-      {/* Floating bubble background effects */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-3xl animate-float-rotate"></div>
-      <div className="absolute bottom-0 left-0 w-40 h-40 bg-gradient-to-tr from-cyan-500/20 to-blue-500/20 rounded-full blur-3xl animate-float-rotate" style={{ animationDelay: '1s' }}></div>
+      {/* Alkimista titkos jelek - animálva */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Körök - alkimista jel (pulzáló) */}
+        <svg className="absolute top-10 left-10 w-24 h-24" style={{ 
+          animation: 'float-rotate 8s ease-in-out infinite, alchemist-pulse 3s ease-in-out infinite, alchemist-glow 2s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 4px hsl(300 100% 70% / 0.6))'
+        }}>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="hsl(300 100% 70%)" strokeWidth="1.5" strokeDasharray="4 4" />
+          <circle cx="12" cy="12" r="6" fill="none" stroke="hsl(300 100% 60%)" strokeWidth="1" />
+          <circle cx="12" cy="12" r="2" fill="hsl(300 100% 70%)" />
+        </svg>
+        
+        {/* Háromszög - tűz/levegő jel (forgó) */}
+        <svg className="absolute top-20 right-20 w-20 h-20" style={{ 
+          animation: 'float-rotate 10s ease-in-out infinite 1s, alchemist-rotate 20s linear infinite, alchemist-pulse 4s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
+        }}>
+          <path d="M 10 2 L 18 18 L 2 18 Z" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="2" />
+          <circle cx="10" cy="10" r="1.5" fill="hsl(300 100% 70%)" />
+        </svg>
+        
+        {/* Hexagram - csillag (pulzáló) */}
+        <svg className="absolute bottom-20 left-20 w-28 h-28" style={{ 
+          animation: 'float-rotate 12s ease-in-out infinite 2s, alchemist-pulse 5s ease-in-out infinite, alchemist-glow 3s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 5px hsl(300 100% 70% / 0.6))'
+        }}>
+          <path d="M 14 2 L 18 10 L 26 10 L 20 16 L 22 24 L 14 20 L 6 24 L 8 16 L 2 10 L 10 10 Z" 
+                fill="none" stroke="hsl(300 100% 60%)" strokeWidth="1.5" />
+        </svg>
+        
+        {/* Alkimista négyzet (forgó) */}
+        <svg className="absolute bottom-32 right-32 w-16 h-16" style={{ 
+          animation: 'float-rotate 9s ease-in-out infinite 0.5s, alchemist-rotate 25s linear infinite reverse, alchemist-pulse 3.5s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
+        }}>
+          <rect x="2" y="2" width="12" height="12" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1.5" />
+          <line x1="2" y1="8" x2="14" y2="8" stroke="hsl(300 100% 70%)" strokeWidth="1" />
+          <line x1="8" y1="2" x2="8" y2="14" stroke="hsl(300 100% 70%)" strokeWidth="1" />
+        </svg>
+        
+        {/* Pentagram - ötágú csillag (lassan forgó) */}
+        <svg className="absolute top-1/2 left-1/4 w-22 h-22" style={{ 
+          animation: 'float-rotate 11s ease-in-out infinite 1.5s, alchemist-rotate 30s linear infinite, alchemist-glow 4s ease-in-out infinite',
+          transform: 'translate(-50%, -50%)',
+          filter: 'drop-shadow(0 0 4px hsl(300 100% 70% / 0.6))'
+        }}>
+          <path d="M 11 2 L 13.5 8.5 L 20.5 8.5 L 14.5 13 L 17 19.5 L 11 15 L 5 19.5 L 7.5 13 L 1.5 8.5 L 8.5 8.5 Z" 
+                fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1.5" />
+        </svg>
+        
+        {/* Kereszt - négy elem (pulzáló) */}
+        <svg className="absolute top-1/3 right-1/3 w-18 h-18" style={{ 
+          animation: 'float-rotate 7s ease-in-out infinite 0.8s, alchemist-pulse 2.5s ease-in-out infinite, alchemist-glow 2.5s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
+        }}>
+          <line x1="9" y1="2" x2="9" y2="16" stroke="hsl(300 100% 70%)" strokeWidth="2" />
+          <line x1="2" y1="9" x2="16" y2="9" stroke="hsl(300 100% 70%)" strokeWidth="2" />
+          <circle cx="9" cy="9" r="2" fill="hsl(300 100% 60%)" />
+        </svg>
+        
+        {/* Spirál jel (forgó) */}
+        <svg className="absolute bottom-16 right-16 w-14 h-14" style={{ 
+          animation: 'float-rotate 6s ease-in-out infinite 1.2s, alchemist-rotate 15s linear infinite, alchemist-pulse 3s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
+        }}>
+          <path d="M 7 7 Q 7 2 12 2 Q 17 2 17 7 Q 17 12 12 12 Q 7 12 7 7" 
+                fill="none" stroke="hsl(300 100% 70%)" strokeWidth="1.5" />
+        </svg>
+        
+        {/* Alkimista körök lánc (pulzáló) */}
+        <svg className="absolute top-1/4 right-1/4 w-32 h-32" style={{ 
+          animation: 'float-rotate 15s ease-in-out infinite, alchemist-pulse 6s ease-in-out infinite, alchemist-glow 3.5s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 4px hsl(300 100% 70% / 0.5))'
+        }}>
+          <circle cx="16" cy="8" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
+          <circle cx="24" cy="16" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
+          <circle cx="16" cy="24" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
+          <circle cx="8" cy="16" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
+          <line x1="16" y1="8" x2="24" y2="16" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
+          <line x1="24" y1="16" x2="16" y2="24" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
+          <line x1="16" y1="24" x2="8" y2="16" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
+          <line x1="8" y1="16" x2="16" y2="8" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
+        </svg>
+      </div>
+      
+      {/* Floating bubble background effects - magenta/purple árnyalatok */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-magenta-500/25 to-purple-500/25 rounded-full blur-3xl animate-float-rotate"></div>
+      <div className="absolute bottom-0 left-0 w-40 h-40 bg-gradient-to-tr from-pink-500/25 to-magenta-500/25 rounded-full blur-3xl animate-float-rotate" style={{ animationDelay: '1s' }}></div>
+      <div className="absolute top-1/2 left-1/2 w-48 h-48 bg-gradient-to-r from-purple-500/15 to-magenta-500/15 rounded-full blur-3xl animate-float-rotate -translate-x-1/2 -translate-y-1/2" style={{ animationDelay: '2s' }}></div>
 
       {/* Main Content */}
       <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center">
