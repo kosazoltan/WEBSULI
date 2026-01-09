@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
 import HeroSection from "@/components/HeroSection";
 import LikeButton from "@/components/LikeButton";
-import ScientificBackground from "@/components/ScientificBackground";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -229,22 +228,21 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               return (
                 <Card
                   key={file.id}
-                  className="group relative overflow-hidden rounded-2xl border-0 bg-slate-800/40 backdrop-blur-sm transition-all duration-300 hover:-translate-y-2 hover:bg-slate-800/60 hover:shadow-2xl hover:shadow-cyan-500/10 cursor-pointer ring-1 ring-white/5 hover:ring-cyan-400/50"
+                  className="group holographic-card cursor-pointer border-0 bg-white/[0.02]"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                 >
-                  {/* Card Header Gradient */}
-                  <div className={`absolute top-0 inset-x-0 h-1 bg-gradient-to-r ${
-                    classroom <= 4 ? "from-green-400 to-emerald-600" :
-                    classroom <= 8 ? "from-blue-400 to-cyan-600" : 
-                    "from-purple-400 to-pink-600"
-                  }`} />
+                  <CardContent className="p-5 flex flex-col h-full relative z-10">
+                    {/* Abstract Header Graphic (CSS only, fast) */}
+                    <div className={`absolute top-0 right-0 w-24 h-24 rounded-full blur-2xl opacity-20 -mr-10 -mt-10 transition-opacity duration-500 group-hover:opacity-40 rounded-bl-3xl ${
+                        classroom <= 4 ? "bg-green-400" :
+                        classroom <= 8 ? "bg-cyan-400" : 
+                        "bg-purple-400"
+                    }`} />
 
-                  <CardContent className="p-5 flex flex-col h-full">
-                    
                     {/* Top Row: Icon & Badge */}
                     <div className="flex justify-between items-start mb-4">
-                        <div className={`p-3 rounded-xl bg-slate-900/50 ring-1 ring-white/10 group-hover:scale-110 transition-transform duration-300 ${
+                        <div className={`p-3 rounded-2xl bg-white/5 ring-1 ring-white/10 group-hover:scale-105 transition-transform duration-300 ${
                              classroom <= 4 ? "text-green-400" :
                              classroom <= 8 ? "text-cyan-400" : 
                              "text-pink-400"
@@ -252,32 +250,35 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                             <Icon className="w-6 h-6" />
                         </div>
                         
-                        <Badge variant="outline" className="bg-slate-900/30 border-white/10 text-xs font-semibold backdrop-blur-md">
+                        <Badge variant="outline" className="bg-white/5 border-white/10 text-xs font-semibold backdrop-blur-sm">
                             {getClassroomLabel(classroom, true)}
                         </Badge>
                     </div>
 
                     {/* Content */}
                     <div className="flex-1">
-                        <h3 className="text-lg font-bold text-slate-100 mb-2 line-clamp-2 leading-tight group-hover:text-cyan-300 transition-colors">
+                        <h3 className="text-lg font-bold text-slate-100 mb-2 line-clamp-2 leading-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-slate-400 transition-all">
                             {file.title}
                         </h3>
-                        <p className="text-sm text-slate-400 line-clamp-2">
-                            {file.description || "Nincs leírás megadva ehhez a tananyaghoz."}
+                        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed">
+                            {file.description || "Töltsd be a tudást!"}
                         </p>
                     </div>
 
-                    {/* Footer Actions */}
+                    {/* Minimalist Footer */}
                     <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
                          <LikeButton
                             materialId={file.id}
-                            className="bg-transparent hover:bg-white/5"
+                            className="bg-transparent hover:bg-white/5 text-slate-400 hover:text-white"
                             initialLikeStatus={batchLikesData?.[file.id]}
                          />
                          
-                         <span className="text-xs font-bold text-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                            Megnyitás <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-                         </span>
+                         {/* Subtle Arrow Indicator */}
+                         <div className="w-8 h-8 rounded-full flex items-center justify-center border border-white/10 bg-white/5 group-hover:bg-cyan-500/20 group-hover:border-cyan-500/50 group-hover:text-cyan-400 transition-all">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
+                         </div>
                     </div>
 
                   </CardContent>
