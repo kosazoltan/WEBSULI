@@ -222,61 +222,68 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
         {/* Files Grid - Chronological Order (Newest First) */}
         {filteredFiles.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 tablet:grid-cols-3 xl:grid-cols-4 foldable:grid-cols-5 uw:grid-cols-6 gap-4 sm:gap-6" data-testid="list-files" id="content-start">
-            {filteredFiles.map((file) => {
+            {filteredFiles.map((file, index) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
               return (
                 <Card
                   key={file.id}
-                  className="group holographic-card cursor-pointer border-0 bg-white/[0.02]"
+                  className="group holographic-card cursor-pointer border-0 animate-slide-in-up"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
+                  style={{ animationDelay: `${Math.min(index * 0.05, 1)}s` }}
                 >
-                  <CardContent className="p-5 flex flex-col h-full relative z-10">
-                    {/* Abstract Header Graphic (CSS only, fast) */}
-                    <div className={`absolute top-0 right-0 w-24 h-24 rounded-full blur-2xl opacity-20 -mr-10 -mt-10 transition-opacity duration-500 group-hover:opacity-40 rounded-bl-3xl ${
-                        classroom <= 4 ? "bg-green-400" :
-                        classroom <= 8 ? "bg-cyan-400" : 
-                        "bg-purple-400"
-                    }`} />
+                  <CardContent className="p-6 flex flex-col h-full relative">
 
-                    {/* Top Row: Icon & Badge */}
+                    {/* Top Row: Playful Icon & Badge */}
                     <div className="flex justify-between items-start mb-4">
-                        <div className={`p-3 rounded-2xl bg-white/5 ring-1 ring-white/10 group-hover:scale-105 transition-transform duration-300 ${
-                             classroom <= 4 ? "text-green-400" :
-                             classroom <= 8 ? "text-cyan-400" : 
-                             "text-pink-400"
+                        <div className={`sticker p-3 rounded-2xl ${
+                             classroom <= 4 ? "bg-gradient-to-br from-green-400/20 to-green-600/20 text-green-400" :
+                             classroom <= 8 ? "bg-gradient-to-br from-cyan-400/20 to-cyan-600/20 text-cyan-400" :
+                             "bg-gradient-to-br from-pink-400/20 to-purple-600/20 text-pink-400"
                         }`}>
-                            <Icon className="w-6 h-6" />
+                            <Icon className="w-7 h-7" />
                         </div>
-                        
-                        <Badge variant="outline" className="bg-white/5 border-white/10 text-xs font-semibold backdrop-blur-sm">
+
+                        <Badge variant="outline" className={`text-xs font-bold ${
+                          classroom <= 4 ? "border-green-400/50 text-green-400 bg-green-400/10" :
+                          classroom <= 8 ? "border-cyan-400/50 text-cyan-400 bg-cyan-400/10" :
+                          "border-pink-400/50 text-pink-400 bg-pink-400/10"
+                        }`}>
                             {getClassroomLabel(classroom, true)}
                         </Badge>
                     </div>
 
                     {/* Content */}
                     <div className="flex-1">
-                        <h3 className="text-lg font-bold text-slate-100 mb-2 line-clamp-2 leading-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-slate-400 transition-all">
+                        <h3 className={`text-lg font-black mb-2 line-clamp-2 leading-tight group-hover:scale-105 transition-transform ${
+                          classroom <= 4 ? "text-foreground group-hover:text-neon-purple" :
+                          classroom <= 8 ? "text-foreground group-hover:text-neon-cyan" :
+                          "text-foreground group-hover:text-neon-pink"
+                        }`}>
                             {file.title}
                         </h3>
-                        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed">
-                            {file.description || "Töltsd be a tudást!"}
+                        <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                            {file.description || "🚀 Töltsd be a tudást és lépj szintet!"}
                         </p>
                     </div>
 
-                    {/* Minimalist Footer */}
-                    <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                    {/* Fun Footer with Like & Arrow */}
+                    <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
                          <LikeButton
                             materialId={file.id}
-                            className="bg-transparent hover:bg-white/5 text-slate-400 hover:text-white"
+                            className="btn-bouncy"
                             initialLikeStatus={batchLikesData?.[file.id]}
                          />
-                         
-                         {/* Subtle Arrow Indicator */}
-                         <div className="w-8 h-8 rounded-full flex items-center justify-center border border-white/10 bg-white/5 group-hover:bg-cyan-500/20 group-hover:border-cyan-500/50 group-hover:text-cyan-400 transition-all">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+
+                         {/* Playful Arrow with Gradient */}
+                         <div className={`w-10 h-10 rounded-full flex items-center justify-center comic-border transition-all ${
+                           classroom <= 4 ? "border-green-400 text-green-400 group-hover:bg-green-400 group-hover:text-background" :
+                           classroom <= 8 ? "border-cyan-400 text-cyan-400 group-hover:bg-cyan-400 group-hover:text-background" :
+                           "border-pink-400 text-pink-400 group-hover:bg-pink-400 group-hover:text-background"
+                         }`}>
+                            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                             </svg>
                          </div>
                     </div>

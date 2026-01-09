@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { ChevronRight, Play } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
 
@@ -21,68 +21,62 @@ function HeroSection({
   };
 
   return (
-    <div className="relative text-center mb-12 py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden holographic-card border-0">
-      
-      {/* Optimized Aurora Background Elements */}
-      <div className="absolute inset-0 z-0">
-         {/* Use static gradients with subtle opacity animation instead of heavy movement */}
-         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[100px] mix-blend-screen opacity-60" />
-         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[100px] mix-blend-screen opacity-60" />
-      </div>
+    <div className="relative text-center mb-12 py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden holographic-card border-0 animate-slide-in-up">
 
       {/* Main Content */}
       <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center">
-        
-        {/* Badge - Minimalist */}
-        <div className="mb-6 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-xs font-bold tracking-widest uppercase text-slate-300">Websuli 2026</span>
+
+        {/* Badge - Gaming Style */}
+        <div className="achievement-badge mb-6">
+            <span className="text-2xl">🎮</span>
+            <span className="text-xs font-black tracking-widest uppercase">Websuli 2026</span>
         </div>
 
-        {/* Title - Massive Type */}
-        <h1 className="text-5xl sm:text-7xl lg:text-9xl font-black mb-6 tracking-tighter leading-[0.9] drop-shadow-2xl">
+        {/* Title - Playful & Bold */}
+        <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black mb-6 tracking-tight leading-[1.1] animate-slide-in-up">
           <span className="text-foreground">Lépj </span>
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-500">
+          <span className="text-neon-purple animate-slide-in-up hero-title-delay">
             Szintet
           </span>
+          <span className="text-4xl sm:text-5xl ml-2 inline-block wobble">🚀</span>
         </h1>
 
-        {/* Subtitle / Mission Statement */}
-        <p className="text-xl sm:text-2xl text-muted-foreground mb-10 max-w-2xl font-light leading-relaxed">
-          A jövő oktatási platformja. <span className="text-foreground font-semibold">Gamifikált</span> tananyagok 
-          és <span className="text-foreground font-semibold">közösségi</span> élmény.
+        {/* Subtitle / Mission Statement - Fun & Energetic */}
+        <p className="text-xl sm:text-2xl text-muted-foreground mb-10 max-w-2xl font-medium leading-relaxed animate-slide-in-up hero-subtitle-delay">
+          A jövő oktatási platformja. <span className="text-neon-cyan font-black">Gamifikált</span> tananyagok,
+          <span className="text-neon-pink font-black"> közösségi</span> élmény és <span className="text-neon-purple font-black">végtelen</span> lehetőségek! ✨
         </p>
 
-        {/* CTA Actions - Big Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center">
-            <Button 
-                size="lg" 
-                className="w-full sm:w-auto text-lg h-16 px-10 rounded-2xl bg-foreground text-background hover:bg-cyan-500 hover:text-white transition-colors shadow-xl shadow-cyan-500/5 font-bold"
+        {/* CTA Actions - Bouncy Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center animate-slide-in-up hero-cta-delay">
+            <Button
+                size="lg"
+                className="btn-bouncy w-full sm:w-auto text-lg h-16 px-10 rounded-2xl bg-gradient-fun text-white hover:scale-110 transition-all shadow-xl font-black comic-border border-purple-600"
                 onClick={scrollToContent}
             >
-                Start <ChevronRight className="w-5 h-5 ml-2" />
+                🎯 Start Learning <ChevronRight className="w-5 h-5 ml-2" />
             </Button>
-            
+
             {showEmailSubscribe && (
                <div className="w-full sm:w-auto">
-                  <EmailSubscribeDialog /> 
+                  <EmailSubscribeDialog />
                </div>
             )}
         </div>
 
-        {/* Stats - Minimalist Row */}
-        <div className="mt-16 pt-8 border-t border-white/5 dark:border-white/5 border-black/5 flex gap-12 sm:gap-24 opacity-60 hover:opacity-100 transition-opacity">
-            <div className="text-center">
-                <div className="text-3xl font-black text-foreground">{totalFiles}</div>
-                <div className="text-xs uppercase tracking-widest text-muted-foreground mt-1">Tananyag</div>
+        {/* Stats - Gaming Achievement Style */}
+        <div className="mt-16 pt-8 border-t border-border/50 flex gap-8 sm:gap-16 animate-slide-in-up hero-stats-delay">
+            <div className="text-center sticker">
+                <div className="text-4xl font-black text-neon-purple mb-1">{totalFiles}</div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold">📚 Tananyag</div>
             </div>
-            <div className="text-center">
-                <div className="text-3xl font-black text-foreground">{totalClassrooms}</div>
-                <div className="text-xs uppercase tracking-widest text-muted-foreground mt-1">Osztály</div>
+            <div className="text-center sticker">
+                <div className="text-4xl font-black text-neon-cyan mb-1">{totalClassrooms}</div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold">🎓 Osztály</div>
             </div>
-             <div className="text-center">
-                <div className="text-3xl font-black text-foreground">∞</div>
-                <div className="text-xs uppercase tracking-widest text-muted-foreground mt-1">Lehetőség</div>
+             <div className="text-center sticker">
+                <div className="text-4xl font-black text-neon-pink mb-1">∞</div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold">⭐ Lehetőség</div>
             </div>
         </div>
 
