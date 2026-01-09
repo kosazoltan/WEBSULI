@@ -34,7 +34,22 @@ export default function Home() {
 
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'hsl(240 100% 9%)', minHeight: '100vh' }}>
+    <div 
+      className="min-h-screen" 
+      style={{ 
+        backgroundColor: 'hsl(240 100% 9%)',
+        backgroundImage: `
+          radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
+          radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
+          radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
+          radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
+          hsl(240 100% 9%)
+        `,
+        backgroundAttachment: 'fixed',
+        minHeight: '100vh',
+        color: '#f9fafb',
+      }}
+    >
       <Header />
 
       {/* Normál felhasználói nézet - csak a fájlok listája */}
