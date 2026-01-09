@@ -4,8 +4,8 @@
 
 @layer base {
   :root {
-    /* --- FIATALOS SZÍNVILÁG (6-18 éveseknek) --- */
-    /* Vibráns, energikus, motiváló színek */
+    /* --- 🎮 GAMIFIED SZÍNVILÁG (6-18 éveseknek) --- */
+    /* Duolingo-inspired vibráns, energikus, motiváló színek */
     --background: 240 100% 98%;
     --foreground: 250 50% 10%;
 
@@ -16,17 +16,18 @@
     --popover-foreground: 250 50% 10%;
 
     /* Gaming/Gamification színek - jutalom érzés */
-    --primary: 280 100% 60%;      /* Élénk lila - Achievement */
+    --primary: 280 100% 60%;      /* Élénk lila - Achievement 🏆 */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 340 100% 60%;    /* Vibráns pink - Energy */
+    --secondary: 340 100% 60%;    /* Vibráns pink - Energy ⚡ */
     --secondary-foreground: 0 0% 100%;
 
-    --accent: 180 100% 50%;       /* Türkiz - Fresh & Cool */
+    --accent: 180 100% 50%;       /* Türkiz - Fresh & Cool 🌊 */
     --accent-foreground: 250 50% 10%;
 
-    --success: 140 80% 50%;       /* Zöld - Siker, Level up */
-    --warning: 40 100% 55%;       /* Narancssárga - Figyelem */
+    --success: 140 80% 50%;       /* Zöld - Siker, Level up 🎯 */
+    --warning: 40 100% 55%;       /* Narancssárga - XP Boost 🔥 */
+    --xp-gold: 45 100% 50%;       /* Arany - XP Points ✨ */
 
     --muted: 240 20% 96%;
     --muted-foreground: 240 10% 45%;
@@ -39,7 +40,7 @@
   }
 
   .dark {
-    /* --- SÖTÉT MÓD: Neon Gaming Aesthetic --- */
+    /* --- 🌙 SÖTÉT MÓD: Neon Gaming Aesthetic --- */
     --background: 250 50% 5%;     /* Deep purple-black */
     --foreground: 0 0% 98%;
 
@@ -50,15 +51,16 @@
     --popover-foreground: 0 0% 98%;
 
     /* Neon Gaming színek */
-    --primary: 280 100% 65%;      /* Neon purple */
+    --primary: 280 100% 65%;      /* Neon purple 💜 */
     --primary-foreground: 0 0% 100%;
-    --secondary: 340 100% 65%;    /* Hot pink */
+    --secondary: 340 100% 65%;    /* Hot pink 💖 */
     --secondary-foreground: 0 0% 100%;
-    --accent: 180 100% 55%;       /* Cyan */
+    --accent: 180 100% 55%;       /* Cyan 💎 */
     --accent-foreground: 250 50% 5%;
 
-    --success: 140 80% 55%;
-    --warning: 40 100% 60%;
+    --success: 140 80% 55%;       /* Level up green 🌟 */
+    --warning: 40 100% 60%;       /* XP Boost orange 🔥 */
+    --xp-gold: 45 100% 55%;       /* XP Gold ✨ */
 
     --muted: 250 30% 15%;
     --muted-foreground: 240 10% 60%;
@@ -81,30 +83,31 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased overflow-x-hidden pt-24;
-    /* Dinamikus, energikus háttér */
+    /* 🎮 Gamified háttér - Duolingo style */
     background:
-      radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.15), transparent 50%),
-      radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.12), transparent 50%),
-      radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.08), transparent 60%),
+      radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
+      radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
+      radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
+      radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
       hsl(var(--background));
     background-attachment: fixed;
     position: relative;
     min-height: 100vh;
   }
 
-  /* Animated floating shapes - FUN & PLAYFUL */
+  /* 🌈 Animated floating bubbles - FUN & PLAYFUL */
   body::before {
     content: '';
     position: fixed;
     top: -10%;
     right: -5%;
-    width: 40vw;
-    height: 40vh;
-    background: radial-gradient(circle, hsl(340 100% 60% / 0.15), transparent 70%);
+    width: 45vw;
+    height: 45vh;
+    background: radial-gradient(circle, hsl(340 100% 60% / 0.18), transparent 70%);
     border-radius: 50%;
     z-index: -1;
     pointer-events: none;
-    animation: float-bubble 20s ease-in-out infinite;
+    animation: float-bubble 18s ease-in-out infinite;
   }
 
   body::after {
@@ -112,26 +115,26 @@
     position: fixed;
     bottom: -10%;
     left: -5%;
-    width: 35vw;
-    height: 35vh;
-    background: radial-gradient(circle, hsl(180 100% 55% / 0.15), transparent 70%);
+    width: 40vw;
+    height: 40vh;
+    background: radial-gradient(circle, hsl(180 100% 55% / 0.18), transparent 70%);
     border-radius: 50%;
     z-index: -1;
     pointer-events: none;
-    animation: float-bubble 15s ease-in-out infinite reverse;
+    animation: float-bubble 14s ease-in-out infinite reverse;
   }
 }
 
 @layer utilities {
 
-  /* --- FUN GAMING KÁRTYÁK (Duolingo style) --- */
+  /* --- 🎮 FUN GAMING KÁRTYÁK (Duolingo style) --- */
   .holographic-card {
     @apply relative overflow-hidden rounded-3xl transition-all duration-300 ease-out;
     background: linear-gradient(135deg,
       rgba(255, 255, 255, 0.95),
       rgba(255, 255, 255, 0.85)
     );
-    border: 2px solid transparent;
+    border: 3px solid transparent;
     background-clip: padding-box;
     box-shadow:
       0 10px 40px rgba(0, 0, 0, 0.08),
@@ -155,28 +158,30 @@
   }
 
   .holographic-card:hover {
-    transform: scale(1.02);
+    transform: translateY(-8px) scale(1.02) rotate(1deg);
     box-shadow:
-      0 25px 60px rgba(236, 72, 153, 0.25),
-      0 0 0 2px rgba(236, 72, 153, 0.5),
+      0 30px 70px rgba(236, 72, 153, 0.3),
+      0 0 0 3px rgba(236, 72, 153, 0.6),
       inset 0 2px 0 rgba(255, 255, 255, 0.3);
-    border-color: rgba(236, 72, 153, 0.4);
+    border-color: rgba(236, 72, 153, 0.5);
   }
 
-  /* Playful gradient border (like rewards) */
+  /* 🌈 Rainbow gradient border (like rewards) */
   .holographic-card::before {
     content: '';
     position: absolute;
-    inset: -2px;
+    inset: -3px;
     border-radius: inherit;
-    padding: 2px;
+    padding: 3px;
     background: linear-gradient(135deg,
       hsl(280 100% 65%),
       hsl(340 100% 65%),
+      hsl(45 100% 60%),
       hsl(180 100% 60%),
+      hsl(140 80% 55%),
       hsl(280 100% 65%)
     );
-    background-size: 300% 300%;
+    background-size: 400% 400%;
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -184,20 +189,20 @@
     opacity: 0;
     transition: opacity 0.4s;
     pointer-events: none;
-    animation: gradient-rotate 4s ease infinite;
+    animation: rainbow-rotate 3s ease infinite;
   }
 
   .holographic-card:hover::before {
     opacity: 1;
   }
 
-  /* Sparkle effect on hover */
+  /* ✨ Sparkle effect on hover */
   .holographic-card::after {
     content: '✨';
     position: absolute;
     top: 10px;
     right: 10px;
-    font-size: 24px;
+    font-size: 28px;
     opacity: 0;
     transform: scale(0) rotate(-45deg);
     transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
@@ -208,50 +213,113 @@
   .holographic-card:hover::after {
     opacity: 1;
     transform: scale(1) rotate(0deg);
-    animation: sparkle-twinkle 1s ease-in-out infinite;
+    animation: sparkle-twinkle 0.8s ease-in-out infinite;
   }
 
-  /* Additional sparkle particles on hover */
+  /* 🌟 Additional sparkle particles on hover */
   .holographic-card:hover {
     background-image: 
-      radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.4) 2px, transparent 2px),
-      radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.3) 1.5px, transparent 1.5px),
-      radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.3) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 100% 100%;
-    animation: sparkle-shimmer 2s linear infinite;
+      radial-gradient(circle at 15% 25%, rgba(255, 255, 255, 0.5) 3px, transparent 3px),
+      radial-gradient(circle at 85% 75%, rgba(236, 72, 153, 0.4) 2px, transparent 2px),
+      radial-gradient(circle at 45% 45%, rgba(139, 92, 246, 0.4) 2px, transparent 2px),
+      radial-gradient(circle at 70% 20%, rgba(45, 212, 191, 0.4) 2px, transparent 2px);
+    background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+    animation: sparkle-shimmer 1.5s linear infinite;
   }
 
-  /* Achievement Badge Style */
+  /* 🏆 Achievement Badge Style - Duolingo Inspired */
   .achievement-badge {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm;
-    background: linear-gradient(135deg, hsl(140 80% 50%), hsl(140 80% 40%));
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-sm tracking-wide;
+    background: linear-gradient(135deg, hsl(140 85% 48%), hsl(140 80% 35%));
     color: white;
     box-shadow:
-      0 4px 15px hsl(140 80% 50% / 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      0 6px 20px hsl(140 80% 50% / 0.5),
+      0 2px 4px rgba(0, 0, 0, 0.1),
+      inset 0 2px 0 rgba(255, 255, 255, 0.4),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.1);
     animation: badge-pulse 2s ease-in-out infinite;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
 
-  /* Level Up Animation */
+  /* 🎖️ XP Badge - Gold Gaming Style */
+  .xp-badge {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full font-black text-sm;
+    background: linear-gradient(135deg, hsl(45 100% 55%), hsl(35 100% 45%), hsl(45 100% 60%));
+    color: hsl(35 100% 15%);
+    box-shadow:
+      0 4px 15px hsl(45 100% 50% / 0.5),
+      inset 0 2px 0 rgba(255, 255, 255, 0.5),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.1);
+    animation: xp-glow 2s ease-in-out infinite;
+  }
+
+  /* 🔥 Streak Badge - Fire Style */
+  .streak-badge {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full font-black text-sm;
+    background: linear-gradient(135deg, hsl(20 100% 55%), hsl(0 100% 50%), hsl(30 100% 50%));
+    color: white;
+    box-shadow:
+      0 4px 15px hsl(20 100% 50% / 0.5),
+      inset 0 2px 0 rgba(255, 255, 255, 0.3);
+    animation: fire-flicker 0.5s ease-in-out infinite alternate;
+  }
+
+  /* 📊 XP Progress Bar - Gaming style */
+  .xp-progress-bar {
+    @apply relative h-5 rounded-full overflow-hidden;
+    background: linear-gradient(180deg, hsl(250 30% 20%), hsl(250 30% 15%));
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.3),
+      0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .xp-progress-fill {
+    @apply h-full rounded-full relative overflow-hidden;
+    background: linear-gradient(90deg,
+      hsl(140 80% 50%),
+      hsl(80 80% 55%),
+      hsl(45 100% 55%)
+    );
+    background-size: 200% 100%;
+    animation: xp-shine 2s linear infinite;
+    box-shadow:
+      0 0 10px hsl(140 80% 50% / 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+  .xp-progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    animation: xp-shimmer 2s ease-in-out infinite;
+  }
+
+  /* ⬆️ Level Up Animation */
   .level-up {
     animation: level-up 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 
-  /* Bouncy Buttons (fun interaction) */
+  /* 🎯 Bouncy Buttons - Duolingo style (fun interaction) */
   .btn-bouncy {
     @apply transition-all duration-200;
+    transform-origin: center center;
   }
 
   .btn-bouncy:active {
-    transform: scale(0.95);
+    transform: scale(0.92);
   }
 
   .btn-bouncy:hover {
-    transform: translateY(-4px) scale(1.05);
-    box-shadow: 0 15px 35px rgba(139, 92, 246, 0.3);
+    transform: translateY(-6px) scale(1.08);
+    box-shadow: 0 18px 40px rgba(139, 92, 246, 0.4);
   }
 
-  /* Progress Bar (gaming style) */
+  /* 📊 Progress Bar (gaming style) */
   .progress-bar {
     @apply relative h-4 rounded-full overflow-hidden;
     background: linear-gradient(90deg,
@@ -263,56 +331,66 @@
     animation: progress-shine 2s linear infinite;
   }
 
-  /* Neon Text Glow */
+  /* ✨ Neon Text Glow */
   .text-neon-purple {
     color: hsl(280 100% 65%);
     text-shadow:
-      0 0 10px hsl(280 100% 65% / 0.5),
-      0 0 20px hsl(280 100% 65% / 0.3),
-      0 0 30px hsl(280 100% 65% / 0.2);
+      0 0 10px hsl(280 100% 65% / 0.6),
+      0 0 25px hsl(280 100% 65% / 0.4),
+      0 0 40px hsl(280 100% 65% / 0.2);
   }
 
   .text-neon-pink {
     color: hsl(340 100% 65%);
     text-shadow:
-      0 0 10px hsl(340 100% 65% / 0.5),
-      0 0 20px hsl(340 100% 65% / 0.3),
-      0 0 30px hsl(340 100% 65% / 0.2);
+      0 0 10px hsl(340 100% 65% / 0.6),
+      0 0 25px hsl(340 100% 65% / 0.4),
+      0 0 40px hsl(340 100% 65% / 0.2);
   }
 
   .text-neon-cyan {
     color: hsl(180 100% 60%);
     text-shadow:
-      0 0 10px hsl(180 100% 60% / 0.5),
-      0 0 20px hsl(180 100% 60% / 0.3),
-      0 0 30px hsl(180 100% 60% / 0.2);
+      0 0 10px hsl(180 100% 60% / 0.6),
+      0 0 25px hsl(180 100% 60% / 0.4),
+      0 0 40px hsl(180 100% 60% / 0.2);
   }
 
-  /* Konfetti particles */
+  /* 🌟 Neon Gold (XP) */
+  .text-neon-gold {
+    color: hsl(45 100% 55%);
+    text-shadow:
+      0 0 10px hsl(45 100% 55% / 0.6),
+      0 0 25px hsl(45 100% 55% / 0.4),
+      0 0 40px hsl(45 100% 55% / 0.2);
+  }
+
+  /* 🎉 Konfetti particles */
   .confetti {
     animation: confetti-fall 3s ease-out infinite;
   }
 
-  /* Sticker-like elements */
+  /* 🏷️ Sticker-like elements - Duolingo style */
   .sticker {
     @apply relative;
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15));
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.2));
     transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 
   .sticker:hover {
-    transform: rotate(-5deg) scale(1.1);
+    transform: rotate(-8deg) scale(1.15);
+    filter: drop-shadow(0 8px 16px rgba(139, 92, 246, 0.3));
   }
 
-  /* Comic-style borders */
+  /* 💬 Comic-style borders */
   .comic-border {
-    border: 3px solid currentColor;
+    border: 4px solid currentColor;
     box-shadow:
-      4px 4px 0 0 currentColor,
-      8px 8px 0 0 rgba(0, 0, 0, 0.1);
+      5px 5px 0 0 currentColor,
+      10px 10px 0 0 rgba(0, 0, 0, 0.15);
   }
 
-  /* Gradient backgrounds (fun & colorful) */
+  /* 🌈 Gradient backgrounds (fun & colorful) */
   .bg-gradient-fun {
     background: linear-gradient(135deg,
       hsl(280 100% 65%),
@@ -337,19 +415,37 @@
     );
   }
 
-  /* Wobble animation (playful) */
+  /* 🌈 Rainbow gradient - achievement unlocked */
+  .bg-gradient-rainbow {
+    background: linear-gradient(135deg,
+      hsl(0 100% 65%),
+      hsl(45 100% 60%),
+      hsl(120 80% 55%),
+      hsl(180 100% 55%),
+      hsl(280 100% 65%),
+      hsl(340 100% 65%)
+    );
+    background-size: 400% 400%;
+    animation: rainbow-rotate 4s ease infinite;
+  }
+
+  /* 🎮 Wobble animation (playful) */
   .wobble {
     animation: wobble 1s ease-in-out;
   }
 
-  /* --- ANIMÁCIÓK --- */
+  .animate-wobble {
+    animation: wobble 2s ease-in-out infinite;
+  }
+
+  /* --- 🎬 ANIMÁCIÓK --- */
 
   @keyframes float-bubble {
     0%, 100% {
       transform: translate(0, 0) scale(1);
     }
     25% {
-      transform: translate(10px, -20px) scale(1.05);
+      transform: translate(15px, -25px) scale(1.08);
     }
     50% {
       transform: translate(-15px, -10px) scale(0.95);
@@ -445,10 +541,128 @@
 
   @keyframes sparkle-shimmer {
     0% {
-      background-position: 0% 0%, 0% 0%, 0% 0%;
+      background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%;
     }
     100% {
-      background-position: 100% 100%, 100% 100%, 100% 100%;
+      background-position: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+    }
+  }
+
+  /* 🌈 Rainbow rotation animation */
+  @keyframes rainbow-rotate {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  /* ✨ XP bar glow animation */
+  @keyframes xp-glow {
+    0%, 100% {
+      box-shadow:
+        0 4px 15px hsl(45 100% 50% / 0.5),
+        inset 0 2px 0 rgba(255, 255, 255, 0.5);
+    }
+    50% {
+      box-shadow:
+        0 6px 25px hsl(45 100% 50% / 0.7),
+        inset 0 2px 0 rgba(255, 255, 255, 0.6);
+    }
+  }
+
+  /* 🔥 Fire flicker animation */
+  @keyframes fire-flicker {
+    0% {
+      box-shadow:
+        0 4px 15px hsl(20 100% 50% / 0.5),
+        inset 0 2px 0 rgba(255, 255, 255, 0.3);
+      transform: scale(1);
+    }
+    100% {
+      box-shadow:
+        0 6px 20px hsl(0 100% 50% / 0.6),
+        inset 0 2px 0 rgba(255, 255, 255, 0.4);
+      transform: scale(1.03);
+    }
+  }
+
+  /* 📊 XP progress shine animation */
+  @keyframes xp-shine {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 200% 50%;
+    }
+  }
+
+  /* ✨ XP shimmer animation */
+  @keyframes xp-shimmer {
+    0% {
+      left: -100%;
+    }
+    50%, 100% {
+      left: 100%;
+    }
+  }
+
+  /* 🎮 Floating emoji animation */
+  @keyframes emoji-float {
+    0%, 100% {
+      transform: translateY(0) rotate(0deg) scale(1);
+      opacity: 0.4;
+    }
+    25% {
+      transform: translateY(-15px) rotate(10deg) scale(1.1);
+      opacity: 0.6;
+    }
+    50% {
+      transform: translateY(-8px) rotate(-5deg) scale(1.05);
+      opacity: 0.5;
+    }
+    75% {
+      transform: translateY(-20px) rotate(5deg) scale(1.08);
+      opacity: 0.55;
+    }
+  }
+
+  /* 🌟 Star burst animation */
+  @keyframes star-burst {
+    0% {
+      transform: scale(0) rotate(0deg);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.3) rotate(180deg);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1) rotate(360deg);
+      opacity: 1;
+    }
+  }
+
+  /* 🎉 Celebration pop animation */
+  @keyframes celebration-pop {
+    0% {
+      transform: scale(0);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.3);
+      opacity: 1;
+    }
+    70% {
+      transform: scale(0.9);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
     }
   }
 
@@ -675,10 +889,10 @@
   }
 
   .glow-on-hover:hover {
-    filter: drop-shadow(0 0 15px currentColor);
+    filter: drop-shadow(0 0 20px currentColor);
   }
 
-  /* Shimmer animation for progress bars */
+  /* ✨ Shimmer animation for progress bars */
   .animate-shimmer {
     animation: shimmer 2s infinite;
   }
@@ -689,6 +903,142 @@
     }
     100% {
       transform: translateX(100%);
+    }
+  }
+
+  /* 🎮 Floating emoji bubbles */
+  .floating-emoji {
+    position: absolute;
+    pointer-events: none;
+    animation: emoji-float 6s ease-in-out infinite;
+    font-size: 1.5rem;
+    opacity: 0.3;
+    z-index: 1;
+  }
+
+  /* 🏆 Level indicator */
+  .level-indicator {
+    @apply inline-flex items-center justify-center w-10 h-10 rounded-full font-black text-lg;
+    background: linear-gradient(135deg, hsl(280 100% 65%), hsl(340 100% 65%));
+    color: white;
+    box-shadow:
+      0 4px 15px hsl(280 100% 65% / 0.4),
+      inset 0 2px 0 rgba(255, 255, 255, 0.3);
+    border: 3px solid white;
+  }
+
+  /* 🌟 Star rating style */
+  .star-filled {
+    color: hsl(45 100% 55%);
+    filter: drop-shadow(0 0 6px hsl(45 100% 55% / 0.6));
+  }
+
+  .star-empty {
+    color: hsl(250 30% 30%);
+  }
+
+  /* 🎯 Achievement unlocked animation */
+  .achievement-unlocked {
+    animation: celebration-pop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  /* 📱 Responsive gamification */
+  @media (max-width: 640px) {
+    .achievement-badge {
+      @apply px-3 py-1.5 text-xs;
+    }
+    
+    .xp-badge,
+    .streak-badge {
+      @apply px-3 py-1.5 text-xs;
+    }
+    
+    .floating-emoji {
+      font-size: 1rem;
+      opacity: 0.2;
+    }
+  }
+
+  /* 🎨 Enhanced sparkle animation */
+  @keyframes sparkle-burst {
+    0% {
+      transform: scale(0) rotate(0deg);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.5) rotate(180deg);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(0) rotate(360deg);
+      opacity: 0;
+    }
+  }
+
+  .sparkle-burst {
+    animation: sparkle-burst 0.6s ease-out forwards;
+  }
+
+  /* 🎮 Game card hover with 3D effect */
+  .game-card-3d {
+    perspective: 1000px;
+    transform-style: preserve-3d;
+  }
+
+  .game-card-3d:hover {
+    transform: rotateY(5deg) rotateX(3deg) scale(1.02);
+  }
+
+  /* ⚡ Energy pulse effect */
+  .energy-pulse {
+    position: relative;
+  }
+
+  .energy-pulse::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(340 100% 65%), hsl(280 100% 65%));
+    opacity: 0;
+    z-index: -1;
+    animation: energy-wave 2s ease-in-out infinite;
+  }
+
+  @keyframes energy-wave {
+    0%, 100% {
+      opacity: 0;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.05);
+    }
+  }
+
+  /* 🏅 Medal shine effect */
+  .medal-shine {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .medal-shine::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    animation: medal-shine-sweep 3s ease-in-out infinite;
+  }
+
+  @keyframes medal-shine-sweep {
+    0% {
+      left: -100%;
+    }
+    50%, 100% {
+      left: 150%;
     }
   }
 }

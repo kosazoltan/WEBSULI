@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Zap, Flame, Trophy, Star } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +14,11 @@ function HeroSection({
   totalClassrooms = 0,
   showEmailSubscribe = true
 }: HeroSectionProps) {
+  
+  // 🎮 Gamification values (calculated from actual data)
+  const currentLevel = Math.floor(totalFiles / 10) + 1;
+  const xpProgress = (totalFiles % 10) * 10; // Progress to next level (0-100)
+  const streakDays = 7; // Could be fetched from user data
   
   const scrollToContent = () => {
     const content = document.getElementById('content-start');
@@ -226,8 +231,32 @@ function HeroSection({
       {/* Main Content */}
       <div className="relative z-20 max-w-5xl mx-auto flex flex-col items-center">
 
+        {/* 🏆 Gamification Status Bar - Level, XP, Streak */}
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-6 animate-bounce-in">
+          {/* Level Badge */}
+          <div className="achievement-badge medal-shine">
+            <span className="level-indicator mr-2">{currentLevel}</span>
+            <span className="text-xs font-black tracking-widest uppercase">Level</span>
+            <Trophy className="w-4 h-4 ml-2" />
+          </div>
+          
+          {/* XP Badge */}
+          <div className="xp-badge medal-shine">
+            <Star className="w-4 h-4" />
+            <span className="font-black">{totalFiles * 50} XP</span>
+            <Zap className="w-4 h-4" />
+          </div>
+          
+          {/* Streak Badge */}
+          <div className="streak-badge">
+            <Flame className="w-4 h-4" />
+            <span className="font-black">{streakDays} nap</span>
+            <span className="text-xs">🔥</span>
+          </div>
+        </div>
+
         {/* Achievement Badge - Gaming Style with Pulse */}
-        <div className="achievement-badge mb-6 animate-bounce-in glow-on-hover">
+        <div className="achievement-badge mb-6 animate-bounce-in glow-on-hover energy-pulse">
             <span className="text-3xl animate-wobble inline-block">🎮</span>
             <span className="text-xs font-black tracking-widest uppercase ml-2">Websuli 2026</span>
             <span className="ml-2 text-lg">✨</span>
@@ -244,11 +273,34 @@ function HeroSection({
         </h1>
 
         {/* Subtitle / Mission Statement - Fun & Energetic with Gradient Text */}
-        <p className="text-lg sm:text-xl lg:text-2xl text-muted-foreground mb-10 max-w-2xl font-medium leading-relaxed animate-slide-in-up hero-subtitle-delay">
+        <p className="text-lg sm:text-xl lg:text-2xl text-muted-foreground mb-8 max-w-2xl font-medium leading-relaxed animate-slide-in-up hero-subtitle-delay">
           A jövő oktatási platformja. <span className="text-neon-cyan font-black glow-on-hover">Gamifikált</span> tananyagok,
           <span className="text-neon-pink font-black glow-on-hover"> közösségi</span> élmény és <span className="text-neon-purple font-black glow-on-hover">végtelen</span> lehetőségek! 
           <span className="inline-block animate-wobble ml-1">✨</span>
         </p>
+
+        {/* 📊 XP Progress Bar to Next Level */}
+        <div className="w-full max-w-md mx-auto mb-8 animate-slide-in-up hero-subtitle-delay">
+          <div className="flex items-center justify-between text-xs font-black text-muted-foreground mb-2">
+            <span className="flex items-center gap-1 text-neon-gold">
+              <Star className="w-4 h-4" />
+              Level {currentLevel}
+            </span>
+            <span className="text-neon-purple flex items-center gap-1">
+              <span>{xpProgress}%</span>
+              <span className="text-xs">→ Level {currentLevel + 1}</span>
+            </span>
+          </div>
+          <div className="xp-progress-bar">
+            <div 
+              className="xp-progress-fill"
+              style={{ width: `${xpProgress}%` }}
+            />
+          </div>
+          <p className="text-center text-xs text-muted-foreground mt-2">
+            <span className="text-neon-gold font-bold">{(10 - (totalFiles % 10)) * 50} XP</span> kell a következő szinthez! 🎯
+          </p>
+        </div>
 
         {/* CTA Actions - Bouncy Buttons with Comic Borders */}
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center animate-slide-in-up hero-cta-delay">
@@ -273,59 +325,54 @@ function HeroSection({
             )}
         </div>
 
-        {/* Progress Bar - Learning Progress Indicator */}
-        {totalFiles > 0 && (
-          <div className="mt-8 w-full max-w-md mx-auto animate-slide-in-up hero-stats-delay">
-            <div className="flex items-center justify-between text-xs font-bold text-muted-foreground mb-2">
-              <span className="flex items-center gap-1">
-                <span>📊</span>
-                Tanulási Haladás
-              </span>
-              <span className="text-neon-purple">{Math.min(Math.round((totalFiles / 100) * 100), 100)}%</span>
-            </div>
-            <div className="relative h-3 rounded-full overflow-hidden bg-gray-800/50 backdrop-blur-sm border border-purple-400/20">
-              <div 
-                className="progress-bar h-full rounded-full relative overflow-hidden"
-                style={{ width: `${Math.min((totalFiles / 100) * 100, 100)}%` }}
-              >
-                {/* Shine effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Stats - Gaming Achievement Style with Stickers */}
+        {/* 🎮 Stats - Gaming Achievement Style with Stickers & Gamification */}
         <div className="mt-12 sm:mt-16 pt-6 sm:pt-8 border-t border-border/50 flex flex-wrap justify-center gap-6 sm:gap-8 lg:gap-16 animate-slide-in-up hero-stats-delay">
-            <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover" style={{ animationDelay: '0.5s' }}>
-                <div className="text-3xl sm:text-4xl font-black text-neon-purple mb-1 drop-shadow-[0_0_10px_rgba(139,92,246,0.5)]">{totalFiles}</div>
+            {/* Tananyagok - Achievement Card */}
+            <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover game-card-3d" style={{ animationDelay: '0.5s' }}>
+                <div className="relative">
+                  <div className="text-4xl sm:text-5xl font-black text-neon-purple mb-1 drop-shadow-[0_0_15px_rgba(139,92,246,0.6)]">{totalFiles}</div>
+                  <div className="absolute -top-2 -right-2 text-lg animate-wobble">🏆</div>
+                </div>
                 <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center justify-center gap-1">
                   <span className="animate-wobble inline-block">📚</span>
                   <span>Tananyag</span>
                 </div>
+                <div className="text-xs text-neon-gold font-bold mt-1">+{totalFiles * 50} XP</div>
             </div>
-            <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover" style={{ animationDelay: '0.6s' }}>
-                <div className="text-3xl sm:text-4xl font-black text-neon-cyan mb-1 drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">{totalClassrooms}</div>
+            
+            {/* Osztályok - Achievement Card */}
+            <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover game-card-3d" style={{ animationDelay: '0.6s' }}>
+                <div className="relative">
+                  <div className="text-4xl sm:text-5xl font-black text-neon-cyan mb-1 drop-shadow-[0_0_15px_rgba(6,182,212,0.6)]">{totalClassrooms}</div>
+                  <div className="absolute -top-2 -right-2 text-lg animate-wobble" style={{ animationDelay: '0.2s' }}>⭐</div>
+                </div>
                 <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center justify-center gap-1">
                   <span className="animate-wobble inline-block" style={{ animationDelay: '0.2s' }}>🎓</span>
                   <span>Osztály</span>
                 </div>
+                <div className="text-xs text-neon-cyan font-bold mt-1">Unlocked!</div>
             </div>
-             <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover" style={{ animationDelay: '0.7s' }}>
-                <div className="text-3xl sm:text-4xl font-black text-neon-pink mb-1 drop-shadow-[0_0_10px_rgba(236,72,153,0.5)]">∞</div>
+            
+            {/* Lehetőségek - Achievement Card */}
+            <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover game-card-3d" style={{ animationDelay: '0.7s' }}>
+                <div className="relative">
+                  <div className="text-4xl sm:text-5xl font-black text-neon-pink mb-1 drop-shadow-[0_0_15px_rgba(236,72,153,0.6)]">∞</div>
+                  <div className="absolute -top-2 -right-2 text-lg animate-wobble" style={{ animationDelay: '0.4s' }}>🌟</div>
+                </div>
                 <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center justify-center gap-1">
-                  <span className="animate-wobble inline-block" style={{ animationDelay: '0.4s' }}>⭐</span>
+                  <span className="animate-wobble inline-block" style={{ animationDelay: '0.4s' }}>💎</span>
                   <span>Lehetőség</span>
                 </div>
+                <div className="text-xs text-neon-pink font-bold mt-1">Unlimited!</div>
             </div>
         </div>
 
       </div>
       
-      {/* Decorative elements - Floating emojis */}
-      <div className="absolute top-4 left-4 text-2xl opacity-30 animate-float-rotate">📚</div>
-      <div className="absolute top-8 right-8 text-xl opacity-30 animate-float-rotate" style={{ animationDelay: '1.5s' }}>🎓</div>
-      <div className="absolute bottom-6 left-12 text-xl opacity-30 animate-float-rotate" style={{ animationDelay: '2s' }}>⭐</div>
+      {/* 🎮 Decorative elements - Floating emojis with animation */}
+      <div className="floating-emoji top-4 left-4 text-2xl" style={{ animationDelay: '0s' }}>📚</div>
+      <div className="floating-emoji top-8 right-8 text-xl" style={{ animationDelay: '1.5s' }}>🎓</div>
+      <div className="floating-emoji bottom-6 left-12 text-xl" style={{ animationDelay: '2s' }}>⭐</div>
       <div className="absolute bottom-4 right-12 text-2xl opacity-30 animate-float-rotate" style={{ animationDelay: '0.5s' }}>🚀</div>
     </div>
   );
