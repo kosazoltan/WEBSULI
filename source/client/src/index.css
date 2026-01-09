@@ -5,25 +5,25 @@
 @layer base {
   :root {
     /* --- Light Mode (Solar Style) --- */
-    --background: 210 40% 98%;    /* #f8fafc - Bright & Airy */
-    --foreground: 222 47% 11%;    /* #0f172a - Dark Text */
-    
-    --card: 0 0% 100%;            /* Pure White */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
-    
+
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    
+
     /* Solar Accents */
-    --primary: 190 100% 40%;      /* #00A3CC - Deep Cyan */
+    --primary: 190 100% 40%;
     --primary-foreground: 210 40% 98%;
-    
-    --secondary: 260 100% 60%;    /* #8800FF - Vivid Purple */
+
+    --secondary: 260 100% 60%;
     --secondary-foreground: 0 0% 98%;
-    
-    --accent: 330 100% 50%;       /* #CC0066 - Rose */
+
+    --accent: 330 100% 50%;
     --accent-foreground: 210 40% 98%;
-    
+
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
     --destructive: 0 84.2% 60.2%;
@@ -36,23 +36,23 @@
 
   .dark {
     /* --- Dark Mode (Aurora 2026) --- */
-    --background: 240 10% 4%;     /* #09090b - Void */
+    --background: 240 10% 4%;
     --foreground: 0 0% 98%;
-    
+
     --card: 240 10% 4%;
     --card-foreground: 0 0% 98%;
-    
+
     --popover: 240 10% 4%;
     --popover-foreground: 0 0% 98%;
-    
+
     /* Neon Accents */
-    --primary: 190 100% 50%;      /* #00F0FF - Cyan */
+    --primary: 190 100% 50%;
     --primary-foreground: 240 10% 4%;
-    --secondary: 280 100% 60%;    /* #AA00FF - Purple */
+    --secondary: 280 100% 60%;
     --secondary-foreground: 0 0% 98%;
-    --accent: 320 100% 60%;       /* #FF0099 - Pink */
+    --accent: 320 100% 60%;
     --accent-foreground: 240 10% 4%;
-    
+
     --muted: 240 4% 16%;
     --muted-foreground: 240 5% 65%;
     --destructive: 0 84% 60%;
@@ -67,89 +67,155 @@
   * {
     @apply border-border;
   }
-  
+
   html {
     scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden pt-24; /* pt-24 fixes header overlap */
-    /* Noise Texture */
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden pt-24;
+    /* Subtle static gradient - no animation for performance */
+    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(240 10% 8%) 100%);
+    background-attachment: fixed;
     position: relative;
     min-height: 100vh;
   }
 
-  /* --- GLOBAL VIBRANT AURORA BACKGROUND --- */
-  body::before, body::after {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -1;
-    pointer-events: none;
-    will-change: transform;
+  /* Light mode gradient */
+  body:not(.dark) {
+    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(210 40% 92%) 100%);
   }
 
-  /* Layer 1: Slow rotating blobs */
+  /* Static decorative blobs - NO ANIMATION for performance */
   body::before {
-    background: 
-      radial-gradient(circle at 10% 0%, rgba(0, 240, 255, 0.25), transparent 40%),
-      radial-gradient(circle at 90% 10%, rgba(170, 0, 255, 0.25), transparent 40%),
-      radial-gradient(circle at 50% 90%, rgba(255, 0, 153, 0.25), transparent 50%);
-    animation: aurora-shift 30s linear infinite alternate;
+    content: '';
+    position: fixed;
+    top: -20%;
+    right: -10%;
+    width: 60vw;
+    height: 60vh;
+    background: radial-gradient(circle, rgba(0, 240, 255, 0.08), transparent 70%);
+    border-radius: 50%;
+    z-index: -1;
+    pointer-events: none;
   }
-  
-  /* Layer 2: Moving accents */
+
   body::after {
-    background: 
-      radial-gradient(circle at 80% 80%, rgba(0, 163, 204, 0.15), transparent 40%),
-      radial-gradient(circle at 20% 20%, rgba(255, 200, 0, 0.1), transparent 30%);
-    animation: aurora-pulse 20s ease-in-out infinite alternate;
+    content: '';
+    position: fixed;
+    bottom: -20%;
+    left: -10%;
+    width: 50vw;
+    height: 50vh;
+    background: radial-gradient(circle, rgba(170, 0, 255, 0.08), transparent 70%);
+    border-radius: 50%;
+    z-index: -1;
+    pointer-events: none;
   }
 }
 
 @layer utilities {
-  
-  /* --- Holographic Card (Works in both modes) --- */
+
+  /* --- Glassmorphism Card (2026 trend) --- */
   .holographic-card {
     @apply relative overflow-hidden rounded-3xl transition-all duration-300 ease-out;
-    background: rgba(255, 255, 255, 0.05); /* Adaptive glass base */
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    /* In light mode, add a subtle shadow to stand out */
-    box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
-  }
-  
-  .dark .holographic-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: none;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   .holographic-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(0, 240, 255, 0.3);
-  }
-  
-  /* Vibrant Text Gradient */
-  .text-gradient-aurora {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 font-extrabold tracking-tight;
-  }
-  .dark .text-gradient-aurora {
-    @apply from-cyan-400 via-purple-400 to-pink-500;
+    transform: translateY(-8px) scale(1.02);
+    box-shadow:
+      0 20px 60px rgba(0, 240, 255, 0.15),
+      0 0 0 1px rgba(0, 240, 255, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
-  /* --- Animations --- */
-  @keyframes aurora-shift {
-    0% { transform: scale(1); }
-    100% { transform: scale(1.1); }
+  /* Gradient border animation on hover only */
+  .holographic-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg,
+      rgba(0, 240, 255, 0.3),
+      rgba(170, 0, 255, 0.3),
+      rgba(255, 0, 153, 0.3)
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
   }
-  
-  @keyframes aurora-pulse {
-    0% { opacity: 0.5; transform: translate(0, 0); }
-    50% { opacity: 0.8; transform: translate(5%, 5%); }
-    100% { opacity: 0.5; transform: translate(0, 0); }
+
+  .holographic-card:hover::before {
+    opacity: 1;
+  }
+
+  /* Bento Box Cards - Modern tile layout */
+  .bento-card {
+    @apply holographic-card p-6;
+    background: linear-gradient(135deg,
+      rgba(0, 240, 255, 0.05),
+      rgba(170, 0, 255, 0.05)
+    );
+  }
+
+  .bento-card:hover {
+    background: linear-gradient(135deg,
+      rgba(0, 240, 255, 0.1),
+      rgba(170, 0, 255, 0.1)
+    );
+  }
+
+  /* Vibrant Text Gradients (2026 style) */
+  .text-gradient-aurora {
+    @apply bg-clip-text text-transparent font-extrabold tracking-tight;
+    background: linear-gradient(135deg, #00f0ff, #aa00ff, #ff0099);
+    background-size: 200% 200%;
+  }
+
+  .text-gradient-cyber {
+    @apply bg-clip-text text-transparent font-bold;
+    background: linear-gradient(90deg, #0ff, #f0f, #ff0, #0ff);
+    background-size: 300% 100%;
+  }
+
+  /* Neon glow effects */
+  .glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 20px rgba(170, 0, 255, 0.4);
+  }
+
+  .glow-pink {
+    box-shadow: 0 0 20px rgba(255, 0, 153, 0.4);
+  }
+
+  /* Dotted pattern decoration */
+  .dotted-pattern {
+    background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+    background-size: 8px 8px;
+  }
+
+  /* Smooth hover elevation */
+  .hover-elevate {
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+  }
+
+  .hover-elevate:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
   }
 }
