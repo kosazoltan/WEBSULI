@@ -278,7 +278,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     "bg-gradient-to-r from-pink-400 via-purple-500 to-pink-600"
                   }`}></div>
                   
-                  <CardContent className="p-5 sm:p-6 flex flex-col h-full relative bg-background rounded-3xl z-10">
+                  <CardContent className="p-5 sm:p-6 flex flex-col h-full relative rounded-3xl z-10" style={{ backgroundColor: 'transparent' }}>
 
                     {/* 🏆 XP Badge - Top right corner */}
                     <div className={`absolute -top-2 -right-2 px-2 py-1 rounded-full text-xs font-black shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:scale-110 ${
