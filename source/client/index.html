@@ -4,25 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     
-    <!-- Critical CSS to prevent FOUC (Flash of Unstyled Content) - Gray background -->
+    <!-- Critical CSS to prevent FOUC (Flash of Unstyled Content) - Dark background -->
     <style>
       html, body {
         margin: 0;
         padding: 0;
-        background-color: #f3f4f6 !important; /* gray-100 - prevents yellow flash */
+        background-color: #111827 !important; /* gray-900 - dark mode alapértelmezett */
         min-height: 100vh;
+        color: #f9fafb !important; /* gray-50 - világos szöveg */
       }
-      body.dark {
+      html.dark, html.dark body {
         background-color: #111827 !important; /* gray-900 */
+      }
+      html:not(.dark), html:not(.dark) body {
+        background-color: #111827 !important; /* dark mode maradjon */
       }
       #root {
         min-height: 100vh;
-        background-color: #f3f4f6; /* gray-100 */
+        background-color: #111827 !important; /* gray-900 - dark mode */
       }
-      body.dark #root {
-        background-color: #111827; /* gray-900 */
+      html.dark #root, html:not(.dark) #root {
+        background-color: #111827 !important; /* gray-900 */
       }
     </style>
+    <script>
+      // Force dark mode immediately before DOM loads
+      if (!document.documentElement.classList.contains('dark')) {
+        document.documentElement.classList.add('dark');
+      }
+      if (localStorage.getItem('theme') !== 'dark') {
+        localStorage.setItem('theme', 'dark');
+      }
+    </script>
     
     <!-- Primary Meta Tags -->
     <title>Anyagok Profiknak - HTML Oktat\u00f3anyagok Platform</title>

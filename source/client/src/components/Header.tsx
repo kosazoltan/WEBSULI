@@ -27,16 +27,12 @@ export default function Header() {
   }, []);
 
   const toggleDarkMode = () => {
-    // Force dark mode mostly for this theme, but allow toggle if really needed
-    const newMode = !darkMode;
+    // Dark mode mindig aktív marad - sci-fi/gamifikált téma miatt
+    // Ne engedjük a light mode-ot
+    const newMode = true; // Mindig dark mode
     setDarkMode(newMode);
-    if (newMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
+    document.documentElement.classList.add("dark");
+    localStorage.setItem("theme", "dark");
   };
 
   return (
