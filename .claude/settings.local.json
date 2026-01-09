@@ -5,7 +5,16 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(ls -la \"c:\\\\Dev\\\\GIThub\\\\WEBSULI\\\\source\\\\client\"\" | grep -E \"tailwind)",
+      "Bash(postcss:*)",
+      "Bash(tsconfig:*)",
+      "Bash(vite \")",
+      "Bash(npx tsc --noEmit)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: redesign HeroSection with Christmas theme - colors, icons, symbols, and canvas animations\n\nChristmas visual updates:\n- New ChristmasOrbit component replacing StarOrbit\n- Central icon changed to TreePine with Star on top\n- Floating icons: Gift, Snowflake, Bell, Sparkles\n- More emoji symbols: 🎄🎁⭐❄️🔔🎅🌟\n\nCanvas animation improvements:\n- 15 detailed snowflakes with opacity variation\n- 20 twinkling stars in Christmas colors \\(gold, white, red, green\\)\n- 6 floating ornament balls with swing motion\n- 6 orbiting Christmas lights with glow effect\n- Enhanced snowflake drawing with more branches\n\nColor scheme:\n- Red-green-gold gradient backgrounds\n- Christmas-themed borders and shadows\n- Festive glow effects on all elements\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nperf: HeroSection újratervezés - elegáns, gyors karácsonyi verzió\n\nTeljesítmény optimalizálás:\n- Canvas animációk eltávolítva \\(legnagyobb teljesítményveszteség\\)\n- useEffect hooks eltávolítva \\(nincs JS animáció\\)\n- Statikus CSS-only elemek\n\nVizuális változások:\n- Elegáns gradiens háttér \\(slate/red/green\\)\n- Arany sarokdíszek\n- Lebegő karácsonyi ikonok \\(Star, Snowflake, Gift, TreePine, Bell\\)\n- Központi fenyőfa ikon csillaggal\n- Csak 1 CSS animáció \\(spin-slow a dekoratív gyűrűn\\)\n- Finomabb, elegánsabb színséma\n- \"Boldog Karácsonyt!\" felirat\n\nFájlméret: 515 sor → 190 sor \\(-63%\\)\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(cat:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

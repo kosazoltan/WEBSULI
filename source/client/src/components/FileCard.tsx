@@ -50,7 +50,7 @@ export default function FileCard({
   const canDelete = isAdmin || (userId !== null && userId === currentUserId);
 
   return (
-    <Card className="hover-elevate transition-all" data-testid={`card-file-${title}`}>
+    <Card className="glass-card" data-testid={`card-file-${title}`}>
       <CardHeader className="fold:p-3 p-4 sm:p-5 pb-2 sm:pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
