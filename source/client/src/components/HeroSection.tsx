@@ -1,6 +1,7 @@
 import { memo } from "react";
-import { Rocket, BookOpen, Users, Sparkles, Star, Gift, Zap, TreePine } from "lucide-react";
+import { Rocket, Sparkles, Zap, Brain, Trophy, ChevronRight } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
+import { Button } from "@/components/ui/button";
 
 interface HeroSectionProps {
   totalFiles?: number;
@@ -13,152 +14,110 @@ function HeroSection({
   totalClassrooms = 0,
   showEmailSubscribe = true
 }: HeroSectionProps) {
+  
+  const scrollToContent = () => {
+    const content = document.getElementById('content-start');
+    if (content) content.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
-    <div className="relative text-center mb-3 sm:mb-4 py-6 sm:py-8 px-6 sm:px-10 rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 group">
+    <div className="relative text-center mb-8 py-12 px-4 sm:px-6 lg:px-8 rounded-3xl overflow-hidden group">
+      
+      {/* Background Elements */}
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-0" />
+      
+      {/* Gamified Decorative Blobs */}
+      <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl animate-float-delayed -z-10" />
+      <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl animate-pulse-glow -z-10" />
 
-      {/* Christmas background image - Winter sledding */}
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: 'url("/christmas-bg.jpg?v=2")' }}
-      />
+      {/* Main Content */}
+      <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center">
+        
+        {/* Floating 3D Icons Group */}
+        <div className="relative mb-8 h-32 w-full flex justify-center items-center">
+             {/* Center Trophy */}
+             <div className="relative z-20 animate-float">
+                <div className="absolute inset-0 bg-yellow-400/30 blur-xl rounded-full" />
+                <div className="w-20 h-20 bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-2xl flex items-center justify-center shadow-lg shadow-yellow-500/20 border border-yellow-200/50 transform rotate-3 hover:scale-110 transition-transform cursor-pointer">
+                    <Trophy className="w-10 h-10 text-white drop-shadow-md" />
+                </div>
+             </div>
 
-      {/* Dark overlay for better text readability */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/80 via-slate-900/70 to-slate-900/80" />
-
-      {/* Subtle vignette effect */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
-
-      {/* Corner decorations - elegant gold accents */}
-      <div className="absolute top-3 left-3 w-16 h-16">
-        <div className="absolute top-0 left-0 w-8 h-[2px] bg-gradient-to-r from-yellow-400/60 to-transparent" />
-        <div className="absolute top-0 left-0 w-[2px] h-8 bg-gradient-to-b from-yellow-400/60 to-transparent" />
-      </div>
-      <div className="absolute top-3 right-3 w-16 h-16">
-        <div className="absolute top-0 right-0 w-8 h-[2px] bg-gradient-to-l from-yellow-400/60 to-transparent" />
-        <div className="absolute top-0 right-0 w-[2px] h-8 bg-gradient-to-b from-yellow-400/60 to-transparent" />
-      </div>
-      <div className="absolute bottom-3 left-3 w-16 h-16">
-        <div className="absolute bottom-0 left-0 w-8 h-[2px] bg-gradient-to-r from-yellow-400/60 to-transparent" />
-        <div className="absolute bottom-0 left-0 w-[2px] h-8 bg-gradient-to-t from-yellow-400/60 to-transparent" />
-      </div>
-      <div className="absolute bottom-3 right-3 w-16 h-16">
-        <div className="absolute bottom-0 right-0 w-8 h-[2px] bg-gradient-to-l from-yellow-400/60 to-transparent" />
-        <div className="absolute bottom-0 right-0 w-[2px] h-8 bg-gradient-to-t from-yellow-400/60 to-transparent" />
-      </div>
-
-
-      {/* Main content */}
-      <div className="relative z-10">
-
-        {/* Central Christmas Icon */}
-        <div className="relative inline-flex items-center justify-center mb-4 sm:mb-5">
-
-          {/* Glow ring */}
-          <div className="absolute inset-0 -m-4 rounded-full bg-gradient-to-r from-red-500/20 via-yellow-500/20 to-green-500/20 blur-xl" />
-
-          {/* Main icon container */}
-          <div className="relative">
-            {/* Decorative ring */}
-            <div className="absolute inset-0 -m-3 rounded-full border-2 border-dashed border-yellow-400/30 animate-spin-slow" />
-
-            {/* Icon background */}
-            <div className="relative p-5 sm:p-6 rounded-full bg-gradient-to-br from-green-800 via-green-700 to-green-900 shadow-2xl shadow-green-900/50 border-2 border-yellow-400/50">
-              <TreePine className="w-10 h-10 sm:w-14 sm:h-14 text-green-100 drop-shadow-lg" />
-
-              {/* Star on top */}
-              <div className="absolute -top-1 left-1/2 -translate-x-1/2">
-                <Star className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]" />
-              </div>
-            </div>
-
-            {/* Orbiting ornaments - CSS only animation */}
-            <div className="absolute top-1/2 left-0 -translate-y-1/2 -translate-x-full">
-              <div className="w-3 h-3 rounded-full bg-gradient-to-br from-red-400 to-red-600 shadow-lg shadow-red-500/50" />
-            </div>
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full">
-              <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-yellow-300 to-yellow-500 shadow-lg shadow-yellow-500/50" />
-            </div>
-            <div className="absolute top-1/2 right-0 translate-y-1/2 translate-x-full">
-              <div className="w-3 h-3 rounded-full bg-gradient-to-br from-green-400 to-green-600 shadow-lg shadow-green-500/50" />
-            </div>
-          </div>
+             {/* Orbiting Elements */}
+             <div className="absolute left-1/2 -translate-x-24 -translate-y-8 animate-float-delayed z-10">
+                <div className="w-14 h-14 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20 rotate-[-10deg] opacity-90">
+                    <Brain className="w-7 h-7 text-white" />
+                </div>
+             </div>
+             
+             <div className="absolute left-1/2 translate-x-12 translate-y-6 animate-pulse z-10">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 rotate-12 opacity-90">
+                    <Rocket className="w-6 h-6 text-white" />
+                </div>
+             </div>
         </div>
 
-        {/* Title with elegant gradient */}
-        <h1 className="text-2xl xs:text-3xl sm:text-4xl lg:text-5xl font-black mb-2 sm:mb-3 text-transparent bg-clip-text bg-gradient-to-r from-red-300 via-yellow-200 to-green-300 tracking-tight">
-          Anyagok Profiknak
+        {/* Title */}
+        <h1 className="text-4xl sm:text-5xl lg:text-7xl font-black mb-4 tracking-tight drop-shadow-2xl">
+          <span className="text-white">Lépj </span>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 animate-gradient-x">
+            Szintet!
+          </span>
         </h1>
 
-        {/* Tagline */}
-        <div className="flex items-center justify-center gap-3 mb-4 sm:mb-5">
-          <div className="h-px w-8 sm:w-12 bg-gradient-to-r from-transparent via-red-400/50 to-transparent" />
-          <p className="text-xs sm:text-sm text-yellow-200/80 font-medium uppercase tracking-[0.2em]">
-            Boldog Karácsonyt!
-          </p>
-          <div className="h-px w-8 sm:w-12 bg-gradient-to-r from-transparent via-green-400/50 to-transparent" />
+        {/* Subtitle / Mission Statement */}
+        <p className="text-lg sm:text-xl text-slate-300 mb-8 max-w-2xl font-medium leading-relaxed">
+          Unalmas PDF-ek helyett <span className="text-cyan-400 font-bold">küldetés-alapú</span> tananyagok. 
+          Gyűjts tudást, szerezz jó jegyeket, és építsd a jövőd!
+        </p>
+
+        {/* Stats "Health Bar" Style */}
+        <div className="flex flex-wrap items-center justify-center gap-4 mb-8">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-slate-700 hover:border-cyan-500/50 transition-colors">
+                <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="text-slate-200 font-bold">{totalFiles}</span>
+                <span className="text-slate-400 text-sm">Tananyag</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/80 border border-slate-700 hover:border-purple-500/50 transition-colors">
+                <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                <span className="text-slate-200 font-bold">{totalClassrooms}</span>
+                <span className="text-slate-400 text-sm">Osztály</span>
+            </div>
         </div>
 
-        {/* Stats */}
-        {totalFiles > 0 && (
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-4 sm:mb-5">
-            <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm rounded-full border border-red-500/20 hover:border-red-400/40 transition-colors">
-              <BookOpen className="w-4 h-4 text-red-300" />
-              <span className="font-bold text-white">{totalFiles}</span>
-              <span className="text-red-200/80 text-sm">anyag</span>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-            </div>
-
-            <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm rounded-full border border-green-500/20 hover:border-green-400/40 transition-colors">
-              <Users className="w-4 h-4 text-green-300" />
-              <span className="font-bold text-white">{totalClassrooms}</span>
-              <span className="text-green-200/80 text-sm">osztály</span>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-            </div>
-
-            <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm rounded-full border border-yellow-500/20 hover:border-yellow-400/40 transition-colors">
-              <Sparkles className="w-4 h-4 text-yellow-300" />
-              <span className="text-yellow-200/80 text-sm font-medium">Ingyenes</span>
-            </div>
-          </div>
-        )}
-
-        {/* Feature cards */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-5 max-w-2xl mx-auto">
-          <div className="flex flex-col items-center gap-1 p-3 sm:p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/5 hover:border-red-500/30 transition-colors group">
-            <Rocket className="w-5 h-5 sm:w-6 sm:h-6 text-red-300 group-hover:text-red-200 transition-colors" />
-            <span className="text-xs sm:text-sm font-medium text-white/90">Gyors</span>
-            <span className="text-[10px] text-white/50 hidden sm:block">Azonnali hozzáférés</span>
-          </div>
-
-          <div className="flex flex-col items-center gap-1 p-3 sm:p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/5 hover:border-green-500/30 transition-colors group">
-            <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-green-300 group-hover:text-green-200 transition-colors" />
-            <span className="text-xs sm:text-sm font-medium text-white/90">Modern</span>
-            <span className="text-[10px] text-white/50 hidden sm:block">Naprakész tartalom</span>
-          </div>
-
-          <div className="flex flex-col items-center gap-1 p-3 sm:p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/5 hover:border-yellow-500/30 transition-colors group">
-            <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-300 group-hover:text-yellow-200 transition-colors" />
-            <span className="text-xs sm:text-sm font-medium text-white/90">Hatékony</span>
-            <span className="text-[10px] text-white/50 hidden sm:block">Optimalizált tanulás</span>
-          </div>
+        {/* CTA Actions */}
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+            <Button 
+                size="lg" 
+                className="w-full sm:w-auto text-lg h-14 shadow-xl shadow-cyan-500/20"
+                onClick={scrollToContent}
+            >
+                Start Küldetés <ChevronRight className="w-5 h-5 ml-2" />
+            </Button>
+            
+            {showEmailSubscribe && (
+               <div className="w-full sm:w-auto">
+                  <EmailSubscribeDialog /> 
+               </div>
+            )}
         </div>
 
-        {/* Email Subscribe */}
-        {showEmailSubscribe && (
-          <div className="flex justify-center">
-            <EmailSubscribeDialog />
-          </div>
-        )}
+        {/* Floating Badges (Features) */}
+        <div className="mt-12 flex justify-center gap-6 opacity-60 hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-yellow-400" />
+                <span className="text-xs uppercase tracking-widest text-slate-400">Gyors</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-pink-400" />
+                <span className="text-xs uppercase tracking-widest text-slate-400">Interaktív</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs uppercase tracking-widest text-slate-400">Ingyenes</span>
+            </div>
+        </div>
+
       </div>
     </div>
   );

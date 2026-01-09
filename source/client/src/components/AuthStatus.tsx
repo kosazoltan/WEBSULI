@@ -32,13 +32,14 @@ export function AuthStatus() {
     return (
       <div className="flex flex-col items-center gap-2">
         <Button
-          variant="default"
+          variant="ghost"
           size="sm"
           onClick={handleLogin}
+          className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/30"
           data-testid="button-login"
         >
           <LogIn className="h-4 w-4 mr-2" />
-          Bejelentkezés
+          Belépés
         </Button>
       </div>
     );
@@ -58,23 +59,26 @@ export function AuthStatus() {
   return (
     <div className="flex items-center gap-2">
       {isAdmin && (
-        <Badge variant="default" className="gap-1" data-testid="badge-admin">
-          <Shield className="h-3 w-3" />
-          Admin
-        </Badge>
+        <div className="hidden sm:flex items-center justify-center w-6 h-6 rounded-full bg-purple-500/20 border border-purple-500/50 text-purple-300" title="Adminisztrátor">
+          <Shield className="w-3 h-3" />
+        </div>
       )}
-      <span className="text-sm text-muted-foreground" data-testid="text-user-name">
-        {getDisplayName()}
-      </span>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleLogout}
-        data-testid="button-logout-action"
-      >
-        <LogOut className="h-4 w-4 mr-2" />
-        Kijelentkezés
-      </Button>
+      
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-cyan-500/30 transition-colors">
+         <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 flex items-center justify-center text-[10px] font-bold text-white shadow-lg shadow-cyan-500/20">
+            {getDisplayName().charAt(0)}
+         </div>
+         <span className="text-xs font-medium text-slate-200 hidden sm:inline-block">
+            {getDisplayName()}
+         </span>
+         <button 
+            onClick={handleLogout}
+            className="ml-1 p-1 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+            title="Kijelentkezés"
+         >
+            <LogOut className="w-3.5 h-3.5" />
+         </button>
+      </div>
     </div>
   );
 }
