@@ -213,57 +213,106 @@
   /* --- 🎮 FUN GAMING KÁRTYÁK (Duolingo style) --- */
   .holographic-card {
     @apply relative overflow-hidden rounded-3xl transition-all duration-300 ease-out;
+    /* Geodéziai kupola - sötét alkony háttér */
     background: linear-gradient(135deg,
-      rgba(255, 255, 255, 0.95),
-      rgba(255, 255, 255, 0.85)
+      hsl(230 60% 15%),
+      hsl(240 50% 18%),
+      hsl(230 55% 16%)
     );
-    border: 3px solid transparent;
+    border: 2px solid hsl(30 100% 60% / 0.3);
     background-clip: padding-box;
     box-shadow:
-      0 10px 40px rgba(0, 0, 0, 0.08),
-      0 0 0 1px rgba(255, 255, 255, 0.5),
-      inset 0 2px 0 rgba(255, 255, 255, 0.8);
+      0 10px 40px rgba(0, 0, 0, 0.4),
+      0 0 0 1px hsl(30 100% 50% / 0.2),
+      inset 0 0 60px hsl(30 100% 55% / 0.15),
+      inset 0 2px 20px hsl(30 100% 65% / 0.1);
+    position: relative;
   }
 
-  .dark .holographic-card {
-    background: linear-gradient(135deg,
-      hsl(220 10% 20%),
-      hsl(220 15% 25%),
-      hsl(280 30% 35%),
-      hsl(300 100% 50%)
-    );
-    -webkit-backdrop-filter: blur(30px);
-    backdrop-filter: blur(30px);
-    box-shadow:
-      0 10px 40px rgba(139, 92, 246, 0.15),
-      0 0 0 1px rgba(139, 92, 246, 0.3),
-      inset 0 2px 0 rgba(255, 255, 255, 0.05);
-  }
-
-  .holographic-card:hover {
-    transform: translateY(-8px) scale(1.02) rotate(1deg);
-    box-shadow:
-      0 30px 70px rgba(236, 72, 153, 0.3),
-      0 0 0 3px rgba(236, 72, 153, 0.6),
-      inset 0 2px 0 rgba(255, 255, 255, 0.3);
-    border-color: rgba(236, 72, 153, 0.5);
-  }
-
-  /* 🌈 Holographic shift border (like rewards) */
+  /* Geodéziai kupola háromszög panelek - SVG pattern overlay */
   .holographic-card::before {
     content: '';
     position: absolute;
-    inset: -3px;
-    border-radius: inherit;
-    padding: 3px;
+    inset: 0;
+    background-image: 
+      url("data:image/svg+xml,%3Csvg width='60' height='52' viewBox='0 0 60 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ff8c00' fill-opacity='0.15'%3E%3Cpath d='M30 0l30 52H0z'/%3E%3C/g%3E%3Cg fill='%23ffa500' fill-opacity='0.1'%3E%3Cpath d='M0 0l30 52 30-52z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    background-size: 60px 52px;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: overlay;
+  }
+
+  .dark .holographic-card {
+    /* Geodéziai kupola - meleg narancs-sárga belső világítás a sötét háttérrel */
     background: linear-gradient(135deg,
-      hsl(var(--achievement-purple)) 0%,
-      hsl(var(--energy-pink)) 25%,
-      hsl(var(--fresh-cyan)) 50%,
-      hsl(var(--success-green)) 75%,
-      hsl(var(--achievement-purple)) 100%
+      hsl(230 60% 12%),
+      hsl(240 50% 15%),
+      hsl(235 55% 14%)
     );
-    background-size: 400% 400%;
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 2px solid hsl(30 100% 60% / 0.4);
+    box-shadow:
+      0 15px 50px rgba(0, 0, 0, 0.5),
+      0 0 0 1px hsl(30 100% 50% / 0.3),
+      /* Meleg narancs-sárga belső világítás glow */
+      inset 0 0 80px hsl(30 100% 55% / 0.25),
+      inset 0 0 120px hsl(35 90% 50% / 0.15),
+      inset 0 2px 30px hsl(30 100% 65% / 0.2),
+      /* Felső glow - mintha belülről jönne a fény */
+      inset 0 -60px 100px hsl(30 100% 60% / 0.1);
+    position: relative;
+  }
+
+  /* Geodéziai háromszög panelek pattern - dark mode */
+  .dark .holographic-card::before {
+    background-image: 
+      url("data:image/svg+xml,%3Csvg width='60' height='52' viewBox='0 0 60 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffa500' fill-opacity='0.25'%3E%3Cpath d='M30 0l30 52H0z'/%3E%3C/g%3E%3Cg fill='%23ff8c00' fill-opacity='0.2'%3E%3Cpath d='M0 0l30 52 30-52z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    opacity: 0.8;
+    mix-blend-mode: screen;
+  }
+
+  .holographic-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    border-color: hsl(30 100% 65% / 0.6);
+    box-shadow:
+      0 30px 70px hsl(30 100% 50% / 0.4),
+      0 0 0 3px hsl(30 100% 60% / 0.5),
+      /* Megerősített belső világítás hover-nél */
+      inset 0 0 100px hsl(30 100% 60% / 0.35),
+      inset 0 0 150px hsl(35 90% 55% / 0.25),
+      inset 0 2px 40px hsl(30 100% 70% / 0.3),
+      inset 0 -80px 120px hsl(30 100% 65% / 0.15);
+  }
+
+  .dark .holographic-card:hover {
+    border-color: hsl(30 100% 65% / 0.7);
+    box-shadow:
+      0 35px 80px hsl(30 100% 55% / 0.5),
+      0 0 0 3px hsl(30 100% 65% / 0.6),
+      /* Erős narancs-sárga glow hover-nél - mintha jobban világítana */
+      inset 0 0 120px hsl(30 100% 60% / 0.4),
+      inset 0 0 180px hsl(35 90% 55% / 0.3),
+      inset 0 2px 50px hsl(30 100% 70% / 0.4),
+      inset 0 -100px 150px hsl(30 100% 70% / 0.2);
+  }
+
+  /* 🌈 Narancs-sárga glow border animáció - geodéziai kupola fény */
+  .holographic-card::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(135deg,
+      hsl(30 100% 60%) 0%,
+      hsl(35 90% 55%) 25%,
+      hsl(30 100% 65%) 50%,
+      hsl(40 85% 60%) 75%,
+      hsl(30 100% 60%) 100%
+    );
+    background-size: 300% 300%;
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -271,11 +320,24 @@
     opacity: 0;
     transition: opacity 0.4s;
     pointer-events: none;
-    animation: holographic-shift 8s ease infinite;
+    animation: geodesic-glow 6s ease infinite;
+    z-index: 0;
   }
 
-  .holographic-card:hover::before {
-    opacity: 1;
+  @keyframes geodesic-glow {
+    0%, 100% {
+      background-position: 0% 50%;
+      opacity: 0.3;
+    }
+    50% {
+      background-position: 100% 50%;
+      opacity: 0.6;
+    }
+  }
+
+  .holographic-card:hover::after {
+    opacity: 0.8;
+    animation: geodesic-glow 3s ease infinite;
   }
 
   /* Card holographic shift animation */
@@ -309,35 +371,10 @@
     opacity: 0.6;
   }
 
-  /* ✨ Sparkle effect on hover */
-  .holographic-card::after {
-    content: '✨';
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 28px;
-    opacity: 0;
-    transform: scale(0) rotate(-45deg);
-    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    pointer-events: none;
-    z-index: 10;
-  }
-
-  .holographic-card:hover::after {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-    animation: sparkle-twinkle 0.8s ease-in-out infinite;
-  }
-
-  /* 🌟 Additional sparkle particles on hover */
-  .holographic-card:hover {
-    background-image: 
-      radial-gradient(circle at 15% 25%, rgba(255, 255, 255, 0.5) 3px, transparent 3px),
-      radial-gradient(circle at 85% 75%, rgba(236, 72, 153, 0.4) 2px, transparent 2px),
-      radial-gradient(circle at 45% 45%, rgba(139, 92, 246, 0.4) 2px, transparent 2px),
-      radial-gradient(circle at 70% 20%, rgba(45, 212, 191, 0.4) 2px, transparent 2px);
-    background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
-    animation: sparkle-shimmer 1.5s linear infinite;
+  /* Geodéziai kupola belső fény effekt - overlay layer */
+  .holographic-card > * {
+    position: relative;
+    z-index: 2;
   }
 
   /* 🏆 Achievement Badge Style - Duolingo Inspired */
