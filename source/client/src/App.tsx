@@ -35,17 +35,24 @@ function Router() {
 
 function App() {
   useEffect(() => {
-    // Alapértelmezett: dark mode (gamifikált sci-fi témához)
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "light") {
-      document.documentElement.classList.remove("dark");
-    } else {
-      // Ha nincs beállítás vagy "dark", akkor dark mode
-      document.documentElement.classList.add("dark");
-      if (!savedTheme) {
+    // Alapértelmezett: dark mode (gamifikált sci-fi témához) - MINDIG dark mode
+    // Kényszerítjük a dark mode-ot, hogy a sci-fi/gamifikált téma mindig aktív legyen
+    document.documentElement.classList.add("dark");
+    localStorage.setItem("theme", "dark");
+    
+    // Ne engedjük a light mode-ot - MutationObserver-ral figyeljük
+    const observer = new MutationObserver(() => {
+      if (!document.documentElement.classList.contains("dark")) {
+        document.documentElement.classList.add("dark");
         localStorage.setItem("theme", "dark");
       }
-    }
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
   }, []);
 
   const APP_VERSION = "2.0.1"; // Force new build hash
