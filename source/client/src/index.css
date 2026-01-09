@@ -155,6 +155,10 @@
   }
 }
 
+/* === GEODÉZIAI KUPOLA KÁRTYA HÁTTÉR === */
+/* @layer NINCS - hogy felülírja a Tailwind utility osztályokat */
+/* Geodéziai kupola kártya háttér - maximális specificity Tailwind override-hoz */
+
 @layer base {
   * {
     @apply border-border;
@@ -208,78 +212,142 @@
   }
 }
 
-@layer utilities {
+/* === GEODÉZIAI KUPOLA KÁRTYA HÁTTÉR === */
+/* NINCS @layer - hogy garantáltan felülírja a Tailwind utility osztályokat */
+/* Geodéziai kupola kártya háttér - maximális specificity Tailwind override-hoz */
+.holographic-card,
+div.holographic-card,
+.shadcn-card.holographic-card,
+div.shadcn-card.holographic-card,
+[class*="holographic-card"] {
+  position: relative !important;
+  overflow: hidden !important;
+  border-radius: 1.5rem !important; /* rounded-3xl */
+  transition: all 300ms ease-out !important;
+  /* Geodéziai kupola - sötét alkony háttér - !important a Tailwind bg-card/80 override miatt */
+  background: linear-gradient(135deg,
+    hsl(230 60% 15%),
+    hsl(240 50% 18%),
+    hsl(230 55% 16%)
+  ) !important;
+  background-color: transparent !important; /* Felülírja a bg-card/80-at */
+  background-image: linear-gradient(135deg,
+    hsl(230 60% 15%),
+    hsl(240 50% 18%),
+    hsl(230 55% 16%)
+  ) !important;
+  border: 2px solid hsl(30 100% 60% / 0.3) !important;
+  background-clip: padding-box !important;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.4),
+    0 0 0 1px hsl(30 100% 50% / 0.2),
+    inset 0 0 60px hsl(30 100% 55% / 0.15),
+    inset 0 2px 20px hsl(30 100% 65% / 0.1) !important;
+}
 
-  /* --- 🎮 FUN GAMING KÁRTYÁK (Duolingo style) --- */
-  /* Geodéziai kupola kártya háttér - nagyobb specificity */
-  .holographic-card,
-  div.holographic-card,
-  .shadcn-card.holographic-card {
-    @apply relative overflow-hidden rounded-3xl transition-all duration-300 ease-out;
-    /* Geodéziai kupola - sötét alkony háttér - !important a Tailwind override miatt */
-    background: linear-gradient(135deg,
-      hsl(230 60% 15%),
-      hsl(240 50% 18%),
-      hsl(230 55% 16%)
-    ) !important;
-    border: 2px solid hsl(30 100% 60% / 0.3) !important;
-    background-clip: padding-box;
-    box-shadow:
-      0 10px 40px rgba(0, 0, 0, 0.4),
-      0 0 0 1px hsl(30 100% 50% / 0.2),
-      inset 0 0 60px hsl(30 100% 55% / 0.15),
-      inset 0 2px 20px hsl(30 100% 65% / 0.1) !important;
-    position: relative;
-  }
+/* Explicit override a Tailwind bg-card utility osztályokra */
+.holographic-card[class*="bg-card"],
+div.holographic-card[class*="bg-card"],
+.shadcn-card.holographic-card[class*="bg-card"],
+div.shadcn-card.holographic-card[class*="bg-card"],
+[class*="holographic-card"][class*="bg-card"] {
+  background: linear-gradient(135deg,
+    hsl(230 60% 15%),
+    hsl(240 50% 18%),
+    hsl(230 55% 16%)
+  ) !important;
+  background-color: transparent !important;
+  background-image: linear-gradient(135deg,
+    hsl(230 60% 15%),
+    hsl(240 50% 18%),
+    hsl(230 55% 16%)
+  ) !important;
+}
 
-  /* Geodéziai kupola háromszög panelek - SVG pattern overlay */
-  .holographic-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: 
-      url("data:image/svg+xml,%3Csvg width='60' height='52' viewBox='0 0 60 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ff8c00' fill-opacity='0.15'%3E%3Cpath d='M30 0l30 52H0z'/%3E%3C/g%3E%3Cg fill='%23ffa500' fill-opacity='0.1'%3E%3Cpath d='M0 0l30 52 30-52z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-    background-size: 60px 52px;
-    opacity: 0.6;
-    pointer-events: none;
-    z-index: 1;
-    mix-blend-mode: overlay;
-  }
+/* Geodéziai kupola háromszög panelek - SVG pattern overlay */
+.holographic-card::before,
+div.holographic-card::before,
+.shadcn-card.holographic-card::before,
+[class*="holographic-card"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    url("data:image/svg+xml,%3Csvg width='60' height='52' viewBox='0 0 60 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ff8c00' fill-opacity='0.15'%3E%3Cpath d='M30 0l30 52H0z'/%3E%3C/g%3E%3Cg fill='%23ffa500' fill-opacity='0.1'%3E%3Cpath d='M0 0l30 52 30-52z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-size: 60px 52px;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: overlay;
+}
 
-  /* Dark mode geodéziai kupola - nagyobb specificity */
-  .dark .holographic-card,
-  .dark div.holographic-card,
-  .dark .shadcn-card.holographic-card {
-    /* Geodéziai kupola - meleg narancs-sárga belső világítás a sötét háttérrel */
-    background: linear-gradient(135deg,
-      hsl(230 60% 12%),
-      hsl(240 50% 15%),
-      hsl(235 55% 14%)
-    ) !important;
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
-    border: 2px solid hsl(30 100% 60% / 0.4) !important;
-    box-shadow:
-      0 15px 50px rgba(0, 0, 0, 0.5),
-      0 0 0 1px hsl(30 100% 50% / 0.3),
-      /* Meleg narancs-sárga belső világítás glow */
-      inset 0 0 80px hsl(30 100% 55% / 0.25),
-      inset 0 0 120px hsl(35 90% 50% / 0.15),
-      inset 0 2px 30px hsl(30 100% 65% / 0.2),
-      /* Felső glow - mintha belülről jönne a fény */
-      inset 0 -60px 100px hsl(30 100% 60% / 0.1) !important;
-    position: relative;
-  }
+/* Dark mode geodéziai kupola - maximális specificity */
+.dark .holographic-card,
+.dark div.holographic-card,
+.dark .shadcn-card.holographic-card,
+.dark div.shadcn-card.holographic-card,
+.dark [class*="holographic-card"] {
+  /* Geodéziai kupola - meleg narancs-sárga belső világítás a sötét háttérrel */
+  background: linear-gradient(135deg,
+    hsl(230 60% 12%),
+    hsl(240 50% 15%),
+    hsl(235 55% 14%)
+  ) !important;
+  background-color: transparent !important; /* Felülírja a bg-card/80-at */
+  background-image: linear-gradient(135deg,
+    hsl(230 60% 12%),
+    hsl(240 50% 15%),
+    hsl(235 55% 14%)
+  ) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 2px solid hsl(30 100% 60% / 0.4) !important;
+  box-shadow:
+    0 15px 50px rgba(0, 0, 0, 0.5),
+    0 0 0 1px hsl(30 100% 50% / 0.3),
+    /* Meleg narancs-sárga belső világítás glow */
+    inset 0 0 80px hsl(30 100% 55% / 0.25),
+    inset 0 0 120px hsl(35 90% 50% / 0.15),
+    inset 0 2px 30px hsl(30 100% 65% / 0.2),
+    /* Felső glow - mintha belülről jönne a fény */
+    inset 0 -60px 100px hsl(30 100% 60% / 0.1) !important;
+  position: relative;
+}
 
-  /* Geodéziai háromszög panelek pattern - dark mode */
-  .dark .holographic-card::before {
-    background-image: 
-      url("data:image/svg+xml,%3Csvg width='60' height='52' viewBox='0 0 60 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffa500' fill-opacity='0.25'%3E%3Cpath d='M30 0l30 52H0z'/%3E%3C/g%3E%3Cg fill='%23ff8c00' fill-opacity='0.2'%3E%3Cpath d='M0 0l30 52 30-52z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-    opacity: 0.8;
-    mix-blend-mode: screen;
-  }
+/* Explicit override dark mode-ban is - bg-card utility osztályokra */
+.dark .holographic-card[class*="bg-card"],
+.dark div.holographic-card[class*="bg-card"],
+.dark .shadcn-card.holographic-card[class*="bg-card"],
+.dark div.shadcn-card.holographic-card[class*="bg-card"],
+.dark [class*="holographic-card"][class*="bg-card"] {
+  background: linear-gradient(135deg,
+    hsl(230 60% 12%),
+    hsl(240 50% 15%),
+    hsl(235 55% 14%)
+  ) !important;
+  background-color: transparent !important;
+  background-image: linear-gradient(135deg,
+    hsl(230 60% 12%),
+    hsl(240 50% 15%),
+    hsl(235 55% 14%)
+  ) !important;
+}
 
-  .holographic-card:hover {
+/* Geodéziai háromszög panelek pattern - dark mode */
+.dark .holographic-card::before,
+.dark div.holographic-card::before,
+.dark .shadcn-card.holographic-card::before,
+.dark [class*="holographic-card"]::before {
+  background-image: 
+    url("data:image/svg+xml,%3Csvg width='60' height='52' viewBox='0 0 60 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffa500' fill-opacity='0.25'%3E%3Cpath d='M30 0l30 52H0z'/%3E%3C/g%3E%3Cg fill='%23ff8c00' fill-opacity='0.2'%3E%3Cpath d='M0 0l30 52 30-52z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  opacity: 0.8;
+  mix-blend-mode: screen;
+}
+
+.holographic-card:hover,
+div.holographic-card:hover,
+.shadcn-card.holographic-card:hover,
+[class*="holographic-card"]:hover {
     transform: translateY(-8px) scale(1.02);
     border-color: hsl(30 100% 65% / 0.6);
     box-shadow:
@@ -292,20 +360,26 @@
       inset 0 -80px 120px hsl(30 100% 65% / 0.15);
   }
 
-  .dark .holographic-card:hover {
-    border-color: hsl(30 100% 65% / 0.7);
-    box-shadow:
-      0 35px 80px hsl(30 100% 55% / 0.5),
-      0 0 0 3px hsl(30 100% 65% / 0.6),
-      /* Erős narancs-sárga glow hover-nél - mintha jobban világítana */
-      inset 0 0 120px hsl(30 100% 60% / 0.4),
-      inset 0 0 180px hsl(35 90% 55% / 0.3),
-      inset 0 2px 50px hsl(30 100% 70% / 0.4),
-      inset 0 -100px 150px hsl(30 100% 70% / 0.2);
-  }
+.dark .holographic-card:hover,
+.dark div.holographic-card:hover,
+.dark .shadcn-card.holographic-card:hover,
+.dark [class*="holographic-card"]:hover {
+  border-color: hsl(30 100% 65% / 0.7) !important;
+  box-shadow:
+    0 35px 80px hsl(30 100% 55% / 0.5),
+    0 0 0 3px hsl(30 100% 65% / 0.6),
+    /* Erős narancs-sárga glow hover-nél - mintha jobban világítana */
+    inset 0 0 120px hsl(30 100% 60% / 0.4),
+    inset 0 0 180px hsl(35 90% 55% / 0.3),
+    inset 0 2px 50px hsl(30 100% 70% / 0.4),
+    inset 0 -100px 150px hsl(30 100% 70% / 0.2) !important;
+}
 
-  /* 🌈 Narancs-sárga glow border animáció - geodéziai kupola fény */
-  .holographic-card::after {
+/* 🌈 Narancs-sárga glow border animáció - geodéziai kupola fény */
+.holographic-card::after,
+div.holographic-card::after,
+.shadcn-card.holographic-card::after,
+[class*="holographic-card"]::after {
     content: '';
     position: absolute;
     inset: -2px;
@@ -341,10 +415,13 @@
     }
   }
 
-  .holographic-card:hover::after {
-    opacity: 0.8;
-    animation: geodesic-glow 3s ease infinite;
-  }
+.holographic-card:hover::after,
+div.holographic-card:hover::after,
+.shadcn-card.holographic-card:hover::after,
+[class*="holographic-card"]:hover::after {
+  opacity: 0.8;
+  animation: geodesic-glow 3s ease infinite;
+}
 
   /* Card holographic shift animation */
   .card-holographic {
@@ -377,11 +454,16 @@
     opacity: 0.6;
   }
 
-  /* Geodéziai kupola belső fény effekt - overlay layer */
-  .holographic-card > * {
-    position: relative;
-    z-index: 2;
-  }
+/* Geodéziai kupola belső fény effekt - overlay layer */
+.holographic-card > *,
+div.holographic-card > *,
+.shadcn-card.holographic-card > *,
+[class*="holographic-card"] > * {
+  position: relative;
+  z-index: 2;
+}
+
+@layer utilities {
 
   /* 🏆 Achievement Badge Style - Duolingo Inspired */
   .achievement-badge {

@@ -5,16 +5,22 @@ import { cn } from "@/lib/utils"
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "shadcn-card rounded-xl border bg-card/80 backdrop-blur-md border-primary/20 text-card-foreground shadow-xl",
-      className
-    )}
-    {...props}
-  />
-));
+>(({ className, ...props }, ref) => {
+  // Ha holographic-card osztály van, ne alkalmazzuk a bg-card/80-at
+  const isHolographic = className?.includes('holographic-card');
+  
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "shadcn-card rounded-xl border backdrop-blur-md border-primary/20 text-card-foreground shadow-xl",
+        !isHolographic && "bg-card/80", // Csak ha nincs holographic-card
+        className
+      )}
+      {...props}
+    />
+  );
+});
 Card.displayName = "Card"
 
 const CardHeader = React.forwardRef<

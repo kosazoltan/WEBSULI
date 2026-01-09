@@ -28,6 +28,7 @@ function HeroSection({
   return (
     <div className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0 animate-slide-in-up" 
          style={{
+           background: 'linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))',
            backdropFilter: 'blur(20px)',
            boxShadow: '0 10px 40px rgba(30, 144, 255, 0.2), 0 0 0 1px rgba(255, 140, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.1)',
          }}>
