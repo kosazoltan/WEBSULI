@@ -4,51 +4,42 @@
 
 @layer base {
   :root {
-    /* "Vibráló Jövő" - Student Theme Palette */
+    /* Aurora 2026 Palette */
+    --background: 240 10% 4%;     /* #09090b - Deepest Void */
+    --foreground: 0 0% 98%;       /* #fafafa */
     
-    /* Deep Space Backgrounds */
-    --background: 222 47% 11%;    /* #0f172a - Slate 900 base */
-    --foreground: 210 40% 98%;    /* #f8fafc - Slate 50 */
+    --card: 240 10% 4%;
+    --card-foreground: 0 0% 98%;
     
-    --card: 217 33% 17%;          /* Slate 800ish */
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
-
-    /* Neon Accents */
-    /* Primary: Electric Blue / Cyan */
-    --primary: 190 100% 50%;      /* #00F0FF */
-    --primary-foreground: 222 47% 11%;
-
-    /* Secondary: Hot Pink */
-    --secondary: 320 100% 60%;    /* #FF33CC */
-    --secondary-foreground: 210 40% 98%;
-
-    /* Accent: Cyber Yellow / Limb */
-    --accent: 60 100% 60%;        /* #FFFF33 */
-    --accent-foreground: 222 47% 11%;
-
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-
+    --popover: 240 10% 4%;
+    --popover-foreground: 0 0% 98%;
+    
+    /* Neon Accents - More saturated for 2026 */
+    --primary: 190 100% 50%;      /* #00F0FF - Cyan */
+    --primary-foreground: 240 10% 4%;
+    
+    --secondary: 280 100% 60%;    /* #AA00FF - Electric Purple */
+    --secondary-foreground: 0 0% 98%;
+    
+    --accent: 320 100% 60%;       /* #FF0099 - Hot Pink */
+    --accent-foreground: 240 10% 4%;
+    
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+    
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
+    --destructive-foreground: 0 0% 98%;
+    
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
     --ring: 190 100% 50%;
-
-    --radius: 1rem; /* Rounded-2xl default for friendlier look */
+    
+    --radius: 1.5rem; /* Modern rounded look */
   }
 
   .dark {
-    /* Same theme currently for both modes to enforce the "Space" look, 
-       but can be tweaked if light mode is requested later. 
-       For now, we force the dark/vibrant theme. */
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    /* ... keep values consistent for the immersive feel */
+    --background: 240 10% 4%;
+    --foreground: 0 0% 98%;
   }
 }
 
@@ -63,69 +54,111 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased overflow-x-hidden;
-    background-image: 
-      radial-gradient(circle at 10% 20%, rgba(0, 240, 255, 0.05) 0%, transparent 40%),
-      radial-gradient(circle at 90% 80%, rgba(255, 51, 204, 0.05) 0%, transparent 40%);
+    /* Static noise overlay for texture - very performant */
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
   }
 }
 
 @layer utilities {
-  /* Text Styles */
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400;
+  /* --- Aurora Backgrounds (Optimized) --- */
+  /* Uses large radial gradients that are heavily blurred but static or transform-only */
+  
+  .aurora-bg {
+    position: relative;
+    overflow: hidden;
   }
   
-  .text-glow {
-    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+  .aurora-bg::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: 
+      radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.15), transparent 50%),
+      radial-gradient(circle at 10% 10%, rgba(170, 0, 255, 0.1), transparent 40%),
+      radial-gradient(circle at 90% 90%, rgba(255, 0, 153, 0.1), transparent 40%);
+    z-index: -1;
+    pointer-events: none;
+    /* Basic animation, GPU ready */
+    animation: aurora-spin 20s linear infinite;
+    will-change: transform;
   }
 
-  /* Glassmorphism - Vibrant EdTech Style */
-  .glass-panel {
-    @apply bg-slate-900/60 backdrop-blur-xl border border-white/10 shadow-xl;
+  /* --- Holographic Card Style (High Performance) --- */
+  /* No backdrop-blur by default to save GPU on mobile */
+  
+  .holographic-card {
+    @apply relative bg-white/[0.03] border border-white/10 rounded-3xl overflow-hidden transition-transform duration-300 ease-out;
+    /* Hardware acceleration for smooth movement */
+    will-change: transform;
   }
   
-  .glass-card {
-    @apply bg-slate-800/40 backdrop-blur-md border border-white/5 shadow-lg transition-all duration-300;
+  /* Iridescent Border Effect on Hover */
+  .holographic-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 1.5rem;
+    padding: 1px; /* border width */
+    background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0)); 
+    -webkit-mask: 
+       linear-gradient(#fff 0 0) content-box, 
+       linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    transition: background 0.3s ease;
   }
   
-  .glass-card:hover {
-    @apply bg-slate-800/60 border-cyan-400/30 -translate-y-1 shadow-[0_0_20px_rgba(0,240,255,0.15)];
-  }
-
-  /* Gamified Elements */
-  .badge-glow {
-    @apply shadow-[0_0_10px_rgba(0,240,255,0.4)];
-  }
-
-  /* Animations */
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
+  .holographic-card:hover {
+    transform: translateY(-4px); /* Smaller movement */
   }
   
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
+  .holographic-card:hover::after {
+    /* Aurora border on hover */
+    background: linear-gradient(135deg, #00F0FF, #AA00FF, #FF0099);
   }
   
-  .animate-float-delayed {
-    animation: float 6s ease-in-out 3s infinite;
+  /* Inner Glow (Simulated with gradient overlay) */
+  .holo-overlay {
+    background: radial-gradient(
+      800px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), 
+      rgba(255, 255, 255, 0.06), 
+      transparent 40%
+    );
   }
 
-  @keyframes pulse-glow {
-    0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(0, 240, 255, 0.2); }
-    50% { opacity: 0.8; box-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
+  /* Typography */
+  .text-gradient-aurora {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-500 font-extrabold tracking-tight;
   }
 
-  .animate-pulse-glow {
-    animation: pulse-glow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  @keyframes spin-slow {
+  /* --- Optimized Animations --- */
+  
+  @keyframes aurora-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
   
-  .animate-spin-slow {
-    animation: spin-slow 12s linear infinite;
+  /* Float with translate3d for GPU */
+  @keyframes float-optimized {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(0, -10px, 0); }
+  }
+  
+  .animate-float-opt {
+    animation: float-optimized 6s ease-in-out infinite;
+  }
+  
+  /* Simple fade pulse (opacity only) */
+  @keyframes pulse-opacity {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+  
+  .animate-fade-in {
+    animation: pulse-opacity 2s ease-in-out infinite;
   }
 }
