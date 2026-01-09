@@ -134,9 +134,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 relative">
-      {/* Tudományos háttér animáció */}
-      <ScientificBackground />
+    <div className="min-h-screen relative">
+      {/* Background is handled by index.css global styles now */}
 
       <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-4 sm:py-6 lg:py-8">
         {/* Admin Toggle */}
@@ -223,82 +222,64 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
         {/* Files Grid - Chronological Order (Newest First) */}
         {filteredFiles.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 tablet:grid-cols-3 xl:grid-cols-4 foldable:grid-cols-5 uw:grid-cols-6 gap-3 sm:gap-4 tablet:gap-5 xl:gap-6" data-testid="list-files">
+          <div className="grid grid-cols-1 sm:grid-cols-2 tablet:grid-cols-3 xl:grid-cols-4 foldable:grid-cols-5 uw:grid-cols-6 gap-4 sm:gap-6" data-testid="list-files" id="content-start">
             {filteredFiles.map((file) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
               return (
                 <Card
                   key={file.id}
-                  className="group cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_20px_50px_rgba(34,211,238,0.3),0_10px_30px_rgba(236,72,153,0.2)] hover:-translate-y-2 hover:scale-[1.03] backdrop-blur-lg border-2 border-cyan-400/30 hover:border-cyan-400/70 dark:border-cyan-400/40 dark:hover:border-cyan-400/80 relative rounded-2xl shadow-lg shadow-cyan-500/10 hover:shadow-cyan-500/20"
+                  className="group relative overflow-hidden rounded-2xl border-0 bg-slate-800/40 backdrop-blur-sm transition-all duration-300 hover:-translate-y-2 hover:bg-slate-800/60 hover:shadow-2xl hover:shadow-cyan-500/10 cursor-pointer ring-1 ring-white/5 hover:ring-cyan-400/50"
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(34, 211, 238, 0.15) 25%, rgba(236, 72, 153, 0.15) 50%, rgba(192, 132, 252, 0.15) 75%, rgba(31, 41, 55, 0.95) 100%)',
-                    boxShadow: '0 0 20px rgba(34, 211, 238, 0.1), inset 0 0 20px rgba(34, 211, 238, 0.05)'
-                  }}
                 >
-                  {/* Cyberpunk neon shimmer effect */}
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl" 
-                    style={{
-                      background: 'linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.1) 25%, rgba(236, 72, 153, 0.1) 50%, rgba(192, 132, 252, 0.1) 75%, transparent 100%)',
-                      backgroundSize: '200% 100%',
-                      animation: 'cyberpunk-shimmer 10s ease-in-out infinite' // 70% slower (3s / 0.3)
-                    }}
-                  />
-                  
-                  {/* Cyberpunk corner accents */}
-                  <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400/50 rounded-tl-xl opacity-50 group-hover:opacity-100 group-hover:border-cyan-400 transition-opacity" />
-                  <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-pink-500/50 rounded-tr-xl opacity-50 group-hover:opacity-100 group-hover:border-pink-500 transition-opacity" />
-                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-purple-400/50 rounded-bl-xl opacity-50 group-hover:opacity-100 group-hover:border-purple-400 transition-opacity" />
-                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400/50 rounded-br-xl opacity-50 group-hover:opacity-100 group-hover:border-cyan-400 transition-opacity" />
+                  {/* Card Header Gradient */}
+                  <div className={`absolute top-0 inset-x-0 h-1 bg-gradient-to-r ${
+                    classroom <= 4 ? "from-green-400 to-emerald-600" :
+                    classroom <= 8 ? "from-blue-400 to-cyan-600" : 
+                    "from-purple-400 to-pink-600"
+                  }`} />
 
-                  {/* Cyberpunk grid decoration */}
-                  <div className="absolute top-0 right-0 w-20 h-20 opacity-30 group-hover:opacity-60 pointer-events-none transition-opacity">
-                    <svg className="w-full h-full text-cyan-400" viewBox="0 0 80 80" style={{ filter: 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.6))' }}>
-                      <line x1="0" y1="20" x2="80" y2="20" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 4" />
-                      <line x1="20" y1="0" x2="20" y2="80" stroke="currentColor" strokeWidth="0.5" strokeDasharray="4 4" />
-                      <circle cx="20" cy="20" r="3" fill="currentColor" fillOpacity="0.8" />
-                    </svg>
-                  </div>
-
-                  <CardContent className="fold:p-3 p-4 sm:p-5 relative">
-                    {/* Icon + Badge */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-gradient-to-br from-gray-700/80 via-gray-600/60 to-gray-700/80 dark:from-gray-800/80 dark:via-gray-700/60 dark:to-gray-800/80 group-hover:from-cyan-500/20 group-hover:via-pink-500/20 group-hover:to-purple-500/20 transition-all duration-300 shadow-md group-hover:shadow-[0_0_20px_rgba(34,211,238,0.4)] border border-gray-600/30 group-hover:border-cyan-400/50">
-                        <Icon className="w-7 h-7 text-gray-300 dark:text-gray-300 group-hover:text-cyan-400 dark:group-hover:text-cyan-400 transition-colors drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
-                      </div>
-                      <Badge
-                        variant="secondary"
-                        className="bg-gradient-to-r from-cyan-600 to-purple-600 text-white border-cyan-400/50 font-semibold text-xs shadow-md shadow-cyan-500/30"
-                      >
-                        {getClassroomLabel(classroom, true)}
-                      </Badge>
+                  <CardContent className="p-5 flex flex-col h-full">
+                    
+                    {/* Top Row: Icon & Badge */}
+                    <div className="flex justify-between items-start mb-4">
+                        <div className={`p-3 rounded-xl bg-slate-900/50 ring-1 ring-white/10 group-hover:scale-110 transition-transform duration-300 ${
+                             classroom <= 4 ? "text-green-400" :
+                             classroom <= 8 ? "text-cyan-400" : 
+                             "text-pink-400"
+                        }`}>
+                            <Icon className="w-6 h-6" />
+                        </div>
+                        
+                        <Badge variant="outline" className="bg-slate-900/30 border-white/10 text-xs font-semibold backdrop-blur-md">
+                            {getClassroomLabel(classroom, true)}
+                        </Badge>
                     </div>
 
-                    {/* Title */}
-                    <h3 className="text-base font-bold text-gray-100 dark:text-gray-100 mb-2 line-clamp-2 group-hover:text-cyan-400 dark:group-hover:text-cyan-400 transition-colors drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">
-                      {file.title}
-                    </h3>
-
-                    {/* Description */}
-                    {file.description && (
-                      <p className="text-sm text-muted-foreground line-clamp-3 mb-3">
-                        {file.description}
-                      </p>
-                    )}
-
-                    {/* Like Button + Hover Indicator */}
-                    <div className="pt-3 border-t border-cyan-400/30 dark:border-cyan-400/30 group-hover:border-cyan-400/60 transition-colors flex items-center justify-between gap-2">
-                      <LikeButton
-                        materialId={file.id}
-                        className="flex-shrink-0"
-                        initialLikeStatus={batchLikesData?.[file.id]}
-                      />
-                      <span className="text-xs text-cyan-400 dark:text-cyan-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">
-                        ⚗️ Megtekintés
-                      </span>
+                    {/* Content */}
+                    <div className="flex-1">
+                        <h3 className="text-lg font-bold text-slate-100 mb-2 line-clamp-2 leading-tight group-hover:text-cyan-300 transition-colors">
+                            {file.title}
+                        </h3>
+                        <p className="text-sm text-slate-400 line-clamp-2">
+                            {file.description || "Nincs leírás megadva ehhez a tananyaghoz."}
+                        </p>
                     </div>
+
+                    {/* Footer Actions */}
+                    <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                         <LikeButton
+                            materialId={file.id}
+                            className="bg-transparent hover:bg-white/5"
+                            initialLikeStatus={batchLikesData?.[file.id]}
+                         />
+                         
+                         <span className="text-xs font-bold text-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                            Megnyitás <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                         </span>
+                    </div>
+
                   </CardContent>
                 </Card>
               );
