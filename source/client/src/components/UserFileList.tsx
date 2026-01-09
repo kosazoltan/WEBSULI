@@ -92,7 +92,20 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
   if (files.length === 0) {
     return (
-      <div className="min-h-screen" style={{ backgroundColor: 'hsl(240 100% 9%)', minHeight: '100vh' }}>
+      <div 
+        className="min-h-screen" 
+        style={{ 
+          backgroundColor: 'hsl(240 100% 9%)',
+          backgroundImage: `
+            radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
+            radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
+            hsl(240 100% 9%)
+          `,
+          backgroundAttachment: 'fixed',
+          minHeight: '100vh',
+          color: '#f9fafb',
+        }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           {/* Admin Toggle */}
           {onToggleView && (
@@ -133,7 +146,21 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   }
 
   return (
-    <div className="min-h-screen relative" style={{ backgroundColor: 'hsl(240 100% 9%)' }}>
+    <div 
+      className="min-h-screen relative" 
+      style={{ 
+        backgroundColor: 'hsl(240 100% 9%)',
+        backgroundImage: `
+          radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
+          radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
+          radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
+          radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
+          hsl(240 100% 9%)
+        `,
+        backgroundAttachment: 'fixed',
+        minHeight: '100vh',
+      }}
+    >
       {/* Background is handled by index.css global styles now - dark mode sci-fi háttér */}
 
       <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-4 sm:py-6 lg:py-8">
@@ -268,7 +295,49 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               return (
                 <Card
                   key={file.id}
-                  className={`group holographic-card cursor-pointer border-0 card-hover-lift relative overflow-visible game-card-3d staggered-card ${staggerDelayClass}`}
+                  className={`group cursor-pointer border-0 relative overflow-visible ${staggerDelayClass}`}
+                  style={{
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderRadius: '1.5rem',
+                    background: 'linear-gradient(135deg, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))',
+                    backgroundColor: 'transparent',
+                    border: '2px solid hsl(30 100% 60% / 0.4)',
+                    boxShadow: `
+                      0 15px 50px rgba(0, 0, 0, 0.5),
+                      0 0 0 1px hsl(30 100% 50% / 0.3),
+                      inset 0 0 80px hsl(30 100% 55% / 0.25),
+                      inset 0 0 120px hsl(35 90% 50% / 0.15),
+                      inset 0 2px 30px hsl(30 100% 65% / 0.2)
+                    `,
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
+                    transition: 'all 300ms ease-out',
+                    transform: 'translateY(0) scale(1)',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                    e.currentTarget.style.borderColor = 'hsl(30 100% 65% / 0.6)';
+                    e.currentTarget.style.boxShadow = `
+                      0 35px 80px hsl(30 100% 55% / 0.5),
+                      0 0 0 3px hsl(30 100% 65% / 0.6),
+                      inset 0 0 120px hsl(30 100% 60% / 0.4),
+                      inset 0 0 180px hsl(35 90% 55% / 0.3),
+                      inset 0 2px 50px hsl(30 100% 70% / 0.4)
+                    `;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                    e.currentTarget.style.borderColor = 'hsl(30 100% 60% / 0.4)';
+                    e.currentTarget.style.boxShadow = `
+                      0 15px 50px rgba(0, 0, 0, 0.5),
+                      0 0 0 1px hsl(30 100% 50% / 0.3),
+                      inset 0 0 80px hsl(30 100% 55% / 0.25),
+                      inset 0 0 120px hsl(35 90% 50% / 0.15),
+                      inset 0 2px 30px hsl(30 100% 65% / 0.2)
+                    `;
+                  }}
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                 >
@@ -279,7 +348,15 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     "bg-gradient-to-r from-pink-400 via-purple-500 to-pink-600"
                   }`}></div>
                   
-                  <CardContent className="p-5 sm:p-6 flex flex-col h-full relative rounded-3xl z-10" style={{ backgroundColor: 'transparent' }}>
+                  <CardContent 
+                    className="p-5 sm:p-6 flex flex-col h-full relative rounded-3xl z-10" 
+                    style={{ 
+                      backgroundColor: 'transparent',
+                      background: 'none',
+                      position: 'relative',
+                      zIndex: 2,
+                    }}
+                  >
 
                     {/* 🏆 XP Badge - Top right corner */}
                     <div className={`absolute -top-2 -right-2 px-2 py-1 rounded-full text-xs font-black shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:scale-110 ${

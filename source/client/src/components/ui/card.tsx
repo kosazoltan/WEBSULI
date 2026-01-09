@@ -4,20 +4,20 @@ import { cn } from "@/lib/utils"
 
 const Card = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => {
-  // Ha holographic-card osztály van, ne alkalmazzuk a bg-card/80-at
-  const isHolographic = className?.includes('holographic-card');
+  React.HTMLAttributes<HTMLDivElement> & { style?: React.CSSProperties }
+>(({ className, style, ...props }, ref) => {
+  // Ha van inline style background vagy backgroundColor, ne alkalmazzuk a bg-card/80-at
+  const hasCustomBackground = style?.background || style?.backgroundColor;
   
   return (
     <div
       ref={ref}
       className={cn(
         "shadcn-card rounded-xl border backdrop-blur-md border-primary/20 text-card-foreground shadow-xl",
-        !isHolographic && "bg-card/80", // Csak ha nincs holographic-card
+        !hasCustomBackground && "bg-card/80", // Csak ha nincs custom background
         className
       )}
-      style={isHolographic ? { backgroundColor: 'transparent', background: 'none' } : undefined}
+      style={style}
       {...props}
     />
   );
