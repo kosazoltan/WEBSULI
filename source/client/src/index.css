@@ -4,9 +4,40 @@
 
 @layer base {
   :root {
-    /* Aurora 2026 Palette */
-    --background: 240 10% 4%;     /* #09090b - Deepest Void */
-    --foreground: 0 0% 98%;       /* #fafafa */
+    /* --- Light Mode (Solar Style) --- */
+    --background: 210 40% 98%;    /* #f8fafc - Bright & Airy */
+    --foreground: 222 47% 11%;    /* #0f172a - Dark Text */
+    
+    --card: 0 0% 100%;            /* Pure White */
+    --card-foreground: 222 47% 11%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    
+    /* Solar Accents */
+    --primary: 190 100% 40%;      /* #00A3CC - Deep Cyan */
+    --primary-foreground: 210 40% 98%;
+    
+    --secondary: 260 100% 60%;    /* #8800FF - Vivid Purple */
+    --secondary-foreground: 0 0% 98%;
+    
+    --accent: 330 100% 50%;       /* #CC0066 - Rose */
+    --accent-foreground: 210 40% 98%;
+    
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 190 100% 40%;
+    --radius: 1.5rem;
+  }
+
+  .dark {
+    /* --- Dark Mode (Aurora 2026) --- */
+    --background: 240 10% 4%;     /* #09090b - Void */
+    --foreground: 0 0% 98%;
     
     --card: 240 10% 4%;
     --card-foreground: 0 0% 98%;
@@ -14,32 +45,21 @@
     --popover: 240 10% 4%;
     --popover-foreground: 0 0% 98%;
     
-    /* Neon Accents - More saturated for 2026 */
+    /* Neon Accents */
     --primary: 190 100% 50%;      /* #00F0FF - Cyan */
     --primary-foreground: 240 10% 4%;
-    
-    --secondary: 280 100% 60%;    /* #AA00FF - Electric Purple */
+    --secondary: 280 100% 60%;    /* #AA00FF - Purple */
     --secondary-foreground: 0 0% 98%;
-    
-    --accent: 320 100% 60%;       /* #FF0099 - Hot Pink */
+    --accent: 320 100% 60%;       /* #FF0099 - Pink */
     --accent-foreground: 240 10% 4%;
     
     --muted: 240 4% 16%;
     --muted-foreground: 240 5% 65%;
-    
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    
     --border: 240 4% 16%;
     --input: 240 4% 16%;
     --ring: 190 100% 50%;
-    
-    --radius: 1.5rem; /* Modern rounded look */
-  }
-
-  .dark {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 98%;
   }
 }
 
@@ -53,112 +73,83 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden;
-    /* Static noise overlay for texture - very performant */
+    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden pt-24; /* pt-24 fixes header overlap */
+    /* Noise Texture */
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+    position: relative;
+    min-height: 100vh;
+  }
+
+  /* --- GLOBAL VIBRANT AURORA BACKGROUND --- */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  /* Layer 1: Slow rotating blobs */
+  body::before {
+    background: 
+      radial-gradient(circle at 10% 0%, rgba(0, 240, 255, 0.25), transparent 40%),
+      radial-gradient(circle at 90% 10%, rgba(170, 0, 255, 0.25), transparent 40%),
+      radial-gradient(circle at 50% 90%, rgba(255, 0, 153, 0.25), transparent 50%);
+    animation: aurora-shift 30s linear infinite alternate;
+  }
+  
+  /* Layer 2: Moving accents */
+  body::after {
+    background: 
+      radial-gradient(circle at 80% 80%, rgba(0, 163, 204, 0.15), transparent 40%),
+      radial-gradient(circle at 20% 20%, rgba(255, 200, 0, 0.1), transparent 30%);
+    animation: aurora-pulse 20s ease-in-out infinite alternate;
   }
 }
 
 @layer utilities {
-  /* --- Aurora Backgrounds (Optimized) --- */
-  /* Uses large radial gradients that are heavily blurred but static or transform-only */
   
-  .aurora-bg {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .aurora-bg::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: 
-      radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.15), transparent 50%),
-      radial-gradient(circle at 10% 10%, rgba(170, 0, 255, 0.1), transparent 40%),
-      radial-gradient(circle at 90% 90%, rgba(255, 0, 153, 0.1), transparent 40%);
-    z-index: -1;
-    pointer-events: none;
-    /* Basic animation, GPU ready */
-    animation: aurora-spin 20s linear infinite;
-    will-change: transform;
-  }
-
-  /* --- Holographic Card Style (High Performance) --- */
-  /* No backdrop-blur by default to save GPU on mobile */
-  
+  /* --- Holographic Card (Works in both modes) --- */
   .holographic-card {
-    @apply relative bg-white/[0.03] border border-white/10 rounded-3xl overflow-hidden transition-transform duration-300 ease-out;
-    /* Hardware acceleration for smooth movement */
-    will-change: transform;
+    @apply relative overflow-hidden rounded-3xl transition-all duration-300 ease-out;
+    background: rgba(255, 255, 255, 0.05); /* Adaptive glass base */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* In light mode, add a subtle shadow to stand out */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
   }
   
-  /* Iridescent Border Effect on Hover */
-  .holographic-card::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: 1.5rem;
-    padding: 1px; /* border width */
-    background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0)); 
-    -webkit-mask: 
-       linear-gradient(#fff 0 0) content-box, 
-       linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-    transition: background 0.3s ease;
+  .dark .holographic-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: none;
   }
-  
+
   .holographic-card:hover {
-    transform: translateY(-4px); /* Smaller movement */
+    transform: translateY(-4px);
+    border-color: rgba(0, 240, 255, 0.3);
   }
   
-  .holographic-card:hover::after {
-    /* Aurora border on hover */
-    background: linear-gradient(135deg, #00F0FF, #AA00FF, #FF0099);
-  }
-  
-  /* Inner Glow (Simulated with gradient overlay) */
-  .holo-overlay {
-    background: radial-gradient(
-      800px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), 
-      rgba(255, 255, 255, 0.06), 
-      transparent 40%
-    );
-  }
-
-  /* Typography */
+  /* Vibrant Text Gradient */
   .text-gradient-aurora {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-500 font-extrabold tracking-tight;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 font-extrabold tracking-tight;
+  }
+  .dark .text-gradient-aurora {
+    @apply from-cyan-400 via-purple-400 to-pink-500;
   }
 
-  /* --- Optimized Animations --- */
-  
-  @keyframes aurora-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  /* --- Animations --- */
+  @keyframes aurora-shift {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.1); }
   }
   
-  /* Float with translate3d for GPU */
-  @keyframes float-optimized {
-    0%, 100% { transform: translate3d(0, 0, 0); }
-    50% { transform: translate3d(0, -10px, 0); }
-  }
-  
-  .animate-float-opt {
-    animation: float-optimized 6s ease-in-out infinite;
-  }
-  
-  /* Simple fade pulse (opacity only) */
-  @keyframes pulse-opacity {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 1; }
-  }
-  
-  .animate-fade-in {
-    animation: pulse-opacity 2s ease-in-out infinite;
+  @keyframes aurora-pulse {
+    0% { opacity: 0.5; transform: translate(0, 0); }
+    50% { opacity: 0.8; transform: translate(5%, 5%); }
+    100% { opacity: 0.5; transform: translate(0, 0); }
   }
 }

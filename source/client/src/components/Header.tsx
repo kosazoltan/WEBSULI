@@ -43,7 +43,7 @@ export default function Header() {
     <header 
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled 
-          ? "py-2 bg-slate-900/80 backdrop-blur-xl border-b border-cyan-500/20 shadow-lg shadow-cyan-500/5" 
+          ? "py-2 bg-background/80 backdrop-blur-xl border-b border-white/10 dark:border-cyan-500/20 shadow-lg shadow-black/5 dark:shadow-cyan-500/5 supports-[backdrop-filter]:bg-background/60" 
           : "py-4 bg-transparent"
       }`}
     >
@@ -61,7 +61,7 @@ export default function Header() {
               </div>
               
               <div className="hidden sm:block">
-                <h1 className="text-xl font-bold text-white tracking-tight">
+                <h1 className="text-xl font-bold text-foreground tracking-tight">
                   Web<span className="text-cyan-400">Suli</span>
                 </h1>
                 <p className="text-[10px] text-cyan-200/60 uppercase tracking-widest font-semibold">

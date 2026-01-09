@@ -41,23 +41,23 @@ function HeroSection({
 
         {/* Title - Massive Type */}
         <h1 className="text-5xl sm:text-7xl lg:text-9xl font-black mb-6 tracking-tighter leading-[0.9] drop-shadow-2xl">
-          <span className="text-white">Lépj </span>
+          <span className="text-foreground">Lépj </span>
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-500">
             Szintet
           </span>
         </h1>
 
         {/* Subtitle / Mission Statement */}
-        <p className="text-xl sm:text-2xl text-slate-400 mb-10 max-w-2xl font-light leading-relaxed">
-          A jövő oktatási platformja. <span className="text-slate-200 font-semibold">Gamifikált</span> tananyagok 
-          és <span className="text-slate-200 font-semibold">közösségi</span> élmény.
+        <p className="text-xl sm:text-2xl text-muted-foreground mb-10 max-w-2xl font-light leading-relaxed">
+          A jövő oktatási platformja. <span className="text-foreground font-semibold">Gamifikált</span> tananyagok 
+          és <span className="text-foreground font-semibold">közösségi</span> élmény.
         </p>
 
         {/* CTA Actions - Big Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center">
             <Button 
                 size="lg" 
-                className="w-full sm:w-auto text-lg h-16 px-10 rounded-2xl bg-white text-slate-900 hover:bg-cyan-50 transition-colors shadow-xl shadow-white/5 font-bold"
+                className="w-full sm:w-auto text-lg h-16 px-10 rounded-2xl bg-foreground text-background hover:bg-cyan-500 hover:text-white transition-colors shadow-xl shadow-cyan-500/5 font-bold"
                 onClick={scrollToContent}
             >
                 Start <ChevronRight className="w-5 h-5 ml-2" />
@@ -71,18 +71,18 @@ function HeroSection({
         </div>
 
         {/* Stats - Minimalist Row */}
-        <div className="mt-16 pt-8 border-t border-white/5 flex gap-12 sm:gap-24 opacity-60 hover:opacity-100 transition-opacity">
+        <div className="mt-16 pt-8 border-t border-white/5 dark:border-white/5 border-black/5 flex gap-12 sm:gap-24 opacity-60 hover:opacity-100 transition-opacity">
             <div className="text-center">
-                <div className="text-3xl font-black text-white">{totalFiles}</div>
-                <div className="text-xs uppercase tracking-widest text-slate-500 mt-1">Tananyag</div>
+                <div className="text-3xl font-black text-foreground">{totalFiles}</div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground mt-1">Tananyag</div>
             </div>
             <div className="text-center">
-                <div className="text-3xl font-black text-white">{totalClassrooms}</div>
-                <div className="text-xs uppercase tracking-widest text-slate-500 mt-1">Osztály</div>
+                <div className="text-3xl font-black text-foreground">{totalClassrooms}</div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground mt-1">Osztály</div>
             </div>
              <div className="text-center">
-                <div className="text-3xl font-black text-white">∞</div>
-                <div className="text-xs uppercase tracking-widest text-slate-500 mt-1">Lehetőség</div>
+                <div className="text-3xl font-black text-foreground">∞</div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground mt-1">Lehetőség</div>
             </div>
         </div>
 
