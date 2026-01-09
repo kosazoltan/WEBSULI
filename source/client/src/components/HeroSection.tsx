@@ -29,12 +29,12 @@ function HeroSection({
     <div className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0 animate-slide-in-up" 
          style={{
            backdropFilter: 'blur(20px)',
-           boxShadow: '0 10px 40px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.05)',
+           boxShadow: '0 10px 40px rgba(30, 144, 255, 0.2), 0 0 0 1px rgba(255, 140, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.1)',
          }}>
       
-      {/* MP4 Video háttér - teljesítmény-optimalizálva */}
+      {/* MP4 Video háttér - űr/planéta témájú */}
       <video
-        className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none"
+        className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
         autoPlay
         loop
         muted
@@ -47,7 +47,7 @@ function HeroSection({
         onLoadedData={(e) => {
           // Videó betöltése után smooth fade-in
           const video = e.currentTarget;
-          video.style.opacity = '0.5';
+          video.style.opacity = '0.6';
           video.style.transition = 'opacity 1s ease-in';
         }}
       >
@@ -56,208 +56,189 @@ function HeroSection({
         Your browser does not support the video tag.
       </video>
 
-      {/* Overlay gradienst a videó felett - grafit szürkétől magenta átmenet */}
+      {/* Sci-fi űr atmoszféra overlay - sötét kék/lila ég → narancs nap → vörös-barna bolygó */}
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{ 
           zIndex: 1,
-          background: 'linear-gradient(to bottom, hsl(220 10% 20% / 0.6) 0%, hsl(220 15% 25% / 0.5) 40%, hsl(280 80% 40% / 0.4) 70%, hsl(300 100% 50% / 0.3) 100%)',
+          background: `
+            linear-gradient(to bottom, 
+              hsl(230 70% 15% / 0.7) 0%, 
+              hsl(240 60% 20% / 0.6) 30%,
+              hsl(25 90% 45% / 0.4) 60%,
+              hsl(30 100% 55% / 0.5) 75%,
+              hsl(15 80% 30% / 0.6) 100%
+            )
+          `,
         }}
       />
 
-      {/* Fujiama hegység tájkép háttér SVG - videó és overlay felett */}
-      <div className="absolute inset-0 opacity-25 pointer-events-none overflow-hidden" style={{ zIndex: 2 }}>
+      {/* Nap glow effekt - narancs-sárga fény */}
+      <div 
+        className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ 
+          zIndex: 1,
+          width: '400px',
+          height: '400px',
+          background: 'radial-gradient(circle, hsl(30 100% 65% / 0.4) 0%, hsl(25 90% 50% / 0.2) 40%, transparent 70%)',
+          borderRadius: '50%',
+          filter: 'blur(60px)',
+        }}
+      />
+
+      {/* Sci-fi bolygó táj háttér SVG - vörös-barna hegyek, narancs nap */}
+      <div className="absolute inset-0 opacity-30 pointer-events-none overflow-hidden" style={{ zIndex: 2 }}>
         <svg className="absolute bottom-0 left-0 w-full h-full" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMax slice">
           <defs>
-            <linearGradient id="skyGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="hsl(220 30% 18%)" />
-              <stop offset="50%" stopColor="hsl(280 40% 22%)" />
-              <stop offset="100%" stopColor="hsl(300 50% 28%)" />
+            <linearGradient id="spaceSkyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="hsl(230 70% 15%)" />
+              <stop offset="40%" stopColor="hsl(240 60% 20%)" />
+              <stop offset="70%" stopColor="hsl(25 90% 45%)" />
+              <stop offset="100%" stopColor="hsl(15 80% 30%)" />
             </linearGradient>
-            <linearGradient id="mountainGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="hsl(220 15% 28%)" />
-              <stop offset="100%" stopColor="hsl(220 10% 22%)" />
+            <linearGradient id="planetGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="hsl(15 75% 35%)" />
+              <stop offset="100%" stopColor="hsl(10 80% 25%)" />
             </linearGradient>
-            <linearGradient id="fujiGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="hsl(220 20% 32%)" />
-              <stop offset="50%" stopColor="hsl(280 30% 38%)" />
-              <stop offset="100%" stopColor="hsl(300 25% 30%)" />
-            </linearGradient>
-            <linearGradient id="snowGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="hsl(0 0% 90%)" />
-              <stop offset="100%" stopColor="hsl(220 15% 40%)" />
-            </linearGradient>
+            <radialGradient id="sunGlow" cx="50%" cy="50%">
+              <stop offset="0%" stopColor="hsl(30 100% 70%)" />
+              <stop offset="50%" stopColor="hsl(25 90% 55%)" />
+              <stop offset="100%" stopColor="transparent" />
+            </radialGradient>
           </defs>
           
-          {/* Ég háttér */}
-          <rect width="1200" height="600" fill="url(#skyGradientHero)" />
+          {/* Űr ég háttér - sötét kék/lila → narancs */}
+          <rect width="1200" height="600" fill="url(#spaceSkyGradient)" />
           
-          {/* Hátsó hegyek */}
-          <path d="M 0,600 L 0,350 L 200,250 L 400,280 L 600,220 L 800,250 L 1000,230 L 1200,240 L 1200,600 Z" 
-                fill="url(#mountainGradientHero)" opacity="0.5" />
+          {/* Nap - narancs-sárga glow */}
+          <circle cx="400" cy="200" r="80" fill="url(#sunGlow)" opacity="0.8" />
+          <circle cx="400" cy="200" r="60" fill="hsl(30 100% 65%)" />
           
-          {/* Középső hegyek */}
-          <path d="M 0,600 L 150,380 L 350,300 L 550,340 L 750,280 L 950,320 L 1200,290 L 1200,600 Z" 
-                fill="url(#mountainGradientHero)" opacity="0.6" />
+          {/* Bolygó hegyek - vörös-barna */}
+          <path d="M 0,600 L 0,400 L 150,320 L 300,350 L 450,280 L 600,320 L 750,300 L 900,340 L 1050,310 L 1200,330 L 1200,600 Z" 
+                fill="url(#planetGradient)" opacity="0.8" />
           
-          {/* Fujiama hegy - középen, karakterisztikus sziluett */}
-          <path d="M 450,600 
-                   L 470,560 
-                   L 490,510 
-                   L 510,450 
-                   L 530,380 
-                   L 550,320 
-                   L 570,260 
-                   L 590,200 
-                   L 610,140 
-                   L 630,100 
-                   L 650,70 
-                   L 670,50 
-                   L 690,35 
-                   L 710,25 
-                   L 730,20 
-                   L 750,18 
-                   L 770,20 
-                   L 790,25 
-                   L 810,35 
-                   L 830,50 
-                   L 850,70 
-                   L 870,100 
-                   L 890,140 
-                   L 910,200 
-                   L 930,260 
-                   L 950,320 
-                   L 970,380 
-                   L 990,450 
-                   L 1010,510 
-                   L 1030,560 
-                   L 1050,600 Z" 
-                fill="url(#fujiGradientHero)" />
+          {/* További hegyek rétegek */}
+          <path d="M 0,600 L 100,420 L 250,380 L 400,400 L 550,350 L 700,370 L 850,390 L 1000,360 L 1200,380 L 1200,600 Z" 
+                fill="url(#planetGradient)" opacity="0.7" />
           
-          {/* Fujiama hó sapka - hófehér csúcs */}
-          <path d="M 730,18 
-                   L 750,16 
-                   L 770,18 
-                   L 790,24 
-                   L 810,34 
-                   L 830,48 
-                   L 850,68 
-                   L 870,98 
-                   L 890,138 
-                   L 910,198 
-                   L 930,258 
-                   L 950,318 
-                   L 930,280 
-                   L 910,200 
-                   L 890,140 
-                   L 870,100 
-                   L 850,70 
-                   L 830,50 
-                   L 810,35 
-                   L 790,25 
-                   L 770,20 
-                   L 750,18 
-                   L 730,20 
-                   Z" 
-                fill="url(#snowGradientHero)" opacity="0.7" />
+          <path d="M 0,600 L 50,480 L 200,440 L 350,460 L 500,420 L 650,440 L 800,460 L 950,430 L 1200,450 L 1200,600 Z" 
+                fill="url(#planetGradient)" opacity="0.6" />
           
-          {/* Felhők */}
-          <ellipse cx="300" cy="180" rx="120" ry="35" fill="hsl(220 20% 28%)" opacity="0.3" />
-          <ellipse cx="900" cy="150" rx="90" ry="30" fill="hsl(280 25% 30%)" opacity="0.3" />
-          <ellipse cx="800" cy="200" rx="75" ry="25" fill="hsl(300 20% 32%)" opacity="0.25" />
-          
-          {/* Csillagok - éjszakai égen */}
-          <circle cx="200" cy="120" r="2" fill="hsl(300 100% 75%)" opacity="0.5" />
-          <circle cx="250" cy="80" r="1.5" fill="hsl(300 100% 75%)" opacity="0.4" />
-          <circle cx="320" cy="100" r="1.8" fill="hsl(300 100% 75%)" opacity="0.5" />
-          <circle cx="1000" cy="70" r="2" fill="hsl(300 100% 75%)" opacity="0.5" />
-          <circle cx="1080" cy="50" r="1.5" fill="hsl(300 100% 75%)" opacity="0.4" />
+          {/* Csillagok az égen - fehér */}
+          <circle cx="180" cy="100" r="1.5" fill="hsl(0 0% 90%)" opacity="0.8" />
+          <circle cx="280" cy="60" r="1" fill="hsl(0 0% 90%)" opacity="0.6" />
+          <circle cx="550" cy="80" r="1.8" fill="hsl(0 0% 90%)" opacity="0.7" />
+          <circle cx="950" cy="100" r="1.5" fill="hsl(0 0% 90%)" opacity="0.8" />
+          <circle cx="1100" cy="50" r="1.2" fill="hsl(0 0% 90%)" opacity="0.6" />
+          <circle cx="750" cy="120" r="1.3" fill="hsl(0 0% 90%)" opacity="0.7" />
         </svg>
       </div>
       
-      {/* Alkimista titkos jelek - animálva - videó és SVG felett */}
+      {/* Sci-fi UI elemek - radar, grafikonok, tracking jelek - narancs-sárga színekkel */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 3 }}>
-        {/* Körök - alkimista jel (pulzáló) */}
-        <svg className="absolute top-10 left-10 w-24 h-24" style={{ 
-          animation: 'float-rotate 8s ease-in-out infinite, alchemist-pulse 3s ease-in-out infinite, alchemist-glow 2s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 4px hsl(300 100% 70% / 0.6))'
-        }}>
-          <circle cx="12" cy="12" r="10" fill="none" stroke="hsl(300 100% 70%)" strokeWidth="1.5" strokeDasharray="4 4" />
-          <circle cx="12" cy="12" r="6" fill="none" stroke="hsl(300 100% 60%)" strokeWidth="1" />
-          <circle cx="12" cy="12" r="2" fill="hsl(300 100% 70%)" />
-        </svg>
         
-        {/* Háromszög - tűz/levegő jel (forgó) */}
-        <svg className="absolute top-20 right-20 w-20 h-20" style={{ 
-          animation: 'float-rotate 10s ease-in-out infinite 1s, alchemist-rotate 20s linear infinite, alchemist-pulse 4s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
-        }}>
-          <path d="M 10 2 L 18 18 L 2 18 Z" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="2" />
-          <circle cx="10" cy="10" r="1.5" fill="hsl(300 100% 70%)" />
-        </svg>
-        
-        {/* Hexagram - csillag (pulzáló) */}
-        <svg className="absolute bottom-20 left-20 w-28 h-28" style={{ 
-          animation: 'float-rotate 12s ease-in-out infinite 2s, alchemist-pulse 5s ease-in-out infinite, alchemist-glow 3s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 5px hsl(300 100% 70% / 0.6))'
-        }}>
-          <path d="M 14 2 L 18 10 L 26 10 L 20 16 L 22 24 L 14 20 L 6 24 L 8 16 L 2 10 L 10 10 Z" 
-                fill="none" stroke="hsl(300 100% 60%)" strokeWidth="1.5" />
-        </svg>
-        
-        {/* Alkimista négyzet (forgó) */}
-        <svg className="absolute bottom-32 right-32 w-16 h-16" style={{ 
-          animation: 'float-rotate 9s ease-in-out infinite 0.5s, alchemist-rotate 25s linear infinite reverse, alchemist-pulse 3.5s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
-        }}>
-          <rect x="2" y="2" width="12" height="12" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1.5" />
-          <line x1="2" y1="8" x2="14" y2="8" stroke="hsl(300 100% 70%)" strokeWidth="1" />
-          <line x1="8" y1="2" x2="8" y2="14" stroke="hsl(300 100% 70%)" strokeWidth="1" />
-        </svg>
-        
-        {/* Pentagram - ötágú csillag (lassan forgó) */}
-        <svg className="absolute top-1/2 left-1/4 w-22 h-22" style={{ 
-          animation: 'float-rotate 11s ease-in-out infinite 1.5s, alchemist-rotate 30s linear infinite, alchemist-glow 4s ease-in-out infinite',
-          transform: 'translate(-50%, -50%)',
-          filter: 'drop-shadow(0 0 4px hsl(300 100% 70% / 0.6))'
-        }}>
-          <path d="M 11 2 L 13.5 8.5 L 20.5 8.5 L 14.5 13 L 17 19.5 L 11 15 L 5 19.5 L 7.5 13 L 1.5 8.5 L 8.5 8.5 Z" 
-                fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1.5" />
-        </svg>
-        
-        {/* Kereszt - négy elem (pulzáló) */}
-        <svg className="absolute top-1/3 right-1/3 w-18 h-18" style={{ 
-          animation: 'float-rotate 7s ease-in-out infinite 0.8s, alchemist-pulse 2.5s ease-in-out infinite, alchemist-glow 2.5s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
-        }}>
-          <line x1="9" y1="2" x2="9" y2="16" stroke="hsl(300 100% 70%)" strokeWidth="2" />
-          <line x1="2" y1="9" x2="16" y2="9" stroke="hsl(300 100% 70%)" strokeWidth="2" />
-          <circle cx="9" cy="9" r="2" fill="hsl(300 100% 60%)" />
-        </svg>
-        
-        {/* Spirál jel (forgó) */}
-        <svg className="absolute bottom-16 right-16 w-14 h-14" style={{ 
-          animation: 'float-rotate 6s ease-in-out infinite 1.2s, alchemist-rotate 15s linear infinite, alchemist-pulse 3s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 3px hsl(300 100% 70% / 0.5))'
-        }}>
-          <path d="M 7 7 Q 7 2 12 2 Q 17 2 17 7 Q 17 12 12 12 Q 7 12 7 7" 
-                fill="none" stroke="hsl(300 100% 70%)" strokeWidth="1.5" />
-        </svg>
-        
-        {/* Alkimista körök lánc (pulzáló) */}
+        {/* Radar kör - koncentrikus gyűrűk */}
         <svg className="absolute top-1/4 right-1/4 w-32 h-32" style={{ 
-          animation: 'float-rotate 15s ease-in-out infinite, alchemist-pulse 6s ease-in-out infinite, alchemist-glow 3.5s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 4px hsl(300 100% 70% / 0.5))'
+          animation: 'float-rotate 8s ease-in-out infinite, alchemist-pulse 3s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 8px hsl(30 100% 60% / 0.6))'
         }}>
-          <circle cx="16" cy="8" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
-          <circle cx="24" cy="16" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
-          <circle cx="16" cy="24" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
-          <circle cx="8" cy="16" r="3" fill="none" stroke="hsl(300 100% 65%)" strokeWidth="1" />
-          <line x1="16" y1="8" x2="24" y2="16" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
-          <line x1="24" y1="16" x2="16" y2="24" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
-          <line x1="16" y1="24" x2="8" y2="16" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
-          <line x1="8" y1="16" x2="16" y2="8" stroke="hsl(300 100% 60%)" strokeWidth="0.5" />
+          <circle cx="16" cy="16" r="12" fill="none" stroke="hsl(30 100% 60%)" strokeWidth="1" strokeDasharray="2 2" opacity="0.6" />
+          <circle cx="16" cy="16" r="8" fill="none" stroke="hsl(30 100% 65%)" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
+          <circle cx="16" cy="16" r="4" fill="hsl(30 100% 65%)" opacity="0.8" />
+          <line x1="16" y1="4" x2="16" y2="28" stroke="hsl(30 100% 60%)" strokeWidth="0.5" opacity="0.5" />
+          <line x1="4" y1="16" x2="28" y2="16" stroke="hsl(30 100% 60%)" strokeWidth="0.5" opacity="0.5" />
         </svg>
+
+        {/* Data flow lines - fehér ívek narancs pontokkal */}
+        <svg className="absolute bottom-1/4 right-1/4 w-full h-full" style={{ 
+          animation: 'float-rotate 12s ease-in-out infinite',
+        }}>
+          <path d="M 80% 70% Q 60% 50%, 40% 40%" 
+                fill="none" 
+                stroke="hsl(0 0% 90%)" 
+                strokeWidth="1.5" 
+                opacity="0.4"
+                strokeDasharray="4 4" />
+          <circle cx="40%" cy="40%" r="3" fill="hsl(30 100% 60%)" opacity="0.8" />
+        </svg>
+
+        {/* Grafikon jelzés - Spacewalks chart stílus */}
+        <div className="absolute top-1/5 left-1/6 bg-black/30 backdrop-blur-sm rounded-lg p-3 border border-white/20" style={{
+          animation: 'float-rotate 10s ease-in-out infinite 1s',
+          boxShadow: '0 0 20px hsl(30 100% 60% / 0.3)',
+        }}>
+          <div className="text-white/80 text-xs font-bold mb-2 flex items-center gap-2">
+            <span>📊</span>
+            <span>Spacewalks</span>
+          </div>
+          <div className="relative h-12 w-24">
+            <svg viewBox="0 0 100 50" className="w-full h-full">
+              <polyline
+                points="0,40 20,35 40,30 60,25 80,20 100,15"
+                fill="none"
+                stroke="hsl(30 100% 60%)"
+                strokeWidth="2"
+              />
+              <polygon
+                points="0,40 20,35 40,30 60,25 80,20 100,15 100,50 0,50"
+                fill="hsl(30 100% 60% / 0.3)"
+              />
+            </svg>
+          </div>
+        </div>
+
+        {/* Heart rate monitor jelzés */}
+        <div className="absolute top-1/6 right-1/5 bg-black/30 backdrop-blur-sm rounded-lg p-3 border border-white/20" style={{
+          animation: 'float-rotate 9s ease-in-out infinite 0.5s',
+          boxShadow: '0 0 20px hsl(30 100% 60% / 0.3)',
+        }}>
+          <div className="text-white/80 text-xs font-bold mb-2 flex items-center gap-2">
+            <span>❤️</span>
+            <span>Heart rate</span>
+          </div>
+          <div className="relative h-12 w-24">
+            <svg viewBox="0 0 100 50" className="w-full h-full">
+              <polyline
+                points="0,25 10,25 15,20 20,25 25,30 30,25 35,20 40,25 45,30 50,25 55,20 60,25 65,30 70,25 75,20 80,25 85,30 90,25 100,25"
+                fill="none"
+                stroke="hsl(30 100% 60%)"
+                strokeWidth="2"
+              />
+            </svg>
+          </div>
+        </div>
+
+        {/* Progress bars - vízszintes narancs oszlopok */}
+        <div className="absolute bottom-1/3 right-1/6 flex gap-1 items-end" style={{
+          animation: 'float-rotate 11s ease-in-out infinite 1.5s',
+        }}>
+          <div className="w-2 rounded-sm" style={{ 
+            height: '60%',
+            background: 'linear-gradient(to top, hsl(30, 100%, 50%), hsl(30, 100%, 65%))',
+            boxShadow: '0 0 10px hsl(30 100% 60% / 0.6)',
+          }} />
+          <div className="w-2 rounded-sm" style={{ 
+            height: '80%',
+            background: 'linear-gradient(to top, hsl(30, 100%, 50%), hsl(30, 100%, 65%))',
+            boxShadow: '0 0 10px hsl(30 100% 60% / 0.6)',
+          }} />
+          <div className="w-2 rounded-sm" style={{ 
+            height: '45%',
+            background: 'linear-gradient(to top, hsl(30, 100%, 50%), hsl(30, 100%, 65%))',
+            boxShadow: '0 0 10px hsl(30 100% 60% / 0.6)',
+          }} />
+          <div className="w-2 rounded-sm" style={{ 
+            height: '90%',
+            background: 'linear-gradient(to top, hsl(30, 100%, 50%), hsl(30, 100%, 65%))',
+            boxShadow: '0 0 10px hsl(30 100% 60% / 0.6)',
+          }} />
+          <div className="w-2 rounded-sm" style={{ 
+            height: '70%',
+            background: 'linear-gradient(to top, hsl(30, 100%, 50%), hsl(30, 100%, 65%))',
+            boxShadow: '0 0 10px hsl(30 100% 60% / 0.6)',
+          }} />
+        </div>
       </div>
       
 
@@ -295,31 +276,34 @@ function HeroSection({
             <span className="ml-2 text-lg">✨</span>
         </div>
 
-        {/* Title - Playful & Bold with Neon Glow */}
+        {/* Title - Sci-fi Space Theme with Orange Glow */}
         <h1 className="text-4xl sm:text-6xl lg:text-7xl xl:text-8xl font-black mb-6 tracking-tight leading-[1.1] animate-slide-in-up">
-          <span className="text-foreground drop-shadow-[0_0_10px_rgba(139,92,246,0.3)]">Lépj </span>
-          <span className="text-neon-purple animate-slide-in-up hero-title-delay inline-block animate-pulse-glow">
-            Szintet
+          <span className="text-white drop-shadow-[0_0_15px_rgba(255,140,0,0.5)]">Revealing the </span>
+          <span className="text-orange-400 animate-slide-in-up hero-title-delay inline-block" style={{
+            textShadow: '0 0 20px hsl(30 100% 60%), 0 0 40px hsl(30 100% 50%)',
+            animation: 'pulse-glow 3s ease-in-out infinite',
+          }}>
+            Treasures
           </span>
+          <span className="text-white drop-shadow-[0_0_15px_rgba(255,140,0,0.5)]"> of the Universe</span>
           <span className="text-3xl sm:text-4xl lg:text-5xl ml-2 inline-block animate-wobble" style={{ animationDelay: '0.5s' }}>🚀</span>
-          <span className="text-2xl sm:text-3xl ml-2 inline-block animate-float-rotate">✨</span>
         </h1>
 
-        {/* Subtitle / Mission Statement - Fun & Energetic with Gradient Text */}
-        <p className="text-lg sm:text-xl lg:text-2xl text-muted-foreground mb-8 max-w-2xl font-medium leading-relaxed animate-slide-in-up hero-subtitle-delay">
-          A jövő oktatási platformja. <span className="text-neon-cyan font-black glow-on-hover">Gamifikált</span> tananyagok,
-          <span className="text-neon-pink font-black glow-on-hover"> közösségi</span> élmény és <span className="text-neon-purple font-black glow-on-hover">végtelen</span> lehetőségek! 
-          <span className="inline-block animate-wobble ml-1">✨</span>
+        {/* Subtitle / Mission Statement - Spacefaring Civilization Theme */}
+        <p className="text-lg sm:text-xl lg:text-2xl text-white/90 mb-8 max-w-3xl font-medium leading-relaxed animate-slide-in-up hero-subtitle-delay" style={{
+          textShadow: '0 2px 10px rgba(0,0,0,0.5)',
+        }}>
+          You want to wake up in the morning and think the future is going to be great - and that's what being a <span className="text-orange-400 font-black" style={{ textShadow: '0 0 10px hsl(30 100% 60%)' }}>spacefaring civilization</span> is all about. It's about <span className="text-orange-300 font-black" style={{ textShadow: '0 0 10px hsl(30 100% 65%)' }}>believing in the future</span> and thinking that the future will be better than the past.
         </p>
 
         {/* 📊 XP Progress Bar to Next Level */}
         <div className="w-full max-w-md mx-auto mb-8 animate-slide-in-up hero-subtitle-delay">
           <div className="flex items-center justify-between text-xs font-black text-muted-foreground mb-2">
-            <span className="flex items-center gap-1 text-neon-gold">
+            <span className="flex items-center gap-1 text-orange-400" style={{ textShadow: '0 0 10px hsl(30 100% 60%)' }}>
               <Star className="w-4 h-4" />
               Level {currentLevel}
             </span>
-            <span className="text-neon-purple flex items-center gap-1">
+            <span className="text-orange-400 flex items-center gap-1" style={{ textShadow: '0 0 10px hsl(30 100% 60%)' }}>
               <span>{xpProgress}%</span>
               <span className="text-xs">→ Level {currentLevel + 1}</span>
             </span>
@@ -339,15 +323,19 @@ function HeroSection({
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-center animate-slide-in-up hero-cta-delay">
             <Button
                 size="lg"
-                className="btn-bouncy w-full sm:w-auto text-base sm:text-lg h-14 sm:h-16 px-8 sm:px-10 rounded-2xl bg-gradient-fun animate-gradient-shift text-white hover:scale-110 transition-all shadow-xl font-black comic-border border-purple-600 relative overflow-hidden group"
+                className="btn-bouncy w-full sm:w-auto text-base sm:text-lg h-14 sm:h-16 px-8 sm:px-10 rounded-2xl text-white hover:scale-110 transition-all shadow-xl font-black relative overflow-hidden group border border-orange-400/50"
+                style={{
+                  background: 'linear-gradient(135deg, hsl(30 100% 55%) 0%, hsl(25 90% 50%) 100%)',
+                  boxShadow: '0 0 30px hsl(30 100% 50% / 0.5), inset 0 2px 0 rgba(255,255,255,0.2)',
+                }}
                 onClick={scrollToContent}
             >
                 <span className="relative z-10 flex items-center">
-                  <span className="text-xl mr-2 animate-wobble inline-block">🎯</span>
-                  Start Learning 
+                  <span className="text-xl mr-2 animate-wobble inline-block">🚀</span>
+                  Explore the Universe
                   <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </span>
-                {/* Animated shine effect */}
+                {/* Animated shine effect - orange */}
                 <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></span>
             </Button>
 
@@ -363,7 +351,10 @@ function HeroSection({
             {/* Tananyagok - Achievement Card */}
             <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover game-card-3d" style={{ animationDelay: '0.5s' }}>
                 <div className="relative">
-                  <div className="text-4xl sm:text-5xl font-black text-neon-purple mb-1 drop-shadow-[0_0_15px_rgba(139,92,246,0.6)]">{totalFiles}</div>
+                  <div className="text-4xl sm:text-5xl font-black mb-1" style={{ 
+                    color: 'hsl(30 100% 65%)',
+                    textShadow: '0 0 20px hsl(30 100% 60%), 0 0 40px hsl(30 100% 50%)',
+                  }}>{totalFiles}</div>
                   <div className="absolute -top-2 -right-2 text-lg animate-wobble">🏆</div>
                 </div>
                 <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center justify-center gap-1">
@@ -376,7 +367,10 @@ function HeroSection({
             {/* Osztályok - Achievement Card */}
             <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover game-card-3d" style={{ animationDelay: '0.6s' }}>
                 <div className="relative">
-                  <div className="text-4xl sm:text-5xl font-black text-neon-cyan mb-1 drop-shadow-[0_0_15px_rgba(6,182,212,0.6)]">{totalClassrooms}</div>
+                  <div className="text-4xl sm:text-5xl font-black mb-1" style={{ 
+                    color: 'hsl(200 100% 70%)',
+                    textShadow: '0 0 20px hsl(200 100% 60%), 0 0 40px hsl(200 100% 50%)',
+                  }}>{totalClassrooms}</div>
                   <div className="absolute -top-2 -right-2 text-lg animate-wobble" style={{ animationDelay: '0.2s' }}>⭐</div>
                 </div>
                 <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center justify-center gap-1">
@@ -389,7 +383,10 @@ function HeroSection({
             {/* Lehetőségek - Achievement Card */}
             <div className="text-center sticker hover:scale-110 transition-transform animate-bounce-in glow-on-hover game-card-3d" style={{ animationDelay: '0.7s' }}>
                 <div className="relative">
-                  <div className="text-4xl sm:text-5xl font-black text-neon-pink mb-1 drop-shadow-[0_0_15px_rgba(236,72,153,0.6)]">∞</div>
+                  <div className="text-4xl sm:text-5xl font-black mb-1" style={{ 
+                    color: 'hsl(30 100% 70%)',
+                    textShadow: '0 0 20px hsl(30 100% 65%), 0 0 40px hsl(30 100% 55%)',
+                  }}>∞</div>
                   <div className="absolute -top-2 -right-2 text-lg animate-wobble" style={{ animationDelay: '0.4s' }}>🌟</div>
                 </div>
                 <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center justify-center gap-1">
