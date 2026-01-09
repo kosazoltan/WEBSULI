@@ -21,15 +21,124 @@ function HeroSection({
   };
 
   return (
-    <div className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0 animate-slide-in-up card-hover-lift" 
+    <div className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0 animate-slide-in-up" 
          style={{
-           background: 'linear-gradient(135deg, hsl(220 10% 20%) 0%, hsl(220 15% 25%) 30%, hsl(300 80% 40%) 70%, hsl(300 100% 50%) 100%)',
            backdropFilter: 'blur(20px)',
            boxShadow: '0 10px 40px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.05)',
          }}>
       
+      {/* Fujiama hegység tájkép háttér SVG */}
+      <div className="absolute inset-0 opacity-30 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
+        <svg className="absolute bottom-0 left-0 w-full h-full" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMax slice">
+          <defs>
+            <linearGradient id="skyGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="hsl(220 30% 18%)" />
+              <stop offset="50%" stopColor="hsl(280 40% 22%)" />
+              <stop offset="100%" stopColor="hsl(300 50% 28%)" />
+            </linearGradient>
+            <linearGradient id="mountainGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="hsl(220 15% 28%)" />
+              <stop offset="100%" stopColor="hsl(220 10% 22%)" />
+            </linearGradient>
+            <linearGradient id="fujiGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="hsl(220 20% 32%)" />
+              <stop offset="50%" stopColor="hsl(280 30% 38%)" />
+              <stop offset="100%" stopColor="hsl(300 25% 30%)" />
+            </linearGradient>
+            <linearGradient id="snowGradientHero" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="hsl(0 0% 90%)" />
+              <stop offset="100%" stopColor="hsl(220 15% 40%)" />
+            </linearGradient>
+          </defs>
+          
+          {/* Ég háttér */}
+          <rect width="1200" height="600" fill="url(#skyGradientHero)" />
+          
+          {/* Hátsó hegyek */}
+          <path d="M 0,600 L 0,350 L 200,250 L 400,280 L 600,220 L 800,250 L 1000,230 L 1200,240 L 1200,600 Z" 
+                fill="url(#mountainGradientHero)" opacity="0.5" />
+          
+          {/* Középső hegyek */}
+          <path d="M 0,600 L 150,380 L 350,300 L 550,340 L 750,280 L 950,320 L 1200,290 L 1200,600 Z" 
+                fill="url(#mountainGradientHero)" opacity="0.6" />
+          
+          {/* Fujiama hegy - középen, karakterisztikus sziluett */}
+          <path d="M 450,600 
+                   L 470,560 
+                   L 490,510 
+                   L 510,450 
+                   L 530,380 
+                   L 550,320 
+                   L 570,260 
+                   L 590,200 
+                   L 610,140 
+                   L 630,100 
+                   L 650,70 
+                   L 670,50 
+                   L 690,35 
+                   L 710,25 
+                   L 730,20 
+                   L 750,18 
+                   L 770,20 
+                   L 790,25 
+                   L 810,35 
+                   L 830,50 
+                   L 850,70 
+                   L 870,100 
+                   L 890,140 
+                   L 910,200 
+                   L 930,260 
+                   L 950,320 
+                   L 970,380 
+                   L 990,450 
+                   L 1010,510 
+                   L 1030,560 
+                   L 1050,600 Z" 
+                fill="url(#fujiGradientHero)" />
+          
+          {/* Fujiama hó sapka - hófehér csúcs */}
+          <path d="M 730,18 
+                   L 750,16 
+                   L 770,18 
+                   L 790,24 
+                   L 810,34 
+                   L 830,48 
+                   L 850,68 
+                   L 870,98 
+                   L 890,138 
+                   L 910,198 
+                   L 930,258 
+                   L 950,318 
+                   L 930,280 
+                   L 910,200 
+                   L 890,140 
+                   L 870,100 
+                   L 850,70 
+                   L 830,50 
+                   L 810,35 
+                   L 790,25 
+                   L 770,20 
+                   L 750,18 
+                   L 730,20 
+                   Z" 
+                fill="url(#snowGradientHero)" opacity="0.7" />
+          
+          {/* Felhők */}
+          <ellipse cx="300" cy="180" rx="120" ry="35" fill="hsl(220 20% 28%)" opacity="0.3" />
+          <ellipse cx="900" cy="150" rx="90" ry="30" fill="hsl(280 25% 30%)" opacity="0.3" />
+          <ellipse cx="800" cy="200" rx="75" ry="25" fill="hsl(300 20% 32%)" opacity="0.25" />
+          
+          {/* Csillagok - éjszakai égen */}
+          <circle cx="200" cy="120" r="2" fill="hsl(300 100% 75%)" opacity="0.5" />
+          <circle cx="250" cy="80" r="1.5" fill="hsl(300 100% 75%)" opacity="0.4" />
+          <circle cx="320" cy="100" r="1.8" fill="hsl(300 100% 75%)" opacity="0.5" />
+          <circle cx="1000" cy="70" r="2" fill="hsl(300 100% 75%)" opacity="0.5" />
+          <circle cx="1080" cy="50" r="1.5" fill="hsl(300 100% 75%)" opacity="0.4" />
+        </svg>
+      </div>
+      
       {/* Alkimista titkos jelek - animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 1 }}>
         {/* Körök - alkimista jel (pulzáló) */}
         <svg className="absolute top-10 left-10 w-24 h-24" style={{ 
           animation: 'float-rotate 8s ease-in-out infinite, alchemist-pulse 3s ease-in-out infinite, alchemist-glow 2s ease-in-out infinite',
@@ -113,13 +222,9 @@ function HeroSection({
         </svg>
       </div>
       
-      {/* Floating bubble background effects - magenta/purple árnyalatok */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-magenta-500/25 to-purple-500/25 rounded-full blur-3xl animate-float-rotate"></div>
-      <div className="absolute bottom-0 left-0 w-40 h-40 bg-gradient-to-tr from-pink-500/25 to-magenta-500/25 rounded-full blur-3xl animate-float-rotate" style={{ animationDelay: '1s' }}></div>
-      <div className="absolute top-1/2 left-1/2 w-48 h-48 bg-gradient-to-r from-purple-500/15 to-magenta-500/15 rounded-full blur-3xl animate-float-rotate -translate-x-1/2 -translate-y-1/2" style={{ animationDelay: '2s' }}></div>
 
       {/* Main Content */}
-      <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center">
+      <div className="relative z-20 max-w-5xl mx-auto flex flex-col items-center">
 
         {/* Achievement Badge - Gaming Style with Pulse */}
         <div className="achievement-badge mb-6 animate-bounce-in glow-on-hover">
