@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* --- 🎮 GAMIFIED SZÍNVILÁG (6-18 éveseknek) --- */
-    /* Duolingo-inspired vibráns, energikus, motiváló színek */
+    /* Duolingo + Fortnite + TikTok vizuális nyelvezet */
     --background: 240 100% 98%;
     --foreground: 250 50% 10%;
 
@@ -15,19 +15,47 @@
     --popover: 0 0% 100%;
     --popover-foreground: 250 50% 10%;
 
-    /* Gaming/Gamification színek - jutalom érzés */
-    --primary: 280 100% 60%;      /* Élénk lila - Achievement 🏆 */
+    /* === ACHIEVEMENT LILA === */
+    --achievement-purple: 280 100% 60%;
+    --achievement-purple-light: 280 100% 70%;
+    --achievement-purple-dark: 280 100% 50%;
+    --achievement-purple-glow: 280 100% 60% / 0.6;
+
+    /* === ENERGY PINK === */
+    --energy-pink: 340 100% 60%;
+    --energy-pink-light: 340 100% 70%;
+    --energy-pink-dark: 340 100% 50%;
+    --energy-pink-glow: 340 100% 60% / 0.6;
+
+    /* === FRESH TÜRKIZ === */
+    --fresh-cyan: 180 100% 50%;
+    --fresh-cyan-light: 180 100% 60%;
+    --fresh-cyan-dark: 180 100% 40%;
+    --fresh-cyan-glow: 180 100% 50% / 0.6;
+
+    /* === LEVEL-UP ZÖLD === */
+    --success-green: 140 80% 50%;
+    --success-green-light: 140 80% 60%;
+    --success-green-dark: 140 80% 40%;
+    --success-green-glow: 140 80% 50% / 0.6;
+
+    /* === HÁTTÉR SZÍNEK === */
+    --bg-dark: 240 100% 9%;
+    --bg-card: 240 100% 18%;
+    --bg-card-hover: 240 100% 26%;
+    --bg-gradient-start: 240 100% 9%;
+    --bg-gradient-end: 240 100% 21%;
+
+    /* Legacy compatibility */
+    --primary: var(--achievement-purple);
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 340 100% 60%;    /* Vibráns pink - Energy ⚡ */
+    --secondary: var(--energy-pink);
     --secondary-foreground: 0 0% 100%;
-
-    --accent: 180 100% 50%;       /* Türkiz - Fresh & Cool 🌊 */
+    --accent: var(--fresh-cyan);
     --accent-foreground: 250 50% 10%;
-
-    --success: 140 80% 50%;       /* Zöld - Siker, Level up 🎯 */
-    --warning: 40 100% 55%;       /* Narancssárga - XP Boost 🔥 */
-    --xp-gold: 45 100% 50%;       /* Arany - XP Points ✨ */
+    --success: var(--success-green);
+    --warning: 40 100% 55%;
+    --xp-gold: 45 100% 50%;
 
     --muted: 240 20% 96%;
     --muted-foreground: 240 10% 45%;
@@ -41,26 +69,56 @@
 
   .dark {
     /* --- 🌙 SÖTÉT MÓD: Neon Gaming Aesthetic --- */
-    --background: 250 50% 5%;     /* Deep purple-black */
+    --background: 240 100% 9%;     /* Deep purple-black */
     --foreground: 0 0% 98%;
 
-    --card: 250 40% 8%;
+    --card: 240 100% 18%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 250 40% 8%;
+    --popover: 240 100% 18%;
     --popover-foreground: 0 0% 98%;
 
-    /* Neon Gaming színek */
-    --primary: 280 100% 65%;      /* Neon purple 💜 */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 340 100% 65%;    /* Hot pink 💖 */
-    --secondary-foreground: 0 0% 100%;
-    --accent: 180 100% 55%;       /* Cyan 💎 */
-    --accent-foreground: 250 50% 5%;
+    /* === ACHIEVEMENT LILA === */
+    --achievement-purple: 280 100% 65%;
+    --achievement-purple-light: 280 100% 75%;
+    --achievement-purple-dark: 280 100% 55%;
+    --achievement-purple-glow: 280 100% 65% / 0.6;
 
-    --success: 140 80% 55%;       /* Level up green 🌟 */
-    --warning: 40 100% 60%;       /* XP Boost orange 🔥 */
-    --xp-gold: 45 100% 55%;       /* XP Gold ✨ */
+    /* === ENERGY PINK === */
+    --energy-pink: 340 100% 65%;
+    --energy-pink-light: 340 100% 75%;
+    --energy-pink-dark: 340 100% 55%;
+    --energy-pink-glow: 340 100% 65% / 0.6;
+
+    /* === FRESH TÜRKIZ === */
+    --fresh-cyan: 180 100% 55%;
+    --fresh-cyan-light: 180 100% 65%;
+    --fresh-cyan-dark: 180 100% 45%;
+    --fresh-cyan-glow: 180 100% 55% / 0.6;
+
+    /* === LEVEL-UP ZÖLD === */
+    --success-green: 140 80% 55%;
+    --success-green-light: 140 80% 65%;
+    --success-green-dark: 140 80% 45%;
+    --success-green-glow: 140 80% 55% / 0.6;
+
+    /* === HÁTTÉR SZÍNEK === */
+    --bg-dark: 240 100% 9%;
+    --bg-card: 240 100% 18%;
+    --bg-card-hover: 240 100% 26%;
+    --bg-gradient-start: 240 100% 9%;
+    --bg-gradient-end: 240 100% 21%;
+
+    /* Legacy compatibility */
+    --primary: var(--achievement-purple);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--energy-pink);
+    --secondary-foreground: 0 0% 100%;
+    --accent: var(--fresh-cyan);
+    --accent-foreground: 250 50% 5%;
+    --success: var(--success-green);
+    --warning: 40 100% 60%;
+    --xp-gold: 45 100% 55%;
 
     --muted: 250 30% 15%;
     --muted-foreground: 240 10% 60%;
@@ -69,6 +127,31 @@
     --border: 250 30% 18%;
     --input: 250 30% 18%;
     --ring: 280 100% 65%;
+  }
+
+  /* Osztály-alapú színkódolás */
+  .grade-lower { 
+    --theme-color: hsl(var(--success-green)); 
+    --theme-color-light: hsl(var(--success-green-light));
+    --theme-color-dark: hsl(var(--success-green-dark));
+  }
+
+  .grade-upper { 
+    --theme-color: hsl(var(--fresh-cyan)); 
+    --theme-color-light: hsl(var(--fresh-cyan-light));
+    --theme-color-dark: hsl(var(--fresh-cyan-dark));
+  }
+
+  .grade-high { 
+    --theme-color: hsl(var(--energy-pink)); 
+    --theme-color-light: hsl(var(--energy-pink-light));
+    --theme-color-dark: hsl(var(--energy-pink-dark));
+  }
+
+  .achievement { 
+    --theme-color: hsl(var(--achievement-purple)); 
+    --theme-color-light: hsl(var(--achievement-purple-light));
+    --theme-color-dark: hsl(var(--achievement-purple-dark));
   }
 }
 
@@ -166,7 +249,7 @@
     border-color: rgba(236, 72, 153, 0.5);
   }
 
-  /* 🌈 Rainbow gradient border (like rewards) */
+  /* 🌈 Holographic shift border (like rewards) */
   .holographic-card::before {
     content: '';
     position: absolute;
@@ -174,12 +257,11 @@
     border-radius: inherit;
     padding: 3px;
     background: linear-gradient(135deg,
-      hsl(280 100% 65%),
-      hsl(340 100% 65%),
-      hsl(45 100% 60%),
-      hsl(180 100% 60%),
-      hsl(140 80% 55%),
-      hsl(280 100% 65%)
+      hsl(var(--achievement-purple)) 0%,
+      hsl(var(--energy-pink)) 25%,
+      hsl(var(--fresh-cyan)) 50%,
+      hsl(var(--success-green)) 75%,
+      hsl(var(--achievement-purple)) 100%
     );
     background-size: 400% 400%;
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -189,11 +271,42 @@
     opacity: 0;
     transition: opacity 0.4s;
     pointer-events: none;
-    animation: rainbow-rotate 3s ease infinite;
+    animation: holographic-shift 8s ease infinite;
   }
 
   .holographic-card:hover::before {
     opacity: 1;
+  }
+
+  /* Card holographic shift animation */
+  .card-holographic {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--achievement-purple)) 0%,
+      hsl(var(--energy-pink)) 25%,
+      hsl(var(--fresh-cyan)) 50%,
+      hsl(var(--success-green)) 75%,
+      hsl(var(--achievement-purple)) 100%
+    );
+    background-size: 400% 400%;
+    animation: holographic-shift 8s ease infinite;
+    border-radius: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-holographic::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: 
+      radial-gradient(circle at 20% 20%, white 1px, transparent 1px),
+      radial-gradient(circle at 80% 40%, white 1px, transparent 1px),
+      radial-gradient(circle at 40% 80%, white 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: sparkle 2s ease-in-out infinite;
+    pointer-events: none;
+    opacity: 0.6;
   }
 
   /* ✨ Sparkle effect on hover */
@@ -230,16 +343,78 @@
   /* 🏆 Achievement Badge Style - Duolingo Inspired */
   .achievement-badge {
     @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-sm tracking-wide;
-    background: linear-gradient(135deg, hsl(140 85% 48%), hsl(140 80% 35%));
+    background: linear-gradient(135deg, hsl(var(--achievement-purple)), hsl(var(--achievement-purple-dark)));
     color: white;
     box-shadow:
-      0 6px 20px hsl(140 80% 50% / 0.5),
+      0 6px 20px hsl(var(--achievement-purple-glow)),
       0 2px 4px rgba(0, 0, 0, 0.1),
       inset 0 2px 0 rgba(255, 255, 255, 0.4),
       inset 0 -2px 0 rgba(0, 0, 0, 0.1);
-    animation: badge-pulse 2s ease-in-out infinite;
+    animation: pulse-glow 2s ease-in-out infinite;
     text-transform: uppercase;
     letter-spacing: 0.1em;
+    position: relative;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    will-change: transform;
+  }
+
+  .achievement-badge.unlocking {
+    animation: badge-unlock 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .achievement-badge::before {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    border-radius: 50%;
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    animation: spin 10s linear infinite;
+  }
+
+  .achievement-badge .icon {
+    font-size: 48px;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+  }
+
+  @keyframes badge-unlock {
+    0% {
+      transform: scale(0) rotate(-180deg);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.3) rotate(10deg);
+      opacity: 1;
+    }
+    70% {
+      transform: scale(0.9) rotate(-5deg);
+    }
+    100% {
+      transform: scale(1) rotate(0deg);
+      opacity: 1;
+    }
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { 
+      box-shadow: 
+        0 0 20px hsl(var(--achievement-purple-glow)),
+        0 0 40px hsl(var(--achievement-purple-glow)),
+        inset 0 0 20px rgba(255, 255, 255, 0.1);
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 
+        0 0 30px hsl(var(--achievement-purple-glow)),
+        0 0 60px hsl(var(--achievement-purple-glow)),
+        0 0 80px hsl(var(--achievement-purple-glow)),
+        inset 0 0 30px rgba(255, 255, 255, 0.2);
+      transform: scale(1.05);
+    }
   }
 
   /* 🎖️ XP Badge - Gold Gaming Style */
@@ -304,19 +479,178 @@
     animation: level-up 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 
-  /* 🎯 Bouncy Buttons - Duolingo style (fun interaction) */
-  .btn-bouncy {
-    @apply transition-all duration-200;
-    transform-origin: center center;
+  /* Level Up Celebration Container */
+  .level-up-container {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 15, 35, 0.95);
+    z-index: 9999;
+    pointer-events: none;
   }
 
-  .btn-bouncy:active {
-    transform: scale(0.92);
+  .level-up-number {
+    font-size: 150px;
+    font-weight: 900;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--success-green)) 0%,
+      hsl(var(--fresh-cyan)) 50%,
+      hsl(var(--achievement-purple)) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: level-up-number 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+    text-shadow: 0 0 50px hsl(var(--success-green-glow));
+    filter: drop-shadow(0 0 30px hsl(var(--success-green)));
+  }
+
+  .level-up-text {
+    font-size: 36px;
+    font-weight: 700;
+    color: white;
+    text-transform: uppercase;
+    animation: level-up-text 0.8s ease-out 0.3s both;
+  }
+
+  @keyframes level-up-number {
+    0% {
+      transform: scale(0.5) translateY(50px);
+      opacity: 0;
+    }
+    30% {
+      transform: scale(1.5) translateY(-20px);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.2) translateY(-10px);
+    }
+    70% {
+      transform: scale(1.3) translateY(-15px);
+    }
+    100% {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes level-up-text {
+    0% {
+      letter-spacing: 20px;
+      opacity: 0;
+      filter: blur(10px);
+    }
+    50% {
+      letter-spacing: 5px;
+      opacity: 1;
+      filter: blur(0);
+    }
+    100% {
+      letter-spacing: 3px;
+      opacity: 1;
+    }
+  }
+
+  @keyframes confetti-fall {
+    0% {
+      transform: translateY(-100vh) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(100vh) rotate(720deg);
+      opacity: 0;
+    }
+  }
+
+  .confetti {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    animation: confetti-fall 3s linear forwards;
+  }
+
+  .confetti:nth-child(odd) { background: hsl(var(--energy-pink)); }
+  .confetti:nth-child(even) { background: hsl(var(--fresh-cyan)); }
+  .confetti:nth-child(3n) { background: hsl(var(--success-green)); }
+  .confetti:nth-child(4n) { background: hsl(var(--achievement-purple)); }
+
+  /* 🎯 Bouncy Buttons - Duolingo style (fun interaction) */
+  .btn-bouncy {
+    background: linear-gradient(135deg, var(--theme-color, hsl(var(--achievement-purple))), var(--theme-color-light, hsl(var(--achievement-purple-light))));
+    border: none;
+    border-radius: 16px;
+    padding: 16px 32px;
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 
+      0 6px 0 var(--theme-color-dark, hsl(var(--achievement-purple-dark))),
+      0 8px 20px rgba(0, 0, 0, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transform-origin: center center;
+    will-change: transform;
+  }
+
+  .btn-bouncy::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.3) 0%,
+      transparent 50%
+    );
+    pointer-events: none;
   }
 
   .btn-bouncy:hover {
-    transform: translateY(-6px) scale(1.08);
-    box-shadow: 0 18px 40px rgba(139, 92, 246, 0.4);
+    animation: bounce-ready 0.6s ease infinite;
+    box-shadow: 
+      0 8px 0 var(--theme-color-dark, hsl(var(--achievement-purple-dark))),
+      0 12px 30px rgba(0, 0, 0, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .btn-bouncy:active {
+    animation: bounce-click 0.4s ease;
+    box-shadow: 
+      0 2px 0 var(--theme-color-dark, hsl(var(--achievement-purple-dark))),
+      0 4px 10px rgba(0, 0, 0, 0.2);
+    transform: translateY(4px);
+  }
+
+  .btn-bouncy.success {
+    animation: bounce-success 0.6s ease;
+  }
+
+  @keyframes bounce-ready {
+    0%, 100% { transform: translateY(-2px) scale(1); }
+    50% { transform: translateY(-5px) scale(1.02); }
+  }
+
+  @keyframes bounce-click {
+    0% { transform: translateY(4px) scale(1); }
+    30% { transform: translateY(6px) scale(0.95); }
+    50% { transform: translateY(3px) scale(1.05); }
+    70% { transform: translateY(5px) scale(0.98); }
+    100% { transform: translateY(4px) scale(1); }
+  }
+
+  @keyframes bounce-success {
+    0% { transform: translateY(0) scale(1) rotate(0deg); }
+    25% { transform: translateY(-10px) scale(1.2) rotate(-5deg); }
+    50% { transform: translateY(-5px) scale(1.1) rotate(5deg); }
+    75% { transform: translateY(-8px) scale(1.15) rotate(-3deg); }
+    100% { transform: translateY(0) scale(1) rotate(0deg); }
   }
 
   /* 📊 Progress Bar (gaming style) */
@@ -442,17 +776,78 @@
 
   @keyframes float-bubble {
     0%, 100% {
-      transform: translate(0, 0) scale(1);
+      transform: translateY(0) translateX(0) scale(1);
+      opacity: 0.3;
     }
     25% {
-      transform: translate(15px, -25px) scale(1.08);
+      transform: translateY(-30px) translateX(15px) scale(1.1);
+      opacity: 0.5;
     }
     50% {
-      transform: translate(-15px, -10px) scale(0.95);
+      transform: translateY(-50px) translateX(-10px) scale(0.9);
+      opacity: 0.4;
     }
     75% {
-      transform: translate(5px, -25px) scale(1.02);
+      transform: translateY(-20px) translateX(20px) scale(1.05);
+      opacity: 0.35;
     }
+  }
+
+  @keyframes float-slow {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-100px) rotate(180deg); }
+  }
+
+  /* Float bubble background container */
+  .bubble-background {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .bubble {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(40px);
+    opacity: 0.3;
+  }
+
+  .bubble-1 {
+    width: 300px;
+    height: 300px;
+    background: hsl(var(--achievement-purple));
+    top: 10%;
+    left: 10%;
+    animation: float-bubble 15s ease-in-out infinite;
+  }
+
+  .bubble-2 {
+    width: 200px;
+    height: 200px;
+    background: hsl(var(--energy-pink));
+    top: 60%;
+    right: 10%;
+    animation: float-bubble 20s ease-in-out infinite 2s;
+  }
+
+  .bubble-3 {
+    width: 250px;
+    height: 250px;
+    background: hsl(var(--fresh-cyan));
+    bottom: 10%;
+    left: 30%;
+    animation: float-bubble 18s ease-in-out infinite 4s;
+  }
+
+  .bubble-4 {
+    width: 180px;
+    height: 180px;
+    background: hsl(var(--success-green));
+    top: 30%;
+    right: 30%;
+    animation: float-bubble 22s ease-in-out infinite 1s;
   }
 
   @keyframes gradient-rotate {
@@ -514,18 +909,32 @@
   }
 
   @keyframes wobble {
-    0%, 100% {
-      transform: rotate(0deg);
-    }
-    25% {
-      transform: rotate(-8deg) scale(1.05);
-    }
-    50% {
-      transform: rotate(0deg) scale(1.1);
-    }
-    75% {
-      transform: rotate(8deg) scale(1.05);
-    }
+    0%, 100% { transform: translateX(0); }
+    10% { transform: translateX(-10px) rotate(-2deg); }
+    20% { transform: translateX(10px) rotate(2deg); }
+    30% { transform: translateX(-10px) rotate(-2deg); }
+    40% { transform: translateX(10px) rotate(2deg); }
+    50% { transform: translateX(-6px) rotate(-1deg); }
+    60% { transform: translateX(6px) rotate(1deg); }
+    70% { transform: translateX(-3px); }
+    80% { transform: translateX(3px); }
+    90% { transform: translateX(-1px); }
+  }
+
+  @keyframes wrong-flash {
+    0%, 100% { background-color: hsl(var(--bg-card)); }
+    50% { background-color: rgba(239, 68, 68, 0.3); }
+  }
+
+  .wobble {
+    animation: wobble 0.6s ease-in-out;
+  }
+
+  .wrong-answer {
+    animation: 
+      wobble 0.6s ease-in-out,
+      wrong-flash 0.3s ease-in-out 3;
+    border-color: #EF4444 !important;
   }
 
   @keyframes sparkle-twinkle {
@@ -558,6 +967,32 @@
     }
     100% {
       background-position: 0% 50%;
+    }
+  }
+
+  @keyframes holographic-shift {
+    0% { 
+      background-position: 0% 50%;
+      filter: hue-rotate(0deg);
+    }
+    50% { 
+      background-position: 100% 50%;
+      filter: hue-rotate(15deg);
+    }
+    100% { 
+      background-position: 0% 50%;
+      filter: hue-rotate(0deg);
+    }
+  }
+
+  @keyframes sparkle {
+    0%, 100% { 
+      opacity: 0.4;
+      transform: scale(0.8) rotate(0deg);
+    }
+    50% { 
+      opacity: 1;
+      transform: scale(1.2) rotate(180deg);
     }
   }
 
@@ -1070,6 +1505,479 @@
     }
     50%, 100% {
       left: 150%;
+    }
+  }
+
+  /* === 3D FLIP CARD === */
+  .flip-card {
+    width: 280px;
+    height: 180px;
+    perspective: 1000px;
+    cursor: pointer;
+    will-change: transform;
+  }
+
+  .flip-card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transform-style: preserve-3d;
+  }
+
+  .flip-card.flipped .flip-card-inner {
+    transform: rotateY(180deg);
+  }
+
+  .flip-card-front,
+  .flip-card-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .flip-card-front {
+    background: linear-gradient(135deg, hsl(var(--achievement-purple)), hsl(var(--energy-pink)));
+    color: white;
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .flip-card-back {
+    background: hsl(var(--bg-card));
+    border: 3px solid hsl(var(--success-green));
+    transform: rotateY(180deg);
+    color: white;
+  }
+
+  .flip-card-back.correct {
+    border-color: hsl(var(--success-green));
+    box-shadow: 0 0 30px hsl(var(--success-green-glow));
+  }
+
+  .flip-card-back.incorrect {
+    border-color: #EF4444;
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
+  }
+
+  /* === COMIC STYLE CARDS === */
+  .card-comic {
+    background: hsl(var(--bg-card));
+    border-radius: 20px;
+    padding: 24px;
+    position: relative;
+    border: 4px solid var(--theme-color, hsl(var(--achievement-purple)));
+    box-shadow: 
+      8px 8px 0 var(--theme-color-dark, hsl(var(--achievement-purple-dark))),
+      0 0 0 2px hsl(var(--bg-dark));
+    transition: all 0.3s ease;
+  }
+
+  .card-comic:hover {
+    transform: translate(-4px, -4px);
+    box-shadow: 
+      12px 12px 0 var(--theme-color-dark, hsl(var(--achievement-purple-dark))),
+      0 0 0 2px hsl(var(--bg-dark));
+  }
+
+  /* Comic speech bubble */
+  .speech-bubble {
+    position: relative;
+    background: white;
+    border-radius: 20px;
+    padding: 20px;
+    color: hsl(var(--bg-dark));
+    font-weight: 600;
+  }
+
+  .speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -20px;
+    left: 30px;
+    border: 15px solid transparent;
+    border-top-color: white;
+    border-bottom: 0;
+  }
+
+  /* Színes nyilak */
+  .arrow-pointer {
+    position: absolute;
+    width: 60px;
+    height: 20px;
+    background: var(--theme-color, hsl(var(--achievement-purple)));
+    clip-path: polygon(0 50%, 70% 0, 70% 30%, 100% 30%, 100% 70%, 70% 70%, 70% 100%);
+    filter: drop-shadow(2px 2px 0 var(--theme-color-dark, hsl(var(--achievement-purple-dark))));
+    animation: arrow-bounce 1s ease-in-out infinite;
+  }
+
+  @keyframes arrow-bounce {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(10px); }
+  }
+
+  /* ZAP/POW effektek */
+  .comic-burst {
+    position: absolute;
+    font-size: 24px;
+    font-weight: 900;
+    color: hsl(var(--energy-pink));
+    text-shadow: 
+      2px 2px 0 white,
+      -2px -2px 0 white,
+      2px -2px 0 white,
+      -2px 2px 0 white;
+    animation: burst-pop 0.5s ease-out;
+    transform: rotate(-10deg);
+  }
+
+  @keyframes burst-pop {
+    0% { transform: scale(0) rotate(-10deg); opacity: 0; }
+    50% { transform: scale(1.3) rotate(-10deg); opacity: 1; }
+    100% { transform: scale(1) rotate(-10deg); opacity: 1; }
+  }
+
+  /* === REDUCED MOTION TÁMOGATÁS === */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+    
+    .bubble-background,
+    .bubble,
+    body::before,
+    body::after {
+      display: none !important;
+    }
+
+    .holographic-card::before,
+    .holographic-card::after {
+      animation: none !important;
+    }
+  }
+
+  /* === PERFORMANCE OPTIMIZATIONS === */
+  /* 1. will-change csak animált elemekre */
+  .card-interactive,
+  .btn-bouncy,
+  .achievement-badge,
+  .bubble,
+  .flip-card {
+    will-change: transform;
+  }
+
+  /* 2. GPU-gyorsított animációk */
+  .animated-element,
+  .holographic-card,
+  .game-card-3d {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  /* 3. Hover animációk csak desktop-on */
+  @media (hover: hover) {
+    .btn-bouncy:hover {
+      animation: bounce-ready 0.6s ease infinite;
+    }
+    
+    .card-interactive:hover .card-inner {
+      transform: rotateY(10deg) rotateX(5deg) scale(1.05);
+    }
+  }
+
+  /* 4. Mobil optimalizáció */
+  @media (max-width: 768px) {
+    .bubble-background .bubble {
+      display: none;
+    }
+    
+    .bubble-background .bubble:nth-child(1),
+    .bubble-background .bubble:nth-child(2) {
+      display: block;
+    }
+    
+    .floating-stickers .sticker:nth-child(n+4) {
+      display: none;
+    }
+
+    .level-up-number {
+      font-size: 100px;
+    }
+
+    .level-up-text {
+      font-size: 24px;
+    }
+  }
+
+  /* 5. contain használata izolációhoz */
+  .card-interactive,
+  .holographic-card {
+    contain: layout style;
+  }
+
+  .achievement-badge {
+    contain: layout;
+  }
+
+  /* 6. Sparkle particle utility */
+  .sparkle-particle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: white;
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    animation: sparkle 1.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 3px white);
+  }
+
+  /* === INTERACTIVE CARDS === */
+  .card-interactive {
+    perspective: 1000px;
+    cursor: pointer;
+  }
+
+  .card-inner {
+    position: relative;
+    width: 100%;
+    min-height: 200px;
+    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transform-style: preserve-3d;
+  }
+
+  .card-interactive:hover .card-inner {
+    transform: rotateY(10deg) rotateX(5deg) scale(1.05);
+  }
+
+  .card-interactive:hover {
+    z-index: 10;
+  }
+
+  /* Tilt effekt egér pozíció alapján */
+  .card-tilt {
+    transition: transform 0.1s ease;
+    transform-style: preserve-3d;
+  }
+
+  /* Gradiens átmenetek hover-re */
+  .card-gradient {
+    background: linear-gradient(135deg, hsl(var(--bg-card)) 0%, hsl(var(--bg-card-hover)) 100%);
+    transition: all 0.5s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-gradient::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      135deg,
+      var(--theme-color, hsl(var(--achievement-purple))) 0%,
+      transparent 60%
+    );
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+
+  .card-gradient:hover::before {
+    opacity: 0.15;
+  }
+
+  /* Staggered megjelenés */
+  @keyframes card-appear {
+    0% {
+      opacity: 0;
+      transform: translateY(50px) scale(0.9);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .card-stagger {
+    animation: card-appear 0.6s ease-out forwards;
+    opacity: 0;
+  }
+
+  .card-stagger:nth-child(1) { animation-delay: 0.1s; }
+  .card-stagger:nth-child(2) { animation-delay: 0.2s; }
+  .card-stagger:nth-child(3) { animation-delay: 0.3s; }
+  .card-stagger:nth-child(4) { animation-delay: 0.4s; }
+  .card-stagger:nth-child(5) { animation-delay: 0.5s; }
+  .card-stagger:nth-child(6) { animation-delay: 0.6s; }
+
+  /* Subject cards color coding */
+  .card-subject.grade-lower {
+    border-left: 6px solid hsl(var(--success-green));
+  }
+
+  .card-subject.grade-upper {
+    border-left: 6px solid hsl(var(--fresh-cyan));
+  }
+
+  .card-subject.grade-high {
+    border-left: 6px solid hsl(var(--energy-pink));
+  }
+
+  /* === NEON TEXT EFFECTS === */
+  .text-neon-purple {
+    color: hsl(var(--achievement-purple));
+    text-shadow: 
+      0 0 5px hsl(var(--achievement-purple)),
+      0 0 10px hsl(var(--achievement-purple)),
+      0 0 20px hsl(var(--achievement-purple)),
+      0 0 40px hsl(var(--achievement-purple));
+  }
+
+  .text-neon-pink {
+    color: hsl(var(--energy-pink));
+    text-shadow: 
+      0 0 5px hsl(var(--energy-pink)),
+      0 0 10px hsl(var(--energy-pink)),
+      0 0 20px hsl(var(--energy-pink)),
+      0 0 40px hsl(var(--energy-pink));
+  }
+
+  .text-neon-cyan {
+    color: hsl(var(--fresh-cyan));
+    text-shadow: 
+      0 0 5px hsl(var(--fresh-cyan)),
+      0 0 10px hsl(var(--fresh-cyan)),
+      0 0 20px hsl(var(--fresh-cyan)),
+      0 0 40px hsl(var(--fresh-cyan));
+  }
+
+  .text-neon-green {
+    color: hsl(var(--success-green));
+    text-shadow: 
+      0 0 5px hsl(var(--success-green)),
+      0 0 10px hsl(var(--success-green)),
+      0 0 20px hsl(var(--success-green)),
+      0 0 40px hsl(var(--success-green));
+  }
+
+  /* Animated neon */
+  @keyframes neon-pulse {
+    0%, 100% {
+      text-shadow: 
+        0 0 5px currentColor,
+        0 0 10px currentColor,
+        0 0 20px currentColor;
+    }
+    50% {
+      text-shadow: 
+        0 0 10px currentColor,
+        0 0 20px currentColor,
+        0 0 40px currentColor,
+        0 0 60px currentColor;
+    }
+  }
+
+  .text-neon-animated {
+    animation: neon-pulse 2s ease-in-out infinite;
+  }
+
+  /* === XP BAR === */
+  .xp-bar-container {
+    width: 100%;
+    height: 24px;
+    background: hsl(var(--bg-dark));
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    border: 2px solid hsl(var(--achievement-purple));
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+  }
+
+  .xp-bar-fill {
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--success-green)) 0%,
+      hsl(var(--fresh-cyan)) 50%,
+      hsl(var(--achievement-purple)) 100%
+    );
+    border-radius: 10px;
+    position: relative;
+    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 0 20px hsl(var(--success-green-glow));
+  }
+
+  .xp-bar-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.4) 0%,
+      transparent 50%,
+      rgba(0, 0, 0, 0.1) 100%
+    );
+    border-radius: 10px;
+  }
+
+  /* Shimmer effect */
+  .xp-bar-fill::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+    animation: shimmer 2s infinite;
+  }
+
+  @keyframes shimmer {
+    100% { left: 100%; }
+  }
+
+  .xp-label {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+
+  .xp-gain {
+    position: absolute;
+    font-size: 18px;
+    font-weight: 700;
+    color: hsl(var(--success-green));
+    animation: xp-float 1s ease-out forwards;
+    text-shadow: 0 0 10px hsl(var(--success-green-glow));
+  }
+
+  @keyframes xp-float {
+    0% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-50px) scale(1.5);
     }
   }
 }
