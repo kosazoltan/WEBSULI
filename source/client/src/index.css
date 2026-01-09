@@ -141,8 +141,10 @@
 
   .dark .holographic-card {
     background: linear-gradient(135deg,
-      rgba(139, 92, 246, 0.08),
-      rgba(236, 72, 153, 0.06)
+      hsl(220 10% 20%),
+      hsl(220 15% 25%),
+      hsl(280 30% 35%),
+      hsl(300 100% 50%)
     );
     -webkit-backdrop-filter: blur(30px);
     backdrop-filter: blur(30px);
@@ -153,7 +155,7 @@
   }
 
   .holographic-card:hover {
-    transform: translateY(-12px) scale(1.03) rotate(-1deg);
+    transform: scale(1.02);
     box-shadow:
       0 25px 60px rgba(236, 72, 153, 0.25),
       0 0 0 2px rgba(236, 72, 153, 0.5),
@@ -628,13 +630,13 @@
     animation: gradient-shift 3s ease infinite;
   }
 
-  /* Card hover lift with rotation */
+  /* Card hover lift with rotation - DISABLED for hero section */
   .card-hover-lift {
-    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: none;
   }
 
   .card-hover-lift:hover {
-    transform: translateY(-16px) rotate(-2deg) scale(1.04);
+    transform: none;
   }
 
   /* Comic-style arrow borders with colors */
