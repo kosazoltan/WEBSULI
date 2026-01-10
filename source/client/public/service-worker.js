@@ -1,8 +1,8 @@
 // Service Worker for Web Push Notifications + PWA
 // Anyagok Profiknak Platform
-// Version: 3.2.0 - Never cache CSS/JS assets to prevent stale styles
+// Version: 3.3.0 - Never cache CSS/JS assets to prevent stale styles - Dark mode fix
 
-const CACHE_VERSION = '3.2.0'; // Fixed version - change this when deploying new version
+const CACHE_VERSION = '3.3.0'; // Fixed version - change this when deploying new version
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
