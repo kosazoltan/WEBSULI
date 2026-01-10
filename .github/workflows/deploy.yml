@@ -63,18 +63,45 @@ jobs:
             echo "📦 Installing dependencies..."
             npm install
             
+            # Clean previous build
+            echo "🧹 Cleaning previous build..."
+            rm -rf dist || true
+            rm -rf node_modules/.vite || true
+            
             # Build the application
             echo "🔨 Building application..."
             npm run build
+            
+            # Verify build output exists
+            if [ ! -d "dist" ]; then
+              echo "❌ Build failed - dist directory not found!"
+              exit 1
+            fi
+            
+            echo "✅ Build completed successfully!"
+            ls -la dist/public/assets/ | head -10
             
             # Run database migrations if needed
             echo "🗄️ Running database migrations..."
             npm run db:push || true
             
-            # Restart application with PM2 (use fork mode, not cluster)
-            echo "♻️ Restarting application..."
+            # Force restart application with PM2 (use fork mode, not cluster)
+            echo "♻️ Force restarting application..."
             pm2 delete websuli 2>/dev/null || true
-            pm2 start deploy/ecosystem.config.cjs --name websuli
+            sleep 2
+            pm2 start deploy/ecosystem.config.cjs --name websuli --update-env
+            
+            # Wait for app to start
+            sleep 3
+            
+            # Check if app is running
+            if pm2 list | grep -q "websuli.*online"; then
+              echo "✅ Application is running!"
+            else
+              echo "❌ Application failed to start!"
+              pm2 logs websuli --lines 50
+              exit 1
+            fi
             
             # Save PM2 process list
             pm2 save
