@@ -11,6 +11,7 @@ import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
+import { GeodesicCardBackground } from "@/components/GeodesicCardBackground";
 
 interface HtmlFileApi {
   id: string;
@@ -47,34 +48,7 @@ function GeodesicCard({
   onClick?: () => void;
   [key: string]: any;
 }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (cardRef.current) {
-      const card = cardRef.current;
-      // Közvetlen DOM manipuláció - garantált érvényesülés
-      card.style.setProperty('position', 'relative', 'important');
-      card.style.setProperty('overflow', 'hidden', 'important');
-      card.style.setProperty('border-radius', '1.5rem', 'important');
-      card.style.setProperty('background', 'linear-gradient(135deg, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))', 'important');
-      card.style.setProperty('background-color', 'transparent', 'important');
-      card.style.setProperty('border', '2px solid hsl(30 100% 60% / 0.4)', 'important');
-      card.style.setProperty('box-shadow', `
-        0 15px 50px rgba(0, 0, 0, 0.5),
-        0 0 0 1px hsl(30 100% 50% / 0.3),
-        inset 0 0 80px hsl(30 100% 55% / 0.25),
-        inset 0 0 120px hsl(35 90% 50% / 0.15),
-        inset 0 2px 30px hsl(30 100% 65% / 0.2)
-      `, 'important');
-      card.style.setProperty('backdrop-filter', 'blur(20px)', 'important');
-      card.style.setProperty('-webkit-backdrop-filter', 'blur(20px)', 'important');
-      card.style.setProperty('transition', 'all 300ms ease-out', 'important');
-      card.style.setProperty('cursor', 'pointer', 'important');
-      
-      // Tailwind bg-card/80 eltávolítása ha létezik
-      card.classList.remove('bg-card');
-    }
-  }, []);
+  // Nincs useEffect - az SVG háttér közvetlenül a JSX-ben van, garantáltan renderelődik
 
   return (
     <Card
@@ -84,8 +58,30 @@ function GeodesicCard({
       onMouseLeave={onMouseLeave}
       onClick={onClick}
       {...props}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: '1.5rem',
+        backgroundColor: 'transparent',
+        border: '2px solid hsl(30 100% 60% / 0.4)',
+        boxShadow: `
+          0 15px 50px rgba(0, 0, 0, 0.5),
+          0 0 0 1px hsl(30 100% 50% / 0.3),
+          inset 0 0 80px hsl(30 100% 55% / 0.25),
+          inset 0 0 120px hsl(35 90% 50% / 0.15),
+          inset 0 2px 30px hsl(30 100% 65% / 0.2)
+        `,
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        transition: 'all 300ms ease-out',
+        cursor: 'pointer',
+        ...props.style,
+      } as React.CSSProperties}
     >
-      {children}
+      <GeodesicCardBackground />
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        {children}
+      </div>
     </Card>
   );
 }
@@ -102,16 +98,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
   // Közvetlen DOM manipuláció - dark mode háttér kényszerítése
   useEffect(() => {
-    // Body háttér kényszerítése
+    // Body háttér kényszerítése - SVG háttérrel, NEM CSS gradient-tel
     document.body.style.setProperty('background-color', 'hsl(240, 100%, 9%)', 'important');
-    document.body.style.setProperty('background-image', `
-      radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
-      radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
-      radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
-      radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
-      hsl(240, 100%, 9%)
-    `, 'important');
-    document.body.style.setProperty('background-attachment', 'fixed', 'important');
     document.body.style.setProperty('color', '#f9fafb', 'important');
     
     // Root háttér kényszerítése
