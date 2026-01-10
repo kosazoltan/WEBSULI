@@ -218,7 +218,15 @@ app.use((req, res, next) => {
 
   // CRITICAL: Service worker and manifest must always revalidate for updates
   if (path === '/service-worker.js' || path === '/manifest.json' || path === '/offline.html') {
-    res.set('Cache-Control', 'no-store'); // No caching for critical PWA files
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  // CRITICAL: HTML files - NO CACHE for SVG background update
+  else if (path === '/' || path.endsWith('.html')) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
   }
   // Cache static assets (JS, CSS, images, fonts) with long expiry
   // Only if they have content hashes (Vite adds hashes to built assets)
@@ -229,9 +237,11 @@ app.use((req, res, next) => {
   else if (path.startsWith('/api/')) {
     res.set('Cache-Control', 'no-cache, must-revalidate'); // Allow ETags
   }
-  // Don't cache HTML files but allow conditional GET
+  // Don't cache other files but allow conditional GET
   else {
-    res.set('Cache-Control', 'no-cache, must-revalidate');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
   }
 
   next();
