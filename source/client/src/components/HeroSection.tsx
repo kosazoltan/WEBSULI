@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
 import { ChevronRight, Zap, Flame, Trophy, Star } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,8 @@ function HeroSection({
   totalClassrooms = 0,
   showEmailSubscribe = true
 }: HeroSectionProps) {
-  
+  const heroRef = useRef<HTMLDivElement>(null);
+
   // 🎮 Gamification values (calculated from actual data)
   const currentLevel = Math.floor(totalFiles / 10) + 1;
   const xpProgress = (totalFiles % 10) * 10; // Progress to next level (0-100)
@@ -25,8 +26,21 @@ function HeroSection({
     if (content) content.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Közvetlen DOM manipuláció - sci-fi háttér kényszerítése
+  useEffect(() => {
+    if (heroRef.current) {
+      const hero = heroRef.current;
+      hero.style.setProperty('background', 'linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))', 'important');
+      hero.style.setProperty('background-color', 'hsl(230 60% 12%)', 'important');
+      hero.style.setProperty('background-image', 'linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))', 'important');
+      hero.style.setProperty('backdrop-filter', 'blur(20px)', 'important');
+      hero.style.setProperty('-webkit-backdrop-filter', 'blur(20px)', 'important');
+    }
+  }, []);
+
   return (
     <div 
+      ref={heroRef}
       className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0" 
       style={{
         background: 'linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))',
@@ -37,7 +51,6 @@ function HeroSection({
         boxShadow: '0 10px 40px rgba(30, 144, 255, 0.2), 0 0 0 1px rgba(255, 140, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.1)',
         zIndex: 10,
         position: 'relative',
-        animation: 'fadeIn 0.6s ease-out',
       } as React.CSSProperties}>
       
       {/* MP4 Video háttér - űr/planéta témájú - ELREJTVE ha nem töltődik be */}

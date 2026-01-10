@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, memo } from "react";
+import { useState, useMemo, useEffect, memo, useRef } from "react";
 import { Search, FileCode, ShieldCheck, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,67 @@ interface UserFileListProps {
   onToggleView?: () => void;
 }
 
+// Geodéziai kupola kártya komponens - közvetlen DOM manipulációval
+function GeodesicCard({ 
+  fileId, 
+  className, 
+  children, 
+  onMouseEnter, 
+  onMouseLeave, 
+  onClick,
+  ...props 
+}: {
+  fileId: string;
+  className?: string;
+  children: React.ReactNode;
+  onMouseEnter?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onMouseLeave?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onClick?: () => void;
+  [key: string]: any;
+}) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (cardRef.current) {
+      const card = cardRef.current;
+      // Közvetlen DOM manipuláció - garantált érvényesülés
+      card.style.setProperty('position', 'relative', 'important');
+      card.style.setProperty('overflow', 'hidden', 'important');
+      card.style.setProperty('border-radius', '1.5rem', 'important');
+      card.style.setProperty('background', 'linear-gradient(135deg, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))', 'important');
+      card.style.setProperty('background-color', 'transparent', 'important');
+      card.style.setProperty('border', '2px solid hsl(30 100% 60% / 0.4)', 'important');
+      card.style.setProperty('box-shadow', `
+        0 15px 50px rgba(0, 0, 0, 0.5),
+        0 0 0 1px hsl(30 100% 50% / 0.3),
+        inset 0 0 80px hsl(30 100% 55% / 0.25),
+        inset 0 0 120px hsl(35 90% 50% / 0.15),
+        inset 0 2px 30px hsl(30 100% 65% / 0.2)
+      `, 'important');
+      card.style.setProperty('backdrop-filter', 'blur(20px)', 'important');
+      card.style.setProperty('-webkit-backdrop-filter', 'blur(20px)', 'important');
+      card.style.setProperty('transition', 'all 300ms ease-out', 'important');
+      card.style.setProperty('cursor', 'pointer', 'important');
+      
+      // Tailwind bg-card/80 eltávolítása ha létezik
+      card.classList.remove('bg-card');
+    }
+  }, []);
+
+  return (
+    <Card
+      ref={cardRef}
+      className={className}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onClick={onClick}
+      {...props}
+    >
+      {children}
+    </Card>
+  );
+}
+
 function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
@@ -37,6 +98,47 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   // Load fingerprint once on mount
   useEffect(() => {
     getFingerprint().then(setFingerprint).catch(() => setFingerprint("anonymous"));
+  }, []);
+
+  // Közvetlen DOM manipuláció - dark mode háttér kényszerítése
+  useEffect(() => {
+    // Body háttér kényszerítése
+    document.body.style.setProperty('background-color', 'hsl(240, 100%, 9%)', 'important');
+    document.body.style.setProperty('background-image', `
+      radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
+      radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
+      radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
+      radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
+      hsl(240, 100%, 9%)
+    `, 'important');
+    document.body.style.setProperty('background-attachment', 'fixed', 'important');
+    document.body.style.setProperty('color', '#f9fafb', 'important');
+    
+    // Root háttér kényszerítése
+    const root = document.getElementById('root');
+    if (root) {
+      root.style.setProperty('background-color', 'hsl(240, 100%, 9%)', 'important');
+      root.style.setProperty('min-height', '100vh', 'important');
+    }
+
+    // HTML dark class kényszerítése
+    document.documentElement.classList.add('dark');
+    localStorage.setItem('theme', 'dark');
+
+    // MutationObserver - ha valami eltávolítja a dark class-t
+    const observer = new MutationObserver(() => {
+      if (!document.documentElement.classList.contains('dark')) {
+        document.documentElement.classList.add('dark');
+      }
+      if (document.body.style.backgroundColor !== 'hsl(240, 100%, 9%)') {
+        document.body.style.setProperty('background-color', 'hsl(240, 100%, 9%)', 'important');
+      }
+    });
+
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+
+    return () => observer.disconnect();
   }, []);
 
   // Filter by search query AND selected classroom - OPTIMIZED with useMemo
@@ -293,50 +395,33 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               const staggerDelayClass = `stagger-delay-${Math.min(index, 10)}`;
               
               return (
-                <Card
+                <GeodesicCard
                   key={file.id}
+                  fileId={file.id}
                   className={`group cursor-pointer border-0 relative overflow-visible ${staggerDelayClass}`}
-                  style={{
-                    position: 'relative',
-                    overflow: 'hidden',
-                    borderRadius: '1.5rem',
-                    background: 'linear-gradient(135deg, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%))',
-                    backgroundColor: 'transparent',
-                    border: '2px solid hsl(30 100% 60% / 0.4)',
-                    boxShadow: `
-                      0 15px 50px rgba(0, 0, 0, 0.5),
-                      0 0 0 1px hsl(30 100% 50% / 0.3),
-                      inset 0 0 80px hsl(30 100% 55% / 0.25),
-                      inset 0 0 120px hsl(35 90% 50% / 0.15),
-                      inset 0 2px 30px hsl(30 100% 65% / 0.2)
-                    `,
-                    backdropFilter: 'blur(20px)',
-                    WebkitBackdropFilter: 'blur(20px)',
-                    transition: 'all 300ms ease-out',
-                    transform: 'translateY(0) scale(1)',
-                    cursor: 'pointer',
-                  }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
-                    e.currentTarget.style.borderColor = 'hsl(30 100% 65% / 0.6)';
-                    e.currentTarget.style.boxShadow = `
+                    const card = e.currentTarget;
+                    card.style.setProperty('transform', 'translateY(-8px) scale(1.02)', 'important');
+                    card.style.setProperty('border-color', 'hsl(30 100% 65% / 0.6)', 'important');
+                    card.style.setProperty('box-shadow', `
                       0 35px 80px hsl(30 100% 55% / 0.5),
                       0 0 0 3px hsl(30 100% 65% / 0.6),
                       inset 0 0 120px hsl(30 100% 60% / 0.4),
                       inset 0 0 180px hsl(35 90% 55% / 0.3),
                       inset 0 2px 50px hsl(30 100% 70% / 0.4)
-                    `;
+                    `, 'important');
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                    e.currentTarget.style.borderColor = 'hsl(30 100% 60% / 0.4)';
-                    e.currentTarget.style.boxShadow = `
+                    const card = e.currentTarget;
+                    card.style.setProperty('transform', 'translateY(0) scale(1)', 'important');
+                    card.style.setProperty('border-color', 'hsl(30 100% 60% / 0.4)', 'important');
+                    card.style.setProperty('box-shadow', `
                       0 15px 50px rgba(0, 0, 0, 0.5),
                       0 0 0 1px hsl(30 100% 50% / 0.3),
                       inset 0 0 80px hsl(30 100% 55% / 0.25),
                       inset 0 0 120px hsl(35 90% 50% / 0.15),
                       inset 0 2px 30px hsl(30 100% 65% / 0.2)
-                    `;
+                    `, 'important');
                   }}
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
@@ -446,7 +531,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     } rounded-bl-full`}></div>
 
                   </CardContent>
-                </Card>
+                </GeodesicCard>
               );
             })}
           </div>
