@@ -6,27 +6,27 @@
   :root {
     /* --- 🎮 GAMIFIED SZÍNVILÁG (6-18 éveseknek) --- */
     /* Duolingo + Fortnite + TikTok vizuális nyelvezet */
-    /* Dark mode alapértelmezett - sci-fi téma */
-    --background: 240 100% 9%; /* Dark sci-fi háttér */
+    /* Dark mode alapértelmezett - tudományos téma */
+    --background: 222 47% 11%; /* #0F172A - Sötét tudományos háttér */
     --foreground: 0 0% 98%;
 
-    --card: 240 100% 18%; /* Dark card háttér - geodéziai kupola */
+    --card: 222 47% 16%; /* Sötétebb card háttér */
     --card-foreground: 0 0% 98%;
 
-    --popover: 240 100% 18%;
+    --popover: 222 47% 16%;
     --popover-foreground: 0 0% 98%;
 
-    /* === ACHIEVEMENT LILA === */
-    --achievement-purple: 280 100% 60%;
-    --achievement-purple-light: 280 100% 70%;
-    --achievement-purple-dark: 280 100% 50%;
-    --achievement-purple-glow: 280 100% 60% / 0.6;
+    /* === ACHIEVEMENT LILA - #8B5CF6 === */
+    --achievement-purple: 262 83% 66%;
+    --achievement-purple-light: 262 83% 76%;
+    --achievement-purple-dark: 262 83% 56%;
+    --achievement-purple-glow: 262 83% 66% / 0.6;
 
-    /* === ENERGY PINK === */
-    --energy-pink: 340 100% 60%;
-    --energy-pink-light: 340 100% 70%;
-    --energy-pink-dark: 340 100% 50%;
-    --energy-pink-glow: 340 100% 60% / 0.6;
+    /* === ENERGY PINK - #EC4899 === */
+    --energy-pink: 330 81% 60%;
+    --energy-pink-light: 330 81% 70%;
+    --energy-pink-dark: 330 81% 50%;
+    --energy-pink-glow: 330 81% 60% / 0.6;
 
     /* === FRESH TÜRKIZ === */
     --fresh-cyan: 180 100% 50%;
@@ -40,12 +40,24 @@
     --success-green-dark: 140 80% 40%;
     --success-green-glow: 140 80% 50% / 0.6;
 
+    /* === VIBRANT ORANGE - #F97316 === */
+    --vibrant-orange: 25 95% 53%;
+    --vibrant-orange-light: 25 95% 63%;
+    --vibrant-orange-dark: 25 95% 43%;
+    --vibrant-orange-glow: 25 95% 53% / 0.6;
+
+    /* === GOLDEN YELLOW - #EAB308 === */
+    --golden-yellow: 48 96% 47%;
+    --golden-yellow-light: 48 96% 57%;
+    --golden-yellow-dark: 48 96% 37%;
+    --golden-yellow-glow: 48 96% 47% / 0.6;
+
     /* === HÁTTÉR SZÍNEK === */
-    --bg-dark: 240 100% 9%;
-    --bg-card: 240 100% 18%;
-    --bg-card-hover: 240 100% 26%;
-    --bg-gradient-start: 240 100% 9%;
-    --bg-gradient-end: 240 100% 21%;
+    --bg-dark: 222 47% 11%; /* #0F172A */
+    --bg-card: 222 47% 16%;
+    --bg-card-hover: 222 47% 22%;
+    --bg-gradient-start: 222 47% 11%;
+    --bg-gradient-end: 222 47% 18%;
 
     /* Legacy compatibility */
     --primary: var(--achievement-purple);
@@ -69,27 +81,27 @@
   }
 
   .dark {
-    /* --- 🌙 SÖTÉT MÓD: Neon Gaming Aesthetic --- */
-    --background: 240 100% 9%;     /* Deep purple-black */
+    /* --- 🌙 SÖTÉT MÓD: Tudományos Neon Aesthetic --- */
+    --background: 222 47% 11%;     /* #0F172A - Sötét tudományos */
     --foreground: 0 0% 98%;
 
-    --card: 240 100% 18%;
+    --card: 222 47% 16%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 240 100% 18%;
+    --popover: 222 47% 16%;
     --popover-foreground: 0 0% 98%;
 
-    /* === ACHIEVEMENT LILA === */
-    --achievement-purple: 280 100% 65%;
-    --achievement-purple-light: 280 100% 75%;
-    --achievement-purple-dark: 280 100% 55%;
-    --achievement-purple-glow: 280 100% 65% / 0.6;
+    /* === ACHIEVEMENT LILA - #8B5CF6 === */
+    --achievement-purple: 262 83% 66%;
+    --achievement-purple-light: 262 83% 76%;
+    --achievement-purple-dark: 262 83% 56%;
+    --achievement-purple-glow: 262 83% 66% / 0.6;
 
-    /* === ENERGY PINK === */
-    --energy-pink: 340 100% 65%;
-    --energy-pink-light: 340 100% 75%;
-    --energy-pink-dark: 340 100% 55%;
-    --energy-pink-glow: 340 100% 65% / 0.6;
+    /* === ENERGY PINK - #EC4899 === */
+    --energy-pink: 330 81% 60%;
+    --energy-pink-light: 330 81% 70%;
+    --energy-pink-dark: 330 81% 50%;
+    --energy-pink-glow: 330 81% 60% / 0.6;
 
     /* === FRESH TÜRKIZ === */
     --fresh-cyan: 180 100% 55%;
@@ -103,12 +115,24 @@
     --success-green-dark: 140 80% 45%;
     --success-green-glow: 140 80% 55% / 0.6;
 
+    /* === VIBRANT ORANGE - #F97316 === */
+    --vibrant-orange: 25 95% 53%;
+    --vibrant-orange-light: 25 95% 63%;
+    --vibrant-orange-dark: 25 95% 43%;
+    --vibrant-orange-glow: 25 95% 53% / 0.6;
+
+    /* === GOLDEN YELLOW - #EAB308 === */
+    --golden-yellow: 48 96% 47%;
+    --golden-yellow-light: 48 96% 57%;
+    --golden-yellow-dark: 48 96% 37%;
+    --golden-yellow-glow: 48 96% 47% / 0.6;
+
     /* === HÁTTÉR SZÍNEK === */
-    --bg-dark: 240 100% 9%;
-    --bg-card: 240 100% 18%;
-    --bg-card-hover: 240 100% 26%;
-    --bg-gradient-start: 240 100% 9%;
-    --bg-gradient-end: 240 100% 21%;
+    --bg-dark: 222 47% 11%; /* #0F172A */
+    --bg-card: 222 47% 16%;
+    --bg-card-hover: 222 47% 22%;
+    --bg-gradient-start: 222 47% 11%;
+    --bg-gradient-end: 222 47% 18%;
 
     /* Legacy compatibility */
     --primary: var(--achievement-purple);
@@ -171,43 +195,43 @@
 
   body {
     @apply text-foreground font-sans antialiased overflow-x-hidden pt-24;
-    /* Dark mode alapértelmezett háttér - sötét sci-fi - MINDIG */
-    background-color: hsl(240 100% 9%) !important; /* --bg-dark */
-    /* 🎮 Gamified háttér - Duolingo style - dark mode sci-fi */
+    /* Dark mode alapértelmezett háttér - #0F172A tudományos - MINDIG */
+    background-color: #0F172A !important; /* --bg-dark */
+    /* 🔬 Tudományos háttér - vibráló gradient rendszer */
     background-image:
-      radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
-      radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
-      radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
-      radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
-      hsl(240 100% 9%) !important; /* --bg-dark - dark sci-fi háttér */
+      radial-gradient(ellipse at 20% 10%, rgba(139, 92, 246, 0.20), transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(236, 72, 153, 0.18), transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(249, 115, 22, 0.12), transparent 60%),
+      radial-gradient(ellipse at 10% 90%, rgba(234, 179, 8, 0.10), transparent 40%),
+      #0F172A !important;
     background-attachment: fixed;
     position: relative;
     min-height: 100vh;
   }
-  
+
   /* Dark mode body háttér - garantált dark */
   html.dark body,
   body.dark,
   html body {
-    background-color: hsl(240 100% 9%) !important; /* --bg-dark */
+    background-color: #0F172A !important; /* --bg-dark */
     background-image:
-      radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
-      radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
-      radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
-      radial-gradient(ellipse at 10% 90%, hsl(45 100% 60% / 0.08), transparent 40%),
-      hsl(240 100% 9%) !important;
+      radial-gradient(ellipse at 20% 10%, rgba(139, 92, 246, 0.20), transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(236, 72, 153, 0.18), transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(249, 115, 22, 0.12), transparent 60%),
+      radial-gradient(ellipse at 10% 90%, rgba(234, 179, 8, 0.10), transparent 40%),
+      #0F172A !important;
   }
-  
+
   /* Override minden világos háttért dark-ra */
   html body #root,
   html #root {
-    background-color: hsl(240 100% 9%) !important;
+    background-color: #0F172A !important;
     background-image: none !important;
   }
   
   /* HeroSection - Scientific Design - háttér átlátszó, ScientificHeroBackground komponens kezeli */
 
-  /* 🌈 Animated floating bubbles - FUN & PLAYFUL */
+  /* 🌈 Animated floating bubbles - SCIENTIFIC */
   body::before {
     content: '';
     position: fixed;
@@ -215,7 +239,7 @@
     right: -5%;
     width: 45vw;
     height: 45vh;
-    background: radial-gradient(circle, hsl(340 100% 60% / 0.18), transparent 70%);
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.20), transparent 70%);
     border-radius: 50%;
     z-index: -1;
     pointer-events: none;
@@ -229,7 +253,7 @@
     left: -5%;
     width: 40vw;
     height: 40vh;
-    background: radial-gradient(circle, hsl(180 100% 55% / 0.18), transparent 70%);
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.20), transparent 70%);
     border-radius: 50%;
     z-index: -1;
     pointer-events: none;
@@ -248,20 +272,21 @@ div.shadcn-card.holographic-card,
   position: relative !important;
   overflow: hidden !important;
   border-radius: 1.5rem !important; /* rounded-3xl */
-  transition: all 300ms ease-out !important;
-  /* Glassmorphism - félig átlátszó háttér blur hatással */
-  background: rgba(255, 255, 255, 0.08) !important;
-  background-color: rgba(255, 255, 255, 0.08) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-  backdrop-filter: blur(20px) !important;
-  /* Finom fehér szegély */
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  transition: all 350ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  /* Glassmorphism - rgba(255,255,255,0.1) blur hatással */
+  background: rgba(255, 255, 255, 0.10) !important;
+  background-color: rgba(255, 255, 255, 0.10) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  /* Finom fehér szegély - ragyogó */
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
   background-clip: padding-box !important;
-  /* Lágy árnyék */
+  /* Lágy árnyék + belső fény */
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.25),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    0 8px 32px rgba(0, 0, 0, 0.30),
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
 }
 
 /* Explicit override a Tailwind bg-card utility osztályokra */
@@ -335,12 +360,13 @@ div.holographic-card::before,
 div.holographic-card:hover,
 .shadcn-card.holographic-card:hover,
 [class*="holographic-card"]:hover {
-  transform: translateY(-8px) scale(1.02);
-  border-color: rgba(139, 92, 246, 0.4);
+  transform: translateY(-10px) scale(1.02);
+  border-color: rgba(139, 92, 246, 0.5) !important;
   box-shadow:
-    0 20px 50px rgba(139, 92, 246, 0.25),
-    0 0 0 1px rgba(139, 92, 246, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    0 25px 60px rgba(139, 92, 246, 0.30),
+    0 0 0 1px rgba(139, 92, 246, 0.4),
+    0 0 40px rgba(236, 72, 153, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
 }
 
 /* Hover előtti border animáció megjelenítése */
@@ -2114,5 +2140,94 @@ div.holographic-card > *,
 
   .fade-in-up {
     animation: fade-in-up 0.6s ease-out;
+  }
+
+  /* === GRADIENT BADGE-EK === */
+  /* Kategória címkék színes gradient-tel */
+  .gradient-badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(236, 72, 153, 0.3));
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(8px);
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  .gradient-badge-purple {
+    background: linear-gradient(135deg, #8B5CF6, #A78BFA);
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+  }
+
+  .gradient-badge-pink {
+    background: linear-gradient(135deg, #EC4899, #F472B6);
+    box-shadow: 0 4px 15px rgba(236, 72, 153, 0.4);
+  }
+
+  .gradient-badge-orange {
+    background: linear-gradient(135deg, #F97316, #FB923C);
+    box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
+  }
+
+  .gradient-badge-yellow {
+    background: linear-gradient(135deg, #EAB308, #FACC15);
+    box-shadow: 0 4px 15px rgba(234, 179, 8, 0.4);
+    color: #1F2937;
+  }
+
+  .gradient-badge-cyan {
+    background: linear-gradient(135deg, #06B6D4, #22D3EE);
+    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+  }
+
+  .gradient-badge-green {
+    background: linear-gradient(135deg, #10B981, #34D399);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+  }
+
+  /* === OKTATÁSI IKON STÍLUSOK === */
+  .education-icon {
+    @apply flex items-center justify-center rounded-xl;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .education-icon-purple {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(167, 139, 250, 0.2));
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+  }
+
+  .education-icon-pink {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.3), rgba(244, 114, 182, 0.2));
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.2);
+  }
+
+  .education-icon-orange {
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.3), rgba(251, 146, 60, 0.2));
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.2);
+  }
+
+  /* === KATEGÓRIA KÁRTYA STÍLUSOK === */
+  .category-card {
+    @apply relative overflow-hidden rounded-2xl;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    transition: all 0.3s ease;
+  }
+
+  .category-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: 0 20px 40px rgba(139, 92, 246, 0.2);
+  }
+
+  .category-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #8B5CF6, #EC4899, #F97316);
   }
 }
