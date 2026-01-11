@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
-import HeroSection from "@/components/HeroSection";
 import LikeButton from "@/components/LikeButton";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
@@ -193,8 +192,6 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
             </div>
           )}
 
-          {/* Hero Section */}
-          <HeroSection showEmailSubscribe={false} />
 
           {/* Empty State */}
           <div className="text-center py-16">
@@ -250,12 +247,6 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           </div>
         )}
 
-        {/* Hero Section */}
-        <HeroSection
-          totalFiles={totalFiles}
-          totalClassrooms={totalClassrooms}
-          showEmailSubscribe={true}
-        />
 
         {/* 🎮 Classroom Filter Buttons - Gamified with XP indicators */}
         <div className="mb-6 sm:mb-8">
