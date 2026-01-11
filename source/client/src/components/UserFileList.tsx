@@ -28,42 +28,6 @@ interface UserFileListProps {
   onToggleView?: () => void;
 }
 
-// Glassmorphism kártya komponens
-function GlassCard({ 
-  fileId, 
-  className, 
-  children, 
-  onMouseEnter, 
-  onMouseLeave, 
-  onClick,
-  ...props 
-}: {
-  fileId: string;
-  className?: string;
-  children: React.ReactNode;
-  onMouseEnter?: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onMouseLeave?: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onClick?: () => void;
-  [key: string]: any;
-}) {
-  return (
-    <Card
-      className={`glass-card ${className || ''}`}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      onClick={onClick}
-      {...props}
-      style={{
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: '1.5rem',
-        ...props.style,
-      } as React.CSSProperties}
-    >
-      {children}
-    </Card>
-  );
-}
 
 function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -354,9 +318,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               const staggerDelayClass = `stagger-delay-${Math.min(index, 10)}`;
               
               return (
-                <GlassCard
+                <Card
                   key={file.id}
-                  fileId={file.id}
                   className={`group cursor-pointer fade-in-up ${staggerDelayClass}`}
                   style={{ animationDelay: `${index * 0.05}s` }}
                   onClick={() => onViewFile(file)}
@@ -457,7 +420,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     </div>
                     
                   </CardContent>
-                </GlassCard>
+                </Card>
               );
             })}
           </div>
