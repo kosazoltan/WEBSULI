@@ -104,7 +104,7 @@ const ScientificHeroBackground: React.FC = () => {
         style={{ zIndex: 1 }}
       />
 
-      {/* Gradient háttér - lila → rózsaszín → narancssárga */}
+      {/* Gradient háttér - lila → rózsaszín → narancssárga + sötét alapháttér */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -115,7 +115,8 @@ const ScientificHeroBackground: React.FC = () => {
               rgba(236, 72, 153, 0.3) 35%,
               rgba(249, 115, 22, 0.25) 70%,
               rgba(234, 179, 8, 0.2) 100%
-            )
+            ),
+            #0F172A
           `,
         }}
       />

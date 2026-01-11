@@ -205,37 +205,7 @@
     background-image: none !important;
   }
   
-  /* HeroSection háttér kényszerítése - sci-fi dark - MAXIMÁLIS SPECIFICITY */
-  .hero-section-container,
-  div.hero-section-container,
-  .relative.text-center.mb-12.hero-section-container,
-  div.relative.text-center.mb-12.hero-section-container,
-  .relative.text-center.mb-12[style*="hsl(230"],
-  .hero-section-container.relative.text-center {
-    background: linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%)) !important;
-    background-color: hsl(230 60% 12%) !important;
-    background-image: linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%)) !important;
-    /* Override minden Tailwind osztályt és inline style-t */
-    background-clip: padding-box !important;
-    /* Override minden gradient-et */
-    background-blend-mode: normal !important;
-  }
-  
-  /* Override minden lehetséges világos háttért a hero section-ben */
-  .hero-section-container *:not(.achievement-badge):not(.xp-badge):not(.streak-badge):not(video):not(svg):not(.sticker) {
-    /* Ne override-oljuk a badge-eket és SVG-ket */
-  }
-  
-  /* Garantált dark háttér a hero section container-nek */
-  div.hero-section-container::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to bottom, hsl(230 60% 12%), hsl(240 50% 15%), hsl(235 55% 14%)) !important;
-    background-color: hsl(230 60% 12%) !important;
-    z-index: -1;
-    pointer-events: none;
-  }
+  /* HeroSection - Scientific Design - háttér átlátszó, ScientificHeroBackground komponens kezeli */
 
   /* 🌈 Animated floating bubbles - FUN & PLAYFUL */
   body::before {
