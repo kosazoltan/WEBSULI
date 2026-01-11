@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, memo, useRef } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import { Search, FileCode, ShieldCheck, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
 import LikeButton from "@/components/LikeButton";
+import HeroSection from "@/components/HeroSection";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -211,6 +212,12 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           </div>
         )}
 
+        {/* 🔬 Tudományos Hero Section - Animált részecskékkel és lebegő képletekkel */}
+        <HeroSection
+          totalFiles={totalFiles}
+          totalClassrooms={totalClassrooms}
+          showEmailSubscribe={true}
+        />
 
         {/* 🎮 Classroom Filter Buttons - Gamified with XP indicators */}
         <div className="mb-6 sm:mb-8">
