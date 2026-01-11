@@ -2,6 +2,37 @@
 
 Ez a VPS jelenleg **nem mutatja a változásokat**. Ez az útmutató segít diagnosztizálni és javítani a problémát.
 
+## 🚀 Gyors Használat - Automatikus Scriptek
+
+### Windows PowerShell Script (Helyi gépről futtatva)
+
+```powershell
+# Csak diagnosztika
+.\diagnose-vps.ps1
+
+# Diagnosztika + automatikus fix
+.\diagnose-vps.ps1 -Fix
+```
+
+### Bash Script (VPS-en futtatva)
+
+```bash
+# Diagnosztika (SSH-n keresztül)
+ssh root@95.216.191.162 'bash -s' < diagnose-vps.sh
+
+# Fix (SSH-n keresztül)
+ssh root@95.216.191.162 'bash -s' < fix-vps-deployment.sh
+```
+
+**Vagy másold a VPS-re és futtasd ott:**
+```bash
+ssh root@95.216.191.162
+cd /var/www/websuli/source
+# Másold ide a scriptet, majd:
+bash diagnose-vps.sh
+bash fix-vps-deployment.sh
+```
+
 ## 🚨 Gyors Diagnosztika
 
 ### 1. SSH Kapcsolat Tesztelése
