@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { ChevronDown, BookOpen, GraduationCap, FileText } from "lucide-react";
+import { ChevronDown, BookOpen, GraduationCap, FileText, Brain, Lightbulb } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
 import { MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
@@ -23,30 +23,104 @@ function HeroSection({
   };
 
   return (
-    <div className="relative text-center py-12 sm:py-16 px-4 mb-8 rounded-xl bg-gradient-to-b from-primary/5 to-transparent">
-      {/* Main content */}
-      <div className="max-w-3xl mx-auto">
-        {/* Title */}
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4 tracking-tight">
-          Üdvözöl a{" "}
-          <span className="text-primary">WebSuli</span>!
+    <div className="relative min-h-[600px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
+      {/* Sötét gradient háttér: lila → rózsaszín → narancssárga */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-orange-900" />
+      
+      {/* Animált részecskék háttér - CSS alapú */}
+      <div className="absolute inset-0 opacity-20">
+        {[...Array(30)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute rounded-full bg-white animate-float-symbol"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              width: `${4 + Math.random() * 8}px`,
+              height: `${4 + Math.random() * 8}px`,
+              animationDelay: `${Math.random() * 6}s`,
+              animationDuration: `${8 + Math.random() * 12}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Geometriai minták - SVG */}
+      <svg className="absolute inset-0 w-full h-full opacity-10" aria-hidden="true">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
+          </pattern>
+          <pattern id="circles" width="60" height="60" patternUnits="userSpaceOnUse">
+            <circle cx="30" cy="30" r="2" fill="white" opacity="0.3" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+        <rect width="100%" height="100%" fill="url(#circles)" />
+      </svg>
+
+      {/* Lebegő matematikai szimbólumok */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {['E=mc²', '∑', '∫', 'π', '∇', '∞'].map((symbol, i) => (
+          <div
+            key={i}
+            className="absolute text-white/20 text-4xl font-bold animate-float-symbol"
+            style={{
+              left: `${15 + i * 15}%`,
+              top: `${20 + (i % 3) * 25}%`,
+              animationDelay: `${i * 1.5}s`,
+              animationDuration: `${10 + i * 2}s`,
+            }}
+          >
+            {symbol}
+          </div>
+        ))}
+      </div>
+
+      {/* Oktatási ikonok - elszórva */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[
+          { Icon: BookOpen, delay: 0 },
+          { Icon: Brain, delay: 2 },
+          { Icon: Lightbulb, delay: 4 },
+          { Icon: GraduationCap, delay: 1 },
+        ].map(({ Icon, delay }, i) => (
+          <Icon
+            key={i}
+            className="absolute text-white/15 w-12 h-12 animate-float-icon"
+            style={{
+              left: `${20 + i * 20}%`,
+              top: `${30 + (i % 2) * 40}%`,
+              animationDelay: `${delay}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Főtartalom */}
+      <div className="relative z-10 max-w-4xl mx-auto px-4 py-16 text-center">
+        {/* Főcím - gradient szöveg */}
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 animate-fade-in-up">
+          <span className="bg-gradient-to-r from-purple-300 via-pink-300 to-orange-300 bg-clip-text text-transparent">
+            Üdvözöl a WebSuli!
+          </span>
         </h1>
 
-        {/* Subtitle */}
-        <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+        {/* Alcím */}
+        <p className="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           Interaktív tananyagok általános és középiskolásoknak.
           Böngéssz osztályok szerint, és találd meg a neked való anyagokat!
         </p>
 
-        {/* CTA buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-10">
+        {/* CTA gombok */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
           <Button
             size="lg"
             onClick={scrollToContent}
-            className="gap-2"
+            className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 text-lg px-8 py-6 animate-pulse-cta"
           >
             Böngészés
-            <ChevronDown className="w-4 h-4" />
+            <ChevronDown className="w-5 h-5" />
           </Button>
 
           {showEmailSubscribe && (
@@ -54,36 +128,36 @@ function HeroSection({
           )}
         </div>
 
-        {/* Stats */}
-        <div className="flex justify-center gap-8 sm:gap-12 pt-6 border-t border-border">
+        {/* Statisztikák */}
+        <div className="flex flex-wrap justify-center gap-8 sm:gap-12 pt-8 border-t border-white/20 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <FileText className="w-5 h-5 text-primary" />
-              <span className="text-2xl sm:text-3xl font-bold text-foreground">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <FileText className="w-6 h-6 text-orange-300" />
+              <span className="text-3xl sm:text-4xl font-bold text-white">
                 {totalFiles}
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">Tananyag</p>
+            <p className="text-sm text-white/80">Tananyag</p>
           </div>
 
           <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <GraduationCap className="w-5 h-5 text-primary" />
-              <span className="text-2xl sm:text-3xl font-bold text-foreground">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <GraduationCap className="w-6 h-6 text-pink-300" />
+              <span className="text-3xl sm:text-4xl font-bold text-white">
                 {totalClassrooms}
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">Osztály</p>
+            <p className="text-sm text-white/80">Osztály</p>
           </div>
 
           <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <BookOpen className="w-5 h-5 text-primary" />
-              <span className="text-2xl sm:text-3xl font-bold text-foreground">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <BookOpen className="w-6 h-6 text-purple-300" />
+              <span className="text-3xl sm:text-4xl font-bold text-white">
                 {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">Évfolyam</p>
+            <p className="text-sm text-white/80">Évfolyam</p>
           </div>
         </div>
       </div>
