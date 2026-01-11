@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
-import { useEffect, lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
@@ -15,10 +15,20 @@ const Admin = lazy(() => import("@/pages/admin"));
 const AdminStats = lazy(() => import("@/pages/AdminStats"));
 const AdminDocumentation = lazy(() => import("@/pages/AdminDocumentation"));
 
-function Router() {
-  // Platform is fully public - no authentication required for any page
+function LoadingSpinner() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Betöltés...</div>}>
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-muted-foreground">Betöltés...</p>
+      </div>
+    </div>
+  );
+}
+
+function Router() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/preview/:id" component={Preview} />
@@ -34,33 +44,10 @@ function Router() {
 }
 
 function App() {
-  useEffect(() => {
-    // Alapértelmezett: dark mode (gamifikált sci-fi témához) - MINDIG dark mode
-    // Kényszerítjük a dark mode-ot, hogy a sci-fi/gamifikált téma mindig aktív legyen
-    document.documentElement.classList.add("dark");
-    localStorage.setItem("theme", "dark");
-    
-    // Ne engedjük a light mode-ot - MutationObserver-ral figyeljük
-    const observer = new MutationObserver(() => {
-      if (!document.documentElement.classList.contains("dark")) {
-        document.documentElement.classList.add("dark");
-        localStorage.setItem("theme", "dark");
-      }
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-    
-    return () => observer.disconnect();
-  }, []);
-
-  const APP_VERSION = "2.0.1"; // Force new build hash
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <div className="relative z-10 min-h-screen">
+        <div className="min-h-screen bg-background">
           <Toaster />
           <Router />
         </div>
