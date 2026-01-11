@@ -199,43 +199,46 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
               const staggerClass = `stagger-delay-${Math.min(index, 5)}`;
+              const isEven = index % 2 === 0;
 
               return (
                 <Card
                   key={file.id}
-                  className={`group cursor-pointer card-hover animate-fade-in ${staggerClass}`}
+                  className={`group cursor-pointer glass-card animate-fade-in ${staggerClass}`}
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                 >
-                  <CardContent className="p-4 flex flex-col h-full">
+                  <CardContent className="p-5 flex flex-col h-full">
                     {/* Header */}
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
-                        <Icon className="w-5 h-5 text-primary" />
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm border border-white/10">
+                        <Icon className="w-6 h-6 text-purple-300 dark:text-purple-400" />
                       </div>
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge 
+                        className={`text-xs font-semibold ${isEven ? 'gradient-badge-primary' : 'gradient-badge-secondary'}`}
+                      >
                         {getClassroomLabel(classroom, true)}
                       </Badge>
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 mb-3">
-                      <h3 className="text-base font-semibold text-foreground mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+                    <div className="flex-1 mb-4">
+                      <h3 className="text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text group-hover:text-transparent transition-all">
                         {file.title}
                       </h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
+                      <p className="text-sm text-muted-foreground line-clamp-3">
                         {file.description || "Kattints a megtekintéshez"}
                       </p>
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex items-center justify-between pt-4 border-t border-border/50">
                       <LikeButton
                         materialId={file.id}
                         initialLikeStatus={batchLikesData?.[file.id]}
                       />
-                      <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-colors">
-                        <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary-foreground transition-colors" />
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-purple-500/50 transition-all">
+                        <ArrowRight className="w-5 h-5 text-white" />
                       </div>
                     </div>
                   </CardContent>
