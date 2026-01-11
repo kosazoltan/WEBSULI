@@ -30,7 +30,7 @@ function HeroSection({
     <div 
       className="relative text-center mb-12 py-16 sm:py-20 px-4 sm:px-6 lg:px-8 rounded-[2.5rem] overflow-hidden border-0" 
       style={{
-        backgroundColor: '#0F172A', // Sötét háttér
+        backgroundColor: 'transparent', // Átlátszó háttér - ScientificHeroBackground látható legyen
         minHeight: '500px',
         position: 'relative',
       } as React.CSSProperties}>
