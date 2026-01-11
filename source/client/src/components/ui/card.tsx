@@ -4,24 +4,17 @@ import { cn } from "@/lib/utils"
 
 const Card = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { style?: React.CSSProperties }
->(({ className, style, ...props }, ref) => {
-  // Ha van inline style background vagy backgroundColor, ne alkalmazzuk a bg-card/80-at
-  const hasCustomBackground = style?.background || style?.backgroundColor;
-  
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        "shadcn-card rounded-xl border backdrop-blur-md border-primary/20 text-card-foreground shadow-xl",
-        !hasCustomBackground && "bg-card/80", // Csak ha nincs custom background
-        className
-      )}
-      style={style}
-      {...props}
-    />
-  );
-});
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
 Card.displayName = "Card"
 
 const CardHeader = React.forwardRef<
@@ -33,7 +26,7 @@ const CardHeader = React.forwardRef<
     className={cn("flex flex-col space-y-1.5 p-6", className)}
     {...props}
   />
-));
+))
 CardHeader.displayName = "CardHeader"
 
 const CardTitle = React.forwardRef<
@@ -60,25 +53,15 @@ const CardDescription = React.forwardRef<
     className={cn("text-sm text-muted-foreground", className)}
     {...props}
   />
-));
+))
 CardDescription.displayName = "CardDescription"
 
 const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => {
-  // Ha parent Card holographic-card, ne legyen háttér
-  const parentIsHolographic = ref && 'current' in ref && ref.current?.parentElement?.classList.contains('holographic-card');
-  
-  return (
-    <div 
-      ref={ref} 
-      className={cn("p-6 pt-0", className)} 
-      style={parentIsHolographic ? { backgroundColor: 'transparent' } : undefined}
-      {...props} 
-    />
-  );
-})
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
 CardContent.displayName = "CardContent"
 
 const CardFooter = React.forwardRef<
@@ -92,11 +75,5 @@ const CardFooter = React.forwardRef<
   />
 ))
 CardFooter.displayName = "CardFooter"
-export {
-  Card,
-  CardHeader,
-  CardFooter,
-  CardTitle,
-  CardDescription,
-  CardContent,
-}
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }

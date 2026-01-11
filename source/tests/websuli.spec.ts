@@ -9,7 +9,7 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         await page.waitForLoadState('networkidle');
 
         // Ellenőrizzük, hogy az oldal betöltődött
-        await expect(page).toHaveTitle(/WEBSULI|Websuli|websuli|Anyagok Profiknak|Anyagok/i);
+        await expect(page).toHaveTitle(/WebSuli|Tananyagok/i);
 
         // Készítsünk képernyőképet
         await page.screenshot({ path: 'tests/screenshots/homepage.png', fullPage: true });
