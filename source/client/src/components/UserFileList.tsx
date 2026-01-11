@@ -198,12 +198,12 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
             {filteredFiles.map((file, index) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
+              const staggerClass = `stagger-delay-${Math.min(index, 5)}`;
 
               return (
                 <Card
                   key={file.id}
-                  className="group cursor-pointer card-hover animate-fade-in"
-                  style={{ animationDelay: `${index * 50}ms` }}
+                  className={`group cursor-pointer card-hover animate-fade-in ${staggerClass}`}
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                 >

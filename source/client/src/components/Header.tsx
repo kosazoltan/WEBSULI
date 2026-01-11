@@ -61,6 +61,7 @@ export default function Header() {
               <Button
                 variant="outline"
                 size={isMobile ? "icon" : "default"}
+                data-testid="button-admin"
               >
                 <Shield className="w-4 h-4 sm:mr-2" />
                 {!isMobile && "Admin"}
