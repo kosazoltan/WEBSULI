@@ -40,29 +40,6 @@
       }
     </style>
     <script>
-      // #region agent log H5: Critical inline script execution
-      try {
-        const logData = {
-          location: 'index.html:30',
-          message: 'Critical inline script - dark mode setup',
-          data: {
-            hasDarkClassBefore: document.documentElement.classList.contains('dark'),
-            savedTheme: localStorage.getItem('theme'),
-            bodyBg: document.body?.style?.backgroundColor || 'no body yet'
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run1',
-          hypothesisId: 'H5'
-        };
-        fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(logData)
-        }).catch(() => {});
-      } catch (e) {}
-      // #endregion
-      
       // Force dark mode immediately before DOM loads
       if (!document.documentElement.classList.contains('dark')) {
         document.documentElement.classList.add('dark');
@@ -70,27 +47,6 @@
       if (localStorage.getItem('theme') !== 'dark') {
         localStorage.setItem('theme', 'dark');
       }
-      
-      // #region agent log H5: After dark class add in inline script
-      try {
-        fetch('http://127.0.0.1:7243/ingest/9378b8f1-e7c8-473a-98f7-339360fc5519', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'index.html:44',
-            message: 'Critical inline script - dark class added',
-            data: {
-              hasDarkClassAfter: document.documentElement.classList.contains('dark'),
-              savedTheme: localStorage.getItem('theme')
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'H5'
-          })
-        }).catch(() => {});
-      } catch (e) {}
-      // #endregion
     </script>
     
     <!-- Primary Meta Tags -->
