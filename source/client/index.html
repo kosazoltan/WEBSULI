@@ -1,114 +1,59 @@
 <!DOCTYPE html>
-<html lang="hu" class="dark" data-version="4.0.0">
+<html lang="hu">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    
-    <!-- Critical CSS to prevent FOUC (Flash of Unstyled Content) - Dark background -->
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        background-color: hsl(240, 100%, 9%) !important; /* Dark sci-fi háttér */
-        background-image: 
-          radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
-          radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
-          radial-gradient(ellipse at 50% 50%, hsl(180 100% 60% / 0.10), transparent 60%),
-          hsl(240, 100%, 9%) !important;
-        background-attachment: fixed;
-        min-height: 100vh;
-        color: #f9fafb !important; /* gray-50 - világos szöveg */
-      }
-      html.dark, html.dark body, html:not(.dark), html:not(.dark) body {
-        background-color: hsl(240, 100%, 9%) !important;
-        background-image: 
-          radial-gradient(ellipse at 20% 10%, hsl(280 100% 70% / 0.18), transparent 50%),
-          radial-gradient(ellipse at 80% 80%, hsl(340 100% 70% / 0.15), transparent 50%),
-          hsl(240, 100%, 9%) !important;
-      }
-      #root {
-        min-height: 100vh;
-        background-color: hsl(240, 100%, 9%) !important;
-        background-image: none !important;
-      }
-      html.dark #root, html:not(.dark) #root {
-        background-color: hsl(240, 100%, 9%) !important;
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-    </style>
-    <script>
-      // Force dark mode immediately before DOM loads
-      if (!document.documentElement.classList.contains('dark')) {
-        document.documentElement.classList.add('dark');
-      }
-      if (localStorage.getItem('theme') !== 'dark') {
-        localStorage.setItem('theme', 'dark');
-      }
-    </script>
-    
+
     <!-- Primary Meta Tags -->
-    <title>Anyagok Profiknak - HTML Oktat\u00f3anyagok Platform</title>
-    <meta name="title" content="Anyagok Profiknak - HTML Oktat\u00f3anyagok Platform">
-    <meta name="description" content="Professzion\u00e1lis platform HTML oktat\u00f3anyagok felt\u00f6lt\u00e9s\u00e9re \u00e9s megosztására. Int\u00e9zm\u00e9nyi platform biztons\u00e1gos tan\u00e9s okt anyagok mutatására.">
-    <meta name="keywords" content="HTML oktat\u00f3anyag, HTML oktatás, t\u00e1voktat\u00e1s, digit\u00e1lis t\u00e1voktat\u00e1s, oktat\u00e1si platform">
-    <meta name="author" content="Anyagok Profiknak">
+    <title>WebSuli - Tananyagok</title>
+    <meta name="title" content="WebSuli - Tananyagok">
+    <meta name="description" content="Interaktív tananyagok általános és középiskolásoknak.">
+    <meta name="keywords" content="tananyag, oktatás, iskola, tanulás">
+    <meta name="author" content="WebSuli">
     <meta name="robots" content="index, follow">
-    
+
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://websuli.org/">
-    <meta property="og:title" content="Anyagok Profiknak - HTML Oktat\u00f3anyagok Platform">
-    <meta property="og:description" content="Professzion\u00e1lis platform HTML oktat\u00f3anyagok felt\u00f6lt\u00e9s\u00e9re \u00e9s megosztására.">
-    <meta property="og:image" content="https://websuli.org/og-image.png">
-    <meta property="og:site_name" content="Anyagok Profiknak">
+    <meta property="og:url" content="https://websuli.vip/">
+    <meta property="og:title" content="WebSuli - Tananyagok">
+    <meta property="og:description" content="Interaktív tananyagok általános és középiskolásoknak.">
+    <meta property="og:site_name" content="WebSuli">
     <meta property="og:locale" content="hu_HU">
-    
+
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://websuli.org/">
-    <meta property="twitter:title" content="Anyagok Profiknak - HTML Oktat\u00f3anyagok Platform">
-    <meta property="twitter:description" content="Professzion\u00e1lis platform HTML oktat\u00f3anyagok felt\u00f6lt\u00e9s\u00e9re \u00e9s megosztására.">
-    <meta property="twitter:image" content="https://websuli.org/og-image.png">
-    
+    <meta property="twitter:url" content="https://websuli.vip/">
+    <meta property="twitter:title" content="WebSuli - Tananyagok">
+    <meta property="twitter:description" content="Interaktív tananyagok általános és középiskolásoknak.">
+
     <!-- JSON-LD Structured Data -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "EducationalOrganization",
-      "name": "Anyagok Profiknak",
-      "description": "Professzion\u00e1lis platform HTML oktat\u00f3anyagok felt\u00f6lt\u00e9s\u00e9re \u00e9s megosztására",
-      "url": "https://websuli.org/",
-      "logo": "https://websuli.org/favicon.png",
-      "sameAs": [],
-      "contactPoint": {
-        "@type": "ContactPoint",
-        "email": "kosa.zoltan.ebc@gmail.com",
-        "contactType": "Admin"
-      }
+      "name": "WebSuli",
+      "description": "Interaktív tananyagok általános és középiskolásoknak",
+      "url": "https://websuli.vip/"
     }
     </script>
-    
-    <!-- Modern SVG favicon (vector, sharp on all screens) -->
+
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <!-- Fallback PNG for older browsers -->
     <link rel="alternate icon" type="image/png" href="/favicon.png">
-    
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2563eb">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Anyagok Profiknak">
-    <!-- Apple devices prefer PNG -->
+    <meta name="apple-mobile-web-app-title" content="WebSuli">
     <link rel="apple-touch-icon" href="/favicon.png">
-    
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>
