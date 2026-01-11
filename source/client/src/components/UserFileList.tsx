@@ -11,7 +11,6 @@ import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
-import { GeodesicCardBackground } from "@/components/GeodesicCardBackground";
 
 interface HtmlFileApi {
   id: string;
@@ -30,8 +29,8 @@ interface UserFileListProps {
   onToggleView?: () => void;
 }
 
-// Geodéziai kupola kártya komponens - közvetlen DOM manipulációval
-function GeodesicCard({ 
+// Glassmorphism kártya komponens
+function GlassCard({ 
   fileId, 
   className, 
   children, 
@@ -48,12 +47,9 @@ function GeodesicCard({
   onClick?: () => void;
   [key: string]: any;
 }) {
-  // Nincs useEffect - az SVG háttér közvetlenül a JSX-ben van, garantáltan renderelődik
-
   return (
     <Card
-      ref={cardRef}
-      className={className}
+      className={`glass-card ${className || ''}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onClick={onClick}
@@ -62,26 +58,10 @@ function GeodesicCard({
         position: 'relative',
         overflow: 'hidden',
         borderRadius: '1.5rem',
-        backgroundColor: 'transparent',
-        border: '2px solid hsl(30 100% 60% / 0.4)',
-        boxShadow: `
-          0 15px 50px rgba(0, 0, 0, 0.5),
-          0 0 0 1px hsl(30 100% 50% / 0.3),
-          inset 0 0 80px hsl(30 100% 55% / 0.25),
-          inset 0 0 120px hsl(35 90% 50% / 0.15),
-          inset 0 2px 30px hsl(30 100% 65% / 0.2)
-        `,
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        transition: 'all 300ms ease-out',
-        cursor: 'pointer',
         ...props.style,
       } as React.CSSProperties}
     >
-      <GeodesicCardBackground />
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        {children}
-      </div>
+      {children}
     </Card>
   );
 }
@@ -383,51 +363,18 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               const staggerDelayClass = `stagger-delay-${Math.min(index, 10)}`;
               
               return (
-                <GeodesicCard
+                <GlassCard
                   key={file.id}
                   fileId={file.id}
-                  className={`group cursor-pointer border-0 relative overflow-visible ${staggerDelayClass}`}
-                  onMouseEnter={(e) => {
-                    const card = e.currentTarget;
-                    card.style.setProperty('transform', 'translateY(-8px) scale(1.02)', 'important');
-                    card.style.setProperty('border-color', 'hsl(30 100% 65% / 0.6)', 'important');
-                    card.style.setProperty('box-shadow', `
-                      0 35px 80px hsl(30 100% 55% / 0.5),
-                      0 0 0 3px hsl(30 100% 65% / 0.6),
-                      inset 0 0 120px hsl(30 100% 60% / 0.4),
-                      inset 0 0 180px hsl(35 90% 55% / 0.3),
-                      inset 0 2px 50px hsl(30 100% 70% / 0.4)
-                    `, 'important');
-                  }}
-                  onMouseLeave={(e) => {
-                    const card = e.currentTarget;
-                    card.style.setProperty('transform', 'translateY(0) scale(1)', 'important');
-                    card.style.setProperty('border-color', 'hsl(30 100% 60% / 0.4)', 'important');
-                    card.style.setProperty('box-shadow', `
-                      0 15px 50px rgba(0, 0, 0, 0.5),
-                      0 0 0 1px hsl(30 100% 50% / 0.3),
-                      inset 0 0 80px hsl(30 100% 55% / 0.25),
-                      inset 0 0 120px hsl(35 90% 50% / 0.15),
-                      inset 0 2px 30px hsl(30 100% 65% / 0.2)
-                    `, 'important');
-                  }}
+                  className={`group cursor-pointer fade-in-up ${staggerDelayClass}`}
+                  style={{ animationDelay: `${index * 0.05}s` }}
                   onClick={() => onViewFile(file)}
                   data-testid={`link-file-${file.id}`}
                 >
-                  {/* 🌈 Rainbow gradient border glow on hover */}
-                  <div className={`absolute -inset-1 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-md ${
-                    isGreen ? "bg-gradient-to-r from-green-400 via-green-500 to-emerald-600" :
-                    isCyan ? "bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-600" :
-                    "bg-gradient-to-r from-pink-400 via-purple-500 to-pink-600"
-                  }`}></div>
-                  
                   <CardContent 
-                    className="p-5 sm:p-6 flex flex-col h-full relative rounded-3xl z-10" 
+                    className="p-5 sm:p-6 flex flex-col h-full relative rounded-3xl" 
                     style={{ 
                       backgroundColor: 'transparent',
-                      background: 'none',
-                      position: 'relative',
-                      zIndex: 2,
                     }}
                   >
 
@@ -452,11 +399,18 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                             <span className="absolute -top-2 -right-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity animate-sparkle-twinkle">✨</span>
                         </div>
 
-                        <Badge variant="outline" className={`text-xs font-black px-3 py-1.5 rounded-full comic-arrow-border transition-all group-hover:scale-105 ${
-                          isGreen ? "border-green-400/80 text-green-400 bg-green-400/20 group-hover:bg-green-400/30 group-hover:border-green-400 shadow-lg shadow-green-500/25" :
-                          isCyan ? "border-cyan-400/80 text-cyan-400 bg-cyan-400/20 group-hover:bg-cyan-400/30 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/25" :
-                          "border-pink-400/80 text-pink-400 bg-pink-400/20 group-hover:bg-pink-400/30 group-hover:border-pink-400 shadow-lg shadow-pink-500/25"
-                        }`}>
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs font-black px-3 py-1.5 rounded-full transition-all group-hover:scale-105 text-white border-white/30"
+                          style={{
+                            background: isGreen 
+                              ? 'linear-gradient(135deg, #8B5CF6, #EC4899)'
+                              : isCyan
+                              ? 'linear-gradient(135deg, #F97316, #EAB308)'
+                              : 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+                            boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
+                          }}
+                        >
                             <span className="mr-1 animate-wobble inline-block">{isGreen ? "🟢" : isCyan ? "🔵" : "🩷"}</span>
                             {getClassroomLabel(classroom, true)}
                         </Badge>
@@ -511,15 +465,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                          </div>
                     </div>
                     
-                    {/* 🌈 Decorative corner accent with rainbow gradient */}
-                    <div className={`absolute top-0 right-0 w-20 h-20 opacity-15 group-hover:opacity-30 transition-opacity ${
-                      isGreen ? "bg-gradient-to-br from-green-400 via-emerald-500 to-green-600" :
-                      isCyan ? "bg-gradient-to-br from-cyan-400 via-blue-500 to-cyan-600" :
-                      "bg-gradient-to-br from-pink-400 via-purple-500 to-pink-600"
-                    } rounded-bl-full`}></div>
-
                   </CardContent>
-                </GeodesicCard>
+                </GlassCard>
               );
             })}
           </div>
