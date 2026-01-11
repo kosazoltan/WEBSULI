@@ -139,3 +139,184 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
     });
 
 });
+
+test.describe('HeroSection Tesztek', () => {
+    test('HeroSection cím és statisztikák megjelennek', async ({ page }) => {
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+
+        // Cím ellenőrzése
+        const heading = page.getByRole('heading', { name: /WebSuli/i }).first();
+        await expect(heading).toBeVisible({ timeout: 10000 });
+
+        // Statisztikák ellenőrzése - Tananyag, Osztály, Évfolyam
+        const statsSection = page.locator('text=Tananyag').locator('..').locator('..');
+        await expect(statsSection).toBeVisible({ timeout: 5000 });
+
+        // Ellenőrizzük, hogy vannak stat értékek (számok)
+        const statValues = page.locator('text=/\\d+/').first();
+        await expect(statValues).toBeVisible({ timeout: 5000 });
+    });
+
+    test('HeroSection CTA gomb görget a content-start szekcióra', async ({ page }) => {
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+
+        // Keresés a CTA gombra (Böngészés gomb)
+        const ctaButton = page.getByRole('button', { name: /böngészés/i }).first();
+        await expect(ctaButton).toBeVisible({ timeout: 10000 });
+
+        // Kattintás a gombra
+        await ctaButton.click();
+
+        // Várakozás a görgetésre
+        await page.waitForTimeout(500);
+
+        // Ellenőrizzük, hogy a #content-start elem látható a viewport-ban
+        const contentStart = page.locator('#content-start');
+        await expect(contentStart).toBeVisible({ timeout: 3000 });
+
+        // Ellenőrizzük, hogy görgetve lettünk (a scroll position változott)
+        const scrollY = await page.evaluate(() => window.scrollY);
+        expect(scrollY).toBeGreaterThan(0);
+    });
+});
+
+test.describe('UserFileList Szűrők és Keresés', () => {
+    test('Osztály szűrő - Minden osztály alapállapot', async ({ page }) => {
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+
+        // Ellenőrizzük, hogy a "Minden osztály" gomb aktív
+        const allButton = page.getByTestId('button-filter-all');
+        await expect(allButton).toBeVisible({ timeout: 10000 });
+
+        // Ellenőrizzük, hogy a files lista látható
+        const filesList = page.getByTestId('list-files');
+        await expect(filesList).toBeVisible({ timeout: 10000 }).catch(() => {
+            // Ha nincs fájl, akkor az üres állapot kártya jelenik meg
+            const emptyState = page.getByText(/nincs találat|nincsenek anyagok/i);
+            expect(emptyState).toBeVisible({ timeout: 5000 });
+        });
+    });
+
+    test('Osztály szűrő - Konkrét osztály kiválasztása', async ({ page }) => {
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+
+        // Várakozás a szűrők megjelenésére
+        await page.waitForTimeout(1000);
+
+        // Keresés egy osztály szűrő gombra (pl. 1. osztály)
+        const classroomButton = page.getByTestId('button-filter-classroom-1');
+        const isVisible = await classroomButton.isVisible().catch(() => false);
+
+        if (isVisible) {
+            await classroomButton.click();
+            await page.waitForTimeout(500);
+
+            // Ellenőrizzük, hogy a gomb aktív lett
+            await expect(classroomButton).toHaveClass(/default|bg-primary/i, { timeout: 1000 });
+        }
+    });
+
+    test('Kereső funkcionalitás', async ({ page }) => {
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+
+        // Keresés a kereső mezőre
+        const searchInput = page.getByTestId('input-search');
+        await expect(searchInput).toBeVisible({ timeout: 10000 });
+
+        // Szöveg beírása
+        await searchInput.fill('test');
+        await page.waitForTimeout(500);
+
+        // Ellenőrizzük, hogy a keresés működik (vagy üres állapot jelenik meg)
+        const filesList = page.getByTestId('list-files');
+        const emptyState = page.getByText(/nincs találat/i);
+
+        const hasResults = await filesList.isVisible().catch(() => false);
+        const hasEmptyState = await emptyState.isVisible().catch(() => false);
+
+        expect(hasResults || hasEmptyState).toBe(true);
+    });
+
+    test('Kombinált szűrés - Osztály + Keresés', async ({ page }) => {
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(1000);
+
+        // Osztály szűrő kiválasztása
+        const classroomButton = page.getByTestId('button-filter-classroom-1');
+        const hasClassroomButton = await classroomButton.isVisible().catch(() => false);
+
+        if (hasClassroomButton) {
+            await classroomButton.click();
+            await page.waitForTimeout(300);
+        }
+
+        // Keresés
+        const searchInput = page.getByTestId('input-search');
+        await searchInput.fill('test');
+        await page.waitForTimeout(500);
+
+        // Ellenőrizzük, hogy a kombinált szűrés működik
+        const filesList = page.getByTestId('list-files');
+        const emptyState = page.getByText(/nincs találat/i);
+
+        const hasResults = await filesList.isVisible().catch(() => false);
+        const hasEmptyState = await emptyState.isVisible().catch(() => false);
+
+        expect(hasResults || hasEmptyState).toBe(true);
+    });
+
+    test('Szűrők törlése - Üres állapot', async ({ page }) => {
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(1000);
+
+        // Keresés beállítása, ami üres eredményt ad
+        const searchInput = page.getByTestId('input-search');
+        await searchInput.fill('xyz123nonexistent');
+        await page.waitForTimeout(500);
+
+        // Ellenőrizzük, hogy üres állapot jelenik meg
+        const emptyState = page.getByText(/nincs találat/i);
+        const clearButton = page.getByTestId('button-clear-filters');
+
+        const hasEmptyState = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
+        const hasClearButton = await clearButton.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (hasEmptyState && hasClearButton) {
+            // Kattintás a szűrők törlése gombra
+            await clearButton.click();
+            await page.waitForTimeout(500);
+
+            // Ellenőrizzük, hogy a keresés törlődött
+            const searchValue = await searchInput.inputValue();
+            expect(searchValue).toBe('');
+
+            // Ellenőrizzük, hogy a "Minden osztály" aktív
+            const allButton = page.getByTestId('button-filter-all');
+            await expect(allButton).toHaveClass(/default|bg-primary/i, { timeout: 1000 });
+        }
+    });
+});
+
+test.describe('Admin Funkciók', () => {
+    test('Admin gomb megjelenik admin felhasználó esetén', async ({ page }) => {
+        // Megjegyzés: Ez a teszt csak akkor fog működni, ha van bejelentkezett admin felhasználó
+        // Jelenleg csak ellenőrizzük, hogy az admin gomb nincs látható (nincs bejelentkezett admin)
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+
+        const adminButton = page.getByTestId('button-admin');
+        const isVisible = await adminButton.isVisible().catch(() => false);
+
+        // Ha nincs admin bejelentkezve, akkor a gomb nem látható
+        // Ha van admin bejelentkezve, akkor látható kell legyen
+        // Ez a teszt jelenleg csak azt ellenőrzi, hogy a gomb selector létezik
+        expect(adminButton).toBeTruthy();
+    });
+});

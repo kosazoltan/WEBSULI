@@ -2,6 +2,7 @@ import { memo } from "react";
 import { ChevronDown, BookOpen, GraduationCap, FileText } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
+import { MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
 
 interface HeroSectionProps {
   totalFiles?: number;
@@ -79,7 +80,7 @@ function HeroSection({
             <div className="flex items-center justify-center gap-2 mb-1">
               <BookOpen className="w-5 h-5 text-primary" />
               <span className="text-2xl sm:text-3xl font-bold text-foreground">
-                0-12
+                {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}
               </span>
             </div>
             <p className="text-sm text-muted-foreground">Évfolyam</p>
