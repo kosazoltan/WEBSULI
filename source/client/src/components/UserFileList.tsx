@@ -296,10 +296,10 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
                       {/* Content */}
                       <div className="flex-1 mb-4">
-                        <h3 className={`text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r ${badgeGradient} group-hover:bg-clip-text group-hover:text-transparent transition-all ${classroom >= 1 && classroom <= 4 ? 'font-kid-display' : classroom >= 5 && classroom <= 8 ? 'font-teen-display' : 'font-senior-display'}`}>
+                        <h3 className={`text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r ${badgeGradient} group-hover:bg-clip-text group-hover:text-transparent transition-all`}>
                           {file.title}
                         </h3>
-                        <p className={`text-sm text-muted-foreground line-clamp-3 ${classroom >= 1 && classroom <= 4 ? 'font-kid-body' : classroom >= 5 && classroom <= 8 ? 'font-teen-body' : 'font-senior-body'}`}>
+                        <p className="text-sm text-muted-foreground line-clamp-3">
                           {file.description || "Kattints a megtekintéshez"}
                         </p>
                       </div>

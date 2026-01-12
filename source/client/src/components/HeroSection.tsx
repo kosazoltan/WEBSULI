@@ -48,6 +48,39 @@ function HeroSection({
     },
   };
 
+  // Pre-generated particle positions to avoid Math.random() during render
+  const particles = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    left: ((i * 7.3) % 100), // Deterministic distribution
+    top: ((i * 11.7) % 100),
+    width: 4 + ((i * 2.1) % 8),
+    height: 4 + ((i * 2.1) % 8),
+    delay: (i * 0.2) % 6,
+    duration: 8 + ((i * 1.3) % 12),
+  }));
+
+  // Pre-generated symbol positions
+  const symbols = ['E=mc²', '∑', '∫', 'π', '∇', '∞'];
+  const symbolPositions = symbols.map((symbol, i) => ({
+    symbol,
+    left: 15 + i * 15,
+    top: 20 + (i % 3) * 25,
+    delay: i * 1.5,
+    duration: 10 + i * 2,
+  }));
+
+  // Pre-generated icon positions
+  const iconPositions = [
+    { Icon: BookOpen, delay: 0 },
+    { Icon: Brain, delay: 2 },
+    { Icon: Lightbulb, delay: 4 },
+    { Icon: GraduationCap, delay: 1 },
+  ].map((item, i) => ({
+    ...item,
+    left: 20 + i * 20,
+    top: 30 + (i % 2) * 40,
+  }));
+
   return (
     <div className="relative min-h-[300px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
       {/* Mars-szerű gradient háttér: vörös → narancs → barna */}
@@ -158,7 +191,7 @@ function HeroSection({
         {/* Főcím - gradient szöveg (Mars-szerű) */}
         <motion.h1
           variants={itemVariants}
-          className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 font-teen-display"
+          className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6"
         >
           <span className="bg-gradient-to-r from-red-300 via-orange-300 to-amber-300 bg-clip-text text-transparent drop-shadow-lg">
             Üdvözöl a WebSuli!
@@ -168,7 +201,7 @@ function HeroSection({
         {/* Alcím */}
         <motion.p
           variants={itemVariants}
-          className="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto font-teen-body"
+          className="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto"
         >
           Interaktív tananyagok általános és középiskolásoknak.
           Böngéssz osztályok szerint, és találd meg a neked való anyagokat!
@@ -211,11 +244,11 @@ function HeroSection({
           >
             <div className="flex items-center justify-center gap-2 mb-2">
               <FileText className="w-6 h-6 text-orange-400" />
-              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg font-teen-display">
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
                 {totalFiles}
               </span>
             </div>
-            <p className="text-sm text-white/90 font-teen-body">Tananyag</p>
+            <p className="text-sm text-white/90">Tananyag</p>
           </motion.div>
 
           <motion.div
@@ -225,11 +258,11 @@ function HeroSection({
           >
             <div className="flex items-center justify-center gap-2 mb-2">
               <GraduationCap className="w-6 h-6 text-amber-400" />
-              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg font-teen-display">
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
                 {totalClassrooms}
               </span>
             </div>
-            <p className="text-sm text-white/90 font-teen-body">Osztály</p>
+            <p className="text-sm text-white/90">Osztály</p>
           </motion.div>
 
           <motion.div
@@ -239,11 +272,11 @@ function HeroSection({
           >
             <div className="flex items-center justify-center gap-2 mb-2">
               <BookOpen className="w-6 h-6 text-red-400" />
-              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg font-teen-display">
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
                 {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}
               </span>
             </div>
-            <p className="text-sm text-white/90 font-teen-body">Évfolyam</p>
+            <p className="text-sm text-white/90">Évfolyam</p>
           </motion.div>
         </motion.div>
       </motion.div>
