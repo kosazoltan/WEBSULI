@@ -83,32 +83,48 @@ jobs:
               }
             fi
             
-            # Navigate to project source directory
-            cd /var/www/websuli/source || {
-              echo "❌ Cannot access /var/www/websuli/source directory!"
+            # Navigate to project directory first
+            cd /var/www/websuli || {
+              echo "❌ Cannot access /var/www/websuli directory!"
               exit 1
             }
             
             echo "📂 Current directory: $(pwd)"
             echo "📋 Git status before pull:"
             git status --short || true
+            echo "📋 Current commit: $(git rev-parse HEAD || echo 'unknown')"
+            echo "📋 Remote commit: $(git ls-remote origin main | cut -f1 || echo 'unknown')"
             
-            # Pull latest changes
-            echo "📥 Pulling latest code..."
+            # Configure git if needed
+            git config --global --add safe.directory /var/www/websuli || true
+            
+            # Fetch latest changes from origin
+            echo "📥 Fetching latest code from origin..."
             git fetch origin main || {
               echo "❌ Git fetch failed!"
               exit 1
             }
-            git pull origin main || {
-              echo "⚠️ Git pull had conflicts, attempting to reset..."
-              git reset --hard origin/main || {
-                echo "❌ Git reset failed!"
-                exit 1
-              }
+            
+            # Reset to match remote exactly (force update)
+            echo "🔄 Resetting to origin/main..."
+            git reset --hard origin/main || {
+              echo "❌ Git reset failed!"
+              exit 1
             }
             
-            echo "📋 Git status after pull:"
+            # Clean untracked files
+            echo "🧹 Cleaning untracked files..."
+            git clean -fd || true
+            
+            echo "📋 Git status after update:"
             git log --oneline -3
+            echo "📋 Current commit after update: $(git rev-parse HEAD)"
+            
+            # Navigate to source directory
+            cd /var/www/websuli/source || {
+              echo "❌ Cannot access /var/www/websuli/source directory!"
+              exit 1
+            }
             
             # Check Node.js and npm
             if ! command -v node &> /dev/null; then
