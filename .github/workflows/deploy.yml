@@ -34,6 +34,22 @@ jobs:
         working-directory: ./source
         run: npm run build
       
+      - name: Validate secrets
+        run: |
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "❌ Error: VPS_HOST secret is missing!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_USERNAME }}" ]; then
+            echo "❌ Error: VPS_USERNAME secret is missing!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "❌ Error: VPS_SSH_KEY secret is missing!"
+            exit 1
+          fi
+          echo "✅ All secrets are present"
+      
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -41,27 +57,76 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
+          timeout: 300s
+          debug: true
           script: |
+            set -e  # Exit on any error
+            set -x  # Debug mode - show all commands
+            
             echo "🚀 Starting deployment..."
+            echo "📋 Environment check:"
+            echo "  - Host: $(hostname)"
+            echo "  - User: $(whoami)"
+            echo "  - Date: $(date)"
+            echo "  - Node version: $(node --version || echo 'Node.js not found')"
+            echo "  - NPM version: $(npm --version || echo 'NPM not found')"
+            echo "  - PM2 version: $(pm2 --version || echo 'PM2 not found')"
             
             # Check if project directory exists, if not clone it
             if [ ! -d "/var/www/websuli" ]; then
               echo "📦 Cloning repository..."
               mkdir -p /var/www
               cd /var/www
-              git clone https://github.com/kosazoltan/WEBSULI.git websuli
+              git clone https://github.com/kosazoltan/WEBSULI.git websuli || {
+                echo "❌ Git clone failed!"
+                exit 1
+              }
             fi
             
             # Navigate to project source directory
-            cd /var/www/websuli/source
+            cd /var/www/websuli/source || {
+              echo "❌ Cannot access /var/www/websuli/source directory!"
+              exit 1
+            }
+            
+            echo "📂 Current directory: $(pwd)"
+            echo "📋 Git status before pull:"
+            git status --short || true
             
             # Pull latest changes
             echo "📥 Pulling latest code..."
-            git pull origin main
+            git fetch origin main || {
+              echo "❌ Git fetch failed!"
+              exit 1
+            }
+            git pull origin main || {
+              echo "⚠️ Git pull had conflicts, attempting to reset..."
+              git reset --hard origin/main || {
+                echo "❌ Git reset failed!"
+                exit 1
+              }
+            }
+            
+            echo "📋 Git status after pull:"
+            git log --oneline -3
+            
+            # Check Node.js and npm
+            if ! command -v node &> /dev/null; then
+              echo "❌ Node.js is not installed!"
+              exit 1
+            fi
+            
+            if ! command -v npm &> /dev/null; then
+              echo "❌ NPM is not installed!"
+              exit 1
+            fi
             
             # Install dependencies
             echo "📦 Installing dependencies..."
-            npm install
+            npm ci || npm install || {
+              echo "❌ npm install failed!"
+              exit 1
+            }
             
             # Clean previous build
             echo "🧹 Cleaning previous build..."
@@ -70,7 +135,12 @@ jobs:
             
             # Build the application
             echo "🔨 Building application..."
-            npm run build
+            npm run build || {
+              echo "❌ Build failed!"
+              echo "📋 Build error details:"
+              cat package.json | grep -A 5 '"scripts"' || true
+              exit 1
+            }
             
             # Verify build output exists
             if [ ! -d "dist" ]; then
@@ -78,35 +148,66 @@ jobs:
               exit 1
             fi
             
+            if [ ! -d "dist/public" ]; then
+              echo "❌ Build failed - dist/public directory not found!"
+              exit 1
+            fi
+            
             echo "✅ Build completed successfully!"
-            ls -la dist/public/assets/ | head -10
+            echo "📋 Build output:"
+            ls -lah dist/public/ | head -10
+            ls -lah dist/public/assets/ | head -10 || echo "⚠️ No assets directory found"
             
             # Run database migrations if needed
             echo "🗄️ Running database migrations..."
-            npm run db:push || true
+            npm run db:push || {
+              echo "⚠️ Database migration failed (non-critical, continuing...)"
+            }
             
-            # Force restart application with PM2 (use fork mode, not cluster)
-            echo "♻️ Force restarting application..."
-            pm2 delete websuli 2>/dev/null || true
+            # Force restart application with PM2
+            echo "♻️ Restarting application with PM2..."
+            
+            # Stop existing process if running
+            pm2 delete websuli 2>/dev/null || echo "No existing PM2 process found"
             sleep 2
-            pm2 start deploy/ecosystem.config.cjs --name websuli --update-env
+            
+            # Start application
+            if [ ! -f "deploy/ecosystem.config.cjs" ]; then
+              echo "❌ PM2 ecosystem config not found at deploy/ecosystem.config.cjs!"
+              exit 1
+            fi
+            
+            pm2 start deploy/ecosystem.config.cjs --name websuli --update-env || {
+              echo "❌ PM2 start failed!"
+              echo "📋 PM2 error log:"
+              pm2 logs websuli --lines 20 --nostream || true
+              exit 1
+            }
             
             # Wait for app to start
-            sleep 3
+            echo "⏳ Waiting for application to start..."
+            sleep 5
             
             # Check if app is running
             if pm2 list | grep -q "websuli.*online"; then
               echo "✅ Application is running!"
+              pm2 list
             else
               echo "❌ Application failed to start!"
-              pm2 logs websuli --lines 50
+              echo "📋 PM2 status:"
+              pm2 list
+              echo "📋 PM2 logs (last 50 lines):"
+              pm2 logs websuli --lines 50 --nostream || true
               exit 1
             fi
             
             # Save PM2 process list
-            pm2 save
+            pm2 save || echo "⚠️ PM2 save failed (non-critical)"
             
             echo "✅ Deployment completed successfully!"
+            echo "📋 Final PM2 status:"
+            pm2 list
+            echo "🌐 Application should be accessible now!"
       
       - name: Deployment notification
         if: always()
