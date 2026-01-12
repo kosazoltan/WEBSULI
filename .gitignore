@@ -6,3 +6,7 @@ source/backups/
 *.log
 .gemini/
 .agent/
+
+# MCP Config (contains API tokens - NEVER commit!)
+MCP-CONFIG-EXAMPLE.json
+*.mcp-config.json
