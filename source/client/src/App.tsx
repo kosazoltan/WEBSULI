@@ -49,7 +49,7 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <div className="min-h-screen bg-background">
+          <div className="min-h-screen">
             <Toaster />
             <Router />
           </div>
