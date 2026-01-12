@@ -83,23 +83,27 @@ function HeroSection({
 
   return (
     <div className="relative min-h-[500px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
-      {/* Copernican solar system háttérkép - LEGALUL */}
+      {/* Copernican solar system háttérkép - LEGALUL - NEM TAKARJÁK EL */}
       <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage: 'url("/copernican-hero-bg.jpg")',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
+          zIndex: 0,
         }}
       />
       
       {/* Sötét overlay a szöveg olvashatóságáért */}
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-[0.5px] z-[1]" />
+      <div 
+        className="absolute inset-0 bg-black/30 backdrop-blur-[0.5px]"
+        style={{ zIndex: 1 }}
+      />
       
       {/* Homokos/köves textúra overlay - ELTÁVOLÍTVA, mert eltakarja a képet */}
       
       {/* Animált részecskék háttér - molekulák és atomok */}
-      <div className="absolute inset-0 opacity-20 z-[2]">
+      <div className="absolute inset-0 opacity-20" style={{ zIndex: 2 }}>
         {particles.map((particle) => (
           <div
             key={particle.id}
@@ -134,7 +138,7 @@ function HeroSection({
       </div>
 
       {/* Geometriai minták - SVG */}
-      <svg className="absolute inset-0 w-full h-full opacity-10 z-[2]" aria-hidden="true">
+      <svg className="absolute inset-0 w-full h-full opacity-10" style={{ zIndex: 2 }} aria-hidden="true">
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
             <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
@@ -148,7 +152,7 @@ function HeroSection({
       </svg>
 
       {/* Lebegő matematikai szimbólumok - finoman animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[3]">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 3 }}>
         {symbolPositions.map((pos, i) => (
           <motion.div
             key={i}
@@ -176,7 +180,7 @@ function HeroSection({
       </div>
 
       {/* Oktatási ikonok - elszórva és animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[3]">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 3 }}>
         {iconPositions.map(({ Icon, delay, left, top }, i) => (
           <motion.div
             key={i}
@@ -204,7 +208,8 @@ function HeroSection({
 
       {/* Főtartalom */}
       <motion.div
-        className="relative z-10 max-w-4xl mx-auto px-4 py-8 text-center"
+        className="relative max-w-4xl mx-auto px-4 py-8 text-center"
+        style={{ zIndex: 10, position: 'relative' }}
         variants={containerVariants}
         initial="hidden"
         animate="visible"
