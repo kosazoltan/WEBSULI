@@ -23,9 +23,36 @@ function HeroSection({
   };
 
   return (
-    <div className="relative min-h-[600px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
+    <div className="relative min-h-[300px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
       {/* Mars-szerű gradient háttér: vörös → narancs → barna */}
       <div className="absolute inset-0 bg-gradient-to-br from-red-950 via-orange-950 to-amber-950" />
+      
+      {/* Homokos/köves textúra overlay */}
+      <div 
+        className="absolute inset-0 opacity-30 mix-blend-overlay"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 20% 50%, rgba(139, 69, 19, 0.3) 0%, transparent 50%),
+            radial-gradient(circle at 80% 80%, rgba(160, 82, 45, 0.3) 0%, transparent 50%),
+            radial-gradient(circle at 40% 20%, rgba(101, 67, 33, 0.2) 0%, transparent 50%),
+            repeating-linear-gradient(
+              90deg,
+              transparent,
+              transparent 2px,
+              rgba(139, 69, 19, 0.03) 2px,
+              rgba(139, 69, 19, 0.03) 4px
+            ),
+            repeating-linear-gradient(
+              0deg,
+              transparent,
+              transparent 2px,
+              rgba(160, 82, 45, 0.03) 2px,
+              rgba(160, 82, 45, 0.03) 4px
+            )
+          `,
+          backgroundSize: '100% 100%, 100% 100%, 100% 100%, 20px 20px, 20px 20px'
+        }}
+      />
       
       {/* Animált részecskék háttér - CSS alapú */}
       <div className="absolute inset-0 opacity-20">
