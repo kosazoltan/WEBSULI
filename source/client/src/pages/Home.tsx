@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import Header from "@/components/Header";
 import UserFileList from "@/components/UserFileList";
+import CosmicBackground from "@/components/CosmicBackground";
 
 interface HtmlFileApi {
   id: string;
@@ -32,9 +33,12 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Kopernikuszi naprendszer háttér */}
+      <CosmicBackground />
+      
       <Header />
-      <main className="pt-16">
+      <main className="pt-16 relative z-10">
         <UserFileList
           files={files}
           isLoading={isLoading}

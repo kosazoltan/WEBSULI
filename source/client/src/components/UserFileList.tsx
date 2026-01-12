@@ -111,8 +111,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container py-16 text-center">
+      <div className="min-h-screen bg-background relative">
+        <div className="container py-16 text-center relative z-10">
           <div className="animate-pulse space-y-4">
             <div className="h-8 w-48 bg-muted rounded mx-auto" />
             <div className="h-4 w-32 bg-muted rounded mx-auto" />
@@ -124,8 +124,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
   if (files.length === 0) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container py-12">
+      <div className="min-h-screen bg-background relative">
+        <div className="container py-12 relative z-10">
           {onToggleView && (
             <div className="flex justify-end mb-6">
               <Button onClick={onToggleView} variant="outline" data-testid="button-toggle-admin-view">
@@ -154,8 +154,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container py-6">
+    <div className="min-h-screen bg-background relative">
+      <div className="container py-6 relative z-10">
         {/* Admin Toggle */}
         {onToggleView && (
           <div className="flex justify-end mb-4">
