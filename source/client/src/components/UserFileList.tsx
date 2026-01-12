@@ -249,24 +249,25 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               let iconBg = "from-orange-600/30 to-amber-600/30";
               let iconBorder = "border-orange-500/30";
               
+              // Új színpaletta: elsődleges és másodlagos gradient-ek
               if (classroom >= 1 && classroom <= 4) {
-                // Kid theme - korall-türkiz
+                // Kid theme - vibráló gradient-ek
                 themeClasses = "rounded-3xl";
-                badgeGradient = "from-[#FF6B6B] to-[#4ECDC4]";
-                iconBg = "from-[#FF6B6B]/30 to-[#4ECDC4]/30";
-                iconBorder = "border-[#FF6B6B]/30";
+                badgeGradient = "from-[#8B5CF6] to-[#EC4899]";
+                iconBg = "from-[#8B5CF6]/20 to-[#EC4899]/20";
+                iconBorder = "border-[#8B5CF6]/40";
               } else if (classroom >= 5 && classroom <= 8) {
-                // Teen theme - lila-türkiz
+                // Teen theme - elsődleges gradient
                 themeClasses = "rounded-2xl";
-                badgeGradient = "from-[#8B5CF6] to-[#06B6D4]";
-                iconBg = "from-[#8B5CF6]/30 to-[#06B6D4]/30";
-                iconBorder = "border-[#8B5CF6]/30";
+                badgeGradient = "from-[#8B5CF6] via-[#EC4899] to-[#F97316]";
+                iconBg = "from-[#8B5CF6]/20 via-[#EC4899]/20 to-[#F97316]/20";
+                iconBorder = "border-[#EC4899]/40";
               } else {
-                // Senior theme - kék-indigo
+                // Senior theme - másodlagos gradient
                 themeClasses = "rounded-xl";
-                badgeGradient = "from-[#3B82F6] to-[#8B5CF6]";
-                iconBg = "from-[#3B82F6]/30 to-[#8B5CF6]/30";
-                iconBorder = "border-[#3B82F6]/30";
+                badgeGradient = "from-[#F97316] to-[#EAB308]";
+                iconBg = "from-[#F97316]/20 to-[#EAB308]/20";
+                iconBorder = "border-[#F97316]/40";
               }
 
               return (
@@ -276,19 +277,23 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                   whileHover="hover"
                   className={gridClasses}
                 >
-                  <Card
-                    className={`group cursor-pointer glass-card h-full ${themeClasses}`}
-                    onClick={() => onViewFile(file)}
-                    data-testid={`link-file-${file.id}`}
+                  <motion.div
+                    whileHover={{ scale: 1.03, y: -5 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   >
+                    <Card
+                      className={`group cursor-pointer glass-card h-full ${themeClasses}`}
+                      onClick={() => onViewFile(file)}
+                      data-testid={`link-file-${file.id}`}
+                    >
                     <CardContent className="p-5 flex flex-col h-full">
                       {/* Header */}
                       <div className="flex justify-between items-start mb-4">
-                        <div className={`p-3 rounded-xl bg-gradient-to-br ${iconBg} backdrop-blur-sm border ${iconBorder} shadow-lg`}>
+                        <div className={`p-3 rounded-xl bg-gradient-to-br ${iconBg} backdrop-blur-md border-2 ${iconBorder} shadow-xl transition-all group-hover:scale-110`}>
                           <Icon className="w-6 h-6 text-white drop-shadow-lg" />
                         </div>
                         <Badge 
-                          className={`text-xs font-semibold bg-gradient-to-r ${badgeGradient} text-white shadow-md`}
+                          className={`text-xs font-bold bg-gradient-to-r ${badgeGradient} text-white shadow-lg border-0 px-3 py-1`}
                         >
                           {getClassroomLabel(classroom, true)}
                         </Badge>
@@ -319,7 +324,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                         </motion.div>
                       </div>
                     </CardContent>
-                  </Card>
+                    </Card>
+                  </motion.div>
                 </motion.div>
               );
             })}
