@@ -85,17 +85,14 @@ function HeroSection({
     <div className="relative min-h-[500px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
       {/* Copernican solar system háttérkép */}
       <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
         style={{
           backgroundImage: 'url("/copernican-hero-bg.jpg")',
         }}
       />
       
       {/* Sötét overlay a szöveg olvashatóságáért */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
-      
-      {/* Finom gradient overlay a kép fokozatos elhalványításához */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/30" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] z-[1]" />
       
       {/* Homokos/köves textúra overlay */}
       <div 
