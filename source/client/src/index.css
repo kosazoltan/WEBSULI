@@ -185,15 +185,7 @@
 /* Glassmorphism kártyák - méhsejt háttérrel - 50% átlátszóság */
 .glass-card {
   background: 
-    linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.3) 100%),
-    repeating-conic-gradient(
-      from 0deg at 50% 50%,
-      transparent 0deg,
-      rgba(251, 146, 60, 0.1) 60deg,
-      transparent 60deg,
-      rgba(234, 179, 8, 0.1) 120deg,
-      transparent 120deg
-    ) !important;
+    linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.3) 100%) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(251, 146, 60, 0.5) !important;
@@ -215,24 +207,39 @@
   width: 200%;
   height: 200%;
   background: 
+    /* Méhsejt hatszög mintázat - erősebb */
     repeating-linear-gradient(
       30deg,
       transparent,
+      transparent 28px,
+      rgba(251, 146, 60, 0.15) 28px,
+      rgba(251, 146, 60, 0.15) 30px,
       transparent 30px,
-      rgba(251, 146, 60, 0.05) 30px,
-      rgba(251, 146, 60, 0.05) 31px
+      transparent 58px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
+      transparent 28px,
+      rgba(234, 179, 8, 0.15) 28px,
+      rgba(234, 179, 8, 0.15) 30px,
       transparent 30px,
-      rgba(234, 179, 8, 0.05) 30px,
-      rgba(234, 179, 8, 0.05) 31px
+      transparent 58px
+    ),
+    repeating-linear-gradient(
+      150deg,
+      transparent,
+      transparent 28px,
+      rgba(245, 158, 11, 0.12) 28px,
+      rgba(245, 158, 11, 0.12) 30px,
+      transparent 30px,
+      transparent 58px
     );
-  background-size: 60px 60px;
-  animation: honeycomb-shift 15s linear infinite;
+  background-size: 60px 60px, 60px 60px, 60px 60px;
+  animation: honeycomb-shift 20s linear infinite;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.8;
+  z-index: 0;
 }
 
 .glass-card:hover {
