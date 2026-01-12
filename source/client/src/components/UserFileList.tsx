@@ -250,23 +250,23 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               let iconBorder = "border-orange-500/30";
               
               if (classroom >= 1 && classroom <= 4) {
-                // Kid theme
+                // Kid theme - korall-türkiz
                 themeClasses = "rounded-3xl";
-                badgeGradient = "from-kid-primary to-kid-secondary";
-                iconBg = "from-kid-primary/30 to-kid-secondary/30";
-                iconBorder = "border-kid-primary/30";
+                badgeGradient = "from-[#FF6B6B] to-[#4ECDC4]";
+                iconBg = "from-[#FF6B6B]/30 to-[#4ECDC4]/30";
+                iconBorder = "border-[#FF6B6B]/30";
               } else if (classroom >= 5 && classroom <= 8) {
-                // Teen theme
+                // Teen theme - lila-türkiz
                 themeClasses = "rounded-2xl";
-                badgeGradient = "from-teen-primary to-teen-secondary";
-                iconBg = "from-teen-primary/30 to-teen-secondary/30";
-                iconBorder = "border-teen-primary/30";
+                badgeGradient = "from-[#8B5CF6] to-[#06B6D4]";
+                iconBg = "from-[#8B5CF6]/30 to-[#06B6D4]/30";
+                iconBorder = "border-[#8B5CF6]/30";
               } else {
-                // Senior theme
+                // Senior theme - kék-indigo
                 themeClasses = "rounded-xl";
-                badgeGradient = "from-senior-primary to-senior-secondary";
-                iconBg = "from-senior-primary/30 to-senior-secondary/30";
-                iconBorder = "border-senior-primary/30";
+                badgeGradient = "from-[#3B82F6] to-[#8B5CF6]";
+                iconBg = "from-[#3B82F6]/30 to-[#8B5CF6]/30";
+                iconBorder = "border-[#3B82F6]/30";
               }
 
               return (

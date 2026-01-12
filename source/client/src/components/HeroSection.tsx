@@ -85,17 +85,17 @@ function HeroSection({
       
       {/* Animált részecskék háttér - CSS alapú */}
       <div className="absolute inset-0 opacity-20">
-        {[...Array(30)].map((_, i) => (
+        {particles.map((particle) => (
           <div
-            key={i}
+            key={particle.id}
             className="absolute rounded-full bg-white animate-float-symbol"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              width: `${4 + Math.random() * 8}px`,
-              height: `${4 + Math.random() * 8}px`,
-              animationDelay: `${Math.random() * 6}s`,
-              animationDuration: `${8 + Math.random() * 12}s`,
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
+              width: `${particle.width}px`,
+              height: `${particle.height}px`,
+              animationDelay: `${particle.delay}s`,
+              animationDuration: `${particle.duration}s`,
             }}
           />
         ))}
@@ -117,36 +117,31 @@ function HeroSection({
 
       {/* Lebegő matematikai szimbólumok */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {['E=mc²', '∑', '∫', 'π', '∇', '∞'].map((symbol, i) => (
+        {symbolPositions.map((pos, i) => (
           <div
             key={i}
             className="absolute text-white/20 text-4xl font-bold animate-float-symbol"
             style={{
-              left: `${15 + i * 15}%`,
-              top: `${20 + (i % 3) * 25}%`,
-              animationDelay: `${i * 1.5}s`,
-              animationDuration: `${10 + i * 2}s`,
+              left: `${pos.left}%`,
+              top: `${pos.top}%`,
+              animationDelay: `${pos.delay}s`,
+              animationDuration: `${pos.duration}s`,
             }}
           >
-            {symbol}
+            {pos.symbol}
           </div>
         ))}
       </div>
 
       {/* Oktatási ikonok - elszórva */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[
-          { Icon: BookOpen, delay: 0 },
-          { Icon: Brain, delay: 2 },
-          { Icon: Lightbulb, delay: 4 },
-          { Icon: GraduationCap, delay: 1 },
-        ].map(({ Icon, delay }, i) => (
+        {iconPositions.map(({ Icon, delay, left, top }, i) => (
           <Icon
             key={i}
             className="absolute text-white/15 w-12 h-12 animate-float-icon"
             style={{
-              left: `${20 + i * 20}%`,
-              top: `${30 + (i % 2) * 40}%`,
+              left: `${left}%`,
+              top: `${top}%`,
               animationDelay: `${delay}s`,
             }}
           />
