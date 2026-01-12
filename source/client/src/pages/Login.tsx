@@ -52,24 +52,24 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center flex-col gap-4 relative overflow-hidden p-4">
+        <div className="min-h-screen flex items-center justify-center flex-col gap-4 relative overflow-hidden p-4 bg-background">
             {/* Background Decorative Elements */}
-            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse-glow -z-10" />
-            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-float -z-10" />
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl -z-10" />
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl -z-10" />
 
-            <Card className="w-full max-w-md glass-panel border-white/10">
+            <Card className="w-full max-w-md bg-card/95 backdrop-blur-sm border-border shadow-2xl">
                 <CardHeader className="space-y-1">
-                    <CardTitle className="text-3xl font-black text-center text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 drop-shadow-sm">
+                    <CardTitle className="text-3xl font-bold text-center text-foreground">
                         Admin Zóna
                     </CardTitle>
-                    <CardDescription className="text-center text-slate-300">
+                    <CardDescription className="text-center text-muted-foreground">
                         Lépj be a parancsnoki hídra
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="email" className="text-slate-200">Email cím</Label>
+                            <Label htmlFor="email" className="text-foreground font-semibold">Email cím</Label>
                             <Input
                                 id="email"
                                 type="email"
@@ -77,35 +77,35 @@ export default function Login() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                className="bg-slate-900/50 border-white/10 focus:border-cyan-400/50 text-slate-100 placeholder:text-slate-500"
+                                className="bg-background text-foreground border-border focus-visible:ring-ring"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="password" className="text-slate-200">Jelszó</Label>
+                            <Label htmlFor="password" className="text-foreground font-semibold">Jelszó</Label>
                             <Input
                                 id="password"
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                className="bg-slate-900/50 border-white/10 focus:border-cyan-400/50 text-slate-100"
+                                className="bg-background text-foreground border-border focus-visible:ring-ring"
                             />
                         </div>
-                        <Button type="submit" className="w-full text-lg h-12 shadow-cyan-500/20 font-bold" disabled={isLoading}>
+                        <Button type="submit" className="w-full text-lg h-12 font-bold" disabled={isLoading}>
                             {isLoading ? "Azonosítás..." : "Belépés"}
                         </Button>
                     </form>
 
                     <div className="relative my-6">
                         <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-white/10" />
+                            <span className="w-full border-t border-border" />
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-slate-900/80 px-2 text-slate-400 backdrop-blur-sm rounded-full">Vagy</span>
+                            <span className="bg-card px-3 py-1 text-muted-foreground font-semibold rounded-full border border-border">Vagy</span>
                         </div>
                     </div>
 
-                    <Button variant="outline" className="w-full border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white" onClick={() => window.location.href = "/auth/google"}>
+                    <Button variant="outline" className="w-full border-border bg-background hover:bg-accent text-foreground" onClick={() => window.location.href = "/auth/google"}>
                         <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-label="Google logo" role="img">
                             <path
                                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -129,7 +129,7 @@ export default function Login() {
                 </CardContent>
             </Card>
 
-            <Button variant="ghost" onClick={() => setLocation("/")} className="text-slate-400 hover:text-cyan-400 hover:bg-transparent">
+            <Button variant="ghost" onClick={() => setLocation("/")} className="text-foreground hover:text-primary hover:bg-transparent">
                 Vissza a főoldalra
             </Button>
         </div>
