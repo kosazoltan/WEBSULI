@@ -59,14 +59,14 @@ function HeroSection({
     duration: 8 + ((i * 1.3) % 12),
   }));
 
-  // Pre-generated symbol positions
-  const symbols = ['E=mc²', '∑', '∫', 'π', '∇', '∞'];
+  // Pre-generated symbol positions - több matematikai szimbólum
+  const symbols = ['E=mc²', '∑', '∫', 'π', '∇', '∞', 'Ω', 'Δ', 'Φ', 'α', 'β', 'γ'];
   const symbolPositions = symbols.map((symbol, i) => ({
     symbol,
-    left: 15 + i * 15,
-    top: 20 + (i % 3) * 25,
-    delay: i * 1.5,
-    duration: 10 + i * 2,
+    left: 10 + (i * 7.5) % 90,
+    top: 15 + (i % 4) * 20,
+    delay: i * 1.2,
+    duration: 12 + (i % 4) * 2,
   }));
 
   // Pre-generated icon positions
