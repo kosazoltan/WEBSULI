@@ -83,6 +83,18 @@ function HeroSection({
 
   return (
     <div className="relative min-h-[500px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
+      {/* Gemini fénykép háttér - 80% átlátszóság */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url("/gemini-hero-bg.jpg")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          opacity: 0.8,
+          zIndex: 0,
+        }}
+      />
+      
       {/* Sötét overlay a szöveg olvashatóságáért */}
       <div 
         className="absolute inset-0 bg-black/20 backdrop-blur-[0.5px]"
