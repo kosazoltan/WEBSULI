@@ -83,46 +83,23 @@ function HeroSection({
 
   return (
     <div className="relative min-h-[500px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
-      {/* Copernican solar system háttérkép */}
+      {/* Copernican solar system háttérkép - LEGALUL */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
         style={{
           backgroundImage: 'url("/copernican-hero-bg.jpg")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}
       />
       
       {/* Sötét overlay a szöveg olvashatóságáért */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] z-[1]" />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[0.5px] z-[1]" />
       
-      {/* Homokos/köves textúra overlay */}
-      <div 
-        className="absolute inset-0 opacity-20 mix-blend-overlay"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 20% 50%, rgba(139, 69, 19, 0.3) 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, rgba(160, 82, 45, 0.3) 0%, transparent 50%),
-            radial-gradient(circle at 40% 20%, rgba(101, 67, 33, 0.2) 0%, transparent 50%),
-            repeating-linear-gradient(
-              90deg,
-              transparent,
-              transparent 2px,
-              rgba(139, 69, 19, 0.03) 2px,
-              rgba(139, 69, 19, 0.03) 4px
-            ),
-            repeating-linear-gradient(
-              0deg,
-              transparent,
-              transparent 2px,
-              rgba(160, 82, 45, 0.03) 2px,
-              rgba(160, 82, 45, 0.03) 4px
-            )
-          `,
-          backgroundSize: '100% 100%, 100% 100%, 100% 100%, 20px 20px, 20px 20px'
-        }}
-      />
+      {/* Homokos/köves textúra overlay - ELTÁVOLÍTVA, mert eltakarja a képet */}
       
       {/* Animált részecskék háttér - molekulák és atomok */}
-      <div className="absolute inset-0 opacity-30">
+      <div className="absolute inset-0 opacity-20 z-[2]">
         {particles.map((particle) => (
           <div
             key={particle.id}
@@ -157,7 +134,7 @@ function HeroSection({
       </div>
 
       {/* Geometriai minták - SVG */}
-      <svg className="absolute inset-0 w-full h-full opacity-10" aria-hidden="true">
+      <svg className="absolute inset-0 w-full h-full opacity-10 z-[2]" aria-hidden="true">
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
             <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
@@ -171,7 +148,7 @@ function HeroSection({
       </svg>
 
       {/* Lebegő matematikai szimbólumok - finoman animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[3]">
         {symbolPositions.map((pos, i) => (
           <motion.div
             key={i}
@@ -199,7 +176,7 @@ function HeroSection({
       </div>
 
       {/* Oktatási ikonok - elszórva és animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[3]">
         {iconPositions.map(({ Icon, delay, left, top }, i) => (
           <motion.div
             key={i}

@@ -3,20 +3,71 @@
 # Run this script directly on the VPS via SSH
 
 set -e  # Exit on error
+set -x  # Debug mode
 
 echo "🚀 Starting direct VPS deployment..."
 
-# Navigate to project directory
-cd /var/www/websuli/source || {
-    echo "❌ Error: /var/www/websuli/source directory not found!"
-    echo "Please make sure the project is cloned to /var/www/websuli"
+# Navigate to project directory first
+cd /var/www/websuli || {
+    echo "❌ Error: /var/www/websuli directory not found!"
     exit 1
 }
 
-# Pull latest changes
-echo "📥 Pulling latest code from GitHub..."
-git pull origin main || {
-    echo "❌ Error: Git pull failed!"
+echo "📂 Current directory: $(pwd)"
+echo "📋 Git status before update:"
+git status --short || true
+echo "📋 Current commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+
+# Configure git
+git config --global --add safe.directory /var/www/websuli 2>/dev/null || true
+git config user.name "Deployment Script" || true
+git config user.email "deploy@websuli.vip" || true
+
+# Check and set remote origin
+if ! git remote | grep -q "^origin$"; then
+    echo "📝 Adding remote origin..."
+    git remote add origin https://github.com/kosazoltan/WEBSULI.git
+else
+    echo "✅ Remote origin exists, updating URL..."
+    git remote set-url origin https://github.com/kosazoltan/WEBSULI.git
+fi
+
+# Fetch latest changes
+echo "📥 Fetching latest code from GitHub..."
+git fetch origin || {
+    echo "❌ Git fetch failed!"
+    exit 1
+}
+
+# Checkout main branch if not already on it
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "🔄 Switching to main branch..."
+    git checkout -B main origin/main 2>/dev/null || git checkout main || {
+        git checkout -b main origin/main || exit 1
+    }
+fi
+
+# Set upstream tracking
+git branch --set-upstream-to=origin/main main 2>/dev/null || true
+
+# Reset to match remote exactly
+echo "🔄 Resetting to origin/main..."
+git reset --hard origin/main || {
+    echo "❌ Git reset failed!"
+    exit 1
+}
+
+# Clean untracked files
+git clean -fd || true
+
+echo "📋 Git status after update:"
+git log --oneline -3
+echo "📋 Current commit after update: $(git rev-parse HEAD)"
+
+# Navigate to source directory
+cd /var/www/websuli/source || {
+    echo "❌ Error: /var/www/websuli/source directory not found!"
     exit 1
 }
 
