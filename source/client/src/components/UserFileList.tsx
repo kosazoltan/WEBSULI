@@ -195,9 +195,13 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                 <Badge
                   key={classroom}
                   variant={selectedClassroom === classroom ? "default" : "outline"}
-                  className={`cursor-pointer text-sm py-1 px-3 ${
-                    !hasFiles ? "opacity-50 cursor-not-allowed" : "hover:bg-primary/10"
-                  }`}
+                  className={`cursor-pointer text-sm py-2 px-4 font-semibold backdrop-blur-sm ${
+                    selectedClassroom === classroom
+                      ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-lg"
+                      : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
+                  } ${
+                    !hasFiles ? "opacity-50 cursor-not-allowed" : ""
+                  } transition-all duration-200`}
                   onClick={() => (hasFiles ? setSelectedClassroom(classroom) : null)}
                   data-testid={`button-filter-classroom-${classroom}`}
                 >
