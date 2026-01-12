@@ -90,35 +90,109 @@ jobs:
             }
             
             echo "📂 Current directory: $(pwd)"
-            echo "📋 Git status before pull:"
-            git status --short || true
-            echo "📋 Current commit: $(git rev-parse HEAD || echo 'unknown')"
-            echo "📋 Remote commit: $(git ls-remote origin main | cut -f1 || echo 'unknown')"
             
-            # Configure git if needed
-            git config --global --add safe.directory /var/www/websuli || true
-            
-            # Fetch latest changes from origin
-            echo "📥 Fetching latest code from origin..."
-            git fetch origin main || {
-              echo "❌ Git fetch failed!"
+            # Check if .git directory exists
+            if [ ! -d ".git" ]; then
+              echo "❌ .git directory not found! This is not a git repository!"
               exit 1
+            fi
+            
+            # Configure git
+            echo "⚙️ Configuring git..."
+            git config --global --add safe.directory /var/www/websuli 2>/dev/null || true
+            git config user.name "GitHub Actions" || true
+            git config user.email "actions@github.com" || true
+            
+            # Check and set remote origin
+            echo "🔍 Checking remote origin..."
+            if ! git remote | grep -q "^origin$"; then
+              echo "📝 Adding remote origin..."
+              git remote add origin https://github.com/kosazoltan/WEBSULI.git || {
+                echo "⚠️ Remote origin might already exist, trying to set URL..."
+                git remote set-url origin https://github.com/kosazoltan/WEBSULI.git
+              }
+            else
+              echo "✅ Remote origin exists, updating URL..."
+              git remote set-url origin https://github.com/kosazoltan/WEBSULI.git
+            fi
+            
+            # Verify remote is configured
+            echo "📋 Remote URLs:"
+            git remote -v
+            
+            # Check current branch and commit
+            echo "📋 Git status before update:"
+            echo "  - Current branch: $(git branch --show-current || echo 'unknown')"
+            echo "  - Current commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+            
+            # Fetch latest from remote
+            echo "📥 Fetching latest code from origin..."
+            git fetch origin || {
+              echo "❌ Git fetch failed! Trying with --all flag..."
+              git fetch --all || {
+                echo "❌ Git fetch completely failed!"
+                exit 1
+              }
             }
+            
+            # Show remote commit info
+            REMOTE_COMMIT=$(git ls-remote origin main 2>/dev/null | cut -f1)
+            if [ -z "$REMOTE_COMMIT" ]; then
+              echo "⚠️ Could not get remote commit hash, trying to fetch again..."
+              git fetch origin main 2>&1
+              REMOTE_COMMIT=$(git ls-remote origin main 2>/dev/null | cut -f1)
+            fi
+            echo "📋 Remote main branch commit: ${REMOTE_COMMIT:-'unknown'}"
+            
+            # Checkout main branch if not already on it
+            CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+            if [ "$CURRENT_BRANCH" != "main" ]; then
+              echo "🔄 Switching to main branch..."
+              git checkout -B main origin/main 2>/dev/null || git checkout main 2>/dev/null || {
+                echo "⚠️ Could not checkout main, creating local branch..."
+                git checkout -b main origin/main || {
+                  echo "❌ Failed to create/checkout main branch!"
+                  exit 1
+                }
+              }
+            fi
+            
+            # Set upstream tracking
+            echo "🔗 Setting upstream tracking..."
+            git branch --set-upstream-to=origin/main main 2>/dev/null || true
             
             # Reset to match remote exactly (force update)
             echo "🔄 Resetting to origin/main..."
             git reset --hard origin/main || {
-              echo "❌ Git reset failed!"
-              exit 1
+              echo "❌ Git reset failed! Trying merge strategy..."
+              git merge origin/main --no-edit || {
+                echo "❌ Git merge also failed! Force resetting..."
+                git fetch origin main:main --force || exit 1
+              }
             }
             
-            # Clean untracked files
+            # Clean untracked files and directories
             echo "🧹 Cleaning untracked files..."
             git clean -fd || true
+            git reset --hard HEAD || true
             
+            # Verify we're on the right commit
+            FINAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
             echo "📋 Git status after update:"
-            git log --oneline -3
-            echo "📋 Current commit after update: $(git rev-parse HEAD)"
+            echo "  - Current branch: $(git branch --show-current)"
+            echo "  - Current commit: $FINAL_COMMIT"
+            echo "  - Remote commit:  $REMOTE_COMMIT"
+            
+            if [ "$FINAL_COMMIT" != "$REMOTE_COMMIT" ] && [ -n "$REMOTE_COMMIT" ] && [ -n "$FINAL_COMMIT" ]; then
+              echo "⚠️ WARNING: Local and remote commits don't match!"
+              echo "   Attempting one more reset..."
+              git reset --hard "$REMOTE_COMMIT" || {
+                echo "❌ Final reset failed!"
+                exit 1
+              }
+            fi
+            
+            git log --oneline -3 || true
             
             # Navigate to source directory
             cd /var/www/websuli/source || {
