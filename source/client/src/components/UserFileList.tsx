@@ -299,7 +299,50 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                       {/* Header */}
                       <div className="flex justify-between items-start mb-4">
                         <div className={`p-3 rounded-xl bg-gradient-to-br ${iconBg} backdrop-blur-md border-2 ${iconBorder} shadow-xl transition-all group-hover:scale-110`}>
-                          <Icon className="w-6 h-6 text-white drop-shadow-lg" />
+                          {/* Színes ikonok tananyag típus szerint */}
+                          {(() => {
+                            const titleLower = (file.title + ' ' + (file.description || '')).toLowerCase();
+                            let iconColor = '';
+                            
+                            // Földrajz - zöld/türkiz színek
+                            if (titleLower.includes('földrajz') || titleLower.includes('geography') || titleLower.includes('hegy') || titleLower.includes('folyó') || titleLower.includes('river') || titleLower.includes('mountain')) {
+                              iconColor = 'text-emerald-500';
+                            }
+                            // Angol - kék/vörös (zászló színek)
+                            else if (titleLower.includes('angol') || titleLower.includes('english') || titleLower.includes('brit') || titleLower.includes('amerika')) {
+                              iconColor = 'text-blue-600';
+                            }
+                            // Történelem - barna/arany
+                            else if (titleLower.includes('történelem') || titleLower.includes('history') || titleLower.includes('vár') || titleLower.includes('castle') || titleLower.includes('király')) {
+                              iconColor = 'text-amber-700';
+                            }
+                            // Matematika - lila/kék
+                            else if (titleLower.includes('matek') || titleLower.includes('matematika') || titleLower.includes('math') || titleLower.includes('algebra') || titleLower.includes('geometria')) {
+                              iconColor = 'text-purple-600';
+                            }
+                            // Fizika - narancs/vörös
+                            else if (titleLower.includes('fizika') || titleLower.includes('physics') || titleLower.includes('atom') || titleLower.includes('energia') || titleLower.includes('zap')) {
+                              iconColor = 'text-orange-600';
+                            }
+                            // Kémia - zöld/kék
+                            else if (titleLower.includes('kémia') || titleLower.includes('chemistry') || titleLower.includes('beaker') || titleLower.includes('flask')) {
+                              iconColor = 'text-green-600';
+                            }
+                            // Biológia - zöld
+                            else if (titleLower.includes('biológia') || titleLower.includes('biology') || titleLower.includes('mikroszkóp')) {
+                              iconColor = 'text-green-500';
+                            }
+                            // Nyelvtan - rózsaszín/lila
+                            else if (titleLower.includes('írás') || titleLower.includes('writing') || titleLower.includes('toll') || titleLower.includes('pen') || titleLower.includes('ceruza') || titleLower.includes('pencil')) {
+                              iconColor = 'text-pink-600';
+                            }
+                            // Alapértelmezett - színes gradient
+                            else {
+                              iconColor = `text-transparent bg-clip-text bg-gradient-to-r ${badgeGradient}`;
+                            }
+                            
+                            return <Icon className={`w-6 h-6 ${iconColor} drop-shadow-lg`} />;
+                          })()}
                         </div>
                         <Badge 
                           className={`text-xs font-bold bg-gradient-to-r ${badgeGradient} text-white shadow-lg border-0 px-3 py-1`}
