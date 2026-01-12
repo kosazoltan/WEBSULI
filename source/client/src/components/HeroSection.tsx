@@ -83,11 +83,19 @@ function HeroSection({
 
   return (
     <div className="relative min-h-[500px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
-      {/* Vibráló gradient háttér: lila → rózsaszín → narancssárga */}
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-800 to-orange-700 animate-gradient-shift" />
+      {/* Copernican solar system háttérkép */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url("/copernican-hero-bg.jpg")',
+        }}
+      />
       
-      {/* További gradient réteg a mélységért */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-[#8B5CF6]/30 via-[#EC4899]/40 to-[#F97316]/50" />
+      {/* Sötét overlay a szöveg olvashatóságáért */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
+      
+      {/* Finom gradient overlay a kép fokozatos elhalványításához */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/30" />
       
       {/* Homokos/köves textúra overlay */}
       <div 
