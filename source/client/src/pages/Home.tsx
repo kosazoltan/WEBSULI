@@ -34,8 +34,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: "#0A0E27" }}>
-      {/* Kopernikuszi naprendszer háttér */}
-      <CosmicBackground />
+      {/* Kopernikuszi naprendszer háttér - ELTÁVOLÍTVA, mert a HeroSection-ban van a háttérkép */}
       
       <Header />
       <main className="pt-16 relative z-10">
