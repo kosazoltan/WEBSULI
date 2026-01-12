@@ -69,6 +69,50 @@
   }
 }
 
+/* Teljes spektrum animáció - emberi szem által látható színskála */
+@keyframes rainbow-spectrum {
+  0% {
+    background-position: 0% 50%;
+  }
+  16.66% {
+    background-position: 20% 50%;
+  }
+  33.33% {
+    background-position: 40% 50%;
+  }
+  50% {
+    background-position: 60% 50%;
+  }
+  66.66% {
+    background-position: 80% 50%;
+  }
+  83.33% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-rainbow-spectrum {
+  background: linear-gradient(
+    90deg,
+    #ff0000 0%,      /* Vörös */
+    #ff7f00 14.28%,  /* Narancs */
+    #ffff00 28.57%,  /* Sárga */
+    #00ff00 42.85%,  /* Zöld */
+    #0000ff 57.14%,  /* Kék */
+    #4b0082 71.42%,  /* Indigó */
+    #9400d3 85.71%,  /* Lila */
+    #ff0000 100%     /* Vörös (vissza) */
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rainbow-spectrum 5s ease-in-out infinite;
+}
+
 @keyframes pulse-glow {
   0%, 100% {
     box-shadow: 0 0 20px rgba(139, 92, 246, 0.5), 0 0 40px rgba(236, 72, 153, 0.3);

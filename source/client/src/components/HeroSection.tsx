@@ -220,7 +220,7 @@ function HeroSection({
           variants={itemVariants}
           className="text-5xl sm:text-6xl lg:text-7xl font-extrabold mb-6"
         >
-          <span className="bg-gradient-to-r from-purple-300 via-pink-300 to-orange-300 bg-clip-text text-transparent drop-shadow-2xl animate-gradient-text">
+          <span className="animate-rainbow-spectrum drop-shadow-2xl">
             Üdvözöl a WebSuli!
           </span>
         </motion.h1>
