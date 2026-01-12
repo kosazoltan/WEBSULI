@@ -298,50 +298,50 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     <CardContent className="p-5 flex flex-col h-full">
                       {/* Header */}
                       <div className="flex justify-between items-start mb-4">
-                        <div className={`p-3 rounded-xl bg-gradient-to-br ${iconBg} backdrop-blur-md border-2 ${iconBorder} shadow-xl transition-all group-hover:scale-110`}>
+                        <div className={`p-3 rounded-xl bg-gradient-to-br ${iconBg} backdrop-blur-md border-2 ${iconBorder} shadow-xl transition-all group-hover:scale-110 relative z-10`}>
                           {/* Színes ikonok tananyag típus szerint */}
                           {(() => {
                             const titleLower = (file.title + ' ' + (file.description || '')).toLowerCase();
                             let iconColor = '';
                             
                             // Földrajz - zöld/türkiz színek
-                            if (titleLower.includes('földrajz') || titleLower.includes('geography') || titleLower.includes('hegy') || titleLower.includes('folyó') || titleLower.includes('river') || titleLower.includes('mountain')) {
+                            if (titleLower.includes('földrajz') || titleLower.includes('geography') || titleLower.includes('geo') || titleLower.includes('hegy') || titleLower.includes('folyó') || titleLower.includes('river') || titleLower.includes('mountain') || titleLower.includes('víz') || titleLower.includes('water') || titleLower.includes('térkép') || titleLower.includes('map') || titleLower.includes('világ') || titleLower.includes('world')) {
                               iconColor = 'text-emerald-500';
                             }
                             // Angol - kék/vörös (zászló színek)
-                            else if (titleLower.includes('angol') || titleLower.includes('english') || titleLower.includes('brit') || titleLower.includes('amerika')) {
+                            else if (titleLower.includes('angol') || titleLower.includes('english') || titleLower.includes('brit') || titleLower.includes('british') || titleLower.includes('uk') || titleLower.includes('usa') || titleLower.includes('amerika') || titleLower.includes('america')) {
                               iconColor = 'text-blue-600';
                             }
                             // Történelem - barna/arany
-                            else if (titleLower.includes('történelem') || titleLower.includes('history') || titleLower.includes('vár') || titleLower.includes('castle') || titleLower.includes('király')) {
+                            else if (titleLower.includes('történelem') || titleLower.includes('history') || titleLower.includes('történelmi') || titleLower.includes('vár') || titleLower.includes('castle') || titleLower.includes('király') || titleLower.includes('king') || titleLower.includes('oklevél') || titleLower.includes('scroll')) {
                               iconColor = 'text-amber-700';
                             }
                             // Matematika - lila/kék
-                            else if (titleLower.includes('matek') || titleLower.includes('matematika') || titleLower.includes('math') || titleLower.includes('algebra') || titleLower.includes('geometria')) {
+                            else if (titleLower.includes('matek') || titleLower.includes('matematika') || titleLower.includes('math') || titleLower.includes('mathematics') || titleLower.includes('algebra') || titleLower.includes('geometria') || titleLower.includes('geometry') || titleLower.includes('formula') || titleLower.includes('képlet') || titleLower.includes('szigma') || titleLower.includes('sigma') || titleLower.includes('egyenlet') || titleLower.includes('equation')) {
                               iconColor = 'text-purple-600';
                             }
                             // Fizika - narancs/vörös
-                            else if (titleLower.includes('fizika') || titleLower.includes('physics') || titleLower.includes('atom') || titleLower.includes('energia') || titleLower.includes('zap')) {
+                            else if (titleLower.includes('fizika') || titleLower.includes('physics') || titleLower.includes('atom') || titleLower.includes('energia') || titleLower.includes('energy') || titleLower.includes('villam') || titleLower.includes('lightning') || titleLower.includes('áram') || titleLower.includes('current') || titleLower.includes('zap')) {
                               iconColor = 'text-orange-600';
                             }
                             // Kémia - zöld/kék
-                            else if (titleLower.includes('kémia') || titleLower.includes('chemistry') || titleLower.includes('beaker') || titleLower.includes('flask')) {
+                            else if (titleLower.includes('kémia') || titleLower.includes('chemistry') || titleLower.includes('kémiai') || titleLower.includes('vegyület') || titleLower.includes('compound') || titleLower.includes('labor') || titleLower.includes('lab') || titleLower.includes('beaker') || titleLower.includes('flask')) {
                               iconColor = 'text-green-600';
                             }
                             // Biológia - zöld
-                            else if (titleLower.includes('biológia') || titleLower.includes('biology') || titleLower.includes('mikroszkóp')) {
+                            else if (titleLower.includes('biológia') || titleLower.includes('biology') || titleLower.includes('mikroszkóp') || titleLower.includes('microscope')) {
                               iconColor = 'text-green-500';
                             }
                             // Nyelvtan - rózsaszín/lila
-                            else if (titleLower.includes('írás') || titleLower.includes('writing') || titleLower.includes('toll') || titleLower.includes('pen') || titleLower.includes('ceruza') || titleLower.includes('pencil')) {
+                            else if (titleLower.includes('írás') || titleLower.includes('writing') || titleLower.includes('írásgyakorlat') || titleLower.includes('toll') || titleLower.includes('pen') || titleLower.includes('ceruza') || titleLower.includes('pencil') || titleLower.includes('papír') || titleLower.includes('paper') || titleLower.includes('esszé') || titleLower.includes('essay')) {
                               iconColor = 'text-pink-600';
                             }
-                            // Alapértelmezett - színes gradient
+                            // Alapértelmezett - fehér/színes gradient
                             else {
-                              iconColor = `text-transparent bg-clip-text bg-gradient-to-r ${badgeGradient}`;
+                              iconColor = 'text-white';
                             }
                             
-                            return <Icon className={`w-6 h-6 ${iconColor} drop-shadow-lg`} />;
+                            return <Icon className={`w-6 h-6 ${iconColor} drop-shadow-lg`} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />;
                           })()}
                         </div>
                         <Badge 
