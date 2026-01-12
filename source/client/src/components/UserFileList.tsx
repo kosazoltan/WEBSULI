@@ -345,7 +345,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                           })()}
                         </div>
                         <Badge 
-                          className={`text-xs font-bold bg-gradient-to-r ${badgeGradient} text-white shadow-lg border-0 px-3 py-1`}
+                          className={`text-xs font-bold bg-gradient-to-r ${badgeGradient} text-white shadow-lg border-0 px-3 py-1 group-hover:bg-gradient-to-r group-hover:from-orange-500 group-hover:to-orange-600 transition-all duration-300`}
                         >
                           {getClassroomLabel(classroom, true)}
                         </Badge>
@@ -353,10 +353,10 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
                       {/* Content */}
                       <div className="flex-1 mb-4">
-                        <h3 className={`text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r ${badgeGradient} group-hover:bg-clip-text group-hover:text-transparent transition-all`}>
+                        <h3 className="text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:text-orange-500 transition-all duration-300 drop-shadow-lg">
                           {file.title}
                         </h3>
-                        <p className="text-sm text-muted-foreground line-clamp-3">
+                        <p className="text-sm text-muted-foreground line-clamp-3 group-hover:text-orange-400 group-hover:font-semibold transition-all duration-300">
                           {file.description || "Kattints a megtekintéshez"}
                         </p>
                       </div>
