@@ -82,12 +82,12 @@ function HeroSection({
   }));
 
   return (
-    <div className="relative min-h-[300px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
-      {/* Mars-szerű gradient háttér: vörös → narancs → barna */}
-      <div className="absolute inset-0 bg-gradient-to-br from-red-950 via-orange-950 to-amber-950" />
+    <div className="relative min-h-[500px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
+      {/* Vibráló gradient háttér: lila → rózsaszín → narancssárga */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-800 to-orange-700 animate-gradient-shift" />
       
-      {/* Aurora gradient overlay */}
-      <div className="absolute inset-0 aurora-bg opacity-40" />
+      {/* További gradient réteg a mélységért */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-[#8B5CF6]/30 via-[#EC4899]/40 to-[#F97316]/50" />
       
       {/* Homokos/köves textúra overlay */}
       <div 
@@ -116,12 +116,12 @@ function HeroSection({
         }}
       />
       
-      {/* Animált részecskék háttér - CSS alapú */}
-      <div className="absolute inset-0 opacity-20">
+      {/* Animált részecskék háttér - molekulák és atomok */}
+      <div className="absolute inset-0 opacity-30">
         {particles.map((particle) => (
           <div
             key={particle.id}
-            className="absolute rounded-full bg-white animate-float-symbol"
+            className="absolute rounded-full bg-white/60 animate-float-symbol"
             style={{
               left: `${particle.left}%`,
               top: `${particle.top}%`,
@@ -129,6 +129,23 @@ function HeroSection({
               height: `${particle.height}px`,
               animationDelay: `${particle.delay}s`,
               animationDuration: `${particle.duration}s`,
+              filter: 'blur(1px)',
+            }}
+          />
+        ))}
+        {/* További nagyobb részecskék */}
+        {Array.from({ length: 10 }, (_, i) => (
+          <div
+            key={`big-${i}`}
+            className="absolute rounded-full bg-purple-300/20 animate-float-symbol"
+            style={{
+              left: `${(i * 12) % 100}%`,
+              top: `${(i * 18) % 100}%`,
+              width: `${12 + (i % 4) * 4}px`,
+              height: `${12 + (i % 4) * 4}px`,
+              animationDelay: `${i * 0.8}s`,
+              animationDuration: `${15 + (i % 3) * 3}s`,
+              filter: 'blur(2px)',
             }}
           />
         ))}
@@ -148,36 +165,58 @@ function HeroSection({
         <rect width="100%" height="100%" fill="url(#circles)" />
       </svg>
 
-      {/* Lebegő matematikai szimbólumok */}
+      {/* Lebegő matematikai szimbólumok - finoman animálva */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {symbolPositions.map((pos, i) => (
-          <div
+          <motion.div
             key={i}
-            className="absolute text-white/20 text-4xl font-bold animate-float-symbol"
+            className="absolute text-white/15 text-3xl sm:text-4xl lg:text-5xl font-bold"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{
+              opacity: [0.1, 0.3, 0.1],
+              y: [0, -30, 0],
+              rotate: [0, 10, -10, 0],
+            }}
+            transition={{
+              duration: pos.duration,
+              repeat: Infinity,
+              delay: pos.delay,
+              ease: "easeInOut",
+            }}
             style={{
               left: `${pos.left}%`,
               top: `${pos.top}%`,
-              animationDelay: `${pos.delay}s`,
-              animationDuration: `${pos.duration}s`,
             }}
           >
             {pos.symbol}
-          </div>
+          </motion.div>
         ))}
       </div>
 
-      {/* Oktatási ikonok - elszórva */}
+      {/* Oktatási ikonok - elszórva és animálva */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {iconPositions.map(({ Icon, delay, left, top }, i) => (
-          <Icon
+          <motion.div
             key={i}
-            className="absolute text-white/15 w-12 h-12 animate-float-icon"
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{
+              opacity: [0.1, 0.25, 0.1],
+              scale: [1, 1.2, 1],
+              y: [0, -20, 0],
+            }}
+            transition={{
+              duration: 6 + i,
+              repeat: Infinity,
+              delay: delay,
+              ease: "easeInOut",
+            }}
             style={{
               left: `${left}%`,
               top: `${top}%`,
-              animationDelay: `${delay}s`,
             }}
-          />
+          >
+            <Icon className="text-white/20 w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14" />
+          </motion.div>
         ))}
       </div>
 
@@ -188,12 +227,12 @@ function HeroSection({
         initial="hidden"
         animate="visible"
       >
-        {/* Főcím - gradient szöveg (Mars-szerű) */}
+        {/* Főcím - vibráló gradient szöveg */}
         <motion.h1
           variants={itemVariants}
-          className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6"
+          className="text-5xl sm:text-6xl lg:text-7xl font-extrabold mb-6"
         >
-          <span className="bg-gradient-to-r from-red-300 via-orange-300 to-amber-300 bg-clip-text text-transparent drop-shadow-lg">
+          <span className="bg-gradient-to-r from-purple-300 via-pink-300 to-orange-300 bg-clip-text text-transparent drop-shadow-2xl animate-gradient-text">
             Üdvözöl a WebSuli!
           </span>
         </motion.h1>
@@ -220,10 +259,10 @@ function HeroSection({
             <Button
               size="lg"
               onClick={scrollToContent}
-              className="gap-2 bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-700 hover:via-orange-700 hover:to-amber-700 text-white border-0 text-lg px-8 py-6 animate-pulse-cta shadow-xl shadow-orange-500/50"
+              className="gap-2 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316] hover:from-[#7C3AED] hover:via-[#DB2777] hover:to-[#EA580C] text-white border-0 text-lg px-10 py-7 rounded-full animate-pulse-glow shadow-2xl shadow-pink-500/50 hover:shadow-pink-500/70 transition-all duration-300"
             >
               Böngészés
-              <ChevronDown className="w-5 h-5" />
+              <ChevronDown className="w-5 h-5 animate-bounce" />
             </Button>
           </motion.div>
 
