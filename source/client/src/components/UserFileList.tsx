@@ -211,11 +211,11 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                   <CardContent className="p-5 flex flex-col h-full">
                     {/* Header */}
                     <div className="flex justify-between items-start mb-4">
-                      <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-sm border border-white/10">
-                        <Icon className="w-6 h-6 text-purple-300 dark:text-purple-400" />
+                      <div className="p-3 rounded-xl bg-gradient-to-br from-orange-600/30 to-amber-600/30 backdrop-blur-sm border border-orange-500/30 shadow-lg shadow-orange-500/20">
+                        <Icon className="w-6 h-6 text-orange-300 drop-shadow-lg" />
                       </div>
                       <Badge 
-                        className={`text-xs font-semibold ${isEven ? 'gradient-badge-primary' : 'gradient-badge-secondary'}`}
+                        className={`text-xs font-semibold bg-gradient-to-r from-orange-600 to-amber-600 text-white border-orange-500/50 shadow-md shadow-orange-500/30`}
                       >
                         {getClassroomLabel(classroom, true)}
                       </Badge>
@@ -223,7 +223,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
                     {/* Content */}
                     <div className="flex-1 mb-4">
-                      <h3 className="text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text group-hover:text-transparent transition-all">
+                      <h3 className="text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r group-hover:from-orange-500 group-hover:to-amber-500 group-hover:bg-clip-text group-hover:text-transparent transition-all">
                         {file.title}
                       </h3>
                       <p className="text-sm text-muted-foreground line-clamp-3">
@@ -232,12 +232,12 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between pt-4 border-t border-border/50">
+                    <div className="flex items-center justify-between pt-4 border-t border-orange-500/20">
                       <LikeButton
                         materialId={file.id}
                         initialLikeStatus={batchLikesData?.[file.id]}
                       />
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-purple-500/50 transition-all">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-600 to-amber-600 flex items-center justify-center group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-orange-500/60 transition-all">
                         <ArrowRight className="w-5 h-5 text-white" />
                       </div>
                     </div>
