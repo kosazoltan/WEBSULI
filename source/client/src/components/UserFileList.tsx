@@ -174,18 +174,23 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           showEmailSubscribe={true}
         />
 
-        {/* Classroom Filter */}
+        {/* Classroom Filter - kontrasztos osztály szűrők sötét háttérhez */}
         <div className="mb-6">
-          <h2 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">
-            <BookOpen className="w-4 h-4" />
-            Válassz osztályt:
+          <h2 className="text-lg font-bold text-white mb-4 text-center drop-shadow-lg flex items-center justify-center gap-2">
+            <BookOpen className="w-5 h-5" />
+            Osztályok szerint szűrés
           </h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3 justify-center items-center">
             <Button
               variant={selectedClassroom === null ? "default" : "outline"}
-              size="sm"
+              size="default"
               onClick={() => setSelectedClassroom(null)}
               data-testid="button-filter-all"
+              className={`font-semibold ${
+                selectedClassroom === null
+                  ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-lg shadow-orange-500/50"
+                  : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
+              }`}
             >
               Minden osztály
             </Button>
@@ -197,7 +202,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                   variant={selectedClassroom === classroom ? "default" : "outline"}
                   className={`cursor-pointer text-sm py-2 px-4 font-semibold backdrop-blur-sm ${
                     selectedClassroom === classroom
-                      ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-lg"
+                      ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-lg shadow-orange-500/50"
                       : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
                   } ${
                     !hasFiles ? "opacity-50 cursor-not-allowed" : ""
@@ -213,15 +218,15 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search - kontrasztos kereső mező sötét háttérhez */}
         <div className="max-w-xl mx-auto mb-8">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/70 z-10" />
             <Input
               placeholder="Keresés tananyag után..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-11 bg-white/20 backdrop-blur-md border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"
               data-testid="input-search"
             />
           </div>
