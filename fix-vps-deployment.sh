@@ -1,49 +1,52 @@
 #!/bin/bash
-# VPS Deployment Fix Script (VPS-en futtatható)
-# Használat: ssh root@95.216.191.162 'bash -s' < fix-vps-deployment.sh
-# VAGY: másold a VPS-re és futtasd: bash fix-vps-deployment.sh
+# Quick deployment fix script for WebSuli VPS
+# Run: ssh root@31.97.44.1 'bash -s' < fix-vps-deployment.sh
 
 set -e
 
-echo "🔧 VPS Deployment Fix"
+echo "🚀 Starting WebSuli VPS Deployment Fix"
 echo ""
 
-PROJECT_DIR="/var/www/websuli/source"
+cd /var/www/websuli/source || { echo "❌ Directory not found!"; exit 1; }
 
-if [ ! -d "$PROJECT_DIR" ]; then
-    echo "❌ Projekt könyvtár nem található: $PROJECT_DIR"
-    exit 1
-fi
-
-cd "$PROJECT_DIR"
-
-echo "📥 Git pull..."
+echo "📥 Pulling latest code from GitHub..."
+git fetch origin
 git pull origin main
 
-echo "📦 npm install..."
+echo ""
+echo "📦 Installing dependencies..."
 npm install
 
-echo "🧹 Build cleanup..."
+echo ""
+echo "🧹 Cleaning old build..."
 rm -rf dist node_modules/.vite
 
-echo "🔨 Build..."
+echo ""
+echo "🔨 Building application..."
 npm run build
 
 if [ ! -d "dist" ]; then
-    echo "❌ Build sikertelen!"
+    echo "❌ Build failed - dist directory not found!"
     exit 1
 fi
 
-echo "✅ Build sikeres!"
+echo ""
+echo "✅ Build completed successfully!"
 
-echo "♻️  PM2 restart..."
+echo ""
+echo "♻️ Restarting PM2..."
 pm2 delete websuli 2>/dev/null || true
 sleep 2
 pm2 start deploy/ecosystem.config.cjs --name websuli --update-env
 sleep 3
 pm2 save
 
-echo "✅ Deployment fix befejezve!"
 echo ""
-echo "PM2 Státusz:"
+echo "✅ Deployment completed!"
+echo ""
+echo "📊 Status:"
 pm2 list | grep websuli
+
+echo ""
+echo "📝 Last commit:"
+git log -1 --oneline
