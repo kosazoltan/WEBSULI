@@ -182,21 +182,21 @@
   animation: honeycomb-shift 20s ease infinite;
 }
 
-/* Glassmorphism kártyák - méhsejt háttérrel - 50% átlátszóság */
+/* Glassmorphism kártyák - méhsejt háttérrel - 50% sötétebb háttér */
 .glass-card {
   background: 
-    linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.3) 100%) !important;
+    linear-gradient(135deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.3) 100%) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(251, 146, 60, 0.5) !important;
   box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
     0 0 20px rgba(251, 146, 60, 0.2) !important;
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
-  opacity: 0.95; /* 50% átlátszóság (95% opacity = 5% átlátszóság) */
+  opacity: 0.95;
 }
 
 .glass-card::before {
@@ -244,7 +244,7 @@
 
 .glass-card:hover {
   background: 
-    linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.4) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.2) 100%),
     repeating-conic-gradient(
       from 0deg at 50% 50%,
       transparent 0deg,
@@ -259,7 +259,7 @@
     0 12px 40px rgba(251, 146, 60, 0.4),
     inset 0 0 0 1px rgba(255, 255, 255, 0.4),
     0 0 30px rgba(234, 179, 8, 0.3) !important;
-  opacity: 1; /* Teljesen átlátszatlan hover-nél */
+  opacity: 1; /* Világosabb hover-nél */
 }
 
 .dark .glass-card {
