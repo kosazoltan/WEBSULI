@@ -125,7 +125,7 @@ function HeroSection({
       </div>
 
       {/* Főtartalom */}
-      <div className="relative z-10 max-w-4xl mx-auto px-4 py-16 text-center">
+      <div className="relative z-10 max-w-4xl mx-auto px-4 py-8 text-center">
         {/* Főcím - gradient szöveg (Mars-szerű) */}
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 animate-fade-in-up">
           <span className="bg-gradient-to-r from-red-300 via-orange-300 to-amber-300 bg-clip-text text-transparent drop-shadow-lg">
