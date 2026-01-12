@@ -22,14 +22,42 @@ function HeroSection({
     }
   };
 
+  // Framer Motion animációk
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+        delayChildren: 0.2,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        type: "spring",
+        damping: 12,
+        stiffness: 100,
+      },
+    },
+  };
+
   return (
     <div className="relative min-h-[300px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
       {/* Mars-szerű gradient háttér: vörös → narancs → barna */}
       <div className="absolute inset-0 bg-gradient-to-br from-red-950 via-orange-950 to-amber-950" />
       
+      {/* Aurora gradient overlay */}
+      <div className="absolute inset-0 aurora-bg opacity-40" />
+      
       {/* Homokos/köves textúra overlay */}
       <div 
-        className="absolute inset-0 opacity-30 mix-blend-overlay"
+        className="absolute inset-0 opacity-20 mix-blend-overlay"
         style={{
           backgroundImage: `
             radial-gradient(circle at 20% 50%, rgba(139, 69, 19, 0.3) 0%, transparent 50%),
@@ -125,69 +153,104 @@ function HeroSection({
       </div>
 
       {/* Főtartalom */}
-      <div className="relative z-10 max-w-4xl mx-auto px-4 py-8 text-center">
+      <motion.div
+        className="relative z-10 max-w-4xl mx-auto px-4 py-8 text-center"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {/* Főcím - gradient szöveg (Mars-szerű) */}
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 animate-fade-in-up">
+        <motion.h1
+          variants={itemVariants}
+          className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 font-teen-display"
+        >
           <span className="bg-gradient-to-r from-red-300 via-orange-300 to-amber-300 bg-clip-text text-transparent drop-shadow-lg">
             Üdvözöl a WebSuli!
           </span>
-        </h1>
+        </motion.h1>
 
         {/* Alcím */}
-        <p className="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        <motion.p
+          variants={itemVariants}
+          className="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto font-teen-body"
+        >
           Interaktív tananyagok általános és középiskolásoknak.
           Böngéssz osztályok szerint, és találd meg a neked való anyagokat!
-        </p>
+        </motion.p>
 
         {/* CTA gombok */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-          <Button
-            size="lg"
-            onClick={scrollToContent}
-            className="gap-2 bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-700 hover:via-orange-700 hover:to-amber-700 text-white border-0 text-lg px-8 py-6 animate-pulse-cta shadow-xl shadow-orange-500/50"
+        <motion.div
+          variants={itemVariants}
+          className="flex flex-col sm:flex-row gap-4 justify-center mb-12"
+        >
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 300 }}
           >
-            Böngészés
-            <ChevronDown className="w-5 h-5" />
-          </Button>
+            <Button
+              size="lg"
+              onClick={scrollToContent}
+              className="gap-2 bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-700 hover:via-orange-700 hover:to-amber-700 text-white border-0 text-lg px-8 py-6 animate-pulse-cta shadow-xl shadow-orange-500/50"
+            >
+              Böngészés
+              <ChevronDown className="w-5 h-5" />
+            </Button>
+          </motion.div>
 
           {showEmailSubscribe && (
             <EmailSubscribeDialog />
           )}
-        </div>
+        </motion.div>
 
         {/* Statisztikák */}
-        <div className="flex flex-wrap justify-center gap-8 sm:gap-12 pt-8 border-t border-white/20 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
-          <div className="text-center">
+        <motion.div
+          variants={itemVariants}
+          className="flex flex-wrap justify-center gap-8 sm:gap-12 pt-8 border-t border-white/20"
+        >
+          <motion.div
+            className="text-center"
+            whileHover={{ scale: 1.1 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
             <div className="flex items-center justify-center gap-2 mb-2">
               <FileText className="w-6 h-6 text-orange-400" />
-              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg font-teen-display">
                 {totalFiles}
               </span>
             </div>
-            <p className="text-sm text-white/90">Tananyag</p>
-          </div>
+            <p className="text-sm text-white/90 font-teen-body">Tananyag</p>
+          </motion.div>
 
-          <div className="text-center">
+          <motion.div
+            className="text-center"
+            whileHover={{ scale: 1.1 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
             <div className="flex items-center justify-center gap-2 mb-2">
               <GraduationCap className="w-6 h-6 text-amber-400" />
-              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg font-teen-display">
                 {totalClassrooms}
               </span>
             </div>
-            <p className="text-sm text-white/90">Osztály</p>
-          </div>
+            <p className="text-sm text-white/90 font-teen-body">Osztály</p>
+          </motion.div>
 
-          <div className="text-center">
+          <motion.div
+            className="text-center"
+            whileHover={{ scale: 1.1 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
             <div className="flex items-center justify-center gap-2 mb-2">
               <BookOpen className="w-6 h-6 text-red-400" />
-              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg font-teen-display">
                 {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}
               </span>
             </div>
-            <p className="text-sm text-white/90">Évfolyam</p>
-          </div>
-        </div>
-      </div>
+            <p className="text-sm text-white/90 font-teen-body">Évfolyam</p>
+          </motion.div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }
