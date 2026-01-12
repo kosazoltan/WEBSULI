@@ -405,25 +405,27 @@ export default function AdminFileDashboard({
         </div>
         
         <div className="flex flex-col xs:flex-row gap-3 mb-6">
-          {onUploadClick && (
+          <div className="flex flex-col xs:flex-row gap-3">
+            {onUploadClick && (
+              <Button
+                onClick={onUploadClick}
+                className="w-full xs:w-auto bg-green-800 hover:bg-green-900 text-white"
+                data-testid="button-upload-html"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Új HTML feltöltése
+              </Button>
+            )}
             <Button
-              onClick={onUploadClick}
+              onClick={onToggleView}
               className="w-full xs:w-auto bg-green-800 hover:bg-green-900 text-white"
-              data-testid="button-upload-html"
+              data-testid="button-toggle-view"
             >
-              <Upload className="w-4 h-4 mr-2" />
-              Új HTML feltöltése
+              <Eye className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Normál nézet</span>
+              <span className="sm:hidden">Normál</span>
             </Button>
-          )}
-          <Button
-            onClick={onToggleView}
-            className="w-full xs:w-auto bg-green-800 hover:bg-green-900 text-white"
-            data-testid="button-toggle-view"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Normál nézet</span>
-            <span className="sm:hidden">Normál</span>
-          </Button>
+          </div>
           <Button
             onClick={handleDownloadSource}
             variant="outline"
@@ -465,26 +467,28 @@ export default function AdminFileDashboard({
             data-testid="input-search"
           />
         </div>
-        {onUploadClick && (
+        <div className="flex flex-col xs:flex-row gap-3">
+          {onUploadClick && (
+            <Button
+              onClick={onUploadClick}
+              className="w-full xs:w-auto xs:flex-shrink-0 bg-green-800 hover:bg-green-900 text-white"
+              data-testid="button-upload-html"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Új HTML feltöltése</span>
+              <span className="sm:hidden">Feltöltés</span>
+            </Button>
+          )}
           <Button
-            onClick={onUploadClick}
+            onClick={onToggleView}
             className="w-full xs:w-auto xs:flex-shrink-0 bg-green-800 hover:bg-green-900 text-white"
-            data-testid="button-upload-html"
+            data-testid="button-toggle-view"
           >
-            <Upload className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Új HTML feltöltése</span>
-            <span className="sm:hidden">Feltöltés</span>
+            <Eye className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Normál nézet</span>
+            <span className="sm:hidden">Normál</span>
           </Button>
-        )}
-        <Button
-          onClick={onToggleView}
-          className="w-full xs:w-auto xs:flex-shrink-0 bg-green-800 hover:bg-green-900 text-white"
-          data-testid="button-toggle-view"
-        >
-          <Eye className="w-4 h-4 mr-2" />
-          <span className="hidden sm:inline">Normál nézet</span>
-          <span className="sm:hidden">Normál</span>
-        </Button>
+        </div>
         <Button
           onClick={handleDownloadSource}
           variant="outline"
