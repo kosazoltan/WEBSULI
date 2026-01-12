@@ -15,10 +15,146 @@ import {
   MessageSquare,
   Settings,
   BarChart,
+  // Földrajz ikonok
+  Mountain,
+  Waves,
+  Globe,
+  MapPin,
+  // Angol nyelv ikonok
+  Flag,
+  Languages,
+  // Történelem ikonok
+  Landmark,
+  Castle,
+  Scroll,
+  Crown,
+  // Matematika ikonok
+  Sigma,
+  Function,
+  Pi,
+  // Fizika ikonok
+  Atom,
+  Zap,
+  Beaker,
+  // Nyelvtan ikonok
+  Pen,
+  Pencil,
+  // További tárgyak
+  FlaskConical,
+  Microscope,
+  Book,
+  GraduationCap,
   type LucideIcon
 } from "lucide-react";
 
 const iconKeywords: Record<string, LucideIcon> = {
+  // FÖLDRÁSZ - prioritás: magas
+  'földrajz': Mountain,
+  'geography': Mountain,
+  'geo': Mountain,
+  'hegy': Mountain,
+  'mountain': Mountain,
+  'hegység': Mountain,
+  'folyó': Waves,
+  'river': Waves,
+  'víz': Waves,
+  'water': Waves,
+  'tenger': Waves,
+  'sea': Waves,
+  'óceán': Waves,
+  'ocean': Waves,
+  'földrajzi': Mountain,
+  'térkép': MapPin,
+  'map': MapPin,
+  'világ': Globe,
+  'world': Globe,
+  
+  // ANGOL NYELV - prioritás: magas
+  'angol': Flag,
+  'english': Flag,
+  'brit': Flag,
+  'british': Flag,
+  'uk': Flag,
+  'usa': Flag,
+  'amerika': Flag,
+  'amerika': Flag,
+  'nyelvtan': Languages,
+  'nyelv': Languages,
+  'language': Languages,
+  'szótár': Book,
+  'dictionary': Book,
+  
+  // TÖRTÉNELEM - prioritás: magas
+  'történelem': Landmark,
+  'history': Landmark,
+  'történelmi': Landmark,
+  'kor': Landmark,
+  'vár': Castle,
+  'castle': Castle,
+  'palota': Castle,
+  'palace': Castle,
+  'király': Crown,
+  'king': Crown,
+  'királyság': Crown,
+  'kingdom': Crown,
+  'oklevél': Scroll,
+  'scroll': Scroll,
+  'dokumentum': Scroll,
+  'document': Scroll,
+  
+  // MATEMATIKA - prioritás: magas
+  'matek': Calculator,
+  'matematika': Calculator,
+  'math': Calculator,
+  'mathematics': Calculator,
+  'szám': Calculator,
+  'számolás': Calculator,
+  'algebra': Function,
+  'geometria': Function,
+  'geometry': Function,
+  'formula': Pi,
+  'képlet': Pi,
+  'szigma': Sigma,
+  'sigma': Sigma,
+  'összeg': Sigma,
+  'sum': Sigma,
+  
+  // FIZIKA - prioritás: magas
+  'fizika': Atom,
+  'physics': Atom,
+  'atom': Atom,
+  'energia': Zap,
+  'energy': Zap,
+  'villam': Zap,
+  'lightning': Zap,
+  'áram': Zap,
+  'current': Zap,
+  'kémia': Beaker,
+  'chemistry': Beaker,
+  'kémiai': Beaker,
+  'vegyület': FlaskConical,
+  'compound': FlaskConical,
+  'labor': FlaskConical,
+  'lab': FlaskConical,
+  'mikroszkóp': Microscope,
+  'microscope': Microscope,
+  'biológia': Microscope,
+  'biology': Microscope,
+  
+  // NYELVTAN - prioritás: magas
+  'írás': Pen,
+  'writing': Pen,
+  'írásgyakorlat': Pen,
+  'toll': Pen,
+  'pen': Pen,
+  'ceruza': Pencil,
+  'pencil': Pencil,
+  'papír': FileText,
+  'paper': FileText,
+  'esszé': FileText,
+  'essay': FileText,
+  
+  // ÁLTALÁNOS INFORMATIKA/TECH
   'táblázat': Table,
   'table': Table,
   'lista': List,
@@ -65,16 +201,54 @@ const iconKeywords: Record<string, LucideIcon> = {
   'chart': BarChart,
   'grafikon': BarChart,
   'statisztika': BarChart,
+  
+  // ÁLTALÁNOS TÁRGYAK
+  'könyv': Book,
+  'book': Book,
+  'tananyag': Book,
+  'material': Book,
+  'oktatás': GraduationCap,
+  'education': GraduationCap,
+  'tanulás': Book,
+  'learning': Book,
 };
 
 export function getFileIcon(title: string, description?: string | null): LucideIcon {
   const searchText = `${title} ${description || ''}`.toLowerCase();
   
+  // Prioritásos keresés - először a specifikus tárgyak, utána az általánosak
+  const priorityKeywords = [
+    // Földrajz
+    ['földrajz', 'geography', 'geo', 'hegy', 'mountain', 'folyó', 'river', 'víz', 'water', 'térkép', 'map', 'világ', 'world'],
+    // Angol
+    ['angol', 'english', 'brit', 'british', 'uk', 'usa', 'amerika'],
+    // Történelem
+    ['történelem', 'history', 'történelmi', 'vár', 'castle', 'király', 'king', 'oklevél', 'scroll'],
+    // Matematika
+    ['matek', 'matematika', 'math', 'mathematics', 'algebra', 'geometria', 'geometry', 'formula', 'képlet', 'szigma', 'sigma'],
+    // Fizika/Kémia
+    ['fizika', 'physics', 'atom', 'energia', 'energy', 'kémia', 'chemistry', 'biológia', 'biology'],
+    // Nyelvtan
+    ['írás', 'writing', 'toll', 'pen', 'ceruza', 'pencil', 'papír', 'paper', 'esszé', 'essay'],
+  ];
+  
+  // Keresés prioritásos sorrendben
+  for (const priorityGroup of priorityKeywords) {
+    for (const keyword of priorityGroup) {
+      if (searchText.includes(keyword)) {
+        const icon = iconKeywords[keyword];
+        if (icon) return icon;
+      }
+    }
+  }
+  
+  // Általános keresés az összes kulcsszóra
   for (const [keyword, icon] of Object.entries(iconKeywords)) {
     if (searchText.includes(keyword)) {
       return icon;
     }
   }
   
-  return FileCode;
+  // Alapértelmezett ikon
+  return Book;
 }
