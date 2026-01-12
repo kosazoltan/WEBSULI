@@ -259,9 +259,10 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply text-foreground font-sans antialiased;
     font-family: 'Poppins', 'Nunito', 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
     min-height: 100vh;
+    background-color: #0A0E27; /* Sötét világűr háttér alapértelmezetten */
   }
 
   /* Korcsoport-specifikus CSS változók */
