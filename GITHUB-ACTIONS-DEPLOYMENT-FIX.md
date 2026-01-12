@@ -1,9 +1,30 @@
 # GitHub Actions Deployment Hiba - Hibakeresési Útmutató
 
 ## 🔴 Probléma
-A "Deploy to VPS" workflow sikertelen volt (42 másodperc alatt).
+A "Deploy to VPS" workflow sikertelen volt vagy törölve lett (cancelled).
 
 ## 🔍 Lehetséges Okok és Megoldások
+
+### 0. Workflow Törölve (Cancelled) - Normális Viselkedés
+
+Ha a workflow **"Cancelled"** státuszt mutat, ez általában **NORMÁLIS** és nem probléma!
+
+**Okok:**
+1. **Concurrency beállítás:** A workflow fájlban van egy `concurrency` beállítás, ami automatikusan törli az előző futást, amikor egy új deployment elindul
+2. **Gyors egymás utáni commit-ok:** Ha gyorsan egymás után több push történt, az előző deployment-ek törlődnek
+3. **Manuális újrafuttatás:** Ha valaki manuálisan futtatta újra a workflow-t, az előző futás törlődik
+
+**Mit kell tenni:**
+- ✅ **Nincs teendő!** Az utolsó (legfrissebb) deployment fut le
+- Ellenőrizd, hogy van-e egy **"success"** vagy **"running"** státuszú deployment
+- Ha az utolsó deployment is cancelled, várj néhány másodpercet, vagy futtasd manuálisan a workflow-t
+
+**Concurrency beállítás a workflow fájlban:**
+```yaml
+concurrency:
+  group: production-deployment
+  cancel-in-progress: true  # ← Ez törli az előző futást
+```
 
 ### 1. GitHub Secrets Hiányoznak vagy Hibásak
 
