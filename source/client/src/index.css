@@ -61,7 +61,39 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Poppins', 'Nunito', 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
     min-height: 100vh;
+  }
+
+  /* Korcsoport-specifikus CSS változók */
+  :root {
+    /* Alsó tagozat (6-10 év) - Játékos Felfedező */
+    --primary-kid: #FF6B6B;
+    --secondary-kid: #4ECDC4;
+    --accent-kid: #FFE66D;
+    --success-kid: #7ED957;
+    --bg-kid: #FFF5F5;
+    --fun-purple: #A855F7;
+    --fun-blue: #38BDF8;
+
+    /* Felső tagozat (11-14 év) - Digitális Kalandor */
+    --primary-teen: #8B5CF6;
+    --secondary-teen: #06B6D4;
+    --accent-teen: #F59E0B;
+    --neon-pink: #EC4899;
+    --neon-green: #10B981;
+    --bg-dark-teen: #0F172A;
+    --bg-card-teen: #1E293B;
+    --glow-teen: rgba(139, 92, 246, 0.4);
+
+    /* Középiskola (15-18 év) - Fiatal Professzionális */
+    --primary-senior: #3B82F6;
+    --secondary-senior: #8B5CF6;
+    --accent-senior: #F97316;
+    --neutral-900: #111827;
+    --neutral-100: #F3F4F6;
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
   }
 }
 

@@ -12,6 +12,17 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        // ✅ MAGYAR ÉKEZET-BARÁT FONTOK
+        'kid-display': ['Nunito', 'Quicksand', 'Poppins', 'sans-serif'],
+        'kid-body': ['Quicksand', 'Nunito', 'Poppins', 'sans-serif'],
+        'teen-display': ['Montserrat', 'Outfit', 'Poppins', 'sans-serif'],
+        'teen-body': ['Poppins', 'Open Sans', 'sans-serif'],
+        'senior-display': ['Montserrat', 'Poppins', 'sans-serif'],
+        'senior-body': ['Open Sans', 'Lato', 'sans-serif'],
+        'sans': ['Poppins', 'Nunito', 'Segoe UI', 'Noto Sans', 'system-ui', 'sans-serif'], // Alapértelmezett
+        'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -46,6 +57,16 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Korcsoport-specifikus színek
+        'kid-primary': '#FF6B6B',
+        'kid-secondary': '#4ECDC4',
+        'kid-accent': '#FFE66D',
+        'teen-primary': '#8B5CF6',
+        'teen-secondary': '#06B6D4',
+        'teen-accent': '#F59E0B',
+        'senior-primary': '#3B82F6',
+        'senior-secondary': '#8B5CF6',
+        'senior-accent': '#F97316',
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -61,10 +82,15 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "aurora": {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "aurora": "aurora 15s ease infinite",
       },
     },
   },

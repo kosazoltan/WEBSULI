@@ -11,6 +11,7 @@ import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
+import { motion } from "framer-motion";
 
 interface HtmlFileApi {
   id: string;
@@ -28,6 +29,40 @@ interface UserFileListProps {
   onViewFile: (file: HtmlFileApi) => void;
   onToggleView?: () => void;
 }
+
+// Framer Motion animációk
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring",
+      damping: 15,
+      stiffness: 200,
+    },
+  },
+  hover: {
+    scale: 1.03,
+    y: -5,
+    transition: {
+      type: "spring",
+      stiffness: 300,
+    },
+  },
+};
 
 function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -188,67 +223,110 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           </div>
         </div>
 
-        {/* Files Grid */}
+        {/* Files Grid - Bento Style with Framer Motion */}
         {filteredFiles.length > 0 ? (
-          <div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-fr"
             data-testid="list-files"
             id="content-start"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
           >
             {filteredFiles.map((file, index) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
-              const staggerClass = `stagger-delay-${Math.min(index, 5)}`;
-              const isEven = index % 2 === 0;
+              
+              // Bento Grid: nagyobb kártyák minden 5. elemnél
+              const isLarge = index % 5 === 0;
+              const gridClasses = isLarge 
+                ? "sm:col-span-2 lg:col-span-2" 
+                : "";
+              
+              // Korcsoport-specifikus téma
+              let themeClasses = "";
+              let badgeGradient = "from-orange-600 to-amber-600";
+              let iconBg = "from-orange-600/30 to-amber-600/30";
+              let iconBorder = "border-orange-500/30";
+              
+              if (classroom >= 1 && classroom <= 4) {
+                // Kid theme
+                themeClasses = "rounded-3xl";
+                badgeGradient = "from-kid-primary to-kid-secondary";
+                iconBg = "from-kid-primary/30 to-kid-secondary/30";
+                iconBorder = "border-kid-primary/30";
+              } else if (classroom >= 5 && classroom <= 8) {
+                // Teen theme
+                themeClasses = "rounded-2xl";
+                badgeGradient = "from-teen-primary to-teen-secondary";
+                iconBg = "from-teen-primary/30 to-teen-secondary/30";
+                iconBorder = "border-teen-primary/30";
+              } else {
+                // Senior theme
+                themeClasses = "rounded-xl";
+                badgeGradient = "from-senior-primary to-senior-secondary";
+                iconBg = "from-senior-primary/30 to-senior-secondary/30";
+                iconBorder = "border-senior-primary/30";
+              }
 
               return (
-                <Card
+                <motion.div
                   key={file.id}
-                  className={`group cursor-pointer glass-card animate-fade-in ${staggerClass}`}
-                  onClick={() => onViewFile(file)}
-                  data-testid={`link-file-${file.id}`}
+                  variants={cardVariants}
+                  whileHover="hover"
+                  className={gridClasses}
                 >
-                  <CardContent className="p-5 flex flex-col h-full">
-                    {/* Header */}
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="p-3 rounded-xl bg-gradient-to-br from-orange-600/30 to-amber-600/30 backdrop-blur-sm border border-orange-500/30 shadow-lg shadow-orange-500/20">
-                        <Icon className="w-6 h-6 text-orange-300 drop-shadow-lg" />
+                  <Card
+                    className={`group cursor-pointer glass-card h-full ${themeClasses}`}
+                    onClick={() => onViewFile(file)}
+                    data-testid={`link-file-${file.id}`}
+                  >
+                    <CardContent className="p-5 flex flex-col h-full">
+                      {/* Header */}
+                      <div className="flex justify-between items-start mb-4">
+                        <div className={`p-3 rounded-xl bg-gradient-to-br ${iconBg} backdrop-blur-sm border ${iconBorder} shadow-lg`}>
+                          <Icon className="w-6 h-6 text-white drop-shadow-lg" />
+                        </div>
+                        <Badge 
+                          className={`text-xs font-semibold bg-gradient-to-r ${badgeGradient} text-white shadow-md`}
+                        >
+                          {getClassroomLabel(classroom, true)}
+                        </Badge>
                       </div>
-                      <Badge 
-                        className={`text-xs font-semibold bg-gradient-to-r from-orange-600 to-amber-600 text-white border-orange-500/50 shadow-md shadow-orange-500/30`}
-                      >
-                        {getClassroomLabel(classroom, true)}
-                      </Badge>
-                    </div>
 
-                    {/* Content */}
-                    <div className="flex-1 mb-4">
-                      <h3 className="text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r group-hover:from-orange-500 group-hover:to-amber-500 group-hover:bg-clip-text group-hover:text-transparent transition-all">
-                        {file.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground line-clamp-3">
-                        {file.description || "Kattints a megtekintéshez"}
-                      </p>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between pt-4 border-t border-orange-500/20">
-                      <LikeButton
-                        materialId={file.id}
-                        initialLikeStatus={batchLikesData?.[file.id]}
-                      />
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-600 to-amber-600 flex items-center justify-center group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-orange-500/60 transition-all">
-                        <ArrowRight className="w-5 h-5 text-white" />
+                      {/* Content */}
+                      <div className="flex-1 mb-4">
+                        <h3 className={`text-lg font-bold text-foreground mb-2 line-clamp-2 group-hover:bg-gradient-to-r ${badgeGradient} group-hover:bg-clip-text group-hover:text-transparent transition-all ${classroom >= 1 && classroom <= 4 ? 'font-kid-display' : classroom >= 5 && classroom <= 8 ? 'font-teen-display' : 'font-senior-display'}`}>
+                          {file.title}
+                        </h3>
+                        <p className={`text-sm text-muted-foreground line-clamp-3 ${classroom >= 1 && classroom <= 4 ? 'font-kid-body' : classroom >= 5 && classroom <= 8 ? 'font-teen-body' : 'font-senior-body'}`}>
+                          {file.description || "Kattints a megtekintéshez"}
+                        </p>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+
+                      {/* Footer */}
+                      <div className={`flex items-center justify-between pt-4 border-t ${iconBorder}`}>
+                        <LikeButton
+                          materialId={file.id}
+                          initialLikeStatus={batchLikesData?.[file.id]}
+                        />
+                        <motion.div
+                          className={`w-10 h-10 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-all`}
+                          whileHover={{ scale: 1.15, rotate: 5 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <ArrowRight className="w-5 h-5 text-white" />
+                        </motion.div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         ) : (
           <div className="text-center py-16">
-            <Card className="max-w-md mx-auto">
+            <Card className="max-w-md mx-auto glass-card">
               <CardContent className="pt-12 pb-12">
                 <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground mb-4">
