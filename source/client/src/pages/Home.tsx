@@ -33,7 +33,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: "#0A0E27" }}>
       {/* Kopernikuszi naprendszer háttér */}
       <CosmicBackground />
       
