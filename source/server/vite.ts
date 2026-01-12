@@ -84,7 +84,20 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // fall through to index.html if the file doesn't exist
+  // CRITICAL: SPA catch-all route - serve index.html for all non-API routes
+  // This ensures /admin, /preview/:id, etc. all work correctly
+  app.get('*', (req, res, next) => {
+    // Skip API routes and static files
+    if (req.path.startsWith('/api/') || 
+        req.path.startsWith('/pdfjs/') ||
+        req.path.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)$/)) {
+      return next();
+    }
+    
+    // Serve index.html for all SPA routes
+    const indexPath = path.resolve(distPath, 'index.html');
+    res.sendFile(indexPath);
+  });
   app.use("*", (_req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
     console.log(`[serveStatic] Serving index.html from: ${indexPath}`);
