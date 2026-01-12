@@ -3,6 +3,7 @@ import { ChevronDown, BookOpen, GraduationCap, FileText, Brain, Lightbulb } from
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
 import { MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
+import { motion } from "framer-motion";
 
 interface HeroSectionProps {
   totalFiles?: number;
