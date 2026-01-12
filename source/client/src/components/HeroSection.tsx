@@ -24,8 +24,8 @@ function HeroSection({
 
   return (
     <div className="relative min-h-[600px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
-      {/* Sötét gradient háttér: lila → rózsaszín → narancssárga */}
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-orange-900" />
+      {/* Mars-szerű gradient háttér: vörös → narancs → barna */}
+      <div className="absolute inset-0 bg-gradient-to-br from-red-950 via-orange-950 to-amber-950" />
       
       {/* Animált részecskék háttér - CSS alapú */}
       <div className="absolute inset-0 opacity-20">
@@ -99,9 +99,9 @@ function HeroSection({
 
       {/* Főtartalom */}
       <div className="relative z-10 max-w-4xl mx-auto px-4 py-16 text-center">
-        {/* Főcím - gradient szöveg */}
+        {/* Főcím - gradient szöveg (Mars-szerű) */}
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 animate-fade-in-up">
-          <span className="bg-gradient-to-r from-purple-300 via-pink-300 to-orange-300 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-red-300 via-orange-300 to-amber-300 bg-clip-text text-transparent drop-shadow-lg">
             Üdvözöl a WebSuli!
           </span>
         </h1>
@@ -117,7 +117,7 @@ function HeroSection({
           <Button
             size="lg"
             onClick={scrollToContent}
-            className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 text-lg px-8 py-6 animate-pulse-cta"
+            className="gap-2 bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-700 hover:via-orange-700 hover:to-amber-700 text-white border-0 text-lg px-8 py-6 animate-pulse-cta shadow-xl shadow-orange-500/50"
           >
             Böngészés
             <ChevronDown className="w-5 h-5" />
@@ -132,32 +132,32 @@ function HeroSection({
         <div className="flex flex-wrap justify-center gap-8 sm:gap-12 pt-8 border-t border-white/20 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
-              <FileText className="w-6 h-6 text-orange-300" />
-              <span className="text-3xl sm:text-4xl font-bold text-white">
+              <FileText className="w-6 h-6 text-orange-400" />
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
                 {totalFiles}
               </span>
             </div>
-            <p className="text-sm text-white/80">Tananyag</p>
+            <p className="text-sm text-white/90">Tananyag</p>
           </div>
 
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
-              <GraduationCap className="w-6 h-6 text-pink-300" />
-              <span className="text-3xl sm:text-4xl font-bold text-white">
+              <GraduationCap className="w-6 h-6 text-amber-400" />
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
                 {totalClassrooms}
               </span>
             </div>
-            <p className="text-sm text-white/80">Osztály</p>
+            <p className="text-sm text-white/90">Osztály</p>
           </div>
 
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
-              <BookOpen className="w-6 h-6 text-purple-300" />
-              <span className="text-3xl sm:text-4xl font-bold text-white">
+              <BookOpen className="w-6 h-6 text-red-400" />
+              <span className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">
                 {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}
               </span>
             </div>
-            <p className="text-sm text-white/80">Évfolyam</p>
+            <p className="text-sm text-white/90">Évfolyam</p>
           </div>
         </div>
       </div>
