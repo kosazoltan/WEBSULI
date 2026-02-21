@@ -16,10 +16,12 @@ export class ClaudeProvider implements IAIProvider {
   readonly model: string;
   private client: Anthropic;
   private timeout: number;
+  private maxTokens: number;
 
   constructor(config: AIProviderConfig) {
     this.model = config.model;
     this.timeout = config.timeout || 60000; // Default 60s
+    this.maxTokens = config.maxTokens || 4096;
     this.client = new Anthropic({
       apiKey: config.apiKey,
       timeout: this.timeout,
@@ -35,7 +37,7 @@ export class ClaudeProvider implements IAIProvider {
       const response = await this.client.messages.create(
         {
           model: this.model,
-          max_tokens: 4096,
+          max_tokens: this.maxTokens,
           system: systemMessages.map(m => m.content).join('\n\n'),
           messages: conversationMessages.map(msg => ({
             role: msg.role as 'user' | 'assistant',
@@ -76,7 +78,7 @@ export class ClaudeProvider implements IAIProvider {
       const stream = await this.client.messages.create(
         {
           model: this.model,
-          max_tokens: 4096,
+          max_tokens: this.maxTokens,
           system: systemMessages.map(m => m.content).join('\n\n'),
           messages: conversationMessages.map(msg => ({
             role: msg.role as 'user' | 'assistant',

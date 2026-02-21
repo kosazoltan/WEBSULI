@@ -4317,6 +4317,7 @@ ${originalFile.content}
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY!,
         model: 'claude-sonnet-4-20250514',
         timeout: 180000, // 3 minutes timeout for AI response
+        maxTokens: 16384, // Full HTML output needs much more than default 4096
       });
 
       // AbortController for request cancellation

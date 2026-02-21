@@ -291,14 +291,20 @@ export default function MaterialImprover() {
         duration: 60000,
       });
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 200000); // 200s timeout (server has 180s)
+
       const res = await fetch(`/api/admin/improve-material/${fileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        signal: controller.signal,
         body: JSON.stringify({
           customPrompt: customPrompt || undefined,
         }),
       });
+
+      clearTimeout(timeoutId);
 
       const data = await res.json();
 
