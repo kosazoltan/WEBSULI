@@ -73,7 +73,14 @@ export function serveStatic(app: Express) {
   // This works in both source and build contexts
   const distPath = path.resolve(process.cwd(), "dist", "public");
 
+  // API-only mode: When FRONTEND_URL is set (split deployment with Vercel),
+  // the frontend is served by Vercel and dist/public may not exist on Render.
   if (!fs.existsSync(distPath)) {
+    if (process.env.FRONTEND_URL) {
+      console.log(`[serveStatic] API-only mode - frontend served by ${process.env.FRONTEND_URL}`);
+      console.log(`[serveStatic] Skipping static file serving (dist/public not found)`);
+      return;
+    }
     throw new Error(
       `Could not find the build directory: ${distPath}. Make sure to run 'npm run build' first.`,
     );
@@ -88,12 +95,13 @@ export function serveStatic(app: Express) {
   // This ensures /admin, /preview/:id, etc. all work correctly
   app.get('*', (req, res, next) => {
     // Skip API routes and static files
-    if (req.path.startsWith('/api/') || 
+    if (req.path.startsWith('/api/') ||
         req.path.startsWith('/pdfjs/') ||
+        req.path.startsWith('/auth/') ||
         req.path.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)$/)) {
       return next();
     }
-    
+
     // Serve index.html for all SPA routes
     const indexPath = path.resolve(distPath, 'index.html');
     res.sendFile(indexPath);
