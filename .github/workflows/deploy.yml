@@ -1,309 +1,65 @@
-name: Deploy to VPS
+name: Build & Verify
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 concurrency:
-  group: production-deployment
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
-
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: 'source/package-lock.json'
-      
+
       - name: Install dependencies
         working-directory: ./source
-        run: npm install
-      
+        run: npm ci
+
+      - name: TypeScript type check
+        working-directory: ./source
+        run: npm run check
+
       - name: Build application
         working-directory: ./source
         run: npm run build
-      
-      - name: Validate secrets
+
+      - name: Verify build output
+        working-directory: ./source
         run: |
-          if [ -z "${{ secrets.VPS_HOST }}" ]; then
-            echo "❌ Error: VPS_HOST secret is missing!"
+          if [ ! -d "dist" ]; then
+            echo "Build failed - dist directory not found!"
             exit 1
           fi
-          if [ -z "${{ secrets.VPS_USERNAME }}" ]; then
-            echo "❌ Error: VPS_USERNAME secret is missing!"
+          if [ ! -d "dist/public" ]; then
+            echo "Build failed - dist/public directory not found!"
             exit 1
           fi
-          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
-            echo "❌ Error: VPS_SSH_KEY secret is missing!"
+          if [ ! -f "dist/index.js" ]; then
+            echo "Build failed - dist/index.js not found!"
             exit 1
           fi
-          echo "✅ All secrets are present"
-      
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          timeout: 300s
-          debug: true
-          script: |
-            set -e  # Exit on any error
-            set -x  # Debug mode - show all commands
-            
-            echo "🚀 Starting deployment..."
-            echo "📋 Environment check:"
-            echo "  - Host: $(hostname)"
-            echo "  - User: $(whoami)"
-            echo "  - Date: $(date)"
-            echo "  - Node version: $(node --version || echo 'Node.js not found')"
-            echo "  - NPM version: $(npm --version || echo 'NPM not found')"
-            echo "  - PM2 version: $(pm2 --version || echo 'PM2 not found')"
-            
-            # Check if project directory exists, if not clone it
-            if [ ! -d "/var/www/websuli" ]; then
-              echo "📦 Cloning repository..."
-              mkdir -p /var/www
-              cd /var/www
-              git clone https://github.com/kosazoltan/WEBSULI.git websuli || {
-                echo "❌ Git clone failed!"
-                exit 1
-              }
-            fi
-            
-            # Navigate to project directory first
-            cd /var/www/websuli || {
-              echo "❌ Cannot access /var/www/websuli directory!"
-              exit 1
-            }
-            
-            echo "📂 Current directory: $(pwd)"
-            
-            # Check if .git directory exists
-            if [ ! -d ".git" ]; then
-              echo "❌ .git directory not found! This is not a git repository!"
-              exit 1
-            fi
-            
-            # Configure git
-            echo "⚙️ Configuring git..."
-            git config --global --add safe.directory /var/www/websuli 2>/dev/null || true
-            git config user.name "GitHub Actions" || true
-            git config user.email "actions@github.com" || true
-            
-            # Check and set remote origin
-            echo "🔍 Checking remote origin..."
-            if ! git remote | grep -q "^origin$"; then
-              echo "📝 Adding remote origin..."
-              git remote add origin https://github.com/kosazoltan/WEBSULI.git || {
-                echo "⚠️ Remote origin might already exist, trying to set URL..."
-                git remote set-url origin https://github.com/kosazoltan/WEBSULI.git
-              }
-            else
-              echo "✅ Remote origin exists, updating URL..."
-              git remote set-url origin https://github.com/kosazoltan/WEBSULI.git
-            fi
-            
-            # Verify remote is configured
-            echo "📋 Remote URLs:"
-            git remote -v
-            
-            # Check current branch and commit
-            echo "📋 Git status before update:"
-            echo "  - Current branch: $(git branch --show-current || echo 'unknown')"
-            echo "  - Current commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
-            
-            # Fetch latest from remote
-            echo "📥 Fetching latest code from origin..."
-            git fetch origin || {
-              echo "❌ Git fetch failed! Trying with --all flag..."
-              git fetch --all || {
-                echo "❌ Git fetch completely failed!"
-                exit 1
-              }
-            }
-            
-            # Show remote commit info
-            REMOTE_COMMIT=$(git ls-remote origin main 2>/dev/null | cut -f1)
-            if [ -z "$REMOTE_COMMIT" ]; then
-              echo "⚠️ Could not get remote commit hash, trying to fetch again..."
-              git fetch origin main 2>&1
-              REMOTE_COMMIT=$(git ls-remote origin main 2>/dev/null | cut -f1)
-            fi
-            echo "📋 Remote main branch commit: ${REMOTE_COMMIT:-'unknown'}"
-            
-            # Checkout main branch if not already on it
-            CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
-            if [ "$CURRENT_BRANCH" != "main" ]; then
-              echo "🔄 Switching to main branch..."
-              git checkout -B main origin/main 2>/dev/null || git checkout main 2>/dev/null || {
-                echo "⚠️ Could not checkout main, creating local branch..."
-                git checkout -b main origin/main || {
-                  echo "❌ Failed to create/checkout main branch!"
-                  exit 1
-                }
-              }
-            fi
-            
-            # Set upstream tracking
-            echo "🔗 Setting upstream tracking..."
-            git branch --set-upstream-to=origin/main main 2>/dev/null || true
-            
-            # Reset to match remote exactly (force update)
-            echo "🔄 Resetting to origin/main..."
-            git reset --hard origin/main || {
-              echo "❌ Git reset failed! Trying merge strategy..."
-              git merge origin/main --no-edit || {
-                echo "❌ Git merge also failed! Force resetting..."
-                git fetch origin main:main --force || exit 1
-              }
-            }
-            
-            # Clean untracked files and directories
-            echo "🧹 Cleaning untracked files..."
-            git clean -fd || true
-            git reset --hard HEAD || true
-            
-            # Verify we're on the right commit
-            FINAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
-            echo "📋 Git status after update:"
-            echo "  - Current branch: $(git branch --show-current)"
-            echo "  - Current commit: $FINAL_COMMIT"
-            echo "  - Remote commit:  $REMOTE_COMMIT"
-            
-            if [ "$FINAL_COMMIT" != "$REMOTE_COMMIT" ] && [ -n "$REMOTE_COMMIT" ] && [ -n "$FINAL_COMMIT" ]; then
-              echo "⚠️ WARNING: Local and remote commits don't match!"
-              echo "   Attempting one more reset..."
-              git reset --hard "$REMOTE_COMMIT" || {
-                echo "❌ Final reset failed!"
-                exit 1
-              }
-            fi
-            
-            git log --oneline -3 || true
-            
-            # Navigate to source directory
-            cd /var/www/websuli/source || {
-              echo "❌ Cannot access /var/www/websuli/source directory!"
-              exit 1
-            }
-            
-            # Check Node.js and npm
-            if ! command -v node &> /dev/null; then
-              echo "❌ Node.js is not installed!"
-              exit 1
-            fi
-            
-            if ! command -v npm &> /dev/null; then
-              echo "❌ NPM is not installed!"
-              exit 1
-            fi
-            
-            # Install dependencies
-            echo "📦 Installing dependencies..."
-            npm ci || npm install || {
-              echo "❌ npm install failed!"
-              exit 1
-            }
-            
-            # Clean previous build
-            echo "🧹 Cleaning previous build..."
-            rm -rf dist || true
-            rm -rf node_modules/.vite || true
-            
-            # Build the application
-            echo "🔨 Building application..."
-            npm run build || {
-              echo "❌ Build failed!"
-              echo "📋 Build error details:"
-              cat package.json | grep -A 5 '"scripts"' || true
-              exit 1
-            }
-            
-            # Verify build output exists
-            if [ ! -d "dist" ]; then
-              echo "❌ Build failed - dist directory not found!"
-              exit 1
-            fi
-            
-            if [ ! -d "dist/public" ]; then
-              echo "❌ Build failed - dist/public directory not found!"
-              exit 1
-            fi
-            
-            echo "✅ Build completed successfully!"
-            echo "📋 Build output:"
-            ls -lah dist/public/ | head -10
-            ls -lah dist/public/assets/ | head -10 || echo "⚠️ No assets directory found"
-            
-            # Run database migrations if needed
-            echo "🗄️ Running database migrations..."
-            npm run db:push || {
-              echo "⚠️ Database migration failed (non-critical, continuing...)"
-            }
-            
-            # Force restart application with PM2
-            echo "♻️ Restarting application with PM2..."
-            
-            # Stop existing process if running
-            pm2 delete websuli 2>/dev/null || echo "No existing PM2 process found"
-            sleep 2
-            
-            # Start application
-            if [ ! -f "deploy/ecosystem.config.cjs" ]; then
-              echo "❌ PM2 ecosystem config not found at deploy/ecosystem.config.cjs!"
-              exit 1
-            fi
-            
-            pm2 start deploy/ecosystem.config.cjs --name websuli --update-env || {
-              echo "❌ PM2 start failed!"
-              echo "📋 PM2 error log:"
-              pm2 logs websuli --lines 20 --nostream || true
-              exit 1
-            }
-            
-            # Wait for app to start
-            echo "⏳ Waiting for application to start..."
-            sleep 5
-            
-            # Check if app is running
-            if pm2 list | grep -q "websuli.*online"; then
-              echo "✅ Application is running!"
-              pm2 list
-            else
-              echo "❌ Application failed to start!"
-              echo "📋 PM2 status:"
-              pm2 list
-              echo "📋 PM2 logs (last 50 lines):"
-              pm2 logs websuli --lines 50 --nostream || true
-              exit 1
-            fi
-            
-            # Save PM2 process list
-            pm2 save || echo "⚠️ PM2 save failed (non-critical)"
-            
-            echo "✅ Deployment completed successfully!"
-            echo "📋 Final PM2 status:"
-            pm2 list
-            echo "🌐 Application should be accessible now!"
-      
-      - name: Deployment notification
-        if: always()
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "✅ Deployment completed successfully!"
-          else
-            echo "❌ Deployment failed!"
-          fi
+          echo "Build verified successfully!"
+          echo "Client assets:"
+          ls -lah dist/public/assets/ | head -10 || echo "No assets directory"
+          echo "Server entry:"
+          ls -lah dist/index.js
+
+  # NOTE: Deployment is handled automatically by Render and Vercel
+  # - Render: Auto-deploys backend on push to main (connected via GitHub integration)
+  # - Vercel: Auto-deploys frontend on push to main (connected via GitHub integration)
