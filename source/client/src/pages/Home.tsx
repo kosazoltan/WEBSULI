@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import Header from "@/components/Header";
 import UserFileList from "@/components/UserFileList";
 import CosmicBackground from "@/components/CosmicBackground";
 
@@ -37,8 +36,7 @@ export default function Home() {
       {/* Kopernikuszi naprendszer háttér */}
       <CosmicBackground />
       
-      <Header />
-      <main className="pt-16 relative z-10">
+      <main className="relative z-10">
         <UserFileList
           files={files}
           isLoading={isLoading}
