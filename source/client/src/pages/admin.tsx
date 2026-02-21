@@ -643,33 +643,32 @@ export default function Admin() {
       {/* Simple static background for admin - no animations to save resources */}
       <div className="fixed inset-0 bg-gray-50 dark:bg-gray-950 -z-10" />
       
-      <div className={`container mx-auto p-4 sm:p-6 max-w-full ${isMobile ? 'pb-20' : ''} relative z-10`} data-testid="admin-panel">
-        <div className="mb-4 sm:mb-6">
-          <Link href="/">
-            <Button 
-              variant="outline" 
-              className="gap-2 w-full sm:w-auto" 
-              data-testid="button-back-to-home"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Vissza a főoldalra</span>
-              <span className="sm:hidden">Vissza</span>
-            </Button>
-          </Link>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Admin Felület</h1>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              Tananyag készítés és kezelés - Admin Authentication Enabled
-            </p>
+      <div className={`container mx-auto px-3 py-2 sm:px-4 sm:py-3 max-w-full ${isMobile ? 'pb-20' : ''} relative z-10`} data-testid="admin-panel">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-3">
+            <Link href="/">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-8 px-2.5 text-xs"
+                data-testid="button-back-to-home"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Vissza</span>
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold leading-tight">Admin Felület</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">
+                Tananyag készítés és kezelés
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="gap-2" 
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 h-8 px-2.5 text-xs"
               data-testid="button-download-source"
               onClick={async () => {
                 try {
@@ -677,15 +676,15 @@ export default function Admin() {
                     title: "Forráskód letöltése...",
                     description: "A ZIP fájl generálása folyamatban...",
                   });
-                  
+
                   const response = await fetch('/api/admin/download-source', {
                     credentials: 'include',
                   });
-                  
+
                   if (!response.ok) {
                     throw new Error(`Letöltési hiba: ${response.status}`);
                   }
-                  
+
                   const blob = await response.blob();
                   const url = window.URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -695,7 +694,7 @@ export default function Admin() {
                   a.click();
                   document.body.removeChild(a);
                   window.URL.revokeObjectURL(url);
-                  
+
                   toast({
                     title: "Forráskód letöltve",
                     description: "A teljes forráskód sikeresen letöltve.",
@@ -709,12 +708,12 @@ export default function Admin() {
                 }
               }}
             >
-              <Download className="h-4 w-4" />
+              <Download className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Forráskód</span>
             </Button>
             <Link href="/admin/help">
-              <Button variant="outline" size="sm" className="gap-2" data-testid="button-help">
-                <HelpCircle className="h-4 w-4" />
+              <Button variant="outline" size="sm" className="gap-1.5 h-8 px-2.5 text-xs" data-testid="button-help">
+                <HelpCircle className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Súgó</span>
               </Button>
             </Link>
@@ -724,72 +723,65 @@ export default function Admin() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Desktop: TabsList látható, Mobil: elrejtve (bottom nav használja) */}
-          <TabsList className={`grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-11 mb-6 ${isMobile ? 'hidden' : ''}`}>
-            <TabsTrigger value="files" className="flex items-center gap-2" data-testid="tab-files">
-              <FolderOpen className="h-4 w-4" />
-              <span className="hidden lg:inline">Fájlok</span>
-              <span className="lg:hidden">Fájlok</span>
+          <TabsList className={`flex flex-wrap gap-1 h-auto p-1 mb-3 ${isMobile ? 'hidden' : ''}`}>
+            <TabsTrigger value="files" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-files">
+              <FolderOpen className="h-3.5 w-3.5" />
+              Fájlok
             </TabsTrigger>
-            <TabsTrigger value="enhanced" className="flex items-center gap-2" data-testid="tab-enhanced">
-              <Wand2 className="h-4 w-4" />
+            <TabsTrigger value="enhanced" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-enhanced">
+              <Wand2 className="h-3.5 w-3.5" />
               <span className="hidden lg:inline">Fejlett készítő</span>
-              <span className="lg:hidden">AI Készítő</span>
+              <span className="lg:hidden">AI</span>
             </TabsTrigger>
-            <TabsTrigger value="pdf-upload" className="flex items-center gap-2" data-testid="tab-pdf-upload">
-              <FileText className="h-4 w-4" />
-              <span className="hidden lg:inline">PDF Feltöltés</span>
-              <span className="lg:hidden">PDF</span>
+            <TabsTrigger value="pdf-upload" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-pdf-upload">
+              <FileText className="h-3.5 w-3.5" />
+              PDF
             </TabsTrigger>
-            <TabsTrigger value="tags" className="flex items-center gap-2" data-testid="tab-tags">
-              <Tag className="h-4 w-4" />
-              <span className="hidden sm:inline">Tag-ek</span>
-              <span className="sm:hidden">Tag</span>
+            <TabsTrigger value="tags" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-tags">
+              <Tag className="h-3.5 w-3.5" />
+              Tag-ek
             </TabsTrigger>
-            <TabsTrigger value="backup" className="flex items-center gap-2" data-testid="tab-backup">
-              <Database className="h-4 w-4" />
-              <span className="hidden sm:inline">Backup</span>
-              <span className="sm:hidden">Backup</span>
+            <TabsTrigger value="backup" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-backup">
+              <Database className="h-3.5 w-3.5" />
+              Backup
             </TabsTrigger>
-            <TabsTrigger value="material-views" className="flex items-center gap-2" data-testid="tab-material-views">
-              <Eye className="h-4 w-4" />
+            <TabsTrigger value="material-views" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-material-views">
+              <Eye className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Megtekintések</span>
               <span className="sm:hidden">Megtek.</span>
             </TabsTrigger>
-            <TabsTrigger value="emails" className="flex items-center gap-2" data-testid="tab-emails">
-              <Mail className="h-4 w-4" />
-              <span className="hidden sm:inline">Email címek</span>
-              <span className="sm:hidden">Email</span>
+            <TabsTrigger value="emails" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-emails">
+              <Mail className="h-3.5 w-3.5" />
+              Email
             </TabsTrigger>
-            <TabsTrigger value="database" className="flex items-center gap-2" data-testid="tab-database">
-              <Database className="h-4 w-4" />
-              <span className="hidden sm:inline">Adatbázis</span>
-              <span className="sm:hidden">DB</span>
+            <TabsTrigger value="database" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-database">
+              <Database className="h-3.5 w-3.5" />
+              DB
             </TabsTrigger>
-            <TabsTrigger 
-              value="improve-materials" 
-              className="flex items-center gap-2 text-red-600 border-red-300 data-[state=active]:bg-red-50 data-[state=active]:text-red-700 data-[state=active]:border-red-500" 
+            <TabsTrigger
+              value="improve-materials"
+              className="flex items-center gap-1 text-xs h-7 px-2.5 text-orange-600 dark:text-orange-400 data-[state=active]:bg-orange-50 data-[state=active]:text-orange-700 dark:data-[state=active]:bg-orange-950 dark:data-[state=active]:text-orange-300"
               data-testid="tab-improve-materials"
             >
-              <Sparkles className="h-4 w-4" />
-              <span className="hidden sm:inline">Okosítás</span>
-              <span className="sm:hidden">Okosítás</span>
+              <Sparkles className="h-3.5 w-3.5" />
+              Okosítás
             </TabsTrigger>
-            <TabsTrigger 
-              value="improvement-backups" 
-              className="flex items-center gap-2 text-red-600 border-red-300 data-[state=active]:bg-red-50 data-[state=active]:text-red-700 data-[state=active]:border-red-500" 
+            <TabsTrigger
+              value="improvement-backups"
+              className="flex items-center gap-1 text-xs h-7 px-2.5 text-orange-600 dark:text-orange-400 data-[state=active]:bg-orange-50 data-[state=active]:text-orange-700 dark:data-[state=active]:bg-orange-950 dark:data-[state=active]:text-orange-300"
               data-testid="tab-improvement-backups"
             >
-              <Database className="h-4 w-4" />
-              <span className="hidden sm:inline">Okosítás Backup</span>
-              <span className="sm:hidden">Backup</span>
+              <Database className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">AI Backup</span>
+              <span className="sm:hidden">AI Bk</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="files" className="space-y-4">
+          <TabsContent value="files" className="space-y-2">
             {activeTab === "files" && <AdminFilesTab />}
           </TabsContent>
 
-          <TabsContent value="enhanced" className="space-y-4">
+          <TabsContent value="enhanced" className="space-y-2">
         {activeTab === "enhanced" && (
           <Suspense fallback={
             <Card>
@@ -797,7 +789,7 @@ export default function Admin() {
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-4 w-96 mt-2" />
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-2">
                 <Skeleton className="h-12 w-full" />
                 <Skeleton className="h-48 w-full" />
                 <Skeleton className="h-12 w-32" />
@@ -809,7 +801,7 @@ export default function Admin() {
         )}
       </TabsContent>
 
-      <TabsContent value="pdf-upload" className="space-y-4">
+      <TabsContent value="pdf-upload" className="space-y-2">
         {activeTab === "pdf-upload" && (
           <Suspense fallback={
             <Card>
@@ -817,7 +809,7 @@ export default function Admin() {
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-4 w-96 mt-2" />
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-2">
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-12 w-full" />
                 <Skeleton className="h-12 w-full" />
@@ -829,19 +821,19 @@ export default function Admin() {
         )}
       </TabsContent>
 
-      <TabsContent value="backup" className="space-y-4">
+      <TabsContent value="backup" className="space-y-2">
         {activeTab === "backup" && <BackupManager />}
       </TabsContent>
 
-      <TabsContent value="emails" className="space-y-4">
+      <TabsContent value="emails" className="space-y-2">
         {activeTab === "emails" && <ExtraEmailsManager />}
       </TabsContent>
 
-      <TabsContent value="tags" className="space-y-4">
+      <TabsContent value="tags" className="space-y-2">
         {activeTab === "tags" && <TagManager />}
       </TabsContent>
 
-      <TabsContent value="database" className="space-y-4">
+      <TabsContent value="database" className="space-y-2">
         {activeTab === "database" && (
           <Suspense fallback={
             <Card>
@@ -849,7 +841,7 @@ export default function Admin() {
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-4 w-96 mt-2" />
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-2">
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-48 w-full" />
               </CardContent>
@@ -860,7 +852,7 @@ export default function Admin() {
         )}
       </TabsContent>
 
-      <TabsContent value="improve-materials" className="space-y-4">
+      <TabsContent value="improve-materials" className="space-y-2">
         {activeTab === "improve-materials" && (
           <Suspense fallback={
             <Card className="border-red-500 border-2">
@@ -868,7 +860,7 @@ export default function Admin() {
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-4 w-96 mt-2" />
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-2">
                 <Skeleton className="h-12 w-full" />
                 <Skeleton className="h-48 w-full" />
               </CardContent>
@@ -879,7 +871,7 @@ export default function Admin() {
         )}
       </TabsContent>
 
-      <TabsContent value="improvement-backups" className="space-y-4">
+      <TabsContent value="improvement-backups" className="space-y-2">
         {activeTab === "improvement-backups" && (
           <Suspense fallback={
             <Card className="border-red-500 border-2">
@@ -887,7 +879,7 @@ export default function Admin() {
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-4 w-96 mt-2" />
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-2">
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-48 w-full" />
               </CardContent>
@@ -898,7 +890,7 @@ export default function Admin() {
         )}
       </TabsContent>
 
-      <TabsContent value="material-views" className="space-y-4">
+      <TabsContent value="material-views" className="space-y-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg sm:text-xl">Tananyag megtekintések</CardTitle>
