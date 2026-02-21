@@ -82,230 +82,61 @@ function HeroSection({
   }));
 
   return (
-    <div className="relative min-h-[160px] flex items-center justify-center overflow-hidden rounded-xl mb-4">
-      {/* Gemini fénykép háttér - 80% átlátszóság */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage: 'url("/gemini-hero-bg.jpg")',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          opacity: 0.8,
-          zIndex: 0,
-        }}
+    <div className="relative flex items-center justify-center overflow-hidden rounded-lg mb-3 py-2 sm:py-3">
+      {/* Gemini fénykép háttér */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-70"
+        style={{ backgroundImage: 'url("/gemini-hero-bg.jpg")' }}
       />
-      
-      {/* Sötét overlay a szöveg olvashatóságáért */}
-      <div 
-        className="absolute inset-0 bg-black/20 backdrop-blur-[0.5px]"
-        style={{ zIndex: 1 }}
-      />
-      
-      {/* Homokos/köves textúra overlay - ELTÁVOLÍTVA, mert eltakarja a képet */}
-      
-      {/* Animált részecskék háttér - molekulák és atomok */}
-      <div className="absolute inset-0 opacity-20" style={{ zIndex: 2 }}>
-        {particles.map((particle) => (
-          <div
-            key={particle.id}
-            className="absolute rounded-full bg-white/60 animate-float-symbol"
-            style={{
-              left: `${particle.left}%`,
-              top: `${particle.top}%`,
-              width: `${particle.width}px`,
-              height: `${particle.height}px`,
-              animationDelay: `${particle.delay}s`,
-              animationDuration: `${particle.duration}s`,
-              filter: 'blur(1px)',
-            }}
-          />
-        ))}
-        {/* További nagyobb részecskék */}
-        {Array.from({ length: 10 }, (_, i) => (
-          <div
-            key={`big-${i}`}
-            className="absolute rounded-full bg-purple-300/20 animate-float-symbol"
-            style={{
-              left: `${(i * 12) % 100}%`,
-              top: `${(i * 18) % 100}%`,
-              width: `${12 + (i % 4) * 4}px`,
-              height: `${12 + (i % 4) * 4}px`,
-              animationDelay: `${i * 0.8}s`,
-              animationDuration: `${15 + (i % 3) * 3}s`,
-              filter: 'blur(2px)',
-            }}
-          />
-        ))}
-      </div>
 
-      {/* Geometriai minták - SVG */}
-      <svg className="absolute inset-0 w-full h-full opacity-10" style={{ zIndex: 2 }} aria-hidden="true">
-        <defs>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
-          </pattern>
-          <pattern id="circles" width="60" height="60" patternUnits="userSpaceOnUse">
-            <circle cx="30" cy="30" r="2" fill="white" opacity="0.3" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" />
-        <rect width="100%" height="100%" fill="url(#circles)" />
-      </svg>
+      {/* Sötét overlay */}
+      <div className="absolute inset-0 bg-black/30" />
 
-      {/* Lebegő matematikai szimbólumok - finoman animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 3 }}>
-        {symbolPositions.map((pos, i) => (
-          <motion.div
-            key={i}
-            className="absolute text-white/15 text-3xl sm:text-4xl lg:text-5xl font-bold"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{
-              opacity: [0.1, 0.3, 0.1],
-              y: [0, -30, 0],
-              rotate: [0, 10, -10, 0],
-            }}
-            transition={{
-              duration: pos.duration,
-              repeat: Infinity,
-              delay: pos.delay,
-              ease: "easeInOut",
-            }}
-            style={{
-              left: `${pos.left}%`,
-              top: `${pos.top}%`,
-            }}
-          >
-            {pos.symbol}
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Oktatási ikonok - elszórva és animálva */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 3 }}>
-        {iconPositions.map(({ Icon, delay, left, top }, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{
-              opacity: [0.1, 0.25, 0.1],
-              scale: [1, 1.2, 1],
-              y: [0, -20, 0],
-            }}
-            transition={{
-              duration: 6 + i,
-              repeat: Infinity,
-              delay: delay,
-              ease: "easeInOut",
-            }}
-            style={{
-              left: `${left}%`,
-              top: `${top}%`,
-            }}
-          >
-            <Icon className="text-white/20 w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14" />
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Főtartalom */}
+      {/* Főtartalom - egyetlen kompakt sor */}
       <motion.div
-        className="relative max-w-4xl mx-auto px-3 py-3 text-center"
-        style={{ zIndex: 10, position: 'relative' }}
+        className="relative z-10 w-full max-w-5xl mx-auto px-3 py-1"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
-        {/* Főcím - vibráló gradient szöveg */}
-        <motion.h1
-          variants={itemVariants}
-          className="text-2xl sm:text-3xl lg:text-4xl font-extrabold mb-2"
-        >
-          <span className="animate-rainbow-spectrum drop-shadow-2xl">
-            Üdvözöl a WebSuli!
-          </span>
-        </motion.h1>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+          {/* Bal: Cím + alcím */}
+          <motion.div variants={itemVariants} className="text-center sm:text-left">
+            <h1 className="text-lg sm:text-xl font-extrabold leading-tight">
+              <span className="animate-rainbow-spectrum drop-shadow-lg">WebSuli</span>
+            </h1>
+            <p className="text-xs text-white/80 hidden sm:block">
+              Interaktív tananyagok {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}. osztályosoknak
+            </p>
+          </motion.div>
 
-        {/* Alcím */}
-        <motion.p
-          variants={itemVariants}
-          className="text-sm sm:text-base text-white/90 mb-3 max-w-xl mx-auto"
-        >
-          Interaktív tananyagok általános és középiskolásoknak.
-          Böngéssz osztályok szerint, és találd meg a neked való anyagokat!
-        </motion.p>
+          {/* Közép: Statisztikák */}
+          <motion.div variants={itemVariants} className="flex items-center gap-4 sm:gap-6">
+            <div className="flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-orange-400" />
+              <span className="text-sm font-bold text-white">{totalFiles}</span>
+              <span className="text-xs text-white/70 hidden sm:inline">tananyag</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-sm font-bold text-white">{totalClassrooms}</span>
+              <span className="text-xs text-white/70 hidden sm:inline">osztály</span>
+            </div>
+          </motion.div>
 
-        {/* CTA gombok */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-col sm:flex-row gap-2 justify-center mb-3"
-        >
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
+          {/* Jobb: CTA gombok */}
+          <motion.div variants={itemVariants} className="flex items-center gap-2">
             <Button
-              size="lg"
+              size="sm"
               onClick={scrollToContent}
-              className="gap-2 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316] hover:from-[#7C3AED] hover:via-[#DB2777] hover:to-[#EA580C] text-white border-0 text-sm px-5 py-2 rounded-full animate-pulse-glow shadow-xl shadow-pink-500/50 hover:shadow-pink-500/70 transition-all duration-300"
+              className="gap-1.5 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316] hover:from-[#7C3AED] hover:via-[#DB2777] hover:to-[#EA580C] text-white border-0 text-xs px-3 py-1 h-7 rounded-full shadow-lg"
             >
               Böngészés
-              <ChevronDown className="w-5 h-5 animate-bounce" />
+              <ChevronDown className="w-3.5 h-3.5 animate-bounce" />
             </Button>
+            {showEmailSubscribe && <EmailSubscribeDialog />}
           </motion.div>
-
-          {showEmailSubscribe && (
-            <EmailSubscribeDialog />
-          )}
-        </motion.div>
-
-        {/* Statisztikák */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-wrap justify-center gap-4 sm:gap-8 pt-3 border-t border-white/20"
-        >
-          <motion.div
-            className="text-center"
-            whileHover={{ scale: 1.1 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <FileText className="w-4 h-4 text-orange-400" />
-              <span className="text-xl sm:text-2xl font-bold text-white drop-shadow-lg">
-                {totalFiles}
-              </span>
-            </div>
-            <p className="text-xs text-white/90">Tananyag</p>
-          </motion.div>
-
-          <motion.div
-            className="text-center"
-            whileHover={{ scale: 1.1 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <GraduationCap className="w-4 h-4 text-amber-400" />
-              <span className="text-xl sm:text-2xl font-bold text-white drop-shadow-lg">
-                {totalClassrooms}
-              </span>
-            </div>
-            <p className="text-xs text-white/90">Osztály</p>
-          </motion.div>
-
-          <motion.div
-            className="text-center"
-            whileHover={{ scale: 1.1 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <div className="flex items-center justify-center gap-1.5 mb-1">
-              <BookOpen className="w-4 h-4 text-red-400" />
-              <span className="text-xl sm:text-2xl font-bold text-white drop-shadow-lg">
-                {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}
-              </span>
-            </div>
-            <p className="text-xs text-white/90">Évfolyam</p>
-          </motion.div>
-        </motion.div>
+        </div>
       </motion.div>
     </div>
   );
