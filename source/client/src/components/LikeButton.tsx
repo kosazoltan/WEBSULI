@@ -87,11 +87,11 @@ export default function LikeButton({ materialId, className, initialLikeStatus }:
         variant="outline"
         size="sm"
         disabled
-        className={className}
+        className={`h-6 px-1.5 text-[10px] ${className}`}
         data-testid={`button-like-loading-${materialId}`}
       >
-        <Heart className="w-4 h-4 mr-2" />
-        <span className="text-sm">-</span>
+        <Heart className="w-3 h-3 mr-1" />
+        <span>-</span>
       </Button>
     );
   }
@@ -110,13 +110,13 @@ export default function LikeButton({ materialId, className, initialLikeStatus }:
       disabled={likeMutation.isPending}
       aria-label={isLiked ? `Kedvelés visszavonása (${likeCount} kedvelés)` : `Kedvelés (${likeCount} kedvelés)`}
       aria-pressed={isLiked}
-      className={`min-h-[44px] ${className}`}
+      className={`h-6 px-1.5 text-[10px] ${className}`}
       data-testid={`button-like-${materialId}`}
     >
       <Heart
-        className={`w-4 h-4 mr-2 ${isLiked ? "fill-current" : ""}`}
+        className={`w-3 h-3 mr-1 ${isLiked ? "fill-current" : ""}`}
       />
-      <span className="text-sm">{likeCount}</span>
+      <span>{likeCount}</span>
     </Button>
   );
 }

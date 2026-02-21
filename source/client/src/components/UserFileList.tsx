@@ -155,14 +155,13 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
   return (
     <div className="min-h-screen relative">
-      <div className="container py-6 relative z-10">
+      <div className="container py-3 relative z-10">
         {/* Admin Toggle */}
         {onToggleView && (
-          <div className="flex justify-end mb-4">
-            <Button onClick={onToggleView} variant="outline" data-testid="button-toggle-admin-view">
-              <ShieldCheck className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Admin nézet</span>
-              <span className="sm:hidden">Admin</span>
+          <div className="flex justify-end mb-2">
+            <Button onClick={onToggleView} variant="outline" size="sm" className="h-7 px-2 text-xs bg-white/20 hover:bg-white/30 text-white border-white/40" data-testid="button-toggle-admin-view">
+              <ShieldCheck className="w-3 h-3 mr-1" />
+              Admin
             </Button>
           </div>
         )}
@@ -174,25 +173,21 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           showEmailSubscribe={true}
         />
 
-        {/* Classroom Filter - kontrasztos osztály szűrők sötét háttérhez */}
-        <div className="mb-6">
-          <h2 className="text-lg font-bold text-white mb-4 text-center drop-shadow-lg flex items-center justify-center gap-2">
-            <BookOpen className="w-5 h-5" />
-            Osztályok szerint szűrés
-          </h2>
-          <div className="flex flex-wrap gap-3 justify-center items-center">
+        {/* Classroom Filter */}
+        <div className="mb-3">
+          <div className="flex flex-wrap gap-1.5 justify-center items-center">
             <Button
               variant={selectedClassroom === null ? "default" : "outline"}
-              size="default"
+              size="sm"
               onClick={() => setSelectedClassroom(null)}
               data-testid="button-filter-all"
-              className={`font-semibold ${
+              className={`h-7 px-3 text-xs font-semibold ${
                 selectedClassroom === null
-                  ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-lg shadow-orange-500/50"
+                  ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
                   : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
               }`}
             >
-              Minden osztály
+              Mind
             </Button>
             {CLASSROOM_VALUES.map((classroom) => {
               const hasFiles = availableClassrooms.includes(classroom);
@@ -200,9 +195,9 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                 <Badge
                   key={classroom}
                   variant={selectedClassroom === classroom ? "default" : "outline"}
-                  className={`cursor-pointer text-sm py-2 px-4 font-semibold backdrop-blur-sm ${
+                  className={`cursor-pointer text-xs py-0.5 px-2 font-semibold backdrop-blur-sm ${
                     selectedClassroom === classroom
-                      ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-lg shadow-orange-500/50"
+                      ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
                       : "bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-md"
                   } ${
                     !hasFiles ? "opacity-50 cursor-not-allowed" : ""
@@ -210,7 +205,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                   onClick={() => (hasFiles ? setSelectedClassroom(classroom) : null)}
                   data-testid={`button-filter-classroom-${classroom}`}
                 >
-                  {getClassroomLabel(classroom, false)}
+                  {getClassroomLabel(classroom, true)}
                   {!hasFiles && " (0)"}
                 </Badge>
               );
@@ -218,15 +213,15 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           </div>
         </div>
 
-        {/* Search - kontrasztos kereső mező sötét háttérhez */}
-        <div className="max-w-xl mx-auto mb-8">
+        {/* Search */}
+        <div className="max-w-md mx-auto mb-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/70 z-10" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70 z-10" />
             <Input
-              placeholder="Keresés tananyag után..."
+              placeholder="Keresés..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-11 bg-white/20 backdrop-blur-md border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"
+              className="pl-8 h-8 text-xs bg-white/20 backdrop-blur-md border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"
               data-testid="input-search"
             />
           </div>
@@ -235,7 +230,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
         {/* Files Grid - Bento Style with Framer Motion */}
         {filteredFiles.length > 0 ? (
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-fr"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr"
             data-testid="list-files"
             id="content-start"
             variants={containerVariants}
@@ -245,12 +240,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
             {filteredFiles.map((file, index) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
-              
-              // Bento Grid: nagyobb kártyák minden 5. elemnél
-              const isLarge = index % 5 === 0;
-              const gridClasses = isLarge 
-                ? "sm:col-span-2 lg:col-span-2" 
-                : "";
+
+              const gridClasses = "";
               
               // Korcsoport-specifikus téma
               let themeClasses = "";
@@ -295,84 +286,41 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                       onClick={() => onViewFile(file)}
                       data-testid={`link-file-${file.id}`}
                     >
-                    <CardContent className="p-5 flex flex-col h-full">
+                    <CardContent className="p-2.5 flex flex-col h-full">
                       {/* Header */}
-                      <div className="flex justify-between items-start mb-4">
-                        <div className={`p-3 rounded-xl bg-gradient-to-br ${iconBg} backdrop-blur-md border-2 ${iconBorder} shadow-xl transition-all group-hover:scale-110 relative z-10`}>
-                          {/* Színes ikonok tananyag típus szerint */}
-                          {(() => {
-                            const titleLower = (file.title + ' ' + (file.description || '')).toLowerCase();
-                            let iconColor = '';
-                            
-                            // Földrajz - zöld/türkiz színek
-                            if (titleLower.includes('földrajz') || titleLower.includes('geography') || titleLower.includes('geo') || titleLower.includes('hegy') || titleLower.includes('folyó') || titleLower.includes('river') || titleLower.includes('mountain') || titleLower.includes('víz') || titleLower.includes('water') || titleLower.includes('térkép') || titleLower.includes('map') || titleLower.includes('világ') || titleLower.includes('world')) {
-                              iconColor = 'text-emerald-500';
-                            }
-                            // Angol - kék/vörös (zászló színek)
-                            else if (titleLower.includes('angol') || titleLower.includes('english') || titleLower.includes('brit') || titleLower.includes('british') || titleLower.includes('uk') || titleLower.includes('usa') || titleLower.includes('amerika') || titleLower.includes('america')) {
-                              iconColor = 'text-blue-600';
-                            }
-                            // Történelem - barna/arany
-                            else if (titleLower.includes('történelem') || titleLower.includes('history') || titleLower.includes('történelmi') || titleLower.includes('vár') || titleLower.includes('castle') || titleLower.includes('király') || titleLower.includes('king') || titleLower.includes('oklevél') || titleLower.includes('scroll')) {
-                              iconColor = 'text-amber-700';
-                            }
-                            // Matematika - lila/kék
-                            else if (titleLower.includes('matek') || titleLower.includes('matematika') || titleLower.includes('math') || titleLower.includes('mathematics') || titleLower.includes('algebra') || titleLower.includes('geometria') || titleLower.includes('geometry') || titleLower.includes('formula') || titleLower.includes('képlet') || titleLower.includes('szigma') || titleLower.includes('sigma') || titleLower.includes('egyenlet') || titleLower.includes('equation')) {
-                              iconColor = 'text-purple-600';
-                            }
-                            // Fizika - narancs/vörös
-                            else if (titleLower.includes('fizika') || titleLower.includes('physics') || titleLower.includes('atom') || titleLower.includes('energia') || titleLower.includes('energy') || titleLower.includes('villam') || titleLower.includes('lightning') || titleLower.includes('áram') || titleLower.includes('current') || titleLower.includes('zap')) {
-                              iconColor = 'text-orange-600';
-                            }
-                            // Kémia - zöld/kék
-                            else if (titleLower.includes('kémia') || titleLower.includes('chemistry') || titleLower.includes('kémiai') || titleLower.includes('vegyület') || titleLower.includes('compound') || titleLower.includes('labor') || titleLower.includes('lab') || titleLower.includes('beaker') || titleLower.includes('flask')) {
-                              iconColor = 'text-green-600';
-                            }
-                            // Biológia - zöld
-                            else if (titleLower.includes('biológia') || titleLower.includes('biology') || titleLower.includes('mikroszkóp') || titleLower.includes('microscope')) {
-                              iconColor = 'text-green-500';
-                            }
-                            // Nyelvtan - rózsaszín/lila
-                            else if (titleLower.includes('írás') || titleLower.includes('writing') || titleLower.includes('írásgyakorlat') || titleLower.includes('toll') || titleLower.includes('pen') || titleLower.includes('ceruza') || titleLower.includes('pencil') || titleLower.includes('papír') || titleLower.includes('paper') || titleLower.includes('esszé') || titleLower.includes('essay')) {
-                              iconColor = 'text-pink-600';
-                            }
-                            // Alapértelmezett - fehér/színes gradient
-                            else {
-                              iconColor = 'text-white';
-                            }
-                            
-                            return <Icon className={`w-6 h-6 ${iconColor} drop-shadow-lg`} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />;
-                          })()}
+                      <div className="flex justify-between items-start mb-1.5">
+                        <div className={`p-1.5 rounded-lg bg-gradient-to-br ${iconBg} backdrop-blur-md border ${iconBorder} shadow-md transition-all group-hover:scale-110 relative z-10`}>
+                          <Icon className="w-4 h-4 text-white drop-shadow-lg" />
                         </div>
-                        <Badge 
-                          className={`text-xs font-bold bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg border-0 px-3 py-1 group-hover:bg-gradient-to-r group-hover:from-gray-900 group-hover:to-black transition-all duration-300`}
+                        <Badge
+                          className="text-[9px] font-bold bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-sm border-0 px-1.5 py-0 h-4 group-hover:from-gray-900 group-hover:to-black transition-all duration-300"
                         >
                           {getClassroomLabel(classroom, true)}
                         </Badge>
                       </div>
 
                       {/* Content */}
-                      <div className="flex-1 mb-4">
-                        <h3 className="text-lg font-bold text-orange-500 mb-2 line-clamp-2 group-hover:text-black transition-all duration-300 drop-shadow-lg">
+                      <div className="flex-1 mb-1.5">
+                        <h3 className="text-xs font-bold text-orange-500 mb-0.5 line-clamp-2 group-hover:text-black transition-all duration-300 drop-shadow-lg leading-tight">
                           {file.title}
                         </h3>
-                        <p className="text-sm text-orange-400 font-semibold line-clamp-3 group-hover:text-black group-hover:font-bold transition-all duration-300">
+                        <p className="text-[10px] text-orange-400 font-medium line-clamp-2 group-hover:text-black transition-all duration-300 leading-tight">
                           {file.description || "Kattints a megtekintéshez"}
                         </p>
                       </div>
 
                       {/* Footer */}
-                      <div className={`flex items-center justify-between pt-4 border-t ${iconBorder}`}>
+                      <div className={`flex items-center justify-between pt-1.5 border-t ${iconBorder}`}>
                         <LikeButton
                           materialId={file.id}
                           initialLikeStatus={batchLikesData?.[file.id]}
                         />
                         <motion.div
-                          className={`w-10 h-10 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-all`}
+                          className={`w-6 h-6 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-all`}
                           whileHover={{ scale: 1.15, rotate: 5 }}
                           whileTap={{ scale: 0.95 }}
                         >
-                          <ArrowRight className="w-5 h-5 text-white" />
+                          <ArrowRight className="w-3 h-3 text-white" />
                         </motion.div>
                       </div>
                     </CardContent>
