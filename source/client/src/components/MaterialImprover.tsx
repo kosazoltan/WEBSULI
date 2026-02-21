@@ -113,7 +113,7 @@ export default function MaterialImprover() {
     if (hasDocType || hasHtmlTag) {
       
       // Ensure it has proper charset meta tag if missing
-      if (!html.includes('charset') && !html.includes('charset')) {
+      if (!html.includes('charset')) {
         html = html.replace(
           /<head[^>]*>/i,
           (match: string) => `${match}<meta charset="UTF-8">`
@@ -222,35 +222,14 @@ export default function MaterialImprover() {
   };
 
   const renderedOriginal = useMemo(
-    () => {
-      const result = makeRunnableHtml(previewData?.originalFile?.content);
-      console.log('[RENDERED] Original HTML structure check:', {
-        hasDocType: result.includes('<!DOCTYPE'),
-        hasHtml: result.includes('<html'),
-        hasHead: result.includes('<head'),
-        hasBody: result.includes('<body'),
-        headBeforeBody: result.indexOf('<head') < result.indexOf('<body') || result.indexOf('<body') === -1,
-        preview: result.substring(0, 500)
-      });
-      return result;
-    },
+    () => makeRunnableHtml(previewData?.originalFile?.content),
     [previewData?.originalFile?.content]
   );
 
-  const renderedImproved = useMemo(() => {
-    const result = makeRunnableHtml(previewData?.content);
-    console.log('[RENDERED] Improved HTML structure check:', {
-      hasDocType: result.includes('<!DOCTYPE'),
-      hasHtml: result.includes('<html'),
-      hasHead: result.includes('<head'),
-      hasBody: result.includes('<body'),
-      headIndex: result.indexOf('<head'),
-      bodyIndex: result.indexOf('<body'),
-      headBeforeBody: result.indexOf('<head') < result.indexOf('<body') || result.indexOf('<body') === -1,
-      preview: result.substring(0, 500)
-    });
-    return result;
-  }, [previewData?.content]);
+  const renderedImproved = useMemo(
+    () => makeRunnableHtml(previewData?.content),
+    [previewData?.content]
+  );
 
   // Create Blob URL for opening in external browser
   const improvedBlobUrl = useMemo(() => {

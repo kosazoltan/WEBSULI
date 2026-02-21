@@ -24,21 +24,29 @@ import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 
 // ========== AI Configuration Validation ==========
 function validateAIConfig() {
+  // Only API keys are required - BASE_URLs are optional (SDKs have defaults)
   const requiredEnvVars = [
     'AI_INTEGRATIONS_OPENAI_API_KEY',
-    'AI_INTEGRATIONS_OPENAI_BASE_URL',
     'AI_INTEGRATIONS_ANTHROPIC_API_KEY',
-    'AI_INTEGRATIONS_ANTHROPIC_BASE_URL'
+  ];
+  const optionalEnvVars = [
+    'AI_INTEGRATIONS_OPENAI_BASE_URL',
+    'AI_INTEGRATIONS_ANTHROPIC_BASE_URL',
   ];
 
   const missing = requiredEnvVars.filter(key => !process.env[key]);
+  const missingOptional = optionalEnvVars.filter(key => !process.env[key]);
 
   if (missing.length > 0) {
-    console.error('❌ Missing AI configuration:', missing.join(', '));
+    console.error('❌ Missing required AI API keys:', missing.join(', '));
     throw new Error(
-      `Hiányzó AI konfigurációs változók: ${missing.join(', ')}. ` +
+      `Hiányzó AI API kulcsok: ${missing.join(', ')}. ` +
       `Kérlek állítsd be az environment variable-öket.`
     );
+  }
+
+  if (missingOptional.length > 0) {
+    console.warn('⚠️ Optional AI BASE_URLs not set (using SDK defaults):', missingOptional.join(', '));
   }
 
   console.log('✅ AI konfiguráció ellenőrizve');
@@ -2165,9 +2173,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "Legalább egy osztály kiválasztása kötelező" });
       }
 
-      // Validate all classrooms are valid numbers 1-8
-      if (!classrooms.every((c: any) => typeof c === 'number' && c >= 1 && c <= 8)) {
-        return res.status(400).json({ message: "Minden osztálynak 1 és 8 között kell lennie" });
+      // Validate all classrooms are valid numbers 0-12 (0=Programming, 1-12=Grades)
+      if (!classrooms.every((c: any) => typeof c === 'number' && c >= 0 && c <= 12)) {
+        return res.status(400).json({ message: "Minden osztálynak 0 és 12 között kell lennie" });
       }
 
       // Email validáció
@@ -2215,9 +2223,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "Legalább egy osztály kiválasztása kötelező" });
       }
 
-      // Validate all classrooms are valid numbers 1-8
-      if (!classrooms.every((c: any) => typeof c === 'number' && c >= 1 && c <= 8)) {
-        return res.status(400).json({ message: "Minden osztálynak 1 és 8 között kell lennie" });
+      // Validate all classrooms are valid numbers 0-12 (0=Programming, 1-12=Grades)
+      if (!classrooms.every((c: any) => typeof c === 'number' && c >= 0 && c <= 12)) {
+        return res.status(400).json({ message: "Minden osztálynak 0 és 12 között kell lennie" });
       }
 
       // Email validáció
@@ -2716,6 +2724,11 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "A 'text' mező kötelező és string típusú kell legyen" });
       }
 
+      // Validate text length to prevent abuse
+      if (text.length > 5000) {
+        return res.status(400).json({ message: "A szöveg maximum 5000 karakter lehet" });
+      }
+
       // Validate lang parameter (whitelist of supported languages)
       const supportedLangs = ['hu', 'en', 'en-US', 'en-GB', 'de', 'fr', 'es', 'it', 'pl', 'ro', 'sk', 'cs', 'pt', 'nl', 'sv', 'da', 'fi', 'no'];
       if (!supportedLangs.includes(lang)) {
@@ -2747,15 +2760,15 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       });
     } catch (error: any) {
       console.error('TTS hiba:', error);
-      res.status(500).json({ message: 'Szöveg felolvasása sikertelen', error: error.message });
+      res.status(500).json({ message: 'Szöveg felolvasása sikertelen' });
     }
   });
 
   // ADMIN Backup operations
   // Create a new backup (max 3 kept automatically)
-  adminRouter.post("/backups/create", async (req, res) => {
+  adminRouter.post("/backups/create", async (req: any, res) => {
     try {
-      const userId = 'anonymous';
+      const userId = req.user?.id || 'admin';
 
       const { name } = req.body;
       if (!name || typeof name !== 'string') {
@@ -2771,10 +2784,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   });
 
   // Get all backups (max 3)
-  adminRouter.get("/backups", async (req, res) => {
+  adminRouter.get("/backups", async (_req, res) => {
     try {
-      const userId = 'anonymous';
-
       const backups = await storage.getAllBackups();
       res.json(backups);
     } catch (error: any) {
@@ -2786,8 +2797,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // Restore from backup
   adminRouter.post("/backups/:id/restore", async (req, res) => {
     try {
-      const userId = 'anonymous';
-
       const success = await storage.restoreBackup(req.params.id);
       if (!success) {
         return res.status(404).json({ message: "Backup nem található" });
@@ -2803,8 +2812,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // Delete backup
   adminRouter.delete("/backups/:id", async (req, res) => {
     try {
-      const userId = 'anonymous';
-
       const success = await storage.deleteBackup(req.params.id);
       if (!success) {
         return res.status(404).json({ message: "Backup nem található" });
@@ -2817,11 +2824,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     }
   });
 
-  // Export backup as downloadable JSON file
-  adminRouter.get("/backups/export", async (req, res) => {
+  // Export backup as downloadable JSON file (protected by adminRouter middleware)
+  adminRouter.get("/backups/export", async (req: any, res) => {
     try {
-      // NO AUTH - Removed authentication
-      const userEmail = "admin";
+      const userEmail = req.user?.email || "admin";
       const allFiles = await storage.getAllHtmlFiles();
 
       const backupData = {
@@ -2858,32 +2864,41 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "A backup fájl nem tartalmaz anyagokat" });
       }
 
-      // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
-      // Import the necessary tables
+      // Basic validation: ensure each material has required fields
+      for (const m of materials) {
+        if (!m.id || !m.title || m.content === undefined) {
+          return res.status(400).json({ message: "Érvénytelen backup: hiányzó kötelező mezők (id, title, content)" });
+        }
+      }
+
+      // Run full import in a transaction to ensure data integrity
       const { emailLogs, materialStats, materialTags, materialLikes, materialRatings, materialComments, materialViews } = await import("@shared/schema");
 
-      await db.delete(emailLogs);
-      await db.delete(materialStats);
-      await db.delete(materialTags);
-      await db.delete(materialLikes);
-      await db.delete(materialRatings);
-      await db.delete(materialComments);
-      await db.delete(materialViews);
+      await db.transaction(async (tx) => {
+        // Delete all related records first to avoid foreign key constraint violations
+        await tx.delete(emailLogs);
+        await tx.delete(materialStats);
+        await tx.delete(materialTags);
+        await tx.delete(materialLikes);
+        await tx.delete(materialRatings);
+        await tx.delete(materialComments);
+        await tx.delete(materialViews);
 
-      // Now we can safely delete all html_files
-      await db.delete(htmlFiles);
+        // Now we can safely delete all html_files
+        await tx.delete(htmlFiles);
 
-      await db.insert(htmlFiles).values(
-        materials.map((file: HtmlFile) => ({
-          id: file.id,
-          userId: file.userId,
-          title: file.title,
-          content: file.content,
-          description: file.description,
-          classroom: file.classroom,
-          createdAt: file.createdAt,
-        }))
-      );
+        await tx.insert(htmlFiles).values(
+          materials.map((file: HtmlFile) => ({
+            id: file.id,
+            userId: file.userId,
+            title: file.title,
+            content: file.content,
+            description: file.description,
+            classroom: file.classroom,
+            createdAt: file.createdAt,
+          }))
+        );
+      });
 
       res.json({
         success: true,
@@ -3541,23 +3556,22 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const { materialIds } = result.data;
 
-      // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
-      // Import the necessary tables first
+      // IMPORTANT: Delete all related records in a transaction to ensure data integrity
       const { emailLogs, materialStats, materialTags, materialLikes, materialRatings, materialComments, materialViews } = await import("@shared/schema");
 
-      // Delete related records for all materials in bulk
-      await db.delete(emailLogs).where(inArray(emailLogs.htmlFileId, materialIds));
-      await db.delete(materialStats).where(inArray(materialStats.materialId, materialIds));
-      await db.delete(materialTags).where(inArray(materialTags.materialId, materialIds));
-      await db.delete(materialLikes).where(inArray(materialLikes.materialId, materialIds));
-      await db.delete(materialRatings).where(inArray(materialRatings.materialId, materialIds));
-      await db.delete(materialComments).where(inArray(materialComments.materialId, materialIds));
-      await db.delete(materialViews).where(inArray(materialViews.materialId, materialIds));
+      await db.transaction(async (tx) => {
+        // Delete related records for all materials in bulk
+        await tx.delete(emailLogs).where(inArray(emailLogs.htmlFileId, materialIds));
+        await tx.delete(materialStats).where(inArray(materialStats.materialId, materialIds));
+        await tx.delete(materialTags).where(inArray(materialTags.materialId, materialIds));
+        await tx.delete(materialLikes).where(inArray(materialLikes.materialId, materialIds));
+        await tx.delete(materialRatings).where(inArray(materialRatings.materialId, materialIds));
+        await tx.delete(materialComments).where(inArray(materialComments.materialId, materialIds));
+        await tx.delete(materialViews).where(inArray(materialViews.materialId, materialIds));
 
-      // Now we can safely delete the html_files
-      const deleteResult = await db
-        .delete(htmlFiles)
-        .where(inArray(htmlFiles.id, materialIds));
+        // Now we can safely delete the html_files
+        await tx.delete(htmlFiles).where(inArray(htmlFiles.id, materialIds));
+      });
 
       res.json({
         success: true,
@@ -3601,7 +3615,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       const { materialIds, classroom } = result.data;
-      const userId = 'anonymous';
+      const userId = (req as any).user?.id || 'admin';
       let movedCount = 0;
 
       for (const id of materialIds) {
@@ -4079,8 +4093,8 @@ Crawl-delay: 1`;
     }
   });
 
-  // Update system prompt (public access)
-  app.put("/api/admin/system-prompts/:id", async (req, res) => {
+  // Update system prompt (admin only - protected via adminRouter middleware)
+  adminRouter.put("/system-prompts/:id", async (req, res) => {
     try {
       const { systemPrompts, insertSystemPromptSchema } = await import('@shared/schema');
 

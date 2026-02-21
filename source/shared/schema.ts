@@ -112,7 +112,7 @@ export const insertExtraEmailSchema = createInsertSchema(extraEmailAddresses).om
   createdAt: true,
   updatedAt: true,
 }).extend({
-  classrooms: z.array(z.number().min(1).max(8)).min(1, "Legalább egy osztály kiválasztása kötelező"),
+  classrooms: z.array(z.number().min(0).max(12)).min(1, "Legalább egy osztály kiválasztása kötelező"),
 });
 
 export type InsertExtraEmail = z.infer<typeof insertExtraEmailSchema>;
