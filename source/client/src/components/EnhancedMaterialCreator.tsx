@@ -1215,7 +1215,7 @@ export default function EnhancedMaterialCreator() {
 
               {/* Linear Progress Indicator when analyzing */}
               {isAnalyzing && (
-                <Card className="bg-gradient-to-r from-cyan-50 to-yellow-50 dark:from-cyan-950/20 dark:to-yellow-950/20 border-2 border-cyan-200 dark:border-cyan-800">
+                <Card className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-2 border-orange-200 dark:border-orange-800">
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -1594,7 +1594,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
             <CardContent>
               {/* Loading indicator for Claude HTML generation */}
               {isClaudeLoading && (
-                <Card className="mb-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 border-2 border-purple-200 dark:border-purple-800">
+                <Card className="mb-4 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-2 border-orange-200 dark:border-orange-800">
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />

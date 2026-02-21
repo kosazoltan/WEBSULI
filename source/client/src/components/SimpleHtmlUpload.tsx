@@ -245,7 +245,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
               <Button
                 type="submit"
                 disabled={!title.trim() || !content.trim() || isPending}
-                className="w-full sm:flex-1 h-8 sm:h-9 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-extrabold shadow-xl text-sm border-2 border-teal-600"
+                className="w-full sm:flex-1 h-8 sm:h-9 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold shadow-xl text-sm border-2 border-orange-600"
                 data-testid="button-submit-upload"
               >
                 {isPending ? (

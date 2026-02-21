@@ -113,7 +113,7 @@ export default function EmailSubscribeDialog() {
       <DialogTrigger asChild>
         <Button
           size="lg"
-          className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-lg hover:shadow-xl transition-all duration-300"
           data-testid="button-open-subscribe-dialog"
         >
           <Bell className="w-4 h-4 mr-2" />
@@ -138,7 +138,7 @@ export default function EmailSubscribeDialog() {
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-purple-600" />
+                <Bell className="w-5 h-5 text-orange-600" />
                 Email értesítések
               </DialogTitle>
               <DialogDescription>

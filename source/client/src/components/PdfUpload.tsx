@@ -373,15 +373,15 @@ export default function PdfUpload() {
       </Card>
 
       {/* Info Card */}
-      <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+      <Card className="bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
             <div className="space-y-2 text-sm">
-              <p className="font-medium text-blue-900 dark:text-blue-100">
+              <p className="font-medium text-orange-900 dark:text-orange-100">
                 Fontos tudnivalók
               </p>
-              <ul className="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-200">
+              <ul className="list-disc list-inside space-y-1 text-orange-800 dark:text-orange-200">
                 <li>A PDF fájl natív böngésző viewerben jelenik meg</li>
                 <li>Nincs AI feldolgozás vagy HTML konverzió</li>
                 <li>Maximum fájlméret: 50 MB</li>

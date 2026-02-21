@@ -254,9 +254,9 @@ export default function BackupManager() {
         </Card>
 
         {/* Production → Dev Sync */}
-        <Card className="border-purple-500/50 bg-purple-50 dark:bg-purple-950/20">
+        <Card className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/20">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-400">
+            <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
               <RefreshCw className="h-5 w-5" />
               Production → Dev Sync
             </CardTitle>
@@ -278,7 +278,7 @@ export default function BackupManager() {
               onClick={() => setShowSyncDialog(true)}
               disabled={syncFromProductionMutation.isPending}
               variant="outline"
-              className="w-full border-purple-500/50 hover:bg-purple-100 dark:hover:bg-purple-950/30"
+              className="w-full border-orange-500/50 hover:bg-orange-100 dark:hover:bg-orange-950/30"
               data-testid="button-sync-from-production"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${syncFromProductionMutation.isPending ? 'animate-spin' : ''}`} />
@@ -288,9 +288,9 @@ export default function BackupManager() {
         </Card>
 
         {/* Download Source Code */}
-        <Card className="border-blue-500/50 bg-blue-50 dark:bg-blue-950/20">
+        <Card className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/20">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+            <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
               <Code2 className="h-5 w-5" />
               Forráskód letöltése
             </CardTitle>

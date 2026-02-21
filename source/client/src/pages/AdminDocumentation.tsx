@@ -32,7 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function AdminDocumentation() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-yellow-50 to-pink-50 dark:from-background dark:via-background dark:to-background">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-background dark:via-background dark:to-background">
       <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
         {/* Header */}
         <div className="mb-6">
@@ -48,7 +48,7 @@ export default function AdminDocumentation() {
               <BookOpen className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-cyan-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+              <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-600 bg-clip-text text-transparent">
                 Admin Dokumentáció
               </h1>
               <p className="text-muted-foreground">
@@ -865,7 +865,7 @@ export default function AdminDocumentation() {
         </Tabs>
 
         {/* Footer */}
-        <Card className="mt-8 bg-gradient-to-r from-cyan-50 to-purple-50 dark:from-background dark:to-background">
+        <Card className="mt-8 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-background dark:to-background">
           <CardContent className="p-6 text-center">
             <p className="text-muted-foreground mb-4">
               További kérdések esetén lépj kapcsolatba az admin-nal.
