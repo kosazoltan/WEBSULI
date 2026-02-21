@@ -394,120 +394,119 @@ export default function AdminFileDashboard({
 
   if (files.length === 0) {
     return (
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-4 sm:py-6 lg:py-8 bg-gray-100 dark:bg-gray-900 rounded-lg">
-        <div className="mb-4 sm:mb-5">
-          <h2 className="text-lg xs:text-xl sm:text-2xl font-bold text-foreground mb-1">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-3 sm:py-4 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+        <div className="mb-2">
+          <h2 className="text-sm font-bold text-orange-900 dark:text-orange-200">
             HTML Fájlok - Admin Nézet
           </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">
+          <p className="text-xs text-orange-700/70 dark:text-orange-300/70">
             0 fájl összesen
           </p>
         </div>
-        
-        <div className="flex flex-col xs:flex-row gap-3 mb-6">
-          <div className="flex flex-col xs:flex-row gap-3">
-            {onUploadClick && (
-              <Button
-                onClick={onUploadClick}
-                className="w-full xs:w-auto bg-green-800 hover:bg-green-900 text-white"
-                data-testid="button-upload-html"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Új HTML feltöltése
-              </Button>
-            )}
+
+        <div className="flex flex-row items-center gap-2 mb-3">
+          {onUploadClick && (
             <Button
-              onClick={onToggleView}
-              className="w-full xs:w-auto bg-green-800 hover:bg-green-900 text-white"
-              data-testid="button-toggle-view"
+              onClick={onUploadClick}
+              size="sm"
+              className="h-7 px-3 text-xs bg-orange-600 hover:bg-orange-700 text-white"
+              data-testid="button-upload-html"
             >
-              <Eye className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Normál nézet</span>
-              <span className="sm:hidden">Normál</span>
+              <Upload className="w-3.5 h-3.5 mr-1.5" />
+              Feltöltés
             </Button>
-          </div>
+          )}
+          <Button
+            onClick={onToggleView}
+            size="sm"
+            className="h-7 px-3 text-xs bg-orange-600 hover:bg-orange-700 text-white"
+            data-testid="button-toggle-view"
+          >
+            <Eye className="w-3.5 h-3.5 mr-1.5" />
+            Normál nézet
+          </Button>
           <Button
             onClick={handleDownloadSource}
             variant="outline"
-            className="w-full xs:w-auto border-green-800 text-green-800 hover:bg-green-50 dark:hover:bg-green-950"
+            size="sm"
+            className="h-7 px-3 text-xs border-orange-400 text-orange-700 hover:bg-orange-100 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900/30"
             data-testid="button-download-source-empty"
           >
-            <Download className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Forráskód letöltése</span>
-            <span className="sm:hidden">Forráskód</span>
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            Forráskód
           </Button>
         </div>
-        
+
         <EmptyState />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-4 sm:py-6 lg:py-8 bg-gray-100 dark:bg-gray-900 rounded-lg">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-3 sm:py-4 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
       {/* Title and description */}
-      <div className="mb-4 sm:mb-5">
-        <h2 className="text-lg xs:text-xl sm:text-2xl font-bold text-foreground mb-1">
+      <div className="mb-2">
+        <h2 className="text-sm font-bold text-orange-900 dark:text-orange-200">
           HTML Fájlok - Admin Nézet
         </h2>
-        <p className="text-xs sm:text-sm text-muted-foreground">
+        <p className="text-xs text-orange-700/70 dark:text-orange-300/70">
           {files.length} fájl összesen
         </p>
       </div>
 
-      {/* Search and view toggle */}
-      <div className="flex flex-col xs:flex-row gap-3 mb-5 sm:mb-6">
+      {/* Search and action buttons - ONE ROW */}
+      <div className="flex flex-row items-center gap-2 mb-3">
         <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-400" />
           <Input
             placeholder="Keresés..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 w-full"
+            className="pl-8 h-7 text-xs w-full border-orange-300 focus:border-orange-500 dark:border-orange-700"
             data-testid="input-search"
           />
         </div>
-        <div className="flex flex-col xs:flex-row gap-3">
-          {onUploadClick && (
-            <Button
-              onClick={onUploadClick}
-              className="w-full xs:w-auto xs:flex-shrink-0 bg-green-800 hover:bg-green-900 text-white"
-              data-testid="button-upload-html"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Új HTML feltöltése</span>
-              <span className="sm:hidden">Feltöltés</span>
-            </Button>
-          )}
+        {onUploadClick && (
           <Button
-            onClick={onToggleView}
-            className="w-full xs:w-auto xs:flex-shrink-0 bg-green-800 hover:bg-green-900 text-white"
-            data-testid="button-toggle-view"
+            onClick={onUploadClick}
+            size="sm"
+            className="h-7 px-3 text-xs flex-shrink-0 bg-orange-600 hover:bg-orange-700 text-white"
+            data-testid="button-upload-html"
           >
-            <Eye className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Normál nézet</span>
-            <span className="sm:hidden">Normál</span>
+            <Upload className="w-3.5 h-3.5 mr-1.5" />
+            <span className="hidden sm:inline">Feltöltés</span>
+            <span className="sm:hidden">Új</span>
           </Button>
-        </div>
+        )}
+        <Button
+          onClick={onToggleView}
+          size="sm"
+          className="h-7 px-3 text-xs flex-shrink-0 bg-orange-600 hover:bg-orange-700 text-white"
+          data-testid="button-toggle-view"
+        >
+          <Eye className="w-3.5 h-3.5 mr-1.5" />
+          Normál
+        </Button>
         <Button
           onClick={handleDownloadSource}
           variant="outline"
-          className="w-full xs:w-auto xs:flex-shrink-0 border-green-800 text-green-800 hover:bg-green-50 dark:hover:bg-green-950"
+          size="sm"
+          className="h-7 px-3 text-xs flex-shrink-0 border-orange-400 text-orange-700 hover:bg-orange-100 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900/30"
           data-testid="button-download-source"
         >
-          <Download className="w-4 h-4 mr-2" />
-          <span className="hidden sm:inline">Forráskód letöltése</span>
-          <span className="sm:hidden">Forráskód</span>
+          <Download className="w-3.5 h-3.5 mr-1.5" />
+          <span className="hidden sm:inline">Forráskód</span>
+          <span className="sm:hidden">ZIP</span>
         </Button>
       </div>
 
       {/* Classroom filters */}
-      <div className="mb-5 sm:mb-6">
-        <p className="text-xs sm:text-sm text-muted-foreground mb-2">Szűrés osztály szerint:</p>
-        <div className="flex flex-wrap gap-2 justify-center xs:justify-start">
+      <div className="mb-3">
+        <p className="text-[10px] text-orange-700/70 dark:text-orange-300/70 mb-1">Szűrés osztály szerint:</p>
+        <div className="flex flex-wrap gap-1 justify-center xs:justify-start">
           <Badge
             variant={classroomFilter === "all" ? "default" : "outline"}
-            className={`cursor-pointer text-xs sm:text-sm ${classroomFilter === "all" ? "bg-blue-900 hover:bg-blue-950 text-white border-blue-900" : "border-blue-900 text-blue-900"}`}
+            className={`cursor-pointer text-[10px] h-5 px-1.5 ${classroomFilter === "all" ? "bg-orange-600 hover:bg-orange-700 text-white border-orange-600" : "border-orange-400 text-orange-700 dark:border-orange-600 dark:text-orange-300"}`}
             onClick={() => setClassroomFilter("all")}
             data-testid="filter-classroom-all"
           >
@@ -517,7 +516,7 @@ export default function AdminFileDashboard({
             <Badge
               key={classroom}
               variant={classroomFilter === classroom ? "default" : "outline"}
-              className={`cursor-pointer text-xs sm:text-sm ${classroomFilter === classroom ? "bg-blue-900 hover:bg-blue-950 text-white border-blue-900" : "border-blue-900 text-blue-900"}`}
+              className={`cursor-pointer text-[10px] h-5 px-1.5 ${classroomFilter === classroom ? "bg-orange-600 hover:bg-orange-700 text-white border-orange-600" : "border-orange-400 text-orange-700 dark:border-orange-600 dark:text-orange-300"}`}
               onClick={() => setClassroomFilter(classroom)}
               data-testid={`filter-classroom-${classroom}`}
             >
@@ -530,48 +529,49 @@ export default function AdminFileDashboard({
 
       {/* Bulk selection toolbar + Reorder save */}
       {orderedFiles.length > 0 && (
-        <div className="mb-4 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
             <Checkbox
               checked={selectedIds.size === orderedFiles.length && orderedFiles.length > 0}
               onCheckedChange={toggleAllSelection}
               data-testid="checkbox-select-all"
             />
-            <span className="text-sm text-muted-foreground">
-              {selectedIds.size === 0 ? "Összes kijelölése" : `${selectedIds.size} kiválasztva`}
+            <span className="text-xs text-orange-700/70 dark:text-orange-300/70">
+              {selectedIds.size === 0 ? "Összes" : `${selectedIds.size} db`}
             </span>
           </div>
-          
+
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <Button
                 variant="destructive"
                 size="sm"
+                className="h-6 px-2 text-[11px]"
                 onClick={handleBulkDelete}
                 disabled={isBulkOperating}
                 data-testid="button-bulk-delete"
               >
-                <Trash2 className="w-4 h-4 mr-2" />
+                <Trash2 className="w-3 h-3 mr-1" />
                 Törlés
               </Button>
               <Button
                 size="sm"
+                className="h-6 px-2 text-[11px] bg-orange-600 hover:bg-orange-700 text-white"
                 onClick={handleBulkEmail}
                 disabled={isBulkOperating}
-                className="bg-green-800 hover:bg-green-900 text-white"
                 data-testid="button-bulk-email"
               >
-                <Mail className="w-4 h-4 mr-2" />
+                <Mail className="w-3 h-3 mr-1" />
                 Email
               </Button>
               <Button
                 size="sm"
+                className="h-6 px-2 text-[11px] bg-orange-600 hover:bg-orange-700 text-white"
                 onClick={handleBulkMove}
                 disabled={isBulkOperating}
-                className="bg-green-800 hover:bg-green-900 text-white"
                 data-testid="button-bulk-move"
               >
-                <FolderOpen className="w-4 h-4 mr-2" />
+                <FolderOpen className="w-3 h-3 mr-1" />
                 Áthelyezés
               </Button>
             </div>
@@ -581,11 +581,12 @@ export default function AdminFileDashboard({
             <Button
               onClick={handleSaveOrder}
               disabled={isSaving}
-              className="ml-auto bg-blue-600 hover:bg-blue-700 text-white"
+              size="sm"
+              className="ml-auto h-7 px-3 text-xs bg-orange-600 hover:bg-orange-700 text-white"
               data-testid="button-save-order"
             >
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? "Mentés..." : "Sorrend Mentése"}
+              <Save className="w-3.5 h-3.5 mr-1.5" />
+              {isSaving ? "Mentés..." : "Sorrend mentése"}
             </Button>
           )}
         </div>
