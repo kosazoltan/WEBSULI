@@ -69,7 +69,7 @@ const corsOptions = {
   },
   credentials: true, // Allow cookies and authentication headers
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
   exposedHeaders: ["Content-Length", "X-Request-Id"],
   maxAge: 86400, // Preflight cache for 24 hours
 };
