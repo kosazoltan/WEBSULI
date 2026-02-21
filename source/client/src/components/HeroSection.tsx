@@ -1,9 +1,11 @@
 import { memo } from "react";
-import { ChevronDown, BookOpen, GraduationCap, FileText, Brain, Lightbulb } from "lucide-react";
+import { ChevronDown, GraduationCap, FileText, LogIn, Shield } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
 import { MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
 import { motion } from "framer-motion";
+import { useAuth } from "@/hooks/useAuth";
+import { Link } from "wouter";
 
 interface HeroSectionProps {
   totalFiles?: number;
@@ -16,6 +18,8 @@ function HeroSection({
   totalClassrooms = 0,
   showEmailSubscribe = true,
 }: HeroSectionProps) {
+  const { user, isAuthenticated, isAdmin } = useAuth();
+
   const scrollToContent = () => {
     const content = document.getElementById("content-start");
     if (content) {
@@ -47,39 +51,6 @@ function HeroSection({
       },
     },
   };
-
-  // Pre-generated particle positions to avoid Math.random() during render
-  const particles = Array.from({ length: 30 }, (_, i) => ({
-    id: i,
-    left: ((i * 7.3) % 100), // Deterministic distribution
-    top: ((i * 11.7) % 100),
-    width: 4 + ((i * 2.1) % 8),
-    height: 4 + ((i * 2.1) % 8),
-    delay: (i * 0.2) % 6,
-    duration: 8 + ((i * 1.3) % 12),
-  }));
-
-  // Pre-generated symbol positions - több matematikai szimbólum
-  const symbols = ['E=mc²', '∑', '∫', 'π', '∇', '∞', 'Ω', 'Δ', 'Φ', 'α', 'β', 'γ'];
-  const symbolPositions = symbols.map((symbol, i) => ({
-    symbol,
-    left: 10 + (i * 7.5) % 90,
-    top: 15 + (i % 4) * 20,
-    delay: i * 1.2,
-    duration: 12 + (i % 4) * 2,
-  }));
-
-  // Pre-generated icon positions
-  const iconPositions = [
-    { Icon: BookOpen, delay: 0 },
-    { Icon: Brain, delay: 2 },
-    { Icon: Lightbulb, delay: 4 },
-    { Icon: GraduationCap, delay: 1 },
-  ].map((item, i) => ({
-    ...item,
-    left: 20 + i * 20,
-    top: 30 + (i % 2) * 40,
-  }));
 
   return (
     <div className="relative flex items-center justify-center overflow-hidden rounded-lg mb-3 py-2 sm:py-3">
@@ -124,7 +95,7 @@ function HeroSection({
             </div>
           </motion.div>
 
-          {/* Jobb: CTA gombok */}
+          {/* Jobb: CTA gombok + Auth */}
           <motion.div variants={itemVariants} className="flex items-center gap-2">
             <Button
               size="sm"
@@ -135,6 +106,21 @@ function HeroSection({
               <ChevronDown className="w-3.5 h-3.5 animate-bounce" />
             </Button>
             {showEmailSubscribe && <EmailSubscribeDialog />}
+            {isAdmin ? (
+              <Link href="/admin">
+                <Button size="sm" className="h-7 px-2 text-xs gap-1 bg-orange-600 hover:bg-orange-700 text-white rounded-full">
+                  <Shield className="w-3 h-3" />
+                  Admin
+                </Button>
+              </Link>
+            ) : !isAuthenticated ? (
+              <Link href="/login">
+                <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1 border-white/40 text-white hover:bg-white/20 rounded-full">
+                  <LogIn className="w-3 h-3" />
+                  Belépés
+                </Button>
+              </Link>
+            ) : null}
           </motion.div>
         </div>
       </motion.div>
