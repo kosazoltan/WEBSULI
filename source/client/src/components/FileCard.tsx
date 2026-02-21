@@ -51,13 +51,13 @@ export default function FileCard({
 
   return (
     <Card className="holographic-card border-0" data-testid={`card-file-${title}`}>
-      <CardHeader className="fold:p-3 p-4 sm:p-5 pb-2 sm:pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-              <FileIcon className="w-6 h-6 sm:w-7 sm:h-7 text-primary" />
+      <CardHeader className="fold:p-2 p-2.5 sm:p-3 pb-1.5 sm:pb-2">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+              <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 dark:text-orange-400" />
             </div>
-            <h3 className="font-semibold text-sm sm:text-base text-foreground break-words">{title}</h3>
+            <h3 className="font-semibold text-xs sm:text-sm text-foreground break-words leading-tight">{title}</h3>
           </div>
           <Badge 
             variant="secondary" 
@@ -73,40 +73,39 @@ export default function FileCard({
       </CardHeader>
 
       {description && (
-        <CardContent className="fold:px-3 px-4 sm:px-5 pb-2 sm:pb-3">
-          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
+        <CardContent className="fold:px-2 px-2.5 sm:px-3 pb-1.5 sm:pb-2">
+          <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-2">
             {description}
           </p>
         </CardContent>
       )}
 
-      <CardFooter className="fold:p-3 p-4 sm:p-5 flex flex-col xs:flex-row xs:items-center gap-3 pt-3 border-t">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-          <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+      <CardFooter className="fold:p-2 p-2.5 sm:p-3 flex flex-col xs:flex-row xs:items-center gap-2 pt-2 border-t border-orange-200/50 dark:border-orange-800/30">
+        <div className="flex items-center gap-1 text-[10px] text-orange-700/60 dark:text-orange-400/60 min-w-0">
+          <Calendar className="w-3 h-3 flex-shrink-0" />
           <span className="truncate">{formatDate(createdAt)}</span>
         </div>
-        <div className="flex flex-wrap gap-2 xs:justify-end xs:ml-auto">
+        <div className="flex flex-wrap gap-1 xs:justify-end xs:ml-auto">
           <LikeButton materialId={id} className="flex-shrink-0" />
-          
+
           <Button
             size="sm"
-            variant="default"
             onClick={onView}
-            className="flex-1 xs:flex-none"
+            className="h-6 px-2 text-[10px] flex-1 xs:flex-none bg-orange-600 hover:bg-orange-700 text-white"
             data-testid="button-view-file"
           >
-            <Eye className="w-3.5 h-3.5 xs:w-4 xs:h-4 xs:mr-1.5" />
-            <span className="hidden xs:inline text-xs sm:text-sm">Megnyitás</span>
+            <Eye className="w-3 h-3 xs:mr-1" />
+            <span className="hidden xs:inline">Megnyitás</span>
           </Button>
           {isAdmin && onEdit && (
             <Button
               size="sm"
               variant="outline"
               onClick={onEdit}
-              className="flex-1 xs:flex-none"
+              className="h-6 w-6 p-0 flex-shrink-0 border-orange-300 text-orange-600 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/30"
               data-testid="button-edit-file"
             >
-              <Edit className="w-3.5 h-3.5 xs:w-4 xs:h-4" />
+              <Edit className="w-3 h-3" />
             </Button>
           )}
           {isAdmin && onSendEmail && (
@@ -114,10 +113,10 @@ export default function FileCard({
               size="sm"
               variant="outline"
               onClick={onSendEmail}
-              className="flex-1 xs:flex-none"
+              className="h-6 w-6 p-0 flex-shrink-0 border-orange-300 text-orange-600 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/30"
               data-testid="button-send-email"
             >
-              <Send className="w-3.5 h-3.5 xs:w-4 xs:h-4" />
+              <Send className="w-3 h-3" />
             </Button>
           )}
           {canDelete && (
@@ -125,10 +124,10 @@ export default function FileCard({
               size="sm"
               variant="outline"
               onClick={onDelete}
-              className="flex-1 xs:flex-none"
+              className="h-6 w-6 p-0 flex-shrink-0 border-red-300 text-red-500 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/30"
               data-testid="button-delete-file"
             >
-              <Trash2 className="w-3.5 h-3.5 xs:w-4 xs:h-4" />
+              <Trash2 className="w-3 h-3" />
             </Button>
           )}
         </div>
