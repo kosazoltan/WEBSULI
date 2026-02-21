@@ -100,7 +100,7 @@ function HeroSection({
             <Button
               size="sm"
               onClick={scrollToContent}
-              className="gap-1.5 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316] hover:from-[#7C3AED] hover:via-[#DB2777] hover:to-[#EA580C] text-white border-0 text-xs px-3 py-1 h-7 rounded-full shadow-lg"
+              className="gap-1.5 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 text-white border-0 text-xs px-3 py-1 h-7 rounded-full shadow-lg"
             >
               Böngészés
               <ChevronDown className="w-3.5 h-3.5 animate-bounce" />
