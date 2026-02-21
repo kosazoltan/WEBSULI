@@ -156,16 +156,6 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   return (
     <div className="min-h-screen relative">
       <div className="container py-3 relative z-10">
-        {/* Admin Toggle */}
-        {onToggleView && (
-          <div className="flex justify-end mb-2">
-            <Button onClick={onToggleView} variant="outline" size="sm" className="h-7 px-2 text-xs bg-white/20 hover:bg-white/30 text-white border-white/40" data-testid="button-toggle-admin-view">
-              <ShieldCheck className="w-3 h-3 mr-1" />
-              Admin
-            </Button>
-          </div>
-        )}
-
         {/* Hero Section */}
         <HeroSection
           totalFiles={totalFiles}
