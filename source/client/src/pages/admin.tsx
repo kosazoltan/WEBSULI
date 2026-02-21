@@ -728,6 +728,10 @@ export default function Admin() {
               <FolderOpen className="h-3.5 w-3.5" />
               Fájlok
             </TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-users">
+              <Users className="h-3.5 w-3.5" />
+              Felhasználók
+            </TabsTrigger>
             <TabsTrigger value="enhanced" className="flex items-center gap-1 text-xs h-7 px-2.5" data-testid="tab-enhanced">
               <Wand2 className="h-3.5 w-3.5" />
               <span className="hidden lg:inline">Fejlett készítő</span>
@@ -779,6 +783,122 @@ export default function Admin() {
 
           <TabsContent value="files" className="space-y-2">
             {activeTab === "files" && <AdminFilesTab />}
+          </TabsContent>
+
+          <TabsContent value="users" className="space-y-2">
+            {activeTab === "users" && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Felhasználók kezelése
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {users?.length || 0} regisztrált felhasználó
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0 sm:p-4">
+                  {isLoadingUsers ? (
+                    <div className="space-y-2 px-4 sm:px-0">
+                      {[...Array(3)].map((_, i) => (
+                        <Skeleton key={i} className="h-16 w-full" />
+                      ))}
+                    </div>
+                  ) : !users || users.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                      <p className="text-sm">Nincsenek felhasználók</p>
+                    </div>
+                  ) : isMobile ? (
+                    <div className="px-3">
+                      {users.map((u) => (
+                        <UserCard key={u.id} user={u} />
+                      ))}
+                    </div>
+                  ) : (
+                    <ScrollArea className="w-full">
+                      <div className="min-w-full">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Felhasználó</TableHead>
+                              <TableHead>Email</TableHead>
+                              <TableHead>Státusz</TableHead>
+                              <TableHead>Utolsó aktivitás</TableHead>
+                              <TableHead>Regisztráció</TableHead>
+                              <TableHead className="text-right">Műveletek</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {users.map((u) => (
+                              <TableRow key={u.id} data-testid={`user-row-${u.id}`}>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-7 w-7">
+                                      {u.profileImageUrl && (
+                                        <AvatarImage src={u.profileImageUrl} alt={u.firstName || u.email || ""} />
+                                      )}
+                                      <AvatarFallback className="text-xs">
+                                        {getInitials(u.firstName, u.lastName, u.email)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm font-medium">
+                                      {u.firstName && u.lastName
+                                        ? `${u.firstName} ${u.lastName}`
+                                        : u.firstName || u.lastName || "Névtelen"}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{u.email || "—"}</TableCell>
+                                <TableCell>
+                                  <div className="flex gap-1">
+                                    {u.isAdmin && <Badge variant="default" className="text-xs py-0">Admin</Badge>}
+                                    {u.isBanned ? (
+                                      <Badge variant="destructive" className="text-xs py-0">Tiltva</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-xs py-0 text-green-600 border-green-300">Aktív</Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-xs">{formatDateShort(u.lastSeenAt)}</TableCell>
+                                <TableCell className="text-xs">{formatDateShort(u.createdAt)}</TableCell>
+                                <TableCell className="text-right">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7">
+                                        <MoreVertical className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={() => toggleAdminMutation.mutate({ userId: u.id, isAdmin: !u.isAdmin })}
+                                      >
+                                        {u.isAdmin ? <><UserIcon className="h-3.5 w-3.5 mr-2" />Normál felhasználó</> : <><Shield className="h-3.5 w-3.5 mr-2" />Admin jogosultság</>}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => toggleBanMutation.mutate({ userId: u.id, banned: !u.isBanned })}
+                                      >
+                                        {u.isBanned ? <><CheckCircle className="h-3.5 w-3.5 mr-2" />Tiltás feloldása</> : <><Ban className="h-3.5 w-3.5 mr-2" />Letiltás</>}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem onClick={() => setDeleteUserId(u.id)} className="text-destructive">
+                                        <Trash2 className="h-3.5 w-3.5 mr-2" />Törlés
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="enhanced" className="space-y-2">
@@ -855,7 +975,7 @@ export default function Admin() {
       <TabsContent value="improve-materials" className="space-y-2">
         {activeTab === "improve-materials" && (
           <Suspense fallback={
-            <Card className="border-red-500 border-2">
+            <Card className="border-orange-500/50 border">
               <CardHeader>
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-4 w-96 mt-2" />
@@ -874,7 +994,7 @@ export default function Admin() {
       <TabsContent value="improvement-backups" className="space-y-2">
         {activeTab === "improvement-backups" && (
           <Suspense fallback={
-            <Card className="border-red-500 border-2">
+            <Card className="border-orange-500/50 border">
               <CardHeader>
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-4 w-96 mt-2" />
@@ -892,13 +1012,16 @@ export default function Admin() {
 
       <TabsContent value="material-views" className="space-y-2">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg sm:text-xl">Tananyag megtekintések</CardTitle>
-            <CardDescription className="text-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="h-4 w-4" />
+              Tananyag megtekintések
+            </CardTitle>
+            <CardDescription className="text-xs">
               Legutóbbi 50 megtekintés regisztrált felhasználóktól
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0 sm:p-6">
+          <CardContent className="p-0 sm:p-4">
             {isLoadingViews ? (
               <div className="space-y-3 px-4 sm:px-0">
                 {[...Array(5)].map((_, i) => (
