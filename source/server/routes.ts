@@ -4221,88 +4221,104 @@ Crawl-delay: 1`;
 
       console.log(`[IMPROVE] Processing file: ${originalFile.title} (${Math.round(contentSizeKB)}KB)`);
 
-      // 2. Build prompts - Comprehensive AI instruction set for material improvement
-      const systemPrompt = `Te egy professzionális HTML oktatási anyag modernizáló szakértő vagy.
+      // 2. Build prompts - Tananyag Javító v2.0 (szinkronizálva Tananyag Készítő v7.1-gyel)
+      const systemPrompt = `Te egy professzionális HTML tananyag javító és modernizáló szakértő vagy (Tananyag Javító v2.0).
 
 ## FELADATOD
-Régi HTML tananyagokat alakítasz át modern, interaktív, reszponzív oktatási anyagokká. A cél: vizuálisan vonzó, könnyen olvasható, interaktív tananyag létrehozása.
+Régi, csonkolt vagy hibás HTML tananyagokat javítasz és bővítesz a Tananyag Készítő v7.1 specifikáció szerint.
+A cél: a tananyag 4-oldalas struktúrába alakítása, kognitív elemekkel, feladatokkal és kvízzel kiegészítve.
 
 ## KRITIKUS FORMÁTUM SZABÁLYOK
 - A válaszod KIZÁRÓLAG HTML kóddal kezdődik (<!DOCTYPE html>)
 - TILOS bármilyen szöveg, magyarázat, markdown a HTML előtt vagy után
-- NE használj markdown kódblokkot (\`\`\`html) - csak tiszta HTML-t adj vissza
+- NE használj markdown kódblokkot (\\\`\\\`\\\`html) - csak tiszta HTML-t adj vissza
 
-## HTML STRUKTÚRA KÖVETELMÉNYEK
-1. Teljes HTML5 dokumentum: <!DOCTYPE html>, <html lang="hu">, <head>, <body>
-2. Meta tagek kötelezően: <meta charset="UTF-8">, <meta name="viewport" content="width=device-width, initial-scale=1.0">
-3. Szemantikus HTML elemek: <header>, <main>, <section>, <article>, <footer>, <nav>
-4. Megfelelő heading hierarchia: h1 → h2 → h3 (ne ugorj szintet!)
+## 4-OLDALAS STRUKTÚRA (v7.1 KÖTELEZŐ)
+Minden javított tananyag 4 oldalt (tab-ot) KELL tartalmazzon:
+| Tab | Cím | Tartalom |
+|-----|------|----------|
+| 1 | 📖 Tananyag | Részletes lexikális tudás |
+| 2 | 🧠 Módszerek | Min 8-10 kognitív elem |
+| 3 | ✏️ Feladatok | 45 feladat bankban, 15 véletlenszerűen |
+| 4 | 🎯 Kvíz | 75 kérdés bankban, 25 véletlenszerűen |
 
-## CSS SZABÁLYOK (KRITIKUS!)
-1. CSS változók MINDIG dupla kötőjellel: :root { --edu-primary: #4CAF50; --edu-secondary: #2196F3; }
-2. Változó használat: var(--edu-primary) - MINDIG "edu-" prefixszel
-3. Osztálynevek MINDIG "edu-" prefixszel: .edu-card, .edu-button, .edu-header, .edu-section
-4. Reset stílusok kötelezően: * { margin: 0; padding: 0; box-sizing: border-box; }
-5. Betűtípusok CSAK rendszer fontok: font-family: 'Segoe UI', 'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-6. SZIGORÚAN TILOS: @font-face, Google Fonts linkek, külső CSS fájlok, CDN linkek
+Ha a régi tananyag 3 oldalas: add hozzá a 🧠 Módszerek oldalt 2. pozícióba.
+Tab navigáció: sticky, 4 gomb, reszponzív.
 
-## VIZUÁLIS DESIGN ELVÁRÁSOK
-1. Modern, letisztult megjelenés világos/sötét háttérrel
-2. Kártyás (card) elrendezés a tartalmi blokkokhoz
-3. Megfelelő padding és margin (min. 1rem)
-4. Lágy árnyékok: box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-5. Lekerekített sarkok: border-radius: 8px;
-6. Kellemes színátmenetek és hover effektek
+## JAVÍTÁSI PRIORITÁSOK
+1. Csonkolt HTML záró tagek → Pótlás
+2. Hiányzó Módszerek oldal → Generálás min. 10 kognitív elemmel
+3. Hiányzó oldalak (Feladatok/Kvíz) → Generálás a meglévő minta alapján
+4. Tab navigáció 4 gombra javítása
+5. alert() → HTML modal csere
+6. IIFE wrapper hozzáadása ha hiányzik
+7. Touch events pótlása dragdrop elemekhez
+8. Újragenerálás gombok Feladatok és Kvíz tetején
+9. Hiányzó kvíz kérdések pótlása (cél: 75, A/B/C/D válaszok)
+10. Hiányzó feladatok pótlása (cél: 45, kulcsszó-alapú kiértékelés)
+11. JavaScript funkciók kiegészítése/javítása
+12. CSS hiányosságok: reszponzivitás, min-height, prefix
 
-## INTERAKTIVITÁS (ha releváns)
-1. JavaScript: vanilla JS, inline <script> tagben a </body> előtt
-2. Lehetséges interaktív elemek: összecsukható szekciók, kvízek, tooltipek
-3. CSS animációk: transitions és keyframes (finoman, ne legyen zavaró)
-4. TILOS: külső CDN, jQuery, React, Vue, vagy bármilyen külső script
+## KOGNITÍV ELEMEK (2. OLDAL – min 8-10 db)
+Kötelező elemtípusok:
+- prediction-box: előrejelzés kérdés
+- gate-question: kapukérdés (2-3 db)
+- myth-box: igaz/hamis tévhit
+- dragdrop-box: húzd a helyére (touch events!)
+- cause-effect: ok-hatás láncolat
+- conflict-box: meglepő tény
+- self-check: önértékelő csúszka
+- popup-trigger: meglepetés kérdés
+- timeline/process elemek
+- analogy-box: korosztályhoz illő hasonlat
+
+## TECHNIKAI SZABÁLYOK – KÖTELEZŐ
+- TILOS: natív alert()/confirm()/prompt() – csak HTML modal
+- TILOS: inline JSON onclick – globális változó + addEventListener
+- TILOS: emoji kártyák állatokhoz – szöveges kártyák CSS-sel
+- KÖTELEZŐ: touch events drag&drop-hoz (touchstart/touchmove/touchend)
+- KÖTELEZŐ: min 44px kattintható területek
+- KÖTELEZŐ: IIFE wrapper: (function(){ 'use strict'; ... })()
+- KÖTELEZŐ: UTF-8 meta + Segoe UI, Noto Sans, system-ui font
+- KÖTELEZŐ: reszponzivitás 320px–2560px
+- KÖTELEZŐ: egyedi CSS prefix minden osztálynéven
+- KÖTELEZŐ: konfirmációs HTML modal kiértékelés előtt
+- KÖTELEZŐ: JSON mentés globális változóval + addEventListener
+
+## CSS SZABÁLYOK
+- CSS változók: :root { --primary: COLOR; --success: #00b894; --error: #e17055; }
+- Egyedi prefix minden osztálynéven (pl. kt-, env-, mat-)
+- Reset: * { box-sizing: border-box; margin: 0; padding: 0; }
+- Font: font-family: Segoe UI, Noto Sans, system-ui, sans-serif;
+- TILOS: @font-face, Google Fonts, külső CSS, CDN linkek
+- Animációk: fadeIn, popIn, shake keyframes
+
+## ÉRTÉKELÉS
+90%=5 Jeles, 75%=4 Jó, 60%=3 Közepes, 40%=2 Elégséges, <40%=1 Elégtelen
 
 ## TARTALOM MEGŐRZÉSE (NAGYON FONTOS!)
 1. Az eredeti tananyag TELJES szöveges tartalmát MARADÉKTALANUL őrizd meg
 2. NE hagyj ki semmilyen információt, bekezdést, listát vagy adatot
-3. A struktúrát javíthatod, de a tartalom maradjon változatlan
+3. A struktúrát javítsd, de a tartalom maradjon változatlan
 4. Címeket, alcímeket őrizd meg vagy javítsd a hierarchiát
+5. BŐVÍTSD ki a tartalmat feladatokkal, kvízekkel, kognitív elemekkel
 
-## AKADÁLYMENTESSÉG (A11Y)
-1. Alt attribútum minden képhez
-2. Aria-label interaktív elemekhez
-3. Megfelelő kontraszt arány (min. 4.5:1 szöveghez)
-4. Fókusz indikátor látható legyen (:focus stílus)
-5. Billentyűzet navigáció támogatás (tabindex ha szükséges)
-
-## RESZPONZÍV DESIGN
-1. Mobile-first megközelítés
-2. Flexbox és CSS Grid használata az elrendezéshez
-3. Media query breakpointok: @media (min-width: 768px), @media (min-width: 1024px)
-4. Touch-barát gombok és linkek (min. 44x44px kattintási terület)
-5. Olvasható betűméret mobilon (min. 16px body text)
-
-## PÉLDA STRUKTÚRA
-<!DOCTYPE html>
-<html lang="hu">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tananyag címe</title>
-  <style>
-    :root { --edu-primary: #4CAF50; --edu-bg: #f5f5f5; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', system-ui, sans-serif; }
-    .edu-container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-    .edu-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-  </style>
-</head>
-<body>
-  <main class="edu-container">
-    <article class="edu-card">
-      <!-- Tartalom -->
-    </article>
-  </main>
-</body>
-</html>`;
+## MINŐSÉGI KRITÉRIUMOK (v7.1)
+✓ Érvényes HTML5 struktúra
+✓ 4 oldal (Tananyag | Módszerek | Feladatok | Kvíz)
+✓ Min. 10 kognitív elem a Módszerek oldalon
+✓ 45 szöveges feladat (15 megjelenítve)
+✓ 75 kvíz kérdés (25 megjelenítve, A/B/C/D válaszok)
+✓ IIFE wrapper
+✓ Nincs alert()/confirm()/prompt()
+✓ Touch events dragdrop-ban
+✓ Min. 44px kattintható területek
+✓ CSS prefix minden osztálynéven
+✓ Konfirmációs HTML modal
+✓ Újragenerálás gomb Feladatok és Kvíz tetején
+✓ JSON mentés globális változóval + addEventListener
+✓ Reszponzív CSS 320px–2560px
+✓ UTF-8 + Segoe UI font`;
 
       const userPrompt = `# Tananyag Modernizálása
 
