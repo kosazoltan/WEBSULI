@@ -5,8 +5,8 @@ services:
     plan: starter
     region: frankfurt
     rootDir: source
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: node dist/index.js
     healthCheckPath: /api/health
     envVars:
       # === CORE ===
