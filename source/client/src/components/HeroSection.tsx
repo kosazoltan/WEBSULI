@@ -82,7 +82,7 @@ function HeroSection({
   }));
 
   return (
-    <div className="relative min-h-[500px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
+    <div className="relative min-h-[320px] flex items-center justify-center overflow-hidden rounded-2xl mb-8">
       {/* Gemini fénykép háttér - 80% átlátszóság */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -209,7 +209,7 @@ function HeroSection({
 
       {/* Főtartalom */}
       <motion.div
-        className="relative max-w-4xl mx-auto px-4 py-8 text-center"
+        className="relative max-w-4xl mx-auto px-4 py-5 text-center"
         style={{ zIndex: 10, position: 'relative' }}
         variants={containerVariants}
         initial="hidden"
@@ -218,7 +218,7 @@ function HeroSection({
         {/* Főcím - vibráló gradient szöveg */}
         <motion.h1
           variants={itemVariants}
-          className="text-5xl sm:text-6xl lg:text-7xl font-extrabold mb-6"
+          className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-4"
         >
           <span className="animate-rainbow-spectrum drop-shadow-2xl">
             Üdvözöl a WebSuli!
@@ -228,7 +228,7 @@ function HeroSection({
         {/* Alcím */}
         <motion.p
           variants={itemVariants}
-          className="text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto"
+          className="text-base sm:text-lg text-white/90 mb-6 max-w-2xl mx-auto"
         >
           Interaktív tananyagok általános és középiskolásoknak.
           Böngéssz osztályok szerint, és találd meg a neked való anyagokat!
@@ -237,7 +237,7 @@ function HeroSection({
         {/* CTA gombok */}
         <motion.div
           variants={itemVariants}
-          className="flex flex-col sm:flex-row gap-4 justify-center mb-12"
+          className="flex flex-col sm:flex-row gap-3 justify-center mb-8"
         >
           <motion.div
             whileHover={{ scale: 1.05 }}
@@ -247,7 +247,7 @@ function HeroSection({
             <Button
               size="lg"
               onClick={scrollToContent}
-              className="gap-2 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316] hover:from-[#7C3AED] hover:via-[#DB2777] hover:to-[#EA580C] text-white border-0 text-lg px-10 py-7 rounded-full animate-pulse-glow shadow-2xl shadow-pink-500/50 hover:shadow-pink-500/70 transition-all duration-300"
+              className="gap-2 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316] hover:from-[#7C3AED] hover:via-[#DB2777] hover:to-[#EA580C] text-white border-0 text-base px-8 py-5 rounded-full animate-pulse-glow shadow-2xl shadow-pink-500/50 hover:shadow-pink-500/70 transition-all duration-300"
             >
               Böngészés
               <ChevronDown className="w-5 h-5 animate-bounce" />
@@ -262,7 +262,7 @@ function HeroSection({
         {/* Statisztikák */}
         <motion.div
           variants={itemVariants}
-          className="flex flex-wrap justify-center gap-8 sm:gap-12 pt-8 border-t border-white/20"
+          className="flex flex-wrap justify-center gap-6 sm:gap-10 pt-6 border-t border-white/20"
         >
           <motion.div
             className="text-center"

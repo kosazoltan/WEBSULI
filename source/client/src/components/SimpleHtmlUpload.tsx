@@ -127,7 +127,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
             </div>
           </CardHeader>
           <CardContent className="pt-3 sm:pt-4 pb-3 sm:pb-4">
-          <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-1.5 sm:space-y-2">
             {/* Osztály választó */}
             <div className="space-y-1">
               <Label htmlFor="classroom" className="text-xs sm:text-sm font-semibold flex items-center gap-2">
@@ -140,7 +140,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
               >
                 <SelectTrigger 
                   id="classroom" 
-                  className="text-sm sm:text-base h-10 sm:h-11"
+                  className="text-sm sm:text-base h-8 sm:h-9"
                   data-testid="select-classroom"
                 >
                   <SelectValue placeholder="Válassz osztályt" />
@@ -153,8 +153,8 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                💡 1-12. osztálynál automatikusan hozzáadódik a cím elejéhez, ha nincs benne. Programozási alapismereteknél nem.
+              <p className="text-[10px] sm:text-xs text-muted-foreground">
+                💡 1-12. osztálynál automatikusan hozzáadódik a cím elejéhez
               </p>
             </div>
 
@@ -170,29 +170,12 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 placeholder='Pl: "Matematika szorzótábla" vagy "5. osztály - Földrajz"'
                 required
                 disabled={isPending}
-                className="text-sm sm:text-base h-10 sm:h-11"
+                className="text-sm sm:text-base h-8 sm:h-9"
                 data-testid="input-title"
               />
-              <p className="text-xs sm:text-sm text-muted-foreground">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">
                 💡 Ha a címben már szerepel az osztály, az fog érvényesülni
               </p>
-            </div>
-
-            {/* Leírás mező */}
-            <div className="space-y-1">
-              <Label htmlFor="description" className="text-xs sm:text-sm font-semibold flex items-center gap-2">
-                📄 Leírás (opcionális)
-              </Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Rövid leírás a tananyagról..."
-                disabled={isPending}
-                rows={2}
-                className="text-xs sm:text-sm resize-none"
-                data-testid="input-description"
-              />
             </div>
 
             {/* HTML tartalom mező */}
@@ -206,7 +189,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full h-9 text-xs sm:text-sm bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-950/20 dark:to-amber-950/20 hover:from-orange-200 hover:to-amber-200 dark:hover:from-orange-900/30 dark:hover:to-amber-900/30 border-2 border-orange-400 dark:border-orange-600 font-bold"
+                  className="w-full h-9 text-xs sm:text-sm bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-800/40 dark:to-amber-800/40 hover:from-orange-200 hover:to-amber-200 dark:hover:from-orange-700/50 dark:hover:to-amber-700/50 border-2 border-orange-400 dark:border-orange-500 font-bold text-orange-900 dark:text-orange-200"
                   disabled={isPending}
                   onClick={(e) => {
                     e.preventDefault();
@@ -247,7 +230,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 placeholder="Illeszd be a HTML kódot ide..."
                 required
                 disabled={isPending}
-                rows={5}
+                rows={10}
                 className="font-mono text-xs bg-gray-50 dark:bg-gray-950"
                 data-testid="input-content"
               />
@@ -258,11 +241,11 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
             </div>
 
             {/* Akció gombok */}
-            <div className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3 border-t border-orange-300 dark:border-orange-700">
+            <div className="flex flex-col sm:flex-row gap-2 pt-1.5 sm:pt-2 border-t border-orange-300 dark:border-orange-700">
               <Button
                 type="submit"
                 disabled={!title.trim() || !content.trim() || isPending}
-                className="w-full sm:flex-1 h-10 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-extrabold shadow-xl text-sm border-2 border-teal-600"
+                className="w-full sm:flex-1 h-8 sm:h-9 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-extrabold shadow-xl text-sm border-2 border-teal-600"
                 data-testid="button-submit-upload"
               >
                 {isPending ? (
@@ -282,7 +265,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 variant="outline"
                 onClick={onCancel}
                 disabled={isPending}
-                className="w-full sm:w-auto h-10 text-sm"
+                className="w-full sm:w-auto h-8 sm:h-9 text-sm"
                 data-testid="button-cancel-upload-bottom"
               >
                 Mégse
