@@ -112,13 +112,12 @@ export default function EmailSubscribeDialog() {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button
-          size="lg"
-          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+          size="sm"
+          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 h-6 sm:h-7 px-2 sm:px-3 text-[10px] sm:text-xs rounded-full"
           data-testid="button-open-subscribe-dialog"
         >
-          <Bell className="w-4 h-4 mr-2" />
-          <span className="hidden xs:inline">Email értesítést kérek</span>
-          <span className="xs:hidden">Értesítés</span>
+          <Bell className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
+          <span className="hidden md:inline">Értesítés</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]" data-testid="dialog-email-subscribe">
