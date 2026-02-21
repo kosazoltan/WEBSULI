@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Plus, Mail, Calendar, Edit } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { CLASSROOMS } from "@shared/classrooms";
 import { format } from "date-fns";
 import { hu } from "date-fns/locale";
 import {
@@ -233,19 +234,19 @@ export default function ExtraEmailsManager() {
             <div className="space-y-2">
               <Label className="text-sm font-medium">Osztályok kiválasztása (több is lehetséges)</Label>
               <div className="grid grid-cols-4 gap-2">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
-                  <div key={num} className="flex items-center space-x-2">
+                {CLASSROOMS.map((c) => (
+                  <div key={c.value} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`new-classroom-${num}`}
-                      checked={newClassrooms.includes(num)}
-                      onCheckedChange={() => toggleClassroom(num, true)}
-                      data-testid={`checkbox-new-classroom-${num}`}
+                      id={`new-classroom-${c.value}`}
+                      checked={newClassrooms.includes(c.value)}
+                      onCheckedChange={() => toggleClassroom(c.value, true)}
+                      data-testid={`checkbox-new-classroom-${c.value}`}
                     />
-                    <Label 
-                      htmlFor={`new-classroom-${num}`}
+                    <Label
+                      htmlFor={`new-classroom-${c.value}`}
                       className="text-sm font-normal cursor-pointer"
                     >
-                      {num}. osztály
+                      {c.shortLabel}
                     </Label>
                   </div>
                 ))}
@@ -281,19 +282,19 @@ export default function ExtraEmailsManager() {
                       {editingClassroomId === email.id ? (
                         <div className="flex flex-col gap-2 w-full">
                           <div className="grid grid-cols-4 gap-2">
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
-                              <div key={num} className="flex items-center space-x-2">
+                            {CLASSROOMS.map((c) => (
+                              <div key={c.value} className="flex items-center space-x-2">
                                 <Checkbox
-                                  id={`edit-classroom-${email.id}-${num}`}
-                                  checked={editClassroomsValue.includes(num)}
-                                  onCheckedChange={() => toggleClassroom(num, false)}
-                                  data-testid={`checkbox-edit-classroom-${email.id}-${num}`}
+                                  id={`edit-classroom-${email.id}-${c.value}`}
+                                  checked={editClassroomsValue.includes(c.value)}
+                                  onCheckedChange={() => toggleClassroom(c.value, false)}
+                                  data-testid={`checkbox-edit-classroom-${email.id}-${c.value}`}
                                 />
-                                <Label 
-                                  htmlFor={`edit-classroom-${email.id}-${num}`}
+                                <Label
+                                  htmlFor={`edit-classroom-${email.id}-${c.value}`}
                                   className="text-sm font-normal cursor-pointer"
                                 >
-                                  {num}.
+                                  {c.shortLabel}
                                 </Label>
                               </div>
                             ))}
