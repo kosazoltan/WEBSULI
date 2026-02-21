@@ -53,7 +53,7 @@ function HeroSection({
   };
 
   return (
-    <div className="relative flex items-center justify-center overflow-hidden rounded-lg mb-3 py-2 sm:py-3">
+    <div className="relative flex items-center justify-center overflow-hidden rounded-lg mb-2 py-1.5 sm:py-2">
       {/* Gemini fénykép háttér */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-70"
@@ -63,61 +63,63 @@ function HeroSection({
       {/* Sötét overlay */}
       <div className="absolute inset-0 bg-black/30" />
 
-      {/* Főtartalom - egyetlen kompakt sor */}
+      {/* Főtartalom - dinamikus elrendezés */}
       <motion.div
-        className="relative z-10 w-full max-w-5xl mx-auto px-3 py-1"
+        className="relative z-10 w-full max-w-6xl mx-auto px-2 sm:px-3 py-0.5"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-3 flex-wrap sm:flex-nowrap">
           {/* Bal: Cím + alcím */}
-          <motion.div variants={itemVariants} className="text-center sm:text-left">
-            <h1 className="text-lg sm:text-xl font-extrabold leading-tight">
+          <motion.div variants={itemVariants} className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <h1 className="text-base sm:text-lg font-extrabold leading-none">
               <span className="animate-rainbow-spectrum drop-shadow-lg">WebSuli</span>
             </h1>
-            <p className="text-xs text-white/80 hidden sm:block">
-              Interaktív tananyagok {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}. osztályosoknak
+            <p className="text-[10px] sm:text-xs text-white/80 hidden sm:block whitespace-nowrap">
+              {MIN_CLASSROOM === 0 ? "1" : MIN_CLASSROOM}-{MAX_CLASSROOM}. oszt.
             </p>
           </motion.div>
 
           {/* Közép: Statisztikák */}
-          <motion.div variants={itemVariants} className="flex items-center gap-4 sm:gap-6">
-            <div className="flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-sm font-bold text-white">{totalFiles}</span>
-              <span className="text-xs text-white/70 hidden sm:inline">tananyag</span>
+          <motion.div variants={itemVariants} className="flex items-center gap-2 sm:gap-4 shrink-0">
+            <div className="flex items-center gap-1">
+              <FileText className="w-3 h-3 text-orange-400" />
+              <span className="text-xs sm:text-sm font-bold text-white">{totalFiles}</span>
+              <span className="text-[10px] text-white/70 hidden md:inline">tananyag</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-sm font-bold text-white">{totalClassrooms}</span>
-              <span className="text-xs text-white/70 hidden sm:inline">osztály</span>
+            <div className="flex items-center gap-1">
+              <GraduationCap className="w-3 h-3 text-amber-400" />
+              <span className="text-xs sm:text-sm font-bold text-white">{totalClassrooms}</span>
+              <span className="text-[10px] text-white/70 hidden md:inline">osztály</span>
             </div>
           </motion.div>
 
           {/* Jobb: CTA gombok + Auth */}
-          <motion.div variants={itemVariants} className="flex items-center gap-2">
+          <motion.div variants={itemVariants} className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
             <Button
               size="sm"
               onClick={scrollToContent}
-              className="gap-1.5 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 text-white border-0 text-xs px-3 py-1 h-7 rounded-full shadow-lg"
+              className="gap-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 text-white border-0 text-[10px] sm:text-xs px-2 sm:px-3 h-6 sm:h-7 rounded-full shadow-lg"
             >
-              Böngészés
-              <ChevronDown className="w-3.5 h-3.5 animate-bounce" />
+              <span className="hidden xs:inline">Böngészés</span>
+              <ChevronDown className="w-3 h-3 animate-bounce" />
             </Button>
-            {showEmailSubscribe && <EmailSubscribeDialog />}
+            <div className="hidden sm:block">
+              {showEmailSubscribe && <EmailSubscribeDialog />}
+            </div>
             {isAdmin ? (
               <Link href="/admin">
-                <Button size="sm" className="h-7 px-2 text-xs gap-1 bg-orange-600 hover:bg-orange-700 text-white rounded-full">
-                  <Shield className="w-3 h-3" />
-                  Admin
+                <Button size="sm" className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs gap-0.5 bg-orange-600 hover:bg-orange-700 text-white rounded-full">
+                  <Shield className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                  <span className="hidden sm:inline">Admin</span>
                 </Button>
               </Link>
             ) : !isAuthenticated ? (
               <Link href="/login">
-                <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1 border-white/40 text-white hover:bg-white/20 rounded-full">
-                  <LogIn className="w-3 h-3" />
-                  Belépés
+                <Button size="sm" variant="outline" className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs gap-0.5 border-white/40 text-white hover:bg-white/20 rounded-full">
+                  <LogIn className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                  <span className="hidden xs:inline">Belépés</span>
                 </Button>
               </Link>
             ) : null}

@@ -108,88 +108,90 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-gray-900 dark:via-orange-950 dark:to-amber-950 py-2 sm:py-4 px-3 sm:px-4">
-      <div className="max-w-4xl mx-auto">
-        <Card className="shadow-2xl border-4 border-orange-400/60 dark:border-orange-600/60 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-2xl">
-          <CardHeader className="bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 text-gray-900 rounded-t-2xl border-b-4 border-orange-600/40 py-3 sm:py-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg sm:text-xl font-extrabold drop-shadow-sm">🚀 Új HTML anyag feltöltése</CardTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onCancel}
-                disabled={isPending}
-                className="hover:bg-white/30 text-gray-900 hover:text-gray-900"
-                data-testid="button-cancel-upload"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-3 sm:pt-4 pb-3 sm:pb-4">
-          <form onSubmit={handleSubmit} className="space-y-1.5 sm:space-y-2">
-            {/* Osztály választó */}
-            <div className="space-y-1">
-              <Label htmlFor="classroom" className="text-xs sm:text-sm font-semibold flex items-center gap-2">
-                🎓 Osztály *
-              </Label>
-              <Select 
-                value={classroom.toString()} 
-                onValueChange={(value) => setClassroom(parseInt(value))}
-                disabled={isPending}
-              >
-                <SelectTrigger 
-                  id="classroom" 
-                  className="text-sm sm:text-base h-8 sm:h-9"
-                  data-testid="select-classroom"
+    <div className="flex flex-col h-[calc(100vh-8rem)] sm:h-[calc(100vh-5.5rem)] px-1 sm:px-2">
+      <Card className="flex flex-col flex-1 min-h-0 shadow-xl border-2 border-orange-400/60 dark:border-orange-600/60 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-xl">
+        <CardHeader className="flex-shrink-0 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 text-gray-900 rounded-t-xl border-b-2 border-orange-600/40 py-2 px-3 sm:px-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm sm:text-base font-extrabold drop-shadow-sm">🚀 Új HTML anyag feltöltése</CardTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onCancel}
+              disabled={isPending}
+              className="hover:bg-white/30 text-gray-900 hover:text-gray-900 h-7 w-7"
+              data-testid="button-cancel-upload"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 min-h-0 flex flex-col pt-2 pb-2 px-3 sm:px-4">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-1.5">
+            {/* Osztály + Cím egymás mellett desktopon */}
+            <div className="flex-shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {/* Osztály választó */}
+              <div className="space-y-0.5">
+                <Label htmlFor="classroom" className="text-xs font-semibold flex items-center gap-1">
+                  🎓 Osztály *
+                </Label>
+                <Select
+                  value={classroom.toString()}
+                  onValueChange={(value) => setClassroom(parseInt(value))}
+                  disabled={isPending}
                 >
-                  <SelectValue placeholder="Válassz osztályt" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLASSROOMS.map((option) => (
-                    <SelectItem key={option.value} value={option.value.toString()}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">
-                💡 1-12. osztálynál automatikusan hozzáadódik a cím elejéhez
-              </p>
+                  <SelectTrigger
+                    id="classroom"
+                    className="text-xs sm:text-sm h-8"
+                    data-testid="select-classroom"
+                  >
+                    <SelectValue placeholder="Válassz osztályt" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLASSROOMS.map((option) => (
+                      <SelectItem key={option.value} value={option.value.toString()}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Cím mező */}
+              <div className="space-y-0.5">
+                <Label htmlFor="title" className="text-xs font-semibold flex items-center gap-1">
+                  📝 Cím *
+                </Label>
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder='Pl: "Matematika szorzótábla"'
+                  required
+                  disabled={isPending}
+                  className="text-xs sm:text-sm h-8"
+                  data-testid="input-title"
+                />
+              </div>
             </div>
 
-            {/* Cím mező */}
-            <div className="space-y-1">
-              <Label htmlFor="title" className="text-xs sm:text-sm font-semibold flex items-center gap-2">
-                📝 Cím *
-              </Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder='Pl: "Matematika szorzótábla" vagy "5. osztály - Földrajz"'
-                required
-                disabled={isPending}
-                className="text-sm sm:text-base h-8 sm:h-9"
-                data-testid="input-title"
-              />
-              <p className="text-[10px] sm:text-xs text-muted-foreground">
-                💡 Ha a címben már szerepel az osztály, az fog érvényesülni
-              </p>
-            </div>
+            {/* HTML tartalom mező - flex-1 kitölti a maradék helyet */}
+            <div className="flex-1 min-h-0 flex flex-col gap-1">
+              <div className="flex-shrink-0 flex items-center justify-between">
+                <Label htmlFor="content" className="text-xs font-semibold flex items-center gap-1">
+                  💻 HTML tartalom *
+                </Label>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {content.length > 0 && `${content.length.toLocaleString()} kar.`}
+                  {content.length > 0 && !content.trim() && <span className="text-destructive ml-1">⚠️ whitespace</span>}
+                </span>
+              </div>
 
-            {/* HTML tartalom mező */}
-            <div className="space-y-1">
-              <Label htmlFor="content" className="text-xs sm:text-sm font-semibold flex items-center gap-2">
-                💻 HTML tartalom *
-              </Label>
-              
-              {/* Fájl feltöltés gomb - OPCIONÁLIS */}
-              <div className="flex gap-2 mb-1">
+              {/* Fájl feltöltés gomb */}
+              <div className="flex-shrink-0">
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full h-9 text-xs sm:text-sm bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-800/40 dark:to-amber-800/40 hover:from-orange-200 hover:to-amber-200 dark:hover:from-orange-700/50 dark:hover:to-amber-700/50 border-2 border-orange-400 dark:border-orange-500 font-bold text-orange-900 dark:text-orange-200"
+                  className="w-full h-8 text-xs bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-800/40 dark:to-amber-800/40 hover:from-orange-200 hover:to-amber-200 dark:hover:from-orange-700/50 dark:hover:to-amber-700/50 border-2 border-orange-400 dark:border-orange-500 font-bold text-orange-900 dark:text-orange-200"
                   disabled={isPending}
                   onClick={(e) => {
                     e.preventDefault();
@@ -203,7 +205,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                   }}
                   data-testid="button-browse-file"
                 >
-                  <Upload className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                  <Upload className="w-3 h-3 mr-1" />
                   <span className="truncate">{fileName ? `✓ ${fileName}` : '📁 Fájl tallózása'}</span>
                 </Button>
                 <input
@@ -217,45 +219,38 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                   disabled={isPending}
                 />
               </div>
-              
-              {/* HTML kód textarea */}
+
+              {/* HTML kód textarea - kitölti a maradék helyet */}
               <Textarea
                 id="content"
                 value={content}
                 onChange={(e) => {
-                  const newValue = e.target.value;
-                  // Removed debug console.log for production
-                  setContent(newValue);
+                  setContent(e.target.value);
                 }}
                 placeholder="Illeszd be a HTML kódot ide..."
                 required
                 disabled={isPending}
-                rows={10}
-                className="font-mono text-xs bg-gray-50 dark:bg-gray-950"
+                className="flex-1 min-h-[80px] resize-none font-mono text-xs bg-gray-50 dark:bg-gray-950"
                 data-testid="input-content"
               />
-              <p className="text-xs text-muted-foreground flex items-center gap-2">
-                <span className="font-mono">{content.length.toLocaleString()}</span> karakter
-                {content.length > 0 && !content.trim() && <span className="text-destructive">⚠️ Csak whitespace</span>}
-              </p>
             </div>
 
             {/* Akció gombok */}
-            <div className="flex flex-col sm:flex-row gap-2 pt-1.5 sm:pt-2 border-t border-orange-300 dark:border-orange-700">
+            <div className="flex-shrink-0 flex flex-row gap-2 pt-1 border-t border-orange-300 dark:border-orange-700">
               <Button
                 type="submit"
                 disabled={!title.trim() || !content.trim() || isPending}
-                className="w-full sm:flex-1 h-8 sm:h-9 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold shadow-xl text-sm border-2 border-orange-600"
+                className="flex-1 h-8 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold shadow-xl text-xs sm:text-sm border-2 border-orange-600"
                 data-testid="button-submit-upload"
               >
                 {isPending ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    <span className="truncate">Feltöltés...</span>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Feltöltés...
                   </>
                 ) : (
                   <>
-                    <FileCode className="w-4 h-4 mr-2" />
+                    <FileCode className="w-3.5 h-3.5 mr-1.5" />
                     🚀 Feltöltés
                   </>
                 )}
@@ -265,7 +260,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 variant="outline"
                 onClick={onCancel}
                 disabled={isPending}
-                className="w-full sm:w-auto h-8 sm:h-9 text-sm"
+                className="h-8 text-xs sm:text-sm px-4"
                 data-testid="button-cancel-upload-bottom"
               >
                 Mégse
@@ -274,7 +269,6 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
           </form>
         </CardContent>
       </Card>
-      </div>
     </div>
   );
 }
