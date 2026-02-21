@@ -30,15 +30,15 @@ export function AuthStatus() {
 
   if (!isAuthenticated) {
     return (
-      <div className="flex flex-col items-center gap-2">
+      <div className="flex items-center">
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={handleLogin}
-          className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/30"
+          className="h-7 px-2 text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-900/30"
           data-testid="button-login"
         >
-          <LogIn className="h-4 w-4 mr-2" />
+          <LogIn className="h-3 w-3" />
           Belépés
         </Button>
       </div>
@@ -57,26 +57,26 @@ export function AuthStatus() {
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       {isAdmin && (
-        <div className="hidden sm:flex items-center justify-center w-6 h-6 rounded-full bg-purple-500/20 border border-purple-500/50 text-purple-300" title="Adminisztrátor">
+        <div className="hidden sm:flex items-center justify-center w-5 h-5 rounded-full bg-orange-500/20 border border-orange-500/50 text-orange-600 dark:text-orange-400" title="Adminisztrátor">
           <Shield className="w-3 h-3" />
         </div>
       )}
-      
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-cyan-500/30 transition-colors">
-         <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 flex items-center justify-center text-[10px] font-bold text-white shadow-lg shadow-cyan-500/20">
+
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-100 border border-orange-300 dark:bg-orange-950/40 dark:border-orange-700 transition-colors">
+         <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-[10px] font-bold text-white">
             {getDisplayName().charAt(0)}
          </div>
-         <span className="text-xs font-medium text-slate-200 hidden sm:inline-block">
+         <span className="text-xs font-medium text-orange-800 dark:text-orange-200 hidden sm:inline-block">
             {getDisplayName()}
          </span>
-         <button 
+         <button
             onClick={handleLogout}
-            className="ml-1 p-1 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+            className="ml-0.5 p-0.5 hover:bg-orange-200 dark:hover:bg-orange-800 rounded text-orange-500 hover:text-red-500 transition-colors"
             title="Kijelentkezés"
          >
-            <LogOut className="w-3.5 h-3.5" />
+            <LogOut className="w-3 h-3" />
          </button>
       </div>
     </div>
