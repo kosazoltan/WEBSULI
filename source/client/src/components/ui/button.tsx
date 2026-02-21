@@ -5,20 +5,20 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl text-sm font-bold tracking-wide transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-95",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl text-sm font-bold tracking-wide transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-95",
   {
     variants: {
       variant: {
         default:
-          "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:-translate-y-0.5 border border-cyan-400/20",
+          "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 hover:-translate-y-0.5 border border-orange-400/20",
         destructive:
           "bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg shadow-red-500/25 hover:shadow-red-500/40 hover:-translate-y-0.5 border border-red-400/20",
         outline:
-          "border-2 border-slate-700 bg-slate-900/50 hover:bg-slate-800 hover:border-cyan-400/50 text-slate-200 hover:text-cyan-400 shadow-sm backdrop-blur-sm",
+          "border border-orange-300 bg-white/80 hover:bg-orange-50 text-orange-700 hover:text-orange-800 shadow-sm backdrop-blur-sm dark:border-orange-700 dark:bg-gray-900/50 dark:text-orange-300 dark:hover:bg-orange-950/30 dark:hover:text-orange-200",
         secondary:
-          "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:-translate-y-0.5 border border-purple-400/20",
-        ghost: "hover:bg-cyan-500/10 hover:text-cyan-400 text-slate-300",
-        link: "text-cyan-400 underline-offset-4 hover:underline",
+          "bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:-translate-y-0.5 border border-amber-400/20",
+        ghost: "hover:bg-orange-500/10 hover:text-orange-600 text-gray-600 dark:text-gray-300 dark:hover:text-orange-400",
+        link: "text-orange-500 underline-offset-4 hover:underline hover:text-orange-600",
         // New "Jelly" variant for extra fun
         jelly: "bg-yellow-400 text-slate-900 border-b-4 border-yellow-600 active:border-b-0 active:translate-y-1 hover:bg-yellow-300 font-black",
       },

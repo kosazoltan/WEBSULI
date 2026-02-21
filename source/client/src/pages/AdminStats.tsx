@@ -50,7 +50,7 @@ export default function AdminStats() {
     queryKey: ['/api/admin/stats/email-delivery'],
   });
 
-  const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#14b8a6', '#6366f1', '#a855f7'];
+  const COLORS = ['#f97316', '#fb923c', '#f59e0b', '#eab308', '#d97706', '#ea580c', '#fbbf24', '#fdba74'];
 
   return (
     <div className="container mx-auto p-6 space-y-6" data-testid="page-admin-stats">
@@ -168,8 +168,8 @@ export default function AdminStats() {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="totalViews" fill="#3b82f6" name="Nézettség" />
-                  <Bar dataKey="totalLikes" fill="#ec4899" name="Like-ok" />
+                  <Bar dataKey="totalViews" fill="#f97316" name="Nézettség" />
+                  <Bar dataKey="totalLikes" fill="#f59e0b" name="Like-ok" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

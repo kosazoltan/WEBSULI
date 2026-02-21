@@ -54,8 +54,8 @@ export default function Login() {
     return (
         <div className="min-h-screen flex items-center justify-center flex-col gap-4 relative overflow-hidden p-4 bg-background">
             {/* Background Decorative Elements */}
-            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl -z-10" />
-            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl -z-10" />
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl -z-10" />
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl -z-10" />
 
             <Card className="w-full max-w-md bg-card/95 backdrop-blur-sm border-border shadow-2xl">
                 <CardHeader className="space-y-1">
