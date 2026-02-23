@@ -14,6 +14,26 @@
       "destination": "https://websuli-api.onrender.com/auth/:path*"
     },
     {
+      "source": "/dev/:path*",
+      "destination": "https://websuli-api.onrender.com/dev/:path*"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "https://websuli-api.onrender.com/sitemap.xml"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "https://websuli-api.onrender.com/robots.txt"
+    },
+    {
+      "source": "/health",
+      "destination": "https://websuli-api.onrender.com/health"
+    },
+    {
+      "source": "/download-source-static",
+      "destination": "https://websuli-api.onrender.com/download-source-static"
+    },
+    {
       "source": "/:path*",
       "destination": "/index.html"
     }
