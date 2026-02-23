@@ -44,6 +44,11 @@ export async function setupVite(app: Express, server: Server) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
+    // Skip routes that should be handled by Express route handlers (not SPA)
+    if (url.startsWith("/dev/") || url.startsWith("/api/") || url.startsWith("/auth/")) {
+      return next();
+    }
+
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,
@@ -77,8 +82,12 @@ export function serveStatic(app: Express) {
   // the frontend is served by Vercel and dist/public may not exist on Render.
   if (!fs.existsSync(distPath)) {
     if (process.env.FRONTEND_URL) {
-      console.log(`[serveStatic] API-only mode - frontend served by ${process.env.FRONTEND_URL}`);
-      console.log(`[serveStatic] Skipping static file serving (dist/public not found)`);
+      console.log(
+        `[serveStatic] API-only mode - frontend served by ${process.env.FRONTEND_URL}`,
+      );
+      console.log(
+        `[serveStatic] Skipping static file serving (dist/public not found)`,
+      );
       return;
     }
     throw new Error(
@@ -87,26 +96,37 @@ export function serveStatic(app: Express) {
   }
 
   console.log(`[serveStatic] Serving from: ${distPath}`);
-  console.log(`[serveStatic] index.html exists: ${fs.existsSync(path.resolve(distPath, "index.html"))}`);
+  console.log(
+    `[serveStatic] index.html exists: ${fs.existsSync(path.resolve(distPath, "index.html"))}`,
+  );
 
   app.use(express.static(distPath));
 
   // CRITICAL: SPA catch-all route - serve index.html for all non-API routes
   // This ensures /admin, /preview/:id, etc. all work correctly
-  app.get('*', (req, res, next) => {
+  app.get("*", (req, res, next) => {
     // Skip API routes and static files
-    if (req.path.startsWith('/api/') ||
-        req.path.startsWith('/pdfjs/') ||
-        req.path.startsWith('/auth/') ||
-        req.path.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)$/)) {
+    if (
+      req.path.startsWith("/api/") ||
+      req.path.startsWith("/dev/") ||
+      req.path.startsWith("/pdfjs/") ||
+      req.path.startsWith("/auth/") ||
+      req.path.match(
+        /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)$/,
+      )
+    ) {
       return next();
     }
 
     // Serve index.html for all SPA routes
-    const indexPath = path.resolve(distPath, 'index.html');
+    const indexPath = path.resolve(distPath, "index.html");
     res.sendFile(indexPath);
   });
-  app.use("*", (_req, res) => {
+  app.use("*", (_req, res, next) => {
+    // Skip routes handled by Express route handlers
+    if (_req.originalUrl.startsWith("/dev/") || _req.originalUrl.startsWith("/api/") || _req.originalUrl.startsWith("/auth/")) {
+      return next();
+    }
     const indexPath = path.resolve(distPath, "index.html");
     console.log(`[serveStatic] Serving index.html from: ${indexPath}`);
     res.sendFile(indexPath);
