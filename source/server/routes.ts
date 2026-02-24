@@ -4335,9 +4335,9 @@ Crawl-delay: 1`;
         return res.status(404).json({ message: "Javított fájl nem található" });
       }
 
-      if (improved.status !== 'approved') {
+      if (!['pending', 'approved'].includes(improved.status)) {
         return res.status(400).json({
-          message: `Csak 'approved' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}`
+          message: `Csak 'pending' vagy 'approved' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}`
         });
       }
 

@@ -601,12 +601,12 @@ export default function MaterialImprover() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleApprove(file.id)}
-                                disabled={updateStatusMutation.isPending}
-                                className="border-green-300 text-green-700 hover:bg-green-50"
+                                onClick={() => handleApply(file.id)}
+                                disabled={applyMutation.isPending}
+                                className="border-green-500 bg-green-600 text-white hover:bg-green-700"
                               >
                                 <CheckCircle className="h-4 w-4 mr-1" />
-                                Jóváhagy
+                                Jóváhagy & Alkalmaz
                               </Button>
                               <Button
                                 variant="outline"
@@ -625,7 +625,7 @@ export default function MaterialImprover() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleApply(file.id)}
-                              className="border-red-500 bg-red-600 text-white hover:bg-red-700"
+                              className="border-green-500 bg-green-600 text-white hover:bg-green-700"
                             >
                               <ArrowRight className="h-4 w-4 mr-1" />
                               Alkalmaz
@@ -770,17 +770,17 @@ export default function MaterialImprover() {
                 </ScrollArea>
               </TabsContent>
             </Tabs>
-            {previewData.status === "approved" && (
+            {(previewData.status === "pending" || previewData.status === "approved") && (
               <div className="mt-4 flex justify-end">
                 <Button
                   onClick={() => {
                     setPreviewImprovedId(null);
                     handleApply(previewData.id);
                   }}
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className="bg-green-600 hover:bg-green-700 text-white"
                 >
                   <ArrowRight className="h-4 w-4 mr-2" />
-                  Alkalmaz
+                  Jóváhagy & Alkalmaz
                 </Button>
               </div>
             )}
