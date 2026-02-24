@@ -301,13 +301,13 @@ export default function MaterialImprover() {
       // Show loading toast
       toast({
         title: "🤖 AI feldolgozás...",
-        description: "A tananyag javítása folyamatban, ez akár 1-2 percig is tarthat.",
-        duration: 180000,
+        description: "A tananyag javítása folyamatban, ez akár 3-5 percig is tarthat.",
+        duration: 480000,
       });
 
-      // 2. Poll for completion (every 5 seconds, max 4 minutes)
+      // 2. Poll for completion (every 5 seconds, max 10 minutes)
       const jobId = startData.jobId;
-      const maxPollTime = 240000; // 4 minutes max
+      const maxPollTime = 600000; // 10 minutes max
       const pollInterval = 5000; // 5 seconds
       const startTime = Date.now();
 
