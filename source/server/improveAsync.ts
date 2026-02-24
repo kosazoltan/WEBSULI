@@ -274,9 +274,10 @@ ${originalFile.content}
       throw new Error('A generált válasz nem tartalmaz érvényes HTML struktúrát');
     }
 
-    // ✅ UPDATE the existing DB record with real content and 'pending' status
-    await storage.updateImprovedHtmlFileStatus(dbRecordId, 'pending');
-    await storage.updateImprovedHtmlFileContent(dbRecordId, improvedHtml);
+    // ✅ CRITICAL: Update content AND status in ONE atomic operation
+    // If we did this in two steps, the user could "Apply" the file
+    // between status→pending and content→HTML, getting the placeholder!
+    await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, improvedHtml, 'pending');
 
     console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Success! Content saved (${improvedHtml.length} bytes), status → pending`);
 
