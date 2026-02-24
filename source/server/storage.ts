@@ -1375,7 +1375,7 @@ export class DatabaseStorage implements IStorage {
     appliedBy?: string, 
     notes?: string
   ): Promise<ImprovedHtmlFile | null> {
-    const updates: any = { status };
+    const updates: Partial<typeof improvedHtmlFiles.$inferInsert> = { status };
     if (notes !== undefined) {
       updates.improvementNotes = notes;
     }

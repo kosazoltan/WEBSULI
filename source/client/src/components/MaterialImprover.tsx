@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -67,11 +67,10 @@ export default function MaterialImprover() {
   const [selectedFileId, setSelectedFileId] = useState<string>("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [previewImprovedId, setPreviewImprovedId] = useState<string | null>(null);
-
-
+  const blobUrlRef = useRef<string | null>(null);
 
   // Get all HTML files
-  const { data: allFiles = [], isLoading: isLoadingFiles } = useQuery<HtmlFile[]>({
+  const { data: allFiles = [] } = useQuery<HtmlFile[]>({
     queryKey: ["/api/html-files"],
   });
 
@@ -87,7 +86,7 @@ export default function MaterialImprover() {
   });
 
   // Precompute rendered HTML documents for side-by-side live preview
-  const makeRunnableHtml = (html?: string) => {
+  const makeRunnableHtml = useCallback((html?: string) => {
     if (!html || html.trim().length === 0) {
       return '<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Üres tartalom</title></head><body style="padding: 2rem; font-family: system-ui, sans-serif;"><p style="color: #666;">Nincs megjeleníthető tartalom.</p></body></html>';
     }
@@ -205,36 +204,41 @@ export default function MaterialImprover() {
     const wrappedHtml = `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`;
     console.log('[makeRunnableHtml] Wrapped HTML with basic structure, length:', wrappedHtml.length);
     return wrappedHtml;
-  };
+  }, []);
 
   const renderedOriginal = useMemo(
     () => makeRunnableHtml(previewData?.originalFile?.content),
-    [previewData?.originalFile?.content]
+    [previewData?.originalFile?.content, makeRunnableHtml]
   );
 
   const renderedImproved = useMemo(
     () => makeRunnableHtml(previewData?.content),
-    [previewData?.content]
+    [previewData?.content, makeRunnableHtml]
   );
 
   // Create Blob URL for opening in external browser
   const improvedBlobUrl = useMemo(() => {
+    // Revoke previous Blob URL to prevent memory leak
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
     if (!renderedImproved) return null;
     const blob = new Blob([renderedImproved], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    console.log('[BLOB] Created Blob URL for improved HTML, length:', renderedImproved.length);
+    blobUrlRef.current = url;
     return url;
   }, [renderedImproved]);
 
   // Cleanup Blob URL on unmount
   useEffect(() => {
     return () => {
-      if (improvedBlobUrl) {
-        URL.revokeObjectURL(improvedBlobUrl);
-        console.log('[BLOB] Revoked Blob URL');
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
       }
     };
-  }, [improvedBlobUrl]);
+  }, []);
 
   const handleOpenInExternalBrowser = () => {
     if (improvedBlobUrl) {
@@ -260,7 +264,7 @@ export default function MaterialImprover() {
       });
 
       const startText = await startRes.text();
-      let startData: any;
+      let startData: { jobId?: string; success?: boolean; improvedFile?: ImprovedFile; message?: string; error?: { message?: string } };
       try {
         startData = JSON.parse(startText);
       } catch {
@@ -323,7 +327,7 @@ export default function MaterialImprover() {
         console.log(`[IMPROVE] Job ${jobId}: ${pollData.elapsed}s elapsed...`);
       }
 
-      throw new Error('Időtúllépés: A javítás túl sokáig tartott (4 perc). Próbáld újra.');
+      throw new Error('Időtúllépés: A javítás túl sokáig tartott (10 perc). Próbáld újra.');
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
@@ -344,29 +348,6 @@ export default function MaterialImprover() {
     },
   });
 
-  // Update status mutation
-  const updateStatusMutation = useMutation({
-    mutationFn: async ({ id, status, notes }: { id: string; status: string; notes?: string }) => {
-      return apiRequest("PATCH", `/api/admin/improved-files/${id}`, {
-        status,
-        improvementNotes: notes,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
-      toast({
-        title: "Státusz frissítve",
-        description: "A javított fájl státusza sikeresen frissítve.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Hiba",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
   // Apply improved file mutation
   const applyMutation = useMutation({
@@ -379,8 +360,8 @@ export default function MaterialImprover() {
       console.log('[APPLY] API response:', result);
       return result;
     },
-    onSuccess: (data: any) => {
-      console.log('[APPLY] ✅ Success:', data);
+    onSuccess: () => {
+      console.log('[APPLY] ✅ Success');
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       toast({
