@@ -42,7 +42,7 @@ interface ImprovedFile {
   title: string;
   description: string | null;
   classroom: number;
-  status: 'pending' | 'approved' | 'rejected' | 'applied';
+  status: 'pending' | 'approved' | 'rejected' | 'applied' | 'processing' | 'error';
   improvementPrompt: string | null;
   improvementNotes: string | null;
   createdAt: string;
@@ -440,10 +440,12 @@ export default function MaterialImprover() {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
+      processing: { variant: "secondary", label: "⏳ Feldolgozás..." },
       pending: { variant: "secondary", label: "Függőben" },
       approved: { variant: "default", label: "Jóváhagyva" },
       rejected: { variant: "destructive", label: "Elutasítva" },
       applied: { variant: "outline", label: "Alkalmazva" },
+      error: { variant: "destructive", label: "❌ Hiba" },
     };
     const config = variants[status] || variants.pending;
     return <Badge variant={config.variant}>{config.label}</Badge>;
@@ -553,33 +555,46 @@ export default function MaterialImprover() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPreviewImprovedId(file.id)}
-                            className="border-red-300 text-red-700 hover:bg-red-50"
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Előnézet
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleApply(file.id)}
-                            disabled={applyMutation.isPending}
-                            className="border-green-500 bg-green-600 text-white hover:bg-green-700"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            {file.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDelete(file.id)}
-                            className="border-red-300 text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {file.status === "processing" ? (
+                              <Badge variant="secondary" className="animate-pulse">
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                AI dolgozik...
+                              </Badge>
+                            ) : file.status === "error" ? (
+                              <span className="text-xs text-red-600 max-w-[200px] truncate" title={file.improvementNotes || ''}>
+                                {file.improvementNotes || 'Hiba'}
+                              </span>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setPreviewImprovedId(file.id)}
+                                  className="border-red-300 text-red-700 hover:bg-red-50"
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Előnézet
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleApply(file.id)}
+                                  disabled={applyMutation.isPending}
+                                  className="border-green-500 bg-green-600 text-white hover:bg-green-700"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  {file.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDelete(file.id)}
+                              className="border-red-300 text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                         </div>
                       </TableCell>
                     </TableRow>

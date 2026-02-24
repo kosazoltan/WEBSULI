@@ -197,6 +197,7 @@ export interface IStorage {
   getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]>;
   getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]>;
   updateImprovedHtmlFileStatus(id: string, status: string, appliedBy?: string, notes?: string): Promise<ImprovedHtmlFile | null>;
+  updateImprovedHtmlFileContent(id: string, content: string): Promise<void>;
   deleteImprovedHtmlFile(id: string): Promise<boolean>;
   
   // Apply improved file to original (TRANSACTION)
@@ -1391,6 +1392,13 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return updated || null;
+  }
+
+  async updateImprovedHtmlFileContent(id: string, content: string): Promise<void> {
+    await db
+      .update(improvedHtmlFiles)
+      .set({ content })
+      .where(eq(improvedHtmlFiles.id, id));
   }
 
   async deleteImprovedHtmlFile(id: string): Promise<boolean> {

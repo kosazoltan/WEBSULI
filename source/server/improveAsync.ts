@@ -2,44 +2,22 @@
  * Async Material Improvement Module
  * 
  * Vercel proxy has a 30s timeout for rewrites, but AI processing takes 1-3 minutes.
- * Solution: POST returns immediately with jobId, processing runs in background,
- * client polls GET /status/:jobId every 5 seconds.
+ * Solution: POST returns immediately with jobId (= DB record id), processing runs in background,
+ * client polls GET /status/:jobId which reads from DATABASE (not in-memory).
+ * 
+ * GYÖKÉROK JAVÍTÁS: Korábban in-memory Map-et használtunk, ami Render restart-kor törlődött.
+ * Most az improvedHtmlFiles tábla 'processing' státuszú rekordja tárolja az állapotot.
  */
 
 import { Router } from 'express';
 import { storage } from './storage';
 import type { HtmlFile } from '@shared/schema';
 
-interface ImprovementJobResult {
-  improvedFile: { id: string; title: string; status: string };
-  stats: { originalSize: number; improvedSize: number; processingTime: number };
-}
-
-interface ImprovementJob {
-  status: 'processing' | 'completed' | 'error';
-  fileId: string;
-  startedAt: number;
-  result?: ImprovementJobResult;
-  error?: string;
-}
-
-const improvementJobs = new Map<string, ImprovementJob>();
-
-// Cleanup old jobs every 10 minutes (remove jobs older than 1 hour)
-setInterval(() => {
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  Array.from(improvementJobs.entries()).forEach(([jobId, job]) => {
-    if (job.startedAt < oneHourAgo) {
-      improvementJobs.delete(jobId);
-    }
-  });
-}, 10 * 60 * 1000);
-
 /**
- * Run the AI improvement in background and update the job store
+ * Run the AI improvement in background and update the DATABASE record
  */
 async function processImprovementJob(
-  jobId: string,
+  dbRecordId: string,
   originalFile: HtmlFile,
   customPrompt: string | undefined,
   userId: string,
@@ -58,7 +36,7 @@ A cél: a tananyag 4-oldalas struktúrába alakítása, kognitív elemekkel, fel
 ## KRITIKUS FORMÁTUM SZABÁLYOK
 - A válaszod KIZÁRÓLAG HTML kóddal kezdődik (<!DOCTYPE html>)
 - TILOS bármilyen szöveg, magyarázat, markdown a HTML előtt vagy után
-- NE használj markdown kódblokkot (\\\`\\\`\\\`html) - csak tiszta HTML-t adj vissza
+- NE használj markdown kódblokkot (\`\`\`html) - csak tiszta HTML-t adj vissza
 
 ## 4-OLDALAS STRUKTÚRA (v7.1 KÖTELEZŐ)
 Minden javított tananyag 4 oldalt (tab-ot) KELL tartalmazzon:
@@ -73,7 +51,7 @@ Ha a régi tananyag 3 oldalas (v6): add hozzá a 🧠 Módszerek oldalt 2. pozí
 Tab navigáció: sticky, 4 gomb, reszponzív, min 44px magasság.
 
 ## JAVÍTÁSI PRIORITÁSOK (sorrendben)
-1. **Csonkolt HTML záró tagek** → Összes hiányzó záró tag pótlása (\</script\>, \</div\>, \</body\>, \</html\>)
+1. **Csonkolt HTML záró tagek** → Összes hiányzó záró tag pótlása (</script>, </div>, </body>, </html>)
 2. **Hiányzó Módszerek oldal** → Generálás min. 10 kognitív elemmel a 2. pozícióba
 3. **Hiányzó oldalak (Feladatok/Kvíz)** → Generálás a tananyag tartalmából
 4. **Tab navigáció 4 gombra javítása** → Módszerek tab hozzáadása
@@ -103,7 +81,7 @@ Tab navigáció: sticky, 4 gomb, reszponzív, min 44px magasság.
 ## TILTOTT ELEMEK (v7.1)
 | Tiltott | Helyes megoldás |
 |---------|----------------|
-| alert('...') | HTML modal overlay (\<div class="PREFIX-overlay"\>) |
+| alert('...') | HTML modal overlay (<div class="PREFIX-overlay">) |
 | confirm('...') | HTML modal confirm (Igen/Mégse gombokkal, addEventListener) |
 | prompt('...') | HTML input modal |
 | Inline JSON onclick="..." | Globális változó + addEventListener |
@@ -229,13 +207,13 @@ ${originalFile.content}
       apiKey: anthropicKey,
       model: 'claude-sonnet-4-20250514',
       timeout: 600000, // 10 min HTTP timeout
-      maxTokens: 32768, // 32K tokens for full v7.1 HTML (75 quiz + 45 exercises + 10 cognitive elements)
+      maxTokens: 32768, // 32K tokens for full v7.1 HTML
     });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min max
 
-    console.log(`[IMPROVE] Job ${jobId}: Calling AI...`);
+    console.log(`[IMPROVE] Record ${dbRecordId}: Calling AI...`);
     const startTime = Date.now();
 
     let aiResponse;
@@ -249,7 +227,7 @@ ${originalFile.content}
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[IMPROVE] Job ${jobId}: AI responded in ${duration}ms`);
+    console.log(`[IMPROVE] Record ${dbRecordId}: AI responded in ${duration}ms`);
 
     if (!aiResponse || !aiResponse.content) {
       throw new Error('Az AI nem adott vissza választ');
@@ -296,38 +274,14 @@ ${originalFile.content}
       throw new Error('A generált válasz nem tartalmaz érvényes HTML struktúrát');
     }
 
-    // Save to database
-    const improvedFile = await storage.createImprovedHtmlFile({
-      originalFileId: originalFile.id,
-      title: originalFile.title,
-      content: improvedHtml,
-      description: originalFile.description,
-      classroom: originalFile.classroom,
-      contentType: originalFile.contentType || 'html',
-      improvementPrompt: customPrompt || 'Default improvement',
-      status: 'pending',
-      createdBy: userId,
-    });
+    // ✅ UPDATE the existing DB record with real content and 'pending' status
+    await storage.updateImprovedHtmlFileStatus(dbRecordId, 'pending');
+    await storage.updateImprovedHtmlFileContent(dbRecordId, improvedHtml);
 
-    console.log(`[IMPROVE] Job ${jobId}: ✅ Success! Saved: ${improvedFile.id}`);
+    console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Success! Content saved (${improvedHtml.length} bytes), status → pending`);
 
-    // Update job with result
-    const existingJob = improvementJobs.get(jobId);
-    improvementJobs.set(jobId, {
-      status: 'completed',
-      fileId: originalFile.id,
-      startedAt: existingJob?.startedAt || Date.now(),
-      result: {
-        improvedFile,
-        stats: {
-          originalSize: originalFile.content.length,
-          improvedSize: improvedHtml.length,
-          processingTime: duration,
-        }
-      }
-    });
   } catch (error: any) {
-    console.error(`[IMPROVE] Job ${jobId}: Error:`, error.message);
+    console.error(`[IMPROVE] Record ${dbRecordId}: Error:`, error.message);
 
     let userMessage = 'Hiba történt a javítás során';
     if (error.name === 'AbortError' || error.message?.includes('aborted')) {
@@ -340,13 +294,12 @@ ${originalFile.content}
       userMessage = error.message;
     }
 
-    const existingJob = improvementJobs.get(jobId);
-    improvementJobs.set(jobId, {
-      status: 'error',
-      fileId: originalFile.id,
-      startedAt: existingJob?.startedAt || Date.now(),
-      error: userMessage,
-    });
+    // ✅ UPDATE the DB record with error status
+    try {
+      await storage.updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage);
+    } catch (dbError: any) {
+      console.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbError.message);
+    }
   }
 }
 
@@ -386,26 +339,31 @@ export function registerImprovementRoutes(adminRouter: Router) {
         });
       }
 
-      // Generate job ID and respond IMMEDIATELY (within Vercel's 30s limit)
-      const jobId = `imp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-      improvementJobs.set(jobId, {
+      // ✅ GYÖKÉROK JAVÍTÁS: Create DB record FIRST with 'processing' status
+      const dbRecord = await storage.createImprovedHtmlFile({
+        originalFileId: originalFile.id,
+        title: originalFile.title,
+        content: '<!-- Feldolgozás alatt... -->', // Placeholder until AI completes
+        description: originalFile.description,
+        classroom: originalFile.classroom,
+        contentType: originalFile.contentType || 'html',
+        improvementPrompt: customPrompt || 'Default improvement',
         status: 'processing',
-        fileId: id,
-        startedAt: Date.now(),
+        createdBy: userId,
       });
 
-      console.log(`[IMPROVE] Job ${jobId} started for: ${originalFile.title}`);
+      console.log(`[IMPROVE] DB record ${dbRecord.id} created with status 'processing' for: ${originalFile.title}`);
 
-      // Return immediately
+      // Return immediately with DB record ID
       res.json({ 
         success: true, 
-        jobId, 
+        jobId: dbRecord.id, 
         status: 'processing',
         message: 'Javítás elindítva' 
       });
 
       // Process in background (fire-and-forget)
-      processImprovementJob(jobId, originalFile, customPrompt, userId, anthropicKey);
+      processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey);
 
     } catch (error: any) {
       console.error('[IMPROVE] Error:', error.message);
@@ -413,31 +371,52 @@ export function registerImprovementRoutes(adminRouter: Router) {
     }
   });
 
-  // GET /api/admin/improve-material/status/:jobId - Poll job status
+  // GET /api/admin/improve-material/status/:jobId - Poll job status FROM DATABASE
   adminRouter.get("/improve-material/status/:jobId", async (req: any, res) => {
     const { jobId } = req.params;
-    const job = improvementJobs.get(jobId);
+    
+    // ✅ Read from DATABASE, not in-memory Map
+    const record = await storage.getImprovedHtmlFile(jobId);
 
-    if (!job) {
+    if (!record) {
       return res.status(404).json({ status: 'not_found', message: 'Job nem található' });
     }
 
-    const elapsed = Math.round((Date.now() - job.startedAt) / 1000);
+    const elapsed = Math.round((Date.now() - new Date(record.createdAt).getTime()) / 1000);
 
-    if (job.status === 'processing') {
+    if (record.status === 'processing') {
       return res.json({ status: 'processing', elapsed });
     }
 
-    if (job.status === 'completed') {
-      improvementJobs.delete(jobId);
-      return res.json({ status: 'completed', elapsed, ...job.result });
+    if (record.status === 'pending') {
+      // AI completed successfully - return the improved file info
+      return res.json({ 
+        status: 'completed', 
+        elapsed, 
+        improvedFile: {
+          id: record.id,
+          title: record.title,
+          status: record.status,
+        }
+      });
     }
 
-    if (job.status === 'error') {
-      improvementJobs.delete(jobId);
-      return res.json({ status: 'error', elapsed, message: job.error });
+    if (record.status === 'error') {
+      // AI failed - return error message, then clean up the record
+      const errorMessage = record.improvementNotes || 'Ismeretlen hiba';
+      await storage.deleteImprovedHtmlFile(jobId);
+      return res.json({ status: 'error', elapsed, message: errorMessage });
     }
 
-    res.json({ status: job.status, elapsed });
+    // Any other status (approved, applied) - treat as completed
+    res.json({ 
+      status: 'completed', 
+      elapsed,
+      improvedFile: {
+        id: record.id,
+        title: record.title,
+        status: record.status,
+      }
+    });
   });
 }
