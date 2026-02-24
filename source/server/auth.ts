@@ -2,8 +2,10 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import express, { Express, RequestHandler } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { dbPool } from "./db";
 import { User } from "@shared/schema";
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
@@ -26,7 +28,18 @@ export function setupAuth(app: Express) {
     // Trust proxy for correct IP and protocol detection behind Nginx
     app.set('trust proxy', 1);
 
+    // ✅ GYÖKÉROK JAVÍTÁS: PostgreSQL session store
+    // Régi: MemoryStore → Render restart = MINDEN session törlődik → user kijelentkezik
+    // Új: connect-pg-simple → session az adatbázisban marad → Render restart után is bejelentkezve
+    const PgSession = connectPgSimple(session);
+
     app.use(session({
+        store: new PgSession({
+            pool: dbPool,
+            tableName: 'session',
+            createTableIfMissing: true, // Auto-create session table
+            pruneSessionInterval: 60 * 15, // Clean expired sessions every 15 min
+        }),
         secret: sessionSecret,
         resave: false,
         saveUninitialized: false,
