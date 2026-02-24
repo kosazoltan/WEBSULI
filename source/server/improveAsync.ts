@@ -224,12 +224,12 @@ ${originalFile.content}
     const improveProvider = new ClaudeProvider({
       apiKey: anthropicKey,
       model: 'claude-sonnet-4-20250514',
-      timeout: 180000,
+      timeout: 480000,
       maxTokens: 16384,
     });
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000);
+    const timeoutId = setTimeout(() => controller.abort(), 480000);
 
     console.log(`[IMPROVE] Job ${jobId}: Calling AI...`);
     const startTime = Date.now();
@@ -327,7 +327,7 @@ ${originalFile.content}
 
     let userMessage = 'Hiba történt a javítás során';
     if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-      userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (3 perc). Próbáld kisebb fájllal.';
+      userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (8 perc). Próbáld kisebb fájllal.';
     } else if (error.message?.includes('rate') || error.message?.includes('429')) {
       userMessage = 'Túl sok kérés. Várj egy percet és próbáld újra.';
     } else if (error.message?.includes('credit') || error.message?.includes('balance')) {
