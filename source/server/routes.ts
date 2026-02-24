@@ -4327,80 +4327,35 @@ Crawl-delay: 1`;
     try {
       const { id } = req.params;
       const { createBackup = true, notes } = req.body || {};
-      const userId = req.user.id;
+      const userId = req.user?.id;
 
-      console.log(`[APPLY-IMPROVED] Starting apply for improved file: ${id}`);
-      console.log(`[APPLY-IMPROVED] User: ${userId}, createBackup: ${createBackup}`);
-
-      // Validate improved file exists
-      const improved = await storage.getImprovedHtmlFile(id);
-      if (!improved) {
-        console.log(`[APPLY-IMPROVED] Improved file not found: ${id}`);
-        return res.status(404).json({ message: "Javított fájl nem található" });
+      if (!userId) {
+        return res.status(401).json({ message: 'Nincs bejelentkezve' });
       }
 
-      console.log(`[APPLY-IMPROVED] Found improved file: status=${improved.status}, originalFileId=${improved.originalFileId}, contentSize=${improved.content?.length || 0}`);
+      console.log(`[APPLY-IMPROVED] Starting apply for improved file: ${id}, user: ${userId}`);
 
-      if (!['pending', 'approved', 'applied'].includes(improved.status)) {
-        console.log(`[APPLY-IMPROVED] Invalid status: ${improved.status}`);
-        return res.status(400).json({
-          message: `Csak 'pending', 'approved' vagy 'applied' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}`
-        });
-      }
-
-      // Apply improved file (with transaction and backup)
-      console.log(`[APPLY-IMPROVED] Calling applyImprovedFileToOriginal...`);
+      // Delegate entirely to storage (single DB query inside transaction)
       const result = await storage.applyImprovedFileToOriginal(id, userId, createBackup, notes);
       
-      console.log(`[APPLY-IMPROVED] ✅ Success! Original file updated: ${result.originalFile.id}, new content size: ${result.originalFile.content?.length || 0}, backupId: ${result.backupId || 'none'}`);
+      console.log(`[APPLY-IMPROVED] \u2705 Success! originalFileId: ${result.originalFile.id}, backupId: ${result.backupId || 'none'}`);
 
       res.json({
         success: true,
-        originalFile: result.originalFile,
+        originalFileId: result.originalFile.id,
+        originalFileTitle: result.originalFile.title,
         backupId: result.backupId,
-        message: 'Javított fájl sikeresen alkalmazva',
+        message: 'Jav\u00edtott f\u00e1jl sikeresen alkalmazva',
       });
     } catch (error: any) {
-      console.error('[APPLY-IMPROVED] ❌ Error:', error.message);
+      console.error('[APPLY-IMPROVED] \u274c Error:', error.message);
       console.error('[APPLY-IMPROVED] Stack:', error.stack);
       res.status(500).json({
-        message: error.message || 'Hiba történt az alkalmazás során'
+        message: error.message || 'Hiba t\u00f6rt\u00e9nt az alkalmaz\u00e1s sor\u00e1n'
       });
     }
   });
 
-  // GET /api/admin/improved-files/:id/debug - Debug endpoint for apply issues
-  adminRouter.get("/improved-files/:id/debug", async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      const improved = await storage.getImprovedHtmlFile(id);
-      if (!improved) {
-        return res.status(404).json({ message: "Improved file not found" });
-      }
-      const original = await storage.getHtmlFile(improved.originalFileId);
-      
-      res.json({
-        improved: {
-          id: improved.id,
-          status: improved.status,
-          contentLength: improved.content?.length || 0,
-          contentStart: improved.content?.substring(0, 200) || 'EMPTY',
-          title: improved.title,
-          originalFileId: improved.originalFileId,
-          appliedAt: improved.appliedAt,
-        },
-        original: {
-          id: original?.id,
-          contentLength: original?.content?.length || 0,
-          contentStart: original?.content?.substring(0, 200) || 'EMPTY',
-          title: original?.title,
-        },
-        contentMatch: improved.content?.length === original?.content?.length,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   // PATCH /api/admin/improved-files/:id - Update improved file status/notes
   adminRouter.patch("/improved-files/:id", async (req: any, res) => {
