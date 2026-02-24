@@ -260,60 +260,84 @@ export default function MaterialImprover() {
     }
   };
 
-  // Improve material mutation - Simple JSON API (no streaming)
-  // IMPORTANT: For long-running AI operations (up to 3 minutes), we call the
-  // Render backend DIRECTLY to bypass Vercel's 30s proxy timeout limit.
-  const RENDER_API_BASE = window.location.hostname === 'localhost' 
-    ? '' 
-    : 'https://websuli-api.onrender.com';
-
+  // Improve material mutation - Async Job Pattern
+  // POST returns immediately with jobId, then we poll for completion.
+  // This avoids Vercel's 30s proxy timeout for long-running AI operations.
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
+      // 1. Start the job (returns immediately with jobId)
+      const startRes = await fetch(`/api/admin/improve-material/${fileId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ customPrompt: customPrompt || undefined }),
+      });
+
+      const startText = await startRes.text();
+      let startData: any;
+      try {
+        startData = JSON.parse(startText);
+      } catch {
+        console.error('[IMPROVE] Start response not JSON:', startText.substring(0, 200));
+        throw new Error(
+          !startRes.ok
+            ? `Szerver hiba (${startRes.status}): ${startText.substring(0, 100)}`
+            : 'A szerver nem JSON választ adott vissza.'
+        );
+      }
+
+      if (!startRes.ok) {
+        throw new Error(startData.message || startData.error?.message || 'Hiba a javítás indításakor');
+      }
+
+      if (!startData.jobId) {
+        // Legacy sync response (if server hasn't been updated yet)
+        if (startData.success && startData.improvedFile) {
+          return startData.improvedFile;
+        }
+        throw new Error('Nem érkezett job azonosító');
+      }
+
       // Show loading toast
       toast({
         title: "🤖 AI feldolgozás...",
         description: "A tananyag javítása folyamatban, ez akár 1-2 percig is tarthat.",
-        duration: 120000,
+        duration: 180000,
       });
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 240000); // 240s timeout (server has 180s)
+      // 2. Poll for completion (every 5 seconds, max 4 minutes)
+      const jobId = startData.jobId;
+      const maxPollTime = 240000; // 4 minutes max
+      const pollInterval = 5000; // 5 seconds
+      const startTime = Date.now();
 
-      const res = await fetch(`${RENDER_API_BASE}/api/admin/improve-material/${fileId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        signal: controller.signal,
-        body: JSON.stringify({
-          customPrompt: customPrompt || undefined,
-        }),
-      });
+      while (Date.now() - startTime < maxPollTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-      clearTimeout(timeoutId);
+        const pollRes = await fetch(`/api/admin/improve-material/status/${jobId}`, {
+          credentials: 'include',
+        });
 
-      // Safely parse response - handle non-JSON error responses from proxy/hosting
-      const responseText = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('[IMPROVE] Response is not valid JSON:', responseText.substring(0, 200));
-        throw new Error(
-          !res.ok
-            ? `Szerver hiba (${res.status}): ${responseText.substring(0, 100)}`
-            : 'A szerver nem JSON választ adott vissza. Próbáld újra.'
-        );
+        if (!pollRes.ok) {
+          console.warn(`[IMPROVE] Poll error: ${pollRes.status}`);
+          continue; // Retry on network issues
+        }
+
+        const pollData = await pollRes.json();
+
+        if (pollData.status === 'completed') {
+          return pollData.improvedFile;
+        }
+
+        if (pollData.status === 'error') {
+          throw new Error(pollData.message || 'Hiba történt a javítás során');
+        }
+
+        // Still processing - continue polling
+        console.log(`[IMPROVE] Job ${jobId}: ${pollData.elapsed}s elapsed...`);
       }
 
-      if (!res.ok) {
-        throw new Error(data.message || data.error?.message || 'Hiba történt a javítás során');
-      }
-
-      if (!data.success || !data.improvedFile) {
-        throw new Error('Nem érkezett javított fájl');
-      }
-
-      return data.improvedFile;
+      throw new Error('Időtúllépés: A javítás túl sokáig tartott (4 perc). Próbáld újra.');
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
