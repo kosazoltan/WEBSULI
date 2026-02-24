@@ -8,13 +8,18 @@
 
 import { Router } from 'express';
 import { storage } from './storage';
+import type { HtmlFile } from '@shared/schema';
 
-// In-memory job store
+interface ImprovementJobResult {
+  improvedFile: { id: string; title: string; status: string };
+  stats: { originalSize: number; improvedSize: number; processingTime: number };
+}
+
 interface ImprovementJob {
   status: 'processing' | 'completed' | 'error';
   fileId: string;
   startedAt: number;
-  result?: any;
+  result?: ImprovementJobResult;
   error?: string;
 }
 
@@ -35,7 +40,7 @@ setInterval(() => {
  */
 async function processImprovementJob(
   jobId: string,
-  originalFile: any,
+  originalFile: HtmlFile,
   customPrompt: string | undefined,
   userId: string,
   anthropicKey: string

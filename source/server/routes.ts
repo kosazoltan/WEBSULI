@@ -4338,20 +4338,20 @@ Crawl-delay: 1`;
       // Delegate entirely to storage (single DB query inside transaction)
       const result = await storage.applyImprovedFileToOriginal(id, userId, createBackup, notes);
       
-      console.log(`[APPLY-IMPROVED] \u2705 Success! originalFileId: ${result.originalFile.id}, backupId: ${result.backupId || 'none'}`);
+      console.log(`[APPLY-IMPROVED] ✅ Success! originalFileId: ${result.originalFile.id}, backupId: ${result.backupId || 'none'}`);
 
       res.json({
         success: true,
         originalFileId: result.originalFile.id,
         originalFileTitle: result.originalFile.title,
         backupId: result.backupId,
-        message: 'Jav\u00edtott f\u00e1jl sikeresen alkalmazva',
+        message: 'Javított fájl sikeresen alkalmazva',
       });
     } catch (error: any) {
-      console.error('[APPLY-IMPROVED] \u274c Error:', error.message);
+      console.error('[APPLY-IMPROVED] ❌ Error:', error.message);
       console.error('[APPLY-IMPROVED] Stack:', error.stack);
       res.status(500).json({
-        message: error.message || 'Hiba t\u00f6rt\u00e9nt az alkalmaz\u00e1s sor\u00e1n'
+        message: error.message || 'Hiba történt az alkalmazás során'
       });
     }
   });
