@@ -568,7 +568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Skip CSRF for AI endpoints (Enhanced Material Creator uses direct API calls)
     // These endpoints have their own authentication checks
-    if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/')) {
+    if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/') || path.startsWith('/api/admin/improved-files/')) {
       return next();
     }
 
@@ -4329,20 +4329,30 @@ Crawl-delay: 1`;
       const { createBackup = true, notes } = req.body || {};
       const userId = req.user.id;
 
-      // Validate improved file exists and is approved
+      console.log(`[APPLY-IMPROVED] Starting apply for improved file: ${id}`);
+      console.log(`[APPLY-IMPROVED] User: ${userId}, createBackup: ${createBackup}`);
+
+      // Validate improved file exists
       const improved = await storage.getImprovedHtmlFile(id);
       if (!improved) {
+        console.log(`[APPLY-IMPROVED] Improved file not found: ${id}`);
         return res.status(404).json({ message: "Javított fájl nem található" });
       }
 
+      console.log(`[APPLY-IMPROVED] Found improved file: status=${improved.status}, originalFileId=${improved.originalFileId}, contentSize=${improved.content?.length || 0}`);
+
       if (!['pending', 'approved'].includes(improved.status)) {
+        console.log(`[APPLY-IMPROVED] Invalid status: ${improved.status}`);
         return res.status(400).json({
           message: `Csak 'pending' vagy 'approved' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}`
         });
       }
 
       // Apply improved file (with transaction and backup)
+      console.log(`[APPLY-IMPROVED] Calling applyImprovedFileToOriginal...`);
       const result = await storage.applyImprovedFileToOriginal(id, userId, createBackup, notes);
+      
+      console.log(`[APPLY-IMPROVED] ✅ Success! Original file updated: ${result.originalFile.id}, new content size: ${result.originalFile.content?.length || 0}, backupId: ${result.backupId || 'none'}`);
 
       res.json({
         success: true,
@@ -4351,7 +4361,8 @@ Crawl-delay: 1`;
         message: 'Javított fájl sikeresen alkalmazva',
       });
     } catch (error: any) {
-      console.error('[APPLY-IMPROVED] Error:', error);
+      console.error('[APPLY-IMPROVED] ❌ Error:', error.message);
+      console.error('[APPLY-IMPROVED] Stack:', error.stack);
       res.status(500).json({
         message: error.message || 'Hiba történt az alkalmazás során'
       });
