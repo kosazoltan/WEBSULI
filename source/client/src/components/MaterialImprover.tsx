@@ -285,10 +285,22 @@ export default function MaterialImprover() {
 
       clearTimeout(timeoutId);
 
-      const data = await res.json();
+      // Safely parse response - handle non-JSON error responses from proxy/hosting
+      const responseText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('[IMPROVE] Response is not valid JSON:', responseText.substring(0, 200));
+        throw new Error(
+          !res.ok
+            ? `Szerver hiba (${res.status}): ${responseText.substring(0, 100)}`
+            : 'A szerver nem JSON választ adott vissza. Próbáld újra.'
+        );
+      }
 
       if (!res.ok) {
-        throw new Error(data.message || 'Hiba történt a javítás során');
+        throw new Error(data.message || data.error?.message || 'Hiba történt a javítás során');
       }
 
       if (!data.success || !data.improvedFile) {
