@@ -81,7 +81,7 @@ export default function MaterialImprover() {
   const [selectedFileId, setSelectedFileId] = useState<string>("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [previewImprovedId, setPreviewImprovedId] = useState<string | null>(null);
-  const [applyingId, setApplyingId] = useState<string | null>(null);
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Get all HTML files
@@ -385,24 +385,27 @@ export default function MaterialImprover() {
   // Apply improved file mutation
   const applyMutation = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
-      return apiRequest("POST", "/api/admin/improved-files/" + id + "/apply", {
+      console.log('[APPLY] Calling API: POST /api/admin/improved-files/' + id + '/apply');
+      const result = await apiRequest("POST", "/api/admin/improved-files/" + id + "/apply", {
         createBackup: true,
         notes,
       });
+      console.log('[APPLY] API response:', result);
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      console.log('[APPLY] ✅ Success:', data);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
-      setApplyingId(null);
       toast({
         title: "✅ Sikeresen alkalmazva",
         description: "A javított fájl sikeresen lecserélte az eredetit. Backup készült.",
       });
     },
     onError: (error: Error) => {
-      setApplyingId(null);
+      console.error('[APPLY] ❌ Error:', error.message);
       toast({
-        title: "Hiba",
+        title: "❌ Hiba az alkalmazás során",
         description: error.message || "Nem sikerült alkalmazni a javítást",
         variant: "destructive",
       });
@@ -453,16 +456,8 @@ export default function MaterialImprover() {
   };
 
   const handleApply = (id: string) => {
-    setApplyingId(id);
-  };
-
-  const confirmApply = () => {
-    const idToApply = applyingId;
-    setApplyingId(null); // Close dialog first
-    if (idToApply) {
-      console.log('[APPLY] Confirming apply for:', idToApply);
-      applyMutation.mutate({ id: idToApply });
-    }
+    console.log('[APPLY] Directly applying improved file:', id);
+    applyMutation.mutate({ id });
   };
 
   const handleDelete = (id: string) => {
@@ -802,30 +797,7 @@ export default function MaterialImprover() {
         </Card>
       )}
 
-      {/* Apply Confirmation Dialog */}
-      <AlertDialog open={applyingId !== null} onOpenChange={(open) => { if (!open) setApplyingId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Alkalmazás megerősítése</AlertDialogTitle>
-            <AlertDialogDescription>
-              Biztosan alkalmazni szeretnéd ezt a javított fájlt? Ez lecseréli az eredeti fájlt.
-              Automatikus backup készül a művelet előtt.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Mégse</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                confirmApply();
-              }}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              ✅ Jóváhagy & Alkalmaz
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deletingId !== null} onOpenChange={() => setDeletingId(null)}>
