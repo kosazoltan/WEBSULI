@@ -1420,8 +1420,8 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 2. Validate status
-      if (!['pending', 'approved'].includes(improved.status)) {
-        throw new Error(`Cannot apply improved file with status: ${improved.status}. Only 'pending' or 'approved' files can be applied.`);
+      if (!['pending', 'approved', 'applied'].includes(improved.status)) {
+        throw new Error(`Cannot apply improved file with status: ${improved.status}. Only 'pending', 'approved' or 'applied' files can be applied.`);
       }
 
       // 3. Validate age (max 30 days)

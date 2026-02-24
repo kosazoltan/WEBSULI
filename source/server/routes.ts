@@ -4341,10 +4341,10 @@ Crawl-delay: 1`;
 
       console.log(`[APPLY-IMPROVED] Found improved file: status=${improved.status}, originalFileId=${improved.originalFileId}, contentSize=${improved.content?.length || 0}`);
 
-      if (!['pending', 'approved'].includes(improved.status)) {
+      if (!['pending', 'approved', 'applied'].includes(improved.status)) {
         console.log(`[APPLY-IMPROVED] Invalid status: ${improved.status}`);
         return res.status(400).json({
-          message: `Csak 'pending' vagy 'approved' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}`
+          message: `Csak 'pending', 'approved' vagy 'applied' státuszú fájlok alkalmazhatók. Jelenlegi státusz: ${improved.status}`
         });
       }
 
