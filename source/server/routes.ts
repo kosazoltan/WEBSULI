@@ -4337,6 +4337,12 @@ Crawl-delay: 1`;
 
       console.log(`[APPLY-IMPROVED] Starting apply for improved file: ${id}, user: ${userId}`);
 
+      // Quick diagnostic: check improved file content before apply
+      const preCheck = await storage.getImprovedHtmlFile(id);
+      if (preCheck) {
+        console.log(`[APPLY-IMPROVED] Pre-check: status=${preCheck.status}, contentLength=${preCheck.content?.length || 0}, first100="${preCheck.content?.substring(0, 100)}"`);
+      }
+
       // Delegate entirely to storage (single DB query inside transaction)
       const result = await storage.applyImprovedFileToOriginal(id, userId, createBackup, notes);
       
