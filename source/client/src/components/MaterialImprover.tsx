@@ -457,8 +457,11 @@ export default function MaterialImprover() {
   };
 
   const confirmApply = () => {
-    if (applyingId) {
-      applyMutation.mutate({ id: applyingId });
+    const idToApply = applyingId;
+    setApplyingId(null); // Close dialog first
+    if (idToApply) {
+      console.log('[APPLY] Confirming apply for:', idToApply);
+      applyMutation.mutate({ id: idToApply });
     }
   };
 
@@ -789,7 +792,7 @@ export default function MaterialImprover() {
       )}
 
       {/* Apply Confirmation Dialog */}
-      <AlertDialog open={applyingId !== null} onOpenChange={() => setApplyingId(null)}>
+      <AlertDialog open={applyingId !== null} onOpenChange={(open) => { if (!open) setApplyingId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Alkalmazás megerősítése</AlertDialogTitle>
@@ -801,10 +804,13 @@ export default function MaterialImprover() {
           <AlertDialogFooter>
             <AlertDialogCancel>Mégse</AlertDialogCancel>
             <AlertDialogAction
-              onClick={confirmApply}
-              className="bg-red-600 hover:bg-red-700"
+              onClick={(e) => {
+                e.preventDefault();
+                confirmApply();
+              }}
+              className="bg-green-600 hover:bg-green-700"
             >
-              Alkalmaz
+              ✅ Jóváhagy & Alkalmaz
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
