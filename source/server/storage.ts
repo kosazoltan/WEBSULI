@@ -1443,13 +1443,24 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Cannot apply improved file with status: ${improved.status}. Only 'pending', 'approved' or 'applied' files can be applied.`);
       }
 
-      // 3. Validate age (max 30 days)
+      // 3. Validate content is NOT a placeholder or empty
+      const contentLength = improved.content?.length || 0;
+      const isPlaceholder = improved.content?.includes('Feldolgozás alatt') || 
+                           improved.content?.includes('Processing') ||
+                           contentLength < 200;
+      const hasHtmlStructure = improved.content?.includes('<html') || 
+                              improved.content?.includes('<!DOCTYPE');
+      if (isPlaceholder || !hasHtmlStructure) {
+        throw new Error(`A javított fájl tartalma üres vagy hiányos (${contentLength} byte). Az AI feldolgozás valószínűleg nem fejeződött be. Töröld és próbáld újra!`);
+      }
+
+      // 4. Validate age (max 30 days)
       const ageInDays = (Date.now() - new Date(improved.createdAt).getTime()) / (1000 * 60 * 60 * 24);
       if (ageInDays > 30) {
         throw new Error('Improved file is too old (max 30 days). Please create a new improvement.');
       }
 
-      // 4. Get original file
+      // 5. Get original file
       const [original] = await tx
         .select()
         .from(htmlFiles)
