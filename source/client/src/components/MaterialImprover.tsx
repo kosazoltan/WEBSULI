@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -24,25 +23,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Sparkles,
   Loader2,
   Eye,
   CheckCircle,
-  XCircle,
   Trash2,
-  ArrowRight,
   FileText,
-  AlertTriangle,
   ExternalLink,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -82,7 +68,7 @@ export default function MaterialImprover() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [previewImprovedId, setPreviewImprovedId] = useState<string | null>(null);
 
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+
 
   // Get all HTML files
   const { data: allFiles = [], isLoading: isLoadingFiles } = useQuery<HtmlFile[]>({
@@ -419,16 +405,14 @@ export default function MaterialImprover() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
-      setDeletingId(null);
       toast({
-        title: "Törölve",
+        title: "✅ Törölve",
         description: "A javított fájl sikeresen törölve.",
       });
     },
     onError: (error: Error) => {
-      setDeletingId(null);
       toast({
-        title: "Hiba",
+        title: "❌ Hiba a törlés során",
         description: error.message,
         variant: "destructive",
       });
@@ -447,27 +431,14 @@ export default function MaterialImprover() {
     improveMutation.mutate({ fileId: selectedFileId, customPrompt: customPrompt || undefined });
   };
 
-  const handleApprove = (id: string) => {
-    updateStatusMutation.mutate({ id, status: "approved" });
-  };
-
-  const handleReject = (id: string) => {
-    updateStatusMutation.mutate({ id, status: "rejected" });
-  };
-
   const handleApply = (id: string) => {
     console.log('[APPLY] Directly applying improved file:', id);
     applyMutation.mutate({ id });
   };
 
   const handleDelete = (id: string) => {
-    setDeletingId(id);
-  };
-
-  const confirmDelete = () => {
-    if (deletingId) {
-      deleteMutation.mutate(deletingId);
-    }
+    console.log('[DELETE] Directly deleting improved file:', id);
+    deleteMutation.mutate(id);
   };
 
   const getStatusBadge = (status: string) => {
@@ -548,8 +519,8 @@ export default function MaterialImprover() {
         <CardHeader>
           <CardTitle className="text-red-700">Javított Fájlok</CardTitle>
           <CardDescription>
-            Itt láthatod az összes javított fájlt. Először jóvá kell hagynod őket, majd
-            alkalmazhatod az eredeti fájlokra.
+            Itt láthatod az összes javított fájlt. Az Alkalmaz gombbal lecserélheted
+            az eredeti fájlt a javított verzióra (backup automatikusan készül).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -741,46 +712,37 @@ export default function MaterialImprover() {
                 </ScrollArea>
               </TabsContent>
             </Tabs>
-            {(previewData.status === "pending" || previewData.status === "approved") && (
-              <div className="mt-4 flex justify-end">
-                <Button
-                  onClick={() => {
-                    setPreviewImprovedId(null);
-                    handleApply(previewData.id);
-                  }}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <ArrowRight className="h-4 w-4 mr-2" />
-                  Jóváhagy & Alkalmaz
-                </Button>
-              </div>
-            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                onClick={() => {
+                  setPreviewImprovedId(null);
+                  handleApply(previewData.id);
+                }}
+                disabled={applyMutation.isPending}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {previewData.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPreviewImprovedId(null);
+                  handleDelete(previewData.id);
+                }}
+                className="border-red-300 text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Törlés
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
 
 
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deletingId !== null} onOpenChange={() => setDeletingId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Törlés megerősítése</AlertDialogTitle>
-            <AlertDialogDescription>
-              Biztosan törölni szeretnéd ezt a javított fájlt? Ez a művelet nem vonható vissza.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Mégse</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Törlés
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
     </div>
   );
 }
