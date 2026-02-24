@@ -594,62 +594,24 @@ export default function MaterialImprover() {
                             <Eye className="h-4 w-4 mr-1" />
                             Előnézet
                           </Button>
-                          {file.status === "pending" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleApply(file.id)}
-                                disabled={applyMutation.isPending}
-                                className="border-green-500 bg-green-600 text-white hover:bg-green-700"
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Jóváhagy & Alkalmaz
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleReject(file.id)}
-                                disabled={updateStatusMutation.isPending}
-                                className="border-red-300 text-red-700 hover:bg-red-50"
-                              >
-                                <XCircle className="h-4 w-4 mr-1" />
-                                Elutasít
-                              </Button>
-                            </>
-                          )}
-                          {file.status === "approved" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleApply(file.id)}
-                              className="border-green-500 bg-green-600 text-white hover:bg-green-700"
-                            >
-                              <ArrowRight className="h-4 w-4 mr-1" />
-                              Alkalmaz
-                            </Button>
-                          )}
-                          {file.status === "applied" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleApply(file.id)}
-                              className="border-blue-500 bg-blue-600 text-white hover:bg-blue-700"
-                            >
-                              <ArrowRight className="h-4 w-4 mr-1" />
-                              Újra alkalmaz
-                            </Button>
-                          )}
-                          {(file.status !== "applied") && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDelete(file.id)}
-                              className="border-red-300 text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleApply(file.id)}
+                            disabled={applyMutation.isPending}
+                            className="border-green-500 bg-green-600 text-white hover:bg-green-700"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            {file.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDelete(file.id)}
+                            className="border-red-300 text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

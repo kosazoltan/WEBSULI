@@ -4429,17 +4429,7 @@ Crawl-delay: 1`;
     try {
       const { id } = req.params;
 
-      // Validate status (only pending or rejected can be deleted)
-      const improved = await storage.getImprovedHtmlFile(id);
-      if (!improved) {
-        return res.status(404).json({ message: "Javított fájl nem található" });
-      }
-
-      if (!['pending', 'rejected'].includes(improved.status)) {
-        return res.status(400).json({
-          message: `Csak 'pending' vagy 'rejected' státuszú fájlok törölhetők. Jelenlegi státusz: ${improved.status}`
-        });
-      }
+      // Allow deletion of any status (no restriction)
 
       const deleted = await storage.deleteImprovedHtmlFile(id);
       if (!deleted) {
