@@ -634,7 +634,18 @@ export default function MaterialImprover() {
                               Alkalmaz
                             </Button>
                           )}
-                          {(file.status === "pending" || file.status === "rejected") && (
+                          {file.status === "applied" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleApply(file.id)}
+                              className="border-blue-500 bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                              <ArrowRight className="h-4 w-4 mr-1" />
+                              Újra alkalmaz
+                            </Button>
+                          )}
+                          {(file.status !== "applied") && (
                             <Button
                               variant="outline"
                               size="sm"
