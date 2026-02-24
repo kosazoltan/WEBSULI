@@ -219,17 +219,16 @@ ${originalFile.content}
 ---
 ⚠️ EMLÉKEZTETŐ: A válaszod CSAK a teljes, javított HTML kód legyen - semmi szöveg előtte vagy utána!`;
 
-    // Call AI
     const { ClaudeProvider } = await import('./ai/ClaudeProvider');
     const improveProvider = new ClaudeProvider({
       apiKey: anthropicKey,
       model: 'claude-sonnet-4-20250514',
-      timeout: 480000,
-      maxTokens: 16384,
+      timeout: 600000, // 10 min HTTP timeout
+      maxTokens: 32768, // 32K tokens for full v7.1 HTML (75 quiz + 45 exercises + 10 cognitive elements)
     });
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 480000);
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min max
 
     console.log(`[IMPROVE] Job ${jobId}: Calling AI...`);
     const startTime = Date.now();
@@ -327,7 +326,7 @@ ${originalFile.content}
 
     let userMessage = 'Hiba történt a javítás során';
     if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-      userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (8 perc). Próbáld kisebb fájllal.';
+      userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (10 perc). Próbáld kisebb fájllal.';
     } else if (error.message?.includes('rate') || error.message?.includes('429')) {
       userMessage = 'Túl sok kérés. Várj egy percet és próbáld újra.';
     } else if (error.message?.includes('credit') || error.message?.includes('balance')) {
