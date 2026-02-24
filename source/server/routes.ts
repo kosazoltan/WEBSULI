@@ -3540,15 +3540,17 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     }
   });
 
-  // CHECK if user liked - Public
+  // CHECK if user liked - Public (returns LikeStatus: { liked, totalLikes })
   app.post("/api/materials/:id/likes/check", async (req, res) => {
     try {
       const { fingerprint } = req.body;
       if (!fingerprint) {
         return res.status(400).json({ message: "Fingerprint kötelező" });
       }
-      const hasLiked = await storage.hasUserLiked(req.params.id, fingerprint);
-      res.json({ hasLiked });
+      const materialId = req.params.id;
+      const liked = await storage.hasUserLiked(materialId, fingerprint);
+      const totalLikes = await storage.getMaterialLikes(materialId);
+      res.json({ liked, totalLikes });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
