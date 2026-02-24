@@ -198,6 +198,7 @@ export interface IStorage {
   getImprovedFilesByOriginalId(originalFileId: string): Promise<ImprovedHtmlFile[]>;
   updateImprovedHtmlFileStatus(id: string, status: string, appliedBy?: string, notes?: string): Promise<ImprovedHtmlFile | null>;
   updateImprovedHtmlFileContent(id: string, content: string): Promise<void>;
+  updateImprovedHtmlFileContentAndStatus(id: string, content: string, status: string): Promise<void>;
   deleteImprovedHtmlFile(id: string): Promise<boolean>;
   
   // Apply improved file to original (TRANSACTION)
@@ -1398,6 +1399,16 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(improvedHtmlFiles)
       .set({ content })
+      .where(eq(improvedHtmlFiles.id, id));
+  }
+
+  async updateImprovedHtmlFileContentAndStatus(id: string, content: string, status: string): Promise<void> {
+    // CRITICAL: Single atomic UPDATE to prevent race condition
+    // If content and status were updated separately, a user could "Apply"
+    // the file between the two updates, copying placeholder content!
+    await db
+      .update(improvedHtmlFiles)
+      .set({ content, status })
       .where(eq(improvedHtmlFiles.id, id));
   }
 

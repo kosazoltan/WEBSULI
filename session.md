@@ -140,3 +140,48 @@ source/shared/schema.ts                            (nem módosítva, csak refere
 2. **In-memory állapot** – Render/Heroku/Railway BÁRMIKOR újraindulhat → Mindig DB-ben tárold az állapotot
 3. **Státusz-függő UI** – Ha a gombok státusztól függenek, a fájl beszorulhat → Legyen mindig elérhető legalább a törlés
 4. **Kód push deployolás közben** – Render auto-deploy → futó job megszakad → Ne pusholj amíg AI job fut
+5. **Két lépéses DB frissítés** – Ha status és content külön UPDATE-ben frissül, race condition keletkezik → MINDIG egyetlen atomi UPDATE
+6. **React Query queryKey URL-ként** – Ha nincs explicit `queryFn`, a React Query a queryKey-t URL-ként használja fetch-hez → MINDIG adj meg `queryFn`-t
+
+---
+
+### 🔴 GYÖKÉROK #5 – Atomi content+status update (Race condition)
+**Fájl:** `source/server/improveAsync.ts` + `source/server/storage.ts`
+
+**Probléma:** Az AI job két külön DB hívásban frissítette a rekordot:
+1. `updateImprovedHtmlFileStatus(id, 'pending')` ← status → pending
+2. `updateImprovedHtmlFileContent(id, html)` ← content frissül
+
+Ha a felhasználó a két UPDATE KÖZÖTT kattint „Alkalmaz"-ra, az `applyImprovedFileToOriginal()` a **placeholder** `<!-- Feldolgozás alatt... -->` tartalmat másolja az eredetibe!
+
+**Javítás:**
+- Új atomi metódus: `updateImprovedHtmlFileContentAndStatus(id, content, status)`
+- Egyetlen `SET { content, status }` UPDATE – lehetetlen a race condition
+
+---
+
+### 🔴 HIBA #6 – LikeButton 404 spam (100+ 404 hiba/oldalbetöltés)
+**Fájl:** `source/client/src/components/LikeButton.tsx`
+
+**Probléma:** A `useQuery` a `queryKey`-t automatikusan URL-ként használta:
+```
+queryKey: ["/api/materials", materialId, "likes", fingerprint]
+→ GET /api/materials/abc-123/likes/d387ea66...
+→ 404 (nincs ilyen route!)
+```
+Ez minden anyagnál (100+) triggerelt egy 404-es GET kérést.
+
+**Javítás:**
+- Explicit `queryFn` hozzáadva → POST `/api/materials/:id/likes/check`
+- `staleTime: 60000` → ne kérdezzen újra 1 percig (batch adat friss)
+
+### Érintett fájlok (2. kör)
+```
+source/server/improveAsync.ts                      (atomi update)
+source/server/storage.ts                           (updateImprovedHtmlFileContentAndStatus)
+source/client/src/components/LikeButton.tsx         (likes 404 fix)
+```
+
+### Git commitok (2. kör)
+8. `fix: atomi content+status update + likes 404 spam javítás`
+

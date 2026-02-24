@@ -29,8 +29,13 @@ export default function LikeButton({ materialId, className, initialLikeStatus }:
   // Check like status - only if not provided via batch
   const { data: likeStatus, isLoading } = useQuery<LikeStatus>({
     queryKey: ["/api/materials", materialId, "likes", fingerprint],
+    queryFn: async () => {
+      // Use the check endpoint which accepts fingerprint in body
+      return await apiRequest<LikeStatus>("POST", `/api/materials/${materialId}/likes/check`, { fingerprint });
+    },
     enabled: !!fingerprint && !initialLikeStatus,
     initialData: initialLikeStatus,
+    staleTime: 60000, // Don't refetch for 1 minute (batch data is fresh)
   });
 
   // Use batch data if available, otherwise use query data
