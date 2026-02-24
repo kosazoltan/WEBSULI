@@ -4369,6 +4369,39 @@ Crawl-delay: 1`;
     }
   });
 
+  // GET /api/admin/improved-files/:id/debug - Debug endpoint for apply issues
+  adminRouter.get("/improved-files/:id/debug", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const improved = await storage.getImprovedHtmlFile(id);
+      if (!improved) {
+        return res.status(404).json({ message: "Improved file not found" });
+      }
+      const original = await storage.getHtmlFile(improved.originalFileId);
+      
+      res.json({
+        improved: {
+          id: improved.id,
+          status: improved.status,
+          contentLength: improved.content?.length || 0,
+          contentStart: improved.content?.substring(0, 200) || 'EMPTY',
+          title: improved.title,
+          originalFileId: improved.originalFileId,
+          appliedAt: improved.appliedAt,
+        },
+        original: {
+          id: original?.id,
+          contentLength: original?.content?.length || 0,
+          contentStart: original?.content?.substring(0, 200) || 'EMPTY',
+          title: original?.title,
+        },
+        contentMatch: improved.content?.length === original?.content?.length,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // PATCH /api/admin/improved-files/:id - Update improved file status/notes
   adminRouter.patch("/improved-files/:id", async (req: any, res) => {
     try {
