@@ -261,19 +261,25 @@ export default function MaterialImprover() {
   };
 
   // Improve material mutation - Simple JSON API (no streaming)
+  // IMPORTANT: For long-running AI operations (up to 3 minutes), we call the
+  // Render backend DIRECTLY to bypass Vercel's 30s proxy timeout limit.
+  const RENDER_API_BASE = window.location.hostname === 'localhost' 
+    ? '' 
+    : 'https://websuli-api.onrender.com';
+
   const improveMutation = useMutation({
     mutationFn: async ({ fileId, customPrompt }: { fileId: string; customPrompt?: string }) => {
       // Show loading toast
       toast({
         title: "🤖 AI feldolgozás...",
         description: "A tananyag javítása folyamatban, ez akár 1-2 percig is tarthat.",
-        duration: 60000,
+        duration: 120000,
       });
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 200000); // 200s timeout (server has 180s)
+      const timeoutId = setTimeout(() => controller.abort(), 240000); // 240s timeout (server has 180s)
 
-      const res = await fetch(`/api/admin/improve-material/${fileId}`, {
+      const res = await fetch(`${RENDER_API_BASE}/api/admin/improve-material/${fileId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
