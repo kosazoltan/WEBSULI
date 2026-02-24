@@ -301,8 +301,8 @@ export default function MaterialImprover() {
       // Show loading toast
       toast({
         title: "🤖 AI feldolgozás...",
-        description: "A tananyag javítása folyamatban, ez akár 3-5 percig is tarthat.",
-        duration: 480000,
+        description: "A tananyag javítása folyamatban, ez akár 5-8 percig is tarthat.",
+        duration: 600000,
       });
 
       // 2. Poll for completion (every 5 seconds, max 10 minutes)
