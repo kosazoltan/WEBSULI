@@ -300,6 +300,7 @@ export default function MaterialImprover() {
       const maxPollTime = 600000; // 10 minutes max
       const pollInterval = 5000; // 5 seconds
       const startTime = Date.now();
+      let consecutive404s = 0;
 
       while (Date.now() - startTime < maxPollTime) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -308,10 +309,25 @@ export default function MaterialImprover() {
           credentials: 'include',
         });
 
+        if (pollRes.status === 404) {
+          consecutive404s++;
+          console.warn(`[IMPROVE] Job not found (404), attempt ${consecutive404s}/3`);
+          if (consecutive404s >= 3) {
+            throw new Error('A javítási feladat elveszett (szerver újraindult). Próbáld újra!');
+          }
+          continue;
+        }
+
+        if (pollRes.status === 401) {
+          throw new Error('Lejárt a munkamenet. Jelentkezz be újra!');
+        }
+
         if (!pollRes.ok) {
           console.warn(`[IMPROVE] Poll error: ${pollRes.status}`);
-          continue; // Retry on network issues
+          continue; // Retry on other network issues
         }
+
+        consecutive404s = 0; // Reset on successful response
 
         const pollData = await pollRes.json();
 
