@@ -37,12 +37,9 @@ export function setupAuth(app: Express) {
             secure: isProduction,
             // Session duration: 24 hours
             maxAge: 1000 * 60 * 60 * 24,
-            // CRITICAL: 'none' in production for cross-site cookie support
-            // Vercel frontend (websuli.vip) makes direct API calls to Render backend
-            // (websuli-api.onrender.com) for long-running AI operations that exceed
-            // Vercel's 30s proxy timeout. 'none' + secure=true allows this.
-            // In development (same-origin), 'lax' is sufficient.
-            sameSite: isProduction ? 'none' as const : 'lax' as const,
+            // CRITICAL for Google OAuth: 'lax' allows cookie to be sent on redirect from Google
+            // 'strict' would block the cookie on the OAuth callback redirect
+            sameSite: 'lax',
             // SECURITY: httpOnly prevents JavaScript access to session cookie
             httpOnly: true,
         },
