@@ -4340,11 +4340,19 @@ ${originalFile.content}
 ⚠️ EMLÉKEZTETŐ: A válaszod CSAK a teljes, javított HTML kód legyen - semmi szöveg előtte vagy utána!`;
 
       // 3. Call AI with extended timeout (3 minutes for large files)
+      const anthropicKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+      if (!anthropicKey) {
+        console.error('[IMPROVE] Missing AI_INTEGRATIONS_ANTHROPIC_API_KEY environment variable');
+        return res.status(500).json({ 
+          message: 'AI API kulcs nincs beállítva. Kérlek ellenőrizd a szerver konfigurációt.' 
+        });
+      }
+
       const { ClaudeProvider } = await import('./ai/ClaudeProvider');
 
       // Create a dedicated provider with longer timeout for improvements
       const improveProvider = new ClaudeProvider({
-        apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY!,
+        apiKey: anthropicKey,
         model: 'claude-sonnet-4-20250514',
         timeout: 180000, // 3 minutes timeout for AI response
         maxTokens: 16384, // Full HTML output needs much more than default 4096
