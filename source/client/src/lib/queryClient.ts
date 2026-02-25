@@ -12,7 +12,9 @@ async function throwIfResNotOk(res: Response) {
     } catch {
       // Response is not JSON, use raw text
     }
-    throw new Error(message);
+    const error = new Error(message) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
   }
 }
 
@@ -149,26 +151,33 @@ export async function apiRequest<T = any>(
             console.warn('[CSRF] Token invalid, refreshing and retrying...');
             csrfTokenManager.invalidate();
             
-            // Retry with new token
+            // Retry with new token (fresh controller in case original timed out)
             const newCsrfToken = await csrfTokenManager.getToken();
             headers['X-CSRF-Token'] = newCsrfToken;
             
-            const retryRes = await fetch(url, {
-              method,
-              headers,
-              body: data ? JSON.stringify(data) : undefined,
-              credentials: "include",
-              signal: controller.signal,
-            });
+            const retryController = new AbortController();
+            const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);
             
-            console.log(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
-            await throwIfResNotOk(retryRes);
-            
-            if (retryRes.status === 204) {
-              return undefined as T;
+            try {
+              const retryRes = await fetch(url, {
+                method,
+                headers,
+                body: data ? JSON.stringify(data) : undefined,
+                credentials: "include",
+                signal: retryController.signal,
+              });
+              
+              console.log(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
+              await throwIfResNotOk(retryRes);
+              
+              if (retryRes.status === 204) {
+                return undefined as T;
+              }
+              
+              return await retryRes.json();
+            } finally {
+              clearTimeout(retryTimeoutId);
             }
-            
-            return await retryRes.json();
           }
         }
 
