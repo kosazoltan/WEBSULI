@@ -92,7 +92,13 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
       const statements = sql
         .split('--\x3e statement-breakpoint')
         .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+        .filter(s => {
+          // Filter out empty chunks and chunks that are ONLY comments (no actual SQL)
+          if (s.length === 0) return false;
+          // Remove all comment lines and check if anything remains
+          const withoutComments = s.replace(/^\s*--.*$/gm, '').trim();
+          return withoutComments.length > 0;
+        });
 
       console.log(`[MIGRATE] 📝 Running: ${fileName} (${statements.length} statements)`);
 
@@ -141,8 +147,9 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
 }
 
 // Allow running directly: npx tsx server/migrate.ts
-// Check if this file is being run directly (not imported)
-const isDirectRun = process.argv[1]?.includes('migrate');
+// Check if this file is being run directly as the main entry point
+const scriptName = process.argv[1] || '';
+const isDirectRun = scriptName.endsWith('migrate.ts') || scriptName.endsWith('migrate.js');
 if (isDirectRun) {
   runMigrations()
     .then(() => {
