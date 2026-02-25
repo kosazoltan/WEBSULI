@@ -386,6 +386,22 @@ export function registerImprovementRoutes(adminRouter: Router) {
     const elapsed = Math.round((Date.now() - new Date(record.createdAt).getTime()) / 1000);
 
     if (record.status === 'processing') {
+      // Auto-detect stuck jobs: if processing for more than 15 minutes, it's stuck
+      const MAX_PROCESSING_TIME_MS = 15 * 60 * 1000; // 15 minutes
+      if (elapsed * 1000 > MAX_PROCESSING_TIME_MS) {
+        console.warn(`[IMPROVE] Job ${jobId} stuck in processing for ${elapsed}s - marking as error`);
+        try {
+          await storage.updateImprovedHtmlFileStatus(jobId, 'error', undefined, 
+            'A javítás időtúllépés miatt meghiúsult (15+ perc). Töröld és próbáld újra!');
+        } catch (e) {
+          console.error(`[IMPROVE] Failed to mark stuck job ${jobId} as error:`, e);
+        }
+        return res.json({ 
+          status: 'error', 
+          elapsed, 
+          message: 'A javítás időtúllépés miatt meghiúsult (15+ perc feldolgozás). Töröld és próbáld újra!' 
+        });
+      }
       return res.json({ status: 'processing', elapsed });
     }
 
