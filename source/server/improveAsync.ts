@@ -206,28 +206,45 @@ ${originalFile.content}
     const improveProvider = new ClaudeProvider({
       apiKey: anthropicKey,
       model: 'claude-sonnet-4-20250514',
-      timeout: 900000, // 15 min HTTP timeout (Render free tier is slow)
+      timeout: 900000, // 15 min HTTP timeout (safety net)
       maxTokens: 32768, // 32K tokens for full v7.1 HTML
     });
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 min max
+    const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 min max (safety net)
 
-    console.log(`[IMPROVE] Record ${dbRecordId}: Calling AI...`);
+    console.log(`[IMPROVE] Record ${dbRecordId}: Calling AI with STREAMING...`);
     const startTime = Date.now();
 
-    let aiResponse;
+    // GYÖKÉROK JAVÍTÁS: Use streaming instead of waiting for full response
+    // Non-streaming chat() waits for ALL 32K tokens at once → HTTP timeout at 10 min
+    // Streaming keeps the connection alive with continuous data flow → never times out
+    let fullContent = '';
+    let lastLogTime = Date.now();
     try {
-      aiResponse = await improveProvider.chat([
+      const stream = improveProvider.streamChat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ], controller.signal);
+
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_delta' && chunk.content) {
+          fullContent += chunk.content;
+          // Log progress every 10 seconds
+          if (Date.now() - lastLogTime > 10000) {
+            console.log(`[IMPROVE] Record ${dbRecordId}: Streaming... ${fullContent.length} chars received (${Math.round((Date.now() - startTime) / 1000)}s)`);
+            lastLogTime = Date.now();
+          }
+        }
+      }
     } finally {
       clearTimeout(timeoutId);
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[IMPROVE] Record ${dbRecordId}: AI responded in ${duration}ms`);
+    console.log(`[IMPROVE] Record ${dbRecordId}: AI stream completed in ${duration}ms, total ${fullContent.length} chars`);
+
+    const aiResponse = { content: fullContent };
 
     if (!aiResponse || !aiResponse.content) {
       throw new Error('Az AI nem adott vissza választ');
