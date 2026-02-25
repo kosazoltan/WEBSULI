@@ -536,7 +536,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // SECURITY: CSRF Protection using modern csrf-sync library
   // Double Submit Cookie pattern with signed HMAC tokens
-  // Double Submit Cookie pattern with signed HMAC tokens
   const { generateToken, csrfSynchronisedProtection } = csrfSync({
     // Use a strong secret for HMAC signing (falls back to SESSION_SECRET if not provided)
     getTokenFromRequest: (req) => {
@@ -2384,7 +2383,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     }
   });
 
-  // Phase 7: Advanced Search - SQLite LIKE search (PostgreSQL full-text disabled)
+  // Phase 7: Advanced Search - PostgreSQL ILIKE search (case-insensitive)
   app.get("/api/html-files/search", async (req, res) => {
     try {
       const query = req.query.q as string;
@@ -2392,7 +2391,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "Search query is required" });
       }
 
-      // SQLite LIKE search (simple but works)
+      // PostgreSQL ILIKE for case-insensitive pattern search
       const searchPattern = `%${query}%`;
 
       const results = await db
@@ -2428,12 +2427,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
   // ADMIN-ONLY route - Create new material
   app.post("/api/html-files", isAuthenticatedAdmin, async (req: any, res) => {
-    console.log('🔵 [UPLOAD] POST /api/html-files request received!');
-    console.log('🔵 [UPLOAD] Headers:', JSON.stringify(req.headers, null, 2));
-    console.log('🔵 [UPLOAD] Body keys:', Object.keys(req.body || {}));
-    console.log('🔵 [UPLOAD] RAW Content length RECEIVED:', req.body?.content?.length || 0);
-    console.log('🔵 [UPLOAD] Content preview (first 200 chars):', req.body?.content?.substring(0, 200));
-    console.log('🔵 [UPLOAD] Content preview (last 200 chars):', req.body?.content?.substring(Math.max(0, (req.body?.content?.length || 0) - 200)));
+    console.log('[UPLOAD] POST /api/html-files request received, body keys:', Object.keys(req.body || {}), 'content length:', req.body?.content?.length || 0);
 
     try {
       // Admin authentication required
@@ -4581,7 +4575,10 @@ Crawl-delay: 1`;
   adminRouter.post("/improvement-backups/:id/restore", async (req: any, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.id;
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ message: 'Nincs bejelentkezve' });
+      }
 
       const result = await storage.restoreFromMaterialImprovementBackup(id, userId);
       res.json({

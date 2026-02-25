@@ -25,8 +25,7 @@ export function setupAuth(app: Express) {
     // Determine if we're in production (HTTPS) environment
     const isProduction = process.env.NODE_ENV === 'production';
 
-    // Trust proxy for correct IP and protocol detection behind Nginx
-    app.set('trust proxy', 1);
+    // NOTE: trust proxy is already set in index.ts (line 223)
 
     // ✅ GYÖKÉROK JAVÍTÁS: PostgreSQL session store
     // Régi: MemoryStore → Render restart = MINDEN session törlődik → user kijelentkezik
