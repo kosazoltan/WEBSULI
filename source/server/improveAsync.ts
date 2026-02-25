@@ -386,10 +386,45 @@ export function registerImprovementRoutes(adminRouter: Router) {
     const elapsed = Math.round((Date.now() - new Date(record.createdAt).getTime()) / 1000);
 
     if (record.status === 'processing') {
-      // Auto-detect stuck jobs: if processing for more than 15 minutes, it's stuck
+      // Auto-detect stuck jobs: if processing for more than 15 minutes
       const MAX_PROCESSING_TIME_MS = 15 * 60 * 1000; // 15 minutes
       if (elapsed * 1000 > MAX_PROCESSING_TIME_MS) {
-        console.warn(`[IMPROVE] Job ${jobId} stuck in processing for ${elapsed}s - marking as error`);
+        // GYÖKÉROK JAVÍTÁS: Check if the AI actually finished writing content
+        // (race condition: processImprovementJob may have completed but we haven't polled yet)
+        const freshRecord = await storage.getImprovedHtmlFile(jobId);
+        if (freshRecord && freshRecord.status !== 'processing') {
+          // Job completed between our first check and now - return actual status
+          console.log(`[IMPROVE] Job ${jobId} was stuck but now has status: ${freshRecord.status}`);
+          if (freshRecord.status === 'pending') {
+            return res.json({ 
+              status: 'completed', elapsed,
+              improvedFile: { id: freshRecord.id, title: freshRecord.title, status: freshRecord.status }
+            });
+          }
+        }
+
+        // Check if content was already written (AI finished but race condition occurred)
+        const contentLength = freshRecord?.content?.length || record.content?.length || 0;
+        const hasValidContent = contentLength > 200 && 
+          !record.content?.includes('Feldolgozás alatt') &&
+          (record.content?.includes('<html') || record.content?.includes('<!DOCTYPE'));
+
+        if (hasValidContent) {
+          // Content is valid! The AI finished successfully - fix the status
+          console.log(`[IMPROVE] Job ${jobId} has valid content (${contentLength} bytes) despite 'processing' status - marking as pending`);
+          try {
+            await storage.updateImprovedHtmlFileStatus(jobId, 'pending');
+          } catch (e) {
+            console.error(`[IMPROVE] Failed to fix stuck job ${jobId} status:`, e);
+          }
+          return res.json({ 
+            status: 'completed', elapsed,
+            improvedFile: { id: record.id, title: record.title, status: 'pending' }
+          });
+        }
+
+        // Content is still placeholder - job truly failed
+        console.warn(`[IMPROVE] Job ${jobId} stuck in processing for ${elapsed}s with no valid content - marking as error`);
         try {
           await storage.updateImprovedHtmlFileStatus(jobId, 'error', undefined, 
             'A javítás időtúllépés miatt meghiúsult (15+ perc). Töröld és próbáld újra!');
@@ -419,9 +454,9 @@ export function registerImprovementRoutes(adminRouter: Router) {
     }
 
     if (record.status === 'error') {
-      // AI failed - return error message, then clean up the record
+      // AI failed - return error message but DO NOT auto-delete the record
+      // Let the user decide to delete or retry manually
       const errorMessage = record.improvementNotes || 'Ismeretlen hiba';
-      await storage.deleteImprovedHtmlFile(jobId);
       return res.json({ status: 'error', elapsed, message: errorMessage });
     }
 
