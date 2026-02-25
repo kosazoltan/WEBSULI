@@ -4443,6 +4443,107 @@ Crawl-delay: 1`;
     }
   });
 
+  // POST /api/admin/improved-files/:id/force-apply - FORCE APPLY with RAW SQL (bypass ORM)
+  // This endpoint bypasses Drizzle ORM and directly executes SQL to prove the DB update works
+  adminRouter.post("/improved-files/:id/force-apply", async (req: any, res) => {
+    const { id } = req.params;
+    const log: string[] = [];
+    
+    try {
+      const { dbPool } = await import('./db');
+      const client = await dbPool.connect();
+      
+      try {
+        log.push(`[1] Connected to database with raw SQL client`);
+        
+        // Step 1: Read improved file
+        const improvedResult = await client.query(
+          'SELECT id, title, content, description, original_file_id, status FROM improved_html_files WHERE id = $1',
+          [id]
+        );
+        
+        if (improvedResult.rows.length === 0) {
+          log.push(`[ERROR] Improved file ${id} NOT FOUND in improved_html_files`);
+          return res.status(404).json({ log, error: 'Improved file not found' });
+        }
+        
+        const improved = improvedResult.rows[0];
+        log.push(`[2] Found improved file: status=${improved.status}, contentLength=${improved.content?.length || 0}, originalFileId=${improved.original_file_id}`);
+        log.push(`[2b] First 150 chars: ${improved.content?.substring(0, 150)}`);
+        
+        // Step 2: Read original file BEFORE update
+        const originalBefore = await client.query(
+          'SELECT id, title, content FROM html_files WHERE id = $1',
+          [improved.original_file_id]
+        );
+        
+        if (originalBefore.rows.length === 0) {
+          log.push(`[ERROR] Original file ${improved.original_file_id} NOT FOUND in html_files`);
+          return res.status(404).json({ log, error: 'Original file not found' });
+        }
+        
+        const origBefore = originalBefore.rows[0];
+        log.push(`[3] Original file BEFORE update: contentLength=${origBefore.content?.length || 0}`);
+        log.push(`[3b] First 150 chars: ${origBefore.content?.substring(0, 150)}`);
+        
+        // Step 3: Check if improved content is valid
+        if (!improved.content || improved.content.length < 200 || improved.content.includes('Feldolgozás alatt')) {
+          log.push(`[ERROR] Improved content is INVALID: length=${improved.content?.length}, placeholder=${improved.content?.includes('Feldolgozás alatt')}`);
+          return res.status(400).json({ log, error: 'Improved content is empty or placeholder' });
+        }
+        
+        // Step 4: FORCE UPDATE with raw SQL - DIRECT write
+        log.push(`[4] Executing: UPDATE html_files SET content = $1, title = $2 WHERE id = $3`);
+        log.push(`[4b] Params: content.length=${improved.content.length}, title=${improved.title}, id=${improved.original_file_id}`);
+        
+        const updateResult = await client.query(
+          'UPDATE html_files SET content = $1, title = $2 WHERE id = $3 RETURNING id, title, length(content) as content_length',
+          [improved.content, improved.title, improved.original_file_id]
+        );
+        
+        log.push(`[5] UPDATE result: rowCount=${updateResult.rowCount}, returned=${JSON.stringify(updateResult.rows[0])}`);
+        
+        if (updateResult.rowCount === 0) {
+          log.push(`[ERROR] UPDATE affected 0 rows! The WHERE clause did not match.`);
+          return res.status(500).json({ log, error: 'UPDATE affected 0 rows' });
+        }
+        
+        // Step 5: VERIFY - Read original file AFTER update
+        const originalAfter = await client.query(
+          'SELECT id, title, length(content) as content_length, substring(content from 1 for 150) as first_150 FROM html_files WHERE id = $1',
+          [improved.original_file_id]
+        );
+        
+        const origAfter = originalAfter.rows[0];
+        log.push(`[6] Original file AFTER update: contentLength=${origAfter.content_length}, title=${origAfter.title}`);
+        log.push(`[6b] First 150 chars: ${origAfter.first_150}`);
+        
+        // Step 6: Mark improved file as applied
+        await client.query(
+          "UPDATE improved_html_files SET status = 'applied', applied_at = NOW() WHERE id = $1",
+          [id]
+        );
+        log.push(`[7] Improved file status → 'applied'`);
+        
+        log.push(`[8] ✅ FORCE APPLY COMPLETE!`);
+        
+        res.json({ 
+          success: true, 
+          log,
+          before: { contentLength: origBefore.content?.length, title: origBefore.title },
+          after: { contentLength: origAfter.content_length, title: origAfter.title },
+        });
+        
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      log.push(`[FATAL ERROR] ${error.message}`);
+      log.push(`[STACK] ${error.stack}`);
+      res.status(500).json({ log, error: error.message });
+    }
+  });
+
   // ========================================
   // MATERIAL IMPROVEMENT BACKUP ENDPOINTS
   // ========================================
