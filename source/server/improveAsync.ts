@@ -339,12 +339,79 @@ ${originalFile.content}
       .replace(/<head>(?![\s\S]*viewport)/i, '<head>\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">')
       .replace(/<head>(?![\s\S]*charset)/i, '<head>\n  <meta charset="UTF-8">');
 
-    // Validate
+    // Validate HTML structure
     if (!improvedHtml || improvedHtml.length < 100) {
       throw new Error('A generált HTML túl rövid vagy üres');
     }
     if (!improvedHtml.includes('<html') && !improvedHtml.includes('<!DOCTYPE')) {
       throw new Error('A generált válasz nem tartalmaz érvényes HTML struktúrát');
+    }
+
+    // ✅ CRITICAL: JavaScript validation and auto-repair
+    // The AI sometimes generates JS with syntax errors (e.g., unescaped Hungarian text)
+    // A single SyntaxError inside an IIFE kills ALL window.* assignments → nothing works
+    const scriptMatch = improvedHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+    if (scriptMatch) {
+      for (const scriptBlock of scriptMatch) {
+        const jsContent = scriptBlock.replace(/<\/?script[^>]*>/gi, '');
+        if (jsContent.trim().length < 10) continue;
+
+        try {
+          // Try to parse the JS to detect syntax errors
+          new Function(jsContent);
+          console.log(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript syntax validation passed`);
+        } catch (syntaxError: any) {
+          console.error(`[IMPROVE] Record ${dbRecordId}: ❌ JavaScript syntax error detected: ${syntaxError.message}`);
+          
+          // Try to find and fix common AI errors:
+          // 1. Unescaped Hungarian text outside of strings (e.g., stray comments)
+          // 2. Missing semicolons
+          // 3. Truncated strings
+          let fixedJs = jsContent;
+          
+          // Fix: Remove lines with bare Hungarian text outside of strings/comments
+          fixedJs = fixedJs.replace(/^\s*[A-ZÁ-Ű][a-zá-ű]+\s+[a-zá-ű]+.*$/gm, (line) => {
+            // Check if this line looks like stray text (not JS)
+            if (!line.trim().startsWith('//') && !line.trim().startsWith('*') && 
+                !line.includes('=') && !line.includes('(') && !line.includes('{') && 
+                !line.includes('}') && !line.includes(';') && !line.includes("'") && 
+                !line.includes('"') && !line.includes('var ') && !line.includes('let ') && 
+                !line.includes('const ') && !line.includes('function') && !line.includes('return')) {
+              console.log(`[IMPROVE] Record ${dbRecordId}: Removing stray text line: "${line.trim().substring(0, 50)}..."`);
+              return '// [AUTO-REMOVED stray text] ' + line;
+            }
+            return line;
+          });
+          
+          // Try to parse again after fixes
+          try {
+            new Function(fixedJs);
+            console.log(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript auto-repair successful`);
+            improvedHtml = improvedHtml.replace(jsContent, fixedJs);
+          } catch (stillBroken: any) {
+            console.error(`[IMPROVE] Record ${dbRecordId}: ⚠️ Auto-repair failed: ${stillBroken.message}`);
+            // Don't block saving - the material is still useful even with JS errors
+            // But log it for debugging
+          }
+        }
+      }
+
+      // Verify that onclick handlers have corresponding window.* assignments
+      const onclickMatches = improvedHtml.match(/onclick="([^"(]+)\(/g);
+      if (onclickMatches) {
+        const onclickFuncs = Array.from(new Set(onclickMatches.map(m => m.replace(/onclick="|[\("]/g, '').trim())));
+        const missingFuncs: string[] = [];
+        
+        for (const func of onclickFuncs) {
+          if (func && !improvedHtml.includes(`window.${func}`) && !func.startsWith('this.')) {
+            missingFuncs.push(func);
+          }
+        }
+        
+        if (missingFuncs.length > 0) {
+          console.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ onclick handlers missing window.* assignment: ${missingFuncs.join(', ')}`);
+        }
+      }
     }
 
     // ✅ CRITICAL: Update content AND status in ONE atomic operation
