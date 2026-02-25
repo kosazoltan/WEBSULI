@@ -340,6 +340,18 @@ export function registerImprovementRoutes(adminRouter: Router) {
         });
       }
 
+      // BUG FIX: Guard against duplicate concurrent improvement jobs for the same file
+      const existingJobs = await storage.getImprovedFilesByOriginalId(originalFile.id);
+      const activeJob = existingJobs?.find((j: any) => j.status === 'processing');
+      if (activeJob) {
+        const elapsed = Math.round((Date.now() - new Date(activeJob.createdAt).getTime()) / 1000);
+        console.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} - active job ${activeJob.id} (${elapsed}s)`);
+        return res.status(409).json({ 
+          message: `Már fut egy javítás erre a fájlra (${elapsed}s óta). Várd meg, amíg befejeződik!`,
+          existingJobId: activeJob.id
+        });
+      }
+
       // ✅ GYÖKÉROK JAVÍTÁS: Create DB record FIRST with 'processing' status
       const dbRecord = await storage.createImprovedHtmlFile({
         originalFileId: originalFile.id,
@@ -363,8 +375,9 @@ export function registerImprovementRoutes(adminRouter: Router) {
         message: 'Javítás elindítva' 
       });
 
-      // Process in background (fire-and-forget)
-      processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey);
+      // Process in background (fire-and-forget with catch to prevent unhandled rejection)
+      processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey)
+        .catch(err => console.error(`[IMPROVE] FATAL unhandled error in background job ${dbRecord.id}:`, err));
 
     } catch (error: any) {
       console.error('[IMPROVE] Error:', error.message);
@@ -404,10 +417,12 @@ export function registerImprovementRoutes(adminRouter: Router) {
         }
 
         // Check if content was already written (AI finished but race condition occurred)
-        const contentLength = freshRecord?.content?.length || record.content?.length || 0;
+        // BUG FIX: Use freshRecord content (not stale record) for validity check
+        const checkContent = freshRecord?.content || record.content;
+        const contentLength = checkContent?.length || 0;
         const hasValidContent = contentLength > 200 && 
-          !record.content?.includes('Feldolgozás alatt') &&
-          (record.content?.includes('<html') || record.content?.includes('<!DOCTYPE'));
+          !checkContent?.includes('Feldolgozás alatt') &&
+          (checkContent?.includes('<html') || checkContent?.includes('<!DOCTYPE'));
 
         if (hasValidContent) {
           // Content is valid! The AI finished successfully - fix the status

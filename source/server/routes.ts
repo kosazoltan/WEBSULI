@@ -3331,7 +3331,11 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 </html>
         `;
 
+        // CRITICAL: No-cache headers for PDF viewer too (same as HTML)
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.send(pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
@@ -3345,7 +3349,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         res.send(wrappedHtml);
       }
     } catch (error: any) {
-      res.status(500).send(`<html><body><h1>Hiba történt</h1><p>${error.message}</p></body></html>`);
+      const safeErrorMsg = (error.message || 'Ismeretlen hiba').replace(/[<>&"']/g, (c: string) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c] || c));
+      res.status(500).send(`<html><body><h1>Hiba történt</h1><p>${safeErrorMsg}</p></body></html>`);
     }
   });
 
