@@ -206,12 +206,12 @@ ${originalFile.content}
     const improveProvider = new ClaudeProvider({
       apiKey: anthropicKey,
       model: 'claude-sonnet-4-20250514',
-      timeout: 600000, // 10 min HTTP timeout
+      timeout: 900000, // 15 min HTTP timeout (Render free tier is slow)
       maxTokens: 32768, // 32K tokens for full v7.1 HTML
     });
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min max
+    const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 min max
 
     console.log(`[IMPROVE] Record ${dbRecordId}: Calling AI...`);
     const startTime = Date.now();
@@ -286,7 +286,7 @@ ${originalFile.content}
 
     let userMessage = 'Hiba történt a javítás során';
     if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-      userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (10 perc). Próbáld kisebb fájllal.';
+      userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (15 perc). Próbáld kisebb fájllal.';
     } else if (error.message?.includes('rate') || error.message?.includes('429')) {
       userMessage = 'Túl sok kérés. Várj egy percet és próbáld újra.';
     } else if (error.message?.includes('credit') || error.message?.includes('balance')) {
