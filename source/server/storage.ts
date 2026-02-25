@@ -1406,10 +1406,21 @@ export class DatabaseStorage implements IStorage {
     // CRITICAL: Single atomic UPDATE to prevent race condition
     // If content and status were updated separately, a user could "Apply"
     // the file between the two updates, copying placeholder content!
-    await db
+    const [updated] = await db
       .update(improvedHtmlFiles)
       .set({ content, status })
-      .where(eq(improvedHtmlFiles.id, id));
+      .where(eq(improvedHtmlFiles.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`[DB] Failed to update improved file ${id}: no rows affected. Record may have been deleted.`);
+    }
+    
+    // VERIFY: confirm content was actually saved
+    if (updated.content?.length !== content.length) {
+      throw new Error(`[DB] Content verification failed for ${id}: expected ${content.length} bytes, got ${updated.content?.length || 0} bytes`);
+    }
+    console.log(`[DB] ✅ Improved file ${id} updated: status=${status}, contentLength=${updated.content?.length}`);
   }
 
   async deleteImprovedHtmlFile(id: string): Promise<boolean> {
@@ -1497,6 +1508,8 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 6. Update original file content (CRITICAL: Direct SQL update for content)
+      console.log(`[APPLY] Updating htmlFiles.id=${original.id}: improved.content.length=${improved.content?.length}, original.content.length=${original.content?.length}`);
+      
       const [updated] = await tx
         .update(htmlFiles)
         .set({
@@ -1508,8 +1521,14 @@ export class DatabaseStorage implements IStorage {
         .returning();
 
       if (!updated) {
-        throw new Error('Failed to update original file');
+        throw new Error('Failed to update original file: no rows returned from UPDATE');
       }
+
+      // VERIFY: Confirm the content was actually written
+      if (updated.content?.length !== improved.content?.length) {
+        throw new Error(`Content verification failed: expected ${improved.content?.length} bytes in htmlFiles, got ${updated.content?.length} bytes`);
+      }
+      console.log(`[APPLY] ✅ htmlFiles.id=${original.id} updated: new content=${updated.content?.length} bytes, title=${updated.title}`);
 
       // 7. Update improved file status
       await tx
