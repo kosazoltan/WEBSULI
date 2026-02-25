@@ -221,25 +221,52 @@ ${originalFile.content}
     // Streaming keeps the connection alive with continuous data flow → never times out
     let fullContent = '';
     let lastLogTime = Date.now();
-    try {
-      const stream = improveProvider.streamChat([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ], controller.signal);
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [30000, 60000, 90000]; // 30s, 60s, 90s
 
-      for await (const chunk of stream) {
-        if (chunk.type === 'content_delta' && chunk.content) {
-          fullContent += chunk.content;
-          // Log progress every 10 seconds
-          if (Date.now() - lastLogTime > 10000) {
-            console.log(`[IMPROVE] Record ${dbRecordId}: Streaming... ${fullContent.length} chars received (${Math.round((Date.now() - startTime) / 1000)}s)`);
-            lastLogTime = Date.now();
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        fullContent = '';
+        lastLogTime = Date.now();
+        
+        if (attempt > 0) {
+          console.log(`[IMPROVE] Record ${dbRecordId}: Retry attempt ${attempt}/${MAX_RETRIES}...`);
+        }
+
+        const stream = improveProvider.streamChat([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ], controller.signal);
+
+        for await (const chunk of stream) {
+          if (chunk.type === 'content_delta' && chunk.content) {
+            fullContent += chunk.content;
+            // Log progress every 10 seconds
+            if (Date.now() - lastLogTime > 10000) {
+              console.log(`[IMPROVE] Record ${dbRecordId}: Streaming... ${fullContent.length} chars received (${Math.round((Date.now() - startTime) / 1000)}s)`);
+              lastLogTime = Date.now();
+            }
           }
         }
+        // If we got here, streaming succeeded - break out of retry loop
+        break;
+      } catch (retryError: any) {
+        const isOverloaded = retryError.message?.includes('overloaded') || 
+                            retryError.message?.includes('529') ||
+                            retryError.status === 529;
+        const isRateLimit = retryError.message?.includes('rate') || retryError.status === 429;
+        
+        if ((isOverloaded || isRateLimit) && attempt < MAX_RETRIES) {
+          const delay = RETRY_DELAYS[attempt];
+          console.warn(`[IMPROVE] Record ${dbRecordId}: ${isOverloaded ? 'Overloaded' : 'Rate limited'} - waiting ${delay/1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue; // Retry
+        }
+        // Not retryable or out of retries - re-throw
+        throw retryError;
       }
-    } finally {
-      clearTimeout(timeoutId);
     }
+    clearTimeout(timeoutId);
 
     const duration = Date.now() - startTime;
     console.log(`[IMPROVE] Record ${dbRecordId}: AI stream completed in ${duration}ms, total ${fullContent.length} chars`);
@@ -304,6 +331,8 @@ ${originalFile.content}
     let userMessage = 'Hiba történt a javítás során';
     if (error.name === 'AbortError' || error.message?.includes('aborted')) {
       userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (15 perc). Próbáld kisebb fájllal.';
+    } else if (error.message?.includes('overloaded') || error.status === 529) {
+      userMessage = 'Az AI szerver jelenleg túlterheltség (overloaded). Próbáld újra 2-3 perc múlva!';
     } else if (error.message?.includes('rate') || error.message?.includes('429')) {
       userMessage = 'Túl sok kérés. Várj egy percet és próbáld újra.';
     } else if (error.message?.includes('credit') || error.message?.includes('balance')) {
