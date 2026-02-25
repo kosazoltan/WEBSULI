@@ -21,11 +21,15 @@ if (isDevelopment && process.env.DEV_DATABASE_URL) {
 }
 
 // Create PG Pool with proper configuration
+// SSL: Auto-detect Neon/Render/Supabase URLs that require SSL
+const requiresSSL = DATABASE_URL.includes('neon.tech') || DATABASE_URL.includes('render.com') || DATABASE_URL.includes('supabase');
+
 const pool = new Pool({
   connectionString: DATABASE_URL,
   max: 20, // Maximum number of connections in the pool
   idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
   connectionTimeoutMillis: 5000, // Timeout after 5 seconds if connection fails
+  ...(requiresSSL && { ssl: { rejectUnauthorized: false } }),
 });
 
 // Test connection on startup
