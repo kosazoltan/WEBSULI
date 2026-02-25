@@ -2,7 +2,7 @@
 // Anyagok Profiknak Platform
 // Version: 4.0.0 - SVG background implementation - FORCE UPDATE
 
-const CACHE_VERSION = '4.1.0'; // FORCE UPDATE - fix /dev/ caching bug
+const CACHE_VERSION = '4.2.0'; // FORCE UPDATE - clear stale cache after Apply
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
