@@ -4254,7 +4254,7 @@ Crawl-delay: 1`;
     } else if (statusCode === 429) {
       errorType = 'RATE_LIMIT';
       userMessage = 'Túl sok kérés. Kérlek várj egy kicsit.';
-    } else if (err.message.includes('AI') || err.message.includes('API')) {
+    } else if (err.message?.includes('AI') || err.message?.includes('API')) {
       errorType = 'AI_ERROR';
       userMessage = 'Az AI szolgáltatás átmenetileg nem elérhető. Próbáld újra.';
     }

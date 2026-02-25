@@ -474,31 +474,27 @@ export class DatabaseStorage implements IStorage {
       return false;
     }
 
-    // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
-    // The following tables have foreign key references to html_files:
-    // - email_logs (html_file_id)
-    // - material_stats (material_id)
-    // - material_tags (material_id)
-    // - material_likes (material_id)
-    // - material_ratings (material_id)
-    // - material_comments (material_id)
-    // - material_views (material_id)
+    // CRITICAL: Use transaction to ensure all related records are deleted atomically
+    // If any delete fails, the entire operation rolls back (no partial state)
+    return await db.transaction(async (tx) => {
+      // Delete in order of dependencies
+      // The following tables have foreign key references to html_files:
+      await tx.delete(emailLogs).where(eq(emailLogs.htmlFileId, id));
+      await tx.delete(materialStats).where(eq(materialStats.materialId, id));
+      await tx.delete(materialTags).where(eq(materialTags.materialId, id));
+      await tx.delete(materialLikes).where(eq(materialLikes.materialId, id));
+      await tx.delete(materialRatings).where(eq(materialRatings.materialId, id));
+      await tx.delete(materialComments).where(eq(materialComments.materialId, id));
+      await tx.delete(materialViews).where(eq(materialViews.materialId, id));
 
-    // Delete in order of dependencies
-    await db.delete(emailLogs).where(eq(emailLogs.htmlFileId, id));
-    await db.delete(materialStats).where(eq(materialStats.materialId, id));
-    await db.delete(materialTags).where(eq(materialTags.materialId, id));
-    await db.delete(materialLikes).where(eq(materialLikes.materialId, id));
-    await db.delete(materialRatings).where(eq(materialRatings.materialId, id));
-    await db.delete(materialComments).where(eq(materialComments.materialId, id));
-    await db.delete(materialViews).where(eq(materialViews.materialId, id));
-
-    // Now we can safely delete the html_file
-    const result = await db
-      .delete(htmlFiles)
-      .where(eq(htmlFiles.id, id))
-      .returning();
-    return result.length > 0;
+      // Now we can safely delete the html_file
+      // (improved_html_files and material_improvement_backups use ON DELETE CASCADE)
+      const result = await tx
+        .delete(htmlFiles)
+        .where(eq(htmlFiles.id, id))
+        .returning();
+      return result.length > 0;
+    });
   }
 
   async getNewFilesCount(userId: string): Promise<number> {

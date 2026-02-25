@@ -122,13 +122,4 @@ export function serveStatic(app: Express) {
     const indexPath = path.resolve(distPath, "index.html");
     res.sendFile(indexPath);
   });
-  app.use("*", (_req, res, next) => {
-    // Skip routes handled by Express route handlers
-    if (_req.originalUrl.startsWith("/dev/") || _req.originalUrl.startsWith("/api/") || _req.originalUrl.startsWith("/auth/")) {
-      return next();
-    }
-    const indexPath = path.resolve(distPath, "index.html");
-    console.log(`[serveStatic] Serving index.html from: ${indexPath}`);
-    res.sendFile(indexPath);
-  });
 }
