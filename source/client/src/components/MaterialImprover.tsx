@@ -291,13 +291,14 @@ export default function MaterialImprover() {
       // Show loading toast
       toast({
         title: "🤖 AI feldolgozás...",
-        description: "A tananyag javítása folyamatban, ez akár 5-8 percig is tarthat.",
-        duration: 600000,
+        description: "A tananyag javítása folyamatban, ez akár 8-15 percig is tarthat.",
+        duration: 960000,
       });
 
-      // 2. Poll for completion (every 5 seconds, max 10 minutes)
+      // 2. Poll for completion (every 5 seconds, max 16 minutes)
+      // NOTE: Server AI timeout is 15 min, so poll 16 min to catch server-side error
       const jobId = startData.jobId;
-      const maxPollTime = 600000; // 10 minutes max
+      const maxPollTime = 960000; // 16 minutes max (server timeout is 15 min)
       const pollInterval = 5000; // 5 seconds
       const startTime = Date.now();
       let consecutive404s = 0;
@@ -343,7 +344,7 @@ export default function MaterialImprover() {
         console.log(`[IMPROVE] Job ${jobId}: ${pollData.elapsed}s elapsed...`);
       }
 
-      throw new Error('Időtúllépés: A javítás túl sokáig tartott (10 perc). Próbáld újra.');
+      throw new Error('Időtúllépés: A javítás túl sokáig tartott (16 perc). Próbáld újra.');
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
