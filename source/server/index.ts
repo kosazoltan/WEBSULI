@@ -13,6 +13,7 @@ import { setupDailyViewSummary } from "./dailyViewSummary";
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { setupAuth } from "./auth";
+import { runMigrations } from "./migrate";
 
 const app = express();
 
@@ -345,8 +346,34 @@ app.use((req, res, next) => {
     log(`Port: ${process.env.PORT || "5000"}`);
     log(`Database: Neon PostgreSQL (${isDev ? "DEV" : "PRODUCTION"})`);
 
-    // Skip SQLite initialization - using Neon PostgreSQL with existing schema
-    // initializeDatabase();
+    // Run pending database migrations before starting the server
+    // This ensures all tables exist (e.g. improved_html_files, material_improvement_backups)
+    // NOTE: Full file-based migration runs during build (npm run db:migrate)
+    // At runtime we do a lightweight check to verify critical tables exist
+    try {
+      const { dbPool: pool } = await import("./db");
+      const testClient = await pool.connect();
+      try {
+        const tablesResult = await testClient.query(`
+          SELECT tablename FROM pg_tables 
+          WHERE schemaname = 'public' 
+            AND tablename IN ('improved_html_files', 'material_improvement_backups')
+        `);
+        const tables = tablesResult.rows.map((r: any) => r.tablename);
+        if (tables.length < 2) {
+          log(`[MIGRATE] ⚠️ Missing tables detected: expected 2, found ${tables.length} (${tables.join(', ')})`);
+          log(`[MIGRATE] Running emergency migration...`);
+          await runMigrations();
+        } else {
+          log(`[MIGRATE] ✅ All critical tables present`);
+        }
+      } finally {
+        testClient.release();
+      }
+    } catch (migrationError) {
+      console.error('[STARTUP] ⚠️ Migration check warning:', migrationError);
+      // Don't crash - the server can still run if tables already exist
+    }
 
     // CRITICAL: Serve PDF.js files BEFORE Vite routing
     // This prevents Vite from intercepting /pdfjs/* requests and serving index.html
