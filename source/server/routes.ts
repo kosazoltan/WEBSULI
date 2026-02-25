@@ -3343,8 +3343,11 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         // HTML material: wrap with responsive container
         const wrappedHtml = wrapHtmlWithResponsiveContainer(file.content);
 
-        // Send wrapped HTML for iframe rendering
+        // CRITICAL: No-cache headers to prevent Vercel/browser from serving stale content after Apply
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.send(wrappedHtml);
       }
     } catch (error: any) {
@@ -4403,6 +4406,40 @@ Crawl-delay: 1`;
     } catch (error: any) {
       console.error('[DELETE-IMPROVED] Error:', error);
       res.status(500).json({ message: error.message || 'Hiba történt' });
+    }
+  });
+
+  // GET /api/admin/improved-files/:id/debug - Diagnostic: show actual DB state
+  adminRouter.get("/improved-files/:id/debug", async (req: any, res) => {
+    try {
+      const improved = await storage.getImprovedHtmlFile(req.params.id);
+      if (!improved) {
+        return res.status(404).json({ message: "Improved file not found in DB" });
+      }
+
+      const original = await storage.getHtmlFile(improved.originalFileId);
+
+      res.json({
+        improved: {
+          id: improved.id,
+          status: improved.status,
+          contentLength: improved.content?.length || 0,
+          contentFirst200: improved.content?.substring(0, 200) || '(empty)',
+          hasHtmlTag: improved.content?.includes('<html') || false,
+          hasDoctype: improved.content?.includes('<!DOCTYPE') || false,
+          isPlaceholder: improved.content?.includes('Feldolgozás alatt') || false,
+          originalFileId: improved.originalFileId,
+          createdAt: improved.createdAt,
+        },
+        original: original ? {
+          id: original.id,
+          title: original.title,
+          contentLength: original.content?.length || 0,
+          contentFirst200: original.content?.substring(0, 200) || '(empty)',
+        } : null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
