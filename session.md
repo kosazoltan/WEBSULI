@@ -142,6 +142,9 @@ source/shared/schema.ts                            (nem módosítva, csak refere
 4. **Kód push deployolás közben** – Render auto-deploy → futó job megszakad → Ne pusholj amíg AI job fut
 5. **Két lépéses DB frissítés** – Ha status és content külön UPDATE-ben frissül, race condition keletkezik → MINDIG egyetlen atomi UPDATE
 6. **React Query queryKey URL-ként** – Ha nincs explicit `queryFn`, a React Query a queryKey-t URL-ként használja fetch-hez → MINDIG adj meg `queryFn`-t
+7. **Cache-Control hiánya** – Ha a szerver nem küld `no-cache` headert, Vercel/böngésző cache-elheti a dinamikus tartalmat → iframe régi tartalmat mutat
+8. **DB UPDATE verifikáció** – Drizzle `.update()` csendben sikeres ha 0 sor frissül → MINDIG `.returning()` + sor és content ellenőrzés
+9. **Session persistence** – `express-session` MemoryStore alapértelmezett → Render restart = kijelentkezés → `connect-pg-simple` PostgreSQL store
 
 ---
 
