@@ -2,7 +2,7 @@
 // Anyagok Profiknak Platform
 // Version: 4.0.0 - SVG background implementation - FORCE UPDATE
 
-const CACHE_VERSION = '4.0.0'; // FORCE UPDATE - SVG háttér implementáció
+const CACHE_VERSION = '4.1.0'; // FORCE UPDATE - fix /dev/ caching bug
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -81,6 +81,15 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(event.request)); // <-- EXPLICIT PASSTHROUGH for API
+    return;
+  }
+
+  // ✅ GYÖKÉROK JAVÍTÁS: Skip ALL /dev/* requests (no caching for material HTML)
+  // These serve dynamic HTML content from the database that changes after Apply.
+  // Previously, the Service Worker cached /dev/:id and served STALE content
+  // even after the database was updated with improved content!
+  if (url.pathname.startsWith('/dev/')) {
+    event.respondWith(fetch(event.request)); // <-- EXPLICIT PASSTHROUGH for /dev/
     return;
   }
 
