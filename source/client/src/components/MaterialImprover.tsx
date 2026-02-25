@@ -737,6 +737,28 @@ export default function MaterialImprover() {
                 {previewData.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
               </Button>
               <Button
+                onClick={async () => {
+                  try {
+                    toast({ title: "⏳ FORCE APPLY...", description: "Raw SQL frissítés folyamatban..." });
+                    const result = await apiRequest("POST", `/api/admin/improved-files/${previewData.id}/force-apply`);
+                    const data = result as any;
+                    console.log('[FORCE-APPLY] Result:', data);
+                    queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
+                    toast({
+                      title: data.success ? "✅ FORCE APPLY SIKERES!" : "❌ FORCE APPLY HIBA",
+                      description: data.log?.slice(-2).join('\n') || JSON.stringify(data),
+                    });
+                  } catch (err: any) {
+                    console.error('[FORCE-APPLY] Error:', err);
+                    toast({ title: "❌ FORCE APPLY HIBA", description: err.message, variant: "destructive" });
+                  }
+                }}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                ⚡ Force Apply (RAW SQL)
+              </Button>
+              <Button
                 variant="outline"
                 onClick={() => {
                   setPreviewImprovedId(null);
