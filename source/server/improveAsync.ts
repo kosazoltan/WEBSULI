@@ -396,7 +396,7 @@ ${originalFile.content}
         }
       }
 
-      // Verify that onclick handlers have corresponding window.* assignments
+      // ✅ AUTO-FIX: Verify onclick handlers have window.* assignments + mobile compatibility
       const onclickMatches = improvedHtml.match(/onclick="([^"(]+)\(/g);
       if (onclickMatches) {
         const onclickFuncs = Array.from(new Set(onclickMatches.map(m => m.replace(/onclick="|[\("]/g, '').trim())));
@@ -408,10 +408,75 @@ ${originalFile.content}
           }
         }
         
+        // AUTO-REPAIR: Inject window.* assignments for missing functions
         if (missingFuncs.length > 0) {
-          console.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ onclick handlers missing window.* assignment: ${missingFuncs.join(', ')}`);
+          console.warn(`[IMPROVE] Record ${dbRecordId}: 🔧 Auto-fixing ${missingFuncs.length} missing window.* assignments: ${missingFuncs.join(', ')}`);
+          
+          // Find function declarations inside the IIFE and add window.* for them
+          for (const funcName of missingFuncs) {
+            // Check if function exists as a regular declaration/expression inside IIFE
+            const funcPatterns = [
+              new RegExp(`function\\s+${funcName}\\s*\\(`, 'g'),  // function funcName(
+              new RegExp(`(?:var|let|const)\\s+${funcName}\\s*=\\s*function`, 'g'),  // var funcName = function
+            ];
+            
+            let foundInCode = false;
+            for (const pattern of funcPatterns) {
+              if (pattern.test(improvedHtml)) {
+                foundInCode = true;
+                break;
+              }
+            }
+            
+            if (foundInCode) {
+              // Add window.funcName = funcName; before the closing })();
+              const iifeEnd = improvedHtml.lastIndexOf('})();');
+              if (iifeEnd !== -1) {
+                const injection = `  window.${funcName} = ${funcName};\n`;
+                improvedHtml = improvedHtml.substring(0, iifeEnd) + injection + improvedHtml.substring(iifeEnd);
+                console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Injected window.${funcName}`);
+              }
+            } else {
+              console.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ Function ${funcName} not found in code - cannot auto-fix`);
+            }
+          }
         }
       }
+
+      // ✅ MOBILE COMPATIBILITY FIXES (Android + iOS)
+      
+      // Fix 1: iOS Safari requires cursor:pointer on non-button clickable elements
+      // Without it, onclick/ontouchstart events don't fire on <div>, <span>, <p>, etc.
+      improvedHtml = improvedHtml.replace(
+        /(<(?:div|span|p|li|td|label|article|section|nav|header|footer)[^>]*onclick="[^"]*"[^>]*)(>)/gi,
+        (match, before, after) => {
+          // Add cursor:pointer to style if not already present
+          if (before.includes('cursor')) return match;
+          if (before.includes('style="')) {
+            return before.replace('style="', 'style="cursor:pointer;') + after;
+          }
+          return before + ' style="cursor:pointer"' + after;
+        }
+      );
+      
+      // Fix 2: Ensure draggable elements have touch-action:none for proper mobile drag
+      improvedHtml = improvedHtml.replace(
+        /(<[^>]*draggable="true"[^>]*)(>)/gi,
+        (match, before, after) => {
+          if (before.includes('touch-action')) return match;
+          if (before.includes('style="')) {
+            return before.replace('style="', 'style="touch-action:none;') + after;
+          }
+          return before + ' style="touch-action:none"' + after;
+        }
+      );
+      
+      // Fix 3: Verify touch events exist for drag-and-drop
+      if (improvedHtml.includes('draggable="true"') && !improvedHtml.includes('touchstart')) {
+        console.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ Draggable elements found but NO touchstart handler - mobile drag won't work!`);
+      }
+      
+      console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Mobile compatibility checks completed`);
     }
 
     // ✅ CRITICAL: Update content AND status in ONE atomic operation
