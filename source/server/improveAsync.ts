@@ -203,12 +203,22 @@ ${originalFile.content}
 ⚠️ EMLÉKEZTETŐ: A válaszod CSAK a teljes, javított HTML kód legyen - semmi szöveg előtte vagy utána!`;
 
     const { ClaudeProvider } = await import('./ai/ClaudeProvider');
-    const improveProvider = new ClaudeProvider({
+    
+    // Model priority: try Sonnet 4 first, fall back to Haiku 3.5 if overloaded
+    const MODELS = [
+      'claude-sonnet-4-20250514',      // Primary: best quality
+      'claude-3-5-haiku-20241022',      // Fallback: faster, less likely overloaded
+    ];
+    let currentModelIndex = 0;
+
+    const createProvider = (modelIndex: number) => new ClaudeProvider({
       apiKey: anthropicKey,
-      model: 'claude-sonnet-4-20250514',
+      model: MODELS[modelIndex],
       timeout: 900000, // 15 min HTTP timeout (safety net)
       maxTokens: 32768, // 32K tokens for full v7.1 HTML
     });
+
+    let improveProvider = createProvider(0);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 min max (safety net)
@@ -222,9 +232,10 @@ ${originalFile.content}
     let fullContent = '';
     let lastLogTime = Date.now();
     const MAX_RETRIES = 3;
-    const RETRY_DELAYS = [30000, 60000, 90000]; // 30s, 60s, 90s
+    const RETRY_DELAYS = [30000, 60000, 90000, 10000]; // 30s, 60s, 90s, 10s (last is for fallback model)
+    const MAX_ATTEMPTS = MAX_RETRIES + 1; // +1 for fallback model attempt
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         fullContent = '';
         lastLogTime = Date.now();
@@ -256,12 +267,30 @@ ${originalFile.content}
                             retryError.status === 529;
         const isRateLimit = retryError.message?.includes('rate') || retryError.status === 429;
         
-        if ((isOverloaded || isRateLimit) && attempt < MAX_RETRIES) {
-          const delay = RETRY_DELAYS[attempt];
-          console.warn(`[IMPROVE] Record ${dbRecordId}: ${isOverloaded ? 'Overloaded' : 'Rate limited'} - waiting ${delay/1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
+        if ((isOverloaded || isRateLimit) && attempt < MAX_ATTEMPTS) {
+          const delay = RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)];
+          console.warn(`[IMPROVE] Record ${dbRecordId}: ${isOverloaded ? 'Overloaded' : 'Rate limited'} on ${MODELS[currentModelIndex]} - waiting ${delay/1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
+          
+          // After 2 failed retries on primary model, switch to fallback
+          if (attempt >= 1 && currentModelIndex < MODELS.length - 1) {
+            currentModelIndex++;
+            improveProvider = createProvider(currentModelIndex);
+            console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Switching to fallback model: ${MODELS[currentModelIndex]}`);
+          }
+          
           await new Promise(resolve => setTimeout(resolve, delay));
           continue; // Retry
         }
+        
+        // If primary model failed all retries but we have a fallback, try it once
+        if ((isOverloaded || isRateLimit) && currentModelIndex < MODELS.length - 1) {
+          currentModelIndex++;
+          improveProvider = createProvider(currentModelIndex);
+          console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Final attempt with fallback model: ${MODELS[currentModelIndex]}`);
+          await new Promise(resolve => setTimeout(resolve, 10000)); // 10s wait
+          continue; // One more try with fallback
+        }
+        
         // Not retryable or out of retries - re-throw
         throw retryError;
       }
