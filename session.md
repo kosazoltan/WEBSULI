@@ -188,3 +188,67 @@ source/client/src/components/LikeButton.tsx         (likes 404 fix)
 ### Git commitok (2. kör)
 8. `fix: atomi content+status update + likes 404 spam javítás`
 
+---
+
+## 2026-02-25 Session – Production DB migráció hiánya + Pipeline fix
+
+### Összefoglaló
+A production adatbázisban (Neon PostgreSQL) az `improved_html_files` tábla **NEM LÉTEZETT**. Ez volt a valódi gyökérok, amiért az AI improvement funkció soha nem tudott menteni. Automatikus migrációs pipeline beépítve.
+
+---
+
+### 🔴 GYÖKÉROK #7 – Hiányzó tábla a production DB-ben
+**Fájl:** `migrations/0001_add_material_improvement_tables.sql`
+
+**Probléma:** A migrációs SQL soha nem futott le a Neon PostgreSQL production adatbázison:
+```
+❌ relation "improved_html_files" does not exist
+```
+Ennek következtében az összes INSERT/SELECT/UPDATE az `improved_html_files` táblán crash-elt.
+
+**Diagnózis:** Direkt connection a production DB-re (`dbDiagnose.ts` script) kimutatta:
+- `html_files` tábla: ✅ OK, nincs trigger, nincs RLS, full jogosultságok
+- `improved_html_files` tábla: ❌ NEM LÉTEZIK
+- `material_improvement_backups` tábla: ❌ NEM LÉTEZIK
+
+**Azonnali javítás:** `runMigration.ts` script közvetlenül lefuttatta a 14 SQL statement-et:
+- 2 CREATE TABLE
+- 6 ALTER TABLE (foreign keys)
+- 6 CREATE INDEX
+
+---
+
+### 🟢 Megoldás: Automatikus migrációs pipeline
+
+**Új fájl:** `source/server/migrate.ts`
+- `_drizzle_migrations` nyomkövető tábla (melyik SQL már lefutott)
+- `migrations/*.sql` fájlok sorrendben végrehajtva
+- `--\x3e statement-breakpoint` delimiter támogatás
+- "Already exists" hibák csendben átugorva (idempotens)
+- Transaction per migration file (rollback ha hiba)
+
+**3 szintű védelem:**
+
+| Szint | Mikor | Hogyan |
+|-------|-------|--------|
+| Build-time | `render.yaml` buildCommand | `npm run db:migrate` – lefut MIELŐTT a szerver build-elődne |
+| Runtime | `index.ts` szerver indulás | Lightweight check: ha `improved_html_files` hiányzik → `runMigrations()` |
+| Manuális | fejlesztő parancs | `npm run db:migrate` vagy `npx tsx server/migrate.ts` |
+
+**Érintett fájlok:**
+```
+source/server/migrate.ts           (ÚJ – migrációs runner)
+source/server/index.ts             (runtime tábla ellenőrzés)
+source/package.json                (db:migrate script)
+render.yaml                        (build pipeline)
+source/server/scripts/dbDiagnose.ts (diagnosztika - nem commitolva)
+source/server/scripts/runMigration.ts (egyszeri futtatás - nem commitolva)
+```
+
+### Git commitok
+9. `feat: automatikus DB migráció a deploy pipeline-ban`
+
+### Tanulságok
+10. **Migráció nem fut le magától** – Drizzle-kit `push` lokálisan működik, de a production DB-t külön kell migrálni
+11. **Neon PostgreSQL** – Serverless DB, nincs SSH, csak connection string → diagnosztika script kellett
+12. **Deploy pipeline** – MINDIG legyen a build command-ban `db:migrate` lépés a szerver build ELŐTT
