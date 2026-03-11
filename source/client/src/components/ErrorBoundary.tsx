@@ -1,7 +1,9 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
-import { AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+/**
+ * ErrorBoundary — Universal Error Logger frontend component
+ * Catches React render errors and reports them
+ */
+import React, { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportError } from "./ErrorReporter";
 
 interface Props {
   children: ReactNode;
@@ -10,95 +12,59 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error: Error | null;
-  errorInfo: ErrorInfo | null;
+  error?: Error;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    };
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
-      errorInfo: null,
-    };
+    return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("[ErrorBoundary] Caught error:", error, errorInfo);
-    this.setState({
-      error,
-      errorInfo,
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    reportError({
+      errorType: "ReactRenderError",
+      message: error.message,
+      stack: error.stack,
+      requestBody: JSON.stringify({ componentStack: info.componentStack?.substring(0, 500) }),
+    }).catch(() => {
+      // Never throw from error reporter
     });
   }
 
-  handleReset = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    });
-    window.location.href = "/";
-  };
-
-  render() {
+  render(): ReactNode {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
-
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
-          <Card className="max-w-2xl w-full">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-8 h-8 text-destructive" />
-                <CardTitle className="text-2xl">Hiba történt</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-muted-foreground">
-                Sajnáljuk, váratlan hiba történt az alkalmazás betöltése során.
-              </p>
-              
-              {process.env.NODE_ENV === "development" && this.state.error && (
-                <div className="bg-muted p-4 rounded-lg">
-                  <p className="font-mono text-sm text-destructive break-all">
-                    {this.state.error.toString()}
-                  </p>
-                  {this.state.errorInfo && (
-                    <pre className="mt-2 text-xs overflow-auto max-h-40">
-                      {this.state.errorInfo.componentStack}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <Button onClick={this.handleReset} variant="default">
-                  Főoldalra vissza
-                </Button>
-                <Button
-                  onClick={() => window.location.reload()}
-                  variant="outline"
-                >
-                  Oldal újratöltése
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        this.props.fallback ?? (
+          <div style={{ padding: 24, textAlign: "center" }}>
+            <h2>Váratlan hiba történt</h2>
+            <p style={{ color: "#666", fontSize: 14 }}>
+              {this.state.error?.message ?? "Ismeretlen hiba"}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                marginTop: 16,
+                padding: "8px 16px",
+                background: "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              Oldal újratöltése
+            </button>
+          </div>
+        )
       );
     }
-
     return this.props.children;
   }
 }
+
+export default ErrorBoundary;
