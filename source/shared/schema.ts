@@ -447,3 +447,38 @@ export const insertMaterialImprovementBackupSchema = createInsertSchema(material
 
 export type InsertMaterialImprovementBackup = z.infer<typeof insertMaterialImprovementBackupSchema>;
 export type MaterialImprovementBackup = typeof materialImprovementBackups.$inferSelect;
+
+export const errorLogs = pgTable("error_logs", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  fingerprint: varchar("fingerprint", { length: 32 }).notNull().unique(),
+  errorType: varchar("error_type", { length: 50 }).notNull(),
+  severity: varchar("severity", { length: 10 }).notNull().default("ERROR"),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  commitSha: varchar("commit_sha", { length: 40 }),
+  appName: varchar("app_name", { length: 50 }).notNull().default("Websuli"),
+  repoPath: varchar("repo_path", { length: 100 }).notNull().default("D:/repo/WEBSULI"),
+  environment: varchar("environment", { length: 20 }).notNull().default("production"),
+  breadcrumbs: jsonb("breadcrumbs"),
+  url: varchar("url", { length: 500 }),
+  requestId: varchar("request_id", { length: 100 }),
+  requestMethod: varchar("request_method", { length: 10 }),
+  requestBody: text("request_body"),
+  userId: varchar("user_id", { length: 100 }),
+  userEmail: varchar("user_email", { length: 200 }),
+  browser: varchar("browser", { length: 300 }),
+  occurrenceCount: integer("occurrence_count").notNull().default(1),
+  firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+  emailSent: boolean("email_sent").notNull().default(false),
+  emailSentAt: timestamp("email_sent_at"),
+  resolved: boolean("resolved").notNull().default(false),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedCommit: varchar("resolved_commit", { length: 40 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  fingerprintIdx: index("error_logs_fingerprint_idx").on(table.fingerprint),
+  severityIdx: index("error_logs_severity_idx").on(table.severity),
+  resolvedIdx: index("error_logs_resolved_idx").on(table.resolved),
+  createdAtIdx: index("error_logs_created_at_idx").on(table.createdAt),
+}))

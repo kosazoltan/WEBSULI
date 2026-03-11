@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ErrorReporter } from "./components/ErrorReporter";
 
 // Register Service Worker for PWA functionality + Push Notifications
 if ('serviceWorker' in navigator) {
@@ -23,4 +25,9 @@ if (!rootElement) {
   throw new Error("Root element not found");
 }
 
-createRoot(rootElement).render(<App />);
+createRoot(rootElement).render(
+  <ErrorBoundary>
+    <ErrorReporter />
+    <App />
+  </ErrorBoundary>
+);

@@ -14,6 +14,10 @@ import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { setupAuth } from "./auth";
 import { runMigrations } from "./migrate";
+import { requestIdMiddleware } from "./middleware/request-id";
+import errorReportRouter from "./routes/error-report";
+import staticAuditRouter from "./routes/static-audit";
+import { sendErrorReport } from "./lib/error-mailer";
 
 const app = express();
 
@@ -74,6 +78,9 @@ const corsOptions = {
   exposedHeaders: ["Content-Length", "X-Request-Id"],
   maxAge: 86400, // Preflight cache for 24 hours
 };
+
+// X-Request-ID middleware — FIRST
+app.use(requestIdMiddleware);
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
@@ -387,6 +394,10 @@ app.use((req, res, next) => {
 
     // Setup Authentication (Passport, Sessions)
     setupAuth(app);
+
+    // Universal Error Logger routes
+    app.use("/api/error-report", errorReportRouter);
+    app.use("/api/static-audit", staticAuditRouter);
 
     const server = await registerRoutes(app);
 
