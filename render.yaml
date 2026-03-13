@@ -1,50 +1,12 @@
 services:
   - type: web
-    name: websuli-api
+    name: websuli-api-eu
     runtime: node
-    plan: starter
     region: frankfurt
     rootDir: source
-    buildCommand: npm install --include=dev && npm run db:migrate && npm run build:server
+    buildCommand: npm install --include=dev --legacy-peer-deps && npm run build
     startCommand: node dist/index.js
-    healthCheckPath: /api/health
+    plan: starter
     envVars:
-      # === CORE ===
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
-      - key: DATABASE_URL
-        sync: false # Neon PostgreSQL connection string - set in Render dashboard
-      - key: SESSION_SECRET
-        sync: false # Random 64+ char string - set in Render dashboard
-      - key: BASE_URL
-        sync: false # The Vercel frontend URL (e.g. https://websuli.vercel.app) - for OAuth callbacks
-      - key: FRONTEND_URL
-        sync: false # Same as BASE_URL - for CORS allowed origins
-      # === GOOGLE OAUTH ===
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-      - key: ADMIN_EMAIL
-        sync: false # First Google login with this email gets admin rights
-      # === AI INTEGRATION ===
-      - key: AI_INTEGRATIONS_OPENAI_API_KEY
-        sync: false
-      - key: AI_INTEGRATIONS_OPENAI_BASE_URL
-        sync: false # Optional - defaults to https://api.openai.com/v1
-      - key: AI_INTEGRATIONS_ANTHROPIC_API_KEY
-        sync: false
-      - key: AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-        sync: false # Optional - defaults to https://api.anthropic.com
-      # === EMAIL (Resend) ===
-      - key: RESEND_API_KEY
-        sync: false
-      - key: RESEND_FROM_EMAIL
-        sync: false # e.g. "WEBSULI <noreply@websuli.org>"
-      # === PUSH NOTIFICATIONS ===
-      - key: PUBLIC_VAPID_KEY
-        sync: false
-      - key: PRIVATE_VAPID_KEY
-        sync: false
