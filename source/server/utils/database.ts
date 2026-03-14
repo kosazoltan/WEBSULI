@@ -36,8 +36,9 @@ async function ensureEndpointActive(databaseUrl: string): Promise<void> {
     await testClient`SELECT 1 as test`;
     
     console.log('[NEON] ✅ Endpoint is active and responsive');
-  } catch (error: any) {
-    const errorMessage = error.message || String(error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const errorMessage = err.message || String(error);
     
     if (errorMessage.includes('endpoint has been disabled') || 
         errorMessage.includes('suspended') ||

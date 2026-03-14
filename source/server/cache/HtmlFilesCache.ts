@@ -5,8 +5,10 @@
  * Cache is invalidated when files are created, updated, or deleted.
  */
 
+import type { HtmlFile } from '@shared/schema';
+
 interface CacheEntry {
-  data: any[];
+  data: HtmlFile[];
   timestamp: number;
 }
 
@@ -22,7 +24,7 @@ export class HtmlFilesCache {
   /**
    * Get cached HTML files list
    */
-  get(): any[] | null {
+  get(): HtmlFile[] | null {
     if (!this.cache) {
       return null;
     }
@@ -40,7 +42,7 @@ export class HtmlFilesCache {
   /**
    * Set cache entry
    */
-  set(data: any[]): void {
+  set(data: HtmlFile[]): void {
     this.cache = {
       data: [...data], // Create a copy to avoid mutations
       timestamp: Date.now(),
