@@ -107,7 +107,8 @@ export function setupDailyViewSummary() {
       }
       
       console.log('[DAILY SUMMARY] Daily summary emails sent successfully.');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[DAILY SUMMARY] Error sending daily summary:', error);
     }
   });

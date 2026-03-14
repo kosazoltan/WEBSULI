@@ -9,7 +9,7 @@
  * Most az improvedHtmlFiles tábla 'processing' státuszú rekordja tárolja az állapotot.
  */
 
-import { Router } from 'express';
+import { Router, Request } from 'express';
 import { storage } from './storage';
 import type { HtmlFile } from '@shared/schema';
 
@@ -261,11 +261,13 @@ ${originalFile.content}
         }
         // If we got here, streaming succeeded - break out of retry loop
         break;
-      } catch (retryError: any) {
-        const isOverloaded = retryError.message?.includes('overloaded') || 
-                            retryError.message?.includes('529') ||
-                            retryError.status === 529;
-        const isRateLimit = retryError.message?.includes('rate') || retryError.status === 429;
+      } catch (retryError: unknown) {
+        const retryErrorTyped = retryError instanceof Error ? retryError : new Error(String(retryError));
+        const retryStatus = typeof retryError === 'object' && retryError !== null && 'status' in retryError ? (retryError as Record<string, unknown>).status : undefined;
+        const isOverloaded = retryErrorTyped.message?.includes('overloaded') || 
+                            retryErrorTyped.message?.includes('529') ||
+                            retryStatus === 529;
+        const isRateLimit = retryErrorTyped.message?.includes('rate') || retryStatus === 429;
         
         if ((isOverloaded || isRateLimit) && attempt < MAX_ATTEMPTS) {
           const delay = RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)];
@@ -360,8 +362,9 @@ ${originalFile.content}
           // Try to parse the JS to detect syntax errors
           new Function(jsContent);
           console.log(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript syntax validation passed`);
-        } catch (syntaxError: any) {
-          console.error(`[IMPROVE] Record ${dbRecordId}: ❌ JavaScript syntax error detected: ${syntaxError.message}`);
+        } catch (syntaxError: unknown) {
+          const syntaxErrorTyped = syntaxError instanceof Error ? syntaxError : new Error(String(syntaxError));
+          console.error(`[IMPROVE] Record ${dbRecordId}: ❌ JavaScript syntax error detected: ${syntaxErrorTyped.message}`);
           
           // Try to find and fix common AI errors:
           // 1. Unescaped Hungarian text outside of strings (e.g., stray comments)
@@ -388,8 +391,9 @@ ${originalFile.content}
             new Function(fixedJs);
             console.log(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript auto-repair successful`);
             improvedHtml = improvedHtml.replace(jsContent, fixedJs);
-          } catch (stillBroken: any) {
-            console.error(`[IMPROVE] Record ${dbRecordId}: ⚠️ Auto-repair failed: ${stillBroken.message}`);
+          } catch (stillBroken: unknown) {
+            const stillBrokenTyped = stillBroken instanceof Error ? stillBroken : new Error(String(stillBroken));
+            console.error(`[IMPROVE] Record ${dbRecordId}: ⚠️ Auto-repair failed: ${stillBrokenTyped.message}`);
             // Don't block saving - the material is still useful even with JS errors
             // But log it for debugging
           }
@@ -486,27 +490,29 @@ ${originalFile.content}
 
     console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Success! Content saved (${improvedHtml.length} bytes), status → pending`);
 
-  } catch (error: any) {
-    console.error(`[IMPROVE] Record ${dbRecordId}: Error:`, error.message);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`[IMPROVE] Record ${dbRecordId}: Error:`, err.message);
 
     let userMessage = 'Hiba történt a javítás során';
-    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+    if (err.name === 'AbortError' || err.message?.includes('aborted')) {
       userMessage = 'Időtúllépés: Az AI túl sokáig dolgozott (15 perc). Próbáld kisebb fájllal.';
-    } else if (error.message?.includes('overloaded') || error.status === 529) {
+    } else if (err.message?.includes('overloaded') || (typeof error === 'object' && error !== null && 'status' in error && (error as Record<string, unknown>).status === 529)) {
       userMessage = 'Az AI szerver jelenleg túlterheltség (overloaded). Próbáld újra 2-3 perc múlva!';
-    } else if (error.message?.includes('rate') || error.message?.includes('429')) {
+    } else if (err.message?.includes('rate') || err.message?.includes('429')) {
       userMessage = 'Túl sok kérés. Várj egy percet és próbáld újra.';
-    } else if (error.message?.includes('credit') || error.message?.includes('balance')) {
+    } else if (err.message?.includes('credit') || err.message?.includes('balance')) {
       userMessage = 'AI egyenleg probléma.';
-    } else if (error.message) {
-      userMessage = error.message;
+    } else if (err.message) {
+      userMessage = err.message;
     }
 
     // ✅ UPDATE the DB record with error status
     try {
       await storage.updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage);
-    } catch (dbError: any) {
-      console.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbError.message);
+    } catch (dbError: unknown) {
+      const dbErrorTyped = dbError instanceof Error ? dbError : new Error(String(dbError));
+      console.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbErrorTyped.message);
     }
   }
 }
@@ -516,7 +522,7 @@ ${originalFile.content}
  */
 export function registerImprovementRoutes(adminRouter: Router) {
   // POST /api/admin/improve-material/:id - Start async AI improvement job
-  adminRouter.post("/improve-material/:id", async (req: any, res) => {
+  adminRouter.post("/improve-material/:id", async (req: Request, res) => {
     console.log(`[IMPROVE] Request received for file ID: ${req.params?.id}`);
 
     if (!req.user || !req.user.id) {
@@ -549,7 +555,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
 
       // BUG FIX: Guard against duplicate concurrent improvement jobs for the same file
       const existingJobs = await storage.getImprovedFilesByOriginalId(originalFile.id);
-      const activeJob = existingJobs?.find((j: any) => j.status === 'processing');
+      const activeJob = existingJobs?.find((j) => j.status === 'processing');
       if (activeJob) {
         const elapsed = Math.round((Date.now() - new Date(activeJob.createdAt).getTime()) / 1000);
         console.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} - active job ${activeJob.id} (${elapsed}s)`);
@@ -586,14 +592,15 @@ export function registerImprovementRoutes(adminRouter: Router) {
       processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey)
         .catch(err => console.error(`[IMPROVE] FATAL unhandled error in background job ${dbRecord.id}:`, err));
 
-    } catch (error: any) {
-      console.error('[IMPROVE] Error:', error.message);
-      return res.status(500).json({ message: error.message || 'Hiba' });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[IMPROVE] Error:', err.message);
+      return res.status(500).json({ message: err.message || 'Hiba' });
     }
   });
 
   // GET /api/admin/improve-material/status/:jobId - Poll job status FROM DATABASE
-  adminRouter.get("/improve-material/status/:jobId", async (req: any, res) => {
+  adminRouter.get("/improve-material/status/:jobId", async (req: Request, res) => {
     const { jobId } = req.params;
     
     // ✅ Read from DATABASE, not in-memory Map

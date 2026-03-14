@@ -130,7 +130,8 @@ export async function sendNewMaterialNotification(
     });
     
     return result;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[RESEND] Email küldési hiba:', error);
     
     // Log failed email to database
@@ -139,7 +140,7 @@ export async function sendNewMaterialNotification(
         htmlFileId: fileId,
         recipientEmail,
         status: 'failed',
-        error: error.message || 'Unknown error',
+        error: err.message || 'Unknown error',
       });
     } catch (logError) {
       console.error('[RESEND] Email log mentési hiba:', logError);
@@ -175,7 +176,8 @@ export async function sendAdminNotification(
 
     console.log(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
     return result;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[RESEND] Admin értesítés küldési hiba:', error);
     throw error;
   }

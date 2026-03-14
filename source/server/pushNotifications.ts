@@ -16,8 +16,9 @@ if (vapidPublicKey && vapidPrivateKey) {
     webPush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
     vapidConfigured = true;
     console.log('[PUSH] VAPID configured successfully');
-  } catch (error: any) {
-    console.warn('[PUSH] VAPID configuration failed:', error.message);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.warn('[PUSH] VAPID configuration failed:', err.message);
     console.warn('[PUSH] Push notifications disabled - invalid VAPID keys');
   }
 } else {
@@ -81,18 +82,19 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
       try {
         const pushSubscription = {
           endpoint: sub.endpoint,
-          keys: sub.keys as any
+          keys: sub.keys as { p256dh: string; auth: string }
         };
 
         await webPush.sendNotification(pushSubscription, notificationPayload);
         sentCount++;
         console.log(`[PUSH] Sent to ${sub.endpoint.substring(0, 50)}...`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         failedCount++;
-        console.error('[PUSH] Failed to send to endpoint:', sub.endpoint.substring(0, 50), 'error:', error.message);
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error('[PUSH] Failed to send to endpoint:', sub.endpoint.substring(0, 50), 'error:', errMsg);
         
         // Remove invalid/expired subscriptions (410 = Gone, endpoint no longer valid)
-        if (error.statusCode === 410 || error.statusCode === 404) {
+        if (error instanceof Error && 'statusCode' in error && ((error as { statusCode: number }).statusCode === 410 || (error as { statusCode: number }).statusCode === 404)) {
           console.log(`[PUSH] Removing expired subscription: ${sub.endpoint.substring(0, 50)}...`);
           await storage.deletePushSubscription(sub.endpoint);
         }
@@ -108,7 +110,8 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
       failed: failedCount,
       total: subscriptions.length
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending notifications:', error);
     throw error;
   }
@@ -156,16 +159,16 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
       try {
         const pushSubscription = {
           endpoint: sub.endpoint,
-          keys: sub.keys as any
+          keys: sub.keys as { p256dh: string; auth: string }
         };
 
         await webPush.sendNotification(pushSubscription, notificationPayload);
         sentCount++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         failedCount++;
         console.error('[PUSH] Failed to send notification:', error);
         
-        if (error.statusCode === 410 || error.statusCode === 404) {
+        if (error instanceof Error && 'statusCode' in error && ((error as { statusCode: number }).statusCode === 410 || (error as { statusCode: number }).statusCode === 404)) {
           await storage.deletePushSubscription(sub.endpoint);
         }
       }
@@ -176,7 +179,8 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
       failed: failedCount,
       total: subscriptions.length
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending user notification:', error);
     throw error;
   }
@@ -205,7 +209,8 @@ export async function sendNewMaterialNotification(materialTitle: string, materia
     });
     
     console.log(`[PUSH] New material notification sent for: ${materialTitle}`);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending new material notification:', error);
   }
 }
@@ -238,7 +243,8 @@ export async function sendMaterialViewNotification(
     });
     
     console.log(`[PUSH] Material view notification sent to admin for: ${materialTitle}`);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending material view notification:', error);
   }
 }
