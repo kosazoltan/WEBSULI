@@ -8,7 +8,7 @@ const db = new Database(dbPath);
 const materialId = process.argv[2] || 'ba65a525-9330-42d5-a175-ef5ed7ee9252';
 
 try {
-  const result = db.prepare('SELECT content FROM html_files WHERE id = ?').get(materialId) as any;
+  const result = db.prepare('SELECT content FROM html_files WHERE id = ?').get(materialId) as { content: string } | undefined;
   
   if (result) {
     // Write to file

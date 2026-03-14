@@ -32,15 +32,16 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
 
   const pool = new pg.Pool({
     connectionString: dbUrl,
-    ssl: dbUrl.includes('neon.tech') || dbUrl.includes('render.com') || dbUrl.includes('supabase')
+    ssl: dbUrl.includes('neon.tech') || dbUrl.includes('render.com') || dbUrl.includes('supabase') || dbUrl.includes('sslmode=')
       ? { rejectUnauthorized: false }
       : undefined,
-    connectionTimeoutMillis: 15000,
+    connectionTimeoutMillis: 30000, // 30s for Neon cold start during build
   });
 
-  const client = await pool.connect();
+  let client: pg.PoolClient | null = null;
 
   try {
+    client = await pool.connect();
     console.log('[MIGRATE] 🔄 Checking for pending migrations...');
 
     // 1. Create migration tracking table if it doesn't exist
@@ -56,7 +57,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
     const appliedResult = await client.query(
       'SELECT migration_name FROM "_drizzle_migrations" ORDER BY id'
     );
-    const appliedMigrations = new Set(appliedResult.rows.map(r => r.migration_name));
+    const appliedMigrations = new Set(appliedResult.rows.map((r: { migration_name: string }) => r.migration_name));
 
     // 3. Read migration files from disk
     const migrationsDir = path.resolve(__dirname, '..', 'migrations');
@@ -108,10 +109,11 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
         for (const stmt of statements) {
           try {
             await client.query(stmt);
-          } catch (err: any) {
+          } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : String(err);
             // Skip "already exists" errors (idempotent migrations)
-            if (err.message.includes('already exists') || 
-                err.message.includes('duplicate key')) {
+            if (errMsg.includes('already exists') || 
+                errMsg.includes('duplicate key')) {
               console.log(`[MIGRATE]   ⚠️ Skipped (already exists): ${stmt.substring(0, 60)}...`);
             } else {
               throw err;
@@ -141,7 +143,9 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
     }
 
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
     await pool.end();
   }
 }
@@ -157,7 +161,7 @@ if (isDirectRun) {
       process.exit(0);
     })
     .catch(err => {
-      console.error('[MIGRATE] ❌ Migration failed:', err.message);
+      console.error('[MIGRATE] ❌ Migration failed:', err instanceof Error ? err.message : String(err));
       process.exit(1);
     });
 }

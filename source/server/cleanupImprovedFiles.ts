@@ -18,7 +18,8 @@ export function setupCleanupImprovedFiles() {
       } else {
         console.log('[CLEANUP-IMPROVED] ℹ️  No old applied improved files to delete');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[CLEANUP-IMPROVED] ❌ Error during cleanup:', error);
     }
   });

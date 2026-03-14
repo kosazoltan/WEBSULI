@@ -27,7 +27,7 @@ export function setupScheduledPublishing() {
 
       for (const job of jobs.rows) {
         try {
-          const payload = job.payload as any;
+          const payload = job.payload as { materialId?: string; userId?: string };
           
           if (job.type === 'publish_material' && payload.materialId) {
             // Publish the material (update to make it visible)
@@ -44,18 +44,20 @@ export function setupScheduledPublishing() {
             SET status = 'completed', completed_at = NOW()
             WHERE id = ${job.id}
           `);
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const err = error instanceof Error ? error : new Error(String(error));
           // Mark job as failed
           await db.execute(sqlTemplate`
             UPDATE scheduled_jobs
-            SET status = 'failed', error = ${error.message}
+            SET status = 'failed', error = ${err.message}
             WHERE id = ${job.id}
           `);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       // Silently skip if table doesn't exist (e.g., in fresh deployments)
-      if (error?.code === '42P01') {
+      if (error instanceof Error && 'code' in error && (error as Record<string, unknown>).code === '42P01') {
         // Table doesn't exist - skip silently for this run
         return;
       }

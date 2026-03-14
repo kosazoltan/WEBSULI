@@ -141,7 +141,7 @@ export function setupAuth(app: Express) {
         console.warn('[AUTH] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing. Google Auth disabled.');
     }
 
-    passport.serializeUser((user: any, done) => {
+    passport.serializeUser((user: Express.User, done) => {
         done(null, user.id);
     });
 
@@ -169,12 +169,22 @@ export function setupAuth(app: Express) {
             return res.status(400).json({ message: "Email és jelszó kötelező" });
         }
 
-        passport.authenticate("local", (err: any, user: User, info: any) => {
+        // Sanitize null bytes that cause PostgreSQL errors
+        if (typeof req.body.email === 'string') {
+            req.body.email = req.body.email.replace(/\0/g, '');
+        }
+        if (typeof req.body.password === 'string') {
+            req.body.password = req.body.password.replace(/\0/g, '');
+        }
+
+        passport.authenticate("local", (err: Error | null, user: User, info: { message?: string }) => {
             if (err) return next(err);
             if (!user) return res.status(401).json({ message: info?.message || "Authentication failed" });
             req.login(user, (err) => {
                 if (err) return next(err);
-                return res.json(user);
+                // SECURITY: Strip password hash before sending to client
+                const { password: _, ...safeUser } = user;
+                return res.json(safeUser);
             });
         })(req, res, next);
     });
@@ -203,9 +213,9 @@ export const isAuthenticatedAdmin: RequestHandler = (req, res, next) => {
     if (!req.isAuthenticated()) {
         return res.status(401).json({ message: "Unauthorized" });
     }
-    const user = req.user as any;
+    const user = req.user;
     // Check isAdmin flag from database user record
-    if (!user.isAdmin) {
+    if (!user?.isAdmin) {
         return res.status(403).json({ message: "Forbidden - Admin access required" });
     }
     next();

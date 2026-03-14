@@ -299,9 +299,20 @@ const subscriptionLimiter = rateLimit({
   skipSuccessfulRequests: false, // Count all attempts, even successful ones
 });
 
+// Rate limiter for login endpoint (brute force protection)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Maximum 10 login attempts per IP per 15 minutes
+  message: "Túl sok bejelentkezési kísérlet. Próbáld újra 15 perc múlva!",
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Only count failed attempts
+});
+
 // Apply rate limiting only to specific endpoints
 app.use("/api/ai/", aiLimiter); // All AI endpoints
 app.use("/api/subscribe-email", subscriptionLimiter);
+app.use("/api/login", loginLimiter); // Brute force protection
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -311,6 +322,13 @@ app.use((req, res, next) => {
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
     capturedJsonResponse = bodyJson;
+    // Sanitize 500 error messages in production to prevent SQL/internal detail leakage
+    if (res.statusCode >= 500 && process.env.NODE_ENV !== 'development' && bodyJson?.message) {
+      const msg = String(bodyJson.message);
+      if (msg.includes('Failed query:') || msg.includes('does not exist') || msg.includes('violates')) {
+        bodyJson = { ...bodyJson, message: 'Szerver hiba történt' };
+      }
+    }
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
@@ -358,15 +376,14 @@ app.use((req, res, next) => {
     // NOTE: Full file-based migration runs during build (npm run db:migrate)
     // At runtime we do a lightweight check to verify critical tables exist
     try {
-      const { dbPool: pool } = await import("./db");
-      const testClient = await pool.connect();
+      const testClient = await dbPool.connect();
       try {
         const tablesResult = await testClient.query(`
           SELECT tablename FROM pg_tables 
           WHERE schemaname = 'public' 
             AND tablename IN ('improved_html_files', 'material_improvement_backups')
         `);
-        const tables = tablesResult.rows.map((r: any) => r.tablename);
+        const tables = tablesResult.rows.map((r: { tablename: string }) => r.tablename);
         if (tables.length < 2) {
           log(`[MIGRATE] ⚠️ Missing tables detected: expected 2, found ${tables.length} (${tables.join(', ')})`);
           log(`[MIGRATE] Running emergency migration...`);
@@ -413,7 +430,9 @@ app.use((req, res, next) => {
     // Phase 11: Start cleanup job for old applied improved files (daily at midnight)
     setupCleanupImprovedFiles();
 
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    // Express error handler (4 params required for Express to identify it as error middleware)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
 

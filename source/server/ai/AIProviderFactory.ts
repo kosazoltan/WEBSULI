@@ -121,9 +121,10 @@ export class AIProviderFactory {
       }
       
       return response;
-    } catch (error: any) {
-      console.warn('[AIFactory] Primary provider (%s) failed: %s', this.primaryProvider, error.message);
-      lastError = error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.warn('[AIFactory] Primary provider (%s) failed: %s', this.primaryProvider, err.message);
+      lastError = err;
 
       // Don't retry on auth errors
       if (error instanceof AIProviderAuthError) {
@@ -148,9 +149,10 @@ export class AIProviderFactory {
         }
         
         return response;
-      } catch (error: any) {
-        console.error('[AIFactory] Fallback provider (%s) also failed: %s', this.fallbackProvider, error.message);
-        lastError = error;
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error('[AIFactory] Fallback provider (%s) also failed: %s', this.fallbackProvider, err.message);
+        lastError = err;
       }
     }
 
@@ -177,9 +179,10 @@ export class AIProviderFactory {
       const primary = this.getProvider(this.primaryProvider);
       yield* primary.streamChat(messages, signal);
       return;
-    } catch (error: any) {
-      console.warn('[AIFactory] Primary provider (%s) stream failed: %s', this.primaryProvider, error.message);
-      lastError = error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.warn('[AIFactory] Primary provider (%s) stream failed: %s', this.primaryProvider, err.message);
+      lastError = err;
 
       // Don't try fallback on auth errors
       if (error instanceof AIProviderAuthError) {
@@ -194,9 +197,10 @@ export class AIProviderFactory {
         const fallback = this.getProvider(this.fallbackProvider);
         yield* fallback.streamChat(messages, signal);
         return;
-      } catch (error: any) {
-        console.error('[AIFactory] Fallback provider (%s) stream also failed: %s', this.fallbackProvider, error.message);
-        lastError = error;
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error('[AIFactory] Fallback provider (%s) stream also failed: %s', this.fallbackProvider, err.message);
+        lastError = err;
       }
     }
 
@@ -219,11 +223,12 @@ export class AIProviderFactory {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         return await fn();
-      } catch (error: any) {
-        lastError = error;
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        lastError = err;
 
         // Don't retry on auth errors or non-retriable errors
-        if (error instanceof AIProviderAuthError || !error.isRetriable) {
+        if (error instanceof AIProviderAuthError || (error instanceof AIProviderError && !error.isRetriable)) {
           throw error;
         }
 

@@ -133,7 +133,7 @@ export interface IStorage {
     materialViews: MaterialView[];
     emailSubscriptions: Array<Omit<EmailSubscription, 'classrooms'> & { classrooms: number[] }>;
     tags: Tag[];
-    systemPrompts: any[];
+    systemPrompts: SystemPrompt[];
     emailLogs: EmailLog[];
   }>;
 
@@ -145,7 +145,7 @@ export interface IStorage {
     materialViews?: MaterialView[];
     emailSubscriptions?: Array<Omit<EmailSubscription, 'classrooms'> & { classrooms: number[] }>;
     tags?: Tag[];
-    systemPrompts?: any[];
+    systemPrompts?: SystemPrompt[];
     emailLogs?: EmailLog[];
   }): Promise<void>;
 
@@ -1216,7 +1216,7 @@ export class DatabaseStorage implements IStorage {
     materialViews?: MaterialView[];
     emailSubscriptions?: Array<Omit<EmailSubscription, 'classrooms'> & { classrooms: number[] }>;
     tags?: Tag[];
-    systemPrompts?: any[];
+    systemPrompts?: SystemPrompt[];
     emailLogs?: EmailLog[];
   }): Promise<void> {
     console.log('[RESTORE] Starting backup restoration...');
@@ -1342,8 +1342,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<ImprovedHtmlFile[]> {
-    let query = db.select().from(improvedHtmlFiles);
-    
     const conditions = [];
     if (status) {
       conditions.push(eq(improvedHtmlFiles.status, status));
@@ -1352,9 +1350,9 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(improvedHtmlFiles.originalFileId, originalFileId));
     }
     
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
+    const query = conditions.length > 0
+      ? db.select().from(improvedHtmlFiles).where(and(...conditions))
+      : db.select().from(improvedHtmlFiles);
     
     return await query.orderBy(desc(improvedHtmlFiles.createdAt));
   }
@@ -1601,7 +1599,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 2. Validate backup data structure
-      const backupData = backup.backupData as any;
+      const backupData = backup.backupData as { id: string; content: string; title?: string; description?: string | null };
       if (!backupData || !backupData.id || !backupData.content) {
         throw new Error('Invalid backup data structure');
       }

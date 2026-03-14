@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { insertHtmlFileSchema, insertEmailSubscriptionSchema, insertExtraEmailSchema, insertMaterialCommentSchema, insertImprovedHtmlFileSchema, type EmailSubscription, type User, type HtmlFile, type ImprovedHtmlFile, type MaterialImprovementBackup } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
-import { sendNewMaterialNotification, sendAdminNotification } from "./resend";
+import { sendNewMaterialNotification } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial, sendMaterialViewNotification } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
 
@@ -526,7 +526,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
 }
 
 // Helper function to apply admin guard to routes
-const requireAdmin = (handler: (req: any, res: Response) => Promise<void>) => {
+const requireAdmin = (handler: (req: Request, res: Response) => Promise<void>) => {
   return [isAuthenticatedAdmin, handler];
 };
 
@@ -588,7 +588,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth endpoint - Get current user session
   // PUBLIC endpoint - Returns user data if authenticated, null if not
-  app.get('/api/auth/user', async (req: any, res) => {
+  app.get('/api/auth/user', async (req: Request, res) => {
     try {
       if (!req.isAuthenticated() || !req.user) {
         return res.json(null);
@@ -597,11 +597,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Try to find user by email (primary lookup) since upsertUser may update
       // existing users by email without changing their ID
       const userEmail = req.user.email;
-      let user = await storage.getUserByEmail(userEmail);
+      let user = userEmail ? await storage.getUserByEmail(userEmail) : null;
 
       // Fallback to ID lookup if email lookup fails
       if (!user) {
-        const userId = req.user.id;
+        const userId = req.user!.id;
         user = await storage.getUser(userId) || null;
       }
 
@@ -611,8 +611,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Return user with admin status (convert undefined to null for type safety)
+      // SECURITY: Strip password hash before sending to client
+      const { password: _, ...safeUser } = user;
       res.json({
-        ...user,
+        ...safeUser,
         isAdmin: !!user.isAdmin,
       });
     } catch (error) {
@@ -623,7 +625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // SECURITY: CSRF Token Endpoint
   // Frontend fetches this token and includes it in all mutating requests (POST/PUT/DELETE)
-  app.get('/api/csrf-token', (req: any, res) => {
+  app.get('/api/csrf-token', (req: Request, res) => {
     const csrfToken = generateToken(req);
     res.json({ csrfToken });
   });
@@ -685,9 +687,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "A responsive wrapper már alkalmazva van az összes fájlra a rendereléskor",
         success: true
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('Responsive fix error:', error);
-      res.status(500).json({ message: 'Hiba történt', error: error.message });
+      res.status(500).json({ message: 'Hiba történt', error: err.message });
     }
   });
 
@@ -762,9 +765,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errors: jsonResult.errors,
         success: true
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('HTML fix error:', error);
-      res.status(500).json({ message: 'Hiba történt az elemzés során', error: error.message });
+      res.status(500).json({ message: 'Hiba történt az elemzés során', error: err.message });
     }
   });
 
@@ -849,9 +853,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         changes: jsonResult.changes,
         success: true
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('Theme fix error:', error);
-      res.status(500).json({ message: 'Hiba történt a színséma alkalmazása során', error: error.message });
+      res.status(500).json({ message: 'Hiba történt a színséma alkalmazása során', error: err.message });
     }
   });
 
@@ -1056,8 +1061,9 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
           validatedJson: validatedResult
         })}\n\n`);
 
-      } catch (parseError: any) {
-        console.error('[AI FIX] ❌ JSON parsing/validation failed:', parseError.message);
+      } catch (parseError: unknown) {
+        const parseErrorTyped = parseError instanceof Error ? parseError : new Error(String(parseError));
+        console.error('[AI FIX] ❌ JSON parsing/validation failed:', parseErrorTyped.message);
         console.error('[AI FIX] Raw JSON response:', rawJsonResponse.substring(0, 500));
 
         // Fallback: send raw response with detailed error
@@ -1065,17 +1071,18 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
           type: 'complete',
           message: '⚠️ Claude befejezte, de a JSON validálás sikertelen',
           fullResponse: explanationText + '\n\n' + rawJsonResponse,
-          parseError: parseError.message,
+          parseError: parseErrorTyped.message,
           validatedJson: null
         })}\n\n`);
       }
 
       res.end();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('HTML fix chat error:', error);
       res.write(`data: ${JSON.stringify({
         type: 'error',
-        message: error.message || 'Hiba történt az elemzés során'
+        message: err.message || 'Hiba történt az elemzés során'
       })}\n\n`);
       res.end();
     }
@@ -1108,9 +1115,10 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
         message: "A javított HTML sikeresen alkalmazva",
         success: true
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('Apply fix error:', error);
-      res.status(500).json({ message: 'Hiba történt a javítás alkalmazása során', error: error.message });
+      res.status(500).json({ message: 'Hiba történt a javítás alkalmazása során', error: err.message });
     }
   });
 
@@ -1138,8 +1146,8 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       // Build conversation history for Claude
       const messages: Array<{ role: 'user' | 'assistant', content: string }> = conversationHistory && Array.isArray(conversationHistory)
         ? conversationHistory
-          .filter((msg: any) => msg.role !== 'system')
-          .map((msg: any) => ({
+          .filter((msg: { role: string; content: string }) => msg.role !== 'system')
+          .map((msg: { role: string; content: string }) => ({
             role: (msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
             content: msg.content
           }))
@@ -1354,11 +1362,12 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
 
       res.write('data: [DONE]\n\n');
       res.end();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('Material creator chat error:', error);
       res.write(`data: ${JSON.stringify({
         type: 'error',
-        message: error.message || 'Hiba történt a beszélgetés során'
+        message: err.message || 'Hiba történt a beszélgetés során'
       })}\n\n`);
       res.end();
     }
@@ -1399,7 +1408,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
       console.log(`[FILE ANALYSIS] Analyzing ${files.length} files`);
 
       // Build content array with all images
-      const content: any[] = [
+      const content: Array<{type: "text"; text: string} | {type: "image_url"; image_url: {url: string; detail: "auto" | "low" | "high"}}> = [
         {
           type: "text",
           text: `Elemezd ezeket a ${files.length} dokumentumot/képet és készíts belőlük egyetlen oktatási anyagot.
@@ -1504,10 +1513,11 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         analysis: result
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[FILE ANALYSIS] Error:', error);
       res.status(500).json({
-        message: error.message || 'Hiba történt a fájlok elemzése során'
+        message: err.message || 'Hiba történt a fájlok elemzése során'
       });
     }
   });
@@ -1542,7 +1552,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 
       // OpenAI Vision API: send image as base64 data URL
       // For PDFs: frontend converts first page to PNG before sending
-      const content: any[] = [
+      const content: Array<{type: "text"; text: string} | {type: "image_url"; image_url: {url: string; detail: "auto" | "low" | "high"}}> = [
         {
           type: "text",
           text: fileType === 'application/pdf'
@@ -1617,10 +1627,11 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         analysis: result
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[FILE ANALYSIS] Error:', error);
       res.status(500).json({
-        message: error.message || 'Hiba történt a fájl elemzése során'
+        message: err.message || 'Hiba történt a fájl elemzése során'
       });
     }
   });
@@ -1756,11 +1767,12 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       res.end();
       clearTimeout(timeout);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       clearTimeout(timeout);
 
       // Handle abort errors
-      if (error.name === 'AbortError' || controller.signal.aborted) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
         console.error('[CHATGPT] Request aborted (timeout or disconnect)');
         if (!res.headersSent) {
           res.status(408).json({ message: 'Kérés időtúllépés' });
@@ -1780,7 +1792,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       } else {
         res.write(`data: ${JSON.stringify({
           type: 'error',
-          message: error.message || 'Ismeretlen hiba'
+          message: err.message || 'Ismeretlen hiba'
         })}\n\n`);
         res.end();
       }
@@ -1819,8 +1831,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       // Build conversation
       const messages: Array<{ role: 'user' | 'assistant', content: string }> = conversationHistory && Array.isArray(conversationHistory)
         ? conversationHistory
-          .filter((msg: any) => msg.role !== 'system')
-          .map((msg: any) => ({
+          .filter((msg: { role: string; content: string }) => msg.role !== 'system')
+          .map((msg: { role: string; content: string }) => ({
             role: (msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
             content: msg.content
           }))
@@ -1996,11 +2008,12 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       res.end();
       clearTimeout(timeout);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       clearTimeout(timeout);
 
       // Handle abort errors
-      if (error.name === 'AbortError' || controller.signal.aborted) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
         console.error('[CLAUDE] Request aborted (timeout or disconnect)');
         if (!res.headersSent) {
           res.status(408).json({ message: 'Kérés időtúllépés' });
@@ -2020,7 +2033,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       } else {
         res.write(`data: ${JSON.stringify({
           type: 'error',
-          message: error.message || 'Ismeretlen hiba'
+          message: err.message || 'Ismeretlen hiba'
         })}\n\n`);
         res.end();
       }
@@ -2246,7 +2259,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const extraEmails = await storage.getActiveExtraEmails();
       res.json(extraEmails);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error("Error fetching extra emails:", error);
       res.status(500).json({ message: "Nem sikerült lekérni az extra email címeket" });
     }
@@ -2266,7 +2280,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       // Validate all classrooms are valid numbers 0-12 (0=Programming, 1-12=Grades)
-      if (!classrooms.every((c: any) => typeof c === 'number' && c >= 0 && c <= 12)) {
+      if (!classrooms.every((c: unknown) => typeof c === 'number' && c >= 0 && c <= 12)) {
         return res.status(400).json({ message: "Minden osztálynak 0 és 12 között kell lennie" });
       }
 
@@ -2279,9 +2293,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       // NO AUTH - No creator ID
       const extraEmail = await storage.addExtraEmail(email.trim(), classrooms, null);
       res.json(extraEmail);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error("Error adding extra email:", error);
-      if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      if (err.message?.includes('duplicate') || err.message?.includes('unique')) {
         return res.status(400).json({ message: "Ez az email cím már hozzá van adva" });
       }
       res.status(500).json({ message: "Nem sikerült hozzáadni az email címet" });
@@ -2295,7 +2310,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(404).json({ message: "Email cím nem található" });
       }
       res.status(204).send();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error("Error deleting extra email:", error);
       res.status(500).json({ message: "Nem sikerült törölni az email címet" });
     }
@@ -2316,7 +2332,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       // Validate all classrooms are valid numbers 0-12 (0=Programming, 1-12=Grades)
-      if (!classrooms.every((c: any) => typeof c === 'number' && c >= 0 && c <= 12)) {
+      if (!classrooms.every((c: unknown) => typeof c === 'number' && c >= 0 && c <= 12)) {
         return res.status(400).json({ message: "Minden osztálynak 0 és 12 között kell lennie" });
       }
 
@@ -2335,9 +2351,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         success: true,
         message: "Sikeresen feliratkoztál az email értesítésekre"
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error("Error subscribing email:", error);
-      if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      if (err.message?.includes('duplicate') || err.message?.includes('unique')) {
         return res.status(400).json({ message: "Ez az email cím már fel van iratkozva" });
       }
       res.status(500).json({ message: "Nem sikerült feliratkozni. Próbáld újra később." });
@@ -2378,8 +2395,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       // Set cache headers
       res.set('Cache-Control', 'public, max-age=60'); // 1 minute client cache
       res.json(files);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -2391,8 +2409,11 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "Search query is required" });
       }
 
+      // Sanitize null bytes that cause PostgreSQL errors
+      const sanitizedQuery = query.replace(/\0/g, '');
+
       // PostgreSQL ILIKE for case-insensitive pattern search
-      const searchPattern = `%${query}%`;
+      const searchPattern = `%${sanitizedQuery}%`;
 
       const results = await db
         .select()
@@ -2407,9 +2428,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         .limit(50);
 
       res.json(results);
-    } catch (error: any) {
-      console.error("Search error:", { error: error.message });
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error("Search error:", { error: errMsg });
+      res.status(500).json({ message: errMsg });
     }
   });
 
@@ -2420,18 +2442,19 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(404).json({ message: "File not found" });
       }
       res.json(file);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
   // ADMIN-ONLY route - Create new material
-  app.post("/api/html-files", isAuthenticatedAdmin, async (req: any, res) => {
+  app.post("/api/html-files", isAuthenticatedAdmin, async (req: Request, res) => {
     console.log('[UPLOAD] POST /api/html-files request received, body keys:', Object.keys(req.body || {}), 'content length:', req.body?.content?.length || 0);
 
     try {
       // Admin authentication required
-      const userId = req.user.id;
+      const userId = req.user!.id;
       console.log('🔵 [UPLOAD] Admin user:', userId)
 
       console.log('🔵 [UPLOAD] Starting validation...');
@@ -2546,9 +2569,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
                 );
                 successful++;
                 console.log(`[EMAIL] ✓ Email sikeresen elküldve (${i + 1}/${uniqueRecipients.length}): ${recipient.email}`);
-              } catch (err: any) {
+              } catch (err: unknown) {
+                const errTyped = err instanceof Error ? err : new Error(String(err));
                 failed++;
-                console.error('[EMAIL] ✗ Hiba email küldéskor:', recipient.email, 'error:', err.message);
+                console.error('[EMAIL] ✗ Hiba email küldéskor:', recipient.email, 'error:', errTyped.message);
               }
 
               // Add 500ms delay between emails to respect rate limits (2 req/sec = 500ms minimum)
@@ -2572,16 +2596,17 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
           console.error('[PUSH] ❌ Push értesítés küldési hiba:', err);
         });
       });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
   // ADMIN-ONLY route - Update material
-  app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: any, res) => {
+  app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       // Admin authentication required
-      const userId = req.user.id;
+      const userId = req.user!.id;
 
       const updates: { title?: string; description?: string; classroom?: number; displayOrder?: number } = {};
 
@@ -2632,16 +2657,17 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // Trigger event-driven backup (debounced, non-blocking)
       triggerEventBackup();
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
   // ADMIN-ONLY route - Batch update display order
-  app.post("/api/html-files/reorder", isAuthenticatedAdmin, async (req: any, res) => {
+  app.post("/api/html-files/reorder", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       // Admin authentication required
-      const userId = req.user.id;
+      const userId = req.user!.id;
 
       // Validate request body: array of {id, displayOrder}
       const { items } = req.body;
@@ -2677,17 +2703,18 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         updated: successCount,
         total: items.length
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[REORDER] ❌ Error:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
   // ADMIN-ONLY route - Delete material
-  app.delete("/api/html-files/:id", isAuthenticatedAdmin, async (req: any, res) => {
+  app.delete("/api/html-files/:id", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       // Admin authentication required
-      const userId = req.user.id;
+      const userId = req.user!.id;
       const materialId = req.params.id;
       const deleted = await storage.deleteHtmlFile(materialId, userId);
       if (!deleted) {
@@ -2704,23 +2731,25 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         if (typeof invalidateHtmlFilesCache === 'function') {
           await invalidateHtmlFilesCache();
         }
-      } catch (cacheError: any) {
-        console.warn('[DELETE] Cache invalidation warning:', cacheError.message);
+      } catch (cacheError: unknown) {
+        const cacheErrorTyped = cacheError instanceof Error ? cacheError : new Error(String(cacheError));
+        console.warn('[DELETE] Cache invalidation warning:', cacheErrorTyped.message);
       }
 
       res.status(204).send();
 
       // Trigger event-driven backup (debounced, non-blocking)
       triggerEventBackup();
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
   // ADMIN-ONLY route - Send email notification for a specific material
-  app.post("/api/html-files/:id/send-email", isAuthenticatedAdmin, async (req: any, res) => {
+  app.post("/api/html-files/:id/send-email", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.id;
 
       const { email } = req.body;
       if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -2737,8 +2766,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       try {
         await storage.addExtraEmail(email, [file.classroom], userId);
         console.log(`[EMAIL] Új email cím hozzáadva: ${email} (${file.classroom}. osztály)`);
-      } catch (err: any) {
-        console.log('[EMAIL] Email cím már létezik vagy hiba:', email, 'message:', err.message);
+      } catch (err: unknown) {
+        const errTyped = err instanceof Error ? err : new Error(String(err));
+        console.log('[EMAIL] Email cím már létezik vagy hiba:', email, 'message:', errTyped.message);
       }
 
       // Send email notification
@@ -2753,40 +2783,43 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         );
         console.log(`[EMAIL] Email sikeresen elküldve: ${email}`);
         res.json({ success: true, message: "Email értesítés elküldve" });
-      } catch (emailError: any) {
+      } catch (emailError: unknown) {
+        const emailErrorTyped = emailError instanceof Error ? emailError : new Error(String(emailError));
         console.error(`[EMAIL] Hiba az email küldésekor:`, emailError);
-        res.status(500).json({ message: "Email küldési hiba", error: emailError.message });
+        res.status(500).json({ message: "Email küldési hiba", error: emailErrorTyped.message });
       }
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
   // ADMIN-ONLY route - Get extra email addresses (PII data)
-  app.get("/api/extra-emails", isAuthenticatedAdmin, async (req: any, res) => {
+  app.get("/api/extra-emails", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.id;
 
       const extraEmails = await storage.getActiveExtraEmails();
       res.json(extraEmails);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
   // REMOVED: Duplicate endpoint - the main one is earlier in the file (line ~1527)
 
   // ADMIN-ONLY route - Update extra email classrooms (PII data)
-  app.patch("/api/extra-emails/:id/classrooms", isAuthenticatedAdmin, async (req: any, res) => {
+  app.patch("/api/extra-emails/:id/classrooms", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user!.id;
 
       const { classrooms } = req.body;
       if (!Array.isArray(classrooms) || classrooms.length === 0) {
         return res.status(400).json({ message: "Legalább egy osztály kiválasztása kötelező" });
       }
 
-      if (!classrooms.every((c: any) => typeof c === 'number' && c >= 1 && c <= 8)) {
+      if (!classrooms.every((c: unknown) => typeof c === 'number' && c >= 1 && c <= 8)) {
         return res.status(400).json({ message: "Minden osztálynak 1 és 8 között kell lennie" });
       }
 
@@ -2796,8 +2829,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       res.json(updated);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -2845,7 +2879,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         audioContent: base64Audio,
         lang: lang,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('TTS hiba:', error);
       res.status(500).json({ message: 'Szöveg felolvasása sikertelen' });
     }
@@ -2853,7 +2888,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
   // ADMIN Backup operations
   // Create a new backup (max 3 kept automatically)
-  adminRouter.post("/backups/create", async (req: any, res) => {
+  adminRouter.post("/backups/create", async (req: Request, res) => {
     try {
       const userId = req.user?.id || 'admin';
 
@@ -2864,9 +2899,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const backup = await storage.createBackup(name, userId);
       res.json(backup);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[BACKUP] Hiba a backup készítésekor:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -2875,9 +2911,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const backups = await storage.getAllBackups();
       res.json(backups);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[BACKUP] Hiba a backup-ok lekérdezésekor:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -2890,9 +2927,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       res.json({ success: true, message: "Backup sikeresen visszaállítva" });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[BACKUP] Hiba a backup visszaállításakor:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -2905,14 +2943,15 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       res.json({ success: true, message: "Backup sikeresen törölve" });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[BACKUP] Hiba a backup törlésekor:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
   // Export backup as downloadable JSON file (protected by adminRouter middleware)
-  adminRouter.get("/backups/export", async (req: any, res) => {
+  adminRouter.get("/backups/export", async (req: Request, res) => {
     try {
       const userEmail = req.user?.email || "admin";
       const allFiles = await storage.getAllHtmlFiles();
@@ -2930,9 +2969,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.json(backupData);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[BACKUP] Hiba az export során:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -2992,9 +3032,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         message: `${materials.length} anyag sikeresen visszaállítva`,
         materialsCount: materials.length,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[BACKUP] Hiba az import során:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3004,9 +3045,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const backupsList = await listBackups();
       res.json(backupsList);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[FILE-BACKUP] Error listing backups:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3042,10 +3084,11 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         message: `Backup sikeresen visszaállítva: ${filename}`,
         materialsRestored: snapshotData.htmlFiles.length,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[FILE-BACKUP] Restore error:', error);
       res.status(500).json({
-        message: `Backup visszaállítás sikertelen: ${error.message}`
+        message: `Backup visszaállítás sikertelen: ${err.message}`
       });
     }
   });
@@ -3087,15 +3130,18 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         message: "Production adatbázis sikeresen szinkronizálva dev adatbázisba",
         timestamp: new Date().toISOString()
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[ADMIN] Sync error:', error);
-      console.error('[ADMIN] Error stack:', error.stack);
+      console.error('[ADMIN] Error stack:', err.stack);
 
       res.status(500).json({
         success: false,
         message: "Hiba történt a szinkronizálás során",
-        error: error.message,
-        details: error.stack ? error.stack.split('\n').slice(0, 5).join('\n') : undefined
+        ...(process.env.NODE_ENV === 'development' && {
+          error: err.message,
+          details: err.stack ? err.stack.split('\n').slice(0, 5).join('\n') : undefined
+        })
       });
     }
   });
@@ -3122,9 +3168,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // Send backup data
       res.json(backupData);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[FILE-BACKUP] Download error:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3134,8 +3181,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       const views = await storage.getRecentMaterialViews(limit);
       res.json(views);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3157,9 +3205,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       });
 
       res.json({ success: true, subscription });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[PUSH] Subscription error:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3174,9 +3223,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const success = await storage.deletePushSubscription(endpoint);
       res.json({ success });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[PUSH] Unsubscribe error:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3228,17 +3278,17 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         try {
           const pushSubscription = {
             endpoint: sub.endpoint,
-            keys: sub.keys as any
+            keys: sub.keys as { p256dh: string; auth: string }
           };
 
           await webPush.sendNotification(pushSubscription, payload);
           successCount++;
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('[PUSH] Failed to send to subscription:', error);
           failCount++;
 
           // Remove invalid subscriptions (410 = endpoint expired)
-          if (error.statusCode === 410) {
+          if (error instanceof Error && 'statusCode' in error && (error as { statusCode: number }).statusCode === 410) {
             await storage.deletePushSubscription(sub.endpoint);
           }
         }
@@ -3250,9 +3300,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         failed: failCount,
         total: subscriptions.length
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
       console.error('[PUSH] Test notification error:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: errMsg });
     }
   });
 
@@ -3272,13 +3323,13 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
         // Create material view record with NULL userId for anonymous
         await storage.createMaterialView({
-          userId: null as any, // NULL for anonymous users (no foreign key violation)
+          userId: null, // NULL for anonymous users (schema allows nullable)
           materialId: file.id,
           userAgent,
         });
 
         console.log(`[TRACKING] Material viewed: ${file.title} by anonymous user`);
-      } catch (trackError: any) {
+      } catch (trackError: unknown) {
         console.error('[TRACKING] Material view rögzítési hiba:', trackError);
       }
 
@@ -3348,8 +3399,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         res.setHeader('Expires', '0');
         res.send(wrappedHtml);
       }
-    } catch (error: any) {
-      const safeErrorMsg = (error.message || 'Ismeretlen hiba').replace(/[<>&"']/g, (c: string) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c] || c));
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const safeErrorMsg = (err.message || 'Ismeretlen hiba').replace(/[<>&"']/g, (c: string) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c] || c));
       res.status(500).send(`<html><body><h1>Hiba történt</h1><p>${safeErrorMsg}</p></body></html>`);
     }
   });
@@ -3384,7 +3436,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // Send PDF binary data
       res.send(pdfBuffer);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       res.status(500).send("Error loading PDF");
     }
   });
@@ -3396,8 +3449,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const stats = await storage.getOverallStats();
       res.json(stats);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3407,8 +3461,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const limit = parseInt(req.query.limit as string) || 10;
       const topMaterials = await storage.getTopMaterials(limit);
       res.json(topMaterials);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3417,8 +3472,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const distribution = await storage.getClassroomDistribution();
       res.json(distribution);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3427,8 +3483,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const stats = await storage.getEmailDeliveryStats();
       res.json(stats);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3439,8 +3496,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const tags = await storage.getAllTags();
       res.json(tags);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3453,8 +3511,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
       const tag = await storage.createTag(name, description, color);
       res.json(tag);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3467,8 +3526,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(404).json({ message: "Tag nem található" });
       }
       res.json(tag);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3480,8 +3540,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(404).json({ message: "Tag nem található" });
       }
       res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3490,8 +3551,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const tags = await storage.getMaterialTags(req.params.id);
       res.json(tags);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3504,8 +3566,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
       const materialTag = await storage.addMaterialTag(req.params.id, tagId);
       res.json(materialTag);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3517,8 +3580,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(404).json({ message: "Tag kapcsolat nem található" });
       }
       res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3537,8 +3601,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const liked = fingerprint ? await storage.hasUserLiked(materialId, fingerprint) : false;
 
       res.json({ liked, totalLikes });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3553,8 +3618,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const liked = await storage.hasUserLiked(materialId, fingerprint);
       const totalLikes = await storage.getMaterialLikes(materialId);
       res.json({ liked, totalLikes });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3588,8 +3654,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         const totalLikes = await storage.getMaterialLikes(materialId);
         res.json({ liked: true, totalLikes, message: "Kedvelve!" });
       }
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3610,8 +3677,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       await storage.updateMaterialStats(req.params.id);
 
       res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3634,8 +3702,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const likesData = await storage.getBatchMaterialLikes(idsToQuery, fingerprint);
       res.json(likesData);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3675,9 +3744,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         deletedCount: materialIds.length,
         message: `${materialIds.length} anyag sikeresen törölve`
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('Bulk delete error:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3696,8 +3766,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // TODO: Implement bulk email sending logic
       res.json({ success: true, message: "Bulk email sending not yet implemented" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3712,7 +3783,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       const { materialIds, classroom } = result.data;
-      const userId = (req as any).user?.id || 'admin';
+      const userId = req.user?.id || 'admin';
       let movedCount = 0;
 
       for (const id of materialIds) {
@@ -3721,8 +3792,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       res.json({ success: true, movedCount });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3761,8 +3833,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         .orderBy(desc(materialComments.createdAt));
 
       res.json(comments);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3813,7 +3886,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       });
 
       res.json({ success: true, message: "A hozzászólásod moderálásra vár. Jóváhagyás után látható lesz." });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[COMMENT] Error submitting comment:', error);
       res.status(500).json({ message: "Hiba történt a hozzászólás elküldésekor" });
     }
@@ -3838,8 +3912,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       });
 
       res.json({ qrCode: qrDataUrl, url: materialUrl });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3859,8 +3934,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         tables: ['html_files', 'users', 'extra_emails', 'material_views', 'email_subscriptions', 'tags', 'system_prompts', 'email_logs'], // Static list for SQLite
         databaseType: 'SQLite',
       });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3890,8 +3966,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }, null, 2), { name: "metadata.json" });
 
       await archive.finalize();
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
@@ -3905,9 +3982,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         ? `https://${process.env.CUSTOM_DOMAIN}`
         : `https://${req.get('host')}`;
 
-      // Get all published materials
+      // Get all materials (no isDraft field in schema - all are published)
       const materials = await storage.getAllHtmlFiles();
-      const publishedMaterials = materials.filter((m: any) => !m.isDraft);
 
       // Build sitemap XML
       const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
@@ -3921,12 +3997,12 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     <lastmod>${new Date().toISOString()}</lastmod>
   </url>
   
-  <!-- Materials (Published only) -->
-${publishedMaterials.map((material: any) => `  <url>
+  <!-- Materials -->
+${materials.map((material) => `  <url>
     <loc>${baseUrl}/preview/${material.id}</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
-    <lastmod>${material.updatedAt ? new Date(material.updatedAt).toISOString() : new Date(material.createdAt).toISOString()}</lastmod>
+    <lastmod>${new Date(material.createdAt).toISOString()}</lastmod>
   </url>`).join('\n')}
 </urlset>`;
 
@@ -3934,8 +4010,9 @@ ${publishedMaterials.map((material: any) => `  <url>
       res.header('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
       res.send(sitemap);
 
-      console.log(`[SEO] Sitemap generated with ${publishedMaterials.length} materials`);
-    } catch (error: any) {
+      console.log(`[SEO] Sitemap generated with ${materials.length} materials`);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SEO] Sitemap generation error:', error);
       res.status(500).send('Error generating sitemap');
     }
@@ -4051,10 +4128,11 @@ ${new Date().toLocaleString('hu-HU')}
       await archive.finalize();
 
       console.log('[ADMIN] Source code archive created and sent successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[ADMIN] Source download error:', error);
       if (!res.headersSent) {
-        res.status(500).json({ message: "Hiba a forráskód letöltése során: " + error.message });
+        res.status(500).json({ message: "Hiba a forráskód letöltése során: " + err.message });
       }
     }
   });
@@ -4079,7 +4157,8 @@ ${new Date().toLocaleString('hu-HU')}
 
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[STATIC] Download error:', error);
       res.status(500).json({ message: "Hiba a letöltés során" });
     }
@@ -4123,7 +4202,8 @@ Crawl-delay: 1`;
         .orderBy(desc((await import('@shared/schema')).systemPrompts.updatedAt));
 
       res.json(prompts);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error fetching prompts:', error);
       res.status(500).json({ message: 'Failed to fetch system prompts' });
     }
@@ -4145,7 +4225,8 @@ Crawl-delay: 1`;
       }
 
       res.json(prompt);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error fetching prompt:', error);
       res.status(500).json({ message: 'Failed to fetch system prompt' });
     }
@@ -4184,7 +4265,8 @@ Crawl-delay: 1`;
 
       console.log(`[SystemPrompts] Created new prompt: ${created.id}`);
       res.status(201).json(created);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error creating prompt:', error);
       res.status(500).json({ message: 'Failed to create system prompt' });
     }
@@ -4219,7 +4301,8 @@ Crawl-delay: 1`;
 
       console.log(`[SystemPrompts] Updated prompt: ${req.params.id}`);
       res.json(updated);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error updating prompt:', error);
       res.status(500).json({ message: 'Failed to update system prompt' });
     }
@@ -4292,7 +4375,7 @@ Crawl-delay: 1`;
   registerImprovementRoutes(adminRouter);
 
   // GET /api/admin/improved-files - List all improved files
-  adminRouter.get("/improved-files", async (req: any, res) => {
+  adminRouter.get("/improved-files", async (req: Request, res) => {
     try {
       const { status, originalFileId } = req.query;
       const files = await storage.getAllImprovedHtmlFiles(
@@ -4300,14 +4383,15 @@ Crawl-delay: 1`;
         originalFileId as string | undefined
       );
       res.json(files);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[IMPROVED-FILES] Error:', error);
-      res.status(500).json({ message: error.message || 'Hiba történt' });
+      res.status(500).json({ message: err.message || 'Hiba történt' });
     }
   });
 
   // GET /api/admin/improved-files/:id - Get single improved file with original
-  adminRouter.get("/improved-files/:id", async (req: any, res) => {
+  adminRouter.get("/improved-files/:id", async (req: Request, res) => {
     try {
       const { id } = req.params;
       const improved = await storage.getImprovedHtmlFile(id);
@@ -4320,14 +4404,15 @@ Crawl-delay: 1`;
         ...improved,
         originalFile: original,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[IMPROVED-FILE] Error:', error);
-      res.status(500).json({ message: error.message || 'Hiba történt' });
+      res.status(500).json({ message: err.message || 'Hiba történt' });
     }
   });
 
   // POST /api/admin/improved-files/:id/apply - Apply improved file to original
-  adminRouter.post("/improved-files/:id/apply", async (req: any, res) => {
+  adminRouter.post("/improved-files/:id/apply", async (req: Request, res) => {
     try {
       const { id } = req.params;
       const { createBackup = true, notes } = req.body || {};
@@ -4357,18 +4442,19 @@ Crawl-delay: 1`;
         backupId: result.backupId,
         message: 'Javított fájl sikeresen alkalmazva',
       });
-    } catch (error: any) {
-      console.error('[APPLY-IMPROVED] ❌ Error:', error.message);
-      console.error('[APPLY-IMPROVED] Stack:', error.stack);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[APPLY-IMPROVED] ❌ Error:', err.message);
+      console.error('[APPLY-IMPROVED] Stack:', err.stack);
       res.status(500).json({
-        message: error.message || 'Hiba történt az alkalmazás során'
+        message: err.message || 'Hiba történt az alkalmazás során'
       });
     }
   });
 
 
   // PATCH /api/admin/improved-files/:id - Update improved file status/notes
-  adminRouter.patch("/improved-files/:id", async (req: any, res) => {
+  adminRouter.patch("/improved-files/:id", async (req: Request, res) => {
     try {
       const { id } = req.params;
       const { status, improvementNotes } = req.body || {};
@@ -4383,14 +4469,15 @@ Crawl-delay: 1`;
       }
 
       res.json(updated);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[UPDATE-IMPROVED] Error:', error);
-      res.status(500).json({ message: error.message || 'Hiba történt' });
+      res.status(500).json({ message: err.message || 'Hiba történt' });
     }
   });
 
   // DELETE /api/admin/improved-files/:id - Delete improved file
-  adminRouter.delete("/improved-files/:id", async (req: any, res) => {
+  adminRouter.delete("/improved-files/:id", async (req: Request, res) => {
     try {
       const { id } = req.params;
 
@@ -4402,14 +4489,15 @@ Crawl-delay: 1`;
       }
 
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[DELETE-IMPROVED] Error:', error);
-      res.status(500).json({ message: error.message || 'Hiba történt' });
+      res.status(500).json({ message: err.message || 'Hiba történt' });
     }
   });
 
   // GET /api/admin/improved-files/:id/debug - Diagnostic: show actual DB state
-  adminRouter.get("/improved-files/:id/debug", async (req: any, res) => {
+  adminRouter.get("/improved-files/:id/debug", async (req: Request, res) => {
     try {
       const improved = await storage.getImprovedHtmlFile(req.params.id);
       if (!improved) {
@@ -4437,14 +4525,15 @@ Crawl-delay: 1`;
           contentFirst200: original.content?.substring(0, 200) || '(empty)',
         } : null,
       });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      res.status(500).json({ message: err.message });
     }
   });
 
   // POST /api/admin/improved-files/:id/force-apply - FORCE APPLY with RAW SQL (bypass ORM)
   // This endpoint bypasses Drizzle ORM and directly executes SQL to prove the DB update works
-  adminRouter.post("/improved-files/:id/force-apply", async (req: any, res) => {
+  adminRouter.post("/improved-files/:id/force-apply", async (req: Request, res) => {
     const { id } = req.params;
     const log: string[] = [];
     
@@ -4536,10 +4625,11 @@ Crawl-delay: 1`;
       } finally {
         client.release();
       }
-    } catch (error: any) {
-      log.push(`[FATAL ERROR] ${error.message}`);
-      log.push(`[STACK] ${error.stack}`);
-      res.status(500).json({ log, error: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      log.push(`[FATAL ERROR] ${err.message}`);
+      log.push(`[STACK] ${err.stack}`);
+      res.status(500).json({ log, error: err.message });
     }
   });
 
@@ -4548,21 +4638,22 @@ Crawl-delay: 1`;
   // ========================================
 
   // GET /api/admin/improvement-backups - List all improvement backups
-  adminRouter.get("/improvement-backups", async (req: any, res) => {
+  adminRouter.get("/improvement-backups", async (req: Request, res) => {
     try {
       const { originalFileId } = req.query;
       const backups = await storage.getAllMaterialImprovementBackups(
         originalFileId as string | undefined
       );
       res.json(backups);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[IMPROVEMENT-BACKUPS] Error:', error);
-      res.status(500).json({ message: error.message || 'Hiba történt' });
+      res.status(500).json({ message: err.message || 'Hiba történt' });
     }
   });
 
   // GET /api/admin/improvement-backups/:id - Get single backup
-  adminRouter.get("/improvement-backups/:id", async (req: any, res) => {
+  adminRouter.get("/improvement-backups/:id", async (req: Request, res) => {
     try {
       const { id } = req.params;
       const backup = await storage.getMaterialImprovementBackup(id);
@@ -4570,14 +4661,15 @@ Crawl-delay: 1`;
         return res.status(404).json({ message: "Backup nem található" });
       }
       res.json(backup);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[IMPROVEMENT-BACKUP] Error:', error);
-      res.status(500).json({ message: error.message || 'Hiba történt' });
+      res.status(500).json({ message: err.message || 'Hiba történt' });
     }
   });
 
   // POST /api/admin/improvement-backups/:id/restore - Restore from backup
-  adminRouter.post("/improvement-backups/:id/restore", async (req: any, res) => {
+  adminRouter.post("/improvement-backups/:id/restore", async (req: Request, res) => {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
@@ -4591,16 +4683,17 @@ Crawl-delay: 1`;
         restoredFile: result.restoredFile,
         message: 'Fájl sikeresen visszaállítva',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[RESTORE-BACKUP] Error:', error);
       res.status(500).json({
-        message: error.message || 'Hiba történt a visszaállítás során'
+        message: err.message || 'Hiba történt a visszaállítás során'
       });
     }
   });
 
   // DELETE /api/admin/improvement-backups/:id - Delete backup
-  adminRouter.delete("/improvement-backups/:id", async (req: any, res) => {
+  adminRouter.delete("/improvement-backups/:id", async (req: Request, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteMaterialImprovementBackup(id);
@@ -4608,9 +4701,10 @@ Crawl-delay: 1`;
         return res.status(404).json({ message: "Backup nem található" });
       }
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[DELETE-BACKUP] Error:', error);
-      res.status(500).json({ message: error.message || 'Hiba történt' });
+      res.status(500).json({ message: err.message || 'Hiba történt' });
     }
   });
 

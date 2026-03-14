@@ -36,7 +36,7 @@ export type ThemeResponse = z.infer<typeof themeResponseSchema>;
 export type ResponsiveResponse = z.infer<typeof responsiveResponseSchema>;
 
 // Convert Zod schema to Anthropic JSON Schema format
-export function zodToAnthropicSchema(schema: z.ZodType): any {
+export function zodToAnthropicSchema(schema: z.ZodType): unknown {
   // For simple implementation, we'll manually define the schemas
   // In production, you might want to use a library like zod-to-json-schema
   return schema;

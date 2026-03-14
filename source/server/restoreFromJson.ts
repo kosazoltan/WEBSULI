@@ -233,7 +233,8 @@ try {
   const sampleMaterials = db.prepare('SELECT id, title, classroom FROM html_files LIMIT 5').all();
   console.log('\n[RESTORE] Sample materials:');
   for (const mat of sampleMaterials) {
-    console.log(`  - ${(mat as any).title} (Classroom: ${(mat as any).classroom})`);
+    const m = mat as { title: string; classroom: string };
+    console.log(`  - ${m.title} (Classroom: ${m.classroom})`);
   }
 
 } catch (error) {

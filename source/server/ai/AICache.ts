@@ -39,7 +39,7 @@ export class AICache {
   /**
    * Generate cache key from messages
    */
-  generateKey(messages: any[], model: string): string {
+  generateKey(messages: unknown[], model: string): string {
     // Create deterministic string from messages and model
     const content = JSON.stringify({ messages, model });
     return crypto.createHash('sha256').update(content).digest('hex');

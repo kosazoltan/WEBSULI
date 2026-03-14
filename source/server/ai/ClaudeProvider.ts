@@ -61,7 +61,8 @@ export class ClaudeProvider implements IAIProvider {
           totalTokens: response.usage.input_tokens + response.usage.output_tokens,
         },
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       throw this.handleError(error);
     }
   }
@@ -101,7 +102,8 @@ export class ClaudeProvider implements IAIProvider {
       }
 
       yield { type: 'done' };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       if (signal?.aborted) {
         yield {
           type: 'error',
@@ -127,9 +129,9 @@ export class ClaudeProvider implements IAIProvider {
     }
   }
 
-  private handleError(error: any): AIProviderError {
+  private handleError(error: unknown): AIProviderError {
     // Handle abort errors
-    if (error.name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       return new AIProviderTimeoutError(this.name, this.timeout);
     }
 
@@ -150,11 +152,12 @@ export class ClaudeProvider implements IAIProvider {
     }
 
     // Generic error
+    const message = error instanceof Error ? error.message : String(error);
     return new AIProviderError(
       this.name,
-      error.message || 'Unknown error',
+      message || 'Unknown error',
       true,
-      error
+      error instanceof Error ? error : undefined
     );
   }
 }
