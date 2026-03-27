@@ -207,6 +207,7 @@ export default function BlockCraftQuiz() {
   const [blocksMined, setBlocksMined] = useState(0);
   const [rareBlocks, setRareBlocks] = useState(0);
   const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT);
+  const [showTouchControls, setShowTouchControls] = useState(false);
   const scoreSubmittedRef = useRef(false);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
@@ -244,6 +245,19 @@ export default function BlockCraftQuiz() {
     }, 1000);
     return () => clearInterval(id);
   }, [phase]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const media = window.matchMedia("(pointer: coarse)");
+    const update = () => setShowTouchControls(media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
 
   const pickQuiz = useCallback(() => bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!, [bank]);
 
@@ -518,11 +532,11 @@ export default function BlockCraftQuiz() {
     const el = canvasRef.current;
     if (!el) return;
     const parent = el.parentElement;
-    const w = Math.min(460, Math.max(300, parent?.clientWidth ?? 360));
+    const w = Math.min(680, Math.max(320, parent?.clientWidth ?? 380));
     el.width = w;
-    el.height = 340;
+    el.height = 384;
     el.style.width = `${w}px`;
-    el.style.height = "340px";
+    el.style.height = "384px";
   }, []);
 
   useEffect(() => {
@@ -557,26 +571,26 @@ export default function BlockCraftQuiz() {
           <div className="flex items-center gap-2 text-xs font-semibold"><span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{totalXp}</span><span className="flex items-center gap-1 text-lime-300"><Flame className="w-4 h-4" />{streak}</span></div>
         </header>
 
-        <Card className="glass-card border-lime-800/50 bg-slate-900/60 flex-1 flex flex-col min-h-0"><CardContent className="p-3 flex flex-col flex-1 min-h-0">
+        <Card className="border border-lime-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0"><CardContent className="p-3 flex flex-col flex-1 min-h-0">
           <div className="flex items-center gap-2 mb-1"><Box className="w-5 h-5 text-lime-400" /><h1 className="text-base font-extrabold">Kockavadasz kviz</h1></div>
-          <p className="text-[10px] text-white/68 mb-2">Reszletesebb Minecraft-szeru vilag, jobb fenyek, por-reszecskek, mobil iranyitas. Pont csak helyes valaszra jar.</p>
-          <p className="text-[10px] text-lime-100/70 mb-2 border border-lime-800/40 rounded px-2 py-1 bg-black/30">{syncBanner}</p>
+          <p className="text-[11px] text-white/80 mb-2">Minecraft-szeru vilag, reszecske effekt, gyorsabb iranyitas. Pont csak helyes valaszra jar.</p>
+          <p className="text-[11px] text-lime-100/90 mb-2 border border-lime-700/45 rounded px-2 py-1.5 bg-slate-900/95">{syncBanner}</p>
 
-          {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/40 border border-lime-900/50">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-white/65 text-center max-w-xs">A/D vagy nyilak: mozgas, Space: ugras, E: banyaszat-kviz. Mobilon lent gombok.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 font-bold text-white shadow-lg" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Vilag betoltese</Button></div>}
+          {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgas, Space: ugras, E: banyaszat + kviz. Erintokijelzon lent jelennek meg a kontrollok.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Vilag betoltese</Button></div>}
 
-          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[10px] font-medium"><div className="rounded-lg border border-white/15 bg-black/30 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/15 bg-black/30 px-2 py-1.5 text-right">Ido: {timeLeft}s · Erc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-800/60 shadow-[0_0_24px_rgba(34,197,94,0.16)] w-full flex justify-center bg-black"><canvas ref={canvasRef} className="block touch-none" /></div><div className="flex flex-wrap gap-2 justify-center w-full"><Button type="button" variant="outline" size="sm" className="border-lime-700/50 text-white" onClick={tryMine}><Pickaxe className="w-4 h-4 mr-1" />Banyasz (E)</Button><Button type="button" variant="secondary" size="sm" className="bg-amber-900/40 text-amber-100" onClick={endRun}>Kor vege</Button></div></div>}
+          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[11px] font-semibold"><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5 text-right">Ido: {timeLeft}s · Erc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full flex justify-center bg-black"><canvas ref={canvasRef} className="block touch-none" /></div><div className="flex flex-wrap gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 shadow-md" onClick={tryMine}><Pickaxe className="w-4 h-4 mr-1" />Banyasz (E)</Button><Button type="button" size="sm" className="bg-amber-600 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md" onClick={endRun}>Kor vege</Button></div></div>}
 
           {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Banyaszat vege</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Erc: <strong>{rareBlocks}</strong></p>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmeny elkuldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Uj vilag</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
         </CardContent></Card>
       </main>
 
-      {phase === "play" && (
-        <div className="fixed bottom-3 inset-x-0 z-40 flex items-end justify-between px-3 pointer-events-auto">
+      {phase === "play" && showTouchControls && (
+        <div className="fixed bottom-3 inset-x-0 z-40 flex items-end justify-between px-3 pointer-events-auto select-none">
           <div className="flex gap-2">
             <Button
               type="button"
               size="sm"
-              className="touch-none bg-slate-950/90 border border-cyan-200/40 text-cyan-50 hover:bg-slate-900 shadow-md shadow-cyan-900/50"
+              className="touch-none min-w-12 bg-slate-950/95 border border-cyan-200/50 text-cyan-50 hover:bg-slate-900 shadow-md shadow-cyan-900/50"
               onPointerDown={(e) => startHold(e, "left")}
               onPointerUp={(e) => endHold(e, "left")}
               onPointerCancel={(e) => endHold(e, "left")}
@@ -587,7 +601,7 @@ export default function BlockCraftQuiz() {
             <Button
               type="button"
               size="sm"
-              className="touch-none bg-slate-950/90 border border-cyan-200/40 text-cyan-50 hover:bg-slate-900 shadow-md shadow-cyan-900/50"
+              className="touch-none min-w-12 bg-slate-950/95 border border-cyan-200/50 text-cyan-50 hover:bg-slate-900 shadow-md shadow-cyan-900/50"
               onPointerDown={(e) => startHold(e, "right")}
               onPointerUp={(e) => endHold(e, "right")}
               onPointerCancel={(e) => endHold(e, "right")}
@@ -600,7 +614,7 @@ export default function BlockCraftQuiz() {
             <Button
               type="button"
               size="sm"
-              className="touch-none bg-slate-950/90 border border-amber-200/40 text-amber-50 hover:bg-slate-900 shadow-md shadow-amber-900/40"
+              className="touch-none bg-slate-950/95 border border-amber-200/50 text-amber-50 hover:bg-slate-900 shadow-md shadow-amber-900/40"
               onPointerDown={(e) => startHold(e, "jump")}
               onPointerUp={(e) => endHold(e, "jump")}
               onPointerCancel={(e) => endHold(e, "jump")}
@@ -608,7 +622,7 @@ export default function BlockCraftQuiz() {
             >
               Ugras
             </Button>
-            <Button type="button" size="sm" className="bg-lime-700 hover:bg-lime-600 text-white border border-lime-200/30" onClick={tryMine}>
+            <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-100/40 shadow-md" onClick={tryMine}>
               Banyasz
             </Button>
           </div>
