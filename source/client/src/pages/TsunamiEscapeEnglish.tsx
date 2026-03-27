@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -11,23 +11,28 @@ import {
   Flame,
   Star,
   RotateCcw,
+  Wind,
+  Timer,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import CosmicBackground from "@/components/CosmicBackground";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  tsunamiQuizEasyMore,
+  tsunamiQuizHardMore,
+  tsunamiQuizMedMore,
+} from "@/data/englishGameQuizExtras";
+import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
+import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 
 const LS_XP = "websuli-tsunami-en-xp";
 const LS_BEST = "websuli-tsunami-en-best-streak";
 
-type Quiz = {
-  id: string;
-  prompt: string;
-  options: string[];
-  correctIndex: number;
-};
+type Quiz = FourChoiceQuiz;
 
-/** Harmadikos angol: színek, számok, egyszerű szavak, üdvözlet — magyar kérdés, angol válaszok */
+/** 3–5. osztályos angol: alap → közép → nehezebb kérdések a menet előrehaladtával */
 const QUIZ_BANK: Quiz[] = [
   {
     id: "1",
@@ -137,9 +142,70 @@ const QUIZ_BANK: Quiz[] = [
     options: ["white", "blue", "red", "brown"],
     correctIndex: 0,
   },
+  {
+    id: "19",
+    prompt: "Hogy mondjuk angolul: narancssárga (szín)?",
+    options: ["purple", "orange", "brown", "gold"],
+    correctIndex: 1,
+  },
+  {
+    id: "20",
+    prompt: "Hogy mondjuk angolul: lila?",
+    options: ["pink", "gray", "purple", "silver"],
+    correctIndex: 2,
+  },
+  {
+    id: "21",
+    prompt: "Hogy mondjuk angolul: négy (szám)?",
+    options: ["five", "four", "forty", "fourteen"],
+    correctIndex: 1,
+  },
+  {
+    id: "22",
+    prompt: "Hogy mondjuk angolul: hat?",
+    options: ["seven", "eight", "six", "sixty"],
+    correctIndex: 2,
+  },
+  {
+    id: "23",
+    prompt: "Hogy mondjuk angolul: madár?",
+    options: ["bear", "bird", "bee", "boat"],
+    correctIndex: 1,
+  },
+  {
+    id: "24",
+    prompt: "Hogy mondjuk angolul: hal?",
+    options: ["fox", "frog", "fish", "farm"],
+    correctIndex: 2,
+  },
+  {
+    id: "25",
+    prompt: "Hogy mondjuk angolul: tej?",
+    options: ["milk", "meat", "meal", "mouse"],
+    correctIndex: 0,
+  },
+  {
+    id: "26",
+    prompt: "Hogy mondjuk angolul: kenyér?",
+    options: ["butter", "bread", "break", "bridge"],
+    correctIndex: 1,
+  },
+  {
+    id: "27",
+    prompt: "Hogy mondjuk angolul: testvér (általános)?",
+    options: ["cousin", "sibling", "neighbor", "parent"],
+    correctIndex: 1,
+  },
+  {
+    id: "28",
+    prompt: "Mit jelent: Good afternoon?",
+    options: ["Jó reggelt", "Jó estét", "Jó napot (délután)", "Viszlát"],
+    correctIndex: 2,
+  },
+  ...tsunamiQuizEasyMore,
 ];
 
-/** Nehezített mód: több kérdés a poolban */
+/** Közép szakasz (3–4. osztály): napok, hónapok, egyszerű mondatok */
 const HARD_QUIZ_EXTRA: Quiz[] = [
   {
     id: "h1",
@@ -191,18 +257,235 @@ const HARD_QUIZ_EXTRA: Quiz[] = [
   },
 ];
 
+const QUIZ_ADDITIONAL_MED: Quiz[] = [
+  {
+    id: "m1",
+    prompt: "Hogy mondjuk angolul: kedd?",
+    options: ["Thursday", "Tuesday", "Wednesday", "Sunday"],
+    correctIndex: 1,
+  },
+  {
+    id: "m2",
+    prompt: "Hogy mondjuk angolul: csütörtök?",
+    options: ["Tuesday", "Thursday", "Friday", "Saturday"],
+    correctIndex: 1,
+  },
+  {
+    id: "m3",
+    prompt: "Hogy mondjuk angolul: vasárnap?",
+    options: ["Saturday", "Monday", "Sunday", "Friday"],
+    correctIndex: 2,
+  },
+  {
+    id: "m4",
+    prompt: "Hogy mondjuk angolul: február?",
+    options: ["January", "February", "March", "May"],
+    correctIndex: 1,
+  },
+  {
+    id: "m5",
+    prompt: "Hogy mondjuk angolul: augusztus?",
+    options: ["April", "June", "August", "October"],
+    correctIndex: 2,
+  },
+  {
+    id: "m6",
+    prompt: "Hogy mondjuk angolul: tél?",
+    options: ["spring", "summer", "autumn", "winter"],
+    correctIndex: 3,
+  },
+  {
+    id: "m7",
+    prompt: "Hogy mondjuk angolul: tavasz?",
+    options: ["spring", "winter", "summer", "fall"],
+    correctIndex: 0,
+  },
+  {
+    id: "m8",
+    prompt: "Hogy mondjuk angolul: szoba?",
+    options: ["road", "room", "river", "rain"],
+    correctIndex: 1,
+  },
+  {
+    id: "m9",
+    prompt: "Hogy mondjuk angolul: kert?",
+    options: ["game", "gate", "garden", "girl"],
+    correctIndex: 2,
+  },
+  {
+    id: "m10",
+    prompt: "Válaszd ki: We are in the classroom.",
+    options: ["Az osztályteremben vagyunk.", "Az udvaron vagyunk.", "Otthon vagyunk.", "A boltban vagyunk."],
+    correctIndex: 0,
+  },
+  {
+    id: "m11",
+    prompt: "Melyik helyes: „Ő (lány) olvas.”?",
+    options: ["He reads.", "She reads.", "It reads.", "They reads."],
+    correctIndex: 1,
+  },
+  {
+    id: "m12",
+    prompt: "Mit jelent: How are you?",
+    options: ["Hány éves vagy?", "Hogy vagy?", "Mi a neved?", "Honnan jöttél?"],
+    correctIndex: 1,
+  },
+  {
+    id: "m13",
+    prompt: "Hogy mondjuk angolul: esős (idő)?",
+    options: ["snowy", "windy", "rainy", "cloud"],
+    correctIndex: 2,
+  },
+  {
+    id: "m14",
+    prompt: "Hogy mondjuk angolul: hideg (időjárás)?",
+    options: ["hot", "warm", "cold", "cool"],
+    correctIndex: 2,
+  },
+];
+
+const QUIZ_HARD: Quiz[] = [
+  {
+    id: "x1",
+    prompt: "Melyik igeforma illik: She ___ English every day.",
+    options: ["study", "studies", "studying", "studied"],
+    correctIndex: 1,
+  },
+  {
+    id: "x2",
+    prompt: "Melyik helyes: „Tegnap játszottam.”?",
+    options: ["I play yesterday.", "I played yesterday.", "I playing yesterday.", "I plays yesterday."],
+    correctIndex: 1,
+  },
+  {
+    id: "x3",
+    prompt: "Mit jelent: I am eating lunch.",
+    options: ["Ebédelek.", "Ebédeltem.", "Ebédelni fogok.", "Nem eszem."],
+    correctIndex: 0,
+  },
+  {
+    id: "x4",
+    prompt: "Melyik szó a helyes többes szám: one child → two ___",
+    options: ["childs", "children", "childes", "childrens"],
+    correctIndex: 1,
+  },
+  {
+    id: "x5",
+    prompt: "Válaszd ki: bigger =",
+    options: ["kisebb", "nagyobb", "legnagyobb", "közepes"],
+    correctIndex: 1,
+  },
+  {
+    id: "x6",
+    prompt: "Melyik elöljáró illik: I go ___ school every morning.",
+    options: ["in", "on", "to", "at"],
+    correctIndex: 2,
+  },
+  {
+    id: "x7",
+    prompt: "Mit jelent: I must do my homework.",
+    options: ["Lehet, hogy házi lesz.", "Kell megcsinálnom a házi feladatom.", "Nem szeretek házi feladatot.", "Már megcsináltam."],
+    correctIndex: 1,
+  },
+  {
+    id: "x8",
+    prompt: "Melyik mondat helyes?",
+    options: ["He don't like apples.", "He doesn't like apples.", "He not like apples.", "He isn't like apples."],
+    correctIndex: 1,
+  },
+  {
+    id: "x9",
+    prompt: "Hogy mondjuk angolul: unokaöcs / unokanővér (gyerek)?",
+    options: ["cousin", "nephew", "aunt", "neighbor"],
+    correctIndex: 0,
+  },
+  {
+    id: "x10",
+    prompt: "Melyik illik: There ___ many books on the desk.",
+    options: ["is", "are", "am", "be"],
+    correctIndex: 1,
+  },
+  {
+    id: "x11",
+    prompt: "Mit jelent: Could you help me, please?",
+    options: ["Kérlek, segíts!", "Nem kérek segítséget.", "Tudsz segíteni, kérlek?", "Ne zavarj!"],
+    correctIndex: 2,
+  },
+  {
+    id: "x12",
+    prompt: "Melyik szinonima illik: The weather is very bad — it is ___.",
+    options: ["sunny", "terrible", "lovely", "warm"],
+    correctIndex: 1,
+  },
+  {
+    id: "x13",
+    prompt: "Válaszd ki: „Holnap megyünk a múzeumba.”",
+    options: ["We go to the museum tomorrow.", "We went to the museum tomorrow.", "We going museum tomorrow.", "We are go museum tomorrow."],
+    correctIndex: 0,
+  },
+  {
+    id: "x14",
+    prompt: "Melyik helyes: „Nem voltam otthon tegnap.”?",
+    options: ["I wasn't at home yesterday.", "I am not at home yesterday.", "I not was home yesterday.", "I didn't be home yesterday."],
+    correctIndex: 0,
+  },
+  ...tsunamiQuizHardMore,
+];
+
+const QUIZ_MED: Quiz[] = [...HARD_QUIZ_EXTRA, ...QUIZ_ADDITIONAL_MED, ...tsunamiQuizMedMore];
+
 type GameDifficulty = "easy" | "normal" | "hard";
 
 const PRESETS: Record<
   GameDifficulty,
   { waterRisePerSec: number; quizEverySec: number; waterPush: number; xpPerCorrect: number; runBonus: number }
 > = {
-  easy: { waterRisePerSec: 3, quizEverySec: 18, waterPush: 28, xpPerCorrect: 25, runBonus: 2 },
-  normal: { waterRisePerSec: 4.5, quizEverySec: 14, waterPush: 22, xpPerCorrect: 25, runBonus: 2 },
-  hard: { waterRisePerSec: 6.8, quizEverySec: 9, waterPush: 16, xpPerCorrect: 32, runBonus: 2 },
+  easy: { waterRisePerSec: 2.15, quizEverySec: 26, waterPush: 28, xpPerCorrect: 25, runBonus: 2 },
+  normal: { waterRisePerSec: 3.35, quizEverySec: 20, waterPush: 22, xpPerCorrect: 26, runBonus: 2 },
+  hard: { waterRisePerSec: 4.85, quizEverySec: 14, waterPush: 16, xpPerCorrect: 34, runBonus: 2 },
 };
 
-type Phase = "menu" | "play" | "quiz" | "over";
+/** Ennyi helyes kvíz egy körben = győzelem (nem a hullám üzenet) */
+const WIN_QUIZ_COUNT: Record<GameDifficulty, number> = {
+  easy: 24,
+  normal: 32,
+  hard: 40,
+};
+
+const WIN_BONUS_XP = 150;
+const SAFE_ZONE_BONUS_XP = 6;
+const QUIZ_TIMEOUT_SEC: Record<GameDifficulty, number> = {
+  easy: 14,
+  normal: 11,
+  hard: 9,
+};
+const QUIZ_WRONG_WATER_PENALTY: Record<GameDifficulty, number> = {
+  easy: 4,
+  normal: 6,
+  hard: 8,
+};
+
+function winQuizTarget(d: GameDifficulty): number {
+  return WIN_QUIZ_COUNT[d];
+}
+
+function shuffleQuiz(q: Quiz): Quiz {
+  const indexed = q.options.map((opt, idx) => ({ opt, idx }));
+  for (let i = indexed.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = indexed[i]!;
+    indexed[i] = indexed[j]!;
+    indexed[j] = tmp;
+  }
+  const correctIndex = indexed.findIndex((x) => x.idx === q.correctIndex);
+  return {
+    ...q,
+    options: indexed.map((x) => x.opt),
+    correctIndex: correctIndex < 0 ? 0 : correctIndex,
+  };
+}
+
+type Phase = "menu" | "play" | "quiz" | "over" | "won";
 
 type SyncEligibility = { eligible: boolean; reason?: string };
 
@@ -244,15 +527,47 @@ export default function TsunamiEscapeEnglish() {
   const [wrongShake, setWrongShake] = useState(false);
   const [rewardBurst, setRewardBurst] = useState(false);
   const [lastQuizXp, setLastQuizXp] = useState(25);
+  const [correctQuizzesInRun, setCorrectQuizzesInRun] = useState(0);
+  const [safeZoneX, setSafeZoneX] = useState(50);
+  const [quizTimeLeft, setQuizTimeLeft] = useState(QUIZ_TIMEOUT_SEC.normal);
+  const [stormFlash, setStormFlash] = useState(false);
+  const [driftDir, setDriftDir] = useState(0);
 
-  const keysRef = useRef({ left: false, right: false });
+  const keysRef = useRef({ left: false, right: false, sprint: false });
   const lastRef = useRef<number | null>(null);
   const quizTimerRef = useRef(0);
   const runTimerRef = useRef(0);
+  const safeZoneTimerRef = useRef(0);
+  const stormTimerRef = useRef(0);
+  const recentQuizIdsRef = useRef<string[]>([]);
+  const driftDirRef = useRef(0);
   const rafRef = useRef<number>(0);
   const paramsRef = useRef(PRESETS.normal);
   const runDifficultyRef = useRef<GameDifficulty>("normal");
+  const correctQuizCountRef = useRef(0);
   const scoreSubmittedRef = useRef(false);
+
+  const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
+    queryKey: ["/api/games/quiz-bank/tsunami-english"],
+    queryFn: async () => {
+      const r = await fetch("/api/games/quiz-bank/tsunami-english", { credentials: "include" });
+      if (!r.ok) return { gameId: "tsunami-english", items: [] };
+      return r.json() as Promise<GameQuizBankResponse>;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const mergedPools = useMemo(() => {
+    const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
+    return {
+      easy: [...QUIZ_BANK, ...easy],
+      med: [...QUIZ_MED, ...medium],
+      hard: [...QUIZ_HARD, ...hard],
+    };
+  }, [quizBankResponse]);
+
+  const mergedPoolsRef = useRef(mergedPools);
+  mergedPoolsRef.current = mergedPools;
 
   const { data: syncEligibility } = useQuery<SyncEligibility>({
     queryKey: ["/api/games/sync-eligibility"],
@@ -276,10 +591,36 @@ export default function TsunamiEscapeEnglish() {
   }, [syncEligibility]);
 
   const pickQuiz = useCallback((): Quiz => {
-    const hard = runDifficultyRef.current === "hard";
-    const pool = hard ? [...QUIZ_BANK, ...HARD_QUIZ_EXTRA] : QUIZ_BANK;
-    const idx = Math.floor(Math.random() * pool.length);
-    return pool[idx]!;
+    const d = runDifficultyRef.current;
+    const target = winQuizTarget(d);
+    const done = correctQuizCountRef.current;
+    const p = target > 0 ? Math.min(1, done / target) : 0;
+    let eff = p;
+    if (d === "hard") eff = Math.min(1, p * 1.22);
+    if (d === "easy") eff = p * 0.78;
+
+    const { easy: poolE, med: poolM, hard: poolH } = mergedPoolsRef.current;
+    let pool: Quiz[];
+    if (eff < 0.32) pool = [...poolE];
+    else if (eff < 0.58) pool = [...poolE, ...poolM];
+    else if (eff < 0.82) pool = [...poolM, ...poolH];
+    else pool = [...poolH];
+
+    if (pool.length === 0) pool = [...poolE];
+
+    const recent = recentQuizIdsRef.current;
+    let selected = pool[Math.floor(Math.random() * pool.length)]!;
+    if (pool.length > 3) {
+      for (let tries = 0; tries < 8; tries++) {
+        const cand = pool[Math.floor(Math.random() * pool.length)]!;
+        if (!recent.includes(cand.id)) {
+          selected = cand;
+          break;
+        }
+      }
+    }
+    recentQuizIdsRef.current = [...recent.slice(-4), selected.id];
+    return shuffleQuiz(selected);
   }, []);
 
   const startGame = useCallback(() => {
@@ -291,8 +632,18 @@ export default function TsunamiEscapeEnglish() {
     setRunSeconds(0);
     setStreak(0);
     setSessionXp(0);
+    setCorrectQuizzesInRun(0);
+    setSafeZoneX(50);
+    setQuizTimeLeft(QUIZ_TIMEOUT_SEC[difficulty]);
+    setStormFlash(false);
+    setDriftDir(0);
+    driftDirRef.current = 0;
+    correctQuizCountRef.current = 0;
+    recentQuizIdsRef.current = [];
     quizTimerRef.current = 0;
     runTimerRef.current = 0;
+    safeZoneTimerRef.current = 0;
+    stormTimerRef.current = 0;
     lastRef.current = null;
     setQuiz(null);
     setPhase("play");
@@ -324,18 +675,58 @@ export default function TsunamiEscapeEnglish() {
     const down = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keysRef.current.left = true;
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keysRef.current.right = true;
+      if (e.key === "Shift") keysRef.current.sprint = true;
     };
     const up = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keysRef.current.left = false;
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keysRef.current.right = false;
+      if (e.key === "Shift") keysRef.current.sprint = false;
+    };
+    const reset = () => {
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+      keysRef.current.sprint = false;
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    window.addEventListener("blur", reset);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", reset);
     };
   }, []);
+
+  useEffect(() => {
+    if (phase === "play") return;
+    keysRef.current.left = false;
+    keysRef.current.right = false;
+    keysRef.current.sprint = false;
+  }, [phase]);
+
+  const setControlState = useCallback((key: "left" | "right" | "sprint", active: boolean) => {
+    keysRef.current[key] = active;
+  }, []);
+
+  const pressStart = useCallback(
+    (e: ReactPointerEvent<HTMLButtonElement>, key: "left" | "right" | "sprint") => {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setControlState(key, true);
+    },
+    [setControlState],
+  );
+
+  const pressEnd = useCallback(
+    (e: ReactPointerEvent<HTMLButtonElement>, key: "left" | "right" | "sprint") => {
+      e.preventDefault();
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+      setControlState(key, false);
+    },
+    [setControlState],
+  );
 
   const gameLoop = useCallback(
     (t: number) => {
@@ -346,9 +737,24 @@ export default function TsunamiEscapeEnglish() {
       const dt = last == null ? 0 : Math.min(0.05, (t - last) / 1000);
 
       const P = paramsRef.current;
+      const target = winQuizTarget(runDifficultyRef.current);
+      const prog = target > 0 ? Math.min(1, correctQuizCountRef.current / target) : 0;
+      const waterStress = Math.pow(prog, 1.42);
+      const currentPush = Math.sin(t * 0.0017) * (4 + waterStress * 18);
+      const driftSign = currentPush >= 0 ? 1 : -1;
+      if (driftSign !== driftDirRef.current) {
+        driftDirRef.current = driftSign;
+        setDriftDir(driftSign);
+      }
+      const floorQuizSec = runDifficultyRef.current === "hard" ? 4.6 : runDifficultyRef.current === "normal" ? 5.8 : 7.8;
+      const quizCurve = Math.pow(prog, 1.38);
+      const quizEveryDyn = Math.max(floorQuizSec, P.quizEverySec * (1.34 - quizCurve * 0.8));
+      const inSafeZone = Math.abs(playerX - safeZoneX) <= 9;
+      const safeZoneFactor = inSafeZone ? 0.74 : 1.04;
+      const waterRise = P.waterRisePerSec * (0.62 + waterStress * 1.18) * safeZoneFactor;
 
       setWater((w) => {
-        let next = w + P.waterRisePerSec * dt;
+        let next = w + waterRise * dt;
         const maxPct = 88;
         if (next >= maxPct) {
           queueMicrotask(endGame);
@@ -359,15 +765,34 @@ export default function TsunamiEscapeEnglish() {
 
       setPlayerX((x) => {
         let nx = x;
-        if (keysRef.current.left) nx -= 38 * dt;
-        if (keysRef.current.right) nx += 38 * dt;
+        const sprintMult = keysRef.current.sprint ? 1.5 : 1;
+        if (keysRef.current.left) nx -= 38 * sprintMult * dt;
+        if (keysRef.current.right) nx += 38 * sprintMult * dt;
+        nx += currentPush * dt;
         return Math.max(8, Math.min(92, nx));
       });
 
+      safeZoneTimerRef.current += dt;
+      const safeZoneEvery = runDifficultyRef.current === "hard" ? 5.2 : runDifficultyRef.current === "normal" ? 6.3 : 7.6;
+      if (safeZoneTimerRef.current >= safeZoneEvery) {
+        safeZoneTimerRef.current = 0;
+        setSafeZoneX(16 + Math.random() * 68);
+      }
+
+      stormTimerRef.current += dt;
+      if (stormTimerRef.current >= (runDifficultyRef.current === "hard" ? 5.6 : 7.2)) {
+        stormTimerRef.current = 0;
+        if (Math.random() < 0.42 + prog * 0.3) {
+          setStormFlash(true);
+          setTimeout(() => setStormFlash(false), 170);
+        }
+      }
+
       quizTimerRef.current += dt;
-      if (quizTimerRef.current >= P.quizEverySec) {
+      if (quizTimerRef.current >= quizEveryDyn) {
         quizTimerRef.current = 0;
         setQuiz(pickQuiz());
+        setQuizTimeLeft(QUIZ_TIMEOUT_SEC[runDifficultyRef.current]);
         setPhase("quiz");
         return;
       }
@@ -375,7 +800,7 @@ export default function TsunamiEscapeEnglish() {
       runTimerRef.current += dt;
       if (runTimerRef.current >= 1) {
         runTimerRef.current -= 1;
-        const bonus = P.runBonus;
+        const bonus = P.runBonus + (inSafeZone ? SAFE_ZONE_BONUS_XP : 0);
         setRunSeconds((s) => s + 1);
         setSessionXp((xp) => xp + bonus);
         setTotalXp((tx) => tx + bonus);
@@ -383,7 +808,7 @@ export default function TsunamiEscapeEnglish() {
 
       rafRef.current = requestAnimationFrame(gameLoop);
     },
-    [phase, pickQuiz, endGame],
+    [phase, pickQuiz, endGame, playerX, safeZoneX],
   );
 
   useEffect(() => {
@@ -400,8 +825,14 @@ export default function TsunamiEscapeEnglish() {
     if (!quiz) return;
     if (index !== quiz.correctIndex) {
       setWrongShake(true);
-      setTimeout(() => setWrongShake(false), 400);
+      setTimeout(() => setWrongShake(false), 320);
       setStreak(0);
+      setWater((w) => Math.min(88, w + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current]));
+      setTimeout(() => {
+        setQuiz(null);
+        setPhase("play");
+        lastRef.current = null;
+      }, 280);
       return;
     }
 
@@ -418,15 +849,50 @@ export default function TsunamiEscapeEnglish() {
       return n;
     });
     setWater((w) => Math.max(5, w - paramsRef.current.waterPush));
+
+    correctQuizCountRef.current += 1;
+    const nCorrect = correctQuizCountRef.current;
+    setCorrectQuizzesInRun(nCorrect);
+
+    const need = winQuizTarget(runDifficultyRef.current);
+    if (nCorrect >= need) {
+      setSessionXp((x) => x + WIN_BONUS_XP);
+      setTotalXp((t) => t + WIN_BONUS_XP);
+      setQuiz(null);
+      cancelAnimationFrame(rafRef.current);
+      lastRef.current = null;
+      setPhase("won");
+      return;
+    }
+
     setQuiz(null);
     setPhase("play");
     lastRef.current = null;
   };
 
+  useEffect(() => {
+    if (phase !== "quiz") return;
+    const id = setInterval(() => {
+      setQuizTimeLeft((prev) => {
+        if (prev <= 1) {
+          setWrongShake(true);
+          setTimeout(() => setWrongShake(false), 220);
+          setStreak(0);
+          setWater((w) => Math.min(88, w + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current]));
+          setQuiz(null);
+          setPhase("play");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [phase]);
+
   const surfacePct = useMemo(() => Math.min(100, water), [water]);
 
   useEffect(() => {
-    if (phase !== "over") return;
+    if (phase !== "over" && phase !== "won") return;
     if (!syncEligibility?.eligible) return;
     if (scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
@@ -487,8 +953,12 @@ export default function TsunamiEscapeEnglish() {
               </h1>
             </div>
             <p className="text-[11px] sm:text-xs text-white/65 mb-2 leading-snug">
-              A víz egyre feljebb jön. Időnként kvíz jön: csak helyes válasszal kapsz nagy XP-t és
-              visszanyomod a hullámot. Billentyű: A/D vagy nyilak. Telefonon: gombok.
+              A víz egyre feljebb jön, az áramlás sodor, és mozgó biztonsági zónákban tudsz stabilabban túlélni.
+              Kvízeknél helyes válasz: XP + hullám vissza.{" "}
+              <strong className="text-amber-200/90">
+                {winQuizTarget(difficulty)} helyes kvíz egy körben = győzelem
+              </strong>{" "}
+              (bónusz XP) — különben, ha túl magasra ér a víz, vége a körnek.
             </p>
             <p className="text-[10px] text-cyan-200/80 mb-3 leading-snug border border-cyan-500/25 rounded-lg px-2 py-1.5 bg-cyan-950/30">
               {syncBanner}
@@ -557,60 +1027,170 @@ export default function TsunamiEscapeEnglish() {
             )}
 
             {(phase === "play" || phase === "quiz") && (
-              <div className="relative flex-1 min-h-[320px] rounded-xl overflow-hidden border border-white/15 bg-gradient-to-b from-sky-900/80 to-slate-950">
-                {/* Tower / sky */}
+              <div className="relative flex-1 min-h-[340px] rounded-2xl overflow-hidden border border-cyan-400/25 shadow-[0_0_40px_rgba(34,211,238,0.12)]">
+                {/* Ég + nap */}
                 <div
-                  className="absolute inset-0 opacity-40"
+                  className="absolute inset-0"
                   style={{
                     background:
-                      "repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(255,255,255,0.04) 28px, rgba(255,255,255,0.04) 29px)",
+                      "linear-gradient(165deg, #38bdf8 0%, #7dd3fc 22%, #bae6fd 42%, #e0f2fe 58%, #94a3b8 78%, #334155 100%)",
                   }}
                 />
-                <div className="absolute top-3 left-0 right-0 flex justify-center">
-                  <span className="text-[10px] uppercase tracking-widest text-white/50">Menekülés felfelé</span>
+                <div
+                  className="absolute w-24 h-24 rounded-full pointer-events-none opacity-90"
+                  style={{
+                    top: "6%",
+                    right: "8%",
+                    background: "radial-gradient(circle, #fff9e6 0%, #fde68a 35%, transparent 70%)",
+                    filter: "blur(0.5px)",
+                    boxShadow: "0 0 60px rgba(253,224,71,0.5)",
+                  }}
+                />
+                {/* Felhők */}
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    className="absolute rounded-full bg-white/50 blur-sm pointer-events-none"
+                    style={{
+                      width: `${56 + i * 24}px`,
+                      height: `${22 + i * 6}px`,
+                      top: `${12 + i * 14}%`,
+                      left: `${8 + i * 28}%`,
+                    }}
+                    animate={{ x: [0, 16 + i * 8, 0], opacity: [0.45, 0.7, 0.45] }}
+                    transition={{ duration: 10 + i * 4, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                ))}
+                {/* Távoli hegyek */}
+                <div
+                  className="absolute bottom-[38%] left-0 right-0 h-[28%] opacity-35 pointer-events-none"
+                  style={{
+                    background:
+                      "linear-gradient(to top, #1e293b 0%, transparent 100%)",
+                    clipPath: "polygon(0 100%, 0 60%, 15% 45%, 30% 70%, 45% 40%, 60% 65%, 75% 35%, 90% 55%, 100% 45%, 100% 100%)",
+                  }}
+                />
+                <div
+                  className="absolute inset-0 opacity-30"
+                  style={{
+                    background:
+                      "repeating-linear-gradient(90deg, transparent, transparent 26px, rgba(255,255,255,0.06) 26px, rgba(255,255,255,0.06) 27px)",
+                  }}
+                />
+                <div className="absolute top-3 left-0 right-0 flex justify-center z-10">
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-slate-800/80 font-bold drop-shadow-sm">
+                    Menekülés felfelé
+                  </span>
                 </div>
-                <div className="absolute top-8 left-2 text-[11px] text-white/60">
-                  Futás: {runSeconds}s · {difficultyLabel(runDifficultyRef.current)}
+                <div className="absolute top-9 left-2 right-2 text-[11px] text-slate-900/75 font-semibold z-10 drop-shadow-sm flex flex-wrap gap-x-2 gap-y-0.5 justify-between">
+                  <span>
+                    Futás: {runSeconds}s · {difficultyLabel(runDifficultyRef.current)}
+                  </span>
+                  <span className="text-emerald-900 font-bold">
+                    Győzelem: {correctQuizzesInRun}/{winQuizTarget(runDifficultyRef.current)} kvíz
+                  </span>
+                </div>
+                <div className="absolute top-[58px] left-2 right-2 text-[10px] text-slate-800/90 font-semibold z-10 flex justify-between">
+                  <span className="inline-flex items-center gap-1">
+                    <Wind className="w-3 h-3" />
+                    Sodrás: {driftDir >= 0 ? "jobbra" : "balra"}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-emerald-900">
+                    <Shield className="w-3 h-3" />
+                    Biztonsági zóna aktív
+                  </span>
                 </div>
 
-                {/* Platforms */}
+                {/* Erkélyek / platformok */}
                 {[18, 38, 58, 78].map((top) => (
                   <div
                     key={top}
-                    className="absolute left-[10%] right-[10%] h-2 rounded-full bg-white/25"
-                    style={{ top: `${top}%` }}
+                    className="absolute left-[8%] right-[8%] h-3 rounded-md z-[5]"
+                    style={{
+                      top: `${top}%`,
+                      background: "linear-gradient(180deg, #cbd5e1 0%, #64748b 40%, #475569 100%)",
+                      boxShadow: "0 4px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)",
+                    }}
                   />
                 ))}
-
-                {/* Player */}
                 <motion.div
-                  className="absolute w-10 h-10 flex items-center justify-center text-2xl select-none"
+                  className="absolute z-[7] top-[63%] h-2 rounded-full bg-emerald-300/90 border border-emerald-100/80"
+                  style={{
+                    left: `${Math.max(8, safeZoneX - 8)}%`,
+                    width: "16%",
+                    boxShadow: "0 0 20px rgba(16,185,129,0.55)",
+                  }}
+                  animate={{ opacity: [0.55, 0.95, 0.55] }}
+                  transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                />
+
+                {/* Játékos (pixel-szerű figura) */}
+                <motion.div
+                  className="absolute z-20 flex flex-col items-center select-none"
                   style={{
                     left: `${playerX}%`,
-                    bottom: `calc(${surfacePct}% + 12px)`,
+                    bottom: `calc(${surfacePct}% + 14px)`,
                     translateX: "-50%",
                   }}
-                  animate={phase === "play" ? { y: [0, -4, 0] } : {}}
-                  transition={{ repeat: Infinity, duration: 0.6, ease: "easeInOut" }}
+                  animate={phase === "play" ? { y: [0, -5, 0] } : {}}
+                  transition={{ repeat: Infinity, duration: 0.55, ease: "easeInOut" }}
                 >
-                  🏃
+                  <div className="relative drop-shadow-[0_4px_6px_rgba(0,0,0,0.35)]">
+                    <div className="w-7 h-2.5 bg-amber-950/90 rounded-t-sm mx-auto" />
+                    <div className="w-8 h-7 bg-amber-800 rounded-sm mx-auto -mt-0.5 border border-amber-950/50" />
+                    <div className="w-9 h-10 bg-orange-600 rounded-sm mx-auto -mt-0.5 border-x border-orange-800" />
+                    <div className="flex gap-1 justify-center -mt-0.5">
+                      <div className="w-3.5 h-5 bg-indigo-700 rounded-sm border border-indigo-900" />
+                      <div className="w-3.5 h-5 bg-indigo-700 rounded-sm border border-indigo-900" />
+                    </div>
+                  </div>
                 </motion.div>
 
-                {/* Water */}
+                {/* Víz + hullám */}
                 <div
-                  className="absolute left-0 right-0 bottom-0 pointer-events-none transition-[height] duration-100 ease-linear"
-                  style={{
-                    height: `${surfacePct}%`,
-                    background: `linear-gradient(to top, rgba(8,47,73,0.95), rgba(14,165,233,0.65), rgba(125,211,252,0.35))`,
-                    boxShadow: "0 -8px 40px rgba(34,211,238,0.35)",
-                  }}
+                  className="absolute left-0 right-0 bottom-0 pointer-events-none transition-[height] duration-100 ease-linear z-[4]"
+                  style={{ height: `${surfacePct}%` }}
                 >
-                  <div className="absolute top-0 left-0 right-0 h-3 -translate-y-1/2 rounded-full bg-cyan-300/50 blur-sm" />
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background:
+                        "linear-gradient(to top, #0c4a6e 0%, #0369a1 35%, #0ea5e9 65%, rgba(125,211,252,0.85) 100%)",
+                    }}
+                  />
+                  <motion.div
+                    className="absolute left-0 right-0 top-0 h-6 opacity-70"
+                    style={{
+                      background:
+                        "repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(255,255,255,0.15) 18px, rgba(255,255,255,0.15) 36px)",
+                    }}
+                    animate={{ x: [0, -36, 0] }}
+                    transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
+                  />
+                  <div
+                    className="absolute top-0 left-0 right-0 h-4 -translate-y-1/2 rounded-full bg-cyan-200/60 blur-md"
+                    style={{ boxShadow: "0 -12px 32px rgba(34,211,238,0.45)" }}
+                  />
                 </div>
+                {[...Array(18)].map((_, i) => (
+                  <motion.div
+                    key={`rain-${i}`}
+                    className="absolute w-[2px] h-10 bg-cyan-100/45 z-[6] pointer-events-none"
+                    style={{ left: `${4 + i * 5.2}%`, top: "-10%" }}
+                    animate={{ y: ["0%", "470%"], opacity: [0.1, 0.55, 0.1] }}
+                    transition={{
+                      duration: 1 + (i % 4) * 0.22,
+                      repeat: Infinity,
+                      ease: "linear",
+                      delay: (i % 5) * 0.1,
+                    }}
+                  />
+                ))}
+                {stormFlash && <div className="absolute inset-0 z-[25] bg-white/35 pointer-events-none" />}
 
                 {rewardBurst && (
                   <motion.div
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none text-4xl"
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none text-4xl z-30"
                     initial={{ scale: 0.5, opacity: 0 }}
                     animate={{ scale: 1.2, opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -622,27 +1202,16 @@ export default function TsunamiEscapeEnglish() {
             )}
 
             {phase === "play" && (
-              <div className="flex gap-3 justify-center mt-3">
+              <div className="grid grid-cols-3 gap-2 mt-3">
                 <Button
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="flex-1 h-14 border-white/30 bg-white/5 text-white hover:bg-white/15 active:scale-95"
-                  onTouchStart={() => {
-                    keysRef.current.left = true;
-                  }}
-                  onTouchEnd={() => {
-                    keysRef.current.left = false;
-                  }}
-                  onMouseDown={() => {
-                    keysRef.current.left = true;
-                  }}
-                  onMouseUp={() => {
-                    keysRef.current.left = false;
-                  }}
-                  onMouseLeave={() => {
-                    keysRef.current.left = false;
-                  }}
+                  className="h-14 touch-none border-cyan-200/45 bg-slate-950/85 text-cyan-50 hover:bg-slate-900 active:scale-95 shadow-md shadow-cyan-900/50"
+                  onPointerDown={(e) => pressStart(e, "left")}
+                  onPointerUp={(e) => pressEnd(e, "left")}
+                  onPointerCancel={(e) => pressEnd(e, "left")}
+                  onPointerLeave={(e) => pressEnd(e, "left")}
                   aria-label="Balra"
                 >
                   <ArrowBigLeft className="w-8 h-8" />
@@ -651,26 +1220,64 @@ export default function TsunamiEscapeEnglish() {
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="flex-1 h-14 border-white/30 bg-white/5 text-white hover:bg-white/15 active:scale-95"
-                  onTouchStart={() => {
-                    keysRef.current.right = true;
-                  }}
-                  onTouchEnd={() => {
-                    keysRef.current.right = false;
-                  }}
-                  onMouseDown={() => {
-                    keysRef.current.right = true;
-                  }}
-                  onMouseUp={() => {
-                    keysRef.current.right = false;
-                  }}
-                  onMouseLeave={() => {
-                    keysRef.current.right = false;
-                  }}
+                  className="h-14 touch-none border-amber-200/55 bg-amber-600/85 text-white hover:bg-amber-500 active:scale-95 shadow-md shadow-amber-900/60"
+                  onPointerDown={(e) => pressStart(e, "sprint")}
+                  onPointerUp={(e) => pressEnd(e, "sprint")}
+                  onPointerCancel={(e) => pressEnd(e, "sprint")}
+                  onPointerLeave={(e) => pressEnd(e, "sprint")}
+                  aria-label="Sprint"
+                >
+                  <Wind className="w-7 h-7" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-14 touch-none border-cyan-200/45 bg-slate-950/85 text-cyan-50 hover:bg-slate-900 active:scale-95 shadow-md shadow-cyan-900/50"
+                  onPointerDown={(e) => pressStart(e, "right")}
+                  onPointerUp={(e) => pressEnd(e, "right")}
+                  onPointerCancel={(e) => pressEnd(e, "right")}
+                  onPointerLeave={(e) => pressEnd(e, "right")}
                   aria-label="Jobbra"
                 >
                   <ArrowBigRight className="w-8 h-8" />
                 </Button>
+              </div>
+            )}
+
+            {phase === "won" && (
+              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center">
+                <Trophy className="w-16 h-16 text-amber-300 drop-shadow-lg" />
+                <p className="text-xl font-black text-amber-200">Sikerült elmenekülni!</p>
+                <p className="text-sm text-white/80 max-w-xs">
+                  {correctQuizzesInRun} helyes kvíz · +{WIN_BONUS_XP} győzelmi bónusz XP · összesen ebben a körben:{" "}
+                  <strong className="text-amber-300">{sessionXp}</strong> XP
+                </p>
+                <p className="text-xs text-white/60">
+                  Futás: {runSeconds} mp · {difficultyLabel(runDifficultyRef.current)}
+                </p>
+                {syncEligibility?.eligible ? (
+                  <p className="text-xs text-emerald-300/90">
+                    A kör eredménye fel lett küldve a szervernek (ranglista frissülhet néhány másodperc alatt).
+                  </p>
+                ) : (
+                  <p className="text-xs text-white/45 max-w-xs mx-auto">{syncBanner}</p>
+                )}
+                <div className="flex flex-wrap gap-2 justify-center mt-2">
+                  <Button
+                    className="gap-1 bg-gradient-to-r from-amber-500 to-orange-600"
+                    onClick={startGame}
+                    data-testid="button-tsunami-retry-won"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Következő kör
+                  </Button>
+                  <Link href="/games">
+                    <Button variant="outline" className="border-white/40 text-white hover:bg-white/10">
+                      Játéklista
+                    </Button>
+                  </Link>
+                </div>
               </div>
             )}
 
@@ -680,7 +1287,8 @@ export default function TsunamiEscapeEnglish() {
                 <p className="text-lg font-bold">Elért a hullám!</p>
                 <p className="text-sm text-white/70">
                   Szekció XP: <strong className="text-amber-300">{sessionXp}</strong> · Futás:{" "}
-                  <strong>{runSeconds}</strong> mp · {difficultyLabel(runDifficultyRef.current)}
+                  <strong>{runSeconds}</strong> mp · {difficultyLabel(runDifficultyRef.current)} · helyes kvíz:{" "}
+                  {correctQuizzesInRun}/{winQuizTarget(runDifficultyRef.current)}
                 </p>
                 {syncEligibility?.eligible ? (
                   <p className="text-xs text-emerald-300/90">
@@ -725,7 +1333,17 @@ export default function TsunamiEscapeEnglish() {
                 wrongShake ? "animate-shake" : ""
               }`}
             >
-              <p className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-2">Kvíz — helyes válasz = XP + hullám vissza</p>
+              <p className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-1">
+                Kvíz — helyes válasz = XP + hullám vissza
+              </p>
+              <p className="text-[11px] text-amber-200/90 mb-1 inline-flex items-center gap-1">
+                <Timer className="w-3 h-3" />
+                Idő: {quizTimeLeft}s
+              </p>
+              <p className="text-[11px] text-emerald-300/90 mb-2">
+                Győzelemhez még:{" "}
+                {Math.max(0, winQuizTarget(runDifficultyRef.current) - correctQuizzesInRun)} helyes válasz ebben a körben
+              </p>
               <p className="text-base font-semibold mb-4 leading-snug">{quiz.prompt}</p>
               <div className="grid gap-2">
                 {quiz.options.map((opt, i) => (
@@ -739,7 +1357,9 @@ export default function TsunamiEscapeEnglish() {
                   </Button>
                 ))}
               </div>
-              <p className="text-[11px] text-white/50 mt-3 text-center">Rossz válasz: nincs jutalom — próbáld újra ugyanazt!</p>
+              <p className="text-[11px] text-white/50 mt-3 text-center">
+                Rossz válasz vagy lejárt idő: vízszint-büntetés, majd vissza a futáshoz.
+              </p>
             </motion.div>
           </motion.div>
         )}

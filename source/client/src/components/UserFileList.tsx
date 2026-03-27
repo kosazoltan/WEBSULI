@@ -129,7 +129,11 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
         <div className="container py-12 relative z-10">
           {onToggleView && (
             <div className="flex justify-end mb-6">
-              <Button onClick={onToggleView} variant="outline" data-testid="button-toggle-admin-view">
+              <Button
+                onClick={onToggleView}
+                data-testid="button-toggle-admin-view"
+                className="h-8 px-3 text-xs font-semibold gap-1 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white border border-rose-200/25 rounded-full shadow-lg"
+              >
                 <ShieldCheck className="w-4 h-4 mr-2" />
                 Admin nézet
               </Button>

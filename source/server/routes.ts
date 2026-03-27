@@ -16,6 +16,7 @@ import { sanitizeText, sanitizeHtml, sanitizeEmail, sanitizeUserAgent, sanitizeU
 // Admin authentication with hardcoded admin emails
 import { setupAuth, isAuthenticated, isAuthenticatedAdmin } from "./auth";
 import * as gameScoreService from "./gameScoreService";
+import * as gameQuizBankService from "./gameQuizBankService";
 // checkIsAdmin import removed
 
 import { db } from "./db";
@@ -663,6 +664,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e) {
       console.error("[GAMES] catalog", e);
       res.status(500).json({ message: "Nem sikerült betölteni a játéklistát." });
+    }
+  });
+
+  /** Nyilvános: játék kvíz-bank (Neon `game_quiz_items` + kliens statikus fallback) */
+  app.get("/api/games/quiz-bank/:gameId", async (req, res) => {
+    try {
+      const gameId = typeof req.params.gameId === "string" ? req.params.gameId : "";
+      const rows = await gameQuizBankService.listGameQuizBank(gameId);
+      res.json({
+        gameId,
+        items: rows.map((r) => ({
+          id: r.id,
+          tier: r.tier,
+          topic: r.topic,
+          prompt: r.prompt,
+          options: r.options,
+          correctIndex: r.correctIndex,
+          sourceMaterialId: r.sourceMaterialId,
+        })),
+      });
+    } catch (e) {
+      console.error("[GAMES] quiz-bank", e);
+      res.json({ gameId: typeof req.params.gameId === "string" ? req.params.gameId : "", items: [] });
     }
   });
 

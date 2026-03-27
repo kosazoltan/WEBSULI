@@ -17,6 +17,9 @@ const AdminStats = lazy(() => import("@/pages/AdminStats"));
 const AdminDocumentation = lazy(() => import("@/pages/AdminDocumentation"));
 const Games = lazy(() => import("@/pages/Games"));
 const TsunamiEscapeEnglish = lazy(() => import("@/pages/TsunamiEscapeEnglish"));
+const WordLadderHuEn = lazy(() => import("@/pages/WordLadderHuEn"));
+const BlockCraftQuiz = lazy(() => import("@/pages/BlockCraftQuiz"));
+const SpeedQuizMath = lazy(() => import("@/pages/SpeedQuizMath"));
 
 function LoadingSpinner() {
   return (
@@ -42,6 +45,9 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/games" component={Games} />
         <Route path="/games/tsunami-english" component={TsunamiEscapeEnglish} />
+        <Route path="/games/word-ladder-hu-en" component={WordLadderHuEn} />
+        <Route path="/games/block-craft-quiz" component={BlockCraftQuiz} />
+        <Route path="/games/speed-quiz-math" component={SpeedQuizMath} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

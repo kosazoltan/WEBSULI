@@ -497,6 +497,35 @@ export const gameScores = pgTable(
 export type GameScore = typeof gameScores.$inferSelect;
 export type InsertGameScore = typeof gameScores.$inferInsert;
 
+/**
+ * Játék-kvíz bank (Neon): bővíthető SQL-lel vagy későbbi admin felülettel.
+ * sourceMaterialId → opcionális kapcsolat egy html_files tananyaghoz (strukturált kvíz nincs a HTML-ben, ez a hivatkozási pont).
+ */
+export const gameQuizItems = pgTable(
+  "game_quiz_items",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    gameId: varchar("game_id", { length: 64 })
+      .notNull()
+      .references(() => gamesCatalog.id, { onDelete: "cascade" }),
+    tier: varchar("tier", { length: 16 }).notNull(),
+    topic: varchar("topic", { length: 128 }),
+    prompt: text("prompt").notNull(),
+    options: jsonb("options").notNull().$type<string[]>(),
+    correctIndex: integer("correct_index").notNull(),
+    sourceMaterialId: varchar("source_material_id").references(() => htmlFiles.id, { onDelete: "set null" }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    gameIdx: index("game_quiz_items_game_id_idx").on(table.gameId),
+    gameTierIdx: index("game_quiz_items_game_tier_idx").on(table.gameId, table.tier),
+  }),
+);
+
+export type GameQuizItem = typeof gameQuizItems.$inferSelect;
+export type InsertGameQuizItem = typeof gameQuizItems.$inferInsert;
+
 export const errorLogs = pgTable("error_logs", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   fingerprint: varchar("fingerprint", { length: 32 }).notNull().unique(),

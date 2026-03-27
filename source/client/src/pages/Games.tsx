@@ -10,6 +10,7 @@ import {
   Trophy,
   Lock,
   CloudUpload,
+  Box,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,39 +40,103 @@ type LeaderRow = {
   bestRunSeconds: number;
 };
 
+function normalizeGameId(id: string): string {
+  const k = id.trim().toLowerCase();
+  if (k === "blockcraft-quiz" || k === "blockcraft" || k === "kockavadasz-kviz") {
+    return "block-craft-quiz";
+  }
+  if (k === "wordladder-hu-en" || k === "word-ladder") {
+    return "word-ladder-hu-en";
+  }
+  if (k === "speedquiz-math" || k === "matek-sprint") {
+    return "speed-quiz-math";
+  }
+  return k;
+}
+
 const GAME_ICONS: Record<string, typeof Waves> = {
   "tsunami-english": Waves,
   "word-ladder-hu-en": BookOpen,
   "speed-quiz-math": Zap,
+  "block-craft-quiz": Box,
 };
 
 const GAME_ACCENTS: Record<string, string> = {
   "tsunami-english": "from-cyan-500 to-blue-600",
   "word-ladder-hu-en": "from-violet-500 to-fuchsia-600",
   "speed-quiz-math": "from-amber-500 to-orange-600",
+  "block-craft-quiz": "from-lime-500 to-emerald-700",
 };
+
+const PLAYABLE_IDS = new Set([
+  "tsunami-english",
+  "word-ladder-hu-en",
+  "block-craft-quiz",
+  "speed-quiz-math",
+]);
+
+/** API / régi migráció szövegét felülírja (pl. „Hamarosan” helyett játszható leírás) */
+const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }> = {
+  "tsunami-english": {
+    description:
+      "3–5. osztályos angol: válassz nehézséget indulás előtt. Hosszabb menetek, a körön belül egyre nehezebb kérdések és gyorsuló hullám.",
+  },
+  "word-ladder-hu-en": {
+    description:
+      "3–5. osztályos szókincs és párosítás (HU ↔ EN). Minden jó válasz egy léc — a menet végére nehezebb feladatok.",
+  },
+  "block-craft-quiz": {
+    description: "Minecraft hangulatú 2D világ: bányászat + angol kvíz.",
+  },
+  "speed-quiz-math": {
+    description: "Gyors matek kihívás: helyes válasz = pont + kombó szorzó.",
+  },
+};
+
+function applyDisplayOverrides(rows: GameCatalogRow[]): GameCatalogRow[] {
+  return rows.map((row) => {
+    const canonicalId = normalizeGameId(row.id);
+    const o = DISPLAY_OVERRIDES[canonicalId];
+    if (!o) return row;
+    return {
+      ...row,
+      id: canonicalId,
+      title: o.title ?? row.title,
+      description: o.description ?? row.description,
+    };
+  });
+}
 
 /** Ha a Neon migráció még nem futott, a játéklista így is működik */
 const FALLBACK_CATALOG: GameCatalogRow[] = [
   {
     id: "tsunami-english",
     title: "Szökőár szökés — Angol",
-    description: "Harmadikos angol kvízek hullám elől",
+    description:
+      "3–5. osztályos angol: válassz nehézséget indulás előtt. Hosszabb menetek, a körön belül egyre nehezebb kérdések és gyorsuló hullám.",
     sortOrder: 1,
     createdAt: "",
   },
   {
     id: "word-ladder-hu-en",
     title: "Szólétra (HU ↔ EN)",
-    description: "Hamarosan elérhető",
+    description:
+      "3–5. osztályos szókincs és párosítás (HU ↔ EN). Minden jó válasz egy léc — a menet végére nehezebb feladatok.",
     sortOrder: 2,
+    createdAt: "",
+  },
+  {
+    id: "block-craft-quiz",
+    title: "Kockavadász kvíz",
+    description: "Minecraft hangulatú 2D világ: bányászat + angol kvíz.",
+    sortOrder: 3,
     createdAt: "",
   },
   {
     id: "speed-quiz-math",
     title: "Gyors matek sprint",
-    description: "Hamarosan elérhető",
-    sortOrder: 3,
+    description: "Gyors matek kihívás: helyes válasz = pont + kombó szorzó.",
+    sortOrder: 4,
     createdAt: "",
   },
 ];
@@ -90,9 +155,21 @@ export default function Games() {
 
   const catalog = useMemo(() => {
     if (catLoading && catalogFromApi === undefined) return [];
-    if (catalogFromApi && catalogFromApi.length > 0) return catalogFromApi;
-    if (catError) return FALLBACK_CATALOG;
-    return FALLBACK_CATALOG;
+    const merge = (api: GameCatalogRow[]) => {
+      const byId = new Map(
+        api.map((g) => {
+          const normalizedId = normalizeGameId(g.id);
+          return [normalizedId, { ...g, id: normalizedId }] as const;
+        }),
+      );
+      for (const f of FALLBACK_CATALOG) {
+        if (!byId.has(f.id)) byId.set(f.id, f);
+      }
+      return applyDisplayOverrides(Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder));
+    };
+    if (catalogFromApi && catalogFromApi.length > 0) return merge(catalogFromApi);
+    if (catError) return applyDisplayOverrides(FALLBACK_CATALOG);
+    return applyDisplayOverrides(FALLBACK_CATALOG);
   }, [catalogFromApi, catLoading, catError]);
 
   const { data: leaderboard = [], isLoading: lbLoading } = useQuery<LeaderRow[]>({
@@ -154,9 +231,9 @@ export default function Games() {
             {catalog.map((game) => {
               const Icon = GAME_ICONS[game.id] ?? Gamepad2;
               const accent = GAME_ACCENTS[game.id] ?? "from-slate-500 to-slate-700";
-              const playable = game.id === "tsunami-english";
+              const playable = PLAYABLE_IDS.has(game.id);
 
-              if (playable) {
+              if (playable && game.id === "tsunami-english") {
                 return (
                   <li key={game.id}>
                     <Card className="glass-card border-white/20 overflow-hidden">
@@ -207,6 +284,81 @@ export default function Games() {
                         </div>
                       </CardContent>
                     </Card>
+                  </li>
+                );
+              }
+
+              if (playable && game.id === "word-ladder-hu-en") {
+                return (
+                  <li key={game.id}>
+                    <Link href="/games/word-ladder-hu-en">
+                      <Card className="glass-card border-white/20 hover:border-fuchsia-400/50 transition-colors cursor-pointer group h-full">
+                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
+                          <div
+                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
+                          >
+                            <Icon className="w-7 h-7 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg font-bold text-white group-hover:text-fuchsia-200 transition-colors mb-1">
+                              {game.title}
+                            </h2>
+                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
+                            <p className="text-xs text-fuchsia-300/90 mt-2 font-medium">Indítás →</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </li>
+                );
+              }
+
+              if (playable && game.id === "block-craft-quiz") {
+                return (
+                  <li key={game.id}>
+                    <Link href="/games/block-craft-quiz">
+                      <Card className="glass-card border-white/20 hover:border-lime-400/50 transition-colors cursor-pointer group h-full">
+                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
+                          <div
+                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
+                          >
+                            <Icon className="w-7 h-7 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg font-bold text-white group-hover:text-lime-200 transition-colors mb-1">
+                              {game.title}
+                            </h2>
+                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
+                            <p className="text-xs text-lime-300/90 mt-2 font-medium">Blokk világ megnyitása →</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </li>
+                );
+              }
+
+              if (playable && game.id === "speed-quiz-math") {
+                return (
+                  <li key={game.id}>
+                    <Link href="/games/speed-quiz-math">
+                      <Card className="glass-card border-white/20 hover:border-amber-400/50 transition-colors cursor-pointer group h-full">
+                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
+                          <div
+                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
+                          >
+                            <Icon className="w-7 h-7 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg font-bold text-white group-hover:text-amber-200 transition-colors mb-1">
+                              {game.title}
+                            </h2>
+                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
+                            <p className="text-xs text-amber-300/90 mt-2 font-medium">Matek sprint indítása →</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
                   </li>
                 );
               }
