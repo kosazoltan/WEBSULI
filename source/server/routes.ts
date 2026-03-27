@@ -657,11 +657,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Játékok — katalógus és ranglista (nyilvános olvasás)
+  const gamesCatalogFallback = [
+    {
+      id: "tsunami-english",
+      title: "Szökőár szökés — Angol",
+      description:
+        "3–5. osztályos angol: válassz nehézséget indulás előtt. Hosszabb menetek, a körön belül egyre nehezebb kérdések és gyorsuló hullám.",
+      sortOrder: 1,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "word-ladder-hu-en",
+      title: "Szólétra (HU ↔ EN)",
+      description:
+        "3–5. osztályos szókincs és párosítás (HU ↔ EN). Minden jó válasz egy léc — a menet végére nehezebb feladatok.",
+      sortOrder: 2,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "speed-quiz-math",
+      title: "Gyors matek sprint",
+      description: "Gyors matek kihívás: helyes válasz = pont + kombó szorzó.",
+      sortOrder: 3,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "block-craft-quiz",
+      title: "Kockavadász kvíz",
+      description: "Minecraft hangulatú 2D világ: bányászat + angol kvíz.",
+      sortOrder: 4,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  function isMissingGamesTableError(err: unknown): boolean {
+    const code = (err as { code?: string })?.code;
+    const msg = String((err as { message?: string })?.message ?? "");
+    return code === "42P01" || /games_catalog|game_scores|relation .* does not exist/i.test(msg);
+  }
+
   app.get("/api/games/catalog", async (_req, res) => {
     try {
       const rows = await gameScoreService.listGamesCatalog();
       res.json(rows);
     } catch (e) {
+      if (isMissingGamesTableError(e)) {
+        console.warn("[GAMES] catalog fallback because DB table missing");
+        return res.json(gamesCatalogFallback);
+      }
       console.error("[GAMES] catalog", e);
       res.status(500).json({ message: "Nem sikerült betölteni a játéklistát." });
     }
@@ -703,6 +746,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const board = await gameScoreService.getLeaderboard(gameId, difficulty, limit);
       res.json(board);
     } catch (e) {
+      if (isMissingGamesTableError(e)) {
+        console.warn("[GAMES] leaderboard fallback because DB table missing");
+        return res.json([]);
+      }
       console.error("[GAMES] leaderboard", e);
       res.status(500).json({ message: "Ranglista hiba." });
     }
