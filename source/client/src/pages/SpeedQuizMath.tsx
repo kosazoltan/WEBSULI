@@ -348,8 +348,8 @@ export default function SpeedQuizMath() {
           "radial-gradient(circle at 20% 15%, rgba(56,189,248,0.28), transparent 34%), radial-gradient(circle at 82% 9%, rgba(244,114,182,0.3), transparent 38%), linear-gradient(180deg, #090f21 0%, #131a3a 100%)",
       }}
     >
-      <main className="relative z-10 max-w-3xl mx-auto px-3 py-4 min-h-screen flex flex-col">
-        <header className="flex items-center justify-between gap-2 mb-3">
+      <main className="relative z-10 max-w-3xl mx-auto px-3 py-3 min-h-screen flex flex-col">
+        <header className="flex items-center justify-between gap-2 mb-2">
           <Link href="/games">
             <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2">
               <ArrowLeft className="w-4 h-4" />
@@ -369,15 +369,17 @@ export default function SpeedQuizMath() {
         </header>
 
         <Card className="border border-cyan-300/45 bg-slate-950/88 backdrop-blur-md shadow-[0_16px_50px_rgba(0,0,0,0.48)] flex-1 flex flex-col min-h-0">
-          <CardContent className="p-4 flex flex-col flex-1 min-h-0">
+          <CardContent className="p-3 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-1">
               <Rocket className="w-5 h-5 text-cyan-300" />
               <h1 className="text-lg font-black tracking-wide">Neon City Tower Obby</h1>
             </div>
-            <p className="text-xs text-white/85 mb-2">
-              Roblox-hangulatú matek futam neon városi toronyban. Jó válaszra haladsz az obby pályán, rossz válaszra életet vesztesz.
-            </p>
-            <p className="text-[11px] text-cyan-100/95 mb-3 border border-cyan-700/45 rounded px-2 py-1.5 bg-slate-900/95">
+            {phase !== "play" && (
+              <p className="text-xs text-white/85 mb-2">
+                Roblox-hangulatú matek futam neon városi toronyban. Jó válaszra haladsz az obby pályán, rossz válaszra életet vesztesz.
+              </p>
+            )}
+            <p className={`text-[11px] text-cyan-100/95 border border-cyan-700/45 rounded px-2 ${phase === "play" ? "py-1 mb-2" : "py-1.5 mb-3"} bg-slate-900/95`}>
               {syncBanner}
             </p>
 
@@ -415,11 +417,12 @@ export default function SpeedQuizMath() {
             )}
 
             {phase === "play" && (
-              <div className="flex flex-col gap-3 flex-1">
-                <div className="grid grid-cols-3 gap-2 text-[11px] font-semibold">
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-2">Szint: {LEVEL_LABEL[grade]}</div>
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-2">Köridő: {timeLeft}s</div>
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-2">Kérdés: {questionTimeLeft}s</div>
+              <div className="flex flex-col gap-2 flex-1 min-h-0">
+                <div className="grid grid-cols-4 gap-1.5 text-[11px] font-semibold">
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Szint: {LEVEL_LABEL[grade]}</div>
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Kör: {timeLeft}s</div>
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Kérdés: {questionTimeLeft}s</div>
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Pont: {score}</div>
                 </div>
 
                 <div className="flex items-center gap-1 text-rose-300 text-xs">
@@ -429,55 +432,55 @@ export default function SpeedQuizMath() {
                   <span className="ml-2 text-white/70">Életek</span>
                 </div>
 
-                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${runProgress}%` }} />
                 </div>
-                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-fuchsia-400 to-pink-500" style={{ width: `${qProgress}%` }} />
                 </div>
 
-                <div className="rounded-2xl border border-cyan-300/45 bg-slate-950/85 p-3">
-                  <div className="mb-2 flex items-center justify-between text-[11px] text-white/70">
+                <div className="rounded-xl border border-cyan-300/45 bg-slate-950/85 p-2">
+                  <div className="mb-1 flex items-center justify-between text-[10px] text-white/70">
                     <span>Obby haladás: {correct}/{TARGET_CORRECT[grade]}</span>
-                    <span>Pont: {score}</span>
+                    <span>Kombó: {streak}</span>
                   </div>
-                  <div className="relative h-16 rounded-xl border border-white/10 bg-slate-950/70 overflow-hidden">
+                  <div className="relative h-12 rounded-lg border border-white/10 bg-slate-950/70 overflow-hidden">
                     <div className="absolute inset-y-0 left-0 w-full bg-[linear-gradient(90deg,rgba(6,182,212,0.14)_0%,rgba(236,72,153,0.14)_100%)]" />
                     {[...Array(12)].map((_, i) => (
                       <div
                         key={i}
-                        className="absolute top-6 h-3 w-10 rounded-md border border-cyan-100/20 bg-cyan-300/20"
+                        className="absolute top-4 h-2.5 w-8 rounded-md border border-cyan-100/20 bg-cyan-300/20"
                         style={{ left: `${4 + i * 8}%` }}
                       />
                     ))}
                     <div
-                      className="absolute top-3 transition-all duration-300"
-                      style={{ left: `calc(${obbyProgress}% - 14px)` }}
+                      className="absolute top-2 transition-all duration-300"
+                      style={{ left: `calc(${obbyProgress}% - 12px)` }}
                     >
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-fuchsia-500 to-cyan-400 border border-white/40 shadow-lg" />
+                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-fuchsia-500 to-cyan-400 border border-white/40 shadow-lg" />
                     </div>
-                    <div className="absolute right-2 top-2 text-[10px] text-amber-200 font-bold">CÉL</div>
+                    <div className="absolute right-2 top-1.5 text-[10px] text-amber-200 font-bold">CÉL</div>
                   </div>
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+                  <div className="mt-1.5 hidden sm:grid grid-cols-3 gap-1.5 text-[10px]">
                     <div className="rounded-md border border-cyan-400/30 bg-cyan-950/40 px-2 py-1 text-cyan-100">Neo Jump</div>
                     <div className="rounded-md border border-fuchsia-400/30 bg-fuchsia-950/40 px-2 py-1 text-fuchsia-100">Laser Gate</div>
                     <div className="rounded-md border border-amber-400/30 bg-amber-950/40 px-2 py-1 text-amber-100">Sky Finish</div>
                   </div>
                 </div>
 
-                <div className={`rounded-2xl border ${wrongFlash ? "border-rose-400" : "border-cyan-300/45"} bg-slate-950/88 p-4 transition-colors`}>
-                  <p className="text-xs text-white/60 mb-2">Kérdés #{answered + 1}</p>
-                  <p className="text-2xl sm:text-3xl font-black tracking-wide text-cyan-50">{task.prompt}</p>
-                  <p className="text-[11px] text-white/60 mt-2">
+                <div className={`rounded-xl border ${wrongFlash ? "border-rose-400" : "border-cyan-300/45"} bg-slate-950/88 p-2.5 transition-colors`}>
+                  <p className="text-[11px] text-white/60 mb-1">Kérdés #{answered + 1}</p>
+                  <p className="text-lg sm:text-xl font-black tracking-wide text-cyan-50 leading-tight">{task.prompt}</p>
+                  <p className="text-[10px] text-white/55 mt-1">
                     Forrás: {task.source === "teacher" ? "Tanári kérdésbank" : "Generált feladat"}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {task.options.map((opt, idx) => (
                     <Button
                       key={`${opt}-${idx}`}
-                      className="h-16 text-xl font-black bg-slate-900/95 hover:bg-cyan-700/45 border border-cyan-200/35 text-white shadow-sm"
+                      className="h-12 text-lg font-black bg-slate-900/95 hover:bg-cyan-700/45 border border-cyan-200/35 text-white shadow-sm"
                       onClick={() => handleAnswer(idx)}
                     >
                       {opt}
