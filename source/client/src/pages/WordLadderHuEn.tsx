@@ -90,7 +90,13 @@ function buildWordLadderQueue(pools: { easy: Quiz[]; med: Quiz[]; hard: Quiz[] }
   return [...e, ...m, ...h];
 }
 
-type Phase = "menu" | "quiz" | "won";
+function buildLongRunQueue(pools: { easy: Quiz[]; med: Quiz[]; hard: Quiz[] }, chunks = 8): Quiz[] {
+  const q: Quiz[] = [];
+  for (let i = 0; i < chunks; i++) q.push(...buildWordLadderQueue(pools));
+  return q;
+}
+
+type Phase = "menu" | "quiz" | "step" | "won";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -116,6 +122,7 @@ export default function WordLadderHuEn() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [rung, setRung] = useState(0);
   const [queue, setQueue] = useState<Quiz[]>([]);
+  const [cursor, setCursor] = useState(0);
   const [current, setCurrent] = useState<Quiz | null>(null);
   const [streak, setStreak] = useState(0);
   const [sessionXp, setSessionXp] = useState(0);
@@ -124,7 +131,9 @@ export default function WordLadderHuEn() {
   const [wrongShake, setWrongShake] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const [runSeconds, setRunSeconds] = useState(0);
+  const [stepDelta, setStepDelta] = useState<1 | -1>(1);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreSubmittedRef = useRef(false);
 
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
@@ -170,8 +179,9 @@ export default function WordLadderHuEn() {
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
-    const q = buildWordLadderQueue(mergedPoolsRef.current);
+    const q = buildLongRunQueue(mergedPoolsRef.current);
     setQueue(q);
+    setCursor(0);
     setRung(0);
     setStreak(0);
     setSessionXp(0);
@@ -185,6 +195,7 @@ export default function WordLadderHuEn() {
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     };
   }, []);
 
@@ -200,29 +211,50 @@ export default function WordLadderHuEn() {
 
   const onAnswer = (i: number) => {
     if (!current) return;
-    if (i !== current.correctIndex) {
+    const isCorrect = i === current.correctIndex;
+
+    if (!isCorrect) {
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 400);
       setStreak(0);
-      return;
     }
-    const add = 30 + streak * 2;
-    setSessionXp((x) => x + add);
-    setTotalXp((t) => t + add);
-    setStreak((s) => {
-      const n = s + 1;
-      setBestStreak((b) => (n > b ? n : b));
-      return n;
-    });
-    const nextRung = rung + 1;
+
+    if (isCorrect) {
+      const add = 30 + streak * 2;
+      setSessionXp((x) => x + add);
+      setTotalXp((t) => t + add);
+      setStreak((s) => {
+        const n = s + 1;
+        setBestStreak((b) => (n > b ? n : b));
+        return n;
+      });
+    }
+
+    const nextRung = Math.max(0, Math.min(RUNGS, rung + (isCorrect ? 1 : -1)));
+    const nextCursor = cursor + 1;
+    let nextQuestion = queue[nextCursor] ?? null;
+    if (!nextQuestion) {
+      const more = buildLongRunQueue(mergedPoolsRef.current, 4);
+      const expanded = [...queue, ...more];
+      setQueue(expanded);
+      nextQuestion = expanded[nextCursor] ?? expanded[0] ?? null;
+    }
+
+    setCursor(nextCursor);
     setRung(nextRung);
-    if (nextRung >= RUNGS) {
-      finishWon();
-      setCurrent(null);
-      return;
-    }
-    const nextQ = queue[nextRung];
-    setCurrent(nextQ ?? null);
+    setStepDelta(isCorrect ? 1 : -1);
+    setCurrent(nextQuestion);
+    setPhase("step");
+
+    if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+    stepTimerRef.current = setTimeout(() => {
+      if (nextRung >= RUNGS) {
+        finishWon();
+        setCurrent(null);
+        return;
+      }
+      setPhase("quiz");
+    }, 520);
   };
 
   useEffect(() => {
@@ -333,7 +365,7 @@ export default function WordLadderHuEn() {
               </div>
             )}
 
-            {phase === "quiz" && (
+            {(phase === "quiz" || phase === "step") && (
               <div className="flex-1 flex gap-3 min-h-[280px]">
                 <div className="relative w-[88px] shrink-0 flex items-end justify-center pb-2">
                   <div
@@ -354,20 +386,34 @@ export default function WordLadderHuEn() {
                       }}
                     />
                   ))}
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 text-[10px] font-bold text-amber-200 bg-black/35 border border-amber-200/30 rounded-full px-2 py-0.5">
+                    CÉL
+                  </div>
                   <motion.div
-                    className="relative z-10 text-3xl drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]"
-                    style={{ marginBottom: `${8 + rung * 18}px` }}
-                    animate={{ y: [0, -3, 0] }}
-                    transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                    className="absolute z-10 left-1/2 -translate-x-1/2"
+                    style={{ bottom: `${8 + rung * 18}px` }}
+                    animate={{ y: [0, -2, 0] }}
+                    transition={{ repeat: Infinity, duration: 1, ease: "easeInOut" }}
                   >
-                    🧗
+                    <div className="relative w-8 h-12 drop-shadow-[0_5px_10px_rgba(0,0,0,0.55)]">
+                      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-5 h-4 rounded-full bg-amber-200 border border-amber-400" />
+                      <div className="absolute top-4 left-1/2 -translate-x-1/2 w-6 h-5 rounded bg-sky-500 border border-sky-700" />
+                      <div className="absolute top-8 left-[6px] w-2.5 h-4 rounded bg-indigo-700 border border-indigo-900" />
+                      <div className="absolute top-8 right-[6px] w-2.5 h-4 rounded bg-indigo-700 border border-indigo-900" />
+                    </div>
                   </motion.div>
                 </div>
                 <div className="flex-1 flex flex-col justify-center rounded-xl border border-white/10 bg-black/25 p-3 min-w-0">
                   <p className="text-[10px] uppercase tracking-widest text-amber-200/70 mb-1">
                     Rung {rung + 1} / {RUNGS} · {runSeconds}s
                   </p>
-                  <p className="text-sm text-white/60">Válaszd ki a helyes angol párost a kvíz ablakban.</p>
+                  <p className="text-sm text-white/80">
+                    {phase === "step"
+                      ? stepDelta > 0
+                        ? "Helyes! Feljebb léptél egy fokot."
+                        : "Nem jó! Visszaléptél egy fokot, jön a következő kérdés."
+                      : "Minden válasz után látod, ahogy fel vagy visszalépsz a létrán."}
+                  </p>
                 </div>
               </div>
             )}
