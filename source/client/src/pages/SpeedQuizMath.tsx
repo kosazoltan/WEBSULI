@@ -348,7 +348,7 @@ export default function SpeedQuizMath() {
           "radial-gradient(circle at 20% 15%, rgba(56,189,248,0.28), transparent 34%), radial-gradient(circle at 82% 9%, rgba(244,114,182,0.3), transparent 38%), linear-gradient(180deg, #090f21 0%, #131a3a 100%)",
       }}
     >
-      <main className="relative z-10 max-w-2xl mx-auto px-3 py-4 min-h-screen flex flex-col">
+      <main className="relative z-10 max-w-3xl mx-auto px-3 py-4 min-h-screen flex flex-col">
         <header className="flex items-center justify-between gap-2 mb-3">
           <Link href="/games">
             <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2">
@@ -368,31 +368,30 @@ export default function SpeedQuizMath() {
           </div>
         </header>
 
-        <Card className="glass-card border-cyan-400/35 bg-slate-900/70 flex-1 flex flex-col min-h-0">
+        <Card className="border border-cyan-300/45 bg-slate-950/88 backdrop-blur-md shadow-[0_16px_50px_rgba(0,0,0,0.48)] flex-1 flex flex-col min-h-0">
           <CardContent className="p-4 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-1">
               <Rocket className="w-5 h-5 text-cyan-300" />
               <h1 className="text-lg font-black tracking-wide">Neon City Tower Obby</h1>
             </div>
-            <p className="text-[11px] text-white/70 mb-2">
+            <p className="text-xs text-white/85 mb-2">
               Roblox-hangulatú matek futam neon városi toronyban. Jó válaszra haladsz az obby pályán, rossz válaszra életet vesztesz.
             </p>
-            <p className="text-[10px] text-cyan-100/80 mb-3 border border-cyan-800/45 rounded px-2 py-1 bg-black/25">
+            <p className="text-[11px] text-cyan-100/95 mb-3 border border-cyan-700/45 rounded px-2 py-1.5 bg-slate-900/95">
               {syncBanner}
             </p>
 
             {phase === "menu" && (
               <div className="flex-1 flex flex-col items-center justify-center gap-4 py-6">
-                <div className="grid grid-cols-3 gap-2 w-full max-w-md">
+                <div className="grid grid-cols-3 gap-2 w-full max-w-xl">
                   {[3, 4, 5].map((g) => (
                     <Button
                       key={g}
                       type="button"
-                      variant={grade === g ? "default" : "outline"}
                       className={
                         grade === g
-                          ? "bg-gradient-to-r from-cyan-500 to-fuchsia-600 text-white font-bold"
-                          : "border-white/35 text-white hover:bg-white/10"
+                          ? "bg-gradient-to-r from-cyan-500 to-fuchsia-600 text-white font-bold border border-cyan-100/40 shadow-[0_0_20px_rgba(34,211,238,0.35)]"
+                          : "bg-slate-900/95 border border-white/30 text-white hover:bg-slate-800"
                       }
                       onClick={() => setGrade(g as GradeLevel)}
                     >
@@ -400,13 +399,13 @@ export default function SpeedQuizMath() {
                     </Button>
                   ))}
                 </div>
-                <div className="w-full max-w-md rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-xs text-white/80">
+                <div className="w-full max-w-xl rounded-xl border border-white/20 bg-slate-900/90 px-3 py-2.5 text-sm text-white/90">
                   Cél: <strong>{TARGET_CORRECT[grade]}</strong> helyes válasz, élet: <strong>3</strong>, szint:{" "}
                   <strong>{LEVEL_LABEL[grade]}</strong>
                 </div>
                 <Button
                   size="lg"
-                  className="bg-gradient-to-r from-cyan-500 via-blue-500 to-fuchsia-600 font-bold text-white px-8"
+                  className="bg-gradient-to-r from-cyan-500 via-blue-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 font-bold text-white px-8 border border-cyan-100/40"
                   onClick={startGame}
                 >
                   <Gauge className="w-4 h-4 mr-2" />
@@ -417,10 +416,10 @@ export default function SpeedQuizMath() {
 
             {phase === "play" && (
               <div className="flex flex-col gap-3 flex-1">
-                <div className="grid grid-cols-3 gap-2 text-[11px]">
-                  <div className="rounded-lg border border-white/15 bg-black/25 px-2 py-2">Szint: {LEVEL_LABEL[grade]}</div>
-                  <div className="rounded-lg border border-white/15 bg-black/25 px-2 py-2">Köridő: {timeLeft}s</div>
-                  <div className="rounded-lg border border-white/15 bg-black/25 px-2 py-2">Kérdés: {questionTimeLeft}s</div>
+                <div className="grid grid-cols-3 gap-2 text-[11px] font-semibold">
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-2">Szint: {LEVEL_LABEL[grade]}</div>
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-2">Köridő: {timeLeft}s</div>
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-2">Kérdés: {questionTimeLeft}s</div>
                 </div>
 
                 <div className="flex items-center gap-1 text-rose-300 text-xs">
@@ -437,7 +436,7 @@ export default function SpeedQuizMath() {
                   <div className="h-full bg-gradient-to-r from-fuchsia-400 to-pink-500" style={{ width: `${qProgress}%` }} />
                 </div>
 
-                <div className="rounded-2xl border border-cyan-400/35 bg-black/30 p-3">
+                <div className="rounded-2xl border border-cyan-300/45 bg-slate-950/85 p-3">
                   <div className="mb-2 flex items-center justify-between text-[11px] text-white/70">
                     <span>Obby haladás: {correct}/{TARGET_CORRECT[grade]}</span>
                     <span>Pont: {score}</span>
@@ -466,11 +465,9 @@ export default function SpeedQuizMath() {
                   </div>
                 </div>
 
-                <div
-                  className={`rounded-2xl border ${wrongFlash ? "border-rose-400" : "border-cyan-400/40"} bg-black/30 p-4 transition-colors`}
-                >
+                <div className={`rounded-2xl border ${wrongFlash ? "border-rose-400" : "border-cyan-300/45"} bg-slate-950/88 p-4 transition-colors`}>
                   <p className="text-xs text-white/60 mb-2">Kérdés #{answered + 1}</p>
-                  <p className="text-2xl sm:text-3xl font-black tracking-wide text-cyan-100">{task.prompt}</p>
+                  <p className="text-2xl sm:text-3xl font-black tracking-wide text-cyan-50">{task.prompt}</p>
                   <p className="text-[11px] text-white/60 mt-2">
                     Forrás: {task.source === "teacher" ? "Tanári kérdésbank" : "Generált feladat"}
                   </p>
@@ -480,8 +477,7 @@ export default function SpeedQuizMath() {
                   {task.options.map((opt, idx) => (
                     <Button
                       key={`${opt}-${idx}`}
-                      variant="secondary"
-                      className="h-16 text-xl font-black bg-white/10 hover:bg-cyan-700/35 border border-white/15"
+                      className="h-16 text-xl font-black bg-slate-900/95 hover:bg-cyan-700/45 border border-cyan-200/35 text-white shadow-sm"
                       onClick={() => handleAnswer(idx)}
                     >
                       {opt}
