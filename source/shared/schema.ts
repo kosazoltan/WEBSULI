@@ -448,6 +448,55 @@ export const insertMaterialImprovementBackupSchema = createInsertSchema(material
 export type InsertMaterialImprovementBackup = z.infer<typeof insertMaterialImprovementBackupSchema>;
 export type MaterialImprovementBackup = typeof materialImprovementBackups.$inferSelect;
 
+/** Regisztrált játékok metaadatai (Neon) — új játékhoz INSERT a katalógusba */
+export const gamesCatalog = pgTable("games_catalog", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type GameCatalogEntry = typeof gamesCatalog.$inferSelect;
+export type InsertGameCatalogEntry = typeof gamesCatalog.$inferInsert;
+
+/** Játékos pontok: Google OAuth + e-mail lista (feliratkozás vagy extra e-mail) */
+export const gameScores = pgTable(
+  "game_scores",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    gameId: varchar("game_id", { length: 64 })
+      .notNull()
+      .references(() => gamesCatalog.id, { onDelete: "cascade" }),
+    difficulty: varchar("difficulty", { length: 32 }).notNull().default("normal"),
+    totalXp: integer("total_xp").notNull().default(0),
+    bestRunXp: integer("best_run_xp").notNull().default(0),
+    bestStreak: integer("best_streak").notNull().default(0),
+    bestRunSeconds: integer("best_run_seconds").notNull().default(0),
+    gamesPlayed: integer("games_played").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userGameDiffUnique: uniqueIndex("game_scores_user_game_difficulty_unique").on(
+      table.userId,
+      table.gameId,
+      table.difficulty,
+    ),
+    gameDiffBestIdx: index("game_scores_game_difficulty_best_run_idx").on(
+      table.gameId,
+      table.difficulty,
+      table.bestRunXp,
+    ),
+  }),
+);
+
+export type GameScore = typeof gameScores.$inferSelect;
+export type InsertGameScore = typeof gameScores.$inferInsert;
+
 export const errorLogs = pgTable("error_logs", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   fingerprint: varchar("fingerprint", { length: 32 }).notNull().unique(),

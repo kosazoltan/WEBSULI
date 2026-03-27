@@ -15,6 +15,8 @@ const PdfView = lazy(() => import("@/pages/pdf-view"));
 const Admin = lazy(() => import("@/pages/admin"));
 const AdminStats = lazy(() => import("@/pages/AdminStats"));
 const AdminDocumentation = lazy(() => import("@/pages/AdminDocumentation"));
+const Games = lazy(() => import("@/pages/Games"));
+const TsunamiEscapeEnglish = lazy(() => import("@/pages/TsunamiEscapeEnglish"));
 
 function LoadingSpinner() {
   return (
@@ -38,6 +40,8 @@ function Router() {
         <Route path="/admin/stats" component={AdminStats} />
         <Route path="/admin/help" component={AdminDocumentation} />
         <Route path="/login" component={Login} />
+        <Route path="/games" component={Games} />
+        <Route path="/games/tsunami-english" component={TsunamiEscapeEnglish} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

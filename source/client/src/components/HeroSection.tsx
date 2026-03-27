@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { ChevronDown, GraduationCap, FileText, LogIn, Shield } from "lucide-react";
+import { ChevronDown, GraduationCap, FileText, LogIn, Shield, Gamepad2 } from "lucide-react";
 import EmailSubscribeDialog from "@/components/EmailSubscribeDialog";
 import { Button } from "@/components/ui/button";
 import { MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
@@ -97,6 +97,16 @@ function HeroSection({
 
           {/* Jobb: CTA gombok + Auth */}
           <motion.div variants={itemVariants} className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
+            <Link href="/games">
+              <Button
+                size="sm"
+                className="gap-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 text-[10px] sm:text-xs px-2 sm:px-3 h-6 sm:h-7 rounded-full shadow-lg"
+                data-testid="link-hero-games"
+              >
+                <Gamepad2 className="w-3 h-3 shrink-0" />
+                <span className="hidden xs:inline">Játékok</span>
+              </Button>
+            </Link>
             <Button
               size="sm"
               onClick={scrollToContent}

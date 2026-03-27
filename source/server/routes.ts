@@ -15,6 +15,7 @@ import { htmlFiles, users, emailSubscriptions, extraEmailAddresses, materialComm
 import { sanitizeText, sanitizeHtml, sanitizeEmail, sanitizeUserAgent, sanitizeUrl } from "./utils/sanitize";
 // Admin authentication with hardcoded admin emails
 import { setupAuth, isAuthenticated, isAuthenticatedAdmin } from "./auth";
+import * as gameScoreService from "./gameScoreService";
 // checkIsAdmin import removed
 
 import { db } from "./db";
@@ -652,6 +653,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       baseUrl: getBaseUrl(),
       environment: process.env.NODE_ENV || 'development',
     });
+  });
+
+  // Játékok — katalógus és ranglista (nyilvános olvasás)
+  app.get("/api/games/catalog", async (_req, res) => {
+    try {
+      const rows = await gameScoreService.listGamesCatalog();
+      res.json(rows);
+    } catch (e) {
+      console.error("[GAMES] catalog", e);
+      res.status(500).json({ message: "Nem sikerült betölteni a játéklistát." });
+    }
+  });
+
+  app.get("/api/games/leaderboard", async (req, res) => {
+    try {
+      const gameId = typeof req.query.gameId === "string" ? req.query.gameId : "";
+      const difficulty =
+        typeof req.query.difficulty === "string" ? req.query.difficulty : "normal";
+      const limitRaw = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 20;
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 20;
+      if (!gameId || !["easy", "normal", "hard"].includes(difficulty)) {
+        return res.status(400).json({ message: "Érvénytelen gameId vagy difficulty." });
+      }
+      const board = await gameScoreService.getLeaderboard(gameId, difficulty, limit);
+      res.json(board);
+    } catch (e) {
+      console.error("[GAMES] leaderboard", e);
+      res.status(500).json({ message: "Ranglista hiba." });
+    }
+  });
+
+  // Google + e-mail lista (feliratkozás vagy extra e-mail) — szinkron jogosultság
+  app.get("/api/games/sync-eligibility", async (req: Request, res) => {
+    try {
+      if (!req.isAuthenticated() || !req.user) {
+        return res.json({ eligible: false, reason: "not_logged_in" as const });
+      }
+      const sessionUser = req.user as User;
+      const user = (await storage.getUser(sessionUser.id)) ?? sessionUser;
+      const result = await gameScoreService.getGameSyncEligibility(user);
+      res.json(result);
+    } catch (e) {
+      console.error("[GAMES] sync-eligibility", e);
+      res.status(500).json({ message: "Hiba." });
+    }
+  });
+
+  const submitGameScoreSchema = z.object({
+    gameId: z.string().min(1).max(64),
+    difficulty: z.enum(["easy", "normal", "hard"]),
+    runXp: z.number().int().min(0).max(200000),
+    runStreak: z.number().int().min(0).max(10000),
+    runSeconds: z.number().int().min(0).max(86400),
+  });
+
+  app.post("/api/games/score", isAuthenticated, async (req: Request, res) => {
+    try {
+      const parsed = submitGameScoreSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: fromError(parsed.error).toString() });
+      }
+      const sessionUser = req.user as User;
+      const user = (await storage.getUser(sessionUser.id)) ?? sessionUser;
+      const el = await gameScoreService.getGameSyncEligibility(user);
+      if (!el.eligible) {
+        return res.status(403).json({
+          message:
+            "Csak Google bejelentkezéssel és értesítő e-mail listán szereplő címmel menthető a pont.",
+          reason: el.reason,
+        });
+      }
+      const row = await gameScoreService.submitGameScore({
+        userId: user.id,
+        ...parsed.data,
+      });
+      res.json(row);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === "invalid_difficulty") {
+        return res.status(400).json({ message: "Érvénytelen nehézség." });
+      }
+      const code = (e as { code?: string })?.code;
+      if (code === "23503") {
+        return res.status(400).json({ message: "Ismeretlen játék azonosító." });
+      }
+      console.error("[GAMES] score submit", e);
+      res.status(500).json({ message: "Mentés sikertelen." });
+    }
   });
 
   // PUBLIC endpoint - Get VAPID public key for push notifications
