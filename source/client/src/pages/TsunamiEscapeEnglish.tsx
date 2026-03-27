@@ -916,16 +916,41 @@ export default function TsunamiEscapeEnglish() {
   }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
 
   return (
-    <div className="min-h-screen relative overflow-hidden text-white" style={{ backgroundColor: "#061022" }}>
-      <CosmicBackground />
+    <div
+      className="min-h-screen relative overflow-hidden text-white"
+      style={{
+        background:
+          "radial-gradient(circle at 8% 14%, rgba(14,165,233,0.34), transparent 34%), radial-gradient(circle at 90% 8%, rgba(250,204,21,0.26), transparent 30%), linear-gradient(180deg, #03203f 0%, #05325f 48%, #0b4d8f 100%)",
+      }}
+    >
+      <div className="absolute inset-0 opacity-35 pointer-events-none">
+        <CosmicBackground />
+      </div>
+      <div className="absolute inset-0 pointer-events-none">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <motion.div
+            key={`bubble-${i}`}
+            className="absolute rounded-full border border-cyan-100/35 bg-cyan-100/10"
+            style={{
+              width: `${20 + i * 8}px`,
+              height: `${20 + i * 8}px`,
+              left: `${8 + i * 15}%`,
+              bottom: `${4 + (i % 3) * 9}%`,
+              boxShadow: "inset 0 0 14px rgba(255,255,255,0.25)",
+            }}
+            animate={{ y: [0, -18 - i * 4, 0], opacity: [0.35, 0.8, 0.35] }}
+            transition={{ duration: 4 + i * 0.8, repeat: Infinity, ease: "easeInOut" }}
+          />
+        ))}
+      </div>
 
-      <main className="relative z-10 max-w-lg mx-auto px-3 py-4 min-h-screen flex flex-col">
+      <main className="relative z-10 max-w-2xl mx-auto px-3 py-4 min-h-screen flex flex-col">
         <header className="flex items-center justify-between gap-2 mb-3">
           <Link href="/games">
             <Button
               variant="ghost"
               size="sm"
-              className="text-white/90 hover:bg-white/10 gap-1 -ml-2"
+              className="text-white bg-slate-900/45 border border-white/20 hover:bg-slate-800/70 gap-1 -ml-2"
               data-testid="link-tsunami-back-games"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -944,15 +969,15 @@ export default function TsunamiEscapeEnglish() {
           </div>
         </header>
 
-        <Card className="glass-card border-cyan-500/30 flex-1 flex flex-col min-h-0 mb-3">
+        <Card className="border border-cyan-200/40 bg-slate-950/82 backdrop-blur-md flex-1 flex flex-col min-h-0 mb-3 shadow-[0_20px_60px_rgba(6,182,212,0.22)]">
           <CardContent className="p-3 sm:p-4 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-2">
-              <Waves className="w-5 h-5 text-cyan-400" />
+              <Waves className="w-5 h-5 text-cyan-300" />
               <h1 className="text-base sm:text-lg font-extrabold leading-tight">
                 Szökőár szökés — Angol 3.
               </h1>
             </div>
-            <p className="text-[11px] sm:text-xs text-white/65 mb-2 leading-snug">
+            <p className="text-xs text-white/85 mb-2 leading-snug">
               A víz egyre feljebb jön, az áramlás sodor, és mozgó biztonsági zónákban tudsz stabilabban túlélni.
               Kvízeknél helyes válasz: XP + hullám vissza.{" "}
               <strong className="text-amber-200/90">
@@ -960,29 +985,25 @@ export default function TsunamiEscapeEnglish() {
               </strong>{" "}
               (bónusz XP) — különben, ha túl magasra ér a víz, vége a körnek.
             </p>
-            <p className="text-[10px] text-cyan-200/80 mb-3 leading-snug border border-cyan-500/25 rounded-lg px-2 py-1.5 bg-cyan-950/30">
+            <p className="text-[11px] text-cyan-100/95 mb-3 leading-snug border border-cyan-400/35 rounded-lg px-2 py-1.5 bg-slate-900/90">
               {syncBanner}
             </p>
 
             {phase === "menu" && (
               <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6">
-                <Trophy className="w-14 h-14 text-amber-400" />
+                <Trophy className="w-16 h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(251,191,36,0.55)]" />
                 <p className="text-sm text-center text-white/75 max-w-xs">
                   Legjobb sorozat (helyi): <strong className="text-orange-300">{bestStreak}</strong> helyes
                   egymás után
                 </p>
                 <div className="w-full max-w-xs space-y-2">
-                  <p className="text-[11px] text-white/55 text-center">Nehézség</p>
+                  <p className="text-xs text-cyan-100/90 text-center font-semibold">Nehézség</p>
                   <div className="flex gap-2 justify-center flex-wrap">
                     <Button
                       type="button"
                       size="sm"
                       variant={difficulty === "easy" ? "default" : "outline"}
-                      className={
-                        difficulty === "easy"
-                          ? "bg-emerald-600 text-white"
-                          : "border-white/40 text-white hover:bg-white/10"
-                      }
+                      className={difficulty === "easy" ? "bg-emerald-600 text-white border border-emerald-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}
                       onClick={() => setDifficulty("easy")}
                     >
                       Könnyű
@@ -991,11 +1012,7 @@ export default function TsunamiEscapeEnglish() {
                       type="button"
                       size="sm"
                       variant={difficulty === "normal" ? "default" : "outline"}
-                      className={
-                        difficulty === "normal"
-                          ? "bg-cyan-600 text-white"
-                          : "border-white/40 text-white hover:bg-white/10"
-                      }
+                      className={difficulty === "normal" ? "bg-cyan-600 text-white border border-cyan-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}
                       onClick={() => setDifficulty("normal")}
                     >
                       Közepes
@@ -1004,11 +1021,7 @@ export default function TsunamiEscapeEnglish() {
                       type="button"
                       size="sm"
                       variant={difficulty === "hard" ? "default" : "outline"}
-                      className={
-                        difficulty === "hard"
-                          ? "bg-rose-600 text-white"
-                          : "border-white/40 text-white hover:bg-white/10"
-                      }
+                      className={difficulty === "hard" ? "bg-rose-600 text-white border border-rose-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}
                       onClick={() => setDifficulty("hard")}
                     >
                       Nehéz
@@ -1017,7 +1030,7 @@ export default function TsunamiEscapeEnglish() {
                 </div>
                 <Button
                   size="lg"
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-full px-8"
+                  className="bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold rounded-full px-8 border border-cyan-100/50 shadow-[0_10px_24px_rgba(56,189,248,0.4)]"
                   onClick={startGame}
                   data-testid="button-tsunami-start"
                 >
@@ -1027,7 +1040,7 @@ export default function TsunamiEscapeEnglish() {
             )}
 
             {(phase === "play" || phase === "quiz") && (
-              <div className="relative flex-1 min-h-[340px] rounded-2xl overflow-hidden border border-cyan-400/25 shadow-[0_0_40px_rgba(34,211,238,0.12)]">
+              <div className="relative flex-1 min-h-[360px] rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
                 {/* Ég + nap */}
                 <div
                   className="absolute inset-0"
@@ -1082,20 +1095,20 @@ export default function TsunamiEscapeEnglish() {
                     Menekülés felfelé
                   </span>
                 </div>
-                <div className="absolute top-9 left-2 right-2 text-[11px] text-slate-900/75 font-semibold z-10 drop-shadow-sm flex flex-wrap gap-x-2 gap-y-0.5 justify-between">
-                  <span>
+                <div className="absolute top-9 left-2 right-2 text-[11px] text-slate-900/90 font-semibold z-10 flex flex-wrap gap-2 justify-between">
+                  <span className="rounded-md bg-white/45 px-2 py-1 backdrop-blur-sm border border-white/40">
                     Futás: {runSeconds}s · {difficultyLabel(runDifficultyRef.current)}
                   </span>
-                  <span className="text-emerald-900 font-bold">
+                  <span className="rounded-md bg-emerald-100/65 px-2 py-1 border border-emerald-300/55 text-emerald-900 font-bold">
                     Győzelem: {correctQuizzesInRun}/{winQuizTarget(runDifficultyRef.current)} kvíz
                   </span>
                 </div>
-                <div className="absolute top-[58px] left-2 right-2 text-[10px] text-slate-800/90 font-semibold z-10 flex justify-between">
-                  <span className="inline-flex items-center gap-1">
+                <div className="absolute top-[66px] left-2 right-2 text-[10px] text-slate-900 font-semibold z-10 flex justify-between">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white/45 px-2 py-1 backdrop-blur-sm border border-white/35">
                     <Wind className="w-3 h-3" />
                     Sodrás: {driftDir >= 0 ? "jobbra" : "balra"}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-emerald-900">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100/65 px-2 py-1 border border-emerald-300/55 text-emerald-900">
                     <Shield className="w-3 h-3" />
                     Biztonsági zóna aktív
                   </span>
@@ -1207,7 +1220,7 @@ export default function TsunamiEscapeEnglish() {
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="h-14 touch-none border-cyan-200/45 bg-slate-950/85 text-cyan-50 hover:bg-slate-900 active:scale-95 shadow-md shadow-cyan-900/50"
+                  className="h-14 touch-none border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
                   onPointerDown={(e) => pressStart(e, "left")}
                   onPointerUp={(e) => pressEnd(e, "left")}
                   onPointerCancel={(e) => pressEnd(e, "left")}
@@ -1220,7 +1233,7 @@ export default function TsunamiEscapeEnglish() {
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="h-14 touch-none border-amber-200/55 bg-amber-600/85 text-white hover:bg-amber-500 active:scale-95 shadow-md shadow-amber-900/60"
+                  className="h-14 touch-none border-amber-100/60 bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 active:scale-95 shadow-md shadow-amber-900/60 font-extrabold"
                   onPointerDown={(e) => pressStart(e, "sprint")}
                   onPointerUp={(e) => pressEnd(e, "sprint")}
                   onPointerCancel={(e) => pressEnd(e, "sprint")}
@@ -1233,7 +1246,7 @@ export default function TsunamiEscapeEnglish() {
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="h-14 touch-none border-cyan-200/45 bg-slate-950/85 text-cyan-50 hover:bg-slate-900 active:scale-95 shadow-md shadow-cyan-900/50"
+                  className="h-14 touch-none border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
                   onPointerDown={(e) => pressStart(e, "right")}
                   onPointerUp={(e) => pressEnd(e, "right")}
                   onPointerCancel={(e) => pressEnd(e, "right")}
@@ -1265,7 +1278,7 @@ export default function TsunamiEscapeEnglish() {
                 )}
                 <div className="flex flex-wrap gap-2 justify-center mt-2">
                   <Button
-                    className="gap-1 bg-gradient-to-r from-amber-500 to-orange-600"
+                    className="gap-1 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 border border-amber-100/50"
                     onClick={startGame}
                     data-testid="button-tsunami-retry-won"
                   >
@@ -1273,7 +1286,7 @@ export default function TsunamiEscapeEnglish() {
                     Következő kör
                   </Button>
                   <Link href="/games">
-                    <Button variant="outline" className="border-white/40 text-white hover:bg-white/10">
+                    <Button variant="outline" className="border-white/40 text-white bg-slate-900/70 hover:bg-slate-800">
                       Játéklista
                     </Button>
                   </Link>
@@ -1299,7 +1312,7 @@ export default function TsunamiEscapeEnglish() {
                 )}
                 <div className="flex flex-wrap gap-2 justify-center mt-2">
                   <Button
-                    className="gap-1 bg-gradient-to-r from-cyan-500 to-blue-600"
+                    className="gap-1 bg-gradient-to-r from-cyan-400 to-blue-600 border border-cyan-100/45"
                     onClick={startGame}
                     data-testid="button-tsunami-retry"
                   >
@@ -1307,7 +1320,7 @@ export default function TsunamiEscapeEnglish() {
                     Újra
                   </Button>
                   <Link href="/games">
-                    <Button variant="outline" className="border-white/40 text-white hover:bg-white/10">
+                    <Button variant="outline" className="border-white/40 text-white bg-slate-900/70 hover:bg-slate-800">
                       Játéklista
                     </Button>
                   </Link>
@@ -1329,7 +1342,7 @@ export default function TsunamiEscapeEnglish() {
             <motion.div
               initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              className={`w-full max-w-md rounded-2xl border border-cyan-400/40 bg-slate-900/95 p-4 shadow-2xl ${
+              className={`w-full max-w-md rounded-2xl border border-cyan-200/50 bg-slate-950/96 p-4 shadow-[0_20px_56px_rgba(14,165,233,0.35)] ${
                 wrongShake ? "animate-shake" : ""
               }`}
             >
@@ -1350,7 +1363,7 @@ export default function TsunamiEscapeEnglish() {
                   <Button
                     key={i}
                     variant="secondary"
-                    className="h-auto py-3 text-left justify-start whitespace-normal bg-white/10 hover:bg-cyan-600/40 text-white border border-white/10"
+                    className="h-auto py-3 text-left justify-start whitespace-normal bg-slate-900/95 hover:bg-cyan-700/45 text-white border border-cyan-200/35"
                     onClick={() => onAnswer(i)}
                   >
                     {opt}
