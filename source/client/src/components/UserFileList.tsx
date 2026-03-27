@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, memo } from "react";
-import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight } from "lucide-react";
+import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2 } from "lucide-react";
+import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -145,6 +146,12 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                 <p className="text-muted-foreground">
                   Hamarosan érkeznek az első tananyagok!
                 </p>
+                <Link href="/games">
+                  <Button variant="outline" className="mt-4 gap-2" data-testid="link-empty-games">
+                    <Gamepad2 className="w-4 h-4" />
+                    Játékok
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </div>
