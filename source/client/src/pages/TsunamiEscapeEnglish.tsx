@@ -1041,29 +1041,29 @@ export default function TsunamiEscapeEnglish() {
 
             {(phase === "play" || phase === "quiz") && (
               <div className="relative flex-1 min-h-[360px] rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
-                {/* Ég + nap */}
+                {/* Eg + nap */}
                 <div
                   className="absolute inset-0"
                   style={{
                     background:
-                      "linear-gradient(165deg, #38bdf8 0%, #7dd3fc 22%, #bae6fd 42%, #e0f2fe 58%, #94a3b8 78%, #334155 100%)",
+                      "linear-gradient(165deg, #37d6ff 0%, #74e0ff 26%, #c7f2ff 48%, #f4fbff 62%, #9ac7e8 78%, #5f8fb8 100%)",
                   }}
                 />
                 <div
-                  className="absolute w-24 h-24 rounded-full pointer-events-none opacity-90"
+                  className="absolute w-28 h-28 rounded-full pointer-events-none opacity-95"
                   style={{
-                    top: "6%",
-                    right: "8%",
-                    background: "radial-gradient(circle, #fff9e6 0%, #fde68a 35%, transparent 70%)",
-                    filter: "blur(0.5px)",
-                    boxShadow: "0 0 60px rgba(253,224,71,0.5)",
+                    top: "4%",
+                    right: "7%",
+                    background: "radial-gradient(circle, #fffdea 0%, #fde68a 36%, transparent 72%)",
+                    filter: "blur(0.3px)",
+                    boxShadow: "0 0 80px rgba(253,224,71,0.58)",
                   }}
                 />
-                {/* Felhők */}
+                {/* Felhok */}
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
-                    className="absolute rounded-full bg-white/50 blur-sm pointer-events-none"
+                    className="absolute rounded-full bg-white/60 blur-sm pointer-events-none"
                     style={{
                       width: `${56 + i * 24}px`,
                       height: `${22 + i * 6}px`,
@@ -1078,8 +1078,7 @@ export default function TsunamiEscapeEnglish() {
                 <div
                   className="absolute bottom-[38%] left-0 right-0 h-[28%] opacity-35 pointer-events-none"
                   style={{
-                    background:
-                      "linear-gradient(to top, #1e293b 0%, transparent 100%)",
+                    background: "linear-gradient(to top, #2f6187 0%, transparent 100%)",
                     clipPath: "polygon(0 100%, 0 60%, 15% 45%, 30% 70%, 45% 40%, 60% 65%, 75% 35%, 90% 55%, 100% 45%, 100% 100%)",
                   }}
                 />
@@ -1091,7 +1090,7 @@ export default function TsunamiEscapeEnglish() {
                   }}
                 />
                 <div className="absolute top-3 left-0 right-0 flex justify-center z-10">
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-slate-800/80 font-bold drop-shadow-sm">
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-slate-900/90 font-black drop-shadow-sm rounded-full border border-white/45 bg-white/50 px-3 py-1">
                     Menekülés felfelé
                   </span>
                 </div>
@@ -1114,15 +1113,19 @@ export default function TsunamiEscapeEnglish() {
                   </span>
                 </div>
 
-                {/* Erkélyek / platformok */}
-                {[18, 38, 58, 78].map((top) => (
+                {/* Erkelyek / platformok */}
+                {[18, 38, 58, 78].map((top, idx) => (
                   <div
-                    key={top}
+                    key={`${top}-${idx}`}
                     className="absolute left-[8%] right-[8%] h-3 rounded-md z-[5]"
                     style={{
                       top: `${top}%`,
-                      background: "linear-gradient(180deg, #cbd5e1 0%, #64748b 40%, #475569 100%)",
-                      boxShadow: "0 4px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)",
+                      background:
+                        idx % 2 === 0
+                          ? "linear-gradient(180deg, #e0f2fe 0%, #67e8f9 40%, #0ea5e9 100%)"
+                          : "linear-gradient(180deg, #dbeafe 0%, #93c5fd 40%, #3b82f6 100%)",
+                      boxShadow:
+                        "0 6px 14px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.72), 0 0 18px rgba(56,189,248,0.35)",
                     }}
                   />
                 ))}
@@ -1137,7 +1140,7 @@ export default function TsunamiEscapeEnglish() {
                   transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
                 />
 
-                {/* Játékos (pixel-szerű figura) */}
+                {/* Jatekos */}
                 <motion.div
                   className="absolute z-20 flex flex-col items-center select-none"
                   style={{
@@ -1148,13 +1151,18 @@ export default function TsunamiEscapeEnglish() {
                   animate={phase === "play" ? { y: [0, -5, 0] } : {}}
                   transition={{ repeat: Infinity, duration: 0.55, ease: "easeInOut" }}
                 >
-                  <div className="relative drop-shadow-[0_4px_6px_rgba(0,0,0,0.35)]">
-                    <div className="w-7 h-2.5 bg-amber-950/90 rounded-t-sm mx-auto" />
-                    <div className="w-8 h-7 bg-amber-800 rounded-sm mx-auto -mt-0.5 border border-amber-950/50" />
-                    <div className="w-9 h-10 bg-orange-600 rounded-sm mx-auto -mt-0.5 border-x border-orange-800" />
+                  <div className="relative drop-shadow-[0_8px_14px_rgba(0,0,0,0.35)]">
+                    <div className="w-8 h-3 bg-amber-950/90 rounded-t-md mx-auto" />
+                    <div className="w-9 h-8 bg-amber-700 rounded-md mx-auto -mt-0.5 border border-amber-950/50 relative">
+                      <div className="absolute top-2 left-2.5 w-1 h-1 rounded-full bg-slate-900" />
+                      <div className="absolute top-2 right-2.5 w-1 h-1 rounded-full bg-slate-900" />
+                    </div>
+                    <div className="w-10 h-11 bg-orange-500 rounded-md mx-auto -mt-0.5 border-x border-orange-800 relative">
+                      <div className="absolute inset-x-1 top-2 h-3 rounded bg-amber-200/75" />
+                    </div>
                     <div className="flex gap-1 justify-center -mt-0.5">
-                      <div className="w-3.5 h-5 bg-indigo-700 rounded-sm border border-indigo-900" />
-                      <div className="w-3.5 h-5 bg-indigo-700 rounded-sm border border-indigo-900" />
+                      <div className="w-4 h-5 bg-indigo-700 rounded-md border border-indigo-900" />
+                      <div className="w-4 h-5 bg-indigo-700 rounded-md border border-indigo-900" />
                     </div>
                   </div>
                 </motion.div>
@@ -1180,12 +1188,21 @@ export default function TsunamiEscapeEnglish() {
                     animate={{ x: [0, -36, 0] }}
                     transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
                   />
+                  <motion.div
+                    className="absolute left-0 right-0 top-2 h-4 opacity-45"
+                    style={{
+                      background:
+                        "repeating-radial-gradient(circle at 10% 50%, rgba(255,255,255,0.35) 0 2px, transparent 2px 10px)",
+                    }}
+                    animate={{ x: [0, -24, 0] }}
+                    transition={{ duration: 3.4, repeat: Infinity, ease: "linear" }}
+                  />
                   <div
                     className="absolute top-0 left-0 right-0 h-4 -translate-y-1/2 rounded-full bg-cyan-200/60 blur-md"
                     style={{ boxShadow: "0 -12px 32px rgba(34,211,238,0.45)" }}
                   />
                 </div>
-                {[...Array(18)].map((_, i) => (
+                {[...Array(12)].map((_, i) => (
                   <motion.div
                     key={`rain-${i}`}
                     className="absolute w-[2px] h-10 bg-cyan-100/45 z-[6] pointer-events-none"
@@ -1203,12 +1220,14 @@ export default function TsunamiEscapeEnglish() {
 
                 {rewardBurst && (
                   <motion.div
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none text-4xl z-30"
-                    initial={{ scale: 0.5, opacity: 0 }}
-                    animate={{ scale: 1.2, opacity: 1 }}
+                    className="absolute right-3 top-20 pointer-events-none z-30"
+                    initial={{ y: 12, opacity: 0, scale: 0.8 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }}
                   >
-                    ✨ +{lastQuizXp} XP
+                    <div className="rounded-full bg-amber-300 text-slate-950 px-4 py-1.5 text-lg font-black border border-amber-100 shadow-[0_8px_18px_rgba(245,158,11,0.55)]">
+                      +{lastQuizXp} XP
+                    </div>
                   </motion.div>
                 )}
               </div>
