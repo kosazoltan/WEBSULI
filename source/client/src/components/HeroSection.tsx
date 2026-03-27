@@ -18,7 +18,7 @@ function HeroSection({
   totalClassrooms = 0,
   showEmailSubscribe = true,
 }: HeroSectionProps) {
-  const { user, isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
 
   const scrollToContent = () => {
     const content = document.getElementById("content-start");
@@ -120,9 +120,12 @@ function HeroSection({
             </div>
             {isAdmin ? (
               <Link href="/admin">
-                <Button size="sm" className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs gap-0.5 bg-orange-600 hover:bg-orange-700 text-white rounded-full">
-                  <Shield className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                  <span className="hidden sm:inline">Admin</span>
+                <Button
+                  size="sm"
+                  className="h-7 min-w-[72px] px-2.5 text-xs font-semibold gap-1 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white border border-rose-200/25 rounded-full shadow-lg"
+                >
+                  <Shield className="w-3.5 h-3.5 shrink-0" />
+                  <span>Admin</span>
                 </Button>
               </Link>
             ) : !isAuthenticated ? (

@@ -18,6 +18,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
+ * 0000_daffy_chronomancer.sql típusú Drizzle-sablon: az egész séma egyetlen blokk-kommentben van.
+ * A runner statement-breakpoint mentén vág — így szakadt blokk-kommentek keletkeznek (42601).
+ * Ilyen fájlokat kihagyunk, de felvesszük _drizzle_migrations-be, hogy a sorrend ne akadjon el.
+ */
+function isBlockCommentWrappedSchemaTemplate(raw: string): boolean {
+  const lines = raw.split("\n");
+  let i = 0;
+  while (i < lines.length && /^\s*--/.test(lines[i]!)) i++;
+  const rest = lines.slice(i).join("\n").trim();
+  return rest.startsWith("/*") && rest.endsWith("*/");
+}
+
+/**
  * Run all SQL migration files in order.
  * Each migration file is split on `-->statement-breakpoint` and executed individually.
  * Errors on "already exists" are silently skipped (idempotent).
@@ -89,6 +102,26 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
       const filePath = path.join(migrationsDir, fileName);
       const sql = fs.readFileSync(filePath, 'utf8');
 
+      if (isBlockCommentWrappedSchemaTemplate(sql)) {
+        console.log(
+          `[MIGRATE] ⏭️ Skipping ${fileName} (full file is block-commented template — not executable per statement)`,
+        );
+        await client.query("BEGIN");
+        try {
+          await client.query(
+            'INSERT INTO "_drizzle_migrations" (migration_name) VALUES ($1) ON CONFLICT DO NOTHING',
+            [fileName],
+          );
+          await client.query("COMMIT");
+          applied++;
+          console.log(`[MIGRATE]   ✅ ${fileName} marked as applied (no-op)`);
+        } catch (err) {
+          await client.query("ROLLBACK");
+          throw err;
+        }
+        continue;
+      }
+
       // Split on drizzle's statement-breakpoint delimiter
       const statements = sql
         .split('--\x3e statement-breakpoint')
@@ -103,17 +136,20 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
 
       console.log(`[MIGRATE] 📝 Running: ${fileName} (${statements.length} statements)`);
 
-      // Execute each statement in a transaction
-      await client.query('BEGIN');
+      // Egy tranzakcióban futunk, de statementenként SAVEPOINT: egy hiba ne abortálja az egész txn-t.
+      await client.query("BEGIN");
       try {
-        for (const stmt of statements) {
+        for (let si = 0; si < statements.length; si++) {
+          const stmt = statements[si]!;
+          const sp = `migr_sp_${si}`;
           try {
+            await client.query(`SAVEPOINT ${sp}`);
             await client.query(stmt);
+            await client.query(`RELEASE SAVEPOINT ${sp}`);
           } catch (err: unknown) {
+            await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
             const errMsg = err instanceof Error ? err.message : String(err);
-            // Skip "already exists" errors (idempotent migrations)
-            if (errMsg.includes('already exists') || 
-                errMsg.includes('duplicate key')) {
+            if (errMsg.includes("already exists") || errMsg.includes("duplicate key")) {
               console.log(`[MIGRATE]   ⚠️ Skipped (already exists): ${stmt.substring(0, 60)}...`);
             } else {
               throw err;
