@@ -122,6 +122,17 @@ function buildWorld(): Uint8Array {
   return g;
 }
 
+function findSpawn(world: Uint8Array): { x: number; y: number } {
+  const c = 6;
+  for (let r = 1; r < ROWS; r++) {
+    const i = r * COLS + c;
+    if (world[i] !== AIR) {
+      return { x: c * TILE + 4, y: r * TILE - 0.1 };
+    }
+  }
+  return { x: 6 * TILE, y: 7 * TILE };
+}
+
 function solid(t: number) {
   return t !== AIR;
 }
@@ -287,7 +298,8 @@ export default function BlockCraftQuiz() {
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
     worldRef.current = buildWorld();
-    playerRef.current = { x: 6 * TILE, y: 7 * TILE, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 };
+    const spawn = findSpawn(worldRef.current);
+    playerRef.current = { x: spawn.x, y: spawn.y, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 };
     cameraRef.current = 0;
     particlesRef.current = [];
     setSessionXp(0);
@@ -386,25 +398,27 @@ export default function BlockCraftQuiz() {
           if (!solid(cell)) continue;
           const bx = gx * TILE;
           const by = gy * TILE;
-          if (p.x + PLAYER_W > bx && p.x < bx + TILE && p.y > by && p.y - PLAYER_H < by + TILE) {
-            const ob = p.y - (by + TILE);
-            const ot = by + TILE - (p.y - PLAYER_H);
-            const ol = p.x + PLAYER_W - bx;
-            const orr = bx + TILE - p.x;
-            const m = Math.min(ob > 0 ? ob : 999, ot > 0 ? ot : 999, ol > 0 ? ol : 999, orr > 0 ? orr : 999);
-            if (m === ob && p.vy > 0) {
-              p.y = by + TILE + 0.01;
-              p.vy = 0;
-              p.onGround = true;
-            } else if (m === ot && p.vy < 0) {
-              p.y = by - PLAYER_H - 0.01;
-              p.vy = 0;
-            } else if (m === ol) {
-              p.x = bx - PLAYER_W - 0.01;
+          const px0 = p.x;
+          const px1 = p.x + PLAYER_W;
+          const py0 = p.y - PLAYER_H;
+          const py1 = p.y;
+          if (px1 > bx && px0 < bx + TILE && py1 > by && py0 < by + TILE) {
+            const overlapX = Math.min(px1 - bx, bx + TILE - px0);
+            const overlapY = Math.min(py1 - by, by + TILE - py0);
+
+            if (overlapX < overlapY) {
+              if (px0 < bx) p.x = bx - PLAYER_W - 0.01;
+              else p.x = bx + TILE + 0.01;
               p.vx = 0;
-            } else if (m === orr) {
-              p.x = bx + TILE + 0.01;
-              p.vx = 0;
+            } else {
+              if (py1 - by < by + TILE - py0) {
+                p.y = by - 0.01;
+                p.vy = 0;
+                p.onGround = true;
+              } else {
+                p.y = by + TILE + PLAYER_H + 0.01;
+                p.vy = 0;
+              }
             }
           }
         }
@@ -532,11 +546,12 @@ export default function BlockCraftQuiz() {
     const el = canvasRef.current;
     if (!el) return;
     const parent = el.parentElement;
-    const w = Math.min(680, Math.max(320, parent?.clientWidth ?? 380));
-    el.width = w;
-    el.height = 384;
-    el.style.width = `${w}px`;
-    el.style.height = "384px";
+    const parentW = Math.max(320, Math.floor(parent?.clientWidth ?? 380));
+    const h = Math.min(440, Math.max(300, Math.round(parentW * 0.56)));
+    el.width = parentW;
+    el.height = h;
+    el.style.width = `${parentW}px`;
+    el.style.height = `${h}px`;
   }, []);
 
   useEffect(() => {
@@ -578,7 +593,7 @@ export default function BlockCraftQuiz() {
 
           {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgas, Space: ugras, E: banyaszat + kviz. Erintokijelzon lent jelennek meg a kontrollok.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Vilag betoltese</Button></div>}
 
-          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[11px] font-semibold"><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5 text-right">Ido: {timeLeft}s · Erc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full flex justify-center bg-black"><canvas ref={canvasRef} className="block touch-none" /></div><div className="flex flex-wrap gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 shadow-md" onClick={tryMine}><Pickaxe className="w-4 h-4 mr-1" />Banyasz (E)</Button><Button type="button" size="sm" className="bg-amber-600 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md" onClick={endRun}>Kor vege</Button></div></div>}
+          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[11px] font-semibold"><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5 text-right">Ido: {timeLeft}s · Erc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black"><canvas ref={canvasRef} className="block touch-none w-full" /></div><div className="text-[11px] text-white/75 bg-slate-900/75 border border-white/15 rounded-md px-2 py-1 w-full">Tipp: allj kozel egy blokkhoz, majd <strong>E</strong> vagy <strong>Banyasz</strong> gomb.</div><div className="flex flex-wrap gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 shadow-md" onClick={tryMine}><Pickaxe className="w-4 h-4 mr-1" />Banyasz (E)</Button><Button type="button" size="sm" className="bg-amber-600 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md" onClick={endRun}>Kor vege</Button></div></div>}
 
           {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Banyaszat vege</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Erc: <strong>{rareBlocks}</strong></p>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmeny elkuldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Uj vilag</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
         </CardContent></Card>
