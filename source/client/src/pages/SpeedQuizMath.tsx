@@ -17,15 +17,15 @@ type MathTask = {
 };
 
 const ROUND_SECONDS: Record<GradeLevel, number> = {
-  3: 85,
-  4: 78,
-  5: 72,
+  3: 120,
+  4: 110,
+  5: 100,
 };
 
 const QUESTION_SECONDS: Record<GradeLevel, number> = {
-  3: 11,
-  4: 10,
-  5: 9,
+  3: 18,
+  4: 16,
+  5: 14,
 };
 
 const TARGET_CORRECT: Record<GradeLevel, number> = {
@@ -286,7 +286,7 @@ export default function SpeedQuizMath() {
         }
         return next;
       });
-      setTimeLeft((t) => Math.max(0, t - 2));
+      setTimeLeft((t) => Math.max(0, t - 1));
       nextTask();
       return;
     }
