@@ -64,7 +64,7 @@ A tananyag 4 oldalra fog tagolódni. Készítsd elő a szöveget úgy, hogy ezek
 
 2. 🧠 MÓDSZEREK OLDAL szövege (kognitív aktiváció):
    - Készíts elő min. 8-10 kognitív elemet:
-     * Előrejelzés kérdések ("Mit gondolsz, mi történik ha...")
+     * Előrejelzés kérdések („Mit gondolsz, mi történik, ha…”)
      * Kapukérdések (2-3 db tudásellenőrző)
      * Tévhit kártyák (igaz/hamis tévhitek)
      * Húzd-a-helyére feladatok szövegei
@@ -84,13 +84,13 @@ A tananyag 4 oldalra fog tagolódni. Készítsd elő a szöveget úgy, hogy ezek
    - Jelöld meg melyik a helyes válasz
 
 📝 OK-OKOZATI ÖSSZEFÜGGÉSEK:
-- Helyezz el ok-okozati összefüggéseket minden témánál ("Azért..., mert...", "Ennek következménye...")
+- Helyezz el ok-okozati összefüggéseket minden témánál („Azért…, mert…”, „Ennek következménye…”)
 - Tanári magyarázatok: úgy fejts ki mindent, mintha egy türelmes tanár lennél
 - Valós példák a fogalmak szemléltetésére
 - Minden fogalmat RÉSZLETESEN fejtsd ki
 
 ✏️ STÍLUS IRÁNYELVEK (osztályonként):
-- 1-3. osztály: Egyszerű, rövid mondatok, sok példa, játékos hangnem, "Tudtad, hogy...?"
+- 1–3. osztály: Egyszerű, rövid mondatok, sok példa, játékos hangnem, „Tudtad, hogy…?”
 - 4. osztály: Vidám, barátságos stílus, kérdések beépítése, érdekességek
 - 5-7. osztály: Energikus, izgalmas témák, fiúkhoz szóló példák (autók, sport, technológia, videójátékok)
 - 8. osztály+: Komolyabb, részletesebb, kamaszoknak szóló stílus, önálló gondolkodásra ösztönzés
@@ -515,7 +515,7 @@ export default function EnhancedMaterialCreator() {
           if (totalPages > 1) {
             toast({
               title: `📄 PDF feldolgozás`,
-              description: `${file.name}: ${totalPages} oldal konvertálása...`,
+              description: `${file.name}: ${totalPages} oldal konvertálása…`,
             });
           }
           
@@ -1148,7 +1148,7 @@ export default function EnhancedMaterialCreator() {
                         {isAnalyzing ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ChatGPT dolgozik...
+                            ChatGPT dolgozik…
                           </>
                         ) : (
                           <>
@@ -1171,7 +1171,7 @@ export default function EnhancedMaterialCreator() {
                     <Textarea
                       value={directText}
                       onChange={(e) => setDirectText(e.target.value)}
-                      placeholder="Másold be ide a tananyag szövegét, vagy írj közvetlenül..."
+                      placeholder="Másold be ide a tananyag szövegét, vagy írj közvetlenül…"
                       className="min-h-[200px] text-base"
                       data-testid="direct-text-input"
                     />
@@ -1198,7 +1198,7 @@ export default function EnhancedMaterialCreator() {
                           {isAnalyzing ? (
                             <>
                               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              ChatGPT dolgozik...
+                              ChatGPT dolgozik…
                             </>
                           ) : (
                             <>
@@ -1220,7 +1220,7 @@ export default function EnhancedMaterialCreator() {
                     <div className="flex items-center gap-3">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
                       <div className="flex-1">
-                        <p className="font-bold text-lg">ChatGPT elemzi a fájlokat...</p>
+                        <p className="font-bold text-lg">ChatGPT elemzi a fájlokat…</p>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium mt-1">
                           <Clock className="w-4 h-4" />
                           <span>Ez akár <strong>1 percig</strong> is tarthat. Kérlek várj türelemmel és ne zárd be az oldalt!</span>
@@ -1286,7 +1286,7 @@ export default function EnhancedMaterialCreator() {
                       <Label>Kinyert szöveg (első 500 karakter)</Label>
                       <ScrollArea className="h-32 border rounded-md p-4 mt-2">
                         <p className="text-sm whitespace-pre-wrap">
-                          {fileAnalysis.extractedText.substring(0, 500)}...
+                          {fileAnalysis.extractedText.substring(0, 500)}…
                         </p>
                       </ScrollArea>
                     </div>
@@ -1326,7 +1326,7 @@ Miben segíthetek? Szeretnéd, hogy készítsek egy strukturált tananyag szöve
                       {isAnalyzing ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Kérlek várj...
+                          Kérlek, várj…
                         </>
                       ) : (
                         <>
@@ -1461,7 +1461,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                 {isChatGptLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Feldolgozás...
+                    Feldolgozás…
                   </>
                 ) : (
                   <>
@@ -1599,7 +1599,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                     <div className="flex items-center gap-3">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
                       <div className="flex-1">
-                        <p className="font-bold text-lg">Claude készíti a HTML-t...</p>
+                        <p className="font-bold text-lg">Claude készíti a HTML-t…</p>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium mt-1">
                           <Clock className="w-4 h-4" />
                           <span>Ez akár <strong>30-60 másodpercig</strong> is tarthat. Kérlek várj türelemmel!</span>
@@ -1650,7 +1650,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                   {isClaudeLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Feldolgozás...
+                      Feldolgozás…
                     </>
                   ) : (
                     <>
@@ -1748,7 +1748,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                 {isPublishing ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Publikálás...
+                    Publikálás…
                   </>
                 ) : (
                   <>

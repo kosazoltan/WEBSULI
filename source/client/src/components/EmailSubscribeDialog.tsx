@@ -158,7 +158,7 @@ export default function EmailSubscribeDialog() {
                       <FormControl>
                         <Input
                           type="email"
-                          placeholder="pelda@email.com"
+                          placeholder="példa@email.com"
                           disabled={subscribeMutation.isPending}
                           data-testid="input-subscribe-email"
                           autoFocus
@@ -224,7 +224,7 @@ export default function EmailSubscribeDialog() {
                     {subscribeMutation.isPending ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Feliratkozás...
+                        Feliratkozás…
                       </>
                     ) : (
                       <>

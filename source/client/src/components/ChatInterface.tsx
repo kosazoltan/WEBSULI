@@ -29,7 +29,7 @@ export default function ChatInterface({
   messages,
   onSendMessage,
   isLoading = false,
-  placeholder = "Írj üzenetet...",
+  placeholder = "Írj üzenetet…",
   aiName = "AI",
   aiIcon,
   disabled = false

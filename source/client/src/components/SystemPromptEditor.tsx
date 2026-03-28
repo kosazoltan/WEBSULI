@@ -207,7 +207,7 @@ export default function SystemPromptEditor({
                 id={`prompt-${promptId}`}
                 value={prompt}
                 onChange={(e) => handlePromptChange(e.target.value)}
-                placeholder="Add meg a system promptot..."
+                placeholder="Add meg a system promptot…"
                 className="min-h-[200px] font-mono text-sm"
                 disabled={isLoading}
                 data-testid={`textarea-prompt-${promptId}`}
@@ -234,7 +234,7 @@ export default function SystemPromptEditor({
                 {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    Mentés...
+                    Mentés…
                   </>
                 ) : (
                   <>

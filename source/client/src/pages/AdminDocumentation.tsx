@@ -39,7 +39,7 @@ export default function AdminDocumentation() {
           <Link href="/admin">
             <Button variant="ghost" size="sm" className="mb-4" data-testid="button-back-to-admin">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Vissza az Admin Dashboardra
+              Vissza az admin felületre
             </Button>
           </Link>
           
@@ -60,7 +60,7 @@ export default function AdminDocumentation() {
 
         <Alert className="mb-6">
           <Info className="h-4 w-4" />
-          <AlertTitle>Gyors Tipp</AlertTitle>
+          <AlertTitle>Gyors tipp</AlertTitle>
           <AlertDescription>
             Használd a fül menüt az oldalon a különböző témák között navigáláshoz. Minden funkció részletes leírást és példákat tartalmaz.
           </AlertDescription>
@@ -75,7 +75,7 @@ export default function AdminDocumentation() {
             </TabsTrigger>
             <TabsTrigger value="creator" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid="tab-creator">
               <Wand2 className="w-4 h-4 mr-2" />
-              Material Creator
+              Fejlett készítő
             </TabsTrigger>
             <TabsTrigger value="materials" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid="tab-materials">
               <FileText className="w-4 h-4 mr-2" />
@@ -97,7 +97,7 @@ export default function AdminDocumentation() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BookOpen className="w-5 h-5" />
-                  Platform Áttekintés
+                  Platform áttekintése
                 </CardTitle>
                 <CardDescription>
                   Az "Anyagok Profiknak" admin felületének teljes bemutatása
@@ -109,11 +109,11 @@ export default function AdminDocumentation() {
                   <p className="text-muted-foreground mb-4">
                     Professzionális HTML oktatóanyag platform, amely lehetővé teszi tananyagok létrehozását, 
                     feltöltését és megosztását diákokkal. A platform AI-alapú tartalomgenerálást, 
-                    osztályonkénti szűrést és email értesítéseket kínál.
+                    osztályonkénti szűrést és e-mail értesítéseket kínál.
                   </p>
                   <Alert className="border-primary/50 bg-primary/5">
                     <Shield className="h-4 w-4 text-primary" />
-                    <AlertTitle>Teljesen Nyilvános Platform</AlertTitle>
+                    <AlertTitle>Teljesen nyilvános platform</AlertTitle>
                     <AlertDescription>
                       A platform <strong>100% nyilvános</strong> - nincs bejelentkezés vagy regisztráció szükséges. 
                       Mindenki létrehozhat, szerkeszthet és törölhet anyagokat, valamint elérheti az admin funkciókat.
@@ -124,47 +124,47 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Főbb Funkciók</h3>
+                  <h3 className="text-lg font-semibold mb-3">Főbb funkciók</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FeatureCard
                       icon={Wand2}
-                      title="Enhanced Material Creator"
-                      description="3-fázisú AI munkafolyamat: PDF/kép feltöltés → ChatGPT szöveggenerálás → Claude HTML készítés → Előnézet → Publikálás"
+                      title="Fejlett tananyagkészítő (AI)"
+                      description="Háromfázisú AI-munkafolyamat: PDF/kép feltöltés → ChatGPT szöveggenerálás → Claude HTML-készítés → előnézet → publikálás"
                     />
                     <FeatureCard
                       icon={FileText}
-                      title="Anyag Kezelés"
-                      description="Anyagok szerkesztése, törlése, bulk műveletek (többszörös törlés, email küldés, áthelyezés)"
+                      title="Anyagkezelés"
+                      description="Anyagok szerkesztése, törlése, tömeges műveletek (többszörös törlés, e-mail küldés, áthelyezés)"
                     />
                     <FeatureCard
                       icon={Shield}
-                      title="Nyilvános Hozzáférés"
-                      description="Nincs bejelentkezés - mindenki létrehozhat, szerkeszthet és törölhet anyagokat szabadon"
+                      title="Nyilvános hozzáférés"
+                      description="Nincs bejelentkezés — mindenki létrehozhat, szerkeszthet és törölhet anyagokat szabadon"
                     />
                     <FeatureCard
                       icon={Tag}
-                      title="Tag Kezelő"
-                      description="Címkék létrehozása, szerkesztése, törlése anyagok kategorizálásához"
+                      title="Címkék kezelése"
+                      description="Címkék létrehozása, szerkesztése, törlése az anyagok kategorizálásához"
                     />
                     <FeatureCard
                       icon={Database}
-                      title="Backup Rendszer"
-                      description="Teljes adatbázis export JSON formátumban, import funkció katasztrófa-helyreállításhoz"
+                      title="Biztonsági másolatok"
+                      description="Teljes adatbázis exportálása JSON-formátumban, importálás katasztrófa-helyreállításhoz"
                     />
                     <FeatureCard
                       icon={Mail}
-                      title="Email Kezelés"
-                      description="Extra email címek hozzáadása osztályonkénti értesítésekhez"
+                      title="E-mailek kezelése"
+                      description="Extra e-mail címek hozzáadása osztályonkénti értesítésekhez"
                     />
                     <FeatureCard
                       icon={BarChart3}
-                      title="Analytics"
-                      description="Anyag megtekintések, email statisztikák, osztály szerinti eloszlás"
+                      title="Statisztikák"
+                      description="Anyag-megtekintések, e-mail statisztikák, osztály szerinti eloszlás"
                     />
                     <FeatureCard
                       icon={Bell}
-                      title="Push Értesítések"
-                      description="Böngésző push notification-ök tesztelése új anyagok feltöltésekor"
+                      title="Leküldéses értesítések"
+                      description="Böngészős push-értesítések kipróbálása új anyagok feltöltésekor"
                     />
                   </div>
                 </div>
@@ -175,25 +175,25 @@ export default function AdminDocumentation() {
                   <h3 className="text-lg font-semibold mb-3">Gyors Navigáció</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <QuickLinkCard
-                      title="Enhanced Material Creator"
-                      description="Anyag létrehozás AI segítséggel"
+                      title="Fejlett tananyagkészítő"
+                      description="Anyag létrehozása AI segítségével"
                       tab="Anyagok → Fejlett készítő"
                       badge="Leggyakoribb"
                     />
                     <QuickLinkCard
-                      title="Anyag Szerkesztés"
+                      title="Anyag szerkesztése"
                       description="Cím, leírás és osztály módosítása"
-                      tab="Fájlok → Szerkesztés ikon"
+                      tab="Fájlok → szerkesztés ikon"
                     />
                     <QuickLinkCard
-                      title="Backup Export"
+                      title="Másolat exportálása"
                       description="Adatbázis mentése"
-                      tab="Kezelés → Backup"
+                      tab="Kezelés → Másolat"
                     />
                     <QuickLinkCard
-                      title="Email Címek"
-                      description="Értesítési email-ek kezelése"
-                      tab="Beállítások → Email címek"
+                      title="E-mail címek"
+                      description="Értesítési címek kezelése"
+                      tab="Beállítások → E-mail címek"
                     />
                   </div>
                 </div>
@@ -207,10 +207,10 @@ export default function AdminDocumentation() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Wand2 className="w-5 h-5" />
-                  Enhanced Material Creator
+                  Fejlett tananyagkészítő (AI)
                 </CardTitle>
                 <CardDescription>
-                  3-fázisú AI-alapú tananyag készítő rendszer
+                  Háromfázisú, AI-alapú tananyag-készítő rendszer
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -218,22 +218,22 @@ export default function AdminDocumentation() {
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertTitle>Mi ez?</AlertTitle>
                   <AlertDescription>
-                    Az Enhanced Material Creator egy varázsló alapú rendszer, amely PDF vagy kép fájlokból 
-                    készít interaktív HTML tananyagot 3 lépésben AI segítségével.
+                    A fejlett tananyagkészítő egy varázslószerű rendszer, amely PDF- vagy képfájlokból
+                    három lépésben, AI segítségével készít interaktív HTML-tananyagot.
                   </AlertDescription>
                 </Alert>
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Munkafolyamat (3 Fázis)</h3>
+                  <h3 className="text-lg font-semibold mb-4">Munkafolyamat (három fázis)</h3>
                   
                   <div className="space-y-4">
                     <PhaseCard
                       number={1}
-                      title="Fájl Feltöltés & Elemzés"
+                      title="Fájlfeltöltés és elemzés"
                       icon={Upload}
                       steps={[
                         "Tölts fel egy vagy több PDF vagy JPG/PNG fájlt (max 30MB összesen)",
-                        "A rendszer ChatGPT Vision API-val elemzi az összes dokumentumot",
+                        "A rendszer a ChatGPT Vision API segítségével elemzi az összes dokumentumot",
                         "Automatikusan kinyeri a szöveget az összes fájlból és javaslatokat ad (cím, leírás, osztály, témák)",
                         "Több fájl esetén az AI kombinálja őket egyetlen tananyaggá",
                         "Ellenőrizd és módosítsd a javaslatokat szükség szerint"
@@ -248,14 +248,14 @@ export default function AdminDocumentation() {
 
                     <PhaseCard
                       number={2}
-                      title="Szöveg Generálás (ChatGPT)"
+                      title="Szöveggenerálás (ChatGPT)"
                       icon={FileText}
                       steps={[
-                        "A ChatGPT chat interfész megnyílik a kinyert szöveggel",
+                        "A ChatGPT csevegőfelület megnyílik a kinyert szöveggel",
                         "Beszélgess az AI-val a tananyag szövegének finomításához",
-                        "Kérd a ChatGPT-t részletesebb magyarázatokra, példákra",
-                        "Az AI osztályonként eltérő stílusban ír (1-3: egyszerű, 5-7: energikus, 8+: komolyabb)",
-                        "Ha elégedett vagy, kattints a 'Tovább Claude HTML generálásra' gombra"
+                        "Kérd a ChatGPT-tól a részletesebb magyarázatokat és példákat",
+                        "Az AI osztályonként eltérő stílusban ír (1–3.: egyszerű, 5–7.: lendületes, 8+.: komolyabb)",
+                        "Ha elégedett vagy, kattints a „Tovább Claude HTML-generálásra” gombra"
                       ]}
                       tips={[
                         "Példa kérés: 'Fejtsd ki részletesebben a fotoszintézis lépéseit'",
@@ -266,18 +266,18 @@ export default function AdminDocumentation() {
 
                     <PhaseCard
                       number={3}
-                      title="HTML Generálás (Claude) & Előnézet"
+                      title="HTML-generálás (Claude) és előnézet"
                       icon={Code2}
                       steps={[
-                        "A Claude AI megkapja a ChatGPT által generált szöveget",
+                        "A Claude megkapja a ChatGPT által generált szöveget",
                         "Interaktív, látványos HTML tananyagot készít belőle",
                         "Osztályonként eltérő vizuális stílust alkalmaz (színek, grafikák)",
                         "Az előnézet ablakban azonnal láthatod az eredményt",
                         "Finomítsd a HTML-t további chat üzenetekkel",
-                        "Ha kész vagy, kattints a 'Publikálás a platformon' gombra"
+                        "Ha kész vagy, kattints a „Publikálás a platformon” gombra"
                       ]}
                       tips={[
-                        "Példa kérés Claude-nak: 'Adj hozzá egy interaktív kvízt a végére'",
+                        "Példa kérés Claude-nak: „Adj hozzá egy interaktív kvízt a végére”",
                         "Példa kérés: 'Használj több animációt és képet'",
                         "Az előnézet valós időben frissül minden AI válasznál"
                       ]}
@@ -288,22 +288,22 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">AI System Prompt Testreszabás</h3>
+                  <h3 className="text-lg font-semibold mb-3">AI rendszerutasítások testreszabása</h3>
                   <p className="text-muted-foreground mb-4">
-                    Minden fázisban testreszabhatod az AI utasításokat a "System Prompt" gombbal:
+                    Minden fázisban testreszabhatod az AI utasításait a „Rendszerutasítás” (system prompt) gombbal:
                   </p>
                   <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                    <li><strong>ChatGPT Prompt:</strong> Tananyag szöveg stílusa, hangnem, részletesség</li>
-                    <li><strong>Claude Prompt:</strong> HTML dizájn stílus, színek, interaktivitás szintje</li>
-                    <li>Az egyedi prompt-ok minden material creator session-ben használatosak</li>
-                    <li>Reset gombbal visszaállíthatod az alapértelmezett prompt-okat</li>
+                    <li><strong>ChatGPT-utasítás:</strong> tananyag szövegének stílusa, hangneme, részletessége</li>
+                    <li><strong>Claude-utasítás:</strong> HTML megjelenés, színek, interaktivitás szintje</li>
+                    <li>Az egyedi utasítások minden készítő-munkamenetben érvényesek</li>
+                    <li>A visszaállítás gombbal az alapértelmezett utasítások térnek vissza</li>
                   </ul>
                 </div>
 
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Gyakori Problémák & Megoldások</h3>
+                  <h3 className="text-lg font-semibold mb-3">Gyakori problémák és megoldások</h3>
                   <div className="space-y-3">
                     <ProblemSolution
                       problem="PDF elemzés sikertelen"
@@ -315,11 +315,11 @@ export default function AdminDocumentation() {
                     />
                     <ProblemSolution
                       problem="HTML nem látványos"
-                      solution="Kérd Claude-ot: 'Adj hozzá több színt, animációt és grafikát'"
+                      solution="Kérd Claude-tól: „Adj hozzá több színt, animációt és grafikát”"
                     />
                     <ProblemSolution
                       problem="Osztály automatikus érzékelés rossz"
-                      solution="A Fázis 1-ben manuálisan állítsd be a helyes osztályt a dropdown-ból"
+                      solution="Az 1. fázisban manuálisan állítsd be a helyes osztályt a legördülő listából"
                     />
                   </div>
                 </div>
@@ -333,7 +333,7 @@ export default function AdminDocumentation() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="w-5 h-5" />
-                  Anyag Kezelés
+                  Anyagkezelés
                 </CardTitle>
                 <CardDescription>
                   Feltöltött tananyagok szerkesztése, törlése és kezelése
@@ -341,17 +341,17 @@ export default function AdminDocumentation() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Anyag Műveletek</h3>
+                  <h3 className="text-lg font-semibold mb-4">Anyagműveletek</h3>
                   
                   <div className="space-y-4">
                     <ActionCard
                       icon={Edit}
-                      title="Anyag Szerkesztése"
-                      description="Kattints az anyagon a három pontra (⋮) → 'Szerkesztés'"
+                      title="Anyag szerkesztése"
+                      description="Kattints az anyagon a három pontra (⋮) → „Szerkesztés”"
                       details={[
                         "Cím módosítása: Bármilyen nem üres szöveg (pl. 'Fotoszintézis magyarázat', '5. Arany János...')",
                         "Leírás módosítása: Rövid összefoglaló (opcionális)",
-                        "Osztály módosítása: 1-8. osztály közötti átsorolás (független a címtől)",
+                        "Osztály módosítása: 1–8. osztály közötti átsorolás (független a címtől)",
                         "A cím és osztály mező most már teljesen független egymástól",
                         "A módosítások azonnal mentésre kerülnek"
                       ]}
@@ -359,36 +359,36 @@ export default function AdminDocumentation() {
 
                     <ActionCard
                       icon={Trash2}
-                      title="Anyag Törlése"
-                      description="Három pont (⋮) → 'Törlés' → Megerősítés"
+                      title="Anyag törlése"
+                      description="Három pont (⋮) → „Törlés” → megerősítés"
                       details={[
                         "FIGYELEM: A törlés végleges és visszavonhatatlan!",
                         "A törölt anyag minden adata elvész (HTML, metaadatok, statisztikák)",
-                        "Törlés előtt mindig készíts backup-ot a Backup Manager-rel"
+                        "Törlés előtt mindig készíts biztonsági másolatot a másolatkezelővel"
                       ]}
                     />
 
                     <ActionCard
                       icon={Eye}
-                      title="Anyag Előnézet"
-                      description="Kattints az anyag kártyára a teljes HTML előnézethez"
+                      title="Anyag előnézete"
+                      description="Kattints az anyag kártyára a teljes HTML-előnézethez"
                       details={[
-                        "A Preview oldal megjeleníti a teljes interaktív tartalmat",
-                        "TTS (Text-to-Speech) funkció elérhető olvasáshoz",
-                        "URL másolása egy kattintással megosztáshoz",
-                        "Mobilbarát nézet automatikusan optimalizálva"
+                        "Az előnézet oldal megjeleníti a teljes interaktív tartalmat",
+                        "TTS (szövegfelolvasás) elérhető hallgatáshoz",
+                        "A webcím egy kattintással másolható megosztáshoz",
+                        "Mobilbarát nézet, automatikus optimalizálással"
                       ]}
                     />
 
                     <ActionCard
                       icon={Mail}
-                      title="Email Értesítés Küldése"
-                      description="Három pont (⋮) → 'Email küldése'"
+                      title="E-mail értesítés küldése"
+                      description="Három pont (⋮) → „E-mail küldése”"
                       details={[
-                        "Email küldése az anyagról az osztályhoz rendelt előfizetőknek",
-                        "Választhatsz az előre mentett email címekből",
-                        "Adhatsz meg egyedi email címet is (vessző-szeparált lista)",
-                        "Az email tartalmazza az anyag címét, leírását és linkjét"
+                        "E-mail küldése az anyagról az osztályhoz rendelt címzetteknek",
+                        "Választhatsz az előre mentett e-mail címek közül",
+                        "Megadhatsz egyedi címeket is (vesszővel elválasztva)",
+                        "Az üzenet tartalmazza az anyag címét, leírását és hivatkozását"
                       ]}
                     />
                   </div>
@@ -397,7 +397,7 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Bulk Műveletek (Tömeges)</h3>
+                  <h3 className="text-lg font-semibold mb-4">Tömeges műveletek</h3>
                   <p className="text-muted-foreground mb-4">
                     Egyszerre több anyagon végezz műveleteket:
                   </p>
@@ -409,8 +409,8 @@ export default function AdminDocumentation() {
                         <div>
                           <h4 className="font-semibold mb-2">Kiválasztás</h4>
                           <p className="text-sm text-muted-foreground">
-                            Jelöld be a kívánt anyagok melletti checkbox-okat. 
-                            A "Minden kijelölése" gomb az összes látható anyagot kijelöli.
+                            Jelöld be a kívánt anyagok melletti jelölőnégyzeteket.
+                            A „Mind kijelölése” gomb az összes látható anyagot kijelöli.
                           </p>
                         </div>
                       </div>
@@ -420,10 +420,10 @@ export default function AdminDocumentation() {
                       <div className="flex items-start gap-3">
                         <Trash2 className="w-5 h-5 text-destructive mt-0.5" />
                         <div>
-                          <h4 className="font-semibold mb-2">Bulk Törlés</h4>
+                          <h4 className="font-semibold mb-2">Tömeges törlés</h4>
                           <p className="text-sm text-muted-foreground mb-2">
-                            A kiválasztott anyagok törlése egyszerre. 
-                            Megerősítő dialógus jelenik meg a veszélyes művelet előtt.
+                            A kiválasztott anyagok törlése egyszerre.
+                            Megerősítő párbeszédablak jelenik meg a veszélyes művelet előtt.
                           </p>
                           <Badge variant="destructive">Visszavonhatatlan!</Badge>
                         </div>
@@ -434,9 +434,9 @@ export default function AdminDocumentation() {
                       <div className="flex items-start gap-3">
                         <Mail className="w-5 h-5 text-primary mt-0.5" />
                         <div>
-                          <h4 className="font-semibold mb-2">Bulk Email</h4>
+                          <h4 className="font-semibold mb-2">Tömeges e-mail</h4>
                           <p className="text-sm text-muted-foreground">
-                            Email értesítés küldése az összes kiválasztott anyagról egyszerre. 
+                            E-mail értesítés az összes kiválasztott anyagról egyszerre.
                             Hasznos havi összesítőkhöz vagy tematikus anyagok kiküldéséhez.
                           </p>
                         </div>
@@ -447,7 +447,7 @@ export default function AdminDocumentation() {
                       <div className="flex items-start gap-3">
                         <FileText className="w-5 h-5 text-primary mt-0.5" />
                         <div>
-                          <h4 className="font-semibold mb-2">Bulk Osztály Áthelyezés</h4>
+                          <h4 className="font-semibold mb-2">Tömeges osztály-áthelyezés</h4>
                           <p className="text-sm text-muted-foreground">
                             Az összes kiválasztott anyag átsorolása egy másik osztályba. 
                             Például: 4. osztályos anyagok átsorolása 5. osztályba.
@@ -461,7 +461,7 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3">Keresés & Szűrés</h3>
+                  <h3 className="text-lg font-semibold mb-3">Keresés és szűrés</h3>
                   <ul className="list-disc list-inside space-y-2 text-muted-foreground">
                     <li><strong>Keresés:</strong> Anyag címében és leírásában keres valós időben</li>
                     <li><strong>Osztály szűrő:</strong> Csak egy adott osztály anyagainak megjelenítése</li>
@@ -479,10 +479,10 @@ export default function AdminDocumentation() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Database className="w-5 h-5" />
-                  Rendszer Kezelés
+                  Rendszerkezelés
                 </CardTitle>
                 <CardDescription>
-                  Backup, tag-ek és email kezelés
+                  Biztonsági másolatok, címkék és e-mailek kezelése
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -496,41 +496,41 @@ export default function AdminDocumentation() {
                 </Alert>
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Backup Manager</h3>
+                  <h3 className="text-lg font-semibold mb-4">Biztonsági másolatok</h3>
                   <p className="text-muted-foreground mb-4">
-                    Nézd: <strong>Kezelés → Backup</strong>
+                    Nézd: <strong>Kezelés → Másolat</strong>
                   </p>
                   
                   <div className="space-y-3">
                     <SystemFeature
-                      title="Backup Export"
-                      description="Teljes adatbázis mentése JSON fájlba"
+                      title="Másolat exportálása"
+                      description="Teljes adatbázis mentése JSON-fájlba"
                       features={[
-                        "Kattints a 'Backup exportálása' gombra",
-                        "Automatikus fájl letöltés: anyagok-backup-YYYY-MM-DD.json",
-                        "Tartalmazza: összes anyag, felhasználó, email subscription",
-                        "Ajánlott: Készíts backup-ot MINDEN nagyobb művelet előtt!"
+                        "Kattints a „Biztonsági másolat letöltése” gombra",
+                        "Automatikus letöltés: anyagok-backup-ÉÉÉÉ-HH-NN.json",
+                        "Tartalmazza: összes anyag, felhasználó, e-mail-feliratkozások",
+                        "Ajánlott: készíts másolatot minden nagyobb művelet előtt!"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Backup Import"
-                      description="Korábbi backup visszaállítása"
+                      title="Másolat importálása"
+                      description="Korábbi mentés visszaállítása"
                       features={[
-                        "Válaszd ki a mentett JSON fájlt",
-                        "Kattints az 'Import indítása' gombra",
-                        "VIGYÁZAT: Ez felülírja a jelenlegi adatokat!",
-                        "Használd katasztrófa esetén vagy teszt környezet visszaállításához"
+                        "Válaszd ki a mentett JSON-fájlt",
+                        "Kattints az „Importálás” / visszaállítás gombra",
+                        "Vigyázat: ez felülírja a jelenlegi adatokat!",
+                        "Használd katasztrófa esetén vagy tesztkörnyezet visszaállításához"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Forrás Kód Export"
-                      description="Teljes projekt forráskódjának letöltése"
+                      title="Forráskód letöltése"
+                      description="A teljes projekt forráskódjának letöltése"
                       features={[
-                        "Kattints a 'Forrás kód letöltése' gombra",
-                        "ZIP fájl letöltése az összes kóddal",
-                        "Hasznos: helyi development, verzió backup, audit"
+                        "Kattints a „Forráskód letöltése (.zip)” gombra",
+                        "ZIP-fájl érkezik az összes kóddal",
+                        "Hasznos: helyi fejlesztés, verziómentés, átvizsgálás"
                       ]}
                     />
                   </div>
@@ -539,30 +539,30 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Tag Manager</h3>
+                  <h3 className="text-lg font-semibold mb-4">Címkék kezelése</h3>
                   <p className="text-muted-foreground mb-4">
-                    Nézd: <strong>Kezelés → Tag-ek</strong>
+                    Nézd: <strong>Kezelés → Címkék</strong>
                   </p>
                   
                   <div className="space-y-3">
                     <SystemFeature
-                      title="Tag Létrehozása"
-                      description="Új címke hozzáadása anyagok kategorizálásához"
+                      title="Címke létrehozása"
+                      description="Új címke hozzáadása az anyagok kategorizálásához"
                       features={[
-                        "Adj meg egy tag nevet (pl. 'Matematika', 'Fizika')",
-                        "Opcionális: Leírás és szín beállítása",
-                        "Kattints a 'Tag hozzáadása' gombra",
-                        "A tag azonnal használható lesz anyagoknál"
+                        "Adj meg egy címke nevet (pl. „matematika”, „fizika”)",
+                        "Opcionális: leírás és szín beállítása",
+                        "Kattints a „Címke hozzáadása” gombra",
+                        "A címke azonnal használható lesz az anyagoknál"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Tag Törlése"
-                      description="Felesleges tag-ek eltávolítása"
+                      title="Címke törlése"
+                      description="Felesleges címkék eltávolítása"
                       features={[
-                        "Kattints a piros Trash ikonra",
-                        "Megerősítő dialógus jelenik meg",
-                        "A tag eltávolításra kerül az összes anyagról is"
+                        "Kattints a piros kuka ikonra",
+                        "Megerősítő párbeszédablak jelenik meg",
+                        "A címke lekerül az összes anyagról is"
                       ]}
                     />
                   </div>
@@ -571,40 +571,40 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Email Kezelés</h3>
+                  <h3 className="text-lg font-semibold mb-4">E-mailek kezelése</h3>
                   <p className="text-muted-foreground mb-4">
-                    Nézd: <strong>Beállítások → Email címek</strong>
+                    Nézd: <strong>Beállítások → E-mail címek</strong>
                   </p>
                   
                   <div className="space-y-3">
                     <SystemFeature
-                      title="Email Cím Hozzáadása"
-                      description="Extra email címek hozzáadása osztályonkénti értesítésekhez"
+                      title="E-mail cím hozzáadása"
+                      description="Extra címek osztályonkénti értesítésekhez"
                       features={[
-                        "Adj meg egy email címet",
-                        "Válaszd ki a kívánt osztályokat (checkbox-ok)",
-                        "Kattints a 'Hozzáadás' gombra",
-                        "Az email cím értesítést kap az adott osztályok új anyagairól"
+                        "Adj meg egy e-mail címet",
+                        "Válaszd ki a kívánt osztályokat (jelölőnégyzetek)",
+                        "Kattints a „Hozzáadás” gombra",
+                        "A cím értesítést kap az adott osztályok új anyagairól"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Osztályok Szerkesztése"
-                      description="Email címhez rendelt osztályok módosítása"
+                      title="Osztályok szerkesztése"
+                      description="E-mail címhez rendelt osztályok módosítása"
                       features={[
-                        "Kattints az Edit ikonra az email mellett",
+                        "Kattints a szerkesztés ikonra a cím mellett",
                         "Módosítsd a kiválasztott osztályokat",
                         "Mentsd el a változtatásokat"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Email Cím Törlése"
-                      description="Email cím eltávolítása az értesítési listáról"
+                      title="E-mail cím törlése"
+                      description="Cím eltávolítása az értesítési listáról"
                       features={[
-                        "Kattints a Trash ikonra",
-                        "Megerősítsd a törlést",
-                        "Az email cím nem kap több értesítést"
+                        "Kattints a kuka ikonra",
+                        "Erősítsd meg a törlést",
+                        "A cím nem kap több értesítést"
                       ]}
                     />
                   </div>
@@ -613,16 +613,16 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Adatbázis Információk</h3>
+                  <h3 className="text-lg font-semibold mb-4">Adatbázis-információk</h3>
                   <p className="text-muted-foreground mb-4">
-                    A Database tab-on találod az adatbázis statisztikákat:
+                    Az <strong>Adatbázis</strong> fülön találod a statisztikákat:
                   </p>
                   
                   <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                    <li><strong>Tananyagok száma:</strong> Összes feltöltött HTML anyag</li>
-                    <li><strong>Felhasználók száma:</strong> Regisztrált felhasználók</li>
-                    <li><strong>Táblák listája:</strong> Adatbázis struktúra áttekintése</li>
-                    <li><strong>Database URL:</strong> PostgreSQL kapcsolati információk</li>
+                    <li><strong>Tananyagok száma:</strong> összes feltöltött HTML-anyag</li>
+                    <li><strong>Felhasználók száma:</strong> regisztrált felhasználók</li>
+                    <li><strong>Táblák listája:</strong> szerkezet áttekintése</li>
+                    <li><strong>Kapcsolati cím (URL):</strong> PostgreSQL elérési adatok</li>
                   </ul>
                 </div>
               </CardContent>
@@ -635,44 +635,44 @@ export default function AdminDocumentation() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Settings className="w-5 h-5" />
-                  Haladó Funkciók
+                  Haladó funkciók
                 </CardTitle>
                 <CardDescription>
-                  Analytics, push értesítések és AI testreszabás
+                  Statisztikák, leküldéses értesítések és AI-testreszabás
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Analytics & Statisztikák</h3>
+                  <h3 className="text-lg font-semibold mb-4">Statisztikák és riportok</h3>
                   <p className="text-muted-foreground mb-4">
                     Nézd: <strong>Beállítások → Megtekintések</strong>
                   </p>
                   
                   <div className="space-y-3">
                     <SystemFeature
-                      title="Anyag Megtekintések"
+                      title="Anyag-megtekintések"
                       description="Részletes statisztikák minden anyag megtekintéséről"
                       features={[
                         "Anyag címe, leírása, osztály",
                         "Megtekintések száma anyagonként",
                         "Utolsó megtekintés időpontja",
-                        "User agent információk (böngésző, eszköz)"
+                        "Böngésző- és eszközazonosító (user agent)"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Email Statisztikák"
-                      description="Küldött email-ek nyomon követése"
+                      title="E-mail statisztikák"
+                      description="Küldött levelek nyomon követése"
                       features={[
-                        "Kiknek küldtél email-t (címzettek listája)",
-                        "Mely anyagokról (anyag címek)",
+                        "Kiknek küldtél e-mailt (címzettek listája)",
+                        "Mely anyagokról (anyagcímek)",
                         "Mikor küldted (dátum, időpont)",
-                        "Sikeres/sikertelen küldések"
+                        "Sikeres és sikertelen küldések"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Osztály Eloszlás"
+                      title="Osztályeloszlás"
                       description="Anyagok megoszlása osztályonként"
                       features={[
                         "Hány anyag van osztályonként (1-8)",
@@ -682,7 +682,7 @@ export default function AdminDocumentation() {
                     />
 
                     <SystemFeature
-                      title="Top Anyagok"
+                      title="Legnépszerűbb anyagok"
                       description="Legnépszerűbb tananyagok rangsora"
                       features={[
                         "A legtöbbet megtekintett anyagok listája",
@@ -696,19 +696,19 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Push Értesítések</h3>
+                  <h3 className="text-lg font-semibold mb-4">Leküldéses értesítések</h3>
                   <p className="text-muted-foreground mb-4">
-                    Böngésző push notification-ök tesztelése és kezelése
+                    Böngészős push-értesítések kipróbálása és kezelése
                   </p>
                   
                   <div className="space-y-3">
                     <SystemFeature
-                      title="Push Notification Küldése"
-                      description="Teszt értesítés küldése előfizetett felhasználóknak"
+                      title="Push-értesítés küldése"
+                      description="Tesztüzenet a feliratkozott felhasználóknak"
                       features={[
-                        "A platform automatikusan push notification-t küld új anyag feltöltésekor",
+                        "A platform új anyag feltöltésekor automatikusan küldhet push-értesítést",
                         "A felhasználóknak engedélyezniük kell a böngészőben",
-                        "VAPID kulcsok használata biztonságos kommunikációhoz",
+                        "VAPID-kulcsok a biztonságos kommunikációhoz",
                         "Támogatott böngészők: Chrome, Firefox, Edge, Safari"
                       ]}
                     />
@@ -717,8 +717,8 @@ export default function AdminDocumentation() {
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>Fontos</AlertTitle>
                       <AlertDescription>
-                        A push értesítések csak HTTPS kapcsolaton keresztül működnek (websuli.org).
-                        Helyi development során nem tesztelhetők.
+                        A push-értesítések csak HTTPS-kapcsolaton keresztül működnek (éles domain).
+                        Helyi fejlesztés közben általában nem tesztelhetők.
                       </AlertDescription>
                     </Alert>
                   </div>
@@ -727,31 +727,31 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">AI System Prompt Testreszabás</h3>
+                  <h3 className="text-lg font-semibold mb-4">AI rendszerutasítások (system prompt)</h3>
                   <p className="text-muted-foreground mb-4">
-                    Az AI generátorok működésének testreszabása egyedi utasításokkal
+                    Az AI-generátorok viselkedésének finomhangolása egyedi utasításokkal
                   </p>
                   
                   <div className="space-y-3">
                     <SystemFeature
-                      title="ChatGPT System Prompt"
-                      description="Szöveggeneráló AI utasításainak módosítása"
+                      title="ChatGPT rendszerutasítás"
+                      description="A szöveggeneráló AI utasításainak módosítása"
                       features={[
-                        "Elérhető az Enhanced Material Creator-ban a 'System Prompt' gombbal",
+                        "Elérhető a fejlett készítőben a „Rendszerutasítás” gombbal",
                         "Módosíthatod a szöveg stílusát, hangnemét, részletességét",
-                        "Példa: 'Írj rövidebb, tömörebb tananyagokat' vagy 'Használj több példát'",
-                        "Az új prompt azonnal érvénybe lép a következő generálásnál"
+                        "Példa: „Írj rövidebb, tömörebb tananyagot” vagy „Használj több példát”",
+                        "Az új utasítás a következő generálásnál lép életbe"
                       ]}
                     />
 
                     <SystemFeature
-                      title="Claude System Prompt"
-                      description="HTML generáló AI utasításainak módosítása"
+                      title="Claude rendszerutasítás"
+                      description="A HTML-t készítő AI utasításainak módosítása"
                       features={[
-                        "Elérhető az Enhanced Material Creator Claude fázisában",
-                        "Módosíthatod a HTML dizájn stílusát, színeket, interaktivitást",
-                        "Példa: 'Használj több animációt' vagy 'Legyen minimalista dizájn'",
-                        "Reset gombbal visszaállíthatod az alapértelmezett prompt-ot"
+                        "Elérhető a fejlett készítő Claude-fázisában",
+                        "Módosíthatod a HTML megjelenését, színeket, interaktivitást",
+                        "Példa: „Használj több animációt” vagy „Legyen minimalista a dizájn”",
+                        "Visszaállítással az alapértelmezett utasítás tér vissza"
                       ]}
                     />
 
@@ -759,8 +759,8 @@ export default function AdminDocumentation() {
                       <Info className="h-4 w-4" />
                       <AlertTitle>Tipp</AlertTitle>
                       <AlertDescription>
-                        Az AI prompt-ok persisted (elmentődnek) a session alatt. 
-                        Ha új beállításokat szeretnél, módosítsd a prompt-ot MIELŐTT elkezded a chat-et.
+                        Az egyedi utasítások a munkamenet alatt megmaradnak.
+                        Ha új beállítást szeretnél, módosítsd az utasítást mielőtt elkezded a csevegést.
                       </AlertDescription>
                     </Alert>
                   </div>
@@ -769,11 +769,11 @@ export default function AdminDocumentation() {
                 <Separator />
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Haladó Tippek & Trükkök</h3>
+                  <h3 className="text-lg font-semibold mb-4">Haladó tippek és trükkök</h3>
                   
                   <div className="space-y-3">
                     <div className="border-l-4 border-primary pl-4">
-                      <h4 className="font-semibold mb-1">Batch Anyag Készítés</h4>
+                      <h4 className="font-semibold mb-1">Több anyag egymás után</h4>
                       <p className="text-sm text-muted-foreground">
                         Készíts több anyagot egymás után ugyanazzal a témával különböző osztályokhoz. 
                         Az AI megjegyzi a kontextust, gyorsabb lesz a generálás.
@@ -781,7 +781,7 @@ export default function AdminDocumentation() {
                     </div>
 
                     <div className="border-l-4 border-primary pl-4">
-                      <h4 className="font-semibold mb-1">Anyag Újrahasznosítás</h4>
+                      <h4 className="font-semibold mb-1">Anyag újrahasznosítása</h4>
                       <p className="text-sm text-muted-foreground">
                         Ha egy anyag jól sikerült, szerkeszd meg és mentsd el más címmel/osztállyal. 
                         Így több verziót tarthatsz fent ugyanabból a tartalomból.
@@ -789,26 +789,26 @@ export default function AdminDocumentation() {
                     </div>
 
                     <div className="border-l-4 border-primary pl-4">
-                      <h4 className="font-semibold mb-1">Rendszeres Backup</h4>
+                      <h4 className="font-semibold mb-1">Rendszeres mentés</h4>
                       <p className="text-sm text-muted-foreground">
-                        Állíts be heti/havi backup rutint. Töltsd le a JSON fájlt és mentsd el biztonságos helyre 
-                        (Google Drive, Dropbox stb.). Ez megment adatvesztéstől.
+                        Állíts be heti vagy havi mentési rutint. Töltsd le a JSON-fájlt, és tárold biztonságos helyen
+                        (felhő, külső lemez stb.). Ez véd az adatvesztéstől.
                       </p>
                     </div>
 
                     <div className="border-l-4 border-primary pl-4">
-                      <h4 className="font-semibold mb-1">Email Lista Karbantartás</h4>
+                      <h4 className="font-semibold mb-1">E-mail lista karbantartása</h4>
                       <p className="text-sm text-muted-foreground">
-                        Rendszeresen ellenőrizd az Extra Email címek listáját. 
-                        Távolítsd el az inaktív vagy érvénytelen címeket az email bounce-ok elkerülése érdekében.
+                        Rendszeresen ellenőrizd az extra e-mail címek listáját.
+                        Távolítsd el az inaktív vagy érvénytelen címeket a visszapattanó levelek elkerülése érdekében.
                       </p>
                     </div>
 
                     <div className="border-l-4 border-primary pl-4">
-                      <h4 className="font-semibold mb-1">Tag Stratégia</h4>
+                      <h4 className="font-semibold mb-1">Címkestratégia</h4>
                       <p className="text-sm text-muted-foreground">
-                        Használj konzisztens tag-eket (pl. 'Matematika', 'Fizika', 'Történelem'). 
-                        Ez megkönnyíti a keresést és a bulk műveleteket később.
+                        Használj egységes címkéket (pl. „matematika”, „fizika”, „történelem”).
+                        Ez megkönnyíti a keresést és a későbbi tömeges műveleteket.
                       </p>
                     </div>
                   </div>
@@ -826,37 +826,37 @@ export default function AdminDocumentation() {
               <CardContent className="space-y-4">
                 <Alert>
                   <Shield className="h-4 w-4" />
-                  <AlertTitle>Biztonság Első!</AlertTitle>
+                  <AlertTitle>Biztonság az első helyen</AlertTitle>
                   <AlertDescription>
                     Az Anyagok Profiknak platform többszörös biztonsági rétegekkel rendelkezik:
                   </AlertDescription>
                 </Alert>
 
                 <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                  <li><strong>Multi-Admin Access:</strong> Két admin fiók rendelkezik jogosultsággal:
+                  <li><strong>Több adminisztrátor:</strong> két adminisztrátori fiók rendelkezik jogosultsággal:
                     <ul className="ml-6 mt-1 space-y-1">
-                      <li>• kosa.zoltan.ebc@gmail.com (Főadmin)</li>
+                      <li>• kosa.zoltan.ebc@gmail.com (főadmin)</li>
                       <li>• mszilva78@gmail.com (Máté Szilvia)</li>
                     </ul>
                   </li>
-                  <li><strong>Session Management:</strong> 30 perces inaktivitás után automatikus kijelentkezés</li>
-                  <li><strong>XSS Protection:</strong> Minden user input sanitizálva van DOMPurify-val</li>
-                  <li><strong>HTTPS Only:</strong> Éles környezetben csak biztonságos kapcsolat</li>
-                  <li><strong>Content Security Policy:</strong> Helmet middleware védi az alkalmazást</li>
-                  <li><strong>Secure Cookies:</strong> HttpOnly, Secure, SameSite beállítások</li>
-                  <li><strong>Database Backup:</strong> Neon PostgreSQL Point-in-Time Restore</li>
+                  <li><strong>Munkamenet-kezelés:</strong> 30 perces tétlenség után automatikus kijelentkezés</li>
+                  <li><strong>XSS-védelem:</strong> a felhasználói beviteleket tisztítjuk (DOMPurify)</li>
+                  <li><strong>Csak HTTPS:</strong> éles környezetben csak titkosított kapcsolat</li>
+                  <li><strong>Tartalombiztonsági szabályzat (CSP):</strong> a Helmet köztes réteg segíti a védelmet</li>
+                  <li><strong>Biztonságos sütik:</strong> HttpOnly, Secure és SameSite beállítások</li>
+                  <li><strong>Adatbázis-helyreállítás:</strong> Neon PostgreSQL — időponthoz kötött visszaállítás (PITR)</li>
                 </ul>
 
                 <Separator />
 
                 <div>
-                  <h4 className="font-semibold mb-2">Best Practices</h4>
+                  <h4 className="font-semibold mb-2">Ajánlott gyakorlatok</h4>
                   <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>Soha ne oszd meg az admin email jelszavát</li>
-                    <li>Rendszeresen ellenőrizd a felhasználók listáját gyanús aktivitásért</li>
-                    <li>Készíts backup-ot minden kritikus művelet előtt</li>
-                    <li>Ne töröld magadat admin jogosultságból</li>
-                    <li>Figyelj az email statisztikákra spam/abuse jelekért</li>
+                    <li>Soha ne oszd meg az adminisztrátori e-mail fiók jelszavát</li>
+                    <li>Rendszeresen ellenőrizd a felhasználók listáját gyanús tevékenység miatt</li>
+                    <li>Készíts biztonsági másolatot minden kritikus művelet előtt</li>
+                    <li>Ne vesd el saját magad adminisztrátori jogosultságát</li>
+                    <li>Figyeld az e-mail statisztikákat levélszemét- és visszaélési jelekért</li>
                   </ul>
                 </div>
               </CardContent>
@@ -868,19 +868,19 @@ export default function AdminDocumentation() {
         <Card className="mt-8 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-background dark:to-background">
           <CardContent className="p-6 text-center">
             <p className="text-muted-foreground mb-4">
-              További kérdések esetén lépj kapcsolatba az admin-nal.
+              További kérdés esetén vedd fel a kapcsolatot az adminisztrátorral.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Link href="/admin">
                 <Button variant="outline" data-testid="button-footer-back-to-admin">
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Vissza az Admin Dashboardra
+                  Vissza az admin felületre
                 </Button>
               </Link>
               <Link href="/">
                 <Button variant="outline" data-testid="button-footer-public-view">
                   <Eye className="w-4 h-4 mr-2" />
-                  Nyilvános Nézet
+                  Nyilvános nézet
                 </Button>
               </Link>
             </div>

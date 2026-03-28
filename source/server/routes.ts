@@ -1138,7 +1138,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       // Send initial message
       res.write(`data: ${JSON.stringify({
         type: 'start',
-        message: `🤖 AI elindítja a ${taskDescription}...`
+        message: `🤖 AI elindítja a ${taskDescription}…`
       })}\n\n`);
 
       // TWO-PHASE APPROACH with OpenAI:
@@ -1455,7 +1455,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
       // Send initial message
       res.write(`data: ${JSON.stringify({
         type: 'start',
-        message: '🤖 Claude csatlakozott...'
+        message: '🤖 Claude csatlakozott…'
       })}\n\n`);
 
       // Stream Claude's response

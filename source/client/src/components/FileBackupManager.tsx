@@ -204,7 +204,7 @@ export default function FileBackupManager() {
               className="bg-destructive hover:bg-destructive/90"
               data-testid="button-confirm-restore"
             >
-              {restoreMutation.isPending ? "Visszaállítás..." : "Visszaállítás"}
+              {restoreMutation.isPending ? "Visszaállítás…" : "Visszaállítás"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

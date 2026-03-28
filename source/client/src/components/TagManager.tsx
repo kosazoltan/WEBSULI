@@ -109,7 +109,7 @@ export default function TagManager() {
               <Label htmlFor="tag-name">Tag neve *</Label>
               <Input
                 id="tag-name"
-                placeholder="pl. Matematika, Történelem..."
+                placeholder="pl. matematika, történelem…"
                 value={newTagName}
                 onChange={(e) => setNewTagName(e.target.value)}
                 data-testid="input-tag-name"
@@ -143,7 +143,7 @@ export default function TagManager() {
                   data-testid="button-create-tag"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  {createTagMutation.isPending ? "Létrehozás..." : "Létrehozás"}
+                  {createTagMutation.isPending ? "Létrehozás…" : "Létrehozás"}
                 </Button>
               </div>
             </div>
@@ -161,7 +161,7 @@ export default function TagManager() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-center text-muted-foreground">Betöltés...</p>
+            <p className="text-center text-muted-foreground">Betöltés…</p>
           ) : tags && tags.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {tags.map((tag) => (
@@ -218,7 +218,7 @@ export default function TagManager() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-delete-tag"
             >
-              {deleteTagMutation.isPending ? "Törlés..." : "Törlés"}
+              {deleteTagMutation.isPending ? "Törlés…" : "Törlés"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

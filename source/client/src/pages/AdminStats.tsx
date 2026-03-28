@@ -103,7 +103,7 @@ export default function AdminStats() {
 
         <Card data-testid="card-total-likes">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Like-ok</CardTitle>
+            <CardTitle className="text-sm font-medium">Kedvelések</CardTitle>
             <Heart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -147,7 +147,7 @@ export default function AdminStats() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              Top 10 Anyag (Nézettség)
+              10 legnépszerűbb anyag (nézettség)
             </CardTitle>
             <CardDescription>Legtöbbet megtekintett tananyagok</CardDescription>
           </CardHeader>
@@ -169,7 +169,7 @@ export default function AdminStats() {
                   <Tooltip />
                   <Legend />
                   <Bar dataKey="totalViews" fill="#f97316" name="Nézettség" />
-                  <Bar dataKey="totalLikes" fill="#f59e0b" name="Like-ok" />
+                  <Bar dataKey="totalLikes" fill="#f59e0b" name="Kedvelések" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -219,9 +219,9 @@ export default function AdminStats() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Email Statisztika
+            E-mail statisztika
           </CardTitle>
-          <CardDescription>Értesítő emailek küldési állapota</CardDescription>
+          <CardDescription>Értesítő e-mailek küldésének állapota</CardDescription>
         </CardHeader>
         <CardContent>
           {emailLoading ? (
@@ -232,13 +232,13 @@ export default function AdminStats() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="border rounded-lg p-4">
-                <p className="text-sm text-muted-foreground">Elküldött emailek</p>
+                <p className="text-sm text-muted-foreground">Elküldött e-mailek</p>
                 <p className="text-2xl font-bold text-green-600" data-testid="text-emails-sent">
                   {emailStats?.sent || 0}
                 </p>
               </div>
               <div className="border rounded-lg p-4">
-                <p className="text-sm text-muted-foreground">Sikertelen emailek</p>
+                <p className="text-sm text-muted-foreground">Sikertelen küldések</p>
                 <p className="text-2xl font-bold text-red-600" data-testid="text-emails-failed">
                   {emailStats?.failed || 0}
                 </p>

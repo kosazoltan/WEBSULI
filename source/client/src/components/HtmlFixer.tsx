@@ -188,7 +188,7 @@ export function HtmlFixer() {
             ) : (
               <Select value={selectedFileId} onValueChange={setSelectedFileId}>
                 <SelectTrigger data-testid="select-html-file">
-                  <SelectValue placeholder="Válassz egy HTML fájlt..." />
+                  <SelectValue placeholder="Válassz egy HTML-fájlt…" />
                 </SelectTrigger>
                 <SelectContent>
                   {files?.map((file) => (
@@ -377,7 +377,7 @@ export function HtmlFixer() {
               <Label htmlFor="responsive-prompt">Egyedi utasítások (opcionális)</Label>
               <Textarea
                 id="responsive-prompt"
-                placeholder="Pl.: Javítsd ki a mobilon túl széles képeket, vagy állítsd be a betűméretet 280px széles kijelzőre..."
+                placeholder="Pl.: javítsd ki a mobilon túl széles képeket, vagy állítsd be a betűméretet 280px széles kijelzőre…"
                 value={responsivePrompt}
                 onChange={(e) => setResponsivePrompt(e.target.value)}
                 rows={4}
@@ -429,7 +429,7 @@ export function HtmlFixer() {
               <Label htmlFor="errors-prompt">Egyedi utasítások (opcionális)</Label>
               <Textarea
                 id="errors-prompt"
-                placeholder="Pl.: Ellenőrizd a gombok hozzáférhetőségét, vagy javítsd ki a hiányzó alt szövegeket..."
+                placeholder="Pl.: ellenőrizd a gombok hozzáférhetőségét, vagy javítsd ki a hiányzó alt szövegeket…"
                 value={errorsPrompt}
                 onChange={(e) => setErrorsPrompt(e.target.value)}
                 rows={4}
@@ -481,7 +481,7 @@ export function HtmlFixer() {
               <Label htmlFor="theme-prompt">Egyedi utasítások (opcionális)</Label>
               <Textarea
                 id="theme-prompt"
-                placeholder="Pl.: Használj sötétebb kék árnyalatokat, vagy alkalmazz élénkebb rózsaszín hangsúlyokat..."
+                placeholder="Pl.: használj sötétebb kék árnyalatokat, vagy alkalmazz élénkebb rózsaszín hangsúlyokat…"
                 value={themePrompt}
                 onChange={(e) => setThemePrompt(e.target.value)}
                 rows={4}

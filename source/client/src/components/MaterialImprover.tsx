@@ -290,7 +290,7 @@ export default function MaterialImprover() {
 
       // Show loading toast
       toast({
-        title: "🤖 AI feldolgozás...",
+        title: "🤖 AI feldolgozás…",
         description: "A tananyag javítása folyamatban, ez akár 8-15 percig is tarthat.",
         duration: 960000,
       });
@@ -441,7 +441,7 @@ export default function MaterialImprover() {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
-      processing: { variant: "secondary", label: "⏳ Feldolgozás..." },
+      processing: { variant: "secondary", label: "⏳ Feldolgozás…" },
       pending: { variant: "secondary", label: "Függőben" },
       approved: { variant: "default", label: "Jóváhagyva" },
       rejected: { variant: "destructive", label: "Elutasítva" },
@@ -470,7 +470,7 @@ export default function MaterialImprover() {
             <Label htmlFor="file-select">Válassz fájlt a javításhoz</Label>
             <Select value={selectedFileId} onValueChange={setSelectedFileId}>
               <SelectTrigger id="file-select" className="border-red-300">
-                <SelectValue placeholder="Válassz egy fájlt..." />
+                <SelectValue placeholder="Válassz egy fájlt…" />
               </SelectTrigger>
               <SelectContent>
                 {allFiles.map((file) => (
@@ -486,7 +486,7 @@ export default function MaterialImprover() {
             <Label htmlFor="custom-prompt">Egyedi prompt (opcionális)</Label>
             <Textarea
               id="custom-prompt"
-              placeholder="Pl: 'Használj dark mode témát' vagy 'Adj hozzá animációkat'..."
+              placeholder="pl.: „Használj dark mode témát”, vagy „Adj hozzá animációkat”…"
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
               className="border-red-300"
@@ -502,7 +502,7 @@ export default function MaterialImprover() {
             {improveMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Javítás folyamatban...
+                Javítás folyamatban…
               </>
             ) : (
               <>
@@ -517,7 +517,7 @@ export default function MaterialImprover() {
       {/* Improved Files List */}
       <Card className="border-red-500 border-2">
         <CardHeader>
-          <CardTitle className="text-red-700">Javított Fájlok</CardTitle>
+          <CardTitle className="text-red-700">Javított fájlok</CardTitle>
           <CardDescription>
             Itt láthatod az összes javított fájlt. Az Alkalmaz gombbal lecserélheted
             az eredeti fájlt a javított verzióra (backup automatikusan készül).
@@ -559,7 +559,7 @@ export default function MaterialImprover() {
                           {file.status === "processing" ? (
                               <Badge variant="secondary" className="animate-pulse">
                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                AI dolgozik...
+                                AI dolgozik…
                               </Badge>
                             ) : file.status === "error" ? (
                               <span className="text-xs text-red-600 max-w-[200px] truncate" title={file.improvementNotes || ''}>
@@ -740,7 +740,7 @@ export default function MaterialImprover() {
               <Button
                 onClick={async () => {
                   try {
-                    toast({ title: "⏳ FORCE APPLY...", description: "Raw SQL frissítés folyamatban..." });
+                    toast({ title: "⏳ FORCE APPLY…", description: "Raw SQL-frissítés folyamatban…" });
                     const result = await apiRequest("POST", `/api/admin/improved-files/${previewData.id}/force-apply`);
                     const data = result as any;
                     console.log('[FORCE-APPLY] Result:', data);

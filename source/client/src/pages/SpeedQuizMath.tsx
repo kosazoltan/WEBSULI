@@ -4,6 +4,7 @@ import { ArrowLeft, Flame, Gauge, Heart, Rocket, RotateCcw, Star, Trophy } from 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 
 type GradeLevel = 3 | 4 | 5;
@@ -348,7 +349,7 @@ export default function SpeedQuizMath() {
           "radial-gradient(circle at 20% 15%, rgba(56,189,248,0.28), transparent 34%), radial-gradient(circle at 82% 9%, rgba(244,114,182,0.3), transparent 38%), linear-gradient(180deg, #090f21 0%, #131a3a 100%)",
       }}
     >
-      <main className="relative z-10 max-w-3xl mx-auto px-3 py-3 min-h-screen flex flex-col">
+      <main className="relative z-10 w-full max-w-3xl xl:max-w-4xl mx-auto px-3 sm:px-5 py-3 min-h-dvh min-h-screen flex flex-col pb-8 sm:pb-10">
         <header className="flex items-center justify-between gap-2 mb-2">
           <Link href="/games">
             <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2">
@@ -372,12 +373,25 @@ export default function SpeedQuizMath() {
           <CardContent className="p-3 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-1">
               <Rocket className="w-5 h-5 text-cyan-300" />
-              <h1 className="text-lg font-black tracking-wide">Neon City Tower Obby</h1>
+              <h1 className="text-lg font-black tracking-wide">Neon matek torony</h1>
             </div>
             {phase !== "play" && (
-              <p className="text-xs text-white/85 mb-2">
-                Roblox-hangulatú matek futam neon városi toronyban. Jó válaszra haladsz az obby pályán, rossz válaszra életet vesztesz.
-              </p>
+              <GamePedagogyPanel
+                accent="cyan"
+                className="mb-2"
+                kidMission={`Válaszolj gyorsan és jól (${grade}. osztály szint)! Minden helyes válasz közelebb visz a torony tetejéhez a pályán. Van 3 életed — rossz válasz egy szívecskét elvesz. A láng = sorozat: minél több jó válasz egymás után, annál nagyobb a pontszorzó érzése.`}
+                parentBody={
+                  <>
+                    <strong className="text-cyan-100/90">Tananyag:</strong> műveletek és számolás a választott évfolyamnak megfelelően (tanári bank + generált feladatok).
+                    <br />
+                    <strong className="text-cyan-100/90">Fejleszt:</strong> számolási sebesség, önellenőrzés, hibatűrés (életek után is folytatható kör).
+                    <br />
+                    <span className="text-white/55">
+                      A kettős idő (kör + kérdés) és a vizuális „lépkedés” a cél felé ugyanazt a motivációs mintát követi, mint a rövid tesztekkel tarkított gyakorló appok: gyors visszajelzés, világos cél.
+                    </span>
+                  </>
+                }
+              />
             )}
             <p className={`text-[11px] text-cyan-100/95 border border-cyan-700/45 rounded px-2 ${phase === "play" ? "py-1 mb-2" : "py-1.5 mb-3"} bg-slate-900/95`}>
               {syncBanner}
@@ -401,17 +415,18 @@ export default function SpeedQuizMath() {
                     </Button>
                   ))}
                 </div>
-                <div className="w-full max-w-xl rounded-xl border border-white/20 bg-slate-900/90 px-3 py-2.5 text-sm text-white/90">
-                  Cél: <strong>{TARGET_CORRECT[grade]}</strong> helyes válasz, élet: <strong>3</strong>, szint:{" "}
-                  <strong>{LEVEL_LABEL[grade]}</strong>
+                <div className="w-full max-w-xl rounded-xl border border-amber-400/35 bg-gradient-to-r from-amber-500/10 to-fuchsia-500/10 px-3 py-2.5 text-sm text-white/90">
+                  <span className="font-bold text-amber-200">A pálya célja:</span>{" "}
+                  <strong>{TARGET_CORRECT[grade]}</strong> helyes válasz a torony tetejéig · <strong>3</strong> szív =
+                  három hibalehetőség · szint: <strong>{LEVEL_LABEL[grade]}</strong>
                 </div>
                 <Button
                   size="lg"
-                  className="bg-gradient-to-r from-cyan-500 via-blue-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 font-bold text-white px-8 border border-cyan-100/40"
+                  className="bg-gradient-to-r from-cyan-500 via-blue-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 font-bold text-white px-8 border border-cyan-100/40 text-base"
                   onClick={startGame}
                 >
                   <Gauge className="w-4 h-4 mr-2" />
-                  Obby futam indítása
+                  Indul a torony — rajta!
                 </Button>
               </div>
             )}
@@ -425,11 +440,16 @@ export default function SpeedQuizMath() {
                   <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Pont: {score}</div>
                 </div>
 
-                <div className="flex items-center gap-1 text-rose-300 text-xs">
-                  {[0, 1, 2].map((i) => (
-                    <Heart key={i} className={`w-4 h-4 ${i < lives ? "fill-rose-400 text-rose-300" : "text-white/20"}`} />
-                  ))}
-                  <span className="ml-2 text-white/70">Életek</span>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="flex items-center gap-1 text-rose-300">
+                    {[0, 1, 2].map((i) => (
+                      <Heart key={i} className={`w-4 h-4 ${i < lives ? "fill-rose-400 text-rose-300" : "text-white/20"}`} />
+                    ))}
+                    <span className="ml-1 text-white/75 font-semibold">Életek (akadály)</span>
+                  </div>
+                  <span className="rounded-full border border-orange-400/40 bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-200">
+                    Kombó = sorozat · minél több jó válasz egymás után, annál menőbb
+                  </span>
                 </div>
 
                 <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
@@ -469,7 +489,9 @@ export default function SpeedQuizMath() {
                 </div>
 
                 <div className={`rounded-xl border ${wrongFlash ? "border-rose-400" : "border-cyan-300/45"} bg-slate-950/88 p-2.5 transition-colors`}>
-                  <p className="text-[11px] text-white/60 mb-1">Kérdés #{answered + 1}</p>
+                  <p className="text-[11px] text-white/60 mb-1">
+                    Gyors teszt #{answered + 1} — válaszd ki a helyest (fent a kérdés-idő sáv)
+                  </p>
                   <p className="text-lg sm:text-xl font-black tracking-wide text-cyan-50 leading-tight">{task.prompt}</p>
                   <p className="text-[10px] text-white/55 mt-1">
                     Forrás: {task.source === "teacher" ? "Tanári kérdésbank" : "Generált feladat"}
@@ -497,7 +519,12 @@ export default function SpeedQuizMath() {
                 ) : (
                   <Gauge className="w-14 h-14 text-rose-300" />
                 )}
-                <p className="text-xl font-bold">{phase === "won" ? "Célba értél az obby pályán!" : "Vége a futamnak"}</p>
+                <p className="text-xl font-bold">{phase === "won" ? "Célba értél a neon toronyban!" : "Vége a futamnak"}</p>
+                {phase === "won" && (
+                  <p className="text-sm font-semibold text-cyan-100/90 max-w-sm">
+                    Annyi helyes matektesztet raktál össze, hogy a pálya tetejére értél — ügyes vagy, ez a fő jutalom!
+                  </p>
+                )}
                 <p className="text-sm text-white/80">
                   Pont: <strong className="text-amber-300">{score}</strong> · Helyes: <strong>{correct}</strong> · Kombó:{" "}
                   <strong>{bestStreak}</strong>

@@ -11,7 +11,7 @@ export function useSyncEligibilityQuery() {
 export function gameSyncBannerText(syncEligibility: SyncEligibility | undefined): string {
   if (!syncEligibility) return "Felhő szinkron ellenőrzése…";
   if (syncEligibility.eligible) {
-    return "Be vagy jelentkezve Google-lal és listán van az e-mailed — a kör vége felkerül a ranglistára.";
+    return "Be vagy jelentkezve Google-lal, és az e-mail címed rajta van a listán — a kör vége felkerül a ranglistára.";
   }
   switch (syncEligibility.reason) {
     case "not_logged_in":
@@ -19,7 +19,7 @@ export function gameSyncBannerText(syncEligibility: SyncEligibility | undefined)
     case "google_only":
       return "Csak Google bejelentkezéssel menthető a pont a szerverre (OAuth).";
     case "not_on_mailing_list":
-      return "Az e-mailed nincs a WebSuli értesítő listáján — iratkozz fel, vagy kérj meghívót.";
+      return "Az e-mail címed nincs a WebSuli értesítő listáján — iratkozz fel, vagy kérj meghívót.";
     default:
       return "A felhő szinkron most nem elérhető.";
   }

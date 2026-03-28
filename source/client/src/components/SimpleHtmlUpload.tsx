@@ -32,7 +32,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
       return;
     }
     toast({
-      title: "Fájl beolvasása...",
+      title: "Fájl beolvasása…",
       description: `${file.name} (${Math.round(file.size / 1024)} KB)`,
     });
 
@@ -227,7 +227,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 onChange={(e) => {
                   setContent(e.target.value);
                 }}
-                placeholder="Illeszd be a HTML kódot ide..."
+                placeholder="Illeszd be a HTML kódot ide…"
                 required
                 disabled={isPending}
                 className="flex-1 min-h-[80px] resize-none font-mono text-xs bg-gray-50 dark:bg-gray-950"
@@ -246,7 +246,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                 {isPending ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Feltöltés...
+                    Feltöltés…
                   </>
                 ) : (
                   <>

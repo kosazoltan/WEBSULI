@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ArrowLeft, Box, Pickaxe, Star, Flame, RotateCcw } from "lucide-react";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 
 const TILE = 24;
@@ -17,6 +18,8 @@ const JUMP_V = 550;
 const PLAYER_W = 14;
 const PLAYER_H = 26;
 const ROUND_LIMIT = 180;
+/** Koppintásos bányászás max. hatótáv (Chebyshev, „csempe” egységben); kisebb = kevésbé érzékeny messzi kockákra. */
+const MINING_REACH_TILES = 2.85;
 
 const AIR = 0;
 const GRASS = 1;
@@ -27,6 +30,8 @@ const LEAVES = 5;
 const COAL = 6;
 const IRON = 7;
 const DIAMOND = 8;
+/** Alul: nem bányászható, nem esik át rajta a játékos */
+const BEDROCK = 9;
 
 type Quiz = { prompt: string; options: string[]; correctIndex: number };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
@@ -35,12 +40,12 @@ type QuizBankApi = {
 };
 
 const QUIZ_FALLBACK: Quiz[] = [
-  { prompt: '"stone" jelentese:', options: ["ko", "ho", "feny", "hid"], correctIndex: 0 },
-  { prompt: '"pickaxe" jelentese:', options: ["lapat", "csakany", "kard", "halo"], correctIndex: 1 },
-  { prompt: '"diamond" magyarul:', options: ["arany", "gyemant", "szen", "vas"], correctIndex: 1 },
-  { prompt: '"forest" magyarul:', options: ["tenger", "hegy", "erdo", "huto"], correctIndex: 2 },
-  { prompt: '"build" jelentese:', options: ["epit", "fut", "ugrik", "banyaszik"], correctIndex: 0 },
-  { prompt: 'Mit jelent: "Craft a tool"', options: ["eszkozt keszit", "futni tanul", "tobbet alszik", "vizet gyujt"], correctIndex: 0 },
+  { prompt: "„Stone” jelentése:", options: ["kő", "hó", "fény", "híd"], correctIndex: 0 },
+  { prompt: "„Pickaxe” jelentése:", options: ["lapát", "csákány", "kard", "háló"], correctIndex: 1 },
+  { prompt: "„Diamond” magyarul:", options: ["arany", "gyémánt", "szén", "vas"], correctIndex: 1 },
+  { prompt: "„Forest” magyarul:", options: ["tenger", "hegy", "erdő", "hűtő"], correctIndex: 2 },
+  { prompt: "„Build” jelentése:", options: ["épít", "fut", "ugrik", "bányászik"], correctIndex: 0 },
+  { prompt: "Mit jelent: „Craft a tool”?", options: ["eszközt készít", "futni tanul", "többet alszik", "vizet gyűjt"], correctIndex: 0 },
 ];
 
 const XP_BY_TILE: Record<number, number> = {
@@ -53,6 +58,7 @@ const XP_BY_TILE: Record<number, number> = {
   [IRON]: 88,
   [DIAMOND]: 140,
   [AIR]: 0,
+  [BEDROCK]: 0,
 };
 
 function randInt(min: number, max: number) {
@@ -119,6 +125,10 @@ function buildWorld(): Uint8Array {
     }
   }
 
+  for (let c = 0; c < COLS; c++) {
+    g[(ROWS - 1) * COLS + c] = BEDROCK;
+  }
+
   return g;
 }
 
@@ -137,6 +147,100 @@ function solid(t: number) {
   return t !== AIR;
 }
 
+/** Játszható-e a cella (AIR vagy bányászható tömb) */
+function mineable(t: number) {
+  return t !== AIR && t !== BEDROCK;
+}
+
+/** Belső canvas-koordináta a megjelenített méret és a buffer eltérése esetén is. */
+function pointerOnCanvas(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / Math.max(1, rect.width);
+  const scaleY = canvas.height / Math.max(1, rect.height);
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
+/** Kb. 3,5 csempe „Minecraft” hatótáv a játékos középpontjától. */
+function playerCanReachTile(p: { x: number; y: number }, tc: number, tr: number) {
+  const pcx = p.x + PLAYER_W / 2;
+  const pcy = p.y - PLAYER_H / 2;
+  const tcx = tc * TILE + TILE / 2;
+  const tcy = tr * TILE + TILE / 2;
+  return Math.max(Math.abs(tcx - pcx), Math.abs(tcy - pcy)) <= TILE * MINING_REACH_TILES;
+}
+
+function canStandAt(world: Uint8Array, footX: number, footY: number): boolean {
+  const gx0 = Math.floor(footX / TILE);
+  const gx1 = Math.floor((footX + PLAYER_W) / TILE);
+  const gyFoot = Math.floor(footY / TILE);
+  const gyHead = Math.floor((footY - PLAYER_H) / TILE);
+  if (gx0 < 0 || gx1 >= COLS || gyHead < 0 || gyFoot >= ROWS) return false;
+  for (let gx = gx0; gx <= gx1; gx++) {
+    for (let gy = gyHead; gy <= gyFoot; gy++) {
+      if (gy < 0 || gx < 0 || gx >= COLS || gy >= ROWS) continue;
+      const cell = world[gy * COLS + gx] ?? AIR;
+      if (solid(cell)) return false;
+    }
+  }
+  if (gyFoot + 1 >= ROWS) return false;
+  let ground = false;
+  for (let gx = gx0; gx <= gx1; gx++) {
+    const below = world[(gyFoot + 1) * COLS + gx] ?? AIR;
+    if (solid(below)) ground = true;
+  }
+  return ground;
+}
+
+/** Felfelé / szomszéd oszlopokban keresünk biztonságos állást (gödör, kvíz utáni lyuk). */
+function rescuePlayerIfNeeded(world: Uint8Array, p: { x: number; y: number; vx: number; vy: number; onGround: boolean }) {
+  const centerCol = Math.max(0, Math.min(COLS - 1, Math.floor((p.x + PLAYER_W / 2) / TILE)));
+  for (const dc of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
+    const col = Math.max(0, Math.min(COLS - 1, centerCol + dc));
+    const footX = col * TILE + 4;
+    for (let groundRow = ROWS - 2; groundRow >= 1; groundRow--) {
+      const footY = groundRow * TILE - 0.01;
+      if (canStandAt(world, footX, footY)) {
+        p.x = Math.max(2, Math.min(COLS * TILE - PLAYER_W - 2, footX));
+        p.y = footY;
+        p.vx = 0;
+        p.vy = 0;
+        p.onGround = true;
+        return;
+      }
+    }
+  }
+  const spawn = findSpawn(world);
+  p.x = spawn.x;
+  p.y = spawn.y;
+  p.vx = 0;
+  p.vy = 0;
+  p.onGround = false;
+}
+
+/** Kvíz után: tömbbe ragadás, kibányászott talaj, vagy mélyen üresen esés alatt. */
+function needsRescueAfterMine(world: Uint8Array, p: { x: number; y: number }, mined: { c: number; r: number; t: number } | null) {
+  if (!canStandAt(world, p.x, p.y)) return true;
+  const gx0 = Math.floor(p.x / TILE);
+  const gx1 = Math.floor((p.x + PLAYER_W) / TILE);
+  const gyFoot = Math.floor(p.y / TILE);
+  let hasGroundBelow = false;
+  if (gyFoot + 1 < ROWS) {
+    for (let gx = gx0; gx <= gx1; gx++) {
+      if (gx < 0 || gx >= COLS) continue;
+      if (solid(world[(gyFoot + 1) * COLS + gx] ?? AIR)) {
+        hasGroundBelow = true;
+        break;
+      }
+    }
+  }
+  if (mined && mined.r === gyFoot + 1 && mined.c >= gx0 && mined.c <= gx1 && !hasGroundBelow) return true;
+  const deep = p.y > ROWS * TILE - TILE * 4;
+  return deep && !hasGroundBelow;
+}
+
 function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, time: number) {
   if (!t) return;
   const pal: Record<number, { top: string; base: string; side: string; speck?: string }> = {
@@ -148,6 +252,7 @@ function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, t: numbe
     [COAL]: { top: "#5e646d", base: "#3d4148", side: "#272b31", speck: "#1b1f25" },
     [IRON]: { top: "#c2a789", base: "#9b8169", side: "#715c49", speck: "#d9ccbc" },
     [DIAMOND]: { top: "#7be9f0", base: "#35b2bb", side: "#237b82", speck: "#c7ffff" },
+    [BEDROCK]: { top: "#1a1d22", base: "#0f1114", side: "#050607", speck: "#2a3038" },
   };
   const p = pal[t] || pal[STONE];
   ctx.fillStyle = p.base;
@@ -267,19 +372,38 @@ export default function BlockCraftQuiz() {
     }
   }, []);
 
+  const tryMineAt = useCallback(
+    (tc: number, tr: number, opts?: { skipReach?: boolean }): boolean => {
+      const p = playerRef.current;
+      const w = worldRef.current;
+      if (tr < 0 || tr >= ROWS || tc < 0 || tc >= COLS) return false;
+      if (!opts?.skipReach && !playerCanReachTile(p, tc, tr)) return false;
+      const t = w[tr * COLS + tc] ?? AIR;
+      if (!mineable(t)) return false;
+      p.vx = 0;
+      p.vy = 0;
+      const tcx = tc * TILE + TILE / 2;
+      p.facing = tcx >= p.x + PLAYER_W / 2 ? 1 : -1;
+      mineTargetRef.current = { c: tc, r: tr, t };
+      setQuiz(pickQuiz());
+      setPhase("quiz");
+      return true;
+    },
+    [pickQuiz],
+  );
+
+  /** E / Bányász gomb: az arc előtti oszlopban a legközelebbi (lábtól felfelé) bányászható cella. */
   const tryMine = useCallback(() => {
     const p = playerRef.current;
     const w = worldRef.current;
     const cx = Math.floor((p.x + PLAYER_W / 2) / TILE) + p.facing;
-    const cy = Math.floor((p.y - PLAYER_H / 2) / TILE);
-    if (cy < 0 || cy >= ROWS || cx < 0 || cx >= COLS) return;
-    const i = cy * COLS + cx;
-    const t = w[i] ?? AIR;
-    if (!solid(t)) return;
-    mineTargetRef.current = { c: cx, r: cy, t };
-    setQuiz(pickQuiz());
-    setPhase("quiz");
-  }, [pickQuiz]);
+    if (cx < 0 || cx >= COLS) return;
+    const rFoot = Math.min(ROWS - 1, Math.floor(p.y / TILE) + 1);
+    const rTop = Math.max(0, Math.floor((p.y - PLAYER_H) / TILE));
+    for (let tr = rFoot; tr >= rTop; tr--) {
+      if (tryMineAt(cx, tr, { skipReach: true })) return;
+    }
+  }, [tryMineAt]);
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
@@ -419,7 +543,7 @@ export default function BlockCraftQuiz() {
         if (parts[i].life <= 0) parts.splice(i, 1);
       }
 
-      if (p.y > ROWS * TILE + 120) {
+      if (p.y > ROWS * TILE + TILE * 5) {
         endRunRef.current();
         return;
       }
@@ -510,6 +634,14 @@ export default function BlockCraftQuiz() {
     }
     mineTargetRef.current = null;
     setQuiz(null);
+    {
+      const p = playerRef.current;
+      p.vx = 0;
+      p.vy = 0;
+      if (needsRescueAfterMine(worldRef.current, p, tgt)) {
+        rescuePlayerIfNeeded(worldRef.current, p);
+      }
+    }
     setPhase("play");
   };
 
@@ -534,7 +666,8 @@ export default function BlockCraftQuiz() {
     if (!el) return;
     const parent = el.parentElement;
     const parentW = Math.max(320, Math.floor(parent?.clientWidth ?? 380));
-    const h = Math.min(440, Math.max(300, Math.round(parentW * 0.56)));
+    const maxH = parentW >= 640 ? 520 : 440;
+    const h = Math.min(maxH, Math.max(300, Math.round(parentW * 0.56)));
     el.width = parentW;
     el.height = h;
     el.style.width = `${parentW}px`;
@@ -565,41 +698,58 @@ export default function BlockCraftQuiz() {
     hold(k, false);
   };
 
-  const clickCanvas = useCallback(
-    (e: ReactMouseEvent<HTMLCanvasElement>) => {
+  const onCanvasPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
       if (phase !== "play") return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const worldX = clickX + cameraRef.current;
-      const p = playerRef.current;
-      p.facing = worldX >= p.x + PLAYER_W / 2 ? 1 : -1;
-      tryMine();
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
+      const canvas = e.currentTarget;
+      const { x, y } = pointerOnCanvas(canvas, e.clientX, e.clientY);
+      const cam = cameraRef.current;
+      const tc = Math.floor((x + cam) / TILE);
+      const tr = Math.floor(y / TILE);
+      if (!tryMineAt(tc, tr)) tryMine();
     },
-    [phase, tryMine],
+    [phase, tryMine, tryMineAt],
   );
 
   return (
     <div className="min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
-      <main className="relative z-10 max-w-xl mx-auto px-3 py-4 min-h-screen flex flex-col pb-24">
+      <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-3 sm:px-5 py-4 min-h-dvh min-h-screen flex flex-col pb-28 sm:pb-10">
         <header className="flex items-center justify-between gap-2 mb-2">
-          <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Jatekok</Button></Link>
+          <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
           <div className="flex items-center gap-2 text-xs font-semibold"><span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{totalXp}</span><span className="flex items-center gap-1 text-lime-300"><Flame className="w-4 h-4" />{streak}</span></div>
         </header>
 
         <Card className="border border-lime-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0"><CardContent className="p-3 flex flex-col flex-1 min-h-0">
-          <div className="flex items-center gap-2 mb-1"><Box className="w-5 h-5 text-lime-400" /><h1 className="text-base font-extrabold">Kockavadasz kviz</h1></div>
-          <p className="text-[11px] text-white/80 mb-2">Minecraft-szeru vilag, reszecske effekt, gyorsabb iranyitas. Pont csak helyes valaszra jar.</p>
+          <div className="flex items-center gap-2 mb-1"><Box className="w-5 h-5 text-lime-400" /><h1 className="text-base font-extrabold">Kockavadász kvíz</h1></div>
+          <GamePedagogyPanel
+            accent="lime"
+            className="mb-2"
+            kidMission="Bányássz blokkokat egy kockavilágban! Minden blokk előtt rövid angol kvíz jön: csak helyes válaszra tűnik el a kő (és kapsz XP-et + sorozat-lángot). Időre is figyelj — a kör végén összesítjük a pontjaidat."
+            parentBody={
+              <>
+                <strong className="text-lime-100/90">Tananyag:</strong> alap angol szókincs (tárgyak, helyzetek) kvízformában, a bányászat motivációt ad az ismétléshez.
+                <br />
+                <strong className="text-lime-100/90">Fejleszt:</strong> olvasásértés gyors döntés mellett, térbeli tájékozódás és kéz-szem koordináció (billentyű / érintés).
+                <br />
+                <span className="text-white/55">
+                  Akadály (fizikai pálya) + teszt (kvíz) + jutalom (XP, blokk eltűnik) minden lépésnél összekapcsolva — erős, azonnali visszajelzés.
+                </span>
+              </>
+            }
+          />
           <p className="text-[11px] text-lime-100/90 mb-2 border border-lime-700/45 rounded px-2 py-1.5 bg-slate-900/95">{syncBanner}</p>
 
-          {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgas, Space: ugras, E: banyaszat + kviz. Erintokijelzon lent jelennek meg a kontrollok.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Vilag betoltese</Button></div>}
+          {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-amber-100/95 text-center max-w-sm font-semibold">A zöld sáv fent = mennyi időd van a körből. Minél több jó kvíz, annál több XP és hosszabb sorozat!</p><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgás, Space: ugrás, E vagy Bányász: kvíz. Koppints a kockára is, ha közel vagy hozzá.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Új világ — indulhat a bányászat!</Button></div>}
 
-          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[11px] font-semibold"><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5 text-right">Ido: {timeLeft}s · Erc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black"><canvas ref={canvasRef} className="block touch-none w-full cursor-crosshair" onClick={clickCanvas} /></div><div className="text-[11px] text-white/80 bg-slate-900/80 border border-white/15 rounded-md px-2 py-1 w-full">Vezérlés: <strong>A/D</strong> vagy gombok, <strong>Space</strong> ugrás, <strong>E</strong> bányászás. Egérkattintás: irány + bányászás.</div><div className="grid grid-cols-4 gap-2 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugras</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 shadow-md" onClick={tryMine}><Pickaxe className="w-4 h-4 mr-1" />Banyasz</Button></div><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md" onClick={endRun}>Kor vege</Button></div></div>}
+          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[11px] font-semibold"><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5 text-right">Idő: {timeLeft}s · Érc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black"><canvas ref={canvasRef} className="block touch-manipulation w-full max-w-full cursor-crosshair" onPointerDown={onCanvasPointerDown} /></div><div className="text-[11px] text-white/80 bg-slate-900/80 border border-white/15 rounded-md px-2 py-1 w-full"><span className="hidden sm:inline">Billentyűzet: </span><strong className="sm:hidden">Érintés: </strong><strong>A/D</strong> vagy gombok, <strong>Space</strong> ugrás, <strong>E</strong> vagy <strong>Bányász</strong>. <span className="hidden sm:inline">Egér: katt a kockára.</span><span className="sm:hidden">Koppints a kockára.</span></div><div className="grid grid-cols-4 gap-2 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugrás</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md" onClick={() => tryMine()}><Pickaxe className="w-4 h-4 mr-1" />Bányász</Button></div><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md" onClick={endRun}>Kör vége</Button></div></div>}
 
-          {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Banyaszat vege</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Erc: <strong>{rareBlocks}</strong></p>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmeny elkuldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Uj vilag</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
+          {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Bányászat vége</p><p className="text-sm font-semibold text-lime-100/90 max-w-sm">Minden jó kvíz angol szavakat erősített — nézd meg az XP-t és a sorozatot: ez a munkád gyümölcse!</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong></p>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Új világ</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
         </CardContent></Card>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><p className="text-xs font-bold text-lime-300 uppercase mb-2">Banyasz kviz</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => <Button key={`${o}-${i}`} variant="secondary" className="h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40" onClick={() => onAnswer(i)}>{o}</Button>)}</div></motion.div></motion.div>}</AnimatePresence>
+      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><p className="text-xs font-bold text-lime-300 uppercase mb-1">Angol mini-teszt</p><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => <Button key={`${o}-${i}`} variant="secondary" className="h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]" onClick={() => onAnswer(i)}>{o}</Button>)}</div></motion.div></motion.div>}</AnimatePresence>
 
       <style>{`@keyframes shake {0%,100% { transform: translateX(0); }25% { transform: translateX(-5px); }75% { transform: translateX(5px); }} .animate-shake { animation: shake 0.16s ease-in-out 2; }`}</style>
     </div>

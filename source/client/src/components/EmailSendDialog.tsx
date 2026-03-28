@@ -193,7 +193,7 @@ export default function EmailSendDialog({
               </div>
               
               {isLoadingEmails ? (
-                <div className="text-sm text-muted-foreground">Betöltés...</div>
+                <div className="text-sm text-muted-foreground">Betöltés…</div>
               ) : suggestedEmails.length > 0 ? (
                 <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
                   {suggestedEmails.map((emailObj) => (
@@ -239,7 +239,7 @@ export default function EmailSendDialog({
             <Input
               id="custom-email"
               type="email"
-              placeholder="pelda@email.com"
+              placeholder="példa@email.com"
               value={customEmail}
               onChange={(e) => setCustomEmail(e.target.value)}
               disabled={isSending}
@@ -287,7 +287,7 @@ export default function EmailSendDialog({
             {isSending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Küldés...
+                Küldés…
               </>
             ) : (
               <>
