@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ArrowLeft, Box, Pickaxe, Star, Flame, RotateCcw } from "lucide-react";
@@ -218,7 +218,6 @@ export default function BlockCraftQuiz() {
   const [blocksMined, setBlocksMined] = useState(0);
   const [rareBlocks, setRareBlocks] = useState(0);
   const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT);
-  const [showTouchControls, setShowTouchControls] = useState(false);
   const scoreSubmittedRef = useRef(false);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
@@ -256,19 +255,6 @@ export default function BlockCraftQuiz() {
     }, 1000);
     return () => clearInterval(id);
   }, [phase]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const media = window.matchMedia("(pointer: coarse)");
-    const update = () => setShowTouchControls(media.matches);
-    update();
-    if (media.addEventListener) {
-      media.addEventListener("change", update);
-      return () => media.removeEventListener("change", update);
-    }
-    media.addListener(update);
-    return () => media.removeListener(update);
-  }, []);
 
   const pickQuiz = useCallback(() => bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!, [bank]);
 
@@ -470,7 +456,8 @@ export default function BlockCraftQuiz() {
       ctx.fill();
 
       for (let i = 0; i < 5; i++) {
-        const cx = ((i * 170 + t * (6 + i * 0.5)) % (CW + 260)) - 120;
+        const cloudSpeed = 0.018 + i * 0.004;
+        const cx = ((i * 170 + t * cloudSpeed) % (CW + 260)) - 120;
         const cy = 20 + (i % 3) * 20;
         ctx.fillStyle = "rgba(255,255,255,0.4)";
         ctx.fillRect(cx, cy, 48, 12);
@@ -578,6 +565,19 @@ export default function BlockCraftQuiz() {
     hold(k, false);
   };
 
+  const clickCanvas = useCallback(
+    (e: ReactMouseEvent<HTMLCanvasElement>) => {
+      if (phase !== "play") return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const worldX = clickX + cameraRef.current;
+      const p = playerRef.current;
+      p.facing = worldX >= p.x + PLAYER_W / 2 ? 1 : -1;
+      tryMine();
+    },
+    [phase, tryMine],
+  );
+
   return (
     <div className="min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
       <main className="relative z-10 max-w-xl mx-auto px-3 py-4 min-h-screen flex flex-col pb-24">
@@ -593,56 +593,11 @@ export default function BlockCraftQuiz() {
 
           {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgas, Space: ugras, E: banyaszat + kviz. Erintokijelzon lent jelennek meg a kontrollok.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Vilag betoltese</Button></div>}
 
-          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[11px] font-semibold"><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5 text-right">Ido: {timeLeft}s · Erc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black"><canvas ref={canvasRef} className="block touch-none w-full" /></div><div className="text-[11px] text-white/75 bg-slate-900/75 border border-white/15 rounded-md px-2 py-1 w-full">Tipp: allj kozel egy blokkhoz, majd <strong>E</strong> vagy <strong>Banyasz</strong> gomb.</div><div className="flex flex-wrap gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 shadow-md" onClick={tryMine}><Pickaxe className="w-4 h-4 mr-1" />Banyasz (E)</Button><Button type="button" size="sm" className="bg-amber-600 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md" onClick={endRun}>Kor vege</Button></div></div>}
+          {phase === "play" && <div className="flex flex-col items-center gap-2"><div className="w-full grid grid-cols-2 gap-2 text-[11px] font-semibold"><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5">XP: {sessionXp} · Blokk: {blocksMined}</div><div className="rounded-lg border border-white/20 bg-slate-900/95 px-2 py-1.5 text-right">Ido: {timeLeft}s · Erc: {rareBlocks}</div></div><div className="w-full h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black"><canvas ref={canvasRef} className="block touch-none w-full cursor-crosshair" onClick={clickCanvas} /></div><div className="text-[11px] text-white/80 bg-slate-900/80 border border-white/15 rounded-md px-2 py-1 w-full">Vezérlés: <strong>A/D</strong> vagy gombok, <strong>Space</strong> ugrás, <strong>E</strong> bányászás. Egérkattintás: irány + bányászás.</div><div className="grid grid-cols-4 gap-2 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugras</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 shadow-md" onClick={tryMine}><Pickaxe className="w-4 h-4 mr-1" />Banyasz</Button></div><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md" onClick={endRun}>Kor vege</Button></div></div>}
 
           {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Banyaszat vege</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Erc: <strong>{rareBlocks}</strong></p>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmeny elkuldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Uj vilag</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
         </CardContent></Card>
       </main>
-
-      {phase === "play" && showTouchControls && (
-        <div className="fixed bottom-3 inset-x-0 z-40 flex items-end justify-between px-3 pointer-events-auto select-none">
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="touch-none min-w-12 bg-slate-950/95 border border-cyan-200/50 text-cyan-50 hover:bg-slate-900 shadow-md shadow-cyan-900/50"
-              onPointerDown={(e) => startHold(e, "left")}
-              onPointerUp={(e) => endHold(e, "left")}
-              onPointerCancel={(e) => endHold(e, "left")}
-              onPointerLeave={(e) => endHold(e, "left")}
-            >
-              ◀
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="touch-none min-w-12 bg-slate-950/95 border border-cyan-200/50 text-cyan-50 hover:bg-slate-900 shadow-md shadow-cyan-900/50"
-              onPointerDown={(e) => startHold(e, "right")}
-              onPointerUp={(e) => endHold(e, "right")}
-              onPointerCancel={(e) => endHold(e, "right")}
-              onPointerLeave={(e) => endHold(e, "right")}
-            >
-              ▶
-            </Button>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="touch-none bg-slate-950/95 border border-amber-200/50 text-amber-50 hover:bg-slate-900 shadow-md shadow-amber-900/40"
-              onPointerDown={(e) => startHold(e, "jump")}
-              onPointerUp={(e) => endHold(e, "jump")}
-              onPointerCancel={(e) => endHold(e, "jump")}
-              onPointerLeave={(e) => endHold(e, "jump")}
-            >
-              Ugras
-            </Button>
-            <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-100/40 shadow-md" onClick={tryMine}>
-              Banyasz
-            </Button>
-          </div>
-        </div>
-      )}
 
       <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><p className="text-xs font-bold text-lime-300 uppercase mb-2">Banyasz kviz</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => <Button key={`${o}-${i}`} variant="secondary" className="h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40" onClick={() => onAnswer(i)}>{o}</Button>)}</div></motion.div></motion.div>}</AnimatePresence>
 
