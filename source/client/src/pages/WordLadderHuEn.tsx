@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
+import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import {
   wordLadderEasyMore,
@@ -383,7 +384,20 @@ export default function WordLadderHuEn() {
             )}
 
             {(phase === "quiz" || phase === "step") && (
-              <div className="flex-1 flex gap-3 min-h-[280px]">
+              <>
+                <GameNextGoalBar
+                  accent="amber"
+                  headline={
+                    rung >= RUNGS - 1
+                      ? "Már majdnem a CÉL tábla — még egy jó válasz!"
+                      : `Mászd meg a következő fokot (${rung + 1}. → ${RUNGS}.)`
+                  }
+                  subtitle={`${runSeconds} mp a körből · minden találat = feljebb a létrán`}
+                  current={rung}
+                  target={RUNGS}
+                  className="mb-2"
+                />
+                <div className="flex-1 flex gap-3 min-h-[min(45vh,340px)] sm:min-h-[300px]">
                 <div className="relative w-[88px] shrink-0 flex items-end justify-center pb-2">
                   <div
                     className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-full rounded-sm"
@@ -433,6 +447,7 @@ export default function WordLadderHuEn() {
                   </p>
                 </div>
               </div>
+              </>
             )}
 
             {phase === "won" && (

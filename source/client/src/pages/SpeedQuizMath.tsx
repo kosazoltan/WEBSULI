@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
+import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 
 type GradeLevel = 3 | 4 | 5;
@@ -72,6 +73,10 @@ const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {
     { prompt: "7 zsákban 5-5 golyó van. Hány golyó összesen?", options: [30, 35, 40, 45], correctIndex: 1, source: "teacher" },
     { prompt: "Misi 12 percet tanult reggel és 13 percet délután. Hány percet tanult összesen?", options: [23, 24, 25, 26], correctIndex: 2, source: "teacher" },
     { prompt: "A büfében 50 zsemle volt, 21-et eladtak. Mennyi maradt?", options: [28, 29, 30, 31], correctIndex: 1, source: "teacher" },
+    { prompt: "Peti 14 matricát ragasztott a füzetére, majd kapott még 8-at. Hány matrica van most összesen?", options: [20, 21, 22, 23], correctIndex: 2, source: "teacher" },
+    { prompt: "Az asztalon 16 színes ceruha volt (köztük 4 törött). A törötteket félretették. Hány egész ceruha maradt az asztalon?", options: [10, 11, 12, 13], correctIndex: 2, source: "teacher" },
+    { prompt: "3 polcon polconként 7 könyv áll. Hány könyv van összesen a három polcon?", options: [18, 19, 20, 21], correctIndex: 3, source: "teacher" },
+    { prompt: "Egy dobozban 20 db kréta volt. 6-ot elhasználtak. Mennyi maradt?", options: [12, 13, 14, 15], correctIndex: 2, source: "teacher" },
   ],
   4: [
     { prompt: "Egy boltban 235 db füzet volt. Hozzáadtak még 147-et. Hány füzet lett?", options: [372, 382, 392, 402], correctIndex: 1, source: "teacher" },
@@ -82,6 +87,9 @@ const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {
     { prompt: "Egy iskolában 720 tanuló van, ebből 268 alsós. Hány felsős tanuló van?", options: [442, 452, 462, 472], correctIndex: 1, source: "teacher" },
     { prompt: "12 dobozban dobozonként 16 filctoll van. Hány filctoll összesen?", options: [182, 192, 202, 212], correctIndex: 1, source: "teacher" },
     { prompt: "4500 Ft-od van. Veszel egy játékot 1750 Ft-ért és egy könyvet 980 Ft-ért. Mennyi pénzed marad?", options: [1670, 1770, 1870, 1970], correctIndex: 1, source: "teacher" },
+    { prompt: "A kiránduláson 156 fényképet készítettek hétfőn és 89-et kedden. Hány kép készült összesen?", options: [235, 245, 255, 265], correctIndex: 1, source: "teacher" },
+    { prompt: "Egy táskában 8 csomag ragasztólap van, mindegyikben 12 lap. Hány lap van összesen?", options: [84, 92, 96, 104], correctIndex: 2, source: "teacher" },
+    { prompt: "A medence hossza 25 m. Anna kétszer oda-vissza úszik (oda és vissza = egy oda-vissza pár). Hány métert úszik összesen?", options: [50, 75, 100, 125], correctIndex: 2, source: "teacher" },
   ],
   5: [
     { prompt: "Egy osztály 24 csapatban gyűjt pontot. Egy csapat 18 pontot, egy másik 27 pontot szerzett. Mennyi a két csapat pontjainak összege?", options: [43, 44, 45, 46], correctIndex: 2, source: "teacher" },
@@ -92,6 +100,9 @@ const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {
     { prompt: "A csapat 5600 XP-ből 2380 XP-t megszerzett hétfőn, és 1740 XP-t kedden. Mennyi hiányzik?", options: [1380, 1480, 1580, 1680], correctIndex: 1, source: "teacher" },
     { prompt: "3 dobozban 24-24 kártya, és 2 dobozban 18-18 kártya van. Hány kártya összesen?", options: [98, 108, 118, 128], correctIndex: 1, source: "teacher" },
     { prompt: "Egy játékban 5 kör van. Körönként 12 pont jár, de minden kör végén 3 pont levonás van. Mennyi pont marad 5 kör után?", options: [40, 45, 50, 55], correctIndex: 1, source: "teacher" },
+    { prompt: "Egy projekthez 144 lapot nyomtattak, ebből 37-et már összefűztek. Hány lap maradt még?", options: [105, 107, 109, 111], correctIndex: 1, source: "teacher" },
+    { prompt: "15 diák mindegyike 8 pontot szerzett a feleletválaszos körben. Hány pont az összesen?", options: [110, 115, 120, 125], correctIndex: 2, source: "teacher" },
+    { prompt: "Egy tábori versenyen 2,5 km-t kellett futni. Zoli már lefutotta 0,8 km-t. Hány km van még hátra?", options: [1.5, 1.6, 1.7, 1.8], correctIndex: 2, source: "teacher" },
   ],
 };
 
@@ -101,70 +112,85 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
   let result = 0;
 
   if (level === 3) {
-    if (roll < 0.45) {
+    if (roll < 0.4) {
       const a = randInt(8, 90);
       const b = randInt(4, 35);
       prompt = `${a} + ${b} = ?`;
       result = a + b;
-    } else if (roll < 0.8) {
+    } else if (roll < 0.7) {
       const a = randInt(25, 100);
       const b = randInt(3, 24);
       prompt = `${a} - ${b} = ?`;
       result = a - b;
-    } else {
+    } else if (roll < 0.84) {
       const a = randInt(2, 9);
       const b = randInt(2, 9);
       prompt = `${a} × ${b} = ?`;
       result = a * b;
+    } else {
+      const a = randInt(6, 22);
+      const b = randInt(4, 18);
+      prompt = `Dóri ${a} matricát ragasztott a füzetére, majd kapott még ${b}-et. Hány matrica van most összesen?`;
+      result = a + b;
     }
   } else if (level === 4) {
-    if (roll < 0.34) {
+    if (roll < 0.3) {
       const a = randInt(120, 780);
       const b = randInt(45, 260);
       prompt = `${a} + ${b} = ?`;
       result = a + b;
-    } else if (roll < 0.64) {
+    } else if (roll < 0.55) {
       const a = randInt(300, 950);
       const b = randInt(80, 290);
       prompt = `${a} - ${b} = ?`;
       result = a - b;
-    } else if (roll < 0.86) {
+    } else if (roll < 0.72) {
       const a = randInt(4, 12);
       const b = randInt(6, 19);
       prompt = `${a} × ${b} = ?`;
       result = a * b;
-    } else {
+    } else if (roll < 0.86) {
       const b = randInt(3, 12);
       const r = randInt(4, 18);
       const a = b * r;
       prompt = `${a} ÷ ${b} = ?`;
       result = r;
+    } else {
+      const rows = randInt(3, 6);
+      const each = randInt(6, 14);
+      prompt = `${rows} polcon polconként ${each} könyv áll (minden polcon ugyanannyi). Hány könyv van összesen?`;
+      result = rows * each;
     }
   } else {
-    if (roll < 0.3) {
+    if (roll < 0.26) {
       const a = randInt(230, 980);
       const b = randInt(120, 760);
       const c = randInt(10, 90);
       prompt = `(${a} + ${b}) - ${c} = ?`;
       result = a + b - c;
-    } else if (roll < 0.56) {
+    } else if (roll < 0.48) {
       const a = randInt(12, 36);
       const b = randInt(8, 24);
       const c = randInt(4, 12);
       prompt = `${a} × ${b} - ${c} = ?`;
       result = a * b - c;
-    } else if (roll < 0.8) {
+    } else if (roll < 0.66) {
       const b = randInt(5, 16);
       const r = randInt(12, 34);
       const a = b * r;
       prompt = `${a} ÷ ${b} = ?`;
       result = r;
-    } else {
+    } else if (roll < 0.78) {
       const a = randInt(40, 120);
       const b = randInt(10, 40);
       const c = randInt(2, 5);
       prompt = `(${a} - ${b}) × ${c} = ?`;
       result = (a - b) * c;
+    } else {
+      const n = randInt(8, 14);
+      const p = randInt(6, 12);
+      prompt = `${n} csapat mindegyike ${p} pontot szerzett ugyanazon a fordulón. Mennyi a pontok összege?`;
+      result = n * p;
     }
   }
 
@@ -451,6 +477,19 @@ export default function SpeedQuizMath() {
                     Kombó = sorozat · minél több jó válasz egymás után, annál menőbb
                   </span>
                 </div>
+
+                <GameNextGoalBar
+                  accent="fuchsia"
+                  headline={
+                    correct >= TARGET_CORRECT[grade]
+                      ? "Megvan a torony teteje — még gyűjts pontot, amíg tart a kör!"
+                      : `${TARGET_CORRECT[grade] - correct} helyes válasz még a célhoz`
+                  }
+                  subtitle={`${LEVEL_LABEL[grade]} · ${timeLeft}s a körből · ${lives} élet · kombó: ${streak}`}
+                  current={correct}
+                  target={TARGET_CORRECT[grade]}
+                  className="w-full"
+                />
 
                 <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${runProgress}%` }} />

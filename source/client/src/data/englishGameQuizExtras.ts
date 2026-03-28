@@ -22,6 +22,18 @@ export const tsunamiQuizEasyMore: FourChoiceQuiz[] = [
   { id: "e46", prompt: "Hogy mondjuk angolul: ceruza?", options: ["paper", "pencil", "parent", "purple"], correctIndex: 1 },
   { id: "e47", prompt: "Hogy mondjuk angolul: vonalzó?", options: ["rubber", "ruler", "riddle", "river"], correctIndex: 1 },
   { id: "e48", prompt: "Hogy mondjuk angolul: táska?", options: ["box", "bag", "bus", "bed"], correctIndex: 1 },
+  { id: "e49", prompt: "Hogy mondjuk angolul: narancs (gyümölcs)?", options: ["onion", "orange", "olive", "ocean"], correctIndex: 1 },
+  { id: "e50", prompt: "Hogy mondjuk angolul: szőlő?", options: ["grass", "grape", "green", "great"], correctIndex: 1 },
+  { id: "e51", prompt: "Hogy mondjuk angolul: kenyér?", options: ["butter", "bread", "bridge", "brown"], correctIndex: 1 },
+  { id: "e52", prompt: "Hogy mondjuk angolul: tej?", options: ["milk", "meal", "moon", "mouse"], correctIndex: 0 },
+  { id: "e53", prompt: "Hogy mondjuk angolul: vaj?", options: ["water", "butter", "button", "better"], correctIndex: 1 },
+  { id: "e54", prompt: "Hogy mondjuk angolul: asztal?", options: ["table", "turtle", "ticket", "tiger"], correctIndex: 0 },
+  { id: "e55", prompt: "Mit jelent: Thank you?", options: ["Kérem", "Köszönöm", "Bocsánat", "Szia"], correctIndex: 1 },
+  { id: "e56", prompt: "Mit jelent: Sorry?", options: ["Köszönöm", "Bocsánat", "Viszlát", "Igen"], correctIndex: 1 },
+  { id: "e57", prompt: "Hogy mondjuk angolul: iskolatáska?", options: ["school bag", "school bell", "school bus", "school boy"], correctIndex: 0 },
+  { id: "e58", prompt: "Hogy mondjuk angolul: tolltartó?", options: ["pencil case", "pencil race", "purple case", "paper chase"], correctIndex: 0 },
+  { id: "e59", prompt: "„Lovacska” (játék) angolul gyakran:", options: ["horse", "house", "hobby", "honey"], correctIndex: 0 },
+  { id: "e60", prompt: "Hogy mondjuk angolul: bicikli?", options: ["boat", "bike", "bird", "book"], correctIndex: 1 },
 ];
 
 /** Szökőár: közép */
@@ -44,6 +56,16 @@ export const tsunamiQuizMedMore: FourChoiceQuiz[] = [
   { id: "em16", prompt: "Mit jelent: What time is it?", options: ["Hány óra van?", "Mi az időjárás?", "Hol vagy?", "Mi a neved?"], correctIndex: 0 },
   { id: "em17", prompt: "Hogy mondjuk angolul: fürdőszoba?", options: ["kitchen", "bedroom", "bathroom", "classroom"], correctIndex: 2 },
   { id: "em18", prompt: "Hogy mondjuk angolul: konyha?", options: ["kitchen", "chicken", "children", "kitten"], correctIndex: 0 },
+  { id: "em19", prompt: "Hogy mondjuk angolul: hálószoba?", options: ["bathroom", "bedroom", "classroom", "living room"], correctIndex: 1 },
+  { id: "em20", prompt: "Hogy mondjuk angolul: nappali (szoba)?", options: ["living room", "leaving room", "library", "light room"], correctIndex: 0 },
+  { id: "em21", prompt: "Mit jelent: How are you?", options: ["Hány óra van?", "Hogy vagy?", "Hol vagy?", "Mennyi az ára?"], correctIndex: 1 },
+  { id: "em22", prompt: "Mit jelent: How old are you?", options: ["Hány éves vagy?", "Milyen magas vagy?", "Hol laksz?", "Mi a neved?"], correctIndex: 0 },
+  { id: "em23", prompt: "Melyik illik: I ___ a student.", options: ["am", "is", "are", "be"], correctIndex: 0 },
+  { id: "em24", prompt: "Melyik illik: We ___ in the classroom.", options: ["am", "is", "are", "be"], correctIndex: 2 },
+  { id: "em25", prompt: "Hogy mondjuk angolul: busz?", options: ["bike", "bus", "boat", "box"], correctIndex: 1 },
+  { id: "em26", prompt: "Hogy mondjuk angolul: vonat?", options: ["tree", "train", "truck", "ticket"], correctIndex: 1 },
+  { id: "em27", prompt: "Mit jelent: Excuse me?", options: ["Elnézést / Elnézést kérek", "Gyere ide", "Siess", "Nem érdekel"], correctIndex: 0 },
+  { id: "em28", prompt: "Válaszd ki: She has a red hat.", options: ["Piros kalapja van.", "Kék cipője van.", "Nagy kutyája van.", "Hideg a víz."], correctIndex: 0 },
 ];
 
 /** Szökőár: nehéz (4–5. oszt.) */
@@ -79,6 +101,14 @@ export const wordLadderEasyMore: FourChoiceQuiz[] = [
   { id: "we10", prompt: "„Ing / póló” (felső) angolul:", options: ["trousers", "shoes", "shirt", "short"], correctIndex: 2 },
   { id: "we11", prompt: "„Cipő” angolul:", options: ["ship", "sheep", "shoe", "shop"], correctIndex: 2 },
   { id: "we12", prompt: "Mit jelent: Good night?", options: ["Jó reggelt", "Jó éjszakát", "Jó napot", "Viszlát"], correctIndex: 1 },
+  { id: "we13", prompt: "„Hát” (testrész) angolul:", options: ["back", "bank", "black", "beak"], correctIndex: 0 },
+  { id: "we14", prompt: "„Has” (test) angolul:", options: ["hand", "hair", "stomach / tummy", "stone"], correctIndex: 2 },
+  { id: "we15", prompt: "„Ujj” angolul:", options: ["ice", "finger", "fish", "five"], correctIndex: 1 },
+  { id: "we16", prompt: "„Térd” angolul:", options: ["knee", "knife", "king", "key"], correctIndex: 0 },
+  { id: "we17", prompt: "„Esernyő” angolul:", options: ["uncle", "umbrella", "under", "uniform"], correctIndex: 1 },
+  { id: "we18", prompt: "„Kalap” angolul:", options: ["hat", "hot", "hit", "hut"], correctIndex: 0 },
+  { id: "we19", prompt: "„Sál” angolul:", options: ["scarf", "scare", "scale", "school"], correctIndex: 0 },
+  { id: "we20", prompt: "„Kesztyű” angolul:", options: ["glass", "glove", "globe", "glue"], correctIndex: 1 },
 ];
 
 /** Szólétra: közép */
@@ -95,6 +125,14 @@ export const wordLadderMedMore: FourChoiceQuiz[] = [
   { id: "wm10", prompt: "Melyik illik: ___ she like music?", options: ["Do", "Does", "Is", "Are"], correctIndex: 1 },
   { id: "wm11", prompt: "„Térkép” angolul:", options: ["map", "mop", "mat", "mud"], correctIndex: 0 },
   { id: "wm12", prompt: "„Palota” angolul:", options: ["village", "palace", "police", "pilot"], correctIndex: 1 },
+  { id: "wm13", prompt: "„Kórház” angolul:", options: ["hotel", "hospital", "history", "holiday"], correctIndex: 1 },
+  { id: "wm14", prompt: "„Repülőtér” angolul:", options: ["airport", "airplane", "apartment", "animal"], correctIndex: 0 },
+  { id: "wm15", prompt: "„Múzeum” angolul:", options: ["music", "museum", "mountain", "minute"], correctIndex: 1 },
+  { id: "wm16", prompt: "Mit jelent: Let's go!", options: ["Gyere!", "Menjünk!", "Állj meg!", "Fáradt vagyok."], correctIndex: 1 },
+  { id: "wm17", prompt: "Mit jelent: Hurry up!", options: ["Nyugodtan!", "Siess!", "Ülj le!", "Ne nevess!"], correctIndex: 1 },
+  { id: "wm18", prompt: "Melyik illik: There ___ a cat in the garden.", options: ["is", "are", "am", "be"], correctIndex: 0 },
+  { id: "wm19", prompt: "Melyik illik: There ___ two dogs.", options: ["is", "are", "am", "be"], correctIndex: 1 },
+  { id: "wm20", prompt: "„Zöldség” (növény, amit eszünk) angolul:", options: ["vegetable", "village", "vacation", "violin"], correctIndex: 0 },
 ];
 
 /** Szólétra: nehéz */
