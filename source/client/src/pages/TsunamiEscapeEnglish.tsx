@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
+import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -1056,7 +1057,20 @@ export default function TsunamiEscapeEnglish() {
             )}
 
             {(phase === "play" || phase === "quiz") && (
-              <div className="relative flex-1 min-h-[360px] rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
+              <>
+                <GameNextGoalBar
+                  accent="cyan"
+                  headline={
+                    correctQuizzesInRun >= winQuizTarget(runDifficultyRef.current)
+                      ? "Megvan a győzelem ebben a körben — fuss tovább, gyűjts XP-et!"
+                      : `${Math.max(0, winQuizTarget(runDifficultyRef.current) - correctQuizzesInRun)} helyes kvíz még a célhoz`
+                  }
+                  subtitle={`Futás: ${runSeconds} mp · ${difficultyLabel(runDifficultyRef.current)} · jó válasz = víz lejjebb`}
+                  current={correctQuizzesInRun}
+                  target={winQuizTarget(runDifficultyRef.current)}
+                  className="mb-2"
+                />
+                <div className="relative flex-1 min-h-[min(52vh,440px)] sm:min-h-[420px] rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
                 {/* Ég + nap */}
                 <div
                   className="absolute inset-0"
@@ -1247,6 +1261,7 @@ export default function TsunamiEscapeEnglish() {
                   </motion.div>
                 )}
               </div>
+              </>
             )}
 
             {phase === "play" && (
