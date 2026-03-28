@@ -61,14 +61,14 @@ export default function BackupManager() {
       document.body.removeChild(a);
       
       toast({
-        title: "Backup exportálva",
-        description: "A backup fájl letöltése megkezdődött.",
+        title: "Biztonsági másolat elkészült",
+        description: "A letöltés megkezdődött.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Hiba",
-        description: error.message || "Nem sikerült exportálni a backup-ot",
+        description: error.message || "Nem sikerült exportálni a biztonsági másolatot",
         variant: "destructive",
       });
     }
@@ -85,7 +85,7 @@ export default function BackupManager() {
     onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       toast({
-        title: "Backup importálva",
+        title: "Biztonsági másolat importálva",
         description: `${response.materialsCount} anyag sikeresen visszaállítva.`,
       });
       setSelectedFile(null);
@@ -97,7 +97,7 @@ export default function BackupManager() {
     onError: (error: any) => {
       toast({
         title: "Hiba",
-        description: error.message || "Nem sikerült importálni a backup-ot",
+        description: error.message || "Nem sikerült importálni a biztonsági másolatot",
         variant: "destructive",
       });
     }
@@ -133,7 +133,7 @@ export default function BackupManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       toast({
         title: "✅ Szinkronizálás sikeres",
-        description: response.message || "Production adatbázis sikeresen másolva dev-be.",
+        description: response.message || "Az éles adatbázis sikeresen átmásolódott a fejlesztői környezetbe.",
       });
       setShowSyncDialog(false);
     },
@@ -141,7 +141,7 @@ export default function BackupManager() {
       console.error('[SYNC ERROR] Full error:', error);
       
       // Extract detailed error information
-      const errorMessage = error.error || error.message || "Nem sikerült szinkronizálni a production adatbázist";
+      const errorMessage = error.error || error.message || "Nem sikerült szinkronizálni az éles adatbázist";
       const errorDetails = error.details || '';
       
       toast({
@@ -174,10 +174,10 @@ export default function BackupManager() {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-orange-600 dark:text-orange-300 space-y-2">
-          <p>• A backup fájl letölthető a mobilodra vagy asztali gépedre</p>
-          <p>• Az oldal összeomlása esetén a backup fájl feltöltésével visszaállítható az összes anyag</p>
-          <p>• A backup import TÖRLI az összes jelenlegi tananyagot és a fájlból állítja vissza őket</p>
-          <p>• Ajánlott rendszeresen backup-ot készíteni és biztonságos helyen tárolni</p>
+          <p>• A biztonsági másolat letölthető a mobilodra vagy az asztali gépedre</p>
+          <p>• Az oldal összeomlása esetén a másolat feltöltésével visszaállítható az összes anyag</p>
+          <p>• Az import TÖRLI az összes jelenlegi tananyagot, és a fájlból állítja vissza őket</p>
+          <p>• Ajánlott rendszeresen másolatot készíteni és biztonságos helyen tárolni</p>
         </CardContent>
       </Card>
 
@@ -188,20 +188,20 @@ export default function BackupManager() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Download className="h-5 w-5" />
-              Backup letöltése
+              Biztonsági másolat letöltése
             </CardTitle>
             <CardDescription>
-              Mentsd le az összes tananyagot JSON fájlként
+              Mentsd le az összes tananyagot JSON-fájlként
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start gap-3 p-3 bg-muted rounded-md">
               <FileJson className="h-5 w-5 mt-0.5 text-muted-foreground" />
               <div className="flex-1 text-sm">
-                <p className="font-medium mb-1">Export tartalom:</p>
+                <p className="font-medium mb-1">Exportált tartalom:</p>
                 <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
                   <li>Összes tananyag (cím, tartalom, leírás)</li>
-                  <li>Osztály besorolások</li>
+                  <li>Osztálybesorolások</li>
                   <li>Létrehozási dátumok</li>
                 </ul>
               </div>
@@ -213,7 +213,7 @@ export default function BackupManager() {
               data-testid="button-export-backup"
             >
               <Download className="mr-2 h-4 w-4" />
-              {exportBackupMutation.isPending ? "Exportálás..." : "Backup letöltése"}
+              {exportBackupMutation.isPending ? "Exportálás…" : "Biztonsági másolat letöltése"}
             </Button>
           </CardContent>
         </Card>
@@ -223,7 +223,7 @@ export default function BackupManager() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
-              Backup feltöltése
+              Biztonsági másolat feltöltése
             </CardTitle>
             <CardDescription>
               Állítsd vissza az anyagokat egy korábban mentett fájlból
@@ -235,12 +235,12 @@ export default function BackupManager() {
               <div className="flex-1 text-sm">
                 <p className="font-medium mb-1 text-destructive">Figyelem!</p>
                 <p className="text-muted-foreground">
-                  A feltöltés TÖRLI az összes jelenlegi anyagot és a backup fájlból állítja vissza őket.
+                  A feltöltés TÖRLI az összes jelenlegi anyagot, és a másolatfájlból állítja vissza őket.
                 </p>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="backup-file">Válassz backup fájlt (.json)</Label>
+              <Label htmlFor="backup-file">Válassz másolatfájlt (.json)</Label>
               <Input
                 id="backup-file"
                 type="file"
@@ -258,10 +258,10 @@ export default function BackupManager() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
               <RefreshCw className="h-5 w-5" />
-              Production → Dev Sync
+              Éles → fejlesztői szinkron
             </CardTitle>
             <CardDescription>
-              Másolja át a production adatbázist dev-be
+              Másolja át az éles adatbázist a fejlesztői környezetbe
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -270,7 +270,7 @@ export default function BackupManager() {
               <div className="flex-1 text-sm">
                 <p className="font-medium mb-1 text-destructive">Figyelem!</p>
                 <p className="text-muted-foreground">
-                  Teljesen törli a dev adatbázist és production-ból másolja felül!
+                  Teljesen törli a fejlesztői adatbázist, és az éles környezetből másolja felül!
                 </p>
               </div>
             </div>
@@ -282,7 +282,7 @@ export default function BackupManager() {
               data-testid="button-sync-from-production"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${syncFromProductionMutation.isPending ? 'animate-spin' : ''}`} />
-              {syncFromProductionMutation.isPending ? "Szinkronizálás..." : "Szinkronizálás"}
+              {syncFromProductionMutation.isPending ? "Szinkronizálás…" : "Szinkronizálás"}
             </Button>
           </CardContent>
         </Card>
@@ -369,9 +369,9 @@ export default function BackupManager() {
       <AlertDialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Production → Dev szinkronizálás</AlertDialogTitle>
+            <AlertDialogTitle>Éles → fejlesztői szinkronizálás</AlertDialogTitle>
             <AlertDialogDescription>
-              Ez a művelet <strong>teljesen törli</strong> a dev adatbázis tartalmát és production-ból másolja át az összes adatot.
+              Ez a művelet <strong>teljesen törli</strong> a fejlesztői adatbázis tartalmát, és az éles környezetből másolja át az összes adatot.
               <br /><br />
               Biztosan folytatod?
             </AlertDialogDescription>
@@ -392,9 +392,9 @@ export default function BackupManager() {
       <AlertDialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Biztosan visszaállítod ezt a backup-ot?</AlertDialogTitle>
+            <AlertDialogTitle>Biztosan visszaállítod ezt a másolatot?</AlertDialogTitle>
             <AlertDialogDescription>
-              Ez a művelet törli az összes jelenlegi tananyagot és a <strong>{selectedFile?.name}</strong> fájlból állítja vissza őket.
+              Ez a művelet törli az összes jelenlegi tananyagot, és a <strong>{selectedFile?.name}</strong> fájlból állítja vissza őket.
               <br /><br />
               <span className="text-destructive font-semibold">Ez a művelet NEM vonható vissza!</span>
             </AlertDialogDescription>
@@ -409,7 +409,7 @@ export default function BackupManager() {
                 }
               }}
             >
-              Mégse
+              Mégsem
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleImport}
@@ -417,7 +417,7 @@ export default function BackupManager() {
               data-testid="button-confirm-import"
               disabled={importBackupMutation.isPending}
             >
-              {importBackupMutation.isPending ? "Importálás..." : "Visszaállítás"}
+              {importBackupMutation.isPending ? "Importálás…" : "Visszaállítás"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

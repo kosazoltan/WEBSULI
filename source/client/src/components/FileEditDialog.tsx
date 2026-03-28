@@ -123,7 +123,7 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
               id="edit-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Rövid leírás az anyagról..."
+              placeholder="Rövid leírás az anyagról…"
               rows={3}
               data-testid="input-edit-description"
             />

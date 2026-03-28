@@ -387,7 +387,7 @@ export default function AdminFileDashboard({
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-3 sm:px-4 tablet:px-6 xl:px-8 py-16 text-center">
-        <p className="text-muted-foreground">Betöltés...</p>
+        <p className="text-muted-foreground">Betöltés…</p>
       </div>
     );
   }
@@ -459,7 +459,7 @@ export default function AdminFileDashboard({
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-400" />
           <Input
-            placeholder="Keresés..."
+            placeholder="Keresés…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-7 text-xs w-full border-orange-300 focus:border-orange-500 dark:border-orange-700"
@@ -586,7 +586,7 @@ export default function AdminFileDashboard({
               data-testid="button-save-order"
             >
               <Save className="w-3.5 h-3.5 mr-1.5" />
-              {isSaving ? "Mentés..." : "Sorrend mentése"}
+              {isSaving ? "Mentés…" : "Sorrend mentése"}
             </Button>
           )}
         </div>

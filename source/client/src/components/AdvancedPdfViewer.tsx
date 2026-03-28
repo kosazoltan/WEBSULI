@@ -211,7 +211,7 @@ export default function AdvancedPdfViewer({ pdfUrl, title, onClose }: AdvancedPd
     if (!searchTerm || !pdfDocRef.current) return;
     
     toast({
-      title: "Keresés...",
+      title: "Keresés…",
       description: `"${searchTerm}" keresése a dokumentumban`,
     });
     
@@ -411,7 +411,7 @@ export default function AdvancedPdfViewer({ pdfUrl, title, onClose }: AdvancedPd
             {/* Search */}
             <div className="flex items-center gap-1 flex-1 max-w-xs">
               <Input
-                placeholder="Keresés..."
+                placeholder="Keresés…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}

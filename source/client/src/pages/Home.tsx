@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,6 +23,15 @@ export default function Home() {
   const { data: files = [], isLoading } = useQuery<HtmlFileApi[]>({
     queryKey: ["/api/html-files"],
   });
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (window.location.hash !== "#gyakorlo-jatekok") return;
+    const id = window.setTimeout(() => {
+      document.getElementById("gyakorlo-jatekok")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, [isLoading, files.length]);
 
   const handleViewFile = (file: HtmlFileApi) => {
     if (file.contentType === "pdf") {

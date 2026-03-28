@@ -492,7 +492,7 @@ export default function Admin() {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-4">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-              <p className="text-muted-foreground">Autentikáció ellenőrzése...</p>
+              <p className="text-muted-foreground">Azonosítás ellenőrzése…</p>
             </div>
           </CardContent>
         </Card>
@@ -668,8 +668,8 @@ export default function Admin() {
               onClick={async () => {
                 try {
                   toast({
-                    title: "Forráskód letöltése...",
-                    description: "A ZIP fájl generálása folyamatban...",
+                    title: "Forráskód letöltése…",
+                    description: "A ZIP-fájl generálása folyamatban…",
                   });
 
                   const response = await fetch('/api/admin/download-source', {
@@ -735,11 +735,11 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="tags" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-tags">
               <Tag className="h-3 w-3" />
-              Tag
+              Címkék
             </TabsTrigger>
             <TabsTrigger value="backup" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-backup">
               <Database className="h-3 w-3" />
-              Backup
+              Másolat
             </TabsTrigger>
             <TabsTrigger value="material-views" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-material-views">
               <Eye className="h-3 w-3" />
@@ -747,11 +747,11 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="emails" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-emails">
               <Mail className="h-3 w-3" />
-              Email
+              E-mail
             </TabsTrigger>
             <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-database">
               <Database className="h-3 w-3" />
-              DB
+              Adatbázis
             </TabsTrigger>
             <TabsTrigger value="improve-materials" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improve-materials">
               <Sparkles className="h-3 w-3" />
@@ -759,7 +759,7 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="improvement-backups" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improvement-backups">
               <Database className="h-3 w-3" />
-              AI Bk
+              Okos mentések
             </TabsTrigger>
           </TabsList>
 
@@ -804,7 +804,7 @@ export default function Admin() {
                           <TableHeader>
                             <TableRow>
                               <TableHead>Felhasználó</TableHead>
-                              <TableHead>Email</TableHead>
+                              <TableHead>E-mail</TableHead>
                               <TableHead>Státusz</TableHead>
                               <TableHead>Utolsó aktivitás</TableHead>
                               <TableHead>Regisztráció</TableHead>

@@ -57,7 +57,7 @@ export default function PdfView() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-12 h-12 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Anyag betöltése...</p>
+          <p className="text-sm text-muted-foreground">Anyag betöltése…</p>
         </div>
       </div>
     );

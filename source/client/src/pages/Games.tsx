@@ -42,7 +42,12 @@ type LeaderRow = {
 
 function normalizeGameId(id: string): string {
   const k = id.trim().toLowerCase();
-  if (k === "blockcraft-quiz" || k === "blockcraft" || k === "kockavadasz-kviz") {
+  if (
+    k === "blockcraft-quiz" ||
+    k === "blockcraft" ||
+    k === "kockavadasz-kviz" ||
+    k === "kockavadász-kvíz"
+  ) {
     return "block-craft-quiz";
   }
   if (k === "wordladder-hu-en" || k === "word-ladder") {
@@ -187,7 +192,7 @@ export default function Games() {
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: "#0A0E27" }}>
       <CosmicBackground />
-      <main className="relative z-10 container max-w-3xl py-6 px-4 pb-16">
+      <main className="relative z-10 w-full max-w-3xl xl:max-w-5xl mx-auto py-6 px-4 sm:px-6 pb-24 sm:pb-14 min-h-dvh min-h-screen">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/">
             <Button
@@ -207,11 +212,28 @@ export default function Games() {
         </div>
 
         <p className="text-white/80 text-sm mb-4 leading-relaxed">
-          A tananyagoktól külön futnak a gyakorlók. A helyi XP mindenkinek megmarad a böngészőben; a{" "}
-          <strong className="text-amber-200/90">felhő ranglistához</strong> Google bejelentkezés kell, és az
-          e-mail címednek rajta kell lennie a WebSuli <strong>értesítő listáján</strong> (feliratkozás vagy
-          admin által felvett extra e-mail).
+          A <Link href="/" className="text-cyan-200 underline-offset-2 hover:underline font-semibold">főoldalon</Link> a
+          tananyagok alatt ugyanilyen kártyákon eléred a játékokat is — itt a teljes lista, részletek és ranglista. A helyi
+          XP megmarad a böngészőben; a <strong className="text-amber-200/90">felhő ranglistához</strong> Google
+          bejelentkezés kell, és az e-mail címednek rajta kell lennie a WebSuli{" "}
+          <strong>értesítő listáján</strong> (feliratkozás vagy admin által felvett extra e-mail).
         </p>
+
+        <Card className="glass-card border-amber-400/35 mb-4 shadow-[0_0_28px_rgba(251,191,36,0.12)]">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-xs font-extrabold text-amber-200 uppercase tracking-wide mb-2">Játszva tanulás — miért működik?</p>
+            <p className="text-xs sm:text-sm text-white/82 leading-relaxed">
+              Minden WebSuli-játékban <strong className="text-white">látható cél</strong>, <strong className="text-white">akadály</strong>{" "}
+              (pl. idő, víz, életek, létra) és <strong className="text-white">rövid teszt</strong> (kvíz vagy matekfeladat) van összekötve. A helyes
+              válaszra <strong className="text-amber-200">azonnal jutalom</strong> jár: XP, sorozat-láng, pályán előrelépés — ez a „cél → próba → visszajelzés”
+              ciklus tartja fenn a figyelmet, hasonlóan a népszerű gyakorló alkalmazásokhoz, tantárgyi tartalommal (angol, matek).
+            </p>
+            <p className="text-[11px] text-white/60 mt-2 leading-snug">
+              Szülőknek: minden játék oldalán kinyitható szöveg írja le, <strong className="text-white/75">milyen oktatási értéket</strong> képvisel
+              (szókincs, számolás, olvasásértés stb.).
+            </p>
+          </CardContent>
+        </Card>
 
         <Card className="glass-card border-white/15 mb-6">
           <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -329,7 +351,7 @@ export default function Games() {
                               {game.title}
                             </h2>
                             <p className="text-sm text-white/70 leading-snug">{game.description}</p>
-                            <p className="text-xs text-lime-300/90 mt-2 font-medium">Blokk világ megnyitása →</p>
+                            <p className="text-xs text-lime-300/90 mt-2 font-medium">Blokkvilág megnyitása →</p>
                           </div>
                         </CardContent>
                       </Card>

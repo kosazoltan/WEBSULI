@@ -319,7 +319,7 @@ export default function PdfUpload() {
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Rövid leírás az anyagról..."
+                  placeholder="Rövid leírás az anyagról…"
                   rows={3}
                   data-testid="input-pdf-description"
                 />
@@ -353,7 +353,7 @@ export default function PdfUpload() {
                   {uploadMutation.isPending ? (
                     <>
                       <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      Feltöltés folyamatban...
+                      Feltöltés folyamatban…
                     </>
                   ) : (
                     <>

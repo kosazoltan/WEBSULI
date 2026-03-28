@@ -49,7 +49,7 @@ export default function Preview() {
     }
     
     toast({
-      title: "Újratöltés...",
+      title: "Újratöltés…",
       description: "Az anyag újratöltődik.",
     });
   };
@@ -197,7 +197,7 @@ export default function Preview() {
       <div className="pt-12 sm:pt-14 h-[calc(100vh-3rem)] sm:h-[calc(100vh-3.5rem)] tablet:h-[calc(100vh-4rem)]">
         {isLoading ? (
           <div className="w-full h-full flex items-center justify-center py-20">
-            <p className="text-muted-foreground">Betöltés...</p>
+            <p className="text-muted-foreground">Betöltés…</p>
           </div>
         ) : (
           // Unified iframe rendering for both HTML and PDF

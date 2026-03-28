@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
+import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -413,7 +414,7 @@ const QUIZ_HARD: Quiz[] = [
   },
   {
     id: "x12",
-    prompt: "Melyik szinonima illik: The weather is very bad — it is ___.",
+    prompt: "Melyik szinoníma illik: The weather is very bad — it is ___.",
     options: ["sunny", "terrible", "lovely", "warm"],
     correctIndex: 1,
   },
@@ -534,6 +535,10 @@ export default function TsunamiEscapeEnglish() {
   const [driftDir, setDriftDir] = useState(0);
 
   const keysRef = useRef({ left: false, right: false, sprint: false });
+  const playerXRef = useRef(playerX);
+  const safeZoneXRef = useRef(safeZoneX);
+  playerXRef.current = playerX;
+  safeZoneXRef.current = safeZoneX;
   const lastRef = useRef<number | null>(null);
   const quizTimerRef = useRef(0);
   const runTimerRef = useRef(0);
@@ -576,7 +581,7 @@ export default function TsunamiEscapeEnglish() {
   const syncBanner = useMemo(() => {
     if (!syncEligibility) return "Felhő szinkron ellenőrzése…";
     if (syncEligibility.eligible) {
-      return "Be vagy jelentkezve Google-lal és listán van az e-mailed — a kör vége felkerül a ranglistára.";
+      return "Be vagy jelentkezve Google-lal, és az e-mail címed rajta van a listán — a kör vége felkerül a ranglistára.";
     }
     switch (syncEligibility.reason) {
       case "not_logged_in":
@@ -584,7 +589,7 @@ export default function TsunamiEscapeEnglish() {
       case "google_only":
         return "Csak Google bejelentkezéssel menthető a pont a szerverre (OAuth).";
       case "not_on_mailing_list":
-        return "Az e-mailed nincs a WebSuli értesítő listáján — iratkozz fel, vagy kérj meghívót.";
+        return "Az e-mail címed nincs a WebSuli értesítő listáján — iratkozz fel, vagy kérj meghívót.";
       default:
         return "A felhő szinkron most nem elérhető.";
     }
@@ -749,7 +754,7 @@ export default function TsunamiEscapeEnglish() {
       const floorQuizSec = runDifficultyRef.current === "hard" ? 4.6 : runDifficultyRef.current === "normal" ? 5.8 : 7.8;
       const quizCurve = Math.pow(prog, 1.38);
       const quizEveryDyn = Math.max(floorQuizSec, P.quizEverySec * (1.34 - quizCurve * 0.8));
-      const inSafeZone = Math.abs(playerX - safeZoneX) <= 9;
+      const inSafeZone = Math.abs(playerXRef.current - safeZoneXRef.current) <= 9;
       const safeZoneFactor = inSafeZone ? 0.74 : 1.04;
       const waterRise = P.waterRisePerSec * (0.62 + waterStress * 1.18) * safeZoneFactor;
 
@@ -808,7 +813,7 @@ export default function TsunamiEscapeEnglish() {
 
       rafRef.current = requestAnimationFrame(gameLoop);
     },
-    [phase, pickQuiz, endGame, playerX, safeZoneX],
+    [phase, pickQuiz, endGame],
   );
 
   useEffect(() => {
@@ -944,7 +949,7 @@ export default function TsunamiEscapeEnglish() {
         ))}
       </div>
 
-      <main className="relative z-10 max-w-2xl mx-auto px-3 py-4 min-h-screen flex flex-col">
+      <main className="relative z-10 w-full max-w-2xl lg:max-w-3xl mx-auto px-3 sm:px-5 py-4 min-h-dvh min-h-screen flex flex-col pb-6 sm:pb-8">
         <header className="flex items-center justify-between gap-2 mb-3">
           <Link href="/games">
             <Button
@@ -974,17 +979,25 @@ export default function TsunamiEscapeEnglish() {
             <div className="flex items-center gap-2 mb-2">
               <Waves className="w-5 h-5 text-cyan-300" />
               <h1 className="text-base sm:text-lg font-extrabold leading-tight">
-                Szökőár szökés — Angol 3.
+                Szökőár szökés — Angol (3–5. o.)
               </h1>
             </div>
-            <p className="text-xs text-white/85 mb-2 leading-snug">
-              A víz egyre feljebb jön, az áramlás sodor, és mozgó biztonsági zónákban tudsz stabilabban túlélni.
-              Kvízeknél helyes válasz: XP + hullám vissza.{" "}
-              <strong className="text-amber-200/90">
-                {winQuizTarget(difficulty)} helyes kvíz egy körben = győzelem
-              </strong>{" "}
-              (bónusz XP) — különben, ha túl magasra ér a víz, vége a körnek.
-            </p>
+            <GamePedagogyPanel
+              accent="cyan"
+              className="mb-2"
+              kidMission={`Fuss el a víz elől! Angol kvízek jönnek: jó válasz = XP + lejjebb megy a hullám. Egy körben szerezz ${winQuizTarget(difficulty)} helyes kvízt, és győztél — jár a nagy bónusz XP! Ha túl magas a víz, új kört kezdhetsz.`}
+              parentBody={
+                <>
+                  <strong className="text-cyan-100/90">Tananyag:</strong> alsó tagozatos angol szókincs és rövid szövegértés; a nehézség a választott szinthez igazodik.
+                  <br />
+                  <strong className="text-cyan-100/90">Fejleszt:</strong> gyors döntés (időkorlátos kvíz), olvasásértés, a pályán térbeli figyelem és stratégia (biztonsági zóna).
+                  <br />
+                  <span className="text-white/55">
+                    Felépítés: cél (menekülés) → akadály (víz, sodrás) → rövid teszt → azonnali jutalom (XP, vízcsökkenés) vagy következmény — a gyakorlás és a visszajelzés szorosan összekapcsolva.
+                  </span>
+                </>
+              }
+            />
             <p className="text-[11px] text-cyan-100/95 mb-3 leading-snug border border-cyan-400/35 rounded-lg px-2 py-1.5 bg-slate-900/90">
               {syncBanner}
             </p>
@@ -992,6 +1005,9 @@ export default function TsunamiEscapeEnglish() {
             {phase === "menu" && (
               <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6">
                 <Trophy className="w-16 h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(251,191,36,0.55)]" />
+                <p className="text-xs text-center text-amber-100/90 max-w-sm font-semibold">
+                  Jutalom minden jó válaszra: XP. A láng ikon = hány helyes válasz jött egymás után — tartsd életben a sorozatot!
+                </p>
                 <p className="text-sm text-center text-white/75 max-w-xs">
                   Legjobb sorozat (helyi): <strong className="text-orange-300">{bestStreak}</strong> helyes
                   egymás után
@@ -1041,7 +1057,7 @@ export default function TsunamiEscapeEnglish() {
 
             {(phase === "play" || phase === "quiz") && (
               <div className="relative flex-1 min-h-[360px] rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
-                {/* Eg + nap */}
+                {/* Ég + nap */}
                 <div
                   className="absolute inset-0"
                   style={{
@@ -1059,7 +1075,7 @@ export default function TsunamiEscapeEnglish() {
                     boxShadow: "0 0 80px rgba(253,224,71,0.58)",
                   }}
                 />
-                {/* Felhok */}
+                {/* Felhők */}
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
@@ -1091,7 +1107,7 @@ export default function TsunamiEscapeEnglish() {
                 />
                 <div className="absolute top-3 left-0 right-0 flex justify-center z-10">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-slate-900/90 font-black drop-shadow-sm rounded-full border border-white/45 bg-white/50 px-3 py-1">
-                    Menekülés felfelé
+                    Maradj szárazon — kvíz = esély a víz ellen
                   </span>
                 </div>
                 <div className="absolute top-9 left-2 right-2 text-[11px] text-slate-900/90 font-semibold z-10 flex flex-wrap gap-2 justify-between">
@@ -1113,7 +1129,7 @@ export default function TsunamiEscapeEnglish() {
                   </span>
                 </div>
 
-                {/* Erkelyek / platformok */}
+                {/* Erkélyek / platformok */}
                 {[18, 38, 58, 78].map((top, idx) => (
                   <div
                     key={`${top}-${idx}`}
@@ -1140,7 +1156,7 @@ export default function TsunamiEscapeEnglish() {
                   transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
                 />
 
-                {/* Jatekos */}
+                {/* Játékos */}
                 <motion.div
                   className="absolute z-20 flex flex-col items-center select-none"
                   style={{
@@ -1234,12 +1250,18 @@ export default function TsunamiEscapeEnglish() {
             )}
 
             {phase === "play" && (
-              <div className="grid grid-cols-3 gap-2 mt-3">
+              <>
+                <p className="hidden md:block text-[11px] text-white/65 text-center mt-2 mb-1">
+                  Billentyűzet: <kbd className="px-1 rounded bg-white/15">←</kbd>{" "}
+                  <kbd className="px-1 rounded bg-white/15">→</kbd> vagy <kbd className="px-1 rounded bg-white/15">A</kbd>{" "}
+                  <kbd className="px-1 rounded bg-white/15">D</kbd>, sprint: <kbd className="px-1 rounded bg-white/15">Shift</kbd>
+                </p>
+                <div className="grid grid-cols-3 gap-2 mt-1 sm:mt-3">
                 <Button
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="h-14 touch-none border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
+                  className="h-12 sm:h-14 touch-manipulation border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
                   onPointerDown={(e) => pressStart(e, "left")}
                   onPointerUp={(e) => pressEnd(e, "left")}
                   onPointerCancel={(e) => pressEnd(e, "left")}
@@ -1252,7 +1274,7 @@ export default function TsunamiEscapeEnglish() {
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="h-14 touch-none border-amber-100/60 bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 active:scale-95 shadow-md shadow-amber-900/60 font-extrabold"
+                  className="h-12 sm:h-14 touch-manipulation border-amber-100/60 bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 active:scale-95 shadow-md shadow-amber-900/60 font-extrabold"
                   onPointerDown={(e) => pressStart(e, "sprint")}
                   onPointerUp={(e) => pressEnd(e, "sprint")}
                   onPointerCancel={(e) => pressEnd(e, "sprint")}
@@ -1265,7 +1287,7 @@ export default function TsunamiEscapeEnglish() {
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="h-14 touch-none border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
+                  className="h-12 sm:h-14 touch-manipulation border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
                   onPointerDown={(e) => pressStart(e, "right")}
                   onPointerUp={(e) => pressEnd(e, "right")}
                   onPointerCancel={(e) => pressEnd(e, "right")}
@@ -1275,12 +1297,16 @@ export default function TsunamiEscapeEnglish() {
                   <ArrowBigRight className="w-8 h-8" />
                 </Button>
               </div>
+              </>
             )}
 
             {phase === "won" && (
               <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center">
                 <Trophy className="w-16 h-16 text-amber-300 drop-shadow-lg" />
                 <p className="text-xl font-black text-amber-200">Sikerült elmenekülni!</p>
+                <p className="text-sm font-semibold text-emerald-200/95 max-w-sm">
+                  Ez a nagy jutalom-kör: elég angol kvízt találtál el — így néz ki, amikor a gyakorlás meghozza a győzelmet!
+                </p>
                 <p className="text-sm text-white/80 max-w-xs">
                   {correctQuizzesInRun} helyes kvíz · +{WIN_BONUS_XP} győzelmi bónusz XP · összesen ebben a körben:{" "}
                   <strong className="text-amber-300">{sessionXp}</strong> XP
@@ -1316,9 +1342,12 @@ export default function TsunamiEscapeEnglish() {
             {phase === "over" && (
               <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center">
                 <Waves className="w-12 h-12 text-cyan-400" />
-                <p className="text-lg font-bold">Elért a hullám!</p>
+                <p className="text-lg font-bold">Utolért a hullám!</p>
+                <p className="text-sm text-white/80 max-w-sm font-medium">
+                  Legközelebb a kvízeknél is számít a gyors jó válasz — próbáld újra, már tudod, mire kell figyelni!
+                </p>
                 <p className="text-sm text-white/70">
-                  Szekció XP: <strong className="text-amber-300">{sessionXp}</strong> · Futás:{" "}
+                  Kör XP: <strong className="text-amber-300">{sessionXp}</strong> · Futás:{" "}
                   <strong>{runSeconds}</strong> mp · {difficultyLabel(runDifficultyRef.current)} · helyes kvíz:{" "}
                   {correctQuizzesInRun}/{winQuizTarget(runDifficultyRef.current)}
                 </p>
@@ -1366,8 +1395,9 @@ export default function TsunamiEscapeEnglish() {
               }`}
             >
               <p className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-1">
-                Kvíz — helyes válasz = XP + hullám vissza
+                Mini-teszt — találd el, és jön a jutalom
               </p>
+              <p className="text-[11px] text-white/70 mb-1">Helyes válasz: XP + lejjebb a hullám. Figyelj az órára!</p>
               <p className="text-[11px] text-amber-200/90 mb-1 inline-flex items-center gap-1">
                 <Timer className="w-3 h-3" />
                 Idő: {quizTimeLeft}s
@@ -1389,8 +1419,8 @@ export default function TsunamiEscapeEnglish() {
                   </Button>
                 ))}
               </div>
-              <p className="text-[11px] text-white/50 mt-3 text-center">
-                Rossz válasz vagy lejárt idő: vízszint-büntetés, majd vissza a futáshoz.
+              <p className="text-[11px] text-white/60 mt-3 text-center leading-snug">
+                Rossz válasz vagy lejáró idő: a víz egy kicsit feljebb jön — de mehetsz tovább futni, és jön a következő esély. Ne add fel!
               </p>
             </motion.div>
           </motion.div>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import {
   wordLadderEasyMore,
@@ -32,7 +33,7 @@ const QUIZ_BANK: Quiz[] = [
   { id: "5", prompt: "„Zöld” angolul:", options: ["gray", "gold", "green", "girl"], correctIndex: 2 },
   { id: "6", prompt: "„Iskola” angolul:", options: ["shop", "school", "ship", "shoe"], correctIndex: 1 },
   { id: "7", prompt: "„Alma” angolul:", options: ["animal", "apple", "April", "arm"], correctIndex: 1 },
-  { id: "8", prompt: "Mit jelent: Good bye?", options: ["Helló", "Viszlát", "Köszönöm", "Kérem"], correctIndex: 1 },
+  { id: "8", prompt: "Mit jelent: Goodbye?", options: ["Helló", "Viszlát", "Köszönöm", "Kérem"], correctIndex: 1 },
   { id: "9", prompt: "„Könyv” angolul:", options: ["ball", "bed", "book", "bird"], correctIndex: 2 },
   { id: "10", prompt: "„Víz” angolul:", options: ["wind", "water", "wall", "week"], correctIndex: 1 },
   { id: "11", prompt: "„Nap” (égbolt) angolul:", options: ["snow", "sun", "sea", "sing"], correctIndex: 1 },
@@ -303,7 +304,7 @@ export default function WordLadderHuEn() {
         transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      <main className="relative z-10 max-w-lg mx-auto px-3 py-4 min-h-screen flex flex-col">
+      <main className="relative z-10 w-full max-w-lg lg:max-w-2xl mx-auto px-3 sm:px-5 py-4 min-h-dvh min-h-screen flex flex-col pb-8 sm:pb-10">
         <header className="flex items-center justify-between gap-2 mb-3">
           <Link href="/games">
             <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2">
@@ -329,9 +330,22 @@ export default function WordLadderHuEn() {
               <BookOpen className="w-5 h-5 text-amber-300" />
               <h1 className="text-base sm:text-lg font-extrabold leading-tight">Szólétra — HU ↔ EN</h1>
             </div>
-            <p className="text-[11px] text-white/70 mb-2">
-              3–5. osztályos angol szókincs: először könnyebb, a létra teteje felé nehezebb kérdések. Érd el a tetejét!
-            </p>
+            <GamePedagogyPanel
+              accent="amber"
+              className="mb-2"
+              kidMission="Mászd meg a létrát a tetejéig! Minden jó válasz egy fokkal feljebb visz és XP-et ad. Ha tévedsz, egy fokot visszamész — de jön azonnal egy új kérdés, újra próbálhatod (mint egy szintlépős nyelvtanfolyamon)."
+              parentBody={
+                <>
+                  <strong className="text-amber-100/90">Tananyag:</strong> magyar–angol szópárok, szókincs és jelentésfelismerés; a kérdések egyre nehezebb „létrafokokra” vannak osztva (progresszív gyakorlás).
+                  <br />
+                  <strong className="text-amber-100/90">Fejleszt:</strong> memória, kontextusból következtetés, kitartás a hiba után is.
+                  <br />
+                  <span className="text-white/55">
+                    A kvízek és a vizuális haladás (létra) együtt tartják a figyelmet: cél látható, a visszajelzés azonnali.
+                  </span>
+                </>
+              }
+            />
             <p className="text-[10px] text-amber-100/80 mb-3 border border-amber-700/40 rounded-lg px-2 py-1 bg-black/20">
               {syncBanner}
             </p>
@@ -352,15 +366,18 @@ export default function WordLadderHuEn() {
                   ))}
                   <span className="relative z-10 text-3xl mb-1 drop-shadow-lg">🧗</span>
                 </div>
+                <p className="text-xs text-amber-100/90 text-center max-w-sm font-semibold px-1">
+                  Tipp: nézd a fokokat bal oldalt — minden találat közelebb visz a „CÉL” táblához. XP + láng = sorozat.
+                </p>
                 <p className="text-sm text-white/75 text-center max-w-xs">
                   Legjobb sorozat: <strong className="text-orange-300">{bestStreak}</strong>
                 </p>
                 <Button
                   size="lg"
-                  className="bg-gradient-to-r from-amber-600 to-orange-700 text-white font-bold rounded-full px-8 shadow-lg"
+                  className="bg-gradient-to-r from-amber-600 to-orange-700 text-white font-bold rounded-full px-8 shadow-lg text-base"
                   onClick={startGame}
                 >
-                  Mászás indul
+                  Kezdjük a létrát!
                 </Button>
               </div>
             )}
@@ -405,14 +422,14 @@ export default function WordLadderHuEn() {
                 </div>
                 <div className="flex-1 flex flex-col justify-center rounded-xl border border-white/10 bg-black/25 p-3 min-w-0">
                   <p className="text-[10px] uppercase tracking-widest text-amber-200/70 mb-1">
-                    Rung {rung + 1} / {RUNGS} · {runSeconds}s
+                    Fok {rung + 1} / {RUNGS} · {runSeconds}s
                   </p>
                   <p className="text-sm text-white/80">
                     {phase === "step"
                       ? stepDelta > 0
-                        ? "Helyes! Feljebb léptél egy fokot."
-                        : "Nem jó! Visszaléptél egy fokot, jön a következő kérdés."
-                      : "Minden válasz után látod, ahogy fel vagy visszalépsz a létrán."}
+                        ? "Szuper! Egy fokkal feljebb — így néz ki a jutalom. Mehet a következő lépés!"
+                        : "Most egy fokot vissza — ne búsulj, a következő kérdésnél újra próbálkozhatsz, és újra feljebb mászhatsz."
+                      : "Figyeld a figurát: minden válasz után vagy feljebb kerül, vagy egy fokot vissza — mindkettő azonnal látszik."}
                   </p>
                 </div>
               </div>
@@ -422,6 +439,9 @@ export default function WordLadderHuEn() {
               <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center">
                 <Sparkles className="w-14 h-14 text-amber-300" />
                 <p className="text-xl font-black text-amber-200">Elérted a létra tetejét!</p>
+                <p className="text-sm font-semibold text-lime-100/90 max-w-sm">
+                  Sok helyes kvíz összejött — a szókincsed egy csomó fokkal feljebb került. Ez a te jutalmad!
+                </p>
                 <p className="text-sm text-white/75">
                   +{sessionXp} XP ebben a körben · {runSeconds} mp
                 </p>
@@ -465,9 +485,10 @@ export default function WordLadderHuEn() {
                 wrongShake ? "animate-shake" : ""
               }`}
             >
-              <p className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">
-                Szólétra kvíz — helyes = feljebb
+              <p className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-1">
+                Gyors kvíz — válaszd a helyest
               </p>
+              <p className="text-[11px] text-white/65 mb-2">Találat = egy fok fel + XP. Ez a „tesztlépés” a következő szintre.</p>
               <p className="text-base font-semibold mb-4 leading-snug">{current.prompt}</p>
               <div className="grid gap-2">
                 {current.options.map((opt, idx) => (

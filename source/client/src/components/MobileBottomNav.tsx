@@ -34,8 +34,8 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
       label: "Anyagok", 
       value: "materials",
       tabs: [
-        { value: "enhanced", label: "AI Készítő", icon: Wand2 },
-        { value: "pdf-upload", label: "PDF Feltöltés", icon: FileText },
+        { value: "enhanced", label: "AI készítő", icon: Wand2 },
+        { value: "pdf-upload", label: "PDF feltöltés", icon: FileText },
         { value: "improve-materials", label: "Okosítás", icon: Sparkles },
       ]
     },
@@ -44,9 +44,9 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
       label: "Kezelés", 
       value: "management",
       tabs: [
-        { value: "tags", label: "Tag-ek", icon: Tag },
-        { value: "backup", label: "Backup", icon: Database },
-        { value: "improvement-backups", label: "Okosítás Backup", icon: Database },
+        { value: "tags", label: "Címkék", icon: Tag },
+        { value: "backup", label: "Másolat", icon: Database },
+        { value: "improvement-backups", label: "Okos mentések", icon: Database },
       ]
     },
     { 
@@ -55,7 +55,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
       value: "settings",
       tabs: [
         { value: "material-views", label: "Megtekintések", icon: Eye },
-        { value: "emails", label: "Email címek", icon: Mail },
+        { value: "emails", label: "E-mail címek", icon: Mail },
       ]
     },
   ];

@@ -56,14 +56,14 @@ export default function ExtraEmailsManager() {
       setNewEmail("");
       setNewClassrooms([]);
       toast({
-        title: "Email cím hozzáadva",
-        description: "Az email cím sikeresen hozzáadásra került.",
+        title: "E-mail cím hozzáadva",
+        description: "Az e-mail cím sikeresen hozzáadásra került.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Hiba",
-        description: error.message || "Nem sikerült hozzáadni az email címet",
+        description: error.message || "Nem sikerült hozzáadni az e-mail címet",
         variant: "destructive",
       });
     },
@@ -79,7 +79,7 @@ export default function ExtraEmailsManager() {
       setEditingClassroomId(null);
       toast({
         title: "Osztályok módosítva",
-        description: "Az email osztályai sikeresen módosítva lettek.",
+        description: "Az e-mail cím osztályai sikeresen módosultak.",
       });
     },
     onError: (error: any) => {
@@ -99,15 +99,15 @@ export default function ExtraEmailsManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/extra-emails"] });
       toast({
-        title: "Email cím törölve",
-        description: "Az email cím sikeresen törölve lett.",
+        title: "E-mail cím törölve",
+        description: "Az e-mail cím sikeresen törölve lett.",
       });
       setDeleteEmailId(null);
     },
     onError: (error: any) => {
       toast({
         title: "Hiba",
-        description: error.message || "Nem sikerült törölni az email címet",
+        description: error.message || "Nem sikerült törölni az e-mail címet",
         variant: "destructive",
       });
     },
@@ -126,7 +126,7 @@ export default function ExtraEmailsManager() {
     if (!emailRegex.test(trimmedEmail)) {
       toast({
         title: "Érvénytelen email",
-        description: "Kérlek adj meg egy érvényes email címet.",
+        description: "Kérlek, adj meg egy érvényes e-mail címet.",
         variant: "destructive",
       });
       return;
@@ -182,8 +182,8 @@ export default function ExtraEmailsManager() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Extra Email Címek</CardTitle>
-          <CardDescription>Töltés...</CardDescription>
+          <CardTitle>Extra e-mail címek</CardTitle>
+          <CardDescription>Töltés…</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -200,9 +200,9 @@ export default function ExtraEmailsManager() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Extra Email Címek</CardTitle>
+          <CardTitle>Extra e-mail címek</CardTitle>
           <CardDescription>
-            Adj hozzá olyan email címeket, akiknek értesítést szeretnél küldeni új tananyagokról.
+            Adj hozzá olyan e-mail címeket, amelyekre értesítést szeretnél küldeni új tananyagokról.
             Ezek a címek akkor is kapnak értesítést, ha a tulajdonosuk még nem jelentkezett be az alkalmazásba.
           </CardDescription>
         </CardHeader>
@@ -211,11 +211,11 @@ export default function ExtraEmailsManager() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex gap-2">
               <div className="flex-1">
-                <Label htmlFor="email" className="sr-only">Email cím</Label>
+                <Label htmlFor="email" className="sr-only">E-mail cím</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="pelda@email.com"
+                  placeholder="példa@email.com"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   data-testid="input-extra-email"
@@ -257,7 +257,7 @@ export default function ExtraEmailsManager() {
           {/* Email címek listája */}
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-muted-foreground">
-              Hozzáadott email címek ({extraEmails?.length || 0})
+              Hozzáadott e-mail címek ({extraEmails?.length || 0})
             </h3>
             
             {extraEmails && extraEmails.length > 0 ? (
@@ -357,7 +357,7 @@ export default function ExtraEmailsManager() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-8">
-                Még nincs hozzáadott extra email cím.
+                Még nincs hozzáadott extra e-mail cím.
               </p>
             )}
           </div>
@@ -369,7 +369,7 @@ export default function ExtraEmailsManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Biztos törölni szeretnéd?</AlertDialogTitle>
             <AlertDialogDescription>
-              Az email cím véglegesen törölve lesz. Ez a cím többé nem fog értesítéseket kapni.
+              Az e-mail cím véglegesen törlődik. Ez a cím többé nem kap értesítést.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

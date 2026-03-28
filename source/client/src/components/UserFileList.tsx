@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
 import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
+import HomePracticeGames from "@/components/HomePracticeGames";
 import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -140,24 +141,27 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
             </div>
           )}
 
-          <div className="text-center py-16">
-            <Card className="max-w-md mx-auto">
-              <CardContent className="pt-12 pb-12">
-                <FileCode className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-xl font-semibold text-foreground mb-2">
-                  Még nincsenek anyagok
-                </h3>
-                <p className="text-muted-foreground">
-                  Hamarosan érkeznek az első tananyagok!
-                </p>
-                <Link href="/games">
-                  <Button variant="outline" className="mt-4 gap-2" data-testid="link-empty-games">
-                    <Gamepad2 className="w-4 h-4" />
-                    Játékok
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
+          <div className="py-8">
+            <div className="text-center mb-8">
+              <Card className="max-w-md mx-auto">
+                <CardContent className="pt-12 pb-12">
+                  <FileCode className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    Még nincsenek anyagok
+                  </h3>
+                  <p className="text-muted-foreground">
+                    Hamarosan érkeznek az első tananyagok! Addig is gyakorolhatsz lent a kártyákkal.
+                  </p>
+                  <Link href="/games">
+                    <Button variant="outline" className="mt-4 gap-2" data-testid="link-empty-games">
+                      <Gamepad2 className="w-4 h-4" />
+                      Összes játék és ranglista
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            </div>
+            <HomePracticeGames />
           </div>
         </div>
       </div>
@@ -219,7 +223,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70 z-10" />
             <Input
-              placeholder="Keresés..."
+              placeholder="Keresés…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 h-8 text-xs bg-white/20 backdrop-blur-md border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"
@@ -228,16 +232,23 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
           </div>
         </div>
 
-        {/* Files Grid - Bento Style with Framer Motion */}
+        {/* Tananyagok */}
         {filteredFiles.length > 0 ? (
-          <motion.div
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr"
-            data-testid="list-files"
-            id="content-start"
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
+          <>
+            <h2
+              className="text-xs sm:text-sm font-extrabold text-white/90 tracking-wide mb-2 flex items-center gap-2"
+              id="content-start"
+            >
+              <BookOpen className="w-4 h-4 text-orange-300 shrink-0" />
+              Tananyagok
+            </h2>
+            <motion.div
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr"
+              data-testid="list-files"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
             {filteredFiles.map((file, index) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
@@ -331,6 +342,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               );
             })}
           </motion.div>
+          <HomePracticeGames />
+          </>
         ) : (
           <div className="text-center py-16">
             <Card className="max-w-md mx-auto glass-card">
@@ -364,6 +377,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                 </Button>
               </CardContent>
             </Card>
+            <HomePracticeGames />
           </div>
         )}
       </div>
