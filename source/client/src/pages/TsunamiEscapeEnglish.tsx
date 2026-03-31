@@ -442,16 +442,16 @@ const PRESETS: Record<
   GameDifficulty,
   { waterRisePerSec: number; quizEverySec: number; waterPush: number; xpPerCorrect: number; runBonus: number }
 > = {
-  easy: { waterRisePerSec: 2.15, quizEverySec: 26, waterPush: 28, xpPerCorrect: 25, runBonus: 2 },
-  normal: { waterRisePerSec: 3.35, quizEverySec: 20, waterPush: 22, xpPerCorrect: 26, runBonus: 2 },
-  hard: { waterRisePerSec: 4.85, quizEverySec: 14, waterPush: 16, xpPerCorrect: 34, runBonus: 2 },
+  easy: { waterRisePerSec: 1.45, quizEverySec: 11, waterPush: 22, xpPerCorrect: 25, runBonus: 2 },
+  normal: { waterRisePerSec: 2.1, quizEverySec: 9, waterPush: 20, xpPerCorrect: 26, runBonus: 2 },
+  hard: { waterRisePerSec: 2.85, quizEverySec: 7, waterPush: 17, xpPerCorrect: 34, runBonus: 2 },
 };
 
 /** Ennyi helyes kvíz egy körben = győzelem (nem a hullám üzenet) */
 const WIN_QUIZ_COUNT: Record<GameDifficulty, number> = {
-  easy: 24,
-  normal: 32,
-  hard: 40,
+  easy: 6,
+  normal: 8,
+  hard: 10,
 };
 
 const WIN_BONUS_XP = 150;
@@ -653,7 +653,8 @@ export default function TsunamiEscapeEnglish() {
     driftDirRef.current = 0;
     correctQuizCountRef.current = 0;
     recentQuizIdsRef.current = [];
-    quizTimerRef.current = 0;
+    // Give an early first quiz so the run does not feel empty at the start.
+    quizTimerRef.current = Math.max(0, PRESETS[difficulty].quizEverySec * 0.55);
     runTimerRef.current = 0;
     safeZoneTimerRef.current = 0;
     stormTimerRef.current = 0;
