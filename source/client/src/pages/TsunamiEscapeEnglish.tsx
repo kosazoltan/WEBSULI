@@ -466,6 +466,7 @@ const QUIZ_WRONG_WATER_PENALTY: Record<GameDifficulty, number> = {
   normal: 6,
   hard: 8,
 };
+const VISUAL_FPS = 24;
 
 function winQuizTarget(d: GameDifficulty): number {
   return WIN_QUIZ_COUNT[d];
@@ -534,10 +535,13 @@ export default function TsunamiEscapeEnglish() {
   const [quizTimeLeft, setQuizTimeLeft] = useState(QUIZ_TIMEOUT_SEC.normal);
   const [stormFlash, setStormFlash] = useState(false);
   const [driftDir, setDriftDir] = useState(0);
+  const [lightGraphics, setLightGraphics] = useState(false);
 
   const keysRef = useRef({ left: false, right: false, sprint: false });
   const playerXRef = useRef(playerX);
   const safeZoneXRef = useRef(safeZoneX);
+  const waterRef = useRef(water);
+  const lastVisualFrameRef = useRef(0);
   playerXRef.current = playerX;
   safeZoneXRef.current = safeZoneX;
   const lastRef = useRef<number | null>(null);
@@ -635,6 +639,9 @@ export default function TsunamiEscapeEnglish() {
     scoreSubmittedRef.current = false;
     setWater(12);
     setPlayerX(50);
+    waterRef.current = 12;
+    playerXRef.current = 50;
+    lastVisualFrameRef.current = 0;
     setRunSeconds(0);
     setStreak(0);
     setSessionXp(0);
@@ -676,6 +683,24 @@ export default function TsunamiEscapeEnglish() {
       /* ignore */
     }
   }, [bestStreak]);
+
+  useEffect(() => {
+    const isLowEnd = () => {
+      const mobileLike =
+        window.matchMedia("(hover: none)").matches ||
+        window.matchMedia("(pointer: coarse)").matches ||
+        window.innerWidth < 1024;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const lowMem = typeof navigator !== "undefined" && "deviceMemory" in navigator
+        ? ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4
+        : false;
+      return mobileLike || reduced || lowMem;
+    };
+    const apply = () => setLightGraphics(isLowEnd());
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -759,24 +784,23 @@ export default function TsunamiEscapeEnglish() {
       const safeZoneFactor = inSafeZone ? 0.74 : 1.04;
       const waterRise = P.waterRisePerSec * (0.62 + waterStress * 1.18) * safeZoneFactor;
 
-      setWater((w) => {
-        let next = w + waterRise * dt;
-        const maxPct = 88;
-        if (next >= maxPct) {
-          queueMicrotask(endGame);
-          return maxPct;
-        }
-        return next;
-      });
+      let nextWater = waterRef.current + waterRise * dt;
+      const maxPct = 88;
+      if (nextWater >= maxPct) {
+        nextWater = maxPct;
+        waterRef.current = nextWater;
+        setWater(nextWater);
+        queueMicrotask(endGame);
+        return;
+      }
+      waterRef.current = nextWater;
 
-      setPlayerX((x) => {
-        let nx = x;
-        const sprintMult = keysRef.current.sprint ? 1.5 : 1;
-        if (keysRef.current.left) nx -= 38 * sprintMult * dt;
-        if (keysRef.current.right) nx += 38 * sprintMult * dt;
-        nx += currentPush * dt;
-        return Math.max(8, Math.min(92, nx));
-      });
+      let nx = playerXRef.current;
+      const sprintMult = keysRef.current.sprint ? 1.5 : 1;
+      if (keysRef.current.left) nx -= 38 * sprintMult * dt;
+      if (keysRef.current.right) nx += 38 * sprintMult * dt;
+      nx += currentPush * dt;
+      playerXRef.current = Math.max(8, Math.min(92, nx));
 
       safeZoneTimerRef.current += dt;
       const safeZoneEvery = runDifficultyRef.current === "hard" ? 5.2 : runDifficultyRef.current === "normal" ? 6.3 : 7.6;
@@ -812,6 +836,13 @@ export default function TsunamiEscapeEnglish() {
         setTotalXp((tx) => tx + bonus);
       }
 
+      const visualMs = 1000 / VISUAL_FPS;
+      if (t - lastVisualFrameRef.current >= visualMs) {
+        lastVisualFrameRef.current = t;
+        setWater(waterRef.current);
+        setPlayerX(playerXRef.current);
+      }
+
       rafRef.current = requestAnimationFrame(gameLoop);
     },
     [phase, pickQuiz, endGame],
@@ -833,7 +864,8 @@ export default function TsunamiEscapeEnglish() {
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 320);
       setStreak(0);
-      setWater((w) => Math.min(88, w + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current]));
+      waterRef.current = Math.min(88, waterRef.current + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current]);
+      setWater(waterRef.current);
       setTimeout(() => {
         setQuiz(null);
         setPhase("play");
@@ -854,7 +886,8 @@ export default function TsunamiEscapeEnglish() {
       setBestStreak((b) => (n > b ? n : b));
       return n;
     });
-    setWater((w) => Math.max(5, w - paramsRef.current.waterPush));
+    waterRef.current = Math.max(5, waterRef.current - paramsRef.current.waterPush);
+    setWater(waterRef.current);
 
     correctQuizCountRef.current += 1;
     const nCorrect = correctQuizCountRef.current;
@@ -884,7 +917,11 @@ export default function TsunamiEscapeEnglish() {
           setWrongShake(true);
           setTimeout(() => setWrongShake(false), 220);
           setStreak(0);
-          setWater((w) => Math.min(88, w + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current]));
+          waterRef.current = Math.min(
+            88,
+            waterRef.current + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current],
+          );
+          setWater(waterRef.current);
           setQuiz(null);
           setPhase("play");
           return 0;
@@ -933,7 +970,7 @@ export default function TsunamiEscapeEnglish() {
         <CosmicBackground />
       </div>
       <div className="absolute inset-0 pointer-events-none">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+        {[0, 1, 2, 3, 4, 5].slice(0, lightGraphics ? 3 : 6).map((i) => (
           <motion.div
             key={`bubble-${i}`}
             className="absolute rounded-full border border-cyan-100/35 bg-cyan-100/10"
@@ -1143,17 +1180,24 @@ export default function TsunamiEscapeEnglish() {
                   </span>
                 </div>
 
-                {/* Erkélyek / platformok */}
-                {[18, 38, 58, 78].map((top, idx) => (
+                {/* Erkélyek / platformok - eltérő anyagokkal */}
+                {[
+                  { top: 18, type: "ice" },
+                  { top: 38, type: "steel" },
+                  { top: 58, type: "wood" },
+                  { top: 78, type: "ice" },
+                ].map(({ top, type }, idx) => (
                   <div
                     key={`${top}-${idx}`}
                     className="absolute left-[8%] right-[8%] h-3 rounded-md z-[5]"
                     style={{
                       top: `${top}%`,
                       background:
-                        idx % 2 === 0
-                          ? "linear-gradient(180deg, #e0f2fe 0%, #67e8f9 40%, #0ea5e9 100%)"
-                          : "linear-gradient(180deg, #dbeafe 0%, #93c5fd 40%, #3b82f6 100%)",
+                        type === "ice"
+                          ? "linear-gradient(180deg, #ecfeff 0%, #67e8f9 40%, #0ea5e9 100%)"
+                          : type === "steel"
+                            ? "linear-gradient(180deg, #dbeafe 0%, #64748b 45%, #334155 100%)"
+                            : "linear-gradient(180deg, #fef3c7 0%, #b45309 45%, #78350f 100%)",
                       boxShadow:
                         "0 6px 14px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.72), 0 0 18px rgba(56,189,248,0.35)",
                     }}
@@ -1209,6 +1253,13 @@ export default function TsunamiEscapeEnglish() {
                         "linear-gradient(to top, #0c4a6e 0%, #0369a1 35%, #0ea5e9 65%, rgba(125,211,252,0.85) 100%)",
                     }}
                   />
+                  <div
+                    className="absolute inset-0 opacity-45"
+                    style={{
+                      background:
+                        "linear-gradient(120deg, rgba(14,165,233,0.05) 0%, rgba(255,255,255,0.22) 40%, rgba(14,116,144,0.09) 100%)",
+                    }}
+                  />
                   <motion.div
                     className="absolute left-0 right-0 top-0 h-6 opacity-70"
                     style={{
@@ -1232,7 +1283,7 @@ export default function TsunamiEscapeEnglish() {
                     style={{ boxShadow: "0 -12px 32px rgba(34,211,238,0.45)" }}
                   />
                 </div>
-                {[...Array(12)].map((_, i) => (
+                {[...Array(lightGraphics ? 6 : 12)].map((_, i) => (
                   <motion.div
                     key={`rain-${i}`}
                     className="absolute w-[2px] h-10 bg-cyan-100/45 z-[6] pointer-events-none"
