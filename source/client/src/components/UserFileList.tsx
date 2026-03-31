@@ -70,10 +70,45 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [lightMotion, setLightMotion] = useState(false);
 
   // Load fingerprint once on mount
   useEffect(() => {
     getFingerprint().then(setFingerprint).catch(() => setFingerprint("anonymous"));
+  }, []);
+
+  // Mobilon és reduced-motion esetén könnyített animáció (kevesebb scroll lag).
+  useEffect(() => {
+    const mediaQueries = [
+      window.matchMedia("(hover: none)"),
+      window.matchMedia("(pointer: coarse)"),
+      window.matchMedia("(max-width: 1023px)"),
+      window.matchMedia("(prefers-reduced-motion: reduce)"),
+    ];
+
+    const updateMotionMode = () => {
+      setLightMotion(mediaQueries.some((query) => query.matches));
+    };
+
+    updateMotionMode();
+
+    for (const query of mediaQueries) {
+      if (typeof query.addEventListener === "function") {
+        query.addEventListener("change", updateMotionMode);
+      } else {
+        query.addListener(updateMotionMode);
+      }
+    }
+
+    return () => {
+      for (const query of mediaQueries) {
+        if (typeof query.removeEventListener === "function") {
+          query.removeEventListener("change", updateMotionMode);
+        } else {
+          query.removeListener(updateMotionMode);
+        }
+      }
+    };
   }, []);
 
   // Filter by search query AND selected classroom
@@ -245,59 +280,55 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
             <motion.div
               className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr"
               data-testid="list-files"
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
+              variants={lightMotion ? undefined : containerVariants}
+              initial={lightMotion ? false : "hidden"}
+              animate={lightMotion ? undefined : "visible"}
             >
-            {filteredFiles.map((file, index) => {
+            {filteredFiles.map((file) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
               const classroom = file.classroom ?? 1;
-
-              const gridClasses = "";
               
               // Korcsoport-specifikus téma
-              let themeClasses = "";
-              let badgeGradient = "from-orange-600 to-amber-600";
-              let iconBg = "from-orange-600/30 to-amber-600/30";
-              let iconBorder = "border-orange-500/30";
-              
-              // Új színpaletta: elsődleges és másodlagos gradient-ek
-              if (classroom >= 1 && classroom <= 4) {
-                // Kid theme - vibráló gradient-ek
-                themeClasses = "rounded-3xl";
-                badgeGradient = "from-[#8B5CF6] to-[#EC4899]";
-                iconBg = "from-[#8B5CF6]/20 to-[#EC4899]/20";
-                iconBorder = "border-[#8B5CF6]/40";
-              } else if (classroom >= 5 && classroom <= 8) {
-                // Teen theme - elsődleges gradient
-                themeClasses = "rounded-2xl";
-                badgeGradient = "from-[#8B5CF6] via-[#EC4899] to-[#F97316]";
-                iconBg = "from-[#8B5CF6]/20 via-[#EC4899]/20 to-[#F97316]/20";
-                iconBorder = "border-[#EC4899]/40";
-              } else {
-                // Senior theme - másodlagos gradient
-                themeClasses = "rounded-xl";
-                badgeGradient = "from-[#F97316] to-[#EAB308]";
-                iconBg = "from-[#F97316]/20 to-[#EAB308]/20";
-                iconBorder = "border-[#F97316]/40";
-              }
+              const {
+                themeClasses,
+                badgeGradient,
+                iconBg,
+                iconBorder,
+              } = classroom >= 1 && classroom <= 4
+                ? {
+                    // Kid theme - vibráló gradient-ek
+                    themeClasses: "rounded-3xl",
+                    badgeGradient: "from-[#8B5CF6] to-[#EC4899]",
+                    iconBg: "from-[#8B5CF6]/20 to-[#EC4899]/20",
+                    iconBorder: "border-[#8B5CF6]/40",
+                  }
+                : classroom >= 5 && classroom <= 8
+                  ? {
+                      // Teen theme - elsődleges gradient
+                      themeClasses: "rounded-2xl",
+                      badgeGradient: "from-[#8B5CF6] via-[#EC4899] to-[#F97316]",
+                      iconBg: "from-[#8B5CF6]/20 via-[#EC4899]/20 to-[#F97316]/20",
+                      iconBorder: "border-[#EC4899]/40",
+                    }
+                  : {
+                      // Senior theme - másodlagos gradient
+                      themeClasses: "rounded-xl",
+                      badgeGradient: "from-[#F97316] to-[#EAB308]",
+                      iconBg: "from-[#F97316]/20 to-[#EAB308]/20",
+                      iconBorder: "border-[#F97316]/40",
+                    };
 
               return (
                 <motion.div
                   key={file.id}
-                  variants={cardVariants}
-                  whileHover="hover"
-                  className={gridClasses}
+                  variants={lightMotion ? undefined : cardVariants}
+                  whileHover={lightMotion ? undefined : "hover"}
                 >
-                  <motion.div
-                    whileHover={{ scale: 1.03, y: -5 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  <Card
+                    className={`group cursor-pointer glass-card h-full ${themeClasses}`}
+                    onClick={() => onViewFile(file)}
+                    data-testid={`link-file-${file.id}`}
                   >
-                    <Card
-                      className={`group cursor-pointer glass-card h-full ${themeClasses}`}
-                      onClick={() => onViewFile(file)}
-                      data-testid={`link-file-${file.id}`}
-                    >
                     <CardContent className="p-2.5 flex flex-col h-full">
                       {/* Header */}
                       <div className="flex justify-between items-start mb-1.5">
@@ -329,15 +360,14 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                         />
                         <motion.div
                           className={`w-6 h-6 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-all`}
-                          whileHover={{ scale: 1.15, rotate: 5 }}
-                          whileTap={{ scale: 0.95 }}
+                          whileHover={lightMotion ? undefined : { scale: 1.15, rotate: 5 }}
+                          whileTap={lightMotion ? undefined : { scale: 0.95 }}
                         >
                           <ArrowRight className="w-3 h-3 text-white" />
                         </motion.div>
                       </div>
                     </CardContent>
-                    </Card>
-                  </motion.div>
+                  </Card>
                 </motion.div>
               );
             })}
