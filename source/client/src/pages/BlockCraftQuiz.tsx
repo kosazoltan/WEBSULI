@@ -88,6 +88,10 @@ function randInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v));
+}
+
 function buildWorld(): Uint8Array {
   const g = new Uint8Array(ROWS * COLS);
   let base = 8;
@@ -264,8 +268,24 @@ function needsRescueAfterMine(world: Uint8Array, p: { x: number; y: number }, mi
   return deep && !hasGroundBelow;
 }
 
-function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, time: number) {
+function tileRand(c: number, r: number, seed: number) {
+  const n = Math.sin(c * 127.1 + r * 311.7 + seed * 74.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
+function drawBlock(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  t: number,
+  time: number,
+  worldCol?: number,
+  worldRow?: number,
+  light?: { sunX: number; sunY: number; viewW: number; viewH: number },
+) {
   if (!t) return;
+  const c = worldCol ?? Math.floor(x / TILE);
+  const r = worldRow ?? Math.floor(y / TILE);
   const pal: Record<number, { top: string; base: string; side: string; speck?: string }> = {
     [GRASS]: { top: "#7cd057", base: "#5a903d", side: "#416a2d", speck: "#325423" },
     [DIRT]: { top: "#a67a4d", base: "#8a6038", side: "#634223", speck: "#6d4728" },
@@ -280,17 +300,80 @@ function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, t: numbe
   const p = pal[t] || pal[STONE];
   ctx.fillStyle = p.base;
   ctx.fillRect(x, y, TILE, TILE);
+
+  // Finom textúra-zaj: részletesebb, "voxel" hatás.
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  for (let i = 0; i < 6; i++) {
+    const rx = x + 2 + Math.floor(tileRand(c, r, i + 0.31) * (TILE - 5));
+    const ry = y + 2 + Math.floor(tileRand(c, r, i + 1.77) * (TILE - 5));
+    ctx.fillRect(rx, ry, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
   ctx.fillStyle = p.top;
   ctx.fillRect(x, y, TILE, TILE * 0.34);
   ctx.fillStyle = p.side;
   ctx.fillRect(x + TILE * 0.62, y + TILE * 0.22, TILE * 0.38, TILE * 0.78);
+
+  if (light) {
+    const cx = x + TILE * 0.5;
+    const cy = y + TILE * 0.5;
+    const toSunX = clamp01((light.sunX - cx) / Math.max(1, light.viewW) + 0.5);
+    const toSunY = clamp01((light.sunY - cy) / Math.max(1, light.viewH) + 0.5);
+    const lit = clamp01(0.2 + toSunX * 0.45 + (1 - toSunY) * 0.35);
+    const shade = clamp01(1 - lit);
+
+    // Napfény oldalfüggő csillanás.
+    ctx.fillStyle = `rgba(255,255,220,${0.06 + lit * 0.11})`;
+    ctx.fillRect(x, y, TILE, TILE * 0.28);
+
+    // Naptól elforduló oldal sötétítése.
+    ctx.fillStyle = `rgba(0,0,0,${0.08 + shade * 0.2})`;
+    ctx.fillRect(x + TILE * 0.58, y + TILE * 0.18, TILE * 0.42, TILE * 0.82);
+  }
+
+  // Világítás + peremárnyék: térérzet.
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  ctx.fillRect(x, y, TILE, 1);
+  ctx.fillRect(x, y, 1, TILE);
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.fillRect(x + TILE - 1, y, 1, TILE);
+  ctx.fillRect(x, y + TILE - 1, TILE, 1);
+
   if (p.speck) {
     ctx.fillStyle = p.speck;
-    for (let k = 0; k < 4; k++) ctx.fillRect(x + 3 + ((k * 7) % 17), y + 7 + ((k * 5) % 11), 2, 2);
+    for (let k = 0; k < 5; k++) {
+      const sx = x + 2 + Math.floor(tileRand(c, r, 10 + k) * (TILE - 5));
+      const sy = y + 3 + Math.floor(tileRand(c, r, 17 + k) * (TILE - 6));
+      ctx.fillRect(sx, sy, 2, 2);
+    }
   }
   if (t === GRASS) {
-    ctx.fillStyle = "rgba(210,255,180,0.2)";
-    for (let k = 0; k < 3; k++) ctx.fillRect(x + 4 + k * 6 + Math.sin(time * 0.003 + k) * 1.7, y + 4, 2, 6);
+    ctx.fillStyle = "rgba(220,255,170,0.26)";
+    for (let k = 0; k < 5; k++) {
+      const wind = Math.sin(time * 0.003 + k + c * 0.6) * 1.3;
+      ctx.fillRect(x + 3 + k * 4 + wind, y + 3, 1, 6);
+    }
+  }
+  if (t === LEAVES) {
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#8dff8d";
+    for (let k = 0; k < 4; k++) {
+      const sx = x + 2 + Math.floor(tileRand(c, r, 40 + k) * (TILE - 5));
+      const sy = y + 2 + Math.floor(tileRand(c, r, 47 + k) * (TILE - 5));
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (t === LOG) {
+    ctx.strokeStyle = "rgba(45,25,10,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(x + 5, y + 2);
+    ctx.lineTo(x + 5, y + TILE - 2);
+    ctx.moveTo(x + 11, y + 2);
+    ctx.lineTo(x + 11, y + TILE - 2);
+    ctx.stroke();
   }
   ctx.strokeStyle = "rgba(0,0,0,0.2)";
   ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
@@ -300,24 +383,39 @@ function drawPlayer(ctx: CanvasRenderingContext2D, px: number, py: number, facin
   const x = Math.round(px);
   const y = Math.round(py);
   const bob = Math.sin(tick * 0.18) * 1.2;
+
+  // Pixeles kontúr: erősebb Minecraft-jelleg.
+  ctx.fillStyle = "#17100d";
+  ctx.fillRect(x - 2, y - PLAYER_H + 2 + bob, 14, 30);
+
   ctx.fillStyle = "#d0a173";
   ctx.fillRect(x, y - PLAYER_H + 5 + bob, 10, 9);
+  ctx.fillStyle = "#8e6546";
+  ctx.fillRect(x, y - PLAYER_H + 5 + bob, 10, 2);
+
   ctx.fillStyle = "#4b321a";
   ctx.fillRect(x - 1, y - PLAYER_H + 3 + bob, 12, 5);
   ctx.fillStyle = "#318bf1";
   ctx.fillRect(x - 1, y - PLAYER_H + 14 + bob, 12, 11);
+  ctx.fillStyle = "#4ea3ff";
+  ctx.fillRect(x - 1, y - PLAYER_H + 14 + bob, 12, 2);
+
   ctx.fillStyle = "#1c396e";
   ctx.fillRect(x - 1, y - PLAYER_H + 24 + Math.sin(tick * 0.2) + bob, 5, 6);
   ctx.fillRect(x + 6, y - PLAYER_H + 24 + Math.sin(tick * 0.2 + Math.PI) + bob, 5, 6);
-  ctx.fillStyle = "#2a1810";
-  ctx.fillRect(facing > 0 ? x + 6 : x, y - PLAYER_H + 8 + bob, 3, 2);
+
+  // Szem + árnyék.
+  ctx.fillStyle = "#0f0b09";
+  ctx.fillRect(facing > 0 ? x + 7 : x + 1, y - PLAYER_H + 8 + bob, 2, 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(facing > 0 ? x + 8 : x + 2, y - PLAYER_H + 8 + bob, 1, 1);
 }
 
 function MenuBlock({ t }: { t: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current?.getContext("2d");
-    if (c) drawBlock(c, 0, 0, t, performance.now());
+    if (c) drawBlock(c, 0, 0, t, performance.now(), 0, 0);
   }, [t]);
   return <canvas ref={ref} width={TILE} height={TILE} className="rounded border border-black/40" />;
 }
@@ -330,7 +428,7 @@ export default function BlockCraftQuiz() {
   const playerRef = useRef({ x: 8 * TILE, y: 7 * TILE, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 });
   const keysRef = useRef({ left: false, right: false, jump: false, mine: false });
   const touchRef = useRef({ left: false, right: false, jump: false });
-  const cameraRef = useRef(0);
+  const cameraRef = useRef({ x: 0, y: 0 });
   const lastTRef = useRef<number | null>(null);
   const rafRef = useRef(0);
   const mineTargetRef = useRef<{ c: number; r: number; t: number } | null>(null);
@@ -432,7 +530,7 @@ export default function BlockCraftQuiz() {
     worldRef.current = buildWorld();
     const spawn = findSpawn(worldRef.current);
     playerRef.current = { x: spawn.x, y: spawn.y, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 };
-    cameraRef.current = 0;
+    cameraRef.current = { x: 0, y: 0 };
     particlesRef.current = [];
     setSessionXp(0);
     setStreak(0);
@@ -573,8 +671,17 @@ export default function BlockCraftQuiz() {
       const CW = canvas.width;
       const CH = canvas.height;
       const playerCenterX = p.x + PLAYER_W / 2;
-      cameraRef.current = playerCenterX - CW / 2;
-      const cam = cameraRef.current;
+      const playerCenterY = p.y - PLAYER_H / 2;
+      const speedRatio = Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
+      const microAmp = 0.22 + speedRatio * 0.85;
+      const microX = Math.sin(t * 0.007 + p.tick * 0.05) * microAmp;
+      const microY = Math.cos(t * 0.006 + p.tick * 0.08) * microAmp * 0.62;
+      cameraRef.current = {
+        x: playerCenterX - CW / 2 + microX,
+        y: playerCenterY - CH / 2 + microY,
+      };
+      const camX = cameraRef.current.x;
+      const camY = cameraRef.current.y;
 
       const cycle = (Math.sin(t * 0.00008) + 1) * 0.5;
       const sky = ctx.createLinearGradient(0, 0, 0, CH);
@@ -584,7 +691,10 @@ export default function BlockCraftQuiz() {
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, CW, CH);
 
-      const sun = ctx.createRadialGradient(CW - 70, 42, 4, CW - 70, 42, 56);
+      const sunOrbit = t * 0.00005;
+      const sunX = CW * 0.52 + Math.cos(sunOrbit) * CW * 0.42;
+      const sunY = 54 + Math.sin(sunOrbit * 1.35) * 22;
+      const sun = ctx.createRadialGradient(sunX, sunY, 5, sunX, sunY, 64);
       sun.addColorStop(0, "rgba(255,248,220,0.95)");
       sun.addColorStop(0.4, "rgba(255,230,150,0.38)");
       sun.addColorStop(1, "rgba(255,200,100,0)");
@@ -593,10 +703,13 @@ export default function BlockCraftQuiz() {
 
       ctx.fillStyle = "rgba(22,58,36,0.3)";
       ctx.beginPath();
-      ctx.moveTo(0, ROWS * TILE - 120);
+      ctx.moveTo(0, ROWS * TILE - cameraRef.current.y - 120);
       for (let sx = 0; sx <= CW + 20; sx += 16) {
-        const wx = sx + cam * 0.6;
-        ctx.lineTo(sx, ROWS * TILE - 122 + Math.sin(wx * 0.018) * 14 + Math.cos(wx * 0.008) * 10);
+        const wx = sx + camX * 0.6;
+        ctx.lineTo(
+          sx,
+          ROWS * TILE - camY - 122 + Math.sin(wx * 0.018) * 14 + Math.cos(wx * 0.008) * 10,
+        );
       }
       ctx.lineTo(CW, CH);
       ctx.lineTo(0, CH);
@@ -611,23 +724,51 @@ export default function BlockCraftQuiz() {
         ctx.fillRect(cx + 10, cy - 6, 26, 8);
       }
 
-      const c0 = Math.floor(cam / TILE);
-      const c1 = Math.ceil((cam + CW) / TILE) + 1;
+      const c0 = Math.floor(camX / TILE);
+      const c1 = Math.ceil((camX + CW) / TILE) + 1;
       for (let r = 0; r < ROWS; r++) {
         for (let c = Math.max(0, c0); c < Math.min(COLS, c1); c++) {
           const cell = w[r * COLS + c] ?? AIR;
-          if (cell) drawBlock(ctx, c * TILE - cam, r * TILE, cell, t);
+          if (cell) {
+            drawBlock(ctx, c * TILE - camX, r * TILE - camY, cell, t, c, r, {
+              sunX,
+              sunY,
+              viewW: CW,
+              viewH: CH,
+            });
+          }
         }
       }
 
       for (const ptx of parts) {
         ctx.globalAlpha = Math.max(0, ptx.life);
         ctx.fillStyle = ptx.color;
-        ctx.fillRect(ptx.x - cam, ptx.y, 3, 3);
+        ctx.fillRect(ptx.x - camX, ptx.y - camY, 3, 3);
       }
       ctx.globalAlpha = 1;
 
-      drawPlayer(ctx, p.x - cam, p.y, p.facing, p.tick);
+      drawPlayer(ctx, p.x - camX, p.y - camY, p.facing, p.tick);
+
+      // Távolsági köd + atmoszférikus réteg (mélységérzet).
+      const fog = ctx.createLinearGradient(0, 0, 0, CH);
+      fog.addColorStop(0, "rgba(180,220,255,0.03)");
+      fog.addColorStop(0.55, "rgba(150,195,220,0.08)");
+      fog.addColorStop(1, "rgba(120,165,180,0.18)");
+      ctx.fillStyle = fog;
+      ctx.fillRect(0, 0, CW, CH);
+
+      ctx.fillStyle = "rgba(210,240,255,0.06)";
+      for (let i = 0; i < 3; i++) {
+        const bandY = CH * (0.28 + i * 0.21) + Math.sin(t * 0.00065 + i + camX * 0.0014) * 8;
+        ctx.fillRect(0, bandY, CW, 14 + i * 5);
+      }
+
+      // Finom vignetta: fókusz a középponti játéktérre.
+      const vignette = ctx.createRadialGradient(CW / 2, CH / 2, CH * 0.28, CW / 2, CH / 2, CH * 0.8);
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.2)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, CW, CH);
       rafRef.current = requestAnimationFrame(loop);
     };
 
@@ -729,8 +870,8 @@ export default function BlockCraftQuiz() {
       const canvas = e.currentTarget;
       const { x, y } = pointerOnCanvas(canvas, e.clientX, e.clientY);
       const cam = cameraRef.current;
-      const tc = Math.floor((x + cam) / TILE);
-      const tr = Math.floor(y / TILE);
+      const tc = Math.floor((x + cam.x) / TILE);
+      const tr = Math.floor((y + cam.y) / TILE);
       if (!tryMineAt(tc, tr)) tryMine();
     },
     [phase, tryMine, tryMineAt],
