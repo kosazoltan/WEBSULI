@@ -60,7 +60,7 @@ function uniqueOptions(correct: number, level: GradeLevel): number[] {
     const candidate = Math.max(0, correct + offset);
     set.add(candidate);
   }
-  return [...set].sort(() => Math.random() - 0.5);
+  return Array.from(set).sort(() => Math.random() - 0.5);
 }
 
 const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {

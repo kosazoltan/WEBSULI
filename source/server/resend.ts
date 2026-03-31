@@ -5,6 +5,42 @@ import { sanitizeText } from './utils/sanitize';
 let resendClient: Resend | null = null;
 let fromEmail: string = '';
 
+function resolveAppBaseUrl(): string {
+  const frontend = process.env.FRONTEND_URL?.trim();
+  if (frontend) {
+    return frontend.replace(/\/+$/, '');
+  }
+
+  const base = process.env.BASE_URL?.trim();
+  if (base) {
+    return base.replace(/\/+$/, '');
+  }
+
+  const customDomain = process.env.CUSTOM_DOMAIN?.trim();
+  if (customDomain) {
+    return `https://${customDomain.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`;
+  }
+
+  return 'https://websuli.vip';
+}
+
+export function isResendConfigured(): { ok: boolean; reason?: string; fromEmail?: string } {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, reason: 'RESEND_API_KEY hiányzik' };
+  }
+
+  const configuredFrom = (process.env.RESEND_FROM_EMAIL || '').trim();
+  if (!configuredFrom) {
+    return {
+      ok: false,
+      reason: 'RESEND_FROM_EMAIL hiányzik (pl. WEBSULI <noreply@websuli.vip>)',
+    };
+  }
+
+  return { ok: true, fromEmail: configuredFrom };
+}
+
 function getResendClient() {
   if (resendClient) {
     return { client: resendClient, fromEmail };
@@ -18,8 +54,11 @@ function getResendClient() {
 
   resendClient = new Resend(apiKey);
   
-  // Use configured from email or default to Resend test email
-  fromEmail = process.env.RESEND_FROM_EMAIL || 'Anyagok Profiknak <onboarding@resend.dev>';
+  // Explicit "from" address is required so production deliveries are reliable.
+  fromEmail = (process.env.RESEND_FROM_EMAIL || '').trim();
+  if (!fromEmail) {
+    throw new Error('RESEND_FROM_EMAIL environment variable is not set');
+  }
   
   console.log('[RESEND] Client initialized, from:', fromEmail);
   
@@ -36,10 +75,7 @@ export async function sendNewMaterialNotification(
   try {
     const { client, fromEmail } = getResendClient();
     
-    // Always use websuli.vip for production
-    const baseUrl = process.env.CUSTOM_DOMAIN 
-      ? `https://${process.env.CUSTOM_DOMAIN}`
-      : 'https://websuli.vip';
+    const baseUrl = resolveAppBaseUrl();
     
     // XSS Protection: Sanitize all user-generated content
     const safeRecipientName = sanitizeText(recipientName);
@@ -99,7 +135,7 @@ export async function sendNewMaterialNotification(
     
     const result = await client.emails.send({
       from: fromEmail,
-      to: recipientEmail,
+      to: [recipientEmail],
       subject: `Új Tananyag: ${safeMaterialTitle}`,
       html: htmlContent
     });
@@ -165,7 +201,7 @@ export async function sendAdminNotification(
     
     const result = await client.emails.send({
       from: fromEmail,
-      to: recipientEmail,
+      to: [recipientEmail],
       subject: subject,
       html: htmlBody
     });
@@ -177,7 +213,6 @@ export async function sendAdminNotification(
     console.log(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
     return result;
   } catch (error: unknown) {
-    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[RESEND] Admin értesítés küldési hiba:', error);
     throw error;
   }
