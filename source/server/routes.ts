@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { insertHtmlFileSchema, insertEmailSubscriptionSchema, insertExtraEmailSchema, insertMaterialCommentSchema, insertImprovedHtmlFileSchema, type EmailSubscription, type User, type HtmlFile, type ImprovedHtmlFile, type MaterialImprovementBackup } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
-import { sendNewMaterialNotification } from "./resend";
+import { sendNewMaterialNotification, isResendConfigured } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial, sendMaterialViewNotification } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
 
@@ -2676,6 +2676,12 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       // Send email notifications in background (fire-and-forget)
       (async () => {
         try {
+          const resendState = isResendConfigured();
+          if (!resendState.ok) {
+            console.error(`[EMAIL] Resend nincs megfelelően konfigurálva: ${resendState.reason}`);
+            return;
+          }
+
           console.log(`[EMAIL] Email címek összegyűjtése értesítésekhez (${classroom}. osztály anyaghoz)...`);
 
           // Get email subscriptions for this classroom
@@ -2932,6 +2938,14 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // Send email notification
       try {
+        const resendState = isResendConfigured();
+        if (!resendState.ok) {
+          return res.status(503).json({
+            message: "Email szolgáltatás nincs beállítva",
+            error: resendState.reason,
+          });
+        }
+
         console.log(`[EMAIL] Email küldése ${email} címre a ${file.title} fájlhoz`);
         await sendNewMaterialNotification(
           email,

@@ -418,7 +418,6 @@ export default function BlockCraftQuiz() {
   /** E / Bányász gomb: az arc előtti oszlopban a legközelebbi (lábtól felfelé) bányászható cella. */
   const tryMine = useCallback(() => {
     const p = playerRef.current;
-    const w = worldRef.current;
     const cx = Math.floor((p.x + PLAYER_W / 2) / TILE) + p.facing;
     if (cx < 0 || cx >= COLS) return;
     const rFoot = Math.min(ROWS - 1, Math.floor(p.y / TILE) + 1);
@@ -573,7 +572,8 @@ export default function BlockCraftQuiz() {
 
       const CW = canvas.width;
       const CH = canvas.height;
-      cameraRef.current = Math.max(0, Math.min(p.x - CW * 0.36, COLS * TILE - CW));
+      const playerCenterX = p.x + PLAYER_W / 2;
+      cameraRef.current = playerCenterX - CW / 2;
       const cam = cameraRef.current;
 
       const cycle = (Math.sin(t * 0.00008) + 1) * 0.5;
