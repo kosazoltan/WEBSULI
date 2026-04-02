@@ -20,6 +20,7 @@ const TsunamiEscapeEnglish = lazy(() => import("@/pages/TsunamiEscapeEnglish"));
 const WordLadderHuEn = lazy(() => import("@/pages/WordLadderHuEn"));
 const BlockCraftQuiz = lazy(() => import("@/pages/BlockCraftQuiz"));
 const SpeedQuizMath = lazy(() => import("@/pages/SpeedQuizMath"));
+const BrainRotSteal = lazy(() => import("@/pages/BrainRotSteal"));
 
 function LoadingSpinner() {
   return (
@@ -48,6 +49,7 @@ function Router() {
         <Route path="/games/word-ladder-hu-en" component={WordLadderHuEn} />
         <Route path="/games/block-craft-quiz" component={BlockCraftQuiz} />
         <Route path="/games/speed-quiz-math" component={SpeedQuizMath} />
+        <Route path="/games/brain-rot-steal" component={BrainRotSteal} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

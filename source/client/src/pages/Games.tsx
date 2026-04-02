@@ -11,6 +11,7 @@ import {
   Lock,
   CloudUpload,
   Box,
+  Brain,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,6 +57,9 @@ function normalizeGameId(id: string): string {
   if (k === "speedquiz-math" || k === "matek-sprint") {
     return "speed-quiz-math";
   }
+  if (k === "brainrot-steal" || k === "brain-rot" || k === "brainrotsteal") {
+    return "brain-rot-steal";
+  }
   return k;
 }
 
@@ -64,6 +68,7 @@ const GAME_ICONS: Record<string, typeof Waves> = {
   "word-ladder-hu-en": BookOpen,
   "speed-quiz-math": Zap,
   "block-craft-quiz": Box,
+  "brain-rot-steal": Brain,
 };
 
 const GAME_ACCENTS: Record<string, string> = {
@@ -71,6 +76,7 @@ const GAME_ACCENTS: Record<string, string> = {
   "word-ladder-hu-en": "from-violet-500 to-fuchsia-600",
   "speed-quiz-math": "from-amber-500 to-orange-600",
   "block-craft-quiz": "from-lime-500 to-emerald-700",
+  "brain-rot-steal": "from-purple-500 to-pink-600",
 };
 
 const PLAYABLE_IDS = new Set([
@@ -78,6 +84,7 @@ const PLAYABLE_IDS = new Set([
   "word-ladder-hu-en",
   "block-craft-quiz",
   "speed-quiz-math",
+  "brain-rot-steal",
 ]);
 
 /** API / régi migráció szövegét felülírja (pl. „Hamarosan” helyett játszható leírás) */
@@ -95,6 +102,9 @@ const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }
   },
   "speed-quiz-math": {
     description: "Gyors matek kihívás: helyes válasz = pont + kombó szorzó.",
+  },
+  "brain-rot-steal": {
+    description: "Kapd el a Brain Rot-okat! Minden elkapás kvízt hoz: angol, matek, magyar nyelvtan. Kombó szorzóval még több XP!",
   },
 };
 
@@ -142,6 +152,13 @@ const FALLBACK_CATALOG: GameCatalogRow[] = [
     title: "Gyors matek sprint",
     description: "Gyors matek kihívás: helyes válasz = pont + kombó szorzó.",
     sortOrder: 4,
+    createdAt: "",
+  },
+  {
+    id: "brain-rot-steal",
+    title: "Brain Rot Lopás",
+    description: "Kapd el a Brain Rot-okat! Minden elkapás kvízt hoz: angol, matek, magyar nyelvtan. Kombó szorzóval még több XP!",
+    sortOrder: 5,
     createdAt: "",
   },
 ];
@@ -377,6 +394,31 @@ export default function Games() {
                             </h2>
                             <p className="text-sm text-white/70 leading-snug">{game.description}</p>
                             <p className="text-xs text-amber-300/90 mt-2 font-medium">Matek sprint indítása →</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </li>
+                );
+              }
+
+              if (playable && game.id === "brain-rot-steal") {
+                return (
+                  <li key={game.id}>
+                    <Link href="/games/brain-rot-steal">
+                      <Card className="glass-card border-white/20 hover:border-purple-400/50 transition-colors cursor-pointer group h-full">
+                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
+                          <div
+                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
+                          >
+                            <Icon className="w-7 h-7 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg font-bold text-white group-hover:text-purple-200 transition-colors mb-1">
+                              {game.title}
+                            </h2>
+                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
+                            <p className="text-xs text-purple-300/90 mt-2 font-medium">Brain Rot vadászat →</p>
                           </div>
                         </CardContent>
                       </Card>

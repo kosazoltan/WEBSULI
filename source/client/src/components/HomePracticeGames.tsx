@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { Gamepad2, Waves, BookOpen, Zap, Box, Sparkles } from "lucide-react";
+import { Gamepad2, Waves, BookOpen, Zap, Box, Brain, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -165,6 +165,31 @@ function HomePracticeGames() {
                   Gyors feladatok, kombó szorzó: 3–5. osztály szintek.
                 </p>
                 <p className="text-[9px] text-amber-200/90 font-semibold pt-1.5 border-t border-white/15">Sprint →</p>
+              </CardContent>
+            </Card>
+          </Link>
+        </motion.div>
+
+        {/* Brain Rot Lopas */}
+        <motion.div variants={cardVariants} className="min-w-0">
+          <Link href="/games/brain-rot-steal">
+            <Card className="glass-card h-full rounded-2xl border-purple-400/35 hover:border-purple-300/60 transition-colors cursor-pointer group shadow-lg">
+              <CardContent className="p-2.5 flex flex-col h-full">
+                <div className="flex justify-between items-start mb-1.5">
+                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-500/25 to-pink-600/25 border border-purple-400/40 group-hover:scale-105 transition-transform">
+                    <Brain className="w-4 h-4 text-purple-200" />
+                  </div>
+                  <span className="text-[9px] font-bold bg-gradient-to-r from-purple-600 to-pink-600 text-white px-1.5 py-0 rounded">
+                    MIX
+                  </span>
+                </div>
+                <h3 className="text-xs font-bold text-purple-100 mb-0.5 line-clamp-2 leading-tight group-hover:text-white">
+                  Brain Rot Lopas
+                </h3>
+                <p className="text-[10px] text-white/70 line-clamp-3 flex-1 leading-tight">
+                  Kapd el a Brain Rot-okat! Angol, matek, magyar kviz.
+                </p>
+                <p className="text-[9px] text-purple-200/90 font-semibold pt-1.5 border-t border-white/15">Vadaszat &rarr;</p>
               </CardContent>
             </Card>
           </Link>
