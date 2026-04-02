@@ -9,7 +9,7 @@ import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 
-/* --- Tipusok --- */
+/* --- Típusok --- */
 type Quiz = { prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
 
 type BrainRot = {
@@ -63,47 +63,47 @@ const MAX_BRAIN_ROTS = 8;
 
 const BRAIN_ROT_EMOJIS = [
   { emoji: "\u{1F9E0}", name: "Agy", xp: 30 },
-  { emoji: "\u{1F92F}", name: "Felrobbano fej", xp: 40 },
+  { emoji: "\u{1F92F}", name: "Felrobbanó fej", xp: 40 },
   { emoji: "\u{1F480}", name: "Koponya", xp: 35 },
-  { emoji: "\u{1F47E}", name: "Urleny", xp: 50 },
+  { emoji: "\u{1F47E}", name: "Űrlény", xp: 50 },
   { emoji: "\u{1F916}", name: "Robot", xp: 45 },
   { emoji: "\u{1F47B}", name: "Szellem", xp: 55 },
-  { emoji: "\u{1F9A0}", name: "Virus", xp: 60 },
-  { emoji: "\u{1F300}", name: "Orveny", xp: 70 },
+  { emoji: "\u{1F9A0}", name: "Vírus", xp: 60 },
+  { emoji: "\u{1F300}", name: "Örvény", xp: 70 },
   { emoji: "\u{1F4AB}", name: "Csillag", xp: 65 },
-  { emoji: "\u{1F52E}", name: "Kristalygolyomb", xp: 80 },
+  { emoji: "\u{1F52E}", name: "Kristálygömb", xp: 80 },
   { emoji: "\u{1F3AD}", name: "Maszk", xp: 45 },
   { emoji: "\u{1F9FF}", name: "Nazar szem", xp: 75 },
-  { emoji: "\u26A1", name: "Villam", xp: 55 },
+  { emoji: "\u26A1", name: "Villám", xp: 55 },
 ];
 
 /* --- Quiz bank --- */
 
 const ENGLISH_QUIZZES: Quiz[] = [
-  { prompt: "\"Dog\" magyarul:", options: ["macska", "kutya", "madar", "hal"], correctIndex: 1, category: "english" },
-  { prompt: "\"Cat\" magyarul:", options: ["kutya", "macska", "nyul", "eger"], correctIndex: 1, category: "english" },
-  { prompt: "\"Apple\" magyarul:", options: ["korte", "szolo", "alma", "barack"], correctIndex: 2, category: "english" },
-  { prompt: "\"Sun\" magyarul:", options: ["hold", "csillag", "felho", "nap"], correctIndex: 3, category: "english" },
-  { prompt: "\"Tree\" magyarul:", options: ["virag", "fa", "bokor", "fu"], correctIndex: 1, category: "english" },
-  { prompt: "\"Water\" magyarul:", options: ["tej", "viz", "le", "udito"], correctIndex: 1, category: "english" },
-  { prompt: "\"House\" magyarul:", options: ["haz", "lakas", "szoba", "kert"], correctIndex: 0, category: "english" },
-  { prompt: "\"School\" magyarul:", options: ["bolt", "konyvtar", "iskola", "korhaz"], correctIndex: 2, category: "english" },
-  { prompt: "\"Happy\" magyarul:", options: ["szomoru", "boldog", "faradt", "merges"], correctIndex: 1, category: "english" },
-  { prompt: "\"Big\" magyarul:", options: ["kicsi", "nagy", "hosszu", "rovid"], correctIndex: 1, category: "english" },
+  { prompt: "\"Dog\" magyarul:", options: ["macska", "kutya", "madár", "hal"], correctIndex: 1, category: "english" },
+  { prompt: "\"Cat\" magyarul:", options: ["kutya", "macska", "nyúl", "egér"], correctIndex: 1, category: "english" },
+  { prompt: "\"Apple\" magyarul:", options: ["körte", "szőlő", "alma", "barack"], correctIndex: 2, category: "english" },
+  { prompt: "\"Sun\" magyarul:", options: ["hold", "csillag", "felhő", "nap"], correctIndex: 3, category: "english" },
+  { prompt: "\"Tree\" magyarul:", options: ["virág", "fa", "bokor", "fű"], correctIndex: 1, category: "english" },
+  { prompt: "\"Water\" magyarul:", options: ["tej", "víz", "lé", "üdítő"], correctIndex: 1, category: "english" },
+  { prompt: "\"House\" magyarul:", options: ["ház", "lakás", "szoba", "kert"], correctIndex: 0, category: "english" },
+  { prompt: "\"School\" magyarul:", options: ["bolt", "könyvtár", "iskola", "kórház"], correctIndex: 2, category: "english" },
+  { prompt: "\"Happy\" magyarul:", options: ["szomorú", "boldog", "fáradt", "mérges"], correctIndex: 1, category: "english" },
+  { prompt: "\"Big\" magyarul:", options: ["kicsi", "nagy", "hosszú", "rövid"], correctIndex: 1, category: "english" },
   { prompt: "Melyik a helyes: I ___ a student.", options: ["am", "is", "are", "be"], correctIndex: 0, category: "english" },
   { prompt: "Melyik a helyes: She ___ books.", options: ["read", "reads", "reading", "readed"], correctIndex: 1, category: "english" },
-  { prompt: "\"Red\" magyarul:", options: ["kek", "zold", "piros", "sarga"], correctIndex: 2, category: "english" },
-  { prompt: "\"Blue\" magyarul:", options: ["kek", "zold", "piros", "feher"], correctIndex: 0, category: "english" },
-  { prompt: "\"Monday\" magyarul:", options: ["kedd", "hetfo", "szerda", "csutortok"], correctIndex: 1, category: "english" },
-  { prompt: "\"Brother\" magyarul:", options: ["nover", "testver", "fiver", "hug"], correctIndex: 2, category: "english" },
-  { prompt: "Mit jelent: Good morning!", options: ["Jo ejszakat!", "Jo napot!", "Jo reggelt!", "Viszlat!"], correctIndex: 2, category: "english" },
-  { prompt: "\"Flower\" magyarul:", options: ["fa", "virag", "level", "gyoker"], correctIndex: 1, category: "english" },
-  { prompt: "Egeszitsd ki: They ___ playing.", options: ["is", "am", "are", "be"], correctIndex: 2, category: "english" },
-  { prompt: "\"Fish\" magyarul:", options: ["madar", "hal", "beka", "kigyo"], correctIndex: 1, category: "english" },
-  { prompt: "\"Green\" magyarul:", options: ["piros", "kek", "zold", "sarga"], correctIndex: 2, category: "english" },
-  { prompt: "\"Kitchen\" magyarul:", options: ["haloszoba", "nappali", "konyha", "furdoszoba"], correctIndex: 2, category: "english" },
-  { prompt: "\"Rain\" magyarul:", options: ["ho", "szel", "nap", "eso"], correctIndex: 3, category: "english" },
-  { prompt: "\"Pencil\" magyarul:", options: ["toll", "ceruza", "radir", "vonalzo"], correctIndex: 1, category: "english" },
+  { prompt: "\"Red\" magyarul:", options: ["kék", "zöld", "piros", "sárga"], correctIndex: 2, category: "english" },
+  { prompt: "\"Blue\" magyarul:", options: ["kék", "zöld", "piros", "fehér"], correctIndex: 0, category: "english" },
+  { prompt: "\"Monday\" magyarul:", options: ["kedd", "hétfő", "szerda", "csütörtök"], correctIndex: 1, category: "english" },
+  { prompt: "\"Brother\" magyarul:", options: ["nővér", "testvér", "fivér", "húg"], correctIndex: 2, category: "english" },
+  { prompt: "Mit jelent: Good morning!", options: ["Jó éjszakát!", "Jó napot!", "Jó reggelt!", "Viszlát!"], correctIndex: 2, category: "english" },
+  { prompt: "\"Flower\" magyarul:", options: ["fa", "virág", "levél", "gyökér"], correctIndex: 1, category: "english" },
+  { prompt: "Egészítsd ki: They ___ playing.", options: ["is", "am", "are", "be"], correctIndex: 2, category: "english" },
+  { prompt: "\"Fish\" magyarul:", options: ["madár", "hal", "béka", "kígyó"], correctIndex: 1, category: "english" },
+  { prompt: "\"Green\" magyarul:", options: ["piros", "kék", "zöld", "sárga"], correctIndex: 2, category: "english" },
+  { prompt: "\"Kitchen\" magyarul:", options: ["hálószoba", "nappali", "konyha", "fürdőszoba"], correctIndex: 2, category: "english" },
+  { prompt: "\"Rain\" magyarul:", options: ["hó", "szél", "nap", "eső"], correctIndex: 3, category: "english" },
+  { prompt: "\"Pencil\" magyarul:", options: ["toll", "ceruza", "radír", "vonalzó"], correctIndex: 1, category: "english" },
   { prompt: "Melyik illik: He ___ to school every day.", options: ["go", "goes", "going", "goed"], correctIndex: 1, category: "english" },
 ];
 
@@ -118,49 +118,49 @@ const MATH_QUIZZES: Quiz[] = [
   { prompt: "144 / 12 = ?", options: ["11", "12", "13", "14"], correctIndex: 1, category: "math" },
   { prompt: "25 + 38 = ?", options: ["53", "63", "62", "64"], correctIndex: 1, category: "math" },
   { prompt: "6 x 12 = ?", options: ["66", "72", "78", "60"], correctIndex: 1, category: "math" },
-  { prompt: "Mi a geometriai test neve, ha 6 negyzet hatarolja?", options: ["gomb", "kocka", "henger", "kup"], correctIndex: 1, category: "math" },
-  { prompt: "Melyik szam a legnagyobb: 398, 389, 399, 390?", options: ["398", "389", "399", "390"], correctIndex: 2, category: "math" },
-  { prompt: "Mennyi a teglalapok kerulete, ha a = 5 cm, b = 3 cm?", options: ["16 cm", "15 cm", "8 cm", "30 cm"], correctIndex: 0, category: "math" },
+  { prompt: "Mi a geometriai test neve, ha 6 négyzet határolja?", options: ["gömb", "kocka", "henger", "kúp"], correctIndex: 1, category: "math" },
+  { prompt: "Melyik szám a legnagyobb: 398, 389, 399, 390?", options: ["398", "389", "399", "390"], correctIndex: 2, category: "math" },
+  { prompt: "Mennyi a téglalap kerülete, ha a = 5 cm, b = 3 cm?", options: ["16 cm", "15 cm", "8 cm", "30 cm"], correctIndex: 0, category: "math" },
   { prompt: "200 - 86 = ?", options: ["124", "116", "114", "104"], correctIndex: 2, category: "math" },
   { prompt: "Mi az 50 fele?", options: ["20", "30", "15", "25"], correctIndex: 3, category: "math" },
   { prompt: "11 x 11 = ?", options: ["111", "121", "110", "131"], correctIndex: 1, category: "math" },
-  { prompt: "Hany perc van 1 oraban?", options: ["30", "45", "60", "90"], correctIndex: 2, category: "math" },
-  { prompt: "Melyik a paratlan szam?", options: ["12", "18", "23", "30"], correctIndex: 2, category: "math" },
-  { prompt: "Mi a 3/4 tizedestortje?", options: ["0,34", "0,75", "0,43", "0,7"], correctIndex: 1, category: "math" },
-  { prompt: "5 negyzeten = ?", options: ["10", "15", "20", "25"], correctIndex: 3, category: "math" },
-  { prompt: "Mennyi a negyzet terulete, ha az oldala 4 cm?", options: ["8 cm2", "12 cm2", "16 cm2", "20 cm2"], correctIndex: 2, category: "math" },
+  { prompt: "Hány perc van 1 órában?", options: ["30", "45", "60", "90"], correctIndex: 2, category: "math" },
+  { prompt: "Melyik a páratlan szám?", options: ["12", "18", "23", "30"], correctIndex: 2, category: "math" },
+  { prompt: "Mi a 3/4 tizedestörtje?", options: ["0,34", "0,75", "0,43", "0,7"], correctIndex: 1, category: "math" },
+  { prompt: "5 négyzeten = ?", options: ["10", "15", "20", "25"], correctIndex: 3, category: "math" },
+  { prompt: "Mennyi a négyzet területe, ha az oldala 4 cm?", options: ["8 cm²", "12 cm²", "16 cm²", "20 cm²"], correctIndex: 2, category: "math" },
   { prompt: "1000 / 10 = ?", options: ["10", "100", "1000", "1"], correctIndex: 1, category: "math" },
   { prompt: "Mennyi 3 x 15?", options: ["30", "35", "45", "55"], correctIndex: 2, category: "math" },
-  { prompt: "Mi a kovetkezo szam: 2, 4, 8, 16, ...?", options: ["20", "24", "28", "32"], correctIndex: 3, category: "math" },
-  { prompt: "Hany cm 1 meter?", options: ["10", "100", "1000", "50"], correctIndex: 1, category: "math" },
+  { prompt: "Mi a következő szám: 2, 4, 8, 16, ...?", options: ["20", "24", "28", "32"], correctIndex: 3, category: "math" },
+  { prompt: "Hány cm 1 méter?", options: ["10", "100", "1000", "50"], correctIndex: 1, category: "math" },
 ];
 
 const HUNGARIAN_QUIZZES: Quiz[] = [
-  { prompt: "Melyik az igekotos ige?", options: ["szep", "megirta", "kutya", "magas"], correctIndex: 1, category: "hungarian" },
-  { prompt: "Hany maganhangzo van a Magyarorszag szoban?", options: ["4", "5", "6", "7"], correctIndex: 1, category: "hungarian" },
-  { prompt: "Melyik szo melleknev?", options: ["fut", "szep", "asztal", "boldogan"], correctIndex: 1, category: "hungarian" },
-  { prompt: "Mi a \"kutya\" szo tobbes szama?", options: ["kutyak", "kutyak", "kutyas", "kutyai"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Melyik a helyes: Holnap ___ iskolaba.", options: ["megyunk", "menunk", "menunk", "mennyunk"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Melyik szo fonev?", options: ["fut", "szep", "asztal", "gyorsan"], correctIndex: 2, category: "hungarian" },
+  { prompt: "Melyik az igekötős ige?", options: ["szép", "megírta", "kutya", "magas"], correctIndex: 1, category: "hungarian" },
+  { prompt: "Hány magánhangzó van a Magyarország szóban?", options: ["4", "5", "6", "7"], correctIndex: 1, category: "hungarian" },
+  { prompt: "Melyik szó melléknév?", options: ["fut", "szép", "asztal", "boldogan"], correctIndex: 1, category: "hungarian" },
+  { prompt: "Mi a \"kutya\" szó többes száma?", options: ["kutyák", "kutyák", "kutyás", "kutyái"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik a helyes: Holnap ___ iskolába.", options: ["megyünk", "menünk", "menünk", "mennyünk"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik szó főnév?", options: ["fut", "szép", "asztal", "gyorsan"], correctIndex: 2, category: "hungarian" },
   { prompt: "Melyik mondat helyes?", options: ["A kutya szalad.", "A kutya szalat.", "A kutya szalatt.", "A kutya szaland."], correctIndex: 0, category: "hungarian" },
-  { prompt: "Mi az \"ly\" hang a \"mely\" szoban?", options: ["j hang", "l hang", "ny hang", "jj hang"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Hany massalhangzo van az \"iskola\" szoban?", options: ["2", "3", "4", "1"], correctIndex: 1, category: "hungarian" },
-  { prompt: "Melyik a hatarozoszo?", options: ["kutya", "szep", "gyorsan", "ir"], correctIndex: 2, category: "hungarian" },
-  { prompt: "Melyik irasjelezés helyes?", options: ["Hol van a konyv?", "Hol van a konyv.", "Hol, van a konyv?", "Hol van, a konyv."], correctIndex: 0, category: "hungarian" },
-  { prompt: "Mi az \"alma\" szo ragozott alakja: alma___?", options: ["-t", "-k", "-nak", "-ban"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Melyik a helyes: \"ott\" vagy \"ot\"?", options: ["ott", "ot", "ottt", "mindketto jo"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Melyik kettosjegyu msh jeloles helyes?", options: ["ly", "lj", "lly", "ljj"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Mi a \"tanar\" szo tobbes szama?", options: ["tanarok", "tanark", "tanarak", "tanarjak"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Melyik szo tartalmaz hosszu maganhangzot?", options: ["hal", "fal", "hal (hosszu a-val)", "kal"], correctIndex: 2, category: "hungarian" },
-  { prompt: "Melyik szoban van \"j\" hang, de \"ly\"-t irunk?", options: ["jatek", "hely", "jeg", "jobb"], correctIndex: 1, category: "hungarian" },
-  { prompt: "Mi a \"konyv\" szo targyragos alakja?", options: ["konyvet", "konyvot", "konyvat", "konyved"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Egeszitsd ki: A gyerekek ___ a parkban.", options: ["jatszanak", "jatsznak", "jacanak", "jatszanak (helyes)"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Melyik szoban van ketjegyu massalhangzo?", options: ["anya", "alma", "apa", "ag"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Mi az \"ly\" hang a \"mély\" szóban?", options: ["j hang", "l hang", "ny hang", "jj hang"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Hány mássalhangzó van az \"iskola\" szóban?", options: ["2", "3", "4", "1"], correctIndex: 1, category: "hungarian" },
+  { prompt: "Melyik a határozószó?", options: ["kutya", "szép", "gyorsan", "ír"], correctIndex: 2, category: "hungarian" },
+  { prompt: "Melyik írásjelezés helyes?", options: ["Hol van a könyv?", "Hol van a könyv.", "Hol, van a könyv?", "Hol van, a könyv."], correctIndex: 0, category: "hungarian" },
+  { prompt: "Mi az \"alma\" szó ragozott alakja: alma___?", options: ["-t", "-k", "-nak", "-ban"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik a helyes: \"ott\" vagy \"ot\"?", options: ["ott", "ot", "ottt", "mindkettő jó"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik kétjegyű msh jelölés helyes?", options: ["ly", "lj", "lly", "ljj"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Mi a \"tanár\" szó többes száma?", options: ["tanárok", "tanárk", "tanárak", "tanárják"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik szó tartalmaz hosszú magánhangzót?", options: ["hal", "fal", "hál (hosszú á-val)", "kal"], correctIndex: 2, category: "hungarian" },
+  { prompt: "Melyik szóban van \"j\" hang, de \"ly\"-t írunk?", options: ["játék", "hely", "jég", "jobb"], correctIndex: 1, category: "hungarian" },
+  { prompt: "Mi a \"könyv\" szó tárgyragos alakja?", options: ["könyvet", "könyvöt", "könyvat", "könyved"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Egészítsd ki: A gyerekek ___ a parkban.", options: ["játszanak", "játsznak", "jácanak", "játszanak (helyes)"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik szóban van kétjegyű mássalhangzó?", options: ["anya", "alma", "apa", "ág"], correctIndex: 0, category: "hungarian" },
   { prompt: "Mi az ige a mondatban: A macska alszik.?", options: ["macska", "A", "alszik", "mondatban"], correctIndex: 2, category: "hungarian" },
-  { prompt: "Melyik szo szinonimaja a \"boldog\"-nak?", options: ["szomoru", "vidam", "merges", "faradt"], correctIndex: 1, category: "hungarian" },
-  { prompt: "Melyik a helyes: \"szebb\" vagy \"szepebb\"?", options: ["szebb", "szepebb", "szepbb", "mind jo"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Hol van a \"j\" hang: golya vagy dij?", options: ["csak golyaban", "csak dijban", "mindkettoben", "egyikben sem"], correctIndex: 2, category: "hungarian" },
-  { prompt: "Melyik a mondatresz: A haz nagy.?", options: ["alany: haz, allitmany: nagy", "alany: A, allitmany: haz", "targy: nagy, alany: A", "nincs allitmany"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik szó szinonímája a \"boldog\"-nak?", options: ["szomorú", "vidám", "mérges", "fáradt"], correctIndex: 1, category: "hungarian" },
+  { prompt: "Melyik a helyes: \"szebb\" vagy \"szépebb\"?", options: ["szebb", "szépebb", "szépbb", "mind jó"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Hol van a \"j\" hang: gólya vagy díj?", options: ["csak gólyában", "csak díjban", "mindkettőben", "egyikben sem"], correctIndex: 2, category: "hungarian" },
+  { prompt: "Melyik a mondatrész: A ház nagy.?", options: ["alany: ház, állítmány: nagy", "alany: A, állítmány: ház", "tárgy: nagy, alany: A", "nincs állítmány"], correctIndex: 0, category: "hungarian" },
 ];
 
 const ALL_QUIZZES = [...ENGLISH_QUIZZES, ...MATH_QUIZZES, ...HUNGARIAN_QUIZZES];
@@ -177,7 +177,7 @@ const CATEGORY_BORDERS: Record<Quiz["category"], string> = {
   hungarian: "border-emerald-500/50",
 };
 
-/* --- Segedfuggvenyek --- */
+/* --- Segédfüggvények --- */
 function randInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -283,7 +283,7 @@ export default function BrainRotSteal() {
     [phase, pickQuiz],
   );
 
-  /* --- Valasz kezeles --- */
+  /* --- Válasz kezelés --- */
   const onAnswer = useCallback(
     (idx: number) => {
       if (!quiz || !caughtRot) return;
@@ -296,7 +296,7 @@ export default function BrainRotSteal() {
         return;
       }
 
-      // Helyes valasz!
+      // Helyes válasz!
       const multiplier = comboMultiplier;
       const xpGain = Math.round(caughtRot.xpValue * multiplier);
       setSessionXp((x) => x + xpGain);
@@ -308,7 +308,7 @@ export default function BrainRotSteal() {
       setTotalCaught((c) => c + 1);
       setComboMultiplier((m) => Math.min(4, m + 0.25));
 
-      // Vizualis visszajelzes
+      // Vizuális visszajelzés
       spawnParticles(caughtRot.x, caughtRot.y, "#fbbf24", 20, "\u2B50");
       addFloatingText(caughtRot.x, caughtRot.y - 30, `+${xpGain} XP`, "#fbbf24");
 
@@ -317,7 +317,7 @@ export default function BrainRotSteal() {
         setTimeout(() => setScreenFlash(null), 300);
       }
 
-      // Brain rot torlese
+      // Brain rot törlése
       setBrainRots((prev) => prev.filter((r) => r.id !== caughtRot.id));
       setCaughtRot(null);
       setQuiz(null);
@@ -326,7 +326,7 @@ export default function BrainRotSteal() {
     [quiz, caughtRot, comboMultiplier, spawnParticles, addFloatingText],
   );
 
-  /* --- Jatek inditasa --- */
+  /* --- Játék indítása --- */
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
     nextId = 0;
@@ -453,7 +453,7 @@ export default function BrainRotSteal() {
     return () => cancelAnimationFrame(animRef.current);
   }, [phase, runSeconds]);
 
-  /* --- Eredmeny bekuldese --- */
+  /* --- Eredmény beküldése --- */
   useEffect(() => {
     if (phase !== "over" || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
@@ -519,7 +519,7 @@ export default function BrainRotSteal() {
           <Link href="/games">
             <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2">
               <ArrowLeft className="w-4 h-4" />
-              Jatekok
+              Játékok
             </Button>
           </Link>
           <div className="flex items-center gap-2 text-xs font-semibold">
@@ -550,7 +550,7 @@ export default function BrainRotSteal() {
             <div className="flex items-center gap-2 mb-1">
               <Brain className="w-5 h-5 text-purple-400" />
               <h1 className="text-sm sm:text-base font-extrabold bg-gradient-to-r from-purple-300 via-pink-300 to-amber-300 bg-clip-text text-transparent">
-                Brain Rot Lopas
+                Brain Rot Lopás
               </h1>
             </div>
 
@@ -559,17 +559,17 @@ export default function BrainRotSteal() {
               <GamePedagogyPanel
                 accent="fuchsia"
                 className="mb-2"
-                kidMission="Kapd el a Brain Rot-okat, mielott eltunnek! Minden elkapas utan kviz: angol, matek, vagy magyar nyelvtan. Helyes valasz = XP + kombo szorzo! Minel gyorsabb vagy, annal tobb pont!"
+                kidMission="Kapd el a Brain Rot-okat, mielőtt eltűnnek! Minden elkapás után kvíz: angol, matek, vagy magyar nyelvtan. Helyes válasz = XP + kombó szorzó! Minél gyorsabb vagy, annál több pont!"
                 parentBody={
                   <>
-                    <strong className="text-fuchsia-100/90">Tananyag:</strong> angol szokincs (3-5. oszt.), alap matematika
-                    (muveletek, mertekegysegek, geometria), magyar nyelvtan (szofajok, ragozas, helyesiras).
+                    <strong className="text-fuchsia-100/90">Tananyag:</strong> angol szókincs (3-5. oszt.), alap matematika
+                    (műveletek, mértékegységek, geometria), magyar nyelvtan (szófajok, ragozás, helyesírás).
                     <br />
-                    <strong className="text-fuchsia-100/90">Fejleszt:</strong> gyors donteshozatal, olvasasertes, kez-szem
-                    koordinacio, matematikai keszsegek, magyar nyelvtan.
+                    <strong className="text-fuchsia-100/90">Fejleszt:</strong> gyors döntéshozatal, olvasásértés, kéz-szem
+                    koordináció, matematikai készségek, magyar nyelvtan.
                     <br />
                     <span className="text-white/55">
-                      A lopas motivacio + kviz + azonnali jutalom (XP, kombo) ciklus tartja fenn a figyelmet.
+                      A lopás motiváció + kvíz + azonnali jutalom (XP, kombó) ciklus tartja fenn a figyelmet.
                     </span>
                   </>
                 }
@@ -596,15 +596,15 @@ export default function BrainRotSteal() {
 
                 <div className="text-center space-y-2 max-w-sm">
                   <h2 className="text-xl font-extrabold bg-gradient-to-r from-purple-300 via-pink-300 to-amber-200 bg-clip-text text-transparent">
-                    Brain Rot Lopas
+                    Brain Rot Lopás
                   </h2>
                   <p className="text-sm text-white/80">
-                    Kapd el a <span className="text-purple-300 font-bold">Brain Rot</span>-okat, amig el nem tunnek! {"\u{1F9E0}\u{1F480}\u{1F47E}"}
+                    Kapd el a <span className="text-purple-300 font-bold">Brain Rot</span>-okat, amíg el nem tűnnek! {"\u{1F9E0}\u{1F480}\u{1F47E}"}
                   </p>
                   <p className="text-xs text-white/60">
-                    Minden elkapas elott valaszolj angol, matek, vagy magyar kerdesre.
-                    Jo valasz = <span className="text-amber-300 font-bold">XP</span> +{" "}
-                    <span className="text-yellow-300 font-bold">kombo szorzo</span>!
+                    Minden elkapás előtt válaszolj angol, matek, vagy magyar kérdésre.
+                    Jó válasz = <span className="text-amber-300 font-bold">XP</span> +{" "}
+                    <span className="text-yellow-300 font-bold">kombó szorzó</span>!
                   </p>
                 </div>
 
@@ -629,7 +629,7 @@ export default function BrainRotSteal() {
                   onClick={startGame}
                 >
                   <Brain className="w-5 h-5 mr-2" />
-                  Vadaszat inditasa!
+                  Vadászat indítása!
                 </Button>
               </div>
             )}
@@ -641,10 +641,10 @@ export default function BrainRotSteal() {
                   accent="fuchsia"
                   headline={
                     streak >= STREAK_GOAL
-                      ? "Szuper sorozat - tartsd igy!"
-                      : `Gyujts ${STREAK_GOAL} jo valaszt egymas utan!`
+                      ? "Szuper sorozat – tartsd így!"
+                      : `Gyűjts ${STREAK_GOAL} jó választ egymás után!`
                   }
-                  subtitle={`${timeLeft}s | ${totalCaught} elkapva | ${totalMissed} elszokott`}
+                  subtitle={`${timeLeft}s | ${totalCaught} elkapva | ${totalMissed} elszökött`}
                   current={Math.min(streak, STREAK_GOAL)}
                   target={STREAK_GOAL}
                   className="w-full"
@@ -656,7 +656,7 @@ export default function BrainRotSteal() {
                     XP: {sessionXp} | Elkapva: {totalCaught}
                   </div>
                   <div className="rounded-lg border border-white/20 bg-slate-900/95 px-1.5 sm:px-2 py-1 sm:py-1.5 text-right">
-                    Ido: {timeLeft}s | Szorzo: x{comboMultiplier.toFixed(1)}
+                    Idő: {timeLeft}s | Szorzó: x{comboMultiplier.toFixed(1)}
                   </div>
                 </div>
 
@@ -804,7 +804,7 @@ export default function BrainRotSteal() {
                         animate={{ opacity: [0.3, 0.7, 0.3] }}
                         transition={{ duration: 2, repeat: Infinity }}
                       >
-                        Brain Rot-ok kozelednek... {"\u{1F9E0}"}
+                        Brain Rot-ok közelednek... {"\u{1F9E0}"}
                       </motion.p>
                     </div>
                   )}
@@ -812,7 +812,7 @@ export default function BrainRotSteal() {
 
                 {/* Hint */}
                 <p className="text-[10px] text-white/50 text-center">
-                  Koppints a Brain Rot-okra, mielott eltunnek! Minden szerzes kvizt hoz.
+                  Koppints a Brain Rot-okra, mielőtt eltűnnek! Minden szerzés kvízt hoz.
                 </p>
               </div>
             )}
@@ -830,10 +830,10 @@ export default function BrainRotSteal() {
 
                 <div className="space-y-1">
                   <h2 className="text-xl font-extrabold bg-gradient-to-r from-amber-300 via-orange-300 to-pink-300 bg-clip-text text-transparent">
-                    Vadaszat vege!
+                    Vadászat vége!
                   </h2>
                   <p className="text-sm text-white/70 max-w-sm">
-                    Minden jo kviz angol szavakat, matekot es magyart erositett!
+                    Minden jó kvíz angol szavakat, matekot és magyart erősített!
                   </p>
                 </div>
 
@@ -852,12 +852,12 @@ export default function BrainRotSteal() {
                   </div>
                   <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center">
                     <p className="text-2xl font-black text-red-300">{totalMissed}</p>
-                    <p className="text-[10px] text-white/60 font-semibold">ELSZOKOTT</p>
+                    <p className="text-[10px] text-white/60 font-semibold">ELSZÖKÖTT</p>
                   </div>
                 </div>
 
                 {syncEligibility?.eligible ? (
-                  <p className="text-xs text-emerald-300/90">Eredmeny elkuldve!</p>
+                  <p className="text-xs text-emerald-300/90">Eredmény elküldve!</p>
                 ) : (
                   <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>
                 )}
@@ -868,7 +868,7 @@ export default function BrainRotSteal() {
                     onClick={startGame}
                   >
                     <RotateCcw className="w-4 h-4 mr-1" />
-                    Ujra!
+                    Újra!
                   </Button>
                   <Link href="/games">
                     <Button variant="outline" className="border-white/40 text-white">
@@ -903,7 +903,7 @@ export default function BrainRotSteal() {
                   <span className="text-2xl">{caughtRot.emoji}</span>
                   <div>
                     <p className={`text-xs font-bold uppercase ${CATEGORY_LABELS[quiz.category].color}`}>
-                      {CATEGORY_LABELS[quiz.category].icon} {CATEGORY_LABELS[quiz.category].label} kviz
+                      {CATEGORY_LABELS[quiz.category].icon} {CATEGORY_LABELS[quiz.category].label} kvíz
                     </p>
                     <p className="text-[10px] text-white/50">
                       {caughtRot.name} | {Math.round(caughtRot.xpValue * comboMultiplier)} XP
@@ -913,14 +913,14 @@ export default function BrainRotSteal() {
                 <div className="text-right">
                   {comboMultiplier > 1 && (
                     <span className="text-[10px] font-bold text-yellow-300 bg-yellow-400/15 px-1.5 py-0.5 rounded">
-                      x{comboMultiplier.toFixed(1)} szorzo
+                      x{comboMultiplier.toFixed(1)} szorzó
                     </span>
                   )}
                 </div>
               </div>
 
               <p className="text-[10px] sm:text-[11px] text-white/60 mb-1.5 sm:mb-2">
-                Helyes valasz: a Brain Rot a tied + XP! Rossz valasz: probald ujra.
+                Helyes válasz: a Brain Rot a tied + XP! Rossz válasz: próbáld újra.
               </p>
 
               {/* Question */}
