@@ -17,6 +17,7 @@ type MathTask = {
   correctIndex: number;
   source: "teacher" | "generated";
 };
+type AnswerState = "idle" | "correct" | "wrong";
 
 const ROUND_SECONDS: Record<GradeLevel, number> = {
   3: 120,
@@ -108,8 +109,8 @@ const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {
 
 function generatedTaskForGrade(level: GradeLevel): MathTask {
   const roll = Math.random();
-  let prompt = "";
-  let result = 0;
+  let prompt: string | null = null;
+  let result: number | null = null;
 
   if (level === 3) {
     if (roll < 0.4) {
@@ -194,13 +195,26 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
     }
   }
 
+  // Defensive fallback; should not happen with the grade branches above.
+  if (prompt == null || result == null) {
+    prompt = "12 + 8 = ?";
+    result = 20;
+  }
   const options = uniqueOptions(result, level);
   const correctIndex = Math.max(0, options.findIndex((n) => n === result));
   return { prompt, options, correctIndex, source: "generated" };
 }
 
+function isMathTask(task: MathTask): boolean {
+  const hasNumericPrompt = /\d/.test(task.prompt);
+  const hasFourOptions = task.options.length === 4;
+  const optionsAreNumbers = task.options.every((n) => Number.isFinite(n));
+  const validCorrect = task.correctIndex >= 0 && task.correctIndex < task.options.length;
+  return hasNumericPrompt && hasFourOptions && optionsAreNumbers && validCorrect;
+}
+
 function pickTask(level: GradeLevel, recentPrompts: string[]): MathTask {
-  const teacherPool = TEACHER_BANK[level];
+  const teacherPool = TEACHER_BANK[level].filter(isMathTask);
   const preferTeacher = Math.random() < 0.68;
   const sourcePool = preferTeacher ? teacherPool : [];
 
@@ -216,7 +230,8 @@ function pickTask(level: GradeLevel, recentPrompts: string[]): MathTask {
     return chosen;
   }
 
-  return generatedTaskForGrade(level);
+  const generated = generatedTaskForGrade(level);
+  return isMathTask(generated) ? generated : generatedTaskForGrade(level);
 }
 
 export default function SpeedQuizMath() {
@@ -233,6 +248,7 @@ export default function SpeedQuizMath() {
   const [bestStreak, setBestStreak] = useState(0);
   const [totalXp, setTotalXp] = useState(0);
   const [wrongFlash, setWrongFlash] = useState(false);
+  const [answerState, setAnswerState] = useState<AnswerState>("idle");
   const recentPromptsRef = useRef<string[]>([]);
   const scoreSubmittedRef = useRef(false);
 
@@ -244,6 +260,7 @@ export default function SpeedQuizMath() {
     recentPromptsRef.current = [...recentPromptsRef.current.slice(-5), next.prompt];
     setTask(next);
     setQuestionTimeLeft(QUESTION_SECONDS[grade]);
+    setAnswerState("idle");
   }, [grade]);
 
   const startGame = useCallback(() => {
@@ -254,6 +271,8 @@ export default function SpeedQuizMath() {
     setScore(0);
     setStreak(0);
     setBestStreak(0);
+    setWrongFlash(false);
+    setAnswerState("idle");
     setTimeLeft(ROUND_SECONDS[grade]);
     setQuestionTimeLeft(QUESTION_SECONDS[grade]);
     recentPromptsRef.current = [];
@@ -302,6 +321,7 @@ export default function SpeedQuizMath() {
     setAnswered((n) => n + 1);
 
     if (idx !== task.correctIndex) {
+      setAnswerState("wrong");
       setWrongFlash(true);
       window.setTimeout(() => setWrongFlash(false), 220);
       setStreak(0);
@@ -314,10 +334,11 @@ export default function SpeedQuizMath() {
         return next;
       });
       setTimeLeft((t) => Math.max(0, t - 1));
-      nextTask();
+      window.setTimeout(nextTask, 140);
       return;
     }
 
+    setAnswerState("correct");
     const base = grade === 3 ? 30 : grade === 4 ? 36 : 44;
     const speedBonus = Math.max(0, questionTimeLeft - 1) * (grade === 5 ? 4 : 3);
     const comboBonus = streak * 8;
@@ -335,7 +356,7 @@ export default function SpeedQuizMath() {
       if (next >= TARGET_CORRECT[grade]) {
         endAsWin();
       } else {
-        nextTask();
+        window.setTimeout(nextTask, 120);
       }
       return next;
     });
@@ -447,6 +468,7 @@ export default function SpeedQuizMath() {
                   három hibalehetőség · szint: <strong>{LEVEL_LABEL[grade]}</strong>
                 </div>
                 <Button
+                  type="button"
                   size="lg"
                   className="bg-gradient-to-r from-cyan-500 via-blue-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 font-bold text-white px-8 border border-cyan-100/40 text-base"
                   onClick={startGame}
@@ -527,7 +549,15 @@ export default function SpeedQuizMath() {
                   </div>
                 </div>
 
-                <div className={`rounded-xl border ${wrongFlash ? "border-rose-400" : "border-cyan-300/45"} bg-slate-950/88 p-2.5 transition-colors`}>
+                <div
+                  className={`rounded-xl border ${
+                    answerState === "correct"
+                      ? "border-emerald-400"
+                      : wrongFlash || answerState === "wrong"
+                        ? "border-rose-400"
+                        : "border-cyan-300/45"
+                  } bg-slate-950/88 p-2.5 transition-colors`}
+                >
                   <p className="text-[11px] text-white/60 mb-1">
                     Gyors teszt #{answered + 1} — válaszd ki a helyest (fent a kérdés-idő sáv)
                   </p>
@@ -541,7 +571,14 @@ export default function SpeedQuizMath() {
                   {task.options.map((opt, idx) => (
                     <Button
                       key={`${opt}-${idx}`}
-                      className="h-12 text-lg font-black bg-slate-900/95 hover:bg-cyan-700/45 border border-cyan-200/35 text-white shadow-sm"
+                      type="button"
+                      className={`h-12 text-lg font-black border text-white shadow-sm transition-colors ${
+                        answerState === "correct"
+                          ? "bg-emerald-700/40 border-emerald-200/40 hover:bg-emerald-600/45"
+                          : wrongFlash || answerState === "wrong"
+                            ? "bg-rose-900/35 border-rose-200/40 hover:bg-rose-800/45"
+                            : "bg-slate-900/95 hover:bg-cyan-700/45 border-cyan-200/35"
+                      }`}
                       onClick={() => handleAnswer(idx)}
                     >
                       {opt}
@@ -574,7 +611,7 @@ export default function SpeedQuizMath() {
                   <p className="text-xs text-white/60 max-w-xs">{syncBanner}</p>
                 )}
                 <div className="flex gap-2">
-                  <Button className="bg-cyan-600 hover:bg-cyan-500" onClick={startGame}>
+                  <Button type="button" className="bg-cyan-600 hover:bg-cyan-500" onClick={startGame}>
                     <RotateCcw className="w-4 h-4 mr-1" />
                     Új futam
                   </Button>
