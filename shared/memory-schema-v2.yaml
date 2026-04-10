@@ -1,0 +1,74 @@
+# WEBSULI Memory Schema v2
+# Generálva: 2026-04-10
+
+schema_version: "2.0"
+project: websuli
+
+frontmatter:
+  required:
+    - id
+    - type
+    - domain
+    - created
+    - source
+    - tags
+    - project
+
+  id:
+    format: "<type>_<domain>_<YYYYMMDD>_<3digit>"
+    example: "procedural_deploy_20260410_101"
+
+  type:
+    values:
+      - episodic    # Időhöz kötött esemény, állapot, diagnosis
+      - semantic    # Időtől független tudás, konfig, architektúra
+      - procedural  # Lépésről-lépésre eljárás, runbook
+      - project     # Projekt szintű összefoglaló
+
+  domain:
+    values:
+      - infrastructure  # VPS, SSH, DNS, Cloudflare, MCP
+      - technology      # Stack, AI, design, performance
+      - deploy          # CI/CD, deploy eljárások
+      - development     # Kód review, local dev, testing
+      - websuli         # Projekt szintű
+
+  tags:
+    type: list
+    max_items: 10
+    examples: [vps, ssh, github-actions, deploy, typescript, ai, design]
+
+  project:
+    fixed: websuli
+
+memory_hierarchy:
+  level_1_index:
+    path: memory/indexes/index.yml
+    description: Collection routing tábla
+
+  level_2_memory:
+    paths:
+      - memory/procedural/deploy/
+      - memory/procedural/development/
+      - memory/semantic/infrastructure/
+      - memory/semantic/technology/
+      - memory/episodic/2026/
+      - memory/projects/websuli/
+    description: Aktív, kereshető memória fájlok
+
+  level_3_vault:
+    paths:
+      - vault/infrastructure/
+      - vault/development/
+    description: Hosszú távú kanonikus tudásjegyzetek
+    naming: claim-named (pl. hostinger-vps-canonical.md)
+
+  moc:
+    path: vault/MOC.md
+    description: Map of Content - teljes memória térkép
+
+conventions:
+  file_naming: kebab-case
+  date_format: YYYY-MM-DD
+  content_language: hu (Hungarian)
+  encoding: utf-8
