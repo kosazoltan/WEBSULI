@@ -1,0 +1,108 @@
+# WEBSULI Memory Index - Collection Routing
+# Generálva: 2026-04-10
+
+collections:
+
+  procedural_deploy:
+    path: memory/procedural/deploy/
+    description: Deployment eljárások, SSH setup, VPS management, GitHub Actions
+    files:
+      - deploy-check-deployment.md
+      - deploy-database-recovery.md
+      - deploy-now.md
+      - deploy-vps-guide.md
+      - github-actions-fix.md
+      - github-ssh-key-guide.md
+      - github-ssh-key-fix.md
+      - ssh-key-info.md
+      - vercel-render-deploy.md
+      - vps-deploy-fix.md
+      - github-actions-setup.md
+      - google-auth-setup.md
+      - readme-hostinger.md
+      - readme-vps.md
+      - ssh-setup.md
+    tags: [deploy, vps, ssh, github-actions, pm2, nginx]
+
+  procedural_development:
+    path: memory/procedural/development/
+    description: Fejlesztési eljárások, kód review, lokális setup
+    files:
+      - code-analysis-report.md
+      - code-review-2024-12.md
+      - readme-local.md
+    tags: [development, code-review, typescript, local]
+
+  semantic_infrastructure:
+    path: memory/semantic/infrastructure/
+    description: Infrastruktúra tudás - VPS IP-k, SSH config, MCP, Cloudflare
+    files:
+      - github-secrets-info.md
+      - hostinger-api-setup.md
+      - hostinger-api-token.md
+      - hostinger-vps-list.md
+      - mcp-config.md
+      - mcp-status.md
+      - ssh-connection-summary.md
+      - vps-config.md
+      - vps-ips-summary.md
+      - websuli-vps-info.md
+      - readme-cloudflare.md
+    tags: [vps, ssh, mcp, cloudflare, hostinger, infrastructure]
+
+  semantic_technology:
+    path: memory/semantic/technology/
+    description: Technológiai tudás - design, AI funkciók, teljesítmény
+    files:
+      - design-implementation-plan.md
+      - landing-performance-analysis.md
+      - material-improvement-feature.md
+      - material-improver-plan.md
+      - edu-platform-design-2026.md
+    tags: [design, ai, performance, framer-motion, tailwind, fonts]
+
+  episodic_2026:
+    path: memory/episodic/2026/
+    description: 2026-os esemény naplók - deployment státuszok, diagnosztikák
+    files:
+      - deployment-status-snapshot.md
+      - vps-deployment-check-2026.md
+      - vps-deployment-diagnosis.md
+      - vps-diagnosis-result.md
+      - vps-project-analysis.md
+      - session-dev-log.md
+    tags: [status, diagnosis, deployment, dev-log, events]
+
+  projects_websuli:
+    path: memory/projects/websuli/
+    description: WEBSULI projekt szintű dokumentáció
+    files:
+      - project-overview.md
+      - readme-download.md
+    tags: [project, overview, stack, setup]
+
+vault_collections:
+
+  vault_infrastructure:
+    path: vault/infrastructure/
+    description: Kanonikus infra tudás - hosszú távú referencia
+    files:
+      - hostinger-vps-canonical.md
+      - github-secrets-canonical.md
+      - ssh-canonical.md
+
+  vault_development:
+    path: vault/development/
+    description: Kanonikus fejlesztési tudás - kritikus tanulságok
+    files:
+      - material-improver-canonical.md
+      - design-system-2026-canonical.md
+      - performance-optimization-canonical.md
+
+routing_rules:
+  - query: [deploy, ssh, vps, pm2, nginx] -> procedural_deploy
+  - query: [code, review, typescript, test] -> procedural_development
+  - query: [ip, hostinger, mcp, cloudflare, infrastructure] -> semantic_infrastructure
+  - query: [design, ai, performance, font, animation] -> semantic_technology
+  - query: [status, diagnosis, history, event] -> episodic_2026
+  - query: [project, overview, stack] -> projects_websuli
