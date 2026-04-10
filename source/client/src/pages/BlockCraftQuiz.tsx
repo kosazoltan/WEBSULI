@@ -35,6 +35,8 @@ const IRON = 7;
 const DIAMOND = 8;
 /** Alul: nem bányászható, nem esik át rajta a játékos */
 const BEDROCK = 9;
+/** Creeper mob a felszínen — bónusz kvíz, dupla XP */
+const CREEPER = 10;
 
 type Quiz = { prompt: string; options: string[]; correctIndex: number };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
@@ -69,6 +71,54 @@ const QUIZ_FALLBACK: Quiz[] = [
   { prompt: "„Happy” magyarul:", options: ["szomorú", "boldog", "fáradt", "mérges"], correctIndex: 1 },
   { prompt: "„Big” magyarul:", options: ["kicsi", "nagy", "lassú", "rövid"], correctIndex: 1 },
   { prompt: "„Small” magyarul:", options: ["nagy", "kicsi", "kövér", "mély"], correctIndex: 1 },
+  // === SZITUÁCIÓS MINECRAFT KÉRDÉSEK ===
+  { prompt: "Éjszaka van, zombik jönnek! Mit csinálsz?", options: ["Build a shelter", "Go swimming", "Take a nap", "Eat diamonds"], correctIndex: 0 },
+  { prompt: "A creeper felrobban! Angolul:", options: ["The creeper explodes!", "The creeper sleeps", "The creeper sings", "The creeper dances"], correctIndex: 0 },
+  { prompt: "Hogyan mondod: 'Készíts egy kardot'?", options: ["Craft a sword", "Cook a sword", "Plant a sword", "Drink a sword"], correctIndex: 0 },
+  { prompt: "Mit jelent: 'Watch out for lava!'?", options: ["Vigyázz a lávára!", "Nézd a vizet!", "Keresd a gyémántot!", "Építs házat!"], correctIndex: 0 },
+  { prompt: "Éhes vagy Minecraftban. Mit csinálsz?", options: ["Find food", "Mine stone", "Jump around", "Sleep outside"], correctIndex: 0 },
+  { prompt: "'You found diamonds!' mit jelent?", options: ["Gyémántot találtál!", "Köveket látod!", "Fát vágsz!", "Vizet iszol!"], correctIndex: 0 },
+  { prompt: "Milyen eszközzel bányászol követ? Angolul:", options: ["With a pickaxe", "With a sword", "With a shovel", "With a bucket"], correctIndex: 0 },
+  { prompt: "'Help! A skeleton is shooting at me!' mit jelent?", options: ["Segítség! Egy csontváz lő rám!", "Segítség! Éhes vagyok!", "Hol van a ház?", "Fussunk!"], correctIndex: 0 },
+  { prompt: "'It’s dangerous to go alone!' mit jelent?", options: ["Veszélyes egyedl menni!", "Gyorsan bányássz!", "Keress vizet!", "Hol a gyémánt?"], correctIndex: 0 },
+  { prompt: "'Run! The creeper is behind you!' mit jelent?", options: ["Fuss! A creeper mögötted van!", "Allé! Zombi jön!", "Keress barlangot!", "Gyúíts tüzet!"], correctIndex: 0 },
+  // === CRAFTING RECEPTEK ===
+  { prompt: "Mi kell a fáklyához? (angolul)", options: ["Coal + Stick", "Iron + Wood", "Diamond + Stone", "Grass + Dirt"], correctIndex: 0 },
+  { prompt: "'Crafting table' magyarul:", options: ["munkasztal / kézműasztal", "konyhaasztal", "íróasztal", "kereskedő"], correctIndex: 0 },
+  { prompt: "Mi kell a kardhoz? (alap: fa + fa) Angolul:", options: ["Wood + Wood", "Stone + Grass", "Coal + Stick", "Dirt + Sand"], correctIndex: 0 },
+  { prompt: "'Sword' magyarul:", options: ["kard", "pajzs", "páncél", "nyíl"], correctIndex: 0 },
+  { prompt: "'Bow' magyarul a Minecraftban:", options: ["ij", "kard", "pajzs", "csákány"], correctIndex: 0 },
+  // === MOB-OK ANGOLUL ===
+  { prompt: "Skeleton = ?", options: ["csontváz", "zombi", "pók", "deneér"], correctIndex: 0 },
+  { prompt: "A 'Villager' magyarul:", options: ["falusi", "katona", "király", "boszorkány"], correctIndex: 0 },
+  { prompt: "Creeper = ?", options: ["robbanó zöld szörny", "repülő deneér", "vörös sárkány", "vízi hal"], correctIndex: 0 },
+  { prompt: "Zombie = ?", options: ["zombi", "démon", "kísértet", "varjú"], correctIndex: 0 },
+  { prompt: "Spider = ?", options: ["pók", "hangya", "méh", "bogarak"], correctIndex: 0 },
+  { prompt: "Witch = ?", options: ["boszorkány", "harcos", "varázslos herceg", "tündér"], correctIndex: 0 },
+  { prompt: "Enderman = ?", options: ["magas fekete lény", "zöld creeper", "csontváz", "vízi szörny"], correctIndex: 0 },
+  // === BIOME-OK ===
+  { prompt: "Desert biome = ?", options: ["sivatag", "óceán", "dzsungel", "hegy"], correctIndex: 0 },
+  { prompt: "'Nether' magyarul kb.:", options: ["alvílág / pokol", "mennyország", "óceán", "erdő"], correctIndex: 0 },
+  { prompt: "Jungle biome = ?", options: ["dzsungel", "sivatag", "tundra", "folyó"], correctIndex: 0 },
+  { prompt: "Ocean biome = ?", options: ["óceán", "hegy", "völgy", "barlang"], correctIndex: 0 },
+  { prompt: "Swamp biome = ?", options: ["mocsár", "sivatag", "mező", "tenger"], correctIndex: 0 },
+  // === SURVIVAL TIPPEK ===
+  { prompt: "First night tip: 'Dig into a hillside!' Mit jelent?", options: ["Áss bele egy dombba!", "Ugorj a vízbe!", "Fuss el!", "Aludj a fán!"], correctIndex: 0 },
+  { prompt: "'Always bring food on adventures!' mit jelent?", options: ["Mindig vigyél ételt a kalandhoz!", "Felejtsd el az ételt!", "Csak vizet igyy", "Aludj sokat!"], correctIndex: 0 },
+  { prompt: "'Mine deeper for rare ores!' mit jelent?", options: ["Mélyebbre bányássz ritka ércekért!", "Maradj a felszínen!", "Keress vizet!", "Gyűjts fát!"], correctIndex: 0 },
+  { prompt: "'Don't dig straight down!' mit jelent?", options: ["Ne áss egyenesen le!", "Mindig lefelé ássz!", "Gyorsan fuss!", "Bányássz követ!"], correctIndex: 0 },
+  // === EXTRA SZÓKINCS ===
+  { prompt: "'Shield' magyarul:", options: ["pajzs", "kard", "sisak", "csizma"], correctIndex: 0 },
+  { prompt: "'Armor' magyarul:", options: ["páncél", "kesztyű", "sapka", "táska"], correctIndex: 0 },
+  { prompt: "'Cave' magyarul:", options: ["barlang", "folyó", "völgy", "domb"], correctIndex: 0 },
+  { prompt: "'Lava' magyarul:", options: ["láva", "víz", "homok", "jég"], correctIndex: 0 },
+  { prompt: "'Torch' magyarul:", options: ["fáklya", "lámpa", "gyertya", "tűz"], correctIndex: 0 },
+  { prompt: "'Chest' magyarul a játékban:", options: ["láda / mellény", "asztal", "ajtó", "ablak"], correctIndex: 0 },
+  { prompt: "'Spawn' jelentése Minecraftban:", options: ["megjelenés / születési pont", "tárgy", "csontváz", "bányász"], correctIndex: 0 },
+  { prompt: "Hogyan mondod: 'Gyere ide!'?", options: ["Come here!", "Go away!", "Mine this!", "Build that!"], correctIndex: 0 },
+  { prompt: "'Careful!' angolul, ha veszely van:", options: ["Careful! / Watch out!", "Hello!", "Good job!", "Let's go!"], correctIndex: 0 },
+  { prompt: "'Hungry' magyarul:", options: ["éhes", "szomjas", "fáradt", "beteg"], correctIndex: 0 },
+  { prompt: "'Dangerous' magyarul:", options: ["veszélyes", "békés", "mély", "gyönyörű"], correctIndex: 0 },
 ];
 
 const XP_BY_TILE: Record<number, number> = {
@@ -82,6 +132,7 @@ const XP_BY_TILE: Record<number, number> = {
   [DIAMOND]: 140,
   [AIR]: 0,
   [BEDROCK]: 0,
+  [CREEPER]: 280,
 };
 
 function randInt(min: number, max: number) {
@@ -129,15 +180,20 @@ function buildWorld(): Uint8Array {
   for (let c = 8; c < COLS - 8; c++) {
     const top = topByCol[c] ?? 8;
     if (Math.random() < 0.12) {
-      const h = randInt(2, 4);
-      for (let t = 1; t <= h; t++) g[(top - t) * COLS + c] = LOG;
-      const tr = top - h;
-      for (let dr = -2; dr <= 1; dr++) {
-        for (let dc = -2; dc <= 2; dc++) {
-          const rr = tr + dr;
-          const cc = c + dc;
-          if (rr > 0 && rr < ROWS && cc > 0 && cc < COLS && Math.abs(dc) + Math.abs(dr) <= 3) {
-            if (g[rr * COLS + cc] === AIR) g[rr * COLS + cc] = LEAVES;
+      if (Math.random() < 0.15 && top - 1 >= 0) {
+        // Creeper a felszínen (15% eséllyel fa helyett)
+        g[(top - 1) * COLS + c] = CREEPER;
+      } else {
+        const h = randInt(2, 4);
+        for (let t = 1; t <= h; t++) g[(top - t) * COLS + c] = LOG;
+        const tr = top - h;
+        for (let dr = -2; dr <= 1; dr++) {
+          for (let dc = -2; dc <= 2; dc++) {
+            const rr = tr + dr;
+            const cc = c + dc;
+            if (rr > 0 && rr < ROWS && cc > 0 && cc < COLS && Math.abs(dc) + Math.abs(dr) <= 3) {
+              if (g[rr * COLS + cc] === AIR) g[rr * COLS + cc] = LEAVES;
+            }
           }
         }
       }
@@ -296,6 +352,7 @@ function drawBlock(
     [IRON]: { top: "#c2a789", base: "#9b8169", side: "#715c49", speck: "#d9ccbc" },
     [DIAMOND]: { top: "#7be9f0", base: "#35b2bb", side: "#237b82", speck: "#c7ffff" },
     [BEDROCK]: { top: "#1a1d22", base: "#0f1114", side: "#050607", speck: "#2a3038" },
+    [CREEPER]: { top: "#4cba4c", base: "#3ea63e", side: "#2d8a2d", speck: "#5ccf5c" },
   };
   const p = pal[t] || pal[STONE];
   ctx.fillStyle = p.base;
@@ -377,6 +434,19 @@ function drawBlock(
   }
   ctx.strokeStyle = "rgba(0,0,0,0.2)";
   ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
+  // Creeper pixel arc
+  if (t === CREEPER) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(x + 4, y + 6, 5, 4);
+    ctx.fillRect(x + 15, y + 6, 5, 4);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x + 5, y + 7, 2, 2);
+    ctx.fillRect(x + 16, y + 7, 2, 2);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(x + 7, y + 13, 2, 3);
+    ctx.fillRect(x + 15, y + 13, 2, 3);
+    ctx.fillRect(x + 9, y + 15, 6, 2);
+  }
 }
 
 function drawPlayer(ctx: CanvasRenderingContext2D, px: number, py: number, facing: number, tick: number) {
@@ -433,6 +503,8 @@ export default function BlockCraftQuiz() {
   const rafRef = useRef(0);
   const mineTargetRef = useRef<{ c: number; r: number; t: number } | null>(null);
   const particlesRef = useRef<Particle[]>([]);
+  const streakRef = useRef(0);
+  const xpPopupRef = useRef<{ amount: number; wx: number; wy: number; life: number } | null>(null);
 
   const [phase, setPhase] = useState<Phase>("menu");
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -444,7 +516,10 @@ export default function BlockCraftQuiz() {
   const [blocksMined, setBlocksMined] = useState(0);
   const [rareBlocks, setRareBlocks] = useState(0);
   const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT);
+  const [achievement, setAchievement] = useState<string | null>(null);
   const scoreSubmittedRef = useRef(false);
+  // Keep streakRef in sync for the canvas loop (avoids stale closure)
+  streakRef.current = streak;
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
@@ -532,6 +607,8 @@ export default function BlockCraftQuiz() {
     playerRef.current = { x: spawn.x, y: spawn.y, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 };
     cameraRef.current = { x: 0, y: 0 };
     particlesRef.current = [];
+    xpPopupRef.current = null;
+    setAchievement(null);
     setSessionXp(0);
     setStreak(0);
     setRunSeconds(0);
@@ -691,6 +768,17 @@ export default function BlockCraftQuiz() {
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, CW, CH);
 
+      // Éjszakai csillagok (cycle < 0.3 = sotét ég)
+      if (cycle < 0.3) {
+        const starAlpha = Math.min(0.95, (0.3 - cycle) * 4);
+        ctx.fillStyle = `rgba(255,255,255,${starAlpha})`;
+        for (let si = 0; si < 18; si++) {
+          const sx = ((Math.sin(si * 7.31 + 1.2) * 0.5 + 0.5) * CW);
+          const sy = ((Math.sin(si * 3.73 + 0.5) * 0.5 + 0.5) * CH * 0.38);
+          ctx.fillRect(Math.round(sx), Math.round(sy), 1, 1);
+        }
+      }
+
       const sunOrbit = t * 0.00005;
       const sunX = CW * 0.52 + Math.cos(sunOrbit) * CW * 0.42;
       const sunY = 54 + Math.sin(sunOrbit * 1.35) * 22;
@@ -749,6 +837,39 @@ export default function BlockCraftQuiz() {
 
       drawPlayer(ctx, p.x - camX, p.y - camY, p.facing, p.tick);
 
+      // Streak aura: 3+ sorozatnál arany particle-k a játékos körül
+      if (streakRef.current >= 3) {
+        const auraCx = Math.round(p.x + PLAYER_W / 2 - camX);
+        const auraCy = Math.round(p.y - PLAYER_H / 2 - camY);
+        const auraCount = Math.min(12, 4 + streakRef.current * 2);
+        for (let ai = 0; ai < auraCount; ai++) {
+          const angle = (t * 0.003 + ai * (Math.PI * 2 / auraCount)) % (Math.PI * 2);
+          const rad = 14 + Math.sin(t * 0.008 + ai) * 4;
+          const ax = auraCx + Math.cos(angle) * rad;
+          const ay = auraCy + Math.sin(angle) * rad;
+          const aAlpha = 0.55 + Math.sin(t * 0.01 + ai * 1.3) * 0.3;
+          ctx.fillStyle = `rgba(255,200,0,${aAlpha})`;
+          ctx.fillRect(ax, ay, 2, 2);
+        }
+      }
+
+      // +XP popup animáció
+      const xpPop = xpPopupRef.current;
+      if (xpPop) {
+        xpPop.life -= dt;
+        if (xpPop.life <= 0) {
+          xpPopupRef.current = null;
+        } else {
+          const popAlpha = Math.min(1, xpPop.life / 0.4);
+          const rise = (1.5 - xpPop.life) * 30;
+          ctx.globalAlpha = popAlpha;
+          ctx.font = "bold 13px monospace";
+          ctx.fillStyle = "#ffe040";
+          ctx.fillText(`+${xpPop.amount} XP`, xpPop.wx - camX - 20, xpPop.wy - camY - rise);
+          ctx.globalAlpha = 1;
+        }
+      }
+
       // Távolsági köd + atmoszférikus réteg (mélységérzet).
       const fog = ctx.createLinearGradient(0, 0, 0, CH);
       fog.addColorStop(0, "rgba(180,220,255,0.03)");
@@ -789,12 +910,32 @@ export default function BlockCraftQuiz() {
     if (tgt) {
       worldRef.current[tgt.r * COLS + tgt.c] = AIR;
       spawnDust((tgt.c + 0.5) * TILE, (tgt.r + 0.5) * TILE, tgt.t);
-      const add = (XP_BY_TILE[tgt.t] ?? 24) + streak * 4;
+      const isCreeper = tgt.t === CREEPER;
+      const baseXp = XP_BY_TILE[tgt.t] ?? 24;
+      const add = (isCreeper ? baseXp * 2 : baseXp) + streak * 4;
+      const newBlocks = blocksMined + 1;
+      const newStreak = streak + 1;
       setSessionXp((x) => x + add);
       setTotalXp((x) => x + add);
-      setBlocksMined((b) => b + 1);
-      if (tgt.t === COAL || tgt.t === IRON || tgt.t === DIAMOND) setRareBlocks((n) => n + 1);
-      setStreak((s) => s + 1);
+      setBlocksMined(newBlocks);
+      if (tgt.t === COAL || tgt.t === IRON || tgt.t === DIAMOND || tgt.t === CREEPER) setRareBlocks((n) => n + 1);
+      setStreak(newStreak);
+      // +XP popup a canvas-on
+      xpPopupRef.current = { amount: add, wx: (tgt.c + 0.5) * TILE, wy: (tgt.r + 0.5) * TILE, life: 1.5 };
+      // Achievement toastok
+      if (tgt.t === DIAMOND && rareBlocks === 0) {
+        setAchievement("Elso gyemant megtalva!");
+        setTimeout(() => setAchievement(null), 2500);
+      } else if (newBlocks === 10) {
+        setAchievement("10. blokk kibányászva!");
+        setTimeout(() => setAchievement(null), 2500);
+      } else if (newStreak === 5) {
+        setAchievement("5-ös sorozat elérve!");
+        setTimeout(() => setAchievement(null), 2500);
+      } else if (isCreeper) {
+        setAchievement("Creeper legyőzve! Dupla XP!");
+        setTimeout(() => setAchievement(null), 2500);
+      }
     }
     mineTargetRef.current = null;
     setQuiz(null);
@@ -915,6 +1056,7 @@ export default function BlockCraftQuiz() {
 
       <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><p className="text-xs font-bold text-lime-300 uppercase mb-1">Angol mini-teszt</p><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => <Button key={`${o}-${i}`} variant="secondary" className="h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]" onClick={() => onAnswer(i)}>{o}</Button>)}</div></motion.div></motion.div>}</AnimatePresence>
 
+      <AnimatePresence>{achievement && <motion.div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-amber-500/95 text-slate-950 font-bold text-sm px-4 py-2 rounded-xl shadow-xl border border-amber-200/60 whitespace-nowrap" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>{achievement}</motion.div>}</AnimatePresence>
       <style>{`@keyframes shake {0%,100% { transform: translateX(0); }25% { transform: translateX(-5px); }75% { transform: translateX(5px); }} .animate-shake { animation: shake 0.16s ease-in-out 2; }`}</style>
     </div>
   );
