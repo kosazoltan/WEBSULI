@@ -11,3 +11,5 @@ source/backups/
 MCP-CONFIG-EXAMPLE.json
 *.mcp-config.json
 client_secret*.json
+
+configs/secrets.json
