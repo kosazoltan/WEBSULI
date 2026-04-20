@@ -329,6 +329,248 @@ function tileRand(c: number, r: number, seed: number) {
   return n - Math.floor(n);
 }
 
+/**
+ * Minecraft-szerű pixel-pontos blokk renderelés.
+ * Minden blokk saját 12×12 virtuális pixelmátrixot kap (TILE=24 → 2px/unit),
+ * deterministikusan a (c, r) koordináta alapján a tileRand() seed-del.
+ * AO: opcionálisan a szomszédos szilárd cellák alapján sötétíti az éleket.
+ */
+// Minecraft-hű pixel palette (Java Edition 1.x-alapú). Minden blokk 4-6 árnyalatot kap.
+const MC_PAL: Record<number, { main: string; dark: string; darker: string; light: string; accent?: string; accent2?: string }> = {
+  [GRASS]:   { main: "#5DA132", dark: "#3F7A23", darker: "#2C5A18", light: "#7BC74A", accent: "#8BDB52" },
+  [DIRT]:    { main: "#8A5A2E", dark: "#6B4422", darker: "#4F3218", light: "#A8724A", accent: "#99653C" },
+  [STONE]:   { main: "#7A7A7A", dark: "#5E5E5E", darker: "#424242", light: "#9A9A9A", accent: "#6A6A6A" },
+  [LOG]:     { main: "#6B4423", dark: "#4E3119", darker: "#35200F", light: "#8B5E33", accent: "#2B1A0B", accent2: "#A67848" },
+  [LEAVES]:  { main: "#2E7A1E", dark: "#215818", darker: "#153610", light: "#4BA530", accent: "#67C24A" },
+  [COAL]:    { main: "#7A7A7A", dark: "#5E5E5E", darker: "#1C1C1C", light: "#9A9A9A", accent: "#0A0A0A" },
+  [IRON]:    { main: "#7A7A7A", dark: "#5E5E5E", darker: "#424242", light: "#9A9A9A", accent: "#D8A56E", accent2: "#B28048" },
+  [DIAMOND]: { main: "#7A7A7A", dark: "#5E5E5E", darker: "#424242", light: "#9A9A9A", accent: "#5ECEE8", accent2: "#B8F4FA" },
+  [BEDROCK]: { main: "#4A4A4A", dark: "#2C2C2C", darker: "#111111", light: "#5C5C5C", accent: "#1A1A1A" },
+  [CREEPER]: { main: "#4BA84B", dark: "#368A36", darker: "#1F5C1F", light: "#6CC46C", accent: "#0A0A0A", accent2: "#FFFFFF" },
+};
+
+/**
+ * Determinisztikus blokk-textúra cache (module-scoped).
+ * Mivel mcBlockPattern() kimenete tisztán determinisztikus (t, c, r) alapján,
+ * a render loop hot-pathán cache-eljük Map-be.
+ *
+ * Felső határ (Eszter F2c memória-analízis pontosítása):
+ *   ROWS × COLS × block-types = 16 × 64 × 10 ≈ 10 240–11 264 bejegyzés
+ *   (AIR=0 nem cache-eli, drawBlock "if (!t) return" mögött).
+ *   Egy bejegyzés = 12×12 grid = 144 string-referencia (MC_PAL konstansokra mutatnak)
+ *     + 13 array objektum + Map overhead.
+ *   Reality-check: runtime memory-footprint ~15–25 MB (nem ~2–3 MB, mint korábban
+ *   becsültem). Dinamikus world / végtelen koordináta-domain esetén korlátlan
+ *   növekedés — de a jelenlegi kódban ilyen útvonal nincs (ROWS/COLS fix, MenuBlock
+ *   csak konstans mintát kér).
+ *
+ * A hover animáció és pulse overlay-ek nem mennek a cache-be, azok a drawBlock-ban futnak.
+ */
+const mcBlockPatternCache: Map<string, string[][]> = new Map();
+
+/**
+ * Determinisztikus pixelmátrix egy blokkhoz. U=TILE/12 unit-méret (2px TILE=24-nél).
+ * Visszaadja a 12x12 színmátrixot (a pal alapján kiválasztva). Cache-elt.
+ */
+function mcBlockPattern(t: number, c: number, r: number): string[][] {
+  const cacheKey = t + ":" + c + ":" + r;
+  const cached = mcBlockPatternCache.get(cacheKey);
+  if (cached) return cached;
+  const grid = mcBlockPatternBuild(t, c, r);
+  mcBlockPatternCache.set(cacheKey, grid);
+  return grid;
+}
+
+/** Determinisztikus pattern építő (belső — cache-elt wrapper hívja meg). */
+function mcBlockPatternBuild(t: number, c: number, r: number): string[][] {
+  const pal = MC_PAL[t] || MC_PAL[STONE];
+  const grid: string[][] = Array.from({ length: 12 }, () => Array(12).fill(pal.main));
+
+  if (t === GRASS) {
+    // Felső 3 sor: zöld fű (vegyes árnyalat, pixelezett felső él).
+    for (let py = 0; py < 3; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 11.7);
+        grid[py][px] = h < 0.22 ? pal.light! : h < 0.55 ? pal.main : pal.dark;
+      }
+    }
+    // Fű-cseppek lecsorognak a DIRT-re (1-2 pixel).
+    for (let px = 0; px < 12; px++) {
+      if (tileRand(c + px, r, 29.1) < 0.25) grid[3][px] = pal.dark;
+      if (tileRand(c + px, r, 37.3) < 0.12) grid[4][px] = pal.darker;
+    }
+    // Alatta DIRT textúra.
+    const dPal = MC_PAL[DIRT];
+    for (let py = 3; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        if (py === 3 && grid[py][px] !== pal.main) continue; // fű-csepp maradjon
+        const h = tileRand(c + px, r + py, 41.3);
+        grid[py][px] = h < 0.16 ? dPal.light! : h < 0.42 ? dPal.main : h < 0.8 ? dPal.dark : dPal.darker;
+      }
+    }
+  } else if (t === DIRT) {
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 53.9);
+        grid[py][px] = h < 0.14 ? pal.light! : h < 0.45 ? pal.main : h < 0.82 ? pal.dark : pal.darker;
+      }
+    }
+  } else if (t === STONE) {
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 67.2);
+        grid[py][px] = h < 0.18 ? pal.light! : h < 0.52 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    // Repedések (sötét pixelvonalak).
+    const crackSeed = tileRand(c, r, 81.5);
+    if (crackSeed < 0.5) {
+      const cx = Math.floor(crackSeed * 10) + 1;
+      const cy = Math.floor(tileRand(c, r, 91.3) * 8) + 2;
+      for (let i = 0; i < 4; i++) {
+        const px = Math.max(0, Math.min(11, cx + i - 1));
+        const py = Math.max(0, Math.min(11, cy + Math.floor((tileRand(c, r, 103 + i) - 0.5) * 2)));
+        grid[py][px] = pal.darker;
+      }
+    }
+  } else if (t === LOG) {
+    // Oldalirányú rostok: függőleges fekete/világos vonalak.
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        // Rostok x-pozíciója csak a col-tól függ, r nem vált.
+        const band = Math.floor(px / 2) + Math.floor(tileRand(c, r + py, 17.3) * 1.3);
+        if (band % 3 === 0) grid[py][px] = pal.dark;
+        else if (band % 3 === 1) grid[py][px] = pal.main;
+        else grid[py][px] = pal.light!;
+      }
+    }
+    // Évgyűrű-jellegű pontok (random sötét foltok).
+    for (let k = 0; k < 4; k++) {
+      const rx = Math.floor(tileRand(c, r, 27 + k) * 11);
+      const ry = Math.floor(tileRand(c, r, 31 + k) * 11);
+      grid[ry][rx] = pal.accent!;
+    }
+  } else if (t === LEAVES) {
+    // Ritka, levélszerű pixelmintázat — több árnyék.
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 127.1);
+        grid[py][px] = h < 0.10 ? pal.accent! : h < 0.30 ? pal.light! : h < 0.60 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    // Ritka fekete pontok (levelek közti hézagok).
+    for (let k = 0; k < 5; k++) {
+      const rx = Math.floor(tileRand(c, r, 151 + k) * 12);
+      const ry = Math.floor(tileRand(c, r, 173 + k) * 12);
+      grid[ry][rx] = pal.darker;
+    }
+  } else if (t === COAL) {
+    // Stone alapra fekete pixelcsomók.
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 191.3);
+        grid[py][px] = h < 0.18 ? pal.light! : h < 0.52 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    const clusters = [[3, 3], [8, 4], [4, 8], [9, 9]];
+    clusters.forEach(([cx, cy], idx) => {
+      if (tileRand(c, r, 200 + idx) < 0.75) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const px = cx + dx;
+            const py = cy + dy;
+            if (px >= 0 && px < 12 && py >= 0 && py < 12) {
+              if (tileRand(c + px, r + py, 211 + idx) < 0.78) grid[py][px] = pal.accent!;
+            }
+          }
+        }
+      }
+    });
+  } else if (t === IRON) {
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 233.7);
+        grid[py][px] = h < 0.18 ? pal.light! : h < 0.52 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    // Narancs-barna vas-csomók.
+    const clusters = [[2, 4], [7, 3], [5, 8], [10, 9]];
+    clusters.forEach(([cx, cy], idx) => {
+      if (tileRand(c, r, 250 + idx) < 0.70) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const px = cx + dx;
+            const py = cy + dy;
+            if (px >= 0 && px < 12 && py >= 0 && py < 12) {
+              const rv = tileRand(c + px, r + py, 261 + idx);
+              if (rv < 0.7) grid[py][px] = rv < 0.3 ? pal.accent2! : pal.accent!;
+            }
+          }
+        }
+      }
+    });
+  } else if (t === DIAMOND) {
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 277.1);
+        grid[py][px] = h < 0.18 ? pal.light! : h < 0.52 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    // Ciánkék gyémánt pixelcsomók — ritkábbak, de fényesebbek.
+    const clusters = [[3, 4], [8, 7], [5, 9]];
+    clusters.forEach(([cx, cy], idx) => {
+      if (tileRand(c, r, 290 + idx) < 0.80) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const px = cx + dx;
+            const py = cy + dy;
+            if (px >= 0 && px < 12 && py >= 0 && py < 12) {
+              const rv = tileRand(c + px, r + py, 301 + idx);
+              if (rv < 0.78) grid[py][px] = rv < 0.35 ? pal.accent2! : pal.accent!;
+            }
+          }
+        }
+      }
+    });
+  } else if (t === BEDROCK) {
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 317.3);
+        grid[py][px] = h < 0.16 ? pal.light! : h < 0.48 ? pal.main : h < 0.78 ? pal.dark : pal.darker;
+      }
+    }
+    // Sötét foltok (a bedrock jellegzetes "összevissza" mintázata).
+    for (let k = 0; k < 6; k++) {
+      const rx = Math.floor(tileRand(c, r, 331 + k) * 12);
+      const ry = Math.floor(tileRand(c, r, 347 + k) * 12);
+      grid[ry][rx] = pal.accent!;
+    }
+  } else if (t === CREEPER) {
+    // Bázis: pixeles zöld mintázat.
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 373.5);
+        grid[py][px] = h < 0.22 ? pal.light! : h < 0.60 ? pal.main : h < 0.88 ? pal.dark : pal.darker;
+      }
+    }
+    // Szemek (2x2 fekete) + szemfehér (1x1).
+    grid[4][2] = pal.accent!; grid[4][3] = pal.accent!;
+    grid[5][2] = pal.accent!; grid[5][3] = pal.accent!;
+    grid[4][8] = pal.accent!; grid[4][9] = pal.accent!;
+    grid[5][8] = pal.accent!; grid[5][9] = pal.accent!;
+    // Creeper száj (klasszikus "mmm" alak).
+    grid[7][4] = pal.accent!; grid[7][5] = pal.accent!;
+    grid[7][6] = pal.accent!; grid[7][7] = pal.accent!;
+    grid[8][3] = pal.accent!; grid[8][4] = pal.accent!;
+    grid[8][7] = pal.accent!; grid[8][8] = pal.accent!;
+    grid[9][3] = pal.accent!; grid[9][8] = pal.accent!;
+  }
+
+  return grid;
+}
+
+type NeighborSolid = { top: boolean; bottom: boolean; left: boolean; right: boolean };
+
 function drawBlock(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -338,41 +580,62 @@ function drawBlock(
   worldCol?: number,
   worldRow?: number,
   light?: { sunX: number; sunY: number; viewW: number; viewH: number },
+  neighbors?: NeighborSolid,
 ) {
   if (!t) return;
   const c = worldCol ?? Math.floor(x / TILE);
   const r = worldRow ?? Math.floor(y / TILE);
-  const pal: Record<number, { top: string; base: string; side: string; speck?: string }> = {
-    [GRASS]: { top: "#7cd057", base: "#5a903d", side: "#416a2d", speck: "#325423" },
-    [DIRT]: { top: "#a67a4d", base: "#8a6038", side: "#634223", speck: "#6d4728" },
-    [STONE]: { top: "#b4b9bf", base: "#8f959b", side: "#636970", speck: "#545961" },
-    [LOG]: { top: "#8f6642", base: "#6a4a2f", side: "#4b3420", speck: "#3d2a19" },
-    [LEAVES]: { top: "#4eb45a", base: "#327f3c", side: "#245b2d", speck: "#19451f" },
-    [COAL]: { top: "#5e646d", base: "#3d4148", side: "#272b31", speck: "#1b1f25" },
-    [IRON]: { top: "#c2a789", base: "#9b8169", side: "#715c49", speck: "#d9ccbc" },
-    [DIAMOND]: { top: "#7be9f0", base: "#35b2bb", side: "#237b82", speck: "#c7ffff" },
-    [BEDROCK]: { top: "#1a1d22", base: "#0f1114", side: "#050607", speck: "#2a3038" },
-    [CREEPER]: { top: "#4cba4c", base: "#3ea63e", side: "#2d8a2d", speck: "#5ccf5c" },
-  };
-  const p = pal[t] || pal[STONE];
-  ctx.fillStyle = p.base;
-  ctx.fillRect(x, y, TILE, TILE);
 
-  // Finom textúra-zaj: részletesebb, "voxel" hatás.
-  ctx.globalAlpha = 0.22;
-  ctx.fillStyle = "rgba(0,0,0,0.65)";
-  for (let i = 0; i < 6; i++) {
-    const rx = x + 2 + Math.floor(tileRand(c, r, i + 0.31) * (TILE - 5));
-    const ry = y + 2 + Math.floor(tileRand(c, r, i + 1.77) * (TILE - 5));
-    ctx.fillRect(rx, ry, 2, 2);
+  // 12x12 unit-grid, TILE=24 esetén minden unit = 2 pixel (pixel-perfekt).
+  const U = TILE / 12;
+  const grid = mcBlockPattern(t, c, r);
+
+  for (let py = 0; py < 12; py++) {
+    for (let px = 0; px < 12; px++) {
+      ctx.fillStyle = grid[py][px];
+      ctx.fillRect(x + px * U, y + py * U, U + 0.5, U + 0.5); // +0.5 anti-gap
+    }
   }
-  ctx.globalAlpha = 1;
 
-  ctx.fillStyle = p.top;
-  ctx.fillRect(x, y, TILE, TILE * 0.34);
-  ctx.fillStyle = p.side;
-  ctx.fillRect(x + TILE * 0.62, y + TILE * 0.22, TILE * 0.38, TILE * 0.78);
+  // Glow aura ritka érceknek (IRON, DIAMOND pulzálóan).
+  if (t === DIAMOND || t === IRON || t === COAL) {
+    const pulse = 0.5 + Math.sin(time * 0.003 + c * 0.7 + r * 1.3) * 0.5;
+    const glowColor = t === DIAMOND ? "rgba(120,235,250," : t === IRON ? "rgba(216,165,110," : "rgba(60,60,70,";
+    ctx.fillStyle = glowColor + (0.08 + pulse * 0.08) + ")";
+    ctx.fillRect(x, y, TILE, TILE);
+  }
 
+  // CREEPER: halvány pulzálás a robbanás-készenlétre.
+  if (t === CREEPER) {
+    const pulse = 0.5 + Math.sin(time * 0.004) * 0.5;
+    ctx.fillStyle = `rgba(255,255,180,${0.06 + pulse * 0.07})`;
+    ctx.fillRect(x, y, TILE, TILE);
+  }
+
+  // LEAVES: fű/szél animáció — finom világos csíkok.
+  if (t === LEAVES) {
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = "#9BE67E";
+    for (let k = 0; k < 3; k++) {
+      const wind = Math.sin(time * 0.0025 + k * 1.7 + c * 0.6) * 1.5;
+      ctx.fillRect(Math.round(x + 4 + k * 7 + wind), Math.round(y + 3 + k * 2), 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // GRASS: apró fűszálak animációval a tetején.
+  if (t === GRASS) {
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = "#B7F07A";
+    for (let k = 0; k < 4; k++) {
+      const wind = Math.sin(time * 0.003 + k + c * 0.6) * 1.1;
+      const bx = Math.round(x + 3 + k * 5 + wind);
+      ctx.fillRect(bx, Math.round(y - 1), 1, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Napfény shading — ugyanaz a logika, de most a pixel-textúra fölött.
   if (light) {
     const cx = x + TILE * 0.5;
     const cy = y + TILE * 0.5;
@@ -381,113 +644,231 @@ function drawBlock(
     const lit = clamp01(0.2 + toSunX * 0.45 + (1 - toSunY) * 0.35);
     const shade = clamp01(1 - lit);
 
-    // Napfény oldalfüggő csillanás.
-    ctx.fillStyle = `rgba(255,255,220,${0.06 + lit * 0.11})`;
-    ctx.fillRect(x, y, TILE, TILE * 0.28);
+    // Napfény csillogás a felső élen.
+    ctx.fillStyle = `rgba(255,255,220,${0.04 + lit * 0.08})`;
+    ctx.fillRect(x, y, TILE, U * 1.2);
 
-    // Naptól elforduló oldal sötétítése.
-    ctx.fillStyle = `rgba(0,0,0,${0.08 + shade * 0.2})`;
-    ctx.fillRect(x + TILE * 0.58, y + TILE * 0.18, TILE * 0.42, TILE * 0.82);
+    // Napárnyék a távolabbi oldalon.
+    ctx.fillStyle = `rgba(0,0,0,${0.05 + shade * 0.14})`;
+    ctx.fillRect(x + TILE - U * 2, y, U * 2, TILE);
   }
 
-  // Világítás + peremárnyék: térérzet.
-  ctx.fillStyle = "rgba(255,255,255,0.14)";
-  ctx.fillRect(x, y, TILE, 1);
-  ctx.fillRect(x, y, 1, TILE);
-  ctx.fillStyle = "rgba(0,0,0,0.22)";
-  ctx.fillRect(x + TILE - 1, y, 1, TILE);
-  ctx.fillRect(x, y + TILE - 1, TILE, 1);
-
-  if (p.speck) {
-    ctx.fillStyle = p.speck;
-    for (let k = 0; k < 5; k++) {
-      const sx = x + 2 + Math.floor(tileRand(c, r, 10 + k) * (TILE - 5));
-      const sy = y + 3 + Math.floor(tileRand(c, r, 17 + k) * (TILE - 6));
-      ctx.fillRect(sx, sy, 2, 2);
+  // Ambient Occlusion — sötétítés azon éleknél, ahol van szomszéd szilárd blokk.
+  if (neighbors) {
+    ctx.fillStyle = "rgba(0,0,0,0.26)";
+    if (neighbors.top) {
+      ctx.fillRect(x, y, TILE, U * 0.9);
+    }
+    if (neighbors.bottom) {
+      ctx.fillRect(x, y + TILE - U * 0.9, TILE, U * 0.9);
+    }
+    if (neighbors.left) {
+      ctx.fillRect(x, y, U * 0.9, TILE);
+    }
+    if (neighbors.right) {
+      ctx.fillRect(x + TILE - U * 0.9, y, U * 0.9, TILE);
     }
   }
-  if (t === GRASS) {
-    ctx.fillStyle = "rgba(220,255,170,0.26)";
-    for (let k = 0; k < 5; k++) {
-      const wind = Math.sin(time * 0.003 + k + c * 0.6) * 1.3;
-      ctx.fillRect(x + 3 + k * 4 + wind, y + 3, 1, 6);
-    }
-  }
-  if (t === LEAVES) {
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = "#8dff8d";
-    for (let k = 0; k < 4; k++) {
-      const sx = x + 2 + Math.floor(tileRand(c, r, 40 + k) * (TILE - 5));
-      const sy = y + 2 + Math.floor(tileRand(c, r, 47 + k) * (TILE - 5));
-      ctx.fillRect(sx, sy, 2, 2);
-    }
-    ctx.globalAlpha = 1;
-  }
-  if (t === LOG) {
-    ctx.strokeStyle = "rgba(45,25,10,0.35)";
-    ctx.beginPath();
-    ctx.moveTo(x + 5, y + 2);
-    ctx.lineTo(x + 5, y + TILE - 2);
-    ctx.moveTo(x + 11, y + 2);
-    ctx.lineTo(x + 11, y + TILE - 2);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = "rgba(0,0,0,0.2)";
-  ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
-  // Creeper pixel arc
-  if (t === CREEPER) {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(x + 4, y + 6, 5, 4);
-    ctx.fillRect(x + 15, y + 6, 5, 4);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(x + 5, y + 7, 2, 2);
-    ctx.fillRect(x + 16, y + 7, 2, 2);
-    ctx.fillStyle = "#000";
-    ctx.fillRect(x + 7, y + 13, 2, 3);
-    ctx.fillRect(x + 15, y + 13, 2, 3);
-    ctx.fillRect(x + 9, y + 15, 6, 2);
+
+  // Klasszikus Minecraft-keret: fekete pixel-él (1 pixel).
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  if (!neighbors?.top)    ctx.fillRect(x, y, TILE, 1);
+  if (!neighbors?.bottom) ctx.fillRect(x, y + TILE - 1, TILE, 1);
+  if (!neighbors?.left)   ctx.fillRect(x, y, 1, TILE);
+  if (!neighbors?.right)  ctx.fillRect(x + TILE - 1, y, 1, TILE);
+}
+
+/** Klasszikus Minecraft pixel-nap: sárga négyzetes korong, 24×24px, sarokvilágítással. */
+function drawMcSun(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
+  const s = 18; // sun half-size
+  // Halvány fényudvar.
+  const halo = ctx.createRadialGradient(cx, cy, s * 0.6, cx, cy, s * 3.2);
+  halo.addColorStop(0, "rgba(255,240,180,0.32)");
+  halo.addColorStop(1, "rgba(255,230,150,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(cx - s * 3.2, cy - s * 3.2, s * 6.4, s * 6.4);
+  // Négyzetes pixel-nap.
+  ctx.fillStyle = "#FFE889";
+  ctx.fillRect(Math.round(cx - s), Math.round(cy - s), s * 2, s * 2);
+  // Belső világosabb rész.
+  ctx.fillStyle = "#FFF4B8";
+  ctx.fillRect(Math.round(cx - s * 0.8), Math.round(cy - s * 0.8), Math.round(s * 1.6), Math.round(s * 1.6));
+  // Kis sötétebb sarkok (pixeles "kerekítés").
+  ctx.fillStyle = "#FFD35E";
+  ctx.fillRect(Math.round(cx - s), Math.round(cy - s), 3, 3);
+  ctx.fillRect(Math.round(cx + s - 3), Math.round(cy - s), 3, 3);
+  ctx.fillRect(Math.round(cx - s), Math.round(cy + s - 3), 3, 3);
+  ctx.fillRect(Math.round(cx + s - 3), Math.round(cy + s - 3), 3, 3);
+}
+
+/** Klasszikus Minecraft pixel-hold: fehér négyzetes, sarokvilágítással. */
+function drawMcMoon(ctx: CanvasRenderingContext2D, cx: number, cy: number, alpha: number) {
+  const s = 14;
+  ctx.globalAlpha = alpha;
+  // Hold fényudvar.
+  const halo = ctx.createRadialGradient(cx, cy, s * 0.5, cx, cy, s * 3);
+  halo.addColorStop(0, "rgba(220,230,255,0.30)");
+  halo.addColorStop(1, "rgba(200,215,255,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(cx - s * 3, cy - s * 3, s * 6, s * 6);
+  // Pixeles hold korong.
+  ctx.fillStyle = "#E8ECF5";
+  ctx.fillRect(Math.round(cx - s), Math.round(cy - s), s * 2, s * 2);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(Math.round(cx - s * 0.7), Math.round(cy - s * 0.7), Math.round(s * 1.4), Math.round(s * 1.4));
+  // Hold-foltok.
+  ctx.fillStyle = "rgba(140,150,170,0.55)";
+  ctx.fillRect(Math.round(cx - s + 4), Math.round(cy - s + 3), 3, 3);
+  ctx.fillRect(Math.round(cx + 2), Math.round(cy - 3), 4, 4);
+  ctx.fillRect(Math.round(cx - 5), Math.round(cy + 2), 3, 2);
+  ctx.globalAlpha = 1;
+}
+
+/** Minecraft-stílusú pixel-felhők: nagyobb, lapos, pixeles, több réteg. */
+function drawMcClouds(ctx: CanvasRenderingContext2D, time: number, viewW: number) {
+  const cloudLayer = 4;
+  for (let i = 0; i < cloudLayer; i++) {
+    const speed = 0.010 + i * 0.004;
+    const yBase = 18 + i * 18;
+    const cxBase = ((i * 230 + time * speed) % (viewW + 320)) - 180;
+    const scale = 1 + i * 0.4;
+
+    // Minecraft cloud: nagy lapos 6×1 pixelblokk + vegyes "zaj" kisebb téglalapokkal.
+    ctx.fillStyle = i < 2 ? "rgba(255,255,255,0.82)" : "rgba(255,255,255,0.55)";
+    // Fő felhő-test.
+    ctx.fillRect(Math.round(cxBase), Math.round(yBase), Math.round(82 * scale), Math.round(9 * scale));
+    ctx.fillRect(Math.round(cxBase + 14 * scale), Math.round(yBase - 5 * scale), Math.round(58 * scale), Math.round(5 * scale));
+    ctx.fillRect(Math.round(cxBase + 26 * scale), Math.round(yBase + 9 * scale), Math.round(42 * scale), Math.round(4 * scale));
+
+    // Halvány "aljazat".
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(Math.round(cxBase - 4), Math.round(yBase + 3), Math.round(6 * scale), Math.round(6 * scale));
+    ctx.fillRect(Math.round(cxBase + 86 * scale), Math.round(yBase + 3), Math.round(6 * scale), Math.round(6 * scale));
+
+    // Sötétebb alsó él.
+    ctx.fillStyle = "rgba(180,190,200,0.30)";
+    ctx.fillRect(Math.round(cxBase), Math.round(yBase + 9 * scale - 1), Math.round(82 * scale), 1);
   }
 }
 
+/**
+ * Steve-szerű Minecraft pixel player.
+ * PLAYER_W=14, PLAYER_H=26.
+ * Láb = 12px, Törzs = 10px, Fej = 8px (szigorú aranyú pixel-vox).
+ */
 function drawPlayer(ctx: CanvasRenderingContext2D, px: number, py: number, facing: number, tick: number) {
   const x = Math.round(px);
   const y = Math.round(py);
-  const bob = Math.sin(tick * 0.18) * 1.2;
+  const walking = Math.abs((Math.sin(tick * 0.35)));
+  const bob = walking > 0.1 ? Math.round(Math.sin(tick * 0.18) * 1) : 0;
 
-  // Pixeles kontúr: erősebb Minecraft-jelleg.
-  ctx.fillStyle = "#17100d";
-  ctx.fillRect(x - 2, y - PLAYER_H + 2 + bob, 14, 30);
+  // Walk cycle: karok és lábak swing.
+  const legSwing = Math.round(Math.sin(tick * 0.35) * 2);
+  const armSwing = Math.round(Math.sin(tick * 0.35 + Math.PI) * 2);
 
-  ctx.fillStyle = "#d0a173";
-  ctx.fillRect(x, y - PLAYER_H + 5 + bob, 10, 9);
-  ctx.fillStyle = "#8e6546";
-  ctx.fillRect(x, y - PLAYER_H + 5 + bob, 10, 2);
+  // Koordináták: y = láb alja, fel van a fej.
+  const footY = y + bob;
+  const legTop = footY - 12;        // lábak: 12 pixel magasak
+  const torsoTop = legTop - 10;     // törzs: 10 pixel magas
+  const headBottom = torsoTop;
+  const headTop = headBottom - 8;   // fej: 8x8 pixel
+  const centerX = x;
 
-  ctx.fillStyle = "#4b321a";
-  ctx.fillRect(x - 1, y - PLAYER_H + 3 + bob, 12, 5);
-  ctx.fillStyle = "#318bf1";
-  ctx.fillRect(x - 1, y - PLAYER_H + 14 + bob, 12, 11);
-  ctx.fillStyle = "#4ea3ff";
-  ctx.fillRect(x - 1, y - PLAYER_H + 14 + bob, 12, 2);
+  // Árnyék a talajon.
+  ctx.fillStyle = "rgba(0,0,0,0.32)";
+  ctx.fillRect(centerX - 1, footY + 1, 14, 2);
 
-  ctx.fillStyle = "#1c396e";
-  ctx.fillRect(x - 1, y - PLAYER_H + 24 + Math.sin(tick * 0.2) + bob, 5, 6);
-  ctx.fillRect(x + 6, y - PLAYER_H + 24 + Math.sin(tick * 0.2 + Math.PI) + bob, 5, 6);
+  // === LÁBAK (két 4x12) ===
+  ctx.fillStyle = "#1C3A78"; // nadrág sötétkék
+  // Bal láb
+  ctx.fillRect(centerX + 1, legTop - legSwing, 4, 12);
+  // Jobb láb
+  ctx.fillRect(centerX + 7, legTop + legSwing, 4, 12);
+  // Nadrág világosabb csík (highlight bal oldal).
+  ctx.fillStyle = "#2A4D94";
+  ctx.fillRect(centerX + 1, legTop - legSwing, 1, 12);
+  ctx.fillRect(centerX + 7, legTop + legSwing, 1, 12);
+  // Cipő
+  ctx.fillStyle = "#0E1A35";
+  ctx.fillRect(centerX + 1, legTop - legSwing + 10, 4, 2);
+  ctx.fillRect(centerX + 7, legTop + legSwing + 10, 4, 2);
 
-  // Szem + árnyék.
-  ctx.fillStyle = "#0f0b09";
-  ctx.fillRect(facing > 0 ? x + 7 : x + 1, y - PLAYER_H + 8 + bob, 2, 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(facing > 0 ? x + 8 : x + 2, y - PLAYER_H + 8 + bob, 1, 1);
+  // === TÖRZS (8x10) ===
+  ctx.fillStyle = "#2F8AE0"; // póló kék (Steve: cyános)
+  ctx.fillRect(centerX + 2, torsoTop, 8, 10);
+  // Világosabb bal oldal.
+  ctx.fillStyle = "#44A1F2";
+  ctx.fillRect(centerX + 2, torsoTop, 2, 10);
+  // Sötétebb jobb oldal.
+  ctx.fillStyle = "#1F6FBC";
+  ctx.fillRect(centerX + 9, torsoTop, 1, 10);
+  // Öv (alsó csík).
+  ctx.fillStyle = "#1A3C6E";
+  ctx.fillRect(centerX + 2, torsoTop + 9, 8, 1);
+
+  // === KAROK (2x 3x10) ===
+  // Bőrszín (kéz-alj).
+  ctx.fillStyle = "#CE9776";
+  const armLeftY = torsoTop + 1 + armSwing;
+  const armRightY = torsoTop + 1 - armSwing;
+  ctx.fillRect(centerX - 1, armLeftY + 7, 3, 3);
+  ctx.fillRect(centerX + 10, armRightY + 7, 3, 3);
+  // Póló-ujj (kék).
+  ctx.fillStyle = "#2F8AE0";
+  ctx.fillRect(centerX - 1, armLeftY, 3, 7);
+  ctx.fillRect(centerX + 10, armRightY, 3, 7);
+  // Világos bal-széle ujj.
+  ctx.fillStyle = "#44A1F2";
+  ctx.fillRect(centerX - 1, armLeftY, 1, 7);
+  ctx.fillRect(centerX + 10, armRightY, 1, 7);
+
+  // === FEJ (8x8) ===
+  // Haj (felső 2 sor + sarok).
+  ctx.fillStyle = "#46341E";
+  ctx.fillRect(centerX + 2, headTop, 8, 3);
+  ctx.fillRect(centerX + 2, headTop + 3, 1, 2);
+  ctx.fillRect(centerX + 9, headTop + 3, 1, 2);
+  // Arc bőrszín.
+  ctx.fillStyle = "#D5A07E";
+  ctx.fillRect(centerX + 3, headTop + 3, 6, 5);
+  // Arc árnyék (jobb oldal).
+  ctx.fillStyle = "#B78760";
+  ctx.fillRect(centerX + 8, headTop + 3, 1, 5);
+
+  // Szemek (2x1 fehér + 1 fekete pupilla).
+  const eyeY = headTop + 4;
+  const faceOffset = facing > 0 ? 0 : 0; // szimmetrikus szem mindkét irányban
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(centerX + 3 + faceOffset, eyeY, 2, 1);
+  ctx.fillRect(centerX + 6 + faceOffset, eyeY, 2, 1);
+  ctx.fillStyle = "#2A5ACE"; // kék szem
+  ctx.fillRect(centerX + 4 + (facing > 0 ? 0 : -1), eyeY, 1, 1);
+  ctx.fillRect(centerX + 7 + (facing > 0 ? 0 : -1), eyeY, 1, 1);
+
+  // Orr.
+  ctx.fillStyle = "#B78760";
+  ctx.fillRect(centerX + 5, headTop + 5, 1, 1);
+
+  // Száj.
+  ctx.fillStyle = "#6B3A1E";
+  ctx.fillRect(centerX + 4, headTop + 7, 4, 1);
+
+  // Szakáll (sötétebb csík az állon).
+  ctx.fillStyle = "#3E2C16";
+  ctx.fillRect(centerX + 3, headTop + 6, 1, 1);
+  ctx.fillRect(centerX + 8, headTop + 6, 1, 1);
 }
 
 function MenuBlock({ t }: { t: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current?.getContext("2d");
-    if (c) drawBlock(c, 0, 0, t, performance.now(), 0, 0);
+    if (c) {
+      c.imageSmoothingEnabled = false;
+      drawBlock(c, 0, 0, t, performance.now(), 0, 0);
+    }
   }, [t]);
-  return <canvas ref={ref} width={TILE} height={TILE} className="rounded border border-black/40" />;
+  return <canvas ref={ref} width={TILE} height={TILE} className="rounded border border-black/40" style={{ imageRendering: "pixelated" as const }} />;
 }
 
 type Phase = "menu" | "play" | "quiz" | "over";
@@ -505,6 +886,7 @@ export default function BlockCraftQuiz() {
   const particlesRef = useRef<Particle[]>([]);
   const streakRef = useRef(0);
   const xpPopupRef = useRef<{ amount: number; wx: number; wy: number; life: number } | null>(null);
+  const hoverCellRef = useRef<{ c: number; r: number } | null>(null);
 
   const [phase, setPhase] = useState<Phase>("menu");
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -581,6 +963,9 @@ export default function BlockCraftQuiz() {
       const tcx = tc * TILE + TILE / 2;
       p.facing = tcx >= p.x + PLAYER_W / 2 ? 1 : -1;
       mineTargetRef.current = { c: tc, r: tr, t };
+      // Stale-hover visszaállítás play → quiz átmenetnél (Eszter F2c PARTIAL finding):
+      // kvíz megjelenése előtt nincs szükség hover indikátorra.
+      hoverCellRef.current = null;
       setQuiz(pickQuiz());
       setPhase("quiz");
       return true;
@@ -608,6 +993,8 @@ export default function BlockCraftQuiz() {
     cameraRef.current = { x: 0, y: 0 };
     particlesRef.current = [];
     xpPopupRef.current = null;
+    // Stale-hover visszaállítás (Eszter F2 LOW finding — új kör kezdetekor ne maradjon kijelölés).
+    hoverCellRef.current = null;
     setAchievement(null);
     setSessionXp(0);
     setStreak(0);
@@ -621,6 +1008,8 @@ export default function BlockCraftQuiz() {
 
   const endRun = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
+    // Stale-hover visszaállítás kör-végnél is (Eszter F2 LOW finding).
+    hoverCellRef.current = null;
     setPhase("over");
   }, []);
 
@@ -659,6 +1048,8 @@ export default function BlockCraftQuiz() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    // Pixel-perfect renderelés (Minecraft-stílusú): nincs bilinear smoothing.
+    ctx.imageSmoothingEnabled = false;
 
     const loop = (t: number) => {
       const last = lastTRef.current;
@@ -779,15 +1170,19 @@ export default function BlockCraftQuiz() {
         }
       }
 
+      // Klasszikus Minecraft pixel-nap és (éjszaka) hold: négyzetes, pixeles, sarokvilágítással.
       const sunOrbit = t * 0.00005;
       const sunX = CW * 0.52 + Math.cos(sunOrbit) * CW * 0.42;
       const sunY = 54 + Math.sin(sunOrbit * 1.35) * 22;
-      const sun = ctx.createRadialGradient(sunX, sunY, 5, sunX, sunY, 64);
-      sun.addColorStop(0, "rgba(255,248,220,0.95)");
-      sun.addColorStop(0.4, "rgba(255,230,150,0.38)");
-      sun.addColorStop(1, "rgba(255,200,100,0)");
-      ctx.fillStyle = sun;
-      ctx.fillRect(0, 0, CW, CH);
+      const moonX = CW - sunX;
+      const moonY = sunY;
+      // Nappal: nap. Éjszaka (cycle < 0.45): hold fokozatos halványulással.
+      if (cycle > 0.1) {
+        drawMcSun(ctx, sunX, sunY);
+      }
+      if (cycle < 0.55) {
+        drawMcMoon(ctx, moonX, moonY, Math.min(1, (0.55 - cycle) * 3));
+      }
 
       ctx.fillStyle = "rgba(22,58,36,0.3)";
       ctx.beginPath();
@@ -803,14 +1198,8 @@ export default function BlockCraftQuiz() {
       ctx.lineTo(0, CH);
       ctx.fill();
 
-      for (let i = 0; i < 5; i++) {
-        const cloudSpeed = 0.018 + i * 0.004;
-        const cx = ((i * 170 + t * cloudSpeed) % (CW + 260)) - 120;
-        const cy = 20 + (i % 3) * 20;
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        ctx.fillRect(cx, cy, 48, 12);
-        ctx.fillRect(cx + 10, cy - 6, 26, 8);
-      }
+      // Klasszikus Minecraft pixel-felhők: többrétegű, lapos, pixeles.
+      drawMcClouds(ctx, t, CW);
 
       const c0 = Math.floor(camX / TILE);
       const c1 = Math.ceil((camX + CW) / TILE) + 1;
@@ -818,13 +1207,46 @@ export default function BlockCraftQuiz() {
         for (let c = Math.max(0, c0); c < Math.min(COLS, c1); c++) {
           const cell = w[r * COLS + c] ?? AIR;
           if (cell) {
-            drawBlock(ctx, c * TILE - camX, r * TILE - camY, cell, t, c, r, {
-              sunX,
-              sunY,
-              viewW: CW,
-              viewH: CH,
-            });
+            // Ambient Occlusion: szomszédos szilárd cellák lekérdezése (három oldalról világséta).
+            const top = r > 0 ? solid(w[(r - 1) * COLS + c] ?? AIR) : false;
+            const bottom = r < ROWS - 1 ? solid(w[(r + 1) * COLS + c] ?? AIR) : false;
+            const left = c > 0 ? solid(w[r * COLS + (c - 1)] ?? AIR) : false;
+            const right = c < COLS - 1 ? solid(w[r * COLS + (c + 1)] ?? AIR) : false;
+            drawBlock(
+              ctx,
+              c * TILE - camX,
+              r * TILE - camY,
+              cell,
+              t,
+              c,
+              r,
+              { sunX, sunY, viewW: CW, viewH: CH },
+              { top, bottom, left, right },
+            );
           }
+        }
+      }
+
+      // Hover outline (klasszikus Minecraft fekete pixel-keret a célzott blokk körül).
+      const hover = hoverCellRef.current;
+      if (hover) {
+        const cell = w[hover.r * COLS + hover.c] ?? AIR;
+        if (cell && mineable(cell) && playerCanReachTile(p, hover.c, hover.r)) {
+          const hx = Math.round(hover.c * TILE - camX);
+          const hy = Math.round(hover.r * TILE - camY);
+          // Külső fekete keret.
+          ctx.fillStyle = "rgba(0,0,0,0.9)";
+          ctx.fillRect(hx - 1, hy - 1, TILE + 2, 1);
+          ctx.fillRect(hx - 1, hy + TILE, TILE + 2, 1);
+          ctx.fillRect(hx - 1, hy - 1, 1, TILE + 2);
+          ctx.fillRect(hx + TILE, hy - 1, 1, TILE + 2);
+          // Finom világos belső pulzálás.
+          const pulse = 0.3 + Math.sin(t * 0.008) * 0.3;
+          ctx.fillStyle = `rgba(255,255,255,${pulse})`;
+          ctx.fillRect(hx, hy, TILE, 1);
+          ctx.fillRect(hx, hy + TILE - 1, TILE, 1);
+          ctx.fillRect(hx, hy, 1, TILE);
+          ctx.fillRect(hx + TILE - 1, hy, 1, TILE);
         }
       }
 
@@ -939,6 +1361,9 @@ export default function BlockCraftQuiz() {
     }
     mineTargetRef.current = null;
     setQuiz(null);
+    // Stale-hover visszaállítás quiz → play átmenetnél is (Eszter F2c PARTIAL finding):
+    // ha a játékos a quiz alatt nem mozgatja a kurzort, a korábbi highlight újra felvillanhat.
+    hoverCellRef.current = null;
     {
       const p = playerRef.current;
       p.vx = 0;
@@ -1018,6 +1443,28 @@ export default function BlockCraftQuiz() {
     [phase, tryMine, tryMineAt],
   );
 
+  /** Hover-outline: a kurzor / ujj alatti blokk célzókeretéhez. */
+  const onCanvasPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      if (phase !== "play") return;
+      const canvas = e.currentTarget;
+      const { x, y } = pointerOnCanvas(canvas, e.clientX, e.clientY);
+      const cam = cameraRef.current;
+      const tc = Math.floor((x + cam.x) / TILE);
+      const tr = Math.floor((y + cam.y) / TILE);
+      if (tc < 0 || tc >= COLS || tr < 0 || tr >= ROWS) {
+        hoverCellRef.current = null;
+        return;
+      }
+      hoverCellRef.current = { c: tc, r: tr };
+    },
+    [phase],
+  );
+
+  const onCanvasPointerLeave = useCallback(() => {
+    hoverCellRef.current = null;
+  }, []);
+
   return (
     <div className="min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
@@ -1048,7 +1495,7 @@ export default function BlockCraftQuiz() {
 
           {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-amber-100/95 text-center max-w-sm font-semibold">A zöld sáv fent = mennyi időd van a körből. Minél több jó kvíz, annál több XP és hosszabb sorozat!</p><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgás, Space: ugrás, E vagy Bányász: kvíz. Koppints a kockára is, ha közel vagy hozzá.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Új világ — indulhat a bányászat!</Button></div>}
 
-          {phase === "play" && <div className="flex flex-col items-center gap-1.5">{/* === CANVAS LEGFELÜL (mobil-first) === */}<div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]"><canvas ref={canvasRef} className="block touch-manipulation w-full max-w-full cursor-crosshair" onPointerDown={onCanvasPointerDown} /></div>{/* === KONTROLLGOMBOK közvetlenül a canvas alatt === */}<div className="grid grid-cols-4 gap-1.5 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugrás</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={() => tryMine()}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button></div>{/* === KOMPAKT HUD sáv === */}<div className="w-full flex items-center gap-1.5"><div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500 transition-all" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span></div><div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70"><span>XP: <strong className="text-amber-300">{sessionXp}</strong></span><span>Blokk: {blocksMined}</span><span>Érc: {rareBlocks}</span><span className="flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-400" />{streak}</span></div>{/* === Cél sáv (kompakt) === */}<GameNextGoalBar accent="lime" headline={streak >= ROUND_STREAK_GOAL ? "Szuper sorozat!" : `${streak}/${ROUND_STREAK_GOAL} jó egymás után`} subtitle="" current={Math.min(streak, ROUND_STREAK_GOAL)} target={ROUND_STREAK_GOAL} className="w-full" /><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600/80 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md text-xs px-3 py-1" onClick={endRun}>Kör vége</Button></div></div>}
+          {phase === "play" && <div className="flex flex-col items-center gap-1.5">{/* === CANVAS LEGFELÜL (mobil-first) === */}<div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]"><canvas ref={canvasRef} className="block touch-manipulation w-full max-w-full cursor-crosshair" style={{ imageRendering: "pixelated" as const }} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerLeave={onCanvasPointerLeave} /></div>{/* === KONTROLLGOMBOK közvetlenül a canvas alatt === */}<div className="grid grid-cols-4 gap-1.5 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugrás</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={() => tryMine()}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button></div>{/* === KOMPAKT HUD sáv === */}<div className="w-full flex items-center gap-1.5"><div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500 transition-all" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span></div><div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70"><span>XP: <strong className="text-amber-300">{sessionXp}</strong></span><span>Blokk: {blocksMined}</span><span>Érc: {rareBlocks}</span><span className="flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-400" />{streak}</span></div>{/* === Cél sáv (kompakt) === */}<GameNextGoalBar accent="lime" headline={streak >= ROUND_STREAK_GOAL ? "Szuper sorozat!" : `${streak}/${ROUND_STREAK_GOAL} jó egymás után`} subtitle="" current={Math.min(streak, ROUND_STREAK_GOAL)} target={ROUND_STREAK_GOAL} className="w-full" /><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600/80 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md text-xs px-3 py-1" onClick={endRun}>Kör vége</Button></div></div>}
 
           {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Bányászat vége</p><p className="text-sm font-semibold text-lime-100/90 max-w-sm">Minden jó kvíz angol szavakat erősített — nézd meg az XP-t és a sorozatot: ez a munkád gyümölcse!</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong></p>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Új világ</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
         </CardContent></Card>
