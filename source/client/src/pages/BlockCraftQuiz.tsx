@@ -11,16 +11,16 @@ import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 
 const TILE = 24;
-const ROWS = 16;
-const COLS = 64;
+const ROWS = 18;
+const COLS = 96;
 const GRAVITY = 2200;
 const MOVE_SPEED = 188;
 const JUMP_V = 550;
 const PLAYER_W = 14;
 const PLAYER_H = 26;
-const ROUND_LIMIT = 180;
+const ROUND_LIMIT = 360;
 /** Mini-cél a sorozat-sávhoz (látható „következő lépés”) */
-const ROUND_STREAK_GOAL = 5;
+const ROUND_STREAK_GOAL = 10;
 /** Koppintásos bányászás max. hatótáv (Chebyshev, „csempe” egységben); kisebb = kevésbé érzékeny messzi kockákra. */
 const MINING_REACH_TILES = 2.85;
 
@@ -37,88 +37,259 @@ const DIAMOND = 8;
 const BEDROCK = 9;
 /** Creeper mob a felszínen — bónusz kvíz, dupla XP */
 const CREEPER = 10;
+/** Homok: sivatag/tengerpart biom, könnyű bányászni */
+const SAND = 11;
+/** Víz: díszítő blokk (nem bányászható, tengeren / tavon található) */
+const WATER = 12;
 
-type Quiz = { prompt: string; options: string[]; correctIndex: number };
+type QuizSubject = "english" | "english-math" | "math" | "nature";
+type Quiz = { prompt: string; options: string[]; correctIndex: number; subject?: QuizSubject };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
 type QuizBankApi = {
   items: { prompt: string; options: string[]; correctIndex: number }[];
 };
 
 const QUIZ_FALLBACK: Quiz[] = [
-  { prompt: "„Stone” jelentése:", options: ["kő", "hó", "fény", "híd"], correctIndex: 0 },
-  { prompt: "„Pickaxe” jelentése:", options: ["lapát", "csákány", "kard", "háló"], correctIndex: 1 },
-  { prompt: "„Diamond” magyarul:", options: ["arany", "gyémánt", "szén", "vas"], correctIndex: 1 },
-  { prompt: "„Forest” magyarul:", options: ["tenger", "hegy", "erdő", "hűtő"], correctIndex: 2 },
-  { prompt: "„Build” jelentése:", options: ["épít", "fut", "ugrik", "bányászik"], correctIndex: 0 },
-  { prompt: "Mit jelent: „Craft a tool”?", options: ["eszközt készít", "futni tanul", "többet alszik", "vizet gyűjt"], correctIndex: 0 },
-  { prompt: "„Grass” magyarul:", options: ["fű", "jég", "kő", "ég"], correctIndex: 0 },
-  { prompt: "„Dirt” magyarul:", options: ["homok", "föld", "víz", "ég"], correctIndex: 1 },
-  { prompt: "„Wood” / faanyag angolul a játékban gyakran:", options: ["water", "wood", "wind", "wolf"], correctIndex: 1 },
-  { prompt: "„Leaves” jelentése:", options: ["gyökerek", "levelek", "kövek", "felhők"], correctIndex: 1 },
-  { prompt: "„Coal” magyarul:", options: ["réz", "szén", "cukor", "kő"], correctIndex: 1 },
-  { prompt: "„Iron” magyarul:", options: ["arany", "vas", "ezüst", "réz"], correctIndex: 1 },
-  { prompt: "„Jump” jelentése:", options: ["fut", "ugrás / ugrik", "áll", "esik"], correctIndex: 1 },
-  { prompt: "„Mine” ebben a játékban:", options: ["fest", "bányászik", "főz", "úszik"], correctIndex: 1 },
-  { prompt: "„Block” jelentése:", options: ["kocka / blokk", "labda", "ajtó", "ablak"], correctIndex: 0 },
-  { prompt: "„Sky” magyarul:", options: ["föld", "ég / égbolt", "víz", "erdő"], correctIndex: 1 },
-  { prompt: "„River” magyarul:", options: ["hegy", "folyó", "út", "ház"], correctIndex: 1 },
-  { prompt: "„Bridge” magyarul:", options: ["híd", "bástya", "bokor", "bárány"], correctIndex: 0 },
-  { prompt: "„Castle” magyarul:", options: ["kert", "vár", "vonat", "villa"], correctIndex: 1 },
-  { prompt: "„Star” magyarul:", options: ["hold", "csillag", "felhő", "szél"], correctIndex: 1 },
-  { prompt: "„Moon” magyarul:", options: ["nap", "hold", "hó", "hajó"], correctIndex: 1 },
-  { prompt: "„Rain” magyarul:", options: ["hó", "eső", "szél", "nap"], correctIndex: 1 },
-  { prompt: "„Snow” magyarul:", options: ["jég", "hó", "eső", "homok"], correctIndex: 1 },
-  { prompt: "„Happy” magyarul:", options: ["szomorú", "boldog", "fáradt", "mérges"], correctIndex: 1 },
-  { prompt: "„Big” magyarul:", options: ["kicsi", "nagy", "lassú", "rövid"], correctIndex: 1 },
-  { prompt: "„Small” magyarul:", options: ["nagy", "kicsi", "kövér", "mély"], correctIndex: 1 },
+  // ============================================================
+  // === ANGOL SZÓKINCS (alap, Minecraft-témájú) ================
+  // ============================================================
+  { prompt: "„Stone” jelentése:", options: ["kő", "hó", "fény", "híd"], correctIndex: 0, subject: "english" },
+  { prompt: "„Pickaxe” jelentése:", options: ["lapát", "csákány", "kard", "háló"], correctIndex: 1, subject: "english" },
+  { prompt: "„Diamond” magyarul:", options: ["arany", "gyémánt", "szén", "vas"], correctIndex: 1, subject: "english" },
+  { prompt: "„Forest” magyarul:", options: ["tenger", "hegy", "erdő", "hűtő"], correctIndex: 2, subject: "english" },
+  { prompt: "„Build” jelentése:", options: ["épít", "fut", "ugrik", "bányászik"], correctIndex: 0, subject: "english" },
+  { prompt: "Mit jelent: „Craft a tool”?", options: ["eszközt készít", "futni tanul", "többet alszik", "vizet gyűjt"], correctIndex: 0, subject: "english" },
+  { prompt: "„Grass” magyarul:", options: ["fű", "jég", "kő", "ég"], correctIndex: 0, subject: "english" },
+  { prompt: "„Dirt” magyarul:", options: ["homok", "föld", "víz", "ég"], correctIndex: 1, subject: "english" },
+  { prompt: "„Wood” / faanyag angolul a játékban gyakran:", options: ["water", "wood", "wind", "wolf"], correctIndex: 1, subject: "english" },
+  { prompt: "„Leaves” jelentése:", options: ["gyökerek", "levelek", "kövek", "felhők"], correctIndex: 1, subject: "english" },
+  { prompt: "„Coal” magyarul:", options: ["réz", "szén", "cukor", "kő"], correctIndex: 1, subject: "english" },
+  { prompt: "„Iron” magyarul:", options: ["arany", "vas", "ezüst", "réz"], correctIndex: 1, subject: "english" },
+  { prompt: "„Jump” jelentése:", options: ["fut", "ugrás / ugrik", "áll", "esik"], correctIndex: 1, subject: "english" },
+  { prompt: "„Mine” ebben a játékban:", options: ["fest", "bányászik", "főz", "úszik"], correctIndex: 1, subject: "english" },
+  { prompt: "„Block” jelentése:", options: ["kocka / blokk", "labda", "ajtó", "ablak"], correctIndex: 0, subject: "english" },
+  { prompt: "„Sky” magyarul:", options: ["föld", "ég / égbolt", "víz", "erdő"], correctIndex: 1, subject: "english" },
+  { prompt: "„River” magyarul:", options: ["hegy", "folyó", "út", "ház"], correctIndex: 1, subject: "english" },
+  { prompt: "„Bridge” magyarul:", options: ["híd", "bástya", "bokor", "bárány"], correctIndex: 0, subject: "english" },
+  { prompt: "„Castle” magyarul:", options: ["kert", "vár", "vonat", "villa"], correctIndex: 1, subject: "english" },
+  { prompt: "„Star” magyarul:", options: ["hold", "csillag", "felhő", "szél"], correctIndex: 1, subject: "english" },
+  { prompt: "„Moon” magyarul:", options: ["nap", "hold", "hó", "hajó"], correctIndex: 1, subject: "english" },
+  { prompt: "„Rain” magyarul:", options: ["hó", "eső", "szél", "nap"], correctIndex: 1, subject: "english" },
+  { prompt: "„Snow” magyarul:", options: ["jég", "hó", "eső", "homok"], correctIndex: 1, subject: "english" },
+  { prompt: "„Happy” magyarul:", options: ["szomorú", "boldog", "fáradt", "mérges"], correctIndex: 1, subject: "english" },
+  { prompt: "„Big” magyarul:", options: ["kicsi", "nagy", "lassú", "rövid"], correctIndex: 1, subject: "english" },
+  { prompt: "„Small” magyarul:", options: ["nagy", "kicsi", "kövér", "mély"], correctIndex: 1, subject: "english" },
   // === SZITUÁCIÓS MINECRAFT KÉRDÉSEK ===
-  { prompt: "Éjszaka van, zombik jönnek! Mit csinálsz?", options: ["Build a shelter", "Go swimming", "Take a nap", "Eat diamonds"], correctIndex: 0 },
-  { prompt: "A creeper felrobban! Angolul:", options: ["The creeper explodes!", "The creeper sleeps", "The creeper sings", "The creeper dances"], correctIndex: 0 },
-  { prompt: "Hogyan mondod: 'Készíts egy kardot'?", options: ["Craft a sword", "Cook a sword", "Plant a sword", "Drink a sword"], correctIndex: 0 },
-  { prompt: "Mit jelent: 'Watch out for lava!'?", options: ["Vigyázz a lávára!", "Nézd a vizet!", "Keresd a gyémántot!", "Építs házat!"], correctIndex: 0 },
-  { prompt: "Éhes vagy Minecraftban. Mit csinálsz?", options: ["Find food", "Mine stone", "Jump around", "Sleep outside"], correctIndex: 0 },
-  { prompt: "'You found diamonds!' mit jelent?", options: ["Gyémántot találtál!", "Köveket látod!", "Fát vágsz!", "Vizet iszol!"], correctIndex: 0 },
-  { prompt: "Milyen eszközzel bányászol követ? Angolul:", options: ["With a pickaxe", "With a sword", "With a shovel", "With a bucket"], correctIndex: 0 },
-  { prompt: "'Help! A skeleton is shooting at me!' mit jelent?", options: ["Segítség! Egy csontváz lő rám!", "Segítség! Éhes vagyok!", "Hol van a ház?", "Fussunk!"], correctIndex: 0 },
-  { prompt: "'It’s dangerous to go alone!' mit jelent?", options: ["Veszélyes egyedl menni!", "Gyorsan bányássz!", "Keress vizet!", "Hol a gyémánt?"], correctIndex: 0 },
-  { prompt: "'Run! The creeper is behind you!' mit jelent?", options: ["Fuss! A creeper mögötted van!", "Allé! Zombi jön!", "Keress barlangot!", "Gyúíts tüzet!"], correctIndex: 0 },
+  { prompt: "Éjszaka van, zombik jönnek! Mit csinálsz?", options: ["Build a shelter", "Go swimming", "Take a nap", "Eat diamonds"], correctIndex: 0, subject: "english" },
+  { prompt: "A creeper felrobban! Angolul:", options: ["The creeper explodes!", "The creeper sleeps", "The creeper sings", "The creeper dances"], correctIndex: 0, subject: "english" },
+  { prompt: "Hogyan mondod: 'Készíts egy kardot'?", options: ["Craft a sword", "Cook a sword", "Plant a sword", "Drink a sword"], correctIndex: 0, subject: "english" },
+  { prompt: "Mit jelent: 'Watch out for lava!'?", options: ["Vigyázz a lávára!", "Nézd a vizet!", "Keresd a gyémántot!", "Építs házat!"], correctIndex: 0, subject: "english" },
+  { prompt: "Éhes vagy Minecraftban. Mit csinálsz?", options: ["Find food", "Mine stone", "Jump around", "Sleep outside"], correctIndex: 0, subject: "english" },
+  { prompt: "'You found diamonds!' mit jelent?", options: ["Gyémántot találtál!", "Köveket látod!", "Fát vágsz!", "Vizet iszol!"], correctIndex: 0, subject: "english" },
+  { prompt: "Milyen eszközzel bányászol követ? Angolul:", options: ["With a pickaxe", "With a sword", "With a shovel", "With a bucket"], correctIndex: 0, subject: "english" },
+  { prompt: "'Help! A skeleton is shooting at me!' mit jelent?", options: ["Segítség! Egy csontváz lő rám!", "Segítség! Éhes vagyok!", "Hol van a ház?", "Fussunk!"], correctIndex: 0, subject: "english" },
+  { prompt: "'It’s dangerous to go alone!' mit jelent?", options: ["Veszélyes egyedl menni!", "Gyorsan bányássz!", "Keress vizet!", "Hol a gyémánt?"], correctIndex: 0, subject: "english" },
+  { prompt: "'Run! The creeper is behind you!' mit jelent?", options: ["Fuss! A creeper mögötted van!", "Allé! Zombi jön!", "Keress barlangot!", "Gyúíts tüzet!"], correctIndex: 0, subject: "english" },
   // === CRAFTING RECEPTEK ===
-  { prompt: "Mi kell a fáklyához? (angolul)", options: ["Coal + Stick", "Iron + Wood", "Diamond + Stone", "Grass + Dirt"], correctIndex: 0 },
-  { prompt: "'Crafting table' magyarul:", options: ["munkasztal / kézműasztal", "konyhaasztal", "íróasztal", "kereskedő"], correctIndex: 0 },
-  { prompt: "Mi kell a kardhoz? (alap: fa + fa) Angolul:", options: ["Wood + Wood", "Stone + Grass", "Coal + Stick", "Dirt + Sand"], correctIndex: 0 },
-  { prompt: "'Sword' magyarul:", options: ["kard", "pajzs", "páncél", "nyíl"], correctIndex: 0 },
-  { prompt: "'Bow' magyarul a Minecraftban:", options: ["ij", "kard", "pajzs", "csákány"], correctIndex: 0 },
+  { prompt: "Mi kell a fáklyához? (angolul)", options: ["Coal + Stick", "Iron + Wood", "Diamond + Stone", "Grass + Dirt"], correctIndex: 0, subject: "english" },
+  { prompt: "'Crafting table' magyarul:", options: ["munkasztal / kézműasztal", "konyhaasztal", "íróasztal", "kereskedő"], correctIndex: 0, subject: "english" },
+  { prompt: "Mi kell a kardhoz? (alap: fa + fa) Angolul:", options: ["Wood + Wood", "Stone + Grass", "Coal + Stick", "Dirt + Sand"], correctIndex: 0, subject: "english" },
+  { prompt: "'Sword' magyarul:", options: ["kard", "pajzs", "páncél", "nyíl"], correctIndex: 0, subject: "english" },
+  { prompt: "'Bow' magyarul a Minecraftban:", options: ["ij", "kard", "pajzs", "csákány"], correctIndex: 0, subject: "english" },
   // === MOB-OK ANGOLUL ===
-  { prompt: "Skeleton = ?", options: ["csontváz", "zombi", "pók", "deneér"], correctIndex: 0 },
-  { prompt: "A 'Villager' magyarul:", options: ["falusi", "katona", "király", "boszorkány"], correctIndex: 0 },
-  { prompt: "Creeper = ?", options: ["robbanó zöld szörny", "repülő deneér", "vörös sárkány", "vízi hal"], correctIndex: 0 },
-  { prompt: "Zombie = ?", options: ["zombi", "démon", "kísértet", "varjú"], correctIndex: 0 },
-  { prompt: "Spider = ?", options: ["pók", "hangya", "méh", "bogarak"], correctIndex: 0 },
-  { prompt: "Witch = ?", options: ["boszorkány", "harcos", "varázslos herceg", "tündér"], correctIndex: 0 },
-  { prompt: "Enderman = ?", options: ["magas fekete lény", "zöld creeper", "csontváz", "vízi szörny"], correctIndex: 0 },
+  { prompt: "Skeleton = ?", options: ["csontváz", "zombi", "pók", "deneér"], correctIndex: 0, subject: "english" },
+  { prompt: "A 'Villager' magyarul:", options: ["falusi", "katona", "király", "boszorkány"], correctIndex: 0, subject: "english" },
+  { prompt: "Creeper = ?", options: ["robbanó zöld szörny", "repülő deneér", "vörös sárkány", "vízi hal"], correctIndex: 0, subject: "english" },
+  { prompt: "Zombie = ?", options: ["zombi", "démon", "kísértet", "varjú"], correctIndex: 0, subject: "english" },
+  { prompt: "Spider = ?", options: ["pók", "hangya", "méh", "bogarak"], correctIndex: 0, subject: "english" },
+  { prompt: "Witch = ?", options: ["boszorkány", "harcos", "varázslos herceg", "tündér"], correctIndex: 0, subject: "english" },
+  { prompt: "Enderman = ?", options: ["magas fekete lény", "zöld creeper", "csontváz", "vízi szörny"], correctIndex: 0, subject: "english" },
   // === BIOME-OK ===
-  { prompt: "Desert biome = ?", options: ["sivatag", "óceán", "dzsungel", "hegy"], correctIndex: 0 },
-  { prompt: "'Nether' magyarul kb.:", options: ["alvílág / pokol", "mennyország", "óceán", "erdő"], correctIndex: 0 },
-  { prompt: "Jungle biome = ?", options: ["dzsungel", "sivatag", "tundra", "folyó"], correctIndex: 0 },
-  { prompt: "Ocean biome = ?", options: ["óceán", "hegy", "völgy", "barlang"], correctIndex: 0 },
-  { prompt: "Swamp biome = ?", options: ["mocsár", "sivatag", "mező", "tenger"], correctIndex: 0 },
+  { prompt: "Desert biome = ?", options: ["sivatag", "óceán", "dzsungel", "hegy"], correctIndex: 0, subject: "english" },
+  { prompt: "'Nether' magyarul kb.:", options: ["alvílág / pokol", "mennyország", "óceán", "erdő"], correctIndex: 0, subject: "english" },
+  { prompt: "Jungle biome = ?", options: ["dzsungel", "sivatag", "tundra", "folyó"], correctIndex: 0, subject: "english" },
+  { prompt: "Ocean biome = ?", options: ["óceán", "hegy", "völgy", "barlang"], correctIndex: 0, subject: "english" },
+  { prompt: "Swamp biome = ?", options: ["mocsár", "sivatag", "mező", "tenger"], correctIndex: 0, subject: "english" },
   // === SURVIVAL TIPPEK ===
-  { prompt: "First night tip: 'Dig into a hillside!' Mit jelent?", options: ["Áss bele egy dombba!", "Ugorj a vízbe!", "Fuss el!", "Aludj a fán!"], correctIndex: 0 },
-  { prompt: "'Always bring food on adventures!' mit jelent?", options: ["Mindig vigyél ételt a kalandhoz!", "Felejtsd el az ételt!", "Csak vizet igyy", "Aludj sokat!"], correctIndex: 0 },
-  { prompt: "'Mine deeper for rare ores!' mit jelent?", options: ["Mélyebbre bányássz ritka ércekért!", "Maradj a felszínen!", "Keress vizet!", "Gyűjts fát!"], correctIndex: 0 },
-  { prompt: "'Don't dig straight down!' mit jelent?", options: ["Ne áss egyenesen le!", "Mindig lefelé ássz!", "Gyorsan fuss!", "Bányássz követ!"], correctIndex: 0 },
+  { prompt: "First night tip: 'Dig into a hillside!' Mit jelent?", options: ["Áss bele egy dombba!", "Ugorj a vízbe!", "Fuss el!", "Aludj a fán!"], correctIndex: 0, subject: "english" },
+  { prompt: "'Always bring food on adventures!' mit jelent?", options: ["Mindig vigyél ételt a kalandhoz!", "Felejtsd el az ételt!", "Csak vizet igyy", "Aludj sokat!"], correctIndex: 0, subject: "english" },
+  { prompt: "'Mine deeper for rare ores!' mit jelent?", options: ["Mélyebbre bányássz ritka ércekért!", "Maradj a felszínen!", "Keress vizet!", "Gyűjts fát!"], correctIndex: 0, subject: "english" },
+  { prompt: "'Don't dig straight down!' mit jelent?", options: ["Ne áss egyenesen le!", "Mindig lefelé ássz!", "Gyorsan fuss!", "Bányássz követ!"], correctIndex: 0, subject: "english" },
   // === EXTRA SZÓKINCS ===
-  { prompt: "'Shield' magyarul:", options: ["pajzs", "kard", "sisak", "csizma"], correctIndex: 0 },
-  { prompt: "'Armor' magyarul:", options: ["páncél", "kesztyű", "sapka", "táska"], correctIndex: 0 },
-  { prompt: "'Cave' magyarul:", options: ["barlang", "folyó", "völgy", "domb"], correctIndex: 0 },
-  { prompt: "'Lava' magyarul:", options: ["láva", "víz", "homok", "jég"], correctIndex: 0 },
-  { prompt: "'Torch' magyarul:", options: ["fáklya", "lámpa", "gyertya", "tűz"], correctIndex: 0 },
-  { prompt: "'Chest' magyarul a játékban:", options: ["láda / mellény", "asztal", "ajtó", "ablak"], correctIndex: 0 },
-  { prompt: "'Spawn' jelentése Minecraftban:", options: ["megjelenés / születési pont", "tárgy", "csontváz", "bányász"], correctIndex: 0 },
-  { prompt: "Hogyan mondod: 'Gyere ide!'?", options: ["Come here!", "Go away!", "Mine this!", "Build that!"], correctIndex: 0 },
-  { prompt: "'Careful!' angolul, ha veszely van:", options: ["Careful! / Watch out!", "Hello!", "Good job!", "Let's go!"], correctIndex: 0 },
-  { prompt: "'Hungry' magyarul:", options: ["éhes", "szomjas", "fáradt", "beteg"], correctIndex: 0 },
-  { prompt: "'Dangerous' magyarul:", options: ["veszélyes", "békés", "mély", "gyönyörű"], correctIndex: 0 },
+  { prompt: "'Shield' magyarul:", options: ["pajzs", "kard", "sisak", "csizma"], correctIndex: 0, subject: "english" },
+  { prompt: "'Armor' magyarul:", options: ["páncél", "kesztyű", "sapka", "táska"], correctIndex: 0, subject: "english" },
+  { prompt: "'Cave' magyarul:", options: ["barlang", "folyó", "völgy", "domb"], correctIndex: 0, subject: "english" },
+  { prompt: "'Lava' magyarul:", options: ["láva", "víz", "homok", "jég"], correctIndex: 0, subject: "english" },
+  { prompt: "'Torch' magyarul:", options: ["fáklya", "lámpa", "gyertya", "tűz"], correctIndex: 0, subject: "english" },
+  { prompt: "'Chest' magyarul a játékban:", options: ["láda / mellény", "asztal", "ajtó", "ablak"], correctIndex: 0, subject: "english" },
+  { prompt: "'Spawn' jelentése Minecraftban:", options: ["megjelenés / születési pont", "tárgy", "csontváz", "bányász"], correctIndex: 0, subject: "english" },
+  { prompt: "Hogyan mondod: 'Gyere ide!'?", options: ["Come here!", "Go away!", "Mine this!", "Build that!"], correctIndex: 0, subject: "english" },
+  { prompt: "'Careful!' angolul, ha veszely van:", options: ["Careful! / Watch out!", "Hello!", "Good job!", "Let's go!"], correctIndex: 0, subject: "english" },
+  { prompt: "'Hungry' magyarul:", options: ["éhes", "szomjas", "fáradt", "beteg"], correctIndex: 0, subject: "english" },
+  { prompt: "'Dangerous' magyarul:", options: ["veszélyes", "békés", "mély", "gyönyörű"], correctIndex: 0, subject: "english" },
+  // ============================================================
+  // === ANGOL MATEMATIKA (math vocabulary + egyszerű műveletek) =
+  // ============================================================
+  { prompt: "What is 'add' in Hungarian?", options: ["szoroz", "összead", "kivon", "oszt"], correctIndex: 1, subject: "english-math" },
+  { prompt: "What is 'subtract' in Hungarian?", options: ["összead", "kivon", "szoroz", "oszt"], correctIndex: 1, subject: "english-math" },
+  { prompt: "What is 'multiply' in Hungarian?", options: ["szoroz", "összead", "kivon", "oszt"], correctIndex: 0, subject: "english-math" },
+  { prompt: "What is 'divide' in Hungarian?", options: ["szoroz", "oszt", "összead", "kivon"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Two plus three equals?' (2 + 3 = ?)", options: ["four", "five", "six", "seven"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Four times two equals?' (4 × 2 = ?)", options: ["six", "eight", "ten", "twelve"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Ten minus four equals?' (10 - 4 = ?)", options: ["five", "six", "seven", "eight"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Twelve divided by three equals?' (12 ÷ 3 = ?)", options: ["three", "four", "five", "six"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Half of ten is?' (10 fele?)", options: ["three", "four", "five", "six"], correctIndex: 2, subject: "english-math" },
+  { prompt: "'Double of six is?' (6 kétszerese?)", options: ["ten", "twelve", "fourteen", "sixteen"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Number' jelentése:", options: ["szám", "szín", "szó", "sor"], correctIndex: 0, subject: "english-math" },
+  { prompt: "'Equal' magyarul:", options: ["nagyobb", "egyenlő", "kisebb", "közel"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Greater than' magyarul:", options: ["kisebb, mint", "nagyobb, mint", "egyenlő", "nem egyenlő"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Less than' magyarul:", options: ["nagyobb, mint", "egyenlő", "kisebb, mint", "közel"], correctIndex: 2, subject: "english-math" },
+  { prompt: "'Sum' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 0, subject: "english-math" },
+  { prompt: "'Difference' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Product' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 2, subject: "english-math" },
+  { prompt: "'Quotient' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 3, subject: "english-math" },
+  { prompt: "'Triangle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 2, subject: "english-math" },
+  { prompt: "'Square' magyarul mértanban:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Circle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 0, subject: "english-math" },
+  { prompt: "'Rectangle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 3, subject: "english-math" },
+  { prompt: "'Half' magyarul:", options: ["egész", "fél", "negyed", "harmad"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Quarter' magyarul (tört):", options: ["egész", "fél", "negyed", "harmad"], correctIndex: 2, subject: "english-math" },
+  { prompt: "How many sides does a triangle have?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "english-math" },
+  { prompt: "How many sides does a square have?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Even number' magyarul:", options: ["páros szám", "páratlan szám", "prím szám", "nulla"], correctIndex: 0, subject: "english-math" },
+  { prompt: "'Odd number' magyarul:", options: ["páros szám", "páratlan szám", "prím szám", "nulla"], correctIndex: 1, subject: "english-math" },
+  // ============================================================
+  // === EGYSZERŰ MAGYAR MATEMATIKA (1-4. osztály szint) =========
+  // ============================================================
+  { prompt: "Mennyi 5 + 3?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 9 - 4?", options: ["3", "4", "5", "6"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 7 + 6?", options: ["11", "12", "13", "14"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 15 - 8?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 4 × 3?", options: ["9", "10", "11", "12"], correctIndex: 3, subject: "math" },
+  { prompt: "Mennyi 6 × 2?", options: ["10", "12", "14", "16"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 8 × 5?", options: ["35", "40", "45", "50"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 18 ÷ 3?", options: ["5", "6", "7", "8"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 24 ÷ 4?", options: ["5", "6", "7", "8"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 100 - 37?", options: ["53", "63", "73", "83"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 25 + 48?", options: ["63", "73", "83", "93"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány cm van 1 méterben?", options: ["10", "100", "1000", "10000"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány perc van 1 órában?", options: ["30", "45", "60", "100"], correctIndex: 2, subject: "math" },
+  { prompt: "Hány nap van 1 hétben?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math" },
+  { prompt: "Hány hónap van 1 évben?", options: ["10", "11", "12", "13"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi a 10 fele?", options: ["2", "4", "5", "6"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi a 8 kétszerese?", options: ["10", "14", "16", "18"], correctIndex: 2, subject: "math" },
+  { prompt: "Melyik a páros szám?", options: ["3", "7", "8", "11"], correctIndex: 2, subject: "math" },
+  { prompt: "Melyik a páratlan szám?", options: ["4", "6", "9", "10"], correctIndex: 2, subject: "math" },
+  { prompt: "Hány oldala van egy háromszögnek?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány oldala van egy négyzetnek?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány csúcsa van egy kockának?", options: ["4", "6", "8", "12"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 12 + 12?", options: ["22", "24", "26", "28"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány nulla van 1000-ben?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 7 × 7?", options: ["42", "49", "56", "63"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 9 × 9?", options: ["72", "81", "90", "99"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi a 20 fele?", options: ["8", "10", "12", "15"], correctIndex: 1, subject: "math" },
+  { prompt: "Ha 3 almám van és kapok 4-et, hány lesz?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math" },
+  { prompt: "Ha 10 cukorkám volt és 6-ot megettem, hány maradt?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 50 + 50?", options: ["90", "100", "110", "150"], correctIndex: 1, subject: "math" },
+  // ============================================================
+  // === KÖRNYEZETISMERET (egyszerű, 1-4. osztály szint) =========
+  // ============================================================
+  { prompt: "Mi a fő különbség a fa és a növény között?", options: ["A fa nagyobb, fás szárú növény", "A fa nem él", "A növény nem zöld", "Nincs különbség"], correctIndex: 0, subject: "nature" },
+  { prompt: "Mi a fő különbség a növény és az állat között?", options: ["A növény fotoszintetizál, az állat mozog és eszik", "Az állat mindig nagyobb", "A növény is eszik húst", "Nincs különbség"], correctIndex: 0, subject: "nature" },
+  { prompt: "Mit csinál a növény a napfénnyel?", options: ["Eszik", "Alszik", "Fotoszintetizál (táplálékot készít)", "Elfut"], correctIndex: 2, subject: "nature" },
+  { prompt: "Mi a tölgy?", options: ["Állat", "Fa", "Gomba", "Hal"], correctIndex: 1, subject: "nature" },
+  { prompt: "Melyik növény NEM fa?", options: ["tölgy", "bükk", "pipacs", "fenyő"], correctIndex: 2, subject: "nature" },
+  { prompt: "Melyik állat NEM emlős?", options: ["kutya", "macska", "tyúk", "ló"], correctIndex: 2, subject: "nature" },
+  { prompt: "Hány lába van egy póknak?", options: ["4", "6", "8", "10"], correctIndex: 2, subject: "nature" },
+  { prompt: "Hány lába van egy rovarnak (pl. méh)?", options: ["4", "6", "8", "10"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mit csinál a méh a virággal?", options: ["Eszi", "Nektárt gyűjt és beporzja", "Kitépi", "Elrejti"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mi lesz a lárvából idővel?", options: ["Növény", "Kő", "Pillangó vagy bogár", "Hal"], correctIndex: 2, subject: "nature" },
+  { prompt: "Melyik évszakban hullik le a levél?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 2, subject: "nature" },
+  { prompt: "Melyik évszakban van a legmelegebb?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mi a fő különbség nappal és éjszaka között?", options: ["A Föld forgása miatt a Nap látszólagos állása", "A Hold eltűnik", "A csillagok elfogynak", "Nincs különbség"], correctIndex: 0, subject: "nature" },
+  { prompt: "Mit iszik a növény?", options: ["tejet", "vizet (gyökerein át)", "levegőt", "semmit"], correctIndex: 1, subject: "nature" },
+  { prompt: "Hol él a hal?", options: ["levegőben", "földben", "vízben", "fán"], correctIndex: 2, subject: "nature" },
+  { prompt: "Mivel lélegzik a hal?", options: ["tüdővel", "kopoltyúval", "orral", "szájjal"], correctIndex: 1, subject: "nature" },
+  { prompt: "Melyik a mi bolygónk?", options: ["Mars", "Hold", "Föld", "Nap"], correctIndex: 2, subject: "nature" },
+  { prompt: "Mi a Nap?", options: ["csillag", "bolygó", "hold", "üstökös"], correctIndex: 0, subject: "nature" },
+  { prompt: "Mi a Hold?", options: ["csillag", "bolygó", "a Föld kísérője", "galaxis"], correctIndex: 2, subject: "nature" },
+  { prompt: "Hány napból áll egy hét?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "nature" },
+  { prompt: "Milyen halmazállapotú a jég?", options: ["folyékony", "szilárd", "légnemű", "ragadós"], correctIndex: 1, subject: "nature" },
+  { prompt: "Milyen halmazállapotú a víz?", options: ["folyékony", "szilárd", "légnemű", "kristályos"], correctIndex: 0, subject: "nature" },
+  { prompt: "Milyen halmazállapotú a levegő?", options: ["folyékony", "szilárd", "légnemű", "porszerű"], correctIndex: 2, subject: "nature" },
+  { prompt: "Mi képződik, ha a víz forró lesz?", options: ["Jég", "Gőz / pára", "Só", "Homok"], correctIndex: 1, subject: "nature" },
+  { prompt: "Melyik állat tojik tojást?", options: ["ló", "kutya", "tyúk", "macska"], correctIndex: 2, subject: "nature" },
+  { prompt: "Melyik NEM madár?", options: ["veréb", "galamb", "denevér", "fecske"], correctIndex: 2, subject: "nature" },
+  { prompt: "Mit eszik a nyúl?", options: ["húst", "növényeket (füvet, répát)", "köveket", "fémet"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mit eszik a farkas?", options: ["csak füvet", "csak gyümölcsöt", "húst (ragadozó)", "köveket"], correctIndex: 2, subject: "nature" },
+  { prompt: "Milyen halmazállapotú a gyémánt?", options: ["folyékony", "szilárd", "légnemű", "gázszerű"], correctIndex: 1, subject: "nature" },
+  { prompt: "Honnan származik az eső?", options: ["a földből", "a felhőkből", "a kőzetekből", "a fákból"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mitől nő a növény?", options: ["víztől, napfénytől, levegőtől", "csak vacsorától", "köztől", "semmitől"], correctIndex: 0, subject: "nature" },
+  { prompt: "Mi a legnagyobb szárazföldi állat?", options: ["oroszlán", "elefánt", "ló", "tigris"], correctIndex: 1, subject: "nature" },
+  { prompt: "Melyik a leghidegebb évszak?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 3, subject: "nature" },
+  // ============================================================
+  // === TOVÁBBI MATEMATIKA (bővítés v2, 2026-04-21) =============
+  // ============================================================
+  { prompt: "Mennyi 13 + 17?", options: ["28", "29", "30", "31"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 45 - 27?", options: ["16", "18", "20", "22"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 8 + 9?", options: ["16", "17", "18", "19"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 20 - 7?", options: ["11", "12", "13", "14"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 16 + 14?", options: ["28", "29", "30", "31"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 3 × 6?", options: ["15", "18", "21", "24"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 5 × 7?", options: ["30", "35", "40", "45"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 6 × 8?", options: ["42", "46", "48", "54"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 56 ÷ 7?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 72 ÷ 9?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 36 ÷ 6?", options: ["4", "5", "6", "7"], correctIndex: 2, subject: "math" },
+  { prompt: "Hány dm van 1 méterben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány mm van 1 cm-ben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány dkg van 1 kg-ban?", options: ["10", "100", "1000", "10000"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány dl van 1 literben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math" },
+  { prompt: "Hány másodperc van 1 percben?", options: ["30", "45", "60", "100"], correctIndex: 2, subject: "math" },
+  { prompt: "Hány óra van egy napon?", options: ["12", "18", "24", "48"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi a 100 fele?", options: ["25", "50", "75", "150"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi a 50 kétszerese?", options: ["75", "100", "150", "200"], correctIndex: 1, subject: "math" },
+  { prompt: "Melyik a legnagyobb?", options: ["25", "52", "125", "99"], correctIndex: 2, subject: "math" },
+  { prompt: "Melyik a legkisebb?", options: ["18", "81", "8", "28"], correctIndex: 2, subject: "math" },
+  { prompt: "Ha egy dobozban 6 ceruza van, hány ceruza van 4 dobozban?", options: ["20", "22", "24", "26"], correctIndex: 2, subject: "math" },
+  { prompt: "Ha 24 almát 4 embernek egyenlően osztunk, mennyi jut egynek?", options: ["4", "5", "6", "8"], correctIndex: 2, subject: "math" },
+  { prompt: "Ha 50-ből elveszek 15-öt, mennyi marad?", options: ["25", "30", "35", "40"], correctIndex: 2, subject: "math" },
+  { prompt: "Mennyi 1000 - 250?", options: ["650", "750", "850", "950"], correctIndex: 1, subject: "math" },
+  // ============================================================
+  // === TOVÁBBI KÖRNYEZETISMERET (bővítés v2) =====================
+  // ============================================================
+  { prompt: "Mi az a szivacs?", options: ["növény", "kőzet", "tengeri állat", "gáz"], correctIndex: 2, subject: "nature" },
+  { prompt: "Mi a különbség a gomba és a növény között?", options: ["A gomba nem fotoszintetizál", "A gomba mindig piros", "A gomba nem él", "Nincs különbség"], correctIndex: 0, subject: "nature" },
+  { prompt: "Melyik a legerősebb csontunk?", options: ["ujj", "comb", "fül", "orr"], correctIndex: 1, subject: "nature" },
+  { prompt: "Melyik szervvel lélegzünk?", options: ["máj", "tüdő", "gyomor", "vese"], correctIndex: 1, subject: "nature" },
+  { prompt: "Melyik szervvel pumpál vért a tested?", options: ["agy", "tüdő", "szív", "máj"], correctIndex: 2, subject: "nature" },
+  { prompt: "Milyen színű a vér a testedben?", options: ["kék", "piros", "zöld", "fekete"], correctIndex: 1, subject: "nature" },
+  { prompt: "Hány foga van egy felnőtt embernek (bölcsességfog nélkül)?", options: ["20", "28", "32", "40"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mit termel a növény nappal?", options: ["szén-dioxidot", "oxigént", "füstöt", "vizet"], correctIndex: 1, subject: "nature" },
+  { prompt: "Hol van a szív a testedben?", options: ["lábban", "fejben", "a mellkas bal oldalán", "a has jobb oldalán"], correctIndex: 2, subject: "nature" },
+  { prompt: "Melyik a legnagyobb óceán?", options: ["Atlanti", "Indiai", "Csendes (Pacific)", "Jégtenger"], correctIndex: 2, subject: "nature" },
+  { prompt: "Milyen bolygó a Mars?", options: ["gázóriás", "kőzetbolygó", "hold", "csillag"], correctIndex: 1, subject: "nature" },
+  { prompt: "Melyik állat a leggyorsabb?", options: ["csiga", "teknős", "gepárd", "ló"], correctIndex: 2, subject: "nature" },
+  { prompt: "Melyik állat szúr?", options: ["teve", "szarvas", "szúnyog", "nyuszi"], correctIndex: 2, subject: "nature" },
+  { prompt: "Hány kontinens van a Földön?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "nature" },
+  { prompt: "Mi a Szahara?", options: ["óceán", "sivatag", "folyó", "jégmező"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mi Magyarország fővárosa?", options: ["Debrecen", "Szeged", "Pécs", "Budapest"], correctIndex: 3, subject: "nature" },
+  { prompt: "Milyen hosszú az év?", options: ["300 nap", "365 nap", "400 nap", "500 nap"], correctIndex: 1, subject: "nature" },
+  // ============================================================
+  // === TOVÁBBI ANGOL MATEMATIKA (bővítés v2) =====================
+  // ============================================================
+  { prompt: "'Five plus six equals?' (5 + 6 = ?)", options: ["ten", "eleven", "twelve", "thirteen"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Eight minus three equals?' (8 - 3 = ?)", options: ["four", "five", "six", "seven"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Nine times two equals?' (9 × 2 = ?)", options: ["sixteen", "eighteen", "twenty", "twenty-two"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Zero' magyarul:", options: ["egy", "null", "tíz", "száz"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Hundred' magyarul:", options: ["tíz", "száz", "ezer", "millió"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Thousand' magyarul:", options: ["száz", "ezer", "millió", "milliárd"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Line' magyarul mértanban:", options: ["pont", "egyenes", "görbe", "sík"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Point' magyarul mértanban:", options: ["pont", "egyenes", "kör", "sík"], correctIndex: 0, subject: "english-math" },
+  { prompt: "'Angle' magyarul:", options: ["szög", "oldal", "csúcs", "lap"], correctIndex: 0, subject: "english-math" },
+  { prompt: "'Cube' magyarul mértanban:", options: ["gömb", "kocka", "kúp", "henger"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Sphere' magyarul:", options: ["kocka", "gömb", "henger", "kúp"], correctIndex: 1, subject: "english-math" },
+  { prompt: "'Cylinder' magyarul:", options: ["kocka", "gömb", "henger", "kúp"], correctIndex: 2, subject: "english-math" },
 ];
 
 const XP_BY_TILE: Record<number, number> = {
@@ -133,6 +304,8 @@ const XP_BY_TILE: Record<number, number> = {
   [AIR]: 0,
   [BEDROCK]: 0,
   [CREEPER]: 280,
+  [SAND]: 22,
+  [WATER]: 0,
 };
 
 function randInt(min: number, max: number) {
@@ -162,7 +335,9 @@ function buildWorld(): Uint8Array {
     }
   }
 
-  for (let n = 0; n < 18; n++) {
+  // Barlangok száma COLS-hoz skálázódik (nagyobb világ = több felfedeznivaló).
+  const caveCount = Math.max(18, Math.round(COLS * 0.45));
+  for (let n = 0; n < caveCount; n++) {
     const cx = randInt(5, COLS - 6);
     const cy = randInt(9, ROWS - 2);
     const rx = randInt(2, 4);
@@ -179,9 +354,10 @@ function buildWorld(): Uint8Array {
 
   for (let c = 8; c < COLS - 8; c++) {
     const top = topByCol[c] ?? 8;
-    if (Math.random() < 0.12) {
-      if (Math.random() < 0.15 && top - 1 >= 0) {
-        // Creeper a felszínen (15% eséllyel fa helyett)
+    // Fák sűrűsége megemelve (12% → 16%): nagyobb világon több erdei övezet.
+    if (Math.random() < 0.16) {
+      if (Math.random() < 0.18 && top - 1 >= 0) {
+        // Creeper a felszínen (18% eséllyel fa helyett — több boss-kihívás).
         g[(top - 1) * COLS + c] = CREEPER;
       } else {
         const h = randInt(2, 4);
@@ -198,13 +374,55 @@ function buildWorld(): Uint8Array {
         }
       }
     }
+    // Érc-arányok enyhén dúsítva: több ritka blokk a nagyobb világon (több rátalálási élmény).
     for (let r = top + 2; r < ROWS - 1; r++) {
       const i = r * COLS + c;
       if (g[i] !== STONE) continue;
       const roll = Math.random();
-      if (roll < 0.035) g[i] = COAL;
-      else if (roll < 0.05) g[i] = IRON;
-      else if (roll < 0.055) g[i] = DIAMOND;
+      if (roll < 0.052) g[i] = COAL;        // 3.5% → 5.2%
+      else if (roll < 0.072) g[i] = IRON;   // 1.5% → 2.0%
+      else if (roll < 0.080) g[i] = DIAMOND; // 0.5% → 0.8%
+    }
+  }
+
+  // === HOMOKOS és VÍZ bioma sávok ===
+  // 3-5 random sáv nagyobb világon (COLS=96): homok tengerpart + víz-medence.
+  const biomeCount = randInt(3, 5);
+  for (let b = 0; b < biomeCount; b++) {
+    const bStart = randInt(8, COLS - 14);
+    const bWidth = randInt(4, 8);
+    const isSandy = Math.random() < 0.6; // 60% sivatagos-partos, 40% tó
+    for (let c = bStart; c < bStart + bWidth && c < COLS; c++) {
+      const top = topByCol[c] ?? 8;
+      if (isSandy) {
+        // Homok réteg: felső 4 sor homok (a fű/dirt-et kicseréljük).
+        for (let dr = 0; dr < 4; dr++) {
+          const rr = top + dr;
+          if (rr < ROWS - 1) {
+            const idx = rr * COLS + c;
+            if (g[idx] === GRASS || g[idx] === DIRT) g[idx] = SAND;
+          }
+        }
+      } else {
+        // Tó: 2-3 sor víz a felső részen, alatta homok.
+        const waterDepth = randInt(2, 3);
+        for (let dr = 0; dr < waterDepth; dr++) {
+          const rr = top + dr;
+          if (rr < ROWS - 1) g[rr * COLS + c] = WATER;
+        }
+        // Tó medre: homok.
+        for (let dr = waterDepth; dr < waterDepth + 2; dr++) {
+          const rr = top + dr;
+          if (rr < ROWS - 1) {
+            const idx = rr * COLS + c;
+            if (g[idx] === DIRT || g[idx] === STONE) g[idx] = SAND;
+          }
+        }
+        // A tó felett a felső sort (korabbi GRASS) cseréljük AIR-re, hogy felülről látható legyen a víz.
+        if (top > 0 && g[(top - 1) * COLS + c] === GRASS) {
+          g[(top - 1) * COLS + c] = AIR;
+        }
+      }
     }
   }
 
@@ -227,12 +445,14 @@ function findSpawn(world: Uint8Array): { x: number; y: number } {
 }
 
 function solid(t: number) {
-  return t !== AIR;
+  // A víz nem szolid (átúszható); AO és ütközés figyelmen kívül hagyja.
+  return t !== AIR && t !== WATER;
 }
 
 /** Játszható-e a cella (AIR vagy bányászható tömb) */
 function mineable(t: number) {
-  return t !== AIR && t !== BEDROCK;
+  // WATER nem bányászható (díszítő tenger), BEDROCK sem, AIR üresség.
+  return t !== AIR && t !== BEDROCK && t !== WATER;
 }
 
 /** Belső canvas-koordináta a megjelenített méret és a buffer eltérése esetén is. */
@@ -354,7 +574,7 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
  * Mivel mcBlockPattern() kimenete tisztán determinisztikus (t, c, r) alapján,
  * a render loop hot-pathán cache-eljük Map-be.
  *
- * Felső határ (Eszter F2c memória-analízis pontosítása):
+ * Felső határ (memória-biztonsági korlát):
  *   ROWS × COLS × block-types = 16 × 64 × 10 ≈ 10 240–11 264 bejegyzés
  *   (AIR=0 nem cache-eli, drawBlock "if (!t) return" mögött).
  *   Egy bejegyzés = 12×12 grid = 144 string-referencia (MC_PAL konstansokra mutatnak)
@@ -564,6 +784,46 @@ function mcBlockPatternBuild(t: number, c: number, r: number): string[][] {
     grid[8][3] = pal.accent!; grid[8][4] = pal.accent!;
     grid[8][7] = pal.accent!; grid[8][8] = pal.accent!;
     grid[9][3] = pal.accent!; grid[9][8] = pal.accent!;
+  } else if (t === SAND) {
+    // Homok: finomabb szemcsék, vízszintes rétegek, enyhén szóródó pixelek.
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 389.7);
+        grid[py][px] = h < 0.14 ? pal.light! : h < 0.58 ? pal.main : h < 0.88 ? pal.dark : pal.darker;
+      }
+    }
+    // Vízszintes rétegződés (horizontális homokcsíkok).
+    for (let py = 2; py < 12; py += 3) {
+      for (let px = 0; px < 12; px++) {
+        if (tileRand(c + px, r + py, 401.3) < 0.35) grid[py][px] = pal.accent!;
+      }
+    }
+    // Szórt "szemcsék" (világosabb pontok).
+    for (let k = 0; k < 3; k++) {
+      const rx = Math.floor(tileRand(c, r, 417 + k) * 12);
+      const ry = Math.floor(tileRand(c, r, 429 + k) * 12);
+      grid[ry][rx] = pal.light!;
+    }
+  } else if (t === WATER) {
+    // Víz: hullámzó mintázat, mély kék felső rész, világos "tükröző" csíkok.
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 443.1);
+        grid[py][px] = h < 0.22 ? pal.light! : h < 0.55 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    // Világos hullám csíkok (felső 3 sor).
+    for (let py = 0; py < 3; py++) {
+      for (let px = 0; px < 12; px++) {
+        if (tileRand(c + px, r + py, 457.3) < 0.45) grid[py][px] = pal.accent!;
+      }
+    }
+    // Mély foltok alul (deep water).
+    for (let py = 9; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        if (tileRand(c + px, r + py, 471.5) < 0.38) grid[py][px] = pal.accent2!;
+      }
+    }
   }
 
   return grid;
@@ -897,6 +1157,13 @@ export default function BlockCraftQuiz() {
   const [runSeconds, setRunSeconds] = useState(0);
   const [blocksMined, setBlocksMined] = useState(0);
   const [rareBlocks, setRareBlocks] = useState(0);
+  // Subject-breakdown: melyik tantárgyból hány jó választ adott.
+  const [subjectStats, setSubjectStats] = useState<Record<QuizSubject, number>>({
+    english: 0,
+    "english-math": 0,
+    math: 0,
+    nature: 0,
+  });
   const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT);
   const [achievement, setAchievement] = useState<string | null>(null);
   const scoreSubmittedRef = useRef(false);
@@ -916,13 +1183,61 @@ export default function BlockCraftQuiz() {
   });
 
   const bank = useMemo<Quiz[]>(() => {
-    const remote = (bankData?.items ?? []).filter((q) => q.options?.length > 1).map((q) => ({
-      prompt: q.prompt,
-      options: q.options.slice(0, 4),
-      correctIndex: q.correctIndex,
-    }));
+    // A backend-ből érkező tételek menték „english” kategóriát alapból (Minecraft-fókuszú angol szókincs).
+    // A stratified-picker osztályozza őket, hogy a matek/környezet/angol-matek se szoruljon háttérbe.
+    const remote: Quiz[] = (bankData?.items ?? [])
+      .filter((q) => q.options?.length > 1)
+      .map((q) => ({
+        prompt: q.prompt,
+        options: q.options.slice(0, 4),
+        correctIndex: q.correctIndex,
+        subject: "english" as QuizSubject,
+      }));
     return [...remote, ...QUIZ_FALLBACK];
   }, [bankData]);
+
+  /**
+   * Stratified pool: a kvízeket tantargy szerint csoportosítja és minden
+   * körben (round) újrakeveri, hogy NE ismétlődjenek közel egymáshoz.
+   * Round-robin stratégia: sorban angol → angol-matek → matek → környezet
+   * → angol stb. Így egyenletes lesz a tananyag-elosztas.
+   */
+  const subjectOrder = useMemo<QuizSubject[]>(() => ["english", "english-math", "math", "nature"], []);
+  const subjectPoolsRef = useRef<Map<QuizSubject, Quiz[]>>(new Map());
+  const subjectCursorsRef = useRef<Map<QuizSubject, number>>(new Map());
+  const subjectRoundRef = useRef(0);
+  const recentPromptsRef = useRef<string[]>([]);
+  const RECENT_WINDOW = 16; // Ennyi kérdést nem ismétlünk vissza egymás után.
+
+  /** Keveri a bank-et subject szerint és Fisher–Yates shuffle-lal */
+  const rebuildSubjectPools = useCallback(() => {
+    const pools = new Map<QuizSubject, Quiz[]>();
+    for (const subj of subjectOrder) pools.set(subj, []);
+    for (const q of bank) {
+      const subj = (q.subject ?? "english") as QuizSubject;
+      const arr = pools.get(subj) ?? [];
+      arr.push(q);
+      pools.set(subj, arr);
+    }
+    // Fisher–Yates shuffle minden tantargyon.
+    for (const subj of subjectOrder) {
+      const arr = pools.get(subj) ?? [];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+      }
+    }
+    subjectPoolsRef.current = pools;
+    subjectCursorsRef.current = new Map(subjectOrder.map((s) => [s, 0]));
+    // Véletlen kezdő subject, hogy ne mindig angollal induljon a kör.
+    subjectRoundRef.current = Math.floor(Math.random() * subjectOrder.length);
+    recentPromptsRef.current = [];
+  }, [bank, subjectOrder]);
+
+  // Automatikus rebuilder: ha a bank változik (pl. remote data beérkezik), újrakeverjük.
+  useEffect(() => {
+    rebuildSubjectPools();
+  }, [rebuildSubjectPools]);
 
   useEffect(() => {
     if (phase !== "play") return;
@@ -939,11 +1254,57 @@ export default function BlockCraftQuiz() {
     return () => clearInterval(id);
   }, [phase]);
 
-  const pickQuiz = useCallback(() => bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!, [bank]);
+  /**
+   * Stratified + non-repeating quiz picker.
+   * Stratégia:
+   *  1. Round-robin subject kiválasztás (angol → angol-matek → matek → környezet)
+   *  2. Adott subject sorrendbe szűrt pool-jából cursor-rel haladunk
+   *  3. Ha a pool végére értünk, újrakeverjük és a cursor nullazódik
+   *  4. Ha a választott kérdés szerepel a RECENT_WINDOW-ban, átugorjuk
+   */
+  const pickQuiz = useCallback((): Quiz => {
+    const pools = subjectPoolsRef.current;
+    if (pools.size === 0) {
+      rebuildSubjectPools();
+    }
+    const recent = recentPromptsRef.current;
+
+    for (let attempt = 0; attempt < subjectOrder.length * 4; attempt++) {
+      const subj = subjectOrder[subjectRoundRef.current % subjectOrder.length]!;
+      subjectRoundRef.current++;
+      const pool = subjectPoolsRef.current.get(subj) ?? [];
+      if (pool.length === 0) continue;
+
+      let cursor = subjectCursorsRef.current.get(subj) ?? 0;
+
+      for (let poolTry = 0; poolTry < pool.length; poolTry++) {
+        if (cursor >= pool.length) {
+          // Pool körbeért → újrakeverés.
+          for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+          }
+          cursor = 0;
+        }
+        const candidate = pool[cursor]!;
+        cursor++;
+
+        if (!recent.includes(candidate.prompt)) {
+          subjectCursorsRef.current.set(subj, cursor);
+          recent.push(candidate.prompt);
+          while (recent.length > RECENT_WINDOW) recent.shift();
+          return candidate;
+        }
+      }
+      subjectCursorsRef.current.set(subj, cursor);
+    }
+    // Végső fallback — sose kellene idejutnunk.
+    return QUIZ_FALLBACK[Math.floor(Math.random() * QUIZ_FALLBACK.length)] ?? QUIZ_FALLBACK[0]!;
+  }, [rebuildSubjectPools, subjectOrder]);
 
   const spawnDust = useCallback((x: number, y: number, tile: number) => {
     const color: Record<number, string> = {
-      [GRASS]: "#7cd057", [DIRT]: "#a67a4d", [STONE]: "#afb4ba", [LOG]: "#8f6642", [LEAVES]: "#54bc60", [COAL]: "#727882", [IRON]: "#d4bfaa", [DIAMOND]: "#9ff8ff", [AIR]: "#fff",
+      [GRASS]: "#7cd057", [DIRT]: "#a67a4d", [STONE]: "#afb4ba", [LOG]: "#8f6642", [LEAVES]: "#54bc60", [COAL]: "#727882", [IRON]: "#d4bfaa", [DIAMOND]: "#9ff8ff", [AIR]: "#fff", [SAND]: "#e6d29a", [WATER]: "#5E94E0", [CREEPER]: "#4ba84b",
     };
     for (let i = 0; i < 12; i++) {
       particlesRef.current.push({ x, y, vx: randInt(-80, 80), vy: randInt(-150, -40), life: 0.5 + Math.random() * 0.5, color: color[tile] || "#fff" });
@@ -963,7 +1324,7 @@ export default function BlockCraftQuiz() {
       const tcx = tc * TILE + TILE / 2;
       p.facing = tcx >= p.x + PLAYER_W / 2 ? 1 : -1;
       mineTargetRef.current = { c: tc, r: tr, t };
-      // Stale-hover visszaállítás play → quiz átmenetnél (Eszter F2c PARTIAL finding):
+      // Stale-hover visszaállítás play → quiz átmenetnél:
       // kvíz megjelenése előtt nincs szükség hover indikátorra.
       hoverCellRef.current = null;
       setQuiz(pickQuiz());
@@ -993,7 +1354,7 @@ export default function BlockCraftQuiz() {
     cameraRef.current = { x: 0, y: 0 };
     particlesRef.current = [];
     xpPopupRef.current = null;
-    // Stale-hover visszaállítás (Eszter F2 LOW finding — új kör kezdetekor ne maradjon kijelölés).
+    // Stale-hover visszaállítás — új kör kezdetekor ne maradjon kijelölés.
     hoverCellRef.current = null;
     setAchievement(null);
     setSessionXp(0);
@@ -1001,14 +1362,17 @@ export default function BlockCraftQuiz() {
     setRunSeconds(0);
     setBlocksMined(0);
     setRareBlocks(0);
+    setSubjectStats({ english: 0, "english-math": 0, math: 0, nature: 0 });
     setTimeLeft(ROUND_LIMIT);
     setPhase("play");
     lastTRef.current = null;
-  }, []);
+    // Minden új körben új kérdés-sorrend: új shuffle, friss cursor-ok, üres recent-history.
+    rebuildSubjectPools();
+  }, [rebuildSubjectPools]);
 
   const endRun = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
-    // Stale-hover visszaállítás kör-végnél is (Eszter F2 LOW finding).
+    // Stale-hover visszaállítás kör-végnél is.
     hoverCellRef.current = null;
     setPhase("over");
   }, []);
@@ -1342,6 +1706,9 @@ export default function BlockCraftQuiz() {
       setBlocksMined(newBlocks);
       if (tgt.t === COAL || tgt.t === IRON || tgt.t === DIAMOND || tgt.t === CREEPER) setRareBlocks((n) => n + 1);
       setStreak(newStreak);
+      // Subject-tracker: ha a kvíznek van címkéje, inkrementáljuk.
+      const subj = quiz.subject ?? "english";
+      setSubjectStats((prev) => ({ ...prev, [subj]: prev[subj] + 1 }));
       // +XP popup a canvas-on
       xpPopupRef.current = { amount: add, wx: (tgt.c + 0.5) * TILE, wy: (tgt.r + 0.5) * TILE, life: 1.5 };
       // Achievement toastok
@@ -1361,7 +1728,7 @@ export default function BlockCraftQuiz() {
     }
     mineTargetRef.current = null;
     setQuiz(null);
-    // Stale-hover visszaállítás quiz → play átmenetnél is (Eszter F2c PARTIAL finding):
+    // Stale-hover visszaállítás quiz → play átmenetnél is:
     // ha a játékos a quiz alatt nem mozgatja a kurzort, a korábbi highlight újra felvillanhat.
     hoverCellRef.current = null;
     {
@@ -1478,12 +1845,12 @@ export default function BlockCraftQuiz() {
           {phase !== "play" && <><GamePedagogyPanel
             accent="lime"
             className="mb-2"
-            kidMission="Bányássz blokkokat egy kockavilágban! Minden blokk előtt rövid angol kvíz jön: csak helyes válaszra tűnik el a kő (és kapsz XP-et + sorozat-lángot). Időre is figyelj — a kör végén összesítjük a pontjaidat."
+            kidMission="Bányássz blokkokat egy kockavilágban! Minden blokk előtt rövid kvíz jön: angol szókincs, angol matek, magyar matek vagy környezetismeret. Csak helyes válaszra tűnik el a kő (és kapsz XP-et + sorozat-lángot). Időre is figyelj — a kör végén összesítjük a pontjaidat."
             parentBody={
               <>
-                <strong className="text-lime-100/90">Tananyag:</strong> alap angol szókincs (tárgyak, helyzetek) kvízformában, a bányászat motivációt ad az ismétléshez.
+                <strong className="text-lime-100/90">Tananyag:</strong> 4 tárgy kvízformában — angol szókincs (tárgyak, helyzetek), angol matek (vocabulary + műveletek), egyszerű magyar matek (1–4. oszt.) és környezetismeret (növény/állat/természet). A bányászat motivációt ad az ismétléshez.
                 <br />
-                <strong className="text-lime-100/90">Fejleszt:</strong> olvasásértés gyors döntés mellett, térbeli tájékozódás és kéz-szem koordináció (billentyű / érintés).
+                <strong className="text-lime-100/90">Fejleszt:</strong> olvasásértés gyors döntés mellett, fejszámolás, idegen nyelvi gondolkozás, természettudományos összefüggés-látás, térbeli tájékozódás és kéz-szem koordináció (billentyű / érintés).
                 <br />
                 <span className="text-white/55">
                   Akadály (fizikai pálya) + teszt (kvíz) + jutalom (XP, blokk eltűnik) minden lépésnél összekapcsolva — erős, azonnali visszajelzés.
@@ -1493,15 +1860,15 @@ export default function BlockCraftQuiz() {
           />
           <p className="text-[11px] text-lime-100/90 mb-2 border border-lime-700/45 rounded px-2 py-1.5 bg-slate-900/95">{syncBanner}</p></>}
 
-          {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-amber-100/95 text-center max-w-sm font-semibold">A zöld sáv fent = mennyi időd van a körből. Minél több jó kvíz, annál több XP és hosszabb sorozat!</p><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgás, Space: ugrás, E vagy Bányász: kvíz. Koppints a kockára is, ha közel vagy hozzá.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Új világ — indulhat a bányászat!</Button></div>}
+          {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-amber-100/95 text-center max-w-sm font-semibold">A zöld sáv fent = mennyi időd van a körből. Minél több jó kvíz, annál több XP és hosszabb sorozat!</p><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgás, Space: ugrás, E vagy Bányász: kvíz. Koppints a kockára is, ha közel vagy hozzá.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Új világ — indulhat a bányászat!</Button></div>}
 
           {phase === "play" && <div className="flex flex-col items-center gap-1.5">{/* === CANVAS LEGFELÜL (mobil-first) === */}<div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]"><canvas ref={canvasRef} className="block touch-manipulation w-full max-w-full cursor-crosshair" style={{ imageRendering: "pixelated" as const }} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerLeave={onCanvasPointerLeave} /></div>{/* === KONTROLLGOMBOK közvetlenül a canvas alatt === */}<div className="grid grid-cols-4 gap-1.5 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugrás</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={() => tryMine()}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button></div>{/* === KOMPAKT HUD sáv === */}<div className="w-full flex items-center gap-1.5"><div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500 transition-all" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span></div><div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70"><span>XP: <strong className="text-amber-300">{sessionXp}</strong></span><span>Blokk: {blocksMined}</span><span>Érc: {rareBlocks}</span><span className="flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-400" />{streak}</span></div>{/* === Cél sáv (kompakt) === */}<GameNextGoalBar accent="lime" headline={streak >= ROUND_STREAK_GOAL ? "Szuper sorozat!" : `${streak}/${ROUND_STREAK_GOAL} jó egymás után`} subtitle="" current={Math.min(streak, ROUND_STREAK_GOAL)} target={ROUND_STREAK_GOAL} className="w-full" /><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600/80 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md text-xs px-3 py-1" onClick={endRun}>Kör vége</Button></div></div>}
 
-          {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Bányászat vége</p><p className="text-sm font-semibold text-lime-100/90 max-w-sm">Minden jó kvíz angol szavakat erősített — nézd meg az XP-t és a sorozatot: ez a munkád gyümölcse!</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong></p>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Új világ</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
+          {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Bányászat vége</p><p className="text-sm font-semibold text-lime-100/90 max-w-sm">Minden jó kvíz egy-egy tantárgyból erősített — nézd meg az XP-t, a sorozatot és a tantárgyi lebontást!</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong></p><div className="flex flex-wrap gap-1.5 justify-center max-w-sm"><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-lime-600/70 text-lime-50 border-lime-300/60">Angol: {subjectStats.english}</span><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-cyan-600/70 text-cyan-50 border-cyan-300/60">Angol-matek: {subjectStats["english-math"]}</span><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-amber-600/70 text-amber-50 border-amber-300/60">Matek: {subjectStats.math}</span><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-600/70 text-emerald-50 border-emerald-300/60">Környezet: {subjectStats.nature}</span></div>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Új világ</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
         </CardContent></Card>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><p className="text-xs font-bold text-lime-300 uppercase mb-1">Angol mini-teszt</p><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => <Button key={`${o}-${i}`} variant="secondary" className="h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]" onClick={() => onAnswer(i)}>{o}</Button>)}</div></motion.div></motion.div>}</AnimatePresence>
+      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => <Button key={`${o}-${i}`} variant="secondary" className="h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]" onClick={() => onAnswer(i)}>{o}</Button>)}</div></motion.div></motion.div>}</AnimatePresence>
 
       <AnimatePresence>{achievement && <motion.div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-amber-500/95 text-slate-950 font-bold text-sm px-4 py-2 rounded-xl shadow-xl border border-amber-200/60 whitespace-nowrap" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>{achievement}</motion.div>}</AnimatePresence>
       <style>{`@keyframes shake {0%,100% { transform: translateX(0); }25% { transform: translateX(-5px); }75% { transform: translateX(5px); }} .animate-shake { animation: shake 0.16s ease-in-out 2; }`}</style>
