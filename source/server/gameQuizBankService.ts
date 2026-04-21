@@ -12,7 +12,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems } from "@shared/schema";
 
-const ALLOWED_GAME_IDS = new Set(["tsunami-english", "word-ladder-hu-en"]);
+const ALLOWED_GAME_IDS = new Set(["tsunami-english", "word-ladder-hu-en", "block-craft-quiz"]);
 
 export type GameQuizBankRow = {
   id: string;
