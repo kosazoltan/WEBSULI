@@ -1,0 +1,90 @@
+name: Auto Review (Bence)
+
+# Automatikus review pipeline - Bence agent helyett GitHub Actions triggereli
+# a ket reviewer bot-ot (Sourcery AI + Codex) minden uj / ready PR-en.
+#
+# Muveletek:
+#   1. PR nyitas / draft->ready / sync -> @sourcery-ai review + @codex review komment
+#   2. Post-CI -> ha CI green, badge-kommenttel jelzi a review-allapotot
+#
+# Bot felhasznalok:
+#   - sourcery-ai[bot]      - statikus analizis, stilus, bug_risk
+#   - chatgpt-codex-connector[bot] - javaslatok + P1/P2 badge-ek
+#
+# Manual trigger: @sourcery-ai review vagy @codex review komment egy PR-en.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  trigger-review-bots:
+    name: Trigger Sourcery + Codex review
+    runs-on: ubuntu-latest
+    # Draft PR-eken nem futunk - csak ready_for_review utan
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Check if already reviewed in this push
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            // Az utolso 50 komment kozott keresunk mar meghivott bot-trigger-t
+            // EZEN a commit-sha-n belul (hogy push utan ismet fusson).
+            const headSha = context.payload.pull_request.head.sha;
+            const stateKey = `<!-- bence-auto-review: ${headSha} -->`;
+            const alreadyTriggered = comments.some(c => c.body?.includes(stateKey));
+            core.setOutput('already', alreadyTriggered ? 'true' : 'false');
+            core.setOutput('state_key', stateKey);
+
+      - name: Post review trigger comment
+        if: steps.check.outputs.already == 'false'
+        uses: actions/github-script@v7
+        env:
+          STATE_KEY: ${{ steps.check.outputs.state_key }}
+        with:
+          script: |
+            const stateKey = process.env.STATE_KEY;
+            const body = [
+              stateKey,
+              '## :robot: Auto review triggered (Bence)',
+              '',
+              'A ket reviewer bot most fut a legfrissebb commit-on:',
+              '',
+              '- **@sourcery-ai** - statikus analizis, stilus, bug_risk',
+              '- **@codex** - javaslatok + P1/P2 badge-ek',
+              '',
+              '---',
+              '',
+              '@sourcery-ai review',
+              '',
+              '@codex review',
+              '',
+              '---',
+              '',
+              '_Automatikus Bence trigger. Kovetkezo lepes: ha CI zold + mindket bot approved,',
+              'Bence merge-eli. Ha CHANGES_REQUESTED, Junior javit es push-ol._',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            core.info(`Trigger komment posztolva: ${stateKey}`);
+
+      - name: Skip (already triggered for this SHA)
+        if: steps.check.outputs.already == 'true'
+        run: |
+          echo "Bot trigger mar fut / lefutott ezen a commit-sha-n. Skip."
