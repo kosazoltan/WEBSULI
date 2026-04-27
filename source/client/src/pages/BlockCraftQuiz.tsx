@@ -597,13 +597,43 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
 const BLOCK_3D_SIZE = 1;
 const WORLD_CENTER_X = COLS / 2;
 const WATER_SURFACE_Z = 0.08;
+const WORLD_DEPTH_LANES = [-1.05, 0, 1.05] as const;
+const PLAYER_DEPTH_Z = WORLD_DEPTH_LANES[2];
 
 function tileTo3d(c: number, r: number, z = 0) {
   return new THREE.Vector3(c - WORLD_CENTER_X + 0.5, ROWS - r - 0.5, z);
 }
 
 function playerTo3d(p: { x: number; y: number }) {
-  return new THREE.Vector3(p.x / TILE - WORLD_CENTER_X + PLAYER_W / TILE / 2, ROWS - p.y / TILE + 0.58, 0.84);
+  return new THREE.Vector3(p.x / TILE - WORLD_CENTER_X + PLAYER_W / TILE / 2, ROWS - p.y / TILE + 0.52, PLAYER_DEPTH_Z);
+}
+
+function blockDepthZ(cell: number, laneZ: number) {
+  return laneZ + (cell === WATER ? WATER_SURFACE_Z : 0);
+}
+
+function desiredCanvasCssSize(el: HTMLCanvasElement) {
+  const parent = el.parentElement;
+  const parentW = Math.max(320, Math.floor(parent?.clientWidth ?? 380));
+  const maxH = parentW >= 640 ? 520 : 440;
+  const height = Math.min(maxH, Math.max(300, Math.round(parentW * 0.56)));
+  return { width: parentW, height };
+}
+
+function sizeCanvasElement(el: HTMLCanvasElement) {
+  const { width, height } = desiredCanvasCssSize(el);
+  if (el.width !== width) el.width = width;
+  if (el.height !== height) el.height = height;
+  el.style.width = `${width}px`;
+  el.style.height = `${height}px`;
+}
+
+function rendererCssSize(el: HTMLCanvasElement) {
+  const rect = el.getBoundingClientRect();
+  return {
+    width: Math.max(1, Math.round(rect.width || el.clientWidth || desiredCanvasCssSize(el).width)),
+    height: Math.max(1, Math.round(rect.height || el.clientHeight || desiredCanvasCssSize(el).height)),
+  };
 }
 
 function makeBlockMaterials() {
@@ -1332,6 +1362,7 @@ export default function BlockCraftQuiz() {
     if (phase !== "play") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+    sizeCanvasElement(canvas);
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1399,6 +1430,8 @@ export default function BlockCraftQuiz() {
     const dustMaterial = new THREE.PointsMaterial({ color: "#f5d38a", size: 0.09, sizeAttenuation: true, transparent: true, opacity: 0.88 });
     let dustPoints: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial> | null = null;
     let renderedWorldVersion = -1;
+    let renderWidth = 0;
+    let renderHeight = 0;
 
     const rebuildWorldMeshes = () => {
       while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]!);
@@ -1409,15 +1442,17 @@ export default function BlockCraftQuiz() {
           const cell = w[r * COLS + c] ?? AIR;
           if (!cell) continue;
           const material = blockMaterials.get(cell) ?? blockMaterials.get(STONE)!;
-          const mesh = new THREE.Mesh(blockGeometry, material) as ThreeBlockMesh;
-          mesh.userData = { c, r, t: cell };
-          mesh.position.copy(tileTo3d(c, r, cell === WATER ? WATER_SURFACE_Z : 0));
-          if (cell === WATER) mesh.scale.set(0.98, 0.72, 0.98);
-          if (cell === LEAVES) mesh.scale.set(0.94, 0.94, 0.94);
-          mesh.castShadow = cell !== WATER;
-          mesh.receiveShadow = true;
-          worldGroup.add(mesh);
-          meshes.push(mesh);
+          for (const laneZ of WORLD_DEPTH_LANES) {
+            const mesh = new THREE.Mesh(blockGeometry, material) as ThreeBlockMesh;
+            mesh.userData = { c, r, t: cell };
+            mesh.position.copy(tileTo3d(c, r, blockDepthZ(cell, laneZ)));
+            if (cell === WATER) mesh.scale.set(0.98, 0.72, 0.98);
+            if (cell === LEAVES) mesh.scale.set(0.94, 0.94, 0.94);
+            mesh.castShadow = cell !== WATER;
+            mesh.receiveShadow = true;
+            worldGroup.add(mesh);
+            meshes.push(mesh);
+          }
         }
       }
       threeRuntimeRef.current = { camera, raycaster, blockMeshes: meshes };
@@ -1541,11 +1576,14 @@ export default function BlockCraftQuiz() {
       if (renderedWorldVersion !== worldVersionRef.current) {
         rebuildWorldMeshes();
       }
-      const CW = Math.max(1, canvas.width);
-      const CH = Math.max(1, canvas.height);
-      renderer.setSize(CW, CH, false);
-      camera.aspect = CW / CH;
-      camera.updateProjectionMatrix();
+      const { width: CW, height: CH } = rendererCssSize(canvas);
+      if (CW !== renderWidth || CH !== renderHeight) {
+        renderer.setSize(CW, CH, false);
+        camera.aspect = CW / CH;
+        camera.updateProjectionMatrix();
+        renderWidth = CW;
+        renderHeight = CH;
+      }
 
       const playerPos = playerTo3d(p);
       playerAvatar.position.copy(playerPos);
@@ -1562,9 +1600,9 @@ export default function BlockCraftQuiz() {
 
       const speedRatio = Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
       const lookAhead = p.facing * (0.65 + speedRatio * 0.85);
-      const desiredCamera = new THREE.Vector3(playerPos.x - lookAhead * 0.42, playerPos.y + 3.05, 9.6);
+      const desiredCamera = new THREE.Vector3(playerPos.x - lookAhead * 0.72, playerPos.y + 3.25, 10.8);
       camera.position.lerp(desiredCamera, last == null ? 1 : 0.055);
-      camera.lookAt(playerPos.x + lookAhead, playerPos.y + 0.04, 0);
+      camera.lookAt(playerPos.x + lookAhead, playerPos.y - 0.04, 0.62);
 
       const cycle = (Math.sin(t * 0.00008) + 1) * 0.5;
       scene.background = new THREE.Color().setRGB(0.12 + cycle * 0.34, 0.25 + cycle * 0.34, 0.38 + cycle * 0.32);
@@ -1579,7 +1617,7 @@ export default function BlockCraftQuiz() {
       hoverCellRef.current = target ? { c: target.c, r: target.r } : null;
       targetBox.visible = Boolean(target);
       if (target) {
-        targetBox.position.copy(tileTo3d(target.c, target.r, target.t === WATER ? WATER_SURFACE_Z : 0));
+        targetBox.position.copy(tileTo3d(target.c, target.r, blockDepthZ(target.t, PLAYER_DEPTH_Z)));
         const pulse = 1.02 + Math.sin(t * 0.008) * 0.035;
         targetBox.scale.setScalar(pulse);
       }
@@ -1732,21 +1770,14 @@ export default function BlockCraftQuiz() {
   const resizeCanvas = useCallback(() => {
     const el = canvasRef.current;
     if (!el) return;
-    const parent = el.parentElement;
-    const parentW = Math.max(320, Math.floor(parent?.clientWidth ?? 380));
-    const maxH = parentW >= 640 ? 520 : 440;
-    const h = Math.min(maxH, Math.max(300, Math.round(parentW * 0.56)));
-    el.width = parentW;
-    el.height = h;
-    el.style.width = `${parentW}px`;
-    el.style.height = `${h}px`;
+    sizeCanvasElement(el);
   }, []);
 
   useEffect(() => {
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
     return () => window.removeEventListener("resize", resizeCanvas);
-  }, [resizeCanvas]);
+  }, [phase, resizeCanvas]);
 
   const hold = (k: "left" | "right" | "jump", v: boolean) => {
     touchRef.current[k] = v;
