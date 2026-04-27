@@ -65,14 +65,14 @@ function HomePracticeGames() {
                   <Waves className="w-4 h-4 text-cyan-200" />
                 </div>
                 <span className="text-[9px] font-bold bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-1.5 py-0 rounded">
-                  EN
+                  MIX
                 </span>
               </div>
               <h3 className="text-xs font-bold text-cyan-100 mb-0.5 line-clamp-2 leading-tight">
-                Szökőár szökés — Angol
+                Szökőár szökés — Tudáspróba
               </h3>
               <p className="text-[10px] text-white/70 line-clamp-2 mb-2 flex-1 leading-tight">
-                3–5. o. angol, hullám + kvízek. Nehézség induláskor.
+                Angol, matek, nyelvtan, környezet vagy vegyes kihívás.
               </p>
               <div className="flex flex-wrap gap-1 pt-1.5 border-t border-white/15">
                 <Link href="/games/tsunami-english?difficulty=easy" className="min-w-0">

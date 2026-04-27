@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import * as THREE from "three";
 import { ArrowLeft, Box, Pickaxe, Star, Flame, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,6 +46,12 @@ const WATER = 12;
 type QuizSubject = "english" | "english-math" | "math" | "nature";
 type Quiz = { prompt: string; options: string[]; correctIndex: number; subject?: QuizSubject };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
+type ThreeBlockMesh = THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>;
+type ThreeRuntime = {
+  camera: THREE.PerspectiveCamera;
+  raycaster: THREE.Raycaster;
+  blockMeshes: ThreeBlockMesh[];
+};
 type QuizBankApi = {
   items: { prompt: string; options: string[]; correctIndex: number }[];
 };
@@ -497,6 +504,22 @@ function canStandAt(world: Uint8Array, footX: number, footY: number): boolean {
   return ground;
 }
 
+function canStepTo(world: Uint8Array, footX: number, footY: number): boolean {
+  const gx0 = Math.floor(footX / TILE);
+  const gx1 = Math.floor((footX + PLAYER_W) / TILE);
+  const gyFoot = Math.floor(footY / TILE);
+  const gyHead = Math.floor((footY - PLAYER_H) / TILE);
+  if (gx0 < 0 || gx1 >= COLS || gyHead < 0 || gyFoot >= ROWS) return false;
+  for (let gx = gx0; gx <= gx1; gx++) {
+    for (let gy = gyHead; gy <= gyFoot; gy++) {
+      if (gy < 0 || gx < 0 || gx >= COLS || gy >= ROWS) continue;
+      const cell = world[gy * COLS + gx] ?? AIR;
+      if (solid(cell)) return false;
+    }
+  }
+  return true;
+}
+
 /** Felfelé / szomszéd oszlopokban keresünk biztonságos állást (gödör, kvíz utáni lyuk). */
 function rescuePlayerIfNeeded(world: Uint8Array, p: { x: number; y: number; vx: number; vy: number; onGround: boolean }) {
   const centerCol = Math.max(0, Math.min(COLS - 1, Math.floor((p.x + PLAYER_W / 2) / TILE)));
@@ -567,7 +590,85 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
   [DIAMOND]: { main: "#7A7A7A", dark: "#5E5E5E", darker: "#424242", light: "#9A9A9A", accent: "#5ECEE8", accent2: "#B8F4FA" },
   [BEDROCK]: { main: "#4A4A4A", dark: "#2C2C2C", darker: "#111111", light: "#5C5C5C", accent: "#1A1A1A" },
   [CREEPER]: { main: "#4BA84B", dark: "#368A36", darker: "#1F5C1F", light: "#6CC46C", accent: "#0A0A0A", accent2: "#FFFFFF" },
+  [SAND]:    { main: "#D9C27A", dark: "#B69A55", darker: "#80673A", light: "#F0DE9C", accent: "#C8AD67" },
+  [WATER]:   { main: "#3E79D8", dark: "#2650A8", darker: "#17326C", light: "#72B7FF", accent: "#B8E6FF", accent2: "#1E438F" },
 };
+
+const BLOCK_3D_SIZE = 1;
+const WORLD_CENTER_X = COLS / 2;
+const WATER_SURFACE_Z = 0.08;
+
+function tileTo3d(c: number, r: number, z = 0) {
+  return new THREE.Vector3(c - WORLD_CENTER_X + 0.5, ROWS - r - 0.5, z);
+}
+
+function playerTo3d(p: { x: number; y: number }) {
+  return new THREE.Vector3(p.x / TILE - WORLD_CENTER_X + PLAYER_W / TILE / 2, ROWS - p.y / TILE + 0.58, 0.84);
+}
+
+function makeBlockMaterials() {
+  const material = (tile: number, options: Partial<THREE.MeshStandardMaterialParameters> = {}) => {
+    const pal = MC_PAL[tile] ?? MC_PAL[STONE];
+    return new THREE.MeshStandardMaterial({
+      color: pal.main,
+      roughness: 0.86,
+      metalness: 0.02,
+      ...options,
+    });
+  };
+
+  return new Map<number, THREE.MeshStandardMaterial>([
+    [GRASS, material(GRASS)],
+    [DIRT, material(DIRT)],
+    [STONE, material(STONE)],
+    [LOG, material(LOG)],
+    [LEAVES, material(LEAVES, { transparent: true, opacity: 0.92 })],
+    [COAL, material(COAL, { emissive: new THREE.Color("#111111"), emissiveIntensity: 0.18 })],
+    [IRON, material(IRON, { emissive: new THREE.Color("#8a4f24"), emissiveIntensity: 0.16 })],
+    [DIAMOND, material(DIAMOND, { emissive: new THREE.Color("#2dd4e8"), emissiveIntensity: 0.46 })],
+    [BEDROCK, material(BEDROCK)],
+    [CREEPER, material(CREEPER, { emissive: new THREE.Color("#145214"), emissiveIntensity: 0.28 })],
+    [SAND, material(SAND)],
+    [WATER, material(WATER, { transparent: true, opacity: 0.66, roughness: 0.28, metalness: 0.04 })],
+  ]);
+}
+
+function createPlayerAvatar() {
+  const group = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: "#C88D62", roughness: 0.8 });
+  const hair = new THREE.MeshStandardMaterial({ color: "#3B2415", roughness: 0.9 });
+  const shirt = new THREE.MeshStandardMaterial({ color: "#1E9FE4", roughness: 0.82 });
+  const pants = new THREE.MeshStandardMaterial({ color: "#263A8F", roughness: 0.85 });
+  const boot = new THREE.MeshStandardMaterial({ color: "#111827", roughness: 0.9 });
+  const pick = new THREE.MeshStandardMaterial({ color: "#A16207", roughness: 0.72 });
+  const metal = new THREE.MeshStandardMaterial({ color: "#CBD5E1", roughness: 0.46, metalness: 0.18 });
+
+  const addBox = (name: string, size: [number, number, number], pos: [number, number, number], mat: THREE.Material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mat);
+    mesh.name = name;
+    mesh.position.set(...pos);
+    group.add(mesh);
+    return mesh;
+  };
+
+  addBox("leg-left", [0.18, 0.48, 0.2], [-0.12, -0.34, 0], pants);
+  addBox("leg-right", [0.18, 0.48, 0.2], [0.12, -0.34, 0], pants);
+  addBox("boot-left", [0.2, 0.09, 0.24], [-0.12, -0.62, 0.02], boot);
+  addBox("boot-right", [0.2, 0.09, 0.24], [0.12, -0.62, 0.02], boot);
+  addBox("torso", [0.54, 0.56, 0.28], [0, 0.12, 0], shirt);
+  addBox("arm-left", [0.14, 0.5, 0.18], [-0.36, 0.05, 0], skin);
+  addBox("arm-right", [0.14, 0.5, 0.18], [0.36, 0.05, 0], skin);
+  addBox("head", [0.44, 0.44, 0.38], [0, 0.66, 0], skin);
+  addBox("hair", [0.47, 0.13, 0.4], [0, 0.88, 0], hair);
+  addBox("pick-handle", [0.06, 0.72, 0.06], [0.5, 0.14, 0.1], pick).rotation.z = -0.58;
+  addBox("pick-head", [0.44, 0.08, 0.08], [0.55, 0.48, 0.11], metal).rotation.z = -0.58;
+
+  group.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) obj.castShadow = true;
+  });
+
+  return group;
+}
 
 /**
  * Determinisztikus blokk-textúra cache (module-scoped).
@@ -938,187 +1039,6 @@ function drawBlock(
   if (!neighbors?.right)  ctx.fillRect(x + TILE - 1, y, 1, TILE);
 }
 
-/** Klasszikus Minecraft pixel-nap: sárga négyzetes korong, 24×24px, sarokvilágítással. */
-function drawMcSun(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
-  const s = 18; // sun half-size
-  // Halvány fényudvar.
-  const halo = ctx.createRadialGradient(cx, cy, s * 0.6, cx, cy, s * 3.2);
-  halo.addColorStop(0, "rgba(255,240,180,0.32)");
-  halo.addColorStop(1, "rgba(255,230,150,0)");
-  ctx.fillStyle = halo;
-  ctx.fillRect(cx - s * 3.2, cy - s * 3.2, s * 6.4, s * 6.4);
-  // Négyzetes pixel-nap.
-  ctx.fillStyle = "#FFE889";
-  ctx.fillRect(Math.round(cx - s), Math.round(cy - s), s * 2, s * 2);
-  // Belső világosabb rész.
-  ctx.fillStyle = "#FFF4B8";
-  ctx.fillRect(Math.round(cx - s * 0.8), Math.round(cy - s * 0.8), Math.round(s * 1.6), Math.round(s * 1.6));
-  // Kis sötétebb sarkok (pixeles "kerekítés").
-  ctx.fillStyle = "#FFD35E";
-  ctx.fillRect(Math.round(cx - s), Math.round(cy - s), 3, 3);
-  ctx.fillRect(Math.round(cx + s - 3), Math.round(cy - s), 3, 3);
-  ctx.fillRect(Math.round(cx - s), Math.round(cy + s - 3), 3, 3);
-  ctx.fillRect(Math.round(cx + s - 3), Math.round(cy + s - 3), 3, 3);
-}
-
-/** Klasszikus Minecraft pixel-hold: fehér négyzetes, sarokvilágítással. */
-function drawMcMoon(ctx: CanvasRenderingContext2D, cx: number, cy: number, alpha: number) {
-  const s = 14;
-  ctx.globalAlpha = alpha;
-  // Hold fényudvar.
-  const halo = ctx.createRadialGradient(cx, cy, s * 0.5, cx, cy, s * 3);
-  halo.addColorStop(0, "rgba(220,230,255,0.30)");
-  halo.addColorStop(1, "rgba(200,215,255,0)");
-  ctx.fillStyle = halo;
-  ctx.fillRect(cx - s * 3, cy - s * 3, s * 6, s * 6);
-  // Pixeles hold korong.
-  ctx.fillStyle = "#E8ECF5";
-  ctx.fillRect(Math.round(cx - s), Math.round(cy - s), s * 2, s * 2);
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(Math.round(cx - s * 0.7), Math.round(cy - s * 0.7), Math.round(s * 1.4), Math.round(s * 1.4));
-  // Hold-foltok.
-  ctx.fillStyle = "rgba(140,150,170,0.55)";
-  ctx.fillRect(Math.round(cx - s + 4), Math.round(cy - s + 3), 3, 3);
-  ctx.fillRect(Math.round(cx + 2), Math.round(cy - 3), 4, 4);
-  ctx.fillRect(Math.round(cx - 5), Math.round(cy + 2), 3, 2);
-  ctx.globalAlpha = 1;
-}
-
-/** Minecraft-stílusú pixel-felhők: nagyobb, lapos, pixeles, több réteg. */
-function drawMcClouds(ctx: CanvasRenderingContext2D, time: number, viewW: number) {
-  const cloudLayer = 4;
-  for (let i = 0; i < cloudLayer; i++) {
-    const speed = 0.010 + i * 0.004;
-    const yBase = 18 + i * 18;
-    const cxBase = ((i * 230 + time * speed) % (viewW + 320)) - 180;
-    const scale = 1 + i * 0.4;
-
-    // Minecraft cloud: nagy lapos 6×1 pixelblokk + vegyes "zaj" kisebb téglalapokkal.
-    ctx.fillStyle = i < 2 ? "rgba(255,255,255,0.82)" : "rgba(255,255,255,0.55)";
-    // Fő felhő-test.
-    ctx.fillRect(Math.round(cxBase), Math.round(yBase), Math.round(82 * scale), Math.round(9 * scale));
-    ctx.fillRect(Math.round(cxBase + 14 * scale), Math.round(yBase - 5 * scale), Math.round(58 * scale), Math.round(5 * scale));
-    ctx.fillRect(Math.round(cxBase + 26 * scale), Math.round(yBase + 9 * scale), Math.round(42 * scale), Math.round(4 * scale));
-
-    // Halvány "aljazat".
-    ctx.fillStyle = "rgba(255,255,255,0.18)";
-    ctx.fillRect(Math.round(cxBase - 4), Math.round(yBase + 3), Math.round(6 * scale), Math.round(6 * scale));
-    ctx.fillRect(Math.round(cxBase + 86 * scale), Math.round(yBase + 3), Math.round(6 * scale), Math.round(6 * scale));
-
-    // Sötétebb alsó él.
-    ctx.fillStyle = "rgba(180,190,200,0.30)";
-    ctx.fillRect(Math.round(cxBase), Math.round(yBase + 9 * scale - 1), Math.round(82 * scale), 1);
-  }
-}
-
-/**
- * Steve-szerű Minecraft pixel player.
- * PLAYER_W=14, PLAYER_H=26.
- * Láb = 12px, Törzs = 10px, Fej = 8px (szigorú aranyú pixel-vox).
- */
-function drawPlayer(ctx: CanvasRenderingContext2D, px: number, py: number, facing: number, tick: number) {
-  const x = Math.round(px);
-  const y = Math.round(py);
-  const walking = Math.abs((Math.sin(tick * 0.35)));
-  const bob = walking > 0.1 ? Math.round(Math.sin(tick * 0.18) * 1) : 0;
-
-  // Walk cycle: karok és lábak swing.
-  const legSwing = Math.round(Math.sin(tick * 0.35) * 2);
-  const armSwing = Math.round(Math.sin(tick * 0.35 + Math.PI) * 2);
-
-  // Koordináták: y = láb alja, fel van a fej.
-  const footY = y + bob;
-  const legTop = footY - 12;        // lábak: 12 pixel magasak
-  const torsoTop = legTop - 10;     // törzs: 10 pixel magas
-  const headBottom = torsoTop;
-  const headTop = headBottom - 8;   // fej: 8x8 pixel
-  const centerX = x;
-
-  // Árnyék a talajon.
-  ctx.fillStyle = "rgba(0,0,0,0.32)";
-  ctx.fillRect(centerX - 1, footY + 1, 14, 2);
-
-  // === LÁBAK (két 4x12) ===
-  ctx.fillStyle = "#1C3A78"; // nadrág sötétkék
-  // Bal láb
-  ctx.fillRect(centerX + 1, legTop - legSwing, 4, 12);
-  // Jobb láb
-  ctx.fillRect(centerX + 7, legTop + legSwing, 4, 12);
-  // Nadrág világosabb csík (highlight bal oldal).
-  ctx.fillStyle = "#2A4D94";
-  ctx.fillRect(centerX + 1, legTop - legSwing, 1, 12);
-  ctx.fillRect(centerX + 7, legTop + legSwing, 1, 12);
-  // Cipő
-  ctx.fillStyle = "#0E1A35";
-  ctx.fillRect(centerX + 1, legTop - legSwing + 10, 4, 2);
-  ctx.fillRect(centerX + 7, legTop + legSwing + 10, 4, 2);
-
-  // === TÖRZS (8x10) ===
-  ctx.fillStyle = "#2F8AE0"; // póló kék (Steve: cyános)
-  ctx.fillRect(centerX + 2, torsoTop, 8, 10);
-  // Világosabb bal oldal.
-  ctx.fillStyle = "#44A1F2";
-  ctx.fillRect(centerX + 2, torsoTop, 2, 10);
-  // Sötétebb jobb oldal.
-  ctx.fillStyle = "#1F6FBC";
-  ctx.fillRect(centerX + 9, torsoTop, 1, 10);
-  // Öv (alsó csík).
-  ctx.fillStyle = "#1A3C6E";
-  ctx.fillRect(centerX + 2, torsoTop + 9, 8, 1);
-
-  // === KAROK (2x 3x10) ===
-  // Bőrszín (kéz-alj).
-  ctx.fillStyle = "#CE9776";
-  const armLeftY = torsoTop + 1 + armSwing;
-  const armRightY = torsoTop + 1 - armSwing;
-  ctx.fillRect(centerX - 1, armLeftY + 7, 3, 3);
-  ctx.fillRect(centerX + 10, armRightY + 7, 3, 3);
-  // Póló-ujj (kék).
-  ctx.fillStyle = "#2F8AE0";
-  ctx.fillRect(centerX - 1, armLeftY, 3, 7);
-  ctx.fillRect(centerX + 10, armRightY, 3, 7);
-  // Világos bal-széle ujj.
-  ctx.fillStyle = "#44A1F2";
-  ctx.fillRect(centerX - 1, armLeftY, 1, 7);
-  ctx.fillRect(centerX + 10, armRightY, 1, 7);
-
-  // === FEJ (8x8) ===
-  // Haj (felső 2 sor + sarok).
-  ctx.fillStyle = "#46341E";
-  ctx.fillRect(centerX + 2, headTop, 8, 3);
-  ctx.fillRect(centerX + 2, headTop + 3, 1, 2);
-  ctx.fillRect(centerX + 9, headTop + 3, 1, 2);
-  // Arc bőrszín.
-  ctx.fillStyle = "#D5A07E";
-  ctx.fillRect(centerX + 3, headTop + 3, 6, 5);
-  // Arc árnyék (jobb oldal).
-  ctx.fillStyle = "#B78760";
-  ctx.fillRect(centerX + 8, headTop + 3, 1, 5);
-
-  // Szemek (2x1 fehér + 1 fekete pupilla).
-  const eyeY = headTop + 4;
-  const faceOffset = facing > 0 ? 0 : 0; // szimmetrikus szem mindkét irányban
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(centerX + 3 + faceOffset, eyeY, 2, 1);
-  ctx.fillRect(centerX + 6 + faceOffset, eyeY, 2, 1);
-  ctx.fillStyle = "#2A5ACE"; // kék szem
-  ctx.fillRect(centerX + 4 + (facing > 0 ? 0 : -1), eyeY, 1, 1);
-  ctx.fillRect(centerX + 7 + (facing > 0 ? 0 : -1), eyeY, 1, 1);
-
-  // Orr.
-  ctx.fillStyle = "#B78760";
-  ctx.fillRect(centerX + 5, headTop + 5, 1, 1);
-
-  // Száj.
-  ctx.fillStyle = "#6B3A1E";
-  ctx.fillRect(centerX + 4, headTop + 7, 4, 1);
-
-  // Szakáll (sötétebb csík az állon).
-  ctx.fillStyle = "#3E2C16";
-  ctx.fillRect(centerX + 3, headTop + 6, 1, 1);
-  ctx.fillRect(centerX + 8, headTop + 6, 1, 1);
-}
-
 function MenuBlock({ t }: { t: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -1139,7 +1059,6 @@ export default function BlockCraftQuiz() {
   const playerRef = useRef({ x: 8 * TILE, y: 7 * TILE, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 });
   const keysRef = useRef({ left: false, right: false, jump: false, mine: false });
   const touchRef = useRef({ left: false, right: false, jump: false });
-  const cameraRef = useRef({ x: 0, y: 0 });
   const lastTRef = useRef<number | null>(null);
   const rafRef = useRef(0);
   const mineTargetRef = useRef<{ c: number; r: number; t: number } | null>(null);
@@ -1147,6 +1066,9 @@ export default function BlockCraftQuiz() {
   const streakRef = useRef(0);
   const xpPopupRef = useRef<{ amount: number; wx: number; wy: number; life: number } | null>(null);
   const hoverCellRef = useRef<{ c: number; r: number } | null>(null);
+  const pointerNdcRef = useRef(new THREE.Vector2(0, 0));
+  const threeRuntimeRef = useRef<ThreeRuntime | null>(null);
+  const worldVersionRef = useRef(0);
 
   const [phase, setPhase] = useState<Phase>("menu");
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -1349,9 +1271,9 @@ export default function BlockCraftQuiz() {
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
     worldRef.current = buildWorld();
+    worldVersionRef.current++;
     const spawn = findSpawn(worldRef.current);
     playerRef.current = { x: spawn.x, y: spawn.y, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 };
-    cameraRef.current = { x: 0, y: 0 };
     particlesRef.current = [];
     xpPopupRef.current = null;
     // Stale-hover visszaállítás — új kör kezdetekor ne maradjon kijelölés.
@@ -1410,10 +1332,114 @@ export default function BlockCraftQuiz() {
     if (phase !== "play") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    // Pixel-perfect renderelés (Minecraft-stílusú): nincs bilinear smoothing.
-    ctx.imageSmoothingEnabled = false;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2("#8fc7e9", 0.035);
+
+    const camera = new THREE.PerspectiveCamera(48, Math.max(1, canvas.width) / Math.max(1, canvas.height), 0.1, 120);
+    const raycaster = new THREE.Raycaster();
+    raycaster.far = 28;
+    threeRuntimeRef.current = { camera, raycaster, blockMeshes: [] };
+
+    const ambient = new THREE.HemisphereLight("#dff5ff", "#26351d", 1.9);
+    scene.add(ambient);
+    const sun = new THREE.DirectionalLight("#fff0c4", 2.6);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -18;
+    sun.shadow.camera.right = 18;
+    sun.shadow.camera.top = 18;
+    sun.shadow.camera.bottom = -18;
+    scene.add(sun);
+    scene.add(sun.target);
+
+    const backdrop = new THREE.Mesh(
+      new THREE.PlaneGeometry(COLS * 1.4, ROWS * 1.25),
+      new THREE.MeshBasicMaterial({ color: "#8cc7e8" }),
+    );
+    backdrop.position.set(0, ROWS / 2, -4.2);
+    scene.add(backdrop);
+
+    const blockGeometry = new THREE.BoxGeometry(BLOCK_3D_SIZE * 0.96, BLOCK_3D_SIZE * 0.96, BLOCK_3D_SIZE * 0.96);
+    const blockMaterials = makeBlockMaterials();
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const targetBox = new THREE.Mesh(
+      new THREE.BoxGeometry(1.08, 1.08, 1.08),
+      new THREE.MeshBasicMaterial({ color: "#fef08a", wireframe: true, transparent: true, opacity: 0.95 }),
+    );
+    targetBox.visible = false;
+    scene.add(targetBox);
+
+    const playerAvatar = createPlayerAvatar();
+    scene.add(playerAvatar);
+
+    const xpOrb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 10, 10),
+      new THREE.MeshBasicMaterial({ color: "#fde047", transparent: true, opacity: 0.9 }),
+    );
+    xpOrb.visible = false;
+    scene.add(xpOrb);
+
+    const auraMaterial = new THREE.MeshBasicMaterial({ color: "#fbbf24", transparent: true, opacity: 0.72 });
+    const auraGeometry = new THREE.SphereGeometry(0.055, 8, 8);
+    const auraOrbs = Array.from({ length: 12 }, () => {
+      const orb = new THREE.Mesh(auraGeometry, auraMaterial);
+      orb.visible = false;
+      scene.add(orb);
+      return orb;
+    });
+
+    const dustMaterial = new THREE.PointsMaterial({ color: "#f5d38a", size: 0.09, sizeAttenuation: true, transparent: true, opacity: 0.88 });
+    let dustPoints: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial> | null = null;
+    let renderedWorldVersion = -1;
+
+    const rebuildWorldMeshes = () => {
+      while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]!);
+      const meshes: ThreeBlockMesh[] = [];
+      const w = worldRef.current;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cell = w[r * COLS + c] ?? AIR;
+          if (!cell) continue;
+          const material = blockMaterials.get(cell) ?? blockMaterials.get(STONE)!;
+          const mesh = new THREE.Mesh(blockGeometry, material) as ThreeBlockMesh;
+          mesh.userData = { c, r, t: cell };
+          mesh.position.copy(tileTo3d(c, r, cell === WATER ? WATER_SURFACE_Z : 0));
+          if (cell === WATER) mesh.scale.set(0.98, 0.72, 0.98);
+          if (cell === LEAVES) mesh.scale.set(0.94, 0.94, 0.94);
+          mesh.castShadow = cell !== WATER;
+          mesh.receiveShadow = true;
+          worldGroup.add(mesh);
+          meshes.push(mesh);
+        }
+      }
+      threeRuntimeRef.current = { camera, raycaster, blockMeshes: meshes };
+      renderedWorldVersion = worldVersionRef.current;
+    };
+
+    const pickTargetBlock = () => {
+      const runtime = threeRuntimeRef.current;
+      if (!runtime) return null;
+      runtime.raycaster.setFromCamera(pointerNdcRef.current, runtime.camera);
+      const hits = runtime.raycaster.intersectObjects(runtime.blockMeshes, false);
+      for (const hit of hits) {
+        const data = hit.object.userData as { c?: number; r?: number; t?: number };
+        if (typeof data.c !== "number" || typeof data.r !== "number" || typeof data.t !== "number") continue;
+        if (!mineable(data.t)) continue;
+        if (!playerCanReachTile(playerRef.current, data.c, data.r)) continue;
+        return { c: data.c, r: data.r, t: data.t };
+      }
+      return null;
+    };
+
+    rebuildWorldMeshes();
 
     const loop = (t: number) => {
       const last = lastTRef.current;
@@ -1424,6 +1450,11 @@ export default function BlockCraftQuiz() {
 
       if (keysRef.current.mine) {
         keysRef.current.mine = false;
+        const target = hoverCellRef.current;
+        if (target && tryMineAt(target.c, target.r)) {
+          rafRef.current = requestAnimationFrame(loop);
+          return;
+        }
         tryMineRef.current();
         rafRef.current = requestAnimationFrame(loop);
         return;
@@ -1437,6 +1468,7 @@ export default function BlockCraftQuiz() {
       if (left) p.facing = -1;
       if (right) p.facing = 1;
       if (Math.abs(p.vx) > 0.1) p.tick += dt * 60;
+      const wasOnGround = p.onGround;
       if (jump && p.onGround) {
         p.vy = -JUMP_V;
         p.onGround = false;
@@ -1469,7 +1501,13 @@ export default function BlockCraftQuiz() {
             const overlapY = Math.min(py1 - by, by + TILE - py0);
 
             if (overlapX < overlapY) {
-              if (px0 < bx) p.x = bx - PLAYER_W - 0.01;
+              const stepCandidateY = by - 0.01;
+              const canAutoStep = wasOnGround && p.vy >= 0 && py1 > by && py1 - by < TILE * 0.85 && canStepTo(w, p.x, stepCandidateY);
+              if (canAutoStep) {
+                p.y = stepCandidateY;
+                p.vy = 0;
+                p.onGround = true;
+              } else if (px0 < bx) p.x = bx - PLAYER_W - 0.01;
               else p.x = bx + TILE + 0.01;
               p.vx = 0;
             } else {
@@ -1500,188 +1538,120 @@ export default function BlockCraftQuiz() {
         return;
       }
 
-      const CW = canvas.width;
-      const CH = canvas.height;
-      const playerCenterX = p.x + PLAYER_W / 2;
-      const playerCenterY = p.y - PLAYER_H / 2;
+      if (renderedWorldVersion !== worldVersionRef.current) {
+        rebuildWorldMeshes();
+      }
+      const CW = Math.max(1, canvas.width);
+      const CH = Math.max(1, canvas.height);
+      renderer.setSize(CW, CH, false);
+      camera.aspect = CW / CH;
+      camera.updateProjectionMatrix();
+
+      const playerPos = playerTo3d(p);
+      playerAvatar.position.copy(playerPos);
+      playerAvatar.rotation.y = p.facing > 0 ? -0.18 : 0.18;
+      const stride = Math.sin(p.tick * 0.35) * Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
+      const leftLeg = playerAvatar.getObjectByName("leg-left");
+      const rightLeg = playerAvatar.getObjectByName("leg-right");
+      const leftArm = playerAvatar.getObjectByName("arm-left");
+      const rightArm = playerAvatar.getObjectByName("arm-right");
+      if (leftLeg) leftLeg.rotation.x = stride * 0.55;
+      if (rightLeg) rightLeg.rotation.x = -stride * 0.55;
+      if (leftArm) leftArm.rotation.x = -stride * 0.45;
+      if (rightArm) rightArm.rotation.x = stride * 0.45;
+
       const speedRatio = Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
-      const microAmp = 0.22 + speedRatio * 0.85;
-      const microX = Math.sin(t * 0.007 + p.tick * 0.05) * microAmp;
-      const microY = Math.cos(t * 0.006 + p.tick * 0.08) * microAmp * 0.62;
-      cameraRef.current = {
-        x: playerCenterX - CW / 2 + microX,
-        y: playerCenterY - CH / 2 + microY,
-      };
-      const camX = cameraRef.current.x;
-      const camY = cameraRef.current.y;
+      const lookAhead = p.facing * (0.65 + speedRatio * 0.85);
+      const desiredCamera = new THREE.Vector3(playerPos.x - lookAhead * 0.42, playerPos.y + 3.05, 9.6);
+      camera.position.lerp(desiredCamera, last == null ? 1 : 0.055);
+      camera.lookAt(playerPos.x + lookAhead, playerPos.y + 0.04, 0);
 
       const cycle = (Math.sin(t * 0.00008) + 1) * 0.5;
-      const sky = ctx.createLinearGradient(0, 0, 0, CH);
-      sky.addColorStop(0, `rgba(${Math.round(36 + cycle * 55)}, ${Math.round(70 + cycle * 90)}, ${Math.round(105 + cycle * 100)}, 1)`);
-      sky.addColorStop(0.6, `rgba(${Math.round(95 + cycle * 65)}, ${Math.round(150 + cycle * 60)}, ${Math.round(185 + cycle * 40)}, 1)`);
-      sky.addColorStop(1, "#45764f");
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, CW, CH);
+      scene.background = new THREE.Color().setRGB(0.12 + cycle * 0.34, 0.25 + cycle * 0.34, 0.38 + cycle * 0.32);
+      backdrop.material.color.set(scene.background as THREE.Color);
+      scene.fog = new THREE.FogExp2(scene.background as THREE.Color, 0.032 + (1 - cycle) * 0.018);
+      sun.position.set(playerPos.x - 6 + Math.cos(t * 0.00025) * 7, playerPos.y + 9, 7);
+      sun.target.position.set(playerPos.x, playerPos.y, 0);
+      sun.intensity = 1.25 + cycle * 2.25;
+      ambient.intensity = 1.25 + cycle * 0.9;
 
-      // Éjszakai csillagok (cycle < 0.3 = sotét ég)
-      if (cycle < 0.3) {
-        const starAlpha = Math.min(0.95, (0.3 - cycle) * 4);
-        ctx.fillStyle = `rgba(255,255,255,${starAlpha})`;
-        for (let si = 0; si < 18; si++) {
-          const sx = ((Math.sin(si * 7.31 + 1.2) * 0.5 + 0.5) * CW);
-          const sy = ((Math.sin(si * 3.73 + 0.5) * 0.5 + 0.5) * CH * 0.38);
-          ctx.fillRect(Math.round(sx), Math.round(sy), 1, 1);
-        }
+      const target = pickTargetBlock();
+      hoverCellRef.current = target ? { c: target.c, r: target.r } : null;
+      targetBox.visible = Boolean(target);
+      if (target) {
+        targetBox.position.copy(tileTo3d(target.c, target.r, target.t === WATER ? WATER_SURFACE_Z : 0));
+        const pulse = 1.02 + Math.sin(t * 0.008) * 0.035;
+        targetBox.scale.setScalar(pulse);
       }
 
-      // Klasszikus Minecraft pixel-nap és (éjszaka) hold: négyzetes, pixeles, sarokvilágítással.
-      const sunOrbit = t * 0.00005;
-      const sunX = CW * 0.52 + Math.cos(sunOrbit) * CW * 0.42;
-      const sunY = 54 + Math.sin(sunOrbit * 1.35) * 22;
-      const moonX = CW - sunX;
-      const moonY = sunY;
-      // Nappal: nap. Éjszaka (cycle < 0.45): hold fokozatos halványulással.
-      if (cycle > 0.1) {
-        drawMcSun(ctx, sunX, sunY);
+      if (dustPoints) {
+        scene.remove(dustPoints);
+        dustPoints.geometry.dispose();
+        dustPoints = null;
       }
-      if (cycle < 0.55) {
-        drawMcMoon(ctx, moonX, moonY, Math.min(1, (0.55 - cycle) * 3));
-      }
-
-      ctx.fillStyle = "rgba(22,58,36,0.3)";
-      ctx.beginPath();
-      ctx.moveTo(0, ROWS * TILE - cameraRef.current.y - 120);
-      for (let sx = 0; sx <= CW + 20; sx += 16) {
-        const wx = sx + camX * 0.6;
-        ctx.lineTo(
-          sx,
-          ROWS * TILE - camY - 122 + Math.sin(wx * 0.018) * 14 + Math.cos(wx * 0.008) * 10,
-        );
-      }
-      ctx.lineTo(CW, CH);
-      ctx.lineTo(0, CH);
-      ctx.fill();
-
-      // Klasszikus Minecraft pixel-felhők: többrétegű, lapos, pixeles.
-      drawMcClouds(ctx, t, CW);
-
-      const c0 = Math.floor(camX / TILE);
-      const c1 = Math.ceil((camX + CW) / TILE) + 1;
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = Math.max(0, c0); c < Math.min(COLS, c1); c++) {
-          const cell = w[r * COLS + c] ?? AIR;
-          if (cell) {
-            // Ambient Occlusion: szomszédos szilárd cellák lekérdezése (három oldalról világséta).
-            const top = r > 0 ? solid(w[(r - 1) * COLS + c] ?? AIR) : false;
-            const bottom = r < ROWS - 1 ? solid(w[(r + 1) * COLS + c] ?? AIR) : false;
-            const left = c > 0 ? solid(w[r * COLS + (c - 1)] ?? AIR) : false;
-            const right = c < COLS - 1 ? solid(w[r * COLS + (c + 1)] ?? AIR) : false;
-            drawBlock(
-              ctx,
-              c * TILE - camX,
-              r * TILE - camY,
-              cell,
-              t,
-              c,
-              r,
-              { sunX, sunY, viewW: CW, viewH: CH },
-              { top, bottom, left, right },
-            );
-          }
-        }
+      if (parts.length > 0) {
+        const positions = new Float32Array(parts.length * 3);
+        parts.forEach((ptx, idx) => {
+          positions[idx * 3] = ptx.x / TILE - WORLD_CENTER_X;
+          positions[idx * 3 + 1] = ROWS - ptx.y / TILE;
+          positions[idx * 3 + 2] = 1.05;
+        });
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        dustPoints = new THREE.Points(geometry, dustMaterial);
+        scene.add(dustPoints);
       }
 
-      // Hover outline (klasszikus Minecraft fekete pixel-keret a célzott blokk körül).
-      const hover = hoverCellRef.current;
-      if (hover) {
-        const cell = w[hover.r * COLS + hover.c] ?? AIR;
-        if (cell && mineable(cell) && playerCanReachTile(p, hover.c, hover.r)) {
-          const hx = Math.round(hover.c * TILE - camX);
-          const hy = Math.round(hover.r * TILE - camY);
-          // Külső fekete keret.
-          ctx.fillStyle = "rgba(0,0,0,0.9)";
-          ctx.fillRect(hx - 1, hy - 1, TILE + 2, 1);
-          ctx.fillRect(hx - 1, hy + TILE, TILE + 2, 1);
-          ctx.fillRect(hx - 1, hy - 1, 1, TILE + 2);
-          ctx.fillRect(hx + TILE, hy - 1, 1, TILE + 2);
-          // Finom világos belső pulzálás.
-          const pulse = 0.3 + Math.sin(t * 0.008) * 0.3;
-          ctx.fillStyle = `rgba(255,255,255,${pulse})`;
-          ctx.fillRect(hx, hy, TILE, 1);
-          ctx.fillRect(hx, hy + TILE - 1, TILE, 1);
-          ctx.fillRect(hx, hy, 1, TILE);
-          ctx.fillRect(hx + TILE - 1, hy, 1, TILE);
-        }
-      }
-
-      for (const ptx of parts) {
-        ctx.globalAlpha = Math.max(0, ptx.life);
-        ctx.fillStyle = ptx.color;
-        ctx.fillRect(ptx.x - camX, ptx.y - camY, 3, 3);
-      }
-      ctx.globalAlpha = 1;
-
-      drawPlayer(ctx, p.x - camX, p.y - camY, p.facing, p.tick);
-
-      // Streak aura: 3+ sorozatnál arany particle-k a játékos körül
       if (streakRef.current >= 3) {
-        const auraCx = Math.round(p.x + PLAYER_W / 2 - camX);
-        const auraCy = Math.round(p.y - PLAYER_H / 2 - camY);
         const auraCount = Math.min(12, 4 + streakRef.current * 2);
-        for (let ai = 0; ai < auraCount; ai++) {
+        auraOrbs.forEach((orb, ai) => {
+          orb.visible = ai < auraCount;
+          if (!orb.visible) return;
           const angle = (t * 0.003 + ai * (Math.PI * 2 / auraCount)) % (Math.PI * 2);
-          const rad = 14 + Math.sin(t * 0.008 + ai) * 4;
-          const ax = auraCx + Math.cos(angle) * rad;
-          const ay = auraCy + Math.sin(angle) * rad;
-          const aAlpha = 0.55 + Math.sin(t * 0.01 + ai * 1.3) * 0.3;
-          ctx.fillStyle = `rgba(255,200,0,${aAlpha})`;
-          ctx.fillRect(ax, ay, 2, 2);
-        }
+          const rad = 0.72 + Math.sin(t * 0.008 + ai) * 0.14;
+          orb.position.set(playerPos.x + Math.cos(angle) * rad, playerPos.y + Math.sin(angle) * rad, playerPos.z + 0.18);
+        });
+      } else {
+        auraOrbs.forEach((orb) => {
+          orb.visible = false;
+        });
       }
 
-      // +XP popup animáció
       const xpPop = xpPopupRef.current;
       if (xpPop) {
         xpPop.life -= dt;
         if (xpPop.life <= 0) {
           xpPopupRef.current = null;
+          xpOrb.visible = false;
         } else {
-          const popAlpha = Math.min(1, xpPop.life / 0.4);
-          const rise = (1.5 - xpPop.life) * 30;
-          ctx.globalAlpha = popAlpha;
-          ctx.font = "bold 13px monospace";
-          ctx.fillStyle = "#ffe040";
-          ctx.fillText(`+${xpPop.amount} XP`, xpPop.wx - camX - 20, xpPop.wy - camY - rise);
-          ctx.globalAlpha = 1;
+          const rise = (1.5 - xpPop.life) * 0.85;
+          xpOrb.visible = true;
+          xpOrb.position.set(xpPop.wx / TILE - WORLD_CENTER_X, ROWS - xpPop.wy / TILE + rise, 1.22);
+          xpOrb.scale.setScalar(0.95 + Math.sin(t * 0.015) * 0.16);
         }
+      } else {
+        xpOrb.visible = false;
       }
 
-      // Távolsági köd + atmoszférikus réteg (mélységérzet).
-      const fog = ctx.createLinearGradient(0, 0, 0, CH);
-      fog.addColorStop(0, "rgba(180,220,255,0.03)");
-      fog.addColorStop(0.55, "rgba(150,195,220,0.08)");
-      fog.addColorStop(1, "rgba(120,165,180,0.18)");
-      ctx.fillStyle = fog;
-      ctx.fillRect(0, 0, CW, CH);
-
-      ctx.fillStyle = "rgba(210,240,255,0.06)";
-      for (let i = 0; i < 3; i++) {
-        const bandY = CH * (0.28 + i * 0.21) + Math.sin(t * 0.00065 + i + camX * 0.0014) * 8;
-        ctx.fillRect(0, bandY, CW, 14 + i * 5);
-      }
-
-      // Finom vignetta: fókusz a középponti játéktérre.
-      const vignette = ctx.createRadialGradient(CW / 2, CH / 2, CH * 0.28, CW / 2, CH / 2, CH * 0.8);
-      vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.2)");
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, CW, CH);
+      renderer.render(scene, camera);
       rafRef.current = requestAnimationFrame(loop);
     };
 
     rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [phase]);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      threeRuntimeRef.current = null;
+      if (dustPoints) dustPoints.geometry.dispose();
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
+          obj.geometry.dispose();
+          const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+          materials.forEach((material) => material.dispose());
+        }
+      });
+      renderer.dispose();
+    };
+  }, [phase, tryMineAt]);
 
   const onAnswer = (idx: number) => {
     if (!quiz) return;
@@ -1695,6 +1665,7 @@ export default function BlockCraftQuiz() {
     const tgt = mineTargetRef.current;
     if (tgt) {
       worldRef.current[tgt.r * COLS + tgt.c] = AIR;
+      worldVersionRef.current++;
       spawnDust((tgt.c + 0.5) * TILE, (tgt.r + 0.5) * TILE, tgt.t);
       const isCreeper = tgt.t === CREEPER;
       const baseXp = XP_BY_TILE[tgt.t] ?? 24;
@@ -1795,40 +1766,54 @@ export default function BlockCraftQuiz() {
     hold(k, false);
   };
 
+  const updatePointerNdc = useCallback((canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
+    const { x, y } = pointerOnCanvas(canvas, clientX, clientY);
+    pointerNdcRef.current.set((x / Math.max(1, canvas.width)) * 2 - 1, -(y / Math.max(1, canvas.height)) * 2 + 1);
+  }, []);
+
+  const pickCurrent3dTarget = useCallback(() => {
+    const runtime = threeRuntimeRef.current;
+    if (!runtime) return hoverCellRef.current;
+    runtime.raycaster.setFromCamera(pointerNdcRef.current, runtime.camera);
+    const hits = runtime.raycaster.intersectObjects(runtime.blockMeshes, false);
+    for (const hit of hits) {
+      const data = hit.object.userData as { c?: number; r?: number; t?: number };
+      if (typeof data.c !== "number" || typeof data.r !== "number" || typeof data.t !== "number") continue;
+      if (mineable(data.t) && playerCanReachTile(playerRef.current, data.c, data.r)) {
+        return { c: data.c, r: data.r };
+      }
+    }
+    return hoverCellRef.current;
+  }, []);
+
+  const mineSelectedTarget = useCallback(() => {
+    const target = pickCurrent3dTarget();
+    if (!target || !tryMineAt(target.c, target.r)) tryMine();
+  }, [pickCurrent3dTarget, tryMine, tryMineAt]);
+
   const onCanvasPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
       if (phase !== "play") return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
       e.preventDefault();
       const canvas = e.currentTarget;
-      const { x, y } = pointerOnCanvas(canvas, e.clientX, e.clientY);
-      const cam = cameraRef.current;
-      const tc = Math.floor((x + cam.x) / TILE);
-      const tr = Math.floor((y + cam.y) / TILE);
-      if (!tryMineAt(tc, tr)) tryMine();
+      updatePointerNdc(canvas, e.clientX, e.clientY);
+      mineSelectedTarget();
     },
-    [phase, tryMine, tryMineAt],
+    [phase, mineSelectedTarget, updatePointerNdc],
   );
 
-  /** Hover-outline: a kurzor / ujj alatti blokk célzókeretéhez. */
+  /** 3D raycast célzás: a render loop ebből számolja az aktuális bányászható blokkot. */
   const onCanvasPointerMove = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
       if (phase !== "play") return;
-      const canvas = e.currentTarget;
-      const { x, y } = pointerOnCanvas(canvas, e.clientX, e.clientY);
-      const cam = cameraRef.current;
-      const tc = Math.floor((x + cam.x) / TILE);
-      const tr = Math.floor((y + cam.y) / TILE);
-      if (tc < 0 || tc >= COLS || tr < 0 || tr >= ROWS) {
-        hoverCellRef.current = null;
-        return;
-      }
-      hoverCellRef.current = { c: tc, r: tr };
+      updatePointerNdc(e.currentTarget, e.clientX, e.clientY);
     },
-    [phase],
+    [phase, updatePointerNdc],
   );
 
   const onCanvasPointerLeave = useCallback(() => {
+    pointerNdcRef.current.set(0, 0);
     hoverCellRef.current = null;
   }, []);
 
@@ -1862,7 +1847,7 @@ export default function BlockCraftQuiz() {
 
           {phase === "menu" && <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6"><div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">{[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}</div><p className="text-xs text-amber-100/95 text-center max-w-sm font-semibold">A zöld sáv fent = mennyi időd van a körből. Minél több jó kvíz, annál több XP és hosszabb sorozat!</p><p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgás, Space: ugrás, E vagy Bányász: kvíz. Koppints a kockára is, ha közel vagy hozzá.</p><Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base" onClick={startGame}><Pickaxe className="w-4 h-4 mr-2" />Új világ — indulhat a bányászat!</Button></div>}
 
-          {phase === "play" && <div className="flex flex-col items-center gap-1.5">{/* === CANVAS LEGFELÜL (mobil-first) === */}<div className="rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]"><canvas ref={canvasRef} className="block touch-manipulation w-full max-w-full cursor-crosshair" style={{ imageRendering: "pixelated" as const }} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerLeave={onCanvasPointerLeave} /></div>{/* === KONTROLLGOMBOK közvetlenül a canvas alatt === */}<div className="grid grid-cols-4 gap-1.5 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugrás</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={() => tryMine()}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button></div>{/* === KOMPAKT HUD sáv === */}<div className="w-full flex items-center gap-1.5"><div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500 transition-all" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span></div><div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70"><span>XP: <strong className="text-amber-300">{sessionXp}</strong></span><span>Blokk: {blocksMined}</span><span>Érc: {rareBlocks}</span><span className="flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-400" />{streak}</span></div>{/* === Cél sáv (kompakt) === */}<GameNextGoalBar accent="lime" headline={streak >= ROUND_STREAK_GOAL ? "Szuper sorozat!" : `${streak}/${ROUND_STREAK_GOAL} jó egymás után`} subtitle="" current={Math.min(streak, ROUND_STREAK_GOAL)} target={ROUND_STREAK_GOAL} className="w-full" /><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600/80 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md text-xs px-3 py-1" onClick={endRun}>Kör vége</Button></div></div>}
+          {phase === "play" && <div className="flex flex-col items-center gap-1.5">{/* === CANVAS LEGFELÜL (mobil-first) === */}<div className="relative rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]"><canvas ref={canvasRef} className="block touch-manipulation w-full max-w-full cursor-crosshair" style={{ imageRendering: "pixelated" as const }} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerLeave={onCanvasPointerLeave} /><div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_54%,rgba(0,0,0,0.28)_100%)]" /><div className="pointer-events-none absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/55"><span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-200 shadow-[0_0_10px_rgba(254,240,138,0.85)]" /></div><div className="pointer-events-none absolute left-2 top-2 rounded-lg border border-cyan-200/25 bg-slate-950/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100">WebGL 3D nézet</div><div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-white/75"><span className="rounded bg-black/45 px-2 py-1">Célozz és bányássz: E / koppintás</span><span className="rounded bg-black/45 px-2 py-1">Sárga keret = kvízblokk</span></div></div>{/* === KONTROLLGOMBOK közvetlenül a canvas alatt === */}<div className="grid grid-cols-4 gap-1.5 w-full"><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button><Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugrás</Button><Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button><Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={mineSelectedTarget}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button></div>{/* === KOMPAKT HUD sáv === */}<div className="w-full flex items-center gap-1.5"><div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-400 to-lime-500 transition-all" style={{ width: `${(timeLeft / ROUND_LIMIT) * 100}%` }} /></div><span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span></div><div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70"><span>XP: <strong className="text-amber-300">{sessionXp}</strong></span><span>Blokk: {blocksMined}</span><span>Érc: {rareBlocks}</span><span className="flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-400" />{streak}</span></div>{/* === Cél sáv (kompakt) === */}<GameNextGoalBar accent="lime" headline={streak >= ROUND_STREAK_GOAL ? "Szuper sorozat!" : `${streak}/${ROUND_STREAK_GOAL} jó egymás után`} subtitle="" current={Math.min(streak, ROUND_STREAK_GOAL)} target={ROUND_STREAK_GOAL} className="w-full" /><div className="flex gap-2 justify-center w-full"><Button type="button" size="sm" className="bg-amber-600/80 hover:bg-amber-500 text-slate-950 border border-amber-200/45 shadow-md text-xs px-3 py-1" onClick={endRun}>Kör vége</Button></div></div>}
 
           {phase === "over" && <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center"><Box className="w-12 h-12 text-lime-400" /><p className="text-lg font-bold">Bányászat vége</p><p className="text-sm font-semibold text-lime-100/90 max-w-sm">Minden jó kvíz egy-egy tantárgyból erősített — nézd meg az XP-t, a sorozatot és a tantárgyi lebontást!</p><p className="text-sm text-white/75">XP: <strong className="text-amber-300">{sessionXp}</strong> · Blokkok: <strong>{blocksMined}</strong> · Érc: <strong>{rareBlocks}</strong></p><div className="flex flex-wrap gap-1.5 justify-center max-w-sm"><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-lime-600/70 text-lime-50 border-lime-300/60">Angol: {subjectStats.english}</span><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-cyan-600/70 text-cyan-50 border-cyan-300/60">Angol-matek: {subjectStats["english-math"]}</span><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-amber-600/70 text-amber-50 border-amber-300/60">Matek: {subjectStats.math}</span><span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-600/70 text-emerald-50 border-emerald-300/60">Környezet: {subjectStats.nature}</span></div>{syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}<div className="flex gap-2"><Button className="bg-lime-700 hover:bg-lime-600" onClick={startGame}><RotateCcw className="w-4 h-4 mr-1" />Új világ</Button><Link href="/games"><Button variant="outline" className="border-white/40 text-white">Lista</Button></Link></div></div>}
         </CardContent></Card>
