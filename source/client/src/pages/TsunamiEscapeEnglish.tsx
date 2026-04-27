@@ -26,16 +26,28 @@ import {
   tsunamiQuizHardMore,
   tsunamiQuizMedMore,
 } from "@/data/englishGameQuizExtras";
+import {
+  TSUNAMI_SUBJECT_META,
+  TSUNAMI_SUBJECT_ORDER,
+  TSUNAMI_SUBJECT_QUIZ_BANKS,
+  type SubjectQuizPools,
+  type TsunamiCoreSubject,
+  type TsunamiSubject,
+  type TsunamiSubjectQuiz,
+} from "@/data/tsunamiSubjectQuizBanks";
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 
 const LS_XP = "websuli-tsunami-en-xp";
 const LS_BEST = "websuli-tsunami-en-best-streak";
 
-type Quiz = FourChoiceQuiz;
+type Quiz = TsunamiSubjectQuiz;
+
+const withSubject = (items: FourChoiceQuiz[], subject: TsunamiCoreSubject): TsunamiSubjectQuiz[] =>
+  items.map((item) => ({ ...item, subject }));
 
 /** 3–5. osztályos angol: alap → közép → nehezebb kérdések a menet előrehaladtával */
-const QUIZ_BANK: Quiz[] = [
+const QUIZ_BANK: FourChoiceQuiz[] = [
   {
     id: "1",
     prompt: "Hogy mondjuk angolul: piros?",
@@ -208,7 +220,7 @@ const QUIZ_BANK: Quiz[] = [
 ];
 
 /** Közép szakasz (3–4. osztály): napok, hónapok, egyszerű mondatok */
-const HARD_QUIZ_EXTRA: Quiz[] = [
+const HARD_QUIZ_EXTRA: FourChoiceQuiz[] = [
   {
     id: "h1",
     prompt: "Hogy mondjuk angolul: hétfő?",
@@ -259,7 +271,7 @@ const HARD_QUIZ_EXTRA: Quiz[] = [
   },
 ];
 
-const QUIZ_ADDITIONAL_MED: Quiz[] = [
+const QUIZ_ADDITIONAL_MED: FourChoiceQuiz[] = [
   {
     id: "m1",
     prompt: "Hogy mondjuk angolul: kedd?",
@@ -346,7 +358,7 @@ const QUIZ_ADDITIONAL_MED: Quiz[] = [
   },
 ];
 
-const QUIZ_HARD: Quiz[] = [
+const QUIZ_HARD: FourChoiceQuiz[] = [
   {
     id: "x1",
     prompt: "Melyik igeforma illik: She ___ English every day.",
@@ -434,7 +446,7 @@ const QUIZ_HARD: Quiz[] = [
   ...tsunamiQuizHardMore,
 ];
 
-const QUIZ_MED: Quiz[] = [...HARD_QUIZ_EXTRA, ...QUIZ_ADDITIONAL_MED, ...tsunamiQuizMedMore];
+const QUIZ_MED: FourChoiceQuiz[] = [...HARD_QUIZ_EXTRA, ...QUIZ_ADDITIONAL_MED, ...tsunamiQuizMedMore];
 
 type GameDifficulty = "easy" | "normal" | "hard";
 
@@ -442,9 +454,9 @@ const PRESETS: Record<
   GameDifficulty,
   { waterRisePerSec: number; quizEverySec: number; waterPush: number; xpPerCorrect: number; runBonus: number }
 > = {
-  easy: { waterRisePerSec: 1.45, quizEverySec: 11, waterPush: 22, xpPerCorrect: 25, runBonus: 2 },
-  normal: { waterRisePerSec: 2.1, quizEverySec: 9, waterPush: 20, xpPerCorrect: 26, runBonus: 2 },
-  hard: { waterRisePerSec: 2.85, quizEverySec: 7, waterPush: 17, xpPerCorrect: 34, runBonus: 2 },
+  easy: { waterRisePerSec: 1.25, quizEverySec: 9.5, waterPush: 25, xpPerCorrect: 28, runBonus: 3 },
+  normal: { waterRisePerSec: 1.85, quizEverySec: 8, waterPush: 23, xpPerCorrect: 30, runBonus: 3 },
+  hard: { waterRisePerSec: 2.55, quizEverySec: 6.7, waterPush: 20, xpPerCorrect: 38, runBonus: 3 },
 };
 
 /** Ennyi helyes kvíz egy körben = győzelem (nem a hullám üzenet) */
@@ -492,6 +504,8 @@ type Phase = "menu" | "play" | "quiz" | "over" | "won";
 
 type SyncEligibility = { eligible: boolean; reason?: string };
 
+type ActiveQuizPools = Record<TsunamiCoreSubject, SubjectQuizPools>;
+
 function difficultyLabel(d: GameDifficulty): string {
   if (d === "easy") return "Könnyű";
   if (d === "hard") return "Nehéz";
@@ -518,6 +532,7 @@ function parseDifficultyFromSearch(): GameDifficulty {
 
 export default function TsunamiEscapeEnglish() {
   const [difficulty, setDifficulty] = useState<GameDifficulty>(parseDifficultyFromSearch);
+  const [subject, setSubject] = useState<TsunamiSubject>("mixed");
   const [phase, setPhase] = useState<Phase>("menu");
   const [water, setWater] = useState(12);
   const [playerX, setPlayerX] = useState(50);
@@ -556,6 +571,8 @@ export default function TsunamiEscapeEnglish() {
   const runDifficultyRef = useRef<GameDifficulty>("normal");
   const correctQuizCountRef = useRef(0);
   const scoreSubmittedRef = useRef(false);
+  const runSubjectRef = useRef<TsunamiSubject>("mixed");
+  const subjectRoundRef = useRef(0);
 
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
     queryKey: ["/api/games/quiz-bank/tsunami-english"],
@@ -567,12 +584,16 @@ export default function TsunamiEscapeEnglish() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const mergedPools = useMemo(() => {
+  const mergedPools = useMemo<ActiveQuizPools>(() => {
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
+    const english: SubjectQuizPools = {
+      easy: [...withSubject(QUIZ_BANK, "english"), ...withSubject(easy, "english")],
+      med: [...withSubject(QUIZ_MED, "english"), ...withSubject(medium, "english")],
+      hard: [...withSubject(QUIZ_HARD, "english"), ...withSubject(hard, "english")],
+    };
     return {
-      easy: [...QUIZ_BANK, ...easy],
-      med: [...QUIZ_MED, ...medium],
-      hard: [...QUIZ_HARD, ...hard],
+      english,
+      ...TSUNAMI_SUBJECT_QUIZ_BANKS,
     };
   }, [quizBankResponse]);
 
@@ -602,6 +623,7 @@ export default function TsunamiEscapeEnglish() {
 
   const pickQuiz = useCallback((): Quiz => {
     const d = runDifficultyRef.current;
+    const activeSubject = runSubjectRef.current;
     const target = winQuizTarget(d);
     const done = correctQuizCountRef.current;
     const p = target > 0 ? Math.min(1, done / target) : 0;
@@ -609,7 +631,11 @@ export default function TsunamiEscapeEnglish() {
     if (d === "hard") eff = Math.min(1, p * 1.22);
     if (d === "easy") eff = p * 0.78;
 
-    const { easy: poolE, med: poolM, hard: poolH } = mergedPoolsRef.current;
+    const subjectKey =
+      activeSubject === "mixed"
+        ? TSUNAMI_SUBJECT_ORDER[subjectRoundRef.current++ % TSUNAMI_SUBJECT_ORDER.length]!
+        : activeSubject;
+    const { easy: poolE, med: poolM, hard: poolH } = mergedPoolsRef.current[subjectKey];
     let pool: Quiz[];
     if (eff < 0.32) pool = [...poolE];
     else if (eff < 0.58) pool = [...poolE, ...poolM];
@@ -636,6 +662,8 @@ export default function TsunamiEscapeEnglish() {
   const startGame = useCallback(() => {
     paramsRef.current = PRESETS[difficulty];
     runDifficultyRef.current = difficulty;
+    runSubjectRef.current = subject;
+    subjectRoundRef.current = 0;
     scoreSubmittedRef.current = false;
     setWater(12);
     setPlayerX(50);
@@ -654,14 +682,14 @@ export default function TsunamiEscapeEnglish() {
     correctQuizCountRef.current = 0;
     recentQuizIdsRef.current = [];
     // Give an early first quiz so the run does not feel empty at the start.
-    quizTimerRef.current = Math.max(0, PRESETS[difficulty].quizEverySec * 0.55);
+    quizTimerRef.current = Math.max(0, PRESETS[difficulty].quizEverySec * 0.72);
     runTimerRef.current = 0;
     safeZoneTimerRef.current = 0;
     stormTimerRef.current = 0;
     lastRef.current = null;
     setQuiz(null);
     setPhase("play");
-  }, [difficulty]);
+  }, [difficulty, subject]);
 
   const endGame = useCallback(() => {
     setPhase("over");
@@ -934,6 +962,9 @@ export default function TsunamiEscapeEnglish() {
   }, [phase]);
 
   const surfacePct = useMemo(() => Math.min(100, water), [water]);
+  const selectedSubjectMeta = TSUNAMI_SUBJECT_META[subject];
+  const runSubjectMeta = TSUNAMI_SUBJECT_META[runSubjectRef.current];
+  const quizSubjectMeta = quiz ? TSUNAMI_SUBJECT_META[quiz.subject] : runSubjectMeta;
 
   useEffect(() => {
     if (phase !== "over" && phase !== "won") return;
@@ -953,8 +984,7 @@ export default function TsunamiEscapeEnglish() {
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard/tsunami"] });
       })
-      .catch((err) => {
-        console.warn("[games/score]", err);
+      .catch(() => {
         scoreSubmittedRef.current = false;
       });
   }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
@@ -1018,18 +1048,18 @@ export default function TsunamiEscapeEnglish() {
             <div className="flex items-center gap-2 mb-2">
               <Waves className="w-5 h-5 text-cyan-300" />
               <h1 className="text-base sm:text-lg font-extrabold leading-tight">
-                Szökőár szökés — Angol (3–5. o.)
+                Szökőár szökés — Tudáspróba (3–5. o.)
               </h1>
             </div>
             <GamePedagogyPanel
               accent="cyan"
               className="mb-2"
-              kidMission={`Fuss el a víz elől! Angol kvízek jönnek: jó válasz = XP + lejjebb megy a hullám. Egy körben szerezz ${winQuizTarget(difficulty)} helyes kvízt, és győztél — jár a nagy bónusz XP! Ha túl magas a víz, új kört kezdhetsz.`}
+              kidMission={`Fuss el a víz elől! Válassz tantárgyat vagy Vegyes kihívást: jó válasz = XP + lejjebb megy a hullám. Egy körben szerezz ${winQuizTarget(difficulty)} helyes kvízt, és győztél — jár a nagy bónusz XP!`}
               parentBody={
                 <>
-                  <strong className="text-cyan-100/90">Tananyag:</strong> alsó tagozatos angol szókincs és rövid szövegértés; a nehézség a választott szinthez igazodik.
+                  <strong className="text-cyan-100/90">Tananyag:</strong> 3–5. osztályos angol, matek, magyar nyelvtan és környezetismeret. A Vegyes kihívás körön belül váltogatja a tantárgyakat.
                   <br />
-                  <strong className="text-cyan-100/90">Fejleszt:</strong> gyors döntés (időkorlátos kvíz), olvasásértés, a pályán térbeli figyelem és stratégia (biztonsági zóna).
+                  <strong className="text-cyan-100/90">Fejleszt:</strong> gyors döntés, olvasásértés, fejszámolás, helyesírási figyelem, természettudományos kapcsolatok és stratégia (biztonsági zóna).
                   <br />
                   <span className="text-white/55">
                     Felépítés: cél (menekülés) → akadály (víz, sodrás) → rövid teszt → azonnali jutalom (XP, vízcsökkenés) vagy következmény — a gyakorlás és a visszajelzés szorosan összekapcsolva.
@@ -1051,6 +1081,33 @@ export default function TsunamiEscapeEnglish() {
                   Legjobb sorozat (helyi): <strong className="text-orange-300">{bestStreak}</strong> helyes
                   egymás után
                 </p>
+                <div className="w-full max-w-xl">
+                  <p className="text-xs text-cyan-100/90 text-center font-semibold mb-2">Tantárgy mód</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                    {(["mixed", ...TSUNAMI_SUBJECT_ORDER] as TsunamiSubject[]).map((id) => {
+                      const meta = TSUNAMI_SUBJECT_META[id];
+                      const active = subject === id;
+                      return (
+                        <Button
+                          key={id}
+                          type="button"
+                          variant={active ? "default" : "outline"}
+                          className={`h-auto min-h-[70px] flex flex-col items-start justify-center gap-0.5 text-left rounded-xl border px-3 py-2 ${
+                            active
+                              ? "bg-gradient-to-br from-cyan-500 to-blue-700 text-white border-cyan-100/60 shadow-[0_0_20px_rgba(34,211,238,0.28)]"
+                              : "bg-slate-900/75 border-white/20 text-white hover:bg-slate-800/90"
+                          }`}
+                          onClick={() => setSubject(id)}
+                        >
+                          <span className="text-[10px] font-black tracking-wide text-amber-200">{meta.chip}</span>
+                          <span className="text-xs font-extrabold">{meta.label}</span>
+                          <span className="text-[10px] leading-tight text-white/70">{meta.short}</span>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-[11px] text-cyan-100/80 text-center">{selectedSubjectMeta.mission}</p>
+                </div>
                 <div className="w-full max-w-xs space-y-2">
                   <p className="text-xs text-cyan-100/90 text-center font-semibold">Nehézség</p>
                   <div className="flex gap-2 justify-center flex-wrap">
@@ -1089,7 +1146,7 @@ export default function TsunamiEscapeEnglish() {
                   onClick={startGame}
                   data-testid="button-tsunami-start"
                 >
-                  Indítás ({difficultyLabel(difficulty)})
+                  Indítás: {selectedSubjectMeta.label} · {difficultyLabel(difficulty)}
                 </Button>
               </div>
             )}
@@ -1103,7 +1160,7 @@ export default function TsunamiEscapeEnglish() {
                       ? "Megvan a győzelem ebben a körben — fuss tovább, gyűjts XP-et!"
                       : `${Math.max(0, winQuizTarget(runDifficultyRef.current) - correctQuizzesInRun)} helyes kvíz még a célhoz`
                   }
-                  subtitle={`Futás: ${runSeconds} mp · ${difficultyLabel(runDifficultyRef.current)} · jó válasz = víz lejjebb`}
+                  subtitle={`${runSubjectMeta.label} · Futás: ${runSeconds} mp · ${difficultyLabel(runDifficultyRef.current)} · jó válasz = víz lejjebb`}
                   current={correctQuizzesInRun}
                   target={winQuizTarget(runDifficultyRef.current)}
                   className="mb-2"
@@ -1163,6 +1220,9 @@ export default function TsunamiEscapeEnglish() {
                   </span>
                 </div>
                 <div className="absolute top-9 left-2 right-2 text-[11px] text-slate-900/90 font-semibold z-10 flex flex-wrap gap-2 justify-between">
+                  <span className="rounded-md bg-amber-100/75 px-2 py-1 border border-amber-300/55 text-amber-950 font-black">
+                    {runSubjectMeta.chip}: {runSubjectMeta.label}
+                  </span>
                   <span className="rounded-md bg-white/45 px-2 py-1 backdrop-blur-sm border border-white/40">
                     Futás: {runSeconds}s · {difficultyLabel(runDifficultyRef.current)}
                   </span>
@@ -1372,7 +1432,7 @@ export default function TsunamiEscapeEnglish() {
                 <Trophy className="w-16 h-16 text-amber-300 drop-shadow-lg" />
                 <p className="text-xl font-black text-amber-200">Sikerült elmenekülni!</p>
                 <p className="text-sm font-semibold text-emerald-200/95 max-w-sm">
-                  Ez a nagy jutalom-kör: elég angol kvízt találtál el — így néz ki, amikor a gyakorlás meghozza a győzelmet!
+                  Ez a nagy jutalom-kör: elég tudáspróba sikerült {runSubjectMeta.label.toLowerCase()} módban — így néz ki, amikor a gyakorlás meghozza a győzelmet!
                 </p>
                 <p className="text-sm text-white/80 max-w-xs">
                   {correctQuizzesInRun} helyes kvíz · +{WIN_BONUS_XP} győzelmi bónusz XP · összesen ebben a körben:{" "}
@@ -1461,9 +1521,14 @@ export default function TsunamiEscapeEnglish() {
                 wrongShake ? "animate-shake" : ""
               }`}
             >
-              <p className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-1">
-                Mini-teszt — találd el, és jön a jutalom
-              </p>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className="rounded-full border border-amber-200/60 bg-amber-300/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-200">
+                  {quizSubjectMeta.chip} · {quizSubjectMeta.label}
+                </span>
+                <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider">
+                  Mini-teszt — találd el, és jön a jutalom
+                </span>
+              </div>
               <p className="text-[11px] text-white/70 mb-1">Helyes válasz: XP + lejjebb a hullám. Figyelj az órára!</p>
               <p className="text-[11px] text-amber-200/90 mb-1 inline-flex items-center gap-1">
                 <Timer className="w-3 h-3" />

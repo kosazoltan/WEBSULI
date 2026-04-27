@@ -90,8 +90,9 @@ const PLAYABLE_IDS = new Set([
 /** API / régi migráció szövegét felülírja (pl. „Hamarosan” helyett játszható leírás) */
 const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }> = {
   "tsunami-english": {
+    title: "Szökőár szökés — Tudáspróba",
     description:
-      "3–5. osztályos angol: válassz nehézséget indulás előtt. Hosszabb menetek, a körön belül egyre nehezebb kérdések és gyorsuló hullám.",
+      "3–5. osztályos kaland: angol, matek, nyelvtan, környezetismeret vagy vegyes kihívás. Fuss, válaszolj, és nyomd vissza a hullámot!",
   },
   "word-ladder-hu-en": {
     description:
@@ -126,9 +127,9 @@ function applyDisplayOverrides(rows: GameCatalogRow[]): GameCatalogRow[] {
 const FALLBACK_CATALOG: GameCatalogRow[] = [
   {
     id: "tsunami-english",
-    title: "Szökőár szökés — Angol",
+    title: "Szökőár szökés — Tudáspróba",
     description:
-      "3–5. osztályos angol: válassz nehézséget indulás előtt. Hosszabb menetek, a körön belül egyre nehezebb kérdések és gyorsuló hullám.",
+      "3–5. osztályos kaland: angol, matek, nyelvtan, környezetismeret vagy vegyes kihívás. Fuss, válaszolj, és nyomd vissza a hullámot!",
     sortOrder: 1,
     createdAt: "",
   },
