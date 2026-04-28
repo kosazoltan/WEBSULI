@@ -689,22 +689,31 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
 
 const BLOCK_3D_SIZE = 1;
 /**
- * 3D blokkok mélysége (z-tengelyen). 1.0 unit = klasszikus Minecraft kocka:
- * - tiszta cube-megjelenés (front face z=+0.5, back face z=-0.5)
- * - a háttérben látszanak a felső blokkok hátsó élei → „voxel” mélységérzet
- * - a játékos pontosan a blokk-fal FRONT FACE-ÉN sétál → ZERO parallax,
- *   nincs „lebegő láb” effekt a 17°-os lefelé-néző kameránál
+ * Klasszikus Minecraft-kocka (1×1×1) — minden lane-be ugyanezt a geometriát
+ * használjuk; per-face textúra GRASS-en marad.
  */
 const BLOCK_3D_DEPTH = 1.0;
 const WORLD_CENTER_X = COLS / 2;
 const WATER_SURFACE_Z = 0.08;
 /**
- * A játékos pontosan a blokkok FRONT FACE síkjában (z = +0.5) sétál,
- * +0.05 buffer-rel, hogy a Steve-avatar ne clip-eljen a fal-élekbe és
- * a kamera–blokk parallax tényleg nulla legyen (foot pixel-pontosan a
- * blokk tetején).
+ * 5 párhuzamos blokk-réteg z-tengelyen → "4 kocka mély út" megjelenés.
+ * Eddig egyetlen rétegnél a játéktér laposnak (= 2D-falnak) tűnt.
+ * Most a 2D world-array-t z-tengelyen 5× duplikáljuk, minden cellához
+ * 5 mesh kerül z=-2.0, -1.0, 0.0, +1.0, +2.0 pozíciókba — így a kamera
+ * 17°-os lefelé-tilt-jénél a felső blokkok mind az 5 sora látszik egymás
+ * mögött, igazi voxel-mélységgel. A játékos a +2.0 lane FRONT-FACE előtt
+ * sétál (z=+2.55), így ütközik a "legfelső" sor felületével.
  */
-const PLAYER_DEPTH_Z = 0.55;
+const WORLD_LANES = [-2.0, -1.0, 0.0, 1.0, 2.0] as const;
+/** Az a lane, ahol a játékos sétál (legközelebbi a kamerához). */
+const FRONT_LANE_Z = WORLD_LANES[WORLD_LANES.length - 1]!;
+/**
+ * Játékos a legközelebbi lane FRONT-FACE síkja előtt 0.05 unit-tal.
+ * Front-face = FRONT_LANE_Z + BLOCK_3D_DEPTH/2 = +2.5 → player z = +2.55.
+ * A foot pixel-pontosan a legfelső sor blokk-tetején, közvetlenül a
+ * kamera felé eső lap előtt — nincs parallax-eltolódás.
+ */
+const PLAYER_DEPTH_Z = FRONT_LANE_Z + BLOCK_3D_DEPTH / 2 + 0.05;
 
 function tileTo3d(c: number, r: number, z = 0) {
   return new THREE.Vector3(c - WORLD_CENTER_X + 0.5, ROWS - r - 0.5, z);
@@ -1737,8 +1746,8 @@ export default function BlockCraftQuiz() {
 
     const playerAvatar = createPlayerAvatar();
     // Kezdő pose: már a player aktuális facing-je szerint álljon, hogy első frame-en
-    // ne legyen frontális → oldalra fordulás "snap".
-    playerAvatar.rotation.y = playerRef.current.facing > 0 ? -Math.PI / 2 : Math.PI / 2;
+    // ne legyen frontális → oldalra fordulás "snap". (facing=+1 → +π/2)
+    playerAvatar.rotation.y = playerRef.current.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
     scene.add(playerAvatar);
 
     const xpOrb = new THREE.Mesh(
@@ -1767,22 +1776,30 @@ export default function BlockCraftQuiz() {
       while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]!);
       const meshes: ThreeBlockMesh[] = [];
       const w = worldRef.current;
+      const lastLaneIdx = WORLD_LANES.length - 1;
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
           const cell = w[r * COLS + c] ?? AIR;
           if (!cell) continue;
           const material = blockMaterials.get(cell) ?? blockMaterials.get(STONE)!;
-          const mesh = new THREE.Mesh(blockGeometry, material) as ThreeBlockMesh;
-          mesh.userData = { c, r, t: cell };
-          mesh.position.copy(tileTo3d(c, r, blockDepthZ(cell)));
-          // Víz: laposabb, kissé szűkebb (úszó felület hatás).
-          if (cell === WATER) mesh.scale.set(1.0, 0.66, 1.0);
-          // Levelek: kicsit kisebbek, hézag-érzet a faágak között.
-          if (cell === LEAVES) mesh.scale.set(0.96, 0.96, 0.98);
-          mesh.castShadow = cell !== WATER;
-          mesh.receiveShadow = true;
-          worldGroup.add(mesh);
-          meshes.push(mesh);
+          // Mind a 5 lane-en duplikáljuk a blokkot. A FRONT lane (legközelebbi
+          // a kamerához) lesz a raycast-target — onnan bányász a játékos.
+          for (let li = 0; li < WORLD_LANES.length; li++) {
+            const laneZ = WORLD_LANES[li]!;
+            const isFront = li === lastLaneIdx;
+            const mesh = new THREE.Mesh(blockGeometry, material) as ThreeBlockMesh;
+            mesh.userData = { c, r, t: cell, laneZ, isFront };
+            mesh.position.copy(tileTo3d(c, r, laneZ + blockDepthZ(cell)));
+            // Víz: laposabb, kissé szűkebb (úszó felület hatás).
+            if (cell === WATER) mesh.scale.set(1.0, 0.66, 1.0);
+            // Levelek: kicsit kisebbek, hézag-érzet a faágak között.
+            if (cell === LEAVES) mesh.scale.set(0.96, 0.96, 0.98);
+            // Csak a FRONT lane vet árnyékot (perf), a háttér-rétegek receiveShadow.
+            mesh.castShadow = cell !== WATER && isFront;
+            mesh.receiveShadow = true;
+            worldGroup.add(mesh);
+            meshes.push(mesh);
+          }
         }
       }
       threeRuntimeRef.current = { camera, raycaster, blockMeshes: meshes };
@@ -1917,10 +1934,12 @@ export default function BlockCraftQuiz() {
 
       const playerPos = playerTo3d(p);
       playerAvatar.position.copy(playerPos);
-      // Steve a mozgás irányába fordul (90°-os profil-nézet a kamera felé,
-      // mint a klasszikus 2.5D platformerekben). A lerp simán átfordít az
-      // ellenkező irányba kb. 10–12 frame alatt — nincs hirtelen ugrás.
-      const targetYRot = p.facing > 0 ? -Math.PI / 2 : Math.PI / 2;
+      // Steve a mozgás irányába fordul (90°-os profil-nézet a kamera felé).
+      // Steve "front" iránya az avatar lokális +Z (orr/szemek a +Z oldalon).
+      // facing=+1 (jobbra megy a játéktérben) → arc +X felé mutasson →
+      // Y-rotation +π/2 (mátrix [0,0,1; 0,1,0; -1,0,0] forgatja (0,0,1)→(1,0,0)).
+      // facing=-1 → -π/2.
+      const targetYRot = p.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
       playerAvatar.rotation.y = THREE.MathUtils.lerp(playerAvatar.rotation.y, targetYRot, 0.22);
       const stride = Math.sin(p.tick * 0.35) * Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
       const leftLeg = playerAvatar.getObjectByName("leg-left");
@@ -1931,10 +1950,11 @@ export default function BlockCraftQuiz() {
       if (rightLeg) rightLeg.rotation.x = -stride * 0.55;
       if (leftArm) leftArm.rotation.x = -stride * 0.45;
       if (rightArm) rightArm.rotation.x = stride * 0.45;
-      // Csákány a "kamera felőli" karban: a 90°-os forgatás után a túloldali
-      // kar a kamera mögé esik, így a csákányt mindig a látható oldalra
-      // tükrözzük facing alapján — sosem tűnik el "Steve háta mögé".
-      const pickSide = p.facing > 0 ? 1 : -1;
+      // Csákány a "kamera felőli" karban: a 90°-os forgatás után az
+      // egyik kar a -Z (kamera mögé) esik. facing=+1 (rotation +π/2) esetén
+      // az eredeti +X (jobb) kar a -Z-re fordul → háta mögé esik. Ezért a
+      // csákányt a -X (bal) karhoz tesszük → forgás után +Z-re kerül = látható.
+      const pickSide = p.facing > 0 ? -1 : 1;
       const pickHandle = playerAvatar.getObjectByName("pick-handle");
       const pickHead = playerAvatar.getObjectByName("pick-head");
       if (pickHandle) {
@@ -1986,7 +2006,9 @@ export default function BlockCraftQuiz() {
       hoverCellRef.current = target ? { c: target.c, r: target.r } : null;
       targetBox.visible = Boolean(target);
       if (target) {
-        targetBox.position.copy(tileTo3d(target.c, target.r, blockDepthZ(target.t)));
+        // Targetbox a FRONT lane-en jelenjen meg (legközelebb a kamerához
+        // és a játékoshoz), nem a középső lane-en — különben "elcsúszna".
+        targetBox.position.copy(tileTo3d(target.c, target.r, FRONT_LANE_Z + blockDepthZ(target.t)));
         const pulse = 1.02 + Math.sin(t * 0.008) * 0.035;
         targetBox.scale.setScalar(pulse);
       }
