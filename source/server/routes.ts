@@ -733,6 +733,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * Nyilvános: a megadott osztály legutóbbi N (alap: 3) tananyagához kapcsolt
+   * kvíz-tételek. Játék-specifikus, "személyre szabott" kérdésekhez (Space
+   * Asteroid Quiz). Ha az osztálynak nincs anyaga vagy nincs csatolt kvíz,
+   * `items: []` üres tömböt ad vissza, és a kliens statikus fallbackre vált.
+   */
+  app.get("/api/games/material-quizzes", async (req, res) => {
+    try {
+      const classroomRaw =
+        typeof req.query.classroom === "string" ? parseInt(req.query.classroom, 10) : NaN;
+      const limitRaw = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 3;
+      if (!Number.isFinite(classroomRaw) || classroomRaw < 0 || classroomRaw > 12) {
+        return res.status(400).json({ message: "classroom 0–12 között legyen." });
+      }
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 3;
+      const result = await gameQuizBankService.listLatestMaterialQuizzes(classroomRaw, limit);
+      res.json({
+        classroom: result.classroom,
+        materials: result.materials,
+        items: result.items.map((r) => ({
+          id: r.id,
+          tier: r.tier,
+          topic: r.topic,
+          prompt: r.prompt,
+          options: r.options,
+          correctIndex: r.correctIndex,
+          sourceMaterialId: r.sourceMaterialId,
+        })),
+      });
+    } catch (e) {
+      console.error("[GAMES] material-quizzes", e);
+      res.json({ classroom: 0, materials: [], items: [] });
+    }
+  });
+
   app.get("/api/games/leaderboard", async (req, res) => {
     try {
       const gameId = typeof req.query.gameId === "string" ? req.query.gameId : "";
