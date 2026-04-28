@@ -34,7 +34,8 @@ import {
   FolderOpen,
   Upload,
   Sparkles,
-  Activity
+  Activity,
+  GraduationCap
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +66,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
+import ParentDashboardPanel from "@/components/ParentDashboardPanel";
 import BackupManager from "@/components/BackupManager";
 import TagManager from "@/components/TagManager";
 import FileEditDialog from "@/components/FileEditDialog";
@@ -755,6 +757,10 @@ export default function Admin() {
               <Activity className="h-3 w-3" />
               Email diag
             </TabsTrigger>
+            <TabsTrigger value="parent-dashboard" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white text-purple-700 dark:text-purple-400" data-testid="tab-parent-dashboard">
+              <GraduationCap className="h-3 w-3" />
+              Szülő-dash
+            </TabsTrigger>
             <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-database">
               <Database className="h-3 w-3" />
               Adatbázis
@@ -939,6 +945,10 @@ export default function Admin() {
 
       <TabsContent value="email-debug" className="space-y-2">
         {activeTab === "email-debug" && <EmailDiagnosticsPanel />}
+      </TabsContent>
+
+      <TabsContent value="parent-dashboard" className="space-y-2">
+        {activeTab === "parent-dashboard" && <ParentDashboardPanel />}
       </TabsContent>
 
       <TabsContent value="tags" className="space-y-2">
