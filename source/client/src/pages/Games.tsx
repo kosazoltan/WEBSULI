@@ -12,6 +12,7 @@ import {
   CloudUpload,
   Box,
   Brain,
+  Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,6 +61,14 @@ function normalizeGameId(id: string): string {
   if (k === "brainrot-steal" || k === "brain-rot" || k === "brainrotsteal") {
     return "brain-rot-steal";
   }
+  if (
+    k === "spaceasteroid-quiz" ||
+    k === "space-asteroid" ||
+    k === "asteroid-quiz" ||
+    k === "galaktikus-aszteroida"
+  ) {
+    return "space-asteroid-quiz";
+  }
   return k;
 }
 
@@ -69,6 +78,7 @@ const GAME_ICONS: Record<string, typeof Waves> = {
   "speed-quiz-math": Zap,
   "block-craft-quiz": Box,
   "brain-rot-steal": Brain,
+  "space-asteroid-quiz": Rocket,
 };
 
 const GAME_ACCENTS: Record<string, string> = {
@@ -77,6 +87,7 @@ const GAME_ACCENTS: Record<string, string> = {
   "speed-quiz-math": "from-amber-500 to-orange-600",
   "block-craft-quiz": "from-lime-500 to-emerald-700",
   "brain-rot-steal": "from-purple-500 to-pink-600",
+  "space-asteroid-quiz": "from-cyan-500 to-fuchsia-600",
 };
 
 const PLAYABLE_IDS = new Set([
@@ -85,6 +96,7 @@ const PLAYABLE_IDS = new Set([
   "block-craft-quiz",
   "speed-quiz-math",
   "brain-rot-steal",
+  "space-asteroid-quiz",
 ]);
 
 /** API / régi migráció szövegét felülírja (pl. „Hamarosan” helyett játszható leírás) */
@@ -106,6 +118,11 @@ const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }
   },
   "brain-rot-steal": {
     description: "Kapd el a Brain Rot-okat! Minden elkapás kvízt hoz: angol, matek, magyar nyelvtan. Kombó szorzóval még több XP!",
+  },
+  "space-asteroid-quiz": {
+    title: "Galaktikus Aszteroida Kvíz",
+    description:
+      "3D űrharc minden hullám és minden ütközés kvízt hoz a SAJÁT osztályod legutóbbi 3 tananyagából. Lődd ki az aszteroidákat, kristályokat, alien UFO-kat és ellenséges vadászgépeket!",
   },
 };
 
@@ -160,6 +177,14 @@ const FALLBACK_CATALOG: GameCatalogRow[] = [
     title: "Brain Rot Lopás",
     description: "Kapd el a Brain Rot-okat! Minden elkapás kvízt hoz: angol, matek, magyar nyelvtan. Kombó szorzóval még több XP!",
     sortOrder: 5,
+    createdAt: "",
+  },
+  {
+    id: "space-asteroid-quiz",
+    title: "Galaktikus Aszteroida Kvíz",
+    description:
+      "3D űrharc minden hullám és minden ütközés kvízt hoz a SAJÁT osztályod legutóbbi 3 tananyagából. Lődd ki az aszteroidákat, kristályokat, alien UFO-kat és ellenséges vadászgépeket!",
+    sortOrder: 6,
     createdAt: "",
   },
 ];
@@ -420,6 +445,34 @@ export default function Games() {
                             </h2>
                             <p className="text-sm text-white/70 leading-snug">{game.description}</p>
                             <p className="text-xs text-purple-300/90 mt-2 font-medium">Brain Rot vadászat →</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </li>
+                );
+              }
+
+              if (playable && game.id === "space-asteroid-quiz") {
+                return (
+                  <li key={game.id}>
+                    <Link href="/games/space-asteroid-quiz">
+                      <Card className="glass-card border-white/20 hover:border-cyan-400/50 transition-colors cursor-pointer group h-full">
+                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
+                          <div
+                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
+                          >
+                            <Icon className="w-7 h-7 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h2 className="text-lg font-bold text-white group-hover:text-cyan-200 transition-colors">
+                                {game.title}
+                              </h2>
+                              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                            </div>
+                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
+                            <p className="text-xs text-cyan-300/90 mt-2 font-medium">Indítás (osztály-választással) →</p>
                           </div>
                         </CardContent>
                       </Card>
