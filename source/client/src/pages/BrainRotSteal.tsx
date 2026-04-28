@@ -14,6 +14,9 @@ import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
+import { recordRun, type Achievement } from "@/lib/achievements";
+import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
+import AchievementToast from "@/components/AchievementToast";
 
 /* --- Típusok --- */
 type Quiz = { prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
@@ -533,6 +536,34 @@ export default function BrainRotSteal() {
       });
   }, [phase, syncEligibility, sessionXp, bestStreak, runSeconds]);
 
+  // Achievement + Daily — egyszer fut "over" átmenetkor.
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
+  const achievementCheckedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "over") {
+      achievementCheckedRef.current = false;
+      return;
+    }
+    if (achievementCheckedRef.current) return;
+    achievementCheckedRef.current = true;
+    const wasDailyAvailable = isTodaysGameAvailable("brain-rot-steal");
+    const newOnes = recordRun({
+      game: "brain-rot-steal",
+      xpGained: sessionXp,
+      correctAnswers: totalCaught,
+      wrongAnswers: totalMissed,
+      maxStreak: bestStreak,
+      brainRotsCaught: totalCaught,
+      maxComboMultiplier: comboMultiplier,
+      perfect: totalMissed === 0 && totalCaught >= 5,
+    });
+    // Daily: ha a játékos legalább 10 brain rot-ot kapott el → "teljesítve".
+    if (wasDailyAvailable && totalCaught >= 10) {
+      markDailyCompleted();
+    }
+    if (newOnes.length > 0) setNewlyUnlocked(newOnes);
+  }, [phase, sessionXp, totalCaught, totalMissed, bestStreak, comboMultiplier]);
+
   /* --- Render --- */
   const timePercent = (timeLeft / ROUND_LIMIT) * 100;
 
@@ -545,6 +576,7 @@ export default function BrainRotSteal() {
       }}
     >
       <ClassroomGateModal accent="fuchsia" />
+      <AchievementToast achievements={newlyUnlocked} />
       {/* Background animated stars */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {Array.from({ length: 30 }).map((_, i) => (

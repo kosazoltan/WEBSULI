@@ -12,6 +12,9 @@ import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScor
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
+import { recordRun, type Achievement } from "@/lib/achievements";
+import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
+import AchievementToast from "@/components/AchievementToast";
 
 /* =====================================================================
  * Galaktikus Aszteroida Kvíz Vadász – Three.js 3D űrharc
@@ -470,6 +473,7 @@ export default function SpaceAsteroidQuiz() {
   const streakProtector = useStreakProtector();
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const [enemiesKilled, setEnemiesKilled] = useState(0);
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const [paused, setPaused] = useState(false);
   const [gameWon, setGameWon] = useState(false);
 
@@ -1517,6 +1521,33 @@ export default function SpaceAsteroidQuiz() {
       .catch(() => { scoreSubmittedRef.current = false; });
   }, [phase, syncEligibility, timeLeft]);
 
+  // Achievement + Daily — egyszer fut "over" átmenetkor.
+  const achievementCheckedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "over") {
+      achievementCheckedRef.current = false;
+      return;
+    }
+    if (achievementCheckedRef.current) return;
+    achievementCheckedRef.current = true;
+    const wasDailyAvailable = isTodaysGameAvailable("space-asteroid-quiz");
+    const newOnes = recordRun({
+      game: "space-asteroid-quiz",
+      xpGained: scoreRef.current,
+      correctAnswers: enemiesKilledRef.current, // ≈ a leszedett ellenfél = helyes válasz proxy
+      wrongAnswers: 0,
+      maxStreak: comboRef.current,
+      enemiesKilled: enemiesKilledRef.current,
+      perfect: gameWon && comboRef.current >= 5,
+      fullClear: gameWon,
+      highestWave: waveRef.current,
+    });
+    if (wasDailyAvailable && gameWon) {
+      markDailyCompleted();
+    }
+    if (newOnes.length > 0) setNewlyUnlocked(newOnes);
+  }, [phase, gameWon]);
+
   /* ===================== Render JSX ===================== */
   const onPickGrade = (g: number) => {
     setGrade(g);
@@ -1538,6 +1569,7 @@ export default function SpaceAsteroidQuiz() {
     <div className="min-h-screen relative overflow-hidden text-white" style={{
       background: "radial-gradient(ellipse at 22% 18%, rgba(255,0,255,0.18), transparent 38%), radial-gradient(ellipse at 80% 12%, rgba(0,240,255,0.20), transparent 42%), linear-gradient(180deg, #02041a 0%, #08051b 100%)",
     }}>
+      <AchievementToast achievements={newlyUnlocked} />
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
         <header className="flex items-center justify-between gap-1 mb-1">
           <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>

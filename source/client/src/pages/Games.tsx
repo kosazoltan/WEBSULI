@@ -13,7 +13,12 @@ import {
   Box,
   Brain,
   Rocket,
+  Calendar,
+  Award,
+  Flame,
 } from "lucide-react";
+import { useDailyChallenge } from "@/lib/dailyChallenge";
+import { useAchievements } from "@/lib/achievements";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -191,6 +196,8 @@ const FALLBACK_CATALOG: GameCatalogRow[] = [
 
 export default function Games() {
   const [lbDifficulty, setLbDifficulty] = useState<"easy" | "normal" | "hard">("normal");
+  const { pick: dailyPick, completedToday: dailyDone, streakDays } = useDailyChallenge();
+  const { unlockedCount, totalCount } = useAchievements();
 
   const {
     data: catalogFromApi,
@@ -252,7 +259,48 @@ export default function Games() {
             <Gamepad2 className="w-6 h-6 text-amber-400" />
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Játékok</h1>
           </div>
+          <Link href="/profile" className="ml-auto">
+            <Button variant="outline" size="sm" className="border-white/40 text-white hover:bg-white/10 gap-1">
+              <Award className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">Profil</span>
+              <span className="text-amber-300 font-bold">
+                {unlockedCount}/{totalCount}
+              </span>
+            </Button>
+          </Link>
         </div>
+
+        {/* Daily Challenge banner */}
+        <Card className="glass-card border-amber-400/55 mb-4 bg-amber-900/15 shadow-[0_0_24px_rgba(251,191,36,0.18)]">
+          <CardContent className="p-3 sm:p-4 flex items-center gap-3">
+            <Calendar className="w-7 h-7 text-amber-300 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-widest font-bold text-amber-300 mb-0.5">Mai kihívás</p>
+              <p className="text-sm sm:text-base font-extrabold text-white leading-tight">
+                {dailyPick.emoji} {dailyPick.title}
+                <span className="ml-2 text-[11px] font-medium text-amber-200/85">+{dailyPick.bonusXp} bónusz XP</span>
+              </p>
+              <div className="flex items-center gap-3 mt-1 text-[11px]">
+                {dailyDone ? (
+                  <span className="text-emerald-300 font-semibold">✓ Mára teljesítve</span>
+                ) : (
+                  <span className="text-amber-200/85">Egy győztes futás napi streak-et ad.</span>
+                )}
+                <span className="flex items-center gap-1 text-orange-300 font-semibold">
+                  <Flame className="w-3.5 h-3.5" />
+                  {streakDays} nap
+                </span>
+              </div>
+            </div>
+            {!dailyDone && (
+              <Link href={`/games/${dailyPick.game}`}>
+                <Button className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex-shrink-0">
+                  Indítás
+                </Button>
+              </Link>
+            )}
+          </CardContent>
+        </Card>
 
         <p className="text-white/80 text-sm mb-4 leading-relaxed">
           A <Link href="/" className="text-cyan-200 underline-offset-2 hover:underline font-semibold">főoldalon</Link> a

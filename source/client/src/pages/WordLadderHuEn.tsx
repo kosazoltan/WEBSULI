@@ -14,6 +14,9 @@ import { useClassroomGrade } from "@/lib/classroomStore";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
+import { recordRun, type Achievement } from "@/lib/achievements";
+import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
+import AchievementToast from "@/components/AchievementToast";
 import {
   wordLadderEasyMore,
   wordLadderHardMore,
@@ -312,6 +315,32 @@ export default function WordLadderHuEn() {
       });
   }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
 
+  // Achievement + Daily — egyszer fut "won" átmenetkor.
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
+  const achievementCheckedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "won") {
+      achievementCheckedRef.current = false;
+      return;
+    }
+    if (achievementCheckedRef.current) return;
+    achievementCheckedRef.current = true;
+    const wasDailyAvailable = isTodaysGameAvailable("word-ladder-hu-en");
+    const newOnes = recordRun({
+      game: "word-ladder-hu-en",
+      xpGained: sessionXp,
+      correctAnswers: streak, // best-effort proxy
+      wrongAnswers: 0,
+      maxStreak: streak,
+      perfect: streak >= 5,
+      fullClear: true,
+    });
+    if (wasDailyAvailable) {
+      markDailyCompleted();
+    }
+    if (newOnes.length > 0) setNewlyUnlocked(newOnes);
+  }, [phase, sessionXp, streak]);
+
   return (
     <div
       className="min-h-screen relative overflow-hidden text-white"
@@ -320,6 +349,7 @@ export default function WordLadderHuEn() {
       }}
     >
       <ClassroomGateModal accent="violet" />
+      <AchievementToast achievements={newlyUnlocked} />
       {/* Ég + nap */}
       <div
         className="pointer-events-none absolute inset-0 opacity-90"
