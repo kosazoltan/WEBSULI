@@ -7,6 +7,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
+import AudioToggleButton from "@/components/AudioToggleButton";
+import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import {
   ArrowLeft,
   ArrowBigLeft,
@@ -708,6 +710,19 @@ export default function TsunamiEscapeEnglish() {
     setPhase("play");
   }, [difficulty, subject]);
 
+  // R = quick-restart az "over" / "won" / "menu" képernyőn.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      if (phase === "over" || phase === "won" || phase === "menu") {
+        e.preventDefault();
+        startGame();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, startGame]);
+
   const endGame = useCallback(() => {
     setPhase("over");
     cancelAnimationFrame(rafRef.current);
@@ -907,6 +922,7 @@ export default function TsunamiEscapeEnglish() {
   const onAnswer = (index: number) => {
     if (!quiz) return;
     if (index !== quiz.correctIndex) {
+      sfxError();
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 320);
       setStreak(0);
@@ -920,6 +936,7 @@ export default function TsunamiEscapeEnglish() {
       return;
     }
 
+    sfxSuccess();
     setRewardBurst(true);
     setTimeout(() => setRewardBurst(false), 900);
 
@@ -941,6 +958,7 @@ export default function TsunamiEscapeEnglish() {
 
     const need = winQuizTarget(runDifficultyRef.current);
     if (nCorrect >= need) {
+      sfxLevelUp();
       setSessionXp((x) => x + WIN_BONUS_XP);
       setTotalXp((t) => t + WIN_BONUS_XP);
       setQuiz(null);
@@ -1050,6 +1068,7 @@ export default function TsunamiEscapeEnglish() {
             </Button>
           </Link>
           <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold">
+            <AudioToggleButton size="icon" />
             <span className="flex items-center gap-1 text-amber-300">
               <Star className="w-4 h-4" />
               {totalXp} XP

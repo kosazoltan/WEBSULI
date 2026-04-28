@@ -12,6 +12,8 @@ import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScor
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
+import AudioToggleButton from "@/components/AudioToggleButton";
+import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import {
   wordLadderEasyMore,
   wordLadderHardMore,
@@ -221,22 +223,38 @@ export default function WordLadderHuEn() {
       clearInterval(tickRef.current);
       tickRef.current = null;
     }
+    sfxLevelUp();
     setPhase("won");
     setCelebrate(true);
     setTimeout(() => setCelebrate(false), 2000);
   }, []);
+
+  // R = quick-restart a "won" / "menu" képernyőn.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      if (phase === "won" || phase === "menu") {
+        e.preventDefault();
+        startGame();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, startGame]);
 
   const onAnswer = (i: number) => {
     if (!current) return;
     const isCorrect = i === current.correctIndex;
 
     if (!isCorrect) {
+      sfxError();
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 400);
       setStreak(0);
     }
 
     if (isCorrect) {
+      sfxSuccess();
       const add = 30 + streak * 2;
       setSessionXp((x) => x + add);
       setTotalXp((t) => t + add);
@@ -330,6 +348,7 @@ export default function WordLadderHuEn() {
             </Button>
           </Link>
           <div className="flex items-center gap-2 text-xs font-semibold">
+            <AudioToggleButton size="icon" />
             <span className="flex items-center gap-1 text-amber-300">
               <Star className="w-4 h-4" />
               {totalXp}

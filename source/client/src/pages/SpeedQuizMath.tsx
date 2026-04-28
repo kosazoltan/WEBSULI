@@ -7,6 +7,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
+import AudioToggleButton from "@/components/AudioToggleButton";
+import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 
 type GradeLevel = 3 | 4 | 5;
 type Phase = "menu" | "play" | "over" | "won";
@@ -283,7 +285,23 @@ export default function SpeedQuizMath() {
   }, [grade]);
 
   const endAsLose = useCallback(() => setPhase("over"), []);
-  const endAsWin = useCallback(() => setPhase("won"), []);
+  const endAsWin = useCallback(() => {
+    sfxLevelUp();
+    setPhase("won");
+  }, []);
+
+  // R = quick-restart az "over" / "won" / "menu" képernyőn.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      if (phase === "over" || phase === "won" || phase === "menu") {
+        e.preventDefault();
+        startGame();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, startGame]);
 
   useEffect(() => {
     if (phase !== "play") return;
@@ -321,6 +339,7 @@ export default function SpeedQuizMath() {
     setAnswered((n) => n + 1);
 
     if (idx !== task.correctIndex) {
+      sfxError();
       setAnswerState("wrong");
       setWrongFlash(true);
       window.setTimeout(() => setWrongFlash(false), 220);
@@ -338,6 +357,7 @@ export default function SpeedQuizMath() {
       return;
     }
 
+    sfxSuccess();
     setAnswerState("correct");
     const base = grade === 3 ? 30 : grade === 4 ? 36 : 44;
     const speedBonus = Math.max(0, questionTimeLeft - 1) * (grade === 5 ? 4 : 3);
@@ -405,6 +425,7 @@ export default function SpeedQuizMath() {
             </Button>
           </Link>
           <div className="flex items-center gap-3 text-xs font-semibold">
+            <AudioToggleButton size="icon" />
             <span className="flex items-center gap-1 text-amber-300">
               <Star className="w-4 h-4" />
               {totalXp}
