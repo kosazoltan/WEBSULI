@@ -8,6 +8,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
+import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
+import { useClassroomGrade } from "@/lib/classroomStore";
+import ClassroomGateModal from "@/components/ClassroomGateModal";
 
 /* --- Típusok --- */
 type Quiz = { prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
@@ -241,10 +244,30 @@ export default function BrainRotSteal() {
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
 
+  // Tananyag-kvíz: a játékos osztályának legutóbbi 3 anyagából (Claude-generált).
+  const { grade: userGrade } = useClassroomGrade();
+  const { items: materialItems } = useMaterialQuizzes(userGrade);
+
   /* --- Quiz valasztas --- */
+  const fullQuizPool = useMemo(() => {
+    const matMapped: Quiz[] = materialItems
+      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .map((q) => {
+        const t = (q.topic ?? "").toLowerCase();
+        const cat: Quiz["category"] = t === "math" ? "math" : t === "hungarian" ? "hungarian" : "english";
+        return {
+          prompt: q.prompt,
+          options: q.options.slice(0, 4),
+          correctIndex: q.correctIndex,
+          category: cat,
+        };
+      });
+    return [...matMapped, ...ALL_QUIZZES];
+  }, [materialItems]);
+
   const pickQuiz = useCallback((): Quiz => {
-    return pickRandom(ALL_QUIZZES);
-  }, []);
+    return pickRandom(fullQuizPool);
+  }, [fullQuizPool]);
 
   /* --- Reszecskek --- */
   const spawnParticles = useCallback((x: number, y: number, color: string, count: number, emoji?: string) => {
@@ -481,6 +504,7 @@ export default function BrainRotSteal() {
           "radial-gradient(circle at 20% 20%, rgba(147, 51, 234, 0.25), transparent 45%), radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.2), transparent 40%), radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.12), transparent 50%), linear-gradient(180deg, #0c0118 0%, #1a0a2e 50%, #0f172a 100%)",
       }}
     >
+      <ClassroomGateModal accent="fuchsia" />
       {/* Background animated stars */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {Array.from({ length: 30 }).map((_, i) => (

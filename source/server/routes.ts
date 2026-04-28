@@ -17,6 +17,7 @@ import { sanitizeText, sanitizeHtml, sanitizeEmail, sanitizeUserAgent, sanitizeU
 import { setupAuth, isAuthenticated, isAuthenticatedAdmin } from "./auth";
 import * as gameScoreService from "./gameScoreService";
 import * as gameQuizBankService from "./gameQuizBankService";
+import { generateMaterialQuiz } from "./gameQuizGeneratorService";
 // checkIsAdmin import removed
 
 import { db } from "./db";
@@ -734,10 +735,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * Admin: AI-vel generál `count` db (alap: 10) kvíz-tételt egy tananyaghoz.
+   * Forrás: `htmlFiles[id]` HTML-tartalma → Claude → strukturált JSON →
+   * insert `gameQuizItems`-be (gameId="space-asteroid-quiz" alibi).
+   * A material-quizzes endpoint utána automatikusan visszaadja az adott
+   * osztály összes játékához.
+   */
+  app.post("/api/admin/materials/:id/generate-quiz", isAuthenticatedAdmin, async (req: Request, res) => {
+    try {
+      const id = typeof req.params.id === "string" ? req.params.id : "";
+      const countRaw = typeof req.body?.count === "number" ? req.body.count : 10;
+      if (!id) return res.status(400).json({ message: "Hiányzó tananyag ID." });
+      const result = await generateMaterialQuiz(id, countRaw);
+      return res.json(result);
+    } catch (e) {
+      console.error("[GAMES] generate-quiz", e);
+      const msg = e instanceof Error ? e.message : "Ismeretlen hiba.";
+      return res.status(500).json({ message: msg });
+    }
+  });
+
+  /**
    * Nyilvános: a megadott osztály legutóbbi N (alap: 3) tananyagához kapcsolt
    * kvíz-tételek. Játék-specifikus, "személyre szabott" kérdésekhez (Space
-   * Asteroid Quiz). Ha az osztálynak nincs anyaga vagy nincs csatolt kvíz,
-   * `items: []` üres tömböt ad vissza, és a kliens statikus fallbackre vált.
+   * Asteroid Quiz, BlockCraft, Brain Rot, Tsunami stb.). Ha az osztálynak
+   * nincs anyaga vagy nincs csatolt kvíz, `items: []` üres tömböt ad vissza,
+   * és a kliens statikus fallbackre vált.
+   *
+   * NB: a lekérdezés gameId-tól FÜGGETLEN — minden játék közösen használja
+   * ugyanazt a pool-t, és kliens-oldalon szűr `topic` alapján (pl. Speed
+   * Quiz Math csak `topic === "math"`).
    */
   app.get("/api/games/material-quizzes", async (req, res) => {
     try {

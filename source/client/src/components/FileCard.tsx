@@ -1,9 +1,11 @@
-import { Eye, Trash2, Calendar, Edit, Send } from "lucide-react";
+import { Eye, Trash2, Calendar, Edit, Send, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
 import LikeButton from "./LikeButton";
+import { useToast } from "@/hooks/use-toast";
 
 interface FileCardProps {
   id: string;
@@ -34,6 +36,45 @@ export default function FileCard({
   onDelete,
   onSendEmail,
 }: FileCardProps) {
+  const { toast } = useToast();
+  const [generating, setGenerating] = useState(false);
+
+  /**
+   * AI-vel kvíz-tételeket generál a tananyagból (Claude). A háttérben az
+   * /api/admin/materials/:id/generate-quiz endpoint-ot hívja, és a végén
+   * toast-tal jelez. A generált tételek a `gameQuizItems` táblába kerülnek
+   * `sourceMaterialId = id` köteléssel — minden játék automatikusan elérheti
+   * az osztály-szűrt `material-quizzes` endpoint-on keresztül.
+   */
+  const handleGenerateQuiz = async () => {
+    if (generating) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/admin/materials/${id}/generate-quiz`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 10 }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || `${res.status} ${res.statusText}`);
+      }
+      const data = await res.json();
+      toast({
+        title: "Kvíz-tételek generálva",
+        description: `${data.inserted} tétel mentve. ${data.skipped > 0 ? `Kihagyva: ${data.skipped}.` : ""}`,
+      });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Kvíz-generálás hiba",
+        description: e instanceof Error ? e.message : "Ismeretlen hiba.",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('hu-HU', {
       year: 'numeric',
@@ -106,6 +147,19 @@ export default function FileCard({
               data-testid="button-edit-file"
             >
               <Edit className="w-3 h-3" />
+            </Button>
+          )}
+          {isAdmin && contentType !== "pdf" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleGenerateQuiz}
+              disabled={generating}
+              title="AI-vel 10 kvíz-tétel generálása ehhez a tananyaghoz (Claude)"
+              className="h-6 w-6 p-0 flex-shrink-0 border-violet-400 text-violet-600 hover:bg-violet-100 dark:border-violet-600 dark:text-violet-300 dark:hover:bg-violet-900/30 disabled:opacity-50"
+              data-testid="button-generate-quiz"
+            >
+              <Sparkles className={`w-3 h-3 ${generating ? "animate-spin" : ""}`} />
             </Button>
           )}
           {isAdmin && onSendEmail && (

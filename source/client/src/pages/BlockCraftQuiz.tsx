@@ -10,6 +10,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
+import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
+import { useClassroomGrade } from "@/lib/classroomStore";
+import ClassroomGateModal from "@/components/ClassroomGateModal";
 
 const TILE = 24;
 const ROWS = 18;
@@ -1391,9 +1394,31 @@ export default function BlockCraftQuiz() {
     },
   });
 
+  // Az osztály-szintű tananyag-bázis: a játékos legutóbbi 3 anyagából AI-vel
+  // generált kvíz-tételek (Claude). Ha még nincs kapcsolt kérdés, üres marad.
+  const { grade: userGrade } = useClassroomGrade();
+  const { items: materialItems } = useMaterialQuizzes(userGrade);
+
   const bank = useMemo<Quiz[]>(() => {
-    // A backend-ből érkező tételek menték „english” kategóriát alapból (Minecraft-fókuszú angol szókincs).
-    // A stratified-picker osztályozza őket, hogy a matek/környezet/angol-matek se szoruljon háttérbe.
+    // 1) Tananyag-kvízek (AI-generált, az osztályod legutóbbi 3 anyagából).
+    //    Topic → BlockCraft `subject` mapping (angol/matek/környezet/magyar).
+    const fromMaterial: Quiz[] = materialItems
+      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .map((q) => {
+        const t = (q.topic ?? "").toLowerCase();
+        const subject: QuizSubject =
+          t === "math" ? "math"
+          : t === "nature" ? "nature"
+          : t === "english" ? "english"
+          : "english"; // hungarian topic alapú kérdéseket "english" csoportba tesszük
+        return {
+          prompt: q.prompt,
+          options: q.options.slice(0, 4),
+          correctIndex: q.correctIndex,
+          subject,
+        };
+      });
+    // 2) Régi quiz-bank (block-craft-quiz gameId-vel mentett tételek)
     const remote: Quiz[] = (bankData?.items ?? [])
       .filter((q) => q.options?.length > 1)
       .map((q) => ({
@@ -1402,8 +1427,9 @@ export default function BlockCraftQuiz() {
         correctIndex: q.correctIndex,
         subject: "english" as QuizSubject,
       }));
-    return [...remote, ...QUIZ_FALLBACK];
-  }, [bankData]);
+    // 3) Statikus fallback (Minecraft-tematikus angol/matek/környezet/magyar)
+    return [...fromMaterial, ...remote, ...QUIZ_FALLBACK];
+  }, [bankData, materialItems]);
 
   /**
    * Stratified pool: a kvízeket tantargy szerint csoportosítja és minden
@@ -2264,6 +2290,7 @@ export default function BlockCraftQuiz() {
 
   return (
     <div className="min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
+      <ClassroomGateModal accent="lime" />
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
         <header className="flex items-center justify-between gap-1 mb-1">
           <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>

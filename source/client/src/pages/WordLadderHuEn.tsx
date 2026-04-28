@@ -9,6 +9,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
+import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
+import { useClassroomGrade } from "@/lib/classroomStore";
+import ClassroomGateModal from "@/components/ClassroomGateModal";
 import {
   wordLadderEasyMore,
   wordLadderHardMore,
@@ -148,14 +151,26 @@ export default function WordLadderHuEn() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // Csak `topic === "english"` material-tételeket fogad (a Word Ladder szókincs-orientált).
+  const { grade: userGrade } = useClassroomGrade();
+  const { items: materialItems } = useMaterialQuizzes(userGrade, "english");
+
   const mergedPools = useMemo(() => {
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
+    const matMed = materialItems
+      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .map((q, idx) => ({
+        id: q.id ?? `mat-${idx}`,
+        prompt: q.prompt,
+        options: q.options.slice(0, 4) as [string, string, string, string],
+        correctIndex: q.correctIndex,
+      }));
     return {
       easy: [...QUIZ_BANK, ...easy],
-      med: [...QUIZ_MED, ...medium],
+      med: [...QUIZ_MED, ...medium, ...matMed],
       hard: [...QUIZ_HARD, ...hard],
     };
-  }, [quizBankResponse]);
+  }, [quizBankResponse, materialItems]);
 
   const mergedPoolsRef = useRef(mergedPools);
   mergedPoolsRef.current = mergedPools;
@@ -286,6 +301,7 @@ export default function WordLadderHuEn() {
         background: "linear-gradient(180deg, #1e3a5f 0%, #2d4a6f 35%, #3d5c3a 70%, #2d4a2d 100%)",
       }}
     >
+      <ClassroomGateModal accent="violet" />
       {/* Ég + nap */}
       <div
         className="pointer-events-none absolute inset-0 opacity-90"

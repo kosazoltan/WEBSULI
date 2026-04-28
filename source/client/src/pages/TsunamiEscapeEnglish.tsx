@@ -4,6 +4,9 @@ import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
+import { useClassroomGrade } from "@/lib/classroomStore";
+import ClassroomGateModal from "@/components/ClassroomGateModal";
 import {
   ArrowLeft,
   ArrowBigLeft,
@@ -584,18 +587,32 @@ export default function TsunamiEscapeEnglish() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // Játékos osztály-specifikus tananyag-kvíz bank (Claude-generált) — minden
+  // material-tétel az `english` subject `med` (medium) tier-jébe kerül, függetlenül
+  // a topic-tól, így az alap "english" mode-ban (ami a leggyakoribb) elérhető.
+  const { grade: userGrade } = useClassroomGrade();
+  const { items: materialItems } = useMaterialQuizzes(userGrade);
+
   const mergedPools = useMemo<ActiveQuizPools>(() => {
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
+    const matMed = materialItems
+      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .map((q, idx) => ({
+        id: q.id ?? `mat-${idx}`,
+        prompt: q.prompt,
+        options: q.options.slice(0, 4) as [string, string, string, string],
+        correctIndex: q.correctIndex,
+      }));
     const english: SubjectQuizPools = {
       easy: [...withSubject(QUIZ_BANK, "english"), ...withSubject(easy, "english")],
-      med: [...withSubject(QUIZ_MED, "english"), ...withSubject(medium, "english")],
+      med: [...withSubject(QUIZ_MED, "english"), ...withSubject(medium, "english"), ...withSubject(matMed, "english")],
       hard: [...withSubject(QUIZ_HARD, "english"), ...withSubject(hard, "english")],
     };
     return {
       english,
       ...TSUNAMI_SUBJECT_QUIZ_BANKS,
     };
-  }, [quizBankResponse]);
+  }, [quizBankResponse, materialItems]);
 
   const mergedPoolsRef = useRef(mergedPools);
   mergedPoolsRef.current = mergedPools;
@@ -997,6 +1014,7 @@ export default function TsunamiEscapeEnglish() {
           "radial-gradient(circle at 8% 14%, rgba(14,165,233,0.34), transparent 34%), radial-gradient(circle at 90% 8%, rgba(250,204,21,0.26), transparent 30%), linear-gradient(180deg, #03203f 0%, #05325f 48%, #0b4d8f 100%)",
       }}
     >
+      <ClassroomGateModal accent="cyan" />
       <div className="absolute inset-0 opacity-35 pointer-events-none">
         <CosmicBackground />
       </div>
