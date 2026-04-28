@@ -362,6 +362,46 @@
   .skeleton {
     @apply animate-pulse bg-muted rounded;
   }
+
+  /*
+   * Game-page reszponzivitás:
+   *  - Mobilon (default) min-h-screen — a játéktér elfér, de görgethető is.
+   *  - Asztali (lg+ ≥1024px) max-h-screen + overflow-hidden — fix viewport;
+   *    A Card belül görget, hogy a header / canvas mindig látható maradjon.
+   *
+   *  Használat: a játék-page fő <div>-jére tedd a "game-shell-fixed" classt,
+   *  és a görgethető Card-tartalmra adj data-game-card-content attribútumot.
+   */
+  .game-shell-fixed {
+    /* Mobile: alap min-h-screen marad, no fix viewport */
+  }
+}
+
+@media (min-width: 1024px) {
+  .game-shell-fixed > main {
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+  .game-shell-fixed [data-game-card-content] {
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Vékony scrollbar — kevésbé feltűnő desktopon */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  }
+  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar {
+    width: 8px;
+  }
+  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+  }
+  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.4);
+  }
 }
 
 @layer utilities {

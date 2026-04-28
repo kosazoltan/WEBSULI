@@ -1055,7 +1055,7 @@ export default function TsunamiEscapeEnglish() {
 
   return (
     <div
-      className="min-h-screen relative overflow-hidden text-white"
+      className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
       style={{
         background:
           "radial-gradient(circle at 8% 14%, rgba(14,165,233,0.34), transparent 34%), radial-gradient(circle at 90% 8%, rgba(250,204,21,0.26), transparent 30%), linear-gradient(180deg, #03203f 0%, #05325f 48%, #0b4d8f 100%)",
@@ -1111,7 +1111,7 @@ export default function TsunamiEscapeEnglish() {
         </header>
 
         <Card className="border border-cyan-200/40 bg-slate-950/82 backdrop-blur-md flex-1 flex flex-col min-h-0 mb-3 shadow-[0_20px_60px_rgba(6,182,212,0.22)]">
-          <CardContent className="p-3 sm:p-4 flex flex-col flex-1 min-h-0">
+          <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-2">
               <Waves className="w-5 h-5 text-cyan-300" />
               <h1 className="text-base sm:text-lg font-extrabold leading-tight">
