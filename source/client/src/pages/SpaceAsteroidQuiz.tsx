@@ -9,6 +9,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
+import AudioToggleButton from "@/components/AudioToggleButton";
+import { useStreakProtector } from "@/hooks/useStreakProtector";
+import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 
 /* =====================================================================
  * Galaktikus Aszteroida Kvíz Vadász – Three.js 3D űrharc
@@ -460,6 +463,11 @@ export default function SpaceAsteroidQuiz() {
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [quizReason, setQuizReason] = useState<QuizReason>("wave");
   const [wrongShake, setWrongShake] = useState(false);
+  // Helyes-válasz felfedés a kvíz-modálban (zöld outline) + a hibás opció
+  // piros outline-ja, 1.5s alatt fade-elődik, majd új kvíz / play.
+  const [revealCorrectIdx, setRevealCorrectIdx] = useState<number | null>(null);
+  const [wrongIdx, setWrongIdx] = useState<number | null>(null);
+  const streakProtector = useStreakProtector();
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const [enemiesKilled, setEnemiesKilled] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -649,6 +657,9 @@ export default function SpaceAsteroidQuiz() {
 
   const startNewRun = useCallback(() => {
     scoreSubmittedRef.current = false;
+    streakProtector.resetProtector();
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
     enemiesRef.current = [];
     bulletsRef.current = [];
     pickupsRef.current = [];
@@ -684,17 +695,32 @@ export default function SpaceAsteroidQuiz() {
 
   const onAnswer = (idx: number) => {
     if (!activeQuiz) return;
+    if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
     if (idx !== activeQuiz.correctIndex) {
+      sfxError();
       setWrongShake(true);
       window.setTimeout(() => setWrongShake(false), 320);
-      // Új kvíz, marad a kvíz fázis
-      setActiveQuiz(pickQuiz());
+      setRevealCorrectIdx(activeQuiz.correctIndex);
+      setWrongIdx(idx);
+      const outcome = streakProtector.handleWrong({ streak: combo });
+      if (outcome === "warned") sfxWarning();
+      else setCombo(0);
+      // Reveal után új kvíz (még quiz fázisban)
+      window.setTimeout(() => {
+        setRevealCorrectIdx(null);
+        setWrongIdx(null);
+        setActiveQuiz(pickQuiz());
+      }, 1500);
       return;
     }
     // Helyes válasz
+    sfxSuccess();
     setActiveQuiz(null);
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
     if (quizReason === "wave") {
-      // A hullám elinítja a spawning-ot
+      sfxLevelUp();
+      // A hullám elindítja a spawning-ot
       beginWaveSpawning();
       // Bónusz pontok jó válaszért
       setScore((s) => s + 50);
@@ -930,6 +956,7 @@ export default function SpaceAsteroidQuiz() {
         bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x - 0.45, y: p.y + 0.5, vx: -3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false });
         bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x + 0.45, y: p.y + 0.5, vx:  3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false });
       }
+      sfxShoot();
     }
 
     // Lövedékek frissítése
@@ -1016,7 +1043,10 @@ export default function SpaceAsteroidQuiz() {
           e.flash = 0.12;
           e.hp -= 1;
           if (e.hp <= 0) {
+            sfxExplode();
             handleEnemyDestroyed(e);
+          } else {
+            sfxHit();
           }
           break;
         }
@@ -1241,6 +1271,7 @@ export default function SpaceAsteroidQuiz() {
 
   /** Pickup begyűjtése. */
   const applyPickup = (pu: PickupState) => {
+    sfxPickup();
     if (pu.kind === "life") {
       const next = Math.min(9, livesRef.current + 1);
       livesRef.current = next;
@@ -1444,6 +1475,19 @@ export default function SpaceAsteroidQuiz() {
     };
   }, []);
 
+  // R = quick-restart az "over" / "intro" / "grade" képernyőn.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      if (phase === "over" || phase === "intro") {
+        e.preventDefault();
+        startNewRun();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, startNewRun]);
+
   /* ===================== Touch gomb-handler-ek ===================== */
   const startHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "up" | "fire") => {
     e.preventDefault();
@@ -1498,6 +1542,7 @@ export default function SpaceAsteroidQuiz() {
         <header className="flex items-center justify-between gap-1 mb-1">
           <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
           <div className="flex items-center gap-2 text-xs font-semibold">
+            <AudioToggleButton size="icon" />
             <span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{score}</span>
             <span className="flex items-center gap-1 text-emerald-300"><Heart className="w-4 h-4" />{lives}</span>
           </div>
@@ -1734,17 +1779,38 @@ export default function SpaceAsteroidQuiz() {
               </p>
               <p className="text-base font-semibold mb-4">{activeQuiz.prompt}</p>
               <div className="grid gap-2">
-                {activeQuiz.options.map((o, i) => (
-                  <Button
-                    key={`${o}-${i}`}
-                    variant="secondary"
-                    className="h-auto py-3 text-left bg-white/10 hover:bg-cyan-800/55 text-white border border-cyan-900/40 text-[15px]"
-                    onClick={() => onAnswer(i)}
-                  >
-                    {o}
-                  </Button>
-                ))}
+                {activeQuiz.options.map((o, i) => {
+                  const isCorrect = revealCorrectIdx === i;
+                  const isWrong = wrongIdx === i;
+                  const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
+                  const cls = isCorrect
+                    ? "h-auto py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[15px] font-bold"
+                    : isWrong
+                      ? "h-auto py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[15px]"
+                      : dim
+                        ? "h-auto py-3 text-left bg-white/5 text-white/40 border border-cyan-900/20 text-[15px]"
+                        : "h-auto py-3 text-left bg-white/10 hover:bg-cyan-800/55 text-white border border-cyan-900/40 text-[15px]";
+                  return (
+                    <Button
+                      key={`${o}-${i}`}
+                      variant="secondary"
+                      className={cls}
+                      disabled={revealCorrectIdx !== null}
+                      onClick={() => onAnswer(i)}
+                    >
+                      {o}
+                    </Button>
+                  );
+                })}
               </div>
+              {streakProtector.warning && (
+                <p className="mt-3 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>
+              )}
+              {revealCorrectIdx !== null && wrongIdx !== null && (
+                <p className="mt-3 text-[11px] text-emerald-300/95">
+                  A helyes válasz: <strong>{activeQuiz.options[revealCorrectIdx]}</strong>
+                </p>
+              )}
             </motion.div>
           </motion.div>
         )}

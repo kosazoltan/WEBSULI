@@ -11,6 +11,9 @@ import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScor
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
+import AudioToggleButton from "@/components/AudioToggleButton";
+import { useStreakProtector } from "@/hooks/useStreakProtector";
+import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 
 /* --- Típusok --- */
 type Quiz = { prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
@@ -227,6 +230,9 @@ export default function BrainRotSteal() {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [caughtRot, setCaughtRot] = useState<BrainRot | null>(null);
   const [wrongShake, setWrongShake] = useState(false);
+  const [revealCorrectIdx, setRevealCorrectIdx] = useState<number | null>(null);
+  const [wrongIdx, setWrongIdx] = useState<number | null>(null);
+  const streakProtector = useStreakProtector();
   const [sessionXp, setSessionXp] = useState(0);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
@@ -310,16 +316,33 @@ export default function BrainRotSteal() {
   const onAnswer = useCallback(
     (idx: number) => {
       if (!quiz || !caughtRot) return;
+      if (revealCorrectIdx !== null) return;
 
       if (idx !== quiz.correctIndex) {
+        sfxError();
         setWrongShake(true);
         setTimeout(() => setWrongShake(false), 400);
-        setStreak(0);
-        setComboMultiplier(1);
+        setRevealCorrectIdx(quiz.correctIndex);
+        setWrongIdx(idx);
+        const outcome = streakProtector.handleWrong({ streak });
+        if (outcome === "warned") {
+          sfxWarning();
+        } else {
+          setStreak(0);
+          setComboMultiplier(1);
+        }
+        // 1.5s reveal után a quiz "elnyel" — a brain rot fennmarad, új próba
+        window.setTimeout(() => {
+          setRevealCorrectIdx(null);
+          setWrongIdx(null);
+        }, 1500);
         return;
       }
 
       // Helyes válasz!
+      sfxSuccess();
+      setRevealCorrectIdx(null);
+      setWrongIdx(null);
       const multiplier = comboMultiplier;
       const xpGain = Math.round(caughtRot.xpValue * multiplier);
       setSessionXp((x) => x + xpGain);
@@ -336,6 +359,7 @@ export default function BrainRotSteal() {
       addFloatingText(caughtRot.x, caughtRot.y - 30, `+${xpGain} XP`, "#fbbf24");
 
       if (multiplier >= 2) {
+        sfxLevelUp();
         setScreenFlash("rgba(251, 191, 36, 0.15)");
         setTimeout(() => setScreenFlash(null), 300);
       }
@@ -346,12 +370,15 @@ export default function BrainRotSteal() {
       setQuiz(null);
       setPhase("play");
     },
-    [quiz, caughtRot, comboMultiplier, spawnParticles, addFloatingText],
+    [quiz, caughtRot, comboMultiplier, spawnParticles, addFloatingText, revealCorrectIdx, streak, streakProtector],
   );
 
   /* --- Játék indítása --- */
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
+    streakProtector.resetProtector();
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
     nextId = 0;
     setBrainRots([]);
     setParticles([]);
@@ -367,7 +394,20 @@ export default function BrainRotSteal() {
     setScreenFlash(null);
     lastSpawnRef.current = 0;
     setPhase("play");
-  }, []);
+  }, [streakProtector]);
+
+  // R = quick-restart az "over" / "menu" képernyőn.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      if (phase === "over" || phase === "menu") {
+        e.preventDefault();
+        startGame();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, startGame]);
 
   /* --- Idozito --- */
   useEffect(() => {
@@ -547,6 +587,7 @@ export default function BrainRotSteal() {
             </Button>
           </Link>
           <div className="flex items-center gap-2 text-xs font-semibold">
+            <AudioToggleButton size="icon" />
             <span className="flex items-center gap-1 text-amber-300">
               <Star className="w-4 h-4" />
               {sessionXp}
@@ -952,24 +993,45 @@ export default function BrainRotSteal() {
 
               {/* Answers */}
               <div className="grid gap-1.5 sm:gap-2">
-                {quiz.options.map((o, i) => (
-                  <Button
-                    key={`${o}-${i}`}
-                    variant="secondary"
-                    className={`h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-white/10 hover:bg-purple-800/50 active:bg-purple-700/60 text-white border text-[14px] sm:text-[15px] ${
-                      quiz.category === "english"
-                        ? "border-cyan-900/40 hover:border-cyan-500/50"
-                        : quiz.category === "math"
-                          ? "border-amber-900/40 hover:border-amber-500/50"
-                          : "border-emerald-900/40 hover:border-emerald-500/50"
-                    }`}
-                    onClick={() => onAnswer(i)}
-                  >
-                    <span className="text-white/40 mr-2 font-mono text-xs">{String.fromCharCode(65 + i)})</span>
-                    {o}
-                  </Button>
-                ))}
+                {quiz.options.map((o, i) => {
+                  const isCorrect = revealCorrectIdx === i;
+                  const isWrong = wrongIdx === i;
+                  const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
+                  const baseCat =
+                    quiz.category === "english"
+                      ? "border-cyan-900/40 hover:border-cyan-500/50"
+                      : quiz.category === "math"
+                        ? "border-amber-900/40 hover:border-amber-500/50"
+                        : "border-emerald-900/40 hover:border-emerald-500/50";
+                  const cls = isCorrect
+                    ? "h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[14px] sm:text-[15px] font-bold"
+                    : isWrong
+                      ? "h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[14px] sm:text-[15px]"
+                      : dim
+                        ? "h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-white/5 text-white/40 border border-white/10 text-[14px] sm:text-[15px]"
+                        : `h-auto min-h-[48px] py-2.5 sm:py-3 text-left bg-white/10 hover:bg-purple-800/50 active:bg-purple-700/60 text-white border text-[14px] sm:text-[15px] ${baseCat}`;
+                  return (
+                    <Button
+                      key={`${o}-${i}`}
+                      variant="secondary"
+                      className={cls}
+                      disabled={revealCorrectIdx !== null}
+                      onClick={() => onAnswer(i)}
+                    >
+                      <span className="text-white/40 mr-2 font-mono text-xs">{String.fromCharCode(65 + i)})</span>
+                      {o}
+                    </Button>
+                  );
+                })}
               </div>
+              {streakProtector.warning && (
+                <p className="mt-2 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>
+              )}
+              {revealCorrectIdx !== null && wrongIdx !== null && (
+                <p className="mt-2 text-[11px] text-emerald-300/95">
+                  A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong>
+                </p>
+              )}
             </motion.div>
           </motion.div>
         )}

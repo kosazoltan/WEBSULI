@@ -13,6 +13,9 @@ import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScor
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
+import AudioToggleButton from "@/components/AudioToggleButton";
+import { useStreakProtector } from "@/hooks/useStreakProtector";
+import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 
 const TILE = 24;
 const ROWS = 18;
@@ -1357,6 +1360,11 @@ export default function BlockCraftQuiz() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [wrongShake, setWrongShake] = useState(false);
+  // Helyes-válasz felfedés a kvíz-modálban (zöld outline) + a hibás opció
+  // piros outline-ja, 1.5s alatt fade-elődik, majd jön az új kvíz.
+  const [revealCorrectIdx, setRevealCorrectIdx] = useState<number | null>(null);
+  const [wrongIdx, setWrongIdx] = useState<number | null>(null);
+  const streakProtector = useStreakProtector();
   const [sessionXp, setSessionXp] = useState(0);
   const [streak, setStreak] = useState(0);
   const [totalXp, setTotalXp] = useState(0);
@@ -1621,8 +1629,9 @@ export default function BlockCraftQuiz() {
     scoreSubmittedRef.current = false;
     setLevelIdx(0);
     setGameWon(false);
+    streakProtector.resetProtector();
     beginLevel(0, { resetSession: true, carryXpFrom: 0 });
-  }, [beginLevel]);
+  }, [beginLevel, streakProtector]);
 
   /** Következő szint: az XP/streak/rare továbbvitt, a pálya friss. */
   const startNextLevel = useCallback(() => {
@@ -2120,13 +2129,29 @@ export default function BlockCraftQuiz() {
 
   const onAnswer = (idx: number) => {
     if (!quiz) return;
+    if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
     if (idx !== quiz.correctIndex) {
+      sfxError();
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 320);
-      setStreak(0);
+      // Helyes válasz felfedése + 1.5s "freeze" → utána új kvíz
+      setRevealCorrectIdx(quiz.correctIndex);
+      setWrongIdx(idx);
+      const outcome = streakProtector.handleWrong({ streak });
+      if (outcome === "warned") {
+        sfxWarning();
+      } else {
+        setStreak(0);
+      }
+      window.setTimeout(() => {
+        setRevealCorrectIdx(null);
+        setWrongIdx(null);
+        setQuiz(pickQuiz());
+      }, 1500);
       return;
     }
 
+    sfxSuccess();
     const tgt = mineTargetRef.current;
     let levelGoalReached = false;
     if (tgt) {
@@ -2184,12 +2209,29 @@ export default function BlockCraftQuiz() {
       }
     }
     if (levelGoalReached) {
+      sfxLevelUp();
       cancelAnimationFrame(rafRef.current);
       setPhase("levelComplete");
     } else {
       setPhase("play");
     }
   };
+
+  // R = quick-restart az "over" / "menu" / "levelComplete" képernyőn.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      if (phase === "over" || phase === "menu") {
+        e.preventDefault();
+        startGame();
+      } else if (phase === "levelComplete") {
+        e.preventDefault();
+        startNextLevel();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, startGame, startNextLevel]);
 
   useEffect(() => {
     if (phase !== "over" || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
@@ -2294,7 +2336,11 @@ export default function BlockCraftQuiz() {
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
         <header className="flex items-center justify-between gap-1 mb-1">
           <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
-          <div className="flex items-center gap-2 text-xs font-semibold"><span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{totalXp}</span><span className="flex items-center gap-1 text-lime-300"><Flame className="w-4 h-4" />{streak}</span></div>
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <AudioToggleButton size="icon" />
+            <span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{totalXp}</span>
+            <span className="flex items-center gap-1 text-lime-300"><Flame className="w-4 h-4" />{streak}</span>
+          </div>
         </header>
 
         <Card className="border border-lime-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0"><CardContent className={`flex flex-col flex-1 min-h-0 ${phase === "play" ? "p-1.5 sm:p-3" : "p-3"}`}>
@@ -2460,7 +2506,19 @@ export default function BlockCraftQuiz() {
         </CardContent></Card>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => <Button key={`${o}-${i}`} variant="secondary" className="h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]" onClick={() => onAnswer(i)}>{o}</Button>)}</div></motion.div></motion.div>}</AnimatePresence>
+      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => {
+        const isCorrect = revealCorrectIdx === i;
+        const isWrong = wrongIdx === i;
+        const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
+        const cls = isCorrect
+          ? "h-auto py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[15px] font-bold"
+          : isWrong
+            ? "h-auto py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[15px]"
+            : dim
+              ? "h-auto py-3 text-left bg-white/5 text-white/40 border border-lime-900/20 text-[15px]"
+              : "h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]";
+        return <Button key={`${o}-${i}`} variant="secondary" className={cls} disabled={revealCorrectIdx !== null} onClick={() => onAnswer(i)}>{o}</Button>;
+      })}</div>{streakProtector.warning && <p className="mt-2 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>}{revealCorrectIdx !== null && wrongIdx !== null && <p className="mt-2 text-[11px] text-emerald-300/95">A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong></p>}</motion.div></motion.div>}</AnimatePresence>
 
       <AnimatePresence>{achievement && <motion.div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-amber-500/95 text-slate-950 font-bold text-sm px-4 py-2 rounded-xl shadow-xl border border-amber-200/60 whitespace-nowrap" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>{achievement}</motion.div>}</AnimatePresence>
       <style>{`@keyframes shake {0%,100% { transform: translateX(0); }25% { transform: translateX(-5px); }75% { transform: translateX(5px); }} .animate-shake { animation: shake 0.16s ease-in-out 2; }`}</style>
