@@ -8,7 +8,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Users, Tag, Eye, Mail, BarChart3 } from "lucide-react";
+import { Users, Tag, Eye, Mail, BarChart3, Activity } from "lucide-react";
 
 interface MobileBottomNavProps {
   onTabChange?: (tab: string) => void;
@@ -56,6 +56,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
       tabs: [
         { value: "material-views", label: "Megtekintések", icon: Eye },
         { value: "emails", label: "E-mail címek", icon: Mail },
+        { value: "email-debug", label: "Email diagnosztika", icon: Activity },
       ]
     },
   ];

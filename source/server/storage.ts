@@ -92,6 +92,8 @@ export interface IStorage {
   updateExtraEmailClassrooms(id: string, classrooms: number[]): Promise<ExtraEmail | null>;
   getActiveExtraEmails(): Promise<ExtraEmail[]>;
   deleteExtraEmail(id: string): Promise<boolean>;
+  /** Új tanév — minden aktív extra-email osztályait egyel feljebb lépteti (max 12). */
+  bulkPromoteExtraEmailClassrooms(): Promise<number>;
 
   // Email log operations
   createEmailLog(log: InsertEmailLog): Promise<EmailLog>;
@@ -646,6 +648,32 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(extraEmailAddresses)
       .where(eq(extraEmailAddresses.isActive, true));
+  }
+
+  /**
+   * Tömeges osztály-léptetés (új tanév gomb).
+   * Minden aktív extra-email rekord `classrooms` PG int-array-ét egyel feljebb
+   * lépteti — pl. `{2, 5}` → `{3, 6}`. A 12-es osztály változatlan marad
+   * (LEAST cap), így nem "esnek le" a végzősök. A duplikációkat DISTINCT
+   * megszünteti (pl. ha valakinek már volt 11 és 12 is, mindkettő 12-re
+   * lépne — DISTINCT csak egyet hagy).
+   *
+   * Visszaadja a frissített rekordok számát.
+   */
+  async bulkPromoteExtraEmailClassrooms(): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE extra_email_addresses
+      SET classrooms = ARRAY(
+            SELECT DISTINCT LEAST(c + 1, 12)
+            FROM unnest(classrooms) AS c
+            WHERE c >= 1 AND c <= 12
+            ORDER BY 1
+          ),
+          updated_at = NOW()
+      WHERE is_active = true
+    `);
+    // Drizzle's execute() returns NeonHttpQueryResult / pg result; rowCount lehet null.
+    return (result as { rowCount?: number | null }).rowCount ?? 0;
   }
 
   async deleteExtraEmail(id: string): Promise<boolean> {

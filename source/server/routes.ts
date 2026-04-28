@@ -3070,6 +3070,105 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     }
   });
 
+  // ADMIN-ONLY: Tömeges osztály-léptetés ("Új tanév" gomb).
+  // Minden aktív extra-email rekord classrooms-ét egyel feljebb lépteti
+  // (max 12). Visszaadja a frissített rekordok számát.
+  app.post("/api/admin/extra-emails/promote-grade", isAuthenticatedAdmin, async (_req: Request, res) => {
+    try {
+      const updated = await storage.bulkPromoteExtraEmailClassrooms();
+      console.log(`[EMAIL] Új tanév: ${updated} extra-email rekord osztályai egyel feljebb léptetve.`);
+      res.json({ updated });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error("[EMAIL] Új tanév léptetés hiba:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ADMIN-ONLY: Email-küldés diagnosztikai panel.
+  // Visszaadja a Resend config állapotát, az osztályonkénti címzett-bontást,
+  // az utolsó N email_logs bejegyzést és az utolsó N tananyag-feltöltést
+  // (a hozzájuk tartozó email-statisztikákkal).
+  app.get("/api/admin/email-diagnostics", isAuthenticatedAdmin, async (_req: Request, res) => {
+    try {
+      const { emailLogs, htmlFiles: htmlFilesTable } = await import("@shared/schema");
+
+      const resendStatus = isResendConfigured();
+
+      // Per-classroom breakdown (1-12)
+      const subs = await storage.getActiveEmailSubscriptions();
+      const extras = await storage.getActiveExtraEmails();
+      const classroomBreakdown: Array<{ classroom: number; subscriptions: number; extras: number }> = [];
+      for (let c = 1; c <= 12; c++) {
+        classroomBreakdown.push({
+          classroom: c,
+          subscriptions: subs.filter((s) => Array.isArray(s.classrooms) && s.classrooms.includes(c)).length,
+          extras: extras.filter((e) => Array.isArray(e.classrooms) && e.classrooms.includes(c)).length,
+        });
+      }
+
+      // Recent email logs (max 30)
+      const recentLogsRaw = await db
+        .select({
+          id: emailLogs.id,
+          htmlFileId: emailLogs.htmlFileId,
+          recipientEmail: emailLogs.recipientEmail,
+          status: emailLogs.status,
+          error: emailLogs.error,
+          createdAt: emailLogs.createdAt,
+        })
+        .from(emailLogs)
+        .orderBy(desc(emailLogs.createdAt))
+        .limit(30);
+
+      // Recent uploads with email-stats (max 10)
+      const recentUploads = await db
+        .select({
+          id: htmlFilesTable.id,
+          title: htmlFilesTable.title,
+          classroom: htmlFilesTable.classroom,
+          createdAt: htmlFilesTable.createdAt,
+        })
+        .from(htmlFilesTable)
+        .orderBy(desc(htmlFilesTable.createdAt))
+        .limit(10);
+
+      // Per-upload email-stats (sent / failed count)
+      const uploadIds = recentUploads.map((u) => u.id);
+      const logsForUploads = uploadIds.length > 0
+        ? await db
+            .select({
+              htmlFileId: emailLogs.htmlFileId,
+              status: emailLogs.status,
+            })
+            .from(emailLogs)
+            .where(inArray(emailLogs.htmlFileId, uploadIds))
+        : [];
+
+      const uploadStats = recentUploads.map((u) => {
+        const logs = logsForUploads.filter((l) => l.htmlFileId === u.id);
+        return {
+          ...u,
+          emailsSent: logs.filter((l) => l.status === "sent").length,
+          emailsFailed: logs.filter((l) => l.status === "failed").length,
+        };
+      });
+
+      res.json({
+        resend: resendStatus,
+        classroomBreakdown,
+        totalActiveSubscriptions: subs.length,
+        totalActiveExtras: extras.length,
+        recentLogs: recentLogsRaw,
+        recentUploads: uploadStats,
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error("[EMAIL] Diagnosztika hiba:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // PUBLIC Google TTS API endpoint (FREE - No API key required!)
   // Uses unofficial Google Translate TTS service - may have rate limits/availability changes
   app.post("/api/tts", async (req, res) => {
