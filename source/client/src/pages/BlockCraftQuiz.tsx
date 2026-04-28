@@ -1736,6 +1736,9 @@ export default function BlockCraftQuiz() {
     scene.add(targetBox);
 
     const playerAvatar = createPlayerAvatar();
+    // Kezdő pose: már a player aktuális facing-je szerint álljon, hogy első frame-en
+    // ne legyen frontális → oldalra fordulás "snap".
+    playerAvatar.rotation.y = playerRef.current.facing > 0 ? -Math.PI / 2 : Math.PI / 2;
     scene.add(playerAvatar);
 
     const xpOrb = new THREE.Mesh(
@@ -1914,7 +1917,11 @@ export default function BlockCraftQuiz() {
 
       const playerPos = playerTo3d(p);
       playerAvatar.position.copy(playerPos);
-      playerAvatar.rotation.y = p.facing > 0 ? -0.18 : 0.18;
+      // Steve a mozgás irányába fordul (90°-os profil-nézet a kamera felé,
+      // mint a klasszikus 2.5D platformerekben). A lerp simán átfordít az
+      // ellenkező irányba kb. 10–12 frame alatt — nincs hirtelen ugrás.
+      const targetYRot = p.facing > 0 ? -Math.PI / 2 : Math.PI / 2;
+      playerAvatar.rotation.y = THREE.MathUtils.lerp(playerAvatar.rotation.y, targetYRot, 0.22);
       const stride = Math.sin(p.tick * 0.35) * Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
       const leftLeg = playerAvatar.getObjectByName("leg-left");
       const rightLeg = playerAvatar.getObjectByName("leg-right");
@@ -1924,6 +1931,20 @@ export default function BlockCraftQuiz() {
       if (rightLeg) rightLeg.rotation.x = -stride * 0.55;
       if (leftArm) leftArm.rotation.x = -stride * 0.45;
       if (rightArm) rightArm.rotation.x = stride * 0.45;
+      // Csákány a "kamera felőli" karban: a 90°-os forgatás után a túloldali
+      // kar a kamera mögé esik, így a csákányt mindig a látható oldalra
+      // tükrözzük facing alapján — sosem tűnik el "Steve háta mögé".
+      const pickSide = p.facing > 0 ? 1 : -1;
+      const pickHandle = playerAvatar.getObjectByName("pick-handle");
+      const pickHead = playerAvatar.getObjectByName("pick-head");
+      if (pickHandle) {
+        pickHandle.position.x = 0.50 * pickSide;
+        pickHandle.rotation.z = -0.55 * pickSide;
+      }
+      if (pickHead) {
+        pickHead.position.x = 0.62 * pickSide;
+        pickHead.rotation.z = -0.55 * pickSide;
+      }
 
       const speedRatio = Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
       const lookAhead = p.facing * (0.65 + speedRatio * 0.85);
