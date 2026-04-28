@@ -41,7 +41,7 @@ import AchievementToast from "@/components/AchievementToast";
  *  - HUD, kvíz-modál, osztály-választó: React overlay (canvas felett).
  * ===================================================================== */
 
-type EnemyKind = "rock" | "crystal" | "alien" | "fighter";
+type EnemyKind = "rock" | "crystal" | "alien" | "fighter" | "boss";
 
 type Quiz = {
   prompt: string;
@@ -83,7 +83,7 @@ type BulletState = {
 
 type PickupState = {
   id: number;
-  kind: "life" | "power";
+  kind: "life" | "power" | "shield" | "bomb";
   x: number;
   y: number;
   vy: number;
@@ -165,7 +165,13 @@ const ENEMY_BASE_XP: Record<EnemyKind, number> = {
   crystal: 60,
   alien: 80,
   fighter: 120,
+  boss: 60, // hit-onkénti pont (a boss összes HP * 60 = ~3000 XP a teljesítésért)
 };
+
+/** Boss össz-HP — 3 fázisra elosztva (50/25/15 = 90 hit a teljes legyőzéshez). */
+const BOSS_TOTAL_HP = 90;
+const BOSS_PHASE_HP = [50, 25, 15] as const;
+const BOSS_FINAL_WAVE = 12;
 
 /* ============================ Helpers ============================ */
 
@@ -395,6 +401,146 @@ function buildFighterMesh(): THREE.Group {
   return group;
 }
 
+/**
+ * Boss alien anyahajó — nagy, többrétegű mesh: 3 koncentrikus tórusz +
+ * központi kupola + 6 oldalsó motor-cone. 3 fázisban változik a szín
+ * (zöld → narancs → vörös) a phase-szel együtt — ezt a render loop frissíti.
+ */
+function buildBossMesh(): THREE.Group {
+  const group = new THREE.Group();
+  const ringMat = new THREE.MeshStandardMaterial({
+    color: "#a0ff60",
+    emissive: "#3a7a18",
+    emissiveIntensity: 0.85,
+    roughness: 0.4,
+    metalness: 0.55,
+  });
+  const innerMat = new THREE.MeshStandardMaterial({
+    color: "#ff00ff",
+    emissive: "#5e1f5e",
+    emissiveIntensity: 0.7,
+    roughness: 0.35,
+    metalness: 0.5,
+  });
+  const domeMat = new THREE.MeshStandardMaterial({
+    color: "#fff700",
+    emissive: "#a09000",
+    emissiveIntensity: 1.1,
+    roughness: 0.18,
+    metalness: 0.4,
+  });
+  // Külső gyűrű (legnagyobb)
+  const outerRing = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.32, 14, 32), ringMat);
+  outerRing.rotation.x = Math.PI / 2;
+  outerRing.name = "boss-outer";
+  group.add(outerRing);
+  // Középső gyűrű
+  const midRing = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.22, 12, 28), innerMat);
+  midRing.rotation.x = Math.PI / 2;
+  midRing.name = "boss-mid";
+  group.add(midRing);
+  // Korpus / disc
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 0.42, 28), ringMat);
+  disc.rotation.x = Math.PI / 2;
+  disc.name = "boss-disc";
+  group.add(disc);
+  // Központi kupola
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.85, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+  dome.position.set(0, 0.18, 0);
+  dome.scale.set(1, 0.85, 1);
+  dome.name = "boss-dome";
+  group.add(dome);
+  // Pulzáló mag-szem
+  const eye = new THREE.Mesh(
+    new THREE.SphereGeometry(0.3, 12, 10),
+    new THREE.MeshStandardMaterial({ color: "#ff0033", emissive: "#ff0033", emissiveIntensity: 1.6 }),
+  );
+  eye.position.set(0, 0.45, 0);
+  eye.name = "boss-eye";
+  group.add(eye);
+  // 6 oldalsó motor-cone a peremen
+  for (let k = 0; k < 6; k++) {
+    const ang = (k / 6) * Math.PI * 2;
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.18, 0.6, 8),
+      new THREE.MeshStandardMaterial({
+        color: "#ff5577",
+        emissive: "#ff2244",
+        emissiveIntensity: 1.3,
+      }),
+    );
+    cone.position.set(Math.cos(ang) * 2.0, -0.18, Math.sin(ang) * 2.0);
+    cone.rotation.x = Math.PI / 2;
+    cone.name = `boss-engine-${k}`;
+    group.add(cone);
+  }
+  return group;
+}
+
+/** Pajzs pickup — forgó kék kocka pajzs-szimbólummal. */
+function buildShieldPickupMesh(): THREE.Group {
+  const group = new THREE.Group();
+  const cubeMat = new THREE.MeshStandardMaterial({
+    color: "#3aa1ff",
+    emissive: "#1864c0",
+    emissiveIntensity: 1.0,
+    roughness: 0.3,
+    metalness: 0.5,
+    transparent: true,
+    opacity: 0.92,
+  });
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), cubeMat);
+  group.add(cube);
+  // "S" alakú belső jelzés (egyszerű 3 doboz)
+  const shieldMat = new THREE.MeshStandardMaterial({
+    color: "#ffffff",
+    emissive: "#ffffff",
+    emissiveIntensity: 1.5,
+  });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.12), shieldMat);
+  top.position.set(0, 0.18, 0.18);
+  group.add(top);
+  const bot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.12), shieldMat);
+  bot.position.set(0, -0.18, 0.18);
+  group.add(bot);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 6, 16), shieldMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, 0, 0.18);
+  group.add(ring);
+  return group;
+}
+
+/** Bomb pickup — forgó narancs gömb fekete csíkokkal. */
+function buildBombPickupMesh(): THREE.Group {
+  const group = new THREE.Group();
+  const sphereMat = new THREE.MeshStandardMaterial({
+    color: "#ff8800",
+    emissive: "#aa3300",
+    emissiveIntensity: 1.0,
+    roughness: 0.35,
+    metalness: 0.45,
+  });
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), sphereMat);
+  group.add(sphere);
+  // Kanóc a tetején
+  const wickMat = new THREE.MeshStandardMaterial({
+    color: "#ffff00",
+    emissive: "#ffff00",
+    emissiveIntensity: 1.6,
+  });
+  const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.25, 6), wickMat);
+  wick.position.set(0, 0.5, 0);
+  group.add(wick);
+  // Spark a tetején
+  const spark = new THREE.Mesh(
+    new THREE.SphereGeometry(0.08, 8, 6),
+    new THREE.MeshBasicMaterial({ color: "#fff700" }),
+  );
+  spark.position.set(0, 0.65, 0);
+  group.add(spark);
+  return group;
+}
+
 /** Életpont pickup — forgó zöld kocka kereszttel. */
 function buildLifePickupMesh(): THREE.Group {
   const group = new THREE.Group();
@@ -462,6 +608,12 @@ export default function SpaceAsteroidQuiz() {
   const [combo, setCombo] = useState(0);
   const [powerLevel, setPowerLevel] = useState(0);
   const [powerTimer, setPowerTimer] = useState(0);
+  // Pajzs (8-20s teljes invuln) + bomb-készlet (max 5)
+  const [shieldTimer, setShieldTimer] = useState(0);
+  const [bombs, setBombs] = useState(0);
+  // Boss HP (null ha nincs aktív boss)
+  const [bossHp, setBossHp] = useState<number | null>(null);
+  const bossHpRef = useRef<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT_SEC);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [quizReason, setQuizReason] = useState<QuizReason>("wave");
@@ -505,6 +657,8 @@ export default function SpaceAsteroidQuiz() {
   const pausedRef = useRef(false);
   const powerLevelRef = useRef(0);
   const powerTimerRef = useRef(0);
+  const shieldTimerRef = useRef(0);
+  const bombsRef = useRef(0);
   const comboRef = useRef(0);
   const enemiesKilledRef = useRef(0);
   const scoreRef = useRef(0);
@@ -523,6 +677,7 @@ export default function SpaceAsteroidQuiz() {
     playerGroup: THREE.Group;
     thrusterMesh: THREE.Mesh<THREE.ConeGeometry, THREE.MeshStandardMaterial>;
     shieldMesh: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
+    shieldFullMesh: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
     enemiesGroup: THREE.Group;
     bulletsGroup: THREE.Group;
     pickupsGroup: THREE.Group;
@@ -656,7 +811,10 @@ export default function SpaceAsteroidQuiz() {
   const beginWaveSpawning = useCallback(() => {
     waveIntermissionRef.current = false;
     enemiesSpawnedThisWaveRef.current = 0;
-    enemiesPerWaveRef.current = 4 + Math.min(waveRef.current * 2, 18);
+    // Boss-pálya: a 12. hullám egy boss
+    enemiesPerWaveRef.current = waveRef.current === BOSS_FINAL_WAVE
+      ? 1
+      : 4 + Math.min(waveRef.current * 2, 18);
   }, []);
 
   const startNewRun = useCallback(() => {
@@ -673,6 +831,8 @@ export default function SpaceAsteroidQuiz() {
     livesRef.current = 3;
     powerLevelRef.current = 0;
     powerTimerRef.current = 0;
+    shieldTimerRef.current = 0;
+    bombsRef.current = 0;
     comboRef.current = 0;
     enemiesKilledRef.current = 0;
     scoreRef.current = 0;
@@ -683,6 +843,8 @@ export default function SpaceAsteroidQuiz() {
     setCombo(0);
     setPowerLevel(0);
     setPowerTimer(0);
+    setShieldTimer(0);
+    setBombs(0);
     setTimeLeft(ROUND_LIMIT_SEC);
     setEnemiesKilled(0);
     setGameWon(false);
@@ -851,6 +1013,16 @@ export default function SpaceAsteroidQuiz() {
     shieldMesh.visible = false;
     playerGroup.add(shieldMesh);
 
+    // Második (kék) pajzsgyűrű — a "shield" pickup aktív állapotát jelzi
+    // (külön a sárga power-pajzstól, hogy egyszerre is működhet a kettő).
+    const shieldFullMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(1.18, 0.075, 10, 36),
+      new THREE.MeshBasicMaterial({ color: "#3aa1ff", transparent: true, opacity: 0.75 }),
+    );
+    shieldFullMesh.rotation.x = Math.PI / 2;
+    shieldFullMesh.visible = false;
+    playerGroup.add(shieldFullMesh);
+
     // Csoportok ellenfelekhez / lövedékekhez / pickupokhoz
     const enemiesGroup = new THREE.Group();
     scene.add(enemiesGroup);
@@ -860,7 +1032,7 @@ export default function SpaceAsteroidQuiz() {
     scene.add(pickupsGroup);
 
     sceneRefs.current = {
-      scene, camera, renderer, starfield, nebula, playerGroup, thrusterMesh, shieldMesh,
+      scene, camera, renderer, starfield, nebula, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh,
       enemiesGroup, bulletsGroup, pickupsGroup,
       enemyMeshById: new Map(),
       bulletMeshById: new Map(),
@@ -949,6 +1121,15 @@ export default function SpaceAsteroidQuiz() {
     p.bobPhase += dt * 4;
     if (p.cooldown > 0) p.cooldown -= dt;
     if (p.invuln > 0) p.invuln -= dt;
+    // Pajzs-időzítő — másodpercenként, közben a render már 1s-os granuláris
+    if (shieldTimerRef.current > 0) {
+      shieldTimerRef.current = Math.max(0, shieldTimerRef.current - dt);
+      // 1 másodpercenként frissítjük a state-et a HUD-hoz (perf)
+      const ceiled = Math.ceil(shieldTimerRef.current);
+      if (ceiled !== Math.ceil(shieldTimerRef.current + dt)) {
+        setShieldTimer(ceiled);
+      }
+    }
 
     // Lövés
     if ((keysRef.current.fire || touchRef.current.fire) && p.cooldown <= 0) {
@@ -1016,6 +1197,50 @@ export default function SpaceAsteroidQuiz() {
             fromEnemy: true,
           });
         }
+      } else if (e.kind === "boss") {
+        // Boss AI — 3 fázis. e.phase = total elapsed time, NEM ütközés-számláló.
+        // Fázis-számítás: a maradék HP alapján.
+        const remaining = e.hp;
+        const bossPhase =
+          remaining > BOSS_TOTAL_HP - BOSS_PHASE_HP[0]
+            ? 0
+            : remaining > BOSS_TOTAL_HP - BOSS_PHASE_HP[0] - BOSS_PHASE_HP[1]
+              ? 1
+              : 2;
+        // Sin-mozgás X-en, fázissal arányos amplitúdóval és frekvenciával
+        const ampX = 4 + bossPhase * 1.5;
+        const freq = 0.7 + bossPhase * 0.5;
+        e.x = Math.sin(e.phase * freq) * ampX;
+        // Lassú lefelé süllyedés, de stabil "fight zone" magasságon megáll
+        const targetY = GAME_H / 2 - 3.5;
+        if (e.y > targetY) e.y += e.vy * dt;
+        else e.y = targetY;
+        // Spread-lövés frekvencia fázisszerint
+        const fireInterval = bossPhase === 0 ? 2.5 : bossPhase === 1 ? 1.5 : 1.0;
+        e.fireCooldown -= dt;
+        if (e.fireCooldown <= 0) {
+          e.fireCooldown = fireInterval;
+          // 3-irányú spread + fázis 2-ben +2 további szórt lövés
+          const angles = bossPhase === 2
+            ? [-0.6, -0.3, 0, 0.3, 0.6]
+            : bossPhase === 1
+              ? [-0.4, 0, 0.4]
+              : [0];
+          for (const ang of angles) {
+            const dxh = playerRef.current.x - e.x + Math.sin(ang) * 6;
+            const dyh = playerRef.current.y - e.y;
+            const len = Math.max(0.1, Math.hypot(dxh, dyh));
+            bulletsRef.current.push({
+              id: nextEntityIdRef.current++,
+              x: e.x,
+              y: e.y - 1.2,
+              vx: (dxh / len) * 6,
+              vy: (dyh / len) * 6,
+              life: 3.0,
+              fromEnemy: true,
+            });
+          }
+        }
       } else {
         // rock + crystal: lefelé sodródik az init vy + vx-szel
         e.x += e.vx * dt;
@@ -1058,7 +1283,8 @@ export default function SpaceAsteroidQuiz() {
     }
 
     // Ellenfél × játékos ütközés (vagy ellenséges lövedék × játékos)
-    if (p.invuln <= 0) {
+    // Pajzs aktív → minden ütközés blokkolva (mintha invuln lenne)
+    if (p.invuln <= 0 && shieldTimerRef.current <= 0) {
       for (const e of enemiesRef.current) {
         if (e.dead) continue;
         const radius = enemyRadius(e) + 0.55;
@@ -1122,6 +1348,18 @@ export default function SpaceAsteroidQuiz() {
     }
 
     if (shakeRef.current > 0) shakeRef.current = Math.max(0, shakeRef.current - dt * 8);
+
+    // Boss HP-szinkron a HUD-hoz
+    const boss = enemiesRef.current.find((e) => !e.dead && e.kind === "boss");
+    if (boss) {
+      if (bossHpRef.current !== boss.hp) {
+        bossHpRef.current = boss.hp;
+        setBossHp(boss.hp);
+      }
+    } else if (bossHpRef.current !== null) {
+      bossHpRef.current = null;
+      setBossHp(null);
+    }
   };
 
   /** Enemy radius (kollizációhoz). */
@@ -1129,11 +1367,59 @@ export default function SpaceAsteroidQuiz() {
     if (e.kind === "rock") return e.size === 3 ? 1.25 : e.size === 2 ? 0.8 : 0.5;
     if (e.kind === "crystal") return 0.72;
     if (e.kind === "alien") return 0.85;
+    if (e.kind === "boss") return 2.0;
     return 0.62; // fighter
+  };
+
+  /**
+   * Boss spawn — a 12. hullám elején. Egyetlen, hatalmas alien anyahajó
+   * 90 HP-vel, 3 fázisban különböző AI-vel:
+   *   - Fázis 0 (50 HP): lassú sin-mozgás, lassú spread-lövés (1/2.5s)
+   *   - Fázis 1 (25 HP): közepes sebesség, gyorsabb lövés (1/1.5s)
+   *   - Fázis 2 (15 HP): gyors mozgás, gyakori spread-lövés (1/1.0s)
+   *
+   * A 12. hullám az alap-spawn helyett egyetlen bosst tartalmaz —
+   * a `enemiesPerWaveRef = 1` és `spawnEnemyForWave()` boss-mesh-t pakol.
+   */
+  const spawnBoss = () => {
+    enemiesSpawnedThisWaveRef.current += 1;
+    const id = nextEntityIdRef.current++;
+    const e: EnemyState = {
+      id,
+      kind: "boss",
+      size: 3, // dummy, nem használjuk boss esetén
+      x: 0,
+      y: GAME_H / 2 - 0.5, // a játéktér tetején spawnol
+      vx: 0,
+      vy: -0.18, // lassan ereszkedik
+      rot: 0,
+      rotSpeed: 0.4,
+      hp: BOSS_TOTAL_HP,
+      flash: 0,
+      dead: false,
+      spawnAt: (lastTimeRef.current ?? 0) / 1000,
+      phase: 0,
+      fireCooldown: 1.5, // pre-fight pause
+    };
+    enemiesRef.current.push(e);
+    const refs = sceneRefs.current;
+    if (refs) {
+      const mesh = buildBossMesh();
+      mesh.position.set(e.x, e.y, 0);
+      refs.enemiesGroup.add(mesh);
+      refs.enemyMeshById.set(id, mesh);
+    }
   };
 
   /** Hullám-spawn: a hullámszámmal súlyozottan vegyíti az ellenfél-típusokat. */
   const spawnEnemyForWave = () => {
+    // Boss-pálya: 12. hullám első spawn = boss, utána semmi
+    if (waveRef.current === BOSS_FINAL_WAVE) {
+      if (enemiesSpawnedThisWaveRef.current === 0) {
+        spawnBoss();
+      }
+      return;
+    }
     enemiesSpawnedThisWaveRef.current += 1;
     const w = waveRef.current;
     // Minden hullámmal több crystal/alien/fighter — első hullámban főleg sziklák.
@@ -1194,6 +1480,45 @@ export default function SpaceAsteroidQuiz() {
     const total = baseXp + comboBonus;
     scoreRef.current += total;
     setScore(scoreRef.current);
+
+    // BOSS megsemmisült → játék-győzelem (12. hullám clear)
+    if (e.kind === "boss") {
+      shakeRef.current = 2.5;
+      const refs = sceneRefs.current;
+      if (refs) {
+        refs.flashLight.intensity = 8.0;
+      }
+      // Hatalmas pickup-shower jutalmul (3 life + 2 power + 1 shield)
+      const showerKinds: PickupState["kind"][] = ["life", "life", "life", "power", "power", "shield"];
+      for (let k = 0; k < showerKinds.length; k++) {
+        const pid = nextEntityIdRef.current++;
+        const ang = (k / showerKinds.length) * Math.PI * 2;
+        const pu: PickupState = {
+          id: pid,
+          kind: showerKinds[k]!,
+          x: e.x + Math.cos(ang) * 2.5,
+          y: e.y + Math.sin(ang) * 1.5,
+          vy: -1.0,
+          life: 14,
+          rot: 0,
+        };
+        pickupsRef.current.push(pu);
+        if (refs) {
+          const mesh = pu.kind === "life" ? buildLifePickupMesh()
+            : pu.kind === "shield" ? buildShieldPickupMesh()
+            : pu.kind === "bomb" ? buildBombPickupMesh()
+            : buildPowerPickupMesh();
+          mesh.position.set(pu.x, pu.y, 0);
+          refs.pickupsGroup.add(mesh);
+          refs.pickupMeshById.set(pid, mesh);
+        }
+      }
+      // Set win flag — a tick következő iterációja phase-t "over"-re vált.
+      setGameWon(true);
+      window.setTimeout(() => setPhase("over"), 1500); // hagyjunk pár frame-et a robbanás-effektre
+      return;
+    }
+
     // Hasadás csak rock-nál
     if (e.kind === "rock" && e.size > 1) {
       for (let k = 0; k < 2; k++) {
@@ -1229,11 +1554,14 @@ export default function SpaceAsteroidQuiz() {
       // Pickup-esély: kis aszteroida vagy crystal/alien/fighter ölés esetén
       const dropChance = e.kind === "rock" ? 0.18 : e.kind === "crystal" ? 0.32 : e.kind === "alien" ? 0.40 : 0.32;
       if (Math.random() < dropChance) {
-        const isLife = Math.random() < 0.45;
+        // 4-féle pickup: 40% life, 30% power, 20% shield, 10% bomb
+        const r = Math.random();
+        const kind: PickupState["kind"] =
+          r < 0.40 ? "life" : r < 0.70 ? "power" : r < 0.90 ? "shield" : "bomb";
         const pid = nextEntityIdRef.current++;
         const pu: PickupState = {
           id: pid,
-          kind: isLife ? "life" : "power",
+          kind,
           x: e.x,
           y: e.y,
           vy: -1.4,
@@ -1243,7 +1571,10 @@ export default function SpaceAsteroidQuiz() {
         pickupsRef.current.push(pu);
         const refs = sceneRefs.current;
         if (refs) {
-          const mesh = isLife ? buildLifePickupMesh() : buildPowerPickupMesh();
+          const mesh = kind === "life" ? buildLifePickupMesh()
+            : kind === "shield" ? buildShieldPickupMesh()
+            : kind === "bomb" ? buildBombPickupMesh()
+            : buildPowerPickupMesh();
           mesh.position.set(pu.x, pu.y, 0);
           refs.pickupsGroup.add(mesh);
           refs.pickupMeshById.set(pid, mesh);
@@ -1284,6 +1615,22 @@ export default function SpaceAsteroidQuiz() {
       window.setTimeout(() => setSavedToast(null), 2200);
       scoreRef.current += 35;
       setScore(scoreRef.current);
+    } else if (pu.kind === "shield") {
+      // Pajzs: 8s teljes invuln (kék gyűrű mutat). Stack-elhető (eddigi shieldTimer + 8s).
+      shieldTimerRef.current = Math.min(20, shieldTimerRef.current + 8);
+      setShieldTimer(shieldTimerRef.current);
+      setSavedToast("Pajzs aktiválva!");
+      window.setTimeout(() => setSavedToast(null), 1800);
+      scoreRef.current += 25;
+      setScore(scoreRef.current);
+    } else if (pu.kind === "bomb") {
+      // Bomb: +1 készletre, B-billentyűvel vagy touch-gombbal süthető le.
+      bombsRef.current = Math.min(5, bombsRef.current + 1);
+      setBombs(bombsRef.current);
+      setSavedToast("Bomba a tárba!");
+      window.setTimeout(() => setSavedToast(null), 1800);
+      scoreRef.current += 30;
+      setScore(scoreRef.current);
     } else {
       // Power-up: 1 vagy 2-szintű, mindkét esetben +10s
       const next = Math.min(2, powerLevelRef.current + 1);
@@ -1296,11 +1643,41 @@ export default function SpaceAsteroidQuiz() {
     }
   };
 
+  /**
+   * Bomb-süt: minden élő ellenfelet (kivéve boss-t — annak csak HP-t vesz)
+   * azonnal megsemmisít, hatalmas vizuális robbanással.
+   */
+  const detonateBomb = useCallback(() => {
+    if (bombsRef.current <= 0) return;
+    if (phaseRef.current !== "play") return;
+    bombsRef.current = Math.max(0, bombsRef.current - 1);
+    setBombs(bombsRef.current);
+    sfxExplode();
+    shakeRef.current = 1.5;
+    const refs = sceneRefs.current;
+    if (refs) refs.flashLight.intensity = 7.0;
+    // Minden enemy meghal (kivéve boss — annak 12 HP-t levesz)
+    for (const e of enemiesRef.current) {
+      if (e.dead) continue;
+      if (e.kind === "boss") {
+        e.flash = 0.2;
+        e.hp = Math.max(0, e.hp - 12);
+        if (e.hp <= 0) handleEnemyDestroyed(e);
+      } else {
+        handleEnemyDestroyed(e);
+      }
+    }
+    // Ellenséges lövedékek is törlődnek
+    for (const b of bulletsRef.current) {
+      if (b.fromEnemy) b.life = 0;
+    }
+  }, []);
+
   /* ===================== Render (Three.js) ===================== */
   const render = (now: number) => {
     const refs = sceneRefs.current;
     if (!refs) return;
-    const { scene, camera, renderer, starfield, playerGroup, thrusterMesh, shieldMesh, flashLight } = refs;
+    const { scene, camera, renderer, starfield, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh, flashLight } = refs;
 
     // Csillagok pásztázása (lassú lefelé Y-mozgás), játék közben gyorsabb
     const moving = phaseRef.current === "play" && !pausedRef.current;
@@ -1326,15 +1703,26 @@ export default function SpaceAsteroidQuiz() {
     const moving2 = phaseRef.current === "play";
     thrusterMesh.scale.set(1 + Math.random() * 0.2, moving2 ? 1.4 + Math.random() * 0.5 : 0.5, 1);
     thrusterMesh.material.opacity = moving2 ? 0.85 : 0.4;
-    // Pajzs
+    // Pajzs (sárga — power-up)
     shieldMesh.visible = powerLevelRef.current > 0;
     shieldMesh.rotation.z += 0.04;
     shieldMesh.rotation.y = now * 1.2;
     if (shieldMesh.visible) {
       shieldMesh.material.opacity = 0.55 + Math.sin(now * 6) * 0.25;
     }
-    // Invuln villogás
-    playerGroup.visible = !(p.invuln > 0 && Math.floor(p.invuln * 30) % 2 === 0);
+    // Pajzs (kék — shield pickup)
+    shieldFullMesh.visible = shieldTimerRef.current > 0;
+    shieldFullMesh.rotation.z -= 0.06;
+    shieldFullMesh.rotation.y = now * 1.5;
+    if (shieldFullMesh.visible) {
+      shieldFullMesh.material.opacity = 0.55 + Math.sin(now * 4) * 0.30;
+    }
+    // Invuln villogás (de csak ha NINCS pajzs)
+    if (shieldTimerRef.current <= 0) {
+      playerGroup.visible = !(p.invuln > 0 && Math.floor(p.invuln * 30) % 2 === 0);
+    } else {
+      playerGroup.visible = true;
+    }
 
     // Ellenfelek mesh-pozíciók
     for (const e of enemiesRef.current) {
@@ -1459,6 +1847,9 @@ export default function SpaceAsteroidQuiz() {
         case " ": keysRef.current.fire = true; break;
         case "p": case "P":
           if (phaseRef.current === "play") setPaused((q) => !q);
+          break;
+        case "b": case "B":
+          if (phaseRef.current === "play") detonateBomb();
           break;
       }
     };
@@ -1683,12 +2074,32 @@ export default function SpaceAsteroidQuiz() {
                 <div className="relative rounded-xl overflow-hidden border-2 border-cyan-700/70 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black min-h-[min(56dvh,420px)] sm:min-h-[360px]">
                   <canvas ref={canvasRef} className="block touch-manipulation w-full h-full" style={{ width: "100%", height: "100%" }} />
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_56%,rgba(0,0,0,0.32)_100%)]" />
-                  <div className="pointer-events-none absolute left-2 top-2 rounded-lg border border-cyan-300/40 bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100">
-                    Hullám {wave}/12
+                  <div className={`pointer-events-none absolute left-2 top-2 rounded-lg border bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                    wave === BOSS_FINAL_WAVE
+                      ? "border-rose-400 text-rose-200 animate-pulse"
+                      : "border-cyan-300/40 text-cyan-100"
+                  }`}>
+                    {wave === BOSS_FINAL_WAVE ? "★ BOSS HULLÁM ★" : `Hullám ${wave}/12`}
                   </div>
                   <div className="pointer-events-none absolute right-2 top-2 rounded-lg border border-amber-300/40 bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-100 flex items-center gap-1">
                     {timeLeft}s
                   </div>
+                  {bossHp !== null && (
+                    <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-2 w-[68%] max-w-md">
+                      <div className="rounded border-2 border-rose-400/85 bg-rose-950/85 px-2 py-1.5 shadow-[0_0_20px_rgba(255,80,140,0.55)]">
+                        <div className="flex items-center justify-between text-[10px] font-extrabold text-rose-100 uppercase tracking-wider mb-1">
+                          <span>★ ALIEN ANYAHAJÓ</span>
+                          <span className="tabular-nums">{bossHp} / {BOSS_TOTAL_HP}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-rose-950/80 overflow-hidden border border-rose-300/40">
+                          <div
+                            className="h-full bg-gradient-to-r from-rose-500 via-fuchsia-400 to-rose-300 transition-all"
+                            style={{ width: `${Math.max(0, Math.min(100, (bossHp / BOSS_TOTAL_HP) * 100))}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {savedToast && (
                     <motion.div
                       key={savedToast}
@@ -1750,10 +2161,23 @@ export default function SpaceAsteroidQuiz() {
                   </div>
                   <span className="text-[10px] font-bold text-white/80 tabular-nums min-w-[32px] text-right">{timeLeft}s</span>
                 </div>
-                <div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70">
+                <div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70 flex-wrap gap-x-2">
                   <span>XP: <strong className="text-amber-300">{score}</strong></span>
                   <span className="flex items-center gap-1"><Heart className="w-3 h-3 text-emerald-300" /><strong>{lives}</strong></span>
                   <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-yellow-300" />{powerLevel > 0 ? `${powerTimer}s` : "–"}</span>
+                  <span className={`flex items-center gap-1 ${shieldTimer > 0 ? "text-sky-300 font-bold" : "text-white/50"}`} title="Pajzs (8s teljes invuln)">
+                    🛡️ {shieldTimer > 0 ? `${shieldTimer}s` : "–"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={detonateBomb}
+                    disabled={bombs <= 0}
+                    className={`flex items-center gap-1 ${bombs > 0 ? "text-orange-300 font-bold hover:text-orange-200 cursor-pointer" : "text-white/40 cursor-not-allowed"}`}
+                    title="Bomba (B billentyű) — minden ellenfél megsemmisül"
+                    data-testid="button-bomb"
+                  >
+                    💣 {bombs}
+                  </button>
                   <span>Combo: <strong className="text-fuchsia-300">{combo}</strong></span>
                 </div>
                 <div className="flex gap-2 justify-center w-full">
