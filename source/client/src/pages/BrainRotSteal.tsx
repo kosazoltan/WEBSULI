@@ -569,7 +569,7 @@ export default function BrainRotSteal() {
 
   return (
     <div
-      className="min-h-screen relative overflow-hidden text-white"
+      className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
       style={{
         background:
           "radial-gradient(circle at 20% 20%, rgba(147, 51, 234, 0.25), transparent 45%), radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.2), transparent 40%), radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.12), transparent 50%), linear-gradient(180deg, #0c0118 0%, #1a0a2e 50%, #0f172a 100%)",
@@ -643,7 +643,7 @@ export default function BrainRotSteal() {
         </header>
 
         <Card className="border border-purple-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0">
-          <CardContent className="p-2 sm:p-3 flex flex-col flex-1 min-h-0">
+          <CardContent data-game-card-content className="p-2 sm:p-3 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-1">
               <Brain className="w-5 h-5 text-purple-400" />
               <h1 className="text-sm sm:text-base font-extrabold bg-gradient-to-r from-purple-300 via-pink-300 to-amber-300 bg-clip-text text-transparent">

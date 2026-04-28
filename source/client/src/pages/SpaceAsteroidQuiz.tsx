@@ -1957,7 +1957,7 @@ export default function SpaceAsteroidQuiz() {
   })();
 
   return (
-    <div className="min-h-screen relative overflow-hidden text-white" style={{
+    <div className="game-shell-fixed min-h-screen relative overflow-hidden text-white" style={{
       background: "radial-gradient(ellipse at 22% 18%, rgba(255,0,255,0.18), transparent 38%), radial-gradient(ellipse at 80% 12%, rgba(0,240,255,0.20), transparent 42%), linear-gradient(180deg, #02041a 0%, #08051b 100%)",
     }}>
       <AchievementToast achievements={newlyUnlocked} />
@@ -1972,7 +1972,7 @@ export default function SpaceAsteroidQuiz() {
         </header>
 
         <Card className="border border-cyan-400/45 bg-slate-950/85 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.45)] flex-1 flex flex-col min-h-0">
-          <CardContent className={`flex flex-col flex-1 min-h-0 ${phase === "play" || phase === "quiz" ? "p-1.5 sm:p-3" : "p-3"}`}>
+          <CardContent data-game-card-content className={`flex flex-col flex-1 min-h-0 ${phase === "play" || phase === "quiz" ? "p-1.5 sm:p-3" : "p-3"}`}>
             {phase !== "play" && phase !== "quiz" && (
               <div className="flex items-center gap-2 mb-1">
                 <Rocket className="w-5 h-5 text-cyan-300" />
