@@ -48,6 +48,12 @@ const CREEPER = 10;
 const SAND = 11;
 /** Víz: díszítő blokk (nem bányászható, tengeren / tavon található) */
 const WATER = 12;
+/** Zombi mob — felszíni, közepesen mélyen is, +2× XP (nehezebb mint creeper). */
+const ZOMBIE = 13;
+/** Csontváz mob — barlangban, a stone-rétegben, +2.5× XP, ritkább. */
+const SKELETON = 14;
+/** Pók mob — barlangban a falakon, +2.2× XP, kisebb mint a többi. */
+const SPIDER = 15;
 
 type QuizSubject = "english" | "english-math" | "math" | "nature";
 type Quiz = { prompt: string; options: string[]; correctIndex: number; subject?: QuizSubject };
@@ -68,6 +74,7 @@ type QuizBankApi = {
  * a Total XP halmozódik, sorozat resetelődik új pálya elején (frissítő).
  */
 type LevelBiome = "forest" | "caves" | "desert" | "diamond" | "standard";
+type LevelWeather = "clear" | "rain" | "snow" | "sandstorm";
 type LevelConfig = {
   id: number;
   name: string;
@@ -88,6 +95,10 @@ type LevelConfig = {
   biome: LevelBiome;
   /** Háttérszín a vibrációhoz (3D szcéna kezdő színe). */
   skyTint: { day: string; dusk: string };
+  /** Időjárás: alap "clear", magasabb szinteken eső/hó/homokvihar. */
+  weather: LevelWeather;
+  /** Boss-pálya: külön HUD-banner + 3-4 extra creeper a felszínen. */
+  isBossLevel?: boolean;
 };
 
 const LEVELS: LevelConfig[] = [
@@ -103,6 +114,7 @@ const LEVELS: LevelConfig[] = [
     treeDensity: 0.18,
     biome: "forest",
     skyTint: { day: "#9bd1ee", dusk: "#5d7faf" },
+    weather: "clear",
   },
   {
     id: 2,
@@ -116,6 +128,7 @@ const LEVELS: LevelConfig[] = [
     treeDensity: 0.24,
     biome: "forest",
     skyTint: { day: "#8ac8e7", dusk: "#4f6fa0" },
+    weather: "clear",
   },
   {
     id: 3,
@@ -129,6 +142,7 @@ const LEVELS: LevelConfig[] = [
     treeDensity: 0.10,
     biome: "caves",
     skyTint: { day: "#7ab1d4", dusk: "#3c5577" },
+    weather: "rain",
   },
   {
     id: 4,
@@ -142,6 +156,7 @@ const LEVELS: LevelConfig[] = [
     treeDensity: 0.10,
     biome: "desert",
     skyTint: { day: "#f4d8a0", dusk: "#c08555" },
+    weather: "sandstorm",
   },
   {
     id: 5,
@@ -155,6 +170,8 @@ const LEVELS: LevelConfig[] = [
     treeDensity: 0.08,
     biome: "diamond",
     skyTint: { day: "#7494c9", dusk: "#2a3550" },
+    weather: "snow",
+    isBossLevel: true,
   },
 ];
 
@@ -415,6 +432,9 @@ const XP_BY_TILE: Record<number, number> = {
   [CREEPER]: 280,
   [SAND]: 22,
   [WATER]: 0,
+  [ZOMBIE]: 320, // +2× nehezebb XP-ben mint a creeper
+  [SKELETON]: 380, // legritkább, legtöbb XP
+  [SPIDER]: 260,
 };
 
 function randInt(min: number, max: number) {
@@ -463,10 +483,12 @@ function buildWorld(config: LevelConfig): Uint8Array {
   for (let c = 8; c < COLS - 8; c++) {
     const top = topByCol[c] ?? 8;
     if (Math.random() < config.treeDensity) {
-      // Több pályán nagyobb a creeper-arány (nehezebb pályán több bónusz-mob).
-      const creeperChance = config.biome === "diamond" ? 0.30 : config.biome === "caves" ? 0.24 : 0.18;
-      if (Math.random() < creeperChance && top - 1 >= 0) {
-        g[(top - 1) * COLS + c] = CREEPER;
+      // Több pályán nagyobb a mob-arány (nehezebb pályán több bónusz-mob).
+      const mobChance = config.biome === "diamond" ? 0.30 : config.biome === "caves" ? 0.24 : 0.18;
+      if (Math.random() < mobChance && top - 1 >= 0) {
+        // 3. szinttől zombi is megjelenhet a felszínen (40% esély a creeper helyett)
+        const useZombie = config.id >= 3 && Math.random() < 0.4;
+        g[(top - 1) * COLS + c] = useZombie ? ZOMBIE : CREEPER;
       } else {
         const h = randInt(2, 4);
         for (let t = 1; t <= h; t++) g[(top - t) * COLS + c] = LOG;
@@ -531,6 +553,45 @@ function buildWorld(config: LevelConfig): Uint8Array {
         if (top > 0 && g[(top - 1) * COLS + c] === GRASS) {
           g[(top - 1) * COLS + c] = AIR;
         }
+      }
+    }
+  }
+
+  // === BOSS-PÁLYA: 3 extra creeper a felszínen véletlenszerű X-pozíciókon ===
+  if (config.isBossLevel) {
+    let placed = 0;
+    let attempts = 0;
+    while (placed < 3 && attempts < 30) {
+      attempts++;
+      const c = randInt(8, COLS - 9);
+      const top = topByCol[c] ?? 8;
+      if (top - 1 >= 0 && (g[(top - 1) * COLS + c] ?? AIR) === AIR) {
+        g[(top - 1) * COLS + c] = CREEPER;
+        placed++;
+      }
+    }
+  }
+
+  // === BARLANG-MOBOK (skeleton + spider) ===
+  // Csak a 4-5. szinten, a barlang-falakon (STONE cella, ami AIR-rel szomszédos).
+  // Skeleton 5% esély (id≥4), spider 4% esély (id≥5).
+  if (config.id >= 4) {
+    const skeletonChance = 0.05;
+    const spiderChance = config.id >= 5 ? 0.04 : 0;
+    for (let r = 6; r < ROWS - 1; r++) {
+      for (let c = 1; c < COLS - 1; c++) {
+        const i = r * COLS + c;
+        if (g[i] !== STONE) continue;
+        // Csak akkor mob, ha legalább egy szomszéd AIR (cave-fal)
+        const hasAirNeighbor =
+          g[i - 1] === AIR ||
+          g[i + 1] === AIR ||
+          g[i - COLS] === AIR ||
+          g[i + COLS] === AIR;
+        if (!hasAirNeighbor) continue;
+        const roll = Math.random();
+        if (roll < skeletonChance) g[i] = SKELETON;
+        else if (roll < skeletonChance + spiderChance) g[i] = SPIDER;
       }
     }
   }
@@ -694,6 +755,10 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
   [CREEPER]: { main: "#4BA84B", dark: "#368A36", darker: "#1F5C1F", light: "#6CC46C", accent: "#0A0A0A", accent2: "#FFFFFF" },
   [SAND]:    { main: "#D9C27A", dark: "#B69A55", darker: "#80673A", light: "#F0DE9C", accent: "#C8AD67" },
   [WATER]:   { main: "#3E79D8", dark: "#2650A8", darker: "#17326C", light: "#72B7FF", accent: "#B8E6FF", accent2: "#1E438F" },
+  // Új mob-blokkok (CREEPER mintáját követve, eltérő színekkel)
+  [ZOMBIE]:   { main: "#3A6B45", dark: "#2A4F32", darker: "#162A1A", light: "#588B5C", accent: "#0A0A0A", accent2: "#7DC174" }, // sötét-zöldes-hús, bőr
+  [SKELETON]: { main: "#D8D6CE", dark: "#A6A498", darker: "#62605A", light: "#F2F0E6", accent: "#0A0A0A", accent2: "#0E1B36" }, // csont-fehér + sötét szem
+  [SPIDER]:   { main: "#1F1A18", dark: "#0E0A09", darker: "#040303", light: "#3A2C28", accent: "#FF4D40", accent2: "#7A1810" }, // fekete pók + piros szem
 };
 
 const BLOCK_3D_SIZE = 1;
@@ -892,6 +957,9 @@ function makeBlockMaterials() {
   map.set(CREEPER, stdMat(buildTex(CREEPER), { emissive: new THREE.Color("#145214"), emissiveIntensity: 0.32 }));
   map.set(SAND, stdMat(buildTex(SAND)));
   map.set(WATER, stdMat(buildTex(WATER), { transparent: true, opacity: 0.62, roughness: 0.18, metalness: 0.06 }));
+  map.set(ZOMBIE, stdMat(buildTex(ZOMBIE), { emissive: new THREE.Color("#1a3a1f"), emissiveIntensity: 0.28 }));
+  map.set(SKELETON, stdMat(buildTex(SKELETON), { emissive: new THREE.Color("#7a7870"), emissiveIntensity: 0.18 }));
+  map.set(SPIDER, stdMat(buildTex(SPIDER), { emissive: new THREE.Color("#3a0a06"), emissiveIntensity: 0.24 }));
   return map;
 }
 
@@ -1171,6 +1239,71 @@ function mcBlockPatternBuild(t: number, c: number, r: number): string[][] {
     grid[8][3] = pal.accent!; grid[8][4] = pal.accent!;
     grid[8][7] = pal.accent!; grid[8][8] = pal.accent!;
     grid[9][3] = pal.accent!; grid[9][8] = pal.accent!;
+  } else if (t === ZOMBIE) {
+    // Bázis: zöldes-húsos pixeles mintázat (CREEPER-szerű, sötétebb-foltos).
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 419.7);
+        grid[py][px] = h < 0.20 ? pal.light! : h < 0.58 ? pal.main : h < 0.88 ? pal.dark : pal.darker;
+      }
+    }
+    // Sebek / foltok: random sötétebb pötty (4 db)
+    for (let k = 0; k < 4; k++) {
+      const px = Math.floor(tileRand(c, r, 433 + k) * 11);
+      const py = Math.floor(tileRand(c, r, 449 + k) * 11);
+      grid[py][px] = pal.accent2!; // világosabb húsos folt
+    }
+    // Üres szemek (1x2 sötét)
+    grid[4][2] = pal.accent!; grid[5][2] = pal.accent!;
+    grid[4][9] = pal.accent!; grid[5][9] = pal.accent!;
+    // Nyitott száj (lefelé ívelő, 4 pixel)
+    grid[7][4] = pal.accent!; grid[7][5] = pal.accent!;
+    grid[7][6] = pal.accent!; grid[7][7] = pal.accent!;
+    grid[8][5] = pal.accent!; grid[8][6] = pal.accent!;
+  } else if (t === SKELETON) {
+    // Bázis: csontfehér zajos mintázat.
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 467.3);
+        grid[py][px] = h < 0.20 ? pal.light! : h < 0.55 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    // Üres koponya-szem-üregek (2x2 sötét, mélyebbek mint creeper)
+    grid[3][2] = pal.accent!; grid[3][3] = pal.accent!;
+    grid[4][2] = pal.accent!; grid[4][3] = pal.accent!;
+    grid[5][3] = pal.darker;
+    grid[3][8] = pal.accent!; grid[3][9] = pal.accent!;
+    grid[4][8] = pal.accent!; grid[4][9] = pal.accent!;
+    grid[5][8] = pal.darker;
+    // Orrlyuk
+    grid[6][5] = pal.accent!; grid[6][6] = pal.accent!;
+    // Fogazat (vízszintes 6 fog)
+    grid[8][3] = pal.accent!; grid[8][4] = pal.accent!;
+    grid[8][5] = pal.accent!; grid[8][6] = pal.accent!;
+    grid[8][7] = pal.accent!; grid[8][8] = pal.accent!;
+    grid[9][3] = pal.darker; grid[9][5] = pal.darker; grid[9][7] = pal.darker;
+  } else if (t === SPIDER) {
+    // Bázis: fekete-szőrös mintázat
+    for (let py = 0; py < 12; py++) {
+      for (let px = 0; px < 12; px++) {
+        const h = tileRand(c + px, r + py, 503.1);
+        grid[py][px] = h < 0.18 ? pal.light! : h < 0.55 ? pal.main : h < 0.85 ? pal.dark : pal.darker;
+      }
+    }
+    // 8 láb a peremen (4 oldalsó pár)
+    grid[2][0] = pal.accent2!; grid[3][1] = pal.accent2!;
+    grid[2][11] = pal.accent2!; grid[3][10] = pal.accent2!;
+    grid[5][0] = pal.accent2!; grid[5][11] = pal.accent2!;
+    grid[7][0] = pal.accent2!; grid[7][11] = pal.accent2!;
+    grid[9][0] = pal.accent2!; grid[10][1] = pal.accent2!;
+    grid[9][11] = pal.accent2!; grid[10][10] = pal.accent2!;
+    // 8 piros pók-szem (kompakt cluster középen)
+    grid[5][4] = pal.accent!; grid[5][5] = pal.accent!;
+    grid[5][6] = pal.accent!; grid[5][7] = pal.accent!;
+    grid[6][4] = pal.accent!; grid[6][7] = pal.accent!;
+    // Csáp / állkapocs (4 pixel a száj alatt)
+    grid[7][5] = pal.darker; grid[7][6] = pal.darker;
+    grid[8][4] = pal.darker; grid[8][7] = pal.darker;
   } else if (t === SAND) {
     // Homok: finomabb szemcsék, vízszintes rétegek, enyhén szóródó pixelek.
     for (let py = 0; py < 12; py++) {
@@ -1767,6 +1900,39 @@ export default function BlockCraftQuiz() {
     scene.add(cloudPlane);
 
     /**
+     * Időjárás-részecske rendszer (Points-buffer, ~600 részecske).
+     * Az aktuális level config.weather alapján dönti el a render-loop:
+     *   - "rain":      hosszú, kék-fehér csíkok lefelé esnek nagy sebességgel
+     *   - "snow":      apró fehér pelyhek lassan "lebegnek" oldalra ingadozva
+     *   - "sandstorm": narancs-sárga homokszemcsék, vízszintesen söprűzik
+     *   - "clear":     a részecskék elrejtve, üresjárat
+     * A részecskék alappozíciói egyszer generáltak, a render frame
+     * újra-pozicionálja őket a Y-tengelyen (és X-en sin-bgaval, ha hó).
+     */
+    const WEATHER_PARTICLES = 600;
+    const weatherPositions = new Float32Array(WEATHER_PARTICLES * 3);
+    const weatherSeeds = new Float32Array(WEATHER_PARTICLES); // X-mozgás-seed
+    for (let i = 0; i < WEATHER_PARTICLES; i++) {
+      weatherPositions[i * 3] = (Math.random() - 0.5) * COLS * 1.4;
+      weatherPositions[i * 3 + 1] = Math.random() * ROWS * 1.4;
+      weatherPositions[i * 3 + 2] = Math.random() * 3 - 1;
+      weatherSeeds[i] = Math.random() * Math.PI * 2;
+    }
+    const weatherGeo = new THREE.BufferGeometry();
+    weatherGeo.setAttribute("position", new THREE.BufferAttribute(weatherPositions, 3));
+    const weatherMat = new THREE.PointsMaterial({
+      size: 0.18,
+      transparent: true,
+      opacity: 0.85,
+      sizeAttenuation: true,
+      color: "#ffffff",
+      depthWrite: false,
+    });
+    const weatherPoints = new THREE.Points(weatherGeo, weatherMat);
+    weatherPoints.visible = false;
+    scene.add(weatherPoints);
+
+    /**
      * Klasszikus Minecraft-szerű kocka-geometria (1×1×1, ~0.99 a hézag-él miatt).
      * Egyetlen mesh-réteg → 3× kevesebb dráho, nincsenek 3-lanes belső lap-artifaktok.
      * A játékos a +Z front-face síkban sétál (PLAYER_DEPTH_Z = +0.55), így a 17°-os
@@ -2031,6 +2197,55 @@ export default function BlockCraftQuiz() {
       cloudPlane.position.x = playerPos.x * 0.18 + Math.sin(t * 0.0001) * 1.4;
       cloudPlane.position.y = playerPos.y * 0.4 + ROWS - 1.2;
 
+      // === IDŐJÁRÁS-RÉSZECSKÉK ===
+      const weather = activeLevelRef.current.weather;
+      if (weather === "clear") {
+        weatherPoints.visible = false;
+      } else {
+        weatherPoints.visible = true;
+        // Részecskék újrapozíciózása + Y-rebreak ha lefuts a játéktér alá
+        const wPos = weatherPoints.geometry.attributes.position;
+        let fallSpeed = 0.22; // alap: hó / sandstorm
+        let xSwayAmp = 0.0;
+        let particleColor = "#ffffff";
+        if (weather === "rain") {
+          fallSpeed = 0.55;
+          particleColor = "#9ed1ff";
+          xSwayAmp = 0.0;
+        } else if (weather === "snow") {
+          fallSpeed = 0.10;
+          particleColor = "#ffffff";
+          xSwayAmp = 0.04;
+        } else if (weather === "sandstorm") {
+          fallSpeed = 0.04;
+          particleColor = "#ffd06b";
+          xSwayAmp = 0.30;
+        }
+        weatherMat.color.set(particleColor);
+        weatherMat.size = weather === "rain" ? 0.22 : weather === "snow" ? 0.18 : 0.12;
+        weatherMat.opacity = weather === "rain" ? 0.78 : weather === "snow" ? 0.92 : 0.55;
+        for (let i = 0; i < WEATHER_PARTICLES; i++) {
+          let py = wPos.getY(i);
+          let px = wPos.getX(i);
+          py -= fallSpeed;
+          if (xSwayAmp > 0) {
+            px += Math.sin(t * 0.001 + weatherSeeds[i]!) * xSwayAmp;
+            // ha kifut a határból, visszateszi
+            if (px < -COLS * 0.7) px = COLS * 0.7;
+            if (px > COLS * 0.7) px = -COLS * 0.7;
+          }
+          // Y-wrap: a játéktér tetejére vissza
+          if (py < playerPos.y - ROWS * 0.7) {
+            py = playerPos.y + ROWS * 0.6 + Math.random() * 4;
+            px = (Math.random() - 0.5) * COLS * 1.3;
+          }
+          wPos.setXY(i, px, py);
+        }
+        wPos.needsUpdate = true;
+        // A részecske-cloud követi a játékos X-pozícióját, hogy mindig "vele essen"
+        weatherPoints.position.x = playerPos.x;
+      }
+
       // Víz-blokkok finom hullámzása (függőleges sin-elmozdulás).
       const waveTime = t * 0.0014;
       for (const m of threeRuntimeRef.current?.blockMeshes ?? []) {
@@ -2164,9 +2379,11 @@ export default function BlockCraftQuiz() {
       worldVersionRef.current++;
       spawnDust((tgt.c + 0.5) * TILE, (tgt.r + 0.5) * TILE, tgt.t);
       const isCreeper = tgt.t === CREEPER;
-      const isRare = tgt.t === COAL || tgt.t === IRON || tgt.t === DIAMOND || tgt.t === CREEPER;
+      const isMob = tgt.t === CREEPER || tgt.t === ZOMBIE || tgt.t === SKELETON || tgt.t === SPIDER;
+      const isRare = tgt.t === COAL || tgt.t === IRON || tgt.t === DIAMOND || isMob;
       const baseXp = XP_BY_TILE[tgt.t] ?? 24;
-      const add = (isCreeper ? baseXp * 2 : baseXp) + streak * 4;
+      // Mob-ölés bónusz: minden mob 2× XP, de a base értékek már nehezebbek (CREEPER 280, ZOMBIE 320, SKELETON 380, SPIDER 260)
+      const add = (isMob ? baseXp * 2 : baseXp) + streak * 4;
       const newBlocks = blocksMined + 1;
       const newLevelBlocks = levelBlocks + 1;
       const newLevelRare = levelRare + (isRare ? 1 : 0);
@@ -2263,8 +2480,6 @@ export default function BlockCraftQuiz() {
     }
     if (achievementCheckedRef.current) return;
     achievementCheckedRef.current = true;
-    // Becsülés: ha a game-won, a final wave 5 (utolsó pálya).
-    const diamondCount = subjectStats.nature; // best-effort proxy, exact-szám nincs
     const wasDailyAvailable = isTodaysGameAvailable("block-craft-quiz");
     const newOnes = recordRun({
       game: "block-craft-quiz",
@@ -2441,10 +2656,21 @@ export default function BlockCraftQuiz() {
                   <div className="pointer-events-none absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/55">
                     <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-200 shadow-[0_0_10px_rgba(254,240,138,0.85)]" />
                   </div>
-                  <div className="pointer-events-none absolute left-2 top-2 rounded-lg border border-lime-300/40 bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-lime-100">
-                    Pálya {cfg.id}/{LEVELS.length} · {cfg.name.replace(/^\d+\.\s*/, "")}
+                  <div className={`pointer-events-none absolute left-2 top-2 rounded-lg border bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                    cfg.isBossLevel
+                      ? "border-rose-400 text-rose-200 animate-pulse"
+                      : "border-lime-300/40 text-lime-100"
+                  }`}>
+                    {cfg.isBossLevel ? `★ BOSS ★ ${cfg.name.replace(/^\d+\.\s*/, "")}` : `Pálya ${cfg.id}/${LEVELS.length} · ${cfg.name.replace(/^\d+\.\s*/, "")}`}
                   </div>
-                  <div className="pointer-events-none absolute right-2 top-2 rounded-lg border border-cyan-200/25 bg-slate-950/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100">3D</div>
+                  <div className="pointer-events-none absolute right-2 top-2 rounded-lg border border-cyan-200/25 bg-slate-950/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100 flex items-center gap-1">
+                    <span>3D</span>
+                    {cfg.weather !== "clear" && (
+                      <span title={cfg.weather}>
+                        {cfg.weather === "rain" ? "🌧" : cfg.weather === "snow" ? "❄" : "🏜"}
+                      </span>
+                    )}
+                  </div>
                   <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-white/75">
                     <span className="rounded bg-black/45 px-2 py-1">Célozz és bányássz: E / koppintás</span>
                     <span className="rounded bg-black/45 px-2 py-1">Sárga keret = kvízblokk</span>
