@@ -16,6 +16,9 @@ import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
+import { recordRun, type Achievement } from "@/lib/achievements";
+import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
+import AchievementToast from "@/components/AchievementToast";
 
 const TILE = 24;
 const ROWS = 18;
@@ -1371,6 +1374,8 @@ export default function BlockCraftQuiz() {
   const [runSeconds, setRunSeconds] = useState(0);
   const [blocksMined, setBlocksMined] = useState(0);
   const [rareBlocks, setRareBlocks] = useState(0);
+  // Achievement-toast queue: az "over" phase-be lépéskor töltődik fel.
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   // Multi-level state: aktuális szint indexe + szint-specifikus számlálók.
   const [levelIdx, setLevelIdx] = useState(0);
   const [levelBlocks, setLevelBlocks] = useState(0);
@@ -2249,6 +2254,39 @@ export default function BlockCraftQuiz() {
       });
   }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
 
+  // Achievement + Daily Challenge tracking — az "over" phase átmenetnél egyszer fut.
+  const achievementCheckedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "over") {
+      achievementCheckedRef.current = false;
+      return;
+    }
+    if (achievementCheckedRef.current) return;
+    achievementCheckedRef.current = true;
+    // Becsülés: ha a game-won, a final wave 5 (utolsó pálya).
+    const diamondCount = subjectStats.nature; // best-effort proxy, exact-szám nincs
+    const wasDailyAvailable = isTodaysGameAvailable("block-craft-quiz");
+    const newOnes = recordRun({
+      game: "block-craft-quiz",
+      xpGained: sessionXp,
+      correctAnswers: blocksMined, // ≈ helyes válaszok = kibányászott blokkok
+      wrongAnswers: 0,
+      maxStreak: streak,
+      blocksMined,
+      diamondsMined: rareBlocks > 0 ? Math.max(1, Math.floor(rareBlocks / 3)) : 0,
+      perfect: streak >= blocksMined && blocksMined >= 5,
+      fullClear: gameWon,
+      highestLevel: levelIdx + 1,
+    });
+    if (wasDailyAvailable && gameWon) {
+      markDailyCompleted();
+    }
+    if (newOnes.length > 0) setNewlyUnlocked(newOnes);
+    // Szándékosan csak `phase`-re iratkozunk fel — a recordRun egyszer fut "over"
+    // átmenetenként, nem akarjuk, hogy minden state-mutáció (sessionXp, streak stb.)
+    // újra triggerelje.
+  }, [phase]);
+
   const resizeCanvas = useCallback(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -2333,6 +2371,7 @@ export default function BlockCraftQuiz() {
   return (
     <div className="min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
       <ClassroomGateModal accent="lime" />
+      <AchievementToast achievements={newlyUnlocked} />
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
         <header className="flex items-center justify-between gap-1 mb-1">
           <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>

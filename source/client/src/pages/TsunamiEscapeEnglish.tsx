@@ -9,6 +9,9 @@ import { useClassroomGrade } from "@/lib/classroomStore";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
+import { recordRun, type Achievement } from "@/lib/achievements";
+import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
+import AchievementToast from "@/components/AchievementToast";
 import {
   ArrowLeft,
   ArrowBigLeft,
@@ -1024,6 +1027,32 @@ export default function TsunamiEscapeEnglish() {
       });
   }, [phase, syncEligibility, sessionXp, streak, runSeconds]);
 
+  // Achievement + Daily — egyszer fut "over" / "won" átmenetkor.
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
+  const achievementCheckedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "over" && phase !== "won") {
+      achievementCheckedRef.current = false;
+      return;
+    }
+    if (achievementCheckedRef.current) return;
+    achievementCheckedRef.current = true;
+    const wasDailyAvailable = isTodaysGameAvailable("tsunami-english");
+    const newOnes = recordRun({
+      game: "tsunami-english",
+      xpGained: sessionXp,
+      correctAnswers: correctQuizCountRef.current,
+      wrongAnswers: 0,
+      maxStreak: streak,
+      perfect: phase === "won" && streak >= correctQuizCountRef.current,
+      fullClear: phase === "won",
+    });
+    if (wasDailyAvailable && phase === "won") {
+      markDailyCompleted();
+    }
+    if (newOnes.length > 0) setNewlyUnlocked(newOnes);
+  }, [phase, sessionXp, streak]);
+
   return (
     <div
       className="min-h-screen relative overflow-hidden text-white"
@@ -1033,6 +1062,7 @@ export default function TsunamiEscapeEnglish() {
       }}
     >
       <ClassroomGateModal accent="cyan" />
+      <AchievementToast achievements={newlyUnlocked} />
       <div className="absolute inset-0 opacity-35 pointer-events-none">
         <CosmicBackground />
       </div>

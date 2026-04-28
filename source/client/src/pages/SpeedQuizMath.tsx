@@ -9,6 +9,9 @@ import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
+import { recordRun, type Achievement } from "@/lib/achievements";
+import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
+import AchievementToast from "@/components/AchievementToast";
 
 type GradeLevel = 3 | 4 | 5;
 type Phase = "menu" | "play" | "over" | "won";
@@ -404,6 +407,32 @@ export default function SpeedQuizMath() {
       });
   }, [phase, syncEligibility, grade, timeLeft, score, bestStreak]);
 
+  // Achievement + Daily — egyszer fut "over" / "won" átmenetkor.
+  const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
+  const achievementCheckedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "over" && phase !== "won") {
+      achievementCheckedRef.current = false;
+      return;
+    }
+    if (achievementCheckedRef.current) return;
+    achievementCheckedRef.current = true;
+    const wasDailyAvailable = isTodaysGameAvailable("speed-quiz-math");
+    const newOnes = recordRun({
+      game: "speed-quiz-math",
+      xpGained: score,
+      correctAnswers: correct,
+      wrongAnswers: answered - correct,
+      maxStreak: bestStreak,
+      perfect: phase === "won" && answered === correct,
+      fullClear: phase === "won",
+    });
+    if (wasDailyAvailable && phase === "won") {
+      markDailyCompleted();
+    }
+    if (newOnes.length > 0) setNewlyUnlocked(newOnes);
+  }, [phase, score, correct, answered, bestStreak]);
+
   const runProgress = Math.max(0, Math.min(100, (timeLeft / ROUND_SECONDS[grade]) * 100));
   const qProgress = Math.max(0, Math.min(100, (questionTimeLeft / QUESTION_SECONDS[grade]) * 100));
   const obbyProgress = Math.max(0, Math.min(100, (correct / TARGET_CORRECT[grade]) * 100));
@@ -416,6 +445,7 @@ export default function SpeedQuizMath() {
           "radial-gradient(circle at 20% 15%, rgba(56,189,248,0.28), transparent 34%), radial-gradient(circle at 82% 9%, rgba(244,114,182,0.3), transparent 38%), linear-gradient(180deg, #090f21 0%, #131a3a 100%)",
       }}
     >
+      <AchievementToast achievements={newlyUnlocked} />
       <main className="relative z-10 w-full max-w-3xl xl:max-w-4xl mx-auto px-3 sm:px-5 py-3 min-h-dvh min-h-screen flex flex-col pb-8 sm:pb-10">
         <header className="flex items-center justify-between gap-2 mb-2">
           <Link href="/games">
