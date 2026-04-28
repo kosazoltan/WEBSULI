@@ -689,23 +689,35 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
 
 const BLOCK_3D_SIZE = 1;
 /**
- * 3D blokkok mélysége (z-tengelyen). 1.95 unit ≈ 2 blokknyi „falvastagság”.
- * Egyetlen rétegű mesh-ek + vastag geometria → tisztább, „minecraft-szerű”
- * fal-megjelenés a 3 lane-es duplikáció helyett (3× kevesebb mesh, jobb FPS,
- * nincsenek rejtett-belső lapok visual artifactjai).
+ * 3D blokkok mélysége (z-tengelyen). 1.0 unit = klasszikus Minecraft kocka:
+ * - tiszta cube-megjelenés (front face z=+0.5, back face z=-0.5)
+ * - a háttérben látszanak a felső blokkok hátsó élei → „voxel” mélységérzet
+ * - a játékos pontosan a blokk-fal FRONT FACE-ÉN sétál → ZERO parallax,
+ *   nincs „lebegő láb” effekt a 17°-os lefelé-néző kameránál
  */
-const BLOCK_3D_DEPTH = 1.95;
+const BLOCK_3D_DEPTH = 1.0;
 const WORLD_CENTER_X = COLS / 2;
 const WATER_SURFACE_Z = 0.08;
-/** Játékos a blokkfal előtt sétál (z = +1.4), így mindig láthatóan kiemelkedik. */
-const PLAYER_DEPTH_Z = 1.42;
+/**
+ * A játékos pontosan a blokkok FRONT FACE síkjában (z = +0.5) sétál,
+ * +0.05 buffer-rel, hogy a Steve-avatar ne clip-eljen a fal-élekbe és
+ * a kamera–blokk parallax tényleg nulla legyen (foot pixel-pontosan a
+ * blokk tetején).
+ */
+const PLAYER_DEPTH_Z = 0.55;
 
 function tileTo3d(c: number, r: number, z = 0) {
   return new THREE.Vector3(c - WORLD_CENTER_X + 0.5, ROWS - r - 0.5, z);
 }
 
+/**
+ * Avatar group Y-offset = +0.97 unit a foot pixel-pozíció felett, mert
+ * az új Steve-arányú avatar legalsó mesh-je (boot-bottom) a group origintől
+ * -0.97 egységre van. Így a foot mesh **pontosan** a blokk-tető Y-jával
+ * esik egybe (foot_world_y = ROWS - p.y/TILE), nincs lebegés és nincs clip.
+ */
 function playerTo3d(p: { x: number; y: number }) {
-  return new THREE.Vector3(p.x / TILE - WORLD_CENTER_X + PLAYER_W / TILE / 2, ROWS - p.y / TILE + 0.52, PLAYER_DEPTH_Z);
+  return new THREE.Vector3(p.x / TILE - WORLD_CENTER_X + PLAYER_W / TILE / 2, ROWS - p.y / TILE + 0.97, PLAYER_DEPTH_Z);
 }
 
 function blockDepthZ(cell: number) {
@@ -1706,8 +1718,10 @@ export default function BlockCraftQuiz() {
     scene.add(cloudPlane);
 
     /**
-     * Vastag (z=1.95) blokk-geometria — egyetlen rétegű mesh-ek + vastag fal.
-     * Ez 3× kevesebb mesh, nincsenek a 3-laneből származó belső lap-artifaktok.
+     * Klasszikus Minecraft-szerű kocka-geometria (1×1×1, ~0.99 a hézag-él miatt).
+     * Egyetlen mesh-réteg → 3× kevesebb dráho, nincsenek 3-lanes belső lap-artifaktok.
+     * A játékos a +Z front-face síkban sétál (PLAYER_DEPTH_Z = +0.55), így a 17°-os
+     * lefelé-nyíló kamerán nincs parallax-eltolódás a foot ↔ block-top között.
      */
     const blockGeometry = new THREE.BoxGeometry(BLOCK_3D_SIZE * 0.99, BLOCK_3D_SIZE * 0.99, BLOCK_3D_DEPTH);
     const blockMaterials = makeBlockMaterials();
