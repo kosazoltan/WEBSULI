@@ -3085,6 +3085,248 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     }
   });
 
+  // ADMIN-ONLY: Szülő-dashboard — minden aktív Google-bejelentkezett tanuló
+  // játék-statisztikája az utolsó N nap alapján. Ide az `gameScores` táblát
+  // queryeljük, és a `users` táblával join-oljuk a név + email-hez.
+  app.get("/api/admin/parent-dashboard", isAuthenticatedAdmin, async (req: Request, res) => {
+    try {
+      const daysRaw = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : 7;
+      const days = Number.isFinite(daysRaw) && daysRaw > 0 && daysRaw <= 90 ? daysRaw : 7;
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const { gameScores } = await import("@shared/schema");
+
+      const rows = await db
+        .select({
+          userId: gameScores.userId,
+          gameId: gameScores.gameId,
+          totalXp: gameScores.totalXp,
+          bestRunXp: gameScores.bestRunXp,
+          bestStreak: gameScores.bestStreak,
+          bestRunSeconds: gameScores.bestRunSeconds,
+          gamesPlayed: gameScores.gamesPlayed,
+          updatedAt: gameScores.updatedAt,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+        })
+        .from(gameScores)
+        .leftJoin(users, eq(gameScores.userId, users.id))
+        .where(sql`${gameScores.updatedAt} >= ${cutoff}`)
+        .orderBy(desc(gameScores.updatedAt));
+
+      // Per-user aggregáció: total XP, total games, best streak, last activity
+      const byUser = new Map<string, {
+        userId: string;
+        name: string;
+        email: string | null;
+        totalXp: number;
+        totalGames: number;
+        bestStreak: number;
+        lastActivity: string;
+        games: Record<string, { totalXp: number; gamesPlayed: number; bestStreak: number; bestRunXp: number }>;
+      }>();
+      for (const r of rows) {
+        const key = r.userId;
+        const name = (r.firstName || r.lastName)
+          ? `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim()
+          : "Névtelen";
+        const updatedAtIso = (r.updatedAt instanceof Date ? r.updatedAt : new Date(r.updatedAt as unknown as string)).toISOString();
+        const existing = byUser.get(key);
+        if (!existing) {
+          byUser.set(key, {
+            userId: r.userId,
+            name,
+            email: r.email,
+            totalXp: r.totalXp ?? 0,
+            totalGames: r.gamesPlayed ?? 0,
+            bestStreak: r.bestStreak ?? 0,
+            lastActivity: updatedAtIso,
+            games: {
+              [r.gameId]: {
+                totalXp: r.totalXp ?? 0,
+                gamesPlayed: r.gamesPlayed ?? 0,
+                bestStreak: r.bestStreak ?? 0,
+                bestRunXp: r.bestRunXp ?? 0,
+              },
+            },
+          });
+        } else {
+          existing.totalXp += r.totalXp ?? 0;
+          existing.totalGames += r.gamesPlayed ?? 0;
+          existing.bestStreak = Math.max(existing.bestStreak, r.bestStreak ?? 0);
+          if (updatedAtIso > existing.lastActivity) existing.lastActivity = updatedAtIso;
+          existing.games[r.gameId] = {
+            totalXp: r.totalXp ?? 0,
+            gamesPlayed: r.gamesPlayed ?? 0,
+            bestStreak: r.bestStreak ?? 0,
+            bestRunXp: r.bestRunXp ?? 0,
+          };
+        }
+      }
+
+      const students = Array.from(byUser.values()).sort((a, b) => b.totalXp - a.totalXp);
+
+      res.json({
+        days,
+        cutoff: cutoff.toISOString(),
+        students,
+        totalStudents: students.length,
+        totalXp: students.reduce((s, x) => s + x.totalXp, 0),
+        totalGames: students.reduce((s, x) => s + x.totalGames, 0),
+      });
+    } catch (e) {
+      console.error("[PARENT-DASH] hiba:", e);
+      const err = e instanceof Error ? e : new Error(String(e));
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ADMIN-ONLY: Heti összefoglaló email kiküldése a szülőknek (extra-emailek).
+  // Lekérdezi a parent-dashboard adatait, generál minden extra-email cím-hez
+  // egy HTML összefoglalót (osztály-szerinti tanulók statjával), majd kiküldi.
+  app.post("/api/admin/parent-dashboard/send-weekly", isAuthenticatedAdmin, async (req: Request, res) => {
+    try {
+      const daysRaw = typeof req.body?.days === "number" ? req.body.days : 7;
+      const days = Math.max(1, Math.min(90, Math.floor(daysRaw)));
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const { gameScores } = await import("@shared/schema");
+
+      // 1. Aggregáljuk a per-user statot (mint a parent-dashboard endpoint).
+      const rows = await db
+        .select({
+          userId: gameScores.userId,
+          gameId: gameScores.gameId,
+          totalXp: gameScores.totalXp,
+          gamesPlayed: gameScores.gamesPlayed,
+          bestStreak: gameScores.bestStreak,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+        })
+        .from(gameScores)
+        .leftJoin(users, eq(gameScores.userId, users.id))
+        .where(sql`${gameScores.updatedAt} >= ${cutoff}`);
+
+      const userStats = new Map<string, { name: string; email: string | null; totalXp: number; totalGames: number; bestStreak: number }>();
+      for (const r of rows) {
+        const key = r.userId;
+        const name = (r.firstName || r.lastName) ? `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() : "Tanuló";
+        const cur = userStats.get(key);
+        if (!cur) {
+          userStats.set(key, {
+            name, email: r.email,
+            totalXp: r.totalXp ?? 0,
+            totalGames: r.gamesPlayed ?? 0,
+            bestStreak: r.bestStreak ?? 0,
+          });
+        } else {
+          cur.totalXp += r.totalXp ?? 0;
+          cur.totalGames += r.gamesPlayed ?? 0;
+          cur.bestStreak = Math.max(cur.bestStreak, r.bestStreak ?? 0);
+        }
+      }
+
+      // 2. Az extra_email_addresses összes aktív cím-listája = értesítendő szülő.
+      const extras = await storage.getActiveExtraEmails();
+      // Minden extra-email kapja a tanulók listáját, akiknek email-je egyezik
+      // (a tanulóknak Google-fiókja az email + extra-emails között megegyezhet),
+      // VAGY ha nem, akkor egy globális összefoglalót (név + XP).
+      // Egyszerűsítve: minden extra-email cím-hez kiküldjük az összes (név, XP)
+      // adatot — a szülő látja az egész osztálya-statját.
+
+      const studentsArr = Array.from(userStats.values()).sort((a, b) => b.totalXp - a.totalXp);
+
+      const resendState = isResendConfigured();
+      if (!resendState.ok) {
+        return res.status(503).json({
+          message: "Resend nincs konfigurálva",
+          reason: resendState.reason,
+          recipients: extras.length,
+          sent: 0,
+          failed: 0,
+        });
+      }
+
+      const Resend = (await import("resend")).Resend;
+      const apiKey = process.env.RESEND_API_KEY!;
+      const fromEmail = (process.env.RESEND_FROM_EMAIL || "").trim();
+      const client = new Resend(apiKey);
+
+      // 3. HTML-template generálás
+      const studentsHtml = studentsArr.length === 0
+        ? `<p style="color:#888;font-style:italic;">Az elmúlt ${days} napban nem volt játékos-aktivitás.</p>`
+        : `<table style="width:100%;border-collapse:collapse;margin:12px 0;">
+            <thead><tr style="background:#f4f4f4;">
+              <th style="text-align:left;padding:6px;border:1px solid #ddd;">Tanuló</th>
+              <th style="text-align:right;padding:6px;border:1px solid #ddd;">Összes XP</th>
+              <th style="text-align:right;padding:6px;border:1px solid #ddd;">Futások</th>
+              <th style="text-align:right;padding:6px;border:1px solid #ddd;">Legjobb sorozat</th>
+            </tr></thead>
+            <tbody>${studentsArr.map((s) => `
+              <tr>
+                <td style="padding:6px;border:1px solid #ddd;">${s.name}</td>
+                <td style="text-align:right;padding:6px;border:1px solid #ddd;font-weight:bold;color:#b45309;">${s.totalXp.toLocaleString("hu-HU")}</td>
+                <td style="text-align:right;padding:6px;border:1px solid #ddd;">${s.totalGames}</td>
+                <td style="text-align:right;padding:6px;border:1px solid #ddd;color:#dc2626;">🔥 ${s.bestStreak}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>`;
+
+      let sent = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < extras.length; i++) {
+        const email = extras[i]!.email;
+        const html = `
+          <!DOCTYPE html>
+          <html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:640px;margin:0 auto;padding:16px;">
+            <h2 style="color:#7c3aed;margin:0 0 4px;">📊 WebSuli — heti összefoglaló</h2>
+            <p style="color:#666;margin:0 0 12px;">Az elmúlt <strong>${days} nap</strong> tanulói teljesítményei.</p>
+            ${studentsHtml}
+            <p style="color:#888;font-size:12px;margin-top:18px;">
+              Ez egy automatikus heti összefoglaló a WebSuli platformról. A tanuló saját böngészőjében tárolt
+              adatok (achievement, daily streak) nincsenek itt — csak a szerver-oldali játékfutási statok.
+            </p>
+          </body></html>`;
+
+        try {
+          const result = await client.emails.send({
+            from: fromEmail,
+            to: [email],
+            subject: `WebSuli — Heti összefoglaló (${days} nap, ${studentsArr.length} tanuló)`,
+            html,
+          });
+          if (result && "error" in result && result.error) {
+            failed++;
+            errors.push(`${email}: ${result.error.message}`);
+          } else {
+            sent++;
+          }
+        } catch (e) {
+          failed++;
+          errors.push(`${email}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        // 500ms rate-limit (Resend 2req/s)
+        if (i < extras.length - 1) await new Promise((r) => setTimeout(r, 500));
+      }
+
+      res.json({
+        recipients: extras.length,
+        sent,
+        failed,
+        errors: errors.slice(0, 10),
+        studentsInReport: studentsArr.length,
+      });
+    } catch (e) {
+      console.error("[PARENT-DASH] heti email hiba:", e);
+      const err = e instanceof Error ? e : new Error(String(e));
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ADMIN-ONLY: Email-küldés diagnosztikai panel.
   // Visszaadja a Resend config állapotát, az osztályonkénti címzett-bontást,
   // az utolsó N email_logs bejegyzést és az utolsó N tananyag-feltöltést
