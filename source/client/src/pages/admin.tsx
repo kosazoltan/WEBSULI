@@ -33,7 +33,8 @@ import {
   Download,
   FolderOpen,
   Upload,
-  Sparkles
+  Sparkles,
+  Activity
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -63,6 +64,7 @@ import { Link } from "wouter";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
+import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
 import BackupManager from "@/components/BackupManager";
 import TagManager from "@/components/TagManager";
 import FileEditDialog from "@/components/FileEditDialog";
@@ -749,6 +751,10 @@ export default function Admin() {
               <Mail className="h-3 w-3" />
               E-mail
             </TabsTrigger>
+            <TabsTrigger value="email-debug" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-cyan-500 data-[state=active]:text-white text-cyan-700 dark:text-cyan-400" data-testid="tab-email-debug">
+              <Activity className="h-3 w-3" />
+              Email diag
+            </TabsTrigger>
             <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-database">
               <Database className="h-3 w-3" />
               Adatbázis
@@ -929,6 +935,10 @@ export default function Admin() {
 
       <TabsContent value="emails" className="space-y-2">
         {activeTab === "emails" && <ExtraEmailsManager />}
+      </TabsContent>
+
+      <TabsContent value="email-debug" className="space-y-2">
+        {activeTab === "email-debug" && <EmailDiagnosticsPanel />}
       </TabsContent>
 
       <TabsContent value="tags" className="space-y-2">

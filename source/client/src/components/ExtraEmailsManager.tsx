@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2, Plus, Mail, Calendar, Edit } from "lucide-react";
+import { Trash2, Plus, Mail, Calendar, Edit, GraduationCap } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CLASSROOMS } from "@shared/classrooms";
@@ -113,6 +113,31 @@ export default function ExtraEmailsManager() {
     },
   });
 
+  // Új tanév — minden osztály +1
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const promoteGradeMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/admin/extra-emails/promote-grade");
+    },
+    onSuccess: async (raw: unknown) => {
+      const data = raw as { updated?: number } | undefined;
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/extra-emails"] });
+      setPromoteOpen(false);
+      toast({
+        title: "Új tanév léptetve",
+        description: `${data?.updated ?? 0} címzett osztálya egyel feljebb lépett (max 12).`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Hiba",
+        description: error.message || "Nem sikerült léptetni az osztályokat",
+        variant: "destructive",
+      });
+    },
+  });
+
   const formatDate = (date: string) => {
     return format(new Date(date), "yyyy. MM. dd. HH:mm", { locale: hu });
   };
@@ -200,11 +225,28 @@ export default function ExtraEmailsManager() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Extra e-mail címek</CardTitle>
-          <CardDescription>
-            Adj hozzá olyan e-mail címeket, amelyekre értesítést szeretnél küldeni új tananyagokról.
-            Ezek a címek akkor is kapnak értesítést, ha a tulajdonosuk még nem jelentkezett be az alkalmazásba.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <CardTitle>Extra e-mail címek</CardTitle>
+              <CardDescription>
+                Adj hozzá olyan e-mail címeket, amelyekre értesítést szeretnél küldeni új tananyagokról.
+                Ezek a címek akkor is kapnak értesítést, ha a tulajdonosuk még nem jelentkezett be az alkalmazásba.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPromoteOpen(true)}
+              disabled={promoteGradeMutation.isPending || !extraEmails || extraEmails.length === 0}
+              className="border-amber-400/60 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/30 gap-1.5 flex-shrink-0"
+              data-testid="button-promote-grade"
+              title="Minden tanuló osztálya egyel feljebb lép (új tanév kezdete)"
+            >
+              <GraduationCap className="h-4 w-4" />
+              Új tanév
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Email hozzáadása form */}
@@ -380,6 +422,33 @@ export default function ExtraEmailsManager() {
             >
               Törlés
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={promoteOpen} onOpenChange={setPromoteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Új tanév — minden osztály +1?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ez a művelet <strong>minden aktív címzett</strong> osztály-listáját egyel feljebb lépteti
+              (1→2, 2→3, ..., 11→12). A 12. osztály változatlan marad. <br /><br />
+              <strong>Ezt csak a tanév elején futtasd!</strong> Nincs visszavonás — ha hibás, kézzel tudod
+              módosítani egyenként a listából.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Mégsem</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => promoteGradeMutation.mutate()}
+              disabled={promoteGradeMutation.isPending}
+              className="bg-amber-600 text-white hover:bg-amber-700"
+              data-testid="button-confirm-promote-grade"
+            >
+              <GraduationCap className="h-4 w-4 mr-1.5" />
+              {promoteGradeMutation.isPending ? "Léptetés…" : "Igen, léptesd!"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
