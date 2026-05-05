@@ -17,6 +17,9 @@
     "db:migrate": "tsx server/migrate.ts",
     "lint": "eslint client/src server"
   },
+  "overrides": {
+    "axios": "1.15.0"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.1",
     "@dnd-kit/core": "^6.3.1",
