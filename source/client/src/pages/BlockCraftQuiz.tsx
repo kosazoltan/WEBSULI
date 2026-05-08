@@ -105,13 +105,13 @@ const LEVELS: LevelConfig[] = [
   {
     id: 1,
     name: "1. Erdei kezdés",
-    description: "Ismerd meg a játékot. Bányássz 8 blokkot az időkereten belül!",
+    description: "Ismerd meg a játékot! Nyílt terepen indulsz. Bányássz 8 blokkot az időkereten belül!",
     goalBlocks: 8,
     goalRareBlocks: 0,
     timeLimit: 240,
     oreMultiplier: 0.7,
-    caveCount: 10,
-    treeDensity: 0.18,
+    caveCount: 8,
+    treeDensity: 0.12,
     biome: "forest",
     skyTint: { day: "#9bd1ee", dusk: "#5d7faf" },
     weather: "clear",
@@ -125,7 +125,7 @@ const LEVELS: LevelConfig[] = [
     timeLimit: 240,
     oreMultiplier: 1.0,
     caveCount: 14,
-    treeDensity: 0.24,
+    treeDensity: 0.20,
     biome: "forest",
     skyTint: { day: "#8ac8e7", dusk: "#4f6fa0" },
     weather: "clear",
@@ -480,9 +480,11 @@ function buildWorld(config: LevelConfig): Uint8Array {
     }
   }
 
+  let lastTreeCol = -5; // minimum fa-távolság tracking
   for (let c = 8; c < COLS - 8; c++) {
+    const isSpawnSafeZone = c < 15; // első 15 oszlop: spawn-védett zóna
     const top = topByCol[c] ?? 8;
-    if (Math.random() < config.treeDensity) {
+    if (!isSpawnSafeZone && Math.random() < config.treeDensity && c - lastTreeCol >= 4) {
       // Több pályán nagyobb a mob-arány (nehezebb pályán több bónusz-mob).
       const mobChance = config.biome === "diamond" ? 0.30 : config.biome === "caves" ? 0.24 : 0.18;
       if (Math.random() < mobChance && top - 1 >= 0) {
@@ -492,6 +494,7 @@ function buildWorld(config: LevelConfig): Uint8Array {
       } else {
         const h = randInt(2, 4);
         for (let t = 1; t <= h; t++) g[(top - t) * COLS + c] = LOG;
+        lastTreeCol = c;
         const tr = top - h;
         for (let dr = -2; dr <= 1; dr++) {
           for (let dc = -2; dc <= 2; dc++) {
@@ -563,7 +566,7 @@ function buildWorld(config: LevelConfig): Uint8Array {
     let attempts = 0;
     while (placed < 3 && attempts < 30) {
       attempts++;
-      const c = randInt(8, COLS - 9);
+      const c = randInt(15, COLS - 9);
       const top = topByCol[c] ?? 8;
       if (top - 1 >= 0 && (g[(top - 1) * COLS + c] ?? AIR) === AIR) {
         g[(top - 1) * COLS + c] = CREEPER;
@@ -590,8 +593,8 @@ function buildWorld(config: LevelConfig): Uint8Array {
           g[i + COLS] === AIR;
         if (!hasAirNeighbor) continue;
         const roll = Math.random();
-        if (roll < skeletonChance) g[i] = SKELETON;
-        else if (roll < skeletonChance + spiderChance) g[i] = SPIDER;
+        if (c >= 15 && roll < skeletonChance) g[i] = SKELETON;
+        else if (c >= 15 && roll < skeletonChance + spiderChance) g[i] = SPIDER;
       }
     }
   }
@@ -604,11 +607,25 @@ function buildWorld(config: LevelConfig): Uint8Array {
 }
 
 function findSpawn(world: Uint8Array): { x: number; y: number } {
-  const c = 6;
+  // A legalacsonyabb terepfelszínt keressük (legnagyobb r érték = legmélyebben kezdődő talaj
+  // = legtöbb levegő felette), de legalább 3 sorral a bedrock felett.
+  let bestCol = 6;
+  let bestSurfaceRow = 0;
+  for (let sc = 4; sc <= 14; sc++) {
+    for (let r = 1; r < ROWS; r++) {
+      if (world[r * COLS + sc] !== AIR) {
+        if (r > bestSurfaceRow && r < ROWS - 3) {
+          bestSurfaceRow = r;
+          bestCol = sc;
+        }
+        break;
+      }
+    }
+  }
+  // Pontosan a talaj tetejére helyezzük a játékost
   for (let r = 1; r < ROWS; r++) {
-    const i = r * COLS + c;
-    if (world[i] !== AIR) {
-      return { x: c * TILE + 4, y: r * TILE - 0.1 };
+    if (world[r * COLS + bestCol] !== AIR) {
+      return { x: bestCol * TILE + 4, y: r * TILE - 0.1 };
     }
   }
   return { x: 6 * TILE, y: 7 * TILE };
