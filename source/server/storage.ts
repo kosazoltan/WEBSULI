@@ -817,37 +817,39 @@ export class DatabaseStorage implements IStorage {
       return false;
     }
 
-    // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
-    // Clear all related tables before deleting html_files
-    await db.delete(emailLogs);
-    await db.delete(materialStats);
-    await db.delete(materialTags);
-    await db.delete(materialLikes);
-    await db.delete(materialRatings);
-    await db.delete(materialComments);
-    await db.delete(materialViews);
+    return await db.transaction(async (tx) => {
+      // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
+      // Clear all related tables before deleting html_files
+      await tx.delete(emailLogs);
+      await tx.delete(materialStats);
+      await tx.delete(materialTags);
+      await tx.delete(materialLikes);
+      await tx.delete(materialRatings);
+      await tx.delete(materialComments);
+      await tx.delete(materialViews);
 
-    // Now we can safely delete all HTML files
-    await db.delete(htmlFiles);
+      // Now we can safely delete all HTML files
+      await tx.delete(htmlFiles);
 
-    // Restore files from backup - bulk insert instead of loop
-    const filesToRestore = backup.data as HtmlFile[];
+      // Restore files from backup - bulk insert instead of loop
+      const filesToRestore = backup.data as HtmlFile[];
 
-    if (filesToRestore.length > 0) {
-      await db.insert(htmlFiles).values(
-        filesToRestore.map(file => ({
-          id: file.id,
-          userId: file.userId,
-          title: file.title,
-          content: file.content,
-          description: file.description,
-          classroom: file.classroom,
-          createdAt: file.createdAt,
-        }))
-      );
-    }
+      if (filesToRestore.length > 0) {
+        await tx.insert(htmlFiles).values(
+          filesToRestore.map(file => ({
+            id: file.id,
+            userId: file.userId,
+            title: file.title,
+            content: file.content,
+            description: file.description,
+            classroom: file.classroom,
+            createdAt: file.createdAt,
+          }))
+        );
+      }
 
-    return true;
+      return true;
+    });
   }
 
   // Material view tracking operations

@@ -1540,15 +1540,13 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
           fullContent += text;
 
           // Check if HTML generation started
-          if (fullContent.includes('<!-- HTML_START -->')) {
+          if (fullContent.includes('<!-- HTML_START -->') && !isCollectingHtml) {
             isCollectingHtml = true;
             // Extract HTML from the marker onwards
             const htmlStartIndex = fullContent.indexOf('<!-- HTML_START -->');
             htmlContent = fullContent.substring(htmlStartIndex);
-          }
-
-          // If already collecting HTML, add to htmlContent
-          if (isCollectingHtml) {
+          } else if (isCollectingHtml) {
+            // If already collecting HTML, add to htmlContent
             htmlContent += text;
           }
 
@@ -1597,7 +1595,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
   // ========== ENHANCED MATERIAL CREATOR ENDPOINTS (Public access - no authentication required) ==========
 
   // Phase 1: ChatGPT Multiple Files Analysis (PDF/JPG with Vision API)
-  app.post("/api/ai/enhanced-creator/analyze-files", async (req, res) => {
+  app.post("/api/ai/enhanced-creator/analyze-files", isAuthenticatedAdmin, async (req, res) => {
     try {
       const { files } = req.body;
 
@@ -1744,7 +1742,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
   });
 
   // Phase 1: ChatGPT Single File Analysis (PDF/JPG with Vision API) - LEGACY, kept for backwards compatibility
-  app.post("/api/ai/enhanced-creator/analyze-file", async (req, res) => {
+  app.post("/api/ai/enhanced-creator/analyze-file", isAuthenticatedAdmin, async (req, res) => {
     try {
       const { fileData, fileType, fileName } = req.body;
 
@@ -1858,7 +1856,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
   });
 
   // Phase 1: ChatGPT Text Generation Chat (streaming)
-  app.post("/api/ai/enhanced-creator/chatgpt-chat", async (req, res) => {
+  app.post("/api/ai/enhanced-creator/chatgpt-chat", isAuthenticatedAdmin, async (req, res) => {
     // AbortController for timeout handling
     const controller = new AbortController();
     const timeout = setTimeout(() => {
@@ -2021,7 +2019,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
   });
 
   // Phase 2: Claude HTML Generation Chat (streaming)
-  app.post("/api/ai/enhanced-creator/claude-chat", async (req, res) => {
+  app.post("/api/ai/enhanced-creator/claude-chat", isAuthenticatedAdmin, async (req, res) => {
     // AbortController for timeout handling
     const controller = new AbortController();
     const timeout = setTimeout(() => {
@@ -2191,15 +2189,13 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
           fullContent += text;
 
           // Check if HTML generation started
-          if (fullContent.includes('<!-- HTML_START -->')) {
+          if (fullContent.includes('<!-- HTML_START -->') && !isCollectingHtml) {
             isCollectingHtml = true;
             // Extract HTML from the marker onwards
             const htmlStartIndex = fullContent.indexOf('<!-- HTML_START -->');
             htmlContent = fullContent.substring(htmlStartIndex);
-          }
-
-          // If already collecting HTML, add to htmlContent
-          if (isCollectingHtml) {
+          } else if (isCollectingHtml) {
+            // If already collecting HTML, add to htmlContent
             htmlContent += text;
           }
 
@@ -2262,7 +2258,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   });
 
   // AI content generation endpoint (Admin only)
-  app.post("/api/ai/generate-material", async (req, res) => {
+  app.post("/api/ai/generate-material", isAuthenticatedAdmin, async (req, res) => {
     try {
       const { prompt, title, description, classroom } = req.body;
 
@@ -4717,7 +4713,7 @@ ${new Date().toLocaleString('hu-HU')}
   // STATIC SOURCE CODE DOWNLOAD
   // ========================================
 
-  app.get("/download-source-static", async (req, res) => {
+  app.get("/download-source-static", isAuthenticatedAdmin, async (req, res) => {
     try {
       const fs = await import("fs");
       const path = await import("path");
@@ -4884,58 +4880,7 @@ Crawl-delay: 1`;
     }
   });
 
-  // ========================================
-  // UNIFIED ERROR HANDLER MIDDLEWARE
-  // ========================================
 
-  // Central error handling middleware
-  app.use((err: APIError, req: Request, res: Response, next: NextFunction) => {
-    // Log error
-    console.error('[API Error]', {
-      error: err.message,
-      stack: err.stack,
-      path: req.path,
-      method: req.method,
-      timestamp: new Date().toISOString()
-    });
-
-    // Determine status code
-    const statusCode = err.status || 500;
-
-    // Determine error type
-    let errorType = 'INTERNAL_ERROR';
-    let userMessage = 'Váratlan hiba történt. Kérlek próbáld újra később.';
-
-    if (statusCode === 400) {
-      errorType = 'VALIDATION_ERROR';
-      userMessage = err.message || 'Hibás kérés';
-    } else if (statusCode === 401) {
-      errorType = 'AUTH_ERROR';
-      userMessage = 'Nincs jogosultságod ehhez a művelethez';
-    } else if (statusCode === 404) {
-      errorType = 'NOT_FOUND';
-      userMessage = 'A keresett erőforrás nem található';
-    } else if (statusCode === 429) {
-      errorType = 'RATE_LIMIT';
-      userMessage = 'Túl sok kérés. Kérlek várj egy kicsit.';
-    } else if (err.message?.includes('AI') || err.message?.includes('API')) {
-      errorType = 'AI_ERROR';
-      userMessage = 'Az AI szolgáltatás átmenetileg nem elérhető. Próbáld újra.';
-    }
-
-    // Response format
-    res.status(statusCode).json({
-      error: {
-        type: errorType,
-        message: userMessage,
-        code: err.code || `ERR_${statusCode}`,
-        ...(process.env.NODE_ENV === 'development' && {
-          details: err.message,
-          stack: err.stack
-        })
-      }
-    });
-  });
 
   // NOTE: DO NOT add a catch-all 404 handler here!
   // The Vite middleware (in development) or static file server (in production)
@@ -5287,6 +5232,58 @@ Crawl-delay: 1`;
   // Register admin router with authentication middleware
   // ALL /api/admin/* routes require admin authentication
   app.use('/api/admin', isAuthenticatedAdmin, adminRouter);
+
+  // ========================================
+  // UNIFIED ERROR HANDLER MIDDLEWARE (Moved to end to catch all admin route errors)
+  // ========================================
+
+  app.use((err: APIError, req: Request, res: Response, next: NextFunction) => {
+    // Log error
+    console.error('[API Error]', {
+      error: err.message,
+      stack: err.stack,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
+
+    // Determine status code
+    const statusCode = err.status || 500;
+
+    // Determine error type
+    let errorType = 'INTERNAL_ERROR';
+    let userMessage = 'Váratlan hiba történt. Kérlek próbáld újra később.';
+
+    if (statusCode === 400) {
+      errorType = 'VALIDATION_ERROR';
+      userMessage = err.message || 'Hibás kérés';
+    } else if (statusCode === 401) {
+      errorType = 'AUTH_ERROR';
+      userMessage = 'Nincs jogosultságod ehhez a művelethez';
+    } else if (statusCode === 404) {
+      errorType = 'NOT_FOUND';
+      userMessage = 'A keresett erőforrás nem található';
+    } else if (statusCode === 429) {
+      errorType = 'RATE_LIMIT';
+      userMessage = 'Túl sok kérés. Kérlek várj egy kicsit.';
+    } else if (err.message?.includes('AI') || err.message?.includes('API')) {
+      errorType = 'AI_ERROR';
+      userMessage = 'Az AI szolgáltatás átmenetileg nem elérhető. Próbáld újra.';
+    }
+
+    // Response format
+    res.status(statusCode).json({
+      error: {
+        type: errorType,
+        message: userMessage,
+        code: err.code || `ERR_${statusCode}`,
+        ...(process.env.NODE_ENV === 'development' && {
+          details: err.message,
+          stack: err.stack
+        })
+      }
+    });
+  });
 
   const httpServer = createServer(app);
 
