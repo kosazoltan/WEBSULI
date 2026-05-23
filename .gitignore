@@ -13,3 +13,4 @@ MCP-CONFIG-EXAMPLE.json
 client_secret*.json
 
 configs/secrets.json
+.vercel
