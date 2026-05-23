@@ -1530,7 +1530,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                     srcDoc={generatedHtml}
                     className="w-full h-[400px]"
                     title="HTML Preview"
-                    sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
+                    sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                     allow="autoplay; fullscreen; clipboard-write; microphone"
                     data-testid="claude-preview-iframe"
                   />
@@ -1722,7 +1722,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                         srcDoc={generatedHtml}
                         className="w-full h-full min-h-[600px]"
                         title="HTML Preview"
-                        sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
+                        sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                         allow="autoplay; fullscreen; clipboard-write; microphone"
                       />
                     </ScrollArea>

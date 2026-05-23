@@ -207,7 +207,7 @@ export default function Preview() {
             src={renderUrl}
             className="w-full h-full border-0"
             title={isPdf ? 'PDF Preview' : 'HTML Preview'}
-            sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads"
+            sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
             allow="autoplay; fullscreen; clipboard-write; microphone"
             data-testid="iframe-preview"
             style={{
