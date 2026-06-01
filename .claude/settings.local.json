@@ -28,7 +28,8 @@
       "WebFetch(domain:websuli.vip)",
       "WebFetch(domain:websuli.vercel.app)",
       "mcp__claude_ai_Vercel__web_fetch_vercel_url",
-      "Read(//c/Users/Kósa Zoltán/.claude/**)"
+      "Read(//c/Users/Kósa Zoltán/.claude/**)",
+      "mcp__6a46ff98-5ae1-48f4-9a5c-ded95b98743f__get_deployment_build_logs"
     ]
   }
 }
