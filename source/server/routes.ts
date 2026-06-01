@@ -285,6 +285,186 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
     }
     </script>`;
 
+  // GLOBÁLIS DIKTÁLÁS (SPEECH-TO-TEXT) SEGÉD - keretrendszer szintű
+  // A tananyagok iframe-en belül futnak; az engedélyt (allow="microphone" + allow-same-origin)
+  // a kliens iframe adja meg. Ez a script a Web Speech API-t használva minden szöveges
+  // mezőhöz (input[type=text...], textarea, [contenteditable]) automatikusan elhelyez egy
+  // 🎤 gombot, így a tanulók diktálással is kitölthetik a feladatokat - akkor is, ha az
+  // adott tananyag eredetileg nem tartalmazott diktáló funkciót.
+  // Materials a window.websuliDictation API-n keresztül expliciten is használhatják.
+  const speechToTextScript = `
+    <script>
+    (function() {
+      try {
+        var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+          // A böngésző nem támogatja a Web Speech API-t - csendben kilépünk.
+          window.websuliDictation = { supported: false, attach: function() {}, start: function() {} };
+          return;
+        }
+
+        var STYLE_ID = '__websuli_dictation_style__';
+        if (!document.getElementById(STYLE_ID)) {
+          var style = document.createElement('style');
+          style.id = STYLE_ID;
+          style.textContent = [
+            '.websuli-mic-btn{display:inline-flex;align-items:center;justify-content:center;',
+            'width:2em;height:2em;margin:2px 4px;padding:0;border:1px solid currentColor;',
+            'border-radius:50%;background:transparent;color:inherit;cursor:pointer;',
+            'font-size:1em;line-height:1;vertical-align:middle;opacity:0.75;',
+            'transition:opacity .15s,background .15s;-webkit-appearance:none;appearance:none;}',
+            '.websuli-mic-btn:hover{opacity:1;}',
+            '.websuli-mic-btn[aria-pressed="true"]{background:#e23;color:#fff;border-color:#e23;',
+            'animation:websuli-mic-pulse 1s ease-in-out infinite;}',
+            '@keyframes websuli-mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(238,34,51,.5);}50%{box-shadow:0 0 0 6px rgba(238,34,51,0);}}'
+          ].join('');
+          (document.head || document.documentElement).appendChild(style);
+        }
+
+        var activeBtn = null;
+        var recognition = null;
+
+        function stopActive() {
+          if (recognition) { try { recognition.stop(); } catch (e) {} }
+        }
+
+        function insertText(field, text) {
+          if (!text) return;
+          if (field.isContentEditable) {
+            field.focus();
+            try { document.execCommand('insertText', false, text); }
+            catch (e) { field.textContent = (field.textContent || '') + text; }
+          } else {
+            var start = typeof field.selectionStart === 'number' ? field.selectionStart : field.value.length;
+            var end = typeof field.selectionEnd === 'number' ? field.selectionEnd : field.value.length;
+            var before = field.value.slice(0, start);
+            // Szóköz beszúrása, ha kell, hogy a szavak ne folyjanak össze.
+            if (before && !/\\s$/.test(before) && !/^\\s/.test(text)) text = ' ' + text;
+            field.value = before + text + field.value.slice(end);
+            var caret = start + text.length;
+            try { field.setSelectionRange(caret, caret); } catch (e) {}
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+
+        function startDictation(field, btn) {
+          if (activeBtn) {
+            // Ugyanarra a gombra kattintva: leállítás. Másikra: váltás.
+            var wasSame = activeBtn === btn;
+            stopActive();
+            if (wasSame) return;
+          }
+          recognition = new SR();
+          recognition.lang = document.documentElement.lang || 'hu-HU';
+          recognition.interimResults = false;
+          recognition.continuous = false;
+          recognition.maxAlternatives = 1;
+
+          activeBtn = btn;
+          btn.setAttribute('aria-pressed', 'true');
+          btn.title = 'Diktálás leállítása';
+
+          recognition.onresult = function(ev) {
+            for (var i = ev.resultIndex; i < ev.results.length; i++) {
+              if (ev.results[i].isFinal) {
+                insertText(field, ev.results[i][0].transcript.trim());
+              }
+            }
+          };
+          recognition.onerror = function(ev) {
+            if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) {
+              try { field.setAttribute('data-dictation-error', ev.error); } catch (e) {}
+              console.warn('[WEBSULI DIKTÁLÁS] Mikrofon engedély megtagadva:', ev.error);
+            }
+          };
+          recognition.onend = function() {
+            if (activeBtn) { activeBtn.setAttribute('aria-pressed', 'false'); activeBtn.title = 'Diktálás'; }
+            activeBtn = null;
+            recognition = null;
+          };
+
+          try { recognition.start(); }
+          catch (e) { recognition = null; activeBtn = null; btn.setAttribute('aria-pressed', 'false'); }
+        }
+
+        function makeButton(field) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'websuli-mic-btn';
+          btn.textContent = '🎤';
+          btn.title = 'Diktálás';
+          btn.setAttribute('aria-label', 'Diktálás (beszéd szöveggé)');
+          btn.setAttribute('aria-pressed', 'false');
+          btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            startDictation(field, btn);
+          });
+          return btn;
+        }
+
+        var TEXT_INPUT_TYPES = ['text', 'search', 'email', 'url', 'tel', ''];
+        function isEligible(el) {
+          if (el.getAttribute('data-no-dictation') !== null) return false;
+          if (el.disabled || el.readOnly) return false;
+          if (el.tagName === 'TEXTAREA') return true;
+          if (el.tagName === 'INPUT') {
+            var t = (el.getAttribute('type') || 'text').toLowerCase();
+            return TEXT_INPUT_TYPES.indexOf(t) !== -1;
+          }
+          if (el.isContentEditable) return true;
+          return false;
+        }
+
+        function attach(root) {
+          root = root || document;
+          var fields = root.querySelectorAll('textarea, input, [contenteditable=""], [contenteditable="true"]');
+          Array.prototype.forEach.call(fields, function(field) {
+            if (field.getAttribute('data-dictation-ready') !== null) return;
+            if (!isEligible(field)) return;
+            field.setAttribute('data-dictation-ready', '1');
+            var btn = makeButton(field);
+            if (field.nextSibling) field.parentNode.insertBefore(btn, field.nextSibling);
+            else field.parentNode.appendChild(btn);
+          });
+        }
+
+        // Publikus API a tananyagok számára.
+        window.websuliDictation = {
+          supported: true,
+          attach: attach,
+          start: function(field) {
+            if (typeof field === 'string') field = document.querySelector(field);
+            if (field) startDictation(field, field.__websuliMicBtn || makeButton(field));
+          },
+          stop: stopActive
+        };
+
+        function init() {
+          attach(document);
+          // Dinamikusan beszúrt mezők figyelése (pl. kvíz lépések, AJAX tartalom).
+          if (window.MutationObserver) {
+            var mo = new MutationObserver(function(muts) {
+              for (var i = 0; i < muts.length; i++) {
+                if (muts[i].addedNodes && muts[i].addedNodes.length) { attach(document); break; }
+              }
+            });
+            mo.observe(document.body, { childList: true, subtree: true });
+          }
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', init);
+        } else {
+          init();
+        }
+      } catch (e) {
+        console.error('[WEBSULI DIKTÁLÁS] Inicializálási hiba:', e);
+      }
+    })();
+    </script>`;
+
   // If user uploaded a complete HTML document, inject scripts strategically
   // This prevents HTML structure duplication (no more double <html>, <body>, etc.)
   if (isFullHtmlDocument) {
@@ -326,13 +506,14 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
       }
     }
 
-    // Inject globalEmailScript before </body> (load order: fix → CSP → user scripts → email script)
+    // Inject globalEmailScript + dictation helper before </body>
+    // (load order: fix → CSP → user scripts → email script → speech-to-text)
     const bodyCloseIndex = htmlWithCSP.toLowerCase().lastIndexOf('</body>');
     if (bodyCloseIndex !== -1) {
-      return htmlWithCSP.slice(0, bodyCloseIndex) + globalEmailScript + htmlWithCSP.slice(bodyCloseIndex);
+      return htmlWithCSP.slice(0, bodyCloseIndex) + globalEmailScript + speechToTextScript + htmlWithCSP.slice(bodyCloseIndex);
     }
     // Fallback: if no </body> found, append at the end
-    return htmlWithCSP + globalEmailScript;
+    return htmlWithCSP + globalEmailScript + speechToTextScript;
   }
 
   // If user HTML is just a fragment (no full HTML structure), wrap it
@@ -524,6 +705,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
   </script>
   ${sandboxLocalStorageFix}
   ${globalEmailScript}
+  ${speechToTextScript}
 </body>
 </html>`;
 }

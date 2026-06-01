@@ -37,7 +37,7 @@ export default function CodeViewer({
             src={`/dev/${materialId}`}
             className="w-full h-full border-0"
             title={title}
-            sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
             allow="autoplay; microphone; clipboard-write"
             data-testid="iframe-preview"
             style={{

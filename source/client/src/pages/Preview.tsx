@@ -202,12 +202,17 @@ export default function Preview() {
         ) : (
           // Unified iframe rendering for both HTML and PDF
           // Sandbox: allow-scripts (JS runs), allow-forms (forms work), allow-same-origin (Web APIs)
+          // CRITICAL: allow-same-origin is REQUIRED for speech-to-text (dictation). Without it the
+          // framed material runs in an opaque origin, and browsers block microphone access (both
+          // getUserMedia and the Web Speech API) regardless of the allow="microphone" attribute.
+          // The /dev/:id endpoint is served from the same origin, so this restores the real origin
+          // that the delegated microphone permission can be granted to.
           <iframe
             ref={iframeRef}
             src={renderUrl}
             className="w-full h-full border-0"
             title={isPdf ? 'PDF Preview' : 'HTML Preview'}
-            sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
             allow="autoplay; fullscreen; clipboard-write; microphone"
             data-testid="iframe-preview"
             style={{

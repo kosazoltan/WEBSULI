@@ -59,7 +59,8 @@ collections:
       - material-improvement-feature.md
       - material-improver-plan.md
       - edu-platform-design-2026.md
-    tags: [design, ai, performance, framer-motion, tailwind, fonts]
+      - speech-to-text-iframe-fix.md
+    tags: [design, ai, performance, framer-motion, tailwind, fonts, speech-to-text, iframe, sandbox, microphone]
 
   episodic_2026:
     path: memory/episodic/2026/
@@ -104,5 +105,6 @@ routing_rules:
   - query: [code, review, typescript, test] -> procedural_development
   - query: [ip, hostinger, mcp, cloudflare, infrastructure] -> semantic_infrastructure
   - query: [design, ai, performance, font, animation] -> semantic_technology
+  - query: [speech-to-text, dictation, diktálás, microphone, iframe, sandbox, web-speech] -> semantic_technology
   - query: [status, diagnosis, history, event] -> episodic_2026
   - query: [project, overview, stack] -> projects_websuli
