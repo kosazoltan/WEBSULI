@@ -123,10 +123,12 @@ export default function ExtraEmailsManager() {
       const data = raw as { updated?: number } | undefined;
       await refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/extra-emails"] });
+      // Az email-diagnosztika breakdown is elavul a léptetés után.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/email-diagnostics"] });
       setPromoteOpen(false);
       toast({
         title: "Új tanév léptetve",
-        description: `${data?.updated ?? 0} címzett osztálya egyel feljebb lépett (max 12).`,
+        description: `${data?.updated ?? 0} címzett (extra e-mail + feliratkozó) osztálya egyel feljebb lépett (max 12, a 0-s Programozás kategória változatlan).`,
       });
     },
     onError: (error: any) => {
@@ -431,10 +433,11 @@ export default function ExtraEmailsManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Új tanév — minden osztály +1?</AlertDialogTitle>
             <AlertDialogDescription>
-              Ez a művelet <strong>minden aktív címzett</strong> osztály-listáját egyel feljebb lépteti
-              (1→2, 2→3, ..., 11→12). A 12. osztály változatlan marad. <br /><br />
-              <strong>Ezt csak a tanév elején futtasd!</strong> Nincs visszavonás — ha hibás, kézzel tudod
-              módosítani egyenként a listából.
+              Ez a művelet <strong>minden aktív címzett</strong> (extra e-mail címek ÉS feliratkozók)
+              osztály-listáját egyel feljebb lépteti (1→2, 2→3, ..., 11→12). A 12. osztály és a 0-s
+              (Programozási alapismeretek) kategória változatlan marad. <br /><br />
+              <strong>Ezt csak a tanév elején futtasd, és csak egyszer!</strong> Nincs visszavonás —
+              dupla futtatás dupla léptetést okoz; hibás állapot kézzel javítható egyenként a listából.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

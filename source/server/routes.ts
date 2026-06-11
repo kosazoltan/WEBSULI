@@ -926,8 +926,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/materials/:id/generate-quiz", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       const id = typeof req.params.id === "string" ? req.params.id : "";
-      const countRaw = typeof req.body?.count === "number" ? req.body.count : 10;
       if (!id) return res.status(400).json({ message: "Hiányzó tananyag ID." });
+      // count: number ÉS numerikus string is elfogadott; minden más 400.
+      const rawCount = req.body?.count;
+      let countRaw = 10;
+      if (rawCount !== undefined) {
+        const n = typeof rawCount === "number" ? rawCount : typeof rawCount === "string" ? parseInt(rawCount, 10) : NaN;
+        if (!Number.isFinite(n) || n < 3 || n > 20) {
+          return res.status(400).json({ message: "A count 3 és 20 közötti szám legyen." });
+        }
+        countRaw = n;
+      }
       const result = await generateMaterialQuiz(id, countRaw);
       return res.json(result);
     } catch (e) {
@@ -3554,7 +3563,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const subs = await storage.getActiveEmailSubscriptions();
       const extras = await storage.getActiveExtraEmails();
       const classroomBreakdown: Array<{ classroom: number; subscriptions: number; extras: number }> = [];
-      for (let c = 1; c <= 12; c++) {
+      // 0-tól indul: a 0-s osztály (Programozási alapismeretek) is a platform része.
+      for (let c = 0; c <= 12; c++) {
         classroomBreakdown.push({
           classroom: c,
           subscriptions: subs.filter((s) => Array.isArray(s.classrooms) && s.classrooms.includes(c)).length,
@@ -3598,6 +3608,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
             })
             .from(emailLogs)
             .where(inArray(emailLogs.htmlFileId, uploadIds))
+            .limit(2000) // memória-védelem nagy címzett-listáknál
         : [];
 
       const uploadStats = recentUploads.map((u) => {

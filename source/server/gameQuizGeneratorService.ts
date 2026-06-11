@@ -68,6 +68,9 @@ export async function generateMaterialQuiz(
     throw new Error("Anthropic API kulcs nincs konfigurálva (AI_INTEGRATIONS_ANTHROPIC_API_KEY hiányzik).");
   }
   const safeCount = Math.max(3, Math.min(20, Math.floor(count)));
+  // Token-limit a kért darabszámhoz méretezve — 4096 fix limit 15-20 tételnél
+  // csonkolta a JSON-t (parse-hiba, 0 insert). ~300 token / tétel + buffer.
+  const maxTokens = Math.min(8192, 1024 + safeCount * 350);
 
   // 1. Tananyag betöltése
   const [material] = await db
@@ -108,7 +111,7 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
 
   const response = await client.messages.create({
     model: ANTHROPIC_MODEL,
-    max_tokens: 4096,
+    max_tokens: maxTokens,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }],
   });
@@ -140,7 +143,15 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
     throw new Error("Claude válasz nem tömb.");
   }
 
-  // 4. Validáció + insert
+  // 4. DEDUP: az ehhez az anyaghoz korábban generált tételeket inaktiváljuk,
+  // hogy ismételt generálás ne duplázza a kérdéseket a játék-poolban.
+  await db
+    .update(gameQuizItems)
+    .set({ isActive: false })
+    .where(eq(gameQuizItems.sourceMaterialId, materialId));
+
+  // 5. Validáció + insert. CAP: legfeljebb safeCount tételt szúrunk be,
+  // akkor is, ha a modell többet adott vissza.
   const result: QuizGenerationResult = {
     materialId,
     materialTitle: material.title,
@@ -149,7 +160,8 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
     errors: [],
   };
   const ALLOWED_TOPICS = new Set(["english", "math", "nature", "hungarian"]);
-  for (const raw of parsed) {
+  const capped = (parsed as unknown[]).slice(0, safeCount);
+  for (const raw of capped) {
     if (!raw || typeof raw !== "object") {
       result.skipped++;
       continue;

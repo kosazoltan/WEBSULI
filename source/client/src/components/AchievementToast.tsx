@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Achievement } from "@/lib/achievements";
 
@@ -24,10 +24,16 @@ const TIER_STYLES: Record<Achievement["tier"], string> = {
 export default function AchievementToast({ achievements, durationMs = 3500 }: Props) {
   const [queue, setQueue] = useState<Achievement[]>([]);
   const [current, setCurrent] = useState<Achievement | null>(null);
+  // Már megjelenített / sorba állított jelvény-ID-k — ha a szülő új tömb-
+  // referenciát ad ugyanazokkal a jelvényekkel, nem duplikálódik a toast.
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (achievements.length === 0) return;
-    setQueue((prev) => [...prev, ...achievements]);
+    const fresh = achievements.filter((a) => !seenIdsRef.current.has(a.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((a) => seenIdsRef.current.add(a.id));
+    setQueue((prev) => [...prev, ...fresh]);
   }, [achievements]);
 
   useEffect(() => {
