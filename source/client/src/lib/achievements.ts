@@ -160,6 +160,16 @@ function saveUnlocked(set: Set<string>): void {
   }
 }
 
+/**
+ * Számmá kényszerít — korrupt localStorage (pl. string "100") ellen véd.
+ * Enélkül a `stats.totalXp += run.xpGained` string-konkatenációvá fajulhat
+ * ("100" + 50 = "10050"), és minden XP-alapú jelvény-feltétel elromlik.
+ */
+function asNumber(v: unknown, fallback: number): number {
+  const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function loadStats(): LifetimeStats {
   if (typeof window === "undefined") return { ...DEFAULT_STATS };
   try {
@@ -167,7 +177,12 @@ export function loadStats(): LifetimeStats {
     if (!raw) return { ...DEFAULT_STATS };
     const parsed = JSON.parse(raw);
     if (typeof parsed === "object" && parsed) {
-      return { ...DEFAULT_STATS, ...parsed };
+      const p = parsed as Record<string, unknown>;
+      const merged: LifetimeStats = { ...DEFAULT_STATS };
+      for (const key of Object.keys(DEFAULT_STATS) as (keyof LifetimeStats)[]) {
+        merged[key] = asNumber(p[key], DEFAULT_STATS[key]);
+      }
+      return merged;
     }
     return { ...DEFAULT_STATS };
   } catch {
@@ -312,6 +327,49 @@ function checkAchievements(stats: LifetimeStats, run: RunStats): Achievement[] {
   return newlyUnlocked;
 }
 
+/* ============== Daily Challenge integráció ============== */
+
+/** Napi kihívás teljesítésekor járó bónusz XP (a lifetime statokba). */
+export const DAILY_BONUS_XP = 50;
+
+/**
+ * Napi kihívás teljesítésekor hívandó (a dailyChallenge.markDailyCompleted
+ * hívja). Szinkronizálja a daily-streaket a lifetime statokba, jóváírja a
+ * +50 bónusz XP-t, és ellenőrzi a daily-kategóriájú jelvényeket
+ * (daily_1 / daily_3 / daily_7 / daily_30 / daily_total_30) — ezek korábban
+ * SOHA nem unlockolódhattak, mert semmi nem frissítette a stats-mezőket.
+ *
+ * Visszaadja az újonnan unlockolt jelvényeket (a játék toast-olhatja).
+ */
+export function recordDailyCompletion(streakDays: number, totalDays: number): Achievement[] {
+  const stats = loadStats();
+  stats.dailyStreakDays = streakDays;
+  stats.totalDailyDays = totalDays;
+  stats.totalXp += DAILY_BONUS_XP;
+  saveStats(stats);
+
+  const unlocked = loadUnlocked();
+  const newlyUnlocked: Achievement[] = [];
+  const tryUnlock = (id: string, condition: boolean) => {
+    if (!condition || unlocked.has(id)) return;
+    const a = ACHIEVEMENT_BY_ID[id];
+    if (!a) return;
+    unlocked.add(id);
+    newlyUnlocked.push(a);
+  };
+
+  tryUnlock("daily_1", totalDays >= 1);
+  tryUnlock("daily_3", streakDays >= 3);
+  tryUnlock("daily_7", streakDays >= 7);
+  tryUnlock("daily_30", streakDays >= 30);
+  tryUnlock("daily_total_30", totalDays >= 30);
+
+  if (newlyUnlocked.length > 0) {
+    saveUnlocked(unlocked);
+  }
+  return newlyUnlocked;
+}
+
 /* ============== React hook ============== */
 
 export function useAchievements() {
@@ -324,8 +382,16 @@ export function useAchievements() {
       setUnlocked(loadUnlocked());
       setStats(loadStats());
     };
+    // storage esemény: másik tab írása is frissítse ezt a nézetet
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY || e.key === STATS_KEY) handler();
+    };
     window.addEventListener(CHANGE_EVENT, handler);
-    return () => window.removeEventListener(CHANGE_EVENT, handler);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(CHANGE_EVENT, handler);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   return {

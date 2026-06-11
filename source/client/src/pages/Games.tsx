@@ -284,7 +284,7 @@ export default function Games() {
                 {dailyDone ? (
                   <span className="text-emerald-300 font-semibold">✓ Mára teljesítve</span>
                 ) : (
-                  <span className="text-amber-200/85">Egy győztes futás napi streak-et ad.</span>
+                  <span className="text-amber-200/85">Egy sikeres futás (a játék céljának teljesítése) napi streaket + 50 XP-t ad a profilodba.</span>
                 )}
                 <span className="flex items-center gap-1 text-orange-300 font-semibold">
                   <Flame className="w-3.5 h-3.5" />

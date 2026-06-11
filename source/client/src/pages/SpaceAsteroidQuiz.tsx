@@ -661,6 +661,8 @@ export default function SpaceAsteroidQuiz() {
   const bombsRef = useRef(0);
   const comboRef = useRef(0);
   const enemiesKilledRef = useRef(0);
+  /** Alien UFO kill-számláló — az alien_killer jelvényhez (10 alien / futás). */
+  const alienKillsRef = useRef(0);
   const scoreRef = useRef(0);
   const shakeRef = useRef(0);
 
@@ -835,6 +837,7 @@ export default function SpaceAsteroidQuiz() {
     bombsRef.current = 0;
     comboRef.current = 0;
     enemiesKilledRef.current = 0;
+    alienKillsRef.current = 0;
     scoreRef.current = 0;
     shakeRef.current = 0;
     setScore(0);
@@ -1475,6 +1478,7 @@ export default function SpaceAsteroidQuiz() {
     setCombo(comboRef.current);
     enemiesKilledRef.current += 1;
     setEnemiesKilled(enemiesKilledRef.current);
+    if (e.kind === "alien") alienKillsRef.current += 1;
     const baseXp = ENEMY_BASE_XP[e.kind] * (e.kind === "rock" ? e.size : 1);
     const comboBonus = Math.min(20, comboRef.current * 4);
     const total = baseXp + comboBonus;
@@ -1929,12 +1933,14 @@ export default function SpaceAsteroidQuiz() {
       wrongAnswers: 0,
       maxStreak: comboRef.current,
       enemiesKilled: enemiesKilledRef.current,
+      alienKills: alienKillsRef.current,
       perfect: gameWon && comboRef.current >= 5,
       fullClear: gameWon,
       highestWave: waveRef.current,
     });
     if (wasDailyAvailable && gameWon) {
-      markDailyCompleted();
+      const daily = markDailyCompleted();
+      if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, gameWon]);

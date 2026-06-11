@@ -32,6 +32,8 @@ export function loadClassroomGrade(): ClassroomGrade | null {
 /** Beállítja az osztályt és minden ablakban értesíti a `useClassroomGrade` hook-okat. */
 export function saveClassroomGrade(grade: ClassroomGrade): void {
   if (typeof window === "undefined") return;
+  // Runtime-validáció: csak 1-12 közötti egész menthető (NaN / rossz érték ellen).
+  if (!Number.isInteger(grade) || grade < 1 || grade > 12) return;
   try {
     window.localStorage.setItem(STORAGE_KEY, String(grade));
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: grade }));

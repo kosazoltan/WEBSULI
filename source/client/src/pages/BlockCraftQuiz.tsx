@@ -2511,7 +2511,8 @@ export default function BlockCraftQuiz() {
       highestLevel: levelIdx + 1,
     });
     if (wasDailyAvailable && gameWon) {
-      markDailyCompleted();
+      const daily = markDailyCompleted();
+      if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
     // Szándékosan csak `phase`-re iratkozunk fel — a recordRun egyszer fut "over"

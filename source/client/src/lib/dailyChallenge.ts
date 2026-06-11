@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { recordDailyCompletion, type Achievement } from "@/lib/achievements";
 
 const STORAGE_KEY = "websuli.daily";
 const CHANGE_EVENT = "websuli:daily-changed";
@@ -46,6 +47,12 @@ const DEFAULT_STATE: DailyState = {
   totalDays: 0,
 };
 
+/** Egész számmá kényszerít — korrupt localStorage elleni védelem. */
+function asInt(v: unknown, fallback: number): number {
+  const n = typeof v === "number" ? v : typeof v === "string" ? parseInt(v, 10) : NaN;
+  return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
 function loadState(): DailyState {
   if (typeof window === "undefined") return { ...DEFAULT_STATE };
   try {
@@ -53,7 +60,12 @@ function loadState(): DailyState {
     if (!raw) return { ...DEFAULT_STATE };
     const parsed = JSON.parse(raw);
     if (typeof parsed === "object" && parsed) {
-      return { ...DEFAULT_STATE, ...parsed };
+      const p = parsed as Record<string, unknown>;
+      return {
+        lastCompletedDate: typeof p.lastCompletedDate === "string" ? p.lastCompletedDate : null,
+        streakDays: asInt(p.streakDays, 0),
+        totalDays: asInt(p.totalDays, 0),
+      };
     }
     return { ...DEFAULT_STATE };
   } catch {
@@ -119,13 +131,18 @@ export function getTodaysPick(date: string = todayISO()): DailyPick {
  *   - ha kihagyott napot → streakDays = 1
  *   - ha ma már teljesítette korábban → no-op
  *
- * Visszaadja, hogy MOST jelölte-e meg (true) vagy már korábban megvolt (false).
+ * Mellékhatások (recordDailyCompletion az achievements modulból):
+ *   - +50 bónusz XP a lifetime statokba
+ *   - daily-streak szinkron a lifetime statokba
+ *   - daily jelvények ellenőrzése (daily_1 / 3 / 7 / 30 / total_30)
+ *
+ * Visszaadja: most jelölte-e meg + az új state + az unlockolt jelvények.
  */
-export function markDailyCompleted(): { newlyCompleted: boolean; state: DailyState } {
+export function markDailyCompleted(): { newlyCompleted: boolean; state: DailyState; achievements: Achievement[] } {
   const today = todayISO();
   const state = loadState();
   if (state.lastCompletedDate === today) {
-    return { newlyCompleted: false, state };
+    return { newlyCompleted: false, state, achievements: [] };
   }
   // Streak: tegnapi vagy nem.
   const yesterday = (() => {
@@ -143,7 +160,9 @@ export function markDailyCompleted(): { newlyCompleted: boolean; state: DailySta
     totalDays: state.totalDays + 1,
   };
   saveState(next);
-  return { newlyCompleted: true, state: next };
+  // Lifetime-stat szinkron + bónusz XP + daily jelvények.
+  const achievements = recordDailyCompletion(next.streakDays, next.totalDays);
+  return { newlyCompleted: true, state: next, achievements };
 }
 
 /** Igaz-e, hogy a megadott gameId megegyezik a mai napival, és még nem teljesítette? */
@@ -152,6 +171,29 @@ export function isTodaysGameAvailable(gameId: DailyGameId): boolean {
   if (pick.game !== gameId) return false;
   const state = loadState();
   return state.lastCompletedDate !== pick.date;
+}
+
+/**
+ * Effektív (megjelenítendő) streak: ha a legutóbbi teljesítés nem ma és nem
+ * tegnap volt, a streak már megszakadt — 0-t mutatunk, nem a tárolt értéket.
+ * (A tárolt érték változatlan marad; a következő markDailyCompleted úgyis
+ * 1-re állítja.)
+ */
+export function getEffectiveStreak(state: DailyState): number {
+  if (!state.lastCompletedDate) return 0;
+  const today = todayISO();
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  })();
+  if (state.lastCompletedDate === today || state.lastCompletedDate === yesterday) {
+    return state.streakDays;
+  }
+  return 0;
 }
 
 /* ============== React hook ============== */
@@ -166,10 +208,27 @@ export function useDailyChallenge() {
       setState(loadState());
       setPick(getTodaysPick());
     };
+    // storage esemény: másik tab írása is frissítse ezt a nézetet
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) handler();
+    };
     window.addEventListener(CHANGE_EVENT, handler);
-    // Naponta egyszer (vagy oldalbetöltéskor) frissítjük a pick-et — ez automatikusan
-    // megtörténik a CHANGE_EVENT triggerelésekor a markDailyCompleted-ben.
-    return () => window.removeEventListener(CHANGE_EVENT, handler);
+    window.addEventListener("storage", onStorage);
+    // Éjfél-figyelő: percenként ellenőrizzük, hogy átléptünk-e új napra —
+    // ha igen, frissül a pick (nyitva hagyott Games/Profile oldalon is).
+    let lastDate = todayISO();
+    const midnightTimer = window.setInterval(() => {
+      const now = todayISO();
+      if (now !== lastDate) {
+        lastDate = now;
+        handler();
+      }
+    }, 60_000);
+    return () => {
+      window.removeEventListener(CHANGE_EVENT, handler);
+      window.removeEventListener("storage", onStorage);
+      window.clearInterval(midnightTimer);
+    };
   }, []);
 
   return {
@@ -177,7 +236,8 @@ export function useDailyChallenge() {
     pick,
     /** Ma megvan-e a daily teljesítve? */
     completedToday: state.lastCompletedDate === pick.date,
-    streakDays: state.streakDays,
+    /** Effektív streak — kihagyott napok után 0-t mutat. */
+    streakDays: getEffectiveStreak(state),
     totalDays: state.totalDays,
   };
 }

@@ -428,7 +428,8 @@ export default function SpeedQuizMath() {
       fullClear: phase === "won",
     });
     if (wasDailyAvailable && phase === "won") {
-      markDailyCompleted();
+      const daily = markDailyCompleted();
+      if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, score, correct, answered, bestStreak]);
