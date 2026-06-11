@@ -99,6 +99,8 @@ type LevelConfig = {
   weather: LevelWeather;
   /** Boss-pálya: külön HUD-banner + 3-4 extra creeper a felszínen. */
   isBossLevel?: boolean;
+  /** Hány GYÉMÁNT kötelező a pálya teljesítéséhez (a leírás ígéretéhez kötve). */
+  goalDiamonds?: number;
 };
 
 const LEVELS: LevelConfig[] = [
@@ -172,6 +174,7 @@ const LEVELS: LevelConfig[] = [
     skyTint: { day: "#7494c9", dusk: "#2a3550" },
     weather: "snow",
     isBossLevel: true,
+    goalDiamonds: 1, // a leírás ígéri: "legalább 1 gyémánt"
   },
 ];
 
@@ -1530,6 +1533,8 @@ export default function BlockCraftQuiz() {
   const [levelIdx, setLevelIdx] = useState(0);
   const [levelBlocks, setLevelBlocks] = useState(0);
   const [levelRare, setLevelRare] = useState(0);
+  /** Pálya-szintű gyémánt-számláló — az 5. pálya "legalább 1 gyémánt" céljához. */
+  const [levelDiamonds, setLevelDiamonds] = useState(0);
   const [levelStartXp, setLevelStartXp] = useState(0);
   const [gameWon, setGameWon] = useState(false);
   // Subject-breakdown: melyik tantárgyból hány jó választ adott.
@@ -1772,6 +1777,7 @@ export default function BlockCraftQuiz() {
     }
     setLevelBlocks(0);
     setLevelRare(0);
+    setLevelDiamonds(0);
     setLevelStartXp(options.carryXpFrom);
     setTimeLeft(cfg.timeLimit);
     setPhase("play");
@@ -1810,6 +1816,12 @@ export default function BlockCraftQuiz() {
 
   const tryMineRef = useRef(tryMine);
   tryMineRef.current = tryMine;
+  // tryMineAt ref: a render-loop effect dependency-mentes hozzáférése.
+  // Enélkül a `tryMineAt` az effect deps-listáján szerepelne, és minden
+  // quiz-bank betöltés (bank → pickQuiz → tryMineAt referencia-változás)
+  // a TELJES WebGL scene újraépítését triggerelné játék közben.
+  const tryMineAtRef = useRef(tryMineAt);
+  tryMineAtRef.current = tryMineAt;
   const endRunRef = useRef(endRun);
   endRunRef.current = endRun;
 
@@ -1849,7 +1861,10 @@ export default function BlockCraftQuiz() {
     renderer.shadowMap.type = THREE.PCFShadowMap;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2("#8fc7e9", 0.035);
+    // Egyetlen FogExp2 példány — a render-loop a color/density mezőit frissíti,
+    // nem hoz létre frame-enként új objektumot (GC-nyomás csökkentés).
+    const sceneFog = new THREE.FogExp2("#8fc7e9", 0.035);
+    scene.fog = sceneFog;
 
     const camera = new THREE.PerspectiveCamera(48, Math.max(1, canvas.width) / Math.max(1, canvas.height), 0.1, 120);
     const raycaster = new THREE.Raycaster();
@@ -2035,8 +2050,12 @@ export default function BlockCraftQuiz() {
       runtime.raycaster.setFromCamera(pointerNdcRef.current, runtime.camera);
       const hits = runtime.raycaster.intersectObjects(runtime.blockMeshes, false);
       for (const hit of hits) {
-        const data = hit.object.userData as { c?: number; r?: number; t?: number };
+        const data = hit.object.userData as { c?: number; r?: number; t?: number; isFront?: boolean };
         if (typeof data.c !== "number" || typeof data.r !== "number" || typeof data.t !== "number") continue;
+        // Csak a FRONT lane mesh-ek targetálhatók: szögből/hézagból a hátsó
+        // lane-ek mesh-e is első hit lehetne, ami vizuális eltérést okozna
+        // a targetBox (mindig front-lane pozíció) és a kattintott blokk között.
+        if (!data.isFront) continue;
         if (!mineable(data.t)) continue;
         if (!playerCanReachTile(playerRef.current, data.c, data.r)) continue;
         return { c: data.c, r: data.r, t: data.t };
@@ -2056,7 +2075,7 @@ export default function BlockCraftQuiz() {
       if (keysRef.current.mine) {
         keysRef.current.mine = false;
         const target = hoverCellRef.current;
-        if (target && tryMineAt(target.c, target.r)) {
+        if (target && tryMineAtRef.current(target.c, target.r)) {
           rafRef.current = requestAnimationFrame(loop);
           return;
         }
@@ -2205,7 +2224,8 @@ export default function BlockCraftQuiz() {
       const skyColor = duskColor.clone().lerp(dayColor, cycle);
       scene.background = skyColor;
       backdrop.material.color.copy(skyColor);
-      scene.fog = new THREE.FogExp2(skyColor, 0.026 + (1 - cycle) * 0.020);
+      sceneFog.color.copy(skyColor);
+      sceneFog.density = 0.026 + (1 - cycle) * 0.020;
       sun.position.set(playerPos.x - 6 + Math.cos(t * 0.00025) * 7, playerPos.y + 11, 8);
       sun.target.position.set(playerPos.x, playerPos.y, 0);
       sun.intensity = 1.4 + cycle * 1.6;
@@ -2343,8 +2363,16 @@ export default function BlockCraftQuiz() {
       cancelAnimationFrame(rafRef.current);
       threeRuntimeRef.current = null;
       if (dustPoints) dustPoints.geometry.dispose();
-      // Explicit textúra-dispose: a CanvasTexture-öket nem GC-eli a Three.js,
-      // ezért minden szintátmenetnél magunknak kell felszabadítani a GPU oldalon.
+      /*
+       * Dispose-stratégia — FONTOS: a világ ~8000 mesh-e EGYETLEN megosztott
+       * blockGeometry-t és típusonként EGYETLEN materialt használ. A korábbi
+       * scene.traverse() dispose minden mesh-en a MEGOSZTOTT erőforrást
+       * dispose-olta több ezerszer → WebGL-korrupció. Ehelyett:
+       *  1. minden MEGOSZTOTT erőforrás pontosan EGYSZER dispose-olódik
+       *  2. a traverse csak az EGYEDI (nem megosztott) geometriákat takarítja
+       *     (player avatar, targetBox, xpOrb, aura, felhő, backdrop, weather)
+       */
+      blockGeometry.dispose();
       blockMaterials.forEach((entry) => {
         const mats = Array.isArray(entry) ? entry : [entry];
         mats.forEach((mat) => {
@@ -2353,16 +2381,29 @@ export default function BlockCraftQuiz() {
         });
       });
       cloudTex.dispose();
+      const sharedGeometries = new Set<THREE.BufferGeometry>([blockGeometry, auraGeometry]);
+      const sharedMaterials = new Set<THREE.Material>();
+      blockMaterials.forEach((entry) => {
+        const mats = Array.isArray(entry) ? entry : [entry];
+        mats.forEach((m) => sharedMaterials.add(m));
+      });
+      sharedMaterials.add(auraMaterial);
+      auraGeometry.dispose();
+      auraMaterial.dispose();
       scene.traverse((obj) => {
         if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-          obj.geometry.dispose();
+          if (!sharedGeometries.has(obj.geometry)) {
+            obj.geometry.dispose();
+          }
           const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-          materials.forEach((material) => material.dispose());
+          materials.forEach((material) => {
+            if (!sharedMaterials.has(material)) material.dispose();
+          });
         }
       });
       renderer.dispose();
     };
-  }, [phase, tryMineAt]);
+  }, [phase]);
 
   const onAnswer = (idx: number) => {
     if (!quiz) return;
@@ -2404,6 +2445,8 @@ export default function BlockCraftQuiz() {
       const newBlocks = blocksMined + 1;
       const newLevelBlocks = levelBlocks + 1;
       const newLevelRare = levelRare + (isRare ? 1 : 0);
+      const isDiamond = tgt.t === DIAMOND;
+      const newLevelDiamonds = levelDiamonds + (isDiamond ? 1 : 0);
       const newStreak = streak + 1;
       setSessionXp((x) => x + add);
       setTotalXp((x) => x + add);
@@ -2411,14 +2454,20 @@ export default function BlockCraftQuiz() {
       if (isRare) setRareBlocks((n) => n + 1);
       setLevelBlocks(newLevelBlocks);
       setLevelRare(newLevelRare);
+      if (isDiamond) setLevelDiamonds(newLevelDiamonds);
       setStreak(newStreak);
       const subj = quiz.subject ?? "english";
       setSubjectStats((prev) => ({ ...prev, [subj]: prev[subj] + 1 }));
       xpPopupRef.current = { amount: add, wx: (tgt.c + 0.5) * TILE, wy: (tgt.r + 0.5) * TILE, life: 1.5 };
 
-      // Pálya-cél ellenőrzés: blokkszám + opcionális ritkacél.
+      // Pálya-cél ellenőrzés: blokkszám + ritkacél + opcionális gyémánt-cél
+      // (az 5. pálya leírása "legalább 1 gyémánt"-ot ígér — most ténylegesen kötelező).
       const cfg = activeLevelRef.current;
-      if (newLevelBlocks >= cfg.goalBlocks && newLevelRare >= cfg.goalRareBlocks) {
+      if (
+        newLevelBlocks >= cfg.goalBlocks &&
+        newLevelRare >= cfg.goalRareBlocks &&
+        newLevelDiamonds >= (cfg.goalDiamonds ?? 0)
+      ) {
         levelGoalReached = true;
       }
 
@@ -2561,8 +2610,9 @@ export default function BlockCraftQuiz() {
     runtime.raycaster.setFromCamera(pointerNdcRef.current, runtime.camera);
     const hits = runtime.raycaster.intersectObjects(runtime.blockMeshes, false);
     for (const hit of hits) {
-      const data = hit.object.userData as { c?: number; r?: number; t?: number };
+      const data = hit.object.userData as { c?: number; r?: number; t?: number; isFront?: boolean };
       if (typeof data.c !== "number" || typeof data.r !== "number" || typeof data.t !== "number") continue;
+      if (!data.isFront) continue; // csak front-lane (lásd pickTargetBlock)
       if (mineable(data.t) && playerCanReachTile(playerRef.current, data.c, data.r)) {
         return { c: data.c, r: data.r };
       }
@@ -2710,7 +2760,7 @@ export default function BlockCraftQuiz() {
                 </div>
                 <div className="w-full flex items-center justify-between text-[10px] font-semibold text-white/70">
                   <span>XP: <strong className="text-amber-300">{sessionXp}</strong></span>
-                  <span>Cél: <strong className="text-lime-300">{levelBlocks}/{cfg.goalBlocks}</strong>{cfg.goalRareBlocks > 0 && <> · <strong className="text-cyan-300">{levelRare}/{cfg.goalRareBlocks}</strong> érc</>}</span>
+                  <span>Cél: <strong className="text-lime-300">{levelBlocks}/{cfg.goalBlocks}</strong>{cfg.goalRareBlocks > 0 && <> · <strong className="text-cyan-300">{levelRare}/{cfg.goalRareBlocks}</strong> érc</>}{(cfg.goalDiamonds ?? 0) > 0 && <> · <strong className="text-sky-200">{levelDiamonds}/{cfg.goalDiamonds}</strong> 💎</>}</span>
                   <span className="flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-400" />{streak}</span>
                 </div>
                 {/* === Cél sáv: blokk-célt mutat (a streak helyett) === */}
