@@ -145,6 +145,11 @@ export default function WordLadderHuEn() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreSubmittedRef = useRef(false);
+  /** Futáson belüli max streak — leaderboard/achievement-hez. */
+  const runBestStreakRef = useRef(0);
+  /** Helyes / hibás válaszok száma a futásban (a streak NEM egyenlő ezekkel). */
+  const correctCountRef = useRef(0);
+  const wrongCountRef = useRef(0);
 
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
     queryKey: ["/api/games/quiz-bank/word-ladder-hu-en"],
@@ -201,6 +206,9 @@ export default function WordLadderHuEn() {
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
+    runBestStreakRef.current = 0;
+    correctCountRef.current = 0;
+    wrongCountRef.current = 0;
     const q = buildLongRunQueue(mergedPoolsRef.current);
     setQueue(q);
     setCursor(0);
@@ -247,9 +255,13 @@ export default function WordLadderHuEn() {
 
   const onAnswer = (i: number) => {
     if (!current) return;
+    // Dupla-kattintás-guard: csak "quiz" fázisban dolgozunk fel választ —
+    // a "step" átmenet alatt érkező második kattintás nem léptet duplán.
+    if (phase !== "quiz") return;
     const isCorrect = i === current.correctIndex;
 
     if (!isCorrect) {
+      wrongCountRef.current += 1;
       sfxError();
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 400);
@@ -257,12 +269,14 @@ export default function WordLadderHuEn() {
     }
 
     if (isCorrect) {
+      correctCountRef.current += 1;
       sfxSuccess();
       const add = 30 + streak * 2;
       setSessionXp((x) => x + add);
       setTotalXp((t) => t + add);
       setStreak((s) => {
         const n = s + 1;
+        if (n > runBestStreakRef.current) runBestStreakRef.current = n;
         setBestStreak((b) => (n > b ? n : b));
         return n;
       });
@@ -304,7 +318,7 @@ export default function WordLadderHuEn() {
       gameId: "word-ladder-hu-en",
       difficulty: "normal",
       runXp: sessionXp,
-      runStreak: streak,
+      runStreak: runBestStreakRef.current,
       runSeconds,
     })
       .then(() => {
@@ -329,10 +343,10 @@ export default function WordLadderHuEn() {
     const newOnes = recordRun({
       game: "word-ladder-hu-en",
       xpGained: sessionXp,
-      correctAnswers: streak, // best-effort proxy
-      wrongAnswers: 0,
-      maxStreak: streak,
-      perfect: streak >= 5,
+      correctAnswers: correctCountRef.current,
+      wrongAnswers: wrongCountRef.current,
+      maxStreak: runBestStreakRef.current,
+      perfect: wrongCountRef.current === 0 && correctCountRef.current >= 5,
       fullClear: true,
     });
     if (wasDailyAvailable) {
