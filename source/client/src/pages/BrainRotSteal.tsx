@@ -558,8 +558,10 @@ export default function BrainRotSteal() {
       perfect: totalMissed === 0 && totalCaught >= 5,
     });
     // Daily: ha a játékos legalább 10 brain rot-ot kapott el → "teljesítve".
+    // (A Brain Rot-nak nincs "won" fázisa — a 10 elkapás a sikeres futás kritériuma.)
     if (wasDailyAvailable && totalCaught >= 10) {
-      markDailyCompleted();
+      const daily = markDailyCompleted();
+      if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, sessionXp, totalCaught, totalMissed, bestStreak, comboMultiplier]);

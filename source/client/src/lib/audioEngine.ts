@@ -215,12 +215,14 @@ export function useAudioSettings(): {
       setMutedState(isMuted());
       setVolumeState(getVolume());
     };
-    window.addEventListener(CHANGE_EVENT, handler);
-    window.addEventListener("storage", (e) => {
+    const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) handler();
-    });
+    };
+    window.addEventListener(CHANGE_EVENT, handler);
+    window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener(CHANGE_EVENT, handler);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
