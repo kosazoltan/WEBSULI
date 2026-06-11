@@ -152,7 +152,10 @@ export async function sendNewMaterialNotification(
         error: `Resend error: ${result.error.message || 'Unknown error'}`,
       });
       
-      throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
+      // Jelöljük, hogy már logoltuk — a catch blokk NE logolja újra (dupla email_logs sor).
+      const err = new Error(`Resend error: ${result.error.message || 'Unknown error'}`) as Error & { alreadyLogged?: boolean };
+      err.alreadyLogged = true;
+      throw err;
     }
 
     console.log('[RESEND] Email sikeresen elküldve:', recipientEmail, 'result:', result);
@@ -170,16 +173,20 @@ export async function sendNewMaterialNotification(
     const err = error instanceof Error ? error : new Error(String(error));
     console.error('[RESEND] Email küldési hiba:', error);
     
-    // Log failed email to database
-    try {
-      await storage.createEmailLog({
-        htmlFileId: fileId,
-        recipientEmail,
-        status: 'failed',
-        error: err.message || 'Unknown error',
-      });
-    } catch (logError) {
-      console.error('[RESEND] Email log mentési hiba:', logError);
+    // Log failed email to database — kivéve ha a try-blokk már logolta
+    // (result.error ág), különben dupla failed-sor keletkezne.
+    const alreadyLogged = (err as Error & { alreadyLogged?: boolean }).alreadyLogged === true;
+    if (!alreadyLogged) {
+      try {
+        await storage.createEmailLog({
+          htmlFileId: fileId,
+          recipientEmail,
+          status: 'failed',
+          error: err.message || 'Unknown error',
+        });
+      } catch (logError) {
+        console.error('[RESEND] Email log mentési hiba:', logError);
+      }
     }
     
     throw error;

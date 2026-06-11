@@ -652,28 +652,38 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Tömeges osztály-léptetés (új tanév gomb).
-   * Minden aktív extra-email rekord `classrooms` PG int-array-ét egyel feljebb
-   * lépteti — pl. `{2, 5}` → `{3, 6}`. A 12-es osztály változatlan marad
-   * (LEAST cap), így nem "esnek le" a végzősök. A duplikációkat DISTINCT
-   * megszünteti (pl. ha valakinek már volt 11 és 12 is, mindkettő 12-re
-   * lépne — DISTINCT csak egyet hagy).
+   * MINDKÉT címzett-tábla (`extra_email_addresses` + `email_subscriptions`)
+   * `classrooms` PG int-array-ét egyel feljebb lépteti — pl. `{2, 5}` → `{3, 6}`.
+   *  - A 12-es osztály változatlan marad (LEAST cap), nem "esnek le" a végzősök.
+   *  - A 0-s osztály (Programozási alapismeretek — speciális kategória, nem
+   *    évfolyam) szintén változatlan marad, NEM törlődik és NEM léptetődik.
+   *  - A duplikációkat DISTINCT megszünteti (pl. {11,12} → {12}).
    *
-   * Visszaadja a frissített rekordok számát.
+   * Visszaadja az összesen frissített rekordok számát (extra + subscription).
    */
   async bulkPromoteExtraEmailClassrooms(): Promise<number> {
-    const result = await db.execute(sql`
-      UPDATE extra_email_addresses
-      SET classrooms = ARRAY(
-            SELECT DISTINCT LEAST(c + 1, 12)
+    const promoteExpr = sql`ARRAY(
+            SELECT DISTINCT CASE WHEN c = 0 THEN 0 ELSE LEAST(c + 1, 12) END
             FROM unnest(classrooms) AS c
-            WHERE c >= 1 AND c <= 12
+            WHERE c >= 0 AND c <= 12
             ORDER BY 1
-          ),
+          )`;
+    const extraResult = await db.execute(sql`
+      UPDATE extra_email_addresses
+      SET classrooms = ${promoteExpr},
           updated_at = NOW()
       WHERE is_active = true
     `);
+    const subsResult = await db.execute(sql`
+      UPDATE email_subscriptions
+      SET classrooms = ${promoteExpr},
+          updated_at = NOW()
+      WHERE is_subscribed = true
+    `);
     // Drizzle's execute() returns NeonHttpQueryResult / pg result; rowCount lehet null.
-    return (result as { rowCount?: number | null }).rowCount ?? 0;
+    const extraCount = (extraResult as { rowCount?: number | null }).rowCount ?? 0;
+    const subsCount = (subsResult as { rowCount?: number | null }).rowCount ?? 0;
+    return extraCount + subsCount;
   }
 
   async deleteExtraEmail(id: string): Promise<boolean> {
