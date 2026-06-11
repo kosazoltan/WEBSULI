@@ -578,6 +578,12 @@ export default function TsunamiEscapeEnglish() {
   const paramsRef = useRef(PRESETS.normal);
   const runDifficultyRef = useRef<GameDifficulty>("normal");
   const correctQuizCountRef = useRef(0);
+  /** Futáson belüli max streak — leaderboard/achievement-hez (a kör-végi streak gyakran 0). */
+  const runBestStreakRef = useRef(0);
+  /** Hibás válaszok + kvíz-timeoutok száma a futásban (lifetime stat-hoz). */
+  const wrongAnswersRef = useRef(0);
+  /** Dupla-kattintás-lock a kvíz-válaszra. */
+  const answerLockedRef = useRef(false);
   const scoreSubmittedRef = useRef(false);
   const runSubjectRef = useRef<TsunamiSubject>("mixed");
   const subjectRoundRef = useRef(0);
@@ -702,6 +708,9 @@ export default function TsunamiEscapeEnglish() {
     setDriftDir(0);
     driftDirRef.current = 0;
     correctQuizCountRef.current = 0;
+    runBestStreakRef.current = 0;
+    wrongAnswersRef.current = 0;
+    answerLockedRef.current = false;
     recentQuizIdsRef.current = [];
     // Give an early first quiz so the run does not feel empty at the start.
     quizTimerRef.current = Math.max(0, PRESETS[difficulty].quizEverySec * 0.72);
@@ -924,7 +933,12 @@ export default function TsunamiEscapeEnglish() {
 
   const onAnswer = (index: number) => {
     if (!quiz) return;
+    // VÁLASZ-LOCK: dupla kattintás ne dolgozza fel kétszer ugyanazt a kvízt
+    // (dupla XP/streak/correctCount, akár korai "won" is lehetett).
+    if (answerLockedRef.current) return;
+    answerLockedRef.current = true;
     if (index !== quiz.correctIndex) {
+      wrongAnswersRef.current += 1;
       sfxError();
       setWrongShake(true);
       setTimeout(() => setWrongShake(false), 320);
@@ -935,6 +949,7 @@ export default function TsunamiEscapeEnglish() {
         setQuiz(null);
         setPhase("play");
         lastRef.current = null;
+        answerLockedRef.current = false;
       }, 280);
       return;
     }
@@ -949,6 +964,9 @@ export default function TsunamiEscapeEnglish() {
     setTotalXp((t) => t + add);
     setStreak((s) => {
       const n = s + 1;
+      // Futáson belüli max streak — a leaderboard/achievement EZT kapja,
+      // nem a kör-végi (gyakran 0-ra resetelt) értéket.
+      if (n > runBestStreakRef.current) runBestStreakRef.current = n;
       setBestStreak((b) => (n > b ? n : b));
       return n;
     });
@@ -967,6 +985,7 @@ export default function TsunamiEscapeEnglish() {
       setQuiz(null);
       cancelAnimationFrame(rafRef.current);
       lastRef.current = null;
+      answerLockedRef.current = false;
       setPhase("won");
       return;
     }
@@ -974,6 +993,7 @@ export default function TsunamiEscapeEnglish() {
     setQuiz(null);
     setPhase("play");
     lastRef.current = null;
+    answerLockedRef.current = false;
   };
 
   useEffect(() => {
@@ -981,6 +1001,8 @@ export default function TsunamiEscapeEnglish() {
     const id = setInterval(() => {
       setQuizTimeLeft((prev) => {
         if (prev <= 1) {
+          wrongAnswersRef.current += 1; // a timeout is hibának számít a statokban
+          answerLockedRef.current = false;
           setWrongShake(true);
           setTimeout(() => setWrongShake(false), 220);
           setStreak(0);
@@ -1014,7 +1036,7 @@ export default function TsunamiEscapeEnglish() {
       gameId: "tsunami-english",
       difficulty: runDifficultyRef.current,
       runXp: sessionXp,
-      runStreak: streak,
+      runStreak: runBestStreakRef.current,
       runSeconds,
     };
 
@@ -1042,9 +1064,9 @@ export default function TsunamiEscapeEnglish() {
       game: "tsunami-english",
       xpGained: sessionXp,
       correctAnswers: correctQuizCountRef.current,
-      wrongAnswers: 0,
-      maxStreak: streak,
-      perfect: phase === "won" && streak >= correctQuizCountRef.current,
+      wrongAnswers: wrongAnswersRef.current,
+      maxStreak: runBestStreakRef.current,
+      perfect: phase === "won" && wrongAnswersRef.current === 0 && correctQuizCountRef.current >= 5,
       fullClear: phase === "won",
     });
     if (wasDailyAvailable && phase === "won") {

@@ -246,6 +246,9 @@ export default function SpeedQuizMath() {
   const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS[4]);
   const [questionTimeLeft, setQuestionTimeLeft] = useState(QUESTION_SECONDS[4]);
   const [lives, setLives] = useState(3);
+  // Szinkron élet-követés: a setState-updater React 18-ban render-időben fut,
+  // a hívó kód nem láthatja azonnal az eredményt — a ref viszont szinkron.
+  const livesRef = useRef(3);
   const [correct, setCorrect] = useState(0);
   const [answered, setAnswered] = useState(0);
   const [score, setScore] = useState(0);
@@ -270,6 +273,7 @@ export default function SpeedQuizMath() {
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
+    livesRef.current = 3;
     setLives(3);
     setCorrect(0);
     setAnswered(0);
@@ -320,15 +324,18 @@ export default function SpeedQuizMath() {
       setQuestionTimeLeft((prev) => {
         if (prev <= 1) {
           setStreak(0);
-          setLives((l) => {
-            const next = l - 1;
-            if (next <= 0) {
-              endAsLose();
-              return 0;
-            }
-            return next;
-          });
-          nextTask();
+          // Szinkron élet-csökkentés ref-fel: így megbízhatóan tudjuk,
+          // hogy game over történt-e (a setState-updater deferred lenne).
+          const nextLives = Math.max(0, livesRef.current - 1);
+          livesRef.current = nextLives;
+          setLives(nextLives);
+          if (nextLives <= 0) {
+            endAsLose();
+          } else {
+            // GUARD: game over után NE töltsünk be új feladatot —
+            // az "over" fázis utáni nextTask() phase-szennyezést okozott.
+            nextTask();
+          }
           return QUESTION_SECONDS[grade];
         }
         return prev - 1;
@@ -339,6 +346,10 @@ export default function SpeedQuizMath() {
 
   const handleAnswer = (idx: number) => {
     if (phase !== "play") return;
+    // VÁLASZ-LOCK: az answerState csak a nextTask()-ban áll vissza "idle"-re —
+    // dupla kattintás nem dolgozza fel kétszer ugyanazt a feladatot
+    // (dupla correct/score/answered, korai győzelem).
+    if (answerState !== "idle") return;
     setAnswered((n) => n + 1);
 
     if (idx !== task.correctIndex) {
@@ -347,16 +358,16 @@ export default function SpeedQuizMath() {
       setWrongFlash(true);
       window.setTimeout(() => setWrongFlash(false), 220);
       setStreak(0);
-      setLives((l) => {
-        const next = l - 1;
-        if (next <= 0) {
-          setPhase("over");
-          return 0;
-        }
-        return next;
-      });
+      const nextLives = Math.max(0, livesRef.current - 1);
+      livesRef.current = nextLives;
+      setLives(nextLives);
       setTimeLeft((t) => Math.max(0, t - 1));
-      window.setTimeout(nextTask, 140);
+      if (nextLives <= 0) {
+        setPhase("over");
+      } else {
+        // GUARD: game over után ne töltsünk új feladatot
+        window.setTimeout(nextTask, 140);
+      }
       return;
     }
 

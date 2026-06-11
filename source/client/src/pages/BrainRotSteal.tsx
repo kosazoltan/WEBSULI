@@ -243,7 +243,12 @@ export default function BrainRotSteal() {
   const [totalMissed, setTotalMissed] = useState(0);
   const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT);
   const [runSeconds, setRunSeconds] = useState(0);
+  // Ref-tükör a rAF loop-nak: a runSeconds state dependency az animációs
+  // useEffect-et másodpercenként újraindította (loop + lastTime reset).
+  const runSecondsRef = useRef(0);
   const [comboMultiplier, setComboMultiplier] = useState(1);
+  /** Futáson belüli max combo — a combo_4x jelvényhez (a végső combo gyakran 1-re reset). */
+  const maxComboRef = useRef(1);
   const [screenFlash, setScreenFlash] = useState<string | null>(null);
   const scoreSubmittedRef = useRef(false);
   const lastSpawnRef = useRef(0);
@@ -355,7 +360,11 @@ export default function BrainRotSteal() {
         return newStreak;
       });
       setTotalCaught((c) => c + 1);
-      setComboMultiplier((m) => Math.min(4, m + 0.25));
+      setComboMultiplier((m) => {
+        const next = Math.min(4, m + 0.25);
+        if (next > maxComboRef.current) maxComboRef.current = next;
+        return next;
+      });
 
       // Vizuális visszajelzés
       spawnParticles(caughtRot.x, caughtRot.y, "#fbbf24", 20, "\u2B50");
@@ -393,7 +402,9 @@ export default function BrainRotSteal() {
     setTotalMissed(0);
     setTimeLeft(ROUND_LIMIT);
     setRunSeconds(0);
+    runSecondsRef.current = 0;
     setComboMultiplier(1);
+    maxComboRef.current = 1;
     setScreenFlash(null);
     lastSpawnRef.current = 0;
     setPhase("play");
@@ -416,6 +427,7 @@ export default function BrainRotSteal() {
   useEffect(() => {
     if (phase !== "play") return;
     const id = setInterval(() => {
+      runSecondsRef.current += 1;
       setRunSeconds((s) => s + 1);
       setTimeLeft((t) => {
         if (t <= 1) {
@@ -442,7 +454,7 @@ export default function BrainRotSteal() {
       const boardH = boardEl?.clientHeight ?? 400;
 
       // Spawn brain rots
-      if (now - lastSpawnRef.current > Math.max(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_BASE - runSeconds * 15)) {
+      if (now - lastSpawnRef.current > Math.max(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_BASE - runSecondsRef.current * 15)) {
         lastSpawnRef.current = now;
         setBrainRots((prev) => {
           if (prev.filter((r) => !r.caught).length >= MAX_BRAIN_ROTS) return prev;
@@ -517,7 +529,7 @@ export default function BrainRotSteal() {
 
     animRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animRef.current);
-  }, [phase, runSeconds]);
+  }, [phase]);
 
   /* --- Eredmény beküldése --- */
   useEffect(() => {
@@ -554,7 +566,7 @@ export default function BrainRotSteal() {
       wrongAnswers: totalMissed,
       maxStreak: bestStreak,
       brainRotsCaught: totalCaught,
-      maxComboMultiplier: comboMultiplier,
+      maxComboMultiplier: maxComboRef.current,
       perfect: totalMissed === 0 && totalCaught >= 5,
     });
     // Daily: ha a játékos legalább 10 brain rot-ot kapott el → "teljesítve".
