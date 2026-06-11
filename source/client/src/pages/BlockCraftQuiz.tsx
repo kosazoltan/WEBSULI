@@ -19,51 +19,21 @@ import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine"
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
+import {
+  AIR, GRASS, DIRT, STONE, LOG, LEAVES, COAL, IRON, DIAMOND, BEDROCK,
+  CREEPER, SAND, WATER, ZOMBIE, SKELETON, SPIDER,
+  WX, WY, WZ,
+  type VoxelWorld, type VoxelGenConfig, type PlayerState, type VoxelHit,
+  generateVoxelWorld, findVoxelSpawn, stepPlayerPhysics, raycastVoxel,
+  vGet, vSet, vIdx, vMineable, collidesAt, isExposed,
+  PLAYER_EYE, MOVE_SPEED_BPS, JUMP_VELOCITY,
+} from "@/lib/voxelcraft";
 
+/** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
-const ROWS = 18;
-const COLS = 96;
-const GRAVITY = 2200;
-const MOVE_SPEED = 188;
-const JUMP_V = 550;
-const PLAYER_W = 14;
-const PLAYER_H = 26;
-/** Koppintásos bányászás max. hatótáv (Chebyshev, „csempe” egységben); kisebb = kevésbé érzékeny messzi kockákra. */
-const MINING_REACH_TILES = 2.85;
-
-const AIR = 0;
-const GRASS = 1;
-const DIRT = 2;
-const STONE = 3;
-const LOG = 4;
-const LEAVES = 5;
-const COAL = 6;
-const IRON = 7;
-const DIAMOND = 8;
-/** Alul: nem bányászható, nem esik át rajta a játékos */
-const BEDROCK = 9;
-/** Creeper mob a felszínen — bónusz kvíz, dupla XP */
-const CREEPER = 10;
-/** Homok: sivatag/tengerpart biom, könnyű bányászni */
-const SAND = 11;
-/** Víz: díszítő blokk (nem bányászható, tengeren / tavon található) */
-const WATER = 12;
-/** Zombi mob — felszíni, közepesen mélyen is, +2× XP (nehezebb mint creeper). */
-const ZOMBIE = 13;
-/** Csontváz mob — barlangban, a stone-rétegben, +2.5× XP, ritkább. */
-const SKELETON = 14;
-/** Pók mob — barlangban a falakon, +2.2× XP, kisebb mint a többi. */
-const SPIDER = 15;
 
 type QuizSubject = "english" | "english-math" | "math" | "nature";
 type Quiz = { prompt: string; options: string[]; correctIndex: number; subject?: QuizSubject };
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
-type ThreeBlockMesh = THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[]>;
-type ThreeRuntime = {
-  camera: THREE.PerspectiveCamera;
-  raycaster: THREE.Raycaster;
-  blockMeshes: ThreeBlockMesh[];
-};
 type QuizBankApi = {
   items: { prompt: string; options: string[]; correctIndex: number }[];
 };
@@ -177,6 +147,28 @@ const LEVELS: LevelConfig[] = [
     goalDiamonds: 1, // a leírás ígéri: "legalább 1 gyémánt"
   },
 ];
+
+/** Pálya-konfig → voxel-világgenerátor paraméterek (Minecraft-klón terep). */
+function genCfgFor(cfg: LevelConfig): VoxelGenConfig {
+  const desert = cfg.biome === "desert";
+  return {
+    oreMultiplier: cfg.oreMultiplier,
+    treeCount: Math.max(4, Math.round(cfg.treeDensity * 90)) + (cfg.biome === "forest" ? 6 : 0),
+    surfaceMobCount: (cfg.id >= 3 ? 3 + cfg.id : 2) + (cfg.isBossLevel ? 3 : 0),
+    caveMobCount: cfg.id >= 4 ? 5 : cfg.id === 3 ? 3 : 0,
+    lakeCount: desert ? 2 : 1,
+    sandPatchCount: desert ? 6 : 1,
+    allowZombies: cfg.id >= 3,
+  };
+}
+
+/** Lerakható blokkok a hotbar-sorrendben (mob és bedrock nem). */
+const PLACEABLE_ORDER = [GRASS, DIRT, STONE, SAND, LOG, LEAVES, COAL, IRON, DIAMOND] as const;
+
+const BLOCK_NAME: Record<number, string> = {
+  [GRASS]: "Fű", [DIRT]: "Föld", [STONE]: "Kő", [SAND]: "Homok", [LOG]: "Rönk",
+  [LEAVES]: "Lomb", [COAL]: "Szén", [IRON]: "Vas", [DIAMOND]: "Gyémánt",
+};
 
 const QUIZ_FALLBACK: Quiz[] = [
   // ============================================================
@@ -440,315 +432,10 @@ const XP_BY_TILE: Record<number, number> = {
   [SPIDER]: 260,
 };
 
-function randInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 function clamp01(v: number) {
   return Math.max(0, Math.min(1, v));
 }
 
-function buildWorld(config: LevelConfig): Uint8Array {
-  const g = new Uint8Array(ROWS * COLS);
-  let base = 8;
-  const topByCol: number[] = [];
-
-  for (let c = 0; c < COLS; c++) {
-    base += randInt(-1, 1);
-    base = Math.max(5, Math.min(10, base));
-    const top = Math.max(4, Math.min(11, Math.round(base + Math.sin(c * 0.24) * 1.2)));
-    topByCol.push(top);
-    for (let r = 0; r < ROWS; r++) {
-      const i = r * COLS + c;
-      if (r < top) g[i] = AIR;
-      else if (r === top) g[i] = GRASS;
-      else if (r < top + 3) g[i] = DIRT;
-      else g[i] = STONE;
-    }
-  }
-
-  const caveCount = config.caveCount;
-  for (let n = 0; n < caveCount; n++) {
-    const cx = randInt(5, COLS - 6);
-    const cy = randInt(9, ROWS - 2);
-    const rx = randInt(2, 4);
-    const ry = randInt(1, 2);
-    for (let r = cy - ry; r <= cy + ry; r++) {
-      for (let c = cx - rx; c <= cx + rx; c++) {
-        if (r <= 0 || c <= 0 || r >= ROWS - 1 || c >= COLS - 1) continue;
-        const nx = (c - cx) / rx;
-        const ny = (r - cy) / ry;
-        if (nx * nx + ny * ny < 1.1) g[r * COLS + c] = AIR;
-      }
-    }
-  }
-
-  let lastTreeCol = -5; // minimum fa-távolság tracking
-  for (let c = 8; c < COLS - 8; c++) {
-    const isSpawnSafeZone = c < 15; // első 15 oszlop: spawn-védett zóna
-    const top = topByCol[c] ?? 8;
-    if (!isSpawnSafeZone && Math.random() < config.treeDensity && c - lastTreeCol >= 4) {
-      // Több pályán nagyobb a mob-arány (nehezebb pályán több bónusz-mob).
-      const mobChance = config.biome === "diamond" ? 0.30 : config.biome === "caves" ? 0.24 : 0.18;
-      if (Math.random() < mobChance && top - 1 >= 0) {
-        // 3. szinttől zombi is megjelenhet a felszínen (40% esély a creeper helyett)
-        const useZombie = config.id >= 3 && Math.random() < 0.4;
-        g[(top - 1) * COLS + c] = useZombie ? ZOMBIE : CREEPER;
-      } else {
-        const h = randInt(2, 4);
-        for (let t = 1; t <= h; t++) g[(top - t) * COLS + c] = LOG;
-        lastTreeCol = c;
-        const tr = top - h;
-        for (let dr = -2; dr <= 1; dr++) {
-          for (let dc = -2; dc <= 2; dc++) {
-            const rr = tr + dr;
-            const cc = c + dc;
-            if (rr > 0 && rr < ROWS && cc > 0 && cc < COLS && Math.abs(dc) + Math.abs(dr) <= 3) {
-              if (g[rr * COLS + cc] === AIR) g[rr * COLS + cc] = LEAVES;
-            }
-          }
-        }
-      }
-    }
-    // Érc-elhelyezés a level config szerint. 'diamond' biomon több gyémánt+vas.
-    const oreMul = config.oreMultiplier;
-    const coalP = 0.052 * oreMul;
-    const ironP = config.biome === "diamond" ? 0.072 * oreMul + 0.020 : 0.072 * oreMul;
-    const diamondP = config.biome === "diamond" ? 0.080 * oreMul + 0.025 : 0.080 * oreMul;
-    for (let r = top + 2; r < ROWS - 1; r++) {
-      const i = r * COLS + c;
-      if (g[i] !== STONE) continue;
-      const roll = Math.random();
-      if (roll < coalP) g[i] = COAL;
-      else if (roll < ironP) g[i] = IRON;
-      else if (roll < diamondP) g[i] = DIAMOND;
-    }
-  }
-
-  // Bióma-eltolódás: 'desert' pályán sok homok+tó, 'forest' minimális.
-  const biomeBaseCount = config.biome === "desert" ? 6 : config.biome === "forest" ? 2 : 4;
-  const biomeCount = biomeBaseCount + randInt(0, 2);
-  const sandyChance = config.biome === "desert" ? 0.45 : 0.6;
-  for (let b = 0; b < biomeCount; b++) {
-    const bStart = randInt(8, COLS - 14);
-    const bWidth = randInt(4, 8);
-    const isSandy = Math.random() < sandyChance;
-    for (let c = bStart; c < bStart + bWidth && c < COLS; c++) {
-      const top = topByCol[c] ?? 8;
-      if (isSandy) {
-        for (let dr = 0; dr < 4; dr++) {
-          const rr = top + dr;
-          if (rr < ROWS - 1) {
-            const idx = rr * COLS + c;
-            if (g[idx] === GRASS || g[idx] === DIRT) g[idx] = SAND;
-          }
-        }
-      } else {
-        const waterDepth = randInt(2, 3);
-        for (let dr = 0; dr < waterDepth; dr++) {
-          const rr = top + dr;
-          if (rr < ROWS - 1) g[rr * COLS + c] = WATER;
-        }
-        for (let dr = waterDepth; dr < waterDepth + 2; dr++) {
-          const rr = top + dr;
-          if (rr < ROWS - 1) {
-            const idx = rr * COLS + c;
-            if (g[idx] === DIRT || g[idx] === STONE) g[idx] = SAND;
-          }
-        }
-        if (top > 0 && g[(top - 1) * COLS + c] === GRASS) {
-          g[(top - 1) * COLS + c] = AIR;
-        }
-      }
-    }
-  }
-
-  // === BOSS-PÁLYA: 3 extra creeper a felszínen véletlenszerű X-pozíciókon ===
-  if (config.isBossLevel) {
-    let placed = 0;
-    let attempts = 0;
-    while (placed < 3 && attempts < 30) {
-      attempts++;
-      const c = randInt(15, COLS - 9);
-      const top = topByCol[c] ?? 8;
-      if (top - 1 >= 0 && (g[(top - 1) * COLS + c] ?? AIR) === AIR) {
-        g[(top - 1) * COLS + c] = CREEPER;
-        placed++;
-      }
-    }
-  }
-
-  // === BARLANG-MOBOK (skeleton + spider) ===
-  // Csak a 4-5. szinten, a barlang-falakon (STONE cella, ami AIR-rel szomszédos).
-  // Skeleton 5% esély (id≥4), spider 4% esély (id≥5).
-  if (config.id >= 4) {
-    const skeletonChance = 0.05;
-    const spiderChance = config.id >= 5 ? 0.04 : 0;
-    for (let r = 6; r < ROWS - 1; r++) {
-      for (let c = 1; c < COLS - 1; c++) {
-        const i = r * COLS + c;
-        if (g[i] !== STONE) continue;
-        // Csak akkor mob, ha legalább egy szomszéd AIR (cave-fal)
-        const hasAirNeighbor =
-          g[i - 1] === AIR ||
-          g[i + 1] === AIR ||
-          g[i - COLS] === AIR ||
-          g[i + COLS] === AIR;
-        if (!hasAirNeighbor) continue;
-        const roll = Math.random();
-        if (c >= 15 && roll < skeletonChance) g[i] = SKELETON;
-        else if (c >= 15 && roll < skeletonChance + spiderChance) g[i] = SPIDER;
-      }
-    }
-  }
-
-  for (let c = 0; c < COLS; c++) {
-    g[(ROWS - 1) * COLS + c] = BEDROCK;
-  }
-
-  return g;
-}
-
-function findSpawn(world: Uint8Array): { x: number; y: number } {
-  // A legalacsonyabb terepfelszínt keressük (legnagyobb r érték = legmélyebben kezdődő talaj
-  // = legtöbb levegő felette), de legalább 3 sorral a bedrock felett.
-  let bestCol = 6;
-  let bestSurfaceRow = 0;
-  for (let sc = 4; sc <= 14; sc++) {
-    for (let r = 1; r < ROWS; r++) {
-      if (world[r * COLS + sc] !== AIR) {
-        if (r > bestSurfaceRow && r < ROWS - 3) {
-          bestSurfaceRow = r;
-          bestCol = sc;
-        }
-        break;
-      }
-    }
-  }
-  // Pontosan a talaj tetejére helyezzük a játékost
-  for (let r = 1; r < ROWS; r++) {
-    if (world[r * COLS + bestCol] !== AIR) {
-      return { x: bestCol * TILE + 4, y: r * TILE - 0.1 };
-    }
-  }
-  return { x: 6 * TILE, y: 7 * TILE };
-}
-
-function solid(t: number) {
-  // A víz nem szolid (átúszható); AO és ütközés figyelmen kívül hagyja.
-  return t !== AIR && t !== WATER;
-}
-
-/** Játszható-e a cella (AIR vagy bányászható tömb) */
-function mineable(t: number) {
-  // WATER nem bányászható (díszítő tenger), BEDROCK sem, AIR üresség.
-  return t !== AIR && t !== BEDROCK && t !== WATER;
-}
-
-/** Belső canvas-koordináta a megjelenített méret és a buffer eltérése esetén is. */
-function pointerOnCanvas(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / Math.max(1, rect.width);
-  const scaleY = canvas.height / Math.max(1, rect.height);
-  return {
-    x: (clientX - rect.left) * scaleX,
-    y: (clientY - rect.top) * scaleY,
-  };
-}
-
-/** Kb. 3,5 csempe „Minecraft” hatótáv a játékos középpontjától. */
-function playerCanReachTile(p: { x: number; y: number }, tc: number, tr: number) {
-  const pcx = p.x + PLAYER_W / 2;
-  const pcy = p.y - PLAYER_H / 2;
-  const tcx = tc * TILE + TILE / 2;
-  const tcy = tr * TILE + TILE / 2;
-  return Math.max(Math.abs(tcx - pcx), Math.abs(tcy - pcy)) <= TILE * MINING_REACH_TILES;
-}
-
-function canStandAt(world: Uint8Array, footX: number, footY: number): boolean {
-  const gx0 = Math.floor(footX / TILE);
-  const gx1 = Math.floor((footX + PLAYER_W) / TILE);
-  const gyFoot = Math.floor(footY / TILE);
-  const gyHead = Math.floor((footY - PLAYER_H) / TILE);
-  if (gx0 < 0 || gx1 >= COLS || gyHead < 0 || gyFoot >= ROWS) return false;
-  for (let gx = gx0; gx <= gx1; gx++) {
-    for (let gy = gyHead; gy <= gyFoot; gy++) {
-      if (gy < 0 || gx < 0 || gx >= COLS || gy >= ROWS) continue;
-      const cell = world[gy * COLS + gx] ?? AIR;
-      if (solid(cell)) return false;
-    }
-  }
-  if (gyFoot + 1 >= ROWS) return false;
-  let ground = false;
-  for (let gx = gx0; gx <= gx1; gx++) {
-    const below = world[(gyFoot + 1) * COLS + gx] ?? AIR;
-    if (solid(below)) ground = true;
-  }
-  return ground;
-}
-
-function canStepTo(world: Uint8Array, footX: number, footY: number): boolean {
-  const gx0 = Math.floor(footX / TILE);
-  const gx1 = Math.floor((footX + PLAYER_W) / TILE);
-  const gyFoot = Math.floor(footY / TILE);
-  const gyHead = Math.floor((footY - PLAYER_H) / TILE);
-  if (gx0 < 0 || gx1 >= COLS || gyHead < 0 || gyFoot >= ROWS) return false;
-  for (let gx = gx0; gx <= gx1; gx++) {
-    for (let gy = gyHead; gy <= gyFoot; gy++) {
-      if (gy < 0 || gx < 0 || gx >= COLS || gy >= ROWS) continue;
-      const cell = world[gy * COLS + gx] ?? AIR;
-      if (solid(cell)) return false;
-    }
-  }
-  return true;
-}
-
-/** Felfelé / szomszéd oszlopokban keresünk biztonságos állást (gödör, kvíz utáni lyuk). */
-function rescuePlayerIfNeeded(world: Uint8Array, p: { x: number; y: number; vx: number; vy: number; onGround: boolean }) {
-  const centerCol = Math.max(0, Math.min(COLS - 1, Math.floor((p.x + PLAYER_W / 2) / TILE)));
-  for (const dc of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
-    const col = Math.max(0, Math.min(COLS - 1, centerCol + dc));
-    const footX = col * TILE + 4;
-    for (let groundRow = ROWS - 2; groundRow >= 1; groundRow--) {
-      const footY = groundRow * TILE - 0.01;
-      if (canStandAt(world, footX, footY)) {
-        p.x = Math.max(2, Math.min(COLS * TILE - PLAYER_W - 2, footX));
-        p.y = footY;
-        p.vx = 0;
-        p.vy = 0;
-        p.onGround = true;
-        return;
-      }
-    }
-  }
-  const spawn = findSpawn(world);
-  p.x = spawn.x;
-  p.y = spawn.y;
-  p.vx = 0;
-  p.vy = 0;
-  p.onGround = false;
-}
-
-/** Kvíz után: tömbbe ragadás, kibányászott talaj, vagy mélyen üresen esés alatt. */
-function needsRescueAfterMine(world: Uint8Array, p: { x: number; y: number }, mined: { c: number; r: number; t: number } | null) {
-  if (!canStandAt(world, p.x, p.y)) return true;
-  const gx0 = Math.floor(p.x / TILE);
-  const gx1 = Math.floor((p.x + PLAYER_W) / TILE);
-  const gyFoot = Math.floor(p.y / TILE);
-  let hasGroundBelow = false;
-  if (gyFoot + 1 < ROWS) {
-    for (let gx = gx0; gx <= gx1; gx++) {
-      if (gx < 0 || gx >= COLS) continue;
-      if (solid(world[(gyFoot + 1) * COLS + gx] ?? AIR)) {
-        hasGroundBelow = true;
-        break;
-      }
-    }
-  }
-  if (mined && mined.r === gyFoot + 1 && mined.c >= gx0 && mined.c <= gx1 && !hasGroundBelow) return true;
-  const deep = p.y > ROWS * TILE - TILE * 4;
-  return deep && !hasGroundBelow;
-}
 
 function tileRand(c: number, r: number, seed: number) {
   const n = Math.sin(c * 127.1 + r * 311.7 + seed * 74.7) * 43758.5453123;
@@ -781,51 +468,6 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
   [SPIDER]:   { main: "#1F1A18", dark: "#0E0A09", darker: "#040303", light: "#3A2C28", accent: "#FF4D40", accent2: "#7A1810" }, // fekete pók + piros szem
 };
 
-const BLOCK_3D_SIZE = 1;
-/**
- * Klasszikus Minecraft-kocka (1×1×1) — minden lane-be ugyanezt a geometriát
- * használjuk; per-face textúra GRASS-en marad.
- */
-const BLOCK_3D_DEPTH = 1.0;
-const WORLD_CENTER_X = COLS / 2;
-const WATER_SURFACE_Z = 0.08;
-/**
- * 5 párhuzamos blokk-réteg z-tengelyen → "4 kocka mély út" megjelenés.
- * Eddig egyetlen rétegnél a játéktér laposnak (= 2D-falnak) tűnt.
- * Most a 2D world-array-t z-tengelyen 5× duplikáljuk, minden cellához
- * 5 mesh kerül z=-2.0, -1.0, 0.0, +1.0, +2.0 pozíciókba — így a kamera
- * 17°-os lefelé-tilt-jénél a felső blokkok mind az 5 sora látszik egymás
- * mögött, igazi voxel-mélységgel. A játékos a +2.0 lane FRONT-FACE előtt
- * sétál (z=+2.55), így ütközik a "legfelső" sor felületével.
- */
-const WORLD_LANES = [-2.0, -1.0, 0.0, 1.0, 2.0] as const;
-/** Az a lane, ahol a játékos sétál (legközelebbi a kamerához). */
-const FRONT_LANE_Z = WORLD_LANES[WORLD_LANES.length - 1]!;
-/**
- * Játékos a legközelebbi lane FRONT-FACE síkja előtt 0.05 unit-tal.
- * Front-face = FRONT_LANE_Z + BLOCK_3D_DEPTH/2 = +2.5 → player z = +2.55.
- * A foot pixel-pontosan a legfelső sor blokk-tetején, közvetlenül a
- * kamera felé eső lap előtt — nincs parallax-eltolódás.
- */
-const PLAYER_DEPTH_Z = FRONT_LANE_Z + BLOCK_3D_DEPTH / 2 + 0.05;
-
-function tileTo3d(c: number, r: number, z = 0) {
-  return new THREE.Vector3(c - WORLD_CENTER_X + 0.5, ROWS - r - 0.5, z);
-}
-
-/**
- * Avatar group Y-offset = +0.97 unit a foot pixel-pozíció felett, mert
- * az új Steve-arányú avatar legalsó mesh-je (boot-bottom) a group origintől
- * -0.97 egységre van. Így a foot mesh **pontosan** a blokk-tető Y-jával
- * esik egybe (foot_world_y = ROWS - p.y/TILE), nincs lebegés és nincs clip.
- */
-function playerTo3d(p: { x: number; y: number }) {
-  return new THREE.Vector3(p.x / TILE - WORLD_CENTER_X + PLAYER_W / TILE / 2, ROWS - p.y / TILE + 0.97, PLAYER_DEPTH_Z);
-}
-
-function blockDepthZ(cell: number) {
-  return cell === WATER ? WATER_SURFACE_Z : 0;
-}
 
 function desiredCanvasCssSize(el: HTMLCanvasElement) {
   const parent = el.parentElement;
@@ -833,22 +475,6 @@ function desiredCanvasCssSize(el: HTMLCanvasElement) {
   const maxH = parentW >= 640 ? 520 : 440;
   const height = Math.min(maxH, Math.max(300, Math.round(parentW * 0.56)));
   return { width: parentW, height };
-}
-
-function sizeCanvasElement(el: HTMLCanvasElement) {
-  const { width, height } = desiredCanvasCssSize(el);
-  if (el.width !== width) el.width = width;
-  if (el.height !== height) el.height = height;
-  el.style.width = `${width}px`;
-  el.style.height = `${height}px`;
-}
-
-function rendererCssSize(el: HTMLCanvasElement) {
-  const rect = el.getBoundingClientRect();
-  return {
-    width: Math.max(1, Math.round(rect.width || el.clientWidth || desiredCanvasCssSize(el).width)),
-    height: Math.max(1, Math.round(rect.height || el.clientHeight || desiredCanvasCssSize(el).height)),
-  };
 }
 
 /**
@@ -983,66 +609,6 @@ function makeBlockMaterials() {
   return map;
 }
 
-/**
- * Minecraft-Steve-szerű arányú avatar:
- *  - Fej: 0.5×0.5×0.5 (Minecraft 8/8/8 px)
- *  - Törzs: 0.5×0.75×0.25 (8/12/4 px)
- *  - Kar/láb: 0.25×0.75×0.25 (4/12/4 px)
- * Karaktermagasság ~1.85 unit, jól illeszkedik 1×1 blokkos talajhoz.
- */
-function createPlayerAvatar() {
-  const group = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: "#E0AC7E", roughness: 0.78 });
-  const hair = new THREE.MeshStandardMaterial({ color: "#3A2417", roughness: 0.9 });
-  const face = new THREE.MeshStandardMaterial({ color: "#E0AC7E", roughness: 0.78 });
-  const shirt = new THREE.MeshStandardMaterial({ color: "#26B5E8", roughness: 0.85 });
-  const pants = new THREE.MeshStandardMaterial({ color: "#2C3F8F", roughness: 0.88 });
-  const boot = new THREE.MeshStandardMaterial({ color: "#0F172A", roughness: 0.9 });
-  const pick = new THREE.MeshStandardMaterial({ color: "#A16207", roughness: 0.72 });
-  const metal = new THREE.MeshStandardMaterial({ color: "#CBD5E1", roughness: 0.40, metalness: 0.22 });
-
-  const addBox = (name: string, size: [number, number, number], pos: [number, number, number], mat: THREE.Material) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mat);
-    mesh.name = name;
-    mesh.position.set(...pos);
-    group.add(mesh);
-    return mesh;
-  };
-
-  // Lábak (Steve 4x12x4 px → 0.25×0.75×0.25)
-  addBox("leg-left", [0.25, 0.75, 0.25], [-0.13, -0.50, 0], pants);
-  addBox("leg-right", [0.25, 0.75, 0.25], [0.13, -0.50, 0], pants);
-  addBox("boot-left", [0.27, 0.10, 0.30], [-0.13, -0.92, 0.025], boot);
-  addBox("boot-right", [0.27, 0.10, 0.30], [0.13, -0.92, 0.025], boot);
-  // Törzs (8x12x4 px → 0.5×0.75×0.25)
-  addBox("torso", [0.50, 0.75, 0.25], [0, 0.27, 0], shirt);
-  // Karok (4x12x4 px → 0.25×0.75×0.25)
-  addBox("arm-left", [0.25, 0.75, 0.25], [-0.375, 0.27, 0], skin);
-  addBox("arm-right", [0.25, 0.75, 0.25], [0.375, 0.27, 0], skin);
-  // Fej (8x8x8 px → 0.5×0.5×0.5)
-  addBox("head", [0.50, 0.50, 0.50], [0, 0.92, 0], face);
-  // Haj overlay (vékony tetejű réteg)
-  addBox("hair", [0.52, 0.12, 0.52], [0, 1.13, 0], hair);
-  addBox("hair-back", [0.52, 0.30, 0.10], [0, 1.02, -0.21], hair);
-  // Szemek (kicsi sötét pixel-foltok az arc oldalán)
-  const eyeMat = new THREE.MeshStandardMaterial({ color: "#1A1A1A", roughness: 0.9 });
-  addBox("eye-l", [0.06, 0.06, 0.04], [-0.10, 0.95, 0.26], eyeMat);
-  addBox("eye-r", [0.06, 0.06, 0.04], [0.10, 0.95, 0.26], eyeMat);
-  // Csákány a jobb kéznél
-  const handleMesh = addBox("pick-handle", [0.05, 0.55, 0.05], [0.50, 0.25, 0.15], pick);
-  handleMesh.rotation.z = -0.55;
-  const headMesh = addBox("pick-head", [0.34, 0.10, 0.10], [0.62, 0.50, 0.16], metal);
-  headMesh.rotation.z = -0.55;
-
-  group.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) {
-      obj.castShadow = true;
-      obj.receiveShadow = true;
-    }
-  });
-
-  return group;
-}
 
 /**
  * Determinisztikus blokk-textúra cache (module-scoped).
@@ -1494,19 +1060,30 @@ type Phase = "menu" | "play" | "quiz" | "levelComplete" | "over";
 
 export default function BlockCraftQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const worldRef = useRef<Uint8Array>(buildWorld(LEVELS[0]!));
-  const playerRef = useRef({ x: 8 * TILE, y: 7 * TILE, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 });
-  const keysRef = useRef({ left: false, right: false, jump: false, mine: false });
-  const touchRef = useRef({ left: false, right: false, jump: false });
+  const worldRef = useRef<VoxelWorld>(generateVoxelWorld(genCfgFor(LEVELS[0]!)));
+  const playerRef = useRef<PlayerState>({
+    x: WX / 2 + 0.5, y: WY, z: WZ / 2 + 0.5,
+    vx: 0, vy: 0, vz: 0,
+    yaw: Math.PI * 0.25, pitch: -0.15, onGround: false,
+  });
+  // First-person irányítás (Minecraft-séma): W/A/S/D + Space.
+  const keysRef = useRef({ fwd: false, back: false, left: false, right: false, jump: false });
   const lastTRef = useRef<number | null>(null);
   const rafRef = useRef(0);
-  const mineTargetRef = useRef<{ c: number; r: number; t: number } | null>(null);
-  const particlesRef = useRef<Particle[]>([]);
+  const mineTargetRef = useRef<{ x: number; y: number; z: number; t: number } | null>(null);
   const streakRef = useRef(0);
-  const xpPopupRef = useRef<{ amount: number; wx: number; wy: number; life: number } | null>(null);
-  const hoverCellRef = useRef<{ c: number; r: number } | null>(null);
-  const pointerNdcRef = useRef(new THREE.Vector2(0, 0));
-  const threeRuntimeRef = useRef<ThreeRuntime | null>(null);
+  /** A crosshair alatt lévő blokk (a render-loop frissíti minden frame-ben). */
+  const lookHitRef = useRef<VoxelHit | null>(null);
+  /** Az aktív FP-kamera — mobil tap-raycast a koppintott pont felé. */
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  /** Sikeres bányászás után ide kerül a por-effekt helye — a visszatérő engine lejátssza. */
+  const pendingBurstRef = useRef<{ x: number; y: number; z: number; t: number } | null>(null);
+  /** E/F billentyű → aktuális mine/place akció (stale-closure-mentes híd). */
+  const mineActionRef = useRef<() => void>(() => {});
+  const placeActionRef = useRef<() => void>(() => {});
+  const hotbarKeyRef = useRef<(slot: number) => void>(() => {});
+  const inventoryRef = useRef<Partial<Record<number, number>>>({});
+  const selTypeRef = useRef<number>(DIRT);
   const worldVersionRef = useRef(0);
   // Aktuális pálya konfigurációja — a render loop closure-ja ezen keresztül lát
   // mindig friss égszín / fény paramétereket; setState helyett ref, hogy a re-effect
@@ -1546,9 +1123,37 @@ export default function BlockCraftQuiz() {
   });
   const [timeLeft, setTimeLeft] = useState(LEVELS[0]!.timeLimit);
   const [achievement, setAchievement] = useState<string | null>(null);
+  // Inventory (Minecraft-hotbar): kibányászott blokkok típusonként, lerakáshoz.
+  const [inventory, setInventory] = useState<Partial<Record<number, number>>>({});
+  const [selType, setSelType] = useState<number>(DIRT);
+  /** Lebegő "+XP" jelzés a crosshair mellett sikeres bányászás után. */
+  const [xpFloat, setXpFloat] = useState<{ amount: number; key: number } | null>(null);
   const scoreSubmittedRef = useRef(false);
-  // Keep streakRef in sync for the canvas loop (avoids stale closure)
+  const phaseRef = useRef<Phase>("menu");
+  // Keep refs in sync for the canvas loop / global key handlers (avoids stale closure)
   streakRef.current = streak;
+  phaseRef.current = phase;
+  inventoryRef.current = inventory;
+  selTypeRef.current = selType;
+
+  const hotbarTypes = useMemo(
+    () => PLACEABLE_ORDER.filter((t) => (inventory[t] ?? 0) > 0),
+    [inventory],
+  );
+
+  // Ha a kiválasztott típus elfogyott, ugorjunk az első elérhetőre.
+  useEffect(() => {
+    if (hotbarTypes.length > 0 && !hotbarTypes.includes(selType as (typeof PLACEABLE_ORDER)[number])) {
+      setSelType(hotbarTypes[0]!);
+    }
+  }, [hotbarTypes, selType]);
+
+  // XP-felirat automatikus eltüntetése.
+  useEffect(() => {
+    if (!xpFloat) return;
+    const id = window.setTimeout(() => setXpFloat(null), 1600);
+    return () => window.clearTimeout(id);
+  }, [xpFloat]);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
@@ -1705,49 +1310,21 @@ export default function BlockCraftQuiz() {
     return QUIZ_FALLBACK[Math.floor(Math.random() * QUIZ_FALLBACK.length)] ?? QUIZ_FALLBACK[0]!;
   }, [rebuildSubjectPools, subjectOrder]);
 
-  const spawnDust = useCallback((x: number, y: number, tile: number) => {
-    const color: Record<number, string> = {
-      [GRASS]: "#7cd057", [DIRT]: "#a67a4d", [STONE]: "#afb4ba", [LOG]: "#8f6642", [LEAVES]: "#54bc60", [COAL]: "#727882", [IRON]: "#d4bfaa", [DIAMOND]: "#9ff8ff", [AIR]: "#fff", [SAND]: "#e6d29a", [WATER]: "#5E94E0", [CREEPER]: "#4ba84b",
-    };
-    for (let i = 0; i < 12; i++) {
-      particlesRef.current.push({ x, y, vx: randInt(-80, 80), vy: randInt(-150, -40), life: 0.5 + Math.random() * 0.5, color: color[tile] || "#fff" });
-    }
-  }, []);
-
+  /** Bányász-kvíz indítása egy konkrét voxelre (a crosshair-cél). */
   const tryMineAt = useCallback(
-    (tc: number, tr: number, opts?: { skipReach?: boolean }): boolean => {
+    (x: number, y: number, z: number): boolean => {
+      const t = vGet(worldRef.current, x, y, z);
+      if (!vMineable(t)) return false;
       const p = playerRef.current;
-      const w = worldRef.current;
-      if (tr < 0 || tr >= ROWS || tc < 0 || tc >= COLS) return false;
-      if (!opts?.skipReach && !playerCanReachTile(p, tc, tr)) return false;
-      const t = w[tr * COLS + tc] ?? AIR;
-      if (!mineable(t)) return false;
       p.vx = 0;
-      p.vy = 0;
-      const tcx = tc * TILE + TILE / 2;
-      p.facing = tcx >= p.x + PLAYER_W / 2 ? 1 : -1;
-      mineTargetRef.current = { c: tc, r: tr, t };
-      // Stale-hover visszaállítás play → quiz átmenetnél:
-      // kvíz megjelenése előtt nincs szükség hover indikátorra.
-      hoverCellRef.current = null;
+      p.vz = 0;
+      mineTargetRef.current = { x, y, z, t };
       setQuiz(pickQuiz());
       setPhase("quiz");
       return true;
     },
     [pickQuiz],
   );
-
-  /** E / Bányász gomb: az arc előtti oszlopban a legközelebbi (lábtól felfelé) bányászható cella. */
-  const tryMine = useCallback(() => {
-    const p = playerRef.current;
-    const cx = Math.floor((p.x + PLAYER_W / 2) / TILE) + p.facing;
-    if (cx < 0 || cx >= COLS) return;
-    const rFoot = Math.min(ROWS - 1, Math.floor(p.y / TILE) + 1);
-    const rTop = Math.max(0, Math.floor((p.y - PLAYER_H) / TILE));
-    for (let tr = rFoot; tr >= rTop; tr--) {
-      if (tryMineAt(cx, tr, { skipReach: true })) return;
-    }
-  }, [tryMineAt]);
 
   /**
    * Egyetlen pálya elindítása: a totalXp/sessionXp NEM resetelődik (átvitt érték),
@@ -1756,13 +1333,18 @@ export default function BlockCraftQuiz() {
   const beginLevel = useCallback((idx: number, options: { resetSession: boolean; carryXpFrom: number }) => {
     const cfg = LEVELS[Math.max(0, Math.min(LEVELS.length - 1, idx))]!;
     activeLevelRef.current = cfg;
-    worldRef.current = buildWorld(cfg);
+    worldRef.current = generateVoxelWorld(genCfgFor(cfg));
     worldVersionRef.current++;
-    const spawn = findSpawn(worldRef.current);
-    playerRef.current = { x: spawn.x, y: spawn.y, vx: 0, vy: 0, facing: 1, onGround: false, tick: 0 };
-    particlesRef.current = [];
-    xpPopupRef.current = null;
-    hoverCellRef.current = null;
+    const spawn = findVoxelSpawn(worldRef.current);
+    playerRef.current = {
+      x: spawn.x, y: spawn.y, z: spawn.z,
+      vx: 0, vy: 0, vz: 0,
+      yaw: Math.PI * 0.25, pitch: -0.15, onGround: false,
+    };
+    pendingBurstRef.current = null;
+    lookHitRef.current = null;
+    setInventory({});
+    setXpFloat(null);
     setAchievement(null);
     if (options.resetSession) {
       setSessionXp(0);
@@ -1809,596 +1391,391 @@ export default function BlockCraftQuiz() {
 
   const endRun = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
-    hoverCellRef.current = null;
+    lookHitRef.current = null;
     setGameWon(false);
     setPhase("over");
   }, []);
 
-  const tryMineRef = useRef(tryMine);
-  tryMineRef.current = tryMine;
-  // tryMineAt ref: a render-loop effect dependency-mentes hozzáférése.
-  // Enélkül a `tryMineAt` az effect deps-listáján szerepelne, és minden
-  // quiz-bank betöltés (bank → pickQuiz → tryMineAt referencia-változás)
-  // a TELJES WebGL scene újraépítését triggerelné játék közben.
-  const tryMineAtRef = useRef(tryMineAt);
-  tryMineAtRef.current = tryMineAt;
-  const endRunRef = useRef(endRun);
-  endRunRef.current = endRun;
-
+  // Globális billentyűzet (Minecraft-séma): WASD/nyilak + Space + E (bányász)
+  // + F (lerakás) + 1-9 (hotbar) + egér-nézelődés pointer lock alatt.
   useEffect(() => {
-    const kd = (e: KeyboardEvent) => {
-      if (e.code === "ArrowLeft" || e.code === "KeyA") keysRef.current.left = true;
-      if (e.code === "ArrowRight" || e.code === "KeyD") keysRef.current.right = true;
-      if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") {
-        e.preventDefault();
-        keysRef.current.jump = true;
+    const setKey = (code: string, v: boolean): boolean => {
+      const k = keysRef.current;
+      switch (code) {
+        case "KeyW": case "ArrowUp": k.fwd = v; return true;
+        case "KeyS": case "ArrowDown": k.back = v; return true;
+        case "KeyA": case "ArrowLeft": k.left = v; return true;
+        case "KeyD": case "ArrowRight": k.right = v; return true;
+        case "Space": k.jump = v; return true;
+        default: return false;
       }
-      if (e.code === "KeyE") keysRef.current.mine = true;
+    };
+    const kd = (e: KeyboardEvent) => {
+      if (phaseRef.current !== "play") return;
+      if (setKey(e.code, true)) {
+        e.preventDefault();
+        return;
+      }
+      if (e.code === "KeyE") {
+        e.preventDefault();
+        mineActionRef.current();
+      } else if (e.code === "KeyF") {
+        e.preventDefault();
+        placeActionRef.current();
+      } else if (/^Digit[1-9]$/.test(e.code)) {
+        hotbarKeyRef.current(parseInt(e.code.slice(5), 10) - 1);
+      }
     };
     const ku = (e: KeyboardEvent) => {
-      if (e.code === "ArrowLeft" || e.code === "KeyA") keysRef.current.left = false;
-      if (e.code === "ArrowRight" || e.code === "KeyD") keysRef.current.right = false;
-      if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keysRef.current.jump = false;
-      if (e.code === "KeyE") keysRef.current.mine = false;
+      setKey(e.code, false);
+    };
+    const mm = (e: MouseEvent) => {
+      if (document.pointerLockElement !== canvasRef.current) return;
+      const p = playerRef.current;
+      p.yaw -= e.movementX * 0.0024;
+      p.pitch = Math.max(-1.45, Math.min(1.45, p.pitch - e.movementY * 0.0022));
     };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    document.addEventListener("mousemove", mm);
     return () => {
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      document.removeEventListener("mousemove", mm);
     };
   }, []);
 
+  /**
+   * First-person voxel engine (Minecraft-klón):
+   *  - InstancedMesh blokktípusonként, csak az exposed (látható) voxelek
+   *  - kamera a játékos szeménél (1.62), YXZ Euler (yaw/pitch)
+   *  - voxel-DDA raycast a crosshair-célhoz + sárga cél-keret
+   *  - gravitáció + AABB ütközés sub-steppinggel (lásd stepPlayerPhysics)
+   *  - időjárás-részecskék + sodródó felhők + bányász-por
+   */
   useEffect(() => {
     if (phase !== "play") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    sizeCanvasElement(canvas);
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
 
+    const cfg = activeLevelRef.current;
     const scene = new THREE.Scene();
-    // Egyetlen FogExp2 példány — a render-loop a color/density mezőit frissíti,
-    // nem hoz létre frame-enként új objektumot (GC-nyomás csökkentés).
-    const sceneFog = new THREE.FogExp2("#8fc7e9", 0.035);
-    scene.fog = sceneFog;
+    const skyColor = new THREE.Color(cfg.skyTint.day);
+    scene.background = skyColor;
+    scene.fog = new THREE.FogExp2(skyColor, cfg.weather === "sandstorm" ? 0.035 : 0.022);
 
-    const camera = new THREE.PerspectiveCamera(48, Math.max(1, canvas.width) / Math.max(1, canvas.height), 0.1, 120);
-    const raycaster = new THREE.Raycaster();
-    raycaster.far = 28;
-    threeRuntimeRef.current = { camera, raycaster, blockMeshes: [] };
-
-    const ambient = new THREE.HemisphereLight("#e9f8ff", "#3a4a30", 1.7);
-    scene.add(ambient);
-    const sun = new THREE.DirectionalLight("#fff5d0", 2.4);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1536, 1536);
-    sun.shadow.camera.left = -22;
-    sun.shadow.camera.right = 22;
-    sun.shadow.camera.top = 20;
-    sun.shadow.camera.bottom = -20;
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 60;
-    sun.shadow.bias = -0.0008;
-    sun.shadow.normalBias = 0.04;
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x4a4038, 0.95);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xfff3d6, 1.1);
+    sun.position.set(WX * 0.7, WY * 4.5, WZ * 0.3);
     scene.add(sun);
-    scene.add(sun.target);
 
-    // Második, gyengébb fényforrás a játékos elöl-mögötti megvilágításához
-    // (kitölti a sun által dobott árnyékot — több részlet látható a blokkokon).
-    const fillLight = new THREE.DirectionalLight("#bcd6ff", 0.55);
-    fillLight.position.set(0, 6, 12);
-    scene.add(fillLight);
+    const camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 140);
+    camera.rotation.order = "YXZ";
+    cameraRef.current = camera;
 
-    const backdrop = new THREE.Mesh(
-      new THREE.PlaneGeometry(COLS * 1.6, ROWS * 1.6),
-      new THREE.MeshBasicMaterial({ color: "#8cc7e8" }),
-    );
-    backdrop.position.set(0, ROWS / 2, -8.5);
-    scene.add(backdrop);
+    let appliedW = 0;
+    let appliedH = 0;
+    const syncSize = () => {
+      const { width, height } = desiredCanvasCssSize(canvas);
+      if (width === appliedW && height === appliedH) return;
+      appliedW = width;
+      appliedH = height;
+      renderer.setSize(width, height, true);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    };
+    syncSize();
 
-    // Távoli felhőréteg (parallax háttér), a kamera mozgásával együtt halványan eltolódik.
-    const cloudGeometry = new THREE.PlaneGeometry(COLS * 1.4, 4);
-    const cloudCanvas = document.createElement("canvas");
-    cloudCanvas.width = 256; cloudCanvas.height = 64;
-    const cloudCtx = cloudCanvas.getContext("2d");
-    if (cloudCtx) {
-      cloudCtx.fillStyle = "rgba(0,0,0,0)";
-      cloudCtx.fillRect(0, 0, 256, 64);
-      for (let i = 0; i < 8; i++) {
-        const cx = Math.random() * 256;
-        const cy = 14 + Math.random() * 36;
-        const radius = 10 + Math.random() * 18;
-        cloudCtx.fillStyle = `rgba(255,255,255,${0.55 + Math.random() * 0.25})`;
-        cloudCtx.beginPath();
-        cloudCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-        cloudCtx.fill();
-        cloudCtx.beginPath();
-        cloudCtx.arc(cx + radius * 0.7, cy + radius * 0.1, radius * 0.85, 0, Math.PI * 2);
-        cloudCtx.fill();
-      }
-    }
-    const cloudTex = new THREE.CanvasTexture(cloudCanvas);
-    cloudTex.wrapS = THREE.RepeatWrapping;
-    cloudTex.repeat.set(2, 1);
-    const cloudPlane = new THREE.Mesh(
-      cloudGeometry,
-      new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.85 }),
-    );
-    cloudPlane.position.set(0, ROWS - 1.5, -7.4);
-    scene.add(cloudPlane);
-
-    /**
-     * Időjárás-részecske rendszer (Points-buffer, ~600 részecske).
-     * Az aktuális level config.weather alapján dönti el a render-loop:
-     *   - "rain":      hosszú, kék-fehér csíkok lefelé esnek nagy sebességgel
-     *   - "snow":      apró fehér pelyhek lassan "lebegnek" oldalra ingadozva
-     *   - "sandstorm": narancs-sárga homokszemcsék, vízszintesen söprűzik
-     *   - "clear":     a részecskék elrejtve, üresjárat
-     * A részecskék alappozíciói egyszer generáltak, a render frame
-     * újra-pozicionálja őket a Y-tengelyen (és X-en sin-bgaval, ha hó).
-     */
-    const WEATHER_PARTICLES = 600;
-    const weatherPositions = new Float32Array(WEATHER_PARTICLES * 3);
-    const weatherSeeds = new Float32Array(WEATHER_PARTICLES); // X-mozgás-seed
-    for (let i = 0; i < WEATHER_PARTICLES; i++) {
-      weatherPositions[i * 3] = (Math.random() - 0.5) * COLS * 1.4;
-      weatherPositions[i * 3 + 1] = Math.random() * ROWS * 1.4;
-      weatherPositions[i * 3 + 2] = Math.random() * 3 - 1;
-      weatherSeeds[i] = Math.random() * Math.PI * 2;
-    }
-    const weatherGeo = new THREE.BufferGeometry();
-    weatherGeo.setAttribute("position", new THREE.BufferAttribute(weatherPositions, 3));
-    const weatherMat = new THREE.PointsMaterial({
-      size: 0.18,
-      transparent: true,
-      opacity: 0.85,
-      sizeAttenuation: true,
-      color: "#ffffff",
-      depthWrite: false,
-    });
-    const weatherPoints = new THREE.Points(weatherGeo, weatherMat);
-    weatherPoints.visible = false;
-    scene.add(weatherPoints);
-
-    /**
-     * Klasszikus Minecraft-szerű kocka-geometria (1×1×1, ~0.99 a hézag-él miatt).
-     * Egyetlen mesh-réteg → 3× kevesebb dráho, nincsenek 3-lanes belső lap-artifaktok.
-     * A játékos a +Z front-face síkban sétál (PLAYER_DEPTH_Z = +0.55), így a 17°-os
-     * lefelé-nyíló kamerán nincs parallax-eltolódás a foot ↔ block-top között.
-     */
-    const blockGeometry = new THREE.BoxGeometry(BLOCK_3D_SIZE * 0.99, BLOCK_3D_SIZE * 0.99, BLOCK_3D_DEPTH);
+    const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
     const blockMaterials = makeBlockMaterials();
-    const worldGroup = new THREE.Group();
-    scene.add(worldGroup);
 
-    const targetBox = new THREE.Mesh(
-      new THREE.BoxGeometry(1.06, 1.06, BLOCK_3D_DEPTH + 0.05),
-      new THREE.MeshBasicMaterial({ color: "#fef08a", wireframe: true, transparent: true, opacity: 0.95 }),
-    );
-    targetBox.visible = false;
-    scene.add(targetBox);
-
-    const playerAvatar = createPlayerAvatar();
-    // Kezdő pose: már a player aktuális facing-je szerint álljon, hogy első frame-en
-    // ne legyen frontális → oldalra fordulás "snap". (facing=+1 → +π/2)
-    playerAvatar.rotation.y = playerRef.current.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
-    scene.add(playerAvatar);
-
-    const xpOrb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.13, 10, 10),
-      new THREE.MeshBasicMaterial({ color: "#fde047", transparent: true, opacity: 0.9 }),
-    );
-    xpOrb.visible = false;
-    scene.add(xpOrb);
-
-    const auraMaterial = new THREE.MeshBasicMaterial({ color: "#fbbf24", transparent: true, opacity: 0.72 });
-    const auraGeometry = new THREE.SphereGeometry(0.055, 8, 8);
-    const auraOrbs = Array.from({ length: 12 }, () => {
-      const orb = new THREE.Mesh(auraGeometry, auraMaterial);
-      orb.visible = false;
-      scene.add(orb);
-      return orb;
-    });
-
-    const dustMaterial = new THREE.PointsMaterial({ color: "#f5d38a", size: 0.09, sizeAttenuation: true, transparent: true, opacity: 0.88 });
-    let dustPoints: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial> | null = null;
-    let renderedWorldVersion = -1;
-    let renderWidth = 0;
-    let renderHeight = 0;
-
-    const rebuildWorldMeshes = () => {
-      while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]!);
-      const meshes: ThreeBlockMesh[] = [];
+    // --- Instanced voxel-renderelés (exposed-culling) ---
+    let instMeshes: THREE.InstancedMesh[] = [];
+    const tmpMat = new THREE.Matrix4();
+    const rebuildWorld = () => {
+      for (const m of instMeshes) {
+        scene.remove(m);
+        m.dispose();
+      }
+      instMeshes = [];
       const w = worldRef.current;
-      const lastLaneIdx = WORLD_LANES.length - 1;
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          const cell = w[r * COLS + c] ?? AIR;
-          if (!cell) continue;
-          const material = blockMaterials.get(cell) ?? blockMaterials.get(STONE)!;
-          // Mind a 5 lane-en duplikáljuk a blokkot. A FRONT lane (legközelebbi
-          // a kamerához) lesz a raycast-target — onnan bányász a játékos.
-          for (let li = 0; li < WORLD_LANES.length; li++) {
-            const laneZ = WORLD_LANES[li]!;
-            const isFront = li === lastLaneIdx;
-            const mesh = new THREE.Mesh(blockGeometry, material) as ThreeBlockMesh;
-            mesh.userData = { c, r, t: cell, laneZ, isFront };
-            mesh.position.copy(tileTo3d(c, r, laneZ + blockDepthZ(cell)));
-            // Víz: laposabb, kissé szűkebb (úszó felület hatás).
-            if (cell === WATER) mesh.scale.set(1.0, 0.66, 1.0);
-            // Levelek: kicsit kisebbek, hézag-érzet a faágak között.
-            if (cell === LEAVES) mesh.scale.set(0.96, 0.96, 0.98);
-            // Csak a FRONT lane vet árnyékot (perf), a háttér-rétegek receiveShadow.
-            mesh.castShadow = cell !== WATER && isFront;
-            mesh.receiveShadow = true;
-            worldGroup.add(mesh);
-            meshes.push(mesh);
+      const byType = new Map<number, number[]>();
+      for (let y = 0; y < WY; y++) {
+        for (let z = 0; z < WZ; z++) {
+          for (let x = 0; x < WX; x++) {
+            const t = w[vIdx(x, y, z)]!;
+            if (t === AIR) continue;
+            // Vízoszlopból csak a felszín látszik; szolidból csak az exposed.
+            if (t === WATER) {
+              if (vGet(w, x, y + 1, z) === WATER) continue;
+            } else if (!isExposed(w, x, y, z)) {
+              continue;
+            }
+            let arr = byType.get(t);
+            if (!arr) {
+              arr = [];
+              byType.set(t, arr);
+            }
+            arr.push(x, y, z);
           }
         }
       }
-      threeRuntimeRef.current = { camera, raycaster, blockMeshes: meshes };
-      renderedWorldVersion = worldVersionRef.current;
-    };
-
-    const pickTargetBlock = () => {
-      const runtime = threeRuntimeRef.current;
-      if (!runtime) return null;
-      runtime.raycaster.setFromCamera(pointerNdcRef.current, runtime.camera);
-      const hits = runtime.raycaster.intersectObjects(runtime.blockMeshes, false);
-      for (const hit of hits) {
-        const data = hit.object.userData as { c?: number; r?: number; t?: number; isFront?: boolean };
-        if (typeof data.c !== "number" || typeof data.r !== "number" || typeof data.t !== "number") continue;
-        // Csak a FRONT lane mesh-ek targetálhatók: szögből/hézagból a hátsó
-        // lane-ek mesh-e is első hit lehetne, ami vizuális eltérést okozna
-        // a targetBox (mindig front-lane pozíció) és a kattintott blokk között.
-        if (!data.isFront) continue;
-        if (!mineable(data.t)) continue;
-        if (!playerCanReachTile(playerRef.current, data.c, data.r)) continue;
-        return { c: data.c, r: data.r, t: data.t };
-      }
-      return null;
-    };
-
-    rebuildWorldMeshes();
-
-    const loop = (t: number) => {
-      const last = lastTRef.current;
-      lastTRef.current = t;
-      const dt = last == null ? 0 : Math.min(0.033, (t - last) / 1000);
-      const p = playerRef.current;
-      const w = worldRef.current;
-
-      if (keysRef.current.mine) {
-        keysRef.current.mine = false;
-        const target = hoverCellRef.current;
-        if (target && tryMineAtRef.current(target.c, target.r)) {
-          rafRef.current = requestAnimationFrame(loop);
-          return;
+      byType.forEach((coords, t) => {
+        const mat = blockMaterials.get(t);
+        if (!mat) return;
+        const n = coords.length / 3;
+        const mesh = new THREE.InstancedMesh(blockGeometry, mat as THREE.Material | THREE.Material[], n);
+        for (let i = 0; i < n; i++) {
+          tmpMat.makeTranslation(coords[i * 3]! + 0.5, coords[i * 3 + 1]! + 0.5, coords[i * 3 + 2]! + 0.5);
+          mesh.setMatrixAt(i, tmpMat);
         }
-        tryMineRef.current();
-        rafRef.current = requestAnimationFrame(loop);
-        return;
+        mesh.instanceMatrix.needsUpdate = true;
+        if (t === WATER || t === LEAVES) mesh.renderOrder = 1;
+        scene.add(mesh);
+        instMeshes.push(mesh);
+      });
+    };
+    let builtVersion = -1;
+
+    // --- Cél-keret (sárga, pulzáló) a crosshair-blokkon ---
+    const hlGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
+    const hlMat = new THREE.LineBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.95 });
+    const highlight = new THREE.LineSegments(hlGeo, hlMat);
+    highlight.visible = false;
+    scene.add(highlight);
+
+    // --- Felhők (lassan sodródó fehér lapok a világ felett) ---
+    const cloudGeo = new THREE.BoxGeometry(8, 0.6, 5);
+    const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.66, fog: false });
+    const clouds: THREE.Mesh[] = [];
+    for (let i = 0; i < 8; i++) {
+      const c = new THREE.Mesh(cloudGeo, cloudMat);
+      c.position.set(Math.random() * WX, WY + 7 + Math.random() * 5, Math.random() * WZ);
+      scene.add(c);
+      clouds.push(c);
+    }
+
+    // --- Időjárás-részecskék a játékos körül ---
+    const WEATHER_N = 340;
+    let weatherPts: THREE.Points | null = null;
+    let weatherGeo: THREE.BufferGeometry | null = null;
+    let weatherMat: THREE.PointsMaterial | null = null;
+    if (cfg.weather !== "clear") {
+      weatherGeo = new THREE.BufferGeometry();
+      const pos = new Float32Array(WEATHER_N * 3);
+      const p0 = playerRef.current;
+      for (let i = 0; i < WEATHER_N; i++) {
+        pos[i * 3] = p0.x + (Math.random() - 0.5) * 28;
+        pos[i * 3 + 1] = p0.y + Math.random() * 14;
+        pos[i * 3 + 2] = p0.z + (Math.random() - 0.5) * 28;
+      }
+      weatherGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      weatherMat = new THREE.PointsMaterial({
+        color: cfg.weather === "rain" ? 0x9ec7ff : cfg.weather === "snow" ? 0xffffff : 0xe7c878,
+        size: cfg.weather === "snow" ? 0.13 : 0.08,
+        transparent: true,
+        opacity: cfg.weather === "sandstorm" ? 0.55 : 0.8,
+        sizeAttenuation: true,
+      });
+      weatherPts = new THREE.Points(weatherGeo, weatherMat);
+      scene.add(weatherPts);
+    }
+
+    // --- Bányász-por burst-ök ---
+    type Burst = {
+      pts: THREE.Points;
+      geo: THREE.BufferGeometry;
+      mat: THREE.PointsMaterial;
+      vel: Float32Array;
+      life: number;
+    };
+    const bursts: Burst[] = [];
+    const spawnBurst = (bx: number, by: number, bz: number, t: number) => {
+      const N = 16;
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(N * 3);
+      const vel = new Float32Array(N * 3);
+      for (let i = 0; i < N; i++) {
+        pos[i * 3] = bx + 0.5 + (Math.random() - 0.5) * 0.6;
+        pos[i * 3 + 1] = by + 0.5 + (Math.random() - 0.5) * 0.6;
+        pos[i * 3 + 2] = bz + 0.5 + (Math.random() - 0.5) * 0.6;
+        vel[i * 3] = (Math.random() - 0.5) * 3.4;
+        vel[i * 3 + 1] = 1.5 + Math.random() * 3.2;
+        vel[i * 3 + 2] = (Math.random() - 0.5) * 3.4;
+      }
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({
+        color: new THREE.Color(MC_PAL[t]?.main ?? "#ffffff"),
+        size: 0.12,
+        transparent: true,
+        opacity: 1,
+      });
+      const pts = new THREE.Points(geo, mat);
+      scene.add(pts);
+      bursts.push({ pts, geo, mat, vel, life: 0.7 });
+    };
+
+    const dirVec = new THREE.Vector3();
+    let disposed = false;
+
+    const step = (now: number) => {
+      if (disposed) return;
+      rafRef.current = requestAnimationFrame(step);
+      const last = lastTRef.current ?? now;
+      const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
+      lastTRef.current = now;
+      syncSize();
+
+      // Világ-mesh frissítés bányászás/lerakás után
+      if (builtVersion !== worldVersionRef.current) {
+        rebuildWorld();
+        builtVersion = worldVersionRef.current;
+      }
+      // Kvíz után visszatérve: por-effekt a kibányászott blokk helyén
+      if (pendingBurstRef.current) {
+        const b = pendingBurstRef.current;
+        pendingBurstRef.current = null;
+        spawnBurst(b.x, b.y, b.z, b.t);
       }
 
-      const left = keysRef.current.left || touchRef.current.left;
-      const right = keysRef.current.right || touchRef.current.right;
-      const jump = keysRef.current.jump || touchRef.current.jump;
-
-      p.vx = left ? -MOVE_SPEED : right ? MOVE_SPEED : 0;
-      if (left) p.facing = -1;
-      if (right) p.facing = 1;
-      if (Math.abs(p.vx) > 0.1) p.tick += dt * 60;
-      const wasOnGround = p.onGround;
-      if (jump && p.onGround) {
-        p.vy = -JUMP_V;
+      // --- Mozgás (yaw-relatív WASD, mint a Minecraftban) ---
+      const p = playerRef.current;
+      const k = keysRef.current;
+      const sinY = Math.sin(p.yaw);
+      const cosY = Math.cos(p.yaw);
+      let mx = 0;
+      let mz = 0;
+      if (k.fwd) { mx -= sinY; mz -= cosY; }
+      if (k.back) { mx += sinY; mz += cosY; }
+      if (k.left) { mx -= cosY; mz += sinY; }
+      if (k.right) { mx += cosY; mz -= sinY; }
+      const ml = Math.hypot(mx, mz);
+      if (ml > 0) {
+        mx /= ml;
+        mz /= ml;
+      }
+      p.vx = mx * MOVE_SPEED_BPS;
+      p.vz = mz * MOVE_SPEED_BPS;
+      if (k.jump && p.onGround) {
+        p.vy = JUMP_VELOCITY;
         p.onGround = false;
       }
+      stepPlayerPhysics(worldRef.current, p, dt);
+      // Biztonsági háló: ha bármi miatt a világ alá esne, vissza a spawnra.
+      if (p.y < -4) {
+        const s = findVoxelSpawn(worldRef.current);
+        p.x = s.x; p.y = s.y; p.z = s.z;
+        p.vx = 0; p.vy = 0; p.vz = 0;
+      }
 
-      p.vy += GRAVITY * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.x = Math.max(2, Math.min(COLS * TILE - PLAYER_W - 2, p.x));
-      p.onGround = false;
+      // --- Kamera a szemnél ---
+      camera.position.set(p.x, p.y + PLAYER_EYE, p.z);
+      camera.rotation.y = p.yaw;
+      camera.rotation.x = p.pitch;
 
-      const gx0 = Math.floor(p.x / TILE);
-      const gx1 = Math.floor((p.x + PLAYER_W) / TILE);
-      const gy0 = Math.floor((p.y - PLAYER_H) / TILE);
-      const gy1 = Math.floor(p.y / TILE);
+      // --- Crosshair-cél raycast (DDA a voxel-rácson) ---
+      camera.getWorldDirection(dirVec);
+      const hit = raycastVoxel(
+        worldRef.current,
+        camera.position.x, camera.position.y, camera.position.z,
+        dirVec.x, dirVec.y, dirVec.z,
+        4.6,
+      );
+      lookHitRef.current = hit;
+      if (hit && vMineable(hit.t)) {
+        highlight.visible = true;
+        highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+        const pulse = 1 + Math.sin(now / 160) * 0.012;
+        highlight.scale.setScalar(pulse);
+      } else {
+        highlight.visible = false;
+      }
 
-      for (let gy = gy0; gy <= gy1; gy++) {
-        for (let gx = gx0; gx <= gx1; gx++) {
-          if (gy < 0 || gx < 0 || gx >= COLS || gy >= ROWS) continue;
-          const cell = w[gy * COLS + gx] ?? AIR;
-          if (!solid(cell)) continue;
-          const bx = gx * TILE;
-          const by = gy * TILE;
-          const px0 = p.x;
-          const px1 = p.x + PLAYER_W;
-          const py0 = p.y - PLAYER_H;
-          const py1 = p.y;
-          if (px1 > bx && px0 < bx + TILE && py1 > by && py0 < by + TILE) {
-            const overlapX = Math.min(px1 - bx, bx + TILE - px0);
-            const overlapY = Math.min(py1 - by, by + TILE - py0);
+      // --- Felhők sodródása ---
+      for (const c of clouds) {
+        c.position.x += dt * 0.7;
+        if (c.position.x > WX + 14) c.position.x = -14;
+      }
 
-            if (overlapX < overlapY) {
-              const stepCandidateY = by - 0.01;
-              const canAutoStep = wasOnGround && p.vy >= 0 && py1 > by && py1 - by < TILE * 0.85 && canStepTo(w, p.x, stepCandidateY);
-              if (canAutoStep) {
-                p.y = stepCandidateY;
-                p.vy = 0;
-                p.onGround = true;
-              } else if (px0 < bx) p.x = bx - PLAYER_W - 0.01;
-              else p.x = bx + TILE + 0.01;
-              p.vx = 0;
-            } else {
-              if (py1 - by < by + TILE - py0) {
-                p.y = by - 0.01;
-                p.vy = 0;
-                p.onGround = true;
-              } else {
-                p.y = by + TILE + PLAYER_H + 0.01;
-                p.vy = 0;
-              }
-            }
+      // --- Időjárás ---
+      if (weatherPts && weatherGeo) {
+        const attr = weatherGeo.getAttribute("position") as THREE.BufferAttribute;
+        const arr = attr.array as Float32Array;
+        const fallSpeed = cfg.weather === "rain" ? 13 : cfg.weather === "snow" ? 2.4 : 5;
+        const driftX = cfg.weather === "sandstorm" ? 9 : cfg.weather === "snow" ? 0.5 : 0;
+        for (let i = 0; i < WEATHER_N; i++) {
+          arr[i * 3] += driftX * dt + (cfg.weather === "snow" ? Math.sin(now / 700 + i) * dt : 0);
+          arr[i * 3 + 1] -= fallSpeed * dt;
+          if (arr[i * 3 + 1]! < p.y - 4 || Math.abs(arr[i * 3]! - p.x) > 16) {
+            arr[i * 3] = p.x + (Math.random() - 0.5) * 28;
+            arr[i * 3 + 1] = p.y + 7 + Math.random() * 8;
+            arr[i * 3 + 2] = p.z + (Math.random() - 0.5) * 28;
           }
         }
+        attr.needsUpdate = true;
       }
 
-      const parts = particlesRef.current;
-      for (let i = parts.length - 1; i >= 0; i--) {
-        parts[i].x += parts[i].vx * dt;
-        parts[i].y += parts[i].vy * dt;
-        parts[i].vy += 420 * dt;
-        parts[i].life -= dt;
-        if (parts[i].life <= 0) parts.splice(i, 1);
-      }
-
-      if (p.y > ROWS * TILE + TILE * 5) {
-        endRunRef.current();
-        return;
-      }
-
-      if (renderedWorldVersion !== worldVersionRef.current) {
-        rebuildWorldMeshes();
-      }
-      const { width: CW, height: CH } = rendererCssSize(canvas);
-      if (CW !== renderWidth || CH !== renderHeight) {
-        renderer.setSize(CW, CH, false);
-        camera.aspect = CW / CH;
-        camera.updateProjectionMatrix();
-        renderWidth = CW;
-        renderHeight = CH;
-      }
-
-      const playerPos = playerTo3d(p);
-      playerAvatar.position.copy(playerPos);
-      // Steve a mozgás irányába fordul (90°-os profil-nézet a kamera felé).
-      // Steve "front" iránya az avatar lokális +Z (orr/szemek a +Z oldalon).
-      // facing=+1 (jobbra megy a játéktérben) → arc +X felé mutasson →
-      // Y-rotation +π/2 (mátrix [0,0,1; 0,1,0; -1,0,0] forgatja (0,0,1)→(1,0,0)).
-      // facing=-1 → -π/2.
-      const targetYRot = p.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
-      playerAvatar.rotation.y = THREE.MathUtils.lerp(playerAvatar.rotation.y, targetYRot, 0.22);
-      const stride = Math.sin(p.tick * 0.35) * Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
-      const leftLeg = playerAvatar.getObjectByName("leg-left");
-      const rightLeg = playerAvatar.getObjectByName("leg-right");
-      const leftArm = playerAvatar.getObjectByName("arm-left");
-      const rightArm = playerAvatar.getObjectByName("arm-right");
-      if (leftLeg) leftLeg.rotation.x = stride * 0.55;
-      if (rightLeg) rightLeg.rotation.x = -stride * 0.55;
-      if (leftArm) leftArm.rotation.x = -stride * 0.45;
-      if (rightArm) rightArm.rotation.x = stride * 0.45;
-      // Csákány a "kamera felőli" karban: a 90°-os forgatás után az
-      // egyik kar a -Z (kamera mögé) esik. facing=+1 (rotation +π/2) esetén
-      // az eredeti +X (jobb) kar a -Z-re fordul → háta mögé esik. Ezért a
-      // csákányt a -X (bal) karhoz tesszük → forgás után +Z-re kerül = látható.
-      const pickSide = p.facing > 0 ? -1 : 1;
-      const pickHandle = playerAvatar.getObjectByName("pick-handle");
-      const pickHead = playerAvatar.getObjectByName("pick-head");
-      if (pickHandle) {
-        pickHandle.position.x = 0.50 * pickSide;
-        pickHandle.rotation.z = -0.55 * pickSide;
-      }
-      if (pickHead) {
-        pickHead.position.x = 0.62 * pickSide;
-        pickHead.rotation.z = -0.55 * pickSide;
-      }
-
-      const speedRatio = Math.min(1, Math.abs(p.vx) / MOVE_SPEED);
-      const lookAhead = p.facing * (0.65 + speedRatio * 0.85);
-      // Kamera kissé közelebb a karakterhez, és kicsit lejjebb néz: jobb "platformer"
-      // típusú nézőszög, ahol a játékos és a blokkok szögei élesen kirajzolódnak.
-      const desiredCamera = new THREE.Vector3(playerPos.x - lookAhead * 0.55, playerPos.y + 2.6, 9.4);
-      camera.position.lerp(desiredCamera, last == null ? 1 : 0.06);
-      camera.lookAt(playerPos.x + lookAhead * 0.6, playerPos.y - 0.18, 0.6);
-
-      const cycle = (Math.sin(t * 0.00008) + 1) * 0.5;
-      // Pálya-specifikus égszín-keverés: minden level saját day/dusk színpalettával.
-      const cfg = activeLevelRef.current;
-      const dayColor = new THREE.Color(cfg.skyTint.day);
-      const duskColor = new THREE.Color(cfg.skyTint.dusk);
-      const skyColor = duskColor.clone().lerp(dayColor, cycle);
-      scene.background = skyColor;
-      backdrop.material.color.copy(skyColor);
-      sceneFog.color.copy(skyColor);
-      sceneFog.density = 0.026 + (1 - cycle) * 0.020;
-      sun.position.set(playerPos.x - 6 + Math.cos(t * 0.00025) * 7, playerPos.y + 11, 8);
-      sun.target.position.set(playerPos.x, playerPos.y, 0);
-      sun.intensity = 1.4 + cycle * 1.6;
-      ambient.intensity = 1.1 + cycle * 0.8;
-      // Felhők lassan úsznak — parallax háttér.
-      cloudPlane.position.x = playerPos.x * 0.18 + Math.sin(t * 0.0001) * 1.4;
-      cloudPlane.position.y = playerPos.y * 0.4 + ROWS - 1.2;
-
-      // === IDŐJÁRÁS-RÉSZECSKÉK ===
-      const weather = activeLevelRef.current.weather;
-      if (weather === "clear") {
-        weatherPoints.visible = false;
-      } else {
-        weatherPoints.visible = true;
-        // Részecskék újrapozíciózása + Y-rebreak ha lefuts a játéktér alá
-        const wPos = weatherPoints.geometry.attributes.position;
-        let fallSpeed = 0.22; // alap: hó / sandstorm
-        let xSwayAmp = 0.0;
-        let particleColor = "#ffffff";
-        if (weather === "rain") {
-          fallSpeed = 0.55;
-          particleColor = "#9ed1ff";
-          xSwayAmp = 0.0;
-        } else if (weather === "snow") {
-          fallSpeed = 0.10;
-          particleColor = "#ffffff";
-          xSwayAmp = 0.04;
-        } else if (weather === "sandstorm") {
-          fallSpeed = 0.04;
-          particleColor = "#ffd06b";
-          xSwayAmp = 0.30;
+      // --- Por-burst-ök ---
+      for (let i = bursts.length - 1; i >= 0; i--) {
+        const b = bursts[i]!;
+        b.life -= dt;
+        if (b.life <= 0) {
+          scene.remove(b.pts);
+          b.geo.dispose();
+          b.mat.dispose();
+          bursts.splice(i, 1);
+          continue;
         }
-        weatherMat.color.set(particleColor);
-        weatherMat.size = weather === "rain" ? 0.22 : weather === "snow" ? 0.18 : 0.12;
-        weatherMat.opacity = weather === "rain" ? 0.78 : weather === "snow" ? 0.92 : 0.55;
-        for (let i = 0; i < WEATHER_PARTICLES; i++) {
-          let py = wPos.getY(i);
-          let px = wPos.getX(i);
-          py -= fallSpeed;
-          if (xSwayAmp > 0) {
-            px += Math.sin(t * 0.001 + weatherSeeds[i]!) * xSwayAmp;
-            // ha kifut a határból, visszateszi
-            if (px < -COLS * 0.7) px = COLS * 0.7;
-            if (px > COLS * 0.7) px = -COLS * 0.7;
-          }
-          // Y-wrap: a játéktér tetejére vissza
-          if (py < playerPos.y - ROWS * 0.7) {
-            py = playerPos.y + ROWS * 0.6 + Math.random() * 4;
-            px = (Math.random() - 0.5) * COLS * 1.3;
-          }
-          wPos.setXY(i, px, py);
+        const attr = b.geo.getAttribute("position") as THREE.BufferAttribute;
+        const arr = attr.array as Float32Array;
+        for (let j = 0; j < arr.length / 3; j++) {
+          b.vel[j * 3 + 1]! -= 14 * dt;
+          arr[j * 3] += b.vel[j * 3]! * dt;
+          arr[j * 3 + 1] += b.vel[j * 3 + 1]! * dt;
+          arr[j * 3 + 2] += b.vel[j * 3 + 2]! * dt;
         }
-        wPos.needsUpdate = true;
-        // A részecske-cloud követi a játékos X-pozícióját, hogy mindig "vele essen"
-        weatherPoints.position.x = playerPos.x;
-      }
-
-      // Víz-blokkok finom hullámzása (függőleges sin-elmozdulás).
-      const waveTime = t * 0.0014;
-      for (const m of threeRuntimeRef.current?.blockMeshes ?? []) {
-        const data = m.userData as { t?: number; c?: number; r?: number };
-        if (data.t === WATER && typeof data.c === "number" && typeof data.r === "number") {
-          const wave = Math.sin(waveTime + data.c * 0.85 + data.r * 0.4) * 0.05;
-          const base = tileTo3d(data.c, data.r, blockDepthZ(WATER));
-          m.position.y = base.y + wave;
-        }
-      }
-
-      const target = pickTargetBlock();
-      hoverCellRef.current = target ? { c: target.c, r: target.r } : null;
-      targetBox.visible = Boolean(target);
-      if (target) {
-        // Targetbox a FRONT lane-en jelenjen meg (legközelebb a kamerához
-        // és a játékoshoz), nem a középső lane-en — különben "elcsúszna".
-        targetBox.position.copy(tileTo3d(target.c, target.r, FRONT_LANE_Z + blockDepthZ(target.t)));
-        const pulse = 1.02 + Math.sin(t * 0.008) * 0.035;
-        targetBox.scale.setScalar(pulse);
-      }
-
-      if (dustPoints) {
-        scene.remove(dustPoints);
-        dustPoints.geometry.dispose();
-        dustPoints = null;
-      }
-      if (parts.length > 0) {
-        const positions = new Float32Array(parts.length * 3);
-        parts.forEach((ptx, idx) => {
-          positions[idx * 3] = ptx.x / TILE - WORLD_CENTER_X;
-          positions[idx * 3 + 1] = ROWS - ptx.y / TILE;
-          positions[idx * 3 + 2] = 1.05;
-        });
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-        dustPoints = new THREE.Points(geometry, dustMaterial);
-        scene.add(dustPoints);
-      }
-
-      if (streakRef.current >= 3) {
-        const auraCount = Math.min(12, 4 + streakRef.current * 2);
-        auraOrbs.forEach((orb, ai) => {
-          orb.visible = ai < auraCount;
-          if (!orb.visible) return;
-          const angle = (t * 0.003 + ai * (Math.PI * 2 / auraCount)) % (Math.PI * 2);
-          const rad = 0.72 + Math.sin(t * 0.008 + ai) * 0.14;
-          orb.position.set(playerPos.x + Math.cos(angle) * rad, playerPos.y + Math.sin(angle) * rad, playerPos.z + 0.18);
-        });
-      } else {
-        auraOrbs.forEach((orb) => {
-          orb.visible = false;
-        });
-      }
-
-      const xpPop = xpPopupRef.current;
-      if (xpPop) {
-        xpPop.life -= dt;
-        if (xpPop.life <= 0) {
-          xpPopupRef.current = null;
-          xpOrb.visible = false;
-        } else {
-          const rise = (1.5 - xpPop.life) * 0.85;
-          xpOrb.visible = true;
-          xpOrb.position.set(xpPop.wx / TILE - WORLD_CENTER_X, ROWS - xpPop.wy / TILE + rise, 1.22);
-          xpOrb.scale.setScalar(0.95 + Math.sin(t * 0.015) * 0.16);
-        }
-      } else {
-        xpOrb.visible = false;
+        attr.needsUpdate = true;
+        b.mat.opacity = Math.min(1, b.life / 0.35);
       }
 
       renderer.render(scene, camera);
-      rafRef.current = requestAnimationFrame(loop);
     };
+    lastTRef.current = null;
+    rafRef.current = requestAnimationFrame(step);
 
-    rafRef.current = requestAnimationFrame(loop);
     return () => {
+      disposed = true;
       cancelAnimationFrame(rafRef.current);
-      threeRuntimeRef.current = null;
-      if (dustPoints) dustPoints.geometry.dispose();
-      /*
-       * Dispose-stratégia — FONTOS: a világ ~8000 mesh-e EGYETLEN megosztott
-       * blockGeometry-t és típusonként EGYETLEN materialt használ. A korábbi
-       * scene.traverse() dispose minden mesh-en a MEGOSZTOTT erőforrást
-       * dispose-olta több ezerszer → WebGL-korrupció. Ehelyett:
-       *  1. minden MEGOSZTOTT erőforrás pontosan EGYSZER dispose-olódik
-       *  2. a traverse csak az EGYEDI (nem megosztott) geometriákat takarítja
-       *     (player avatar, targetBox, xpOrb, aura, felhő, backdrop, weather)
-       */
+      cameraRef.current = null;
+      if (document.pointerLockElement === canvas) document.exitPointerLock();
+      for (const m of instMeshes) {
+        scene.remove(m);
+        m.dispose();
+      }
+      for (const b of bursts) {
+        scene.remove(b.pts);
+        b.geo.dispose();
+        b.mat.dispose();
+      }
+      if (weatherPts) scene.remove(weatherPts);
+      weatherGeo?.dispose();
+      weatherMat?.dispose();
+      for (const c of clouds) scene.remove(c);
+      cloudGeo.dispose();
+      cloudMat.dispose();
+      hlGeo.dispose();
+      hlMat.dispose();
       blockGeometry.dispose();
-      blockMaterials.forEach((entry) => {
-        const mats = Array.isArray(entry) ? entry : [entry];
-        mats.forEach((mat) => {
-          mat.map?.dispose();
-          mat.dispose();
-        });
-      });
-      cloudTex.dispose();
-      const sharedGeometries = new Set<THREE.BufferGeometry>([blockGeometry, auraGeometry]);
-      const sharedMaterials = new Set<THREE.Material>();
-      blockMaterials.forEach((entry) => {
-        const mats = Array.isArray(entry) ? entry : [entry];
-        mats.forEach((m) => sharedMaterials.add(m));
-      });
-      sharedMaterials.add(auraMaterial);
-      auraGeometry.dispose();
-      auraMaterial.dispose();
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-          if (!sharedGeometries.has(obj.geometry)) {
-            obj.geometry.dispose();
-          }
-          const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-          materials.forEach((material) => {
-            if (!sharedMaterials.has(material)) material.dispose();
-          });
+      blockMaterials.forEach((mat) => {
+        const list = Array.isArray(mat) ? mat : [mat];
+        for (const m of list) {
+          m.map?.dispose();
+          m.dispose();
         }
       });
       renderer.dispose();
@@ -2433,9 +1810,14 @@ export default function BlockCraftQuiz() {
     const tgt = mineTargetRef.current;
     let levelGoalReached = false;
     if (tgt) {
-      worldRef.current[tgt.r * COLS + tgt.c] = AIR;
+      vSet(worldRef.current, tgt.x, tgt.y, tgt.z, AIR);
       worldVersionRef.current++;
-      spawnDust((tgt.c + 0.5) * TILE, (tgt.r + 0.5) * TILE, tgt.t);
+      pendingBurstRef.current = { x: tgt.x, y: tgt.y, z: tgt.z, t: tgt.t };
+      // A kibányászott blokk a hotbar-ba kerül (mob nem gyűjthető — Minecraft-logika).
+      if ((PLACEABLE_ORDER as readonly number[]).includes(tgt.t)) {
+        const minedType = tgt.t;
+        setInventory((inv) => ({ ...inv, [minedType]: (inv[minedType] ?? 0) + 1 }));
+      }
       const isCreeper = tgt.t === CREEPER;
       const isMob = tgt.t === CREEPER || tgt.t === ZOMBIE || tgt.t === SKELETON || tgt.t === SPIDER;
       const isRare = tgt.t === COAL || tgt.t === IRON || tgt.t === DIAMOND || isMob;
@@ -2458,7 +1840,7 @@ export default function BlockCraftQuiz() {
       setStreak(newStreak);
       const subj = quiz.subject ?? "english";
       setSubjectStats((prev) => ({ ...prev, [subj]: prev[subj] + 1 }));
-      xpPopupRef.current = { amount: add, wx: (tgt.c + 0.5) * TILE, wy: (tgt.r + 0.5) * TILE, life: 1.5 };
+      setXpFloat({ amount: add, key: Date.now() });
 
       // Pálya-cél ellenőrzés: blokkszám + ritkacél + opcionális gyémánt-cél
       // (az 5. pálya leírása "legalább 1 gyémánt"-ot ígér — most ténylegesen kötelező).
@@ -2487,15 +1869,8 @@ export default function BlockCraftQuiz() {
     }
     mineTargetRef.current = null;
     setQuiz(null);
-    hoverCellRef.current = null;
-    {
-      const p = playerRef.current;
-      p.vx = 0;
-      p.vy = 0;
-      if (needsRescueAfterMine(worldRef.current, p, tgt)) {
-        rescuePlayerIfNeeded(worldRef.current, p);
-      }
-    }
+    // FP-fizika: ha a lábunk alatti blokkot bányásztuk ki, a gravitáció
+    // szabályosan leejt a gödörbe — ez a Minecraft-viselkedés, nincs "rescue".
     if (levelGoalReached) {
       sfxLevelUp();
       cancelAnimationFrame(rafRef.current);
@@ -2569,29 +1944,18 @@ export default function BlockCraftQuiz() {
     // újra triggerelje.
   }, [phase]);
 
-  const resizeCanvas = useCallback(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    sizeCanvasElement(el);
-  }, []);
-
-  useEffect(() => {
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-    return () => window.removeEventListener("resize", resizeCanvas);
-  }, [phase, resizeCanvas]);
-
-  const hold = (k: "left" | "right" | "jump", v: boolean) => {
-    touchRef.current[k] = v;
+  /** Mobil irány-gombok: lenyomásra/felengedésre a keysRef-et írják. */
+  const hold = (k: "fwd" | "back" | "left" | "right" | "jump", v: boolean) => {
+    keysRef.current[k] = v;
   };
 
-  const startHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "jump") => {
+  const startHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "fwd" | "back" | "left" | "right" | "jump") => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     hold(k, true);
   };
 
-  const endHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "jump") => {
+  const endHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "fwd" | "back" | "left" | "right" | "jump") => {
     e.preventDefault();
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -2599,56 +1963,116 @@ export default function BlockCraftQuiz() {
     hold(k, false);
   };
 
-  const updatePointerNdc = useCallback((canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
-    const { x, y } = pointerOnCanvas(canvas, clientX, clientY);
-    pointerNdcRef.current.set((x / Math.max(1, canvas.width)) * 2 - 1, -(y / Math.max(1, canvas.height)) * 2 + 1);
-  }, []);
+  /** Crosshair-célzott blokk bányászása (E / bal klikk / Bányász gomb / tap). */
+  const tryMineLook = useCallback(() => {
+    const hit = lookHitRef.current;
+    if (!hit || !vMineable(hit.t)) return;
+    tryMineAt(hit.x, hit.y, hit.z);
+  }, [tryMineAt]);
 
-  const pickCurrent3dTarget = useCallback(() => {
-    const runtime = threeRuntimeRef.current;
-    if (!runtime) return hoverCellRef.current;
-    runtime.raycaster.setFromCamera(pointerNdcRef.current, runtime.camera);
-    const hits = runtime.raycaster.intersectObjects(runtime.blockMeshes, false);
-    for (const hit of hits) {
-      const data = hit.object.userData as { c?: number; r?: number; t?: number; isFront?: boolean };
-      if (typeof data.c !== "number" || typeof data.r !== "number" || typeof data.t !== "number") continue;
-      if (!data.isFront) continue; // csak front-lane (lásd pickTargetBlock)
-      if (mineable(data.t) && playerCanReachTile(playerRef.current, data.c, data.r)) {
-        return { c: data.c, r: data.r };
-      }
+  /** Blokk-lerakás a célzott blokk megcélzott lapjára (F / jobb klikk / Lerak gomb). */
+  const tryPlaceLook = useCallback(() => {
+    const hit = lookHitRef.current;
+    if (!hit) return;
+    const t = selTypeRef.current;
+    if ((inventoryRef.current[t] ?? 0) <= 0) return;
+    const nx = hit.x + hit.nx;
+    const ny = hit.y + hit.ny;
+    const nz = hit.z + hit.nz;
+    // Bedrock-szint (y=0) fölé és a világhatáron belülre rakhatunk.
+    if (nx < 0 || ny < 1 || nz < 0 || nx >= WX || ny >= WY || nz >= WZ) return;
+    const w = worldRef.current;
+    const cur = vGet(w, nx, ny, nz);
+    if (cur !== AIR && cur !== WATER) return;
+    vSet(w, nx, ny, nz, t);
+    // Minecraft-szabály: a saját testünkbe nem rakhatunk blokkot.
+    const p = playerRef.current;
+    if (collidesAt(w, p.x, p.y, p.z)) {
+      vSet(w, nx, ny, nz, cur);
+      return;
     }
-    return hoverCellRef.current;
+    worldVersionRef.current++;
+    setInventory((inv) => ({ ...inv, [t]: Math.max(0, (inv[t] ?? 0) - 1) }));
   }, []);
 
-  const mineSelectedTarget = useCallback(() => {
-    const target = pickCurrent3dTarget();
-    if (!target || !tryMineAt(target.c, target.r)) tryMine();
-  }, [pickCurrent3dTarget, tryMine, tryMineAt]);
+  // E/F billentyű hídjai (a globális keydown handler ref-en keresztül hív).
+  mineActionRef.current = tryMineLook;
+  placeActionRef.current = tryPlaceLook;
+  hotbarKeyRef.current = (slot: number) => {
+    const t = hotbarTypes[slot];
+    if (t != null) setSelType(t);
+  };
+
+  /** Mobil look-drag állapot (egy ujjas húzás a canvason = körbenézés). */
+  const touchLookRef = useRef<{ id: number; lastX: number; lastY: number; moved: number } | null>(null);
 
   const onCanvasPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
       if (phase !== "play") return;
-      if (e.pointerType === "mouse" && e.button !== 0) return;
       e.preventDefault();
       const canvas = e.currentTarget;
-      updatePointerNdc(canvas, e.clientX, e.clientY);
-      mineSelectedTarget();
+      if (e.pointerType === "mouse") {
+        // Desktop: első kattintás = pointer lock; lock alatt bal = bányász, jobb = lerak.
+        if (document.pointerLockElement !== canvas) {
+          canvas.requestPointerLock?.();
+          return;
+        }
+        if (e.button === 2) tryPlaceLook();
+        else tryMineLook();
+        return;
+      }
+      canvas.setPointerCapture(e.pointerId);
+      touchLookRef.current = { id: e.pointerId, lastX: e.clientX, lastY: e.clientY, moved: 0 };
     },
-    [phase, mineSelectedTarget, updatePointerNdc],
+    [phase, tryMineLook, tryPlaceLook],
   );
 
-  /** 3D raycast célzás: a render loop ebből számolja az aktuális bányászható blokkot. */
-  const onCanvasPointerMove = useCallback(
+  const onCanvasPointerMove = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const tl = touchLookRef.current;
+    if (!tl || tl.id !== e.pointerId) return;
+    const dx = e.clientX - tl.lastX;
+    const dy = e.clientY - tl.lastY;
+    tl.lastX = e.clientX;
+    tl.lastY = e.clientY;
+    tl.moved += Math.abs(dx) + Math.abs(dy);
+    const p = playerRef.current;
+    p.yaw -= dx * 0.006;
+    p.pitch = Math.max(-1.45, Math.min(1.45, p.pitch - dy * 0.005));
+  }, []);
+
+  const onCanvasPointerUp = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
-      if (phase !== "play") return;
-      updatePointerNdc(e.currentTarget, e.clientX, e.clientY);
+      const tl = touchLookRef.current;
+      if (!tl || tl.id !== e.pointerId) return;
+      touchLookRef.current = null;
+      if (tl.moved >= 12) return;
+      // Rövid tap = bányászás. A koppintott képernyőpont felé lövünk sugarat
+      // (Minecraft mobil-viselkedés), fallback a crosshair-célra.
+      const cam = cameraRef.current;
+      const canvas = e.currentTarget;
+      if (cam) {
+        const rect = canvas.getBoundingClientRect();
+        const ndcX = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+        const ndcY = -((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+        const dir = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(cam).sub(cam.position).normalize();
+        const hit = raycastVoxel(
+          worldRef.current,
+          cam.position.x, cam.position.y, cam.position.z,
+          dir.x, dir.y, dir.z,
+          5.2,
+        );
+        if (hit && vMineable(hit.t)) {
+          tryMineAt(hit.x, hit.y, hit.z);
+          return;
+        }
+      }
+      tryMineLook();
     },
-    [phase, updatePointerNdc],
+    [tryMineAt, tryMineLook],
   );
 
-  const onCanvasPointerLeave = useCallback(() => {
-    pointerNdcRef.current.set(0, 0);
-    hoverCellRef.current = null;
+  const onCanvasPointerCancel = useCallback(() => {
+    touchLookRef.current = null;
   }, []);
 
   return (
@@ -2703,7 +2127,9 @@ export default function BlockCraftQuiz() {
                   ))}
                 </ul>
               </div>
-              <p className="text-xs text-white/80 text-center max-w-xs">A/D vagy nyilak: mozgás, Space: ugrás, E vagy Bányász: kvíz. Koppints a kockára, ha közel vagy hozzá.</p>
+              <p className="text-xs text-white/80 text-center max-w-xs">
+                Igazi Minecraft-irányítás: <strong>kattints a játéktérre</strong>, az egérrel nézel körbe, <strong>WASD</strong>: mozgás, <strong>Space</strong>: ugrás, <strong>bal klikk / E</strong>: bányász-kvíz, <strong>jobb klikk / F</strong>: blokk-lerakás, <strong>1–9</strong>: hotbar. Mobilon: gombok + húzd az ujjad a nézelődéshez, koppints a blokkra a bányászathoz.
+              </p>
               <Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base" onClick={startGame}>
                 <Pickaxe className="w-4 h-4 mr-2" />Indulhat a bányászat!
               </Button>
@@ -2719,11 +2145,26 @@ export default function BlockCraftQuiz() {
               <div className="flex flex-col items-center gap-1.5">
                 {/* === CANVAS LEGFELÜL (mobil-first) === */}
                 <div className="relative rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]">
-                  <canvas ref={canvasRef} className="block touch-manipulation w-full max-w-full cursor-crosshair" style={{ imageRendering: "pixelated" as const }} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerLeave={onCanvasPointerLeave} />
-                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_54%,rgba(0,0,0,0.28)_100%)]" />
-                  <div className="pointer-events-none absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/55">
-                    <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-200 shadow-[0_0_10px_rgba(254,240,138,0.85)]" />
+                  <canvas
+                    ref={canvasRef}
+                    className="block touch-none w-full max-w-full cursor-crosshair select-none"
+                    onPointerDown={onCanvasPointerDown}
+                    onPointerMove={onCanvasPointerMove}
+                    onPointerUp={onCanvasPointerUp}
+                    onPointerCancel={onCanvasPointerCancel}
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_54%,rgba(0,0,0,0.22)_100%)]" />
+                  {/* Crosshair (Minecraft-stílusú kereszt) */}
+                  <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <span className="absolute left-1/2 top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-white/80 mix-blend-difference" />
+                    <span className="absolute left-1/2 top-1/2 h-0.5 w-4 -translate-x-1/2 -translate-y-1/2 bg-white/80 mix-blend-difference" />
                   </div>
+                  {xpFloat && (
+                    <div key={xpFloat.key} className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 text-amber-300 font-extrabold text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] animate-bounce">
+                      +{xpFloat.amount} XP
+                    </div>
+                  )}
                   <div className={`pointer-events-none absolute left-2 top-2 rounded-lg border bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
                     cfg.isBossLevel
                       ? "border-rose-400 text-rose-200 animate-pulse"
@@ -2732,7 +2173,7 @@ export default function BlockCraftQuiz() {
                     {cfg.isBossLevel ? `★ BOSS ★ ${cfg.name.replace(/^\d+\.\s*/, "")}` : `Pálya ${cfg.id}/${LEVELS.length} · ${cfg.name.replace(/^\d+\.\s*/, "")}`}
                   </div>
                   <div className="pointer-events-none absolute right-2 top-2 rounded-lg border border-cyan-200/25 bg-slate-950/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100 flex items-center gap-1">
-                    <span>3D</span>
+                    <span>3D FP</span>
                     {cfg.weather !== "clear" && (
                       <span title={cfg.weather}>
                         {cfg.weather === "rain" ? "🌧" : cfg.weather === "snow" ? "❄" : "🏜"}
@@ -2740,16 +2181,42 @@ export default function BlockCraftQuiz() {
                     )}
                   </div>
                   <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-white/75">
-                    <span className="rounded bg-black/45 px-2 py-1">Célozz és bányássz: E / koppintás</span>
-                    <span className="rounded bg-black/45 px-2 py-1">Sárga keret = kvízblokk</span>
+                    <span className="rounded bg-black/45 px-2 py-1 hidden sm:inline">Klikk: irányítás · bal: bányász · jobb: lerak</span>
+                    <span className="rounded bg-black/45 px-2 py-1 sm:hidden">Húzás: nézelődés · tap: bányász</span>
+                    <span className="rounded bg-black/45 px-2 py-1">Sárga keret = célzott blokk</span>
                   </div>
                 </div>
-                {/* === KONTROLLGOMBOK közvetlenül a canvas alatt === */}
+                {/* === HOTBAR (kibányászott blokkok, lerakáshoz) === */}
+                {hotbarTypes.length > 0 && (
+                  <div className="flex flex-wrap gap-1 w-full justify-center">
+                    {hotbarTypes.map((t, i) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setSelType(t)}
+                        className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-bold transition-colors ${
+                          selType === t
+                            ? "border-amber-300 bg-amber-500/25 text-amber-100"
+                            : "border-white/20 bg-black/40 text-white/75 hover:bg-white/10"
+                        }`}
+                        title={`${BLOCK_NAME[t] ?? "?"} (${i + 1})`}
+                      >
+                        <span className="inline-block h-3.5 w-3.5 rounded-sm border border-black/40" style={{ background: MC_PAL[t]?.main ?? "#999" }} />
+                        {BLOCK_NAME[t] ?? "?"}
+                        <span className="tabular-nums text-white/60">×{inventory[t] ?? 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* === KONTROLLGOMBOK (mobil + fallback) === */}
                 <div className="grid grid-cols-4 gap-1.5 w-full">
-                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>Balra</Button>
+                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")} onPointerLeave={(e) => endHold(e, "left")}>⟵ Balra</Button>
+                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "fwd")} onPointerUp={(e) => endHold(e, "fwd")} onPointerCancel={(e) => endHold(e, "fwd")} onPointerLeave={(e) => endHold(e, "fwd")}>▲ Előre</Button>
+                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "back")} onPointerUp={(e) => endHold(e, "back")} onPointerCancel={(e) => endHold(e, "back")} onPointerLeave={(e) => endHold(e, "back")}>▼ Hátra</Button>
+                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra ⟶</Button>
                   <Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")} onPointerLeave={(e) => endHold(e, "jump")}>Ugrás</Button>
-                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")} onPointerLeave={(e) => endHold(e, "right")}>Jobbra</Button>
-                  <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={mineSelectedTarget}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button>
+                  <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs col-span-2" onClick={tryMineLook}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász (E)</Button>
+                  <Button type="button" size="sm" className="bg-amber-700 hover:bg-amber-600 text-white border border-amber-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={tryPlaceLook} disabled={(inventory[selType] ?? 0) <= 0}>Lerak (F)</Button>
                 </div>
                 {/* === KOMPAKT HUD === */}
                 <div className="w-full flex items-center gap-1.5">
