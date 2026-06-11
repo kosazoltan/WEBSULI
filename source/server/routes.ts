@@ -3232,8 +3232,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "Legalább egy osztály kiválasztása kötelező" });
       }
 
-      if (!classrooms.every((c: unknown) => typeof c === 'number' && c >= 1 && c <= 8)) {
-        return res.status(400).json({ message: "Minden osztálynak 1 és 8 között kell lennie" });
+      // 0–12 a platform-szintű tartomány (0 = Programozási alapismeretek)
+      if (!classrooms.every((c: unknown) => typeof c === 'number' && Number.isInteger(c) && c >= 0 && c <= 12)) {
+        return res.status(400).json({ message: "Minden osztálynak 0 és 12 között kell lennie" });
       }
 
       const updated = await storage.updateExtraEmailClassrooms(req.params.id, classrooms);
@@ -3263,9 +3264,13 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     }
   });
 
-  // ADMIN-ONLY: Szülő-dashboard — minden aktív Google-bejelentkezett tanuló
-  // játék-statisztikája az utolsó N nap alapján. Ide az `gameScores` táblát
-  // queryeljük, és a `users` táblával join-oljuk a név + email-hez.
+  // ADMIN-ONLY: Szülő-dashboard — az utolsó N napban AKTÍV tanulók listája.
+  // FONTOS: a gameScores tábla per-user/per-game KUMULATÍV (upsert) aggregátum,
+  // nem esemény-log. A `updatedAt >= cutoff` szűrés azt mondja meg, KI volt
+  // aktív az időszakban; a visszaadott XP/futás-számok a tanuló ÉLETHOSSZI
+  // összesített értékei (a periódusra bontás esemény-log nélkül nem lehetséges).
+  // A kliens-UI ennek megfelelően "összesített statok / aktív az időszakban"
+  // címkével jeleníti meg.
   app.get("/api/admin/parent-dashboard", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       const daysRaw = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : 7;
@@ -3334,11 +3339,14 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
           existing.totalGames += r.gamesPlayed ?? 0;
           existing.bestStreak = Math.max(existing.bestStreak, r.bestStreak ?? 0);
           if (updatedAtIso > existing.lastActivity) existing.lastActivity = updatedAtIso;
+          // Egy játékhoz több sor is lehet (easy/normal/hard difficulty) —
+          // ÖSSZEGEZZÜK, nem felülírjuk, különben a korábbi difficulty statja elveszne.
+          const prev = existing.games[r.gameId];
           existing.games[r.gameId] = {
-            totalXp: r.totalXp ?? 0,
-            gamesPlayed: r.gamesPlayed ?? 0,
-            bestStreak: r.bestStreak ?? 0,
-            bestRunXp: r.bestRunXp ?? 0,
+            totalXp: (prev?.totalXp ?? 0) + (r.totalXp ?? 0),
+            gamesPlayed: (prev?.gamesPlayed ?? 0) + (r.gamesPlayed ?? 0),
+            bestStreak: Math.max(prev?.bestStreak ?? 0, r.bestStreak ?? 0),
+            bestRunXp: Math.max(prev?.bestRunXp ?? 0, r.bestRunXp ?? 0),
           };
         }
       }
@@ -3390,7 +3398,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const userStats = new Map<string, { name: string; email: string | null; totalXp: number; totalGames: number; bestStreak: number }>();
       for (const r of rows) {
         const key = r.userId;
-        const name = (r.firstName || r.lastName) ? `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() : "Tanuló";
+        // XSS-védelem: a Google-profilból érkező nevek sanitizálása a HTML-template előtt.
+        const rawName = (r.firstName || r.lastName) ? `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() : "Tanuló";
+        const name = sanitizeText(rawName);
         const cur = userStats.get(key);
         if (!cur) {
           userStats.set(key, {
@@ -3408,13 +3418,14 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // 2. Az extra_email_addresses összes aktív cím-listája = értesítendő szülő.
       const extras = await storage.getActiveExtraEmails();
-      // Minden extra-email kapja a tanulók listáját, akiknek email-je egyezik
-      // (a tanulóknak Google-fiókja az email + extra-emails között megegyezhet),
-      // VAGY ha nem, akkor egy globális összefoglalót (név + XP).
-      // Egyszerűsítve: minden extra-email cím-hez kiküldjük az összes (név, XP)
-      // adatot — a szülő látja az egész osztálya-statját.
+      // ADATVÉDELEM: a riport csak KERESZTNEVET tartalmaz (vezetéknév nélkül),
+      // mert minden extra-email cím ugyanazt az össz-osztály riportot kapja
+      // (tanuló↔szülő hozzárendelés nincs az adatmodellben). A teljes nevet
+      // csak az admin-dashboard mutatja (bejelentkezés mögött).
 
-      const studentsArr = Array.from(userStats.values()).sort((a, b) => b.totalXp - a.totalXp);
+      const studentsArr = Array.from(userStats.values())
+        .map((s) => ({ ...s, name: s.name.split(/\s+/)[0] ?? s.name }))
+        .sort((a, b) => b.totalXp - a.totalXp);
 
       const resendState = isResendConfigured();
       if (!resendState.ok) {
@@ -3452,45 +3463,69 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
             </tbody>
           </table>`;
 
-      let sent = 0;
-      let failed = 0;
-      const errors: string[] = [];
-
-      for (let i = 0; i < extras.length; i++) {
-        const email = extras[i]!.email;
-        const html = `
+      const buildHtml = () => `
           <!DOCTYPE html>
           <html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:640px;margin:0 auto;padding:16px;">
             <h2 style="color:#7c3aed;margin:0 0 4px;">📊 WebSuli — heti összefoglaló</h2>
-            <p style="color:#666;margin:0 0 12px;">Az elmúlt <strong>${days} nap</strong> tanulói teljesítményei.</p>
+            <p style="color:#666;margin:0 0 12px;">Az elmúlt <strong>${days} napban aktív</strong> tanulók összesített statisztikái.</p>
             ${studentsHtml}
             <p style="color:#888;font-size:12px;margin-top:18px;">
-              Ez egy automatikus heti összefoglaló a WebSuli platformról. A tanuló saját böngészőjében tárolt
-              adatok (achievement, daily streak) nincsenek itt — csak a szerver-oldali játékfutási statok.
+              Megjegyzés: az XP / futás-számok a tanuló <strong>összesített (élethosszi)</strong> eredményei
+              — a lista azt mutatja, ki volt aktív az elmúlt ${days} napban.
+              A böngészőben tárolt adatok (jelvények, napi streak) itt nem szerepelnek.
             </p>
           </body></html>`;
 
-        try {
-          const result = await client.emails.send({
-            from: fromEmail,
-            to: [email],
-            subject: `WebSuli — Heti összefoglaló (${days} nap, ${studentsArr.length} tanuló)`,
-            html,
-          });
-          if (result && "error" in result && result.error) {
+      const sendAll = async () => {
+        let sent = 0;
+        let failed = 0;
+        const errors: string[] = [];
+        for (let i = 0; i < extras.length; i++) {
+          const email = extras[i]!.email;
+          try {
+            const result = await client.emails.send({
+              from: fromEmail,
+              to: [email],
+              subject: `WebSuli — Heti összefoglaló (${days} nap, ${studentsArr.length} tanuló)`,
+              html: buildHtml(),
+            });
+            if (result && "error" in result && result.error) {
+              failed++;
+              errors.push(`${email}: ${result.error.message}`);
+              await storage.createEmailLog({ htmlFileId: null, recipientEmail: email, status: "failed", error: `weekly: ${result.error.message}` }).catch(() => {});
+            } else {
+              sent++;
+              await storage.createEmailLog({ htmlFileId: null, recipientEmail: email, status: "sent", resendId: result.data?.id }).catch(() => {});
+            }
+          } catch (e) {
             failed++;
-            errors.push(`${email}: ${result.error.message}`);
-          } else {
-            sent++;
+            const msg = e instanceof Error ? e.message : String(e);
+            errors.push(`${email}: ${msg}`);
+            await storage.createEmailLog({ htmlFileId: null, recipientEmail: email, status: "failed", error: `weekly: ${msg}` }).catch(() => {});
           }
-        } catch (e) {
-          failed++;
-          errors.push(`${email}: ${e instanceof Error ? e.message : String(e)}`);
+          // 500ms rate-limit (Resend 2req/s)
+          if (i < extras.length - 1) await new Promise((r) => setTimeout(r, 500));
         }
-        // 500ms rate-limit (Resend 2req/s)
-        if (i < extras.length - 1) await new Promise((r) => setTimeout(r, 500));
+        return { sent, failed, errors };
+      };
+
+      // HTTP-timeout védelem: nagy listánál (>40 cím ≈ 20s+) háttérben fut,
+      // és azonnal 202-vel válaszolunk. Kis listánál szinkron a pontos eredményért.
+      if (extras.length > 40) {
+        void sendAll().then((r) => {
+          console.log(`[PARENT-DASH] Heti email háttérben kész: ${r.sent} sikeres, ${r.failed} hibás.`);
+        });
+        return res.status(202).json({
+          recipients: extras.length,
+          sent: 0,
+          failed: 0,
+          background: true,
+          message: `Küldés elindítva háttérben (${extras.length} címzett). Az eredmény az Email diagnosztika fülön követhető.`,
+          studentsInReport: studentsArr.length,
+        });
       }
 
+      const { sent, failed, errors } = await sendAll();
       res.json({
         recipients: extras.length,
         sent,

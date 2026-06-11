@@ -76,10 +76,12 @@ export default function ParentDashboardPanel() {
       return await apiRequest("POST", "/api/admin/parent-dashboard/send-weekly", { days });
     },
     onSuccess: (raw: unknown) => {
-      const result = raw as { sent?: number; failed?: number; recipients?: number };
+      const result = raw as { sent?: number; failed?: number; recipients?: number; background?: boolean; message?: string };
       toast({
-        title: "Heti email kiküldve",
-        description: `${result.sent ?? 0} sikeres / ${result.failed ?? 0} hibás (${result.recipients ?? 0} címzett).`,
+        title: result.background ? "Heti email küldés elindítva" : "Heti email kiküldve",
+        description: result.background
+          ? result.message ?? `Háttérben fut (${result.recipients ?? 0} címzett).`
+          : `${result.sent ?? 0} sikeres / ${result.failed ?? 0} hibás (${result.recipients ?? 0} címzett).`,
       });
     },
     onError: (error: unknown) => {
@@ -103,8 +105,9 @@ export default function ParentDashboardPanel() {
                 Szülő-dashboard
               </CardTitle>
               <CardDescription>
-                A Google-lal bejelentkezett tanulók játék-statisztikája az utolsó {days} napban.
-                Csak azok a tanulók jelennek meg, akik bejelentkeztek és játszottak az időszakban.
+                Az utolsó {days} napban <strong>aktív</strong> tanulók listája. A megjelenített XP / futás-számok
+                a tanuló <strong>összesített (élethosszi)</strong> eredményei — az időszak-szűrés azt mutatja,
+                ki játszott az adott periódusban.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
