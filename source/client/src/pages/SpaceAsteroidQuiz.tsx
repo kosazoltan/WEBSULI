@@ -665,6 +665,13 @@ export default function SpaceAsteroidQuiz() {
   const alienKillsRef = useRef(0);
   const scoreRef = useRef(0);
   const shakeRef = useRef(0);
+  // Friss closure-ref-ek a mount-olt RAF loop-hoz (stale closure ellen).
+  // A render végén frissülnek; a loop mindig a legutolsó verziót hívja.
+  const tickRef = useRef<(dt: number) => void>(() => {});
+  const renderRef = useRef<(now: number) => void>(() => {});
+  const detonateBombRef = useRef<() => void>(() => {});
+  /** Boss legyőzve flag — a tick hullám-vége ága ne duplázza a phase-átmenetet. */
+  const bossDefeatedRef = useRef(false);
 
   const keysRef = useRef({ left: false, right: false, up: false, down: false, fire: false });
   const touchRef = useRef({ left: false, right: false, up: false, fire: false });
@@ -838,6 +845,7 @@ export default function SpaceAsteroidQuiz() {
     comboRef.current = 0;
     enemiesKilledRef.current = 0;
     alienKillsRef.current = 0;
+    bossDefeatedRef.current = false;
     scoreRef.current = 0;
     shakeRef.current = 0;
     setScore(0);
@@ -1059,13 +1067,17 @@ export default function SpaceAsteroidQuiz() {
     window.addEventListener("resize", handleResize);
 
     /* ===================== Render loop ===================== */
+    // FONTOS: ref-eken keresztül hívjuk a tick/render-t, NEM közvetlen
+    // closure-ből. A mount-kori closure befagyasztaná a quiz-pool-t
+    // (pickQuiz → quizPool) és minden későbbi logika-frissítést — az async
+    // betöltött tananyag-kvízeket a játék sosem látná.
     const loop = (t: number) => {
       const last = lastTimeRef.current;
       lastTimeRef.current = t;
       const dt = last == null ? 0 : Math.min(0.05, (t - last) / 1000);
 
-      tick(dt);
-      render(t / 1000);
+      tickRef.current(dt);
+      renderRef.current(t / 1000);
 
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -1094,18 +1106,10 @@ export default function SpaceAsteroidQuiz() {
   /* ===================== Tick (game logic) ===================== */
   const tick = (dt: number) => {
     if (phaseRef.current !== "play" || pausedRef.current) {
-      // Csillag-pásztázás akkor is megy, hogy ne legyen "befagyva" a háttér
-      const refs = sceneRefs.current;
-      if (refs) {
-        const pos = refs.starfield.geometry.attributes.position;
-        for (let i = 0; i < pos.count; i++) {
-          let y = pos.getY(i);
-          y -= dt * 0.4;
-          if (y < -GAME_H * 1.2) y = GAME_H * 1.2;
-          pos.setY(i, y);
-        }
-        pos.needsUpdate = true;
-      }
+      // Kvíz / szünet alatt nincs játéklogika. A csillagmezőt a render()
+      // animálja (egy helyen — korábban itt IS futott, ami dupla-sebességet
+      // okozott kvíz alatt).
+      void dt;
       return;
     }
     const p = playerRef.current;
@@ -1330,8 +1334,10 @@ export default function SpaceAsteroidQuiz() {
     bulletsRef.current = bulletsRef.current.filter((b) => b.life > 0);
     pickupsRef.current = pickupsRef.current.filter((pu) => pu.life > 0);
 
-    // Hullám-vége detektálás
+    // Hullám-vége detektálás. Boss legyőzésekor a handleEnemyDestroyed boss-ága
+    // kezeli a győzelem-átmenetet (1.5s effekt-késleltetéssel) — itt NEM duplázzuk.
     if (
+      !bossDefeatedRef.current &&
       !waveIntermissionRef.current &&
       enemiesSpawnedThisWaveRef.current >= enemiesPerWaveRef.current &&
       enemiesRef.current.length === 0
@@ -1339,7 +1345,7 @@ export default function SpaceAsteroidQuiz() {
       waveIntermissionRef.current = true;
       const newWave = waveRef.current + 1;
       if (newWave > 12) {
-        // Győzelem
+        // Győzelem (elvileg ide csak akkor jutunk, ha a boss-ág nem futott le)
         setGameWon(true);
         setPhase("over");
         return;
@@ -1517,9 +1523,12 @@ export default function SpaceAsteroidQuiz() {
           refs.pickupMeshById.set(pid, mesh);
         }
       }
-      // Set win flag — a tick következő iterációja phase-t "over"-re vált.
+      // Boss legyőzve: a flag megakadályozza, hogy a tick hullám-vége ága
+      // PÁRHUZAMOSAN (azonnal) over-re váltson — így a 1.5s robbanás-pause
+      // ténylegesen lejátszódik a phase-átmenet előtt.
+      bossDefeatedRef.current = true;
       setGameWon(true);
-      window.setTimeout(() => setPhase("over"), 1500); // hagyjunk pár frame-et a robbanás-effektre
+      window.setTimeout(() => setPhase("over"), 1500); // robbanás-effekt ideje
       return;
     }
 
@@ -1602,8 +1611,22 @@ export default function SpaceAsteroidQuiz() {
       const refs = sceneRefs.current;
       if (refs) refs.flashLight.intensity = 5.5;
     }
+    // AZONNALI takarítás: a tick a kvíz-fázisban korán kilép, a halott
+    // ellenfél egyébként a kvíz-overlay alatt a pályán maradna (mesh + state).
+    enemiesRef.current = enemiesRef.current.filter((en) => !en.dead);
     comboRef.current = 0;
     setCombo(0);
+    // ÉLET-MECHANIKA: ütközés = -1 élet. 0 életnél game over (a HUD szívei
+    // eddig csak dekoráció voltak — a lives sosem csökkent).
+    const nextLives = Math.max(0, livesRef.current - 1);
+    livesRef.current = nextLives;
+    setLives(nextLives);
+    if (nextLives <= 0) {
+      sfxExplode();
+      setGameWon(false);
+      setPhase("over");
+      return;
+    }
     playerRef.current.invuln = 0.3; // rövid pre-quiz invuln
     enqueueQuiz("hit");
   };
@@ -1651,7 +1674,14 @@ export default function SpaceAsteroidQuiz() {
    * Bomb-süt: minden élő ellenfelet (kivéve boss-t — annak csak HP-t vesz)
    * azonnal megsemmisít, hatalmas vizuális robbanással.
    */
-  const detonateBomb = useCallback(() => {
+  /**
+   * Bomb-süt: minden élő ellenfél megsemmisül (boss: -12 HP).
+   * COMBO-EXPLOIT FIX: a bomba EGYETLEN +1 combót ad, nem kill-enkéntit —
+   * korábban 8 enemy = +8 combo egy frame-ben, duzzasztott XP-vel.
+   * Nem useCallback — minden render friss closure-t kap, a keyboard-handler
+   * a detonateBombRef-en keresztül hívja.
+   */
+  const detonateBomb = () => {
     if (bombsRef.current <= 0) return;
     if (phaseRef.current !== "play") return;
     bombsRef.current = Math.max(0, bombsRef.current - 1);
@@ -1660,22 +1690,33 @@ export default function SpaceAsteroidQuiz() {
     shakeRef.current = 1.5;
     const refs = sceneRefs.current;
     if (refs) refs.flashLight.intensity = 7.0;
-    // Minden enemy meghal (kivéve boss — annak 12 HP-t levesz)
+    // Combo-snapshot: a handleEnemyDestroyed kill-enként növelné — a bomba
+    // után visszaállítjuk snapshot+1-re (1 akció = 1 combo-lépés).
+    const comboBefore = comboRef.current;
+    let killedAny = false;
     for (const e of enemiesRef.current) {
       if (e.dead) continue;
       if (e.kind === "boss") {
         e.flash = 0.2;
         e.hp = Math.max(0, e.hp - 12);
-        if (e.hp <= 0) handleEnemyDestroyed(e);
+        if (e.hp <= 0) {
+          handleEnemyDestroyed(e);
+          killedAny = true;
+        }
       } else {
         handleEnemyDestroyed(e);
+        killedAny = true;
       }
+    }
+    if (killedAny) {
+      comboRef.current = comboBefore + 1;
+      setCombo(comboRef.current);
     }
     // Ellenséges lövedékek is törlődnek
     for (const b of bulletsRef.current) {
       if (b.fromEnemy) b.life = 0;
     }
-  }, []);
+  };
 
   /* ===================== Render (Three.js) ===================== */
   const render = (now: number) => {
@@ -1839,6 +1880,13 @@ export default function SpaceAsteroidQuiz() {
     renderer.render(scene, camera);
   };
 
+  // Friss closure-ök publikálása a mount-olt RAF loop felé (stale closure fix):
+  // minden render után a loop a LEGUTOLSÓ tick/render definíciót hívja, így a
+  // mount után betöltött quiz-pool és minden logika-frissítés érvényesül.
+  tickRef.current = tick;
+  renderRef.current = render;
+  detonateBombRef.current = detonateBomb;
+
   /* ===================== Billentyűzet ===================== */
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
@@ -1853,7 +1901,8 @@ export default function SpaceAsteroidQuiz() {
           if (phaseRef.current === "play") setPaused((q) => !q);
           break;
         case "b": case "B":
-          if (phaseRef.current === "play") detonateBomb();
+          // Ref-en át — a mount-kori effect closure ne fagyassza be a stale verziót.
+          if (phaseRef.current === "play") detonateBombRef.current();
           break;
       }
     };
@@ -2179,7 +2228,7 @@ export default function SpaceAsteroidQuiz() {
                     onClick={detonateBomb}
                     disabled={bombs <= 0}
                     className={`flex items-center gap-1 ${bombs > 0 ? "text-orange-300 font-bold hover:text-orange-200 cursor-pointer" : "text-white/40 cursor-not-allowed"}`}
-                    title="Bomba (B billentyű) — minden ellenfél megsemmisül"
+                    title="Bomba (B billentyű) — minden ellenfél megsemmisül (boss: -12 HP)"
                     data-testid="button-bomb"
                   >
                     💣 {bombs}
