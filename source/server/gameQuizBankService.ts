@@ -111,7 +111,8 @@ export async function listLatestMaterialQuizzes(
         eq(gameQuizItems.isActive, true),
         inArray(gameQuizItems.sourceMaterialId, materialIds),
       ),
-    );
+    )
+    .limit(200); // payload-védelem: 3 anyag × sok generálás se nőhessen korlátlanul
 
   const items: GameQuizBankRow[] = [];
   for (const r of rows) {

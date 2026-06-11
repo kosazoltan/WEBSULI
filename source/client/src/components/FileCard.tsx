@@ -61,6 +61,10 @@ export default function FileCard({
         throw new Error(j.message || `${res.status} ${res.statusText}`);
       }
       const data = await res.json();
+      // A material-quizzes cache invalidálása — a játékok a friss tételeket
+      // kapják, nem kell manuális oldal-frissítés.
+      const { queryClient } = await import("@/lib/queryClient");
+      void queryClient.invalidateQueries({ queryKey: ["/api/games/material-quizzes"] });
       toast({
         title: "Kvíz-tételek generálva",
         description: `${data.inserted} tétel mentve. ${data.skipped > 0 ? `Kihagyva: ${data.skipped}.` : ""}`,

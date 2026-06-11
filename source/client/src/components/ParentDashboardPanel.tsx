@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -77,6 +77,8 @@ export default function ParentDashboardPanel() {
     },
     onSuccess: (raw: unknown) => {
       const result = raw as { sent?: number; failed?: number; recipients?: number; background?: boolean; message?: string };
+      // Az email-diagnosztika log-listája frissüljön az új küldések után.
+      void queryClient.invalidateQueries({ queryKey: ["/api/admin/email-diagnostics"] });
       toast({
         title: result.background ? "Heti email küldés elindítva" : "Heti email kiküldve",
         description: result.background

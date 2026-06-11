@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Streak-protector hook: minden run-on egyszer abszorbál egy hibás választ,
@@ -36,6 +36,14 @@ export type StreakProtectorOutcome = "warned" | "broken";
 export function useStreakProtector(minStreakToProtect = 3) {
   const usedRef = useRef(false);
   const [warning, setWarning] = useState<string | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+
+  // Unmount-cleanup: a függő warning-timeout ne fusson le halott komponensen.
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const handleWrong = useCallback(
     ({ streak }: { streak: number }): StreakProtectorOutcome => {
@@ -44,7 +52,8 @@ export function useStreakProtector(minStreakToProtect = 3) {
       }
       usedRef.current = true;
       setWarning("Streak megmentve! Vigyázz, a következő hiba törli a sorozatodat.");
-      window.setTimeout(() => setWarning(null), 2200);
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = window.setTimeout(() => setWarning(null), 2200);
       return "warned";
     },
     [minStreakToProtect],
@@ -53,6 +62,10 @@ export function useStreakProtector(minStreakToProtect = 3) {
   const resetProtector = useCallback(() => {
     usedRef.current = false;
     setWarning(null);
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
   }, []);
 
   return { handleWrong, resetProtector, warning, used: usedRef.current };
