@@ -1,0 +1,9 @@
+{
+  "kitVersion": "1.0.0",
+  "profile": "t2",
+  "audit": {
+    "sentinel": ".audit-ok",
+    "maxAgeMinutes": 10,
+    "enabled": true
+  }
+}
