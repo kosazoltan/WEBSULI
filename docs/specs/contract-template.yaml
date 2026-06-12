@@ -1,0 +1,41 @@
+# agentic-qa-kit — Contract-first sablon (TECH-063, VibeContract-minta)
+# Pénzügyi/kritikus funkciónál a kód ELŐTT töltsd ki, hagyasd jóvá emberrel,
+# és EBBŐL vezesd le a teszteket (property-tesztek = végrehajtható posztkondíciók).
+
+contract: "<FüggvényNév / végpont>"
+date: "ÉÉÉÉ-HH-NN"
+status: "VÁZLAT"   # VÁZLAT -> JÓVÁHAGYVA
+
+preconditions:
+  # hívás előtti kényszerfeltételek — Zod-séma szinten kikényszerítve
+  - "amount: pozitív, véges, max 2 tizedesjegy"
+  - "accountId / entityId: nem null, létező entitás"
+  - "idempotencyKey: kötelező, egyedi (DB unique constraint)"
+
+postconditions:
+  # a lefutás utáni garantált állapot — assert/invariant + property-teszt
+  - "newBalance pontosan oldBalance - amount (Decimal-alapú, nem float)"
+  - "newBalance >= 0"
+  - "audit-bejegyzés létezik a művelethez (siker ÉS hiba esetén is)"
+
+invariants:
+  # a művelet alatt végig igaz állítások
+  - "az entitás azonosítója nem változik"
+  - "összesített egyenleg-változás = 0 (forrás + cél)"
+
+error_contracts:
+  # hibaágak: melyik feltételsértés melyik hibát adja
+  - "amount > balance -> InsufficientFundsError (4xx, kód: ...)"
+  - "ismert idempotencyKey -> a korábbi eredmény tér vissza (nem hiba)"
+
+behavioral:
+  # mellékhatás-garanciák
+  - "idempotens: azonos kulccsal ismételt hívás azonos eredményt ad, mellékhatás nélkül"
+  - "fizikai törlés tilos: void/reversal bejegyzés készül"
+  - "naplózás: ki, mikor, mit, milyen bemenettel (auditálható)"
+
+derived_tests:
+  # a szerződésből levezetett tesztek (töltsd ki implementáció után)
+  - "property: egyenleg-megmaradás 1000 random bemenetre (fast-check)"
+  - "property: idempotencia azonos kulccsal"
+  - "unit: minden error_contract ág"

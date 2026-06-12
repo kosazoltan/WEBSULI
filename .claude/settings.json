@@ -1,0 +1,58 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/check-destructive.mjs\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/check-destructive.mjs\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/warn-test-edit.mjs\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/check-audit-ok.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Audit-sentinel ellenőrzés push előtt..."
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/check-audit-ok.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Audit-sentinel ellenőrzés push előtt..."
+          }
+        ]
+      }
+    ]
+  }
+}
