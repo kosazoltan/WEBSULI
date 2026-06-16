@@ -25,8 +25,11 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'wouter'],
           'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select'],
           'pdf-vendor': ['pdfjs-dist', '@react-pdf-viewer/core', '@react-pdf-viewer/default-layout'],
-          'mammoth': ['mammoth'],
-          'ai-vendor': ['openai', '@anthropic-ai/sdk'],
+          // Note: 'mammoth' is loaded via dynamic import('mammoth/mammoth.browser'),
+          // so Rollup already emits a dedicated lazy chunk for it — a manual entry on the
+          // bare 'mammoth' package root would only produce an empty chunk.
+          // 'openai' and '@anthropic-ai/sdk' are server-only and never enter the client
+          // bundle, so they are intentionally not chunked here either.
         },
       },
     },
