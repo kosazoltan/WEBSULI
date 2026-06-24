@@ -26,7 +26,7 @@ export default defineConfig({
           'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select'],
           'pdf-vendor': ['pdfjs-dist', '@react-pdf-viewer/core', '@react-pdf-viewer/default-layout'],
           'mammoth': ['mammoth'],
-          'ai-vendor': ['openai', '@anthropic-ai/sdk'],
+          // E4: 'ai-vendor' removed — openai/@anthropic-ai/sdk are server-only, not imported by client
         },
       },
     },

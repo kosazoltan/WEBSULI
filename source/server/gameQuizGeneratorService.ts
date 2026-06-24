@@ -143,15 +143,8 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
     throw new Error("Claude válasz nem tömb.");
   }
 
-  // 4. DEDUP: az ehhez az anyaghoz korábban generált tételeket inaktiváljuk,
-  // hogy ismételt generálás ne duplázza a kérdéseket a játék-poolban.
-  await db
-    .update(gameQuizItems)
-    .set({ isActive: false })
-    .where(eq(gameQuizItems.sourceMaterialId, materialId));
-
-  // 5. Validáció + insert. CAP: legfeljebb safeCount tételt szúrunk be,
-  // akkor is, ha a modell többet adott vissza.
+  // 4 + 5. DEDUP + INSERT tranzakcióba csomagolva: ha bármelyik insert dob,
+  // az egész rollbackel — nem maradhat deaktivált régi kvízkészlet új nélkül.
   const result: QuizGenerationResult = {
     materialId,
     materialTitle: material.title,
@@ -161,6 +154,9 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
   };
   const ALLOWED_TOPICS = new Set(["english", "math", "nature", "hungarian"]);
   const capped = (parsed as unknown[]).slice(0, safeCount);
+
+  // Validálás a tranzakción kívül — így a skipped számlálás nem zavarja az atomicitást.
+  const validItems: GeneratedQuizItem[] = [];
   for (const raw of capped) {
     if (!raw || typeof raw !== "object") {
       result.skipped++;
@@ -184,8 +180,19 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
       result.skipped++;
       continue;
     }
-    try {
-      await db.insert(gameQuizItems).values({
+    validItems.push(item as GeneratedQuizItem);
+  }
+
+  // Tranzakció: deaktivál + beilleszt atomikusan.
+  // Ha bármelyik tx.insert dob, az egész rollbackel.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(gameQuizItems)
+      .set({ isActive: false })
+      .where(eq(gameQuizItems.sourceMaterialId, materialId));
+
+    for (const item of validItems) {
+      await tx.insert(gameQuizItems).values({
         gameId: ALIBI_GAME_ID,
         tier: "normal",
         topic: item.topic,
@@ -196,9 +203,8 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
         isActive: true,
       });
       result.inserted++;
-    } catch (e) {
-      result.errors.push(`Insert hiba: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }
+  });
+
   return result;
 }

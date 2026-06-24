@@ -1112,6 +1112,9 @@ export default function BlockCraftQuiz() {
   const [levelRare, setLevelRare] = useState(0);
   /** Pálya-szintű gyémánt-számláló — az 5. pálya "legalább 1 gyémánt" céljához. */
   const [levelDiamonds, setLevelDiamonds] = useState(0);
+  // D2/D3: run-level (cross-level) trackers that survive per-level resets.
+  const bestStreakRef = useRef(0);      // highest streak reached during the whole run
+  const totalDiamondsRef = useRef(0);   // total real DIAMOND tiles mined during the whole run
   const [levelStartXp, setLevelStartXp] = useState(0);
   const [gameWon, setGameWon] = useState(false);
   // Subject-breakdown: melyik tantárgyból hány jó választ adott.
@@ -1130,6 +1133,8 @@ export default function BlockCraftQuiz() {
   const [xpFloat, setXpFloat] = useState<{ amount: number; key: number } | null>(null);
   const scoreSubmittedRef = useRef(false);
   const phaseRef = useRef<Phase>("menu");
+  // D1: ref-guard — a Three.js scene csak egyszer épül fel ugyanazon play-session-ban
+  const sceneBuiltRef = useRef(false);
   // Keep refs in sync for the canvas loop / global key handlers (avoids stale closure)
   streakRef.current = streak;
   phaseRef.current = phase;
@@ -1370,6 +1375,8 @@ export default function BlockCraftQuiz() {
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
+    bestStreakRef.current = 0;     // D2: reset run-level best streak on new game
+    totalDiamondsRef.current = 0; // D3: reset run-level diamond count on new game
     setLevelIdx(0);
     setGameWon(false);
     streakProtector.resetProtector();
@@ -1435,12 +1442,22 @@ export default function BlockCraftQuiz() {
       p.yaw -= e.movementX * 0.0024;
       p.pitch = Math.max(-1.45, Math.min(1.45, p.pitch - e.movementY * 0.0022));
     };
+    // D4: reset all movement flags on window blur (prevents stuck keys on tab/window switch)
+    const onBlur = () => {
+      keysRef.current.fwd = false;
+      keysRef.current.back = false;
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+      keysRef.current.jump = false;
+    };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    window.addEventListener("blur", onBlur);
     document.addEventListener("mousemove", mm);
     return () => {
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.removeEventListener("blur", onBlur);
       document.removeEventListener("mousemove", mm);
     };
   }, []);
@@ -1453,8 +1470,11 @@ export default function BlockCraftQuiz() {
    *  - gravitáció + AABB ütközés sub-steppinggel (lásd stepPlayerPhysics)
    *  - időjárás-részecskék + sodródó felhők + bányász-por
    */
+  // D1: scene mount-szintű effect — NEM phase-függő; phaseRef-et használja a render-loopban
   useEffect(() => {
-    if (phase !== "play") return;
+    if (phaseRef.current !== "play") return;
+    if (sceneBuiltRef.current) return;
+    sceneBuiltRef.current = true;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -1779,8 +1799,9 @@ export default function BlockCraftQuiz() {
         }
       });
       renderer.dispose();
+      sceneBuiltRef.current = false; // D1: reset on cleanup
     };
-  }, [phase]);
+  }, []); // D1: mount-szintű — phase-változásra NEM épül újra a scene
 
   const onAnswer = (idx: number) => {
     if (!quiz) return;
@@ -1830,6 +1851,10 @@ export default function BlockCraftQuiz() {
       const isDiamond = tgt.t === DIAMOND;
       const newLevelDiamonds = levelDiamonds + (isDiamond ? 1 : 0);
       const newStreak = streak + 1;
+      // D2: track run-level best streak (does not reset between levels)
+      if (newStreak > bestStreakRef.current) bestStreakRef.current = newStreak;
+      // D3: track run-level real diamonds mined
+      if (isDiamond) totalDiamondsRef.current += 1;
       setSessionXp((x) => x + add);
       setTotalXp((x) => x + add);
       setBlocksMined(newBlocks);
@@ -1914,6 +1939,24 @@ export default function BlockCraftQuiz() {
 
   // Achievement + Daily Challenge tracking — az "over" phase átmenetnél egyszer fut.
   const achievementCheckedRef = useRef(false);
+
+  // D6 a11y: quiz-overlay dialog ref + Escape + auto-focus
+  const quizDialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (phase !== "quiz") return;
+    const t = window.setTimeout(() => {
+      const first = quizDialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]");
+      first?.focus();
+    }, 50);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [phase]);
   useEffect(() => {
     if (phase !== "over") {
       achievementCheckedRef.current = false;
@@ -1927,9 +1970,9 @@ export default function BlockCraftQuiz() {
       xpGained: sessionXp,
       correctAnswers: blocksMined, // ≈ helyes válaszok = kibányászott blokkok
       wrongAnswers: 0,
-      maxStreak: streak,
+      maxStreak: bestStreakRef.current, // D2: run-level best streak, not current
       blocksMined,
-      diamondsMined: rareBlocks > 0 ? Math.max(1, Math.floor(rareBlocks / 3)) : 0,
+      diamondsMined: totalDiamondsRef.current, // D3: real diamonds, not rareBlocks/3 estimate
       perfect: streak >= blocksMined && blocksMined >= 5,
       fullClear: gameWon,
       highestLevel: levelIdx + 1,
@@ -2306,7 +2349,7 @@ export default function BlockCraftQuiz() {
         </CardContent></Card>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => {
+      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div ref={quizDialogRef} role="dialog" aria-modal="true" aria-label="Mini-teszt" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => {
         const isCorrect = revealCorrectIdx === i;
         const isWrong = wrongIdx === i;
         const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;

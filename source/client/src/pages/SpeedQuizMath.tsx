@@ -259,6 +259,10 @@ export default function SpeedQuizMath() {
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
   const recentPromptsRef = useRef<string[]>([]);
   const scoreSubmittedRef = useRef(false);
+  const timeoutsRef = useRef<number[]>([]);
+
+  // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
+  useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
@@ -356,7 +360,7 @@ export default function SpeedQuizMath() {
       sfxError();
       setAnswerState("wrong");
       setWrongFlash(true);
-      window.setTimeout(() => setWrongFlash(false), 220);
+      timeoutsRef.current.push(window.setTimeout(() => setWrongFlash(false), 220));
       setStreak(0);
       const nextLives = Math.max(0, livesRef.current - 1);
       livesRef.current = nextLives;
@@ -366,7 +370,7 @@ export default function SpeedQuizMath() {
         setPhase("over");
       } else {
         // GUARD: game over után ne töltsünk új feladatot
-        window.setTimeout(nextTask, 140);
+        timeoutsRef.current.push(window.setTimeout(nextTask, 140));
       }
       return;
     }
@@ -390,7 +394,7 @@ export default function SpeedQuizMath() {
       if (next >= TARGET_CORRECT[grade]) {
         endAsWin();
       } else {
-        window.setTimeout(nextTask, 120);
+        timeoutsRef.current.push(window.setTimeout(nextTask, 120));
       }
       return next;
     });
