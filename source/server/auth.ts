@@ -148,6 +148,10 @@ export function setupAuth(app: Express) {
     passport.deserializeUser(async (id: string, done) => {
         try {
             const user = await storage.getUser(id);
+            // B1: Ban enforcement — reject banned users on every request
+            if (user && (user as unknown as { isBanned?: boolean }).isBanned) {
+                return done(null, false);
+            }
             done(null, user);
         } catch (err) {
             done(err);
@@ -180,11 +184,19 @@ export function setupAuth(app: Express) {
         passport.authenticate("local", (err: Error | null, user: User, info: { message?: string }) => {
             if (err) return next(err);
             if (!user) return res.status(401).json({ message: info?.message || "Authentication failed" });
-            req.login(user, (err) => {
-                if (err) return next(err);
-                // SECURITY: Strip password hash before sending to client
-                const { password: _, ...safeUser } = user;
-                return res.json(safeUser);
+            // B1: Ban enforcement — reject banned users at login
+            if ((user as unknown as { isBanned?: boolean }).isBanned) {
+                return res.status(403).json({ message: "Account banned" });
+            }
+            // B2: Session-fixation fix — regenerate session ID before login
+            req.session.regenerate((regenErr) => {
+                if (regenErr) return next(regenErr);
+                req.login(user, (err) => {
+                    if (err) return next(err);
+                    // SECURITY: Strip password hash before sending to client
+                    const { password: _, ...safeUser } = user;
+                    return res.json(safeUser);
+                });
             });
         })(req, res, next);
     });

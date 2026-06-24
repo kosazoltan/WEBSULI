@@ -15,3 +15,12 @@ client_secret*.json
 configs/secrets.json
 .vercel
 .audit-ok
+
+# === Security + repo hygiene (added 2026-06-23 by harness) ===
+source/KEY_TO_UPLOAD.txt
+vault/**/*canonical*
+vault/**/*secret*
+*.zip
+Gemini.jpg
+.harness/backups/
+source/.harness/

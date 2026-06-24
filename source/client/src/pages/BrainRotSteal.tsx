@@ -254,6 +254,12 @@ export default function BrainRotSteal() {
   const lastSpawnRef = useRef(0);
   const animRef = useRef(0);
   const floatIdRef = useRef(0);
+  const timeoutsRef = useRef<number[]>([]);
+  // D5: RAF re-render throttle — utolsó setState hívás időpontja (ms)
+  const lastRenderMsRef = useRef(0);
+
+  // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
+  useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
@@ -329,7 +335,7 @@ export default function BrainRotSteal() {
       if (idx !== quiz.correctIndex) {
         sfxError();
         setWrongShake(true);
-        setTimeout(() => setWrongShake(false), 400);
+        timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 400));
         setRevealCorrectIdx(quiz.correctIndex);
         setWrongIdx(idx);
         const outcome = streakProtector.handleWrong({ streak });
@@ -340,10 +346,10 @@ export default function BrainRotSteal() {
           setComboMultiplier(1);
         }
         // 1.5s reveal után a quiz "elnyel" — a brain rot fennmarad, új próba
-        window.setTimeout(() => {
+        timeoutsRef.current.push(window.setTimeout(() => {
           setRevealCorrectIdx(null);
           setWrongIdx(null);
-        }, 1500);
+        }, 1500));
         return;
       }
 
@@ -373,7 +379,7 @@ export default function BrainRotSteal() {
       if (multiplier >= 2) {
         sfxLevelUp();
         setScreenFlash("rgba(251, 191, 36, 0.15)");
-        setTimeout(() => setScreenFlash(null), 300);
+        timeoutsRef.current.push(window.setTimeout(() => setScreenFlash(null), 300));
       }
 
       // Brain rot törlése
@@ -462,67 +468,73 @@ export default function BrainRotSteal() {
         });
       }
 
-      // Update brain rots
-      setBrainRots((prev) => {
-        const nowMs = Date.now();
-        return prev
-          .map((rot) => {
-            if (rot.caught) return rot;
+      // D5: RAF throttle — setState legfeljebb ~10 FPS-enként (100ms), nem minden frame-ben
+      const shouldRender = now - lastRenderMsRef.current >= 100;
+      if (shouldRender) {
+        lastRenderMsRef.current = now;
 
-            // Check if expired
-            if (nowMs - rot.spawnTime > BRAIN_ROT_LIFETIME && !rot.escaping) {
-              return { ...rot, escaping: true };
-            }
+        // Update brain rots
+        setBrainRots((prev) => {
+          const nowMs = Date.now();
+          return prev
+            .map((rot) => {
+              if (rot.caught) return rot;
 
-            let { x, y, vx, vy, rotation } = rot;
-            const { rotSpeed } = rot;
+              // Check if expired
+              if (nowMs - rot.spawnTime > BRAIN_ROT_LIFETIME && !rot.escaping) {
+                return { ...rot, escaping: true };
+              }
 
-            // Bounce off walls
-            x += vx;
-            y += vy;
-            if (x < rot.size / 2 || x > boardW - rot.size / 2) vx = -vx;
-            if (y < rot.size / 2 || y > boardH - rot.size / 2) vy = -vy;
-            x = Math.max(rot.size / 2, Math.min(boardW - rot.size / 2, x));
-            y = Math.max(rot.size / 2, Math.min(boardH - rot.size / 2, y));
+              let { x, y, vx, vy, rotation } = rot;
+              const { rotSpeed } = rot;
 
-            rotation += rotSpeed;
+              // Bounce off walls
+              x += vx;
+              y += vy;
+              if (x < rot.size / 2 || x > boardW - rot.size / 2) vx = -vx;
+              if (y < rot.size / 2 || y > boardH - rot.size / 2) vy = -vy;
+              x = Math.max(rot.size / 2, Math.min(boardW - rot.size / 2, x));
+              y = Math.max(rot.size / 2, Math.min(boardH - rot.size / 2, y));
 
-            return { ...rot, x, y, vx, vy, rotation };
-          })
-          .filter((rot) => {
-            if (rot.escaping) {
-              setTotalMissed((m) => m + 1);
-              setStreak(0);
-              setComboMultiplier(1);
-              return false;
-            }
-            return true;
-          });
-      });
+              rotation += rotSpeed;
 
-      // Update particles
-      setParticles((prev) =>
-        prev
-          .map((p) => ({
-            ...p,
-            x: p.x + p.vx * dt * 60,
-            y: p.y + p.vy * dt * 60,
-            vy: p.vy + 5 * dt * 60,
-            life: p.life - dt,
-          }))
-          .filter((p) => p.life > 0),
-      );
+              return { ...rot, x, y, vx, vy, rotation };
+            })
+            .filter((rot) => {
+              if (rot.escaping) {
+                setTotalMissed((m) => m + 1);
+                setStreak(0);
+                setComboMultiplier(1);
+                return false;
+              }
+              return true;
+            });
+        });
 
-      // Update floating texts
-      setFloatingTexts((prev) =>
-        prev
-          .map((ft) => ({
-            ...ft,
-            y: ft.y - 1.5,
-            life: ft.life - dt,
-          }))
-          .filter((ft) => ft.life > 0),
-      );
+        // Update particles
+        setParticles((prev) =>
+          prev
+            .map((p) => ({
+              ...p,
+              x: p.x + p.vx * dt * 60,
+              y: p.y + p.vy * dt * 60,
+              vy: p.vy + 5 * dt * 60,
+              life: p.life - dt,
+            }))
+            .filter((p) => p.life > 0),
+        );
+
+        // Update floating texts
+        setFloatingTexts((prev) =>
+          prev
+            .map((ft) => ({
+              ...ft,
+              y: ft.y - 1.5,
+              life: ft.life - dt,
+            }))
+            .filter((ft) => ft.life > 0),
+        );
+      }
 
       animRef.current = requestAnimationFrame(loop);
     };

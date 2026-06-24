@@ -21,6 +21,7 @@ import { generateMaterialQuiz } from "./gameQuizGeneratorService";
 // checkIsAdmin import removed
 
 import { db } from "./db";
+import { withAIProvider } from "./lib/ai-provider-wrapper";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
@@ -751,9 +752,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     // Skip CSRF for AI endpoints (Enhanced Material Creator uses direct API calls)
-    // These endpoints have their own authentication checks
+    // These endpoints have their own authentication checks, but we still enforce Origin/Referer allowlist
     if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/') || path.startsWith('/api/admin/improved-files/')) {
-      return next();
+      const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean);
+      let requestOrigin: string | undefined;
+      const originHeader = req.headers.origin;
+      if (originHeader) {
+        requestOrigin = originHeader;
+      } else {
+        const referer = req.headers.referer;
+        if (referer) {
+          try {
+            requestOrigin = new URL(referer).origin;
+          } catch {
+            requestOrigin = undefined;
+          }
+        }
+      }
+      if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+        return next();
+      }
+      if (process.env.NODE_ENV !== 'production' && requestOrigin &&
+          (requestOrigin.startsWith('http://localhost') || requestOrigin.startsWith('http://127.0.0.1'))) {
+        return next();
+      }
+      return res.status(403).json({ error: 'Origin not allowed' });
     }
 
     // Apply CSRF protection to all other mutating requests
@@ -1152,7 +1175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]
 }`;
 
-      const message = await anthropic.messages.create({
+      const message = await withAIProvider((signal) => anthropic.messages.create({
         model: "claude-3-5-sonnet-20241022",
         max_tokens: 4096,
         system: systemPrompt,
@@ -1162,7 +1185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             content: `Javítsd ki ezt a HTML fájlt és add vissza JSON formátumban:\n\n${file.content}`
           }
         ]
-      });
+      }, { signal }));
 
       let responseText = message.content[0].type === 'text' ? message.content[0].text : '{}';
 
@@ -1240,7 +1263,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]
 }`;
 
-      const message = await anthropic.messages.create({
+      const message = await withAIProvider((signal) => anthropic.messages.create({
         model: "claude-3-5-sonnet-20241022",
         max_tokens: 4096,
         system: systemPrompt,
@@ -1250,7 +1273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             content: `Alakítsd át ezt a HTML fájlt a megadott színsémára és add vissza JSON formátumban:\n\n${file.content}`
           }
         ]
-      });
+      }, { signal }));
 
       let responseText = message.content[0].type === 'text' ? message.content[0].text : '{}';
 
@@ -4583,12 +4606,16 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       const { materialIds, classroom } = result.data;
-      const userId = req.user?.id || 'admin';
-      let movedCount = 0;
 
-      for (const id of materialIds) {
-        const updated = await storage.updateHtmlFile(id, userId, { classroom });
-        if (updated) movedCount++;
+      // C3: atomic bulk update — single UPDATE ... WHERE id IN (...) instead of N round-trips
+      let movedCount = 0;
+      if (materialIds.length > 0) {
+        const moved = await db
+          .update(htmlFiles)
+          .set({ classroom })
+          .where(inArray(htmlFiles.id, materialIds))
+          .returning({ id: htmlFiles.id });
+        movedCount = moved.length;
       }
 
       res.json({ success: true, movedCount });

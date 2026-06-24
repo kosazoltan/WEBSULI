@@ -366,33 +366,15 @@ export default function Games() {
                           </p>
                           <p className="text-[11px] text-white/50 mb-2">Nehézség — válassz indulás előtt:</p>
                           <div className="flex flex-wrap gap-2">
-                            <Link href="/games/tsunami-english?difficulty=easy">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="bg-emerald-600/40 hover:bg-emerald-600/60 text-white border-emerald-400/30"
-                              >
-                                Könnyű
-                              </Button>
-                            </Link>
-                            <Link href="/games/tsunami-english?difficulty=normal">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="bg-cyan-600/40 hover:bg-cyan-600/60 text-white border-cyan-400/30"
-                              >
-                                Közepes
-                              </Button>
-                            </Link>
-                            <Link href="/games/tsunami-english?difficulty=hard">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="bg-rose-600/40 hover:bg-rose-600/60 text-white border-rose-400/30"
-                              >
-                                Nehéz
-                              </Button>
-                            </Link>
+                            <Button asChild size="sm" variant="secondary" className="bg-emerald-600/40 hover:bg-emerald-600/60 text-white border-emerald-400/30">
+                              <Link href="/games/tsunami-english?difficulty=easy">Könnyű</Link>
+                            </Button>
+                            <Button asChild size="sm" variant="secondary" className="bg-cyan-600/40 hover:bg-cyan-600/60 text-white border-cyan-400/30">
+                              <Link href="/games/tsunami-english?difficulty=normal">Közepes</Link>
+                            </Button>
+                            <Button asChild size="sm" variant="secondary" className="bg-rose-600/40 hover:bg-rose-600/60 text-white border-rose-400/30">
+                              <Link href="/games/tsunami-english?difficulty=hard">Nehéz</Link>
+                            </Button>
                           </div>
                         </div>
                       </CardContent>

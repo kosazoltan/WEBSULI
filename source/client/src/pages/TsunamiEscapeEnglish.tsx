@@ -587,6 +587,10 @@ export default function TsunamiEscapeEnglish() {
   const scoreSubmittedRef = useRef(false);
   const runSubjectRef = useRef<TsunamiSubject>("mixed");
   const subjectRoundRef = useRef(0);
+  const timeoutsRef = useRef<number[]>([]);
+
+  // D4: unmountkor az összes pending timeout törlése
+  useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
 
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
     queryKey: ["/api/games/quiz-bank/tsunami-english"],
@@ -887,7 +891,7 @@ export default function TsunamiEscapeEnglish() {
         stormTimerRef.current = 0;
         if (Math.random() < 0.42 + prog * 0.3) {
           setStormFlash(true);
-          setTimeout(() => setStormFlash(false), 170);
+          timeoutsRef.current.push(window.setTimeout(() => setStormFlash(false), 170));
         }
       }
 
@@ -941,22 +945,22 @@ export default function TsunamiEscapeEnglish() {
       wrongAnswersRef.current += 1;
       sfxError();
       setWrongShake(true);
-      setTimeout(() => setWrongShake(false), 320);
+      timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 320));
       setStreak(0);
       waterRef.current = Math.min(88, waterRef.current + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current]);
       setWater(waterRef.current);
-      setTimeout(() => {
+      timeoutsRef.current.push(window.setTimeout(() => {
         setQuiz(null);
         setPhase("play");
         lastRef.current = null;
         answerLockedRef.current = false;
-      }, 280);
+      }, 280));
       return;
     }
 
     sfxSuccess();
     setRewardBurst(true);
-    setTimeout(() => setRewardBurst(false), 900);
+    timeoutsRef.current.push(window.setTimeout(() => setRewardBurst(false), 900));
 
     const add = paramsRef.current.xpPerCorrect;
     setLastQuizXp(add);
@@ -1004,7 +1008,7 @@ export default function TsunamiEscapeEnglish() {
           wrongAnswersRef.current += 1; // a timeout is hibának számít a statokban
           answerLockedRef.current = false;
           setWrongShake(true);
-          setTimeout(() => setWrongShake(false), 220);
+          timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 220));
           setStreak(0);
           waterRef.current = Math.min(
             88,
@@ -1052,6 +1056,24 @@ export default function TsunamiEscapeEnglish() {
   // Achievement + Daily — egyszer fut "over" / "won" átmenetkor.
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const achievementCheckedRef = useRef(false);
+
+  // D6 a11y: quiz-overlay dialog ref + Escape + auto-focus
+  const quizDialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (phase !== "quiz") return;
+    const t = window.setTimeout(() => {
+      const first = quizDialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]");
+      first?.focus();
+    }, 50);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [phase]);
   useEffect(() => {
     if (phase !== "over" && phase !== "won") {
       achievementCheckedRef.current = false;
@@ -1599,6 +1621,9 @@ export default function TsunamiEscapeEnglish() {
       <AnimatePresence>
         {phase === "quiz" && quiz && (
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Kvíz kérdés"
             className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1607,6 +1632,10 @@ export default function TsunamiEscapeEnglish() {
             <motion.div
               initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
+              ref={quizDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Mini-teszt"
               className={`w-full max-w-md rounded-2xl border border-cyan-200/50 bg-slate-950/96 p-4 shadow-[0_20px_56px_rgba(14,165,233,0.35)] ${
                 wrongShake ? "animate-shake" : ""
               }`}

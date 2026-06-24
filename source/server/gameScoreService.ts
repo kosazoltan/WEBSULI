@@ -106,54 +106,37 @@ export async function submitGameScore(params: {
   const runStreak = Math.max(0, Math.min(10_000, Math.floor(Number(params.runStreak) || 0)));
   const runSeconds = Math.max(0, Math.min(86_400, Math.floor(Number(params.runSeconds) || 0)));
 
-  const [existing] = await db
-    .select()
-    .from(gameScores)
-    .where(
-      and(
-        eq(gameScores.userId, params.userId),
-        eq(gameScores.gameId, params.gameId),
-        eq(gameScores.difficulty, diff),
-      ),
-    )
-    .limit(1);
-
   const now = new Date();
-  if (!existing) {
-    const [inserted] = await db
-      .insert(gameScores)
-      .values({
-        userId: params.userId,
-        gameId: params.gameId,
-        difficulty: diff,
-        totalXp: runXp,
-        bestRunXp: runXp,
-        bestStreak: runStreak,
-        bestRunSeconds: runSeconds,
-        gamesPlayed: 1,
-        updatedAt: now,
-      })
-      .returning();
-    return inserted;
-  }
 
-  const newTotal = existing.totalXp + runXp;
-  const newBestRun = Math.max(existing.bestRunXp, runXp);
-  const newBestStreak = Math.max(existing.bestStreak, runStreak);
-  const newBestSeconds = Math.max(existing.bestRunSeconds, runSeconds);
-
-  const [updated] = await db
-    .update(gameScores)
-    .set({
-      totalXp: newTotal,
-      bestRunXp: newBestRun,
-      bestStreak: newBestStreak,
-      bestRunSeconds: newBestSeconds,
-      gamesPlayed: existing.gamesPlayed + 1,
+  // Atomic upsert — eliminates the lost-update race condition that existed in
+  // the previous read-then-write pattern. On conflict (same userId+gameId+difficulty)
+  // all increments are applied in a single SQL statement so concurrent requests
+  // cannot observe a stale read.
+  const [upserted] = await db
+    .insert(gameScores)
+    .values({
+      userId: params.userId,
+      gameId: params.gameId,
+      difficulty: diff,
+      totalXp: runXp,
+      bestRunXp: runXp,
+      bestStreak: runStreak,
+      bestRunSeconds: runSeconds,
+      gamesPlayed: 1,
       updatedAt: now,
     })
-    .where(eq(gameScores.id, existing.id))
+    .onConflictDoUpdate({
+      target: [gameScores.userId, gameScores.gameId, gameScores.difficulty],
+      set: {
+        totalXp: sql`${gameScores.totalXp} + ${runXp}`,
+        bestRunXp: sql`GREATEST(${gameScores.bestRunXp}, ${runXp})`,
+        bestStreak: sql`GREATEST(${gameScores.bestStreak}, ${runStreak})`,
+        bestRunSeconds: sql`GREATEST(${gameScores.bestRunSeconds}, ${runSeconds})`,
+        gamesPlayed: sql`${gameScores.gamesPlayed} + 1`,
+        updatedAt: now,
+      },
+    })
     .returning();
 
-  return updated;
+  return upserted;
 }
