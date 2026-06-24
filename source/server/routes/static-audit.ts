@@ -1,13 +1,17 @@
 /**
  * GET /api/static-audit
- * Returns static audit results
+ * Returns static audit results (admin-only, disabled in production)
  */
 import { Router, type Request, type Response } from "express";
 import { runStaticAudit } from "../lib/static-audit";
+import { isAuthenticatedAdmin } from "../auth";
 
 const router = Router();
 
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", isAuthenticatedAdmin, async (_req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   try {
     const results = await runStaticAudit();
     const allPass = results.every((r) => r.status !== "FAIL");

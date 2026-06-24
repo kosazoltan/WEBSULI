@@ -18,6 +18,7 @@ import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
 import staticAuditRouter from "./routes/static-audit";
 import { sendErrorReport } from "./lib/error-mailer";
+import { aiPayloadGuard } from "./lib/ai-payload-guard";
 
 const app = express();
 
@@ -311,6 +312,7 @@ const loginLimiter = rateLimit({
 
 // Apply rate limiting only to specific endpoints
 app.use("/api/ai/", aiLimiter); // All AI endpoints
+app.use("/api/ai/", aiPayloadGuard()); // C1: payload size + history limits
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 

@@ -1599,6 +1599,9 @@ export default function TsunamiEscapeEnglish() {
       <AnimatePresence>
         {phase === "quiz" && quiz && (
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Kvíz kérdés"
             className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

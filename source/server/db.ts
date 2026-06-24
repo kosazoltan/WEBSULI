@@ -29,7 +29,13 @@ const pool = new Pool({
   max: 10, // Reduced for Neon free tier (max ~100 connections shared across all clients)
   idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
   connectionTimeoutMillis: 10000, // 10s timeout — Neon cold start can take 3-5s
-  ...(requiresSSL && { ssl: { rejectUnauthorized: false } }),
+  // B3: SSL certificate validation — enabled in production, relaxed in dev (self-signed certs)
+  ...(requiresSSL && {
+    ssl: {
+      rejectUnauthorized: process.env.NODE_ENV === 'production',
+      ...(process.env.DATABASE_CA_CERT ? { ca: process.env.DATABASE_CA_CERT } : {}),
+    }
+  }),
 });
 
 // Test connection on startup with retry for Neon cold starts

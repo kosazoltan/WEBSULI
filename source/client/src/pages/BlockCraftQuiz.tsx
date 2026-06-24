@@ -1112,6 +1112,9 @@ export default function BlockCraftQuiz() {
   const [levelRare, setLevelRare] = useState(0);
   /** Pálya-szintű gyémánt-számláló — az 5. pálya "legalább 1 gyémánt" céljához. */
   const [levelDiamonds, setLevelDiamonds] = useState(0);
+  // D2/D3: run-level (cross-level) trackers that survive per-level resets.
+  const bestStreakRef = useRef(0);      // highest streak reached during the whole run
+  const totalDiamondsRef = useRef(0);   // total real DIAMOND tiles mined during the whole run
   const [levelStartXp, setLevelStartXp] = useState(0);
   const [gameWon, setGameWon] = useState(false);
   // Subject-breakdown: melyik tantárgyból hány jó választ adott.
@@ -1370,6 +1373,8 @@ export default function BlockCraftQuiz() {
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
+    bestStreakRef.current = 0;     // D2: reset run-level best streak on new game
+    totalDiamondsRef.current = 0; // D3: reset run-level diamond count on new game
     setLevelIdx(0);
     setGameWon(false);
     streakProtector.resetProtector();
@@ -1435,12 +1440,22 @@ export default function BlockCraftQuiz() {
       p.yaw -= e.movementX * 0.0024;
       p.pitch = Math.max(-1.45, Math.min(1.45, p.pitch - e.movementY * 0.0022));
     };
+    // D4: reset all movement flags on window blur (prevents stuck keys on tab/window switch)
+    const onBlur = () => {
+      keysRef.current.fwd = false;
+      keysRef.current.back = false;
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+      keysRef.current.jump = false;
+    };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    window.addEventListener("blur", onBlur);
     document.addEventListener("mousemove", mm);
     return () => {
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.removeEventListener("blur", onBlur);
       document.removeEventListener("mousemove", mm);
     };
   }, []);
@@ -1453,8 +1468,9 @@ export default function BlockCraftQuiz() {
    *  - gravitáció + AABB ütközés sub-steppinggel (lásd stepPlayerPhysics)
    *  - időjárás-részecskék + sodródó felhők + bányász-por
    */
+  // D1: scene mount-szintű effect — NEM phase-függő; phaseRef-et használja a render-loopban
   useEffect(() => {
-    if (phase !== "play") return;
+    if (phaseRef.current !== "play") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -1780,7 +1796,7 @@ export default function BlockCraftQuiz() {
       });
       renderer.dispose();
     };
-  }, [phase]);
+  }, []); // D1: mount-szintű — phase-változásra NEM épül újra a scene
 
   const onAnswer = (idx: number) => {
     if (!quiz) return;
@@ -1830,6 +1846,10 @@ export default function BlockCraftQuiz() {
       const isDiamond = tgt.t === DIAMOND;
       const newLevelDiamonds = levelDiamonds + (isDiamond ? 1 : 0);
       const newStreak = streak + 1;
+      // D2: track run-level best streak (does not reset between levels)
+      if (newStreak > bestStreakRef.current) bestStreakRef.current = newStreak;
+      // D3: track run-level real diamonds mined
+      if (isDiamond) totalDiamondsRef.current += 1;
       setSessionXp((x) => x + add);
       setTotalXp((x) => x + add);
       setBlocksMined(newBlocks);
@@ -1927,9 +1947,9 @@ export default function BlockCraftQuiz() {
       xpGained: sessionXp,
       correctAnswers: blocksMined, // ≈ helyes válaszok = kibányászott blokkok
       wrongAnswers: 0,
-      maxStreak: streak,
+      maxStreak: bestStreakRef.current, // D2: run-level best streak, not current
       blocksMined,
-      diamondsMined: rareBlocks > 0 ? Math.max(1, Math.floor(rareBlocks / 3)) : 0,
+      diamondsMined: totalDiamondsRef.current, // D3: real diamonds, not rareBlocks/3 estimate
       perfect: streak >= blocksMined && blocksMined >= 5,
       fullClear: gameWon,
       highestLevel: levelIdx + 1,

@@ -660,6 +660,7 @@ export default function SpaceAsteroidQuiz() {
   const shieldTimerRef = useRef(0);
   const bombsRef = useRef(0);
   const comboRef = useRef(0);
+  const bestComboRef = useRef(0); // D2: run-level best combo (survives combo resets)
   const enemiesKilledRef = useRef(0);
   /** Alien UFO kill-számláló — az alien_killer jelvényhez (10 alien / futás). */
   const alienKillsRef = useRef(0);
@@ -675,6 +676,15 @@ export default function SpaceAsteroidQuiz() {
 
   const keysRef = useRef({ left: false, right: false, up: false, down: false, fire: false });
   const touchRef = useRef({ left: false, right: false, up: false, fire: false });
+  const timeoutsRef = useRef<number[]>([]);
+  const pushTimeout = useCallback((cb: () => void, ms: number): number => {
+    const id = window.setTimeout(() => {
+      timeoutsRef.current = timeoutsRef.current.filter((t) => t !== id);
+      cb();
+    }, ms);
+    timeoutsRef.current.push(id);
+    return id;
+  }, []);
 
   // Three.js objektumok — useEffect-ben hozzuk létre, refbe tesszük.
   const sceneRefs = useRef<{
@@ -843,6 +853,7 @@ export default function SpaceAsteroidQuiz() {
     shieldTimerRef.current = 0;
     bombsRef.current = 0;
     comboRef.current = 0;
+    bestComboRef.current = 0; // D2: reset run-level best combo on new run
     enemiesKilledRef.current = 0;
     alienKillsRef.current = 0;
     bossDefeatedRef.current = false;
@@ -876,14 +887,14 @@ export default function SpaceAsteroidQuiz() {
     if (idx !== activeQuiz.correctIndex) {
       sfxError();
       setWrongShake(true);
-      window.setTimeout(() => setWrongShake(false), 320);
+      pushTimeout(() => setWrongShake(false), 320);
       setRevealCorrectIdx(activeQuiz.correctIndex);
       setWrongIdx(idx);
       const outcome = streakProtector.handleWrong({ streak: combo });
       if (outcome === "warned") sfxWarning();
       else setCombo(0);
       // Reveal után új kvíz (még quiz fázisban)
-      window.setTimeout(() => {
+      pushTimeout(() => {
         setRevealCorrectIdx(null);
         setWrongIdx(null);
         setActiveQuiz(pickQuiz());
@@ -1481,6 +1492,7 @@ export default function SpaceAsteroidQuiz() {
   const handleEnemyDestroyed = (e: EnemyState) => {
     e.dead = true;
     comboRef.current = comboRef.current + 1;
+    if (comboRef.current > bestComboRef.current) bestComboRef.current = comboRef.current; // D2
     setCombo(comboRef.current);
     enemiesKilledRef.current += 1;
     setEnemiesKilled(enemiesKilledRef.current);
@@ -1528,7 +1540,7 @@ export default function SpaceAsteroidQuiz() {
       // ténylegesen lejátszódik a phase-átmenet előtt.
       bossDefeatedRef.current = true;
       setGameWon(true);
-      window.setTimeout(() => setPhase("over"), 1500); // robbanás-effekt ideje
+      pushTimeout(() => setPhase("over"), 1500); // robbanás-effekt ideje
       return;
     }
 
@@ -1639,7 +1651,7 @@ export default function SpaceAsteroidQuiz() {
       livesRef.current = next;
       setLives(next);
       setSavedToast("Megúsztál egy kvízt!");
-      window.setTimeout(() => setSavedToast(null), 2200);
+      pushTimeout(() => setSavedToast(null), 2200);
       scoreRef.current += 35;
       setScore(scoreRef.current);
     } else if (pu.kind === "shield") {
@@ -1647,7 +1659,7 @@ export default function SpaceAsteroidQuiz() {
       shieldTimerRef.current = Math.min(20, shieldTimerRef.current + 8);
       setShieldTimer(shieldTimerRef.current);
       setSavedToast("Pajzs aktiválva!");
-      window.setTimeout(() => setSavedToast(null), 1800);
+      pushTimeout(() => setSavedToast(null), 1800);
       scoreRef.current += 25;
       setScore(scoreRef.current);
     } else if (pu.kind === "bomb") {
@@ -1655,7 +1667,7 @@ export default function SpaceAsteroidQuiz() {
       bombsRef.current = Math.min(5, bombsRef.current + 1);
       setBombs(bombsRef.current);
       setSavedToast("Bomba a tárba!");
-      window.setTimeout(() => setSavedToast(null), 1800);
+      pushTimeout(() => setSavedToast(null), 1800);
       scoreRef.current += 30;
       setScore(scoreRef.current);
     } else {
@@ -1710,6 +1722,7 @@ export default function SpaceAsteroidQuiz() {
     }
     if (killedAny) {
       comboRef.current = comboBefore + 1;
+      if (comboRef.current > bestComboRef.current) bestComboRef.current = comboRef.current; // D2
       setCombo(comboRef.current);
     }
     // Ellenséges lövedékek is törlődnek
@@ -1915,12 +1928,28 @@ export default function SpaceAsteroidQuiz() {
         case " ": keysRef.current.fire = false; break;
       }
     };
+    // D4: reset all movement flags on window blur (prevents stuck keys on tab/window switch)
+    const onBlur = () => {
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+      keysRef.current.up = false;
+      keysRef.current.down = false;
+      keysRef.current.fire = false;
+    };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.removeEventListener("blur", onBlur);
     };
+  }, []);
+
+  // D4: clear all registered timeouts on unmount (prevents late state-update warnings)
+  useEffect(() => () => {
+    timeoutsRef.current.forEach((id) => window.clearTimeout(id));
+    timeoutsRef.current = [];
   }, []);
 
   // R = quick-restart az "over" / "intro" / "grade" képernyőn.
@@ -1958,7 +1987,7 @@ export default function SpaceAsteroidQuiz() {
       gameId: "space-asteroid-quiz",
       difficulty: "normal",
       runXp: scoreRef.current,
-      runStreak: comboRef.current,
+      runStreak: bestComboRef.current, // D2: run-level best, not current
       runSeconds: ROUND_LIMIT_SEC - timeLeft,
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
@@ -1980,10 +2009,10 @@ export default function SpaceAsteroidQuiz() {
       xpGained: scoreRef.current,
       correctAnswers: enemiesKilledRef.current, // ≈ a leszedett ellenfél = helyes válasz proxy
       wrongAnswers: 0,
-      maxStreak: comboRef.current,
+      maxStreak: bestComboRef.current, // D2: run-level best, not current
       enemiesKilled: enemiesKilledRef.current,
       alienKills: alienKillsRef.current,
-      perfect: gameWon && comboRef.current >= 5,
+      perfect: gameWon && bestComboRef.current >= 5,
       fullClear: gameWon,
       highestWave: waveRef.current,
     });
@@ -2261,6 +2290,9 @@ export default function SpaceAsteroidQuiz() {
       <AnimatePresence>
         {phase === "quiz" && activeQuiz && (
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Kvíz kérdés"
             className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/85 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

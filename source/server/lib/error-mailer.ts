@@ -15,10 +15,9 @@ const APP_NAME = "Websuli";
 const REPO_PATH = "D:\\repo\\WEBSULI";
 const GITHUB_REPO = "kosazoltan/WEBSULI";
 const FORBIDDEN_REPOS: string[] = [];
-const HMAC_SECRET =
-  process.env.ERRORLOG_HMAC_SECRET ?? "errorlog-hmac-s3cr3t-websuli-2026-kz";
-const SENDER_EMAIL = "noraautomatizalas@gmail.com";
-const RECIPIENT_EMAIL = "noraautomatizalas@gmail.com";
+const HMAC_SECRET = process.env.ERRORLOG_HMAC_SECRET;
+const SENDER_EMAIL = process.env.ERROR_REPORT_SENDER;
+const RECIPIENT_EMAIL = process.env.ERROR_REPORT_RECIPIENT;
 
 // ============================================================
 // TYPES
@@ -95,6 +94,10 @@ export function sanitizeForEmail(text: string | undefined): string {
 // signEmailPayload — HMAC-SHA256
 // ============================================================
 export function signEmailPayload(payload: string): string {
+  if (!HMAC_SECRET) {
+    throw new Error("ERRORLOG_HMAC_SECRET is not configured");
+  }
+
   return crypto
     .createHmac("sha256", HMAC_SECRET)
     .update(payload)
@@ -195,6 +198,14 @@ async function _sendEmail(
   const password = process.env.JUNIOR_EMAIL_PASSWORD;
   if (!password) {
     console.warn("[ErrorLogger] JUNIOR_EMAIL_PASSWORD not set, skipping email.");
+    return;
+  }
+  if (!HMAC_SECRET) {
+    console.warn("[ErrorLogger] ERRORLOG_HMAC_SECRET not set, skipping email.");
+    return;
+  }
+  if (!SENDER_EMAIL || !RECIPIENT_EMAIL) {
+    console.warn("[ErrorLogger] ERROR_REPORT_SENDER or ERROR_REPORT_RECIPIENT not set, skipping email.");
     return;
   }
 
