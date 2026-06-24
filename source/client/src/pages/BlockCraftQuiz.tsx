@@ -1133,6 +1133,8 @@ export default function BlockCraftQuiz() {
   const [xpFloat, setXpFloat] = useState<{ amount: number; key: number } | null>(null);
   const scoreSubmittedRef = useRef(false);
   const phaseRef = useRef<Phase>("menu");
+  // D1: ref-guard — a Three.js scene csak egyszer épül fel ugyanazon play-session-ban
+  const sceneBuiltRef = useRef(false);
   // Keep refs in sync for the canvas loop / global key handlers (avoids stale closure)
   streakRef.current = streak;
   phaseRef.current = phase;
@@ -1471,6 +1473,8 @@ export default function BlockCraftQuiz() {
   // D1: scene mount-szintű effect — NEM phase-függő; phaseRef-et használja a render-loopban
   useEffect(() => {
     if (phaseRef.current !== "play") return;
+    if (sceneBuiltRef.current) return;
+    sceneBuiltRef.current = true;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -1795,6 +1799,7 @@ export default function BlockCraftQuiz() {
         }
       });
       renderer.dispose();
+      sceneBuiltRef.current = false; // D1: reset on cleanup
     };
   }, []); // D1: mount-szintű — phase-változásra NEM épül újra a scene
 
@@ -1934,6 +1939,24 @@ export default function BlockCraftQuiz() {
 
   // Achievement + Daily Challenge tracking — az "over" phase átmenetnél egyszer fut.
   const achievementCheckedRef = useRef(false);
+
+  // D6 a11y: quiz-overlay dialog ref + Escape + auto-focus
+  const quizDialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (phase !== "quiz") return;
+    const t = window.setTimeout(() => {
+      const first = quizDialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]");
+      first?.focus();
+    }, 50);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [phase]);
   useEffect(() => {
     if (phase !== "over") {
       achievementCheckedRef.current = false;
@@ -2326,7 +2349,7 @@ export default function BlockCraftQuiz() {
         </CardContent></Card>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => {
+      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div ref={quizDialogRef} role="dialog" aria-modal="true" aria-label="Mini-teszt" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => {
         const isCorrect = revealCorrectIdx === i;
         const isWrong = wrongIdx === i;
         const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;

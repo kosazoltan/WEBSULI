@@ -1996,6 +1996,24 @@ export default function SpaceAsteroidQuiz() {
 
   // Achievement + Daily — egyszer fut "over" átmenetkor.
   const achievementCheckedRef = useRef(false);
+
+  // D6 a11y: quiz-overlay dialog ref + Escape + auto-focus
+  const quizDialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (phase !== "quiz") return;
+    const t = window.setTimeout(() => {
+      const first = quizDialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]");
+      first?.focus();
+    }, 50);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [phase]);
   useEffect(() => {
     if (phase !== "over") {
       achievementCheckedRef.current = false;
@@ -2299,6 +2317,10 @@ export default function SpaceAsteroidQuiz() {
             exit={{ opacity: 0 }}
           >
             <motion.div
+              ref={quizDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Mini-teszt"
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               className={`w-full max-w-md rounded-2xl border-2 border-cyan-400/55 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake-spq" : ""}`}
