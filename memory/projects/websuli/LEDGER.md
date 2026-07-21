@@ -57,3 +57,16 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   Render API health 200 ✅. websuli.vip /health OK, /api/csrf-token 200.
 - VPS megjegyzés: a 95.216.191.162 gépen NINCS /var/www/websuli — a régi
   VPS-deploy doksik elavultak (doc drift), az éles út: Vercel + Render.
+
+## 2026-07-21 — Git history titok-tisztítás (filter-repo)
+
+- Teljes bundle-backup: D:\repo\_backups\websuli-pre-rewrite-20260721.bundle.
+- `git filter-repo --replace-text`: 4 érték (2× Google Client ID + 2× Secret)
+  → `***REMOVED***` MINDEN commitban; lokális ellenőrzés minden refre: TISZTA.
+- Force push main → origin (09be169...517510b). A régi historyt hordozó 4 remote
+  branch (3× claude/*, fix/security-quality) törölve a GitHubról; a lokális
+  másolataik filter-repo által átírva.
+- Purge-lista + replacement fájl: D:\repo\_backups\ (600-as joggal, gitignore-on kívül).
+- MARADÉK KOCKÁZAT: GitHub a törölt commitokat cache-eli (dangling objektumok,
+  PR-diffek); teljes törléshez GitHub Support kérés kell — ezért a Client
+  Secret ROTÁCIÓJA továbbra is kötelező.

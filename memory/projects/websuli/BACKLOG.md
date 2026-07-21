@@ -14,7 +14,7 @@ project: websuli
 
 ## Sürgős / biztonság
 
-- [ ] **Google OAuth Client Secret rotálása** — a régi secret a git historyban
+- [ ] **Google OAuth Client Secret rotálása** — a history filter-repóval tisztítva (2026-07-21), de a GitHub cache/PR-diffek miatt a rotáció továbbra is kötelező. A régi secret a git historyban
   van (trackelt template-fájlokban volt élő értékkel); a working tree már
   tiszta, de a history nem. Rotálás után csak a `.env`-be írni.
 - [x] QA-javítások commitolva + rebase + push (8702e2b) + auto-deploy VERIFIED (Vercel bundle marker, Render health 200).
