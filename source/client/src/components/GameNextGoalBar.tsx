@@ -7,8 +7,8 @@ export type GoalAccent = "cyan" | "amber" | "lime" | "fuchsia";
 const shell: Record<GoalAccent, string> = {
   cyan: "border-cyan-400/55 bg-gradient-to-br from-cyan-500/20 via-slate-950/40 to-blue-900/30 shadow-[0_0_24px_rgba(34,211,238,0.15)]",
   amber: "border-amber-400/55 bg-gradient-to-br from-amber-500/20 via-slate-950/40 to-orange-900/25 shadow-[0_0_24px_rgba(251,191,36,0.12)]",
-  lime: "border-lime-400/55 bg-gradient-to-br from-lime-500/18 via-slate-950/40 to-emerald-900/28 shadow-[0_0_24px_rgba(34,197,94,0.14)]",
-  fuchsia: "border-fuchsia-400/50 bg-gradient-to-br from-fuchsia-500/18 via-slate-950/40 to-cyan-900/25 shadow-[0_0_24px_rgba(217,70,239,0.12)]",
+  lime: "border-lime-400/55 bg-gradient-to-br from-lime-500/20 via-slate-950/40 to-emerald-900/30 shadow-[0_0_24px_rgba(34,197,94,0.14)]",
+  fuchsia: "border-fuchsia-400/50 bg-gradient-to-br from-fuchsia-500/20 via-slate-950/40 to-cyan-900/25 shadow-[0_0_24px_rgba(217,70,239,0.12)]",
 };
 
 const barFill: Record<GoalAccent, string> = {
@@ -55,7 +55,7 @@ function GameNextGoalBar({
         <div className="min-w-0 flex-1">
           <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/60">Következő cél</p>
           <p className="text-sm font-extrabold leading-snug text-white drop-shadow-sm">{headline}</p>
-          {subtitle ? <p className="text-[11px] text-white/78 mt-0.5 leading-snug">{subtitle}</p> : null}
+          {subtitle ? <p className="text-[11px] text-white/75 mt-0.5 leading-snug">{subtitle}</p> : null}
           {showBar && target > 0 ? (
             <div className="mt-2">
               <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/40 ring-1 ring-white/10">

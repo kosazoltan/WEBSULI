@@ -483,7 +483,7 @@ export default function SpeedQuizMath() {
           </div>
         </header>
 
-        <Card className="border border-cyan-300/45 bg-slate-950/88 backdrop-blur-md shadow-[0_16px_50px_rgba(0,0,0,0.48)] flex-1 flex flex-col min-h-0">
+        <Card className="border border-cyan-300/45 bg-slate-950/90 backdrop-blur-md shadow-[0_16px_50px_rgba(0,0,0,0.48)] flex-1 flex flex-col min-h-0">
           <CardContent data-game-card-content className="p-3 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-1">
               <Rocket className="w-5 h-5 text-cyan-300" />
@@ -623,7 +623,7 @@ export default function SpeedQuizMath() {
                       : wrongFlash || answerState === "wrong"
                         ? "border-rose-400"
                         : "border-cyan-300/45"
-                  } bg-slate-950/88 p-2.5 transition-colors`}
+                  } bg-slate-950/90 p-2.5 transition-colors`}
                 >
                   <p className="text-[11px] text-white/60 mb-1">
                     Gyors teszt #{answered + 1} — válaszd ki a helyest (fent a kérdés-idő sáv)

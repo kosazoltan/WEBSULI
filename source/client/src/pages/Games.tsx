@@ -313,7 +313,7 @@ export default function Games() {
         <Card className="glass-card border-amber-400/35 mb-4 shadow-[0_0_28px_rgba(251,191,36,0.12)]">
           <CardContent className="p-3 sm:p-4">
             <p className="text-xs font-extrabold text-amber-200 uppercase tracking-wide mb-2">Játszva tanulás — miért működik?</p>
-            <p className="text-xs sm:text-sm text-white/82 leading-relaxed">
+            <p className="text-xs sm:text-sm text-white/80 leading-relaxed">
               Minden WebSuli-játékban <strong className="text-white">látható cél</strong>, <strong className="text-white">akadály</strong>{" "}
               (pl. idő, víz, életek, létra) és <strong className="text-white">rövid teszt</strong> (kvíz vagy matekfeladat) van összekötve. A helyes
               válaszra <strong className="text-amber-200">azonnal jutalom</strong> jár: XP, sorozat-láng, pályán előrelépés — ez a „cél → próba → visszajelzés”

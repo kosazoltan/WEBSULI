@@ -10,6 +10,12 @@ interface LikeButtonProps {
   materialId: string;
   className?: string;
   initialLikeStatus?: { liked: boolean; totalLikes: number };
+  /**
+   * Ha true, a gomb NEM indít egyedi /likes/check kérést (pl. amíg a szülő
+   * batch lekérdezése folyamatban van). Enélkül listanézetben minden kártya
+   * külön POST-ot lőne (N+1 kérés-vihar), mielőtt a batch adat beérne.
+   */
+  suppressCheck?: boolean;
 }
 
 interface LikeStatus {
@@ -17,7 +23,7 @@ interface LikeStatus {
   totalLikes: number;
 }
 
-export default function LikeButton({ materialId, className, initialLikeStatus }: LikeButtonProps) {
+export default function LikeButton({ materialId, className, initialLikeStatus, suppressCheck = false }: LikeButtonProps) {
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -33,7 +39,7 @@ export default function LikeButton({ materialId, className, initialLikeStatus }:
       // Use the check endpoint which accepts fingerprint in body
       return await apiRequest<LikeStatus>("POST", `/api/materials/${materialId}/likes/check`, { fingerprint });
     },
-    enabled: !!fingerprint && !initialLikeStatus,
+    enabled: !!fingerprint && !initialLikeStatus && !suppressCheck,
     initialData: initialLikeStatus,
     staleTime: 60000, // Don't refetch for 1 minute (batch data is fresh)
   });
@@ -86,7 +92,7 @@ export default function LikeButton({ materialId, className, initialLikeStatus }:
     }
   });
 
-  if (!fingerprint || (isLoading && !initialLikeStatus)) {
+  if (!fingerprint || (isLoading && !initialLikeStatus) || (suppressCheck && !currentLikeStatus)) {
     return (
       <Button
         variant="outline"

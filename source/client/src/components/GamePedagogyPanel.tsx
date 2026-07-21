@@ -16,19 +16,19 @@ const accentStyles: Record<
   },
   amber: {
     border: "border-amber-400/50",
-    bg: "from-amber-500/20 via-orange-500/12 to-rose-500/10",
+    bg: "from-amber-500/20 via-orange-500/10 to-rose-500/10",
     label: "text-amber-200/95",
     title: "text-white",
   },
   lime: {
     border: "border-lime-400/50",
-    bg: "from-lime-500/18 via-emerald-600/12 to-teal-600/12",
+    bg: "from-lime-500/20 via-emerald-600/10 to-teal-600/10",
     label: "text-lime-200/95",
     title: "text-white",
   },
   fuchsia: {
     border: "border-fuchsia-400/45",
-    bg: "from-fuchsia-500/18 via-violet-600/12 to-purple-700/10",
+    bg: "from-fuchsia-500/20 via-violet-600/10 to-purple-700/10",
     label: "text-fuchsia-200/95",
     title: "text-white",
   },
@@ -72,7 +72,7 @@ function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className
             aria-hidden
           />
         </summary>
-        <div className="border-t border-white/10 px-3 py-2 text-[11px] leading-relaxed text-white/72">{parentBody}</div>
+        <div className="border-t border-white/10 px-3 py-2 text-[11px] leading-relaxed text-white/70">{parentBody}</div>
       </details>
     </div>
   );

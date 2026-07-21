@@ -1155,7 +1155,7 @@ export default function TsunamiEscapeEnglish() {
           </div>
         </header>
 
-        <Card className="border border-cyan-200/40 bg-slate-950/82 backdrop-blur-md flex-1 flex flex-col min-h-0 mb-3 shadow-[0_20px_60px_rgba(6,182,212,0.22)]">
+        <Card className="border border-cyan-200/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0 mb-3 shadow-[0_20px_60px_rgba(6,182,212,0.22)]">
           <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-2">
               <Waves className="w-5 h-5 text-cyan-300" />
@@ -1636,7 +1636,7 @@ export default function TsunamiEscapeEnglish() {
               role="dialog"
               aria-modal="true"
               aria-label="Mini-teszt"
-              className={`w-full max-w-md rounded-2xl border border-cyan-200/50 bg-slate-950/96 p-4 shadow-[0_20px_56px_rgba(14,165,233,0.35)] ${
+              className={`w-full max-w-md rounded-2xl border border-cyan-200/50 bg-slate-950/95 p-4 shadow-[0_20px_56px_rgba(14,165,233,0.35)] ${
                 wrongShake ? "animate-shake" : ""
               }`}
             >

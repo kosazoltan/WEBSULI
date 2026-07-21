@@ -252,3 +252,14 @@ source/server/scripts/runMigration.ts (egyszeri futtatás - nem commitolva)
 10. **Migráció nem fut le magától** – Drizzle-kit `push` lokálisan működik, de a production DB-t külön kell migrálni
 11. **Neon PostgreSQL** – Serverless DB, nincs SSH, csak connection string → diagnosztika script kellett
 12. **Deploy pipeline** – MINDIG legyen a build command-ban `db:migrate` lépés a szerver build ELŐTT
+
+---
+
+## 2026-07-20 Session – QA-kör, titok-higiénia, repo-memória bevezetés
+
+- UI-javítások: érvénytelen Tailwind opacity-k, N+1 likes/check vihar, Szólétra
+  létra-túlcsordulás, 404 oldal sötét téma + home link, prod console-spam kapu.
+- Titkok: trackelt template-ekből élő Google OAuth kulcsok kivéve (placeholder),
+  archívum + .env backup gitignore alatt; .env kiegészítve opcionális változókkal.
+- Memória: memory/projects/websuli/LEDGER.md + BACKLOG.md létrehozva, index.yml
+  frissítve. Részletek: LEDGER.md. Nyitott tételek: BACKLOG.md (secret-rotáció!).

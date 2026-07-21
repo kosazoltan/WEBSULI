@@ -80,7 +80,9 @@ collections:
     files:
       - project-overview.md
       - readme-download.md
-    tags: [project, overview, stack, setup]
+      - LEDGER.md
+      - BACKLOG.md
+    tags: [project, overview, stack, setup, ledger, backlog]
 
 vault_collections:
 

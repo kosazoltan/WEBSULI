@@ -66,6 +66,12 @@ class CSRFTokenManager {
 
 const csrfTokenManager = new CSRFTokenManager();
 
+// Dev-only request logger — production buildben néma, hogy ne szemetelje
+// tele a konzolt (167 tananyagnál kérésenként 2 sor volt).
+const debugLog: typeof console.log = import.meta.env.DEV
+  ? console.log.bind(console)
+  : () => {};
+
 // Retry helper with exponential backoff for mobile network reliability
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -93,7 +99,7 @@ async function retryWithBackoff<T>(
       
       // Calculate delay with exponential backoff + jitter
       const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
-      console.log(`[RETRY] Attempt ${attempt + 1}/${maxRetries + 1} failed, retrying in ${Math.round(delay)}ms...`, error.message);
+      debugLog(`[RETRY] Attempt ${attempt + 1}/${maxRetries + 1} failed, retrying in ${Math.round(delay)}ms...`, error.message);
       
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -119,7 +125,7 @@ export async function apiRequest<T = any>(
       }, timeout);
 
       try {
-        console.log(`[API REQUEST] ${method} ${url}, size: ${data ? JSON.stringify(data).length : 0} bytes`);
+        debugLog(`[API REQUEST] ${method} ${url}, size: ${data ? JSON.stringify(data).length : 0} bytes`);
         
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
@@ -142,7 +148,7 @@ export async function apiRequest<T = any>(
         });
 
         clearTimeout(timeoutId);
-        console.log(`[API REQUEST] ${method} ${url} → ${res.status} ${res.statusText}`);
+        debugLog(`[API REQUEST] ${method} ${url} → ${res.status} ${res.statusText}`);
 
         // SECURITY: If CSRF token invalid (403 Forbidden), refresh token and retry ONCE
         if (res.status === 403) {
@@ -167,7 +173,7 @@ export async function apiRequest<T = any>(
                 signal: retryController.signal,
               });
               
-              console.log(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
+              debugLog(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
               await throwIfResNotOk(retryRes);
               
               if (retryRes.status === 204) {

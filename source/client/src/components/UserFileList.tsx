@@ -127,8 +127,8 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   // Batch fetch likes for all visible files
   const materialIds = useMemo(() => filteredFiles.map((f) => f.id), [filteredFiles]);
 
-  const { data: batchLikesData } = useQuery<Record<string, { liked: boolean; totalLikes: number }>>({
-    queryKey: ["/api/materials/likes/batch", materialIds.sort().join(","), fingerprint],
+  const { data: batchLikesData, isLoading: batchLikesLoading } = useQuery<Record<string, { liked: boolean; totalLikes: number }>>({
+    queryKey: ["/api/materials/likes/batch", [...materialIds].sort().join(","), fingerprint],
     queryFn: async () => {
       if (!fingerprint || materialIds.length === 0) return {};
       return await apiRequest("POST", "/api/materials/likes/batch", {
@@ -357,6 +357,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                         <LikeButton
                           materialId={file.id}
                           initialLikeStatus={batchLikesData?.[file.id]}
+                          suppressCheck={batchLikesLoading}
                         />
                         <motion.div
                           className={`w-6 h-6 rounded-full bg-gradient-to-r ${badgeGradient} flex items-center justify-center transition-all`}

@@ -379,7 +379,7 @@ export default function WordLadderHuEn() {
         transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
-        className="pointer-events-none absolute w-56 h-24 rounded-full bg-white/8 blur-2xl top-[14%] right-[5%]"
+        className="pointer-events-none absolute w-56 h-24 rounded-full bg-white/10 blur-2xl top-[14%] right-[5%]"
         animate={{ x: [0, -40, 0] }}
         transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
       />
@@ -433,13 +433,15 @@ export default function WordLadderHuEn() {
 
             {phase === "menu" && (
               <div className="flex flex-col items-center justify-center flex-1 gap-4 py-8">
-                <div className="relative w-32 h-48 flex items-end justify-center">
+                <div className="relative w-32 h-48 flex items-end justify-center overflow-hidden">
                   {Array.from({ length: RUNGS }).map((_, i) => (
                     <div
                       key={i}
                       className="absolute w-28 h-2 rounded-sm shadow-md"
                       style={{
-                        bottom: `${i * 14}px`,
+                        // A fokok a konténer magasságán belül oszlanak el (h-48 = 192px),
+                        // különben a 22 fok túlcsordulna és a fenti panelekre lógna.
+                        bottom: `${i * 8}px`,
                         background: `linear-gradient(90deg, #5c3d1e 0%, #8b5a2b 40%, #6b4423 100%)`,
                         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15)",
                       }}
@@ -576,7 +578,7 @@ export default function WordLadderHuEn() {
             <motion.div
               initial={{ y: 36, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              className={`w-full max-w-md rounded-2xl border-2 border-amber-600/50 bg-gradient-to-b from-amber-950/95 to-slate-950/98 p-4 shadow-2xl ${
+              className={`w-full max-w-md rounded-2xl border-2 border-amber-600/50 bg-gradient-to-b from-amber-950/95 to-slate-950 p-4 shadow-2xl ${
                 wrongShake ? "animate-shake" : ""
               }`}
             >
