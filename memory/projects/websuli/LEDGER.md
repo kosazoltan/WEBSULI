@@ -43,3 +43,17 @@ project: websuli
 **Verifikáció:** dev szerver fut (:5000), `/api/csrf-token` 200 OK. Záró kapu a
 javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 `npx eslint client/src server` → **0 error / 1160 warning** (baseline 1163 volt).
+
+## 2026-07-20 (este) — lint / merge / push / deploy
+
+- Rebase origin/main-re (2 upstream commit: Node 20→22 CI-fix, security+quality
+  #5); 2 konfliktus kézzel oldva (TsunamiEscapeEnglish.tsx: upstream a11y
+  attribútumok + mi opacity-fixünk együtt; .gitignore: mindkét blokk megtartva).
+- Rebase utáni kapuk: tsc 0 hiba, eslint 0 error.
+- Push: main → origin/main (48685cd..8702e2b), 2 commit:
+  4811a7c fix(ui+perf) QA-kör, 8702e2b chore(security) template-kulcsok ki.
+- Deploy (auto, GitHub-ról): Vercel frontend — az élő bundle
+  (index-DGTpmKi4.js) már tartalmazza a `suppressCheck` markert = új build ✅;
+  Render API health 200 ✅. websuli.vip /health OK, /api/csrf-token 200.
+- VPS megjegyzés: a 95.216.191.162 gépen NINCS /var/www/websuli — a régi
+  VPS-deploy doksik elavultak (doc drift), az éles út: Vercel + Render.

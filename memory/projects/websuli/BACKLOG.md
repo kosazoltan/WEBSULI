@@ -17,7 +17,7 @@ project: websuli
 - [ ] **Google OAuth Client Secret rotálása** — a régi secret a git historyban
   van (trackelt template-fájlokban volt élő értékkel); a working tree már
   tiszta, de a history nem. Rotálás után csak a `.env`-be írni.
-- [ ] A 2026-07-20 QA-javítások commitolása (13 módosított fájl a working tree-ben,
+- [x] QA-javítások commitolva + rebase + push (8702e2b) + auto-deploy VERIFIED (Vercel bundle marker, Render health 200).
   a `main` ága eleve "ahead 1" állapotban van — rendezni a remote-tal).
 
 ## Verifikáció / QA folytatás
