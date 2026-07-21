@@ -24,3 +24,9 @@ vault/**/*secret*
 Gemini.jpg
 .harness/backups/
 source/.harness/
+
+# Local secret environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
