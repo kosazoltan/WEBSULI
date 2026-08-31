@@ -3,7 +3,7 @@ import http from "node:http";
 import test from "node:test";
 import express, { type Request, type Response, type NextFunction } from "express";
 
-import { isOriginAllowed, getAllowedOrigins } from "../server/lib/allowed-origins";
+import { isOriginAllowed, getAllowedOrigins, getSelfOrigin, isSameOriginRequest } from "../server/lib/allowed-origins";
 
 /**
  * A1 — Origin/Referer allowlist enforcement for the mutating endpoints that cannot carry
@@ -234,4 +234,61 @@ test("the allowlist always contains the production domains and normalises env en
       assert.equal(new Set(origins).size, origins.length);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Same-origin requests must never be rejected by the CORS layer.
+//
+// Vite emits its bundles as `<script type="module" crossorigin>` / `<link crossorigin>`,
+// so the browser attaches an Origin header even to the app's own assets. Rejecting those
+// returns 500 for every bundle and the page renders blank — a full outage whenever the
+// deployment is reached on a hostname the allowlist does not know.
+// ---------------------------------------------------------------------------
+
+test("isSameOriginRequest accepts the origin the server is addressed as", () => {
+  assert.equal(isSameOriginRequest("http://localhost:5000", "http", "localhost:5000"), true);
+  assert.equal(isSameOriginRequest("https://websuli.vip", "https", "websuli.vip"), true);
+});
+
+test("isSameOriginRequest rejects a different host, port or scheme", () => {
+  assert.equal(isSameOriginRequest("http://evil.example", "http", "localhost:5000"), false);
+  assert.equal(isSameOriginRequest("http://localhost:5001", "http", "localhost:5000"), false);
+  assert.equal(isSameOriginRequest("https://localhost:5000", "http", "localhost:5000"), false);
+});
+
+test("isSameOriginRequest is false without an Origin or a Host", () => {
+  assert.equal(isSameOriginRequest(undefined, "http", "localhost:5000"), false);
+  assert.equal(isSameOriginRequest("http://localhost:5000", "http", undefined), false);
+  assert.equal(isSameOriginRequest("http://localhost:5000", undefined, "localhost:5000"), false);
+});
+
+test("getSelfOrigin normalises away the default port and any path", () => {
+  assert.equal(getSelfOrigin("https", "websuli.vip"), "https://websuli.vip");
+  assert.equal(getSelfOrigin("https", "websuli.vip:443"), "https://websuli.vip");
+  assert.equal(getSelfOrigin("http", "websuli.vip:80"), "http://websuli.vip");
+  assert.equal(getSelfOrigin("http", "localhost:5000"), "http://localhost:5000");
+});
+
+test("getSelfOrigin returns null for unusable input", () => {
+  assert.equal(getSelfOrigin("http", undefined), null);
+  assert.equal(getSelfOrigin(undefined, "localhost"), null);
+  assert.equal(getSelfOrigin("http", " "), null);
+});
+
+test("a production deployment on an unknown host still serves its own assets", () => {
+  // The allowlist does not know this host (no CUSTOM_DOMAIN set), yet the app's own
+  // crossorigin bundles must still load.
+  const saved = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    assert.equal(isOriginAllowed("https://uj-domain.example"), false, "precondition");
+    assert.equal(
+      isSameOriginRequest("https://uj-domain.example", "https", "uj-domain.example"),
+      true,
+      "same-origin must win regardless of the allowlist",
+    );
+  } finally {
+    if (saved === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = saved;
+  }
 });

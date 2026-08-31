@@ -61,6 +61,43 @@ export function getAllowedOrigins(): string[] {
 }
 
 /**
+ * The origin the server itself is being addressed as, derived from the request's
+ * protocol (honours X-Forwarded-Proto behind Nginx via Express' `trust proxy`) and Host
+ * header. Returns null when the Host header is missing or unusable.
+ */
+export function getSelfOrigin(
+  protocol: string | undefined,
+  host: string | undefined,
+): string | null {
+  if (!protocol || !host) return null;
+  try {
+    return new URL(`${protocol}://${host}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when the request's Origin header names the very server handling it.
+ *
+ * Vite emits its bundles as `<script type="module" crossorigin>` / `<link crossorigin>`,
+ * which makes the browser attach an Origin header even to same-origin asset requests.
+ * Rejecting those is never a security win — a same-origin request is not cross-origin —
+ * but it *is* an outage: every bundle 500s and the app renders a blank page. That happens
+ * whenever the deployment is reached on a hostname the allowlist does not know
+ * (a new domain, a missing CUSTOM_DOMAIN, http instead of https).
+ */
+export function isSameOriginRequest(
+  origin: string | undefined,
+  protocol: string | undefined,
+  host: string | undefined,
+): boolean {
+  if (!origin) return false;
+  const self = getSelfOrigin(protocol, host);
+  return self !== null && self === origin;
+}
+
+/**
  * SECURITY: True when the given origin may perform state-changing requests.
  * Localhost is accepted on any port outside production only.
  */

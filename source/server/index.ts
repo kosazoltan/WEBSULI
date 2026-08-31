@@ -3,7 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import compression from "compression";
 import helmet from "helmet";
-import cors from "cors";
+import cors, { type CorsOptionsDelegate } from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
@@ -18,7 +18,7 @@ import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
 import staticAuditRouter from "./routes/static-audit";
 import { aiPayloadGuard } from "./lib/ai-payload-guard";
-import { getAllowedOrigins, isOriginAllowed } from "./lib/allowed-origins";
+import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 
 const app = express();
 
@@ -31,30 +31,47 @@ const isDevelopment = process.env.NODE_ENV !== "production";
 const ALLOWED_ORIGINS = getAllowedOrigins();
 
 // CORS configuration object
-const corsOptions = {
-  origin: (
-    origin: string | undefined,
-    callback: (err: Error | null, allow?: boolean) => void,
-  ) => {
-    // Allow requests with no origin (mobile apps, curl, Postman, same-origin)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    // Allowlist: production domains + deployment env vars; localhost in development only
-    if (isOriginAllowed(origin)) {
-      return callback(null, true);
-    }
-
-    // SECURITY: Production - NEVER use wildcards with credentials
-    // Block ALL unauthorized origins to prevent CSRF attacks
-    return callback(new Error(`CORS policy blocked: ${origin}`));
-  },
+const corsBaseOptions = {
   credentials: true, // Allow cookies and authentication headers
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
   exposedHeaders: ["Content-Length", "X-Request-Id"],
   maxAge: 86400, // Preflight cache for 24 hours
+};
+
+/**
+ * Per-request CORS options. The delegate form is required because the same-origin check
+ * needs the request itself (its protocol and Host), not just the Origin header.
+ */
+const corsOptions: CorsOptionsDelegate<Request> = (req, callback) => {
+  callback(null, {
+    ...corsBaseOptions,
+    origin: (
+      origin: string | undefined,
+      originCallback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      // Allow requests with no origin (mobile apps, curl, Postman, plain navigations)
+      if (!origin) {
+        return originCallback(null, true);
+      }
+
+      // A request from the very origin serving it is not cross-origin. Vite marks its
+      // bundles `crossorigin`, so the browser sends an Origin header even for the app's
+      // own assets; rejecting those bricks the whole page instead of protecting anything.
+      if (isSameOriginRequest(origin, req.protocol, req.headers.host)) {
+        return originCallback(null, true);
+      }
+
+      // Allowlist: production domains + deployment env vars; localhost in development only
+      if (isOriginAllowed(origin)) {
+        return originCallback(null, true);
+      }
+
+      // SECURITY: Production - NEVER use wildcards with credentials
+      // Block ALL unauthorized origins to prevent CSRF attacks
+      return originCallback(new Error(`CORS policy blocked: ${origin}`));
+    },
+  });
 };
 
 // X-Request-ID middleware — FIRST
