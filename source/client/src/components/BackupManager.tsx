@@ -1,22 +1,14 @@
 import { useState, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { hu } from "date-fns/locale";
-import { Download, Upload, AlertCircle, Save, FileJson, Database, Code2, RefreshCw } from "lucide-react";
+import { Download, Upload, AlertCircle, FileJson, Code2, RefreshCw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,

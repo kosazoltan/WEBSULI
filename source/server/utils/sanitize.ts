@@ -92,7 +92,7 @@ export function sanitizeUrl(url: string | null | undefined): string {
           default: return char;
         }
       });
-  } catch (error) {
+  } catch {
     // Invalid URL format
     return '';
   }

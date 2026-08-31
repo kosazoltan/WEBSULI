@@ -20,7 +20,6 @@ import {
   AlertCircle,
   Loader2,
   Trash2,
-  Eye
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";

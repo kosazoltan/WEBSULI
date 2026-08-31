@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import ChatInterface, { ChatMessage } from "./ChatInterface";
 import SystemPromptEditor from "./SystemPromptEditor";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
 
 type Phase = 'upload' | 'chatgpt' | 'claude' | 'preview';
@@ -254,7 +254,7 @@ export default function EnhancedMaterialCreator() {
   
   // System Prompts for AI customization
   const [chatGptSystemPrompt, setChatGptSystemPrompt] = useState("");
-  const [claudeSystemPrompt, setClaudeSystemPrompt] = useState("");
+  const [, setClaudeSystemPrompt] = useState("");
 
   // Phase 4: Preview & Publish
   const [isPublishing, setIsPublishing] = useState(false);
@@ -449,7 +449,7 @@ export default function EnhancedMaterialCreator() {
         // For DOC/DOCX: convert to HTML using mammoth (browser build)
         if (file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
           try {
-            // @ts-ignore - mammoth.browser has no type definitions but exists at runtime
+            // @ts-expect-error - mammoth.browser has no type definitions but exists at runtime
             const mammoth = await import('mammoth/mammoth.browser');
             
             // Read DOCX as ArrayBuffer
@@ -472,7 +472,8 @@ export default function EnhancedMaterialCreator() {
             throw new Error(
               `DOCX konverzió sikertelen (${file.name}). ` +
               `Kérlek próbáld meg PDF vagy JPG/PNG formátumban feltölteni. ` +
-              `Hiba: ${docxError.message || 'Ismeretlen hiba'}`
+              `Hiba: ${docxError.message || 'Ismeretlen hiba'}`,
+              { cause: docxError }
             );
           }
         }
@@ -492,7 +493,8 @@ export default function EnhancedMaterialCreator() {
               }
               throw new Error(
                 'PDF worker inicializálása sikertelen. ' +
-                'Kérlek próbáld újra vagy használj JPG/PNG formátumot.'
+                'Kérlek próbáld újra vagy használj JPG/PNG formátumot.',
+                { cause: workerError }
               );
             }
           }
@@ -507,6 +509,8 @@ export default function EnhancedMaterialCreator() {
             data: arrayBuffer,
             standardFontDataUrl: '/pdfjs/standard_fonts/',
             useSystemFonts: false,
+            // SECURITY: block the CVE-2024-4367 font-eval sink in pdf.js 3.x
+            isEvalSupported: false,
           }).promise;
           
           const totalPages = pdf.numPages;
@@ -737,7 +741,7 @@ export default function EnhancedMaterialCreator() {
               } else if (parsed.type === 'error') {
                 throw new Error(parsed.message);
               }
-            } catch (e) {
+            } catch {
               // Ignore parse errors for incomplete JSON
             }
           }
@@ -846,7 +850,7 @@ export default function EnhancedMaterialCreator() {
               } else if (parsed.type === 'error') {
                 throw new Error(parsed.message);
               }
-            } catch (e) {
+            } catch {
               // Ignore parse errors for incomplete JSON
             }
           }

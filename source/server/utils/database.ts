@@ -50,7 +50,7 @@ async function ensureEndpointActive(databaseUrl: string): Promise<void> {
       console.error('[NEON]    3. Endpoints menü → Resume/Enable gomb');
       console.error('[NEON]    4. Várj 1-2 percet');
       console.error('[NEON]    5. Restart-eld a Replit alkalmazást');
-      throw new Error('Neon endpoint disabled - follow instructions above to enable it');
+      throw new Error('Neon endpoint disabled - follow instructions above to enable it', { cause: error });
     }
     
     // Other errors - just log and continue

@@ -30,8 +30,8 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
-      - name: ESLint (max 1166 warnings - baseline, must not grow)
-        run: npx eslint client/src server --max-warnings 1166
+      - name: ESLint (max 989 warnings - baseline, must not grow)
+        run: npx eslint client/src server --max-warnings 989
 
   unit-tests:
     name: Unit Tests
@@ -55,7 +55,7 @@ jobs:
         run: npm ci
 
       - name: Run security unit tests
-        run: node --import tsx --test tests/csrf-origin.test.ts tests/static-audit-guard.test.ts tests/error-report-hmac.test.ts
+        run: node --import tsx --test tests/csrf-origin.test.ts tests/static-audit-guard.test.ts tests/error-report-hmac.test.ts tests/push-endpoint.test.ts
 
   e2e-tests:
     name: Playwright E2E

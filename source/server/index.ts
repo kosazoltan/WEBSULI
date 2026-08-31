@@ -17,32 +17,18 @@ import { runMigrations } from "./migrate";
 import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
 import staticAuditRouter from "./routes/static-audit";
-import { sendErrorReport } from "./lib/error-mailer";
 import { aiPayloadGuard } from "./lib/ai-payload-guard";
+import { getAllowedOrigins, isOriginAllowed } from "./lib/allowed-origins";
 
 const app = express();
 
 // SECURITY: Helmet middleware for security headers
 const isDevelopment = process.env.NODE_ENV !== "production";
 
-// CORS: Allow requests from trusted frontends
-const ALLOWED_ORIGINS = [
-  "https://websuli.org",
-  "https://www.websuli.org",
-  "https://websuli.vip",
-  "https://www.websuli.vip",
-  // NOTE: HTTP versions needed because Nginx doesn't force HTTPS redirect
-  "http://websuli.org",
-  "http://www.websuli.org",
-  "http://websuli.vip",
-  "http://www.websuli.vip",
-  // SECURITY: localhost ONLY in development
-  ...(isDevelopment ? ["http://localhost:5173", "http://localhost:5000"] : []),
-  process.env.CUSTOM_DOMAIN && `https://${process.env.CUSTOM_DOMAIN}`,
-  process.env.CUSTOM_DOMAIN && `https://www.${process.env.CUSTOM_DOMAIN}`,
-  process.env.FRONTEND_URL, // Support Vercel/external frontend URL
-  process.env.BASE_URL, // Support Render base URL for OAuth
-].filter(Boolean) as string[];
+// CORS: Allow requests from trusted frontends.
+// SECURITY: single source of truth — the same list backs the Origin/Referer allowlist
+// that protects login/logout and the AI endpoints (see server/lib/allowed-origins.ts).
+const ALLOWED_ORIGINS = getAllowedOrigins();
 
 // CORS configuration object
 const corsOptions = {
@@ -55,17 +41,8 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Check if origin is in explicit allowed list
-    if (ALLOWED_ORIGINS.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // SECURITY: Development ONLY - Allow localhost/127.0.0.1 with any port
-    if (
-      isDevelopment &&
-      (origin.startsWith("http://localhost:") ||
-        origin.startsWith("http://127.0.0.1:"))
-    ) {
+    // Allowlist: production domains + deployment env vars; localhost in development only
+    if (isOriginAllowed(origin)) {
       return callback(null, true);
     }
 
@@ -231,14 +208,36 @@ app.use(
 // This ensures req.protocol is 'https' when accessed via HTTPS
 app.set("trust proxy", 1);
 
-// Parse JSON bodies up to 150MB
-// Removed rawBody buffer to improve performance and reduce memory usage
-app.use(
-  express.json({
-    limit: "150mb", // Increased to support 100MB PDFs (base64 encoded ~133MB)
-  }),
+// SECURITY: Body size limits are scoped by route.
+// Only the admin upload / AI paths need the huge limit (100MB PDFs are sent base64-encoded,
+// ~133MB). Applying 150MB to every endpoint let any anonymous client exhaust server memory
+// by POSTing giant bodies to cheap public routes (likes, comments, push subscribe, ...).
+const LARGE_BODY_PREFIXES = [
+  "/api/html-files", // admin material create/update (base64 PDF payloads)
+  "/api/ai/", // Enhanced Material Creator
+  "/api/admin/", // backup import, improvement apply, ...
+];
+const LARGE_BODY_LIMIT = "150mb";
+const STANDARD_BODY_LIMIT = "1mb";
+
+const largeJsonParser = express.json({ limit: LARGE_BODY_LIMIT });
+const standardJsonParser = express.json({ limit: STANDARD_BODY_LIMIT });
+const largeUrlencodedParser = express.urlencoded({ extended: false, limit: LARGE_BODY_LIMIT });
+const standardUrlencodedParser = express.urlencoded({ extended: false, limit: STANDARD_BODY_LIMIT });
+
+const needsLargeBody = (path: string) =>
+  LARGE_BODY_PREFIXES.some((prefix) => path.startsWith(prefix));
+
+app.use((req, res, next) =>
+  needsLargeBody(req.path)
+    ? largeJsonParser(req, res, next)
+    : standardJsonParser(req, res, next),
 );
-app.use(express.urlencoded({ extended: false, limit: "150mb" }));
+app.use((req, res, next) =>
+  needsLargeBody(req.path)
+    ? largeUrlencodedParser(req, res, next)
+    : standardUrlencodedParser(req, res, next),
+);
 
 // Smart caching strategy: Cache static assets, allow conditional GET for API
 app.use((req, res, next) => {
@@ -310,11 +309,47 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true, // Only count failed attempts
 });
 
+// Rate limiter for the public text-to-speech proxy.
+// Without it anyone can use the server as a free, unthrottled Google TTS relay.
+const ttsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60,
+  message: "Túl sok felolvasási kérés. Próbáld újra később!",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limiter for public write endpoints (comments, likes, push subscriptions).
+// These are unauthenticated and write to the database — throttle spam/flooding.
+const publicWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: "Túl sok kérés. Próbáld újra később!",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Apply rate limiting only to specific endpoints
 app.use("/api/ai/", aiLimiter); // All AI endpoints
 app.use("/api/ai/", aiPayloadGuard()); // C1: payload size + history limits
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
+app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
+app.use("/api/push/subscribe", publicWriteLimiter);
+app.use("/api/push/unsubscribe", publicWriteLimiter);
+
+// Public comment/like writes live under /api/materials/*. Only real writes are throttled:
+// safe methods and the two read-only POST lookups (likes/check and likes/batch, used on
+// every landing-page load) stay unthrottled so shared school IPs behind NAT aren't locked out.
+const READ_ONLY_MATERIAL_POSTS = /^\/(likes\/batch|[^/]+\/likes\/check)$/;
+app.use("/api/materials", (req, res, next) => {
+  const isSafeMethod =
+    req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
+  if (isSafeMethod || READ_ONLY_MATERIAL_POSTS.test(req.path)) {
+    return next();
+  }
+  return publicWriteLimiter(req, res, next);
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -433,7 +468,6 @@ app.use((req, res, next) => {
     setupCleanupImprovedFiles();
 
     // Express error handler (4 params required for Express to identify it as error middleware)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";

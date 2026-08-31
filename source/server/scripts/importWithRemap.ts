@@ -58,7 +58,7 @@ async function main() {
             `;
 
             try {
-                const res = await destPool.query(query, values);
+                await destPool.query(query, values);
                 // Assuming successful insert or conflict (if conflict on ID, srcId=destId)
                 userIdMap.set(srcId, srcId);
             } catch (e: any) {
@@ -98,7 +98,7 @@ async function main() {
             try {
                 const res = await sourcePool.query(`SELECT * FROM "${table.name}"`);
                 rows = res.rows;
-            } catch (e) { console.log(`   Skipping (missing source table)`); continue; }
+            } catch { console.log(`   Skipping (missing source table)`); continue; }
 
             if (rows.length === 0) continue;
             let count = 0;
@@ -127,7 +127,7 @@ async function main() {
                 try {
                     const res = await destPool.query(query, values);
                     if ((res as any).rowCount > 0) count++;
-                } catch (e: any) {
+                } catch {
                     // Ignore some errors
                 }
             }

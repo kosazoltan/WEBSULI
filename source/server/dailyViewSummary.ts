@@ -1,6 +1,9 @@
 import cron from "node-cron";
 import { storage } from "./storage";
-import { sendAdminNotification } from "./gmail";
+// BUGFIX: this used to import from ./gmail, whose sendAdminNotification is a deprecated
+// stub that unconditionally throws — the daily summary e-mail could never be delivered
+// (the throw was swallowed by the surrounding catch). Use the live Resend implementation.
+import { sendAdminNotification } from "./resend";
 import { getMaterialPreviewUrl } from "./utils/config";
 import { sanitizeText } from "./utils/sanitize";
 import type { MaterialView, HtmlFile } from "@shared/schema";
@@ -108,7 +111,6 @@ export function setupDailyViewSummary() {
       
       console.log('[DAILY SUMMARY] Daily summary emails sent successfully.');
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[DAILY SUMMARY] Error sending daily summary:', error);
     }
   });

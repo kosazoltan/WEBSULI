@@ -403,7 +403,7 @@ ${originalFile.content}
       // ✅ AUTO-FIX: Verify onclick handlers have window.* assignments + mobile compatibility
       const onclickMatches = improvedHtml.match(/onclick="([^"(]+)\(/g);
       if (onclickMatches) {
-        const onclickFuncs = Array.from(new Set(onclickMatches.map(m => m.replace(/onclick="|[\("]/g, '').trim())));
+        const onclickFuncs = Array.from(new Set(onclickMatches.map(m => m.replace(/onclick="|["(]/g, '').trim())));
         const missingFuncs: string[] = [];
         
         for (const func of onclickFuncs) {

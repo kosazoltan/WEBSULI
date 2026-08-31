@@ -57,7 +57,6 @@ export class OpenAIProvider implements IAIProvider {
           : undefined,
       };
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       throw this.handleError(error);
     }
   }
@@ -92,7 +91,6 @@ export class OpenAIProvider implements IAIProvider {
 
       yield { type: 'done' };
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       if (signal?.aborted) {
         yield {
           type: 'error',

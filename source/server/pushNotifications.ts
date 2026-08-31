@@ -111,7 +111,6 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
       total: subscriptions.length
     };
   } catch (error: unknown) {
-    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending notifications:', error);
     throw error;
   }
@@ -180,7 +179,6 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
       total: subscriptions.length
     };
   } catch (error: unknown) {
-    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending user notification:', error);
     throw error;
   }
@@ -210,7 +208,6 @@ export async function sendNewMaterialNotification(materialTitle: string, materia
     
     console.log(`[PUSH] New material notification sent for: ${materialTitle}`);
   } catch (error: unknown) {
-    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending new material notification:', error);
   }
 }
@@ -244,7 +241,6 @@ export async function sendMaterialViewNotification(
     
     console.log(`[PUSH] Material view notification sent to admin for: ${materialTitle}`);
   } catch (error: unknown) {
-    const err = error instanceof Error ? error : new Error(String(error));
     console.error('[PUSH] Error sending material view notification:', error);
   }
 }

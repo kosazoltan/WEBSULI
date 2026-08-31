@@ -24,7 +24,6 @@ import {
   User as UserIcon,
   Users,
   FileText,
-  Code,
   Wand2,
   Database,
   Eye,
@@ -32,7 +31,6 @@ import {
   HelpCircle,
   Download,
   FolderOpen,
-  Upload,
   Sparkles,
   Activity,
   GraduationCap
@@ -208,7 +206,7 @@ function AdminFilesTab() {
             for (const url of urlsToDelete) {
               try {
                 await cache.delete(url);
-              } catch (deleteError) {
+              } catch {
                 // Ignore individual deletion errors (URL might not exist in this cache)
               }
             }
@@ -467,11 +465,6 @@ export default function Admin() {
     }
   });
   
-  const formatDate = (date: string | Date | null | undefined) => {
-    if (!date) return "—";
-    return format(new Date(date), "yyyy. MM. dd. HH:mm", { locale: hu });
-  };
-
   const formatDateShort = (date: string | Date | null | undefined) => {
     if (!date) return "—";
     return format(new Date(date), "MM.dd. HH:mm", { locale: hu });

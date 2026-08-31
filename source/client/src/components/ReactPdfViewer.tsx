@@ -11,7 +11,7 @@ interface ReactPdfViewerProps {
   onClose?: () => void;
 }
 
-export default function ReactPdfViewer({ pdfUrl, title }: ReactPdfViewerProps) {
+export default function ReactPdfViewer({ pdfUrl }: ReactPdfViewerProps) {
   // Create default layout plugin with all features
   const defaultLayoutPluginInstance = defaultLayoutPlugin({
     sidebarTabs: (defaultTabs) => [
@@ -54,6 +54,10 @@ export default function ReactPdfViewer({ pdfUrl, title }: ReactPdfViewerProps) {
             ...options,
             standardFontDataUrl: '/pdfjs/standard_fonts/',
             useSystemFonts: false,
+            // SECURITY: pdf.js (pinned to 3.x by @react-pdf-viewer) can be coerced into
+            // running attacker-controlled JavaScript from a crafted PDF font
+            // (CVE-2024-4367). Disabling eval removes that sink.
+            isEvalSupported: false,
           })}
         />
       </Worker>
