@@ -2,6 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
     testDir: './tests',
+    // Only the browser end-to-end suites are Playwright's.
+    // tests/*.test.ts are node:test unit suites (`node --import tsx --test`); Playwright's
+    // default testMatch (**/*.@(spec|test).*) also matched those, and loading them during
+    // collection actually *executed* the whole unit suite inside the Playwright run while
+    // reporting zero tests from it.
+    testMatch: '**/*.spec.ts',
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 2 : 0,

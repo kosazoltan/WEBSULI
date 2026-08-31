@@ -101,3 +101,58 @@ működő Resend-implementációra.
   `DATABASE_URL` kell, ami ebben a környezetben nem érhető el. Kockázat: a middleware-sorrend
   változásai (body-limit, rate limiter) csak típus- és build-szinten vannak igazolva,
   futásidejűen nem. A CI e2e-job lefedi őket.
+
+---
+
+# Második kör — TDD-alapú átfésülés (2026-08-31)
+
+A kód alapján írt unit tesztek, majd a bukó teszteknél a **program** javítása.
+139 teszt, 11 fájl — mind zöld.
+
+## Tesztelhetőségi kiemelések (viselkedés-azonos mozgatás)
+
+| Új modul | Honnan | Miért |
+|----------|--------|-------|
+| `server/lib/error-sanitize.ts` | `error-mailer.ts` | Az `error-mailer` importja `pg` pool-t nyit; a tiszta helperek így DB nélkül tesztelhetők |
+| `server/lib/public-input.ts` | `routes.ts` | A publikus végpontok input-guardjai önmagukban ellenőrizhetők |
+| `extractClassroomFromTitle` | `routes.ts` → `shared/classrooms.ts` | Osztály-logika egy helyen, a kliens is használhatja |
+
+## Tesztek által feltárt és javított hibák
+
+| # | Hol | Bukó teszt | Hiba | Javítás |
+|---|-----|-----------|------|---------|
+| T1 | `utils/sanitize.ts` | „sanitizeEmail strips CR/LF" | A doc-comment szerint injection ellen véd, de a CR/LF-et átengedte — e-mail-fejléc- és log-injection vektor | Vezérlőkarakterek szűrése |
+| T2 | `lib/error-sanitize.ts` | „redacts a credential with a colon and a space" | A `password[^\s]*` minta csak a címkéig tartott: `password: hunter2` → `[REDACTED] hunter2`, a titok bennmaradt. Az `api_key:` alakot egyáltalán nem ismerte | Címke-alapú, sor végéig tartó redaktálás, bővebb kulcsszólistával |
+| T3 | `lib/error-sanitize.ts` | „escapes the client-controlled environment field" | Az e-mail HTML-törzsében az `environment` és a `commitSha` **escape nélkül** került be, pedig a publikus `/api/error-report`-ból jönnek. 20 karakter épp elég `<svg onload=alert()>`-hez → HTML-injection az admin postaládájába | `buildErrorEmailHtml()` tiszta függvény, minden mező `escapeHtml()`-en át |
+| T4 | `shared/classrooms.ts` | „isValidClassroom rejects non-integers" | `isValidClassroom(3.7)` → `true`, pedig egész oszlopba kerül (csendes csonkolás) | `Number.isInteger` ellenőrzés (NaN/Infinity is kiesik) |
+| T5 | `cache/HtmlFilesCache.ts` | „get returns a copy" | A `set()` másolt, a `get()` viszont a belső tömböt adta vissza referenciával — egy hívó mutációja minden későbbi látogató válaszát elrontja | Copy-on-read is |
+| T6 | `middleware/request-id.ts` | „an over-long id is not reflected verbatim" | A kliens `X-Request-ID` fejlécét korlátlan hosszban, tetszőleges karakterekkel tükrözte vissza válaszfejlécbe, logba és a hibajelentő e-mailbe | Max 100 karakter + szigorú trace-id karakterkészlet, különben generált UUID |
+| T7 | `utils/config.ts` | „never emits a doubled slash" | `BASE_URL=https://websuli.org/` esetén minden generált link `//preview/...` lett (QR-kód, sitemap, e-mail) | Záró perjel levágása |
+| T8 | `lib/ai-provider-wrapper.ts` | „an already-mapped AIProviderError is not retried" | **Logikai hiba:** az `isTransient()` őr hatástalan volt — ha a hiba nem transient, a `catch` blokkból egyszerűen kifutott a vezérlés, és a `for` ciklus így is újrapróbálkozott, csak backoff nélkül. Egy végleges AI-hiba 4× hívta az upstreamet | Explicit `break` a nem-transient ágon |
+| T9 | `aiSchemas.ts` + `routes.ts` | „accepts every classroom the application supports" | Az AI-válaszséma és a promptok 1–8-ra korlátoztak, az alkalmazás viszont 0–12-t támogat: a programozás-sávra és a 9–12. osztályra **sosem** jöhetett érvényes javaslat | Tartomány a `shared/classrooms.ts`-ből, `.int()` megkötéssel; a promptok és a provider JSON-sémák is frissítve |
+| T10 | `playwright.config.ts` | (kollekció-ellenőrzés) | A Playwright alapértelmezett `testMatch`-e a `*.test.ts` unit-fájlokat is felszedte, és a betöltésükkel **le is futtatta** az egész node:test csomagot minden E2E-futásban, nulla tesztet jelentve belőlük | `testMatch: '**/*.spec.ts'` |
+
+## További holt kód
+
+- `server/lib/email-validator.ts` — sehonnan nem importált fájl, ráadásul **beégetett HMAC
+  fallback titokkal** (`ERRORLOG_HMAC_SECRET ?? "errorlog-hmac-..."`). A valódi HMAC-ellenőrzés
+  a `routes/error-report.ts`-ben van, ami produkcióban helyesen fail-closed. Törölve.
+- `sanitizeUrl`, `sanitizeUserAgent` a `utils/sanitize.ts`-ből — nincs hívási helyük.
+
+## Tesztfájlok
+
+`sanitize`, `error-sanitize`, `public-input`, `classrooms`, `ai-payload-guard`,
+`html-files-cache`, `request-id`, `config-base-url`, `ai-provider-wrapper`, `ai-schemas`
+— a meglévő `csrf-origin`, `push-endpoint`, `error-report-hmac`, `static-audit-guard` mellé.
+
+A CI unit-teszt lépése mostantól glob-bal fut (`tests/*.test.ts`), így az új fájlok
+automatikusan bekerülnek.
+
+## Playwright E2E — nem ennek a PR-nak a hibája
+
+A `Playwright E2E` job **a `main`-en is bukik**, minden eddigi futásban: a
+`playwright.config.ts`-ben a `webServer` blokk ki van kommentezve („we assume it's already
+running"), a workflow viszont nem indít szervert, így mind a 17 teszt
+`ERR_CONNECTION_REFUSED at http://localhost:5000/` hibával áll meg. Determinisztikus
+konfigurációs hiány, nem flake — újrafuttatás nem segít. Javasolt javítás a PR-ben leírva;
+külön, validálható változtatást igényel (élő `DATABASE_URL` kell hozzá).

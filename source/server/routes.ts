@@ -27,6 +27,8 @@ import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from ".
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { isOriginAllowed } from "./lib/allowed-origins";
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
+import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
+import { extractClassroomFromTitle } from "@shared/classrooms";
 
 // ========== AI Configuration Validation ==========
 function validateAIConfig() {
@@ -109,31 +111,6 @@ const htmlFixChatSchema = z.object({
 });
 
 // ========================================
-
-// Utility function to extract classroom number from title
-function extractClassroomFromTitle(title: string): number | null {
-  // Special case: "Programozási alapismeretek" - return 0 as special identifier
-  if (/programoz[aá]si?\s+alapismeretek/i.test(title) || /programoz[aá]s\s+alapok/i.test(title)) {
-    return 0;
-  }
-
-  // Match classrooms 1-12
-  const patterns = [
-    /\b([1-9]|1[0-2])\.\s*oszt[aá]ly/i,  // "5. osztály" or "12. osztály"
-    /\boszt[aá]ly\s*([1-9]|1[0-2])\b/i,   // "osztály 5" or "osztály 12"
-    /\b([1-9]|1[0-2])\s*oszt[aá]ly/i,     // "5 osztály" or "12 osztály"
-    /\boszt[aá]ly:\s*([1-9]|1[0-2])\b/i,  // "osztály: 5" or "osztály: 12"
-  ];
-
-  for (const pattern of patterns) {
-    const match = title.match(pattern);
-    if (match) {
-      return parseInt(match[1], 10);
-    }
-  }
-
-  return null;
-}
 
 // Utility function to wrap user HTML with responsive container
 // Ensures all uploaded HTML materials work across all screen sizes (280px - 1920px+)
@@ -695,23 +672,6 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
   ${speechToTextScript}
 </body>
 </html>`;
-}
-
-/** Max length accepted for a client-supplied browser fingerprint. */
-const MAX_FINGERPRINT_LENGTH = 128;
-
-/**
- * SECURITY: Normalise an anonymous like-fingerprint coming from the client.
- * The value is written to the database by public, unauthenticated endpoints, so it must
- * be a bounded, plain string — returns null for anything else.
- */
-function normalizeFingerprint(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > MAX_FINGERPRINT_LENGTH) return null;
-  // Fingerprints are hashes/ids — reject control characters and anything exotic.
-  if (!/^[A-Za-z0-9._:-]+$/.test(trimmed)) return null;
-  return trimmed;
 }
 
 /**
@@ -1866,13 +1826,13 @@ FELADATOD:
 1. Olvasd ki MINDEN fájlból az összes szöveget és releváns információt
 2. Kombináld őket egyetlen koherens tananyaggá
 3. Azonosítsd a közös témákat és kapcsolódási pontokat
-4. Javasolj egy átfogó címet, leírást és osztályt (1-8)
+4. Javasolj egy átfogó címet, leírást és osztályt (0-12; 0 = programozási alapismeretek)
 
 VÁLASZOLJ JSON formátumban a következő struktúrával:
 - extractedText: Az összes fájlból kinyert összesített szöveg
 - suggestedTitle: Átfogó cím az összes tartalom alapján
 - suggestedDescription: Leírás, ami összefoglalja az összes fájl tartalmát
-- suggestedClassroom: Javasolt osztály (1-8) a teljes anyag nehézsége alapján
+- suggestedClassroom: Javasolt osztály (0-12; 0 = programozási alapismeretek) a teljes anyag nehézsége alapján
 - topics: Fő témák listája az összes dokumentumból`
         }
       ];
@@ -1937,7 +1897,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
                 },
                 suggestedClassroom: {
                   type: "number",
-                  description: "Javasolt osztály (1-8) az összesített tartalom nehézsége alapján"
+                  description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) az összesített tartalom nehézsége alapján"
                 },
                 topics: {
                   type: "array",
@@ -2004,8 +1964,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         {
           type: "text",
           text: fileType === 'application/pdf'
-            ? "Elemezd ezt a PDF első oldalát (PNG-ként konvertálva) és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (1-8)."
-            : "Elemezd ezt a képet és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (1-8)."
+            ? "Elemezd ezt a PDF első oldalát (PNG-ként konvertálva) és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (0-12; 0 = programozási alapismeretek)."
+            : "Elemezd ezt a képet és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (0-12; 0 = programozási alapismeretek)."
         },
         {
           type: "image_url",
@@ -2050,7 +2010,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
                 },
                 suggestedClassroom: {
                   type: "number",
-                  description: "Javasolt osztály (1-8) a tartalom nehézsége alapján"
+                  description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) a tartalom nehézsége alapján"
                 },
                 topics: {
                   type: "array",
@@ -4556,10 +4516,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       // Limit batch size to prevent abuse, and only accept plausible material ids
-      const MAX_BATCH_SIZE = 100;
-      const idsToQuery = materialIds
-        .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.length <= 64)
-        .slice(0, MAX_BATCH_SIZE);
+      const idsToQuery = normalizeMaterialIdBatch(materialIds);
 
       if (idsToQuery.length === 0) {
         return res.json([]);

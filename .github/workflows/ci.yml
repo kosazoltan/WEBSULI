@@ -54,8 +54,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run security unit tests
-        run: node --import tsx --test tests/csrf-origin.test.ts tests/static-audit-guard.test.ts tests/error-report-hmac.test.ts tests/push-endpoint.test.ts
+      - name: Run unit tests
+        run: node --import tsx --test "tests/*.test.ts"
 
   e2e-tests:
     name: Playwright E2E

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MIN_CLASSROOM, MAX_CLASSROOM } from '@shared/classrooms';
 
 // Schema for HTML error detection response
 export const htmlErrorsResponseSchema = z.object({
@@ -48,7 +49,15 @@ export const chatGptFileAnalysisSchema = z.object({
   extractedText: z.string().describe('The complete text content extracted from the PDF or image'),
   suggestedTitle: z.string().describe('Suggested material title based on content'),
   suggestedDescription: z.string().describe('Suggested description summarizing the content'),
-  suggestedClassroom: z.number().min(1).max(8).optional().describe('Suggested classroom (1-8) based on content difficulty'),
+  // Kept in sync with shared/classrooms.ts: 0 = programming track, 1-12 = grades.
+  // The previous 1-8 cap silently rejected every valid secondary-school suggestion.
+  suggestedClassroom: z
+    .number()
+    .int()
+    .min(MIN_CLASSROOM)
+    .max(MAX_CLASSROOM)
+    .optional()
+    .describe(`Suggested classroom (${MIN_CLASSROOM}-${MAX_CLASSROOM}, 0 = programming basics) based on content difficulty`),
   topics: z.array(z.string()).describe('List of main topics found in the document')
 });
 

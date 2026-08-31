@@ -75,6 +75,10 @@ export async function withAIProvider<T>(
         await new Promise((r) => setTimeout(r, retryDelayMs * Math.pow(2, attempt)));
         continue;
       }
+      // BUGFIX: falling out of the catch used to continue the loop anyway, so a
+      // non-transient error was still retried — just without the backoff delay. Stop here
+      // and let the safe error mapping below run.
+      break;
     } finally {
       clearTimeout(timer);
     }

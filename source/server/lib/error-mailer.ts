@@ -7,6 +7,16 @@ import nodemailer from "nodemailer";
 import { db } from "../db";
 import { errorLogs } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import {
+  escapeHtml,
+  sanitizeForEmail,
+  generateFingerprint,
+  determineSeverity,
+  buildErrorEmailHtml,
+} from "./error-sanitize";
+
+// Re-exported so existing import sites (and tests) can keep using error-mailer.
+export { escapeHtml, sanitizeForEmail, generateFingerprint, determineSeverity };
 
 // ============================================================
 // CONSTANTS
@@ -36,58 +46,6 @@ export interface ErrorReportPayload {
   breadcrumbs?: unknown[];
   commitSha?: string;
   environment?: string;
-}
-
-// ============================================================
-// generateFingerprint — MD5 of errorType+normalizedMessage
-// ============================================================
-export function generateFingerprint(errorType: string, message: string): string {
-  const normalized = message.replace(/\d+/g, "N").substring(0, 200);
-  return crypto
-    .createHash("md5")
-    .update(`${errorType}:${normalized}`)
-    .digest("hex");
-}
-
-// ============================================================
-// determineSeverity
-// ============================================================
-export function determineSeverity(errorType: string, message: string): string {
-  const type = errorType.toLowerCase();
-  const msg = message.toLowerCase();
-  if (
-    type.includes("uncaught") ||
-    type.includes("unhandled") ||
-    msg.includes("database") ||
-    msg.includes("cannot read") ||
-    msg.includes("is not a function")
-  ) {
-    return "CRITICAL";
-  }
-  if (
-    type.includes("error") ||
-    msg.includes("failed") ||
-    msg.includes("timeout")
-  ) {
-    return "ERROR";
-  }
-  if (type.includes("warn") || msg.includes("deprecated")) {
-    return "WARN";
-  }
-  return "ERROR";
-}
-
-// ============================================================
-// sanitizeForEmail — remove sensitive data
-// ============================================================
-export function sanitizeForEmail(text: string | undefined): string {
-  if (!text) return "";
-  return text
-    .replace(/password[^\s]*/gi, "[REDACTED]")
-    .replace(/token[^\s]*/gi, "[REDACTED]")
-    .replace(/secret[^\s]*/gi, "[REDACTED]")
-    .replace(/authorization:[^\n]*/gi, "authorization: [REDACTED]")
-    .substring(0, 2000);
 }
 
 // ============================================================
@@ -229,29 +187,25 @@ async function _sendEmail(
 
   const subject = `[${severity}] ${APP_NAME} — ${payload.errorType}: ${payload.message.substring(0, 80)}`;
 
-  const htmlBody = `
-<h2>🚨 ${APP_NAME} Error Report</h2>
-<table border="1" cellpadding="6" style="border-collapse:collapse;font-family:monospace">
-  <tr><th>Field</th><th>Value</th></tr>
-  <tr><td>Severity</td><td><strong>${severity}</strong></td></tr>
-  <tr><td>Error Type</td><td>${escapeHtml(payload.errorType)}</td></tr>
-  <tr><td>Message</td><td>${escapeHtml(sanitizeForEmail(payload.message))}</td></tr>
-  <tr><td>Fingerprint</td><td>${fingerprint}</td></tr>
-  <tr><td>App</td><td>${APP_NAME}</td></tr>
-  <tr><td>Repo</td><td>${REPO_PATH}</td></tr>
-  <tr><td>GitHub</td><td><a href="https://github.com/${GITHUB_REPO}">https://github.com/${GITHUB_REPO}</a></td></tr>
-  <tr><td>Commit</td><td>${commitSha ?? "N/A"}</td></tr>
-  <tr><td>Environment</td><td>${payload.environment ?? process.env.NODE_ENV}</td></tr>
-  <tr><td>URL</td><td>${escapeHtml(payload.url ?? "")}</td></tr>
-  <tr><td>Request ID</td><td>${escapeHtml(payload.requestId ?? "")}</td></tr>
-  <tr><td>User</td><td>${escapeHtml(payload.userEmail ?? payload.userId ?? "")}</td></tr>
-  <tr><td>Browser</td><td>${escapeHtml(payload.browser ?? "")}</td></tr>
-  <tr><td>Timestamp</td><td>${new Date().toISOString()}</td></tr>
-  <tr><td>HMAC Signature</td><td><code>${signature}</code></td></tr>
-</table>
-${payload.stack ? `<h3>Stack Trace</h3><pre>${escapeHtml(sanitizeForEmail(payload.stack))}</pre>` : ""}
-${payload.breadcrumbs ? `<h3>Breadcrumbs</h3><pre>${escapeHtml(JSON.stringify(payload.breadcrumbs, null, 2))}</pre>` : ""}
-`;
+  const htmlBody = buildErrorEmailHtml({
+    appName: APP_NAME,
+    repoPath: REPO_PATH,
+    githubRepo: GITHUB_REPO,
+    severity,
+    fingerprint,
+    signature,
+    timestamp: new Date().toISOString(),
+    errorType: payload.errorType,
+    message: payload.message,
+    commitSha,
+    environment: payload.environment ?? process.env.NODE_ENV,
+    url: payload.url,
+    requestId: payload.requestId,
+    user: payload.userEmail ?? payload.userId,
+    browser: payload.browser,
+    stack: payload.stack,
+    breadcrumbs: payload.breadcrumbs,
+  });
 
   try {
     await transporter.sendMail({
@@ -264,12 +218,4 @@ ${payload.breadcrumbs ? `<h3>Breadcrumbs</h3><pre>${escapeHtml(JSON.stringify(pa
   } catch (emailErr) {
     console.error("[ErrorLogger] Email send failed:", emailErr);
   }
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

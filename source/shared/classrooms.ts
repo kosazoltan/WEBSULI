@@ -57,5 +57,40 @@ export function getClassroomLabel(classroom: number, short: boolean = false): st
  * Check if classroom is valid
  */
 export function isValidClassroom(classroom: number): boolean {
-  return classroom >= MIN_CLASSROOM && classroom <= MAX_CLASSROOM;
+  // Number.isInteger also rules out NaN and ±Infinity. The value backs an integer DB
+  // column, so a fractional input would be silently truncated rather than rejected.
+  return (
+    Number.isInteger(classroom) &&
+    classroom >= MIN_CLASSROOM &&
+    classroom <= MAX_CLASSROOM
+  );
+}
+
+/**
+ * Extracts the classroom a material belongs to from its title.
+ * Returns 0 for the "Programozási alapismeretek" track, 1-12 for a grade, and null when
+ * the title carries no classroom marker.
+ */
+export function extractClassroomFromTitle(title: string): number | null {
+  // Special case: "Programozási alapismeretek" - return 0 as special identifier
+  if (/programoz[aá]si?\s+alapismeretek/i.test(title) || /programoz[aá]s\s+alapok/i.test(title)) {
+    return 0;
+  }
+
+  // Match classrooms 1-12
+  const patterns = [
+    /\b([1-9]|1[0-2])\.\s*oszt[aá]ly/i,  // "5. osztály" or "12. osztály"
+    /\boszt[aá]ly\s*([1-9]|1[0-2])\b/i,   // "osztály 5" or "osztály 12"
+    /\b([1-9]|1[0-2])\s*oszt[aá]ly/i,     // "5 osztály" or "12 osztály"
+    /\boszt[aá]ly:\s*([1-9]|1[0-2])\b/i,  // "osztály: 5" or "osztály: 12"
+  ];
+
+  for (const pattern of patterns) {
+    const match = title.match(pattern);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+  }
+
+  return null;
 }
