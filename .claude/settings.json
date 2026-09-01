@@ -52,6 +52,36 @@
             "statusMessage": "Audit-sentinel ellenőrzés push előtt..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/enforce-repo-rules.mjs\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/enforce-repo-rules.mjs\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"scripts/qa/hooks/enforce-repo-rules.mjs\"",
+            "timeout": 15
+          }
+        ]
       }
     ]
   }
