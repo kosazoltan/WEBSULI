@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { dbPool } from "./db";
 import { User } from "@shared/schema";
+import { enforceOriginAllowlist } from "./lib/origin-guard";
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 
@@ -129,14 +130,22 @@ export function setupAuth(app: Express) {
         // Google Auth Routes
         app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-        app.get('/auth/google/callback',
-            passport.authenticate('google', { failureRedirect: '/login' }),
-            (req, res) => {
-                // Successful authentication, redirect home or admin
-                console.log('[AUTH] Google auth successful, redirecting...');
-                res.redirect('/admin');
-            }
-        );
+        // AUDIT 2026-09-01: session-fixation védelem a Google-belépésen is (a lokális login
+        // már regenerál): egy előre beültetett session-id ne maradjon érvényes belépés után.
+        app.get('/auth/google/callback', (req, res, next) => {
+            passport.authenticate('google', (err: Error | null, user: Express.User | false) => {
+                if (err) return next(err);
+                if (!user) return res.redirect('/login');
+                req.session.regenerate((regenErr) => {
+                    if (regenErr) return next(regenErr);
+                    req.login(user, (loginErr) => {
+                        if (loginErr) return next(loginErr);
+                        console.log('[AUTH] Google auth successful, redirecting...');
+                        res.redirect('/admin');
+                    });
+                });
+            })(req, res, next);
+        });
     } else {
         console.warn('[AUTH] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing. Google Auth disabled.');
     }
@@ -159,7 +168,10 @@ export function setupAuth(app: Express) {
     });
 
     // Login route handling text/plain for robustness
-    app.post("/api/login", express.text(), (req, res, next) => {
+    // AUDIT 2026-09-01: az Origin/Referer allowlist-őr közvetlenül a route-on. A routes.ts
+    // globális app.use()-őre KÉSŐBB regisztrálódik, mint ezek a handlerek, ezért oda a
+    // login/logout kérés soha nem jutott el (login-CSRF / kényszerített kijelentkezés).
+    app.post("/api/login", enforceOriginAllowlist, express.text(), (req, res, next) => {
         // Manual parsing if body is string (text/plain workaround)
         if (typeof req.body === 'string') {
             try {
@@ -201,7 +213,7 @@ export function setupAuth(app: Express) {
         })(req, res, next);
     });
 
-    app.post("/api/logout", (req, res, next) => {
+    app.post("/api/logout", enforceOriginAllowlist, (req, res, next) => {
         req.logout((err) => {
             if (err) return next(err);
             // SECURITY: req.logout() only clears req.user — the session row and its cookie

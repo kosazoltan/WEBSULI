@@ -8,7 +8,7 @@ import EmptyState from "@/components/EmptyState";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CLASSROOM_VALUES, getClassroomLabel } from "@shared/classrooms";
+import { CLASSROOM_VALUES, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
 import {
   DndContext,
   closestCenter,
@@ -163,11 +163,22 @@ export default function AdminFileDashboard({
     return matchesSearch && matchesClassroom;
   });
 
-  // Initialize local order from filteredFiles
+  // Initialize local order from filteredFiles.
+  // Csak akkor írjuk felül a helyi (esetleg még nem mentett) sorrendet, ha nincs
+  // el nem mentett módosítás — különben egy háttér-refetch elveszíthetné a
+  // felhasználó folyamatban lévő drag&drop átrendezését.
   useEffect(() => {
-    setLocalOrder(filteredFiles.map(f => f.id));
-    setIsDirty(false);
-  }, [files, searchQuery, classroomFilter]);
+    if (!isDirty) {
+      setLocalOrder(filteredFiles.map(f => f.id));
+    }
+  }, [files, searchQuery, classroomFilter, isDirty]);
+
+  // Szűrőváltáskor a kijelölésből távolítsuk el azokat az id-kat, amelyek már
+  // nem szerepelnek a szűrt listában, hogy a "bulk" műveletek ne rejtett
+  // elemekre is vonatkozzanak.
+  useEffect(() => {
+    setSelectedIds(prev => new Set([...prev].filter(id => filteredFiles.some(f => f.id === id))));
+  }, [searchQuery, classroomFilter]);
 
   // Get ordered files based on localOrder
   const orderedFiles = localOrder
@@ -301,15 +312,15 @@ export default function AdminFileDashboard({
   const handleBulkMove = async () => {
     if (selectedIds.size === 0) return;
     
-    const classroom = prompt("Add meg az új osztályt (1-8):");
+    const classroom = prompt(`Add meg az új osztályt (${MIN_CLASSROOM}-${MAX_CLASSROOM}):`);
     if (!classroom) return;
-    
+
     const classroomNum = parseInt(classroom);
-    if (isNaN(classroomNum) || classroomNum < 1 || classroomNum > 8) {
+    if (isNaN(classroomNum) || classroomNum < MIN_CLASSROOM || classroomNum > MAX_CLASSROOM) {
       toast({
         variant: "destructive",
         title: "Érvénytelen osztály",
-        description: "Az osztálynak 1 és 8 között kell lennie."
+        description: `Az osztálynak ${MIN_CLASSROOM} és ${MAX_CLASSROOM} között kell lennie.`
       });
       return;
     }

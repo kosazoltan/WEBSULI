@@ -77,14 +77,22 @@ function CosmicBackground({ className = "" }: CosmicBackgroundProps) {
       canvas.height = window.innerHeight;
       stateRef.current.centerX = canvas.width / 2;
       stateRef.current.centerY = canvas.height / 2;
+      // AUDIT 2026-09-01: rejtett/0 méretű ablakban (háttér-tab, beágyazott pane) a 0×0
+      // statikus réteg drawImage-e InvalidStateError-t dobott, és az ErrorBoundary-ig
+      // elszállt a teljes főoldal. 0 méretnél nincs statikus réteg (fallback: fillRect).
+      if (canvas.width === 0 || canvas.height === 0) {
+        staticLayerRef.current = null;
+        return;
+      }
       buildStaticLayer();
     };
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
     const drawFrame = () => {
-      if (staticLayerRef.current) {
-        ctx.drawImage(staticLayerRef.current, 0, 0);
+      const staticLayer = staticLayerRef.current;
+      if (staticLayer && staticLayer.width > 0 && staticLayer.height > 0) {
+        ctx.drawImage(staticLayer, 0, 0);
       } else {
         ctx.fillStyle = "#0A0E27";
         ctx.fillRect(0, 0, canvas.width, canvas.height);

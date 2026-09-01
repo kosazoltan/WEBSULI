@@ -31,9 +31,11 @@ export function setupScheduledPublishing() {
           
           if (job.type === 'publish_material' && payload.materialId) {
             // Publish the material (update to make it visible)
+            // AUDIT 2026-09-01: a tábla neve html_files, az oszlopé user_id (schema.ts);
+            // az idézőjeles camelCase azonosító 42P01-gyel bukott, minden job "failed" lett.
             await db.execute(sqlTemplate`
-              UPDATE "htmlFiles"
-              SET "userId" = ${payload.userId || 'dev-admin-local'}
+              UPDATE html_files
+              SET user_id = ${payload.userId || 'dev-admin-local'}
               WHERE id = ${payload.materialId}
             `);
           }

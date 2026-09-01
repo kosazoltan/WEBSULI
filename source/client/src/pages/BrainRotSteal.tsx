@@ -148,8 +148,8 @@ const HUNGARIAN_QUIZZES: Quiz[] = [
   { prompt: "Melyik az igekötős ige?", options: ["szép", "megírta", "kutya", "magas"], correctIndex: 1, category: "hungarian" },
   { prompt: "Hány magánhangzó van a Magyarország szóban?", options: ["4", "5", "6", "7"], correctIndex: 1, category: "hungarian" },
   { prompt: "Melyik szó melléknév?", options: ["fut", "szép", "asztal", "boldogan"], correctIndex: 1, category: "hungarian" },
-  { prompt: "Mi a \"kutya\" szó többes száma?", options: ["kutyák", "kutyák", "kutyás", "kutyái"], correctIndex: 0, category: "hungarian" },
-  { prompt: "Melyik a helyes: Holnap ___ iskolába.", options: ["megyünk", "menünk", "menünk", "mennyünk"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Mi a \"kutya\" szó többes száma?", options: ["kutyák", "kutyás", "kutyáz", "kutyái"], correctIndex: 0, category: "hungarian" },
+  { prompt: "Melyik a helyes: Holnap ___ iskolába.", options: ["megyünk", "menünk", "mész", "mennyünk"], correctIndex: 0, category: "hungarian" },
   { prompt: "Melyik szó főnév?", options: ["fut", "szép", "asztal", "gyorsan"], correctIndex: 2, category: "hungarian" },
   { prompt: "Melyik mondat helyes?", options: ["A kutya szalad.", "A kutya szalat.", "A kutya szalatt.", "A kutya szaland."], correctIndex: 0, category: "hungarian" },
   { prompt: "Mi az \"ly\" hang a \"mély\" szóban?", options: ["j hang", "l hang", "ny hang", "jj hang"], correctIndex: 0, category: "hungarian" },
@@ -255,6 +255,9 @@ export default function BrainRotSteal() {
   const animRef = useRef(0);
   const floatIdRef = useRef(0);
   const timeoutsRef = useRef<number[]>([]);
+  // JAVÍTÁS: a rossz kvízválasz eddig sehol nem volt számolva, így a statisztika
+  // hibás volt és a `perfect` akkor is igaz lett, ha a játékos sokat hibázott.
+  const wrongQuizAnswersRef = useRef(0);
   // D5: RAF re-render throttle — utolsó setState hívás időpontja (ms)
   const lastRenderMsRef = useRef(0);
 
@@ -334,6 +337,7 @@ export default function BrainRotSteal() {
 
       if (idx !== quiz.correctIndex) {
         sfxError();
+        wrongQuizAnswersRef.current += 1;
         setWrongShake(true);
         timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 400));
         setRevealCorrectIdx(quiz.correctIndex);
@@ -411,6 +415,7 @@ export default function BrainRotSteal() {
     runSecondsRef.current = 0;
     setComboMultiplier(1);
     maxComboRef.current = 1;
+    wrongQuizAnswersRef.current = 0;
     setScreenFlash(null);
     lastSpawnRef.current = 0;
     setPhase("play");
@@ -575,11 +580,11 @@ export default function BrainRotSteal() {
       game: "brain-rot-steal",
       xpGained: sessionXp,
       correctAnswers: totalCaught,
-      wrongAnswers: totalMissed,
+      wrongAnswers: totalMissed + wrongQuizAnswersRef.current,
       maxStreak: bestStreak,
       brainRotsCaught: totalCaught,
       maxComboMultiplier: maxComboRef.current,
-      perfect: totalMissed === 0 && totalCaught >= 5,
+      perfect: totalMissed === 0 && wrongQuizAnswersRef.current === 0 && totalCaught >= 5,
     });
     // Daily: ha a játékos legalább 10 brain rot-ot kapott el → "teljesítve".
     // (A Brain Rot-nak nincs "won" fázisa — a 10 elkapás a sikeres futás kritériuma.)

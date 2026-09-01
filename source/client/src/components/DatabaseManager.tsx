@@ -8,7 +8,8 @@ interface DatabaseInfo {
   materials: number;
   users: number;
   tables: string[];
-  databaseUrl: string;
+  databaseUrl?: string;
+  databaseType?: string;
 }
 
 export default function DatabaseManager() {
@@ -79,15 +80,14 @@ export default function DatabaseManager() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="font-mono text-xs">
-                      PostgreSQL
-                    </Badge>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      Neon
+                      {dbInfo?.databaseType || "Ismeretlen"}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground font-mono break-all">
-                    {dbInfo?.databaseUrl}
-                  </p>
+                  {dbInfo?.databaseUrl && (
+                    <p className="text-xs text-muted-foreground font-mono break-all">
+                      {dbInfo.databaseUrl}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

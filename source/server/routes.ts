@@ -25,7 +25,7 @@ import { withAIProvider } from "./lib/ai-provider-wrapper";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
-import { isOriginAllowed } from "./lib/allowed-origins";
+import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { extractClassroomFromTitle } from "@shared/classrooms";
@@ -674,45 +674,8 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
 </html>`;
 }
 
-/**
- * SECURITY: Resolve the request's origin from the Origin header, falling back to the
- * origin part of the Referer header. Returns undefined when neither is present/parseable.
- */
-function getRequestOrigin(req: Request): string | undefined {
-  const originHeader = req.headers.origin;
-  if (originHeader) {
-    return originHeader;
-  }
-  const referer = req.headers.referer;
-  if (referer) {
-    try {
-      return new URL(referer).origin;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
-}
-
-/**
- * SECURITY: Fail-closed Origin/Referer allowlist for mutating endpoints that cannot use
- * the synchroniser-token CSRF flow (login/logout have no session yet; the AI endpoints are
- * called directly by the Enhanced Material Creator).
- * A request without a usable Origin/Referer is rejected — never allowed through.
- */
-function enforceOriginAllowlist(req: Request, res: Response, next: NextFunction): void {
-  const requestOrigin = getRequestOrigin(req);
-  if (isOriginAllowed(requestOrigin)) {
-    return next();
-  }
-  // A same-origin request is by definition not cross-site, so it is always safe. This also
-  // keeps login working on a deployment whose domain isn't in the allowlist yet.
-  // req.protocol honours X-Forwarded-Proto because `trust proxy` is set in index.ts.
-  if (requestOrigin && requestOrigin === `${req.protocol}://${req.get('host')}`) {
-    return next();
-  }
-  res.status(403).json({ error: 'Origin not allowed' });
-}
+// AUDIT 2026-09-01: getRequestOrigin / enforceOriginAllowlist → server/lib/origin-guard.ts
+// (az auth.ts login/logout route-jai is ugyanazt az őrt használják, közvetlenül).
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth setup is now handled in index.ts to ensure correct order
@@ -910,8 +873,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })),
       });
     } catch (e) {
+      // AUDIT 2026-09-01: csak a hiányzó tábla esetén fallback; más DB-hiba ne legyen néma 200
+      if (isMissingGamesTableError(e)) {
+        return res.json({ gameId: typeof req.params.gameId === "string" ? req.params.gameId : "", items: [] });
+      }
       console.error("[GAMES] quiz-bank", e);
-      res.json({ gameId: typeof req.params.gameId === "string" ? req.params.gameId : "", items: [] });
+      res.status(500).json({ message: "Nem sikerült betölteni a kvízbankot." });
     }
   });
 
@@ -980,8 +947,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })),
       });
     } catch (e) {
+      if (isMissingGamesTableError(e)) {
+        return res.json({ classroom: 0, materials: [], items: [] });
+      }
       console.error("[GAMES] material-quizzes", e);
-      res.json({ classroom: 0, materials: [], items: [] });
+      res.status(500).json({ message: "Nem sikerült betölteni a tananyag-kvízeket." });
     }
   });
 
@@ -1101,7 +1071,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error('Responsive fix error:', error);
-      res.status(500).json({ message: 'Hiba történt', error: err.message });
+      res.status(500).json({ message: 'Hiba történt', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
     }
   });
 
@@ -1163,7 +1133,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ]
       }, { signal }));
 
-      let responseText = message.content[0].type === 'text' ? message.content[0].text : '{}';
+      // AUDIT 2026-09-01: üres content tömbnél (pl. max_tokens) content[0] TypeError-t dobott
+      const firstBlock = message.content[0];
+      let responseText = firstBlock?.type === 'text' ? firstBlock.text : '{}';
 
       // Remove markdown code fences if Claude wrapped JSON in ```json ... ```
       responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
@@ -1179,7 +1151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error('HTML fix error:', error);
-      res.status(500).json({ message: 'Hiba történt az elemzés során', error: err.message });
+      res.status(500).json({ message: 'Hiba történt az elemzés során', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
     }
   });
 
@@ -1251,7 +1223,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ]
       }, { signal }));
 
-      let responseText = message.content[0].type === 'text' ? message.content[0].text : '{}';
+      // AUDIT 2026-09-01: üres content tömbnél (pl. max_tokens) content[0] TypeError-t dobott
+      const firstBlock = message.content[0];
+      let responseText = firstBlock?.type === 'text' ? firstBlock.text : '{}';
 
       // Remove markdown code fences if Claude wrapped JSON in ```json ... ```
       responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
@@ -1267,7 +1241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error('Theme fix error:', error);
-      res.status(500).json({ message: 'Hiba történt a színséma alkalmazása során', error: err.message });
+      res.status(500).json({ message: 'Hiba történt a színséma alkalmazása során', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
     }
   });
 
@@ -1529,7 +1503,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error('Apply fix error:', error);
-      res.status(500).json({ message: 'Hiba történt a javítás alkalmazása során', error: err.message });
+      res.status(500).json({ message: 'Hiba történt a javítás alkalmazása során', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
     }
   });
 
@@ -1538,7 +1512,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
     try {
       const { message, conversationHistory, title, description, classroom } = req.body;
 
-      if (!message || !message.trim()) {
+      if (typeof message !== 'string' || !message.trim()) { // AUDIT 2026-09-01: nem-string → 400, nem TypeError
         return res.status(400).json({ message: "Üzenet megadása kötelező" });
       }
 
@@ -2056,7 +2030,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
     try {
       const { message, conversationHistory, context, systemPrompt } = req.body;
 
-      if (!message || !message.trim()) {
+      if (typeof message !== 'string' || !message.trim()) { // AUDIT 2026-09-01: nem-string → 400, nem TypeError
         clearTimeout(timeout);
         return res.status(400).json({ message: "Üzenet megadása kötelező" });
       }
@@ -2219,7 +2193,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
     try {
       const { message, conversationHistory, textContent, metadata } = req.body;
 
-      if (!message || !message.trim()) {
+      if (typeof message !== 'string' || !message.trim()) { // AUDIT 2026-09-01: nem-string → 400, nem TypeError
         clearTimeout(timeout);
         return res.status(400).json({ message: "Üzenet megadása kötelező" });
       }
@@ -3113,11 +3087,19 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       console.log(`[REORDER] Updating display order for ${items.length} materials`);
 
       // Update each file's display order
-      const results = await Promise.all(
-        items.map(item =>
-          storage.updateHtmlFile(item.id, userId, { displayOrder: item.displayOrder })
-        )
-      );
+      // AUDIT 2026-09-01: N párhuzamos (get+update) lekérdezés a 10-es poolt kimerítette;
+      // 5-ös blokkokban, szekvenciálisan.
+      const results: Awaited<ReturnType<typeof storage.updateHtmlFile>>[] = [];
+      const CHUNK = 5;
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const chunk = items.slice(i, i + CHUNK);
+        const chunkResults = await Promise.all(
+          chunk.map(item =>
+            storage.updateHtmlFile(item.id, userId, { displayOrder: item.displayOrder })
+          )
+        );
+        results.push(...chunkResults);
+      }
 
       const successCount = results.filter(r => r !== null).length;
       console.log(`[REORDER] ✅ Updated ${successCount}/${items.length} materials`);
@@ -3800,8 +3782,10 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // Basic validation: ensure each material has required fields
       for (const m of materials) {
-        if (!m.id || !m.title || m.content === undefined) {
-          return res.status(400).json({ message: "Érvénytelen backup: hiányzó kötelező mezők (id, title, content)" });
+        // AUDIT 2026-09-01: az üres string content is érvénytelen (régi, listanézetből
+        // készült export) — abból importálni a teljes tananyag-állomány elvesztése lenne.
+        if (!m.id || !m.title || typeof m.content !== 'string' || m.content.length === 0) {
+          return res.status(400).json({ message: "Érvénytelen backup: hiányzó kötelező mezők (id, title, content) vagy üres tartalom" });
         }
       }
 
@@ -4039,8 +4023,14 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       if (!endpoint) {
         return res.status(400).json({ message: "Hiányzó endpoint" });
       }
+      // AUDIT 2026-09-01: a subscribe-bal azonos validáció (formátum/hossz), tetszőleges
+      // sztring ne kerüljön a lekérdezésbe
+      const safeEndpoint = validatePushEndpoint(endpoint);
+      if (!safeEndpoint) {
+        return res.status(400).json({ message: "Érvénytelen endpoint" });
+      }
 
-      const success = await storage.deletePushSubscription(endpoint);
+      const success = await storage.deletePushSubscription(safeEndpoint);
       res.json({ success });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -4452,6 +4442,12 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const materialId = req.params.id;
 
+      // AUDIT 2026-09-01: nem létező anyagra a like FK-sértéssel 500-at adott 404 helyett
+      const likedFile = await storage.getHtmlFile(materialId);
+      if (!likedFile) {
+        return res.status(404).json({ message: "Tananyag nem található" });
+      }
+
       // Check if already liked
       const hasLiked = await storage.hasUserLiked(materialId, fingerprint);
 
@@ -4543,6 +4539,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       const { materialIds } = result.data;
+      let deletedCount = 0;
 
       // IMPORTANT: Delete all related records in a transaction to ensure data integrity
       const { emailLogs, materialStats, materialTags, materialLikes, materialRatings, materialComments, materialViews } = await import("@shared/schema");
@@ -4558,12 +4555,14 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         await tx.delete(materialViews).where(inArray(materialViews.materialId, materialIds));
 
         // Now we can safely delete the html_files
-        await tx.delete(htmlFiles).where(inArray(htmlFiles.id, materialIds));
+        // AUDIT 2026-09-01: a válasz eddig a KÉRT darabszámot adta, nem a ténylegesen törölt sorokét
+        const removed = await tx.delete(htmlFiles).where(inArray(htmlFiles.id, materialIds)).returning({ id: htmlFiles.id });
+        deletedCount = removed.length;
       });
 
       res.json({
         success: true,
-        deletedCount: materialIds.length,
+        deletedCount,
         message: `${materialIds.length} anyag sikeresen törölve`
       });
     } catch (error: unknown) {
@@ -4654,7 +4653,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
             eq(materialComments.isApproved, true)
           )
         )
-        .orderBy(desc(materialComments.createdAt));
+        .orderBy(desc(materialComments.createdAt))
+        .limit(200); // AUDIT 2026-09-01: publikus lista felső korlát nélkül futott
 
       res.json(comments);
     } catch (error: unknown) {
@@ -4748,14 +4748,25 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const materialsCount = await storage.getAllHtmlFiles();
       const usersCount = await db.select().from(users);
 
-      // SQLite doesn't have information_schema
-      // Skip table listing for SQLite
+      // AUDIT 2026-09-01: az adatbázis Postgres (Drizzle pgTable), nem SQLite; a kliens
+      // databaseUrl-t is vár — jelszó nélkül, csak host + adatbázisnév.
+      let databaseUrl: string | undefined;
+      try {
+        const raw = process.env.DATABASE_URL;
+        if (raw) {
+          const u = new URL(raw);
+          databaseUrl = `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}${u.pathname}`;
+        }
+      } catch {
+        databaseUrl = undefined;
+      }
 
       res.json({
         materials: materialsCount.length,
         users: usersCount.length,
-        tables: ['html_files', 'users', 'extra_emails', 'material_views', 'email_subscriptions', 'tags', 'system_prompts', 'email_logs'], // Static list for SQLite
-        databaseType: 'SQLite',
+        tables: ['html_files', 'users', 'extra_email_addresses', 'material_views', 'email_subscriptions', 'tags', 'system_prompts', 'email_logs'],
+        databaseType: 'PostgreSQL',
+        databaseUrl,
       });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -4801,9 +4812,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
   app.get("/sitemap.xml", async (req, res) => {
     try {
-      const baseUrl = process.env.CUSTOM_DOMAIN
-        ? `https://${process.env.CUSTOM_DOMAIN}`
-        : `https://${req.get('host')}`;
+      // AUDIT 2026-09-01: a kliens által küldött Host fejléc ne kerüljön a publikus,
+      // cache-elt sitemap-be (host-header injection) — konfigurált bázis-URL
+      const baseUrl = getBaseUrl();
 
       // Get all materials (no isDraft field in schema - all are published)
       const materials = await storage.getAllHtmlFiles();
@@ -4977,6 +4988,16 @@ ${new Date().toLocaleString('hu-HU')}
       res.setHeader("Content-Disposition", "attachment; filename=anyagok-profiknak-source.tar.gz");
 
       const fileStream = fs.createReadStream(filePath);
+      // AUDIT 2026-09-01: kezeletlen 'error' esemény (fájl eltűnik az existsSync után) →
+      // uncaughtException → szerverleállás
+      fileStream.on("error", (streamErr) => {
+        console.error("[SOURCE-DOWNLOAD] stream error:", streamErr);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Hiba a letöltés során" });
+        } else {
+          res.destroy();
+        }
+      });
       fileStream.pipe(res);
     } catch (error: unknown) {
       console.error('[STATIC] Download error:', error);
@@ -4989,9 +5010,7 @@ ${new Date().toLocaleString('hu-HU')}
   // ========================================
 
   app.get("/robots.txt", (req, res) => {
-    const baseUrl = process.env.CUSTOM_DOMAIN
-      ? `https://${process.env.CUSTOM_DOMAIN}`
-      : `https://${req.get('host')}`;
+    const baseUrl = getBaseUrl(); // AUDIT 2026-09-01: ld. sitemap
 
     const robotsTxt = `# Anyagok Profiknak - robots.txt
 User-agent: *
@@ -5394,7 +5413,7 @@ Crawl-delay: 1`;
       const err = error instanceof Error ? error : new Error(String(error));
       log.push(`[FATAL ERROR] ${err.message}`);
       log.push(`[STACK] ${err.stack}`);
-      res.status(500).json({ log, error: err.message });
+      res.status(500).json({ log, error: process.env.NODE_ENV === 'development' ? err.message : undefined });
     }
   });
 

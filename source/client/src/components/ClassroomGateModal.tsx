@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -44,6 +45,29 @@ const ACCENT_TO_BUTTON: Record<NonNullable<Props["accent"]>, string> = {
 export default function ClassroomGateModal({ accent = "cyan", forceShow, onSelected, onClose }: Props) {
   const { grade, setGrade } = useClassroomGrade();
   const visible = forceShow || grade == null;
+  // A11y: kezdő fókusz az első osztály-gombra (a hookok a korai return ELŐTT állnak).
+  const firstButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    firstButtonRef.current?.focus();
+  }, [visible]);
+
+  // A11y: Escape csak akkor zár, ha VAN bezáró callback. Ha nincs (a modal
+  // kötelező osztály-választás, grade == null), az Escape szándékosan nem
+  // csinál semmit — különben a játék használhatatlan állapotba kerülne.
+  useEffect(() => {
+    if (!visible || !onClose) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [visible, onClose]);
+
   if (!visible) return null;
 
   const handlePick = (g: ClassroomGrade) => {
@@ -65,20 +89,24 @@ export default function ClassroomGateModal({ accent = "cyan", forceShow, onSelec
       <motion.div
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="classroom-gate-title"
         className="w-full max-w-md rounded-2xl border-2 border-white/20 bg-slate-950/95 p-5 shadow-2xl"
       >
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="w-5 h-5 text-amber-300" />
-          <h2 className="text-lg font-extrabold text-white">Hányadik osztályos vagy?</h2>
+          <h2 id="classroom-gate-title" className="text-lg font-extrabold text-white">Hányadik osztályos vagy?</h2>
         </div>
         <p className="text-[12px] text-white/70 mb-3 leading-relaxed">
           Az osztályod alapján a játék a SAJÁT legutóbbi 3 tananyagodból kérdez. Ami nincs még feldolgozva, azt általános bankból pótoljuk.
           Az érték a böngésződben tárolódik (nem küldjük el sehova) — bármikor megváltoztathatod.
         </p>
         <div className="grid grid-cols-4 gap-2 mb-3">
-          {GRADES.map((g) => (
+          {GRADES.map((g, idx) => (
             <Button
               key={g}
+              ref={idx === 0 ? firstButtonRef : undefined}
               type="button"
               onClick={() => handlePick(g)}
               className={`h-12 text-base font-extrabold bg-gradient-to-br ${buttonStyle} border text-white`}

@@ -40,3 +40,13 @@ project: websuli
   állapotot ír le — kód-alapú felülvizsgálat, elavultak archiválása.
 - [ ] `pip`→python3.14 vs python3.13 eltérés a gépen nem repo-ügy, de a
   Playwright teszt-futtatás (playwright.config.ts) még nem volt kipróbálva.
+
+## 2026-09-01 mély audit — nyitva hagyott tételek
+- routes.ts `globalEmailScript`: ADMIN_EMAILS a publikus tananyag-HTML-be kerül (scrape) →
+  szerver-oldali `POST /api/material-result` végpont kell, a címeket ne süssük a kliensbe.
+- `/dev/:id` minden megtekintésre material_views sort ír, rate-limit nélkül → dedup
+  (IP+material+1h) inkább, mint IP-limiter (iskolai NAT).
+- migrate.ts: a 0000 séma blokk-kommentben van, üres DB-n "applied"-nek jelöli futtatás
+  nélkül → 0001 42P01. Döntés kell: kikommentelés megszüntetése vagy runner-fejtés.
+- Preview.tsx iframe allow-same-origin+allow-scripts: szándékos (mikrofon), de a
+  tananyag-HTML admin által feltöltött → dokumentált bizalmi feltevés, felülvizsgálandó.

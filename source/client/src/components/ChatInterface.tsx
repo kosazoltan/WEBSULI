@@ -36,10 +36,15 @@ export default function ChatInterface({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive.
+  // A scrollRef a Radix ScrollArea Root elemére mutat, aminek overflow: hidden van —
+  // a tényleges görgethető konténer a belső [data-radix-scroll-area-viewport] div.
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const viewport = scrollRef.current?.querySelector<HTMLDivElement>(
+      '[data-radix-scroll-area-viewport]'
+    );
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
     }
   }, [messages]);
 

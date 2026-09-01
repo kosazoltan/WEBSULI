@@ -144,6 +144,12 @@ export default function WordLadderHuEn() {
   const [stepDelta, setStepDelta] = useState<1 | -1>(1);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // JAVÍTÁS: a válasz-lock eddig csak state-alapú volt (phase !== "quiz"), a
+  // setPhase viszont nem szinkron → két gyors kattintás duplán feldolgozódhatott.
+  const answerLockedRef = useRef(false);
+  // JAVÍTÁS: az ad-hoc setTimeout-ok unmount után is futottak (state-frissítés
+  // leszerelt komponensen). Gyűjtjük és cleanupban töröljük őket.
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scoreSubmittedRef = useRef(false);
   /** Futáson belüli max streak — leaderboard/achievement-hez. */
   const runBestStreakRef = useRef(0);
@@ -206,6 +212,7 @@ export default function WordLadderHuEn() {
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
+    answerLockedRef.current = false;
     runBestStreakRef.current = 0;
     correctCountRef.current = 0;
     wrongCountRef.current = 0;
@@ -226,6 +233,8 @@ export default function WordLadderHuEn() {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
       if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+      timeoutsRef.current.forEach((t) => clearTimeout(t));
+      timeoutsRef.current = [];
     };
   }, []);
 
@@ -237,7 +246,7 @@ export default function WordLadderHuEn() {
     sfxLevelUp();
     setPhase("won");
     setCelebrate(true);
-    setTimeout(() => setCelebrate(false), 2000);
+    timeoutsRef.current.push(setTimeout(() => setCelebrate(false), 2000));
   }, []);
 
   // R = quick-restart a "won" / "menu" képernyőn.
@@ -258,13 +267,15 @@ export default function WordLadderHuEn() {
     // Dupla-kattintás-guard: csak "quiz" fázisban dolgozunk fel választ —
     // a "step" átmenet alatt érkező második kattintás nem léptet duplán.
     if (phase !== "quiz") return;
+    if (answerLockedRef.current) return;
+    answerLockedRef.current = true;
     const isCorrect = i === current.correctIndex;
 
     if (!isCorrect) {
       wrongCountRef.current += 1;
       sfxError();
       setWrongShake(true);
-      setTimeout(() => setWrongShake(false), 400);
+      timeoutsRef.current.push(setTimeout(() => setWrongShake(false), 400));
       setStreak(0);
     }
 
@@ -305,6 +316,8 @@ export default function WordLadderHuEn() {
         setCurrent(null);
         return;
       }
+      // Új kérdés → lock feloldása.
+      answerLockedRef.current = false;
       setPhase("quiz");
     }, 520);
   };

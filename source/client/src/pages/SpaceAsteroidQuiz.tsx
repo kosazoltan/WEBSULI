@@ -789,9 +789,10 @@ export default function SpaceAsteroidQuiz() {
     scoreRef.current = score;
   }, [score]);
 
-  /** Kör-óra: másodpercenként számol vissza. */
+  /** Kör-óra: másodpercenként számol vissza. Szünetben (paused) áll. */
   useEffect(() => {
-    if (phase !== "play") return;
+    // JAVÍTÁS: a szünet korábban nem állította meg az órát → pause alatt is fogyott az idő.
+    if (phase !== "play" || paused) return;
     const id = window.setInterval(() => {
       setTimeLeft((s) => {
         if (s <= 1) {
@@ -802,11 +803,11 @@ export default function SpaceAsteroidQuiz() {
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [phase]);
+  }, [phase, paused]);
 
-  /** Power-timer (sec). */
+  /** Power-timer (sec). Szünetben (paused) áll. */
   useEffect(() => {
-    if (phase !== "play") return;
+    if (phase !== "play" || paused) return;
     if (powerTimer <= 0) return;
     const id = window.setInterval(() => {
       setPowerTimer((t) => {
@@ -818,7 +819,7 @@ export default function SpaceAsteroidQuiz() {
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [phase, powerTimer]);
+  }, [phase, paused, powerTimer]);
 
   const enqueueQuiz = useCallback((reason: QuizReason) => {
     setQuizReason(reason);

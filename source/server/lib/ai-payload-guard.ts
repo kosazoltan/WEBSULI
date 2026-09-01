@@ -35,8 +35,10 @@ export function aiPayloadGuard(limits: AIPayloadLimits = {}) {
         });
         return;
       }
-      for (const f of body.files as Array<{ content?: string; extractedText?: string }>) {
-        const bytes = Buffer.byteLength(f?.content ?? '', 'utf8');
+      // AUDIT 2026-09-01: az analyze-files payload a tartalmat `fileData`-ban (base64 data URL)
+      // küldi, nem `content`-ben — a méretkorlát eddig mindig 0 bájtot mért.
+      for (const f of body.files as Array<{ content?: string; fileData?: string; extractedText?: string }>) {
+        const bytes = Buffer.byteLength(f?.content ?? f?.fileData ?? '', 'utf8');
         if (bytes > cfg.maxBytesPerFile) {
           res.status(413).json({
             error: `File content too large: max ${cfg.maxBytesPerFile} bytes`,

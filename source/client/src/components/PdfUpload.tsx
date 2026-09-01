@@ -35,7 +35,6 @@ export default function PdfUpload() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [classroom, setClassroom] = useState<string>(DEFAULT_CLASSROOM.toString());
-  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
 
   // Upload mutation
   const uploadMutation = useMutation({
@@ -89,11 +88,7 @@ export default function PdfUpload() {
     }
 
     setSelectedFile(file);
-    
-    // Create preview URL
-    const objectUrl = URL.createObjectURL(file);
-    setFilePreviewUrl(objectUrl);
-    
+
     // Auto-fill title from filename (remove .pdf extension)
     if (!title) {
       const autoTitle = file.name.replace(/\.pdf$/i, '');
@@ -147,12 +142,15 @@ export default function PdfUpload() {
       return;
     }
 
-    try {
-      // Read file as base64
-      const reader = new FileReader();
-      reader.onload = async (event) => {
+    // Read file as base64. A FileReader onload/onerror callback aszinkron módon,
+    // a hívó try/catch-én KÍVÜL fut le, ezért a hibakezelést a callbackeken
+    // belül kell elvégezni (különben a throw elveszne / unhandled rejection lenne).
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      try {
         const base64Content = event.target?.result as string;
-        
+
         if (!base64Content) {
           throw new Error("Nem sikerült beolvasni a fájlt");
         }
@@ -165,20 +163,24 @@ export default function PdfUpload() {
           content: base64Content,
           contentType: 'pdf'
         });
-      };
+      } catch (error: any) {
+        toast({
+          title: "Hiba",
+          description: error.message || "Nem sikerült feltölteni a PDF-et",
+          variant: "destructive"
+        });
+      }
+    };
 
-      reader.onerror = () => {
-        throw new Error("Fájl olvasási hiba");
-      };
-
-      reader.readAsDataURL(selectedFile);
-    } catch (error: any) {
+    reader.onerror = () => {
       toast({
         title: "Hiba",
-        description: error.message || "Nem sikerült feltölteni a PDF-et",
+        description: "Fájl olvasási hiba",
         variant: "destructive"
       });
-    }
+    };
+
+    reader.readAsDataURL(selectedFile);
   };
 
   const resetForm = () => {
@@ -186,10 +188,6 @@ export default function PdfUpload() {
     setTitle("");
     setDescription("");
     setClassroom("1");
-    if (filePreviewUrl) {
-      URL.revokeObjectURL(filePreviewUrl);
-      setFilePreviewUrl(null);
-    }
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }

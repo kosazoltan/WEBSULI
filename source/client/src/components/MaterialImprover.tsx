@@ -435,6 +435,10 @@ export default function MaterialImprover() {
   };
 
   const handleDelete = (id: string) => {
+    // Megerősítés nélkül eddig egy elgépelt kattintás is véglegesen törölt egy javított anyagot.
+    if (!window.confirm("Biztosan törlöd ezt a javított anyagot? A művelet nem vonható vissza.")) {
+      return;
+    }
     console.log('[DELETE] Directly deleting improved file:', id);
     deleteMutation.mutate(id);
   };
@@ -739,6 +743,11 @@ export default function MaterialImprover() {
               </Button>
               <Button
                 onClick={async () => {
+                  // A FORCE APPLY nyers SQL-lel írja felül az anyagot, megkerülve a normál
+                  // alkalmazási útvonalat — véletlen kattintás ellen megerősítést kérünk.
+                  if (!window.confirm("Biztosan végrehajtod a FORCE APPLY-t? Ez nyers SQL-lel, a normál validáció megkerülésével írja felül az anyagot.")) {
+                    return;
+                  }
                   try {
                     toast({ title: "⏳ FORCE APPLY…", description: "Raw SQL-frissítés folyamatban…" });
                     const result = await apiRequest("POST", `/api/admin/improved-files/${previewData.id}/force-apply`);

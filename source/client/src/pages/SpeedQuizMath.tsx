@@ -260,6 +260,10 @@ export default function SpeedQuizMath() {
   const recentPromptsRef = useRef<string[]>([]);
   const scoreSubmittedRef = useRef(false);
   const timeoutsRef = useRef<number[]>([]);
+  // JAVÍTÁS: a kérdés-lejárat életet von, de nem növelte az `answered`-et,
+  // így a statisztikában nem számított rossz válasznak és a `perfect` hamisan
+  // igaz lett. Külön számláló a lejárt kérdésekre.
+  const timeoutCountRef = useRef(0);
 
   // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
   useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
@@ -278,6 +282,7 @@ export default function SpeedQuizMath() {
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
     livesRef.current = 3;
+    timeoutCountRef.current = 0;
     setLives(3);
     setCorrect(0);
     setAnswered(0);
@@ -328,6 +333,8 @@ export default function SpeedQuizMath() {
       setQuestionTimeLeft((prev) => {
         if (prev <= 1) {
           setStreak(0);
+          // A lejárt kérdés is hibás válasznak számít a statisztikában.
+          timeoutCountRef.current += 1;
           // Szinkron élet-csökkentés ref-fel: így megbízhatóan tudjuk,
           // hogy game over történt-e (a setState-updater deferred lenne).
           const nextLives = Math.max(0, livesRef.current - 1);
@@ -437,9 +444,9 @@ export default function SpeedQuizMath() {
       game: "speed-quiz-math",
       xpGained: score,
       correctAnswers: correct,
-      wrongAnswers: answered - correct,
+      wrongAnswers: answered - correct + timeoutCountRef.current,
       maxStreak: bestStreak,
-      perfect: phase === "won" && answered === correct,
+      perfect: phase === "won" && answered === correct && timeoutCountRef.current === 0,
       fullClear: phase === "won",
     });
     if (wasDailyAvailable && phase === "won") {

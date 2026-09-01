@@ -47,7 +47,8 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, desc, gt, lt, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, gt, gte, lt, and, sql, inArray } from "drizzle-orm";
+import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
 
@@ -111,6 +112,7 @@ export interface IStorage {
   createMaterialView(view: InsertMaterialView): Promise<MaterialView>;
   getMaterialViewsByFile(materialId: string): Promise<MaterialView[]>;
   getRecentMaterialViews(limit?: number): Promise<Array<MaterialView & { user?: User; material?: HtmlFile }>>;
+  getMaterialViewsBetween(from: Date, to: Date): Promise<Array<MaterialView & { user?: User; material?: HtmlFile }>>;
   getMaterialViewsCount(materialId: string): Promise<number>;
 
   // Push subscription operations
@@ -342,27 +344,36 @@ export class DatabaseStorage implements IStorage {
     // - push_subscriptions (user_id)
     // - scheduled_jobs (created_by) - nullify
 
-    // Delete owned records (completely remove)
-    await db.delete(aiGenerationRequests).where(eq(aiGenerationRequests.userId, userId));
-    await db.delete(emailSubscriptions).where(eq(emailSubscriptions.userId, userId));
-    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+    // AUDIT 2026-09-01: (1) egy tranzakcióban — részleges törlés után a user rekord
+    // megmaradt, de a feliratkozásai/fájl-hivatkozásai már elvesztek; (2) az
+    // improved_html_files.created_by/applied_by és material_improvement_backups.created_by
+    // FK-k ON DELETE nélkül jöttek létre (0001), ezeket is nullázni kell, különben 23503.
+    return await db.transaction(async (tx) => {
+      // Delete owned records (completely remove)
+      await tx.delete(aiGenerationRequests).where(eq(aiGenerationRequests.userId, userId));
+      await tx.delete(emailSubscriptions).where(eq(emailSubscriptions.userId, userId));
+      await tx.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
 
-    // Nullify references in related tables (keep records but remove user link)
-    await db.update(htmlFiles).set({ userId: null }).where(eq(htmlFiles.userId, userId));
-    await db.update(materialViews).set({ userId: null }).where(eq(materialViews.userId, userId));
-    await db.update(extraEmailAddresses).set({ addedBy: null }).where(eq(extraEmailAddresses.addedBy, userId));
-    await db.update(materialComments).set({ userId: null }).where(eq(materialComments.userId, userId));
-    await db.update(materialComments).set({ approvedBy: null }).where(eq(materialComments.approvedBy, userId));
-    await db.update(materialLikes).set({ userId: null }).where(eq(materialLikes.userId, userId));
-    await db.update(materialRatings).set({ userId: null }).where(eq(materialRatings.userId, userId));
-    await db.update(scheduledJobs).set({ createdBy: null }).where(eq(scheduledJobs.createdBy, userId));
+      // Nullify references in related tables (keep records but remove user link)
+      await tx.update(htmlFiles).set({ userId: null }).where(eq(htmlFiles.userId, userId));
+      await tx.update(materialViews).set({ userId: null }).where(eq(materialViews.userId, userId));
+      await tx.update(extraEmailAddresses).set({ addedBy: null }).where(eq(extraEmailAddresses.addedBy, userId));
+      await tx.update(materialComments).set({ userId: null }).where(eq(materialComments.userId, userId));
+      await tx.update(materialComments).set({ approvedBy: null }).where(eq(materialComments.approvedBy, userId));
+      await tx.update(materialLikes).set({ userId: null }).where(eq(materialLikes.userId, userId));
+      await tx.update(materialRatings).set({ userId: null }).where(eq(materialRatings.userId, userId));
+      await tx.update(scheduledJobs).set({ createdBy: null }).where(eq(scheduledJobs.createdBy, userId));
+      await tx.update(improvedHtmlFiles).set({ createdBy: null }).where(eq(improvedHtmlFiles.createdBy, userId));
+      await tx.update(improvedHtmlFiles).set({ appliedBy: null }).where(eq(improvedHtmlFiles.appliedBy, userId));
+      await tx.update(materialImprovementBackups).set({ createdBy: null }).where(eq(materialImprovementBackups.createdBy, userId));
 
-    // Now we can safely delete the user
-    const result = await db
-      .delete(users)
-      .where(eq(users.id, userId))
-      .returning();
-    return result.length > 0;
+      // Now we can safely delete the user
+      const result = await tx
+        .delete(users)
+        .where(eq(users.id, userId))
+        .returning();
+      return result.length > 0;
+    });
   }
 
   async toggleUserBan(userId: string, banned: boolean): Promise<boolean> {
@@ -539,7 +550,9 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: emailSubscriptions.userId,
+        // AUDIT 2026-09-01: az email_subscriptions táblán csak az email oszlop unique
+        // (0000 migráció); a user_id target 42P10-zel bukott volna minden híváskor.
+        target: emailSubscriptions.email,
         set: {
           isSubscribed: subscriptionData.isSubscribed,
           email: subscriptionData.email,
@@ -748,8 +761,10 @@ export class DatabaseStorage implements IStorage {
 
   // Backup operations
   async createBackup(name: string, createdBy: string): Promise<Backup> {
-    // Get all HTML files to backup
-    const allFiles = await this.getAllHtmlFiles();
+    // AUDIT 2026-09-01: a listanézet-lekérdezés (getAllHtmlFiles, content: '' optimalizáció)
+    // üres tartalmat ad — a backupnak a TELJES sorok kellenek, különben a visszaállítás
+    // minden tananyagot üres tartalommal ír felül.
+    const allFiles = await db.select().from(htmlFiles).orderBy(htmlFiles.displayOrder, desc(htmlFiles.createdAt));
 
     // Create backup with all files data
     const [backup] = await db
@@ -820,6 +835,13 @@ export class DatabaseStorage implements IStorage {
       return false;
     }
 
+    // Restore files from backup - bulk insert instead of loop
+    const filesToRestore = backup.data as HtmlFile[];
+
+    // AUDIT 2026-09-01: kapu — egy régi, listanézetből készült backup üres content-ű
+    // tananyagokat tartalmaz; abból visszaállítani = a teljes állomány elvesztése.
+    assertBackupFilesHaveContent(filesToRestore);
+
     return await db.transaction(async (tx) => {
       // IMPORTANT: Delete all related records first to avoid foreign key constraint violations
       // Clear all related tables before deleting html_files
@@ -834,9 +856,6 @@ export class DatabaseStorage implements IStorage {
       // Now we can safely delete all HTML files
       await tx.delete(htmlFiles);
 
-      // Restore files from backup - bulk insert instead of loop
-      const filesToRestore = backup.data as HtmlFile[];
-
       if (filesToRestore.length > 0) {
         await tx.insert(htmlFiles).values(
           filesToRestore.map(file => ({
@@ -846,6 +865,10 @@ export class DatabaseStorage implements IStorage {
             content: file.content,
             description: file.description,
             classroom: file.classroom,
+            // AUDIT 2026-09-01: contentType/displayOrder nélkül a PDF-anyag html-ként
+            // állt vissza, a kézi sorrend elveszett.
+            contentType: file.contentType ?? 'html',
+            displayOrder: file.displayOrder ?? 0,
             createdAt: file.createdAt,
           }))
         );
@@ -883,6 +906,28 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
 
     // Transform results to match expected return type
+    return results.map(row => ({
+      id: row.material_views.id,
+      userId: row.material_views.userId,
+      materialId: row.material_views.materialId,
+      viewedAt: row.material_views.viewedAt,
+      userAgent: row.material_views.userAgent,
+      user: row.users || undefined,
+      material: row.html_files || undefined,
+    }));
+  }
+
+  // AUDIT 2026-09-01: a napi összesítő eddig a globális "utolsó 1000" nézetet szűrte
+  // kliens-oldalon — 1000 napi megtekintés fölött a nap eleje kimaradt. Dátumszűrt lekérdezés.
+  async getMaterialViewsBetween(from: Date, to: Date): Promise<Array<MaterialView & { user?: User; material?: HtmlFile }>> {
+    const results = await db
+      .select()
+      .from(materialViews)
+      .leftJoin(users, eq(materialViews.userId, users.id))
+      .leftJoin(htmlFiles, eq(materialViews.materialId, htmlFiles.id))
+      .where(and(gte(materialViews.viewedAt, from), lt(materialViews.viewedAt, to)))
+      .orderBy(desc(materialViews.viewedAt));
+
     return results.map(row => ({
       id: row.material_views.id,
       userId: row.material_views.userId,
@@ -1009,7 +1054,9 @@ export class DatabaseStorage implements IStorage {
       })
       .from(htmlFiles)
       .leftJoin(materialStats, eq(htmlFiles.id, materialStats.materialId))
-      .orderBy(desc(materialStats.totalViews))
+      // AUDIT 2026-09-01: LEFT JOIN + DESC → NULLS FIRST: a soha meg nem tekintett anyagok
+      // kerültek a "legnépszerűbb" lista élére. COALESCE(...,0) DESC a helyes.
+      .orderBy(sql`COALESCE(${materialStats.totalViews}, 0) DESC`)
       .limit(limit);
   }
 
@@ -1115,8 +1162,20 @@ export class DatabaseStorage implements IStorage {
 
   // Like operations
   async addMaterialLike(materialId: string, fingerprint: string, userId?: string): Promise<MaterialLike> {
-    const [like] = await db.insert(materialLikes).values({ materialId, fingerprint, userId: userId || null }).returning();
-    return like;
+    // AUDIT 2026-09-01: két egyidejű like (dupla katt/retry) a unique indexbe ütközött → 500.
+    // Idempotens beszúrás: ütközéskor a meglévő sort adjuk vissza.
+    const [like] = await db
+      .insert(materialLikes)
+      .values({ materialId, fingerprint, userId: userId || null })
+      .onConflictDoNothing()
+      .returning();
+    if (like) return like;
+    const [existing] = await db
+      .select()
+      .from(materialLikes)
+      .where(and(eq(materialLikes.materialId, materialId), eq(materialLikes.fingerprint, fingerprint)))
+      .limit(1);
+    return existing;
   }
 
   async removeMaterialLike(materialId: string, fingerprint: string): Promise<boolean> {
@@ -1203,7 +1262,8 @@ export class DatabaseStorage implements IStorage {
     emailLogs: EmailLog[];
   }> {
     // Fetch all data from database tables
-    const htmlFilesData = await this.getAllHtmlFiles();
+    // AUDIT 2026-09-01: teljes sorok (content-tel) — ld. createBackup megjegyzését.
+    const htmlFilesData = await db.select().from(htmlFiles).orderBy(htmlFiles.displayOrder, desc(htmlFiles.createdAt));
     const usersData = await this.getAllUsers();
 
     // Fetch extra emails
@@ -1263,6 +1323,8 @@ export class DatabaseStorage implements IStorage {
     if (!snapshotData.htmlFiles || !snapshotData.users) {
       throw new Error('Snapshot validation failed: htmlFiles and users are required');
     }
+    // AUDIT 2026-09-01: üres content-ű snapshot (régi export) → restore megtagadva
+    assertBackupFilesHaveContent(snapshotData.htmlFiles);
 
     // Single transaction for atomic restore
     await db.transaction(async (tx) => {
