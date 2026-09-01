@@ -70,3 +70,24 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 - MARADÉK KOCKÁZAT: GitHub a törölt commitokat cache-eli (dangling objektumok,
   PR-diffek); teljes törléshez GitHub Support kérés kell — ezért a Client
   Secret ROTÁCIÓJA továbbra is kötelező.
+
+## 2026-09-01 — lint / merge / push / deploy (agentic-qa-kit v1.2)
+
+- Kapuk push előtt: `npx tsc --noEmit` → 0 hiba; `npx eslint client/src server`
+  → 0 error / 1163 warning (CI baseline 1166); unit 9/9 pass (csrf-origin,
+  static-audit-guard, error-report-hmac).
+- Commit 3618160 (main): `.agentic-qa-kit.json` 1.0.0→1.2.0, `.claude/settings.json`
+  enforce-repo-rules PreToolUse hook (Bash/PowerShell/Edit|Write),
+  `scripts/qa/hooks/enforce-repo-rules.mjs`, `.harness/release-log.md`.
+  NEM commitolt (szándékosan): `tmp/*.md` (2026-06-23 audit-jegyzetek).
+- Push main → origin (d162bd4..3618160); audit-sentinel (.audit-ok) a valódi
+  kapuk lefuttatása után írva. Vercel production deploy READY
+  (dpl_AHGKLUp27f6waSq2wUJYwoB6pmUR); websuli.vip /health 200, /api/csrf-token 200.
+- TALÁLT HIBA (nem javítva, külön feladat): a CI Playwright E2E job 2026-07-21 óta
+  MINDEN main-futáson bukik — `playwright.config.ts` webServer blokk kikommentezve,
+  a CI nem indít szervert → `net::ERR_CONNECTION_REFUSED localhost:5000`, 17/17 fail.
+  Lint+Unit zöld. Kód-hiba a CI-ben, nem a tesztekben.
+- NYITVA: PR #6 (`claude/codebase-review-cleanup-k5axvo`, DRAFT, 87 fájl,
+  +2557/−7347, 2026-08 biztonsági audit + 139 unit teszt + CORS same-origin fix).
+  Nem olvasztottam be — draft, emberi döntés kell.
+- Lokális `fix/security-quality-2026-06-23` ág elavult (PR #5-ként beolvadt).
