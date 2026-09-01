@@ -69,7 +69,11 @@ const corsOptions: CorsOptionsDelegate<Request> = (req, callback) => {
 
       // SECURITY: Production - NEVER use wildcards with credentials
       // Block ALL unauthorized origins to prevent CSRF attacks
-      return originCallback(new Error(`CORS policy blocked: ${origin}`));
+      // AUDIT 2026-09-02: tiltás, nem szerverhiba — status 403, hogy MINDEN hibakezelő
+      // (routes.ts egységes handler, index.ts fallback) 403-at adjon 500 helyett.
+      const corsError = new Error(`CORS policy blocked: ${origin}`) as Error & { status: number };
+      corsError.status = 403;
+      return originCallback(corsError);
     },
   });
 };
@@ -501,11 +505,8 @@ app.use((req, res, next) => {
 
     // Express error handler (4 params required for Express to identify it as error middleware)
     app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
-      // AUDIT 2026-09-02: a CORS-delegate elutasítása (idegen Origin) eddig 500-ként jelent
-      // meg — ez tiltás, nem szerverhiba: 403.
-      const isCorsRejection = typeof err.message === "string" && err.message.startsWith("CORS policy blocked");
-      const status = err.status || err.statusCode || (isCorsRejection ? 403 : 500);
-      const message = isCorsRejection ? "Origin not allowed" : (err.message || "Internal Server Error");
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
 
       // Log error details for debugging
       console.error("Error handler:", {
