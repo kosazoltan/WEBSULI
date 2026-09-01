@@ -151,3 +151,14 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   `/dev/:id` view-írás rate-limit (iskolai NAT-kockázat); Preview.tsx allow-same-origin
   (PR #2 szándékos, mikrofon); migrate.ts 0000 blokk-kommentes séma futtatása üres DB-n.
 - Branch: fix/deep-audit-2026-09-01 — push/merge külön utasításra.
+
+## 2026-09-02 — audit-merge deploy + CI-javítás
+
+- Merge 47ff967 (fix/deep-audit-2026-09-01) → push → Vercel READY (index-CXtEhaSL.js élőben),
+  Render újraindult (uptime 29s), élő füstteszt: like nem létező anyagra 404 ✅, login Origin
+  nélkül / idegen Referer 403 ✅, katalógusban space-asteroid-quiz ✅.
+- CI Lint bukott: a PR #6 óta a baseline 989 warning (nem 1166), az audit 5 új console.*
+  hívása 994-re vitte → a hívások a server/lib/logger-re cserélve (kód-javítás, küszöb
+  változatlan) → 989/989.
+- Idegen Origin-es login 500-at adott a CORS-delegate hibájából → a globális hibakezelő a
+  "CORS policy blocked" hibát 403 "Origin not allowed"-ként adja vissza.

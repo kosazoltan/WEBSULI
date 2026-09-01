@@ -11,6 +11,7 @@
 
 import { Router, Request } from 'express';
 import { storage } from './storage';
+import { logger } from './lib/logger';
 import type { HtmlFile } from '@shared/schema';
 
 /**
@@ -575,10 +576,10 @@ export function registerImprovementRoutes(adminRouter: Router) {
         // után a rekord biztosan halott → hibára állítjuk és engedjük az új javítást.
         const STALE_JOB_MS = 15 * 60 * 1000;
         if (elapsed * 1000 > STALE_JOB_MS) {
-          console.warn(`[IMPROVE] Stale processing job ${activeJob.id} (${elapsed}s) for ${originalFile.title} → marking as error`);
+          logger.warn(`[IMPROVE] Stale processing job ${activeJob.id} (${elapsed}s) for ${originalFile.title} → marking as error`);
           await storage.updateImprovedHtmlFileStatus(activeJob.id, 'error', undefined, 'Megszakadt feldolgozás (szerver újraindult vagy időtúllépés).');
         } else {
-          console.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} - active job ${activeJob.id} (${elapsed}s)`);
+          logger.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} - active job ${activeJob.id} (${elapsed}s)`);
           return res.status(409).json({
             message: `Már fut egy javítás erre a fájlra (${elapsed}s óta). Várd meg, amíg befejeződik!`,
             existingJobId: activeJob.id
@@ -725,7 +726,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
     });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      console.error('[IMPROVE] status endpoint error:', err.message);
+      logger.error('[IMPROVE] status endpoint error:', err.message);
       if (!res.headersSent) {
         res.status(500).json({ status: 'error', message: 'Hiba a státusz lekérdezésekor' });
       }

@@ -8,6 +8,7 @@ import { storage } from "./storage";
 import { dbPool } from "./db";
 import { User } from "@shared/schema";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
+import { logger } from "./lib/logger";
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 
@@ -140,7 +141,7 @@ export function setupAuth(app: Express) {
                     if (regenErr) return next(regenErr);
                     req.login(user, (loginErr) => {
                         if (loginErr) return next(loginErr);
-                        console.log('[AUTH] Google auth successful, redirecting...');
+                        logger.info('[AUTH] Google auth successful, redirecting...');
                         res.redirect('/admin');
                     });
                 });

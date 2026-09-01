@@ -26,6 +26,7 @@ import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
+import { logger } from "./lib/logger";
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { extractClassroomFromTitle } from "@shared/classrooms";
@@ -4991,7 +4992,7 @@ ${new Date().toLocaleString('hu-HU')}
       // AUDIT 2026-09-01: kezeletlen 'error' esemény (fájl eltűnik az existsSync után) →
       // uncaughtException → szerverleállás
       fileStream.on("error", (streamErr) => {
-        console.error("[SOURCE-DOWNLOAD] stream error:", streamErr);
+        logger.error("[SOURCE-DOWNLOAD] stream error:", streamErr);
         if (!res.headersSent) {
           res.status(500).json({ message: "Hiba a letöltés során" });
         } else {

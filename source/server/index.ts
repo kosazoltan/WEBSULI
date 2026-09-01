@@ -501,8 +501,11 @@ app.use((req, res, next) => {
 
     // Express error handler (4 params required for Express to identify it as error middleware)
     app.use((err: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
+      // AUDIT 2026-09-02: a CORS-delegate elutasítása (idegen Origin) eddig 500-ként jelent
+      // meg — ez tiltás, nem szerverhiba: 403.
+      const isCorsRejection = typeof err.message === "string" && err.message.startsWith("CORS policy blocked");
+      const status = err.status || err.statusCode || (isCorsRejection ? 403 : 500);
+      const message = isCorsRejection ? "Origin not allowed" : (err.message || "Internal Server Error");
 
       // Log error details for debugging
       console.error("Error handler:", {
