@@ -91,3 +91,19 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   +2557/−7347, 2026-08 biztonsági audit + 139 unit teszt + CORS same-origin fix).
   Nem olvasztottam be — draft, emberi döntés kell.
 - Lokális `fix/security-quality-2026-06-23` ág elavult (PR #5-ként beolvadt).
+
+## 2026-09-01 (este) — PR #6 merge + deploy (user megismételt "LINT MERGE PUSH DEPLOY" = döntés)
+
+- PR #6 (`claude/codebase-review-cleanup-k5axvo`, DRAFT, 3 commit: 5b55fe0, 158d24b,
+  1e1a141) lokálisan beolvasztva a main-be: konfliktusmentes, merge-commit b747629.
+- Kapu a merge-fán (npm ci után): tsc 0 hiba; eslint 0 error / 989 warning
+  (1163-ról csökkent); unit 145/145 pass (14 tesztfájl, benne a PR 139 új tesztje);
+  `npm run build` exit 0 (bundle index-CxhQcm29.js).
+- Push main → origin (49eb074..b747629); GitHub a PR #6-ot MERGED-nek jelölte.
+- Deploy: Vercel production dpl_9frybwUMbCd8bSvWkNy8fTNBmKML READY, websuli.vip
+  alias rajta; élő bundle = index-CxhQcm29.js (azonos a lokális builddel).
+  Backend (Render, X-Render-Origin-Server) füstteszt: /api/health, /api/auth/user,
+  /api/tags, /api/config, /api/html-files, /api/games/catalog, /api/csrf-token → 200.
+- Nyitott kockázat: CI Playwright E2E továbbra is strukturálisan bukik (nincs
+  szerver a CI-ben) — külön feladat. A PR nagy (87 fájl), a merge-utáni
+  visszaállítási pont: `git revert -m 1 b747629`.
