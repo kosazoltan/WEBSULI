@@ -123,14 +123,11 @@ const helmetMiddleware = helmet({
         ...(isDevelopment ? ["ws:", "wss:"] : ["wss:"]),
       ],
       frameSrc: ["'self'"],
-      // BACKLOG T4: a /dev/:id tananyag a Render saját originjéről töltődik az app
-      // (websuli.vip) iframe-jébe → a beágyazó originek: 'self' + CUSTOM_DOMAIN + allowlist
       frameAncestors: [
         "'self'",
         ...(process.env.CUSTOM_DOMAIN
           ? [`https://${process.env.CUSTOM_DOMAIN}`]
           : []),
-        ...ALLOWED_ORIGINS,
       ],
       objectSrc: ["'none'"],
       upgradeInsecureRequests:
@@ -180,11 +177,15 @@ app.use((req, res, next) => {
             ...ALLOWED_ORIGINS,
           ], // PDF.js CMap/font files + trusted frontends
           frameSrc: ["'self'"],
+          // BACKLOG T4: a /dev/:id tananyag a Render saját originjéről töltődik az app
+          // (websuli.vip) iframe-jébe → beágyazó originek: 'self' + CUSTOM_DOMAIN + allowlist
+          // (ALLOWED_ORIGINS tartalmazza a prod domaineket akkor is, ha CUSTOM_DOMAIN nincs beállítva).
           frameAncestors: [
             "'self'",
             ...(process.env.CUSTOM_DOMAIN
               ? [`https://${process.env.CUSTOM_DOMAIN}`]
               : []),
+            ...ALLOWED_ORIGINS,
           ],
           objectSrc: ["'self'", "data:"], // CRITICAL: Allow <embed> tag for native PDF viewer
           workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com"], // PDF.js worker
