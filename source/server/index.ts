@@ -123,11 +123,14 @@ const helmetMiddleware = helmet({
         ...(isDevelopment ? ["ws:", "wss:"] : ["wss:"]),
       ],
       frameSrc: ["'self'"],
+      // BACKLOG T4: a /dev/:id tananyag a Render saját originjéről töltődik az app
+      // (websuli.vip) iframe-jébe → a beágyazó originek: 'self' + CUSTOM_DOMAIN + allowlist
       frameAncestors: [
         "'self'",
         ...(process.env.CUSTOM_DOMAIN
           ? [`https://${process.env.CUSTOM_DOMAIN}`]
           : []),
+        ...ALLOWED_ORIGINS,
       ],
       objectSrc: ["'none'"],
       upgradeInsecureRequests:
@@ -193,7 +196,9 @@ app.use((req, res, next) => {
         preload: true,
       },
       noSniff: true,
-      frameguard: { action: "sameorigin" },
+      // BACKLOG T4: X-Frame-Options SAMEORIGIN blokkolná a cross-origin beágyazást; a
+      // beágyazhatóságot a fenti CSP frame-ancestors irányítja (explicit allowlist).
+      frameguard: false,
       xssFilter: true,
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
       crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow iframe embedding

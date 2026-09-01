@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 
 interface AppConfig {
   baseUrl: string;
+  /** A tananyag-iframe (/dev/:id) originje; '' = same-origin (dev). BACKLOG T4. */
+  materialOrigin?: string;
   environment: string;
 }
 
@@ -24,6 +26,8 @@ export function useConfig() {
   
   return {
     baseUrl,
+    // Amíg a config nem jött meg, üres (same-origin) — a Preview a betöltést megvárja
+    materialOrigin: data?.materialOrigin || '',
     environment: data?.environment || 'development',
     isLoading,
     error,

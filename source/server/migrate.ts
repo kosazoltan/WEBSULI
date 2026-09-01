@@ -13,6 +13,7 @@ import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { isBlockCommentWrappedSql, unwrapBlockCommentedSql } from './lib/migration-sql';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,11 +24,7 @@ const __dirname = path.dirname(__filename);
  * Ilyen fájlokat kihagyunk, de felvesszük _drizzle_migrations-be, hogy a sorrend ne akadjon el.
  */
 function isBlockCommentWrappedSchemaTemplate(raw: string): boolean {
-  const lines = raw.split("\n");
-  let i = 0;
-  while (i < lines.length && /^\s*--/.test(lines[i]!)) i++;
-  const rest = lines.slice(i).join("\n").trim();
-  return rest.startsWith("/*") && rest.endsWith("*/");
+  return isBlockCommentWrappedSql(raw);
 }
 
 /**
@@ -105,26 +102,15 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
       }
 
       const filePath = path.join(migrationsDir, fileName);
-      const sql = fs.readFileSync(filePath, 'utf8');
+      let sql = fs.readFileSync(filePath, 'utf8');
 
+      // BACKLOG T3 (2026-09-02): a drizzle-kit teljes fájlt blokk-kommentbe csomagoló
+      // séma-exportját (0000_…) eddig no-opként "applied"-nek jelöltük → üres DB-n az
+      // alaptáblák sosem jöttek létre. Most lefejtjük a burkot és normálisan futtatjuk;
+      // meglévő DB-n minden statement "already exists" → az alábbi tolerancia átugorja.
       if (isBlockCommentWrappedSchemaTemplate(sql)) {
-        console.log(
-          `[MIGRATE] ⏭️ Skipping ${fileName} (full file is block-commented template — not executable per statement)`,
-        );
-        await client.query("BEGIN");
-        try {
-          await client.query(
-            'INSERT INTO "_drizzle_migrations" (migration_name) VALUES ($1) ON CONFLICT DO NOTHING',
-            [fileName],
-          );
-          await client.query("COMMIT");
-          applied++;
-          console.log(`[MIGRATE]   ✅ ${fileName} marked as applied (no-op)`);
-        } catch (err) {
-          await client.query("ROLLBACK");
-          throw err;
-        }
-        continue;
+        console.log(`[MIGRATE] 📦 ${fileName}: blokk-kommentes séma-export → kicsomagolva futtatjuk`);
+        sql = unwrapBlockCommentedSql(sql);
       }
 
       // Split on drizzle's statement-breakpoint delimiter

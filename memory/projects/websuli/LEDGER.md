@@ -165,3 +165,18 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 - 2026-09-02 folyt.: az idegen-Origin login a CORS-delegate hibájából 500-at adott → az
   Error status=403 (index.ts) + FORBIDDEN ág az egységes hibakezelőben (routes.ts);
   élesben ellenőrizve: 403. CI 7a1f086: Lint ✅ Unit ✅ (E2E: régi strukturális hiba).
+
+## 2026-09-02 — az audit 4 nyitott tételének lezárása (spec: docs/specs/backlog-4-2026-09-02.md)
+
+- T1: `POST /api/material-result` (Origin-őr, 10/15perc limiter, validáció a
+  server/lib/material-result.ts-ben, Resend `sendAdminNotification` minden ADMIN_EMAILS
+  címre); az injektált `sendResultEmail()` fetch-csel hívja, a HTML-ben nincs e-mail cím.
+- T2: server/lib/view-dedup.ts — ip|materialId 1 órás dedup, max 50k kulcs; /dev/:id csak
+  friss kulcsra ír material_views sort.
+- T3: server/lib/migration-sql.ts — a blokk-kommentes 0000 séma-exportot a runner
+  kicsomagolja és futtatja (meglévő DB-n "already exists" tolerálva).
+- T4: getMaterialOrigin() (MATERIAL_ORIGIN, prod-ban RENDER_EXTERNAL_URL) → /api/config
+  materialOrigin → Preview.tsx iframe src; /dev helmet: frameguard ki, frame-ancestors
+  'self' + CUSTOM_DOMAIN + allowlist.
+- Kapuk: tsc 0; eslint 0 error / 989 warn; unit 172/172 (+11 teszt); build OK. Helyi
+  füstteszt: /dev HTML 0 e-mail; endpoint 403/400/404/503; 3 GET → 1 tracking sor.

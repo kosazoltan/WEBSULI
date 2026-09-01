@@ -50,3 +50,8 @@ project: websuli
   nélkül → 0001 42P01. Döntés kell: kikommentelés megszüntetése vagy runner-fejtés.
 - Preview.tsx iframe allow-same-origin+allow-scripts: szándékos (mikrofon), de a
   tananyag-HTML admin által feltöltött → dokumentált bizalmi feltevés, felülvizsgálandó.
+- 2026-09-02: a fenti négy tétel LEZÁRVA (docs/specs/backlog-4-2026-09-02.md): T1
+  POST /api/material-result (a HTML-ben nincs e-mail cím), T2 ViewDedup a /dev/:id-n,
+  T3 migrate.ts kicsomagolja a 0000-t, T4 tananyag-iframe a Render saját originjéről
+  (MATERIAL_ORIGIN / RENDER_EXTERNAL_URL). Feltétel élesben: RESEND_API_KEY + ADMIN_EMAILS
+  beállítva a Render envben, különben az eredményküldés 503-at ad ("nem elérhető").

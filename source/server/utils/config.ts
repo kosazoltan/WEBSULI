@@ -33,3 +33,22 @@ function stripTrailingSlash(url: string): string {
 export function getMaterialPreviewUrl(materialId: string): string {
   return `${getBaseUrl()}/preview/${materialId}`;
 }
+
+/**
+ * BACKLOG T4 (2026-09-02): a tananyag-iframe (/dev/:id) originje.
+ * A tananyag-HTML admin által feltöltött, scriptet futtató tartalom; ha az app originjéről
+ * (websuli.vip) szolgáljuk ki `allow-same-origin` sandboxban, a script az app sütijeit /
+ * localStorage-át / session-jét éri el. Külön originről (a Render szolgáltatás saját URL-je,
+ * amit a Render a RENDER_EXTERNAL_URL változóban ad) a sandbox a tananyag SAJÁT originjét
+ * adja — a mikrofon-engedély (allow="microphone") így is működik.
+ * Üres string = same-origin (dev, vagy MATERIAL_ORIGIN="" kényszerítés).
+ */
+export function getMaterialOrigin(): string {
+  if (process.env.MATERIAL_ORIGIN !== undefined) {
+    return stripTrailingSlash(process.env.MATERIAL_ORIGIN);
+  }
+  if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+    return stripTrailingSlash(process.env.RENDER_EXTERNAL_URL);
+  }
+  return '';
+}

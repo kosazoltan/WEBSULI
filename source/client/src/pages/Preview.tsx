@@ -15,7 +15,7 @@ export default function Preview() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
   // Get correct base URL from backend (CUSTOM_DOMAIN in prod, localhost in dev)
-  const { baseUrl, isLoading: configLoading } = useConfig();
+  const { baseUrl, materialOrigin, isLoading: configLoading } = useConfig();
   
   // Fetch full material data (including content for inline rendering)
   const { data: material, isLoading: materialLoading } = useQuery<HtmlFile>({
@@ -32,8 +32,11 @@ export default function Preview() {
   // Determine content type
   const isPdf = material?.contentType === 'pdf';
   
-  // Use relative URL for iframe (same-origin, no CORS issues)
-  const renderUrl = `/dev/${params?.id}`;
+  // BACKLOG T4 (2026-09-02): a tananyag a saját, elszigetelt originjéről töltődik
+  // (prod: a Render szolgáltatás URL-je; dev: same-origin). Így az iframe
+  // `allow-same-origin`-ja a tananyag originjét adja, nem az appét — a feltöltött HTML
+  // scriptje nem éri el a websuli.vip sütijeit/localStorage-át/API-session-jét.
+  const renderUrl = `${materialOrigin}/dev/${params?.id}`;
   
   const handleReloadIframe = () => {
     if (iframeRef.current) {

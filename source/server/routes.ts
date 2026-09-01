@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { insertHtmlFileSchema, insertMaterialCommentSchema, type User, type HtmlFile } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
-import { sendNewMaterialNotification, isResendConfigured } from "./resend";
+import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification } from "./resend";
 import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
 
@@ -27,6 +27,13 @@ import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from ".
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
+import rateLimit from "express-rate-limit";
+import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
+import { ViewDedup } from "./lib/view-dedup";
+import { getMaterialOrigin } from "./utils/config";
+
+// BACKLOG T2: /dev/:id megtekintés-dedup (ip|materialId, 1 óra)
+const materialViewDedup = new ViewDedup();
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { extractClassroomFromTitle } from "@shared/classrooms";
@@ -216,36 +223,57 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
      * @param {string} body - Email törzse (pl. "Név: János\\nPontszám: 95%")
      */
     if (typeof window.sendResultEmail === 'undefined') {
+      // BACKLOG T1 (2026-09-02): az admin címek NEM kerülnek a publikus HTML-be — az
+      // eredményt a szerver küldi el (POST /api/material-result, same-origin fetch).
+      // A tananyag mindig a /dev/:id útvonalon szolgálódik ki → az azonosító az URL-ből jön
+      var __websuliMaterialId = (window.location.pathname.match(/\\/dev\\/([A-Za-z0-9_-]+)/) || [])[1] || '';
+
+      function __websuliShowNotice(text, isError) {
+        try {
+          var el = document.createElement('div');
+          el.setAttribute('role', 'status');
+          el.textContent = text;
+          el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483647;' +
+            'padding:12px 18px;border-radius:10px;font:600 14px/1.3 Arial,sans-serif;color:#fff;' +
+            'box-shadow:0 6px 24px rgba(0,0,0,.3);max-width:90vw;text-align:center;' +
+            'background:' + (isError ? '#c0392b' : '#1e8449') + ';';
+          document.body.appendChild(el);
+          setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 4500);
+        } catch (e) { /* no-op */ }
+      }
+
       window.sendResultEmail = function(subject, body) {
-        // Email címzettek (környezeti változóból, vesszővel elválasztva)
-        var recipients = '${process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "admin@websuli.org"}';
-        
-        // URL encode a tárgy és üzenet (szóközök, ékezetes betűk, speciális karakterek kezelése)
-        var encodedSubject = encodeURIComponent(subject || 'Tananyag eredmény');
-        var encodedBody = encodeURIComponent(body || '');
-        
-        // Mailto link összeállítása (több címzett vesszővel elválasztva)
-        var mailtoLink = 'mailto:' + recipients + 
-                        '?subject=' + encodedSubject + 
-                        '&body=' + encodedBody;
-        
-        // Email program megnyitása
-        window.location.href = mailtoLink;
-        
-        // Visszajelzés a tanulónak (opcionális)
-        console.log('📧 Email program megnyitva:', {
-          címzettek: recipients,
-          tárgy: subject,
-          üzenet: body
+        var payload = {
+          materialId: __websuliMaterialId,
+          subject: String(subject || 'Tananyag eredmény'),
+          body: String(body || '')
+        };
+        return fetch('/api/material-result', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'omit',
+          body: JSON.stringify(payload)
+        }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (data) {
+            if (r.ok) {
+              __websuliShowNotice('✅ Az eredményt elküldtük a tanárnak.', false);
+              return true;
+            }
+            __websuliShowNotice('⚠️ ' + (data && data.message ? data.message : 'Az eredményt nem sikerült elküldeni.'), true);
+            return false;
+          });
+        }).catch(function () {
+          __websuliShowNotice('⚠️ Nincs hálózat — az eredményt nem sikerült elküldeni.', true);
+          return false;
         });
       };
-      
+
+      // Explicit címzettnél (a tananyag maga adja meg) marad a mailto; cím nélkül a szerveres út.
       window.sendResultEmailTo = function(to, subject, body) {
-        var recipient = to || '${process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "admin@websuli.org"}';
+        if (!to) { return window.sendResultEmail(subject, body); }
         var encodedSubject = encodeURIComponent(subject || 'Tananyag eredmény');
         var encodedBody = encodeURIComponent(body || '');
-        var mailtoLink = 'mailto:' + recipient + '?subject=' + encodedSubject + '&body=' + encodedBody;
-        window.location.href = mailtoLink;
+        window.location.href = 'mailto:' + encodeURIComponent(String(to)) + '?subject=' + encodedSubject + '&body=' + encodedBody;
       };
     }
     </script>`;
@@ -718,6 +746,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/') || path.startsWith('/api/admin/improved-files/')) {
       return enforceOriginAllowlist(req, res, next);
     }
+    // BACKLOG T1: a tananyag-iframe-ből hívott eredményküldés — nincs CSRF-tokenje,
+    // az Origin/Referer allowlist (+ same-origin) őrzi.
+    if (path === '/api/material-result') {
+      return enforceOriginAllowlist(req, res, next);
+    }
 
     // Apply CSRF protection to all other mutating requests
     csrfSynchronisedProtection(req, res, next);
@@ -798,8 +831,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/config', (_req, res) => {
     res.json({
       baseUrl: getBaseUrl(),
+      // BACKLOG T4: a tananyag-iframe elszigetelt originje ('' = same-origin)
+      materialOrigin: getMaterialOrigin(),
       environment: process.env.NODE_ENV || 'development',
     });
+  });
+
+  // BACKLOG T1 (2026-09-02): tananyag-eredmény beküldés — a címzetteket a szerver oldja fel,
+  // a publikus HTML-ben nincs e-mail cím. Publikus, Origin-allowlist őr + saját rate-limit.
+  const materialResultLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { message: "Túl sok eredményküldés. Próbáld újra később!" },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.post('/api/material-result', materialResultLimiter, async (req, res) => {
+    try {
+      const validated = normalizeMaterialResult(req.body);
+      if (!validated.ok) {
+        return res.status(400).json({ message: validated.error });
+      }
+      const { value } = validated;
+      const file = await storage.getHtmlFile(value.materialId);
+      if (!file) {
+        return res.status(404).json({ message: "Tananyag nem található" });
+      }
+      const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL });
+      const resendStatus = isResendConfigured();
+      if (!resendStatus.ok || recipients.length === 0) {
+        logger.warn('[MATERIAL-RESULT] nincs konfigurált küldő/címzett', { resend: resendStatus.reason, recipients: recipients.length });
+        return res.status(503).json({ message: "Az eredményküldés jelenleg nem elérhető." });
+      }
+      const mail = buildMaterialResultEmail(value, file.title, getMaterialPreviewUrl(file.id));
+      const results = await Promise.allSettled(
+        recipients.map((to) => sendAdminNotification(mail.subject, mail.html, to)),
+      );
+      const delivered = results.filter((r) => r.status === 'fulfilled' && (r.value as { success?: boolean } | undefined)?.success !== false).length;
+      if (delivered === 0) {
+        return res.status(502).json({ message: "Az eredményt nem sikerült elküldeni." });
+      }
+      res.json({ success: true, delivered });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[MATERIAL-RESULT] hiba:', err.message);
+      res.status(500).json({ message: "Hiba történt az eredmény küldésekor" });
+    }
   });
 
   // Játékok — katalógus és ranglista (nyilvános olvasás)
@@ -4131,14 +4208,17 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       try {
         const userAgent = req.headers['user-agent'] || undefined;
 
-        // Create material view record with NULL userId for anonymous
-        await storage.createMaterialView({
-          userId: null, // NULL for anonymous users (schema allows nullable)
-          materialId: file.id,
-          userAgent,
-        });
-
-        console.log(`[TRACKING] Material viewed: ${file.title} by anonymous user`);
+        // BACKLOG T2 (2026-09-02): ugyanaz az IP + anyag 1 órán belül csak egyszer számít —
+        // eddig minden GET egy sort írt, rate-limit nélkül (spam / statisztika-torzítás).
+        if (materialViewDedup.shouldRecord(`${req.ip ?? 'unknown'}|${file.id}`)) {
+          // Create material view record with NULL userId for anonymous
+          await storage.createMaterialView({
+            userId: null, // NULL for anonymous users (schema allows nullable)
+            materialId: file.id,
+            userAgent,
+          });
+          console.log(`[TRACKING] Material viewed: ${file.title} by anonymous user`);
+        }
       } catch (trackError: unknown) {
         console.error('[TRACKING] Material view rögzítési hiba:', trackError);
       }
