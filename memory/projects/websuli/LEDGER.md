@@ -162,3 +162,6 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   változatlan) → 989/989.
 - Idegen Origin-es login 500-at adott a CORS-delegate hibájából → a globális hibakezelő a
   "CORS policy blocked" hibát 403 "Origin not allowed"-ként adja vissza.
+- 2026-09-02 folyt.: az idegen-Origin login a CORS-delegate hibájából 500-at adott → az
+  Error status=403 (index.ts) + FORBIDDEN ág az egységes hibakezelőben (routes.ts);
+  élesben ellenőrizve: 403. CI 7a1f086: Lint ✅ Unit ✅ (E2E: régi strukturális hiba).

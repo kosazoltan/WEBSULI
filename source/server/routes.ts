@@ -5524,6 +5524,10 @@ Crawl-delay: 1`;
     } else if (statusCode === 401) {
       errorType = 'AUTH_ERROR';
       userMessage = 'Nincs jogosultságod ehhez a művelethez';
+    } else if (statusCode === 403) {
+      // AUDIT 2026-09-02: CORS/Origin tiltás — eddig "Váratlan hiba" (INTERNAL_ERROR) szöveggel ment ki
+      errorType = 'FORBIDDEN';
+      userMessage = 'A kérés forrása nem engedélyezett';
     } else if (statusCode === 404) {
       errorType = 'NOT_FOUND';
       userMessage = 'A keresett erőforrás nem található';
