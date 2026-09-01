@@ -180,3 +180,11 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   'self' + CUSTOM_DOMAIN + allowlist.
 - Kapuk: tsc 0; eslint 0 error / 989 warn; unit 172/172 (+11 teszt); build OK. Helyi
   füstteszt: /dev HTML 0 e-mail; endpoint 403/400/404/503; 3 GET → 1 tracking sor.
+- 2026-09-02 (folyt.): a T4 első deploy után az élő előnézet ÜRES volt — a frame-ancestors
+  módosítás a rossz (általános) helmet-blokkba került; hotfix 9ff8ebb a /dev ágba. Élő
+  ellenőrzés valódi Chrome-ban: /preview/:id iframe az onrender originről betölt, konzol
+  tiszta; onrender /dev fejléc: frame-ancestors 'self' + websuli.org/.vip. (Az automatizált
+  böngésző-pane cross-origin iframe-et nem renderel és 'Framing' hibát mutat — nem mérvadó.)
+- T1 élesben: /api/material-result 503 "nem elérhető" → a Render envben nincs RESEND_API_KEY
+  és/vagy ADMIN_EMAILS. Amíg nincs beállítva, a tananyagok "Eredmény küldése" gombja a
+  tanulónak hibaüzenetet ad (korábban mailto nyílt). Teendő: Render env beállítása (user).
