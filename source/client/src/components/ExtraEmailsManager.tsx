@@ -191,16 +191,16 @@ export default function ExtraEmailsManager() {
 
   const toggleClassroom = (classroom: number, isNew: boolean) => {
     if (isNew) {
-      setNewClassrooms(prev => 
-        prev.includes(classroom) 
+      setNewClassrooms(prev =>
+        prev.includes(classroom)
           ? prev.filter(c => c !== classroom)
-          : [...prev, classroom].sort()
+          : [...prev, classroom].sort((a, b) => a - b)
       );
     } else {
-      setEditClassroomsValue(prev => 
-        prev.includes(classroom) 
+      setEditClassroomsValue(prev =>
+        prev.includes(classroom)
           ? prev.filter(c => c !== classroom)
-          : [...prev, classroom].sort()
+          : [...prev, classroom].sort((a, b) => a - b)
       );
     }
   };
@@ -240,7 +240,7 @@ export default function ExtraEmailsManager() {
               variant="outline"
               size="sm"
               onClick={() => setPromoteOpen(true)}
-              disabled={promoteGradeMutation.isPending || !extraEmails || extraEmails.length === 0}
+              disabled={promoteGradeMutation.isPending}
               className="border-amber-400/60 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/30 gap-1.5 flex-shrink-0"
               data-testid="button-promote-grade"
               title="Minden tanuló osztálya egyel feljebb lép (új tanév kezdete)"
@@ -363,7 +363,7 @@ export default function ExtraEmailsManager() {
                       ) : (
                         <>
                           <div className="flex gap-1 flex-wrap">
-                            {email.classrooms.sort().map((classroom) => (
+                            {[...email.classrooms].sort((a, b) => a - b).map((classroom) => (
                               <Badge key={classroom} variant="secondary">
                                 {classroom}. osztály
                               </Badge>

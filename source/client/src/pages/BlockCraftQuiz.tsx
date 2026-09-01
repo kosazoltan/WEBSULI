@@ -1070,6 +1070,13 @@ export default function BlockCraftQuiz() {
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, jump: false });
   const lastTRef = useRef<number | null>(null);
   const rafRef = useRef(0);
+  // G1 JAVÍTÁS: a render-loop futásának egyetlen forrása. A step() a rekurzív
+  // requestAnimationFrame előtt ezt ellenőrzi, így a loop megállítható ÉS
+  // (a scene újraépítése nélkül) újraindítható — korábban a levelComplete/endRun
+  // cancelAnimationFrame után soha nem indult újra.
+  const runningRef = useRef(false);
+  /** A scene-effect által beállított render-lépés — a loop-vezérlő effect innen indítja újra. */
+  const stepRef = useRef<((now: number) => void) | null>(null);
   const mineTargetRef = useRef<{ x: number; y: number; z: number; t: number } | null>(null);
   const streakRef = useRef(0);
   /** A crosshair alatt lévő blokk (a render-loop frissíti minden frame-ben). */
@@ -1397,6 +1404,7 @@ export default function BlockCraftQuiz() {
   }, [beginLevel, levelIdx, sessionXp]);
 
   const endRun = useCallback(() => {
+    runningRef.current = false; // G1: loop stop (újraindítás a phase-effectből)
     cancelAnimationFrame(rafRef.current);
     lookHitRef.current = null;
     setGameWon(false);
@@ -1471,12 +1479,16 @@ export default function BlockCraftQuiz() {
    *  - időjárás-részecskék + sodródó felhők + bányász-por
    */
   // D1: scene mount-szintű effect — NEM phase-függő; phaseRef-et használja a render-loopban
+  // G1 JAVÍTÁS: a korábbi `if (phaseRef.current !== "play") return;` guard mountkor
+  // (phase === "menu") mindig kilépett, és az effect deps üres → a scene SOHA nem épült fel.
+  // Most a canvas is végig a DOM-ban van, így mountkor felépíthető; a loop külön vezérelt.
   useEffect(() => {
-    if (phaseRef.current !== "play") return;
     if (sceneBuiltRef.current) return;
-    sceneBuiltRef.current = true;
     const canvas = canvasRef.current;
+    // A "megépült" flag csak akkor áll be, ha tényleg van canvas — különben
+    // egy hiányzó canvas véglegesen letiltaná a scene felépítését.
     if (!canvas) return;
+    sceneBuiltRef.current = true;
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -1645,6 +1657,8 @@ export default function BlockCraftQuiz() {
 
     const step = (now: number) => {
       if (disposed) return;
+      // G1: leállított loop → nem ütemezünk új frame-et (újraindítás a phase-effectből).
+      if (!runningRef.current) return;
       rafRef.current = requestAnimationFrame(step);
       const last = lastTRef.current ?? now;
       const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
@@ -1766,10 +1780,14 @@ export default function BlockCraftQuiz() {
       renderer.render(scene, camera);
     };
     lastTRef.current = null;
-    rafRef.current = requestAnimationFrame(step);
+    // G1: a loop indítását/leállítását a phase-vezérelt effect végzi (lentebb).
+    stepRef.current = step;
+    if (runningRef.current) rafRef.current = requestAnimationFrame(step);
 
     return () => {
       disposed = true;
+      runningRef.current = false;
+      stepRef.current = null;
       cancelAnimationFrame(rafRef.current);
       cameraRef.current = null;
       if (document.pointerLockElement === canvas) document.exitPointerLock();
@@ -1802,6 +1820,24 @@ export default function BlockCraftQuiz() {
       sceneBuiltRef.current = false; // D1: reset on cleanup
     };
   }, []); // D1: mount-szintű — phase-változásra NEM épül újra a scene
+
+  /**
+   * G1: render-loop vezérlés. A scene egyszer épül fel (fenti effect), a loop
+   * viszont a phase szerint indul/áll — így új kör, következő pálya és kvíz után
+   * is újraindul, míg levelComplete/over/menu alatt nem pörgeti a GPU-t.
+   */
+  useEffect(() => {
+    const shouldRun = phase === "play" || phase === "quiz";
+    if (!shouldRun) {
+      runningRef.current = false;
+      cancelAnimationFrame(rafRef.current);
+      return;
+    }
+    if (runningRef.current || !stepRef.current) return;
+    runningRef.current = true;
+    lastTRef.current = null; // dt-ugrás elkerülése a szünet után
+    rafRef.current = requestAnimationFrame(stepRef.current);
+  }, [phase]);
 
   const onAnswer = (idx: number) => {
     if (!quiz) return;
@@ -1898,6 +1934,7 @@ export default function BlockCraftQuiz() {
     // szabályosan leejt a gödörbe — ez a Minecraft-viselkedés, nincs "rescue".
     if (levelGoalReached) {
       sfxLevelUp();
+      runningRef.current = false; // G1: loop stop (újraindítás a phase-effectből)
       cancelAnimationFrame(rafRef.current);
       setPhase("levelComplete");
     } else {
@@ -2179,13 +2216,19 @@ export default function BlockCraftQuiz() {
             </div>
           )}
 
-          {phase === "play" && (() => {
+          {/*
+            G1: a canvas MINDIG a DOM-ban marad (más fázisokban csak elrejtjük),
+            különben a mount-szintű Three.js effect nem találná meg a canvas-t,
+            és a scene sosem épülne fel. (Ugyanaz a minta, mint SpaceAsteroidQuiz.)
+          */}
+          {(() => {
             const cfg = activeLevelRef.current;
             const timePct = (timeLeft / cfg.timeLimit) * 100;
             const blocksPct = Math.min(100, (levelBlocks / cfg.goalBlocks) * 100);
             const rarePct = cfg.goalRareBlocks > 0 ? Math.min(100, (levelRare / cfg.goalRareBlocks) * 100) : 100;
+            const showPlay = phase === "play" || phase === "quiz";
             return (
-              <div className="flex flex-col items-center gap-1.5">
+              <div className={`flex flex-col items-center gap-1.5 ${showPlay ? "" : "hidden"}`}>
                 {/* === CANVAS LEGFELÜL (mobil-first) === */}
                 <div className="relative rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]">
                   <canvas

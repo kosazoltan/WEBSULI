@@ -24,6 +24,8 @@ async function processImprovementJob(
   anthropicKey: string
 ) {
   const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
+  // AUDIT 2026-09-01: a 15 perces abort-timer azonosítója a catch-ágban is elérhető legyen
+  let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
     // Build prompts
@@ -222,6 +224,7 @@ ${originalFile.content}
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 min max (safety net)
+    abortTimeoutId = timeoutId;
 
     console.log(`[IMPROVE] Record ${dbRecordId}: Calling AI with STREAMING...`);
     const startTime = Date.now();
@@ -250,6 +253,11 @@ ${originalFile.content}
         ], controller.signal);
 
         for await (const chunk of stream) {
+          // AUDIT 2026-09-01: a provider abort/hiba esetén 'error' chunkot ad és NORMÁLISAN
+          // lezár — eddig a csonka HTML 'pending'-ként mentődött és alkalmazható volt.
+          if (chunk.type === 'error') {
+            throw new Error(chunk.message || 'AI stream error');
+          }
           if (chunk.type === 'content_delta' && chunk.content) {
             fullContent += chunk.content;
             // Log progress every 10 seconds
@@ -390,7 +398,9 @@ ${originalFile.content}
           try {
             new Function(fixedJs);
             console.log(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript auto-repair successful`);
-            improvedHtml = improvedHtml.replace(jsContent, fixedJs);
+            // AUDIT 2026-09-01: függvényes csere — a string-csere a `$&`, `$'`, `$1` mintákat
+            // értelmezné, és a generált JS-ben gyakori `$` a dokumentumot duplázhatta.
+            improvedHtml = improvedHtml.replace(jsContent, () => fixedJs);
           } catch (stillBroken: unknown) {
             const stillBrokenTyped = stillBroken instanceof Error ? stillBroken : new Error(String(stillBroken));
             console.error(`[IMPROVE] Record ${dbRecordId}: ⚠️ Auto-repair failed: ${stillBrokenTyped.message}`);
@@ -491,6 +501,8 @@ ${originalFile.content}
     console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Success! Content saved (${improvedHtml.length} bytes), status → pending`);
 
   } catch (error: unknown) {
+    // AUDIT 2026-09-01: a 15 perces abort-timer a hibaágon eddig nem törlődött (szivárgott).
+    if (abortTimeoutId) clearTimeout(abortTimeoutId);
     const err = error instanceof Error ? error : new Error(String(error));
     console.error(`[IMPROVE] Record ${dbRecordId}: Error:`, err.message);
 
@@ -558,11 +570,20 @@ export function registerImprovementRoutes(adminRouter: Router) {
       const activeJob = existingJobs?.find((j) => j.status === 'processing');
       if (activeJob) {
         const elapsed = Math.round((Date.now() - new Date(activeJob.createdAt).getTime()) / 1000);
-        console.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} - active job ${activeJob.id} (${elapsed}s)`);
-        return res.status(409).json({ 
-          message: `Már fut egy javítás erre a fájlra (${elapsed}s óta). Várd meg, amíg befejeződik!`,
-          existingJobId: activeJob.id
-        });
+        // AUDIT 2026-09-01: szerver-újraindítás után a memóriában futó job elveszett, a DB-sor
+        // örökre 'processing' maradt, és minden új kérés 409-et kapott. A 15 perces AI-limit
+        // után a rekord biztosan halott → hibára állítjuk és engedjük az új javítást.
+        const STALE_JOB_MS = 15 * 60 * 1000;
+        if (elapsed * 1000 > STALE_JOB_MS) {
+          console.warn(`[IMPROVE] Stale processing job ${activeJob.id} (${elapsed}s) for ${originalFile.title} → marking as error`);
+          await storage.updateImprovedHtmlFileStatus(activeJob.id, 'error', undefined, 'Megszakadt feldolgozás (szerver újraindult vagy időtúllépés).');
+        } else {
+          console.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} - active job ${activeJob.id} (${elapsed}s)`);
+          return res.status(409).json({
+            message: `Már fut egy javítás erre a fájlra (${elapsed}s óta). Várd meg, amíg befejeződik!`,
+            existingJobId: activeJob.id
+          });
+        }
       }
 
       // ✅ GYÖKÉROK JAVÍTÁS: Create DB record FIRST with 'processing' status
@@ -601,8 +622,11 @@ export function registerImprovementRoutes(adminRouter: Router) {
 
   // GET /api/admin/improve-material/status/:jobId - Poll job status FROM DATABASE
   adminRouter.get("/improve-material/status/:jobId", async (req: Request, res) => {
+    // AUDIT 2026-09-01: Express 4 nem kapja el az async handler rejectjét → DB-hiba esetén a
+    // kérés a timeoutig lógott és unhandledRejection keletkezett.
+    try {
     const { jobId } = req.params;
-    
+
     // ✅ Read from DATABASE, not in-memory Map
     const record = await storage.getImprovedHtmlFile(jobId);
 
@@ -690,8 +714,8 @@ export function registerImprovementRoutes(adminRouter: Router) {
     }
 
     // Any other status (approved, applied) - treat as completed
-    res.json({ 
-      status: 'completed', 
+    res.json({
+      status: 'completed',
       elapsed,
       improvedFile: {
         id: record.id,
@@ -699,5 +723,12 @@ export function registerImprovementRoutes(adminRouter: Router) {
         status: record.status,
       }
     });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[IMPROVE] status endpoint error:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ status: 'error', message: 'Hiba a státusz lekérdezésekor' });
+      }
+    }
   });
 }

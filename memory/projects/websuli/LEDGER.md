@@ -107,3 +107,47 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 - Nyitott kockázat: CI Playwright E2E továbbra is strukturálisan bukik (nincs
   szerver a CI-ben) — külön feladat. A PR nagy (87 fájl), a merge-utáni
   visszaállítási pont: `git revert -m 1 b747629`.
+
+## 2026-09-01 (éjjel) — Mély kódaudit + autonóm javítás (fix/deep-audit-2026-09-01)
+
+- Módszer: 5 párhuzamos csak-olvasó elemző ügynök (backend routes/opus, backend
+  storage+services/opus, kliens-alap, kliens-oldalak, játékok) → ~50 finding →
+  refuter-kör (minden CRITICAL/HIGH forrásból újra-ellenőrizve) → spec
+  (docs/specs/deep-audit-2026-09-01.md) → 2 javító ügynök (kliens) + saját szerver-munka.
+- KRITIKUS javítások: (1) DB-backup és JSON-export üres `content`-tel készült
+  (getAllHtmlFiles listanézet) és a restore ebből írta felül az összes tananyagot →
+  teljes select + `server/lib/backup-guard.ts` kapu minden restore-úton;
+  (2) `/api/login`,`/api/logout` Origin/CSRF-őr halott kód volt (setupAuth előbb
+  regisztrált, mint a routes.ts app.use) → `server/lib/origin-guard.ts`, közvetlenül a
+  route-on, új teszt a VALÓS sorrenddel; (3) BlockCraft render-loop pálya/kör után nem
+  indult újra (+ scene guard) → canvas mindig a DOM-ban, runningRef/stepRef, phase-vezérelt
+  loop; (4) AchievementToast önmagát törlő effect → sosem tűnt el; (5) srcDoc iframe
+  `allow-same-origin`+`allow-scripts` AI-generált HTML-en (EnhancedMaterialCreator).
+- HIGH: scheduledPublishing rossz tábla/oszlopnév (`"htmlFiles"`→`html_files`);
+  games_catalog hiányzó `space-asteroid-quiz`/`brain-rot-steal` (0007 migráció; a pontok
+  és AI-kvízek FK-hibával vesztek el); deleteUser FK-nullázás + tranzakció; improveAsync:
+  stream `error` chunk → throw, stale `processing` 15 perc után feloldva, abort-timer
+  szivárgás, `replace(…, () => fixedJs)`, status handler try/catch; kvízgenerálás üres
+  eredménynél nem deaktivál; body-parser: nagy limit csak session-sütivel; SpaceAsteroid
+  pause alatt fogyó óra; PdfUpload néma FileReader-hiba; AdminFileDashboard mentetlen
+  sorrend elveszett; queryClient 403 body kétszer olvasva; ChatInterface autoscroll;
+  ExtraEmailsManager promote gomb; pdf-view classroom 0/9-12 crash.
+- MEDIUM/LOW: compression SSE-kizárás, payload-guard `fileData`, Google-callback
+  session.regenerate, like 404 + onConflictDoNothing, readStream error, bulk-delete valós
+  darabszám, popular COALESCE, upsert target email, migrate.ts TLS, comments limit,
+  sitemap getBaseUrl, push unsubscribe validáció, quiz-bank catch csak hiányzó táblára,
+  message típus, content[0], err.message csak dev-ben, error-mailer boolean, napi
+  összesítő dátumszűrt lekérdezés, reorder chunkolt, database/info Postgres + maszkolt
+  URL, AdminDocumentation admin-guard, admin validTabs, MaterialImprover confirm,
+  DatabaseManager, AuthStatus kezdőbetű, ClassroomGateModal a11y, WordLadder lock +
+  timeouts, SpeedQuiz/BrainRot perfect-számítás, BrainRot duplikált opciók,
+  CosmicBackground 0-méretű canvas crash (böngészőben találva).
+- Kapuk (valós kimenet): tsc 0; eslint 0 error / 994 warning (CI baseline 1166; +5 új
+  console.error hibaágakon); unit 161/161 (3 új tesztfájl: backup-guard,
+  origin-guard-order, audit-2026-09-static); `npm run build` exit 0; böngészőben:
+  BlockCraft indul + "Kör vége" → "Új próbálkozás" után újra renderel, jelvény-toast
+  eltűnik, főoldal 167 tananyaggal betölt.
+- NEM javítva (BACKLOG): ADMIN_EMAILS a publikus /dev/:id HTML-ben (új API kell);
+  `/dev/:id` view-írás rate-limit (iskolai NAT-kockázat); Preview.tsx allow-same-origin
+  (PR #2 szándékos, mikrofon); migrate.ts 0000 blokk-kommentes séma futtatása üres DB-n.
+- Branch: fix/deep-audit-2026-09-01 — push/merge külön utasításra.

@@ -215,6 +215,12 @@ app.use(
       if (req.headers["x-no-compression"]) {
         return false;
       }
+      // AUDIT 2026-09-01: SSE stream (text/event-stream) NEM tömöríthető — a gzip-puffer
+      // ~1 KB-ig visszatartotta a res.write() darabokat, a "streaming" válasz megállt.
+      const contentType = String(res.getHeader("Content-Type") ?? "");
+      if (contentType.includes("text/event-stream")) {
+        return false;
+      }
       // Use compression's default filter (compresses text/* and application/json)
       return compression.filter(req, res);
     },
@@ -242,16 +248,25 @@ const standardJsonParser = express.json({ limit: STANDARD_BODY_LIMIT });
 const largeUrlencodedParser = express.urlencoded({ extended: false, limit: LARGE_BODY_LIMIT });
 const standardUrlencodedParser = express.urlencoded({ extended: false, limit: STANDARD_BODY_LIMIT });
 
-const needsLargeBody = (path: string) =>
-  LARGE_BODY_PREFIXES.some((prefix) => path.startsWith(prefix));
+// AUDIT 2026-09-01: a body-parser a session/auth és a rate-limiterek ELŐTT fut, ezért egy
+// bejelentkezés nélküli kliens is 150 MB-os JSON-t parseoltathatott (memória-DoS), mielőtt a
+// 401/403 megszületett volna. A session-middleware itt még nem elérhető, ezért olcsó
+// előszűrő: nagy body csak akkor, ha a kérés egyáltalán hordoz session-sütit — anélkül a
+// nagy-limitű útvonalak úgyis 401-et adnának.
+const SESSION_COOKIE_NAME = "connect.sid";
+const hasSessionCookie = (req: express.Request) =>
+  typeof req.headers.cookie === "string" && req.headers.cookie.includes(`${SESSION_COOKIE_NAME}=`);
+
+const needsLargeBody = (req: express.Request) =>
+  LARGE_BODY_PREFIXES.some((prefix) => req.path.startsWith(prefix)) && hasSessionCookie(req);
 
 app.use((req, res, next) =>
-  needsLargeBody(req.path)
+  needsLargeBody(req)
     ? largeJsonParser(req, res, next)
     : standardJsonParser(req, res, next),
 );
 app.use((req, res, next) =>
-  needsLargeBody(req.path)
+  needsLargeBody(req)
     ? largeUrlencodedParser(req, res, next)
     : standardUrlencodedParser(req, res, next),
 );

@@ -724,25 +724,30 @@ export default function EnhancedMaterialCreator() {
             const data = line.slice(6).trim();
             if (data === '[DONE]') continue;
 
+            // A JSON.parse-t külön try-ba tettük, hogy az 'error' ág throw-ja
+            // ne nyelődjön el a parse-hibákat elnyelő catch-ben, hanem a
+            // külső catch-hez jusson és toast-oljon.
+            let parsed: any;
             try {
-              const parsed = JSON.parse(data);
-
-              if (parsed.type === 'content_delta') {
-                assistantMessage += parsed.content;
-                // Update the last assistant message with streaming content
-                setChatGptMessages(prev => {
-                  const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = {
-                    role: 'assistant',
-                    content: assistantMessage
-                  };
-                  return newMessages;
-                });
-              } else if (parsed.type === 'error') {
-                throw new Error(parsed.message);
-              }
+              parsed = JSON.parse(data);
             } catch {
               // Ignore parse errors for incomplete JSON
+              continue;
+            }
+
+            if (parsed.type === 'content_delta') {
+              assistantMessage += parsed.content;
+              // Update the last assistant message with streaming content
+              setChatGptMessages(prev => {
+                const newMessages = [...prev];
+                newMessages[newMessages.length - 1] = {
+                  role: 'assistant',
+                  content: assistantMessage
+                };
+                return newMessages;
+              });
+            } else if (parsed.type === 'error') {
+              throw new Error(parsed.message);
             }
           }
         }
@@ -827,31 +832,36 @@ export default function EnhancedMaterialCreator() {
             const data = line.slice(6).trim();
             if (data === '[DONE]') continue;
 
+            // A JSON.parse-t külön try-ba tettük, hogy az 'error' ág throw-ja
+            // ne nyelődjön el a parse-hibákat elnyelő catch-ben, hanem a
+            // külső catch-hez jusson és toast-oljon.
+            let parsed: any;
             try {
-              const parsed = JSON.parse(data);
-
-              if (parsed.type === 'content_delta') {
-                assistantMessage += parsed.content;
-                // Update the last assistant message with streaming content
-                setClaudeMessages(prev => {
-                  const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = {
-                    role: 'assistant',
-                    content: assistantMessage
-                  };
-                  return newMessages;
-                });
-              } else if (parsed.type === 'html_generated') {
-                setGeneratedHtml(parsed.html);
-                toast({
-                  title: "HTML elkészült!",
-                  description: "Megtekintheted az előnézetben"
-                });
-              } else if (parsed.type === 'error') {
-                throw new Error(parsed.message);
-              }
+              parsed = JSON.parse(data);
             } catch {
               // Ignore parse errors for incomplete JSON
+              continue;
+            }
+
+            if (parsed.type === 'content_delta') {
+              assistantMessage += parsed.content;
+              // Update the last assistant message with streaming content
+              setClaudeMessages(prev => {
+                const newMessages = [...prev];
+                newMessages[newMessages.length - 1] = {
+                  role: 'assistant',
+                  content: assistantMessage
+                };
+                return newMessages;
+              });
+            } else if (parsed.type === 'html_generated') {
+              setGeneratedHtml(parsed.html);
+              toast({
+                title: "HTML elkészült!",
+                description: "Megtekintheted az előnézetben"
+              });
+            } else if (parsed.type === 'error') {
+              throw new Error(parsed.message);
             }
           }
         }
@@ -1534,7 +1544,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                     srcDoc={generatedHtml}
                     className="w-full h-[400px]"
                     title="HTML Preview"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+                    sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                     allow="autoplay; fullscreen; clipboard-write; microphone"
                     data-testid="claude-preview-iframe"
                   />
@@ -1726,7 +1736,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                         srcDoc={generatedHtml}
                         className="w-full h-full min-h-[600px]"
                         title="HTML Preview"
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+                        sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                         allow="autoplay; fullscreen; clipboard-write; microphone"
                       />
                     </ScrollArea>

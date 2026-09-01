@@ -183,6 +183,13 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
     validItems.push(item as GeneratedQuizItem);
   }
 
+  // AUDIT 2026-09-01: ha egyetlen generált tétel sem érvényes, NEM deaktiváljuk a régi
+  // kvízeket — különben a tananyag teljes kérdéskészlete hiba nélkül eltűnne.
+  if (validItems.length === 0) {
+    result.errors.push("Nincs érvényes generált tétel — a meglévő kvízek változatlanok maradtak.");
+    return result;
+  }
+
   // Tranzakció: deaktivál + beilleszt atomikusan.
   // Ha bármelyik tx.insert dob, az egész rollbackel.
   await db.transaction(async (tx) => {

@@ -131,12 +131,14 @@ export async function sendErrorReport(payload: ErrorReportPayload): Promise<void
       !emailAlreadySent ||
       (severity === "CRITICAL" && existing.length > 0 && existing[0].occurrenceCount % 10 === 0)
     ) {
-      await _sendEmail(fingerprint, severity, payload, commitSha);
+      const sent = await _sendEmail(fingerprint, severity, payload, commitSha);
 
-      await db
-        .update(errorLogs)
-        .set({ emailSent: true, emailSentAt: new Date() })
-        .where(eq(errorLogs.fingerprint, fingerprint));
+      if (sent) {
+        await db
+          .update(errorLogs)
+          .set({ emailSent: true, emailSentAt: new Date() })
+          .where(eq(errorLogs.fingerprint, fingerprint));
+      }
     }
   } catch (dbErr) {
     // Never throw from error logger — just log
@@ -152,19 +154,21 @@ async function _sendEmail(
   severity: string,
   payload: ErrorReportPayload,
   commitSha?: string
-): Promise<void> {
+): Promise<boolean> {
+  // AUDIT 2026-09-01: boolean visszatérés — a hívó eddig sikertelen küldés után is
+  // emailSent=true-t írt, így a hibáról soha többé nem ment értesítés.
   const password = process.env.JUNIOR_EMAIL_PASSWORD;
   if (!password) {
     console.warn("[ErrorLogger] JUNIOR_EMAIL_PASSWORD not set, skipping email.");
-    return;
+    return false;
   }
   if (!HMAC_SECRET) {
     console.warn("[ErrorLogger] ERRORLOG_HMAC_SECRET not set, skipping email.");
-    return;
+    return false;
   }
   if (!SENDER_EMAIL || !RECIPIENT_EMAIL) {
     console.warn("[ErrorLogger] ERROR_REPORT_SENDER or ERROR_REPORT_RECIPIENT not set, skipping email.");
-    return;
+    return false;
   }
 
   const transporter = nodemailer.createTransport({
@@ -215,7 +219,9 @@ async function _sendEmail(
       html: htmlBody,
     });
     console.warn(`[ErrorLogger] Email sent for fingerprint ${fingerprint}`);
+    return true;
   } catch (emailErr) {
     console.error("[ErrorLogger] Email send failed:", emailErr);
+    return false;
   }
 }

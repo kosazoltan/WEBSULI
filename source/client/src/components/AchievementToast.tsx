@@ -36,16 +36,24 @@ export default function AchievementToast({ achievements, durationMs = 3500 }: Pr
     setQueue((prev) => [...prev, ...fresh]);
   }, [achievements]);
 
+  // JAVÍTÁS: korábban egyetlen effect állította be a current-et ÉS indította a
+  // rejtő-timert. Mivel a setCurrent a saját deps-ét változtatta, az effect
+  // azonnal újrafutott, és a cleanup törölte a frissen indított timert → a toast
+  // sosem tűnt el. Ezért két külön effect: (a) sorból léptetés, (b) rejtő-timer.
   useEffect(() => {
     if (current || queue.length === 0) return;
     const next = queue[0]!;
     setCurrent(next);
     setQueue((prev) => prev.slice(1));
+  }, [current, queue]);
+
+  useEffect(() => {
+    if (!current) return;
     const timer = window.setTimeout(() => {
       setCurrent(null);
     }, durationMs);
     return () => window.clearTimeout(timer);
-  }, [current, queue, durationMs]);
+  }, [current, durationMs]);
 
   return (
     <AnimatePresence>

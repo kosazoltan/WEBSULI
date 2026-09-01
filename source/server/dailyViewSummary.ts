@@ -25,14 +25,9 @@ export function setupDailyViewSummary() {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       
-      // Get recent views (last 1000) - includes material data
-      const allViews = await storage.getRecentMaterialViews(1000);
-      
-      // Filter views from today
-      const todayViews = allViews.filter((view: MaterialView & { material?: HtmlFile }) => {
-        const viewDate = new Date(view.viewedAt);
-        return viewDate >= today && viewDate < tomorrow;
-      });
+      // AUDIT 2026-09-01: dátumszűrt lekérdezés a globális 1000-es limit helyett
+      const todayViews: Array<MaterialView & { material?: HtmlFile }> =
+        await storage.getMaterialViewsBetween(today, tomorrow);
       
       // If no views today, skip email
       if (todayViews.length === 0) {

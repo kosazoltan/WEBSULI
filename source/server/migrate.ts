@@ -45,8 +45,13 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
 
   const pool = new pg.Pool({
     connectionString: dbUrl,
+    // AUDIT 2026-09-01: éles DB-n a tanúsítvány-ellenőrzés nem kapcsolható ki (MITM DDL) —
+    // ugyanaz a szabály, mint server/db.ts-ben (NODE_ENV alapú, opcionális CA env-ből).
     ssl: dbUrl.includes('neon.tech') || dbUrl.includes('render.com') || dbUrl.includes('supabase') || dbUrl.includes('sslmode=')
-      ? { rejectUnauthorized: false }
+      ? {
+          rejectUnauthorized: process.env.NODE_ENV === 'production',
+          ...(process.env.DATABASE_CA_CERT ? { ca: process.env.DATABASE_CA_CERT } : {}),
+        }
       : undefined,
     connectionTimeoutMillis: 30000, // 30s for Neon cold start during build
   });

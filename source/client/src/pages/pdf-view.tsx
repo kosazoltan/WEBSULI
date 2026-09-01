@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import ReactPdfViewer from "@/components/ReactPdfViewer";
 import LikeButton from "@/components/LikeButton";
 import type { HtmlFile } from "@shared/schema";
+import { getClassroomLabel } from "@shared/classrooms";
 
 const CLASSROOM_COLORS = [
   { bg: "bg-orange-500", text: "text-white", name: "1. osztály" },
@@ -101,7 +102,12 @@ export default function PdfView() {
     );
   }
 
-  const classroomColor = CLASSROOM_COLORS[material.classroom - 1];
+  // CLASSROOM_COLORS csak 1-8. osztályra van definiálva; 0 és 9-12 esetén fallback szürke badge.
+  const classroomColor = CLASSROOM_COLORS[material.classroom - 1] ?? {
+    bg: "bg-slate-500",
+    text: "text-white",
+    name: getClassroomLabel(material.classroom),
+  };
   const pdfUrl = `/api/pdf/${id}`;
 
   return (

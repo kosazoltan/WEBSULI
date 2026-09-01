@@ -1,8 +1,11 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-async function throwIfResNotOk(res: Response) {
+// A `preReadText` paraméter azért kell, mert a 403-as CSRF-ág már beolvasta
+// a body-t (res.text()) — a Response body csak egyszer olvasható, ismételt
+// res.text() hívás üres stringet/hibát adna.
+async function throwIfResNotOk(res: Response, preReadText?: string) {
   if (!res.ok) {
-    const text = await res.text();
+    const text = preReadText !== undefined ? preReadText : await res.text();
     let message = text || res.statusText;
     try {
       const json = JSON.parse(text);
@@ -151,8 +154,12 @@ export async function apiRequest<T = any>(
         debugLog(`[API REQUEST] ${method} ${url} → ${res.status} ${res.statusText}`);
 
         // SECURITY: If CSRF token invalid (403 Forbidden), refresh token and retry ONCE
+        // A `text`-et itt olvassuk ki (body csak egyszer olvasható), és lent a
+        // throwIfResNotOk(res, text) hívásnak adjuk tovább, ha nem CSRF-hiba.
+        let forbiddenText: string | undefined;
         if (res.status === 403) {
           const text = await res.text();
+          forbiddenText = text;
           if (text.includes('CSRF') || text.includes('csrf')) {
             console.warn('[CSRF] Token invalid, refreshing and retrying...');
             csrfTokenManager.invalidate();
@@ -187,8 +194,8 @@ export async function apiRequest<T = any>(
           }
         }
 
-        await throwIfResNotOk(res);
-        
+        await throwIfResNotOk(res, forbiddenText);
+
         // Handle 204 No Content responses (e.g., DELETE operations)
         if (res.status === 204) {
           return undefined as T;

@@ -44,13 +44,21 @@ export function AuthStatus() {
     );
   }
 
-  // Get display name based on email
+  // Kezdőbetű meghatározása: elsőként a keresztnevet (firstName) használjuk,
+  // ha az nincs meg, az e-mail első betűjét — nem hardcode-olt e-mail-egyezést,
+  // hogy bármelyik admin/felhasználó helyesen jelenjen meg.
   const getDisplayName = () => {
-    if (!user || !('email' in user)) return 'Unknown';
+    if (!user) return 'Unknown';
 
-    const email = user.email;
-    if (email === 'kosa.zoltan.ebc@gmail.com') return 'Z';
-    if (email === 'mszilva78@gmail.com') return 'Sz';
+    const firstName = 'firstName' in user ? user.firstName : undefined;
+    if (firstName && firstName.trim()) {
+      return firstName.trim();
+    }
+
+    const email = 'email' in user ? user.email : undefined;
+    if (email && email.trim()) {
+      return email.trim().charAt(0).toUpperCase();
+    }
 
     return 'Admin';
   };

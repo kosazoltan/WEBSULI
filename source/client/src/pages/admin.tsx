@@ -353,7 +353,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
-    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups"];
+    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups", "email-debug", "parent-dashboard"];
     return tabParam && validTabs.includes(tabParam) ? tabParam : "files";
   });
 

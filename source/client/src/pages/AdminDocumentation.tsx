@@ -1,15 +1,16 @@
+import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  BookOpen, 
-  Wand2, 
-  FileText, 
-  Database, 
-  Mail, 
-  Tag, 
-  BarChart3, 
-  Bell, 
+import {
+  BookOpen,
+  Wand2,
+  FileText,
+  Database,
+  Mail,
+  Tag,
+  BarChart3,
+  Bell,
   Settings,
   Upload,
   Edit,
@@ -24,10 +25,33 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminDocumentation() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  // CRITICAL SECURITY: Redirect non-admin users to home page (ua. mint admin.tsx-ben)
+  useEffect(() => {
+    if (!isAuthLoading && !user?.isAdmin) {
+      toast({
+        title: "Hozzáférés megtagadva",
+        description: "Csak adminisztrátorok érhetik el ezt az oldalt.",
+        variant: "destructive",
+      });
+      setLocation("/");
+    }
+  }, [isAuthLoading, user, setLocation, toast]);
+
+  // CRITICAL SECURITY: Don't render anything if not admin (redirect will happen via useEffect)
+  if (!user?.isAdmin) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-background dark:via-background dark:to-background">
       <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
