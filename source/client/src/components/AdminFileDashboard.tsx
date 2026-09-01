@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Eye, Trash2, Mail, FolderOpen, CheckSquare, Square, Upload, Download, Save, GripVertical } from "lucide-react";
+import { Search, Eye, Trash2, Mail, FolderOpen, Upload, Download, Save, GripVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import FileCard from "@/components/FileCard";
 import EmptyState from "@/components/EmptyState";

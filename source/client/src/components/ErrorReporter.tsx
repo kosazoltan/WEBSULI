@@ -91,7 +91,8 @@ export function ErrorReporter(): null {
 
     // Track unhandled promise rejections
     const handleUnhandledRejection = (e: PromiseRejectionEvent): void => {
-      const message = e.reason?.message ?? String(e.reason) ?? "Unhandled rejection";
+      // String(...) never returns null/undefined, so the fallback has to sit inside it.
+      const message = e.reason?.message ?? String(e.reason ?? "Unhandled rejection");
       addBreadcrumb({ type: "error", message: `UnhandledRejection: ${message}` });
       reportError({
         errorType: "UnhandledRejection",

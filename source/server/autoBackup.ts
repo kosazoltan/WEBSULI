@@ -18,7 +18,7 @@ function sanitizeBackupFilename(filename: string): string | null {
     return null;
   }
   // Only allow safe characters in backup filenames
-  if (!/^[a-zA-Z0-9_\-\.]+$/.test(filename)) {
+  if (!/^[a-zA-Z0-9_.-]+$/.test(filename)) {
     return null;
   }
   // Must be a .json file

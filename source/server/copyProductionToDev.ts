@@ -32,7 +32,6 @@ async function validateDatabaseIdentity(
 
   // Query actual database name from PostgreSQL
   const sql = neon(connectionUrl);
-  const db = drizzle(sql, { schema });
 
   const result = await sql`SELECT current_database() as dbname`;
   const actualDbName = result[0]?.dbname as string;
@@ -42,8 +41,8 @@ async function validateDatabaseIdentity(
   const materialsCount = (countResult[0]?.count as number) || 0;
 
   // Determine confidence based on multiple signals
-  let confidence: 'production' | 'dev' | 'unknown' = 'unknown';
-  let reason = '';
+  let confidence: 'production' | 'dev' | 'unknown';
+  let reason: string;
 
   // Signal 1: Database name contains explicit markers (PRIMARY SIGNAL)
   const lowerDbName = (actualDbName || databaseName || '').toLowerCase();

@@ -36,7 +36,9 @@ export class HtmlFilesCache {
       return null;
     }
 
-    return this.cache.data;
+    // Copy on read as well as on write: the returned array is handed straight to
+    // res.json(), and a caller mutating it would corrupt the entry for every later hit.
+    return [...this.cache.data];
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Home, FileText, Wand2, Settings, Database, Sparkles } from "lucide-react";
+import { FileText, Wand2, Settings, Database, Sparkles } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import {
@@ -8,7 +8,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Users, Tag, Eye, Mail, BarChart3, Activity, GraduationCap } from "lucide-react";
+import { Users, Tag, Eye, Mail, Activity, GraduationCap } from "lucide-react";
 
 interface MobileBottomNavProps {
   onTabChange?: (tab: string) => void;

@@ -3,18 +3,18 @@ import { createServer, type Server } from "http";
 import express from "express";
 import { csrfSync } from "csrf-sync";
 import { storage } from "./storage";
-import { insertHtmlFileSchema, insertEmailSubscriptionSchema, insertExtraEmailSchema, insertMaterialCommentSchema, insertImprovedHtmlFileSchema, type EmailSubscription, type User, type HtmlFile, type ImprovedHtmlFile, type MaterialImprovementBackup } from "@shared/schema";
+import { insertHtmlFileSchema, insertMaterialCommentSchema, type User, type HtmlFile } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
 import { sendNewMaterialNotification, isResendConfigured } from "./resend";
-import { sendNewMaterialNotification as sendPushNewMaterial, sendMaterialViewNotification } from "./pushNotifications";
+import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
 
 import { eq, sql, and, or, ilike, desc, inArray } from "drizzle-orm";
-import { htmlFiles, users, emailSubscriptions, extraEmailAddresses, materialComments } from "@shared/schema";
-import { sanitizeText, sanitizeHtml, sanitizeEmail, sanitizeUserAgent, sanitizeUrl } from "./utils/sanitize";
+import { htmlFiles, users, materialComments } from "@shared/schema";
+import { sanitizeText, sanitizeHtml, sanitizeEmail } from "./utils/sanitize";
 // Admin authentication with hardcoded admin emails
-import { setupAuth, isAuthenticated, isAuthenticatedAdmin } from "./auth";
+import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
 import * as gameScoreService from "./gameScoreService";
 import * as gameQuizBankService from "./gameQuizBankService";
 import { generateMaterialQuiz } from "./gameQuizGeneratorService";
@@ -25,6 +25,10 @@ import { withAIProvider } from "./lib/ai-provider-wrapper";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup, listBackups, readBackup, createAutoBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
+import { isOriginAllowed } from "./lib/allowed-origins";
+import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
+import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
+import { extractClassroomFromTitle } from "@shared/classrooms";
 
 // ========== AI Configuration Validation ==========
 function validateAIConfig() {
@@ -70,7 +74,6 @@ interface APIError extends Error {
 // 100MB PDF → ~133MB base64 → ~140M characters (with safety margin)
 const MAX_FILE_SIZE_MB = 100;
 const MAX_FILE_SIZE_BYTES = 104_857_600; // 100MB in bytes
-const MAX_PDF_BASE64_LENGTH = 140_000_000; // ~140 million characters for 100MB PDF (base64 encoded)
 
 // Bulk operations validation schemas
 const bulkDeleteSchema = z.object({
@@ -98,21 +101,6 @@ const htmlFixApplySchema = z.object({
   fixedHtml: z.string().min(1, "A javított HTML nem lehet üres"),
 });
 
-// AI Enhanced Creator validation schemas
-const analyzeFileSchema = z.object({
-  fileBase64: z.string().min(1, "Fájl base64 tartalom kötelező"),
-  fileName: z.string().min(1, "Fájlnév kötelező"),
-  mimeType: z.string().min(1, "MIME type kötelező"),
-});
-
-const aiChatSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(["user", "assistant"]),
-    content: z.string(),
-  })).min(1, "Legalább egy üzenet kötelező"),
-  context: z.string().optional(),
-});
-
 // HTML Fix Chat validation schema
 const htmlFixChatSchema = z.object({
   fileId: z.string().uuid("Érvényes file ID szükséges"),
@@ -123,31 +111,6 @@ const htmlFixChatSchema = z.object({
 });
 
 // ========================================
-
-// Utility function to extract classroom number from title
-function extractClassroomFromTitle(title: string): number | null {
-  // Special case: "Programozási alapismeretek" - return 0 as special identifier
-  if (/programoz[aá]si?\s+alapismeretek/i.test(title) || /programoz[aá]s\s+alapok/i.test(title)) {
-    return 0;
-  }
-
-  // Match classrooms 1-12
-  const patterns = [
-    /\b([1-9]|1[0-2])\.\s*oszt[aá]ly/i,  // "5. osztály" or "12. osztály"
-    /\boszt[aá]ly\s*([1-9]|1[0-2])\b/i,   // "osztály 5" or "osztály 12"
-    /\b([1-9]|1[0-2])\s*oszt[aá]ly/i,     // "5 osztály" or "12 osztály"
-    /\boszt[aá]ly:\s*([1-9]|1[0-2])\b/i,  // "osztály: 5" or "osztály: 12"
-  ];
-
-  for (const pattern of patterns) {
-    const match = title.match(pattern);
-    if (match) {
-      return parseInt(match[1], 10);
-    }
-  }
-
-  return null;
-}
 
 // Utility function to wrap user HTML with responsive container
 // Ensures all uploaded HTML materials work across all screen sizes (280px - 1920px+)
@@ -711,10 +674,45 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
 </html>`;
 }
 
-// Helper function to apply admin guard to routes
-const requireAdmin = (handler: (req: Request, res: Response) => Promise<void>) => {
-  return [isAuthenticatedAdmin, handler];
-};
+/**
+ * SECURITY: Resolve the request's origin from the Origin header, falling back to the
+ * origin part of the Referer header. Returns undefined when neither is present/parseable.
+ */
+function getRequestOrigin(req: Request): string | undefined {
+  const originHeader = req.headers.origin;
+  if (originHeader) {
+    return originHeader;
+  }
+  const referer = req.headers.referer;
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * SECURITY: Fail-closed Origin/Referer allowlist for mutating endpoints that cannot use
+ * the synchroniser-token CSRF flow (login/logout have no session yet; the AI endpoints are
+ * called directly by the Enhanced Material Creator).
+ * A request without a usable Origin/Referer is rejected — never allowed through.
+ */
+function enforceOriginAllowlist(req: Request, res: Response, next: NextFunction): void {
+  const requestOrigin = getRequestOrigin(req);
+  if (isOriginAllowed(requestOrigin)) {
+    return next();
+  }
+  // A same-origin request is by definition not cross-site, so it is always safe. This also
+  // keeps login working on a deployment whose domain isn't in the allowlist yet.
+  // req.protocol honours X-Forwarded-Proto because `trust proxy` is set in index.ts.
+  if (requestOrigin && requestOrigin === `${req.protocol}://${req.get('host')}`) {
+    return next();
+  }
+  res.status(403).json({ error: 'Origin not allowed' });
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth setup is now handled in index.ts to ensure correct order
@@ -741,42 +739,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return next();
     }
 
-    // Skip CSRF for auth endpoints (OIDC callback needs to work)
-    if (path.startsWith('/api/auth/')) {
-      return next();
-    }
-
-    // Skip CSRF for login/logout endpoints (authentication)
+    // SECURITY: login/logout cannot carry a CSRF synchroniser token (there is no session
+    // yet), so they are guarded by the Origin/Referer allowlist instead. Previously they
+    // were skipped outright, which let any third-party page force a victim's browser into
+    // an attacker-controlled session (login CSRF) or silently log them out.
+    // NOTE: /api/auth/* is GET-only (see /api/auth/user) and the Google OAuth callback
+    // lives on /auth/google/callback, so neither needs a blanket skip any more.
     if (path === '/api/login' || path === '/api/logout') {
-      return next();
+      return enforceOriginAllowlist(req, res, next);
     }
 
     // Skip CSRF for AI endpoints (Enhanced Material Creator uses direct API calls)
     // These endpoints have their own authentication checks, but we still enforce Origin/Referer allowlist
     if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/') || path.startsWith('/api/admin/improved-files/')) {
-      const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean);
-      let requestOrigin: string | undefined;
-      const originHeader = req.headers.origin;
-      if (originHeader) {
-        requestOrigin = originHeader;
-      } else {
-        const referer = req.headers.referer;
-        if (referer) {
-          try {
-            requestOrigin = new URL(referer).origin;
-          } catch {
-            requestOrigin = undefined;
-          }
-        }
-      }
-      if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
-        return next();
-      }
-      if (process.env.NODE_ENV !== 'production' && requestOrigin &&
-          (requestOrigin.startsWith('http://localhost') || requestOrigin.startsWith('http://127.0.0.1'))) {
-        return next();
-      }
-      return res.status(403).json({ error: 'Origin not allowed' });
+      return enforceOriginAllowlist(req, res, next);
     }
 
     // Apply CSRF protection to all other mutating requests
@@ -1850,13 +1826,13 @@ FELADATOD:
 1. Olvasd ki MINDEN fájlból az összes szöveget és releváns információt
 2. Kombináld őket egyetlen koherens tananyaggá
 3. Azonosítsd a közös témákat és kapcsolódási pontokat
-4. Javasolj egy átfogó címet, leírást és osztályt (1-8)
+4. Javasolj egy átfogó címet, leírást és osztályt (0-12; 0 = programozási alapismeretek)
 
 VÁLASZOLJ JSON formátumban a következő struktúrával:
 - extractedText: Az összes fájlból kinyert összesített szöveg
 - suggestedTitle: Átfogó cím az összes tartalom alapján
 - suggestedDescription: Leírás, ami összefoglalja az összes fájl tartalmát
-- suggestedClassroom: Javasolt osztály (1-8) a teljes anyag nehézsége alapján
+- suggestedClassroom: Javasolt osztály (0-12; 0 = programozási alapismeretek) a teljes anyag nehézsége alapján
 - topics: Fő témák listája az összes dokumentumból`
         }
       ];
@@ -1921,7 +1897,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
                 },
                 suggestedClassroom: {
                   type: "number",
-                  description: "Javasolt osztály (1-8) az összesített tartalom nehézsége alapján"
+                  description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) az összesített tartalom nehézsége alapján"
                 },
                 topics: {
                   type: "array",
@@ -1974,7 +1950,6 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       }
 
       const OpenAI = (await import('openai')).default;
-      const { chatGptFileAnalysisSchema } = await import('./aiSchemas');
 
       const openai = new OpenAI({
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -1989,8 +1964,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         {
           type: "text",
           text: fileType === 'application/pdf'
-            ? "Elemezd ezt a PDF első oldalát (PNG-ként konvertálva) és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (1-8)."
-            : "Elemezd ezt a képet és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (1-8)."
+            ? "Elemezd ezt a PDF első oldalát (PNG-ként konvertálva) és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (0-12; 0 = programozási alapismeretek)."
+            : "Elemezd ezt a képet és készíts belőle oktatási anyagot. Olvasd ki az összes szöveget, azonosítsd a témákat, és javasold a címet, leírást és osztályt (0-12; 0 = programozási alapismeretek)."
         },
         {
           type: "image_url",
@@ -2035,7 +2010,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
                 },
                 suggestedClassroom: {
                   type: "number",
-                  description: "Javasolt osztály (1-8) a tartalom nehézsége alapján"
+                  description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) a tartalom nehézsége alapján"
                 },
                 topics: {
                   type: "array",
@@ -2691,7 +2666,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const extraEmails = await storage.getActiveExtraEmails();
       res.json(extraEmails);
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error("Error fetching extra emails:", error);
       res.status(500).json({ message: "Nem sikerült lekérni az extra email címeket" });
     }
@@ -2742,7 +2716,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
       res.status(204).send();
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error("Error deleting extra email:", error);
       res.status(500).json({ message: "Nem sikerült törölni az email címet" });
     }
@@ -2774,7 +2747,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       // Add email without authentication (no addedBy user)
-      const extraEmail = await storage.addExtraEmail(email.trim(), classrooms, null);
+      await storage.addExtraEmail(email.trim(), classrooms, null);
 
       console.log(`[EMAIL SUBSCRIBE] Public subscription: ${email.trim()}`);
 
@@ -2843,11 +2816,26 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       // Sanitize null bytes that cause PostgreSQL errors
       const sanitizedQuery = query.replace(/\0/g, '');
 
-      // PostgreSQL ILIKE for case-insensitive pattern search
-      const searchPattern = `%${sanitizedQuery}%`;
+      // PostgreSQL ILIKE for case-insensitive pattern search.
+      // SECURITY/PERF: cap the pattern length so an anonymous caller cannot turn a huge
+      // query string into an expensive scan.
+      const searchPattern = `%${sanitizedQuery.slice(0, 200)}%`;
 
+      // PERF: never select `content` here — a material can hold a 100MB base64 PDF and this
+      // public endpoint returns up to 50 rows. The list view only needs metadata, exactly
+      // like storage.getAllHtmlFiles().
       const results = await db
-        .select()
+        .select({
+          id: htmlFiles.id,
+          userId: htmlFiles.userId,
+          title: htmlFiles.title,
+          content: sql<string>`''`.as('content'),
+          description: htmlFiles.description,
+          classroom: htmlFiles.classroom,
+          contentType: htmlFiles.contentType,
+          displayOrder: htmlFiles.displayOrder,
+          createdAt: htmlFiles.createdAt,
+        })
         .from(htmlFiles)
         .where(
           or(
@@ -2862,7 +2850,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error("Search error:", { error: errMsg });
-      res.status(500).json({ message: errMsg });
+      // SECURITY: don't echo the raw database error back to an anonymous caller
+      res.status(500).json({ message: "A keresés jelenleg nem érhető el" });
     }
   });
 
@@ -2913,7 +2902,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       // Extract and validate classroom from title
-      let classroomFromTitle = extractClassroomFromTitle(result.data.title);
+      const classroomFromTitle = extractClassroomFromTitle(result.data.title);
 
       // Determine final classroom: title > validated body > default (1)
       let classroom: number;
@@ -3242,8 +3231,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // ADMIN-ONLY route - Get extra email addresses (PII data)
   app.get("/api/extra-emails", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
-      const userId = req.user!.id;
-
       const extraEmails = await storage.getActiveExtraEmails();
       res.json(extraEmails);
     } catch (error: unknown) {
@@ -3257,8 +3244,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // ADMIN-ONLY route - Update extra email classrooms (PII data)
   app.patch("/api/extra-emails/:id/classrooms", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
-      const userId = req.user!.id;
-
       const { classrooms } = req.body;
       if (!Array.isArray(classrooms) || classrooms.length === 0) {
         return res.status(400).json({ message: "Legalább egy osztály kiválasztása kötelező" });
@@ -3703,7 +3688,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         lang: lang,
       });
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('TTS hiba:', error);
       res.status(500).json({ message: 'Szöveg felolvasása sikertelen' });
     }
@@ -4019,12 +4003,24 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         return res.status(400).json({ message: "Hiányzó subscription adatok" });
       }
 
+      // SECURITY: the stored endpoint is later requested by the server (web-push POSTs to
+      // it on every notification). Only accept HTTPS URLs on the real browser push
+      // services, otherwise this public endpoint becomes an SSRF primitive.
+      const safeEndpoint = validatePushEndpoint(endpoint);
+      if (!safeEndpoint) {
+        return res.status(400).json({ message: "Érvénytelen push endpoint" });
+      }
+      const safeKeys = validatePushKeys(keys);
+      if (!safeKeys) {
+        return res.status(400).json({ message: "Érvénytelen push kulcsok" });
+      }
+
       // Create or update subscription (no authentication required)
       const subscription = await storage.createPushSubscription({
         userId: null, // No authentication
         email: null,
-        endpoint,
-        keys,
+        endpoint: safeEndpoint,
+        keys: safeKeys,
       });
 
       res.json({ success: true, subscription });
@@ -4056,7 +4052,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // ADMIN Test push notification endpoint
   adminRouter.post("/push/test", async (req, res) => {
     try {
-      const webPush = require('web-push');
+      const webPush = (await import('web-push')).default;
       const { title, body, url } = req.body;
 
       const vapidPublicKey = process.env.PUBLIC_VAPID_KEY;
@@ -4259,8 +4255,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       // Send PDF binary data
       res.send(pdfBuffer);
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
+    } catch {
       res.status(500).send("Error loading PDF");
     }
   });
@@ -4415,7 +4410,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   app.get("/api/materials/:id/likes", async (req, res) => {
     try {
       const materialId = req.params.id;
-      const fingerprint = req.query.fingerprint as string;
+      const fingerprint = normalizeFingerprint(req.query.fingerprint);
 
       // Get total likes count
       const totalLikes = await storage.getMaterialLikes(materialId);
@@ -4433,7 +4428,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // CHECK if user liked - Public (returns LikeStatus: { liked, totalLikes })
   app.post("/api/materials/:id/likes/check", async (req, res) => {
     try {
-      const { fingerprint } = req.body;
+      const fingerprint = normalizeFingerprint(req.body?.fingerprint);
       if (!fingerprint) {
         return res.status(400).json({ message: "Fingerprint kötelező" });
       }
@@ -4450,7 +4445,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // TOGGLE like - Public (idempotent: like if not liked, unlike if already liked)
   app.post("/api/materials/:id/likes", async (req, res) => {
     try {
-      const { fingerprint } = req.body;
+      const fingerprint = normalizeFingerprint(req.body?.fingerprint);
       if (!fingerprint) {
         return res.status(400).json({ message: "Fingerprint kötelező" });
       }
@@ -4486,7 +4481,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // REMOVE like - Public
   app.delete("/api/materials/:id/likes", async (req, res) => {
     try {
-      const { fingerprint } = req.body;
+      const fingerprint = normalizeFingerprint(req.body?.fingerprint);
       if (!fingerprint) {
         return res.status(400).json({ message: "Fingerprint kötelező" });
       }
@@ -4509,19 +4504,23 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
   // BATCH GET material likes status - Public (optimized for landing page)
   app.post("/api/materials/likes/batch", async (req, res) => {
     try {
-      const { materialIds, fingerprint } = req.body;
+      const { materialIds } = req.body;
 
       if (!Array.isArray(materialIds) || materialIds.length === 0) {
         return res.status(400).json({ message: "Material IDs array kötelező" });
       }
 
-      if (!fingerprint || typeof fingerprint !== 'string') {
+      const fingerprint = normalizeFingerprint(req.body?.fingerprint);
+      if (!fingerprint) {
         return res.status(400).json({ message: "Fingerprint kötelező" });
       }
 
-      // Limit batch size to prevent abuse
-      const MAX_BATCH_SIZE = 100;
-      const idsToQuery = materialIds.slice(0, MAX_BATCH_SIZE);
+      // Limit batch size to prevent abuse, and only accept plausible material ids
+      const idsToQuery = normalizeMaterialIdBatch(materialIds);
+
+      if (idsToQuery.length === 0) {
+        return res.json([]);
+      }
 
       const likesData = await storage.getBatchMaterialLikes(idsToQuery, fingerprint);
       res.json(likesData);
@@ -4585,9 +4584,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         });
       }
 
-      const { materialIds, email } = result.data;
-
-      // TODO: Implement bulk email sending logic
+      // TODO: Implement bulk email sending logic (result.data holds materialIds + email)
       res.json({ success: true, message: "Bulk email sending not yet implemented" });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -4635,17 +4632,17 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
     try {
       const materialId = req.params.id;
 
+      // SECURITY: this endpoint is public — never expose commenter e-mail addresses
+      // (materialComments.authorEmail / users.email) to anonymous visitors.
       const comments = await db
         .select({
           id: materialComments.id,
           materialId: materialComments.materialId,
           userId: materialComments.userId,
           authorName: materialComments.authorName,
-          authorEmail: materialComments.authorEmail,
           body: materialComments.body,
           isApproved: materialComments.isApproved,
           createdAt: materialComments.createdAt,
-          email: users.email,
           firstName: users.firstName,
           lastName: users.lastName,
         })
@@ -4714,7 +4711,6 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       res.json({ success: true, message: "A hozzászólásod moderálásra vár. Jóváhagyás után látható lesz." });
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[COMMENT] Error submitting comment:', error);
       res.status(500).json({ message: "Hiba történt a hozzászólás elküldésekor" });
     }
@@ -4839,7 +4835,6 @@ ${materials.map((material) => `  <url>
 
       console.log(`[SEO] Sitemap generated with ${materials.length} materials`);
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SEO] Sitemap generation error:', error);
       res.status(500).send('Error generating sitemap');
     }
@@ -4897,7 +4892,7 @@ ${materials.map((material) => `  <url>
           await fs.access(dirPath);
           archive.directory(dirPath, dir);
           console.log(`[ADMIN] Added directory: ${dir}`);
-        } catch (err) {
+        } catch {
           console.warn(`[ADMIN] Directory not found: ${dir}`);
         }
       }
@@ -4909,7 +4904,7 @@ ${materials.map((material) => `  <url>
           await fs.access(filePath);
           archive.file(filePath, { name: file });
           console.log(`[ADMIN] Added file: ${file}`);
-        } catch (err) {
+        } catch {
           console.warn(`[ADMIN] File not found: ${file}`);
         }
       }
@@ -4971,7 +4966,6 @@ ${new Date().toLocaleString('hu-HU')}
   app.get("/download-source-static", isAuthenticatedAdmin, async (req, res) => {
     try {
       const fs = await import("fs");
-      const path = await import("path");
 
       const filePath = "/tmp/anyagok-profiknak-source.tar.gz";
 
@@ -4985,7 +4979,6 @@ ${new Date().toLocaleString('hu-HU')}
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[STATIC] Download error:', error);
       res.status(500).json({ message: "Hiba a letöltés során" });
     }
@@ -5030,7 +5023,6 @@ Crawl-delay: 1`;
 
       res.json(prompts);
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error fetching prompts:', error);
       res.status(500).json({ message: 'Failed to fetch system prompts' });
     }
@@ -5053,7 +5045,6 @@ Crawl-delay: 1`;
 
       res.json(prompt);
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error fetching prompt:', error);
       res.status(500).json({ message: 'Failed to fetch system prompt' });
     }
@@ -5093,7 +5084,6 @@ Crawl-delay: 1`;
       console.log(`[SystemPrompts] Created new prompt: ${created.id}`);
       res.status(201).json(created);
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error creating prompt:', error);
       res.status(500).json({ message: 'Failed to create system prompt' });
     }
@@ -5129,7 +5119,6 @@ Crawl-delay: 1`;
       console.log(`[SystemPrompts] Updated prompt: ${req.params.id}`);
       res.json(updated);
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       console.error('[SystemPrompts] Error updating prompt:', error);
       res.status(500).json({ message: 'Failed to update system prompt' });
     }
@@ -5492,7 +5481,7 @@ Crawl-delay: 1`;
   // UNIFIED ERROR HANDLER MIDDLEWARE (Moved to end to catch all admin route errors)
   // ========================================
 
-  app.use((err: APIError, req: Request, res: Response, next: NextFunction) => {
+  app.use((err: APIError, req: Request, res: Response, _next: NextFunction) => {
     // Log error
     console.error('[API Error]', {
       error: err.message,

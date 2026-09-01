@@ -1,5 +1,4 @@
 
-import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import fs from 'fs';
 import { config } from 'dotenv';

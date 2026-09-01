@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Send, User, Bot } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -30,7 +29,6 @@ export default function ChatInterface({
   onSendMessage,
   isLoading = false,
   placeholder = "Írj üzenetet…",
-  aiName = "AI",
   aiIcon,
   disabled = false
 }: ChatInterfaceProps) {

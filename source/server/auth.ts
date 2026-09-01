@@ -204,7 +204,18 @@ export function setupAuth(app: Express) {
     app.post("/api/logout", (req, res, next) => {
         req.logout((err) => {
             if (err) return next(err);
-            res.sendStatus(200);
+            // SECURITY: req.logout() only clears req.user — the session row and its cookie
+            // survive, so a stolen or fixated session id stays usable after "logging out".
+            // Destroy the server-side session and drop the cookie as well.
+            req.session.destroy((destroyErr) => {
+                if (destroyErr) return next(destroyErr);
+                res.clearCookie("connect.sid", {
+                    httpOnly: true,
+                    secure: isProduction,
+                    sameSite: "lax",
+                });
+                res.sendStatus(200);
+            });
         });
     });
 

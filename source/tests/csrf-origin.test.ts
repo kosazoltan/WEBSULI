@@ -3,54 +3,61 @@ import http from "node:http";
 import test from "node:test";
 import express, { type Request, type Response, type NextFunction } from "express";
 
+import { isOriginAllowed, getAllowedOrigins, getSelfOrigin, isSameOriginRequest } from "../server/lib/allowed-origins";
+
 /**
- * A1 — Origin/Referer allowlist enforcement for AI/admin mutating endpoints.
+ * A1 — Origin/Referer allowlist enforcement for the mutating endpoints that cannot carry
+ * a CSRF synchroniser token: the AI/admin-improve endpoints and, since the 2026-08 audit,
+ * /api/login and /api/logout as well.
  *
- * The production middleware is defined inline inside registerRoutes() in
- * server/routes.ts:734-783 (not separately exported). This test reproduces the
- * EXACT same Origin-check branch (routes.ts:755-778) as an isolated middleware
- * and asserts its observable behavior, without modifying product source.
- *
- * If the product logic changes, this test must be updated to match.
+ * The middleware itself is defined inline inside registerRoutes() in server/routes.ts and
+ * is not exported, but its decision function — isOriginAllowed() — now lives in
+ * server/lib/allowed-origins.ts and IS imported here, so these tests exercise the real
+ * production allowlist rather than a copy of it. Only the thin request-routing wrapper is
+ * reproduced below.
  */
-function aiOriginCsrfMiddleware(req: Request, res: Response, next: NextFunction) {
-  const method = req.method.toUpperCase();
-  // Safe methods skip (routes.ts:738)
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
-    return next();
-  }
-  const path = req.path;
-  if (
+const ORIGIN_GUARDED_PATHS = [
+  "/api/login",
+  "/api/logout",
+];
+
+function isOriginGuardedPath(path: string): boolean {
+  return (
+    ORIGIN_GUARDED_PATHS.includes(path) ||
     path.startsWith("/api/ai/") ||
     path.startsWith("/api/admin/improve-material/") ||
     path.startsWith("/api/admin/improved-files/")
-  ) {
-    const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    let requestOrigin: string | undefined;
-    const originHeader = req.headers.origin;
-    if (originHeader) {
-      requestOrigin = originHeader as string;
-    } else {
-      const referer = req.headers.referer;
-      if (referer) {
-        try {
-          requestOrigin = new URL(referer).origin;
-        } catch {
-          requestOrigin = undefined;
-        }
-      }
+  );
+}
+
+/** Mirrors getRequestOrigin() in server/routes.ts. */
+function requestOrigin(req: Request): string | undefined {
+  const originHeader = req.headers.origin;
+  if (originHeader) return originHeader as string;
+  const referer = req.headers.referer;
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return undefined;
     }
-    if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+  }
+  return undefined;
+}
+
+function originCsrfMiddleware(req: Request, res: Response, next: NextFunction) {
+  const method = req.method.toUpperCase();
+  // Safe methods skip
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return next();
+  }
+  if (isOriginGuardedPath(req.path)) {
+    const origin = requestOrigin(req);
+    if (isOriginAllowed(origin)) {
       return next();
     }
-    if (
-      process.env.NODE_ENV !== "production" &&
-      requestOrigin &&
-      (requestOrigin.startsWith("http://localhost") || requestOrigin.startsWith("http://127.0.0.1"))
-    ) {
+    // same-origin is never cross-site
+    if (origin && origin === `${req.protocol}://${req.get("host")}`) {
       return next();
     }
     return res.status(403).json({ error: "Origin not allowed" });
@@ -62,9 +69,12 @@ function aiOriginCsrfMiddleware(req: Request, res: Response, next: NextFunction)
 async function withServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
   const app = express();
   app.use(express.json());
-  app.use(aiOriginCsrfMiddleware);
-  app.post("/api/ai/generate", (_req, res) => res.status(200).json({ ok: true }));
-  app.get("/api/ai/generate", (_req, res) => res.status(200).json({ ok: true }));
+  app.use(originCsrfMiddleware);
+  const ok = (_req: Request, res: Response) => res.status(200).json({ ok: true });
+  app.post("/api/ai/generate", ok);
+  app.get("/api/ai/generate", ok);
+  app.post("/api/login", ok);
+  app.post("/api/logout", ok);
 
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -79,12 +89,25 @@ async function withServer(run: (baseUrl: string) => Promise<void>): Promise<void
   }
 }
 
-test("allowed Origin on mutating /api/ai/ passes (not 403)", async () => {
-  const original = process.env.ALLOWED_ORIGINS;
-  const originalEnv = process.env.NODE_ENV;
-  process.env.ALLOWED_ORIGINS = "https://websuli.example";
-  process.env.NODE_ENV = "production";
+/** Runs `body` with ALLOWED_ORIGINS/NODE_ENV set, restoring both afterwards. */
+async function withEnv(
+  env: { ALLOWED_ORIGINS?: string; NODE_ENV?: string },
+  body: () => Promise<void>,
+): Promise<void> {
+  const originalAllowed = process.env.ALLOWED_ORIGINS;
+  const originalNodeEnv = process.env.NODE_ENV;
+  if (env.ALLOWED_ORIGINS !== undefined) process.env.ALLOWED_ORIGINS = env.ALLOWED_ORIGINS;
+  if (env.NODE_ENV !== undefined) process.env.NODE_ENV = env.NODE_ENV;
   try {
+    await body();
+  } finally {
+    process.env.ALLOWED_ORIGINS = originalAllowed;
+    process.env.NODE_ENV = originalNodeEnv;
+  }
+}
+
+test("allowed Origin on mutating /api/ai/ passes (not 403)", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
     await withServer(async (baseUrl) => {
       const r = await fetch(`${baseUrl}/api/ai/generate`, {
         method: "POST",
@@ -93,18 +116,11 @@ test("allowed Origin on mutating /api/ai/ passes (not 403)", async () => {
       });
       assert.equal(r.status, 200);
     });
-  } finally {
-    process.env.ALLOWED_ORIGINS = original;
-    process.env.NODE_ENV = originalEnv;
-  }
+  });
 });
 
 test("foreign Origin on mutating /api/ai/ returns 403", async () => {
-  const original = process.env.ALLOWED_ORIGINS;
-  const originalEnv = process.env.NODE_ENV;
-  process.env.ALLOWED_ORIGINS = "https://websuli.example";
-  process.env.NODE_ENV = "production";
-  try {
+  await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
     await withServer(async (baseUrl) => {
       const r = await fetch(`${baseUrl}/api/ai/generate`, {
         method: "POST",
@@ -115,16 +131,11 @@ test("foreign Origin on mutating /api/ai/ returns 403", async () => {
       const j = (await r.json()) as { error?: string };
       assert.equal(j.error, "Origin not allowed");
     });
-  } finally {
-    process.env.ALLOWED_ORIGINS = original;
-    process.env.NODE_ENV = originalEnv;
-  }
+  });
 });
 
 test("GET /api/ai/ is a safe method and is not Origin-blocked", async () => {
-  const original = process.env.ALLOWED_ORIGINS;
-  process.env.ALLOWED_ORIGINS = "https://websuli.example";
-  try {
+  await withEnv({ ALLOWED_ORIGINS: "https://websuli.example" }, async () => {
     await withServer(async (baseUrl) => {
       const r = await fetch(`${baseUrl}/api/ai/generate`, {
         method: "GET",
@@ -132,7 +143,152 @@ test("GET /api/ai/ is a safe method and is not Origin-blocked", async () => {
       });
       assert.equal(r.status, 200);
     });
+  });
+});
+
+test("login CSRF: a foreign Origin cannot POST /api/login", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "", NODE_ENV: "production" }, async () => {
+    await withServer(async (baseUrl) => {
+      const r = await fetch(`${baseUrl}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+        body: JSON.stringify({ email: "a@b.c", password: "x" }),
+      });
+      assert.equal(r.status, 403);
+    });
+  });
+});
+
+test("login from a production domain is allowed without ALLOWED_ORIGINS being set", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "", NODE_ENV: "production" }, async () => {
+    await withServer(async (baseUrl) => {
+      const r = await fetch(`${baseUrl}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://websuli.org" },
+        body: JSON.stringify({ email: "a@b.c", password: "x" }),
+      });
+      assert.equal(r.status, 200);
+    });
+  });
+});
+
+test("a same-origin login is allowed even when the domain is not in the allowlist", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
+    await withServer(async (baseUrl) => {
+      const r = await fetch(`${baseUrl}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: baseUrl },
+        body: JSON.stringify({ email: "a@b.c", password: "x" }),
+      });
+      assert.equal(r.status, 200);
+    });
+  });
+});
+
+test("logout with no Origin/Referer at all is rejected (fail-closed)", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
+    await withServer(async (baseUrl) => {
+      const r = await fetch(`${baseUrl}/api/logout`, { method: "POST" });
+      assert.equal(r.status, 403);
+    });
+  });
+});
+
+test("Referer is used as the origin when the Origin header is absent", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
+    await withServer(async (baseUrl) => {
+      const r = await fetch(`${baseUrl}/api/ai/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Referer: "https://websuli.example/admin/materials",
+        },
+        body: JSON.stringify({ x: 1 }),
+      });
+      assert.equal(r.status, 200);
+    });
+  });
+});
+
+test("localhost is only trusted outside production", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "", NODE_ENV: "production" }, async () => {
+    assert.equal(isOriginAllowed("http://localhost:5173"), false);
+  });
+  await withEnv({ ALLOWED_ORIGINS: "", NODE_ENV: "development" }, async () => {
+    assert.equal(isOriginAllowed("http://localhost:5173"), true);
+    assert.equal(isOriginAllowed("http://127.0.0.1:4321"), true);
+  });
+});
+
+test("the allowlist always contains the production domains and normalises env entries", async () => {
+  await withEnv(
+    { ALLOWED_ORIGINS: " https://extra.example/some/path , ", NODE_ENV: "production" },
+    async () => {
+      const origins = getAllowedOrigins();
+      assert.ok(origins.includes("https://websuli.org"));
+      assert.ok(origins.includes("https://www.websuli.vip"));
+      // a URL with a path is reduced to its origin, blank entries are dropped
+      assert.ok(origins.includes("https://extra.example"));
+      assert.ok(!origins.some((o) => o === "" || o.includes("/some/path")));
+      // no duplicates
+      assert.equal(new Set(origins).size, origins.length);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Same-origin requests must never be rejected by the CORS layer.
+//
+// Vite emits its bundles as `<script type="module" crossorigin>` / `<link crossorigin>`,
+// so the browser attaches an Origin header even to the app's own assets. Rejecting those
+// returns 500 for every bundle and the page renders blank — a full outage whenever the
+// deployment is reached on a hostname the allowlist does not know.
+// ---------------------------------------------------------------------------
+
+test("isSameOriginRequest accepts the origin the server is addressed as", () => {
+  assert.equal(isSameOriginRequest("http://localhost:5000", "http", "localhost:5000"), true);
+  assert.equal(isSameOriginRequest("https://websuli.vip", "https", "websuli.vip"), true);
+});
+
+test("isSameOriginRequest rejects a different host, port or scheme", () => {
+  assert.equal(isSameOriginRequest("http://evil.example", "http", "localhost:5000"), false);
+  assert.equal(isSameOriginRequest("http://localhost:5001", "http", "localhost:5000"), false);
+  assert.equal(isSameOriginRequest("https://localhost:5000", "http", "localhost:5000"), false);
+});
+
+test("isSameOriginRequest is false without an Origin or a Host", () => {
+  assert.equal(isSameOriginRequest(undefined, "http", "localhost:5000"), false);
+  assert.equal(isSameOriginRequest("http://localhost:5000", "http", undefined), false);
+  assert.equal(isSameOriginRequest("http://localhost:5000", undefined, "localhost:5000"), false);
+});
+
+test("getSelfOrigin normalises away the default port and any path", () => {
+  assert.equal(getSelfOrigin("https", "websuli.vip"), "https://websuli.vip");
+  assert.equal(getSelfOrigin("https", "websuli.vip:443"), "https://websuli.vip");
+  assert.equal(getSelfOrigin("http", "websuli.vip:80"), "http://websuli.vip");
+  assert.equal(getSelfOrigin("http", "localhost:5000"), "http://localhost:5000");
+});
+
+test("getSelfOrigin returns null for unusable input", () => {
+  assert.equal(getSelfOrigin("http", undefined), null);
+  assert.equal(getSelfOrigin(undefined, "localhost"), null);
+  assert.equal(getSelfOrigin("http", " "), null);
+});
+
+test("a production deployment on an unknown host still serves its own assets", () => {
+  // The allowlist does not know this host (no CUSTOM_DOMAIN set), yet the app's own
+  // crossorigin bundles must still load.
+  const saved = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    assert.equal(isOriginAllowed("https://uj-domain.example"), false, "precondition");
+    assert.equal(
+      isSameOriginRequest("https://uj-domain.example", "https", "uj-domain.example"),
+      true,
+      "same-origin must win regardless of the allowlist",
+    );
   } finally {
-    process.env.ALLOWED_ORIGINS = original;
+    if (saved === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = saved;
   }
 });

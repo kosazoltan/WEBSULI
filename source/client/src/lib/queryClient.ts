@@ -201,12 +201,12 @@ export async function apiRequest<T = any>(
         
         if (error.name === 'AbortError') {
           console.error('[API REQUEST] Timeout after', timeout, 'ms');
-          throw new Error(`A kérés túllépte az időkorlátot (${timeout / 1000}s). Kérlek ellenőrizd az internetkapcsolatot!`);
+          throw new Error(`A kérés túllépte az időkorlátot (${timeout / 1000}s). Kérlek ellenőrizd az internetkapcsolatot!`, { cause: error });
         }
         
         if (error instanceof TypeError && error.message.includes('fetch')) {
           console.error('[API REQUEST] Network error:', error.message);
-          throw new Error('Hálózati hiba: Nincs internetkapcsolat vagy a szerver nem érhető el.');
+          throw new Error('Hálózati hiba: Nincs internetkapcsolat vagy a szerver nem érhető el.', { cause: error });
         }
         
         throw error;

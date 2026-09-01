@@ -1,6 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { LogIn, LogOut, Shield } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 

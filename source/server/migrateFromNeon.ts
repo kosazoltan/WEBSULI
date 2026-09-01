@@ -141,7 +141,7 @@ async function exportFromNeon(): Promise<NeonData> {
     const reportsRes = await neonClient.query('SELECT * FROM weekly_email_reports ORDER BY created_at ASC');
     data.weeklyEmailReports = reportsRes.rows;
     console.log(`   ✅ ${data.weeklyEmailReports.length} weekly reports exported`);
-  } catch (err: any) {
+  } catch {
     console.log(`   ⚠️  Table weekly_email_reports not found, skipping...`);
     data.weeklyEmailReports = [];
   }

@@ -1,12 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   BookOpen, 
   Wand2, 
   FileText, 
-  Users, 
   Database, 
   Mail, 
   Tag, 
@@ -18,7 +16,6 @@ import {
   Trash2,
   Eye,
   ArrowLeft,
-  Download,
   Code2,
   Shield,
   CheckCircle2,

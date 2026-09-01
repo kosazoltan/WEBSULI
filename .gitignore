@@ -30,3 +30,7 @@ source/.harness/
 .env.*
 !.env.example
 !.env.*.example
+
+# Playwright futási artefaktumok
+source/test-results/
+source/playwright-report/

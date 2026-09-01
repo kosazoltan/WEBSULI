@@ -62,7 +62,6 @@ export class ClaudeProvider implements IAIProvider {
         },
       };
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       throw this.handleError(error);
     }
   }
@@ -103,7 +102,6 @@ export class ClaudeProvider implements IAIProvider {
 
       yield { type: 'done' };
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       if (signal?.aborted) {
         yield {
           type: 'error',

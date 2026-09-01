@@ -1,6 +1,6 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Share2, Heart, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Share2, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ReactPdfViewer from "@/components/ReactPdfViewer";
@@ -41,7 +41,7 @@ export default function PdfView() {
           text: material?.description || '',
           url: url,
         });
-      } catch (err) {
+      } catch {
         // User cancelled
       }
     } else {

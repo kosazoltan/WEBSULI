@@ -7,7 +7,14 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': 'warn',
+      // Leading underscore marks a binding that is deliberately unused
+      // (Express `_req`/`_next`, destructuring-away a secret: `const { password: _, ...rest }`).
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
+      }],
       '@typescript-eslint/ban-ts-comment': 'warn',
       '@typescript-eslint/no-require-imports': 'warn',
       'no-console': 'warn',

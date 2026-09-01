@@ -26,26 +26,19 @@ import {
   type EmailSubscription,
   type InsertEmailSubscription,
   type ExtraEmail,
-  type InsertExtraEmail,
   type EmailLog,
   type InsertEmailLog,
   type AiGenerationRequest,
   type InsertAiGenerationRequest,
   type Backup,
-  type InsertBackup,
   type MaterialView,
   type InsertMaterialView,
   type PushSubscription,
   type InsertPushSubscription,
   type Tag,
-  type InsertTag,
   type MaterialTag,
   type MaterialStat,
   type MaterialLike,
-  type MaterialRating,
-  type MaterialComment,
-  type ScheduledJob,
-  type WeeklyEmailReport,
   type SystemPrompt,
   type ImprovedHtmlFile,
   type InsertImprovedHtmlFile,
@@ -54,7 +47,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, desc, asc, gt, lt, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, gt, lt, and, sql, inArray } from "drizzle-orm";
 
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
 
@@ -468,7 +461,7 @@ export class DatabaseStorage implements IStorage {
     return updatedFile || null;
   }
 
-  async deleteHtmlFile(id: string, userId: string): Promise<boolean> {
+  async deleteHtmlFile(id: string, _userId: string): Promise<boolean> {
     // NO AUTH - Public platform, no ownership or admin checks required
     // Get the file first to verify it exists
     const file = await this.getHtmlFile(id);
@@ -1146,13 +1139,8 @@ export class DatabaseStorage implements IStorage {
       return {};
     }
 
-    // Get all likes for these materials in one query
-    const allLikes = await db
-      .select({
-        materialId: materialLikes.materialId,
-      })
-      .from(materialLikes)
-      .where(inArray(materialLikes.materialId, materialIds));
+    // PERF: a second query used to fetch every like row here and then threw the result
+    // away — the counts below already come from an aggregated query.
 
     // Get total likes count for each material
     const totalLikesResults = await db
@@ -1625,7 +1613,7 @@ export class DatabaseStorage implements IStorage {
 
   async restoreFromMaterialImprovementBackup(
     backupId: string,
-    userId: string
+    _userId: string
   ): Promise<{ success: boolean; restoredFile: HtmlFile }> {
     return await db.transaction(async (tx) => {
       // 1. Get backup

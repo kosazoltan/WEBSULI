@@ -55,7 +55,6 @@ export function setupScheduledPublishing() {
         }
       }
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
       // Silently skip if table doesn't exist (e.g., in fresh deployments)
       if (error instanceof Error && 'code' in error && (error as Record<string, unknown>).code === '42P01') {
         // Table doesn't exist - skip silently for this run

@@ -6,7 +6,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import type { HtmlFile } from "@shared/schema";
 import { useConfig } from "@/lib/useConfig";
-import { queryClient } from "@/lib/queryClient";
 
 export default function Preview() {
   const [, params] = useRoute("/preview/:id");
@@ -74,9 +73,9 @@ export default function Preview() {
         try {
           document.execCommand('copy');
           textArea.remove();
-        } catch (err) {
+        } catch (copyError) {
           textArea.remove();
-          throw new Error('Clipboard not supported');
+          throw new Error('Clipboard not supported', { cause: copyError });
         }
       }
       
@@ -86,7 +85,7 @@ export default function Preview() {
         description: "Az anyag linkje a vágólapra került.",
       });
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch {
       // Safari-specific: Try native share as fallback
       if (navigator.share) {
         try {
@@ -99,7 +98,7 @@ export default function Preview() {
             description: "Az anyag linkje megosztva.",
           });
           return;
-        } catch (shareError) {
+        } catch {
           // User cancelled share dialog
         }
       }

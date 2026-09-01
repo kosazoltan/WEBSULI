@@ -49,7 +49,7 @@ const aiConfigVars = [
 
 let hasOpenAI = false;
 let hasClaude = false;
-let missingRequired: string[] = [];
+const missingRequired: string[] = [];
 
 console.log("\n📋 Környezeti változók állapota:\n");
 

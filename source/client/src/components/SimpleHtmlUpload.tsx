@@ -17,7 +17,7 @@ interface SimpleHtmlUploadProps {
 
 export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false }: SimpleHtmlUploadProps) {
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [description] = useState("");
   const [content, setContent] = useState("");
   const [fileName, setFileName] = useState("");
   const [classroom, setClassroom] = useState<number>(DEFAULT_CLASSROOM);

@@ -6,6 +6,10 @@
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "noEmit": true,
     "module": "ESNext",
+    // The real transpilation is done by Vite/esbuild; tsc only type-checks. Without an
+    // explicit target it defaults to ES5, which rejects perfectly valid modern syntax
+    // (e.g. iterating a Set) that the bundler emits without trouble.
+    "target": "ES2022",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
     "jsx": "preserve",
