@@ -215,3 +215,18 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   (48.8s) — először 2026-07-21 óta. Menet közben talált+javított: a 0000 séma-export
   `'{RAY[}'` tömb-defaultja (drizzle-kit introspekciós hiba, ezért volt kikommentezve) →
   '{1}'::integer[] a schema.ts szerint; seed 12 tananyagra (viewport-túllógás a görgetés-teszthez).
+
+## 2026-09-02 — Szólétra (WordLadderHuEn) grafikai + játékélmény-újratervezés
+
+- Spec: docs/specs/wordladder-redesign-2026-09-02.md (3 irány mérlegelve; a kvíz a létra
+  mellé került, nem modal). Tiszta logika: client/src/lib/wordLadderLogic.ts (+9 teszt).
+- Játékmenet: 16 fok (6/5/5), válasz-felfedés 900 ms (helyes zöld ✓, hibás piros ✗),
+  megcsúszás wobble-lel (0-ról nem), 4 zóna (rét/erdő/felhők/csillagok) háttér- és
+  fok-színekkel + dekorációval, mérföldkő-feliratok (5/10/15), sorozat-feliratok (3, 5, 10…),
+  +XP lebegő szám, konfetti a célnál, SVG-létra és mosolygó mászó (lángocska ≥3 sorozat),
+  prefers-reduced-motion tisztelve. DEV-only `?rung=N` kezdőfok a gyors QA-hoz.
+- Változatlan: kérdésbank, XP-képlet, pontszám-küldés, jelvények, napi kihívás, hang.
+- Böngészőben végigjátszva: helyes/hibás útvonal, zónaváltás (erdő), cél+konfetti+jelvény,
+  mobil (375px) elrendezés túlcsordulás nélkül. Menet közben talált+javított hiba: a lépés
+  alatt a következő kérdés helyes válasza szivárgott ki a felfedő színezéssel → a
+  kérdéscsere csak a lépés után.
