@@ -23,7 +23,7 @@ CREATE TABLE "email_subscriptions" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" varchar,
 	"email" varchar NOT NULL,
-	"classrooms" integer[] DEFAULT '{RAY[}' NOT NULL,
+	"classrooms" integer[] DEFAULT '{1}'::integer[] NOT NULL,
 	"is_subscribed" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
@@ -110,7 +110,7 @@ CREATE TABLE "tags" (
 CREATE TABLE "extra_email_addresses" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"email" varchar NOT NULL,
-	"classrooms" integer[] DEFAULT '{RAY[}' NOT NULL,
+	"classrooms" integer[] DEFAULT '{1}'::integer[] NOT NULL,
 	"added_by" varchar,
 	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
