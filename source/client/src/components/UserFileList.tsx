@@ -220,6 +220,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
               variant={selectedClassroom === null ? "default" : "outline"}
               size="sm"
               onClick={() => setSelectedClassroom(null)}
+              aria-pressed={selectedClassroom === null}
               data-testid="button-filter-all"
               className={`h-7 px-3 text-xs font-semibold ${
                 selectedClassroom === null
@@ -243,6 +244,12 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     !hasFiles ? "opacity-50 cursor-not-allowed" : ""
                   } transition-all duration-200`}
                   onClick={() => (hasFiles ? setSelectedClassroom(classroom) : null)}
+                  // a11y (2026-09-02): kattintható jelvény → gomb-szerep, toggle-állapot és
+                  // letiltottság gép által olvasható
+                  role="button"
+                  tabIndex={hasFiles ? 0 : -1}
+                  aria-pressed={selectedClassroom === classroom}
+                  aria-disabled={!hasFiles}
                   data-testid={`button-filter-classroom-${classroom}`}
                 >
                   {getClassroomLabel(classroom, true)}

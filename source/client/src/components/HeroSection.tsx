@@ -53,7 +53,8 @@ function HeroSection({
   };
 
   return (
-    <div className="relative flex items-center justify-center overflow-hidden rounded-lg mb-2 py-1.5 sm:py-2">
+    // E2E/a11y (2026-09-02): a felső sáv az oldal fejléce → szemantikus <header> landmark
+    <header className="relative flex items-center justify-center overflow-hidden rounded-lg mb-2 py-1.5 sm:py-2">
       {/* Gemini fénykép háttér */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-70"
@@ -82,7 +83,7 @@ function HeroSection({
           </motion.div>
 
           {/* Közép: Statisztikák */}
-          <motion.div variants={itemVariants} className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <motion.div variants={itemVariants} className="flex items-center gap-2 sm:gap-4 shrink-0" data-testid="hero-stats">
             <div className="flex items-center gap-1">
               <FileText className="w-3 h-3 text-orange-400" />
               <span className="text-xs sm:text-sm font-bold text-white">{totalFiles}</span>
@@ -139,7 +140,7 @@ function HeroSection({
           </motion.div>
         </div>
       </motion.div>
-    </div>
+    </header>
   );
 }
 

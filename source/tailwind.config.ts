@@ -12,6 +12,12 @@ export default {
       },
     },
     extend: {
+      // JAVÍTÁS (2026-09-02): az `xs:` breakpoint 7 helyen használt (pl. "Belépés",
+      // "Böngészés", "Játékok" gombfeliratok `hidden xs:inline`), de sosem volt definiálva →
+      // a feliratok MINDEN képernyőn rejtve maradtak (ikon-only gombok, akadálymentesség).
+      screens: {
+        xs: "480px",
+      },
       fontFamily: {
         // ✅ MAGYAR ÉKEZET-BARÁT FONTOK
         'kid-display': ['Nunito', 'Quicksand', 'Poppins', 'sans-serif'],

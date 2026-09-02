@@ -193,3 +193,21 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   kosa.zoltan.ebc@gmail.com címre (feladó: WebSuli <onboarding@resend.dev>). render.yaml:
   RESEND_API_KEY / RESEND_FROM_EMAIL / ADMIN_EMAILS sync:false. ÉLESBEN a Render
   dashboardon kell beállítani (nincs Render API-token) — amíg nincs, az endpoint 503.
+
+## 2026-09-02 — CI E2E javítás (2026-07-21 óta bukott) + Render env API-n
+
+- Render: RESEND_API_KEY / RESEND_FROM_EMAIL / ADMIN_EMAILS a Render API-n (PUT env-vars)
+  beállítva, deploy live; élesben POST /api/material-result → 200 delivered:1.
+- CI E2E gyökérok: nem indult szerver és nem volt DB. Javítás: playwright.config.ts
+  webServer (node dist/index.js, /api/health, reuseExistingServer:false, channel:'chrome');
+  ci.yml: postgres:16 service, db:migrate (a T3 miatt üres DB-n is fut), tests/e2e-seed.ts
+  (1 publikus tananyag), report-artifact bukásnál.
+- A helyi futás VALÓDI hibákat is talált (kód javítva, nem a teszt): Tailwind `xs`
+  breakpoint sosem volt definiálva → a "Belépés/Böngészés/Játékok" feliratok minden
+  képernyőn rejtve (ikon-only gombok); a fejléc-sáv nem volt <header>; a szűrőgombok
+  aria-pressed/aria-disabled/role nélkül. Teszt-módosítás csak dokumentált spec-váltásra:
+  hero-stats testid (a `text=Tananyag` a kártyákra is illett), az 1. osztály gombja 0
+  tananyaggal letiltott → első engedélyezett osztály, aktív állapot aria-pressed alapján.
+- Csapda: a másik munkamenet worktree-je régi buildű szervert futtatott az 5000-en, a
+  Playwright reuseExistingServer azt tesztelte (fehér oldal) → reuseExistingServer:false.
+- Helyi eredmény: 17/17 passed (25.5s), a szerver leáll a futás után.

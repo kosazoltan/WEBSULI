@@ -149,12 +149,14 @@ test.describe('HeroSection Tesztek', () => {
         const heading = page.getByRole('heading', { name: /WebSuli/i }).first();
         await expect(heading).toBeVisible({ timeout: 10000 });
 
-        // Statisztikák ellenőrzése - Tananyag, Osztály, Évfolyam
-        const statsSection = page.locator('text=Tananyag').locator('..').locator('..');
+        // Statisztikák ellenőrzése — a 2026-06 kompakt fejléc-sáv (DESIGN-IMPLEMENTATION-PLAN)
+        // óta a stat-blokk `data-testid="hero-stats"`; a korábbi `text=Tananyag` szöveg-lokátor
+        // a tananyag-kártyákra is illeszkedett (strict-mode ütközés), ezért nem használható.
+        const statsSection = page.getByTestId('hero-stats');
         await expect(statsSection).toBeVisible({ timeout: 5000 });
 
         // Ellenőrizzük, hogy vannak stat értékek (számok)
-        const statValues = page.locator('text=/\\d+/').first();
+        const statValues = statsSection.locator('text=/\\d+/').first();
         await expect(statValues).toBeVisible({ timeout: 5000 });
     });
 
@@ -207,8 +209,12 @@ test.describe('UserFileList Szűrők és Keresés', () => {
         // Várakozás a szűrők megjelenésére
         await page.waitForTimeout(1000);
 
-        // Keresés egy osztály szűrő gombra (pl. 1. osztály)
-        const classroomButton = page.getByTestId('button-filter-classroom-1');
+        // Az első olyan osztály-szűrő, amelyhez van tananyag (a 0-s tananyagú osztály gombja
+        // szándékosan letiltott: aria-disabled="true"). Az aktív állapotot a gomb
+        // `aria-pressed` attribútuma jelzi (2026-09-02 a11y-javítás), nem a CSS-osztálynév.
+        const classroomButton = page
+            .locator('[data-testid^="button-filter-classroom-"]:not([aria-disabled="true"])')
+            .first();
         const isVisible = await classroomButton.isVisible().catch(() => false);
 
         if (isVisible) {
@@ -216,7 +222,7 @@ test.describe('UserFileList Szűrők és Keresés', () => {
             await page.waitForTimeout(500);
 
             // Ellenőrizzük, hogy a gomb aktív lett
-            await expect(classroomButton).toHaveClass(/default|bg-primary/i, { timeout: 1000 });
+            await expect(classroomButton).toHaveAttribute('aria-pressed', 'true', { timeout: 1000 });
         }
     });
 
@@ -247,8 +253,11 @@ test.describe('UserFileList Szűrők és Keresés', () => {
         await page.waitForLoadState('networkidle');
         await page.waitForTimeout(1000);
 
-        // Osztály szűrő kiválasztása
-        const classroomButton = page.getByTestId('button-filter-classroom-1');
+        // Osztály szűrő kiválasztása — az első olyan osztály, amelyhez van tananyag (a 0
+        // tananyagú osztály gombja aria-disabled, arra kattintani nem lehet; 2026-09-02)
+        const classroomButton = page
+            .locator('[data-testid^="button-filter-classroom-"]:not([aria-disabled="true"])')
+            .first();
         const hasClassroomButton = await classroomButton.isVisible().catch(() => false);
 
         if (hasClassroomButton) {
@@ -297,9 +306,9 @@ test.describe('UserFileList Szűrők és Keresés', () => {
             const searchValue = await searchInput.inputValue();
             expect(searchValue).toBe('');
 
-            // Ellenőrizzük, hogy a "Minden osztály" aktív
+            // Ellenőrizzük, hogy a "Minden osztály" aktív (aria-pressed, ld. fent)
             const allButton = page.getByTestId('button-filter-all');
-            await expect(allButton).toHaveClass(/default|bg-primary/i, { timeout: 1000 });
+            await expect(allButton).toHaveAttribute('aria-pressed', 'true', { timeout: 1000 });
         }
     });
 });
