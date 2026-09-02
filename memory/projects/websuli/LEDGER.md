@@ -211,3 +211,7 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 - Csapda: a másik munkamenet worktree-je régi buildű szervert futtatott az 5000-en, a
   Playwright reuseExistingServer azt tesztelte (fehér oldal) → reuseExistingServer:false.
 - Helyi eredmény: 17/17 passed (25.5s), a szerver leáll a futás után.
+- 2026-09-02 07:15: CI TELJESEN ZÖLD (27c6bd7): Lint ✅ Unit ✅ Playwright E2E ✅ 17/17
+  (48.8s) — először 2026-07-21 óta. Menet közben talált+javított: a 0000 séma-export
+  `'{RAY[}'` tömb-defaultja (drizzle-kit introspekciós hiba, ezért volt kikommentezve) →
+  '{1}'::integer[] a schema.ts szerint; seed 12 tananyagra (viewport-túllógás a görgetés-teszthez).
