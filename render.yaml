@@ -25,5 +25,13 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # Tananyag-eredmény küldés (POST /api/material-result, 2026-09-02): Resend kulcs +
+      # admin címzettek (vesszővel elválasztva). Értékük a Render dashboardon állítandó.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
