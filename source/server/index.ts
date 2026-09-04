@@ -380,6 +380,16 @@ app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
 app.use("/api/push/subscribe", publicWriteLimiter);
 app.use("/api/push/unsubscribe", publicWriteLimiter);
 
+// LS-3a: a Próba-beküldés és a kupon-műveletek publikus írások, és valódi jutalmat
+// (képernyőidőt) osztanak — a szórásos újrapróbálkozást itt is fojtjuk. A GET
+// /coupons/active minden HUD-frissítéskor lefut, ezért az kimarad.
+app.use("/api/lessons", (req, res, next) => {
+  const isSafeMethod =
+    req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
+  if (isSafeMethod) return next();
+  return publicWriteLimiter(req, res, next);
+});
+
 // Public comment/like writes live under /api/materials/*. Only real writes are throttled:
 // safe methods and the two read-only POST lookups (likes/check and likes/batch, used on
 // every landing-page load) stay unthrottled so shared school IPs behind NAT aren't locked out.

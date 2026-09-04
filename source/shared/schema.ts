@@ -754,3 +754,93 @@ export const lektorNotes = pgTable(
 export type LektorNoteRow = typeof lektorNotes.$inferSelect;
 export type InsertLektorNoteRow = typeof lektorNotes.$inferInsert;
 
+/**
+ * LS-3a — a jutalom-politika (D2) hangolható paraméterei.
+ *
+ * Kulcs-érték tábla, nem oszlopok: a tulajdonos a Stúdióból állítja a létrát a saját
+ * gyerekéhez, deploy nélkül. Egyetlen aktív sor van, `key = 'default'`.
+ */
+export const rewardPolicy = pgTable("reward_policy", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key", { length: 32 }).notNull().unique(),
+  /** shared/reward-policy.ts RewardPolicy alakja. */
+  value: jsonb("value").notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type RewardPolicyRow = typeof rewardPolicy.$inferSelect;
+export type InsertRewardPolicyRow = typeof rewardPolicy.$inferInsert;
+
+/**
+ * LS-3a — egy kiadott játékidő-kupon.
+ *
+ * A `serverStartedAt` a SZERVEREN íródik, és a hátralévő időt is a szerver számolja
+ * (D2): a képernyőidő valódi jutalom, tehát a kliens érdekelt lenne a hazugságban.
+ * A `servedItems` azokat a kvíz-kérdéseket sorolja, amelyeket a szerver adott ki ehhez
+ * a menethez — bónusz csak ezekre jár, és mindegyikre egyszer (`claimedItems`).
+ */
+export const coupons = pgTable(
+  "coupons",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    /** Bejelentkezett gyerek azonosítója; anonim esetben null. */
+    userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+    /** Anonim azonosító (normalizeFingerprint); bejelentkezve null. */
+    fingerprint: varchar("fingerprint", { length: 128 }),
+    lessonId: varchar("lesson_id")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    sectionIdx: integer("section_idx").notNull(),
+    minutes: integer("minutes").notNull(),
+    bonusSeconds: integer("bonus_seconds").notNull().default(0),
+    /** section_perfect | section_good | lesson_perfect */
+    reason: varchar("reason", { length: 24 }).notNull(),
+    servedItems: jsonb("served_items").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+    claimedItems: jsonb("claimed_items").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+    issuedAt: timestamp("issued_at").notNull().defaultNow(),
+    serverStartedAt: timestamp("server_started_at"),
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (table) => ({
+    userIdx: index("coupons_user_id_idx").on(table.userId),
+    fingerprintIdx: index("coupons_fingerprint_idx").on(table.fingerprint),
+    lessonIdx: index("coupons_lesson_id_idx").on(table.lessonId),
+    expiryIdx: index("coupons_expires_at_idx").on(table.expiresAt),
+  }),
+);
+
+export type CouponRow = typeof coupons.$inferSelect;
+export type InsertCouponRow = typeof coupons.$inferInsert;
+
+/**
+ * LS-3a — fogalmankénti eredmény, a visszacsatolás nyersanyaga.
+ *
+ * Nem összesítve tároljuk, hanem eseményenként: az LS-5 ebből számol „érti / még nem"
+ * bontást, és utólag nem lehet visszakérdezni egy elveszett részletre.
+ */
+export const conceptResults = pgTable(
+  "concept_results",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    /** A térkép fogalmának localId-ja (a lecke blokkjai ezt hivatkozzák). */
+    conceptId: varchar("concept_id", { length: 64 }).notNull(),
+    userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+    fingerprint: varchar("fingerprint", { length: 128 }),
+    sectionIdx: integer("section_idx").notNull(),
+    correct: boolean("correct").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    lessonIdx: index("concept_results_lesson_id_idx").on(table.lessonId),
+    conceptIdx: index("concept_results_concept_idx").on(table.lessonId, table.conceptId),
+    userIdx: index("concept_results_user_id_idx").on(table.userId),
+  }),
+);
+
+export type ConceptResultRow = typeof conceptResults.$inferSelect;
+export type InsertConceptResultRow = typeof conceptResults.$inferInsert;
+
