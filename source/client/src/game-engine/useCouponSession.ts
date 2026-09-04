@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getFingerprint } from "@/lib/fingerprintCache";
+import { apiRequest } from "@/lib/queryClient";
 import {
   advanceClock,
   applyServerSync,
@@ -116,6 +117,24 @@ export function useCouponSession(): CouponSession {
         sectionIdx: data.coupon.sectionIdx,
         minutes: data.coupon.minutes,
       });
+
+      /**
+       * Start the clock the first time a game sees the coupon.
+       *
+       * The server stamps `serverStartedAt` here and refuses to do it twice, so this is
+       * safe to call on every sync — and it must be called by someone, or an issued
+       * coupon would sit at its full grant forever, never counting down.
+       */
+      if (!data.coupon.started) {
+        try {
+          await apiRequest("POST", `/api/lessons/coupons/${data.coupon.id}/start`, {
+            fingerprint: readFingerprint() ?? undefined,
+          });
+        } catch {
+          // Already running, or a transient failure: the next sync retries.
+        }
+      }
+
       setClock((prev) =>
         prev
           ? applyServerSync(prev, data.coupon as ServerCoupon, now)
@@ -171,24 +190,22 @@ export function useCouponSession(): CouponSession {
       if (!current || current.expired) return;
 
       try {
-        const res = await fetch(`/api/lessons/coupons/${current.couponId}/bonus`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quizItemId, fingerprint: readFingerprint() ?? undefined }),
-        });
-        // A rejected bonus (unserved item, replay) is deliberately silent: the child
-        // answered a question, they did not do anything wrong.
-        if (!res.ok) return;
+        // apiRequest attaches the CSRF token; a bare fetch would 403 in production.
+        const data = await apiRequest<{ remainingSeconds: number }>(
+          "POST",
+          `/api/lessons/coupons/${current.couponId}/bonus`,
+          { quizItemId, fingerprint: readFingerprint() ?? undefined },
+        );
 
-        const data = (await res.json()) as { remainingSeconds: number };
         setClock((prev) =>
           prev
             ? applyServerSync(prev, { id: prev.couponId, remainingSeconds: data.remainingSeconds }, Date.now())
             : prev,
         );
       } catch {
-        // Network failure: the child keeps playing on the time they already have.
+        // A rejected bonus (unserved item, replay) and a network failure are both
+        // deliberately silent: the child answered a question, they did nothing wrong,
+        // and they keep playing on the time they already have.
       }
     },
     [],

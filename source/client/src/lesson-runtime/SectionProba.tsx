@@ -5,6 +5,7 @@ import { Gamepad2, RefreshCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getFingerprint } from "@/lib/fingerprintCache";
+import { apiRequest } from "@/lib/queryClient";
 import type { Section } from "@shared/lesson-schema";
 
 /**
@@ -49,28 +50,21 @@ export function SectionProba({ lessonId, sectionIdx, section, answers }: Props) 
     setError(null);
     try {
       const fingerprint = await getFingerprint().catch(() => undefined);
-      const res = await fetch(`/api/lessons/${lessonId}/proba`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+      // apiRequest, not a bare fetch: mutating routes are CSRF-protected, and the
+      // token is attached there. A raw fetch here would 403 in production while
+      // passing every local test that never crosses the guard.
+      const data = await apiRequest<ProbaResult>("POST", `/api/lessons/${lessonId}/proba`, {
+        sectionIdx,
         // No score field: the server marks this from the stored lesson.
-        body: JSON.stringify({
-          sectionIdx,
-          answers: Object.entries(answers).map(([blockIndex, pickedIndex]) => ({
-            blockIndex: Number(blockIndex),
-            pickedIndex,
-          })),
-          fingerprint,
-        }),
+        answers: Object.entries(answers).map(([blockIndex, pickedIndex]) => ({
+          blockIndex: Number(blockIndex),
+          pickedIndex,
+        })),
+        fingerprint,
       });
-
-      if (!res.ok) {
-        setError("Most nem sikerült beküldeni. Próbáld újra egy pillanat múlva.");
-        return;
-      }
-      setResult((await res.json()) as ProbaResult);
+      setResult(data);
     } catch {
-      setError("Nincs kapcsolat a szerverrel.");
+      setError("Most nem sikerült beküldeni. Próbáld újra egy pillanat múlva.");
     } finally {
       setBusy(false);
     }
