@@ -1,6 +1,8 @@
 // Web Push Notifications Client Library
 // Anyagok Profiknak Platform
 
+import { apiRequest } from "@/lib/queryClient";
+
 const isDev = import.meta.env.DEV;
 const log = (...args: unknown[]) => isDev && console.log('[Push]', ...args);
 const logError = (...args: unknown[]) => console.error('[Push]', ...args);
@@ -187,38 +189,16 @@ export async function getCurrentSubscription(): Promise<PushSubscription | null>
  * Send subscription to server
  */
 export async function sendSubscriptionToServer(subscription: PushSubscription): Promise<void> {
-  const response = await fetch('/api/push/subscribe', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    body: JSON.stringify(subscription)
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to save subscription');
-  }
+  // apiRequest: a CSRF-tokent ez teszi rá — a feliratkozás a gyerek böngészőjéből,
+  // bejelentkezés nélkül megy, a token-végpont (GET /api/csrf-token) nyilvános (SEC-107).
+  await apiRequest('POST', '/api/push/subscribe', subscription);
 }
 
 /**
  * Remove subscription from server
  */
 export async function removeSubscriptionFromServer(subscription: PushSubscription): Promise<void> {
-  const response = await fetch('/api/push/unsubscribe', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    body: JSON.stringify({ endpoint: subscription.endpoint })
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to remove subscription');
-  }
+  await apiRequest('POST', '/api/push/unsubscribe', { endpoint: subscription.endpoint });
 }
 
 /**

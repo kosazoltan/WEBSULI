@@ -93,21 +93,17 @@ export default function SystemPromptEditor({
     
     setIsSaving(true);
     try {
-      // Try to update first
-      let response = await fetch(`/api/admin/system-prompts/${promptId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          prompt,
-          name: title,
-          description: description || ''
-        })
-      });
-      
-      // If not found, create new
-      if (response.status === 404) {
-        response = await apiRequest('POST', '/api/admin/system-prompts', {
+      const payload = { prompt, name: title, description: description || '' };
+      try {
+        // apiRequest: a CSRF-tokent ez teszi rá (SEC-107).
+        await apiRequest('PUT', `/api/admin/system-prompts/${promptId}`, payload);
+      } catch (e) {
+        // If not found, create new. apiRequest throws with `status` on HTTP errors —
+        // a bare Response with `.ok` is not what it returns (SEC-107 also fixed that
+        // mismatch in the POST branch).
+        const status = (e as { status?: number })?.status;
+        if (status !== 404) throw e;
+        await apiRequest('POST', '/api/admin/system-prompts', {
           id: promptId,
           name: title,
           prompt,
@@ -116,15 +112,11 @@ export default function SystemPromptEditor({
         });
       }
       
-      if (response.ok) {
-        setHasUnsavedChanges(false);
-        toast({
-          title: "✅ Mentve",
-          description: "A system prompt sikeresen frissítve.",
-        });
-      } else {
-        throw new Error('Failed to save prompt');
-      }
+      setHasUnsavedChanges(false);
+      toast({
+        title: "✅ Mentve",
+        description: "A system prompt sikeresen frissítve.",
+      });
     } catch (error) {
       console.error('Failed to save system prompt:', error);
       toast({

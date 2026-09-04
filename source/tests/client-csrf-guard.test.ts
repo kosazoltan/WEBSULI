@@ -13,49 +13,43 @@ import path from "node:path";
  * button. It was caught by probing production, which is one deploy too late.
  *
  * The rule: mutating requests from the client go through `apiRequest`, which attaches
- * the CSRF token. If a route genuinely cannot carry a token, it has to be added to the
- * server's explicit skip list in routes.ts — a deliberate, reviewable decision — and
- * listed here with the reason.
+ * the CSRF token (fetched from the public GET /api/csrf-token — works without a login,
+ * which matters because a child's push subscription is anonymous).
+ *
+ * One legitimate exception: routes the SERVER deliberately guards by Origin/Referer
+ * allowlist instead of a CSRF synchroniser token (they cannot carry one: no session
+ * exists yet for login/logout, SSE streams open before the token fetch, and the
+ * material iframe is a foreign context). Those are listed below with their reason and
+ * are not failures — which is why the list names the exact server skip list in
+ * routes.ts, not a client-side opinion.
+ *
+ * Anything else that trips this guard gets a 403 in production, period.
  */
 
 const CLIENT_SRC = path.join(import.meta.dirname, "..", "client", "src");
 
-/** Routes the server deliberately guards by Origin allowlist instead of a CSRF token. */
-const ORIGIN_GUARDED = [
-  "/api/material-result", // called from inside a material iframe, has no token
-];
-
 /**
- * Inherited offenders, measured 2026-09-04 and ticketed as kanban #107.
- *
- * This is a baseline, not an amnesty: the list may only shrink.
- *
- * Evidence note, because it is easy to get wrong: a curl without a token returns 403 on
- * *every* protected route, so probing production proves nothing on its own. The evidence
- * here is the code — `lib/pushNotifications.ts` builds the request by hand and no token
- * is attached anywhere along that path, so a real browser sends the same tokenless POST
- * curl did. `LikeButton` also 403s under curl but goes through `apiRequest`, which is why
- * it is not on this list.
- *
- * They are listed rather than fixed here because untangling twelve call sites belongs in
- * its own slice, not in a reward feature's commit.
- *
- * Anything NOT on this list is new, and new offenders fail the test.
+ * Routes the server guards by Origin allowlist instead of a CSRF token
+ * (routes.ts:744-757 — the `enforceOriginAllowlist` branches). Mirror of the server's
+ * decision; the two must not drift apart.
  */
-const INHERITED_2026_09_04 = new Set([
-  "components/AuthStatus.tsx → /api/logout",
-  "components/EnhancedMaterialCreator.tsx → /api/ai/enhanced-creator/analyze-files",
-  "components/EnhancedMaterialCreator.tsx → /api/ai/enhanced-creator/chatgpt-chat",
-  "components/EnhancedMaterialCreator.tsx → /api/ai/enhanced-creator/claude-chat",
-  "components/EnhancedMaterialCreator.tsx → /api/html-files",
-  "components/ErrorReporter.tsx → /api/error-report",
-  "components/FileCard.tsx → /api/admin/materials/${id}/generate-quiz",
-  "components/MaterialImprover.tsx → /api/admin/improve-material/${fileId}",
-  "components/SystemPromptEditor.tsx → /api/admin/system-prompts/${promptId}",
-  "lib/pushNotifications.ts → /api/push/subscribe",
-  "lib/pushNotifications.ts → /api/push/unsubscribe",
-  "pages/Login.tsx → /api/login",
-]);
+const SERVER_ORIGIN_GUARDED: { prefix: string; why: string }[] = [
+  { prefix: "/api/login", why: "nincs még session, a tokent nem tudná hitelesíteni" },
+  { prefix: "/api/logout", why: "kijelentkezés nem viselhet session-höz kötött tokent" },
+  { prefix: "/api/ai/", why: "SSE folyamok — a böngésző fetch-e nem tud fejlécet rakni rájuk" },
+  {
+    prefix: "/api/admin/improve-material/",
+    why: "hosszú SSE folyam, a szerver Origin-allowlisttel őrzi",
+  },
+  {
+    prefix: "/api/admin/improved-files/",
+    why: "ugyanaz a család, mint az improve-material",
+  },
+  {
+    prefix: "/api/material-result",
+    why: "a tananyag-iframe-ből jön, nincs tokenje",
+  },
+];
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -86,7 +80,7 @@ function mutatingFetches(source: string): string[] {
 
     const urlMatch = /fetch\s*\(\s*[`"']([^`"']+)/.exec(window);
     const url = urlMatch?.[1] ?? "(dinamikus URL)";
-    if (ORIGIN_GUARDED.some((skip) => url.startsWith(skip))) continue;
+    if (SERVER_ORIGIN_GUARDED.some((entry) => url.startsWith(entry.prefix))) continue;
 
     hits.push(url);
   }
@@ -105,25 +99,35 @@ test("a kliens nem küld nyers mutáló fetch-et CSRF-token nélkül", () => {
   }
 
   const unique = [...new Set(found)];
-  const fresh = unique.filter((entry) => !INHERITED_2026_09_04.has(entry));
 
   assert.deepEqual(
-    fresh,
+    unique,
     [],
     "Ezek a hívások 403-at kapnának élesben. Használj apiRequest-et " +
-      "(az teszi rá a CSRF-tokent), vagy vedd fel a szerver kivétellistájára:\n" +
-      fresh.join("\n"),
+      "(az teszi rá a CSRF-tokent), vagy vedd fel a szerver routes.ts " +
+      "Origin-allowlistes kivétellistájára ÉS tükrözd itt:\n" +
+      unique.join("\n"),
   );
+});
 
-  // The baseline may only shrink. A fixed call site must be deleted from the list,
-  // or the list quietly becomes a place where problems are stored instead of solved.
-  const stale = [...INHERITED_2026_09_04].filter((entry) => !unique.includes(entry));
-  assert.deepEqual(
-    stale,
-    [],
-    "Ezek már javítva vannak — vedd ki őket az INHERITED_2026_09_04 listából:\n" +
-      stale.join("\n"),
-  );
+test("AC1 a szerver által mentesített útvonalak raw fetch-ei nem hibák", () => {
+  // The guard must know the server's own exemptions, or it flags the login page itself.
+  const samples = [
+    `fetch("/api/login", { method: "POST", body: "{}" });`,
+    `fetch("/api/logout", { method: "POST" });`,
+    `fetch("/api/ai/enhanced-creator/analyze-files", { method: "POST", body: "{}" });`,
+    `fetch("/api/admin/improve-material/x", { method: "POST" });`,
+    `fetch("/api/admin/improved-files/x", { method: "POST" });`,
+    `fetch("/api/material-result", { method: "POST", body: "{}" });`,
+  ];
+
+  for (const sample of samples) {
+    assert.deepEqual(
+      mutatingFetches(sample),
+      [],
+      `a szerver által mentesített útvonal nem lehet hiba: ${sample}`,
+    );
+  }
 });
 
 test("az őr tényleg észreveszi a hibás mintát", () => {
@@ -131,6 +135,11 @@ test("az őr tényleg észreveszi a hibás mintát", () => {
   // pass on an empty codebase and prove nothing.
   const bad = `await fetch("/api/lessons/x/proba", { method: "POST", body: "{}" });`;
   assert.deepEqual(mutatingFetches(bad), ["/api/lessons/x/proba"]);
+
+  // NOT exempt just because it starts with /api/admin/: the server skip list is
+  // exact, and /api/admin/materials/* is CSRF-protected.
+  const adminButProtected = `fetch("/api/admin/materials/1/generate-quiz", { method: "POST" });`;
+  assert.deepEqual(mutatingFetches(adminButProtected), ["/api/admin/materials/1/generate-quiz"]);
 
   const good = `await apiRequest("POST", "/api/lessons/x/proba", {});`;
   assert.deepEqual(mutatingFetches(good), []);

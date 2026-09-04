@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
 import LikeButton from "./LikeButton";
 import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 interface FileCardProps {
   id: string;
@@ -50,20 +51,14 @@ export default function FileCard({
     if (generating) return;
     setGenerating(true);
     try {
-      const res = await fetch(`/api/admin/materials/${id}/generate-quiz`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 10 }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || `${res.status} ${res.statusText}`);
-      }
-      const data = await res.json();
+      // apiRequest: a CSRF-tokent ez teszi rá (SEC-107).
+      const data = await apiRequest<{ inserted: number; skipped: number }>(
+        "POST",
+        `/api/admin/materials/${id}/generate-quiz`,
+        { count: 10 },
+      );
       // A material-quizzes cache invalidálása — a játékok a friss tételeket
       // kapják, nem kell manuális oldal-frissítés.
-      const { queryClient } = await import("@/lib/queryClient");
       void queryClient.invalidateQueries({ queryKey: ["/api/games/material-quizzes"] });
       toast({
         title: "Kvíz-tételek generálva",

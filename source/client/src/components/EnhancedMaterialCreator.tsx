@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import ChatInterface, { ChatMessage } from "./ChatInterface";
 import SystemPromptEditor from "./SystemPromptEditor";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
 
 type Phase = 'upload' | 'chatgpt' | 'claude' | 'preview';
@@ -909,22 +909,14 @@ export default function EnhancedMaterialCreator() {
       // ✅ JAVÍTÁS: Automatikus osztály hozzáadása a címhez
       const titleWithClassroom = ensureClassroomInTitle(title, classroom);
       
-      const response = await fetch('/api/html-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          title: titleWithClassroom,
-          description,
-          content: generatedHtml
-          // ✅ classroom mező TÖRÖLVE - a backend a címből kinyeri
-        })
+      // apiRequest: a mutáló útvonalak CSRF-védettek, a tokent ez teszi rá.
+      // Nyelv fetch-csel ez a kérés élesben 403-at kapott volna (SEC-107).
+      await apiRequest('POST', '/api/html-files', {
+        title: titleWithClassroom,
+        description,
+        content: generatedHtml
+        // ✅ classroom mező TÖRÖLVE - a backend a címből kinyeri
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${response.status}: Nem sikerült publikálni az anyagot`);
-      }
 
       await queryClient.invalidateQueries({ queryKey: ['/api/html-files'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/materials'] });

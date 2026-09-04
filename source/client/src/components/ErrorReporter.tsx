@@ -4,6 +4,8 @@
  */
 import { useEffect } from "react";
 
+import { apiRequest } from "@/lib/queryClient";
+
 // ============================================================
 // Breadcrumb ring buffer (max 50)
 // ============================================================
@@ -43,16 +45,19 @@ export interface ErrorPayload {
 
 export async function reportError(payload: ErrorPayload): Promise<void> {
   try {
-    await fetch("/api/error-report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...payload,
-        url: payload.url ?? window.location.href,
-        browser: navigator.userAgent,
-        breadcrumbs: getBreadcrumbs(),
-        environment: import.meta.env.MODE,
-      }),
+    // apiRequest: a CSRF-tokent ez teszi rá (SEC-107).
+    //
+    // FONTOS ismert maradék: az /api/error-report route-nak VAN EGY MÁSODIK őre is —
+    // a szerver élesben kötelezően vár egy X-Signature HMAC fejlécet, amelynek
+    // titka (ERRORLOG_HMAC_SECRET) a böngészőbe NEM kerülhet. Ez a kérés tehát a
+    // CSRF-javítás után is 401-et kap élesben; a jelentés-továbbítási lánc külön
+    // tétel (#127). A CSRF-réteg legalább már nem 403-mal áll az útjába.
+    await apiRequest("POST", "/api/error-report", {
+      ...payload,
+      url: payload.url ?? window.location.href,
+      browser: navigator.userAgent,
+      breadcrumbs: getBreadcrumbs(),
+      environment: import.meta.env.MODE,
     });
   } catch {
     // Never throw from error reporter
