@@ -9,7 +9,10 @@ import {
   type AgeBand,
   type Block,
   type Lesson,
+  type Section,
 } from "@shared/lesson-schema";
+
+import { SectionProba } from "./SectionProba";
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.
@@ -82,10 +85,24 @@ function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example"
   );
 }
 
-function CheckBlock({ block, band }: { block: Extract<Block, { kind: "check" }>; band: AgeBand }) {
+function CheckBlock({
+  block,
+  band,
+  onPick,
+}: {
+  block: Extract<Block, { kind: "check" }>;
+  band: AgeBand;
+  onPick?: (pickedIndex: number) => void;
+}) {
   const [picked, setPicked] = useState<number | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const correct = picked !== null && picked === block.correctIndex;
+
+  const pick = (i: number) => {
+    setPicked(i);
+    // The section's Próba is graded on the server from these indices (LS-3b).
+    onPick?.(i);
+  };
 
   return (
     <Card data-block="check">
@@ -99,7 +116,7 @@ function CheckBlock({ block, band }: { block: Extract<Block, { kind: "check" }>;
             return (
               <button
                 key={i}
-                onClick={() => setPicked(i)}
+                onClick={() => pick(i)}
                 disabled={correct}
                 data-testid={`check-option-${i}`}
                 className={cn(
@@ -185,14 +202,22 @@ function PendingBlock({ label }: { label: string }) {
   );
 }
 
-export function LessonBlock({ block, band }: { block: Block; band: AgeBand }) {
+export function LessonBlock({
+  block,
+  band,
+  onPick,
+}: {
+  block: Block;
+  band: AgeBand;
+  onPick?: (pickedIndex: number) => void;
+}) {
   switch (block.kind) {
     case "explain":
       return <ExplainBlock block={block} band={band} />;
     case "example":
       return <ExampleBlock block={block} band={band} />;
     case "check":
-      return <CheckBlock block={block} band={band} />;
+      return <CheckBlock block={block} band={band} onPick={onPick} />;
     case "recap":
       return <RecapBlock block={block} />;
     case "animate":
@@ -202,7 +227,56 @@ export function LessonBlock({ block, band }: { block: Block; band: AgeBand }) {
   }
 }
 
-export function LessonRuntime({ lesson }: { lesson: Lesson }) {
+/**
+ * One section, plus its Próba.
+ *
+ * The picked answers are collected here rather than in each block, because the Próba is
+ * a section-level thing: the server is asked once, about the whole section, and answers
+ * with the score and whatever play time it is worth (LS-3b).
+ */
+function LessonSection({
+  section,
+  sectionIdx,
+  band,
+  lessonId,
+}: {
+  section: Section;
+  sectionIdx: number;
+  band: AgeBand;
+  lessonId: string | null;
+}) {
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+
+  return (
+    <section
+      className="space-y-4"
+      id={`section-${sectionIdx + 1}`}
+      data-testid={`lesson-section-${sectionIdx}`}
+    >
+      <h2 className={cn("border-b pb-1", BAND_STYLES[band].heading)}>{section.heading}</h2>
+      {section.blocks.map((block, bi) => (
+        <LessonBlock
+          key={bi}
+          block={block}
+          band={band}
+          onPick={(pickedIndex) => setAnswers((prev) => ({ ...prev, [bi]: pickedIndex }))}
+        />
+      ))}
+
+      {/* Without a lesson id (the render probe, a preview) there is nothing to submit to. */}
+      {lessonId && (
+        <SectionProba
+          lessonId={lessonId}
+          sectionIdx={sectionIdx}
+          section={section}
+          answers={answers}
+        />
+      )}
+    </section>
+  );
+}
+
+export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?: string }) {
   const band = ageBandForClassroom(lesson.classroom);
 
   return (
@@ -215,12 +289,13 @@ export function LessonRuntime({ lesson }: { lesson: Lesson }) {
       </header>
 
       {lesson.sections.map((section, si) => (
-        <section key={si} className="space-y-4" data-testid={`lesson-section-${si}`}>
-          <h2 className={cn("border-b pb-1", BAND_STYLES[band].heading)}>{section.heading}</h2>
-          {section.blocks.map((block, bi) => (
-            <LessonBlock key={bi} block={block} band={band} />
-          ))}
-        </section>
+        <LessonSection
+          key={si}
+          section={section}
+          sectionIdx={si}
+          band={band}
+          lessonId={lessonId ?? null}
+        />
       ))}
     </article>
   );

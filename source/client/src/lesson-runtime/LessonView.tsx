@@ -15,7 +15,7 @@ import { LessonRuntime } from "./LessonRuntime";
  * that a section is absent, and a teacher can.
  */
 export function LessonView({ material }: { material: { id: string; title?: string } }) {
-  const { data, isLoading, error } = useQuery<{ lesson: unknown }>({
+  const { data, isLoading, error } = useQuery<{ lesson: unknown; lessonId?: string }>({
     queryKey: ["/api/lessons/by-file", material.id],
     queryFn: () => apiRequest("GET", `/api/lessons/by-file/${material.id}`),
   });
@@ -57,5 +57,6 @@ export function LessonView({ material }: { material: { id: string; title?: strin
     );
   }
 
-  return <LessonRuntime lesson={parsed.data} />;
+  // The lesson id (not the html_files id) is what the Próba endpoint keys on.
+  return <LessonRuntime lesson={parsed.data} lessonId={data?.lessonId} />;
 }

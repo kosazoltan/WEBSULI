@@ -17,6 +17,8 @@ import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine"
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
+import { useCouponSession } from "@/game-engine/useCouponSession";
+import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 
 /* --- Típusok --- */
 type Quiz = { prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
@@ -227,6 +229,13 @@ function spawnBrainRot(boardW: number, boardH: number): BrainRot {
 export default function BrainRotSteal() {
   const boardRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>("menu");
+
+  /**
+   * LS-3b: the play-time coupon earned in a lesson, if there is one.
+   *
+   * Inert without a coupon — free play stays exactly as it was.
+   */
+  const coupon = useCouponSession();
   const [brainRots, setBrainRots] = useState<BrainRot[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
@@ -626,6 +635,10 @@ export default function BrainRotSteal() {
           />
         ))}
       </div>
+
+      {/* LS-3b: earned play time. Renders nothing when the child has no coupon. */}
+      <CouponHud session={coupon} />
+      <CouponExpiredOverlay session={coupon} />
 
       {/* Screen flash effect */}
       <AnimatePresence>

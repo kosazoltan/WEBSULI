@@ -162,6 +162,39 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         await expect(page.getByText('Eredmény:')).toBeHidden();
     });
 
+    test('LS-3b: a kupon-HUD 360px-en elfér, olvasható, és a lejárat visszavezet a leckéhez', async ({ page }) => {
+        // A HUD egy játék fölé kitett fix réteg: a kérdés geometriai — belefér-e egy
+        // 360px-es telefonba, látszik-e a visszaszámláló, és ad-e valódi utat vissza.
+        // Unit-teszt ebből semmit nem mutat meg.
+        await page.setViewportSize({ width: 360, height: 740 });
+        await page.goto('/__coupon-hud-probe');
+
+        const hud = page.getByTestId('coupon-hud');
+        await expect(hud).toBeVisible();
+        await expect(hud).toHaveText(/0:45/);
+
+        // 1. A HUD nem lóg ki a képernyőből.
+        const box = await hud.boundingBox();
+        expect(box, 'a HUD-nak van elrendezési doboza').not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(360 + 1);
+        expect(box!.height, 'a HUD magassága').toBeGreaterThanOrEqual(36);
+
+        // 2. Nincs vízszintes túlcsordulás a fix réteg miatt.
+        const overflow = await page.evaluate(() =>
+            document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(overflow, 'vízszintes túlcsordulás 360px-en').toBeLessThanOrEqual(0);
+
+        // 3. A lejárat-réteg visszavezet a leckéhez, nem egy "játssz újra" gombra.
+        const back = page.getByTestId('coupon-expired-back');
+        await expect(back).toBeVisible();
+        await expect(back).toHaveText(/Vissza a leckéhez/);
+        const backBox = await back.boundingBox();
+        expect(backBox!.height, 'a vissza gomb magassága').toBeGreaterThanOrEqual(44);
+
+        await page.screenshot({ path: 'tests/screenshots/ls3b-coupon-hud-360.png', fullPage: false });
+    });
+
     test('API elérhetőség - health check', async ({ request }) => {
         // Ellenőrizzük, hogy az API válaszol
         const response = await request.get('/api/html-files');

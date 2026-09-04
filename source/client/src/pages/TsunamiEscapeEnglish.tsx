@@ -12,6 +12,8 @@ import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
+import { useCouponSession } from "@/game-engine/useCouponSession";
+import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import {
   ArrowLeft,
   ArrowBigLeft,
@@ -542,6 +544,14 @@ export default function TsunamiEscapeEnglish() {
   const [difficulty, setDifficulty] = useState<GameDifficulty>(parseDifficultyFromSearch);
   const [subject, setSubject] = useState<TsunamiSubject>("mixed");
   const [phase, setPhase] = useState<Phase>("menu");
+
+  /**
+   * LS-3b: the play-time coupon earned in a lesson, if there is one.
+   *
+   * Without a coupon this is inert and the game is exactly what it was before — free
+   * play is the default and must stay that way.
+   */
+  const coupon = useCouponSession();
   const [water, setWater] = useState(12);
   const [playerX, setPlayerX] = useState(50);
   const [runSeconds, setRunSeconds] = useState(0);
@@ -1130,6 +1140,9 @@ export default function TsunamiEscapeEnglish() {
       </div>
 
       <main className="relative z-10 w-full max-w-2xl lg:max-w-3xl mx-auto px-3 sm:px-5 py-4 min-h-dvh min-h-screen flex flex-col pb-6 sm:pb-8">
+        {/* LS-3b: earned play time. Renders nothing when the child has no coupon. */}
+        <CouponHud session={coupon} />
+        <CouponExpiredOverlay session={coupon} />
         <header className="flex items-center justify-between gap-2 mb-3">
           <Link href="/games">
             <Button

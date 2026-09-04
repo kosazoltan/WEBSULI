@@ -1,4 +1,6 @@
 import { LessonRuntime } from "./LessonRuntime";
+import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
+import type { CouponSession } from "@/game-engine/useCouponSession";
 import type { Lesson } from "@shared/lesson-schema";
 
 /**
@@ -73,4 +75,33 @@ const PROBE_LESSON: Lesson = {
 
 export default function LessonRuntimeProbe() {
   return <LessonRuntime lesson={PROBE_LESSON} />;
+}
+
+/**
+ * The coupon HUD, rendered with a fixed session (LS-3b).
+ *
+ * The HUD is a fixed-position overlay on top of a game, so the questions worth asking
+ * are geometric: does it stay inside a 360 px phone, is it readable, and does the
+ * expiry dialog offer a real way back. None of that is visible to a unit test.
+ *
+ * The session is a literal rather than the real hook: this measures the rendering, and
+ * `tests/game-engine.test.ts` already measures the clock.
+ */
+export function CouponHudProbe() {
+  const session: CouponSession = {
+    active: true,
+    remaining: 45,
+    expired: false,
+    lessonId: "probe-lesson",
+    sectionIdx: 0,
+    minutes: 2,
+    claimBonus: async () => {},
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 p-4">
+      <CouponHud session={session} />
+      <CouponExpiredOverlay session={{ ...session, active: false, expired: true }} />
+    </div>
+  );
 }

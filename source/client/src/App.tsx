@@ -11,6 +11,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
 const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
+// LS-3b: a kupon-HUD mérőoldala, ugyanazzal a kapcsolóval.
+const CouponHudProbe = lazy(() =>
+  import("@/lesson-runtime/LessonRuntimeProbe").then((m) => ({ default: m.CouponHudProbe })),
+);
 
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
@@ -49,6 +53,9 @@ function Router() {
             a `!PROD` feltétel: a kapcsolót a teszt-build állítja be. */}
         {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
           <Route path="/__lesson-runtime-probe" component={LessonRuntimeProbe} />
+        )}
+        {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
+          <Route path="/__coupon-hud-probe" component={CouponHudProbe} />
         )}
         <Route path="/preview/:id" component={Preview} />
         <Route path="/materials/pdf/:id" component={PdfView} />
