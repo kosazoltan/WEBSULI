@@ -1,0 +1,187 @@
+import { z } from "zod";
+
+import type { MapConcept } from "./coverage";
+import { SUPPORTING_THRESHOLD } from "./coverage";
+import { conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
+import { NOTE_KINDS, type RawNote } from "./lektor";
+
+/**
+ * LS-2c — schemas, validators and prompt builders for the model-driven steps.
+ *
+ * The pipeline state machine (pipeline.ts) shipped without the calls it sequences:
+ * pedagogue, author and lektor had model ids and no runner. This module is the pure,
+ * testable layer of that runner — what the models' JSON must look like, the rules the
+ * outline must satisfy before an admin sees it, and the prompts, including the D1
+ * wording the owner fixed verbatim.
+ */
+
+const id = () => z.string().trim().min(1).max(64);
+
+export const outlineSectionSchema = z.object({
+  heading: z.string().trim().min(1).max(255),
+  /** Every core + ≥90% supporting concept id must appear across sections. */
+  conceptIds: z.array(id()).min(1),
+  plannedBlocks: z
+    .array(z.enum(["explain", "example", "check", "recap", "animate", "try"]))
+    .min(1),
+  animationSuggestions: z.array(z.string().trim().min(1).max(120)).default([]),
+});
+
+export type OutlineSection = z.infer<typeof outlineSectionSchema>;
+
+export const outlineSchema = z.object({
+  sections: z.array(outlineSectionSchema).min(1),
+  misconceptions: z
+    .array(z.object({ conceptId: id(), text: z.string().trim().min(1).max(1000) }))
+    .default([]),
+});
+
+export type LessonOutline = z.infer<typeof outlineSchema>;
+
+export const lektorReportSchema = z.object({
+  notes: z
+    .array(
+      z.object({
+        kind: z.enum(NOTE_KINDS),
+        subkind: z.string().trim().min(1).max(32).optional(),
+        message: z.string().trim().min(1).max(2000),
+        blockPath: z.string().trim().min(1).max(32).optional(),
+      }),
+    )
+    .default([]),
+});
+
+export type LektorReport = z.infer<typeof lektorReportSchema>;
+
+export type OutlineCoverage = {
+  ok: boolean;
+  missingCore: string[];
+  unknownIds: string[];
+  supporting: { total: number; covered: number; ratio: number };
+};
+
+/**
+ * The pedagogue's output must cover the curated map before an admin ever reviews it
+ * (master plan §6.2): every `core` concept, and at least 90% of `supporting`. A
+ * concept id that is not in the map at all is rejected too — an invented binding is
+ * how an unreviewed claim slips past D1 while looking well-formed.
+ */
+export function outlineCoversMap(
+  sections: OutlineSection[],
+  concepts: MapConcept[],
+): OutlineCoverage {
+  const known = new Set(concepts.map((c) => c.localId));
+  const used = new Set(sections.flatMap((s) => s.conceptIds));
+
+  const core = concepts.filter((c) => c.examWeight === "core").map((c) => c.localId);
+  const supporting = concepts.filter((c) => c.examWeight === "supporting").map((c) => c.localId);
+
+  const missingCore = core.filter((c) => !used.has(c));
+  const unknownIds = [...used].filter((c) => !known.has(c));
+  const coveredSupporting = supporting.filter((c) => used.has(c)).length;
+  const supportingRatio = supporting.length === 0 ? 1 : coveredSupporting / supporting.length;
+
+  return {
+    ok: missingCore.length === 0 && unknownIds.length === 0 && supportingRatio >= SUPPORTING_THRESHOLD,
+    missingCore,
+    unknownIds,
+    supporting: { total: supporting.length, covered: coveredSupporting, ratio: supportingRatio },
+  };
+}
+
+/** Concept ids the lesson claims that the map does not contain. Empty = subset holds. */
+export function lessonIdsSubsetOfMap(lesson: Lesson, concepts: MapConcept[]): string[] {
+  const known = new Set(concepts.map((c) => c.localId));
+  return conceptIdsOf(lesson).filter((c) => !known.has(c));
+}
+
+/**
+ * D1, verbatim — the owner's exact words, which the lektor prompt must carry and the
+ * author prompt must honour. Changed spelling would weaken the instruction; tests pin
+ * this constant.
+ */
+export const D1_RULE_TEXT =
+  "A forrás a mérce. Ha a forrás szerinted téved, azt csak `book_probably_wrong` " +
+  "jegyzetként jelezd; a leckében a forrás állítása marad.";
+
+type PromptMap = {
+  title?: string;
+  subject: string;
+  classroom: number;
+  concepts: MapConcept[];
+};
+
+function mapJson(map: PromptMap): string {
+  return JSON.stringify(map, null, 2);
+}
+
+/** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
+export function buildPedagoguePrompt(map: PromptMap): string {
+  return [
+    "Te vagy a pedagógus. A kurált fogalomtérképből készíts lecke-vázlatot.",
+    "",
+    "Követelmények:",
+    "- Minden `core` fogalom és legalább 90%-a a `supporting` fogalmaknak szerepeljen a vázlat valamelyik szakaszában (conceptIds).",
+    "- Csak a térképen lévő fogalom-azonosítókat használd; újat ne találj ki.",
+    "- Minden szakaszhoz tervezz blokkokat (plannedBlocks) a megengedett típusokból: explain, example, check, recap, animate, try.",
+    "- Ahol animáció segítene, írd be az animationSuggestions mezőbe.",
+    "",
+    `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
+    "",
+    "A válasz CSAK JSON legyen, a következő alakban:",
+    '{ "sections": [{ "heading": string, "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[] }], "misconceptions": [{ "conceptId": string, "text": string }] }',
+    "",
+    "Fogalomtérkép:",
+    mapJson(map),
+  ].join("\n");
+}
+
+/**
+ * Szerző: a vázlatból teljes lecke.
+ *
+ * A jegyzetek közül CSAK a blokkolók mennek a szerzőnek, és azok közül sem mindegyik:
+ * a `book_probably_wrong` az adminnak szól, kiszűrjük — a szerző soha nem kaphat olyan
+ * üzenetet, ami arra bíztatná, hogy a forrás rovására „javítson" (D1).
+ */
+export function buildAuthorPrompt(
+  sections: OutlineSection[],
+  map: PromptMap,
+  blockerNotes: RawNote[],
+): string {
+  const authorNotes = blockerNotes.filter((n) => n.subkind !== "book_probably_wrong");
+  const conceptIds = [...new Set(sections.flatMap((s) => s.conceptIds))];
+
+  const parts = [
+    "You are the lesson author. Write a complete lesson from the outline, in Hungarian, in a register matching the pupil's age band.",
+    "",
+    D1_RULE_TEXT,
+    "",
+    "Hard rules:",
+    "- Every block's coversConceptIds may use ONLY the ids below — never invent new ones:",
+    conceptIds.join(", "),
+    "- sourceOnly must be true.",
+    "- Every check block needs feedbackPerOption with exactly as many entries as options.",
+    "",
+  ];
+
+  if (authorNotes.length > 0) {
+    parts.push(
+      "The lektor asked these fixes after the previous round (change ONLY these, nothing else):",
+      ...authorNotes.map((n) => `- [${n.kind}${n.subkind ? "/" + n.subkind : ""}] ${n.message}`),
+      "",
+    );
+  }
+
+  parts.push(
+    "Answer with JSON ONLY, matching the Lesson schema:",
+    '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [], "sourceOnly": true }',
+    "",
+    "Outline:",
+    JSON.stringify(sections, null, 2),
+    "",
+    "Concept map:",
+    mapJson(map),
+  );
+
+  return parts.join("\n");
+}
