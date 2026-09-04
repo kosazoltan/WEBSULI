@@ -39,8 +39,43 @@ export function isDevelopmentEnv(): boolean {
 }
 
 /**
+ * SECURITY: True when the origin names the local machine.
+ *
+ * Matches the hostname exactly (or the whole 127.0.0.0/8 block and IPv6 ::1) rather
+ * than by prefix, so a genuinely remote host that merely *looks* local —
+ * `https://localhost.attacker.com`, `https://127.0.0.1.attacker.com` — is not treated
+ * as loopback. `0.0.0.0` is included because binding to it is a common dev shorthand.
+ */
+export function isLoopbackOrigin(origin: string | undefined | null): boolean {
+  if (!origin) return false;
+  let hostname: string;
+  try {
+    hostname = new URL(origin).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  // URL() keeps IPv6 hosts in brackets: http://[::1]:5000 → "[::1]".
+  const bare = hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+  return (
+    bare === "localhost" ||
+    bare === "::1" ||
+    bare === "0.0.0.0" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare)
+  );
+}
+
+/**
  * Builds the allowlist from the static production domains plus the deployment-specific
  * environment variables. Computed on every call so tests and runtime env changes are honoured.
+ *
+ * SECURITY (#100, 2026-09-04): in production every loopback origin is stripped at the end,
+ * whatever its source. Previously only the two literal localhost entries below were gated
+ * on NODE_ENV, while FRONTEND_URL, BASE_URL, CUSTOM_DOMAIN and ALLOWED_ORIGINS were folded
+ * in unconditionally — so a deployment that still carried a developer value for any of them
+ * trusted `http://localhost:5173` in production. That list also guards the mutating
+ * endpoints which cannot carry a CSRF token, so the hole was reachable, not theoretical.
  */
 export function getAllowedOrigins(): string[] {
   const fromEnv = [
@@ -55,7 +90,9 @@ export function getAllowedOrigins(): string[] {
 
   const origins = [...STATIC_ORIGINS, ...fromEnv]
     .map(toOrigin)
-    .filter((o): o is string => o !== null);
+    .filter((o): o is string => o !== null)
+    // The single choke point: no environment variable may name the local machine in production.
+    .filter((o) => isDevelopmentEnv() || !isLoopbackOrigin(o));
 
   return origins.filter((origin, index) => origins.indexOf(origin) === index);
 }
