@@ -1,6 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
+import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import * as schema from "../shared/schema";
+import { logger } from "./lib/logger";
 
 
 // ========== DATABASE IDENTITY VALIDATION ==========
@@ -102,8 +104,8 @@ async function validateDatabaseIdentity(
 }
 
 // Clear dev database before sync (correct FK order: children → parents)
-async function clearDevDatabase(devDb: any) {
-  console.log('🗑️ Clearing dev database (FK order: children → parents)...\n');
+async function clearDevDatabase(devDb: NeonHttpDatabase<typeof schema>) {
+  logger.info('🗑️ Clearing dev database (FK order: children → parents)...\n');
 
   // CRITICAL: Truncate children BEFORE parents to respect FK constraints
   // Level 1: Deepest children (depend on html_files + others)
@@ -130,7 +132,7 @@ async function clearDevDatabase(devDb: any) {
   // Level 5: Root parent (users is root of FK tree)
   await devDb.execute('TRUNCATE TABLE users CASCADE');
 
-  console.log('✅ Dev database cleared (all tables empty)\n');
+  logger.info('✅ Dev database cleared (all tables empty)\n');
 }
 
 export async function copyProductionToDev() {
@@ -146,34 +148,34 @@ export async function copyProductionToDev() {
       '3. Restart application\n' +
       '4. Try sync again';
 
-    console.error(errorMsg);
+    logger.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  console.log('🔄 Starting production → dev data copy...\n');
+  logger.info('🔄 Starting production → dev data copy...\n');
 
   // ========== STEP 1: VALIDATE DATABASE IDENTITIES (PREVENT PRODUCTION WIPE) ==========
-  console.log('🔍 Validating database identities...\n');
+  logger.info('🔍 Validating database identities...\n');
 
   const prodIdentity = await validateDatabaseIdentity(process.env.DATABASE_URL!, 'production');
   const devIdentity = await validateDatabaseIdentity(process.env.DEV_DATABASE_URL!, 'dev');
 
-  console.log('📊 DATABASE VALIDATION RESULTS:');
-  console.log('─'.repeat(80));
-  console.log(`\n[DATABASE_URL] Expected: PRODUCTION`);
-  console.log(`  Database: ${prodIdentity.databaseName}`);
-  console.log(`  Host: ${prodIdentity.host}`);
-  console.log(`  Materials: ${prodIdentity.materialsCount}`);
-  console.log(`  Confidence: ${prodIdentity.confidence.toUpperCase()}`);
-  console.log(`  Reason: ${prodIdentity.reason}`);
+  logger.info('📊 DATABASE VALIDATION RESULTS:');
+  logger.info('─'.repeat(80));
+  logger.info(`\n[DATABASE_URL] Expected: PRODUCTION`);
+  logger.info(`  Database: ${prodIdentity.databaseName}`);
+  logger.info(`  Host: ${prodIdentity.host}`);
+  logger.info(`  Materials: ${prodIdentity.materialsCount}`);
+  logger.info(`  Confidence: ${prodIdentity.confidence.toUpperCase()}`);
+  logger.info(`  Reason: ${prodIdentity.reason}`);
 
-  console.log(`\n[DEV_DATABASE_URL] Expected: DEV`);
-  console.log(`  Database: ${devIdentity.databaseName}`);
-  console.log(`  Host: ${devIdentity.host}`);
-  console.log(`  Materials: ${devIdentity.materialsCount}`);
-  console.log(`  Confidence: ${devIdentity.confidence.toUpperCase()}`);
-  console.log(`  Reason: ${devIdentity.reason}`);
-  console.log('─'.repeat(80) + '\n');
+  logger.info(`\n[DEV_DATABASE_URL] Expected: DEV`);
+  logger.info(`  Database: ${devIdentity.databaseName}`);
+  logger.info(`  Host: ${devIdentity.host}`);
+  logger.info(`  Materials: ${devIdentity.materialsCount}`);
+  logger.info(`  Confidence: ${devIdentity.confidence.toUpperCase()}`);
+  logger.info(`  Reason: ${devIdentity.reason}`);
+  logger.info('─'.repeat(80) + '\n');
 
   // ========== STEP 2: CRITICAL SAFETY CHECK - SAME DATABASE DETECTION ==========
   const isSameDatabase = (
@@ -203,11 +205,11 @@ export async function copyProductionToDev() {
       `  DEV_DATABASE_URL: ${devIdentity.databaseName} @ ${devIdentity.host}\n` +
       `  Materials count: ${prodIdentity.materialsCount}`;
 
-    console.error(errorMsg);
+    logger.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  console.log('✅ Database safety check PASSED - Databases are separate\n');
+  logger.info('✅ Database safety check PASSED - Databases are separate\n');
 
   // ========== STEP 3: ABORT IF DATABASES APPEAR SWAPPED ==========
   const isSwapped = prodIdentity.confidence === 'dev' && devIdentity.confidence === 'production';
@@ -225,7 +227,7 @@ export async function copyProductionToDev() {
       `   - DEV_DATABASE_URL should point to: ${prodIdentity.databaseName} (${prodIdentity.materialsCount} materials)\n\n` +
       'Then REDEPLOY and try again.';
 
-    console.error(errorMsg);
+    logger.error(errorMsg);
     throw new Error(errorMsg);
   }
 
@@ -259,12 +261,12 @@ export async function copyProductionToDev() {
       `  DATABASE_URL: ${prodIdentity.databaseName} (${prodIdentity.materialsCount} materials)\n` +
       `  DEV_DATABASE_URL: ${devIdentity.databaseName} (${devIdentity.materialsCount} materials)`;
 
-    console.error(errorMsg);
+    logger.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  console.log('✅ Database identity validation PASSED - Safe to proceed\n');
-  console.log(`📋 Sync direction: ${prodIdentity.databaseName} (${prodIdentity.materialsCount} materials) → ${devIdentity.databaseName} (will be cleared)\n`);
+  logger.info('✅ Database identity validation PASSED - Safe to proceed\n');
+  logger.info(`📋 Sync direction: ${prodIdentity.databaseName} (${prodIdentity.materialsCount} materials) → ${devIdentity.databaseName} (will be cleared)\n`);
 
   // Production database
   const prodSql = neon(process.env.DATABASE_URL!);
@@ -281,23 +283,23 @@ export async function copyProductionToDev() {
     // Copy in correct order (respecting foreign keys)
 
     // 1. Users (no dependencies)
-    console.log('📋 Copying users...');
+    logger.info('📋 Copying users...');
     const users = await prodDb.select().from(schema.users);
     if (users.length > 0) {
       await devDb.insert(schema.users).values(users).onConflictDoNothing();
-      console.log(`✅ Copied ${users.length} users`);
+      logger.info(`✅ Copied ${users.length} users`);
     }
 
     // 2. System Prompts (no dependencies)
-    console.log('📋 Copying system prompts...');
+    logger.info('📋 Copying system prompts...');
     const prompts = await prodDb.select().from(schema.systemPrompts);
     if (prompts.length > 0) {
       await devDb.insert(schema.systemPrompts).values(prompts).onConflictDoNothing();
-      console.log(`✅ Copied ${prompts.length} system prompts`);
+      logger.info(`✅ Copied ${prompts.length} system prompts`);
     }
 
     // 3. HTML Files (depends on users) - Fix orphaned user_id references
-    console.log('📋 Copying materials...');
+    logger.info('📋 Copying materials...');
     const materials = await prodDb.select().from(schema.htmlFiles);
     const userIds = new Set(users.map(u => u.id));
 
@@ -309,11 +311,11 @@ export async function copyProductionToDev() {
 
     if (materialsFixed.length > 0) {
       await devDb.insert(schema.htmlFiles).values(materialsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${materialsFixed.length} materials`);
+      logger.info(`✅ Copied ${materialsFixed.length} materials`);
     }
 
     // 4. Email Subscriptions (depends on users)
-    console.log('📋 Copying email subscriptions...');
+    logger.info('📋 Copying email subscriptions...');
     const emailSubs = await prodDb.select().from(schema.emailSubscriptions);
     const emailSubsFixed = emailSubs.map(s => ({
       ...s,
@@ -321,11 +323,11 @@ export async function copyProductionToDev() {
     }));
     if (emailSubsFixed.length > 0) {
       await devDb.insert(schema.emailSubscriptions).values(emailSubsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${emailSubsFixed.length} email subscriptions`);
+      logger.info(`✅ Copied ${emailSubsFixed.length} email subscriptions`);
     }
 
     // 5. Extra Emails (depends on users)
-    console.log('📋 Copying extra emails...');
+    logger.info('📋 Copying extra emails...');
     const extraEmails = await prodDb.select().from(schema.extraEmailAddresses);
     const extraEmailsFixed = extraEmails.map(e => ({
       ...e,
@@ -333,11 +335,11 @@ export async function copyProductionToDev() {
     }));
     if (extraEmailsFixed.length > 0) {
       await devDb.insert(schema.extraEmailAddresses).values(extraEmailsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${extraEmailsFixed.length} extra emails`);
+      logger.info(`✅ Copied ${extraEmailsFixed.length} extra emails`);
     }
 
     // 6. Material Views (depends on users + materials)
-    console.log('📋 Copying material views...');
+    logger.info('📋 Copying material views...');
     const views = await prodDb.select().from(schema.materialViews);
     const materialIds = new Set(materialsFixed.map(m => m.id));
     const viewsFixed = views
@@ -349,14 +351,14 @@ export async function copyProductionToDev() {
 
     if (viewsFixed.length > 0) {
       await devDb.insert(schema.materialViews).values(viewsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${viewsFixed.length} material views`);
+      logger.info(`✅ Copied ${viewsFixed.length} material views`);
     }
 
     // 7. Material Likes - SKIPPED (transient user data, not needed for dev testing)
-    console.log('📋 Skipping material likes (transient user data)...');
+    logger.info('📋 Skipping material likes (transient user data)...');
 
     // 8. Email Logs (depends on materials)
-    console.log('📋 Copying email logs...');
+    logger.info('📋 Copying email logs...');
     const logs = await prodDb.select().from(schema.emailLogs);
     const logsFixed = logs.map(l => ({
       ...l,
@@ -364,19 +366,19 @@ export async function copyProductionToDev() {
     }));
     if (logsFixed.length > 0) {
       await devDb.insert(schema.emailLogs).values(logsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${logsFixed.length} email logs`);
+      logger.info(`✅ Copied ${logsFixed.length} email logs`);
     }
 
     // 9. Tags (no dependencies)
-    console.log('📋 Copying tags...');
+    logger.info('📋 Copying tags...');
     const tags = await prodDb.select().from(schema.tags);
     if (tags.length > 0) {
       await devDb.insert(schema.tags).values(tags).onConflictDoNothing();
-      console.log(`✅ Copied ${tags.length} tags`);
+      logger.info(`✅ Copied ${tags.length} tags`);
     }
 
     // 10. Material Tags (junction table: materials ↔ tags)
-    console.log('📋 Copying material↔tag relationships...');
+    logger.info('📋 Copying material↔tag relationships...');
     const materialTags = await prodDb.select().from(schema.materialTags);
     const tagIds = new Set(tags.map(t => t.id));
     const materialTagsFixed = materialTags.filter(mt =>
@@ -384,11 +386,11 @@ export async function copyProductionToDev() {
     );
     if (materialTagsFixed.length > 0) {
       await devDb.insert(schema.materialTags).values(materialTagsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${materialTagsFixed.length} material-tag relationships`);
+      logger.info(`✅ Copied ${materialTagsFixed.length} material-tag relationships`);
     }
 
     // 11. Material Ratings (depends on materials + users)
-    console.log('📋 Copying material ratings...');
+    logger.info('📋 Copying material ratings...');
     const ratings = await prodDb.select().from(schema.materialRatings);
     const ratingsFixed = ratings
       .map(r => ({
@@ -400,11 +402,11 @@ export async function copyProductionToDev() {
 
     if (ratingsFixed.length > 0) {
       await devDb.insert(schema.materialRatings).values(ratingsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${ratingsFixed.length} material ratings`);
+      logger.info(`✅ Copied ${ratingsFixed.length} material ratings`);
     }
 
     // 12. Material Comments (depends on materials + users)
-    console.log('📋 Copying material comments...');
+    logger.info('📋 Copying material comments...');
     const comments = await prodDb.select().from(schema.materialComments);
     const commentsFixed = comments
       .filter(c => materialIds.has(c.materialId)) // Filter first to keep valid materials
@@ -416,31 +418,31 @@ export async function copyProductionToDev() {
 
     if (commentsFixed.length > 0) {
       await devDb.insert(schema.materialComments).values(commentsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${commentsFixed.length} material comments`);
+      logger.info(`✅ Copied ${commentsFixed.length} material comments`);
     }
 
     // 13. Material Stats (depends on materials)
-    console.log('📋 Copying material stats...');
+    logger.info('📋 Copying material stats...');
     const stats = await prodDb.select().from(schema.materialStats);
     const statsFixed = stats.filter(s => materialIds.has(s.materialId));
 
     if (statsFixed.length > 0) {
       await devDb.insert(schema.materialStats).values(statsFixed).onConflictDoNothing();
-      console.log(`✅ Copied ${statsFixed.length} material stats`);
+      logger.info(`✅ Copied ${statsFixed.length} material stats`);
     }
 
     // 14. Backups (no critical dependencies)
-    console.log('📋 Copying backups...');
+    logger.info('📋 Copying backups...');
     const backups = await prodDb.select().from(schema.backups);
     if (backups.length > 0) {
       await devDb.insert(schema.backups).values(backups).onConflictDoNothing();
-      console.log(`✅ Copied ${backups.length} backups`);
+      logger.info(`✅ Copied ${backups.length} backups`);
     }
 
-    console.log('\n🎉 Production → Dev copy completed successfully!');
+    logger.info('\n🎉 Production → Dev copy completed successfully!');
 
   } catch (error) {
-    console.error('❌ Error during copy:', error);
+    logger.error('❌ Error during copy:', error);
     throw error;
   }
 }
@@ -448,10 +450,10 @@ export async function copyProductionToDev() {
 // Run as standalone script when executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   copyProductionToDev().then(() => {
-    console.log('\n✅ All done!');
+    logger.info('\n✅ All done!');
     process.exit(0);
   }).catch((err) => {
-    console.error('\n❌ Fatal error:', err);
+    logger.error('\n❌ Fatal error:', err);
     process.exit(1);
   });
 }

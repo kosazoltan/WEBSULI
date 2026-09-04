@@ -7,6 +7,7 @@ import { sendAdminNotification } from "./resend";
 import { getMaterialPreviewUrl } from "./utils/config";
 import { sanitizeText } from "./utils/sanitize";
 import type { MaterialView, HtmlFile } from "@shared/schema";
+import { logger } from "./lib/logger";
 
 /**
  * Daily summary email for material views
@@ -16,7 +17,7 @@ export function setupDailyViewSummary() {
   // Run every day at 20:00 (8 PM)
   cron.schedule("0 20 * * *", async () => {
     try {
-      console.log('[DAILY SUMMARY] Starting daily view summary email generation...');
+      logger.info('[DAILY SUMMARY] Starting daily view summary email generation...');
       
       // Get today's material views
       const today = new Date();
@@ -31,7 +32,7 @@ export function setupDailyViewSummary() {
       
       // If no views today, skip email
       if (todayViews.length === 0) {
-        console.log('[DAILY SUMMARY] No views today, skipping email.');
+        logger.info('[DAILY SUMMARY] No views today, skipping email.');
         return;
       }
       
@@ -101,14 +102,14 @@ export function setupDailyViewSummary() {
       
       for (const adminEmail of adminEmails) {
         await sendAdminNotification(emailSubject, emailBody, adminEmail);
-        console.log(`[DAILY SUMMARY] Email sent to: ${adminEmail}`);
+        logger.info(`[DAILY SUMMARY] Email sent to: ${adminEmail}`);
       }
       
-      console.log('[DAILY SUMMARY] Daily summary emails sent successfully.');
+      logger.info('[DAILY SUMMARY] Daily summary emails sent successfully.');
     } catch (error: unknown) {
-      console.error('[DAILY SUMMARY] Error sending daily summary:', error);
+      logger.error('[DAILY SUMMARY] Error sending daily summary:', error);
     }
   });
 
-  console.log("Daily view summary email job started (runs daily at 20:00)");
+  logger.info("Daily view summary email job started (runs daily at 20:00)");
 }

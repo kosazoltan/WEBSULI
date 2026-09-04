@@ -1,6 +1,7 @@
 import { Client } from 'pg';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import { logger } from "./lib/logger";
 
 // Neon PostgreSQL connection
 const neonClient = new Client({
@@ -10,29 +11,51 @@ const neonClient = new Client({
 // SQLite database
 const sqlite = new Database('./sqlite.db');
 
+/** PostgreSQL timestamp as pg hands it over. */
+type NeonTimestamp = string | number | Date;
+
+interface NeonHtmlFile { id: string; user_id: string | null; title: string; content: string; description: string | null; classroom: number; created_at: NeonTimestamp | null; updated_at: NeonTimestamp | null; }
+interface NeonUser { id: string; email: string; hashed_password: string | null; first_name: string | null; last_name: string | null; created_at: NeonTimestamp | null; updated_at: NeonTimestamp | null; last_seen_at: NeonTimestamp | null; is_banned: boolean; is_admin: boolean; }
+interface NeonEmailSubscription { id: string; user_id: string | null; email: string; classrooms: unknown; is_subscribed: boolean; created_at: NeonTimestamp | null; updated_at: NeonTimestamp | null; }
+interface NeonExtraEmailAddress { id: string; email: string; classrooms: unknown; added_by: string | null; is_active: boolean; created_at: NeonTimestamp | null; updated_at: NeonTimestamp | null; }
+interface NeonEmailLog { id: string; html_file_id: string | null; recipient_email: string; subject: string; status: string; error_message: string | null; created_at: NeonTimestamp | null; }
+interface NeonAiGenerationRequest { id: string; user_id: string | null; provider: string; model: string; prompt: string; response: string; created_at: NeonTimestamp | null; }
+interface NeonBackup { id: string; filename: string; size: number; created_at: NeonTimestamp | null; }
+interface NeonMaterialView { id: string; user_id: string | null; material_id: string; viewed_at: NeonTimestamp | null; user_agent: string | null; }
+interface NeonPushSubscription { id: string; user_id: string | null; email: string | null; endpoint: string; keys: unknown; created_at: NeonTimestamp | null; updated_at: NeonTimestamp | null; }
+interface NeonTag { id: string; name: string; created_at: NeonTimestamp | null; }
+interface NeonMaterialTag { id: string; material_id: string; tag_id: string; }
+interface NeonMaterialStat { id: string; material_id: string; view_count: number; like_count: number; comment_count: number; average_rating: number; last_updated: NeonTimestamp | null; }
+interface NeonMaterialLike { id: string; material_id: string; user_id: string | null; created_at: NeonTimestamp | null; }
+interface NeonMaterialRating { id: string; material_id: string; user_id: string | null; rating: number; created_at: NeonTimestamp | null; }
+interface NeonMaterialComment { id: string; material_id: string; user_id: string | null; content: string; created_at: NeonTimestamp | null; updated_at: NeonTimestamp | null; }
+interface NeonScheduledJob { id: string; job_type: string; scheduled_for: NeonTimestamp | null; status: string; executed_at: NeonTimestamp | null; error_message: string | null; created_at: NeonTimestamp | null; }
+interface NeonWeeklyEmailReport { id: string; week_start: NeonTimestamp | null; week_end: NeonTimestamp | null; total_materials: number; total_views: number; sent_at: NeonTimestamp | null; created_at: NeonTimestamp | null; }
+interface NeonSystemPrompt { id: string; name: string; prompt: string; description: string | null; is_active: boolean; created_at: NeonTimestamp | null; updated_at: NeonTimestamp | null; }
+
 interface NeonData {
-  htmlFiles: any[];
-  users: any[];
-  emailSubscriptions: any[];
-  extraEmailAddresses: any[];
-  emailLogs: any[];
-  aiGenerationRequests: any[];
-  backups: any[];
-  materialViews: any[];
-  pushSubscriptions: any[];
-  tags: any[];
-  materialTags: any[];
-  materialStats: any[];
-  materialLikes: any[];
-  materialRatings: any[];
-  materialComments: any[];
-  scheduledJobs: any[];
-  weeklyEmailReports: any[];
-  systemPrompts: any[];
+  htmlFiles: NeonHtmlFile[];
+  users: NeonUser[];
+  emailSubscriptions: NeonEmailSubscription[];
+  extraEmailAddresses: NeonExtraEmailAddress[];
+  emailLogs: NeonEmailLog[];
+  aiGenerationRequests: NeonAiGenerationRequest[];
+  backups: NeonBackup[];
+  materialViews: NeonMaterialView[];
+  pushSubscriptions: NeonPushSubscription[];
+  tags: NeonTag[];
+  materialTags: NeonMaterialTag[];
+  materialStats: NeonMaterialStat[];
+  materialLikes: NeonMaterialLike[];
+  materialRatings: NeonMaterialRating[];
+  materialComments: NeonMaterialComment[];
+  scheduledJobs: NeonScheduledJob[];
+  weeklyEmailReports: NeonWeeklyEmailReport[];
+  systemPrompts: NeonSystemPrompt[];
 }
 
 async function exportFromNeon(): Promise<NeonData> {
-  console.log('🔌 Connecting to Neon PostgreSQL...');
+  logger.info('🔌 Connecting to Neon PostgreSQL...');
   await neonClient.connect();
   
   const data: NeonData = {
@@ -56,113 +79,113 @@ async function exportFromNeon(): Promise<NeonData> {
     systemPrompts: [],
   };
 
-  console.log('📦 Exporting htmlFiles...');
+  logger.info('📦 Exporting htmlFiles...');
   const htmlFilesRes = await neonClient.query('SELECT * FROM html_files ORDER BY created_at ASC');
   data.htmlFiles = htmlFilesRes.rows;
-  console.log(`   ✅ ${data.htmlFiles.length} materials exported`);
+  logger.info(`   ✅ ${data.htmlFiles.length} materials exported`);
 
-  console.log('📦 Exporting users...');
+  logger.info('📦 Exporting users...');
   const usersRes = await neonClient.query('SELECT * FROM users ORDER BY created_at ASC');
   data.users = usersRes.rows;
-  console.log(`   ✅ ${data.users.length} users exported`);
+  logger.info(`   ✅ ${data.users.length} users exported`);
 
-  console.log('📦 Exporting emailSubscriptions...');
+  logger.info('📦 Exporting emailSubscriptions...');
   const emailSubsRes = await neonClient.query('SELECT * FROM email_subscriptions ORDER BY created_at ASC');
   data.emailSubscriptions = emailSubsRes.rows;
-  console.log(`   ✅ ${data.emailSubscriptions.length} email subscriptions exported`);
+  logger.info(`   ✅ ${data.emailSubscriptions.length} email subscriptions exported`);
 
-  console.log('📦 Exporting extraEmailAddresses...');
+  logger.info('📦 Exporting extraEmailAddresses...');
   const extraEmailsRes = await neonClient.query('SELECT * FROM extra_email_addresses ORDER BY created_at ASC');
   data.extraEmailAddresses = extraEmailsRes.rows;
-  console.log(`   ✅ ${data.extraEmailAddresses.length} extra emails exported`);
+  logger.info(`   ✅ ${data.extraEmailAddresses.length} extra emails exported`);
 
-  console.log('📦 Exporting emailLogs...');
+  logger.info('📦 Exporting emailLogs...');
   const emailLogsRes = await neonClient.query('SELECT * FROM email_logs ORDER BY created_at ASC');
   data.emailLogs = emailLogsRes.rows;
-  console.log(`   ✅ ${data.emailLogs.length} email logs exported`);
+  logger.info(`   ✅ ${data.emailLogs.length} email logs exported`);
 
-  console.log('📦 Exporting aiGenerationRequests...');
+  logger.info('📦 Exporting aiGenerationRequests...');
   const aiReqRes = await neonClient.query('SELECT * FROM ai_generation_requests ORDER BY created_at ASC');
   data.aiGenerationRequests = aiReqRes.rows;
-  console.log(`   ✅ ${data.aiGenerationRequests.length} AI requests exported`);
+  logger.info(`   ✅ ${data.aiGenerationRequests.length} AI requests exported`);
 
-  console.log('📦 Exporting backups...');
+  logger.info('📦 Exporting backups...');
   const backupsRes = await neonClient.query('SELECT * FROM backups ORDER BY created_at ASC');
   data.backups = backupsRes.rows;
-  console.log(`   ✅ ${data.backups.length} backups exported`);
+  logger.info(`   ✅ ${data.backups.length} backups exported`);
 
-  console.log('📦 Exporting materialViews...');
+  logger.info('📦 Exporting materialViews...');
   const viewsRes = await neonClient.query('SELECT * FROM material_views ORDER BY viewed_at ASC');
   data.materialViews = viewsRes.rows;
-  console.log(`   ✅ ${data.materialViews.length} material views exported`);
+  logger.info(`   ✅ ${data.materialViews.length} material views exported`);
 
-  console.log('📦 Exporting pushSubscriptions...');
+  logger.info('📦 Exporting pushSubscriptions...');
   const pushSubsRes = await neonClient.query('SELECT * FROM push_subscriptions ORDER BY created_at ASC');
   data.pushSubscriptions = pushSubsRes.rows;
-  console.log(`   ✅ ${data.pushSubscriptions.length} push subscriptions exported`);
+  logger.info(`   ✅ ${data.pushSubscriptions.length} push subscriptions exported`);
 
-  console.log('📦 Exporting tags...');
+  logger.info('📦 Exporting tags...');
   const tagsRes = await neonClient.query('SELECT * FROM tags ORDER BY created_at ASC');
   data.tags = tagsRes.rows;
-  console.log(`   ✅ ${data.tags.length} tags exported`);
+  logger.info(`   ✅ ${data.tags.length} tags exported`);
 
-  console.log('📦 Exporting materialTags...');
+  logger.info('📦 Exporting materialTags...');
   const matTagsRes = await neonClient.query('SELECT * FROM material_tags ORDER BY id ASC');
   data.materialTags = matTagsRes.rows;
-  console.log(`   ✅ ${data.materialTags.length} material tags exported`);
+  logger.info(`   ✅ ${data.materialTags.length} material tags exported`);
 
-  console.log('📦 Exporting materialStats...');
+  logger.info('📦 Exporting materialStats...');
   const statsRes = await neonClient.query('SELECT * FROM material_stats ORDER BY material_id ASC');
   data.materialStats = statsRes.rows;
-  console.log(`   ✅ ${data.materialStats.length} material stats exported`);
+  logger.info(`   ✅ ${data.materialStats.length} material stats exported`);
 
-  console.log('📦 Exporting materialLikes...');
+  logger.info('📦 Exporting materialLikes...');
   const likesRes = await neonClient.query('SELECT * FROM material_likes ORDER BY created_at ASC');
   data.materialLikes = likesRes.rows;
-  console.log(`   ✅ ${data.materialLikes.length} material likes exported`);
+  logger.info(`   ✅ ${data.materialLikes.length} material likes exported`);
 
-  console.log('📦 Exporting materialRatings...');
+  logger.info('📦 Exporting materialRatings...');
   const ratingsRes = await neonClient.query('SELECT * FROM material_ratings ORDER BY created_at ASC');
   data.materialRatings = ratingsRes.rows;
-  console.log(`   ✅ ${data.materialRatings.length} material ratings exported`);
+  logger.info(`   ✅ ${data.materialRatings.length} material ratings exported`);
 
-  console.log('📦 Exporting materialComments...');
+  logger.info('📦 Exporting materialComments...');
   const commentsRes = await neonClient.query('SELECT * FROM material_comments ORDER BY created_at ASC');
   data.materialComments = commentsRes.rows;
-  console.log(`   ✅ ${data.materialComments.length} material comments exported`);
+  logger.info(`   ✅ ${data.materialComments.length} material comments exported`);
 
-  console.log('📦 Exporting scheduledJobs...');
+  logger.info('📦 Exporting scheduledJobs...');
   const jobsRes = await neonClient.query('SELECT * FROM scheduled_jobs ORDER BY created_at ASC');
   data.scheduledJobs = jobsRes.rows;
-  console.log(`   ✅ ${data.scheduledJobs.length} scheduled jobs exported`);
+  logger.info(`   ✅ ${data.scheduledJobs.length} scheduled jobs exported`);
 
-  console.log('📦 Exporting weeklyEmailReports...');
+  logger.info('📦 Exporting weeklyEmailReports...');
   try {
     const reportsRes = await neonClient.query('SELECT * FROM weekly_email_reports ORDER BY created_at ASC');
     data.weeklyEmailReports = reportsRes.rows;
-    console.log(`   ✅ ${data.weeklyEmailReports.length} weekly reports exported`);
+    logger.info(`   ✅ ${data.weeklyEmailReports.length} weekly reports exported`);
   } catch {
-    console.log(`   ⚠️  Table weekly_email_reports not found, skipping...`);
+    logger.info(`   ⚠️  Table weekly_email_reports not found, skipping...`);
     data.weeklyEmailReports = [];
   }
 
-  console.log('📦 Exporting systemPrompts...');
+  logger.info('📦 Exporting systemPrompts...');
   const promptsRes = await neonClient.query('SELECT * FROM system_prompts ORDER BY created_at ASC');
   data.systemPrompts = promptsRes.rows;
-  console.log(`   ✅ ${data.systemPrompts.length} system prompts exported`);
+  logger.info(`   ✅ ${data.systemPrompts.length} system prompts exported`);
 
   await neonClient.end();
-  console.log('✅ Neon export complete!\n');
+  logger.info('✅ Neon export complete!\n');
   
   return data;
 }
 
 function convertToSQLite(data: NeonData) {
-  console.log('🔄 Converting data to SQLite format...');
+  logger.info('🔄 Converting data to SQLite format...');
   
   // Convert PostgreSQL snake_case and arrays to SQLite camelCase and JSON
   const converted = {
-    htmlFiles: data.htmlFiles.map((f: any) => ({
+    htmlFiles: data.htmlFiles.map((f) => ({
       id: f.id,
       userId: f.user_id,
       title: f.title,
@@ -172,7 +195,7 @@ function convertToSQLite(data: NeonData) {
       createdAt: f.created_at ? new Date(f.created_at).toISOString() : new Date().toISOString(),
       updatedAt: f.updated_at ? new Date(f.updated_at).toISOString() : null,
     })),
-    users: data.users.map((u: any) => ({
+    users: data.users.map((u) => ({
       id: u.id,
       email: u.email,
       hashedPassword: u.hashed_password,
@@ -184,7 +207,7 @@ function convertToSQLite(data: NeonData) {
       isBanned: u.is_banned,
       isAdmin: u.is_admin,
     })),
-    emailSubscriptions: data.emailSubscriptions.map((e: any) => ({
+    emailSubscriptions: data.emailSubscriptions.map((e) => ({
       id: e.id,
       userId: e.user_id,
       email: e.email,
@@ -193,7 +216,7 @@ function convertToSQLite(data: NeonData) {
       createdAt: e.created_at ? new Date(e.created_at).toISOString() : new Date().toISOString(),
       updatedAt: e.updated_at ? new Date(e.updated_at).toISOString() : null,
     })),
-    extraEmailAddresses: data.extraEmailAddresses.map((e: any) => ({
+    extraEmailAddresses: data.extraEmailAddresses.map((e) => ({
       id: e.id,
       email: e.email,
       classrooms: JSON.stringify(e.classrooms || [1]),
@@ -202,7 +225,7 @@ function convertToSQLite(data: NeonData) {
       createdAt: e.created_at ? new Date(e.created_at).toISOString() : new Date().toISOString(),
       updatedAt: e.updated_at ? new Date(e.updated_at).toISOString() : null,
     })),
-    emailLogs: data.emailLogs.map((l: any) => ({
+    emailLogs: data.emailLogs.map((l) => ({
       id: l.id,
       htmlFileId: l.html_file_id,
       recipientEmail: l.recipient_email,
@@ -211,7 +234,7 @@ function convertToSQLite(data: NeonData) {
       errorMessage: l.error_message,
       createdAt: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
     })),
-    aiGenerationRequests: data.aiGenerationRequests.map((a: any) => ({
+    aiGenerationRequests: data.aiGenerationRequests.map((a) => ({
       id: a.id,
       userId: a.user_id,
       provider: a.provider,
@@ -220,20 +243,20 @@ function convertToSQLite(data: NeonData) {
       response: a.response,
       createdAt: a.created_at ? new Date(a.created_at).toISOString() : new Date().toISOString(),
     })),
-    backups: data.backups.map((b: any) => ({
+    backups: data.backups.map((b) => ({
       id: b.id,
       filename: b.filename,
       size: b.size,
       createdAt: b.created_at ? new Date(b.created_at).toISOString() : new Date().toISOString(),
     })),
-    materialViews: data.materialViews.map((v: any) => ({
+    materialViews: data.materialViews.map((v) => ({
       id: v.id,
       userId: v.user_id,
       materialId: v.material_id,
       viewedAt: v.viewed_at ? new Date(v.viewed_at).toISOString() : new Date().toISOString(),
       userAgent: v.user_agent,
     })),
-    pushSubscriptions: data.pushSubscriptions.map((p: any) => ({
+    pushSubscriptions: data.pushSubscriptions.map((p) => ({
       id: p.id,
       userId: p.user_id,
       email: p.email,
@@ -242,17 +265,17 @@ function convertToSQLite(data: NeonData) {
       createdAt: p.created_at ? new Date(p.created_at).toISOString() : new Date().toISOString(),
       updatedAt: p.updated_at ? new Date(p.updated_at).toISOString() : null,
     })),
-    tags: data.tags.map((t: any) => ({
+    tags: data.tags.map((t) => ({
       id: t.id,
       name: t.name,
       createdAt: t.created_at ? new Date(t.created_at).toISOString() : new Date().toISOString(),
     })),
-    materialTags: data.materialTags.map((mt: any) => ({
+    materialTags: data.materialTags.map((mt) => ({
       id: mt.id,
       materialId: mt.material_id,
       tagId: mt.tag_id,
     })),
-    materialStats: data.materialStats.map((s: any) => ({
+    materialStats: data.materialStats.map((s) => ({
       id: s.id,
       materialId: s.material_id,
       viewCount: s.view_count,
@@ -261,20 +284,20 @@ function convertToSQLite(data: NeonData) {
       averageRating: s.average_rating,
       lastUpdated: s.last_updated ? new Date(s.last_updated).toISOString() : new Date().toISOString(),
     })),
-    materialLikes: data.materialLikes.map((l: any) => ({
+    materialLikes: data.materialLikes.map((l) => ({
       id: l.id,
       materialId: l.material_id,
       userId: l.user_id,
       createdAt: l.created_at ? new Date(l.created_at).toISOString() : new Date().toISOString(),
     })),
-    materialRatings: data.materialRatings.map((r: any) => ({
+    materialRatings: data.materialRatings.map((r) => ({
       id: r.id,
       materialId: r.material_id,
       userId: r.user_id,
       rating: r.rating,
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
     })),
-    materialComments: data.materialComments.map((c: any) => ({
+    materialComments: data.materialComments.map((c) => ({
       id: c.id,
       materialId: c.material_id,
       userId: c.user_id,
@@ -282,7 +305,7 @@ function convertToSQLite(data: NeonData) {
       createdAt: c.created_at ? new Date(c.created_at).toISOString() : new Date().toISOString(),
       updatedAt: c.updated_at ? new Date(c.updated_at).toISOString() : null,
     })),
-    scheduledJobs: data.scheduledJobs.map((j: any) => ({
+    scheduledJobs: data.scheduledJobs.map((j) => ({
       id: j.id,
       jobType: j.job_type,
       scheduledFor: j.scheduled_for ? new Date(j.scheduled_for).toISOString() : new Date().toISOString(),
@@ -291,7 +314,7 @@ function convertToSQLite(data: NeonData) {
       errorMessage: j.error_message,
       createdAt: j.created_at ? new Date(j.created_at).toISOString() : new Date().toISOString(),
     })),
-    weeklyEmailReports: data.weeklyEmailReports.map((w: any) => ({
+    weeklyEmailReports: data.weeklyEmailReports.map((w) => ({
       id: w.id,
       weekStart: w.week_start ? new Date(w.week_start).toISOString() : new Date().toISOString(),
       weekEnd: w.week_end ? new Date(w.week_end).toISOString() : new Date().toISOString(),
@@ -300,7 +323,7 @@ function convertToSQLite(data: NeonData) {
       sentAt: w.sent_at ? new Date(w.sent_at).toISOString() : null,
       createdAt: w.created_at ? new Date(w.created_at).toISOString() : new Date().toISOString(),
     })),
-    systemPrompts: data.systemPrompts.map((p: any) => ({
+    systemPrompts: data.systemPrompts.map((p) => ({
       id: p.id,
       name: p.name,
       prompt: p.prompt,
@@ -311,15 +334,15 @@ function convertToSQLite(data: NeonData) {
     })),
   };
   
-  console.log('✅ Data converted to SQLite format!\n');
+  logger.info('✅ Data converted to SQLite format!\n');
   return converted;
 }
 
-async function importToSQLite(data: any) {
-  console.log('📥 Importing data to SQLite...');
+async function importToSQLite(data: ReturnType<typeof convertToSQLite>) {
+  logger.info('📥 Importing data to SQLite...');
   
   // Clear existing test data first
-  console.log('🗑️  Clearing existing test data...');
+  logger.info('🗑️  Clearing existing test data...');
   sqlite.exec('DELETE FROM html_files');
   sqlite.exec('DELETE FROM users');
   sqlite.exec('DELETE FROM email_subscriptions');
@@ -338,10 +361,10 @@ async function importToSQLite(data: any) {
   sqlite.exec('DELETE FROM scheduled_jobs');
   sqlite.exec('DELETE FROM weekly_email_reports');
   sqlite.exec('DELETE FROM system_prompts');
-  console.log('   ✅ Test data cleared\n');
+  logger.info('   ✅ Test data cleared\n');
 
   // Import htmlFiles
-  console.log('📦 Importing htmlFiles...');
+  logger.info('📦 Importing htmlFiles...');
   const insertFile = sqlite.prepare(`
     INSERT INTO html_files (id, user_id, title, content, description, classroom, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -358,10 +381,10 @@ async function importToSQLite(data: any) {
       file.createdAt
     );
   }
-  console.log(`   ✅ ${data.htmlFiles.length} materials imported`);
+  logger.info(`   ✅ ${data.htmlFiles.length} materials imported`);
 
   // Import users
-  console.log('📦 Importing users...');
+  logger.info('📦 Importing users...');
   const insertUser = sqlite.prepare(`
     INSERT INTO users (id, email, password, first_name, last_name, created_at, updated_at, last_seen_at, is_banned, is_admin)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -381,10 +404,10 @@ async function importToSQLite(data: any) {
       user.isAdmin ? 1 : 0
     );
   }
-  console.log(`   ✅ ${data.users.length} users imported`);
+  logger.info(`   ✅ ${data.users.length} users imported`);
 
   // Import emailSubscriptions
-  console.log('📦 Importing emailSubscriptions...');
+  logger.info('📦 Importing emailSubscriptions...');
   const insertEmailSub = sqlite.prepare(`
     INSERT INTO email_subscriptions (id, user_id, email, classrooms, is_subscribed, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -401,10 +424,10 @@ async function importToSQLite(data: any) {
       sub.updatedAt
     );
   }
-  console.log(`   ✅ ${data.emailSubscriptions.length} email subscriptions imported`);
+  logger.info(`   ✅ ${data.emailSubscriptions.length} email subscriptions imported`);
 
   // Import extraEmailAddresses
-  console.log('📦 Importing extraEmailAddresses...');
+  logger.info('📦 Importing extraEmailAddresses...');
   const insertExtraEmail = sqlite.prepare(`
     INSERT INTO extra_email_addresses (id, email, classrooms, added_by, is_active, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -421,78 +444,78 @@ async function importToSQLite(data: any) {
       extra.updatedAt
     );
   }
-  console.log(`   ✅ ${data.extraEmailAddresses.length} extra emails imported`);
+  logger.info(`   ✅ ${data.extraEmailAddresses.length} extra emails imported`);
 
   // Import remaining tables
-  console.log('📦 Importing emailLogs...');
+  logger.info('📦 Importing emailLogs...');
   for (const log of data.emailLogs) {
     sqlite.prepare(`
       INSERT INTO email_logs (id, html_file_id, recipient_email, status, error, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(log.id, log.htmlFileId, log.recipientEmail, log.status, log.errorMessage, log.createdAt);
   }
-  console.log(`   ✅ ${data.emailLogs.length} email logs imported`);
+  logger.info(`   ✅ ${data.emailLogs.length} email logs imported`);
 
-  console.log('📦 Importing aiGenerationRequests...');
+  logger.info('📦 Importing aiGenerationRequests...');
   for (const req of data.aiGenerationRequests) {
     sqlite.prepare(`
       INSERT INTO ai_generation_requests (id, user_id, prompt, status, created_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(req.id, req.userId, req.prompt || '', 'completed', req.createdAt);
   }
-  console.log(`   ✅ ${data.aiGenerationRequests.length} AI requests imported`);
+  logger.info(`   ✅ ${data.aiGenerationRequests.length} AI requests imported`);
 
-  console.log('📦 Importing materialViews...');
+  logger.info('📦 Importing materialViews...');
   for (const view of data.materialViews) {
     sqlite.prepare(`
       INSERT INTO material_views (id, user_id, material_id, viewed_at, user_agent)
       VALUES (?, ?, ?, ?, ?)
     `).run(view.id, view.userId, view.materialId, view.viewedAt, view.userAgent);
   }
-  console.log(`   ✅ ${data.materialViews.length} material views imported`);
+  logger.info(`   ✅ ${data.materialViews.length} material views imported`);
 
-  console.log('📦 Importing pushSubscriptions...');
+  logger.info('📦 Importing pushSubscriptions...');
   for (const push of data.pushSubscriptions) {
     sqlite.prepare(`
       INSERT INTO push_subscriptions (id, user_id, email, endpoint, keys, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(push.id, push.userId, push.email, push.endpoint, push.keys, push.createdAt, push.updatedAt);
   }
-  console.log(`   ✅ ${data.pushSubscriptions.length} push subscriptions imported`);
+  logger.info(`   ✅ ${data.pushSubscriptions.length} push subscriptions imported`);
 
-  console.log('📦 Importing systemPrompts...');
+  logger.info('📦 Importing systemPrompts...');
   for (const prompt of data.systemPrompts) {
     sqlite.prepare(`
       INSERT INTO system_prompts (id, name, prompt, description, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(prompt.id, prompt.name, prompt.prompt, prompt.description, prompt.isActive ? 1 : 0, prompt.createdAt, prompt.updatedAt);
   }
-  console.log(`   ✅ ${data.systemPrompts.length} system prompts imported`);
+  logger.info(`   ✅ ${data.systemPrompts.length} system prompts imported`);
 
-  console.log('✅ All data imported to SQLite!\n');
+  logger.info('✅ All data imported to SQLite!\n');
 }
 
 async function migrate() {
   try {
-    console.log('🚀 Starting Neon → SQLite migration...\n');
+    logger.info('🚀 Starting Neon → SQLite migration...\n');
     
     const neonData = await exportFromNeon();
     
     // Save backup
     const backupPath = './neon-backup.json';
     fs.writeFileSync(backupPath, JSON.stringify(neonData, null, 2));
-    console.log(`💾 Backup saved to: ${backupPath}\n`);
+    logger.info(`💾 Backup saved to: ${backupPath}\n`);
     
     const sqliteData = convertToSQLite(neonData);
     await importToSQLite(sqliteData);
     
-    console.log('🎉 Migration complete!');
-    console.log('\n📊 Summary:');
-    console.log(`   Materials: ${sqliteData.htmlFiles.length}`);
-    console.log(`   Users: ${sqliteData.users.length}`);
-    console.log(`   Email Subscriptions: ${sqliteData.emailSubscriptions.length}`);
-    console.log(`   Material Views: ${sqliteData.materialViews.length}`);
-    console.log(`   Total records migrated: ${
+    logger.info('🎉 Migration complete!');
+    logger.info('\n📊 Summary:');
+    logger.info(`   Materials: ${sqliteData.htmlFiles.length}`);
+    logger.info(`   Users: ${sqliteData.users.length}`);
+    logger.info(`   Email Subscriptions: ${sqliteData.emailSubscriptions.length}`);
+    logger.info(`   Material Views: ${sqliteData.materialViews.length}`);
+    logger.info(`   Total records migrated: ${
       sqliteData.htmlFiles.length +
       sqliteData.users.length +
       sqliteData.emailSubscriptions.length +
@@ -506,7 +529,7 @@ async function migrate() {
     sqlite.close();
     process.exit(0);
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    logger.error('❌ Migration failed:', error);
     process.exit(1);
   }
 }

@@ -5,6 +5,7 @@
 import { Router, type Request, type Response } from "express";
 import { runStaticAudit } from "../lib/static-audit";
 import { isAuthenticatedAdmin } from "../auth";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.get("/", isAuthenticatedAdmin, async (_req: Request, res: Response) => {
       checks: results,
     });
   } catch (err) {
-    console.error("[static-audit]", err);
+    logger.error("[static-audit]", err);
     res.status(500).json({ error: "Audit failed" });
   }
 });

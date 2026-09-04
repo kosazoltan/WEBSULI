@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CLASSROOMS, DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
+import { logger } from "../lib/logger";
 
 interface SimpleHtmlUploadProps {
   onUpload: (data: { title: string; content: string; description?: string; classroom: number }) => void;
@@ -42,7 +43,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
       
       if (!result || result.trim().length === 0) {
         if (process.env.NODE_ENV === 'development') {
-          console.error('[FILE UPLOAD] Empty file result');
+          logger.error('[FILE UPLOAD] Empty file result');
         }
         toast({ 
           title: "Üres fájl", 
@@ -68,7 +69,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
     
     reader.onerror = (error) => {
       if (process.env.NODE_ENV === 'development') {
-        console.error('[FILE UPLOAD] FileReader error:', error);
+        logger.error('[FILE UPLOAD] FileReader error:', error);
       }
       toast({
         title: "Fájl olvasási hiba",
@@ -200,7 +201,7 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
                     if (input) {
                       input.click();
                     } else if (process.env.NODE_ENV === 'development') {
-                      console.error('[BUTTON CLICK] Input element NOT found!');
+                      logger.error('[BUTTON CLICK] Input element NOT found!');
                     }
                   }}
                   data-testid="button-browse-file"

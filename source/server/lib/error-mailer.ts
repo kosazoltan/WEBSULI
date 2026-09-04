@@ -14,6 +14,7 @@ import {
   determineSeverity,
   buildErrorEmailHtml,
 } from "./error-sanitize";
+import { logger } from "./logger";
 
 // Re-exported so existing import sites (and tests) can keep using error-mailer.
 export { escapeHtml, sanitizeForEmail, generateFingerprint, determineSeverity };
@@ -68,7 +69,7 @@ export function signEmailPayload(payload: string): string {
 export async function sendErrorReport(payload: ErrorReportPayload): Promise<void> {
   // Guard: forbidden repos should never call this
   if (FORBIDDEN_REPOS.some((r) => REPO_PATH.startsWith(r))) {
-    console.warn("[ErrorLogger] Forbidden repo, skipping.");
+    logger.warn("[ErrorLogger] Forbidden repo, skipping.");
     return;
   }
 
@@ -142,7 +143,7 @@ export async function sendErrorReport(payload: ErrorReportPayload): Promise<void
     }
   } catch (dbErr) {
     // Never throw from error logger — just log
-    console.error("[ErrorLogger] DB error:", dbErr);
+    logger.error("[ErrorLogger] DB error:", dbErr);
   }
 }
 
@@ -159,15 +160,15 @@ async function _sendEmail(
   // emailSent=true-t írt, így a hibáról soha többé nem ment értesítés.
   const password = process.env.JUNIOR_EMAIL_PASSWORD;
   if (!password) {
-    console.warn("[ErrorLogger] JUNIOR_EMAIL_PASSWORD not set, skipping email.");
+    logger.warn("[ErrorLogger] JUNIOR_EMAIL_PASSWORD not set, skipping email.");
     return false;
   }
   if (!HMAC_SECRET) {
-    console.warn("[ErrorLogger] ERRORLOG_HMAC_SECRET not set, skipping email.");
+    logger.warn("[ErrorLogger] ERRORLOG_HMAC_SECRET not set, skipping email.");
     return false;
   }
   if (!SENDER_EMAIL || !RECIPIENT_EMAIL) {
-    console.warn("[ErrorLogger] ERROR_REPORT_SENDER or ERROR_REPORT_RECIPIENT not set, skipping email.");
+    logger.warn("[ErrorLogger] ERROR_REPORT_SENDER or ERROR_REPORT_RECIPIENT not set, skipping email.");
     return false;
   }
 
@@ -218,10 +219,10 @@ async function _sendEmail(
       subject,
       html: htmlBody,
     });
-    console.warn(`[ErrorLogger] Email sent for fingerprint ${fingerprint}`);
+    logger.warn(`[ErrorLogger] Email sent for fingerprint ${fingerprint}`);
     return true;
   } catch (emailErr) {
-    console.error("[ErrorLogger] Email send failed:", emailErr);
+    logger.error("[ErrorLogger] Email send failed:", emailErr);
     return false;
   }
 }

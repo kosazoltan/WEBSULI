@@ -3,6 +3,7 @@
 
 import webPush from 'web-push';
 import { storage } from './storage';
+import { logger } from "./lib/logger";
 
 // Initialize VAPID configuration
 const vapidPublicKey = process.env.PUBLIC_VAPID_KEY;
@@ -15,14 +16,14 @@ if (vapidPublicKey && vapidPrivateKey) {
   try {
     webPush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
     vapidConfigured = true;
-    console.log('[PUSH] VAPID configured successfully');
+    logger.info('[PUSH] VAPID configured successfully');
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
-    console.warn('[PUSH] VAPID configuration failed:', err.message);
-    console.warn('[PUSH] Push notifications disabled - invalid VAPID keys');
+    logger.warn('[PUSH] VAPID configuration failed:', err.message);
+    logger.warn('[PUSH] Push notifications disabled - invalid VAPID keys');
   }
 } else {
-  console.warn('[PUSH] VAPID keys not found - push notifications disabled');
+  logger.warn('[PUSH] VAPID keys not found - push notifications disabled');
 }
 
 export interface PushNotificationPayload {
@@ -49,7 +50,7 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
   total: number;
 }> {
   if (!vapidConfigured) {
-    console.warn('[PUSH] Cannot send notifications - VAPID not configured');
+    logger.warn('[PUSH] Cannot send notifications - VAPID not configured');
     return { sent: 0, failed: 0, total: 0 };
   }
 
@@ -57,7 +58,7 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
     const subscriptions = await storage.getAllPushSubscriptions();
     
     if (subscriptions.length === 0) {
-      console.log('[PUSH] No active subscriptions');
+      logger.info('[PUSH] No active subscriptions');
       return { sent: 0, failed: 0, total: 0 };
     }
 
@@ -87,15 +88,15 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
 
         await webPush.sendNotification(pushSubscription, notificationPayload);
         sentCount++;
-        console.log(`[PUSH] Sent to ${sub.endpoint.substring(0, 50)}...`);
+        logger.info(`[PUSH] Sent to ${sub.endpoint.substring(0, 50)}...`);
       } catch (error: unknown) {
         failedCount++;
         const errMsg = error instanceof Error ? error.message : String(error);
-        console.error('[PUSH] Failed to send to endpoint:', sub.endpoint.substring(0, 50), 'error:', errMsg);
+        logger.error('[PUSH] Failed to send to endpoint:', sub.endpoint.substring(0, 50), 'error:', errMsg);
         
         // Remove invalid/expired subscriptions (410 = Gone, endpoint no longer valid)
         if (error instanceof Error && 'statusCode' in error && ((error as { statusCode: number }).statusCode === 410 || (error as { statusCode: number }).statusCode === 404)) {
-          console.log(`[PUSH] Removing expired subscription: ${sub.endpoint.substring(0, 50)}...`);
+          logger.info(`[PUSH] Removing expired subscription: ${sub.endpoint.substring(0, 50)}...`);
           await storage.deletePushSubscription(sub.endpoint);
         }
       }
@@ -103,7 +104,7 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
 
     await Promise.all(sendPromises);
 
-    console.log(`[PUSH] Notification sent: ${sentCount} success, ${failedCount} failed, ${subscriptions.length} total`);
+    logger.info(`[PUSH] Notification sent: ${sentCount} success, ${failedCount} failed, ${subscriptions.length} total`);
     
     return {
       sent: sentCount,
@@ -111,7 +112,7 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
       total: subscriptions.length
     };
   } catch (error: unknown) {
-    console.error('[PUSH] Error sending notifications:', error);
+    logger.error('[PUSH] Error sending notifications:', error);
     throw error;
   }
 }
@@ -125,7 +126,7 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
   total: number;
 }> {
   if (!vapidConfigured) {
-    console.warn('[PUSH] Cannot send notifications - VAPID not configured');
+    logger.warn('[PUSH] Cannot send notifications - VAPID not configured');
     return { sent: 0, failed: 0, total: 0 };
   }
 
@@ -133,7 +134,7 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
     const subscriptions = await storage.getUserPushSubscriptions(userId);
     
     if (subscriptions.length === 0) {
-      console.log(`[PUSH] No subscriptions for user ${userId}`);
+      logger.info(`[PUSH] No subscriptions for user ${userId}`);
       return { sent: 0, failed: 0, total: 0 };
     }
 
@@ -165,7 +166,7 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
         sentCount++;
       } catch (error: unknown) {
         failedCount++;
-        console.error('[PUSH] Failed to send notification:', error);
+        logger.error('[PUSH] Failed to send notification:', error);
         
         if (error instanceof Error && 'statusCode' in error && ((error as { statusCode: number }).statusCode === 410 || (error as { statusCode: number }).statusCode === 404)) {
           await storage.deletePushSubscription(sub.endpoint);
@@ -179,7 +180,7 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
       total: subscriptions.length
     };
   } catch (error: unknown) {
-    console.error('[PUSH] Error sending user notification:', error);
+    logger.error('[PUSH] Error sending user notification:', error);
     throw error;
   }
 }
@@ -206,9 +207,9 @@ export async function sendNewMaterialNotification(materialTitle: string, materia
       requireInteraction: false,
     });
     
-    console.log(`[PUSH] New material notification sent for: ${materialTitle}`);
+    logger.info(`[PUSH] New material notification sent for: ${materialTitle}`);
   } catch (error: unknown) {
-    console.error('[PUSH] Error sending new material notification:', error);
+    logger.error('[PUSH] Error sending new material notification:', error);
   }
 }
 
@@ -239,8 +240,8 @@ export async function sendMaterialViewNotification(
       requireInteraction: false,
     });
     
-    console.log(`[PUSH] Material view notification sent to admin for: ${materialTitle}`);
+    logger.info(`[PUSH] Material view notification sent to admin for: ${materialTitle}`);
   } catch (error: unknown) {
-    console.error('[PUSH] Error sending material view notification:', error);
+    logger.error('[PUSH] Error sending material view notification:', error);
   }
 }

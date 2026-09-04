@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { sql as sqlTemplate } from "drizzle-orm";
+import { logger } from "./lib/logger";
 
 export function setupScheduledPublishing() {
   // Run every minute to check for scheduled jobs
@@ -9,7 +10,7 @@ export function setupScheduledPublishing() {
     try {
       // Skip if DATABASE_URL is not available (e.g., in certain deployment environments)
       if (!process.env.DATABASE_URL) {
-        console.log('[SCHEDULED] DATABASE_URL not available, skipping scheduled publishing check');
+        logger.info('[SCHEDULED] DATABASE_URL not available, skipping scheduled publishing check');
         return;
       }
       
@@ -62,9 +63,9 @@ export function setupScheduledPublishing() {
         // Table doesn't exist - skip silently for this run
         return;
       }
-      console.error("Scheduled publishing cron error:", error);
+      logger.error("Scheduled publishing cron error:", error);
     }
   });
 
-  console.log("Scheduled publishing cron job started (runs every minute)");
+  logger.info("Scheduled publishing cron job started (runs every minute)");
 }

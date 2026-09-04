@@ -246,7 +246,7 @@ ${originalFile.content}
     const timeoutId = setTimeout(() => controller.abort(), 900000); // 15 min max (safety net)
     abortTimeoutId = timeoutId;
 
-    console.log(`[IMPROVE] Record ${dbRecordId}: Calling AI with STREAMING...`);
+    logger.info(`[IMPROVE] Record ${dbRecordId}: Calling AI with STREAMING...`);
     const startTime = Date.now();
 
     // GYÖKÉROK JAVÍTÁS: Use streaming instead of waiting for full response
@@ -264,7 +264,7 @@ ${originalFile.content}
         lastLogTime = Date.now();
         
         if (attempt > 0) {
-          console.log(`[IMPROVE] Record ${dbRecordId}: Retry attempt ${attempt}/${MAX_RETRIES}...`);
+          logger.info(`[IMPROVE] Record ${dbRecordId}: Retry attempt ${attempt}/${MAX_RETRIES}...`);
         }
 
         const stream = improveProvider.streamChat([
@@ -282,7 +282,7 @@ ${originalFile.content}
             fullContent += chunk.content;
             // Log progress every 10 seconds
             if (Date.now() - lastLogTime > 10000) {
-              console.log(`[IMPROVE] Record ${dbRecordId}: Streaming... ${fullContent.length} chars received (${Math.round((Date.now() - startTime) / 1000)}s)`);
+              logger.info(`[IMPROVE] Record ${dbRecordId}: Streaming... ${fullContent.length} chars received (${Math.round((Date.now() - startTime) / 1000)}s)`);
               lastLogTime = Date.now();
             }
           }
@@ -299,13 +299,13 @@ ${originalFile.content}
         
         if ((isOverloaded || isRateLimit) && attempt < MAX_ATTEMPTS) {
           const delay = RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)];
-          console.warn(`[IMPROVE] Record ${dbRecordId}: ${isOverloaded ? 'Overloaded' : 'Rate limited'} on ${MODEL_CHAIN[currentModelIndex]} - waiting ${delay/1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
+          logger.warn(`[IMPROVE] Record ${dbRecordId}: ${isOverloaded ? 'Overloaded' : 'Rate limited'} on ${MODEL_CHAIN[currentModelIndex]} - waiting ${delay/1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
           
           // After 2 failed retries on primary model, switch to fallback
           if (attempt >= 1 && currentModelIndex < MODEL_CHAIN.length - 1) {
             currentModelIndex++;
             improveProvider = createProvider(currentModelIndex);
-            console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Switching to fallback model: ${MODEL_CHAIN[currentModelIndex]}`);
+            logger.info(`[IMPROVE] Record ${dbRecordId}: ⚡ Switching to fallback model: ${MODEL_CHAIN[currentModelIndex]}`);
           }
           
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -316,7 +316,7 @@ ${originalFile.content}
         if ((isOverloaded || isRateLimit) && currentModelIndex < MODEL_CHAIN.length - 1) {
           currentModelIndex++;
           improveProvider = createProvider(currentModelIndex);
-          console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Final attempt with fallback model: ${MODEL_CHAIN[currentModelIndex]}`);
+          logger.info(`[IMPROVE] Record ${dbRecordId}: ⚡ Final attempt with fallback model: ${MODEL_CHAIN[currentModelIndex]}`);
           await new Promise(resolve => setTimeout(resolve, 10000)); // 10s wait
           continue; // One more try with fallback
         }
@@ -328,7 +328,7 @@ ${originalFile.content}
     clearTimeout(timeoutId);
 
     const duration = Date.now() - startTime;
-    console.log(`[IMPROVE] Record ${dbRecordId}: AI stream completed in ${duration}ms, total ${fullContent.length} chars`);
+    logger.info(`[IMPROVE] Record ${dbRecordId}: AI stream completed in ${duration}ms, total ${fullContent.length} chars`);
 
     const aiResponse = { content: fullContent };
 
@@ -389,10 +389,10 @@ ${originalFile.content}
         try {
           // Try to parse the JS to detect syntax errors
           new Function(jsContent);
-          console.log(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript syntax validation passed`);
+          logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript syntax validation passed`);
         } catch (syntaxError: unknown) {
           const syntaxErrorTyped = syntaxError instanceof Error ? syntaxError : new Error(String(syntaxError));
-          console.error(`[IMPROVE] Record ${dbRecordId}: ❌ JavaScript syntax error detected: ${syntaxErrorTyped.message}`);
+          logger.error(`[IMPROVE] Record ${dbRecordId}: ❌ JavaScript syntax error detected: ${syntaxErrorTyped.message}`);
           
           // Try to find and fix common AI errors:
           // 1. Unescaped Hungarian text outside of strings (e.g., stray comments)
@@ -408,7 +408,7 @@ ${originalFile.content}
                 !line.includes('}') && !line.includes(';') && !line.includes("'") && 
                 !line.includes('"') && !line.includes('var ') && !line.includes('let ') && 
                 !line.includes('const ') && !line.includes('function') && !line.includes('return')) {
-              console.log(`[IMPROVE] Record ${dbRecordId}: Removing stray text line: "${line.trim().substring(0, 50)}..."`);
+              logger.info(`[IMPROVE] Record ${dbRecordId}: Removing stray text line: "${line.trim().substring(0, 50)}..."`);
               return '// [AUTO-REMOVED stray text] ' + line;
             }
             return line;
@@ -417,13 +417,13 @@ ${originalFile.content}
           // Try to parse again after fixes
           try {
             new Function(fixedJs);
-            console.log(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript auto-repair successful`);
+            logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ JavaScript auto-repair successful`);
             // AUDIT 2026-09-01: függvényes csere — a string-csere a `$&`, `$'`, `$1` mintákat
             // értelmezné, és a generált JS-ben gyakori `$` a dokumentumot duplázhatta.
             improvedHtml = improvedHtml.replace(jsContent, () => fixedJs);
           } catch (stillBroken: unknown) {
             const stillBrokenTyped = stillBroken instanceof Error ? stillBroken : new Error(String(stillBroken));
-            console.error(`[IMPROVE] Record ${dbRecordId}: ⚠️ Auto-repair failed: ${stillBrokenTyped.message}`);
+            logger.error(`[IMPROVE] Record ${dbRecordId}: ⚠️ Auto-repair failed: ${stillBrokenTyped.message}`);
             // Don't block saving - the material is still useful even with JS errors
             // But log it for debugging
           }
@@ -444,7 +444,7 @@ ${originalFile.content}
         
         // AUTO-REPAIR: Inject window.* assignments for missing functions
         if (missingFuncs.length > 0) {
-          console.warn(`[IMPROVE] Record ${dbRecordId}: 🔧 Auto-fixing ${missingFuncs.length} missing window.* assignments: ${missingFuncs.join(', ')}`);
+          logger.warn(`[IMPROVE] Record ${dbRecordId}: 🔧 Auto-fixing ${missingFuncs.length} missing window.* assignments: ${missingFuncs.join(', ')}`);
           
           // Find function declarations inside the IIFE and add window.* for them
           for (const funcName of missingFuncs) {
@@ -468,10 +468,10 @@ ${originalFile.content}
               if (iifeEnd !== -1) {
                 const injection = `  window.${funcName} = ${funcName};\n`;
                 improvedHtml = improvedHtml.substring(0, iifeEnd) + injection + improvedHtml.substring(iifeEnd);
-                console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Injected window.${funcName}`);
+                logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Injected window.${funcName}`);
               }
             } else {
-              console.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ Function ${funcName} not found in code - cannot auto-fix`);
+              logger.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ Function ${funcName} not found in code - cannot auto-fix`);
             }
           }
         }
@@ -507,10 +507,10 @@ ${originalFile.content}
       
       // Fix 3: Verify touch events exist for drag-and-drop
       if (improvedHtml.includes('draggable="true"') && !improvedHtml.includes('touchstart')) {
-        console.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ Draggable elements found but NO touchstart handler - mobile drag won't work!`);
+        logger.warn(`[IMPROVE] Record ${dbRecordId}: ⚠️ Draggable elements found but NO touchstart handler - mobile drag won't work!`);
       }
       
-      console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Mobile compatibility checks completed`);
+      logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Mobile compatibility checks completed`);
     }
 
     // ✅ CRITICAL: Update content AND status in ONE atomic operation
@@ -518,13 +518,13 @@ ${originalFile.content}
     // between status→pending and content→HTML, getting the placeholder!
     await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, improvedHtml, 'pending');
 
-    console.log(`[IMPROVE] Record ${dbRecordId}: ✅ Success! Content saved (${improvedHtml.length} bytes), status → pending`);
+    logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Success! Content saved (${improvedHtml.length} bytes), status → pending`);
 
   } catch (error: unknown) {
     // AUDIT 2026-09-01: a 15 perces abort-timer a hibaágon eddig nem törlődött (szivárgott).
     if (abortTimeoutId) clearTimeout(abortTimeoutId);
     const err = error instanceof Error ? error : new Error(String(error));
-    console.error(`[IMPROVE] Record ${dbRecordId}: Error:`, err.message);
+    logger.error(`[IMPROVE] Record ${dbRecordId}: Error:`, err.message);
 
     let userMessage = 'Hiba történt a javítás során';
     if (err.name === 'AbortError' || err.message?.includes('aborted')) {
@@ -544,7 +544,7 @@ ${originalFile.content}
       await storage.updateImprovedHtmlFileStatus(dbRecordId, 'error', undefined, userMessage);
     } catch (dbError: unknown) {
       const dbErrorTyped = dbError instanceof Error ? dbError : new Error(String(dbError));
-      console.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbErrorTyped.message);
+      logger.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbErrorTyped.message);
     }
   }
 }
@@ -555,7 +555,7 @@ ${originalFile.content}
 export function registerImprovementRoutes(adminRouter: Router) {
   // POST /api/admin/improve-material/:id - Start async AI improvement job
   adminRouter.post("/improve-material/:id", async (req: Request, res) => {
-    console.log(`[IMPROVE] Request received for file ID: ${req.params?.id}`);
+    logger.info(`[IMPROVE] Request received for file ID: ${req.params?.id}`);
 
     if (!req.user || !req.user.id) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -619,7 +619,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
         createdBy: userId,
       });
 
-      console.log(`[IMPROVE] DB record ${dbRecord.id} created with status 'processing' for: ${originalFile.title}`);
+      logger.info(`[IMPROVE] DB record ${dbRecord.id} created with status 'processing' for: ${originalFile.title}`);
 
       // Return immediately with DB record ID
       res.json({ 
@@ -631,11 +631,11 @@ export function registerImprovementRoutes(adminRouter: Router) {
 
       // Process in background (fire-and-forget with catch to prevent unhandled rejection)
       processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey)
-        .catch(err => console.error(`[IMPROVE] FATAL unhandled error in background job ${dbRecord.id}:`, err));
+        .catch(err => logger.error(`[IMPROVE] FATAL unhandled error in background job ${dbRecord.id}:`, err));
 
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      console.error('[IMPROVE] Error:', err.message);
+      logger.error('[IMPROVE] Error:', err.message);
       return res.status(500).json({ message: err.message || 'Hiba' });
     }
   });
@@ -665,7 +665,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
         const freshRecord = await storage.getImprovedHtmlFile(jobId);
         if (freshRecord && freshRecord.status !== 'processing') {
           // Job completed between our first check and now - return actual status
-          console.log(`[IMPROVE] Job ${jobId} was stuck but now has status: ${freshRecord.status}`);
+          logger.info(`[IMPROVE] Job ${jobId} was stuck but now has status: ${freshRecord.status}`);
           if (freshRecord.status === 'pending') {
             return res.json({ 
               status: 'completed', elapsed,
@@ -684,11 +684,11 @@ export function registerImprovementRoutes(adminRouter: Router) {
 
         if (hasValidContent) {
           // Content is valid! The AI finished successfully - fix the status
-          console.log(`[IMPROVE] Job ${jobId} has valid content (${contentLength} bytes) despite 'processing' status - marking as pending`);
+          logger.info(`[IMPROVE] Job ${jobId} has valid content (${contentLength} bytes) despite 'processing' status - marking as pending`);
           try {
             await storage.updateImprovedHtmlFileStatus(jobId, 'pending');
           } catch (e) {
-            console.error(`[IMPROVE] Failed to fix stuck job ${jobId} status:`, e);
+            logger.error(`[IMPROVE] Failed to fix stuck job ${jobId} status:`, e);
           }
           return res.json({ 
             status: 'completed', elapsed,
@@ -697,12 +697,12 @@ export function registerImprovementRoutes(adminRouter: Router) {
         }
 
         // Content is still placeholder - job truly failed
-        console.warn(`[IMPROVE] Job ${jobId} stuck in processing for ${elapsed}s with no valid content - marking as error`);
+        logger.warn(`[IMPROVE] Job ${jobId} stuck in processing for ${elapsed}s with no valid content - marking as error`);
         try {
           await storage.updateImprovedHtmlFileStatus(jobId, 'error', undefined, 
             'A javítás időtúllépés miatt meghiúsult (15+ perc). Töröld és próbáld újra!');
         } catch (e) {
-          console.error(`[IMPROVE] Failed to mark stuck job ${jobId} as error:`, e);
+          logger.error(`[IMPROVE] Failed to mark stuck job ${jobId} as error:`, e);
         }
         return res.json({ 
           status: 'error', 

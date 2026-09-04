@@ -16,6 +16,7 @@ import { config } from "dotenv";
 import pg from "pg";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+import { logger } from "../lib/logger";
 
 // Manually load env from root .env file
 const __filename = fileURLToPath(import.meta.url);
@@ -25,32 +26,32 @@ config({ path: resolve(__dirname, "../../.env") });
 const { Pool } = pg;
 
 async function main() {
-    console.log("🔄 Starting sync from PRODUCTION to DEVELOPMENT...\n");
-    console.log("=".repeat(60));
+    logger.info("🔄 Starting sync from PRODUCTION to DEVELOPMENT...\n");
+    logger.info("=".repeat(60));
 
     // A production URL lehet a PRODUCTION_DATABASE_URL vagy NEON_SOURCE_URL
     const sourceUrl = process.env.PRODUCTION_DATABASE_URL || process.env.NEON_SOURCE_URL;
     const destUrl = process.env.DATABASE_URL;
 
     if (!sourceUrl) {
-        console.error("❌ PRODUCTION_DATABASE_URL or NEON_SOURCE_URL is missing in .env");
-        console.error("   Add one of these to your .env file with the production connection string");
+        logger.error("❌ PRODUCTION_DATABASE_URL or NEON_SOURCE_URL is missing in .env");
+        logger.error("   Add one of these to your .env file with the production connection string");
         process.exit(1);
     }
     if (!destUrl) {
-        console.error("❌ DATABASE_URL is missing in .env");
+        logger.error("❌ DATABASE_URL is missing in .env");
         process.exit(1);
     }
 
     // Ellenőrizzük, hogy nem azonosak-e a URL-ek
     if (sourceUrl === destUrl) {
-        console.error("❌ SOURCE and DESTINATION URLs are the same! Aborting to prevent data loss.");
+        logger.error("❌ SOURCE and DESTINATION URLs are the same! Aborting to prevent data loss.");
         process.exit(1);
     }
 
-    console.log(`📤 SOURCE (Production): ${sourceUrl.replace(/:[^:@]+@/, ':****@').substring(0, 60)}...`);
-    console.log(`📥 DESTINATION (Dev):   ${destUrl.replace(/:[^:@]+@/, ':****@').substring(0, 60)}...`);
-    console.log("=".repeat(60));
+    logger.info(`📤 SOURCE (Production): ${sourceUrl.replace(/:[^:@]+@/, ':****@').substring(0, 60)}...`);
+    logger.info(`📥 DESTINATION (Dev):   ${destUrl.replace(/:[^:@]+@/, ':****@').substring(0, 60)}...`);
+    logger.info("=".repeat(60));
 
     // SSL beállítás a production adatbázishoz
     const sourcePool = new Pool({
@@ -90,33 +91,34 @@ async function main() {
 
     try {
         // Teszt kapcsolatok
-        console.log("\n🔌 Testing connections...");
+        logger.info("\n🔌 Testing connections...");
         await sourcePool.query("SELECT 1");
-        console.log("   ✅ Source (Production) connected!");
+        logger.info("   ✅ Source (Production) connected!");
         await destPool.query("SELECT 1");
-        console.log("   ✅ Destination (Dev) connected!");
+        logger.info("   ✅ Destination (Dev) connected!");
 
         for (const table of tables) {
-            console.log(`\n📦 Processing: ${table.name}`);
-            console.log("   " + "-".repeat(40));
+            logger.info(`\n📦 Processing: ${table.name}`);
+            logger.info("   " + "-".repeat(40));
 
             // Fetch from source
-            let rows: any[] = [];
+            let rows: Array<Record<string, unknown>> = [];
             try {
                 const res = await sourcePool.query(`SELECT * FROM "${table.name}"`);
                 rows = res.rows;
-                console.log(`   📊 Found ${rows.length} rows in production`);
-            } catch (e: any) {
-                if (e.message.includes('does not exist')) {
-                    console.log(`   ⚠️ Table doesn't exist in production (Skipping)`);
+                logger.info(`   📊 Found ${rows.length} rows in production`);
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                if (msg.includes('does not exist')) {
+                    logger.info(`   ⚠️ Table doesn't exist in production (Skipping)`);
                 } else {
-                    console.warn(`   ⚠️ Could not read: ${e.message} (Skipping)`);
+                    logger.warn(`   ⚠️ Could not read: ${msg} (Skipping)`);
                 }
                 continue;
             }
 
             if (rows.length === 0) {
-                console.log(`   ℹ️ No data to sync`);
+                logger.info(`   ℹ️ No data to sync`);
                 continue;
             }
 
@@ -152,38 +154,39 @@ async function main() {
 
                 try {
                     const insertRes = await destPool.query(query, values);
-                    if ((insertRes as any).rowCount > 0) {
+                    if ((insertRes.rowCount ?? 0) > 0) {
                         inserted++;
                     } else {
                         skipped++;
                     }
-                } catch (e: any) {
-                    if (!e.message.includes('already exists')) {
-                        console.error(`   ❌ Error on row ${row[table.pk]}: ${e.message.substring(0, 80)}`);
+                } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    if (!msg.includes('already exists')) {
+                        logger.error(`   ❌ Error on row ${row[table.pk]}: ${msg.substring(0, 80)}`);
                     }
                     failed++;
                 }
             }
 
-            console.log(`   ✅ Inserted/Updated: ${inserted}`);
-            if (skipped > 0) console.log(`   ⏭️ Skipped: ${skipped}`);
-            if (failed > 0) console.log(`   ❌ Failed: ${failed}`);
+            logger.info(`   ✅ Inserted/Updated: ${inserted}`);
+            if (skipped > 0) logger.info(`   ⏭️ Skipped: ${skipped}`);
+            if (failed > 0) logger.info(`   ❌ Failed: ${failed}`);
 
             totalInserted += inserted;
             totalSkipped += skipped;
             totalFailed += failed;
         }
 
-        console.log("\n" + "=".repeat(60));
-        console.log("🎉 SYNC COMPLETE!");
-        console.log("=".repeat(60));
-        console.log(`   📥 Total Inserted/Updated: ${totalInserted}`);
-        console.log(`   ⏭️ Total Skipped: ${totalSkipped}`);
-        console.log(`   ❌ Total Failed: ${totalFailed}`);
-        console.log("=".repeat(60));
+        logger.info("\n" + "=".repeat(60));
+        logger.info("🎉 SYNC COMPLETE!");
+        logger.info("=".repeat(60));
+        logger.info(`   📥 Total Inserted/Updated: ${totalInserted}`);
+        logger.info(`   ⏭️ Total Skipped: ${totalSkipped}`);
+        logger.info(`   ❌ Total Failed: ${totalFailed}`);
+        logger.info("=".repeat(60));
 
     } catch (err) {
-        console.error("\n🔥 Fatal error during sync:", err);
+        logger.error("\n🔥 Fatal error during sync:", err);
         process.exit(1);
     } finally {
         await sourcePool.end();

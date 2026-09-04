@@ -5,6 +5,7 @@ import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { logger } from "./lib/logger";
 
 const viteLogger = createLogger();
 
@@ -16,7 +17,7 @@ export function log(message: string, source = "express") {
     hour12: true,
   });
 
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info(`${formattedTime} [${source}] ${message}`);
 }
 
 export async function setupVite(app: Express, server: Server) {
@@ -82,10 +83,10 @@ export function serveStatic(app: Express) {
   // the frontend is served by Vercel and dist/public may not exist on Render.
   if (!fs.existsSync(distPath)) {
     if (process.env.FRONTEND_URL) {
-      console.log(
+      logger.info(
         `[serveStatic] API-only mode - frontend served by ${process.env.FRONTEND_URL}`,
       );
-      console.log(
+      logger.info(
         `[serveStatic] Skipping static file serving (dist/public not found)`,
       );
       return;
@@ -95,8 +96,8 @@ export function serveStatic(app: Express) {
     );
   }
 
-  console.log(`[serveStatic] Serving from: ${distPath}`);
-  console.log(
+  logger.info(`[serveStatic] Serving from: ${distPath}`);
+  logger.info(
     `[serveStatic] index.html exists: ${fs.existsSync(path.resolve(distPath, "index.html"))}`,
   );
 

@@ -14,6 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { isBlockCommentWrappedSql, unwrapBlockCommentedSql } from './lib/migration-sql';
+import { logger } from "./lib/logger";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,7 +37,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
   const dbUrl = databaseUrl || process.env.DATABASE_URL;
   
   if (!dbUrl) {
-    console.warn('[MIGRATE] ⚠️ No DATABASE_URL set - skipping migrations');
+    logger.warn('[MIGRATE] ⚠️ No DATABASE_URL set - skipping migrations');
     return;
   }
 
@@ -57,7 +58,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
 
   try {
     client = await pool.connect();
-    console.log('[MIGRATE] 🔄 Checking for pending migrations...');
+    logger.info('[MIGRATE] 🔄 Checking for pending migrations...');
 
     // 1. Create migration tracking table if it doesn't exist
     await client.query(`
@@ -78,7 +79,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
     const migrationsDir = path.resolve(__dirname, '..', 'migrations');
     
     if (!fs.existsSync(migrationsDir)) {
-      console.log('[MIGRATE] ⚠️ No migrations directory found, skipping');
+      logger.info('[MIGRATE] ⚠️ No migrations directory found, skipping');
       return;
     }
 
@@ -87,7 +88,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
       .sort(); // Alphabetical order = chronological (0000_, 0001_, ...)
 
     if (migrationFiles.length === 0) {
-      console.log('[MIGRATE] ✅ No migration files found');
+      logger.info('[MIGRATE] ✅ No migration files found');
       return;
     }
 
@@ -109,7 +110,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
       // alaptáblák sosem jöttek létre. Most lefejtjük a burkot és normálisan futtatjuk;
       // meglévő DB-n minden statement "already exists" → az alábbi tolerancia átugorja.
       if (isBlockCommentWrappedSchemaTemplate(sql)) {
-        console.log(`[MIGRATE] 📦 ${fileName}: blokk-kommentes séma-export → kicsomagolva futtatjuk`);
+        logger.info(`[MIGRATE] 📦 ${fileName}: blokk-kommentes séma-export → kicsomagolva futtatjuk`);
         sql = unwrapBlockCommentedSql(sql);
       }
 
@@ -125,7 +126,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
           return withoutComments.length > 0;
         });
 
-      console.log(`[MIGRATE] 📝 Running: ${fileName} (${statements.length} statements)`);
+      logger.info(`[MIGRATE] 📝 Running: ${fileName} (${statements.length} statements)`);
 
       // Egy tranzakcióban futunk, de statementenként SAVEPOINT: egy hiba ne abortálja az egész txn-t.
       await client.query("BEGIN");
@@ -141,7 +142,7 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
             await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
             const errMsg = err instanceof Error ? err.message : String(err);
             if (errMsg.includes("already exists") || errMsg.includes("duplicate key")) {
-              console.log(`[MIGRATE]   ⚠️ Skipped (already exists): ${stmt.substring(0, 60)}...`);
+              logger.info(`[MIGRATE]   ⚠️ Skipped (already exists): ${stmt.substring(0, 60)}...`);
             } else {
               throw err;
             }
@@ -155,18 +156,18 @@ export async function runMigrations(databaseUrl?: string): Promise<void> {
         );
         await client.query('COMMIT');
         applied++;
-        console.log(`[MIGRATE]   ✅ ${fileName} applied successfully`);
+        logger.info(`[MIGRATE]   ✅ ${fileName} applied successfully`);
       } catch (err) {
         await client.query('ROLLBACK');
-        console.error(`[MIGRATE]   ❌ ${fileName} FAILED:`, err);
+        logger.error(`[MIGRATE]   ❌ ${fileName} FAILED:`, err);
         throw err;
       }
     }
 
     if (applied > 0) {
-      console.log(`[MIGRATE] ✅ Done! ${applied} migration(s) applied, ${skipped} already applied`);
+      logger.info(`[MIGRATE] ✅ Done! ${applied} migration(s) applied, ${skipped} already applied`);
     } else {
-      console.log(`[MIGRATE] ✅ Database is up to date (${skipped} migration(s) already applied)`);
+      logger.info(`[MIGRATE] ✅ Database is up to date (${skipped} migration(s) already applied)`);
     }
 
   } finally {
@@ -184,11 +185,11 @@ const isDirectRun = scriptName.endsWith('migrate.ts') || scriptName.endsWith('mi
 if (isDirectRun) {
   runMigrations()
     .then(() => {
-      console.log('[MIGRATE] ✅ Migration complete');
+      logger.info('[MIGRATE] ✅ Migration complete');
       process.exit(0);
     })
     .catch(err => {
-      console.error('[MIGRATE] ❌ Migration failed:', err instanceof Error ? err.message : String(err));
+      logger.error('[MIGRATE] ❌ Migration failed:', err instanceof Error ? err.message : String(err));
       process.exit(1);
     });
 }

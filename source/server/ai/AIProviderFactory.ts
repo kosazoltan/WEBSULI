@@ -11,6 +11,7 @@ import { ClaudeProvider } from './ClaudeProvider';
 import { OpenRouterProvider, isOpenRouterConfigured } from './OpenRouterProvider';
 import { LEGACY_MODELS, resolveStudioModel } from './models';
 import { getAICache } from './AICache';
+import { logger } from "../lib/logger";
 
 export type ProviderType = 'openai' | 'claude' | 'openrouter';
 
@@ -141,7 +142,7 @@ export class AIProviderFactory {
       return response;
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      console.warn('[AIFactory] Primary provider (%s) failed: %s', this.primaryProvider, err.message);
+      logger.warn('[AIFactory] Primary provider (%s) failed: %s', this.primaryProvider, err.message);
       lastError = err;
 
       // Don't retry on auth errors
@@ -153,7 +154,7 @@ export class AIProviderFactory {
     // Try fallback provider if configured
     if (this.fallbackProvider) {
       try {
-        console.log(`[AIFactory] Falling back to ${this.fallbackProvider}...`);
+        logger.info(`[AIFactory] Falling back to ${this.fallbackProvider}...`);
         const fallback = this.getProvider(this.fallbackProvider);
         response = await this.retryWithBackoff(
           () => fallback.chat(messages, signal),
@@ -169,7 +170,7 @@ export class AIProviderFactory {
         return response;
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error));
-        console.error('[AIFactory] Fallback provider (%s) also failed: %s', this.fallbackProvider, err.message);
+        logger.error('[AIFactory] Fallback provider (%s) also failed: %s', this.fallbackProvider, err.message);
         lastError = err;
       }
     }
@@ -199,7 +200,7 @@ export class AIProviderFactory {
       return;
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      console.warn('[AIFactory] Primary provider (%s) stream failed: %s', this.primaryProvider, err.message);
+      logger.warn('[AIFactory] Primary provider (%s) stream failed: %s', this.primaryProvider, err.message);
       lastError = err;
 
       // Don't try fallback on auth errors
@@ -211,13 +212,13 @@ export class AIProviderFactory {
     // Try fallback provider if configured
     if (this.fallbackProvider) {
       try {
-        console.log(`[AIFactory] Falling back to ${this.fallbackProvider} for streaming...`);
+        logger.info(`[AIFactory] Falling back to ${this.fallbackProvider} for streaming...`);
         const fallback = this.getProvider(this.fallbackProvider);
         yield* fallback.streamChat(messages, signal);
         return;
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error));
-        console.error('[AIFactory] Fallback provider (%s) stream also failed: %s', this.fallbackProvider, err.message);
+        logger.error('[AIFactory] Fallback provider (%s) stream also failed: %s', this.fallbackProvider, err.message);
         lastError = err;
       }
     }
@@ -258,7 +259,7 @@ export class AIProviderFactory {
 
         // Calculate exponential backoff: 1s, 2s, 4s, 8s, ...
         const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-        console.log(`[AIFactory] Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+        logger.info(`[AIFactory] Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }

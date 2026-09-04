@@ -1,10 +1,11 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import { logger } from "./lib/logger";
 
 const dbPath = path.join(process.cwd(), 'sqlite.db');
 const db = new Database(dbPath);
 
-console.log('[MIGRATION] Starting classroom 0 title update...');
+logger.info('[MIGRATION] Starting classroom 0 title update...');
 
 try {
   // Get all materials with classroom 0 that have "0. osztály" in title
@@ -15,10 +16,10 @@ try {
     AND (title LIKE '%0. osztály%' OR title LIKE '%0.osztály%')
   `).all();
 
-  console.log(`[MIGRATION] Found ${materials.length} materials to update`);
+  logger.info(`[MIGRATION] Found ${materials.length} materials to update`);
 
   if (materials.length === 0) {
-    console.log('[MIGRATION] ✅ No materials need updating');
+    logger.info('[MIGRATION] ✅ No materials need updating');
     process.exit(0);
   }
 
@@ -30,7 +31,7 @@ try {
   `);
 
   let updated = 0;
-  for (const material of materials as any[]) {
+  for (const material of materials as Array<{ id: string; title: string; classroom: number }>) {
     const oldTitle = material.title;
     // Replace both "0. osztály" and "0.osztály" with "Programozási alapismeretek"
     const newTitle = oldTitle
@@ -39,16 +40,16 @@ try {
     
     if (oldTitle !== newTitle) {
       updateStmt.run(newTitle, material.id);
-      console.log(`[MIGRATION] ✅ Updated: "${oldTitle}" → "${newTitle}"`);
+      logger.info(`[MIGRATION] ✅ Updated: "${oldTitle}" → "${newTitle}"`);
       updated++;
     }
   }
 
-  console.log(`[MIGRATION] ✅ Successfully updated ${updated} material titles`);
-  console.log('[MIGRATION] ✅ Migration complete!');
+  logger.info(`[MIGRATION] ✅ Successfully updated ${updated} material titles`);
+  logger.info('[MIGRATION] ✅ Migration complete!');
 
 } catch (error) {
-  console.error('[MIGRATION] ❌ Error:', error);
+  logger.error('[MIGRATION] ❌ Error:', error);
   process.exit(1);
 } finally {
   db.close();

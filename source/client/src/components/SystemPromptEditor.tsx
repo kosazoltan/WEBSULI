@@ -19,6 +19,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { logger } from "../lib/logger";
 
 interface SystemPromptEditorProps {
   promptId: string;
@@ -70,7 +71,7 @@ export default function SystemPromptEditor({
         }
       }
     } catch (error) {
-      console.error('Failed to load system prompt:', error);
+      logger.error('Failed to load system prompt:', error);
       setPrompt(defaultPrompt);
       if (onPromptChange) {
         onPromptChange(defaultPrompt);
@@ -118,7 +119,7 @@ export default function SystemPromptEditor({
         description: "A system prompt sikeresen frissítve.",
       });
     } catch (error) {
-      console.error('Failed to save system prompt:', error);
+      logger.error('Failed to save system prompt:', error);
       toast({
         title: "❌ Hiba",
         description: "Nem sikerült menteni a system promptot.",

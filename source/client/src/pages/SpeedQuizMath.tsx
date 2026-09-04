@@ -114,7 +114,7 @@ const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {
 
 function generatedTaskForGrade(level: GradeLevel): MathTask {
   const roll = Math.random();
-  let prompt: string | null = null;
+  let prompt: string | null;
   let result: number | null = null;
 
   if (level === 3) {

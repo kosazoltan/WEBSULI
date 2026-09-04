@@ -2,10 +2,11 @@
 // Anyagok Profiknak Platform
 
 import { apiRequest } from "@/lib/queryClient";
+import { logger } from "./logger";
 
 const isDev = import.meta.env.DEV;
-const log = (...args: unknown[]) => isDev && console.log('[Push]', ...args);
-const logError = (...args: unknown[]) => console.error('[Push]', ...args);
+const log = (...args: unknown[]) => isDev && logger.info('[Push]', ...args);
+const logError = (...args: unknown[]) => logger.error('[Push]', ...args);
 
 /**
  * Convert VAPID public key from base64 to Uint8Array for browser API

@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { logger } from "../lib/logger";
 
 export default function BackupManager() {
   const { toast } = useToast();
@@ -57,7 +58,7 @@ export default function BackupManager() {
         description: "A letöltés megkezdődött.",
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült exportálni a biztonsági másolatot",
@@ -72,9 +73,9 @@ export default function BackupManager() {
       const text = await file.text();
       const backupData = JSON.parse(text);
       
-      return await apiRequest("POST", "/api/admin/backups/import", { backupData });
+      return await apiRequest<{ materialsCount: number }>("POST", "/api/admin/backups/import", { backupData });
     },
-    onSuccess: (response: any) => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       toast({
         title: "Biztonsági másolat importálva",
@@ -86,7 +87,7 @@ export default function BackupManager() {
         fileInputRef.current.value = '';
       }
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült importálni a biztonsági másolatot",
@@ -119,9 +120,9 @@ export default function BackupManager() {
   // Production → Dev sync mutation
   const syncFromProductionMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/admin/sync-from-production", {});
+      return await apiRequest<{ success: boolean; message?: string }>("POST", "/api/admin/sync-from-production", {});
     },
-    onSuccess: (response: any) => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       toast({
         title: "✅ Szinkronizálás sikeres",
@@ -129,12 +130,13 @@ export default function BackupManager() {
       });
       setShowSyncDialog(false);
     },
-    onError: (error: any) => {
-      console.error('[SYNC ERROR] Full error:', error);
+    onError: (error) => {
+      logger.error('[SYNC ERROR] Full error:', error);
       
       // Extract detailed error information
-      const errorMessage = error.error || error.message || "Nem sikerült szinkronizálni az éles adatbázist";
-      const errorDetails = error.details || '';
+      const detail = error as Error & { error?: string; details?: string };
+      const errorMessage = detail.error || error.message || "Nem sikerült szinkronizálni az éles adatbázist";
+      const errorDetails = detail.details || '';
       
       toast({
         title: "❌ Szinkronizálási hiba",
@@ -337,12 +339,12 @@ export default function BackupManager() {
                     title: "✅ Forráskód letöltve",
                     description: "A ZIP fájl letöltése megkezdődött",
                   });
-                } catch (error: any) {
-                  console.error('Download error:', error);
+                } catch (error) {
+                  logger.error('Download error:', error);
                   toast({
                     variant: "destructive",
                     title: "❌ Letöltési hiba",
-                    description: error.message || "Nem sikerült letölteni a forráskódot",
+                    description: error instanceof Error ? error.message : "Nem sikerült letölteni a forráskódot",
                   });
                 }
               }}

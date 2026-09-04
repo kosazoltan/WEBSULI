@@ -1,17 +1,18 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { logger } from "./lib/logger";
 
 const dbPath = path.join(process.cwd(), 'sqlite.db');
 const backupPath = path.join(process.cwd(), 'neon-backup.json');
 
-console.log('[RESTORE] Starting data restore from neon-backup.json');
-console.log('[RESTORE] Database:', dbPath);
-console.log('[RESTORE] Backup file:', backupPath);
+logger.info('[RESTORE] Starting data restore from neon-backup.json');
+logger.info('[RESTORE] Database:', dbPath);
+logger.info('[RESTORE] Backup file:', backupPath);
 
 // Read backup file
 const backupData = JSON.parse(fs.readFileSync(backupPath, 'utf-8'));
-console.log('[RESTORE] Backup loaded:', Object.keys(backupData).length, 'tables');
+logger.info('[RESTORE] Backup loaded:', Object.keys(backupData).length, 'tables');
 
 // Initialize database
 const db = new Database(dbPath);
@@ -19,11 +20,11 @@ db.pragma('journal_mode = WAL');
 
 try {
   // Begin transaction
-  console.log('[RESTORE] Starting transaction...');
+  logger.info('[RESTORE] Starting transaction...');
   db.exec('BEGIN TRANSACTION');
 
   // 1. Clear existing data (in reverse dependency order)
-  console.log('[RESTORE] Clearing existing data...');
+  logger.info('[RESTORE] Clearing existing data...');
   db.exec('DELETE FROM email_logs');
   db.exec('DELETE FROM material_likes');
   db.exec('DELETE FROM material_stats');
@@ -36,11 +37,11 @@ try {
   db.exec('DELETE FROM email_subscriptions');
   db.exec('DELETE FROM users');
   
-  console.log('[RESTORE] Existing data cleared');
+  logger.info('[RESTORE] Existing data cleared');
 
   // 2. Restore users
   const users = backupData.users || [];
-  console.log(`[RESTORE] Restoring ${users.length} users...`);
+  logger.info(`[RESTORE] Restoring ${users.length} users...`);
   const insertUser = db.prepare(`
     INSERT INTO users (id, email, last_seen_at, created_at)
     VALUES (?, ?, ?, ?)
@@ -57,7 +58,7 @@ try {
 
   // 3. Restore html_files (materials)
   const htmlFiles = backupData.htmlFiles || backupData.html_files || [];
-  console.log(`[RESTORE] Restoring ${htmlFiles.length} materials...`);
+  logger.info(`[RESTORE] Restoring ${htmlFiles.length} materials...`);
   const insertHtmlFile = db.prepare(`
     INSERT INTO html_files (id, user_id, title, content, description, classroom, content_type, display_order, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -79,7 +80,7 @@ try {
 
   // 4. Restore email_subscriptions
   const emailSubscriptions = backupData.emailSubscriptions || backupData.email_subscriptions || [];
-  console.log(`[RESTORE] Restoring ${emailSubscriptions.length} email subscriptions...`);
+  logger.info(`[RESTORE] Restoring ${emailSubscriptions.length} email subscriptions...`);
   const insertEmailSubscription = db.prepare(`
     INSERT INTO email_subscriptions (user_id, classrooms, created_at, updated_at)
     VALUES (?, ?, ?, ?)
@@ -96,7 +97,7 @@ try {
 
   // 5. Restore extra_email_addresses
   const extraEmails = backupData.extraEmails || backupData.extra_emails || backupData.extraEmailAddresses || backupData.extra_email_addresses || [];
-  console.log(`[RESTORE] Restoring ${extraEmails.length} extra emails...`);
+  logger.info(`[RESTORE] Restoring ${extraEmails.length} extra emails...`);
   const insertExtraEmail = db.prepare(`
     INSERT INTO extra_email_addresses (id, email, classrooms, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?)
@@ -115,7 +116,7 @@ try {
 
   // 6. Restore material_views
   const materialViews = backupData.materialViews || backupData.material_views || [];
-  console.log(`[RESTORE] Restoring ${materialViews.length} material views...`);
+  logger.info(`[RESTORE] Restoring ${materialViews.length} material views...`);
   const insertMaterialView = db.prepare(`
     INSERT INTO material_views (id, material_id, user_id, viewed_at, user_agent)
     VALUES (?, ?, ?, ?, ?)
@@ -133,7 +134,7 @@ try {
 
   // 7. Restore backups
   const backups = backupData.backups || [];
-  console.log(`[RESTORE] Restoring ${backups.length} backups...`);
+  logger.info(`[RESTORE] Restoring ${backups.length} backups...`);
   const insertBackup = db.prepare(`
     INSERT INTO backups (id, name, created_at, data)
     VALUES (?, ?, ?, ?)
@@ -150,7 +151,7 @@ try {
 
   // 8. Restore tags
   const tags = backupData.tags || [];
-  console.log(`[RESTORE] Restoring ${tags.length} tags...`);
+  logger.info(`[RESTORE] Restoring ${tags.length} tags...`);
   const insertTag = db.prepare(`
     INSERT INTO tags (id, name, description, color, created_at)
     VALUES (?, ?, ?, ?, ?)
@@ -168,7 +169,7 @@ try {
 
   // 9. Restore system_prompts
   const systemPrompts = backupData.systemPrompts || backupData.system_prompts || [];
-  console.log(`[RESTORE] Restoring ${systemPrompts.length} system prompts...`);
+  logger.info(`[RESTORE] Restoring ${systemPrompts.length} system prompts...`);
   const insertSystemPrompt = db.prepare(`
     INSERT INTO system_prompts (id, name, prompt, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?)
@@ -186,7 +187,7 @@ try {
 
   // 10. Restore email_logs
   const emailLogs = backupData.emailLogs || backupData.email_logs || [];
-  console.log(`[RESTORE] Restoring ${emailLogs.length} email logs...`);
+  logger.info(`[RESTORE] Restoring ${emailLogs.length} email logs...`);
   const insertEmailLog = db.prepare(`
     INSERT INTO email_logs (id, html_file_id, recipient_email, status, error, resend_id, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -206,7 +207,7 @@ try {
 
   // Commit transaction
   db.exec('COMMIT');
-  console.log('[RESTORE] ✅ Transaction committed successfully!');
+  logger.info('[RESTORE] ✅ Transaction committed successfully!');
 
   // Verify results
   const counts = {
@@ -219,32 +220,32 @@ try {
     emailLogs: db.prepare('SELECT COUNT(*) as count FROM email_logs').get() as { count: number },
   };
 
-  console.log('\n[RESTORE] ✅ DATA RESTORE COMPLETE!');
-  console.log('[RESTORE] Final counts:');
-  console.log(`  - Users: ${counts.users.count}`);
-  console.log(`  - Materials (html_files): ${counts.htmlFiles.count}`);
-  console.log(`  - Material views: ${counts.materialViews.count}`);
-  console.log(`  - Tags: ${counts.tags.count}`);
-  console.log(`  - System prompts: ${counts.systemPrompts.count}`);
-  console.log(`  - Backups: ${counts.backups.count}`);
-  console.log(`  - Email logs: ${counts.emailLogs.count}`);
+  logger.info('\n[RESTORE] ✅ DATA RESTORE COMPLETE!');
+  logger.info('[RESTORE] Final counts:');
+  logger.info(`  - Users: ${counts.users.count}`);
+  logger.info(`  - Materials (html_files): ${counts.htmlFiles.count}`);
+  logger.info(`  - Material views: ${counts.materialViews.count}`);
+  logger.info(`  - Tags: ${counts.tags.count}`);
+  logger.info(`  - System prompts: ${counts.systemPrompts.count}`);
+  logger.info(`  - Backups: ${counts.backups.count}`);
+  logger.info(`  - Email logs: ${counts.emailLogs.count}`);
   
   // Verify specific materials exist
   const sampleMaterials = db.prepare('SELECT id, title, classroom FROM html_files LIMIT 5').all();
-  console.log('\n[RESTORE] Sample materials:');
+  logger.info('\n[RESTORE] Sample materials:');
   for (const mat of sampleMaterials) {
     const m = mat as { title: string; classroom: string };
-    console.log(`  - ${m.title} (Classroom: ${m.classroom})`);
+    logger.info(`  - ${m.title} (Classroom: ${m.classroom})`);
   }
 
 } catch (error) {
-  console.error('[RESTORE] ❌ Error during restore:', error);
+  logger.error('[RESTORE] ❌ Error during restore:', error);
   db.exec('ROLLBACK');
-  console.error('[RESTORE] Transaction rolled back');
+  logger.error('[RESTORE] Transaction rolled back');
   process.exit(1);
 } finally {
   db.close();
 }
 
-console.log('\n[RESTORE] Database connection closed');
+logger.info('\n[RESTORE] Database connection closed');
 process.exit(0);

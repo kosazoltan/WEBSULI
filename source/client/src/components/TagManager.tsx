@@ -61,7 +61,7 @@ export default function TagManager() {
       setNewTagDescription("");
       setNewTagColor("#3b82f6");
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült létrehozni a tag-et",
@@ -83,7 +83,7 @@ export default function TagManager() {
       });
       setDeleteTagId(null);
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült törölni a tag-et",

@@ -2,6 +2,7 @@
 import pg from 'pg';
 import fs from 'fs';
 import { config } from 'dotenv';
+import { logger } from "../lib/logger";
 config();
 
 const { Pool } = pg;
@@ -17,19 +18,20 @@ const tables = [
 ];
 
 async function run() {
-    console.log('📦 Starting full database backup to JSON files...');
+    logger.info('📦 Starting full database backup to JSON files...');
     if (!fs.existsSync('backups')) fs.mkdirSync('backups');
 
     for (const table of tables) {
         try {
             const result = await pool.query(`SELECT * FROM "${table}"`);
             fs.writeFileSync(`backups/${table}_backup.json`, JSON.stringify(result.rows, null, 2));
-            console.log(`✅ ${table}: ${result.rowCount} rows saved to backups/${table}_backup.json`);
-        } catch (e: any) {
-            console.error(`❌ ${table} error: ${e.message}`);
+            logger.info(`✅ ${table}: ${result.rowCount} rows saved to backups/${table}_backup.json`);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            logger.error(`❌ ${table} error: ${msg}`);
         }
     }
-    console.log('🎉 All backups completed!');
+    logger.info('🎉 All backups completed!');
     process.exit(0);
 }
-run().catch(console.error);
+run().catch((error: unknown) => logger.error(error));

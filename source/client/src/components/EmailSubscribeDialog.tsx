@@ -78,7 +78,7 @@ export default function EmailSubscribeDialog() {
         setIsSuccess(false);
       }, 2000);
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba történt",
         description: error.message || "Nem sikerült feliratkozni. Próbáld újra később.",

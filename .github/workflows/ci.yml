@@ -33,8 +33,8 @@ jobs:
       - name: TypeScript check (tests)
         run: npx tsc --noEmit -p tsconfig.test.json
 
-      - name: ESLint (max 989 warnings - baseline, must not grow)
-        run: npx eslint client/src server --max-warnings 989
+      - name: ESLint (0 warnings - warnings are fixed, not tolerated)
+        run: npx eslint client/src server --max-warnings 0
 
   unit-tests:
     name: Unit Tests

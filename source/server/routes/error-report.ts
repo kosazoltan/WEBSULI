@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import type { ErrorReportPayload } from "../lib/error-mailer";
+import { logger } from "../lib/logger";
 
 const MAX_LENGTHS = {
   errorType: 50,
@@ -59,7 +60,7 @@ export function verifyErrorReportSignature(req: Request, res: Response, next: Ne
       res.status(503).json({ error: "error reporting not configured" });
       return;
     }
-    console.warn("[error-report route] ERRORLOG_HMAC_SECRET not set; accepting unsigned dev request.");
+    logger.warn("[error-report route] ERRORLOG_HMAC_SECRET not set; accepting unsigned dev request.");
     next();
     return;
   }
@@ -115,7 +116,7 @@ export function createErrorReportRouter(
 
       res.status(202).json({ ok: true });
     } catch (err) {
-      console.error("[error-report route]", err);
+      logger.error("[error-report route]", err);
       res.status(500).json({ error: "Internal error" });
     }
   });

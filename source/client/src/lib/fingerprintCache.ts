@@ -1,4 +1,5 @@
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
+import { logger } from "./logger";
 
 // Singleton fingerprint cache to avoid multiple FingerprintJS loads
 let fingerprintCache: string | null = null;
@@ -23,7 +24,7 @@ export async function getFingerprint(): Promise<string> {
       fingerprintCache = result.visitorId;
       return fingerprintCache;
     } catch (error) {
-      console.error("Failed to get fingerprint:", error);
+      logger.error("Failed to get fingerprint:", error);
       fingerprintCache = "anonymous";
       return fingerprintCache;
     } finally {

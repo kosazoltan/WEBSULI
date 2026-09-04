@@ -60,7 +60,7 @@ export default function ExtraEmailsManager() {
         description: "Az e-mail cím sikeresen hozzáadásra került.",
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült hozzáadni az e-mail címet",
@@ -82,7 +82,7 @@ export default function ExtraEmailsManager() {
         description: "Az e-mail cím osztályai sikeresen módosultak.",
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült módosítani az osztályokat",
@@ -104,7 +104,7 @@ export default function ExtraEmailsManager() {
       });
       setDeleteEmailId(null);
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült törölni az e-mail címet",
@@ -131,7 +131,7 @@ export default function ExtraEmailsManager() {
         description: `${data?.updated ?? 0} címzett (extra e-mail + feliratkozó) osztálya egyel feljebb lépett (max 12, a 0-s Programozás kategória változatlan).`,
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült léptetni az osztályokat",

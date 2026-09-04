@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { logger } from "../lib/logger";
 
 /**
  * AI Response Cache System
@@ -65,7 +66,7 @@ export class AICache {
     }
 
     this.hits++;
-    console.log(`[AICache] Cache HIT for key: ${key.substring(0, 16)}...`);
+    logger.info(`[AICache] Cache HIT for key: ${key.substring(0, 16)}...`);
     return entry.content;
   }
 
@@ -89,7 +90,7 @@ export class AICache {
       model,
     });
 
-    console.log(`[AICache] Cache SET for key: ${key.substring(0, 16)}... (${this.cache.size}/${this.maxSize})`);
+    logger.info(`[AICache] Cache SET for key: ${key.substring(0, 16)}... (${this.cache.size}/${this.maxSize})`);
   }
 
   /**
@@ -98,7 +99,7 @@ export class AICache {
   invalidate(key: string): boolean {
     const deleted = this.cache.delete(key);
     if (deleted) {
-      console.log(`[AICache] Cache INVALIDATED for key: ${key.substring(0, 16)}...`);
+      logger.info(`[AICache] Cache INVALIDATED for key: ${key.substring(0, 16)}...`);
     }
     return deleted;
   }
@@ -110,7 +111,7 @@ export class AICache {
     this.cache.clear();
     this.hits = 0;
     this.misses = 0;
-    console.log('[AICache] Cache CLEARED');
+    logger.info('[AICache] Cache CLEARED');
   }
 
   /**
@@ -133,7 +134,7 @@ export class AICache {
     });
 
     if (removed > 0) {
-      console.log(`[AICache] Cleanup: removed ${removed} expired entries`);
+      logger.info(`[AICache] Cleanup: removed ${removed} expired entries`);
     }
   }
 

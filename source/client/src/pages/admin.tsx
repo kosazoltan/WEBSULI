@@ -71,12 +71,14 @@ import LessonStudioPanel from "@/components/studio/LessonStudioPanel";
 import BackupManager from "@/components/BackupManager";
 import TagManager from "@/components/TagManager";
 import FileEditDialog from "@/components/FileEditDialog";
+import type { HtmlFileApi } from "@/components/AdminFileDashboard";
 import EmailSendDialog from "@/components/EmailSendDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { AuthStatus } from "@/components/AuthStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
+import { logger } from "../lib/logger";
 
 // AUTH ENABLED - Only admin emails can access protected features
 
@@ -94,27 +96,27 @@ function AdminFilesTab() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showUploadZone, setShowUploadZone] = useState(false);
-  const [editingFile, setEditingFile] = useState<any>(null);
-  const [sendingEmailFile, setSendingEmailFile] = useState<any>(null);
+  const [editingFile, setEditingFile] = useState<HtmlFileApi | null>(null);
+  const [sendingEmailFile, setSendingEmailFile] = useState<HtmlFileApi | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
 
-  const { data: files = [], isLoading } = useQuery<any[]>({
+  const { data: files = [], isLoading } = useQuery<HtmlFileApi[]>({
     queryKey: ["/api/html-files"],
   });
 
   const uploadMutation = useMutation({
     mutationFn: async (data: { title: string; content: string; description?: string; classroom: number }) => {
-      console.log('[ADMIN UPLOAD] Starting upload, content size:', data.content?.length || 0);
-      const result = await apiRequest("POST", "/api/html-files", data);
-      console.log('[ADMIN UPLOAD] Upload response:', result);
+      logger.info('[ADMIN UPLOAD] Starting upload, content size:', data.content?.length || 0);
+      const result = await apiRequest<{ title?: string }>("POST", "/api/html-files", data);
+      logger.info('[ADMIN UPLOAD] Upload response:', result);
       return result;
     },
     onSuccess: async (data) => {
-      console.log('[ADMIN UPLOAD] Success! Force refetching...', data);
+      logger.info('[ADMIN UPLOAD] Success! Force refetching...', data);
       // Force remove cache and refetch fresh data
       queryClient.removeQueries({ queryKey: ["/api/html-files"] });
       await queryClient.refetchQueries({ queryKey: ["/api/html-files"], type: 'all' });
-      console.log('[ADMIN UPLOAD] Refetch complete');
+      logger.info('[ADMIN UPLOAD] Refetch complete');
       setShowUploadZone(false);
       toast({
         title: "✅ Sikeres feltöltés!",
@@ -122,7 +124,7 @@ function AdminFilesTab() {
       });
     },
     onError: (error: Error) => {
-      console.error('[ADMIN UPLOAD] Error:', error);
+      logger.error('[ADMIN UPLOAD] Error:', error);
       toast({
         title: "❌ Hiba történt",
         description: error.message || "Ismeretlen hiba történt a feltöltés során",
@@ -154,13 +156,13 @@ function AdminFilesTab() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      console.log('[ADMIN DELETE] Deleting file:', id);
+      logger.info('[ADMIN DELETE] Deleting file:', id);
       await apiRequest("DELETE", `/api/html-files/${id}`);
-      console.log('[ADMIN DELETE] Delete successful');
+      logger.info('[ADMIN DELETE] Delete successful');
       return id;
     },
     onSuccess: async (deletedId) => {
-      console.log('[ADMIN DELETE] Force invalidating cache for deleted:', deletedId);
+      logger.info('[ADMIN DELETE] Force invalidating cache for deleted:', deletedId);
       
       // CRITICAL: Invalidate ALL cache entries related to this material
       // 1. Invalidate material list query (used on Home and Admin pages)
@@ -175,9 +177,9 @@ function AdminFilesTab() {
       // 4. Invalidate batch likes query if exists
       queryClient.setQueriesData(
         { queryKey: ["/api/materials/likes/batch"] },
-        (oldData: any) => {
+        (oldData) => {
           if (oldData && typeof oldData === 'object') {
-            const newData = { ...oldData };
+            const newData = { ...oldData } as Record<string, unknown>;
             delete newData[deletedId];
             return newData;
           }
@@ -214,16 +216,16 @@ function AdminFilesTab() {
               }
             }
           }
-          console.log('[ADMIN DELETE] Service Worker cache cleared for material:', deletedId);
+          logger.info('[ADMIN DELETE] Service Worker cache cleared for material:', deletedId);
         } catch (swError) {
-          console.warn('[ADMIN DELETE] Service Worker cache clear warning:', swError);
+          logger.warn('[ADMIN DELETE] Service Worker cache clear warning:', swError);
         }
       }
       
       // 6. Force refetch material list to update UI immediately
       await queryClient.refetchQueries({ queryKey: ["/api/html-files"], type: 'all' });
       
-      console.log('[ADMIN DELETE] Cache invalidation complete');
+      logger.info('[ADMIN DELETE] Cache invalidation complete');
       setDeletingFileId(null);
       toast({
         title: "Törölve",
@@ -231,7 +233,7 @@ function AdminFilesTab() {
       });
     },
     onError: (error: Error) => {
-      console.error('[ADMIN DELETE] Error:', error);
+      logger.error('[ADMIN DELETE] Error:', error);
       setDeletingFileId(null);
       toast({
         title: "Hiba történt",
@@ -241,7 +243,7 @@ function AdminFilesTab() {
     },
   });
 
-  const handleViewFile = (file: any) => {
+  const handleViewFile = (file: HtmlFileApi) => {
     if (file.contentType === 'pdf') {
       setLocation(`/materials/pdf/${file.id}`);
     } else {
@@ -409,7 +411,7 @@ export default function Admin() {
       });
       setDeleteUserId(null);
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült törölni a felhasználót",
@@ -435,7 +437,7 @@ export default function Admin() {
           : "A felhasználó tiltása fel lett oldva.",
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült módosítani a tiltás állapotát",
@@ -459,7 +461,7 @@ export default function Admin() {
         description: `A felhasználó mostantól ${isAdmin ? 'admin' : 'normál felhasználó'}.`,
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba",
         description: error.message || "Nem sikerült módosítani a jogosultságot",
@@ -694,11 +696,11 @@ export default function Admin() {
                     title: "Forráskód letöltve",
                     description: "A teljes forráskód sikeresen letöltve.",
                   });
-                } catch (error: any) {
+                } catch (error) {
                   toast({
                     variant: "destructive",
                     title: "Letöltési hiba",
-                    description: error.message || "Nem sikerült letölteni a forráskódot",
+                    description: error instanceof Error ? error.message : "Nem sikerült letölteni a forráskódot",
                   });
                 }
               }}

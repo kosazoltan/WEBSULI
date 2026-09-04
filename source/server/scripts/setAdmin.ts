@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { config } from 'dotenv';
+import { logger } from "../lib/logger";
 config();
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -9,7 +10,7 @@ async function run() {
 
     // First check if user exists
     const check = await pool.query(`SELECT id, email, is_admin FROM users WHERE email = $1`, [email]);
-    console.log('Current user:', check.rows[0] || 'NOT FOUND');
+    logger.info('Current user:', check.rows[0] || 'NOT FOUND');
 
     if (check.rows.length === 0) {
         // Create admin user
@@ -18,15 +19,15 @@ async function run() {
             VALUES ($1, true, 'Zoltán', 'Kósa')
             RETURNING id, email, is_admin
         `, [email]);
-        console.log('Created admin user:', insert.rows[0]);
+        logger.info('Created admin user:', insert.rows[0]);
     } else {
         // Update existing to admin
         const update = await pool.query(`
             UPDATE users SET is_admin = true WHERE email = $1 RETURNING id, email, is_admin
         `, [email]);
-        console.log('Updated to admin:', update.rows[0]);
+        logger.info('Updated to admin:', update.rows[0]);
     }
     await pool.end();
     process.exit(0);
 }
-run().catch(e => { console.error(e); process.exit(1); });
+run().catch(e => { logger.error(e); process.exit(1); });

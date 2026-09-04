@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Send, Loader2, Mail, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { logger } from "../lib/logger";
 
 interface EmailSendDialogProps {
   isOpen: boolean;
@@ -119,7 +120,7 @@ export default function EmailSendDialog({
           await apiRequest("POST", `/api/html-files/${fileId}/send-email`, { email });
           successCount++;
         } catch (error) {
-          console.error('Failed to send email:', { email, error });
+          logger.error('Failed to send email:', { email, error });
           failCount++;
         }
       }
@@ -144,10 +145,10 @@ export default function EmailSendDialog({
         setSelectedEmails(new Set());
         onClose();
       }
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Hiba történt",
-        description: error.message || "Az email küldése sikertelen",
+        description: error instanceof Error ? error.message : "Az email küldése sikertelen",
         variant: "destructive",
       });
     } finally {

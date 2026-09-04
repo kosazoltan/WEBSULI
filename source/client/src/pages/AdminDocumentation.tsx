@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Info
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Link, useLocation } from "wouter";
@@ -914,7 +915,7 @@ export default function AdminDocumentation() {
 
 // Helper Components
 
-function FeatureCard({ icon: Icon, title, description }: { icon: any; title: string; description: string }) {
+function FeatureCard({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
   return (
     <div className="border rounded-lg p-4 hover-elevate">
       <div className="flex items-start gap-3">
@@ -943,7 +944,7 @@ function QuickLinkCard({ title, description, tab, badge }: { title: string; desc
   );
 }
 
-function PhaseCard({ number, title, icon: Icon, steps, tips }: { number: number; title: string; icon: any; steps: string[]; tips: string[] }) {
+function PhaseCard({ number, title, icon: Icon, steps, tips }: { number: number; title: string; icon: LucideIcon; steps: string[]; tips: string[] }) {
   return (
     <div className="border rounded-lg p-4">
       <div className="flex items-center gap-3 mb-3">
@@ -982,7 +983,7 @@ function PhaseCard({ number, title, icon: Icon, steps, tips }: { number: number;
   );
 }
 
-function ActionCard({ icon: Icon, title, description, details }: { icon: any; title: string; description: string; details: string[] }) {
+function ActionCard({ icon: Icon, title, description, details }: { icon: LucideIcon; title: string; description: string; details: string[] }) {
   return (
     <div className="border rounded-lg p-4">
       <div className="flex items-start gap-3 mb-3">

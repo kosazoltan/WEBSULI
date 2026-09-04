@@ -49,6 +49,7 @@ import {
 import { db } from "./db";
 import { eq, desc, gt, gte, lt, and, sql, inArray } from "drizzle-orm";
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
+import { logger } from "./lib/logger";
 
 // PostgreSQL native arrays and jsonb - no JSON parsing helpers needed
 
@@ -435,7 +436,7 @@ export class DatabaseStorage implements IStorage {
 
   async createHtmlFile(insertFile: InsertHtmlFile, userId: string, classroom: number): Promise<HtmlFile> {
     try {
-      console.log('[STORAGE] createHtmlFile called with:', {
+      logger.info('[STORAGE] createHtmlFile called with:', {
         titleLength: insertFile.title?.length || 0,
         contentLength: insertFile.content?.length || 0,
         classroom,
@@ -447,10 +448,10 @@ export class DatabaseStorage implements IStorage {
         .values({ ...insertFile, userId, classroom })
         .returning();
 
-      console.log('[STORAGE] File created successfully:', file.id);
+      logger.info('[STORAGE] File created successfully:', file.id);
       return file;
     } catch (error) {
-      console.error('[STORAGE] Error creating file:', error);
+      logger.error('[STORAGE] Error creating file:', error);
       throw error;
     }
   }
@@ -1307,8 +1308,8 @@ export class DatabaseStorage implements IStorage {
     systemPrompts?: SystemPrompt[];
     emailLogs?: EmailLog[];
   }): Promise<void> {
-    console.log('[RESTORE] Starting backup restoration...');
-    console.log('[RESTORE] Snapshot contents:', {
+    logger.info('[RESTORE] Starting backup restoration...');
+    logger.info('[RESTORE] Snapshot contents:', {
       htmlFiles: snapshotData.htmlFiles.length,
       users: snapshotData.users.length,
       extraEmails: snapshotData.extraEmails.length,
@@ -1328,7 +1329,7 @@ export class DatabaseStorage implements IStorage {
 
     // Single transaction for atomic restore
     await db.transaction(async (tx) => {
-      console.log('[RESTORE] Transaction started - deleting existing data...');
+      logger.info('[RESTORE] Transaction started - deleting existing data...');
 
       // Delete in reverse FK dependency order
       await tx.delete(materialLikes);
@@ -1350,44 +1351,44 @@ export class DatabaseStorage implements IStorage {
       await tx.delete(weeklyEmailReports);
       await tx.delete(scheduledJobs);
 
-      console.log('[RESTORE] All tables cleared');
+      logger.info('[RESTORE] All tables cleared');
 
       // Insert parent tables first
-      console.log('[RESTORE] Inserting users...');
+      logger.info('[RESTORE] Inserting users...');
       if (snapshotData.users.length > 0) {
         await tx.insert(users).values(snapshotData.users);
       }
 
-      console.log('[RESTORE] Inserting tags...');
+      logger.info('[RESTORE] Inserting tags...');
       if (snapshotData.tags && snapshotData.tags.length > 0) {
         await tx.insert(tags).values(snapshotData.tags);
       }
 
-      console.log('[RESTORE] Inserting system prompts...');
+      logger.info('[RESTORE] Inserting system prompts...');
       if (snapshotData.systemPrompts && snapshotData.systemPrompts.length > 0) {
         await tx.insert(systemPrompts).values(snapshotData.systemPrompts);
       }
 
       // Insert htmlFiles
-      console.log('[RESTORE] Inserting htmlFiles...');
+      logger.info('[RESTORE] Inserting htmlFiles...');
       if (snapshotData.htmlFiles.length > 0) {
         await tx.insert(htmlFiles).values(snapshotData.htmlFiles);
       }
 
       // Insert extra emails
-      console.log('[RESTORE] Inserting extra emails...');
+      logger.info('[RESTORE] Inserting extra emails...');
       if (snapshotData.extraEmails && snapshotData.extraEmails.length > 0) {
         await tx.insert(extraEmailAddresses).values(snapshotData.extraEmails);
       }
 
       // Insert email subscriptions
-      console.log('[RESTORE] Inserting email subscriptions...');
+      logger.info('[RESTORE] Inserting email subscriptions...');
       if (snapshotData.emailSubscriptions && snapshotData.emailSubscriptions.length > 0) {
         await tx.insert(emailSubscriptions).values(snapshotData.emailSubscriptions);
       }
 
       // Insert relation tables
-      console.log('[RESTORE] Inserting material views...');
+      logger.info('[RESTORE] Inserting material views...');
       if (snapshotData.materialViews && snapshotData.materialViews.length > 0) {
         // Chunk inserts for large datasets (200 rows per batch)
         const chunkSize = 200;
@@ -1397,7 +1398,7 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      console.log('[RESTORE] Inserting email logs...');
+      logger.info('[RESTORE] Inserting email logs...');
       if (snapshotData.emailLogs && snapshotData.emailLogs.length > 0) {
         // Chunk inserts for large datasets
         const chunkSize = 200;
@@ -1407,10 +1408,10 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      console.log('[RESTORE] Transaction completed successfully');
+      logger.info('[RESTORE] Transaction completed successfully');
     });
 
-    console.log('[RESTORE] ✅ Backup restoration complete!');
+    logger.info('[RESTORE] ✅ Backup restoration complete!');
   }
 
   // ==================== Improved Files Operations ====================
@@ -1504,7 +1505,7 @@ export class DatabaseStorage implements IStorage {
     if (updated.content?.length !== content.length) {
       throw new Error(`[DB] Content verification failed for ${id}: expected ${content.length} bytes, got ${updated.content?.length || 0} bytes`);
     }
-    console.log(`[DB] ✅ Improved file ${id} updated: status=${status}, contentLength=${updated.content?.length}`);
+    logger.info(`[DB] ✅ Improved file ${id} updated: status=${status}, contentLength=${updated.content?.length}`);
   }
 
   async deleteImprovedHtmlFile(id: string): Promise<boolean> {
@@ -1592,7 +1593,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 6. Update original file content (CRITICAL: Direct SQL update for content)
-      console.log(`[APPLY] Updating htmlFiles.id=${original.id}: improved.content.length=${improved.content?.length}, original.content.length=${original.content?.length}`);
+      logger.info(`[APPLY] Updating htmlFiles.id=${original.id}: improved.content.length=${improved.content?.length}, original.content.length=${original.content?.length}`);
       
       const [updated] = await tx
         .update(htmlFiles)
@@ -1612,7 +1613,7 @@ export class DatabaseStorage implements IStorage {
       if (updated.content?.length !== improved.content?.length) {
         throw new Error(`Content verification failed: expected ${improved.content?.length} bytes in htmlFiles, got ${updated.content?.length} bytes`);
       }
-      console.log(`[APPLY] ✅ htmlFiles.id=${original.id} updated: new content=${updated.content?.length} bytes, title=${updated.title}`);
+      logger.info(`[APPLY] ✅ htmlFiles.id=${original.id} updated: new content=${updated.content?.length} bytes, title=${updated.title}`);
 
       // 7. Update improved file status
       await tx

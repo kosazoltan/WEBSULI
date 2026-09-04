@@ -3,6 +3,7 @@ import { storage } from './storage';
 import fs from 'fs/promises'; // Async file I/O
 import fsSync from 'fs'; // For synchronous operations where needed
 import path from 'path';
+import { logger } from "./lib/logger";
 
 // Backup configuration
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
@@ -56,7 +57,7 @@ let pendingEventBackup: NodeJS.Timeout | null = null;
 // Ensure backup directory exists (synchronous on module load)
 if (!fsSync.existsSync(BACKUP_DIR)) {
   fsSync.mkdirSync(BACKUP_DIR, { recursive: true });
-  console.log('[AUTO-BACKUP] Created backups directory:', BACKUP_DIR);
+  logger.info('[AUTO-BACKUP] Created backups directory:', BACKUP_DIR);
 }
 
 /**
@@ -95,14 +96,14 @@ export async function createAutoBackup(reason: 'scheduled' | 'event' | 'pre-rest
     // Write to file (async to avoid blocking event loop)
     await fs.writeFile(filepath, JSON.stringify(backupData, null, 2), 'utf-8');
 
-    console.log(`[AUTO-BACKUP] ✅ Backup created: ${filename} (${snapshotData.htmlFiles.length} materials)`);
+    logger.info(`[AUTO-BACKUP] ✅ Backup created: ${filename} (${snapshotData.htmlFiles.length} materials)`);
 
     // Clean old backups
     await cleanOldBackups();
 
     return filename;
   } catch (error) {
-    console.error('[AUTO-BACKUP] ❌ Failed to create backup:', error);
+    logger.error('[AUTO-BACKUP] ❌ Failed to create backup:', error);
     return null;
   }
 }
@@ -132,17 +133,17 @@ async function cleanOldBackups(): Promise<number> {
       if (fileAge > maxAge) {
         await fs.unlink(filepath);
         deletedCount++;
-        console.log('[AUTO-BACKUP] 🗑️  Deleted old backup:', file);
+        logger.info('[AUTO-BACKUP] 🗑️  Deleted old backup:', file);
       }
     }
 
     if (deletedCount > 0) {
-      console.log('[AUTO-BACKUP] Cleaned', deletedCount, 'old backup(s)');
+      logger.info('[AUTO-BACKUP] Cleaned', deletedCount, 'old backup(s)');
     }
 
     return deletedCount;
   } catch (error) {
-    console.error('[AUTO-BACKUP] ❌ Failed to clean old backups:', error);
+    logger.error('[AUTO-BACKUP] ❌ Failed to clean old backups:', error);
     return 0;
   }
 }
@@ -172,7 +173,7 @@ export async function listBackups(): Promise<Array<{ filename: string; size: num
     const backupInfos = (await Promise.all(backupInfoPromises)).filter(Boolean) as Array<{ filename: string; size: number; created: Date }>;
     return backupInfos.sort((a, b) => b.created.getTime() - a.created.getTime());
   } catch (error) {
-    console.error('[AUTO-BACKUP] ❌ Failed to list backups:', error);
+    logger.error('[AUTO-BACKUP] ❌ Failed to list backups:', error);
     return [];
   }
 }
@@ -180,26 +181,26 @@ export async function listBackups(): Promise<Array<{ filename: string; size: num
 /**
  * Reads a specific backup file
  */
-export async function readBackup(filename: string): Promise<any | null> {
+export async function readBackup(filename: string): Promise<Record<string, unknown> | null> {
   try {
     // SECURITY: Use sanitized path helper to prevent path traversal
     const filepath = getSafeBackupPath(filename);
     if (!filepath) {
-      console.error('[AUTO-BACKUP] ❌ Invalid filename rejected:', String(filename).substring(0, 50));
+      logger.error('[AUTO-BACKUP] ❌ Invalid filename rejected:', String(filename).substring(0, 50));
       return null;
     }
     
     try {
       await fs.access(filepath);
     } catch {
-      console.error('[AUTO-BACKUP] ❌ Backup not found:', String(filename).substring(0, 50));
+      logger.error('[AUTO-BACKUP] ❌ Backup not found:', String(filename).substring(0, 50));
       return null;
     }
 
     const content = await fs.readFile(filepath, 'utf-8');
     return JSON.parse(content);
   } catch (error) {
-    console.error('[AUTO-BACKUP] ❌ Failed to read backup:', error);
+    logger.error('[AUTO-BACKUP] ❌ Failed to read backup:', error);
     return null;
   }
 }
@@ -225,7 +226,7 @@ export function triggerEventBackup() {
       pendingEventBackup = null;
     }, EVENT_BACKUP_DEBOUNCE_MS - (now - lastEventBackupTime));
     
-    console.log('[AUTO-BACKUP] 📅 Event backup scheduled (debounced)');
+    logger.info('[AUTO-BACKUP] 📅 Event backup scheduled (debounced)');
   } else {
     // Create backup immediately
     createAutoBackup('event').then(() => {
@@ -240,17 +241,17 @@ export function triggerEventBackup() {
 export function startAutoBackupJob() {
   // Daily backup at 2:00 AM
   cron.schedule(BACKUP_SCHEDULE, async () => {
-    console.log('[AUTO-BACKUP] 🕒 Running scheduled daily backup...');
+    logger.info('[AUTO-BACKUP] 🕒 Running scheduled daily backup...');
     await createAutoBackup('scheduled');
   });
 
-  console.log(`[AUTO-BACKUP] ✅ Scheduled backup job started (daily at 02:00)`);
-  console.log(`[AUTO-BACKUP] 📁 Backup directory: ${BACKUP_DIR}`);
-  console.log(`[AUTO-BACKUP] ♻️  Retention: ${MAX_BACKUP_AGE_DAYS} days`);
+  logger.info(`[AUTO-BACKUP] ✅ Scheduled backup job started (daily at 02:00)`);
+  logger.info(`[AUTO-BACKUP] 📁 Backup directory: ${BACKUP_DIR}`);
+  logger.info(`[AUTO-BACKUP] ♻️  Retention: ${MAX_BACKUP_AGE_DAYS} days`);
 
   // Create initial backup on startup
   setTimeout(async () => {
-    console.log('[AUTO-BACKUP] Creating initial backup on startup...');
+    logger.info('[AUTO-BACKUP] Creating initial backup on startup...');
     await createAutoBackup('scheduled');
   }, 5000); // 5 second delay to ensure DB is ready
 }

@@ -19,6 +19,7 @@ import errorReportRouter from "./routes/error-report";
 import staticAuditRouter from "./routes/static-audit";
 import { aiPayloadGuard } from "./lib/ai-payload-guard";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
+import { logger } from "./lib/logger";
 
 const app = express();
 
@@ -406,7 +407,7 @@ app.use("/api/materials", (req, res, next) => {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -428,7 +429,7 @@ app.use((req, res, next) => {
       // SECURITY: Don't log full response bodies to avoid leaking PII (emails, names, etc.)
       // Only log metadata for debugging
       if (capturedJsonResponse) {
-        const safeMetadata: Record<string, any> = {};
+        const safeMetadata: Record<string, unknown> = {};
         if ("id" in capturedJsonResponse)
           safeMetadata.id = capturedJsonResponse.id;
         if ("message" in capturedJsonResponse)
@@ -484,7 +485,7 @@ app.use((req, res, next) => {
         testClient.release();
       }
     } catch (migrationError) {
-      console.error('[STARTUP] ⚠️ Migration check warning:', migrationError);
+      logger.error('[STARTUP] ⚠️ Migration check warning:', migrationError);
       // Don't crash - the server can still run if tables already exist
     }
 
@@ -525,7 +526,7 @@ app.use((req, res, next) => {
       const message = err.message || "Internal Server Error";
 
       // Log error details for debugging
-      console.error("Error handler:", {
+      logger.error("Error handler:", {
         status,
         message: err.message,
         stack: err.stack,
@@ -575,14 +576,14 @@ app.use((req, res, next) => {
           log("Graceful shutdown completed");
           process.exit(0);
         } catch (err) {
-          console.error("Error during shutdown:", err);
+          logger.error("Error during shutdown:", err);
           process.exit(1);
         }
       });
 
       // Force close after 30 seconds
       setTimeout(() => {
-        console.error(
+        logger.error(
           "Could not close connections in time, forcefully shutting down",
         );
         process.exit(1);
@@ -593,19 +594,19 @@ app.use((req, res, next) => {
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
     process.on("SIGINT", () => gracefulShutdown("SIGINT"));
   } catch (error) {
-    console.error("FATAL: Failed to start server");
-    console.error("Error details:", error);
+    logger.error("FATAL: Failed to start server");
+    logger.error("Error details:", error);
     if (error instanceof Error) {
-      console.error("Stack trace:", error.stack);
+      logger.error("Stack trace:", error.stack);
     }
 
     // Log environment info for debugging
-    console.error("Environment check:");
-    console.error("- NODE_ENV:", process.env.NODE_ENV);
-    console.error("- PORT:", process.env.PORT);
-    console.error("- DATABASE_URL exists:", !!process.env.DATABASE_URL);
-    console.error("- SESSION_SECRET exists:", !!process.env.SESSION_SECRET);
-    console.error("- ADMIN_EMAIL exists:", !!process.env.ADMIN_EMAIL);
+    logger.error("Environment check:");
+    logger.error("- NODE_ENV:", process.env.NODE_ENV);
+    logger.error("- PORT:", process.env.PORT);
+    logger.error("- DATABASE_URL exists:", !!process.env.DATABASE_URL);
+    logger.error("- SESSION_SECRET exists:", !!process.env.SESSION_SECRET);
+    logger.error("- ADMIN_EMAIL exists:", !!process.env.ADMIN_EMAIL);
 
     process.exit(1);
   }

@@ -9,6 +9,7 @@ import {
   teardownPushNotifications,
   getCurrentSubscription
 } from "@/lib/pushNotifications";
+import { logger } from "../lib/logger";
 
 export default function PushNotificationToggle() {
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -78,7 +79,7 @@ export default function PushNotificationToggle() {
         const { publicKey } = await response.json();
         
         if (!publicKey) {
-          console.error('VAPID public key not found');
+          logger.error('VAPID public key not found');
           toast({
             title: "Konfigurációs hiba",
             description: "A push értesítések nincsenek megfelelően konfigurálva.",
@@ -96,7 +97,7 @@ export default function PushNotificationToggle() {
         });
       }
     } catch (error) {
-      console.error('Push notification error:', error);
+      logger.error('Push notification error:', error);
       toast({
         title: "Hiba történt",
         description: error instanceof Error ? error.message : "Nem sikerült váltani az értesítéseket.",

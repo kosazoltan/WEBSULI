@@ -25,12 +25,17 @@ import {
   Lightbulb,
   LogIn
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+/** Egy SSE-stream JSON-csomagja a két csevegő-fázisban. */
+type StreamChunk = { type?: string; content?: string; html?: string; message?: string };
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import ChatInterface, { ChatMessage } from "./ChatInterface";
 import SystemPromptEditor from "./SystemPromptEditor";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
+import { logger } from "../lib/logger";
 
 type Phase = 'upload' | 'chatgpt' | 'claude' | 'preview';
 
@@ -274,7 +279,7 @@ export default function EnhancedMaterialCreator() {
     return updated;
   };
 
-  const phases: { id: Phase; label: string; icon: any }[] = [
+  const phases: { id: Phase; label: string; icon: LucideIcon }[] = [
     { id: 'upload', label: '1. Fájl feltöltés', icon: Upload },
     { id: 'chatgpt', label: '2. Szöveg generálás', icon: FileText },
     { id: 'claude', label: '3. HTML készítés', icon: Code },
@@ -350,8 +355,8 @@ export default function EnhancedMaterialCreator() {
 
       setCompletedPhases(prev => [...prev, 'upload']);
       
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
         toast({
           title: "Időtúllépés",
           description: "A szöveg elemzése túl sokáig tartott. Próbáld meg rövidebb szöveggel.",
@@ -360,7 +365,7 @@ export default function EnhancedMaterialCreator() {
       } else {
         toast({
           title: "Elemzési hiba",
-          description: error.message || 'Ismeretlen hiba történt',
+          description: error instanceof Error ? error.message : 'Ismeretlen hiba történt',
           variant: "destructive"
         });
       }
@@ -460,19 +465,19 @@ export default function EnhancedMaterialCreator() {
             
             // Check for conversion messages/warnings
             if (result.messages && result.messages.length > 0 && process.env.NODE_ENV === 'development') {
-              console.warn('[DOCX] Conversion warnings:', result.messages);
+              logger.warn('[DOCX] Conversion warnings:', result.messages);
             }
             
             // Store HTML content as text/html
             fileData = result.value; // This is the HTML string
             fileType = 'text/html';
             fileName = file.name;
-          } catch (docxError: any) {
-            console.error('[DOCX] Conversion failed:', docxError);
+          } catch (docxError) {
+            logger.error('[DOCX] Conversion failed:', docxError);
             throw new Error(
               `DOCX konverzió sikertelen (${file.name}). ` +
               `Kérlek próbáld meg PDF vagy JPG/PNG formátumban feltölteni. ` +
-              `Hiba: ${docxError.message || 'Ismeretlen hiba'}`,
+              `Hiba: ${docxError instanceof Error ? docxError.message : 'Ismeretlen hiba'}`,
               { cause: docxError }
             );
           }
@@ -489,7 +494,7 @@ export default function EnhancedMaterialCreator() {
               pdfjsInitialized = true;
             } catch (workerError) {
               if (process.env.NODE_ENV === 'development') {
-                console.error('[PDF Worker] Betöltési hiba:', workerError);
+                logger.error('[PDF Worker] Betöltési hiba:', workerError);
               }
               throw new Error(
                 'PDF worker inicializálása sikertelen. ' +
@@ -537,7 +542,7 @@ export default function EnhancedMaterialCreator() {
             
             if (!context) {
               if (process.env.NODE_ENV === 'development') {
-                console.error('[Canvas] Context létrehozása sikertelen', {
+                logger.error('[Canvas] Context létrehozása sikertelen', {
                   canvas: canvas,
                   browser: navigator.userAgent
                 });
@@ -651,8 +656,8 @@ export default function EnhancedMaterialCreator() {
 
       setCompletedPhases(prev => [...prev, 'upload']);
       
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
         toast({
           title: "Időtúllépés",
           description: "A fájlok elemzése túl sokáig tartott (180s). Próbáld kevesebb vagy kisebb fájllal.",
@@ -661,7 +666,7 @@ export default function EnhancedMaterialCreator() {
       } else {
         toast({
           title: "Elemzési hiba",
-          description: error.message || "Hiba történt a fájlok elemzése során",
+          description: error instanceof Error ? error.message : "Hiba történt a fájlok elemzése során",
           variant: "destructive"
         });
       }
@@ -727,7 +732,7 @@ export default function EnhancedMaterialCreator() {
             // A JSON.parse-t külön try-ba tettük, hogy az 'error' ág throw-ja
             // ne nyelődjön el a parse-hibákat elnyelő catch-ben, hanem a
             // külső catch-hez jusson és toast-oljon.
-            let parsed: any;
+            let parsed: StreamChunk;
             try {
               parsed = JSON.parse(data);
             } catch {
@@ -736,7 +741,7 @@ export default function EnhancedMaterialCreator() {
             }
 
             if (parsed.type === 'content_delta') {
-              assistantMessage += parsed.content;
+              assistantMessage += parsed.content ?? "";
               // Update the last assistant message with streaming content
               setChatGptMessages(prev => {
                 const newMessages = [...prev];
@@ -753,10 +758,10 @@ export default function EnhancedMaterialCreator() {
         }
       }
 
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "ChatGPT hiba",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Ismeretlen hiba',
         variant: "destructive"
       });
       // Remove the empty assistant message on error
@@ -835,7 +840,7 @@ export default function EnhancedMaterialCreator() {
             // A JSON.parse-t külön try-ba tettük, hogy az 'error' ág throw-ja
             // ne nyelődjön el a parse-hibákat elnyelő catch-ben, hanem a
             // külső catch-hez jusson és toast-oljon.
-            let parsed: any;
+            let parsed: StreamChunk;
             try {
               parsed = JSON.parse(data);
             } catch {
@@ -844,7 +849,7 @@ export default function EnhancedMaterialCreator() {
             }
 
             if (parsed.type === 'content_delta') {
-              assistantMessage += parsed.content;
+              assistantMessage += parsed.content ?? "";
               // Update the last assistant message with streaming content
               setClaudeMessages(prev => {
                 const newMessages = [...prev];
@@ -855,7 +860,7 @@ export default function EnhancedMaterialCreator() {
                 return newMessages;
               });
             } else if (parsed.type === 'html_generated') {
-              setGeneratedHtml(parsed.html);
+              setGeneratedHtml(parsed.html ?? "");
               toast({
                 title: "HTML elkészült!",
                 description: "Megtekintheted az előnézetben"
@@ -867,10 +872,10 @@ export default function EnhancedMaterialCreator() {
         }
       }
 
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Claude hiba",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Ismeretlen hiba',
         variant: "destructive"
       });
       // Remove the empty assistant message on error
@@ -929,9 +934,9 @@ export default function EnhancedMaterialCreator() {
       // Reset wizard
       resetWizard();
 
-    } catch (error: any) {
+    } catch (error) {
       // ✅ JAVÍTÁS: Részletesebb hibaüzenet
-      const errorMessage = error.message || 'Ismeretlen hiba történt a publikálás során.';
+      const errorMessage = error instanceof Error ? error.message : 'Ismeretlen hiba történt a publikálás során.';
       
       toast({
         title: "Publikálási hiba",
@@ -941,7 +946,7 @@ export default function EnhancedMaterialCreator() {
       
       // Log error only in development
       if (process.env.NODE_ENV === 'development') {
-        console.error('[EnhancedMaterialCreator] Publikálási hiba:', {
+        logger.error('[EnhancedMaterialCreator] Publikálási hiba:', {
           error: error,
           title: title,
           classroom: classroom,

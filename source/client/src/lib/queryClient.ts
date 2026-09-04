@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { logger } from "./logger";
 
 // A `preReadText` paraméter azért kell, mert a 403-as CSRF-ág már beolvasta
 // a body-t (res.text()) — a Response body csak egyszer olvasható, ismételt
@@ -71,8 +72,8 @@ const csrfTokenManager = new CSRFTokenManager();
 
 // Dev-only request logger — production buildben néma, hogy ne szemetelje
 // tele a konzolt (167 tananyagnál kérésenként 2 sor volt).
-const debugLog: typeof console.log = import.meta.env.DEV
-  ? console.log.bind(console)
+const debugLog: (...args: unknown[]) => void = import.meta.env.DEV
+  ? (...args: unknown[]) => logger.debug(...args)
   : () => {};
 
 // Retry helper with exponential backoff for mobile network reliability
@@ -80,29 +81,33 @@ async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
   baseDelay: number = 1000,
-  shouldRetry: (error: any) => boolean = () => true
+  shouldRetry: (error: unknown) => boolean = () => true
 ): Promise<T> {
-  let lastError: any;
+  let lastError: unknown;
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
-    } catch (error: any) {
+    } catch (error) {
       lastError = error;
-      
+
       // Don't retry on client errors (4xx) or if retry condition fails
-      if (!shouldRetry(error) || error.status >= 400 && error.status < 500) {
+      const status = typeof error === "object" && error !== null && "status" in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+      if (!shouldRetry(error) || (typeof status === "number" && status >= 400 && status < 500)) {
         throw error;
       }
-      
+
       // Last attempt - throw the error
       if (attempt === maxRetries) {
         throw error;
       }
-      
+
       // Calculate delay with exponential backoff + jitter
       const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
-      debugLog(`[RETRY] Attempt ${attempt + 1}/${maxRetries + 1} failed, retrying in ${Math.round(delay)}ms...`, error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      debugLog(`[RETRY] Attempt ${attempt + 1}/${maxRetries + 1} failed, retrying in ${Math.round(delay)}ms...`, message);
       
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -111,7 +116,7 @@ async function retryWithBackoff<T>(
   throw lastError;
 }
 
-export async function apiRequest<T = any>(
+export async function apiRequest<T = unknown>(
   method: string,
   url: string,
   data?: unknown | undefined,
@@ -137,7 +142,7 @@ export async function apiRequest<T = any>(
             const csrfToken = await csrfTokenManager.getToken();
             headers['X-CSRF-Token'] = csrfToken;
           } catch (error) {
-            console.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
+            logger.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
             // Continue anyway - backend will reject if CSRF required
           }
         }
@@ -161,7 +166,7 @@ export async function apiRequest<T = any>(
           const text = await res.text();
           forbiddenText = text;
           if (text.includes('CSRF') || text.includes('csrf')) {
-            console.warn('[CSRF] Token invalid, refreshing and retrying...');
+            logger.warn('[CSRF] Token invalid, refreshing and retrying...');
             csrfTokenManager.invalidate();
             
             // Retry with new token (fresh controller in case original timed out)
@@ -203,16 +208,16 @@ export async function apiRequest<T = any>(
         
         const result = await res.json();
         return result;
-      } catch (error: any) {
+      } catch (error) {
         clearTimeout(timeoutId);
         
-        if (error.name === 'AbortError') {
-          console.error('[API REQUEST] Timeout after', timeout, 'ms');
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.error('[API REQUEST] Timeout after', timeout, 'ms');
           throw new Error(`A kérés túllépte az időkorlátot (${timeout / 1000}s). Kérlek ellenőrizd az internetkapcsolatot!`, { cause: error });
         }
         
         if (error instanceof TypeError && error.message.includes('fetch')) {
-          console.error('[API REQUEST] Network error:', error.message);
+          logger.error('[API REQUEST] Network error:', error.message);
           throw new Error('Hálózati hiba: Nincs internetkapcsolat vagy a szerver nem érhető el.', { cause: error });
         }
         
@@ -221,11 +226,14 @@ export async function apiRequest<T = any>(
     },
     retries,
     1000, // 1 second base delay
-    (error: any) => {
+    (error: unknown) => {
       // Retry on network errors and server errors (5xx), but not on client errors (4xx)
-      return error.name === 'AbortError' || 
+      const status = typeof error === "object" && error !== null && "status" in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+      return (error instanceof Error && error.name === 'AbortError') ||
              (error instanceof TypeError && error.message.includes('fetch')) ||
-             (error.status && error.status >= 500);
+             (typeof status === "number" && status >= 500);
     }
   );
 }

@@ -68,31 +68,31 @@ export function setupAuth(app: Express) {
 
     passport.use(new LocalStrategy({ usernameField: 'email', passwordField: 'password' }, async (email, password, done) => {
         try {
-            console.log(`[AUTH] Login attempt for ${email}`);
+            logger.info(`[AUTH] Login attempt for ${email}`);
             const user = await storage.getUserByEmail(email);
 
             if (!user || !user.password) {
-                console.log(`[AUTH] User not found or no password`);
+                logger.info(`[AUTH] User not found or no password`);
                 return done(null, false, { message: "Hibás email vagy jelszó" });
             }
 
             const isValid = await bcrypt.compare(password, user.password);
             if (!isValid) {
-                console.log(`[AUTH] Invalid password`);
+                logger.info(`[AUTH] Invalid password`);
                 return done(null, false, { message: "Hibás email vagy jelszó" });
             }
 
-            console.log(`[AUTH] Login success for ${email}`);
+            logger.info(`[AUTH] Login success for ${email}`);
             return done(null, user);
         } catch (err) {
-            console.error(`[AUTH] Error during authentication:`, err);
+            logger.error(`[AUTH] Error during authentication:`, err);
             return done(err);
         }
     }));
 
     if (googleClientId && googleClientSecret) {
-        console.log('[AUTH] Setting up Google OAuth Strategy...');
-        console.log(`[AUTH] Callback URL: ${baseUrl}/auth/google/callback`);
+        logger.info('[AUTH] Setting up Google OAuth Strategy...');
+        logger.info(`[AUTH] Callback URL: ${baseUrl}/auth/google/callback`);
 
         passport.use(new GoogleStrategy({
             clientID: googleClientId,
@@ -101,7 +101,7 @@ export function setupAuth(app: Express) {
             scope: ['profile', 'email']
         }, async (accessToken, refreshToken, profile, done) => {
             try {
-                console.log(`[AUTH] Google login attempt for ${profile.emails?.[0]?.value}`);
+                logger.info(`[AUTH] Google login attempt for ${profile.emails?.[0]?.value}`);
                 const email = profile.emails?.[0]?.value;
 
                 if (!email) {
@@ -124,7 +124,7 @@ export function setupAuth(app: Express) {
 
                 return done(null, user);
             } catch (err) {
-                console.error(`[AUTH] Error during Google authentication:`, err);
+                logger.error(`[AUTH] Error during Google authentication:`, err);
                 return done(err);
             }
         }));
@@ -163,7 +163,7 @@ export function setupAuth(app: Express) {
             })(req, res, next);
         });
     } else {
-        console.warn('[AUTH] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing. Google Auth disabled.');
+        logger.warn('[AUTH] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing. Google Auth disabled.');
     }
 
     passport.serializeUser((user: Express.User, done) => {
@@ -193,7 +193,7 @@ export function setupAuth(app: Express) {
             try {
                 req.body = JSON.parse(req.body);
             } catch (e) {
-                console.error("[AUTH] JSON parse error:", e);
+                logger.error("[AUTH] JSON parse error:", e);
             }
         }
 

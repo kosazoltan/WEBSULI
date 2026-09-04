@@ -3,6 +3,7 @@ import { config } from "dotenv";
 import pg from "pg";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+import { logger } from "../lib/logger";
 
 // Manually load env from root .env file
 const __filename = fileURLToPath(import.meta.url);
@@ -12,24 +13,24 @@ config({ path: resolve(__dirname, "../../.env") });
 const { Pool } = pg;
 
 async function main() {
-    console.log("🚀 Starting import from Neon DB to Local Hostinger DB...");
+    logger.info("🚀 Starting import from Neon DB to Local Hostinger DB...");
 
     const sourceUrl = process.env.NEON_SOURCE_URL;
     const destUrl = process.env.DATABASE_URL;
 
     if (!sourceUrl) {
-        console.error("❌ NEON_SOURCE_URL is missing in .env");
+        logger.error("❌ NEON_SOURCE_URL is missing in .env");
         process.exit(1);
     }
     if (!destUrl) {
-        console.error("❌ DATABASE_URL is missing in .env");
+        logger.error("❌ DATABASE_URL is missing in .env");
         process.exit(1);
     }
 
-    console.log(`🔌 Connecting to source: ${sourceUrl.substring(0, 20)}...`);
+    logger.info(`🔌 Connecting to source: ${sourceUrl.substring(0, 20)}...`);
     const sourcePool = new Pool({ connectionString: sourceUrl, ssl: true });
 
-    console.log(`🔌 Connecting to destination: ${destUrl.substring(0, 20)}...`);
+    logger.info(`🔌 Connecting to destination: ${destUrl.substring(0, 20)}...`);
     const destPool = new Pool({ connectionString: destUrl });
 
     // Helper to list tables could be useful, but we have a defined order.
@@ -57,16 +58,17 @@ async function main() {
 
     try {
         for (const table of tables) {
-            console.log(`\n📦 Processing table: ${table.name}...`);
+            logger.info(`\n📦 Processing table: ${table.name}...`);
 
             // Fetch from source
             let rows = [];
             try {
                 const res = await sourcePool.query(`SELECT * FROM "${table.name}"`);
                 rows = res.rows;
-                console.log(`   Found ${rows.length} rows in source.`);
-            } catch (e: any) {
-                console.warn(`   ⚠️ Could not read from source table ${table.name}: ${e.message} (Skipping)`);
+                logger.info(`   Found ${rows.length} rows in source.`);
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                logger.warn(`   ⚠️ Could not read from source table ${table.name}: ${msg} (Skipping)`);
                 continue;
             }
 
@@ -93,23 +95,24 @@ async function main() {
 
                 try {
                     const insertRes = await destPool.query(query, values);
-                    if ((insertRes as any).rowCount > 0) {
+                    if ((insertRes.rowCount ?? 0) > 0) {
                         inserted++;
                     } else {
                         skipped++;
                     }
-                } catch (e: any) {
+                } catch (e) {
                     // Try to catch missing column errors (schema drift)
-                    console.error(`   ❌ Error inserting ID ${row[table.pk]}: ${e.message}`);
+                    const msg = e instanceof Error ? e.message : String(e);
+                    logger.error(`   ❌ Error inserting ID ${row[table.pk]}: ${msg}`);
                     failed++;
                 }
             }
-            console.log(`   ✅ Inserted: ${inserted}, ⏭️ Skipped: ${skipped}, ❌ Failed: ${failed}`);
+            logger.info(`   ✅ Inserted: ${inserted}, ⏭️ Skipped: ${skipped}, ❌ Failed: ${failed}`);
         }
 
-        console.log("\n🎉 Import finished!");
+        logger.info("\n🎉 Import finished!");
     } catch (err) {
-        console.error("🔥 Fatal error during import:", err);
+        logger.error("🔥 Fatal error during import:", err);
     } finally {
         await sourcePool.end();
         await destPool.end();

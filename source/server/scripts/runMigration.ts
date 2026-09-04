@@ -3,17 +3,18 @@
  * Creates: improved_html_files + material_improvement_backups tables
  */
 import pg from 'pg';
+import { logger } from "../lib/logger";
 
 const DATABASE_URL = process.argv[2] || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
-  console.error('Usage: npx tsx runMigration.ts <DATABASE_URL>');
+  logger.error('Usage: npx tsx runMigration.ts <DATABASE_URL>');
   process.exit(1);
 }
 
 async function main() {
   const masked = DATABASE_URL!.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
-  console.log(`Connecting to: ${masked.substring(0, 60)}...`);
+  logger.info(`Connecting to: ${masked.substring(0, 60)}...`);
 
   const pool = new pg.Pool({
     connectionString: DATABASE_URL,
@@ -22,7 +23,7 @@ async function main() {
   const client = await pool.connect();
 
   try {
-    console.log('✅ Connected!\n');
+    logger.info('✅ Connected!\n');
 
     // Check if tables already exist
     const existing = await client.query(`
@@ -31,14 +32,14 @@ async function main() {
         AND tablename IN ('improved_html_files', 'material_improvement_backups')
     `);
     const existingTables = existing.rows.map(r => r.tablename);
-    console.log('Existing tables:', existingTables.length ? existingTables.join(', ') : '(none)');
+    logger.info('Existing tables:', existingTables.length ? existingTables.join(', ') : '(none)');
 
     if (existingTables.includes('improved_html_files') && existingTables.includes('material_improvement_backups')) {
-      console.log('✅ Both tables already exist! No migration needed.');
+      logger.info('✅ Both tables already exist! No migration needed.');
       return;
     }
 
-    console.log('\n🔧 Running migration...\n');
+    logger.info('\n🔧 Running migration...\n');
 
     // Run each statement separately (statement-breakpoint delimited)
     const statements = [
@@ -105,34 +106,35 @@ async function main() {
       const label = stmt.substring(0, 60).replace(/\s+/g, ' ').trim();
       try {
         await client.query(stmt);
-        console.log(`  ✅ [${i + 1}/${statements.length}] ${label}...`);
-      } catch (err: any) {
-        if (err.message.includes('already exists')) {
-          console.log(`  ⚠️ [${i + 1}/${statements.length}] Already exists (OK): ${label}...`);
+        logger.info(`  ✅ [${i + 1}/${statements.length}] ${label}...`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('already exists')) {
+          logger.info(`  ⚠️ [${i + 1}/${statements.length}] Already exists (OK): ${label}...`);
         } else {
-          console.error(`  ❌ [${i + 1}/${statements.length}] FAILED: ${label}...`);
-          console.error(`     Error: ${err.message}`);
+          logger.error(`  ❌ [${i + 1}/${statements.length}] FAILED: ${label}...`);
+          logger.error(`     Error: ${message}`);
           throw err;
         }
       }
     }
 
     // Verify
-    console.log('\n🔍 Verifying...');
+    logger.info('\n🔍 Verifying...');
     const verify = await client.query(`
       SELECT tablename FROM pg_tables 
       WHERE schemaname = 'public' 
         AND tablename IN ('improved_html_files', 'material_improvement_backups')
     `);
-    console.log('Tables found:', verify.rows.map(r => r.tablename).join(', '));
+    logger.info('Tables found:', verify.rows.map(r => r.tablename).join(', '));
 
     const colCount = await client.query(`
       SELECT count(*) as cnt FROM information_schema.columns 
       WHERE table_name = 'improved_html_files'
     `);
-    console.log(`improved_html_files columns: ${colCount.rows[0].cnt}`);
+    logger.info(`improved_html_files columns: ${colCount.rows[0].cnt}`);
 
-    console.log('\n✅✅✅ MIGRÁCIÓ SIKERES! A production DB most már kész az AI improvement feature-re.');
+    logger.info('\n✅✅✅ MIGRÁCIÓ SIKERES! A production DB most már kész az AI improvement feature-re.');
 
   } finally {
     client.release();
@@ -141,6 +143,6 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error('\n❌ FATAL:', err.message);
+  logger.error('\n❌ FATAL:', err.message);
   process.exit(1);
 });

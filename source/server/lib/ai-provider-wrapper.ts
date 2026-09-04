@@ -1,3 +1,4 @@
+import { logger } from "./logger";
 /**
  * C2: Unified AI provider wrapper with timeout, retry, and safe error mapping.
  * Prevents raw upstream errors leaking to the client and ensures bounded execution.
@@ -86,7 +87,6 @@ export async function withAIProvider<T>(
   // Map unknown upstream error to safe client response
   const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
   // Only log; do NOT propagate raw message to client
-  // eslint-disable-next-line no-console
-  console.error('[AI] Upstream error after retries:', msg);
+  logger.error('[AI] Upstream error after retries:', msg);
   throw new AIProviderError('AI provider error', 'UPSTREAM_ERROR', 502);
 }

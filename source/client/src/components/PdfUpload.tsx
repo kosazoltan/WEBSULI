@@ -56,10 +56,10 @@ export default function PdfUpload() {
       // Reset form
       resetForm();
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Hiba történt",
-        description: error.message || "Nem sikerült feltölteni a PDF-et",
+        description: error instanceof Error ? error.message : "Nem sikerült feltölteni a PDF-et",
         variant: "destructive",
       });
     }
@@ -163,10 +163,10 @@ export default function PdfUpload() {
           content: base64Content,
           contentType: 'pdf'
         });
-      } catch (error: any) {
+      } catch (error) {
         toast({
           title: "Hiba",
-          description: error.message || "Nem sikerült feltölteni a PDF-et",
+          description: error instanceof Error ? error.message : "Nem sikerült feltölteni a PDF-et",
           variant: "destructive"
         });
       }

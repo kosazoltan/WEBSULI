@@ -200,7 +200,7 @@ export default function AdminStats() {
                     fill="#8884d8"
                     dataKey="count"
                   >
-                    {classroomDist.map((entry: any, index: number) => (
+                    {classroomDist.map((entry, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>

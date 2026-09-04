@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from "@shared/schema";
+import { logger } from "./lib/logger";
 
 const { Pool } = pg;
 
@@ -16,7 +17,7 @@ if (isDevelopment && process.env.DEV_DATABASE_URL) {
   DATABASE_URL = process.env.DATABASE_URL;
 } else {
   // Warn but don't crash immediately, let the pool try to connect
-  console.warn('DATABASE_URL environment variable is not set. Database connection will fail.');
+  logger.warn('DATABASE_URL environment variable is not set. Database connection will fail.');
   DATABASE_URL = "postgres://postgres:postgres@localhost:5432/websuli"; // Default fallback
 }
 
@@ -43,18 +44,18 @@ async function testConnectionWithRetry(maxRetries = 3, delayMs = 2000): Promise<
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const client = await pool.connect();
-      console.log(`[DB] ✅ Database connected successfully (${isDevelopment ? 'DEV' : 'PRODUCTION'})`);
+      logger.info(`[DB] ✅ Database connected successfully (${isDevelopment ? 'DEV' : 'PRODUCTION'})`);
       client.release();
       return;
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const isLastAttempt = attempt === maxRetries;
       if (isLastAttempt) {
-        console.error(`[DB] ❌ Database connection failed after ${maxRetries} attempts:`, errMsg);
-        console.error(`[DB] 🔧 Ellenőrizd: DATABASE_URL helyesen van-e beállítva a Render environment variables-ban`);
-        console.error(`[DB] 🔧 Neon console: https://console.neon.tech — endpoint aktív-e?`);
+        logger.error(`[DB] ❌ Database connection failed after ${maxRetries} attempts:`, errMsg);
+        logger.error(`[DB] 🔧 Ellenőrizd: DATABASE_URL helyesen van-e beállítva a Render environment variables-ban`);
+        logger.error(`[DB] 🔧 Neon console: https://console.neon.tech — endpoint aktív-e?`);
       } else {
-        console.warn(`[DB] ⚠️ Connection attempt ${attempt}/${maxRetries} failed: ${errMsg} — retrying in ${delayMs}ms...`);
+        logger.warn(`[DB] ⚠️ Connection attempt ${attempt}/${maxRetries} failed: ${errMsg} — retrying in ${delayMs}ms...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         delayMs *= 2; // Exponential backoff
       }

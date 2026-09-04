@@ -9,9 +9,10 @@
  */
 
 import { config } from 'dotenv';
+import { logger } from "../lib/logger";
 config();
 
-console.log('\n🔍 Google OAuth Diagnostics\n' + '='.repeat(50));
+logger.info('\n🔍 Google OAuth Diagnostics\n' + '='.repeat(50));
 
 // Check required environment variables
 const vars = {
@@ -23,17 +24,17 @@ const vars = {
     'ADMIN_EMAIL': process.env.ADMIN_EMAIL,
 };
 
-console.log('\n📋 Environment Variables:');
+logger.info('\n📋 Environment Variables:');
 for (const [key, value] of Object.entries(vars)) {
     if (value) {
         // Mask secrets
         if (key.includes('SECRET') || key.includes('CLIENT_ID')) {
-            console.log(`  ✅ ${key}: ${value.substring(0, 10)}...*** (set)`);
+            logger.info(`  ✅ ${key}: ${value.substring(0, 10)}...*** (set)`);
         } else {
-            console.log(`  ✅ ${key}: ${value}`);
+            logger.info(`  ✅ ${key}: ${value}`);
         }
     } else {
-        console.log(`  ❌ ${key}: NOT SET`);
+        logger.info(`  ❌ ${key}: NOT SET`);
     }
 }
 
@@ -41,39 +42,39 @@ for (const [key, value] of Object.entries(vars)) {
 const baseUrl = process.env.BASE_URL ||
     (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'http://localhost:5000');
 
-console.log('\n🌐 OAuth Configuration:');
-console.log(`  Base URL: ${baseUrl}`);
-console.log(`  Callback URL: ${baseUrl}/auth/google/callback`);
+logger.info('\n🌐 OAuth Configuration:');
+logger.info(`  Base URL: ${baseUrl}`);
+logger.info(`  Callback URL: ${baseUrl}/auth/google/callback`);
 
 // Check if production mode
 const isProduction = process.env.NODE_ENV === 'production';
-console.log('\n🔒 Session Cookie Settings:');
-console.log(`  secure: ${isProduction}`);
-console.log(`  sameSite: lax`);
-console.log(`  httpOnly: true`);
-console.log(`  proxy: ${isProduction}`);
+logger.info('\n🔒 Session Cookie Settings:');
+logger.info(`  secure: ${isProduction}`);
+logger.info(`  sameSite: lax`);
+logger.info(`  httpOnly: true`);
+logger.info(`  proxy: ${isProduction}`);
 
-console.log('\n⚠️  Google Cloud Console Checklist:');
-console.log('  1. Go to https://console.cloud.google.com/apis/credentials');
-console.log('  2. Select your OAuth 2.0 Client ID');
-console.log('  3. Verify "Authorized redirect URIs" includes:');
-console.log(`     ${baseUrl}/auth/google/callback`);
-console.log('  4. Verify "Authorized JavaScript origins" includes:');
-console.log(`     ${baseUrl.replace(/\/+$/, '')}`);
+logger.info('\n⚠️  Google Cloud Console Checklist:');
+logger.info('  1. Go to https://console.cloud.google.com/apis/credentials');
+logger.info('  2. Select your OAuth 2.0 Client ID');
+logger.info('  3. Verify "Authorized redirect URIs" includes:');
+logger.info(`     ${baseUrl}/auth/google/callback`);
+logger.info('  4. Verify "Authorized JavaScript origins" includes:');
+logger.info(`     ${baseUrl.replace(/\/+$/, '')}`);
 
 if (baseUrl.includes('websuli.vip')) {
-    console.log('\n  Also add these URIs if using multiple domains:');
-    console.log('     https://websuli.vip/auth/google/callback');
-    console.log('     https://www.websuli.vip/auth/google/callback');
-    console.log('     https://websuli.org/auth/google/callback');
-    console.log('     https://www.websuli.org/auth/google/callback');
+    logger.info('\n  Also add these URIs if using multiple domains:');
+    logger.info('     https://websuli.vip/auth/google/callback');
+    logger.info('     https://www.websuli.vip/auth/google/callback');
+    logger.info('     https://websuli.org/auth/google/callback');
+    logger.info('     https://www.websuli.org/auth/google/callback');
 }
 
-console.log('\n🔧 Common Issues:');
-console.log('  1. Callback URL mismatch - must match EXACTLY (including https vs http)');
-console.log('  2. Missing sameSite cookie attribute - causes session loss on redirect');
-console.log('  3. secure:true on HTTP - causes cookie not to be set');
-console.log('  4. Trust proxy not configured - wrong protocol detection behind Nginx');
+logger.info('\n🔧 Common Issues:');
+logger.info('  1. Callback URL mismatch - must match EXACTLY (including https vs http)');
+logger.info('  2. Missing sameSite cookie attribute - causes session loss on redirect');
+logger.info('  3. secure:true on HTTP - causes cookie not to be set');
+logger.info('  4. Trust proxy not configured - wrong protocol detection behind Nginx');
 
-console.log('\n' + '='.repeat(50));
-console.log('✅ Diagnostics complete\n');
+logger.info('\n' + '='.repeat(50));
+logger.info('✅ Diagnostics complete\n');

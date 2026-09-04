@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { storage } from './storage';
 import { sanitizeText } from './utils/sanitize';
+import { logger } from "./lib/logger";
 
 let resendClient: Resend | null = null;
 let fromEmail: string = '';
@@ -60,7 +61,7 @@ function getResendClient() {
     throw new Error('RESEND_FROM_EMAIL environment variable is not set');
   }
   
-  console.log('[RESEND] Client initialized, from:', fromEmail);
+  logger.info('[RESEND] Client initialized, from:', fromEmail);
   
   return { client: resendClient, fromEmail };
 }
@@ -131,7 +132,7 @@ export async function sendNewMaterialNotification(
       </html>
     `;
 
-    console.log(`[RESEND] Email küldése: ${recipientEmail} részére (${materialTitle})`);
+    logger.info(`[RESEND] Email küldése: ${recipientEmail} részére (${materialTitle})`);
     
     const result = await client.emails.send({
       from: fromEmail,
@@ -142,7 +143,7 @@ export async function sendNewMaterialNotification(
 
     // Check if the result contains an error
     if (result && 'error' in result && result.error) {
-      console.error('[RESEND] Email küldési hiba:', recipientEmail, 'error:', result.error);
+      logger.error('[RESEND] Email küldési hiba:', recipientEmail, 'error:', result.error);
       
       // Log failed email to database
       await storage.createEmailLog({
@@ -158,7 +159,7 @@ export async function sendNewMaterialNotification(
       throw err;
     }
 
-    console.log('[RESEND] Email sikeresen elküldve:', recipientEmail, 'result:', result);
+    logger.info('[RESEND] Email sikeresen elküldve:', recipientEmail, 'result:', result);
     
     // Log successful email to database
     await storage.createEmailLog({
@@ -171,7 +172,7 @@ export async function sendNewMaterialNotification(
     return result;
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
-    console.error('[RESEND] Email küldési hiba:', error);
+    logger.error('[RESEND] Email küldési hiba:', error);
     
     // Log failed email to database — kivéve ha a try-blokk már logolta
     // (result.error ág), különben dupla failed-sor keletkezne.
@@ -185,7 +186,7 @@ export async function sendNewMaterialNotification(
           error: err.message || 'Unknown error',
         });
       } catch (logError) {
-        console.error('[RESEND] Email log mentési hiba:', logError);
+        logger.error('[RESEND] Email log mentési hiba:', logError);
       }
     }
     
@@ -204,7 +205,7 @@ export async function sendAdminNotification(
     
     const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'admin@websuli.org';
     
-    console.log(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
+    logger.info(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
     
     const result = await client.emails.send({
       from: fromEmail,
@@ -217,10 +218,10 @@ export async function sendAdminNotification(
       throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
     }
 
-    console.log(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
+    logger.info(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
     return result;
   } catch (error: unknown) {
-    console.error('[RESEND] Admin értesítés küldési hiba:', error);
+    logger.error('[RESEND] Admin értesítés küldési hiba:', error);
     throw error;
   }
 }

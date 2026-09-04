@@ -35,6 +35,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
 import { hu } from "date-fns/locale";
+import { logger } from "../lib/logger";
 
 interface ImprovedFile {
   id: string;
@@ -154,7 +155,7 @@ export default function MaterialImprover() {
             // Find where head content ends - look for </head> or next major tag (but not <head> itself)
             const headEndIndex = html.indexOf('>', headOpenIndex) + 1;
             // Look for the end of head content - find </head> or next tag that's not <head>
-            let insertIndex = headEndIndex;
+            let insertIndex: number;
             // Search for closing </head> first
             const headCloseMatch = html.substring(headEndIndex).match(/<\/head>/i);
             if (headCloseMatch) {
@@ -196,13 +197,13 @@ export default function MaterialImprover() {
         }
       }
       
-      console.log('[makeRunnableHtml] Returning full HTML structure, length:', html.length);
+      logger.info('[makeRunnableHtml] Returning full HTML structure, length:', html.length);
       return html;
     }
     
     // Otherwise, wrap the content in a full HTML structure
     const wrappedHtml = `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`;
-    console.log('[makeRunnableHtml] Wrapped HTML with basic structure, length:', wrappedHtml.length);
+    logger.info('[makeRunnableHtml] Wrapped HTML with basic structure, length:', wrappedHtml.length);
     return wrappedHtml;
   }, []);
 
@@ -268,7 +269,7 @@ export default function MaterialImprover() {
       try {
         startData = JSON.parse(startText);
       } catch {
-        console.error('[IMPROVE] Start response not JSON:', startText.substring(0, 200));
+        logger.error('[IMPROVE] Start response not JSON:', startText.substring(0, 200));
         throw new Error(
           !startRes.ok
             ? `Szerver hiba (${startRes.status}): ${startText.substring(0, 100)}`
@@ -312,7 +313,7 @@ export default function MaterialImprover() {
 
         if (pollRes.status === 404) {
           consecutive404s++;
-          console.warn(`[IMPROVE] Job not found (404), attempt ${consecutive404s}/3`);
+          logger.warn(`[IMPROVE] Job not found (404), attempt ${consecutive404s}/3`);
           if (consecutive404s >= 3) {
             throw new Error('A javítási feladat elveszett (szerver újraindult). Próbáld újra!');
           }
@@ -324,7 +325,7 @@ export default function MaterialImprover() {
         }
 
         if (!pollRes.ok) {
-          console.warn(`[IMPROVE] Poll error: ${pollRes.status}`);
+          logger.warn(`[IMPROVE] Poll error: ${pollRes.status}`);
           continue; // Retry on other network issues
         }
 
@@ -341,7 +342,7 @@ export default function MaterialImprover() {
         }
 
         // Still processing - continue polling
-        console.log(`[IMPROVE] Job ${jobId}: ${pollData.elapsed}s elapsed...`);
+        logger.info(`[IMPROVE] Job ${jobId}: ${pollData.elapsed}s elapsed...`);
       }
 
       throw new Error('Időtúllépés: A javítás túl sokáig tartott (16 perc). Próbáld újra.');
@@ -356,7 +357,7 @@ export default function MaterialImprover() {
       });
     },
     onError: (error: Error) => {
-      console.error('[IMPROVE] Mutation error:', error);
+      logger.error('[IMPROVE] Mutation error:', error);
       toast({
         title: "❌ Hiba",
         description: error.message || "Nem sikerült a javítás",
@@ -369,16 +370,16 @@ export default function MaterialImprover() {
   // Apply improved file mutation
   const applyMutation = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
-      console.log('[APPLY] Calling API: POST /api/admin/improved-files/' + id + '/apply');
+      logger.info('[APPLY] Calling API: POST /api/admin/improved-files/' + id + '/apply');
       const result = await apiRequest("POST", "/api/admin/improved-files/" + id + "/apply", {
         createBackup: true,
         notes,
       });
-      console.log('[APPLY] API response:', result);
+      logger.info('[APPLY] API response:', result);
       return result;
     },
     onSuccess: () => {
-      console.log('[APPLY] ✅ Success');
+      logger.info('[APPLY] ✅ Success');
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       toast({
@@ -387,7 +388,7 @@ export default function MaterialImprover() {
       });
     },
     onError: (error: Error) => {
-      console.error('[APPLY] ❌ Error:', error.message);
+      logger.error('[APPLY] ❌ Error:', error.message);
       toast({
         title: "❌ Hiba az alkalmazás során",
         description: error.message || "Nem sikerült alkalmazni a javítást",
@@ -430,7 +431,7 @@ export default function MaterialImprover() {
   };
 
   const handleApply = (id: string) => {
-    console.log('[APPLY] Directly applying improved file:', id);
+    logger.info('[APPLY] Directly applying improved file:', id);
     applyMutation.mutate({ id });
   };
 
@@ -439,7 +440,7 @@ export default function MaterialImprover() {
     if (!window.confirm("Biztosan törlöd ezt a javított anyagot? A művelet nem vonható vissza.")) {
       return;
     }
-    console.log('[DELETE] Directly deleting improved file:', id);
+    logger.info('[DELETE] Directly deleting improved file:', id);
     deleteMutation.mutate(id);
   };
 
@@ -750,18 +751,18 @@ export default function MaterialImprover() {
                   }
                   try {
                     toast({ title: "⏳ FORCE APPLY…", description: "Raw SQL-frissítés folyamatban…" });
-                    const result = await apiRequest("POST", `/api/admin/improved-files/${previewData.id}/force-apply`);
-                    const data = result as any;
-                    console.log('[FORCE-APPLY] Result:', data);
+                    const result = await apiRequest<{ success: boolean; log?: string[] }>("POST", `/api/admin/improved-files/${previewData.id}/force-apply`);
+                    const data = result;
+                    logger.info('[FORCE-APPLY] Result:', data);
                     queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
                     queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
                     toast({
                       title: data.success ? "✅ FORCE APPLY SIKERES!" : "❌ FORCE APPLY HIBA",
                       description: data.log?.slice(-2).join('\n') || JSON.stringify(data),
                     });
-                  } catch (err: any) {
-                    console.error('[FORCE-APPLY] Error:', err);
-                    toast({ title: "❌ FORCE APPLY HIBA", description: err.message, variant: "destructive" });
+                  } catch (err) {
+                    logger.error('[FORCE-APPLY] Error:', err);
+                    toast({ title: "❌ FORCE APPLY HIBA", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
                   }
                 }}
                 className="bg-orange-600 hover:bg-orange-700 text-white"

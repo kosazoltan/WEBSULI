@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { logger } from "./lib/logger";
 
 const dbPath = path.join(process.cwd(), 'sqlite.db');
 const db = new Database(dbPath);
@@ -13,13 +14,13 @@ try {
   if (result) {
     // Write to file
     fs.writeFileSync('/tmp/material_content.html', result.content);
-    console.log('✅ Content written to /tmp/material_content.html');
-    console.log(`Size: ${result.content.length} bytes`);
+    logger.info('✅ Content written to /tmp/material_content.html');
+    logger.info(`Size: ${result.content.length} bytes`);
   } else {
-    console.log('❌ Material not found');
+    logger.info('❌ Material not found');
   }
 } catch (error) {
-  console.error('Error:', error);
+  logger.error('Error:', error);
 } finally {
   db.close();
 }

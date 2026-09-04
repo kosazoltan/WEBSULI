@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
+import { logger } from "../lib/logger";
 
 /**
  * Get DATABASE_URL from environment variable
@@ -11,7 +12,7 @@ function getDatabaseUrl(): string {
     throw new Error('DATABASE_URL not found in environment variables');
   }
   
-  console.log('[DATABASE] Using unified DATABASE_URL from environment variable');
+  logger.info('[DATABASE] Using unified DATABASE_URL from environment variable');
   return process.env.DATABASE_URL;
 }
 
@@ -24,18 +25,18 @@ async function ensureEndpointActive(databaseUrl: string): Promise<void> {
     // Extract endpoint ID from DATABASE_URL
     const match = databaseUrl.match(/ep-[a-z0-9-]+/);
     if (!match) {
-      console.log('[NEON] Could not extract endpoint ID from DATABASE_URL');
+      logger.info('[NEON] Could not extract endpoint ID from DATABASE_URL');
       return;
     }
     
     const endpointId = match[0];
-    console.log(`[NEON] Checking endpoint status: ${endpointId}`);
+    logger.info(`[NEON] Checking endpoint status: ${endpointId}`);
     
     // Test connection with a simple query
     const testClient = neon(databaseUrl);
     await testClient`SELECT 1 as test`;
     
-    console.log('[NEON] ✅ Endpoint is active and responsive');
+    logger.info('[NEON] ✅ Endpoint is active and responsive');
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
     const errorMessage = err.message || String(error);
@@ -43,18 +44,18 @@ async function ensureEndpointActive(databaseUrl: string): Promise<void> {
     if (errorMessage.includes('endpoint has been disabled') || 
         errorMessage.includes('suspended') ||
         errorMessage.includes('not active')) {
-      console.error('[NEON] ⚠️ Endpoint is DISABLED/SUSPENDED!');
-      console.error('[NEON] 🔧 MEGOLDÁS:');
-      console.error('[NEON]    1. Nyisd meg: https://console.neon.tech');
-      console.error('[NEON]    2. Válaszd ki a projektet');
-      console.error('[NEON]    3. Endpoints menü → Resume/Enable gomb');
-      console.error('[NEON]    4. Várj 1-2 percet');
-      console.error('[NEON]    5. Restart-eld a Replit alkalmazást');
+      logger.error('[NEON] ⚠️ Endpoint is DISABLED/SUSPENDED!');
+      logger.error('[NEON] 🔧 MEGOLDÁS:');
+      logger.error('[NEON]    1. Nyisd meg: https://console.neon.tech');
+      logger.error('[NEON]    2. Válaszd ki a projektet');
+      logger.error('[NEON]    3. Endpoints menü → Resume/Enable gomb');
+      logger.error('[NEON]    4. Várj 1-2 percet');
+      logger.error('[NEON]    5. Restart-eld a Replit alkalmazást');
       throw new Error('Neon endpoint disabled - follow instructions above to enable it', { cause: error });
     }
     
     // Other errors - just log and continue
-    console.warn('[NEON] Connection test warning:', errorMessage);
+    logger.warn('[NEON] Connection test warning:', errorMessage);
   }
 }
 
@@ -68,7 +69,7 @@ export function getDatabaseClient() {
   
   // Check endpoint status on first connection (async, non-blocking for initialization)
   ensureEndpointActive(databaseUrl).catch(err => {
-    console.error('[NEON] Endpoint check failed:', err.message);
+    logger.error('[NEON] Endpoint check failed:', err.message);
   });
   
   return neon(databaseUrl);

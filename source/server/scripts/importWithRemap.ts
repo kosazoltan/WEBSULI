@@ -3,6 +3,7 @@ import { config } from "dotenv";
 import pg from "pg";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+import { logger } from "../lib/logger";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,7 +12,7 @@ config({ path: resolve(__dirname, "../../.env") });
 const { Pool } = pg;
 
 async function main() {
-    console.log("🚀 Starting SMART Import (with User Remapping)...");
+    logger.info("🚀 Starting SMART Import (with User Remapping)...");
 
     const sourceUrl = process.env.NEON_SOURCE_URL;
     const destUrl = process.env.DATABASE_URL;
@@ -25,7 +26,7 @@ async function main() {
 
     try {
         // 1. Process USERS & build map
-        console.log("📦 Processing USERS and building ID map...");
+        logger.info("📦 Processing USERS and building ID map...");
 
         const destUsers = await destPool.query('SELECT id, email FROM users');
         const emailToDestId = new Map<string, string>();
@@ -42,7 +43,7 @@ async function main() {
             if (email && emailToDestId.has(email)) {
                 const existingDestId = emailToDestId.get(email)!;
                 userIdMap.set(srcId, existingDestId);
-                // console.log(`   Users: Remapped ${srcId} -> ${existingDestId} (${email})`);
+                // logger.info(`   Users: Remapped ${srcId} -> ${existingDestId} (${email})`);
                 continue; // Do not insert, user exists
             }
 
@@ -61,15 +62,17 @@ async function main() {
                 await destPool.query(query, values);
                 // Assuming successful insert or conflict (if conflict on ID, srcId=destId)
                 userIdMap.set(srcId, srcId);
-            } catch (e: any) {
-                if (e.code === '23505') { // Unique violation (should be handled by logic above, but safety net)
-                    console.warn(`   Users: Schema constraint conflict for ${email}, skipping.`);
+            } catch (e) {
+                const pgError = e as { code?: string };
+                if (pgError.code === '23505') { // Unique violation (should be handled by logic above, but safety net)
+                    logger.warn(`   Users: Schema constraint conflict for ${email}, skipping.`);
                 } else {
-                    console.error(`   Users: Error inserting ${email}: ${e.message}`);
+                    const msg = e instanceof Error ? e.message : String(e);
+                    logger.error(`   Users: Error inserting ${email}: ${msg}`);
                 }
             }
         }
-        console.log(`   User mapping complete. Mapped ${userIdMap.size} users.`);
+        logger.info(`   User mapping complete. Mapped ${userIdMap.size} users.`);
 
         // 2. Process Tables with Mapping
         const tables = [
@@ -93,12 +96,12 @@ async function main() {
         ];
 
         for (const table of tables) {
-            console.log(`📦 Processing ${table.name}...`);
+            logger.info(`📦 Processing ${table.name}...`);
             let rows;
             try {
                 const res = await sourcePool.query(`SELECT * FROM "${table.name}"`);
                 rows = res.rows;
-            } catch { console.log(`   Skipping (missing source table)`); continue; }
+            } catch { logger.info(`   Skipping (missing source table)`); continue; }
 
             if (rows.length === 0) continue;
             let count = 0;
@@ -126,16 +129,16 @@ async function main() {
 
                 try {
                     const res = await destPool.query(query, values);
-                    if ((res as any).rowCount > 0) count++;
+                    if ((res.rowCount ?? 0) > 0) count++;
                 } catch {
                     // Ignore some errors
                 }
             }
-            console.log(`   Imported ${count} new rows.`);
+            logger.info(`   Imported ${count} new rows.`);
         }
-        console.log("🎉 SMART Import Finished!");
+        logger.info("🎉 SMART Import Finished!");
 
-    } catch (e) { console.error(e); }
+    } catch (e) { logger.error(e); }
     await sourcePool.end();
     await destPool.end();
 }

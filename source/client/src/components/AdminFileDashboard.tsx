@@ -26,8 +26,9 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { logger } from "../lib/logger";
 
-interface HtmlFileApi {
+export interface HtmlFileApi {
   id: string;
   userId: string | null;
   title: string;
@@ -385,12 +386,12 @@ export default function AdminFileDashboard({
         title: "✅ Forráskód letöltve",
         description: "A ZIP fájl letöltése megkezdődött",
       });
-    } catch (error: any) {
-      console.error('Download error:', error);
+    } catch (error) {
+      logger.error('Download error:', error);
       toast({
         variant: "destructive",
         title: "❌ Letöltési hiba",
-        description: error.message || "Nem sikerült letölteni a forráskódot",
+        description: error instanceof Error ? error.message : "Nem sikerült letölteni a forráskódot",
       });
     }
   };
