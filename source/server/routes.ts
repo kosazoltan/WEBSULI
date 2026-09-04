@@ -31,6 +31,7 @@ import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
 import { LEGACY_MODELS, assertDistinctFamilies } from "./ai/models";
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
+import { studioRouter } from "./studio/routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
 
@@ -776,6 +777,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       'OpenAI/Claude providerekre esnek vissza.',
     );
   }
+
+  // LS-1: Lesson Studio — Tudás-térkép végpontok. Külön routerben (a routes.ts már
+  // 5,6 ezer sor); a router maga rakja fel az isAuthenticatedAdmin őrt.
+  app.use("/api/studio", studioRouter);
 
   // Create admin router with authentication middleware
   const adminRouter = express.Router();

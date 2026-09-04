@@ -560,3 +560,91 @@ export const errorLogs = pgTable("error_logs", {
   resolvedIdx: index("error_logs_resolved_idx").on(table.resolved),
   createdAtIdx: index("error_logs_created_at_idx").on(table.createdAt),
 }))
+
+/**
+ * LS-1 — Tudás-térkép (KnowledgeMap).
+ *
+ * Egy feltöltött forráscsomag (PDF/JPG/DOCX/TXT) strukturált kivonata. Ez határolja
+ * be, mit taníthat a később generált lecke: a szerző csak olyan állítást írhat le,
+ * ami visszavezethető egy itteni fogalomra.
+ *
+ * `inputHash` = sha256(rendezett fájltartalmak + hatókör) — ugyanarra a feltöltésre
+ * nem indul újra a drága vision-hívás.
+ */
+export const knowledgeMaps = pgTable(
+  "knowledge_maps",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    title: varchar("title", { length: 255 }).notNull(),
+    subject: varchar("subject", { length: 120 }).notNull(),
+    /** 0-12, a shared/classrooms.ts szerint (0 = programozási alapismeretek). */
+    classroom: integer("classroom").notNull(),
+    unit: varchar("unit", { length: 255 }),
+    /** draft | review | approved */
+    status: varchar("status", { length: 16 }).notNull().default("draft"),
+    sourceFiles: jsonb("source_files")
+      .notNull()
+      .$type<Array<{ name: string; kind: string; pages?: number }>>(),
+    /** A kivonatolt nyers forrásszöveg — ehhez mérjük a szó szerinti idézeteket (D1). */
+    sourceText: text("source_text"),
+    inputHash: varchar("input_hash", { length: 64 }).notNull().unique(),
+    model: varchar("model", { length: 120 }),
+    createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+    approvedBy: varchar("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    hashIdx: index("knowledge_maps_input_hash_idx").on(table.inputHash),
+    scopeIdx: index("knowledge_maps_scope_idx").on(table.subject, table.classroom),
+    statusIdx: index("knowledge_maps_status_idx").on(table.status),
+  }),
+);
+
+export type KnowledgeMapRow = typeof knowledgeMaps.$inferSelect;
+export type InsertKnowledgeMapRow = typeof knowledgeMaps.$inferInsert;
+
+/**
+ * Egy fogalom a térképen. A `quote` a forrás SZÓ SZERINTI részlete; a `verbatimOk`
+ * azt rögzíti, hogy a szerver ezt tényleg megtalálta-e a forrásszövegben (D1).
+ * Kulcsfogalom (`core`) hamis `verbatimOk`-kal nem hagyható jóvá.
+ */
+export const kmConcepts = pgTable(
+  "km_concepts",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    mapId: varchar("map_id")
+      .notNull()
+      .references(() => knowledgeMaps.id, { onDelete: "cascade" }),
+    /** A modell által adott azonosító a térképen belül (relatedIds hivatkozik rá). */
+    localId: varchar("local_id", { length: 64 }).notNull(),
+    term: varchar("term", { length: 200 }).notNull(),
+    definition: text("definition").notNull(),
+    quote: text("quote").notNull(),
+    sourceRef: jsonb("source_ref")
+      .notNull()
+      .$type<{ file: string; page?: number; region?: { x: number; y: number; w: number; h: number } }>(),
+    /** definition | fact | date | formula | procedure | person | place */
+    type: varchar("type", { length: 24 }).notNull(),
+    /** core | supporting | extra */
+    examWeight: varchar("exam_weight", { length: 16 }).notNull(),
+    relatedIds: jsonb("related_ids").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+    verbatimOk: boolean("verbatim_ok").notNull().default(false),
+    verbatimReason: varchar("verbatim_reason", { length: 32 }),
+    /** pending | kept | edited | rejected */
+    reviewState: varchar("review_state", { length: 16 }).notNull().default("pending"),
+    orderIndex: integer("order_index").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    mapIdx: index("km_concepts_map_id_idx").on(table.mapId),
+    mapOrderIdx: index("km_concepts_map_order_idx").on(table.mapId, table.orderIndex),
+    weightIdx: index("km_concepts_exam_weight_idx").on(table.mapId, table.examWeight),
+  }),
+);
+
+export type KmConceptRow = typeof kmConcepts.$inferSelect;
+export type InsertKmConceptRow = typeof kmConcepts.$inferInsert;
+
