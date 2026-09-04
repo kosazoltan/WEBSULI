@@ -173,15 +173,45 @@ export function buildAuthorPrompt(
   }
 
   parts.push(
-    "Answer with JSON ONLY, matching the Lesson schema:",
+    "A válasz CSAK JSON legyen, a Lesson sémának megfelelően:",
     '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [], "sourceOnly": true }',
     "",
-    "Outline:",
+    "Vázlat:",
     JSON.stringify(sections, null, 2),
     "",
-    "Concept map:",
+    "Fogalomtérkép:",
     mapJson(map),
   );
 
   return parts.join("\n");
+}
+
+/**
+ * Lektor: a kész leckét a kurált térképhez méri, és CSAK jelent — sosem ír át.
+ *
+ * A D1 szabály szó szerint szerepel, mert a lektor a forrás-hűség független ellenőre.
+ * Ha a forrás téved, azt `book_probably_wrong` jegyzetként jelezheti (az adminnak);
+ * a leckét ő sem „javítja" soha.
+ */
+export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
+  return [
+    "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",
+    "",
+    D1_RULE_TEXT,
+    "",
+    `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
+    "",
+    "Hard rules:",
+    "- Every block's coversConceptIds must exist in the map below. An id that is not in the map is a source_conflict/not_in_map blocker.",
+    "- A core concept no block teaches is a coverage_gap/core blocker; a missing supporting concept is a coverage_gap warn.",
+    "- Register, style and age-band problems are language / age warnings.",
+    "- sourceOnly must be true.",
+    "- Report with JSON ONLY: { \"notes\": [{ \"kind\": \"source_conflict|coverage_gap|language|age\", \"subkind\": string?, \"message\": string, \"blockPath\": \"section.block\"? }] }",
+    "",
+    "Lesson:",
+    JSON.stringify(lesson, null, 2),
+    "",
+    "Concept map:",
+    mapJson(map),
+  ].join("\n");
 }

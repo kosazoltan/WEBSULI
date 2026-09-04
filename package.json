@@ -4,6 +4,7 @@
   "description": "Gyökér-manifest. Az alkalmazás a source/ alatt él (a függőségek is ott vannak); ez a fájl nem telepít semmit, csak a .github/workflows/ci.yml kapuit teszi felfedezhetővé a gyökérből — enélkül egy 369 tesztes repó úgy néz ki, mintha nem lenne futtatható parancsa.",
   "scripts": {
     "check": "npm --prefix source run check",
+    "check:test": "npm --prefix source run check:test",
     "lint": "npm --prefix source run lint",
     "test": "npm --prefix source run test",
     "build": "npm --prefix source run build",

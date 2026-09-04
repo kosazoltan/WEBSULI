@@ -83,7 +83,7 @@ test("extractKnowledgeMap calls the model when no cached map exists", async () =
   const result = await extractKnowledgeMap({ files: FILES, scope: SCOPE }, deps);
   assert.equal(deps.calls, 1);
   assert.equal(result.cached, false);
-  assert.equal(result.map.concepts.length, 1);
+  assert.equal(result.map.concepts?.length, 1);
 });
 
 test("extractKnowledgeMap returns the cached map WITHOUT calling the model", async () => {

@@ -33,7 +33,7 @@ test("a JSON válasz parse-olódik", async () => {
   );
 
   assert.deepEqual(out.json, { sections: [] });
-  assert.equal(out.usage.totalTokens, 15);
+  assert.equal(out.usage?.totalTokens, 15);
 });
 
 test("a kód-keretes válasz is parse-olódik (fence-strip)", async () => {

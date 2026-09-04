@@ -39,7 +39,11 @@ test("rejects a claim the source never makes", () => {
 test("rejects an empty or whitespace-only quote", () => {
   assert.equal(checkVerbatim("", SOURCE).ok, false);
   assert.equal(checkVerbatim("   \n ", SOURCE).ok, false);
-  assert.equal(checkVerbatim("   ", SOURCE).reason, "empty");
+
+  const r = checkVerbatim("   ", SOURCE);
+  assert.equal(r.ok, false);
+  if (r.ok) assert.fail("empty quote must not pass");
+  assert.equal(r.reason, "empty");
 });
 
 test("rejects a quote when the source text itself is empty", () => {

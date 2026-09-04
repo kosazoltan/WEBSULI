@@ -8,9 +8,11 @@ import {
   lessonIdsSubsetOfMap,
   buildPedagoguePrompt,
   buildAuthorPrompt,
+  buildLektorPrompt,
   D1_RULE_TEXT,
 } from "../server/studio/step-io";
 import type { MapConcept } from "../server/studio/coverage";
+import type { LessonOutline, OutlineSection } from "../server/studio/step-io";
 import type { Lesson } from "../shared/lesson-schema";
 
 /**
@@ -38,13 +40,14 @@ const MAP: MapConcept[] = [
   { localId: "s10", examWeight: "supporting" },
 ];
 
-const GOOD_OUTLINE = {
+const GOOD_OUTLINE: LessonOutline = {
   sections: [
-    { heading: "Fogalmak", conceptIds: ["c1", "c2"], plannedBlocks: ["explain", "check", "recap"] },
+    { heading: "Fogalmak", conceptIds: ["c1", "c2"], plannedBlocks: ["explain", "check", "recap"], animationSuggestions: [] },
     {
       heading: "Kiegészítés",
       conceptIds: ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
       plannedBlocks: ["example", "check", "recap"],
+      animationSuggestions: [],
     },
   ],
   misconceptions: [],
@@ -70,20 +73,21 @@ test("outlineCoversMap: core 100% + supporting 100% → ok", () => {
 });
 
 test("outlineCoversMap: hiányzó core elutasítás, megnevezve", () => {
-  const sections = [{ heading: "Fél", conceptIds: ["c1"], plannedBlocks: ["explain"] }];
+  const sections: OutlineSection[] = [{ heading: "Fél", conceptIds: ["c1"], plannedBlocks: ["explain"], animationSuggestions: [] }];
   const out = outlineCoversMap(sections, MAP);
   assert.equal(out.ok, false);
   assert.deepEqual(out.missingCore, ["c2"]);
 });
 
 test("outlineCoversMap: 90% alatti supporting elutasítás", () => {
-  const sections = [
-    { heading: "Core", conceptIds: ["c1", "c2"], plannedBlocks: ["explain"] },
+  const sections: OutlineSection[] = [
+    { heading: "Core", conceptIds: ["c1", "c2"], plannedBlocks: ["explain"], animationSuggestions: [] },
     // 10 supporting-ból 8 = 80% → rejected (a küszöb 90).
     {
       heading: "Supporting",
       conceptIds: ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
       plannedBlocks: ["explain"],
+      animationSuggestions: [],
     },
   ];
   const out = outlineCoversMap(sections, MAP);
@@ -91,8 +95,8 @@ test("outlineCoversMap: 90% alatti supporting elutasítás", () => {
 });
 
 test("outlineCoversMap: ismeretlen fogalom-azonosító elutasítás", () => {
-  const sections = [
-    { heading: "Core", conceptIds: ["c1", "c2", "szellem"], plannedBlocks: ["explain"] },
+  const sections: OutlineSection[] = [
+    { heading: "Core", conceptIds: ["c1", "c2", "szellem"], plannedBlocks: ["explain"], animationSuggestions: [] },
   ];
   const out = outlineCoversMap(sections, MAP);
   assert.equal(out.ok, false);
@@ -156,7 +160,7 @@ test("buildPedagoguePrompt: a térkép teljes JSON-ja benne, magyarul", () => {
 });
 
 test("buildAuthorPrompt: D1 szó szerint, concept id-k visszhangozva", () => {
-  const prompt = buildAuthorPrompt(GOOD_OUTLINE.sections, { concepts: MAP }, []);
+  const prompt = buildAuthorPrompt(GOOD_OUTLINE.sections, { subject: "biológia", classroom: 7, concepts: MAP }, []);
 
   assert.ok(prompt.includes(D1_RULE_TEXT), "a D1 szabály szó szerinti szövege kötelező");
   for (const id of ["c1", "c2", "s10"]) {
@@ -174,11 +178,48 @@ test("buildAuthorPrompt: a book_probably_wrong jegyzet SOHA nem jut el a szerző
     },
   ];
 
-  const prompt = buildAuthorPrompt(GOOD_OUTLINE.sections, { concepts: MAP }, blockerNotes as never);
+  const prompt = buildAuthorPrompt(
+    GOOD_OUTLINE.sections,
+    { subject: "biológia", classroom: 7, concepts: MAP },
+    blockerNotes as never,
+  );
 
   assert.ok(prompt.includes("A c1 állítás nincs a térképen."), "a blokkoló jegyzet megy a szerzőnek");
   assert.ok(
     !prompt.includes("elavult adatot"),
     "a book_probably_wrong üzenete az adminé — a szerző soha nem láthatja (D1)",
   );
+});
+
+test("buildLektorPrompt: D1 szó szerint, a lecke JSON-ja és a térkép benne", () => {
+  const lesson = {
+    title: "T",
+    subject: "s",
+    classroom: 4,
+    mapId: "m",
+    misconceptions: [],
+    sourceOnly: true as const,
+    sections: [
+      {
+        heading: "H",
+        probaEnabled: true,
+        blocks: [
+          {
+            kind: "explain" as const,
+            text: "x",
+            depth: "core" as const,
+            readAloud: true,
+            coversConceptIds: ["c1", "kitalalt-id"],
+          },
+        ],
+      },
+    ],
+  } satisfies Lesson;
+
+  const prompt = buildLektorPrompt(lesson, { subject: "biológia", classroom: 7, concepts: MAP });
+
+  assert.ok(prompt.includes(D1_RULE_TEXT), "a D1 szabály szó szerinti szövege a lektor promptjában is kötelező");
+  assert.ok(prompt.includes("kitalalt-id"), "a lecke tartalma (a vizsgálandó szöveg) benne van");
+  assert.ok(prompt.includes("book_probably_wrong"), "a lektor megkapja a D1-kivétel eszközét");
+  assert.ok(prompt.includes("biológia"), "a térkép metaadata benne van");
 });
