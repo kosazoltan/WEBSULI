@@ -1,9 +1,9 @@
 import express, { type Request, type Response } from "express";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
-import { studioJobs } from "../../shared/schema";
+import { lektorNotes, studioJobs } from "../../shared/schema";
 import { isAuthenticatedAdmin } from "../auth";
 import { logger } from "../lib/logger";
 import {
@@ -106,12 +106,41 @@ lessonPipelineRouter.get("/jobs/:id", async (req: Request, res: Response) => {
       createdAt: row.createdAt,
       finishedAt: row.finishedAt,
     },
+    // LS-2c (kliens): amit a vázlat-jóváhagyó képernyő megmutat. A `coverage` a
+    // pedagógus-lépéskor szerveroldalon számolt mérés — a kliens csak megjeleníti.
     produced: {
-      outline: output?.outline !== undefined,
+      outline: output?.outline ?? null,
+      coverage: output?.coverage ?? null,
       approvedOutline: output?.approvedOutline !== undefined,
       lessonId: row.lessonId,
     },
   });
+});
+
+/** GET /api/studio/jobs/:id/notes — the lektor's notes of a job (LektorNotes panel). */
+lessonPipelineRouter.get("/jobs/:id/notes", async (req: Request, res: Response) => {
+  const [exists] = await db
+    .select({ id: studioJobs.id })
+    .from(studioJobs)
+    .where(eq(studioJobs.id, req.params.id))
+    .limit(1);
+  if (!exists) return res.status(404).json({ message: "A job nem található." });
+
+  const rows = await db
+    .select({
+      id: lektorNotes.id,
+      kind: lektorNotes.kind,
+      subkind: lektorNotes.subkind,
+      severity: lektorNotes.severity,
+      message: lektorNotes.message,
+      blockPath: lektorNotes.blockPath,
+      resolvedBy: lektorNotes.resolvedBy,
+    })
+    .from(lektorNotes)
+    .where(eq(lektorNotes.jobId, req.params.id))
+    .orderBy(asc(lektorNotes.createdAt));
+
+  res.json({ notes: rows });
 });
 
 /** POST /api/studio/jobs/:id/approve-outline — the admin gate between pedagogue and author. */

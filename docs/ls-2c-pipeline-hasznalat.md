@@ -47,8 +47,46 @@ A következő admin-végpontok élnek (`/api/studio`, csak adminnak):
 
 ## Amit MÉG nem kapsz ebben a szeletben
 
-- **Admin képernyő a gépsorhoz.** A végpontok szerveroldalon készen vannak, a Studio
-  felületén gombok még nincsenek hozzájuk (a térképszerkesztő megvan, a job-monitor és
-  a vázlat-jóváhagyó képernyő a felületi szeletben jön).
 - **A publikálási kapu gépesítése** (5. pont: a lecke a kapunál vár).
 - **Animáció, gyakorlat-blokkok, hang** — a 4. szelet tartalma.
+
+## A felület: „Lecke készítése" fül az adminban
+
+A fenti végpontokhoz képernyő is jár (LS-2c felületi szelet). Az admin oldalon
+(**Lecke készítése** fül, `?tab=lesson-studio`) a folyamat három lépésben zajlik:
+
+1. **Térkép kiválasztása.** A legördülőből a kurált, **jóváhagyott** tudás-térképek
+   választhatók — a nem jóváhagyottak szürkén, letiltva szerepelnek. A tantárgy és az
+   osztály a térképből jön: a lecke mindig a térkép szerinti osztálynak készül.
+2. **Indítás és figyelés.** A „Lecke-készítés indítás" gomb elindítja a gépsort, a
+   kártya **2 másodpercenként** kérdezi az állapotot: melyik lépésnél jár
+   (pedagógus → szerző → lektor → kapu), hányadik javítási körnél tart, és hiba esetén
+   pontosan kiírja, mi okozta. Hiba után az **Újra** gomb ugyanazzal a bemenettel
+   folytatja — a már kifizetett modellhívást nem fizeti meg újra.
+3. **Vázlat-jóváhagyás.** Amikor a pedagógus kész van, a vázlat megjelenik szakaszokkal:
+   - minden szakasznál ott vannak a hozzákapcsolt fogalmak (a **kulcsfogalmakat** piros
+     keret jelöli), és a tervezett blokkok típusai magyarul;
+   - a **fedettség-sáv** megmutatja, a kulcsfogalmak és a kiegészítők hány százalékát
+     fedi le a vázlat (a szerver mérte, mielőtt egyáltalán láttad);
+   - a szakaszok a **fogantyúnál fogva** átrendezhetők — egérrel és billentyűzettel is,
+     a sorrend a jóváhagyással együtt megy át a szerverre, amely **újravizsgálja** az
+     egészet;
+   - a „Vázlat jóváhagyása" gomb engedi tovább a szerzőt. Vissza nincs nyomd — a
+     jóváhagyás után a szerző ír.
+4. **A lektor jegyzetei.** A lektor lépés után három lista jelenik meg:
+   - **Blokkoló** — ezeknél a szerző újraírja a megnevezett részt (max. 2 kör);
+   - **Figyelmeztetés** — nyelvi/életkori észrevételek, nem állítják meg a gépsort;
+   - **Információ** — egyéb megjegyzések.
+   - **„Csak neked" doboz:** ha a lektor szerint a **tankönyv tévedhet**
+     (`book_probably_wrong`), azt ide írja be, szürke dobozban. Ez az admin saját
+     információja: a lecke a forrás szerint marad (D1), és **a gyerek sosem látja**
+     ezt a jegyzetet.
+
+### Technikai megjegyzés (teszt-lefedettség)
+
+A képernyő mögötti tiszta logika (polling-döntés, magyar címkék, jegyzet-csoportosítás,
+szakasz-átrendezés, fedettségi százalékok) egységtesztelt:
+`source/tests/studio-ui-pure.test.ts` (19 teszt). Maga a **UI komponens** nem
+egységtesztelt — erre akkor kerül sor Playwright e2e-ben, ha lesz egy valós,
+lefutott lecke, amivel a folyamat végigjátszható (a futtatáshoz admin bejelentkezés és
+élő OPENROUTER_API_KEY kell).

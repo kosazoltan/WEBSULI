@@ -67,6 +67,7 @@ import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
 import ParentDashboardPanel from "@/components/ParentDashboardPanel";
 import { KnowledgeMapPanel } from "@/components/studio/KnowledgeMapEditor";
+import LessonStudioPanel from "@/components/studio/LessonStudioPanel";
 import BackupManager from "@/components/BackupManager";
 import TagManager from "@/components/TagManager";
 import FileEditDialog from "@/components/FileEditDialog";
@@ -355,7 +356,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
-    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups", "email-debug", "parent-dashboard"];
+    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups", "email-debug", "parent-dashboard", "lesson-studio"];
     return tabParam && validTabs.includes(tabParam) ? tabParam : "files";
   });
 
@@ -760,6 +761,10 @@ export default function Admin() {
               <BookOpen className="h-3 w-3" />
               Tudás-térkép
             </TabsTrigger>
+            <TabsTrigger value="lesson-studio" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white text-emerald-700 dark:text-emerald-400" data-testid="tab-lesson-studio">
+              <Sparkles className="h-3 w-3" />
+              Lecke készítése
+            </TabsTrigger>
             <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-database">
               <Database className="h-3 w-3" />
               Adatbázis
@@ -952,6 +957,10 @@ export default function Admin() {
 
       <TabsContent value="knowledge-maps" className="space-y-2">
         {activeTab === "knowledge-maps" && <KnowledgeMapPanel />}
+      </TabsContent>
+
+      <TabsContent value="lesson-studio" className="space-y-2">
+        {activeTab === "lesson-studio" && <LessonStudioPanel />}
       </TabsContent>
 
       <TabsContent value="tags" className="space-y-2">

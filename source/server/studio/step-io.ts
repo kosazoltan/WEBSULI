@@ -96,6 +96,29 @@ export function lessonIdsSubsetOfMap(lesson: Lesson, concepts: MapConcept[]): st
 }
 
 /**
+ * The percentages the OutlineReview coverage bar shows.
+ *
+ * Derived from an existing `OutlineCoverage` plus the map: `core` is how many core
+ * concepts the sections cover, `supporting` the server-computed ratio, `unknown` the
+ * count of invented ids. A map with no core concepts shows core 100% (a 0/0 is a bar
+ * at zero for a map that cannot fail on core — misleading in the other direction).
+ */
+export function coveragePercentages(
+  coverage: OutlineCoverage,
+  concepts: MapConcept[],
+): { core: number; supporting: number; unknown: number } {
+  const coreTotal = concepts.filter((c) => c.examWeight === "core").length;
+  const coreCovered = coreTotal - coverage.missingCore.length;
+  const corePct = coreTotal === 0 ? 100 : Math.round((coreCovered / coreTotal) * 100);
+
+  return {
+    core: corePct,
+    supporting: Math.round(coverage.supporting.ratio * 100),
+    unknown: coverage.unknownIds.length,
+  };
+}
+
+/**
  * D1, verbatim — the owner's exact words, which the lektor prompt must carry and the
  * author prompt must honour. Changed spelling would weaken the instruction; tests pin
  * this constant.
