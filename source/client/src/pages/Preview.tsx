@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import type { HtmlFile } from "@shared/schema";
 import { useConfig } from "@/lib/useConfig";
+import { LessonView } from "@/lesson-runtime/LessonView";
 
 export default function Preview() {
   const [, params] = useRoute("/preview/:id");
@@ -31,6 +32,8 @@ export default function Preview() {
   
   // Determine content type
   const isPdf = material?.contentType === 'pdf';
+  // LS-2: a strukturált lecke saját futtatót kap az iframe helyett.
+  const isLesson = material?.contentType === 'lesson';
   
   // BACKLOG T4 (2026-09-02): a tananyag a saját, elszigetelt originjéről töltődik
   // (prod: a Render szolgáltatás URL-je; dev: same-origin). Így az iframe
@@ -201,6 +204,11 @@ export default function Preview() {
           <div className="w-full h-full flex items-center justify-center py-20">
             <p className="text-muted-foreground">Betöltés…</p>
           </div>
+        ) : isLesson ? (
+          // LS-2: a strukturált lecke NEM iframe-ben fut. A tartalom a saját sémánk
+          // szerinti JSON, amit a saját futtatónk renderel — így nincs idegen script,
+          // egységes a mobil/érintés-viselkedés, és a /dev CSP-lazítás sem kell ide.
+          <LessonView material={material} />
         ) : (
           // Unified iframe rendering for both HTML and PDF
           // Sandbox: allow-scripts (JS runs), allow-forms (forms work), allow-same-origin (Web APIs)

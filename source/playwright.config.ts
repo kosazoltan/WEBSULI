@@ -37,7 +37,13 @@ export default defineConfig({
         // Közvetlenül a node-ot indítjuk (nem npm → cross-env → node láncot): Windows-on a
         // Playwright a futás végén a közbenső shell-folyamatokat nem tudta leállítani, a
         // szerver árván maradt az 5000-es porton, és a futás a timeoutig lógott.
-        command: 'node dist/index.js',
+        //
+        // LS-2 (2026-09-04): a build ITT fut, a VITE_ENABLE_RUNTIME_PROBE=1 kapcsolóval,
+        // hogy a lecke-futtató mérőoldala (/__lesson-runtime-probe) létezzen a tesztben.
+        // Így a teszt maga gondoskodik a feltételéről: nem attól függ, hogy valaki
+        // korábban milyen környezettel buildelt. Az éles build a kapcsoló nélkül fut,
+        // ezért a mérőoldal a kiadott bundle-ben nincs benne (ellenőrizve: 0 találat).
+        command: 'npm run build:e2e && node dist/index.js',
         url: 'http://localhost:5000/api/health',
         // Mindig SAJÁT szervert indít: ha az 5000-es port foglalt, a Playwright hibával
         // megáll, nem egy idegen (pl. más worktree régi buildjét futtató) szervert tesztel.

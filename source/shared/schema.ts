@@ -648,3 +648,109 @@ export const kmConcepts = pgTable(
 export type KmConceptRow = typeof kmConcepts.$inferSelect;
 export type InsertKmConceptRow = typeof kmConcepts.$inferInsert;
 
+/**
+ * LS-2 — a strukturált lecke.
+ *
+ * 1:1 egy `html_files` sorral, amelynek `contentType`-ja `'lesson'` — így a meglévő
+ * lista, jogosultság és nézettség-számlálás változatlanul működik, de a Preview nem
+ * iframe-et tesz ki, hanem a lecke-futtatót.
+ */
+export const lessons = pgTable(
+  "lessons",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    htmlFileId: varchar("html_file_id").references(() => htmlFiles.id, { onDelete: "cascade" }),
+    mapId: varchar("map_id")
+      .notNull()
+      .references(() => knowledgeMaps.id, { onDelete: "restrict" }),
+    version: integer("version").notNull().default(1),
+    /** A teljes Lesson JSON (shared/lesson-schema.ts). */
+    json: jsonb("json").notNull(),
+    /** A publikáláskori fedettség pillanatképe: core/supporting arányok. */
+    coverage: jsonb("coverage"),
+    publishedAt: timestamp("published_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    mapIdx: index("lessons_map_id_idx").on(table.mapId),
+    fileIdx: index("lessons_html_file_id_idx").on(table.htmlFileId),
+    publishedIdx: index("lessons_published_at_idx").on(table.publishedAt),
+  }),
+);
+
+export type LessonRow = typeof lessons.$inferSelect;
+export type InsertLessonRow = typeof lessons.$inferInsert;
+
+/**
+ * Egy csővezeték-lépés futása. DB-sor, nem memóriabeli map: újraindítás után is
+ * követhető, és a kliens ezt kérdezi le (ugyanaz a minta, mint az improveAsync.ts).
+ */
+export const studioJobs = pgTable(
+  "studio_jobs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").references(() => lessons.id, { onDelete: "cascade" }),
+    mapId: varchar("map_id")
+      .notNull()
+      .references(() => knowledgeMaps.id, { onDelete: "cascade" }),
+    /** pedagogue | author | lektor | gate | done | error */
+    step: varchar("step", { length: 16 }).notNull(),
+    /** pending | running | ok | error */
+    status: varchar("status", { length: 16 }).notNull().default("pending"),
+    /** Hányadik szerző-kör (0 = első írás). Limit: MAX_AUTHOR_ROUNDS. */
+    round: integer("round").notNull().default(0),
+    model: varchar("model", { length: 120 }),
+    promptVersion: varchar("prompt_version", { length: 32 }),
+    inputHash: varchar("input_hash", { length: 64 }).notNull(),
+    output: jsonb("output"),
+    tokensIn: integer("tokens_in"),
+    tokensOut: integer("tokens_out"),
+    error: text("error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => ({
+    mapIdx: index("studio_jobs_map_id_idx").on(table.mapId),
+    lessonIdx: index("studio_jobs_lesson_id_idx").on(table.lessonId),
+    hashIdx: index("studio_jobs_input_hash_idx").on(table.inputHash),
+    stepStatusIdx: index("studio_jobs_step_status_idx").on(table.step, table.status),
+  }),
+);
+
+export type StudioJobRow = typeof studioJobs.$inferSelect;
+export type InsertStudioJobRow = typeof studioJobs.$inferInsert;
+
+/**
+ * A Lektor megállapításai — CSAK adminnak. A `book_probably_wrong` fajta `info`
+ * szintű, és a lecke szövegét soha nem módosítja (D1).
+ */
+export const lektorNotes = pgTable(
+  "lektor_notes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    jobId: varchar("job_id")
+      .notNull()
+      .references(() => studioJobs.id, { onDelete: "cascade" }),
+    /** source_conflict | coverage_gap | language | age */
+    kind: varchar("kind", { length: 24 }).notNull(),
+    /** pl. book_probably_wrong | not_in_map | contradicts_source | core | supporting */
+    subkind: varchar("subkind", { length: 32 }),
+    /** blocker | warn | info */
+    severity: varchar("severity", { length: 12 }).notNull(),
+    message: text("message").notNull(),
+    /** "szakaszIndex.blokkIndex", ha egy blokkra mutat. */
+    blockPath: varchar("block_path", { length: 32 }),
+    resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolution: text("resolution"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    jobIdx: index("lektor_notes_job_id_idx").on(table.jobId),
+    severityIdx: index("lektor_notes_severity_idx").on(table.jobId, table.severity),
+  }),
+);
+
+export type LektorNoteRow = typeof lektorNotes.$inferSelect;
+export type InsertLektorNoteRow = typeof lektorNotes.$inferInsert;
+

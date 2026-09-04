@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "vite build && node build-server.js",
+    "build:e2e": "cross-env VITE_ENABLE_RUNTIME_PROBE=1 vite build && node build-server.js",
     "build:client": "vite build",
     "build:server": "node build-server.js",
     "start": "cross-env NODE_ENV=production node dist/index.js",

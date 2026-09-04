@@ -121,6 +121,47 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         expect(scrollWidth).toBeLessThanOrEqual(360 + 1); // 1px kerekítési tűrés
     });
 
+    test('LS-2: a lecke-futtató 360px-en renderel, nincs túlcsordulás, a Check tanít', async ({ page }) => {
+        // A futtató a gyerek felülete: unit-teszt nem mutatja meg, hogy elfér-e telefonon,
+        // hogy megnyomható-e a válasz, és hogy a rossz válaszra jön-e magyarázat.
+        // Ezért egy önálló oldalon rendereljük a valódi komponenst valódi böngészőben.
+        await page.setViewportSize({ width: 360, height: 740 });
+        await page.goto('/__lesson-runtime-probe');
+
+        const runtime = page.getByTestId('lesson-runtime');
+        await expect(runtime).toBeVisible();
+
+        // 1. Nincs vízszintes túlcsordulás.
+        const overflow = await page.evaluate(() =>
+            document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(overflow, 'vízszintes túlcsordulás 360px-en').toBeLessThanOrEqual(0);
+
+        // 2. Minden válaszgomb elérhető méretű (WCAG 2.5.5).
+        const options = page.locator('[data-testid^="check-option-"]');
+        const count = await options.count();
+        expect(count).toBeGreaterThan(1);
+        for (let i = 0; i < count; i++) {
+            const box = await options.nth(i).boundingBox();
+            expect(box, `${i}. válasz nem látszik`).not.toBeNull();
+            expect(box!.height, `${i}. válasz magassága`).toBeGreaterThanOrEqual(44);
+        }
+
+        // 3. A ROSSZ válasz is tanít: saját visszajelzést kap, nem csak piros keretet.
+        await options.nth(1).click();
+        const feedback = page.getByTestId('check-feedback');
+        await expect(feedback).toBeVisible();
+        await expect(feedback).toHaveText(/nem a gyökér/i);
+
+        // 4. A helyes válasz után a visszajelzés is változik.
+        await options.nth(0).click();
+        await expect(feedback).toHaveText(/így van/i);
+
+        // 5. A példa lépésenként nyílik, nem zúdítja rá a megoldást.
+        const nextStep = page.getByTestId('example-next-step');
+        await expect(nextStep).toBeVisible();
+        await expect(page.getByText('Eredmény:')).toBeHidden();
+    });
+
     test('API elérhetőség - health check', async ({ request }) => {
         // Ellenőrizzük, hogy az API válaszol
         const response = await request.get('/api/html-files');

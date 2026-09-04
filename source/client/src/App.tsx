@@ -9,6 +9,9 @@ import Login from "@/pages/Login";
 import { lazy, Suspense } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
+// LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
+const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
+
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
 const PdfView = lazy(() => import("@/pages/pdf-view"));
@@ -40,6 +43,13 @@ function Router() {
     <Suspense fallback={<LoadingSpinner />}>
       <Switch>
         <Route path="/" component={Home} />
+        {/* LS-2: a lecke-futtató böngészős mérőoldala. Csak akkor létezik, ha a build
+            kifejezetten bekapcsolta (VITE_ENABLE_RUNTIME_PROBE=1) — az éles bundle-ben
+            nincs benne. A Playwright a production buildet szolgálja ki, ezért NEM elég
+            a `!PROD` feltétel: a kapcsolót a teszt-build állítja be. */}
+        {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
+          <Route path="/__lesson-runtime-probe" component={LessonRuntimeProbe} />
+        )}
         <Route path="/preview/:id" component={Preview} />
         <Route path="/materials/pdf/:id" component={PdfView} />
         <Route path="/admin" component={Admin} />

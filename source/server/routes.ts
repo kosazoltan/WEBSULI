@@ -32,6 +32,7 @@ import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEma
 import { LEGACY_MODELS, assertDistinctFamilies } from "./ai/models";
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { studioRouter } from "./studio/routes";
+import { lessonPublicRouter } from "./studio/lesson-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
 
@@ -781,6 +782,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LS-1: Lesson Studio — Tudás-térkép végpontok. Külön routerben (a routes.ts már
   // 5,6 ezer sor); a router maga rakja fel az isAuthenticatedAdmin őrt.
   app.use("/api/studio", studioRouter);
+
+  // LS-2: a lecke olvasó oldala PUBLIKUS (ezt tölti a gyerek böngészője), és csak
+  // publikált, sémára újraellenőrzött leckét ad ki.
+  app.use("/api/lessons", lessonPublicRouter);
 
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
