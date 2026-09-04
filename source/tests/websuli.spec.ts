@@ -86,6 +86,41 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         await expect(mainContent).toBeVisible({ timeout: 15000 });
     });
 
+    test('LS-0b: 360px-en a hero CTA gombok láthatók, feliratosak és 44px-esek', async ({ page }) => {
+        // Regresszió-őr: 2026-09-04 előtt a három fő CTA `h-6` (24px) volt és a feliratuk
+        // `hidden xs:inline` — a `xs` breakpoint hiánya miatt MINDEN méreten rejtve. Egy
+        // 360px széles telefonon ikon-only, ujjal alig eltalálható gombok voltak.
+        await page.setViewportSize({ width: 360, height: 740 });
+        await page.goto('/');
+        await page.waitForLoadState('networkidle');
+
+        await page.screenshot({ path: 'tests/screenshots/ls0b-hero-360.png', fullPage: false });
+
+        // A "Játékok" CTA mindig ott van; a "Böngészés" is. A harmadik (Belépés/Admin)
+        // az auth-állapottól függ, ezért azt csak akkor nézzük, ha látható.
+        const games = page.getByTestId('link-hero-games');
+        const browse = page.getByTestId('button-hero-browse');
+
+        for (const cta of [games, browse]) {
+            await expect(cta).toBeVisible({ timeout: 15000 });
+            const box = await cta.boundingBox();
+            expect(box, 'a CTA-nak van elrendezési doboza').not.toBeNull();
+            // WCAG 2.5.5 / iOS HIG: min. 44x44 CSS px érintőfelület.
+            expect(box!.height).toBeGreaterThanOrEqual(44);
+            expect(box!.width).toBeGreaterThanOrEqual(44);
+            // A felirat NEM lehet elrejtve: legyen nem üres, látható szöveg.
+            const text = (await cta.innerText()).trim();
+            expect(text.length).toBeGreaterThan(0);
+        }
+
+        await expect(games).toHaveText(/Játékok/);
+        await expect(browse).toHaveText(/Böngészés/);
+
+        // 360px-en sem lehet vízszintes túlcsordulás.
+        const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+        expect(scrollWidth).toBeLessThanOrEqual(360 + 1); // 1px kerekítési tűrés
+    });
+
     test('API elérhetőség - health check', async ({ request }) => {
         // Ellenőrizzük, hogy az API válaszol
         const response = await request.get('/api/html-files');

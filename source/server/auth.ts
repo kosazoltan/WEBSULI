@@ -8,6 +8,7 @@ import { storage } from "./storage";
 import { dbPool } from "./db";
 import { User } from "@shared/schema";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
+import { sanitizeReturnTo, resolvePostLoginRedirect } from "./lib/return-to";
 import { logger } from "./lib/logger";
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
@@ -129,7 +130,15 @@ export function setupAuth(app: Express) {
         }));
 
         // Google Auth Routes
-        app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+        // LS-0a: the caller may ask to be returned to a specific page after login
+        // (a pupil starting from /games or a lesson). Only same-origin relative paths
+        // are stored; anything else is dropped and the default destination applies.
+        app.get('/auth/google', (req, res, next) => {
+            const requested = sanitizeReturnTo(req.query.returnTo);
+            if (requested) req.session.oauthReturnTo = requested;
+            else delete req.session.oauthReturnTo;
+            passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+        });
 
         // AUDIT 2026-09-01: session-fixation védelem a Google-belépésen is (a lokális login
         // már regenerál): egy előre beültetett session-id ne maradjon érvényes belépés után.
@@ -137,12 +146,18 @@ export function setupAuth(app: Express) {
             passport.authenticate('google', (err: Error | null, user: Express.User | false) => {
                 if (err) return next(err);
                 if (!user) return res.redirect('/login');
+                // LS-0a: read the stored path BEFORE regenerate() — regenerating the session
+                // discards its contents, so reading it afterwards always yields undefined.
+                const storedReturnTo = sanitizeReturnTo(req.session.oauthReturnTo);
                 req.session.regenerate((regenErr) => {
                     if (regenErr) return next(regenErr);
                     req.login(user, (loginErr) => {
                         if (loginErr) return next(loginErr);
                         logger.info('[AUTH] Google auth successful, redirecting...');
-                        res.redirect('/admin');
+                        res.redirect(resolvePostLoginRedirect({
+                            isAdmin: !!user.isAdmin,
+                            stored: storedReturnTo,
+                        }));
                     });
                 });
             })(req, res, next);

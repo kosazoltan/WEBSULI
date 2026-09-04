@@ -39,6 +39,13 @@ type Student = {
   games: Record<string, GameStats>;
 };
 
+type GameCatalogStat = {
+  gameId: string;
+  totalGamesPlayed: number;
+  totalXp: number;
+  distinctPlayers: number;
+};
+
 type DashboardResponse = {
   days: number;
   cutoff: string;
@@ -46,6 +53,8 @@ type DashboardResponse = {
   totalStudents: number;
   totalXp: number;
   totalGames: number;
+  /** LS-0d: per-játék használat. Régi szerververzió nem küldi → opcionális. */
+  gamesCatalog?: GameCatalogStat[];
 };
 
 const GAME_LABELS: Record<string, { name: string; emoji: string }> = {
@@ -188,6 +197,51 @@ export default function ParentDashboardPanel() {
               </p>
             </CardContent>
           </Card>
+
+          {/* LS-0d: melyik játékot játsszák valójában — a közös játékmotor
+              bevezetési sorrendjének adatalapja (D3). */}
+          {data.gamesCatalog && data.gamesCatalog.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-cyan-500" />
+                  Játékok használata
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Az időszakban ténylegesen játszott körök játékonként.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-muted-foreground border-b">
+                        <th className="py-2 pr-3 font-medium">Játék</th>
+                        <th className="py-2 pr-3 font-medium text-right">Futás</th>
+                        <th className="py-2 pr-3 font-medium text-right">Játékos</th>
+                        <th className="py-2 font-medium text-right">XP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.gamesCatalog.map((g) => {
+                        const label = GAME_LABELS[g.gameId];
+                        return (
+                          <tr key={g.gameId} className="border-b last:border-0">
+                            <td className="py-2 pr-3">
+                              {label ? `${label.emoji} ${label.name}` : g.gameId}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-semibold">{g.totalGamesPlayed}</td>
+                            <td className="py-2 pr-3 text-right">{g.distinctPlayers}</td>
+                            <td className="py-2 text-right text-muted-foreground">{g.totalXp}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

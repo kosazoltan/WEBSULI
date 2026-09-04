@@ -29,6 +29,8 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
+import { LEGACY_MODELS, assertDistinctFamilies } from "./ai/models";
+import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
 
@@ -764,6 +766,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Continue anyway but log warning
   }
 
+  // LS-0d: a Studio modell-útvonalak épségének ellenőrzése induláskor.
+  // Ha a Szerző és a Lektor ugyanabba a modellcsaládba esik, a forrás-hűség (D1)
+  // független ellenőrzése némán megszűnik — ezért ez HIBA, nem figyelmeztetés.
+  assertDistinctFamilies();
+  if (!isOpenRouterConfigured()) {
+    logger.warn(
+      '[AI] OPENROUTER_API_KEY nincs beállítva — a Studio lépések a meglévő ' +
+      'OpenAI/Claude providerekre esnek vissza.',
+    );
+  }
+
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
 
@@ -1200,7 +1213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       const message = await withAIProvider((signal) => anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
+        model: LEGACY_MODELS.htmlFix,
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
@@ -1290,7 +1303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       const message = await withAIProvider((signal) => anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
+        model: LEGACY_MODELS.htmlTheme,
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
@@ -1453,7 +1466,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       const explanationPrompt = `${systemPrompt}\n\nElemezd ezt a HTML fájlt és magyarázd el, mit fogsz javítani (csak magyarázat, ne JSON):\n\n${file.content.substring(0, 3000)}...`;
 
       const explanationStream = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+        model: LEGACY_MODELS.htmlFixStream, // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
         messages: [{ role: "user", content: explanationPrompt }],
         max_completion_tokens: 2048,
         stream: true,
@@ -1482,7 +1495,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       const structuredPrompt = `${systemPrompt}\n\nJavítsd ki ezt a HTML fájlt és add vissza JSON formátumban:\n\n${file.content}`;
 
       const structuredResponse = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: LEGACY_MODELS.htmlFixStream,
         messages: [{ role: "user", content: structuredPrompt }],
         max_completion_tokens: 4096,
         response_format: { type: "json_object" }
@@ -1764,7 +1777,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
 
       // Stream Claude's response
       const stream = anthropic.messages.stream({
-        model: "claude-3-5-sonnet-20241022",
+        model: LEGACY_MODELS.claudeChat,
         max_tokens: 8192, // Larger for full HTML generation
         system: systemPrompt,
         messages: messages
@@ -1916,7 +1929,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       }
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: LEGACY_MODELS.analyzeFiles,
         messages: [
           {
             role: "system",
@@ -2029,7 +2042,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       ];
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: LEGACY_MODELS.analyzeFiles,
         messages: [
           {
             role: "system",
@@ -3430,6 +3443,31 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const students = Array.from(byUser.values()).sort((a, b) => b.totalXp - a.totalXp);
 
+      // LS-0d: per-játék összesítő — "mit játszanak valójában a gyerekek".
+      // Ez adja a D3-döntés (melyik játék kapja először a közös motort) adatalapját.
+      // Ugyanabból a `rows` halmazból számoljuk, nincs plusz adatbázis-kör.
+      const byGame = new Map<string, { gameId: string; totalGamesPlayed: number; totalXp: number; players: Set<string> }>();
+      for (const r of rows) {
+        const entry = byGame.get(r.gameId) ?? {
+          gameId: r.gameId,
+          totalGamesPlayed: 0,
+          totalXp: 0,
+          players: new Set<string>(),
+        };
+        entry.totalGamesPlayed += r.gamesPlayed ?? 0;
+        entry.totalXp += r.totalXp ?? 0;
+        entry.players.add(r.userId);
+        byGame.set(r.gameId, entry);
+      }
+      const gamesCatalogStats = Array.from(byGame.values())
+        .map(({ gameId, totalGamesPlayed, totalXp, players }) => ({
+          gameId,
+          totalGamesPlayed,
+          totalXp,
+          distinctPlayers: players.size,
+        }))
+        .sort((a, b) => b.totalGamesPlayed - a.totalGamesPlayed);
+
       res.json({
         days,
         cutoff: cutoff.toISOString(),
@@ -3437,6 +3475,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         totalStudents: students.length,
         totalXp: students.reduce((s, x) => s + x.totalXp, 0),
         totalGames: students.reduce((s, x) => s + x.totalGames, 0),
+        gamesCatalog: gamesCatalogStats,
       });
     } catch (e) {
       console.error("[PARENT-DASH] hiba:", e);

@@ -15,8 +15,17 @@ export default {
       // JAVÍTÁS (2026-09-02): az `xs:` breakpoint 7 helyen használt (pl. "Belépés",
       // "Böngészés", "Játékok" gombfeliratok `hidden xs:inline`), de sosem volt definiálva →
       // a feliratok MINDEN képernyőn rejtve maradtak (ikon-only gombok, akadálymentesség).
+      // LS-0b (2026-09-04): a `tablet:` (10 használat), `foldable:` és `uw:` osztályok
+      // ugyanebben az állapotban voltak — definiálatlan prefix esetén a Tailwind NEM ad ki
+      // szabályt, a class némán hatástalan. A `tests/screens-defined.test.ts` őrzi a hibaosztályt.
+      // A `fold:` (FileCard ×3) SZŰKÍTŐ szándékú (`fold:p-2` a `p-2.5` helyett), ezért
+      // max-width — a Galaxy Z Fold külső kijelzője ~280-320px.
       screens: {
         xs: "480px",
+        fold: { max: "320px" },
+        tablet: "768px",
+        foldable: "900px",
+        uw: "1600px",
       },
       fontFamily: {
         // ✅ MAGYAR ÉKEZET-BARÁT FONTOK

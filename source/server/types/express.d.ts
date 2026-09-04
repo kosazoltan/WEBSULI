@@ -1,4 +1,17 @@
 // Augment Express Request and User types for Passport integration
+import "express-session";
+
+declare module "express-session" {
+  interface SessionData {
+    /**
+     * LS-0a: sanitized same-origin relative path the user should return to after a
+     * successful Google login. Written by `GET /auth/google`, consumed (and cleared)
+     * by the OAuth callback.
+     */
+    oauthReturnTo?: string;
+  }
+}
+
 declare global {
   namespace Express {
     interface Request {

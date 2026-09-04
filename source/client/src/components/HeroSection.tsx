@@ -56,9 +56,12 @@ function HeroSection({
     // E2E/a11y (2026-09-02): a felső sáv az oldal fejléce → szemantikus <header> landmark
     <header className="relative flex items-center justify-center overflow-hidden rounded-lg mb-2 py-1.5 sm:py-2">
       {/* Gemini fénykép háttér */}
+      {/* LS-0c (2026-09-04): 11,16 MB JPEG → 246 KB WebP (1440px, q72), 97,7% kisebb.
+          A kép opacity-70 + fekete overlay mögött díszlet, a méret nem indokolt.
+          A duplikátum copernican-hero-bg.jpg (bájtra azonos, 0 kódhivatkozás) törölve. */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-70"
-        style={{ backgroundImage: 'url("/gemini-hero-bg.jpg")' }}
+        style={{ backgroundImage: 'url("/gemini-hero-bg.webp")' }}
       />
 
       {/* Sötét overlay */}
@@ -97,24 +100,28 @@ function HeroSection({
           </motion.div>
 
           {/* Jobb: CTA gombok + Auth */}
-          <motion.div variants={itemVariants} className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
+          {/* LS-0b: 44px-es érintőfelület (WCAG 2.5.5 / iOS HIG) és MINDIG látható felirat.
+              Korábban `h-6` (24px) + `hidden xs:inline` → 480px alatt ikon-only, ujjal alig
+              található gombok. A feliratot nem rejtjük el, inkább tördelünk. */}
+          <motion.div variants={itemVariants} className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto flex-wrap justify-end">
             <Button
               asChild
               size="sm"
-              className="gap-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 text-[10px] sm:text-xs px-2 sm:px-3 h-6 sm:h-7 rounded-full shadow-lg"
+              className="gap-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 text-xs px-3 min-h-11 min-w-11 rounded-full shadow-lg"
             >
               <a href="#gyakorlo-jatekok" data-testid="link-hero-games">
-                <Gamepad2 className="w-3 h-3 shrink-0" />
-                <span className="hidden xs:inline">Játékok</span>
+                <Gamepad2 className="w-4 h-4 shrink-0" />
+                <span>Játékok</span>
               </a>
             </Button>
             <Button
               size="sm"
               onClick={scrollToContent}
-              className="gap-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 text-white border-0 text-[10px] sm:text-xs px-2 sm:px-3 h-6 sm:h-7 rounded-full shadow-lg"
+              className="gap-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 text-white border-0 text-xs px-3 min-h-11 min-w-11 rounded-full shadow-lg"
+              data-testid="button-hero-browse"
             >
-              <span className="hidden xs:inline">Böngészés</span>
-              <ChevronDown className="w-3 h-3 animate-bounce" />
+              <span>Böngészés</span>
+              <ChevronDown className="w-4 h-4 animate-bounce" />
             </Button>
             <div className="hidden sm:block">
               {showEmailSubscribe && <EmailSubscribeDialog />}
@@ -123,17 +130,17 @@ function HeroSection({
               <Link href="/admin">
                 <Button
                   size="sm"
-                  className="h-7 min-w-[72px] px-2.5 text-xs font-semibold gap-1 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white border border-rose-200/25 rounded-full shadow-lg"
+                  className="min-h-11 min-w-11 px-3 text-xs font-semibold gap-1 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white border border-rose-200/25 rounded-full shadow-lg"
                 >
-                  <Shield className="w-3.5 h-3.5 shrink-0" />
+                  <Shield className="w-4 h-4 shrink-0" />
                   <span>Admin</span>
                 </Button>
               </Link>
             ) : !isAuthenticated ? (
-              <Link href="/login">
-                <Button size="sm" variant="outline" className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs gap-0.5 border-white/40 text-white hover:bg-white/20 rounded-full">
-                  <LogIn className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                  <span className="hidden xs:inline">Belépés</span>
+              <Link href={`/login?returnTo=${encodeURIComponent("/")}`}>
+                <Button size="sm" variant="outline" className="min-h-11 min-w-11 px-3 text-xs gap-1 border-white/40 text-white hover:bg-white/20 rounded-full" data-testid="button-hero-login">
+                  <LogIn className="w-4 h-4 shrink-0" />
+                  <span>Belépés</span>
                 </Button>
               </Link>
             ) : null}

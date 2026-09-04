@@ -34,3 +34,10 @@ source/.harness/
 # Playwright futási artefaktumok
 source/test-results/
 source/playwright-report/
+source/tests/screenshots/
+
+# LS-0c (2026-09-04): repo-bloat — a 39 MB-os biztonsági bundle és a Playwright
+# képernyőképek kimenetek, nem forrás. A bundle a HISTORY-ban benne marad
+# (a történelem átírása külön, tulajdonosi döntés).
+tmp/local-repo-safety/
+*.bundle
