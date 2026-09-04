@@ -280,16 +280,18 @@ test.describe('HeroSection Tesztek', () => {
         // Kattintás a gombra
         await ctaButton.click();
 
-        // Várakozás a görgetésre
-        await page.waitForTimeout(500);
-
         // Ellenőrizzük, hogy a #content-start elem látható a viewport-ban
         const contentStart = page.locator('#content-start');
         await expect(contentStart).toBeVisible({ timeout: 3000 });
 
-        // Ellenőrizzük, hogy görgetve lettünk (a scroll position változott)
-        const scrollY = await page.evaluate(() => window.scrollY);
-        expect(scrollY).toBeGreaterThan(0);
+        // A görgetés `behavior: "smooth"` (HeroSection.tsx:26), tehát ANIMÁLT. Egy fix
+        // 500ms-os várakozás után egyetlen, nem újrapróbált mérés terhelés alatt még a
+        // nulla pozíciót látja — 2026-09-04-én három futásból egy ezért bukott, holott
+        // a görgetés működik. Ugyanaz az állítás, de addig várunk rá, amíg az animáció
+        // tart. Ha tényleg nem görget, a lejáró határidő ugyanúgy megbuktatja.
+        await expect
+            .poll(() => page.evaluate(() => window.scrollY), { timeout: 5000 })
+            .toBeGreaterThan(0);
     });
 });
 
