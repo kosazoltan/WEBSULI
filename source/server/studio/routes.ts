@@ -20,6 +20,18 @@ import {
   parseConceptPatch,
   parseExtractRequest,
 } from "./request";
+import {
+  LEGACY_MODELS,
+  STUDIO_STEPS,
+  aiKeyStatus,
+  assertDistinctFamilies,
+  effortFor,
+  modelFamily,
+  providerForModel,
+  requiredKeyFor,
+  resolveLegacyModel,
+  studioModelMap,
+} from "../ai/models";
 
 /**
  * Lesson Studio — KnowledgeMap endpoints (LS-1).
@@ -70,6 +82,53 @@ function toClientConcept(row: typeof kmConcepts.$inferSelect) {
     orderIndex: row.orderIndex,
   };
 }
+
+/**
+ * GET /api/studio/ai-status — melyik AI-funkció tud egyáltalán elindulni.
+ *
+ * Azért létezik, mert 2026-09-04-én az éles rendszerben EGYETLEN AI-kulcs sem volt
+ * beállítva, és ezt semmi nem mondta meg: a route-ok felépítették az SDK-klienst, és az
+ * első admin-kattintás nyers szolgáltatói hibát kapott. Egy „miért nem működik" kérdésre
+ * a válasznak egy lekérdezésnyire kell lennie.
+ *
+ * A kulcsok ÉRTÉKE soha nem hagyja el a szervert — csak a jelenlét, a modell-hozzárendelés
+ * és a hiányzó kulcs miatt kieső funkciók listája.
+ */
+studioRouter.get("/ai-status", async (_req: Request, res: Response) => {
+  const keys = aiKeyStatus();
+  const studio = studioModelMap();
+
+  let d1Independent = true;
+  let d1Message = "";
+  try {
+    assertDistinctFamilies();
+  } catch (error) {
+    d1Independent = false;
+    d1Message = (error as Error).message;
+  }
+
+  res.json({
+    keys,
+    legacyTasks: (Object.keys(LEGACY_MODELS) as (keyof typeof LEGACY_MODELS)[]).map((task) => {
+      const value: string | readonly string[] = LEGACY_MODELS[task];
+      return {
+        task,
+        model: resolveLegacyModel(task),
+        fallbacks: Array.isArray(value) ? value.slice(1) : [],
+        effort: effortFor(task) ?? null,
+        requiredKey: requiredKeyFor(task),
+        ready: keys[providerForModel(resolveLegacyModel(task))].configured,
+      };
+    }),
+    studioSteps: STUDIO_STEPS.map((step) => ({
+      step,
+      model: studio[step],
+      family: modelFamily(studio[step]),
+      ready: keys.openrouter.configured,
+    })),
+    d1: { independentLektor: d1Independent, message: d1Message },
+  });
+});
 
 /** GET /api/studio/maps — list maps for the admin overview. */
 studioRouter.get("/maps", async (_req: Request, res: Response) => {

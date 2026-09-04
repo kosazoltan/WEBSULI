@@ -8,9 +8,11 @@ import {
 } from './AIProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { ClaudeProvider } from './ClaudeProvider';
+import { OpenRouterProvider, isOpenRouterConfigured } from './OpenRouterProvider';
+import { LEGACY_MODELS, resolveStudioModel } from './models';
 import { getAICache } from './AICache';
 
-export type ProviderType = 'openai' | 'claude';
+export type ProviderType = 'openai' | 'claude' | 'openrouter';
 
 interface ProviderOptions {
   primaryProvider: ProviderType;
@@ -53,7 +55,7 @@ export class AIProviderFactory {
         'openai',
         new OpenAIProvider({
           apiKey: openAIKey,
-          model: 'gpt-4o-2024-11-20',
+          model: LEGACY_MODELS.chatgptChat,
           timeout: 60000,
         })
       );
@@ -66,8 +68,24 @@ export class AIProviderFactory {
         'claude',
         new ClaudeProvider({
           apiKey: claudeKey,
-          model: 'claude-sonnet-4-20250514',
+          model: LEGACY_MODELS.claudeHtml,
           timeout: 60000,
+        })
+      );
+    }
+
+    // Initialize OpenRouter provider (LS-0d).
+    //
+    // Registered here rather than only inside the Studio's own runner so that anything
+    // going through the factory can reach the routed models. Optional by design: with
+    // no key the provider is simply absent and the direct vendor providers stay in use.
+    if (isOpenRouterConfigured()) {
+      this.providers.set(
+        'openrouter',
+        new OpenRouterProvider({
+          apiKey: process.env.OPENROUTER_API_KEY!,
+          model: resolveStudioModel('author'),
+          timeout: 180000,
         })
       );
     }

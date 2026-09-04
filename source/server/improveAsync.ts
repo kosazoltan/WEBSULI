@@ -206,20 +206,39 @@ ${originalFile.content}
 ⚠️ EMLÉKEZTETŐ: A válaszod CSAK a teljes, javított HTML kód legyen - semmi szöveg előtte vagy utána!`;
 
     const { ClaudeProvider } = await import('./ai/ClaudeProvider');
-    
-    // Model priority: try Sonnet 4 first, fall back to Haiku 3.5 if overloaded
-    const MODELS = [
-      'claude-sonnet-4-20250514',      // Primary: best quality
-      'claude-3-5-haiku-20241022',      // Fallback: faster, less likely overloaded
-    ];
+    const { OpenRouterProvider } = await import('./ai/OpenRouterProvider');
+    const { LEGACY_MODELS, providerForModel } = await import('./ai/models');
+
+    // Model priority comes from models.ts, not from a literal here: the primary is
+    // regularly overloaded, so the runner walks down the list — but WHICH models those
+    // are must be tunable in one place (LS-0d).
+    const MODEL_CHAIN = LEGACY_MODELS.improve;
     let currentModelIndex = 0;
 
-    const createProvider = (modelIndex: number) => new ClaudeProvider({
-      apiKey: anthropicKey,
-      model: MODELS[modelIndex],
-      timeout: 900000, // 15 min HTTP timeout (safety net)
-      maxTokens: 32768, // 32K tokens for full v7.1 HTML
-    });
+    /**
+     * Build the provider that serves this rung of the chain.
+     *
+     * The chain crosses vendors on purpose (Claude → OpenRouter/GLM): the reason we fall
+     * back at all is that Anthropic is overloaded, and a second Anthropic model would
+     * hit the same wall. So the provider is chosen from the model id, not fixed.
+     */
+    const createProvider = (modelIndex: number) => {
+      const model = MODEL_CHAIN[modelIndex];
+      if (providerForModel(model) === 'openrouter') {
+        return new OpenRouterProvider({
+          apiKey: process.env.OPENROUTER_API_KEY ?? '',
+          model,
+          timeout: 900000,
+          maxTokens: 32768,
+        });
+      }
+      return new ClaudeProvider({
+        apiKey: anthropicKey,
+        model,
+        timeout: 900000, // 15 min HTTP timeout (safety net)
+        maxTokens: 32768, // 32K tokens for full v7.1 HTML
+      });
+    };
 
     let improveProvider = createProvider(0);
 
@@ -280,13 +299,13 @@ ${originalFile.content}
         
         if ((isOverloaded || isRateLimit) && attempt < MAX_ATTEMPTS) {
           const delay = RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)];
-          console.warn(`[IMPROVE] Record ${dbRecordId}: ${isOverloaded ? 'Overloaded' : 'Rate limited'} on ${MODELS[currentModelIndex]} - waiting ${delay/1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
+          console.warn(`[IMPROVE] Record ${dbRecordId}: ${isOverloaded ? 'Overloaded' : 'Rate limited'} on ${MODEL_CHAIN[currentModelIndex]} - waiting ${delay/1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
           
           // After 2 failed retries on primary model, switch to fallback
-          if (attempt >= 1 && currentModelIndex < MODELS.length - 1) {
+          if (attempt >= 1 && currentModelIndex < MODEL_CHAIN.length - 1) {
             currentModelIndex++;
             improveProvider = createProvider(currentModelIndex);
-            console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Switching to fallback model: ${MODELS[currentModelIndex]}`);
+            console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Switching to fallback model: ${MODEL_CHAIN[currentModelIndex]}`);
           }
           
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -294,10 +313,10 @@ ${originalFile.content}
         }
         
         // If primary model failed all retries but we have a fallback, try it once
-        if ((isOverloaded || isRateLimit) && currentModelIndex < MODELS.length - 1) {
+        if ((isOverloaded || isRateLimit) && currentModelIndex < MODEL_CHAIN.length - 1) {
           currentModelIndex++;
           improveProvider = createProvider(currentModelIndex);
-          console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Final attempt with fallback model: ${MODELS[currentModelIndex]}`);
+          console.log(`[IMPROVE] Record ${dbRecordId}: ⚡ Final attempt with fallback model: ${MODEL_CHAIN[currentModelIndex]}`);
           await new Promise(resolve => setTimeout(resolve, 10000)); // 10s wait
           continue; // One more try with fallback
         }

@@ -6,6 +6,7 @@ import {
   resolveStudioModel,
   modelFamily,
   assertDistinctFamilies,
+  providerForModel,
   LEGACY_MODELS,
 } from "../server/ai/models";
 
@@ -93,7 +94,22 @@ test("assertDistinctFamilies throws when author and lektor share a family", () =
 // ------------------------------------------------------------------ legacy ids
 
 test("the legacy route models are declared centrally", () => {
-  // These keep the exact ids routes.ts used before, so behaviour is unchanged.
-  assert.equal(LEGACY_MODELS.htmlFix, "claude-3-5-sonnet-20241022");
-  assert.equal(LEGACY_MODELS.analyzeFiles, "gpt-5");
+  // Originally this pinned the exact pre-LS-0d ids to prove the move out of routes.ts
+  // changed no behaviour. That job is done, and on 2026-09-04 the owner refreshed the
+  // whole generation (Opus 5 / GPT-5.6 Sol / GLM 5.3 Flash), which made a literal id
+  // assertion a maintenance tax that says nothing.
+  //
+  // What actually matters is pinned instead: every task resolves to a non-empty id, and
+  // each one is routed to the right vendor. `tests/ai-model-routing-complete.test.ts`
+  // owns the "no retired generation, no hard-coded literal" guard.
+  for (const [task, value] of Object.entries(LEGACY_MODELS)) {
+    const ids = Array.isArray(value) ? value : [value];
+    assert.ok(ids.length > 0, `${task}: nincs modell`);
+    for (const id of ids) {
+      assert.ok(typeof id === "string" && id.trim().length > 0, `${task}: üres modell-azonosító`);
+    }
+  }
+
+  assert.equal(providerForModel(LEGACY_MODELS.htmlFix), "anthropic");
+  assert.equal(providerForModel(LEGACY_MODELS.analyzeFiles), "openai");
 });

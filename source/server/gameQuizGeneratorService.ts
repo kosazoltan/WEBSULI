@@ -16,10 +16,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
+import { resolveLegacyModel } from "./ai/models";
 
 const ANTHROPIC_API_KEY = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
 const ANTHROPIC_BASE_URL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
-const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+/** Central routing (LS-0d): the model id lives in ai/models.ts, not here. */
+const ANTHROPIC_MODEL = resolveLegacyModel("quizGenerator");
 const ALIBI_GAME_ID = "space-asteroid-quiz";
 
 export type GeneratedQuizItem = {

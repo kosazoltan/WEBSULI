@@ -35,3 +35,15 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
+      # AI-kulcsok (2026-09-04). `sync: false` = az ÉRTÉK a Render dashboardon él, ide
+      # csak a létezésük kerül — enélkül egy blueprint-alapú újratelepítés némán
+      # kulcs nélkül hagyta volna a szolgáltatást, és minden AI-funkció (okosítás,
+      # HTML-javítás, fájlelemzés, Tudás-térkép) az első kattintásnál dőlt volna el.
+      # Ellenőrzés: `npx tsx server/scripts/checkAIConfig.ts`, vagy admin-ként
+      # GET /api/studio/ai-status.
+      - key: AI_INTEGRATIONS_ANTHROPIC_API_KEY
+        sync: false
+      - key: AI_INTEGRATIONS_OPENAI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false

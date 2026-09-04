@@ -29,7 +29,7 @@ import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
-import { LEGACY_MODELS, assertDistinctFamilies } from "./ai/models";
+import { assertDistinctFamilies, effortFor, resolveLegacyModel } from "./ai/models";
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { studioRouter } from "./studio/routes";
 import { lessonPublicRouter } from "./studio/lesson-routes";
@@ -1223,7 +1223,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       const message = await withAIProvider((signal) => anthropic.messages.create({
-        model: LEGACY_MODELS.htmlFix,
+        model: resolveLegacyModel("htmlFix"),
+        output_config: { effort: effortFor("htmlFix") },
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
@@ -1313,7 +1314,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       const message = await withAIProvider((signal) => anthropic.messages.create({
-        model: LEGACY_MODELS.htmlTheme,
+        model: resolveLegacyModel("htmlTheme"),
+        output_config: { effort: effortFor("htmlTheme") },
         max_tokens: 4096,
         system: systemPrompt,
         messages: [
@@ -1476,7 +1478,8 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       const explanationPrompt = `${systemPrompt}\n\nElemezd ezt a HTML fájlt és magyarázd el, mit fogsz javítani (csak magyarázat, ne JSON):\n\n${file.content.substring(0, 3000)}...`;
 
       const explanationStream = await openai.chat.completions.create({
-        model: LEGACY_MODELS.htmlFixStream, // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+        model: resolveLegacyModel("htmlFixStream"),
+        reasoning_effort: effortFor("htmlFixStream"),
         messages: [{ role: "user", content: explanationPrompt }],
         max_completion_tokens: 2048,
         stream: true,
@@ -1505,7 +1508,8 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       const structuredPrompt = `${systemPrompt}\n\nJavítsd ki ezt a HTML fájlt és add vissza JSON formátumban:\n\n${file.content}`;
 
       const structuredResponse = await openai.chat.completions.create({
-        model: LEGACY_MODELS.htmlFixStream,
+        model: resolveLegacyModel("htmlFixStream"),
+        reasoning_effort: effortFor("htmlFixStream"),
         messages: [{ role: "user", content: structuredPrompt }],
         max_completion_tokens: 4096,
         response_format: { type: "json_object" }
@@ -1787,7 +1791,8 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
 
       // Stream Claude's response
       const stream = anthropic.messages.stream({
-        model: LEGACY_MODELS.claudeChat,
+        model: resolveLegacyModel("claudeChat"),
+        output_config: { effort: effortFor("claudeChat") },
         max_tokens: 8192, // Larger for full HTML generation
         system: systemPrompt,
         messages: messages
@@ -1939,7 +1944,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       }
 
       const response = await openai.chat.completions.create({
-        model: LEGACY_MODELS.analyzeFiles,
+        model: resolveLegacyModel("analyzeFiles"),
+        reasoning_effort: effortFor("analyzeFiles"),
         messages: [
           {
             role: "system",
@@ -2052,7 +2058,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       ];
 
       const response = await openai.chat.completions.create({
-        model: LEGACY_MODELS.analyzeFiles,
+        model: resolveLegacyModel("analyzeFiles"),
+        reasoning_effort: effortFor("analyzeFiles"),
         messages: [
           {
             role: "system",
@@ -2209,7 +2216,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       console.log(`[CHATGPT CHAT] Streaming response...`);
 
       const stream = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: resolveLegacyModel("chatgptChat"),
+        reasoning_effort: effortFor("chatgptChat"),
         messages,
         stream: true,
         max_completion_tokens: 4096
@@ -2414,7 +2422,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       console.log(`[CLAUDE HTML] Messages count: ${messages.length}`);
 
       const stream = await anthropic.messages.stream({
-        model: "claude-sonnet-4-20250514",
+        model: resolveLegacyModel("claudeHtml"),
+        output_config: { effort: effortFor("claudeHtml") },
         max_tokens: 16384, // Increased for full v7.1 HTML generation
         system: systemPrompt,
         messages,
