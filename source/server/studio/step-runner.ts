@@ -8,6 +8,7 @@ import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { classifyNotes, type RawNote } from "./lektor";
+import { STUDIO_PROMPT_NAMES, studioPromptStore } from "./prompt";
 import {
   computeStepHash,
   isTerminal,
@@ -116,6 +117,8 @@ export type PipelineDeps = {
   store?: PipelineStore;
   providerFactory?: (model: string) => IAIProvider;
   keyConfigured?: () => boolean;
+  /** Prompt lookup by name with an inline fallback; defaults to studioPromptStore. */
+  promptLookup?: (name: string, fallback: string) => Promise<string>;
 };
 
 export type StepOutcome =
@@ -129,6 +132,7 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
     store: deps.store ?? (await createDrizzlePipelineStore()),
     providerFactory: deps.providerFactory ?? defaultProviderFactory,
     keyConfigured: deps.keyConfigured ?? (() => isOpenRouterConfigured()),
+    promptLookup: deps.promptLookup ?? ((name, fallback) => studioPromptStore.get(name, fallback)),
   };
 }
 
@@ -220,7 +224,7 @@ function cachedNext(job: JobView): Transition {
  * ------------------------------------------------------------------ */
 
 export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): Promise<StepOutcome> {
-  const { store, providerFactory, keyConfigured } = await resolveDeps(deps);
+  const { store, providerFactory, keyConfigured, promptLookup } = await resolveDeps(deps);
 
   const job = await store.loadJob(jobId);
   if (!job) {
@@ -248,7 +252,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   switch (job.step) {
     case "pedagogue": {
       input = pedagogueInputOf(map);
-      system = buildPedagoguePrompt(promptMapOf(map));
+      system = await promptLookup(
+        STUDIO_PROMPT_NAMES.pedagogue,
+        buildPedagoguePrompt(promptMapOf(map)),
+      );
       break;
     }
     case "author": {
@@ -264,14 +271,20 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       }
       const blockers = await store.loadBlockerNotes(job.id);
       input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts };
-      system = buildAuthorPrompt(outline.sections, promptMapOf(map), blockers);
+      system = await promptLookup(
+        STUDIO_PROMPT_NAMES.author,
+        buildAuthorPrompt(outline.sections, promptMapOf(map), blockers),
+      );
       break;
     }
     case "lektor": {
       const lesson = job.output?.lesson as Lesson | undefined;
       if (!lesson) return fail(store, job, "A lektor lépéshez nincs lecke a jobban.");
       input = { lesson, map: mapInputOf(map), concepts: map.concepts };
-      system = buildLektorPrompt(lesson, promptMapOf(map));
+      system = await promptLookup(
+        STUDIO_PROMPT_NAMES.lektor,
+        buildLektorPrompt(lesson, promptMapOf(map)),
+      );
       break;
     }
     case "done":

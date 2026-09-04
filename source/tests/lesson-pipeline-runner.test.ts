@@ -186,6 +186,15 @@ function makeDeps(cannedResponse: string) {
   const store = new MemoryStore();
   store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
 
+  // The prompt lookup is the DB-backed seam: production uses studioPromptStore (which
+  // reads `system_prompts` and fails open to the inline prompt); the test keeps the
+  // inline builder result and records which prompt name the runner asked for.
+  const promptNames: string[] = [];
+  const promptLookup = async (name: string, fallback: string) => {
+    promptNames.push(name);
+    return fallback;
+  };
+
   const calls: Array<{ model: string; system: string; user: string }> = [];
   const providerFactory = (model: string): IAIProvider => ({
     name: "stub",
@@ -197,7 +206,7 @@ function makeDeps(cannedResponse: string) {
     isAvailable: async () => true,
   } as unknown as IAIProvider);
 
-  return { store, calls, providerFactory, keyConfigured: () => true };
+  return { store, calls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
 }
 
 /** The pedagogue input hash the runner must compute — recomputed here to pin equality. */
@@ -223,7 +232,7 @@ const CANNED_LEKTOR_BLOCKER = JSON.stringify({
 });
 
 test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async () => {
-  const { store, calls, providerFactory, keyConfigured } = makeDeps(CANNED_PEDAGOGUE);
+  const { store, calls, promptNames, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_PEDAGOGUE);
   const jobId = await store.createJob({
     mapId: "m1",
     step: "pedagogue",
@@ -233,7 +242,7 @@ test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async
     inputHash: pedagogueHash(),
   });
 
-  const outcome = await runPipelineStep(jobId, { store, providerFactory, keyConfigured });
+  const outcome = await runPipelineStep(jobId, { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.ok && outcome.next.step, "author");
@@ -245,6 +254,10 @@ test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async
   assert.equal(job?.inputHash, pedagogueHash(), "a vázlat input-hash-e a lépés bemenetét rögzíti");
   assert.deepEqual(job?.output?.outline, GOOD_OUTLINE);
 
+  // The system prompt is fetched through the prompt store under the versioned name
+  // (studio.pedagogue.v1) — the owner can revise it in `system_prompts` without a deploy.
+  assert.deepEqual(promptNames, ["studio.pedagogue.v1"]);
+
   const stored = store.jobs.get(jobId);
   assert.equal(stored?.tokensIn, 10);
   assert.equal(stored?.tokensOut, 5);
@@ -255,7 +268,7 @@ test("(b) pedagogue: a térképet nem fedő vázlat hibára fut, megnevezve a hi
     sections: [{ heading: "Fél", conceptIds: ["s1"], plannedBlocks: ["explain"] }],
     misconceptions: [],
   });
-  const { store, providerFactory, keyConfigured } = makeDeps(badOutline);
+  const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(badOutline);
   const jobId = await store.createJob({
     mapId: "m1",
     step: "pedagogue",
@@ -265,7 +278,7 @@ test("(b) pedagogue: a térképet nem fedő vázlat hibára fut, megnevezve a hi
     inputHash: pedagogueHash(),
   });
 
-  const outcome = await runPipelineStep(jobId, { store, providerFactory, keyConfigured });
+  const outcome = await runPipelineStep(jobId, { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, false);
   assert.equal(outcome.next.step, "error");
@@ -279,7 +292,7 @@ test("(b) pedagogue: a térképet nem fedő vázlat hibára fut, megnevezve a hi
 });
 
 test("(c) author: a lecke elmentődik, a következő lépés lektor", async () => {
-  const { store, calls, providerFactory, keyConfigured } = makeDeps(CANNED_AUTHOR);
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_AUTHOR);
   store.seed({
     id: "job-1",
     mapId: "m1",
@@ -288,7 +301,7 @@ test("(c) author: a lecke elmentődik, a következő lépés lektor", async () =
     output: { approvedOutline: GOOD_OUTLINE },
   });
 
-  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured });
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.ok && outcome.next.step, "lektor");
@@ -302,7 +315,7 @@ test("(c) author: a lecke elmentődik, a következő lépés lektor", async () =
 });
 
 test("(d) author: kitalált fogalom-azonosítóval a lecke hibára fut, megnevezve", async () => {
-  const { store, providerFactory, keyConfigured } = makeDeps(INVENTED_LESSON);
+  const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(INVENTED_LESSON);
   store.seed({
     id: "job-1",
     mapId: "m1",
@@ -311,7 +324,7 @@ test("(d) author: kitalált fogalom-azonosítóval a lecke hibára fut, megnevez
     output: { approvedOutline: GOOD_OUTLINE },
   });
 
-  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured });
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, false);
   assert.equal(outcome.next.step, "error");
@@ -323,7 +336,7 @@ test("(d) author: kitalált fogalom-azonosítóval a lecke hibára fut, megnevez
 });
 
 test("(e) lektor: csak book_probably_wrong jegyzet → gate, 0 blokkoló", async () => {
-  const { store, providerFactory, keyConfigured } = makeDeps(CANNED_LEKTOR_BENIGN);
+  const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_LEKTOR_BENIGN);
   store.seed({
     id: "job-1",
     mapId: "m1",
@@ -332,7 +345,7 @@ test("(e) lektor: csak book_probably_wrong jegyzet → gate, 0 blokkoló", async
     output: { lesson: GOOD_LESSON },
   });
 
-  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured });
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.ok && outcome.next.step, "gate");
@@ -345,7 +358,7 @@ test("(e) lektor: csak book_probably_wrong jegyzet → gate, 0 blokkoló", async
 });
 
 test("(f) lektor: not_in_map blokkoló → author, round+1", async () => {
-  const { store, providerFactory, keyConfigured } = makeDeps(CANNED_LEKTOR_BLOCKER);
+  const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_LEKTOR_BLOCKER);
   store.seed({
     id: "job-1",
     mapId: "m1",
@@ -355,7 +368,7 @@ test("(f) lektor: not_in_map blokkoló → author, round+1", async () => {
     output: { lesson: GOOD_LESSON },
   });
 
-  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured });
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.ok && outcome.next.step, "author");
@@ -369,7 +382,7 @@ test("(f) lektor: not_in_map blokkoló → author, round+1", async () => {
 });
 
 test("(g) lektor: round>=2 blokkolókkal → error, emberi döntés szükséges", async () => {
-  const { store, providerFactory, keyConfigured } = makeDeps(CANNED_LEKTOR_BLOCKER);
+  const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_LEKTOR_BLOCKER);
   store.seed({
     id: "job-1",
     mapId: "m1",
@@ -379,7 +392,7 @@ test("(g) lektor: round>=2 blokkolókkal → error, emberi döntés szükséges"
     output: { lesson: GOOD_LESSON },
   });
 
-  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured });
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, false);
   assert.equal(outcome.next.step, "error");
@@ -391,7 +404,7 @@ test("(g) lektor: round>=2 blokkolókkal → error, emberi döntés szükséges"
 });
 
 test("(h) approve-outline: ismeretlen azonosítójú vázlat elutasítva, hívás nélkül", async () => {
-  const { store, calls, providerFactory, keyConfigured } = makeDeps(CANNED_AUTHOR);
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_AUTHOR);
   store.seed({
     id: "job-1",
     mapId: "m1",
@@ -410,7 +423,7 @@ test("(h) approve-outline: ismeretlen azonosítójú vázlat elutasítva, hívá
     ],
     misconceptions: [],
   };
-  const result = await approveOutline("job-1", bad, { store, providerFactory, keyConfigured });
+  const result = await approveOutline("job-1", bad, { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(result.ok, false);
   assert.match(result.reason, /kitalalt-id/);
@@ -422,7 +435,7 @@ test("(h) approve-outline: ismeretlen azonosítójú vázlat elutasítva, hívá
 });
 
 test("(i) resume: azonos input-hash → gyorsítótár, nincs második hívás", async () => {
-  const { store, calls, providerFactory, keyConfigured } = makeDeps(CANNED_PEDAGOGUE);
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_PEDAGOGUE);
   const jobId = await store.createJob({
     mapId: "m1",
     step: "pedagogue",
@@ -432,13 +445,13 @@ test("(i) resume: azonos input-hash → gyorsítótár, nincs második hívás",
     inputHash: pedagogueHash(),
   });
 
-  const first = await runPipelineStep(jobId, { store, providerFactory, keyConfigured });
+  const first = await runPipelineStep(jobId, { store, providerFactory, keyConfigured, promptLookup });
   assert.equal(first.ok, true);
   assert.equal(calls.length, 1);
 
   // Resume before the caller applied the transition: the current step's input is
   // still identical, so the stored output must be reused — never a second payment.
-  const second = await runPipelineStep(jobId, { store, providerFactory, keyConfigured });
+  const second = await runPipelineStep(jobId, { store, providerFactory, keyConfigured, promptLookup });
   assert.equal(second.ok, true);
   assert.equal(second.cached, true);
   assert.equal(calls.length, 1, "a gyorsítótár-találat nem hívja újra a modellt");
