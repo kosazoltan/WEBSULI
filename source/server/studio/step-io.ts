@@ -135,7 +135,14 @@ type PromptMap = {
 };
 
 function mapJson(map: PromptMap): string {
-  return JSON.stringify(map, null, 2);
+  // #179: the model must only ever see localId — MapConcept.id is the km_concepts UUID
+  // (added for the quiz-export FK, #178); serialising it made the model use UUIDs as
+  // conceptIds and coverage collapsed to 0% in production.
+  return JSON.stringify(
+    { ...map, concepts: map.concepts.map((c) => ({ localId: c.localId, examWeight: c.examWeight })) },
+    null,
+    2,
+  );
 }
 
 /** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
