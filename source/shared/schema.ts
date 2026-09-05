@@ -514,6 +514,8 @@ export const gameQuizItems = pgTable(
     options: jsonb("options").notNull().$type<string[]>(),
     correctIndex: integer("correct_index").notNull(),
     sourceMaterialId: varchar("source_material_id").references(() => htmlFiles.id, { onDelete: "set null" }),
+    /** LS-5: a lecke fogalma, amelyhez az elem tartozik — a feedback-loop így a játékbeli hibákat is fogalomhoz köti. */
+    conceptId: varchar("concept_id", { length: 64 }).references(() => kmConcepts.id, { onDelete: "set null" }),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

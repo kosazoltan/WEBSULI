@@ -21,9 +21,11 @@ import { callStepModel, StepModelError } from "./run-step";
 import {
   buildAnimatorPrompt,
   buildAuthorPrompt,
+  buildConceptFixPrompt,
   buildLektorPrompt,
   buildPedagoguePrompt,
   checkAnimatorResult,
+  checkConceptFixResult,
   lessonIdsSubsetOfMap,
   lektorReportSchema,
   outlineCoversMap,
@@ -639,3 +641,92 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
     },
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * LS-5 — "fix this concept"
+ * ------------------------------------------------------------------ */
+
+export type FixConceptResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string };
+
+/**
+ * A lektorált lecke EGY gyenge fogalmának célzott újraírása.
+ *
+ * A szerződés a checkConceptFixResult: CSAK a célfogalmat fedő blokkok
+ * változhatnak, azonosító mezők és minden más blokk bájtra azonos, új
+ * fogalom-id nem születhet. Bármilyen eltérésnél a lecke ÉRINTETLEN marad,
+ * a hibaszöveg pedig megnevezi a sértést — a feedback-loop nem lehet
+ * tanterv-átírás hátsó ajtaja.
+ */
+export async function fixConceptOnLesson(
+  lessonId: string,
+  conceptId: string,
+  deps: PipelineDeps = {},
+): Promise<FixConceptResult> {
+  const { providerFactory, keyConfigured, promptLookup } = await resolveDeps(deps);
+  // Lazy, mint a createDrizzlePipelineStore-ban: a modul importja nem nyithat adatbázis-kapcsolatot.
+  const { db } = await import("../db");
+
+  const [row] = await db
+    .select({ json: lessons.json, mapId: lessons.mapId })
+    .from(lessons)
+    .where(eq(lessons.id, lessonId))
+    .limit(1);
+  if (!row) return { ok: false, error: "A lecke nem található." };
+
+  const original = row.json as Lesson;
+  const mapId = row.mapId;
+
+  const [mapRow] = await db
+    .select({ subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom })
+    .from(knowledgeMaps)
+    .where(eq(knowledgeMaps.id, mapId))
+    .limit(1);
+  if (!mapRow) return { ok: false, error: "A lecke fogalomtérképe nem található." };
+
+  const conceptRows = await db
+    .select({ localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
+    .from(kmConcepts)
+    .where(eq(kmConcepts.mapId, mapId));
+
+  if (!keyConfigured()) return { ok: false, error: NO_OPENROUTER_KEY_MESSAGE };
+
+  const model = resolveStudioModel("author");
+  const provider = providerFactory(model);
+
+  const fallback = buildConceptFixPrompt(original, {
+    subject: mapRow.subject,
+    classroom: mapRow.classroom,
+    concepts: conceptRows.map((c) => ({ localId: c.localId, examWeight: c.examWeight as ExamWeight })),
+  }, conceptId);
+  const system = await promptLookup(STUDIO_PROMPT_NAMES.author, fallback);
+
+  let json: unknown;
+  try {
+    const result = await callStepModel(provider, {
+      step: "author",
+      model,
+      system,
+      user: "Válaszolj kizárólag a kért JSON-nal.",
+    });
+    json = result.json;
+  } catch (error) {
+    const reason = error instanceof StepModelError ? error.message : "A modellhívás meghiúsult.";
+    return { ok: false, error: reason };
+  }
+
+  const parsed = lessonSchema.safeParse(json);
+  if (!parsed.success) {
+    return { ok: false, error: `A javított lecke érvénytelen: ${zodIssues(parsed.error)}` };
+  }
+
+  const check = checkConceptFixResult(original, parsed.data, conceptId);
+  if (!check.ok) {
+    return { ok: false, error: `A javítás túllépett a célfogalmon — a lecke érintetlen: ${check.reasons.join("; ")}` };
+  }
+
+  await db.update(lessons).set({ json: parsed.data as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
+  return { ok: true, message: `A(z) ${conceptId} fogalom blokkjai frissítve.` };
+}
+

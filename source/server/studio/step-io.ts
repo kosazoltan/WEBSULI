@@ -317,3 +317,88 @@ export function checkAnimatorResult(original: Lesson, candidate: Lesson): Animat
 
   return { ok: reasons.length === 0, reasons };
 }
+
+/** LS-5 — "fix this concept": az egyetlen fogalomra szűkített javítási szerződés. */
+export type ConceptFixCheck = { ok: boolean; reasons: string[] };
+
+/**
+ * A "fix this concept" futás eredményének ellenőrzése. Az animátor-szerződés
+ * testvére: CSAK a célfogalmat fedő blokkok változhatnak, minden más bájtra
+ * azonos, új fogalom-id nem születhet, a blokkok száma sem változhat — egy
+ * "javítás", ami átírja a leckét, valójában tanterv-átírás.
+ */
+export function checkConceptFixResult(
+  original: Lesson,
+  candidate: Lesson,
+  conceptId: string,
+): ConceptFixCheck {
+  const reasons: string[] = [];
+
+  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly"] as const;
+  for (const f of identityFields) {
+    if (JSON.stringify(original[f]) !== JSON.stringify(candidate[f])) {
+      reasons.push(`A lecke azonosító mezője megváltozott: ${f}.`);
+    }
+  }
+
+  const originalIds = new Set(conceptIdsOf(original));
+  for (const id of conceptIdsOf(candidate)) {
+    if (!originalIds.has(id)) reasons.push(`Új fogalom-azonosító jelent meg: ${id}.`);
+  }
+
+  if (original.sections.length !== candidate.sections.length) {
+    reasons.push(`A szakaszok száma megváltozott (${original.sections.length} -> ${candidate.sections.length}).`);
+    return { ok: false, reasons };
+  }
+
+  original.sections.forEach((section, i) => {
+    const candidateSection = candidate.sections[i]!;
+    if (section.heading !== candidateSection.heading) {
+      reasons.push(`A(z) ${i + 1}. szakasz címe megváltozott.`);
+    }
+    if (section.blocks.length !== candidateSection.blocks.length) {
+      reasons.push(`A(z) ${i + 1}. szakasz blokkszáma megváltozott — a fix nem adhat hozzá és nem vehet el blokkot.`);
+      return;
+    }
+    section.blocks.forEach((block, bi) => {
+      const coveredIds = "coversConceptIds" in block ? block.coversConceptIds : [];
+      const isTarget = coveredIds.includes(conceptId);
+      if (!isTarget && JSON.stringify(block) !== JSON.stringify(candidateSection.blocks[bi])) {
+        const covered = coveredIds.join(", ");
+        reasons.push(
+          `A(z) ${i + 1}. szakasz ${bi + 1}. blokkja nem a(z) ${conceptId} fogalmat fedi` +
+            (covered ? ` (fedett: ${covered})` : "") +
+            ", mégis megváltozott.",
+        );
+      }
+    });
+  });
+
+  return { ok: reasons.length === 0, reasons };
+}
+
+/**
+ * A "fix this concept" szerzői prompt: a hatókör a célfogalom blokkjai, D1
+ * szó szerint — a javítás nem szülhet új fogalmat és nem nyúlhat más blokkhoz.
+ */
+export function buildConceptFixPrompt(lesson: Lesson, map: PromptMap, conceptId: string): string {
+  return [
+    "You are the Lesson Author, running a SCOPED fix for ONE weak concept.",
+    "",
+    D1_RULE_TEXT,
+    "",
+    `Target concept id: ${conceptId}`,
+    "",
+    "Hard rules:",
+    `- You may ONLY edit blocks whose coversConceptIds contains "${conceptId}". Every other block, every heading and every identity field must stay byte-identical.`,
+    "- You may not add or remove blocks or sections.",
+    "- No new concept ids may appear — reuse only ids already present in the lesson.",
+    "- Answer with JSON ONLY: the COMPLETE modified Lesson, matching the Lesson schema.",
+    "",
+    "Concept map:",
+    mapJson(map),
+    "",
+    "Lesson:",
+    JSON.stringify(lesson, null, 2),
+  ].join("\n");
+}

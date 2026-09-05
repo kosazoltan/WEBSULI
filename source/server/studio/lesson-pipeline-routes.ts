@@ -3,15 +3,25 @@ import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
-import { lektorNotes, studioJobs } from "../../shared/schema";
+import {
+  conceptResults,
+  gameQuizItems,
+  gamesCatalog,
+  lektorNotes,
+  lessons,
+  studioJobs,
+} from "../../shared/schema";
 import { isAuthenticatedAdmin } from "../auth";
 import { logger } from "../lib/logger";
+import { aggregateConceptResults } from "../rewards/aggregate";
 import {
   advanceJob,
   approveOutline,
+  fixConceptOnLesson,
   runPipelineStep,
   startJobFromMap,
 } from "./step-runner";
+import { exportQuizItemsFromChecks } from "./quiz-export";
 
 /**
  * LS-2c — the admin endpoints that drive the lesson pipeline.
@@ -165,4 +175,59 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
 
   await drive(req.params.id);
   res.json({ jobId: req.params.id });
+});
+
+/* ------------------------------------------------------------------ *
+ * LS-5 — feedback loop: concept stats, fix-concept, quiz export
+ * ------------------------------------------------------------------ */
+
+/** GET /api/studio/lessons/:id/concept-stats — fogalmankénti összesítés (szülői összegző adata). */
+lessonPipelineRouter.get("/lessons/:id/concept-stats", async (req: Request, res: Response) => {
+  const rows = await db
+    .select({ conceptId: conceptResults.conceptId, correct: conceptResults.correct })
+    .from(conceptResults)
+    .where(eq(conceptResults.lessonId, req.params.id));
+
+  res.json({ stats: aggregateConceptResults(rows) });
+});
+
+/** POST /api/studio/lessons/:id/fix-concept — egy gyenge fogalom célzott újraírása. */
+lessonPipelineRouter.post("/lessons/:id/fix-concept", async (req: Request, res: Response) => {
+  const body = z.object({ conceptId: z.string().trim().min(1).max(64) }).safeParse(req.body);
+  if (!body.success) return res.status(400).json({ message: "conceptId kötelező (1-64 karakter)." });
+
+  const result = await fixConceptOnLesson(req.params.id, body.data.conceptId);
+  if (!result.ok) return res.status(409).json({ message: result.error });
+  res.json({ lessonId: req.params.id, message: result.message });
+});
+
+const exportQuizBody = z.object({
+  gameId: z.string().trim().min(1).max(64),
+  topic: z.string().trim().max(128).optional(),
+});
+
+/** POST /api/studio/lessons/:id/export-quiz — a check-blokkok a játék-kvíz bankba, fogalom-kötéssel. */
+lessonPipelineRouter.post("/lessons/:id/export-quiz", async (req: Request, res: Response) => {
+  const body = exportQuizBody.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ message: "gameId kötelező, topic legfeljebb 128 karakter." });
+
+  const [game] = await db
+    .select({ id: gamesCatalog.id })
+    .from(gamesCatalog)
+    .where(eq(gamesCatalog.id, body.data.gameId))
+    .limit(1);
+  if (!game) return res.status(400).json({ message: "Ismeretlen játék-azonosító." });
+
+  const [lesson] = await db
+    .select({ json: lessons.json })
+    .from(lessons)
+    .where(eq(lessons.id, req.params.id))
+    .limit(1);
+  if (!lesson) return res.status(404).json({ message: "A lecke nem található." });
+
+  const rows = exportQuizItemsFromChecks(lesson.json as never, body.data.gameId, body.data.topic);
+  if (rows.length === 0) return res.status(400).json({ message: "A leckében nincs fogalommal köthető check-blokk." });
+
+  await db.insert(gameQuizItems).values(rows);
+  res.json({ exported: rows.length });
 });
