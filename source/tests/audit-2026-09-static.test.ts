@@ -45,7 +45,11 @@ test("improveAsync: a stream 'error' chunk hibát dob (csonka HTML nem mentődik
 test("index.ts: SSE válasz nincs tömörítve; nagy body csak session-sütivel", () => {
   const src = read("server/index.ts");
   assert.match(src, /text\/event-stream/);
-  assert.match(src, /hasSessionCookie\(req\)/);
+  // #162: a session-cookie előszűrő a lib/body-limits.ts-be költözött (unit-tesztelt);
+  // az index.ts a needsLargeBody-n keresztül használja — a védelem változatlan.
+  assert.match(src, /needsLargeBody\(req\)/);
+  const lib = read("server/lib/body-limits.ts");
+  assert.match(lib, /hasSessionCookie\(req\)/);
 });
 
 test("migrate.ts: a TLS-tanúsítvány ellenőrzés prod-ban nincs kikapcsolva", () => {

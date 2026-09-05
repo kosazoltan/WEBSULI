@@ -21,6 +21,7 @@ import { aiPayloadGuard } from "./lib/ai-payload-guard";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 import { logger } from "./lib/logger";
 import { isLessonRoute, lessonCspDirectives } from "./lib/csp-profiles";
+import { needsLargeBody } from "./lib/body-limits";
 
 const app = express();
 
@@ -272,11 +273,7 @@ app.set("trust proxy", 1);
 // Only the admin upload / AI paths need the huge limit (100MB PDFs are sent base64-encoded,
 // ~133MB). Applying 150MB to every endpoint let any anonymous client exhaust server memory
 // by POSTing giant bodies to cheap public routes (likes, comments, push subscribe, ...).
-const LARGE_BODY_PREFIXES = [
-  "/api/html-files", // admin material create/update (base64 PDF payloads)
-  "/api/ai/", // Enhanced Material Creator
-  "/api/admin/", // backup import, improvement apply, ...
-];
+// #162: the route list + cookie precheck live in lib/body-limits.ts (unit-tested).
 const LARGE_BODY_LIMIT = "150mb";
 const STANDARD_BODY_LIMIT = "1mb";
 
@@ -289,13 +286,7 @@ const standardUrlencodedParser = express.urlencoded({ extended: false, limit: ST
 // bejelentkezés nélküli kliens is 150 MB-os JSON-t parseoltathatott (memória-DoS), mielőtt a
 // 401/403 megszületett volna. A session-middleware itt még nem elérhető, ezért olcsó
 // előszűrő: nagy body csak akkor, ha a kérés egyáltalán hordoz session-sütit — anélkül a
-// nagy-limitű útvonalak úgyis 401-et adnának.
-const SESSION_COOKIE_NAME = "connect.sid";
-const hasSessionCookie = (req: express.Request) =>
-  typeof req.headers.cookie === "string" && req.headers.cookie.includes(`${SESSION_COOKIE_NAME}=`);
-
-const needsLargeBody = (req: express.Request) =>
-  LARGE_BODY_PREFIXES.some((prefix) => req.path.startsWith(prefix)) && hasSessionCookie(req);
+// nagy-limitű útvonalak úgyis 401-et adnának. (needsLargeBody: lib/body-limits.ts)
 
 app.use((req, res, next) =>
   needsLargeBody(req)
