@@ -59,6 +59,26 @@ const OCR_SYSTEM_PROMPT = [
   "Output plain text only.",
 ].join(" ");
 
+/**
+ * Az OCR-kérés paraméterei — a #165 gyökér-okkal azonos hibaosztály ellen
+ * pin-elve: a glm-flash osztálynál a reasoning kötelező és keretet fogyaszt,
+ * ezért effort:low + bő completion-keret (a 4096 az átiratnak kell).
+ */
+export function ocrRequestParams(model: string, imageDataUrl: string) {
+  return {
+    model,
+    messages: [
+      { role: "system" as const, content: OCR_SYSTEM_PROMPT },
+      {
+        role: "user" as const,
+        content: [{ type: "image_url" as const, image_url: { url: imageDataUrl, detail: "high" as const } }],
+      },
+    ],
+    max_completion_tokens: 6000,
+    reasoning: { effort: "low" as const },
+  };
+}
+
 /** The default OCR callable: one cheap vision call per image. */
 export async function callOcrModel(file: ExtractorFile, model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
@@ -73,17 +93,11 @@ export async function callOcrModel(file: ExtractorFile, model: string): Promise<
         },
   );
 
-  const response = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: OCR_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [{ type: "image_url", image_url: { url: file.content, detail: "high" } }],
-      },
-    ],
-    max_completion_tokens: 4096,
-  });
-
-  return response.choices[0]?.message?.content?.trim() ?? "";
+  const params = ocrRequestParams(model, file.content);
+  // A `reasoning` OpenRouter-bővítés; az openai SDK típusa nem ismeri.
+  const response = await client.chat.completions.create(
+    params as unknown as Parameters<typeof client.chat.completions.create>[0],
+  );
+  if ("choices" in response) return response.choices[0]?.message?.content?.trim() ?? "";
+  return "";
 }

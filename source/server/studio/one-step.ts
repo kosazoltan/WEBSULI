@@ -115,6 +115,28 @@ export async function inferScope(files: ExtractorFile[], callModel: ScopeModelFn
   }
 }
 
+type ScopeContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail: "low" } };
+
+/**
+ * A scope-hívás kérés-paraméterei — külön függvényben, mert a #165 gyökér-ok
+ * pontosan itt volt: a glm-flash osztálynál a reasoning kötelező, és a szűk
+ * (300) token-keretet teljesen elette (finish=length, content=null). Mérve:
+ * effort:low + 2000 keret mellett a válasz stabilan megjön.
+ */
+export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
+  return {
+    model,
+    messages: [
+      { role: "system" as const, content: SCOPE_PROMPT },
+      { role: "user" as const, content: parts },
+    ],
+    max_completion_tokens: 2000,
+    reasoning: { effort: "low" as const },
+  };
+}
+
 /** Default scope model call: one cheap vision call over all sources. */
 export async function callScopeModel(files: ExtractorFile[], model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
@@ -129,21 +151,17 @@ export async function callScopeModel(files: ExtractorFile[], model: string): Pro
         },
   );
 
-  const parts: Array<
-    { type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "low" } }
-  > = [];
+  const parts: ScopeContentPart[] = [];
   for (const file of files) {
     if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "low" } });
     else parts.push({ type: "text", text: file.content.slice(0, 4000) });
   }
 
-  const response = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: SCOPE_PROMPT },
-      { role: "user", content: parts },
-    ],
-    max_completion_tokens: 300,
-  });
-  return response.choices[0]?.message?.content ?? "";
+  const params = scopeRequestParams(model, parts);
+  // A `reasoning` OpenRouter-bővítés; az openai SDK típusa nem ismeri.
+  const response = await client.chat.completions.create(
+    params as unknown as Parameters<typeof client.chat.completions.create>[0],
+  );
+  if ("choices" in response) return response.choices[0]?.message?.content ?? "";
+  return "";
 }
