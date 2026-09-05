@@ -18,7 +18,8 @@ import type { ExamWeight } from "../../shared/knowledge-map-schema";
 /** Minimum share of `supporting` concepts a publishable lesson must cover. */
 export const SUPPORTING_THRESHOLD = 0.9;
 
-export type MapConcept = { localId: string; examWeight: ExamWeight };
+/** `id` = km_concepts.id (UUID) when loaded from the DB; prompt/coverage fixtures may omit it (#178). */
+export type MapConcept = { id?: string; localId: string; examWeight: ExamWeight };
 
 export type CoverageCount = { total: number; covered: number; ratio: number };
 

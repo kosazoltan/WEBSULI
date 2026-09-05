@@ -39,7 +39,7 @@ import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
-import { exportQuizItemsForPublish } from "./quiz-export";
+import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 
 /**
@@ -563,7 +563,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
     title: parsed.data.title,
     classroom: parsed.data.classroom,
     coverage: gate.coverage,
-    quizItems: exportQuizItemsForPublish(parsed.data, job.lessonId),
+    quizItems: exportQuizItemsForPublish(parsed.data, job.lessonId, conceptIdResolver(map.concepts)),
   });
   logger.info(
     `[STUDIO/GATE] Lecke publikálva: ${job.lessonId} → html_files ${published.htmlFileId}, ${published.exportedQuizItems} kvíz-tétel exportálva`,
@@ -723,13 +723,13 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       // #174: a kihúzott (rejected) fogalom nem tananyag — a vázlat-lefedettség
       // és a fogalom-javítás sem követelheti.
       const concepts = await db
-        .select({ localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
+        .select({ id: kmConcepts.id, localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
         .from(kmConcepts)
         .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
 
       return {
         meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom },
-        concepts: concepts.map((c) => ({ localId: c.localId, examWeight: c.examWeight as ExamWeight })),
+        concepts: concepts.map((c) => ({ id: c.id, localId: c.localId, examWeight: c.examWeight as ExamWeight })),
       };
     },
 
@@ -882,7 +882,7 @@ export async function fixConceptOnLesson(
   if (!mapRow) return { ok: false, error: "A lecke fogalomtérképe nem található." };
 
   const conceptRows = await db
-    .select({ localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
+    .select({ id: kmConcepts.id, localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
     .from(kmConcepts)
     .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
 
@@ -894,7 +894,7 @@ export async function fixConceptOnLesson(
   const fallback = buildConceptFixPrompt(original, {
     subject: mapRow.subject,
     classroom: mapRow.classroom,
-    concepts: conceptRows.map((c) => ({ localId: c.localId, examWeight: c.examWeight as ExamWeight })),
+    concepts: conceptRows.map((c) => ({ id: c.id, localId: c.localId, examWeight: c.examWeight as ExamWeight })),
   }, conceptId);
   const system = await promptLookup(STUDIO_PROMPT_NAMES.authorFix, fallback);
 
