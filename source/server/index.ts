@@ -506,6 +506,16 @@ app.use((req, res, next) => {
       // Don't crash - the server can still run if tables already exist
     }
 
+    // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
+    // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.
+    try {
+      const { closeOrphanedOneStepRuns } = await import("./studio/lesson-pipeline-routes");
+      await closeOrphanedOneStepRuns();
+    } catch (sweepError) {
+      logger.error("[STARTUP] Az árva one-step futások zárása nem sikerült:", sweepError);
+      // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
+    }
+
     // CRITICAL: Serve PDF.js files BEFORE Vite routing
     // This prevents Vite from intercepting /pdfjs/* requests and serving index.html
     app.use(

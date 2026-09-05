@@ -688,6 +688,30 @@ export type InsertLessonRow = typeof lessons.$inferInsert;
  * Egy csővezeték-lépés futása. DB-sor, nem memóriabeli map: újraindítás után is
  * követhető, és a kliens ezt kérdezi le (ugyanaz a minta, mint az improveAsync.ts).
  */
+/**
+ * #168 — az egylépeses gyártás futás-státusza (a kliens állapotjelzőjéé).
+ * Memória-first, de minden fázisváltás ide is íródik, hogy a Render-restart
+ * ne fagyassza be a jelzőt.
+ */
+export const oneStepRuns = pgTable(
+  "one_step_runs",
+  {
+    id: varchar("id").primaryKey(),
+    /** indul | ocr | extract | pedagogue | author | animator | lektor | done | parked | error */
+    phase: varchar("phase", { length: 16 }).notNull(),
+    detail: text("detail"),
+    error: text("error"),
+    mapId: varchar("map_id"),
+    jobId: varchar("job_id"),
+    lessonId: varchar("lesson_id"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    updatedIdx: index("one_step_runs_updated_idx").on(table.updatedAt),
+  }),
+);
+
 export const studioJobs = pgTable(
   "studio_jobs",
   {

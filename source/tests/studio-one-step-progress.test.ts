@@ -16,20 +16,20 @@ import { oneStepPhaseRows, ONE_STEP_PHASES } from "../shared/studio-ui";
  * outline, writing, lektor), not stare at a dead spinner.
  */
 
-test("store: create → update → get életciklus, ismeretlen runId = null", () => {
+test("store: create → update → get életciklus, ismeretlen runId = null", async () => {
   __resetRunsForTest();
   const id = createRun();
-  const fresh = getRun(id);
+  const fresh = await getRun(id);
   assert.ok(fresh);
   assert.equal(fresh.phase, "indul");
   updateRun(id, { phase: "ocr", detail: "Kép átírása: 3/10" });
-  const after = getRun(id);
+  const after = await getRun(id);
   assert.equal(after?.phase, "ocr");
   assert.equal(after?.detail, "Kép átírása: 3/10");
-  assert.equal(getRun("nincs-ilyen"), null);
+  assert.equal(await getRun("nincs-ilyen"), null);
 });
 
-test("store: lezárt (done/error) futás TTL után törlődik, futó nem", () => {
+test("store: lezárt (done/error) futás TTL után törlődik, futó nem", async () => {
   __resetRunsForTest();
   const doneId = createRun();
   const liveId = createRun();
@@ -37,8 +37,8 @@ test("store: lezárt (done/error) futás TTL után törlődik, futó nem", () =>
   updateRun(liveId, { phase: "author" });
   const past = Date.now() + 16 * 60 * 1000; // 16 perc múlva
   pruneRuns(past);
-  assert.equal(getRun(doneId), null, "kész futás kitakarítva");
-  assert.ok(getRun(liveId), "futó megmarad");
+  assert.equal(await getRun(doneId), null, "kész futás kitakarítva");
+  assert.ok(await getRun(liveId), "futó megmarad");
 });
 
 test("view-model: fázissorrend és állapotok (kész/aktív/hátralévő)", () => {

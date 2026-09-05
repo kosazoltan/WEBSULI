@@ -23,7 +23,89 @@ import {
 } from "./step-runner";
 import { exportQuizItemsFromChecks } from "./quiz-export";
 import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
-import { createRun, getRun, updateRun, type OneStepPhase } from "./one-step-progress";
+import {
+  createRun as createRunBase,
+  getRun as getRunBase,
+  markOrphanedRuns,
+  updateRun as updateRunBase,
+  type OneStepPhase,
+  type OneStepRun,
+} from "./one-step-progress";
+import { oneStepRuns } from "../../shared/schema";
+
+/* ------------------------------------------------------------------ *
+ * #168 — a futás-státusz DB-perzisztálása (Render-restart ellen).
+ * ------------------------------------------------------------------ */
+
+async function persistRun(run: OneStepRun): Promise<void> {
+  await db
+    .insert(oneStepRuns)
+    .values({
+      id: run.id,
+      phase: run.phase,
+      detail: run.detail,
+      error: run.error,
+      mapId: run.mapId,
+      jobId: run.jobId,
+      lessonId: run.lessonId,
+      startedAt: new Date(run.startedAt),
+      updatedAt: new Date(run.updatedAt),
+    })
+    .onConflictDoUpdate({
+      target: oneStepRuns.id,
+      set: {
+        phase: run.phase,
+        detail: run.detail,
+        error: run.error,
+        mapId: run.mapId,
+        jobId: run.jobId,
+        lessonId: run.lessonId,
+        updatedAt: new Date(run.updatedAt),
+      },
+    });
+}
+
+async function loadRun(id: string): Promise<OneStepRun | null> {
+  const [row] = await db.select().from(oneStepRuns).where(eq(oneStepRuns.id, id)).limit(1);
+  if (!row) return null;
+  return {
+    id: row.id,
+    phase: row.phase as OneStepPhase,
+    detail: row.detail,
+    error: row.error,
+    mapId: row.mapId,
+    jobId: row.jobId,
+    lessonId: row.lessonId,
+    startedAt: row.startedAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
+  };
+}
+
+const createRun = () => createRunBase(persistRun);
+const updateRun = (id: string, patch: Parameters<typeof updateRunBase>[1]) =>
+  updateRunBase(id, patch, persistRun);
+const getRun = (id: string) => getRunBase(id, loadRun);
+
+/**
+ * #168 — boot-sweep: a folyamat halálakor árván maradt futások explicit hibára
+ * záródnak, hogy a kliens jelzője ne ragadjon be. Induláskor egyszer fut.
+ */
+export async function closeOrphanedOneStepRuns(): Promise<number> {
+  const open = await db
+    .select({ id: oneStepRuns.id, phase: oneStepRuns.phase })
+    .from(oneStepRuns);
+  const orphans = markOrphanedRuns(open);
+  for (const o of orphans) {
+    await db
+      .update(oneStepRuns)
+      .set({ phase: "error", error: o.error, updatedAt: new Date() })
+      .where(eq(oneStepRuns.id, o.id));
+  }
+  if (orphans.length > 0) {
+    logger.warn(`[STUDIO/1STEP] ${orphans.length} árva futás hibára zárva (szerver-újraindulás).`);
+  }
+  return orphans.length;
+}
 import { computeInputHash, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
 import { resolveStudioModel } from "../ai/models";
@@ -113,8 +195,8 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
 });
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */
-lessonPipelineRouter.get("/lessons/one-step/:runId", (req: Request, res: Response) => {
-  const run = getRun(req.params.runId);
+lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: Response) => {
+  const run = await getRun(req.params.runId);
   if (!run) return res.status(404).json({ message: "Ismeretlen vagy lejárt futás." });
   res.json({
     phase: run.phase,
