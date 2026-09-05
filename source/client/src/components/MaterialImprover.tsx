@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { deleteImprovedConfirmMessage } from "@shared/improver-ui";
+import { deleteImprovedConfirmMessage, IMPROVER_ZOOM } from "@shared/improver-ui";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -459,7 +459,7 @@ export default function MaterialImprover() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ zoom: IMPROVER_ZOOM }} data-testid="improver-root">
       <Card className="border-red-500 border-2">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-red-700">

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deleteImprovedConfirmMessage } from "../shared/improver-ui";
+import { deleteImprovedConfirmMessage, IMPROVER_ZOOM } from "../shared/improver-ui";
 
 /**
  * #172 — a törlés-megerősítő generikus szövege azt a kérdést váltotta ki a
@@ -26,4 +26,8 @@ test("alkalmazott javítás: a tananyag a javított tartalommal marad élesben",
 test("ismeretlen státusz: a biztonságos általános szöveg", () => {
   const msg = deleteImprovedConfirmMessage("akarmi");
   assert.ok(msg.includes("csak ezt a javítási másolatot"));
+});
+
+test("#173: az okosító panel 70%-os zoomon fut (kevesebb scroll)", () => {
+  assert.equal(IMPROVER_ZOOM, 0.7);
 });

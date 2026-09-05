@@ -8,6 +8,13 @@
  * (tananyag) és a material_improvement_backups (backup) érintetlen.
  */
 
+/**
+ * #173 — az okosító oldal sűrítése: a teljes panel 70%-os zoomon fut, mert a
+ * teljes méret aránytalanul sok scrollt kényszerített (tulajdonosi kérés).
+ * CSS zoom (nem transform): reflow-val kicsinyít, nem hagy üres sávot.
+ */
+export const IMPROVER_ZOOM = 0.7;
+
 export function deleteImprovedConfirmMessage(status: string): string {
   if (status === "applied") {
     return [
