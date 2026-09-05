@@ -11,7 +11,7 @@ import {
   type ExtractorScope,
   type RawExtraction,
 } from "./extractor";
-import { callOcrModel, mergeOcrIntoSourceText, ocrTextsOf } from "./ocr";
+import { callOcrModel, mergeOcrIntoSourceText, ocrTextsOf, withOcrCache } from "./ocr";
 import { conceptSchema, type Concept } from "../../shared/knowledge-map-schema";
 
 /**
@@ -144,11 +144,27 @@ export async function runExtraction(input: RunInput): Promise<string> {
   // #163 — kép-források átirata olcsó vision-modellel, hogy a D1 idézet-
   // ellenőrzésnek legyen mi ellen futnia. Fail-open: az OCR-hiba üres átirat,
   // a kivonatolás megy tovább. (LS-6b: OCR ELŐBB fut, darabszám-jelentéssel.)
+  // #170: párhuzamos pool + DB átirat-cache — ugyanaz a kép sosem fizetve
+  // kétszer, restart utáni újrafutás a kész átiratokat ingyen kapja.
   const ocrModel = resolveStudioModel("ocr");
-  const ocrResults = await ocrTextsOf(
-    input.files,
-    (file) => callOcrModel(file, ocrModel),
-    (done, total) => input.onPhase?.("ocr", `Kép átírása: ${done + 1}/${total}`),
+  const { db } = await import("../db");
+  const { ocrTranscripts } = await import("../../shared/schema");
+  const { eq } = await import("drizzle-orm");
+  const cachedOcr = withOcrCache((file) => callOcrModel(file, ocrModel), ocrModel, {
+    get: async (key) => {
+      const [row] = await db
+        .select({ text: ocrTranscripts.text })
+        .from(ocrTranscripts)
+        .where(eq(ocrTranscripts.cacheKey, key))
+        .limit(1);
+      return row?.text ?? null;
+    },
+    put: async (key, text) => {
+      await db.insert(ocrTranscripts).values({ cacheKey: key, text }).onConflictDoNothing();
+    },
+  });
+  const ocrResults = await ocrTextsOf(input.files, cachedOcr, (done, total) =>
+    input.onPhase?.("ocr", `Kép átírása: ${done}/${total}`),
   );
 
   input.onPhase?.("extract", null);

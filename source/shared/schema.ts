@@ -689,6 +689,15 @@ export type InsertLessonRow = typeof lessons.$inferInsert;
  * követhető, és a kliens ezt kérdezi le (ugyanaz a minta, mint az improveAsync.ts).
  */
 /**
+ * #170 — OCR átirat-cache (tartalom-hash + modell). Lásd server/studio/ocr.ts.
+ */
+export const ocrTranscripts = pgTable("ocr_transcripts", {
+  cacheKey: varchar("cache_key", { length: 64 }).primaryKey(),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/**
  * #168 — az egylépeses gyártás futás-státusza (a kliens állapotjelzőjéé).
  * Memória-first, de minden fázisváltás ide is íródik, hogy a Render-restart
  * ne fagyassza be a jelzőt.
