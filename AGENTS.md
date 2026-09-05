@@ -140,7 +140,7 @@ Ezt a blokkot a `Codex-iranyitasi-terv.md` és `Codex-vegrehajtasi-terv.md` alap
 
 ### Munkafolyamat
 - Munka előtt olvasd el a legközelebbi `AGENTS.md` / `CLAUDE.md` vezérlő fájlt és a feladathoz tartozó projektfájlokat.
-- Ha a feladat 3 vagy több fájlt, architektúrát, adatmodellt, migrációt, authot, gateway-t, Nórát, OpenClaw-t vagy éles működést érint, előbb készíts rövid specifikációt: cél, nem-cél, érintett fájlok, edge case-ek, elfogadási feltételek.
+- Ha a feladat 3 vagy több fájlt, architektúrát, adatmodellt, migrációt, authot vagy éles működést érint, előbb készíts rövid specifikációt: cél, nem-cél, érintett fájlok, edge case-ek, elfogadási feltételek.
 - A megvalósítás legyen minimális és célzott. Ne refaktorálj mellékesen, ne írd át a stílust ok nélkül, és ne gyengíts tesztet csak azért, hogy zöld legyen.
 - Minden érdemi változtatás után futtasd a legszűkebb hasznos ellenőrzést: teszt, lint, typecheck, build vagy célzott smoke check. Ha nem futtatható, írd le pontosan az okát.
 - Késznek csak akkor jelöld, ha van futtatott parancs és tényleges eredmény, vagy egyértelműen dokumentált blocker.
@@ -153,7 +153,7 @@ Ezt a blokkot a `Codex-iranyitasi-terv.md` és `Codex-vegrehajtasi-terv.md` alap
 ### Biztonság és autonómia
 - `approval_policy = "never"` és `sandbox_mode = "danger-full-access"` / teljes hozzáférésű sandbox csak izolált, eldobható, megbízható környezetben használható. Éles gépen, érzékeny adat mellett vagy nem áttekintett repóban ne javasold alapértelmezettnek.
 - Titkot, tokent, privát kulcsot, személyes adatot ne írj chatbe, logba, commitba vagy dokumentációba.
-- Destruktív művelet, séma-migráció, tömeges törlés, deploy, gateway/Nóra/OpenClaw újraindítás előtt jelezd a kockázatot és készíts visszaállítási pontot, ha értelmes.
+- Destruktív művelet, séma-migráció, tömeges törlés, deploy előtt jelezd a kockázatot és készíts visszaállítási pontot, ha értelmes.
 
 ### Kontextus-higiénia
 - Ha egy munkamenet megmérgeződött, ismételten ugyanarra a hibás irányra tér vissza, vagy 3 azonos kudarc után sincs haladás, ne vitatkozz tovább a kontextussal. Állj meg, foglald össze a bizonyított tényeket, és javasolj tiszta új ágat / új threadet / kisebb részfeladatot.
