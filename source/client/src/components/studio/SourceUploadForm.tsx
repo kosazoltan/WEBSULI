@@ -154,6 +154,7 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
     error: string | null;
     mapId: string | null;
     lessonId: string | null;
+    htmlFileId?: string | null;
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: () => apiRequest("GET", `/api/studio/lessons/one-step/${runId}`),
@@ -319,9 +320,16 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
               ))}
             </ul>
             {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
-              <Button variant="ghost" size="sm" className="mt-1" onClick={() => setRunId(null)}>
-                Bezárás
-              </Button>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                {run.data.phase === "done" && run.data.htmlFileId && (
+                  <Button asChild size="sm" data-testid="one-step-open-lesson">
+                    <a href={`/preview/${run.data.htmlFileId}`}>Lecke megnyitása</a>
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => setRunId(null)}>
+                  Bezárás
+                </Button>
+              </div>
             )}
           </div>
         )}

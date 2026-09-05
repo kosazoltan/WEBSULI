@@ -116,7 +116,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
 
         {data.job.step === "gate" && (
           <p className="text-sm text-muted-foreground">
-            A lecke a publikálási kapunál várakozik — a kapu teljes gépesítése a következő szelet.
+            A publikálási kapu fut (séma + fedettség ellenőrzés) — siker esetén a lecke azonnal megjelenik a főoldalon.
           </p>
         )}
 

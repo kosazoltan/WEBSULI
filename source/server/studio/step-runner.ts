@@ -1,6 +1,6 @@
 import { and, eq, ne } from "drizzle-orm";
 
-import { kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
+import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
 import { resolveStudioModel } from "../ai/models";
 import { isOpenRouterConfigured, OpenRouterProvider } from "../ai/OpenRouterProvider";
@@ -37,6 +37,9 @@ import {
 } from "./step-io";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
+import type { InsertGameQuizItem } from "../../shared/schema";
+import { checkCoverageGate, type Coverage } from "./coverage";
+import { exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 
 /**
@@ -67,7 +70,26 @@ export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
   "Állítsd be a kulcsot a környezeti változók között, vagy nézd meg a /api/studio/ai-status végpontot.";
 
+/**
+ * The html_files row of a published lesson carries no real HTML: the Preview page detects
+ * `contentType:'lesson'` and mounts the lesson runtime instead of the iframe. This stub is
+ * what an old client or a crawler would see.
+ */
+export const LESSON_PLACEHOLDER_HTML =
+  '<!doctype html><html lang="hu"><head><meta charset="utf-8"><title>Websuli lecke</title></head>' +
+  "<body><p>Ezt a leckét a Websuli lecke-futtató jeleníti meg. Nyisd meg a websuli.vip oldalon.</p></body></html>";
+
 export type MapMeta = { id: string; title: string; subject: string; classroom: number };
+
+/** What the deterministic gate hands to the store when a lesson passes. */
+export type PublishInput = {
+  lessonId: string;
+  mapId: string;
+  title: string;
+  classroom: number;
+  coverage: Coverage;
+  quizItems: InsertGameQuizItem[];
+};
 
 export type JobView = {
   id: string;
@@ -103,12 +125,23 @@ export type JobPatch = Partial<{
 export type PipelineStore = {
   loadJob(jobId: string): Promise<JobView | null>;
   loadMap(mapId: string): Promise<{ meta: MapMeta; concepts: MapConcept[] } | null>;
-  /** Blocking lektor notes of a job — what the next Author round must fix. */
-  loadBlockerNotes(jobId: string): Promise<RawNote[]>;
+  /** Blocking lektor notes of ONE lektor round — what the next Author round must fix. */
+  loadBlockerNotes(jobId: string, round: number): Promise<RawNote[]>;
   saveStep(jobId: string, patch: JobPatch): Promise<void>;
-  saveNotes(jobId: string, notes: Array<RawNote & { severity: "blocker" | "warn" | "info" }>): Promise<void>;
+  /** Persist a lektor round's notes, tagged with the round they were written in. */
+  saveNotes(
+    jobId: string,
+    notes: Array<RawNote & { severity: "blocker" | "warn" | "info" }>,
+    round: number,
+  ): Promise<void>;
   /** Insert a new lessons row, or overwrite the existing one on a later Author round. */
   upsertLesson(lessonId: string | null, mapId: string, json: unknown): Promise<string>;
+  /**
+   * Audit 2026-09-05 (gate): make the lesson reachable for a child — html_files row
+   * (`contentType:'lesson'`), publishedAt + coverage snapshot on the lessons row, and the
+   * concept-bound checks exported to the coupon games (idempotent per lesson).
+   */
+  publishLesson(input: PublishInput): Promise<{ htmlFileId: string; exportedQuizItems: number }>;
   createJob(input: {
     mapId: string;
     step: "pedagogue";
@@ -243,8 +276,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     return { ok: true, next: { step: job.step, round: job.round }, cached: true };
   }
   if (job.step === "gate") {
-    // The deterministic gate is a later slice; here the pipeline simply waits.
-    return { ok: true, next: { step: "gate", round: job.round }, cached: true };
+    return runGate(store, job);
   }
 
   const map = await store.loadMap(job.mapId);
@@ -277,7 +309,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           parked: true,
         };
       }
-      const blockers = await store.loadBlockerNotes(job.id);
+      // Round N Author fixes what the round N-1 Lektor blocked — never older rounds' stale union.
+      const blockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
       input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
@@ -463,7 +496,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       if (!parsed.success) return fail(store, job, `A lektori jelentés alakilag hibás: ${zodIssues(parsed.error)}`);
 
       const notes = classifyNotes(parsed.data.notes);
-      await store.saveNotes(job.id, notes);
+      await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
 
       const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers });
@@ -484,6 +517,72 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 }
 
 /* ------------------------------------------------------------------ *
+ * The deterministic gate (audit 2026-09-05, szelet A)
+ * ------------------------------------------------------------------ */
+
+/**
+ * No model call. The stored lesson must (1) parse against lessonSchema and (2) pass
+ * checkCoverageGate against the curated map. Pass → publish (html_files row, publishedAt,
+ * coverage snapshot, quiz export) and `done`. Fail → `nextStep({gatePassed:false})`, which
+ * sends the Author another round or dead-ends at the round limit; a failing lesson is
+ * NEVER published. Measured before this existed: every prod lesson had publishedAt=NULL.
+ */
+async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome> {
+  const rawLesson = job.output?.lesson;
+  if (!rawLesson || !job.lessonId) {
+    return fail(store, job, "A kapuhoz nincs lecke a jobban — a szerző lépés nem futott le.");
+  }
+  const parsed = lessonSchema.safeParse(rawLesson);
+  if (!parsed.success) {
+    return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(parsed.error)}`);
+  }
+
+  const map = await store.loadMap(job.mapId);
+  if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
+
+  const gate = checkCoverageGate(parsed.data, map.concepts);
+  const gateOutput = { ok: gate.ok, reasons: gate.reasons, missingCore: gate.missingCore, unknownIds: gate.unknownIds };
+
+  if (!gate.ok) {
+    const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
+    if (transition.step === "error") {
+      return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);
+    }
+    await store.saveStep(job.id, {
+      status: "ok",
+      output: { ...job.output, gate: gateOutput },
+      error: null,
+      finishedAt: null,
+    });
+    return { ok: true, next: transition };
+  }
+
+  const published = await store.publishLesson({
+    lessonId: job.lessonId,
+    mapId: job.mapId,
+    title: parsed.data.title,
+    classroom: parsed.data.classroom,
+    coverage: gate.coverage,
+    quizItems: exportQuizItemsForPublish(parsed.data, job.lessonId),
+  });
+  logger.info(
+    `[STUDIO/GATE] Lecke publikálva: ${job.lessonId} → html_files ${published.htmlFileId}, ${published.exportedQuizItems} kvíz-tétel exportálva`,
+  );
+  await store.saveStep(job.id, {
+    status: "ok",
+    output: {
+      ...job.output,
+      gate: gateOutput,
+      htmlFileId: published.htmlFileId,
+      exportedQuizItems: published.exportedQuizItems,
+    },
+    error: null,
+    finishedAt: new Date(),
+  });
+  return { ok: true, next: nextStep({ step: "gate", ok: true, round: job.round, gatePassed: true }) };
+}
+
+/* ------------------------------------------------------------------ *
  * Caller-side operations (used by the routes, tested through the store)
  * ------------------------------------------------------------------ */
 
@@ -499,12 +598,14 @@ export async function advanceJob(
   deps: PipelineDeps = {},
 ): Promise<void> {
   const { store } = await resolveDeps(deps);
+  const terminal = next.step === "done" || next.step === "error";
   await store.saveStep(jobId, {
     step: next.step,
     round: next.round,
     status: next.step === "error" ? "error" : opts.status,
     error: next.step === "error" ? (next.reason ?? "Ismeretlen hiba.") : null,
-    finishedAt: new Date(),
+    // Audit 2026-09-05 (C): finished_at means finished — intermediate transitions leave it null.
+    finishedAt: terminal ? new Date() : null,
   });
 }
 
@@ -632,7 +733,9 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       };
     },
 
-    async loadBlockerNotes(jobId) {
+    async loadBlockerNotes(jobId, round) {
+      // Audit 2026-09-05 (C): only the requested lektor round — the union of every
+      // earlier round told the Author to re-fix findings it had already fixed.
       const rows = await db
         .select({
           kind: lektorNotes.kind,
@@ -641,7 +744,13 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           blockPath: lektorNotes.blockPath,
         })
         .from(lektorNotes)
-        .where(and(eq(lektorNotes.jobId, jobId), eq(lektorNotes.severity, "blocker")));
+        .where(
+          and(
+            eq(lektorNotes.jobId, jobId),
+            eq(lektorNotes.severity, "blocker"),
+            eq(lektorNotes.round, round),
+          ),
+        );
       return rows.map((r) => ({
         kind: r.kind as RawNote["kind"],
         subkind: r.subkind ?? undefined,
@@ -654,7 +763,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       await db.update(studioJobs).set(patch).where(eq(studioJobs.id, jobId));
     },
 
-    async saveNotes(jobId, notes) {
+    async saveNotes(jobId, notes, round) {
       if (notes.length === 0) return;
       await db.insert(lektorNotes).values(
         notes.map((n) => ({
@@ -664,8 +773,43 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           severity: n.severity,
           message: n.message,
           blockPath: n.blockPath ?? null,
+          round,
         })),
       );
+    },
+
+    async publishLesson(input) {
+      // Audit 2026-09-05 (A): one transaction — a lesson is either fully reachable
+      // (html_files row + publishedAt + quiz export) or untouched.
+      return db.transaction(async (tx) => {
+        const [file] = await tx
+          .insert(htmlFiles)
+          .values({
+            title: input.title,
+            content: LESSON_PLACEHOLDER_HTML,
+            description: "Websuli lecke — a lecke-futtató jeleníti meg.",
+            classroom: input.classroom,
+            contentType: "lesson",
+          })
+          .returning({ id: htmlFiles.id });
+        await tx
+          .update(lessons)
+          .set({
+            htmlFileId: file.id,
+            publishedAt: new Date(),
+            coverage: input.coverage as never,
+            updatedAt: new Date(),
+          })
+          .where(eq(lessons.id, input.lessonId));
+        // Idempotent re-publish: the previous export of this lesson goes first.
+        await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, input.lessonId));
+        if (input.quizItems.length > 0) {
+          await tx
+            .insert(gameQuizItems)
+            .values(input.quizItems.map((q) => ({ ...q, sourceMaterialId: file.id })));
+        }
+        return { htmlFileId: file.id, exportedQuizItems: input.quizItems.length };
+      });
     },
 
     async upsertLesson(lessonId, mapId, json) {

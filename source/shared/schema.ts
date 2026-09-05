@@ -516,12 +516,15 @@ export const gameQuizItems = pgTable(
     sourceMaterialId: varchar("source_material_id").references(() => htmlFiles.id, { onDelete: "set null" }),
     /** LS-5: a lecke fogalma, amelyhez az elem tartozik — a feedback-loop így a játékbeli hibákat is fogalomhoz köti. */
     conceptId: varchar("concept_id", { length: 64 }).references(() => kmConcepts.id, { onDelete: "set null" }),
+    /** Audit 2026-09-05: a publikálási kapu exportja — leckéhez kötve, hogy az újra-publikálás idempotens legyen. */
+    lessonId: varchar("lesson_id").references(() => lessons.id, { onDelete: "cascade" }),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
     gameIdx: index("game_quiz_items_game_id_idx").on(table.gameId),
     gameTierIdx: index("game_quiz_items_game_tier_idx").on(table.gameId, table.tier),
+    lessonIdx: index("game_quiz_items_lesson_id_idx").on(table.lessonId),
   }),
 );
 
@@ -776,6 +779,8 @@ export const lektorNotes = pgTable(
     message: text("message").notNull(),
     /** "szakaszIndex.blokkIndex", ha egy blokkra mutat. */
     blockPath: varchar("block_path", { length: 32 }),
+    /** Audit 2026-09-05: a lektor-kör, amelyben a jegyzet született — az author csak az előző kört kapja. */
+    round: integer("round").notNull().default(0),
     resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: "set null" }),
     resolution: text("resolution"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

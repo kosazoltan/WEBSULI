@@ -67,3 +67,8 @@ test("inferScope: értelmezhetetlen modellválasz → ok:false, nem dob", async 
   });
   assert.equal(thrown.ok, false);
 });
+
+// Audit 2026-09-05 (szelet A): a kapu determinisztikus lépés, a driver átmegy rajta.
+test("decideOneStepAction: gate lépésen → continue (a determinisztikus kapu a driverben fut le)", () => {
+  assert.equal(decideOneStepAction({ step: "gate", status: "ok", output: { lesson: {} } }), "continue");
+});

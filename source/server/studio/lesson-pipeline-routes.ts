@@ -147,6 +147,8 @@ async function drive(jobId: string): Promise<void> {
     const auto =
       next.step === "animator" ||
       next.step === "lektor" ||
+      // Audit 2026-09-05 (A): the gate is deterministic — no admin click needed to run it.
+      next.step === "gate" ||
       (next.step === "author" && output?.approvedOutline !== undefined);
 
     await advanceJob(jobId, next, { status: auto ? "running" : "ok" });
@@ -198,6 +200,17 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
 lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: Response) => {
   const run = await getRun(req.params.runId);
   if (!run) return res.status(404).json({ message: "Ismeretlen vagy lejárt futás." });
+  // Audit 2026-09-05 (A): a finished run points at the published material so the teacher
+  // (and the child) can open it — the html_files id lives on the lessons row.
+  let htmlFileId: string | null = null;
+  if (run.phase === "done" && run.lessonId) {
+    const [lesson] = await db
+      .select({ htmlFileId: lessons.htmlFileId })
+      .from(lessons)
+      .where(eq(lessons.id, run.lessonId))
+      .limit(1);
+    htmlFileId = lesson?.htmlFileId ?? null;
+  }
   res.json({
     phase: run.phase,
     detail: run.detail,
@@ -205,6 +218,7 @@ lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: R
     mapId: run.mapId,
     jobId: run.jobId,
     lessonId: run.lessonId,
+    htmlFileId,
   });
 });
 
@@ -383,7 +397,7 @@ async function driveOneStep(runId: string, jobId: string): Promise<void> {
 
     // LS-6b: mirror the pipeline's own step into the progress store.
     const phase = (
-      ["pedagogue", "author", "animator", "lektor"].includes(job.step) ? job.step : null
+      ["pedagogue", "author", "animator", "lektor", "gate"].includes(job.step) ? job.step : null
     ) as OneStepPhase | null;
     if (phase) updateRun(runId, { phase });
 

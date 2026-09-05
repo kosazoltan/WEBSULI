@@ -18,6 +18,7 @@ const CouponHudProbe = lazy(() =>
 
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
+const LessonRedirect = lazy(() => import("@/pages/LessonRedirect"));
 const PdfView = lazy(() => import("@/pages/pdf-view"));
 const Admin = lazy(() => import("@/pages/admin"));
 const AdminStats = lazy(() => import("@/pages/AdminStats"));
@@ -58,6 +59,7 @@ function Router() {
           <Route path="/__coupon-hud-probe" component={CouponHudProbe} />
         )}
         <Route path="/preview/:id" component={Preview} />
+        <Route path="/lesson/:id" component={LessonRedirect} />
         <Route path="/materials/pdf/:id" component={PdfView} />
         <Route path="/admin" component={Admin} />
         <Route path="/admin/stats" component={AdminStats} />

@@ -23,6 +23,7 @@ export type OneStepPhase =
   | "author"
   | "animator"
   | "lektor"
+  | "gate"
   | "done"
   | "parked"
   | "error";

@@ -86,6 +86,23 @@ lessonPublicRouter.get("/", async (_req: Request, res: Response) => {
   res.json({ lessons: rows });
 });
 
+/**
+ * GET /api/lessons/:id/material — audit 2026-09-05 (A): resolve a lesson id to the material
+ * (html_files) id the SPA renders at /preview/:id. Published lessons only; used by the
+ * /lesson/:id route the coupon HUD links back to.
+ */
+lessonPublicRouter.get("/:id/material", async (req: Request, res: Response) => {
+  const [row] = await db
+    .select({ htmlFileId: lessons.htmlFileId, publishedAt: lessons.publishedAt })
+    .from(lessons)
+    .where(eq(lessons.id, req.params.id))
+    .limit(1);
+  if (!row || !row.publishedAt || !row.htmlFileId) {
+    return res.status(404).json({ message: "Ez a lecke nem érhető el." });
+  }
+  res.json({ htmlFileId: row.htmlFileId });
+});
+
 /* ------------------------------------------------------------------ *
  * LS-3a — Próba, kupon, bónusz.
  *

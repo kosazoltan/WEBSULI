@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   PIPELINE_PROMPT_VERSION,
+  advanceJob,
   approveOutline,
   runPipelineStep,
   type JobPatch,
@@ -96,7 +97,7 @@ type StoredJob = JobView & {
 class MemoryStore implements PipelineStore {
   jobs = new Map<string, StoredJob>();
   maps = new Map<string, { meta: MapMeta; concepts: MapConcept[] }>();
-  notes = new Map<string, LektorNote[]>();
+  notes = new Map<string, Array<LektorNote & { round: number }>>();
   lessons = new Map<string, { id: string; mapId: string; json: unknown }>();
 
   async loadJob(id: string): Promise<JobView | null> {
@@ -107,9 +108,9 @@ class MemoryStore implements PipelineStore {
     return this.maps.get(id) ?? null;
   }
 
-  async loadBlockerNotes(jobId: string) {
+  async loadBlockerNotes(jobId: string, round: number) {
     return (this.notes.get(jobId) ?? [])
-      .filter((n) => n.severity === "blocker")
+      .filter((n) => n.severity === "blocker" && n.round === round)
       .map((n) => ({ kind: n.kind, subkind: n.subkind, message: n.message, blockPath: n.blockPath }));
   }
 
@@ -119,8 +120,15 @@ class MemoryStore implements PipelineStore {
     Object.assign(job, patch);
   }
 
-  async saveNotes(jobId: string, notes: LektorNote[]): Promise<void> {
-    this.notes.set(jobId, notes);
+  async saveNotes(jobId: string, notes: LektorNote[], round: number): Promise<void> {
+    this.notes.set(jobId, [
+      ...(this.notes.get(jobId) ?? []),
+      ...notes.map((n) => ({ ...n, round })),
+    ]);
+  }
+
+  async publishLesson(): Promise<{ htmlFileId: string; exportedQuizItems: number }> {
+    throw new Error("publishLesson: ebben a tesztben a kapu nem futhat");
   }
 
   async upsertLesson(lessonId: string | null, mapId: string, json: unknown): Promise<string> {
@@ -558,4 +566,62 @@ test("(k) animator: invariáns-sértő kimenet FALLBACK — az eredeti lecke meg
   const job = await store.loadJob("job-1");
   assert.equal(job?.status, "ok");
   assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "a tárolt lecke bájtra az eredeti — félkész animáció sosem kerül ki");
+});
+
+/* ------------------------------------------------------------------ *
+ * Audit 2026-09-05 (szelet C) — lektor-kör integritás + finished_at
+ * ------------------------------------------------------------------ */
+
+test("(l) author round 2 CSAK a round-1 lektor blokkolóit kapja, a round-0 stale jegyzetet nem", async () => {
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_AUTHOR);
+  store.seed({
+    id: "job-1",
+    mapId: "m1",
+    step: "author",
+    status: "running",
+    round: 2,
+    output: { approvedOutline: GOOD_OUTLINE },
+  });
+  await store.saveNotes(
+    "job-1",
+    [{ kind: "source_conflict", subkind: "not_in_map", severity: "blocker", blocking: true, message: "REGI-HIBA-ROUND0" } as LektorNote],
+    0,
+  );
+  await store.saveNotes(
+    "job-1",
+    [{ kind: "source_conflict", subkind: "not_in_map", severity: "blocker", blocking: true, message: "AKTUALIS-HIBA-ROUND1" } as LektorNote],
+    1,
+  );
+
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  assert.equal(outcome.ok, true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].user + calls[0].system, /AKTUALIS-HIBA-ROUND1/);
+  assert.doesNotMatch(calls[0].user + calls[0].system, /REGI-HIBA-ROUND0/, "a már javított kör hibája nem kerül újra a szerző elé");
+});
+
+test("(m) lektor a saját körével címkézi a jegyzeteit", async () => {
+  const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_LEKTOR_BLOCKER);
+  store.seed({ id: "job-1", mapId: "m1", step: "lektor", status: "running", round: 1, output: { lesson: GOOD_LESSON } });
+
+  await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  const notes = store.notes.get("job-1") ?? [];
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].round, 1);
+});
+
+test("(n) advanceJob: köztes átmenet finishedAt=null, terminális átmenet finishedAt kitöltve", async () => {
+  const { store } = makeDeps(CANNED_AUTHOR);
+  store.seed({ id: "job-1", mapId: "m1", step: "pedagogue", status: "ok", finishedAt: new Date(0) });
+
+  await advanceJob("job-1", { step: "author", round: 0 }, { status: "ok" }, { store });
+  assert.equal(store.jobs.get("job-1")?.finishedAt, null, "author-ra lépés nem 'kész'");
+
+  await advanceJob("job-1", { step: "done", round: 0 }, { status: "ok" }, { store });
+  assert.ok(store.jobs.get("job-1")?.finishedAt instanceof Date);
+
+  await advanceJob("job-1", { step: "error", round: 0, reason: "x" }, { status: "ok" }, { store });
+  assert.ok(store.jobs.get("job-1")?.finishedAt instanceof Date);
 });

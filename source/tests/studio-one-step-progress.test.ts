@@ -58,3 +58,17 @@ test("view-model: hiba és parkolás explicit, magyar üzenettel", () => {
   const parked = oneStepPhaseRows({ phase: "parked", detail: "Vázlat kézi jóváhagyásra vár.", error: null });
   assert.ok(parked.some((r) => r.state === "parked"));
 });
+
+// Audit 2026-09-05 (szelet A): a kapu/publikálás látható fázis a tanárnak.
+test("ONE_STEP_PHASES: a lektor után 'gate' (publikálási kapu) fázis áll", () => {
+  const keys = ONE_STEP_PHASES.map((p) => p.key);
+  assert.equal(keys[keys.indexOf("lektor") + 1], "gate");
+  const rows = oneStepPhaseRows({ phase: "gate", detail: null, error: null });
+  assert.equal(rows.find((r) => r.key === "lektor")?.state, "done");
+  assert.equal(rows.find((r) => r.key === "gate")?.state, "active");
+});
+
+test("oneStepPhaseRows: done fázisnál minden sor done, a gate is", () => {
+  const rows = oneStepPhaseRows({ phase: "done", detail: "A lecke elkészült.", error: null });
+  assert.ok(rows.every((r) => r.state === "done"));
+});

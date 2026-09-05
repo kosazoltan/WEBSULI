@@ -367,6 +367,7 @@ export const ONE_STEP_PHASES = [
   { key: "author", label: "Lecke megírása" },
   { key: "animator", label: "Animációk" },
   { key: "lektor", label: "Lektorálás" },
+  { key: "gate", label: "Publikálási kapu" },
 ] as const;
 
 export type OneStepPhaseKey = (typeof ONE_STEP_PHASES)[number]["key"];
