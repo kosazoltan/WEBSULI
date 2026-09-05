@@ -25,10 +25,15 @@ export type OcrResult = { name: string; text: string };
 export type OcrFn = (file: ExtractorFile) => Promise<string>;
 
 /** Transcribe the image files only; other kinds already carry their text. */
-export async function ocrTextsOf(files: ExtractorFile[], ocr: OcrFn): Promise<OcrResult[]> {
+export async function ocrTextsOf(
+  files: ExtractorFile[],
+  ocr: OcrFn,
+  onProgress?: (done: number, total: number) => void,
+): Promise<OcrResult[]> {
   const images = files.filter((f) => f.kind === "image");
   const out: OcrResult[] = [];
   for (const file of images) {
+    onProgress?.(out.length, images.length);
     try {
       out.push({ name: file.name, text: await ocr(file) });
     } catch (error) {

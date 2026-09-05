@@ -22,7 +22,8 @@ import {
   startJobFromMap,
 } from "./step-runner";
 import { exportQuizItemsFromChecks } from "./quiz-export";
-import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest } from "./one-step";
+import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
+import { createRun, getRun, updateRun, type OneStepPhase } from "./one-step-progress";
 import { computeInputHash, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
 import { resolveStudioModel } from "../ai/models";
@@ -87,30 +88,66 @@ const fromMapBody = z.object({
 /**
  * POST /api/studio/lessons/one-step — LS-6 (#164): upload → map → lesson in one call.
  *
- * Reuses the exact same machinery as the two-step flow: runExtraction (hash-
- * idempotent, OCR included), startJobFromMap, drive(). The only new behaviour is
- * (a) scope inference on the cheap OCR model when subject/classroom is omitted,
- * and (b) outline auto-approval — which goes through approveOutline(), so the
- * mechanical coverage check still decides. The lektor gate is untouched.
+ * LS-6b (#165): answers 202 + runId IMMEDIATELY and does the work in the
+ * background, updating an in-memory progress store at every phase boundary.
+ * The client polls GET /lessons/one-step/:runId and shows a live phase list
+ * (OCR i/n, extraction, outline, writing, animator, lektor) — the teacher must
+ * see the machine working, not a dead spinner. Gates unchanged: outline
+ * auto-approval goes through approveOutline() (coverage decides), lektor
+ * untouched.
  */
 lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Response) => {
   const parsed = parseOneStepRequest(req.body);
   if (!parsed.ok) {
     return res.status(400).json({ message: "Hibás kérés.", issues: parsed.issues });
   }
-  const { files, title } = parsed.data;
+
+  const runId = createRun();
+  const userId = (req.user as { id?: string } | undefined)?.id;
+  // Fire-and-forget: the run loop reports through the progress store.
+  void runOneStep(runId, parsed.data, userId).catch((error) => {
+    logger.error(`[STUDIO/1STEP] Váratlan hiba: ${error instanceof Error ? error.message : String(error)}`);
+    updateRun(runId, { phase: "error", error: "Váratlan hiba történt. Próbáld újra." });
+  });
+  res.status(202).json({ runId });
+});
+
+/** GET /api/studio/lessons/one-step/:runId — the progress poll. */
+lessonPipelineRouter.get("/lessons/one-step/:runId", (req: Request, res: Response) => {
+  const run = getRun(req.params.runId);
+  if (!run) return res.status(404).json({ message: "Ismeretlen vagy lejárt futás." });
+  res.json({
+    phase: run.phase,
+    detail: run.detail,
+    error: run.error,
+    mapId: run.mapId,
+    jobId: run.jobId,
+    lessonId: run.lessonId,
+  });
+});
+
+/** The whole one-step chain, reporting each phase into the progress store. */
+async function runOneStep(
+  runId: string,
+  data: OneStepRequest,
+  userId: string | undefined,
+): Promise<void> {
+  const { files, title } = data;
 
   // 1) Scope: given, or inferred from the sources on the cheap model.
-  let scope = parsed.data.scope;
+  let scope = data.scope;
   let inferredTitle: string | undefined;
   if (!scope) {
+    updateRun(runId, { phase: "ocr", detail: "Tantárgy és osztály felismerése…" });
     const inferred = await inferScope(files as ExtractorFile[], (f) =>
       callScopeModel(f, resolveStudioModel("ocr")),
     );
     if (!inferred.ok) {
-      return res.status(422).json({
-        message: `Nem sikerült felismerni a tantárgyat/osztályt (${inferred.reason}) — add meg kézzel.`,
+      updateRun(runId, {
+        phase: "error",
+        error: `Nem sikerült felismerni a tantárgyat/osztályt (${inferred.reason}) — add meg kézzel.`,
       });
+      return;
     }
     scope = inferred.scope;
     inferredTitle = inferred.title;
@@ -127,8 +164,10 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
   let mapId: string;
   if (existing) {
     mapId = existing.id;
+    updateRun(runId, { phase: "extract", detail: "Ez a forrás már fel volt dolgozva — a meglévő tudástárat használjuk.", mapId });
     logger.info(`[STUDIO/1STEP] Térkép gyorsítótárból: ${mapId}`);
   } else {
+    updateRun(runId, { phase: "ocr", detail: null });
     const { runExtraction } = await import("./run-extraction");
     try {
       mapId = await runExtraction({
@@ -136,53 +175,86 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
         scope,
         title: title ?? inferredTitle,
         inputHash,
-        userId: (req.user as { id?: string } | undefined)?.id,
+        userId,
+        onPhase: (phase, detail) => updateRun(runId, { phase, detail }),
       });
     } catch (error) {
       logger.error(
         `[STUDIO/1STEP] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return res.status(502).json({ message: "A kivonatolás nem sikerült. Próbáld újra." });
+      updateRun(runId, { phase: "error", error: "A kivonatolás nem sikerült. Próbáld újra." });
+      return;
     }
+    updateRun(runId, { mapId });
   }
 
   // 3) Lesson job on the freshly built map, driven with outline auto-approval.
   const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom });
-  if (!started.ok) return res.status(409).json({ message: started.reason, mapId });
+  if (!started.ok) {
+    updateRun(runId, { phase: "error", error: started.reason, mapId });
+    return;
+  }
+  updateRun(runId, { phase: "pedagogue", jobId: started.jobId });
 
-  await driveOneStep(started.jobId);
-  res.status(201).json({ jobId: started.jobId, mapId, scope });
-});
+  await driveOneStep(runId, started.jobId);
+}
 
 /** drive() plus outline auto-approval; approveOutline re-validates coverage. */
-async function driveOneStep(jobId: string): Promise<void> {
+async function driveOneStep(runId: string, jobId: string): Promise<void> {
   for (let i = 0; i < MAX_CHAIN; i++) {
     await drive(jobId);
 
     const [job] = await db
-      .select({ step: studioJobs.step, status: studioJobs.status, output: studioJobs.output })
+      .select({
+        step: studioJobs.step,
+        status: studioJobs.status,
+        output: studioJobs.output,
+        error: studioJobs.error,
+        lessonId: studioJobs.lessonId,
+      })
       .from(studioJobs)
       .where(eq(studioJobs.id, jobId))
       .limit(1);
     if (!job) return;
+
+    // LS-6b: mirror the pipeline's own step into the progress store.
+    const phase = (
+      ["pedagogue", "author", "animator", "lektor"].includes(job.step) ? job.step : null
+    ) as OneStepPhase | null;
+    if (phase) updateRun(runId, { phase });
 
     const action = decideOneStepAction({
       step: job.step,
       status: job.status,
       output: (job.output ?? null) as Record<string, unknown> | null,
     });
-    if (action === "stop") return;
+    if (action === "stop") {
+      if (job.step === "error") {
+        updateRun(runId, { phase: "error", error: job.error ?? "A gyártás hibára futott." });
+      } else if (job.step === "done") {
+        updateRun(runId, { phase: "done", detail: "A lecke elkészült.", lessonId: job.lessonId ?? null });
+      } else {
+        updateRun(runId, { phase: "parked", detail: "A futás kézi döntésre vár a Studio panelen." });
+      }
+      return;
+    }
     if (action === "approve") {
       const outline = (job.output as { outline?: unknown } | null)?.outline;
       const approved = await approveOutline(jobId, outline);
       if (!approved.ok) {
         // Coverage failed: park exactly where the manual flow would — admin decides.
         logger.warn(`[STUDIO/1STEP] Automatikus vázlat-jóváhagyás elutasítva: ${approved.reason}`);
+        updateRun(runId, {
+          phase: "parked",
+          detail: `A vázlat kézi jóváhagyásra vár (${approved.reason})`,
+        });
         return;
       }
+      updateRun(runId, { phase: "author" });
     }
     // action === "continue": loop back into drive()
   }
+  updateRun(runId, { phase: "error", error: "A pipeline-lánc nem ért véget a lépés-határon belül." });
 }
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */

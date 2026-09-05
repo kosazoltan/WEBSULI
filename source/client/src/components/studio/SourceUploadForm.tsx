@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileUp, Loader2, Upload, X } from "lucide-react";
 
@@ -12,11 +12,14 @@ import {
   buildExtractPayload,
   downscaleTargetOf,
   extractSubmitDisabledReason,
+  oneStepPhaseRows,
   oneStepSubmitDisabledReason,
   shouldDownscale,
   sourceFileFromRead,
   type SourceFile,
 } from "@shared/studio-ui";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, Check, CircleDashed, PauseCircle } from "lucide-react";
 
 /**
  * LS-2a-fix (board #157) — the missing source-upload form.
@@ -124,9 +127,12 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
 
   // LS-6 (#164): feltöltés → tudástár → lecke egyetlen hívásban. A scope
   // elhagyható — üres tantárgynál a szerver az olcsó modellel felismeri.
+  // LS-6b (#165): a szerver 202 + runId-t ad azonnal; a futást a fázispanel
+  // pollozza, hogy a tanár LÁSSA, melyik gyártási lépés fut éppen.
+  const [runId, setRunId] = useState<string | null>(null);
   const oneStep = useMutation({
     mutationFn: () =>
-      apiRequest<{ jobId: string; mapId: string; scope: { subject: string; classroom: number } }>(
+      apiRequest<{ runId: string }>(
         "POST",
         "/api/studio/lessons/one-step",
         subject.trim() === ""
@@ -134,23 +140,44 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
           : buildExtractPayload({ title, subject, classroom, files }),
       ),
     onSuccess: (r) => {
-      toast({
-        title: "Tananyaggyártás elindult",
-        description: `${r.scope.subject}, ${r.scope.classroom}. osztály — a tudástár elkészült, a lecke készül.`,
-      });
-      void queryClient.invalidateQueries({ queryKey: ["/api/studio/maps"] });
-      void queryClient.invalidateQueries({ queryKey: ["/api/studio/jobs"] });
+      setRunId(r.runId);
       setFiles([]);
       setTitle("");
-      onCreated?.(r.mapId);
     },
     onError: (e: Error) =>
       toast({ title: "Az egylépeses gyártás nem sikerült", description: e.message, variant: "destructive" }),
   });
 
+  const run = useQuery<{
+    phase: string;
+    detail: string | null;
+    error: string | null;
+    mapId: string | null;
+    lessonId: string | null;
+  }>({
+    queryKey: ["/api/studio/lessons/one-step", runId],
+    queryFn: () => apiRequest("GET", `/api/studio/lessons/one-step/${runId}`),
+    enabled: runId !== null,
+    refetchInterval: (query) => {
+      const phase = query.state.data?.phase;
+      return phase === "done" || phase === "error" || phase === "parked" ? false : 2500;
+    },
+  });
+
+  const runFinished = run.data?.phase === "done" || run.data?.phase === "error" || run.data?.phase === "parked";
+  const prevFinished = useRef(false);
+  useEffect(() => {
+    if (runFinished && !prevFinished.current) {
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/maps"] });
+      if (run.data?.mapId) onCreated?.(run.data.mapId);
+    }
+    prevFinished.current = runFinished;
+  }, [runFinished, run.data?.mapId, queryClient, onCreated]);
+
   const blocked = extractSubmitDisabledReason(subject, classroom, files.length);
   const oneStepBlocked = oneStepSubmitDisabledReason(subject, classroom, files.length);
-  const busy = extract.isPending || oneStep.isPending;
+  const runActive = runId !== null && !runFinished;
+  const busy = extract.isPending || oneStep.isPending || runActive;
 
   return (
     <Card data-testid="source-upload-form">
@@ -255,10 +282,46 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
           )}
           {busy && (
             <span className="text-xs text-muted-foreground">
-              A gép dolgozik a forráson — ez akár egy-két perc is lehet.
+              A gép dolgozik a forráson — a lépések lent követhetők.
             </span>
           )}
         </div>
+
+        {runId !== null && run.data && (
+          <div className="rounded-md border p-3 space-y-1.5" data-testid="one-step-progress">
+            <p className="text-sm font-medium">
+              {run.data.phase === "done"
+                ? "A tananyag elkészült ✔"
+                : run.data.phase === "error"
+                  ? "A gyártás megállt hibával"
+                  : run.data.phase === "parked"
+                    ? "A gyártás kézi döntésre vár"
+                    : "Tananyag készül…"}
+            </p>
+            <ul className="space-y-1">
+              {oneStepPhaseRows(run.data).map((row) => (
+                <li key={row.key} className="flex items-start gap-2 text-sm">
+                  {row.state === "done" && <Check className="w-4 h-4 mt-0.5 text-emerald-600" />}
+                  {row.state === "active" && <Loader2 className="w-4 h-4 mt-0.5 animate-spin text-blue-600" />}
+                  {row.state === "pending" && <CircleDashed className="w-4 h-4 mt-0.5 text-muted-foreground" />}
+                  {row.state === "error" && <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600" />}
+                  {row.state === "parked" && <PauseCircle className="w-4 h-4 mt-0.5 text-amber-600" />}
+                  <span className={row.state === "pending" ? "text-muted-foreground" : ""}>
+                    {row.label}
+                    {row.detail && (
+                      <span className="block text-xs text-muted-foreground">{row.detail}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
+              <Button variant="ghost" size="sm" className="mt-1" onClick={() => setRunId(null)}>
+                Bezárás
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -355,4 +355,71 @@ export function oneStepSubmitDisabledReason(
   return null;
 }
 
+/**
+ * LS-6b (#165) — az egylépeses futás fázislistája a kliens állapotjelzőjéhez.
+ * A user célja: LÁSSA, hogy a gép dolgozik (melyik fázisban jár, mi a részlet),
+ * ne holt spinnert nézzen.
+ */
+export const ONE_STEP_PHASES = [
+  { key: "ocr", label: "Képek átírása (OCR)" },
+  { key: "extract", label: "Tudástár kivonatolása" },
+  { key: "pedagogue", label: "Pedagógiai vázlat" },
+  { key: "author", label: "Lecke megírása" },
+  { key: "animator", label: "Animációk" },
+  { key: "lektor", label: "Lektorálás" },
+] as const;
+
+export type OneStepPhaseKey = (typeof ONE_STEP_PHASES)[number]["key"];
+
+export type OneStepRunView = {
+  phase: string;
+  detail: string | null;
+  error: string | null;
+};
+
+export type PhaseRowState = "done" | "active" | "pending" | "error" | "parked";
+
+export type PhaseRow = {
+  key: OneStepPhaseKey;
+  label: string;
+  state: PhaseRowState;
+  /** Az aktív sor alatt megjelenő részlet (pl. "Kép átírása: 3/10"). */
+  detail: string | null;
+};
+
+const PHASE_ORDER: Record<string, number> = Object.fromEntries(
+  ONE_STEP_PHASES.map((p, i) => [p.key, i]),
+);
+
+/**
+ * A futás pillanatnyi fázisából sor-állapotok: előtte done, ő active, utána
+ * pending. "indul" = még semmi sincs kész; done/parked/error a megfelelő
+ * sorra kerül (error/parked az utoljára aktív fázisra).
+ */
+export function oneStepPhaseRows(run: OneStepRunView): PhaseRow[] {
+  const terminal = run.phase === "done" || run.phase === "parked" || run.phase === "error";
+  const activeIdx =
+    run.phase === "indul"
+      ? -1
+      : run.phase === "done"
+        ? ONE_STEP_PHASES.length
+        : terminal
+          ? ONE_STEP_PHASES.length - 1
+          : (PHASE_ORDER[run.phase] ?? -1);
+
+  return ONE_STEP_PHASES.map((p, i) => {
+    let state: PhaseRowState;
+    if (i < activeIdx) state = "done";
+    else if (i === activeIdx) {
+      state = run.phase === "error" ? "error" : run.phase === "parked" ? "parked" : "active";
+    } else state = run.phase === "done" ? "done" : "pending";
+    return {
+      key: p.key,
+      label: p.label,
+      state,
+      detail: i === activeIdx ? (run.error ?? run.detail) : null,
+    };
+  });
+}
+
 export type { LektorNote, RawNote };

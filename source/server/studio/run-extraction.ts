@@ -64,6 +64,8 @@ type RunInput = {
   title?: string;
   inputHash: string;
   userId?: string;
+  /** LS-6b: fázis-jelentés az egylépeses állapotjelzőnek (opcionális). */
+  onPhase?: (phase: "ocr" | "extract", detail: string | null) => void;
 };
 
 /** Ask the extractor model for a structured reading of the uploaded sources. */
@@ -139,6 +141,17 @@ export async function runExtraction(input: RunInput): Promise<string> {
   const model = resolveStudioModel("extract");
   const systemPrompt = await promptStore.get(EXTRACTOR_PROMPT_NAME, FALLBACK_PROMPT);
 
+  // #163 — kép-források átirata olcsó vision-modellel, hogy a D1 idézet-
+  // ellenőrzésnek legyen mi ellen futnia. Fail-open: az OCR-hiba üres átirat,
+  // a kivonatolás megy tovább. (LS-6b: OCR ELŐBB fut, darabszám-jelentéssel.)
+  const ocrModel = resolveStudioModel("ocr");
+  const ocrResults = await ocrTextsOf(
+    input.files,
+    (file) => callOcrModel(file, ocrModel),
+    (done, total) => input.onPhase?.("ocr", `Kép átírása: ${done + 1}/${total}`),
+  );
+
+  input.onPhase?.("extract", null);
   const raw = await callExtractorModel(input.files, input.scope, systemPrompt, model);
 
   // A modell javaslat, nem igazság: az alakilag hibás fogalmat eldobjuk (egy rossz tétel
@@ -151,12 +164,6 @@ export async function runExtraction(input: RunInput): Promise<string> {
   const dropped = raw.concepts.length - valid.length;
 
   const sourceText = sourceTextOf(input.files);
-
-  // #163 — kép-források átirata olcsó vision-modellel, hogy a D1 idézet-
-  // ellenőrzésnek legyen mi ellen futnia. Fail-open: az OCR-hiba üres átirat,
-  // a kivonatolás megy tovább.
-  const ocrModel = resolveStudioModel("ocr");
-  const ocrResults = await ocrTextsOf(input.files, (file) => callOcrModel(file, ocrModel));
   const searchableText = mergeOcrIntoSourceText(sourceText, ocrResults);
   if (ocrResults.length > 0) {
     logger.info(
