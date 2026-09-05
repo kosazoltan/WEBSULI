@@ -338,4 +338,21 @@ export function extractSubmitDisabledReason(
   return null;
 }
 
+/**
+ * LS-6 (#164) — az egylépeses gomb indoka: csak fájl kell; tantárgy/osztály
+ * elhagyható (a gép felismeri), de ha a tantárgy ki van töltve, az osztálynak
+ * is érvényesnek kell lennie (fél-scope-ot nem küldünk).
+ */
+export function oneStepSubmitDisabledReason(
+  subject: string,
+  classroom: number,
+  fileCount: number,
+): string | null {
+  if (fileCount === 0) return "Tölts fel legalább egy forrásfájlt.";
+  if (subject.trim() !== "" && (!Number.isInteger(classroom) || classroom < 0 || classroom > 12)) {
+    return "Az osztály 0 és 12 között lehet.";
+  }
+  return null;
+}
+
 export type { LektorNote, RawNote };

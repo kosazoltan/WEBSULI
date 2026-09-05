@@ -22,6 +22,10 @@ import {
   startJobFromMap,
 } from "./step-runner";
 import { exportQuizItemsFromChecks } from "./quiz-export";
+import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest } from "./one-step";
+import { computeInputHash, type ExtractorFile } from "./extractor";
+import { knowledgeMaps } from "../../shared/schema";
+import { resolveStudioModel } from "../ai/models";
 
 /**
  * LS-2c — the admin endpoints that drive the lesson pipeline.
@@ -79,6 +83,107 @@ const fromMapBody = z.object({
   subject: z.string().trim().min(1).max(120),
   classroom: z.number().int().min(0).max(12),
 });
+
+/**
+ * POST /api/studio/lessons/one-step — LS-6 (#164): upload → map → lesson in one call.
+ *
+ * Reuses the exact same machinery as the two-step flow: runExtraction (hash-
+ * idempotent, OCR included), startJobFromMap, drive(). The only new behaviour is
+ * (a) scope inference on the cheap OCR model when subject/classroom is omitted,
+ * and (b) outline auto-approval — which goes through approveOutline(), so the
+ * mechanical coverage check still decides. The lektor gate is untouched.
+ */
+lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Response) => {
+  const parsed = parseOneStepRequest(req.body);
+  if (!parsed.ok) {
+    return res.status(400).json({ message: "Hibás kérés.", issues: parsed.issues });
+  }
+  const { files, title } = parsed.data;
+
+  // 1) Scope: given, or inferred from the sources on the cheap model.
+  let scope = parsed.data.scope;
+  let inferredTitle: string | undefined;
+  if (!scope) {
+    const inferred = await inferScope(files as ExtractorFile[], (f) =>
+      callScopeModel(f, resolveStudioModel("ocr")),
+    );
+    if (!inferred.ok) {
+      return res.status(422).json({
+        message: `Nem sikerült felismerni a tantárgyat/osztályt (${inferred.reason}) — add meg kézzel.`,
+      });
+    }
+    scope = inferred.scope;
+    inferredTitle = inferred.title;
+  }
+
+  // 2) Map: reuse by content hash or extract now (same as /maps/extract).
+  const inputHash = computeInputHash(files as ExtractorFile[], scope);
+  const [existing] = await db
+    .select({ id: knowledgeMaps.id })
+    .from(knowledgeMaps)
+    .where(eq(knowledgeMaps.inputHash, inputHash))
+    .limit(1);
+
+  let mapId: string;
+  if (existing) {
+    mapId = existing.id;
+    logger.info(`[STUDIO/1STEP] Térkép gyorsítótárból: ${mapId}`);
+  } else {
+    const { runExtraction } = await import("./run-extraction");
+    try {
+      mapId = await runExtraction({
+        files: files as ExtractorFile[],
+        scope,
+        title: title ?? inferredTitle,
+        inputHash,
+        userId: (req.user as { id?: string } | undefined)?.id,
+      });
+    } catch (error) {
+      logger.error(
+        `[STUDIO/1STEP] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return res.status(502).json({ message: "A kivonatolás nem sikerült. Próbáld újra." });
+    }
+  }
+
+  // 3) Lesson job on the freshly built map, driven with outline auto-approval.
+  const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom });
+  if (!started.ok) return res.status(409).json({ message: started.reason, mapId });
+
+  await driveOneStep(started.jobId);
+  res.status(201).json({ jobId: started.jobId, mapId, scope });
+});
+
+/** drive() plus outline auto-approval; approveOutline re-validates coverage. */
+async function driveOneStep(jobId: string): Promise<void> {
+  for (let i = 0; i < MAX_CHAIN; i++) {
+    await drive(jobId);
+
+    const [job] = await db
+      .select({ step: studioJobs.step, status: studioJobs.status, output: studioJobs.output })
+      .from(studioJobs)
+      .where(eq(studioJobs.id, jobId))
+      .limit(1);
+    if (!job) return;
+
+    const action = decideOneStepAction({
+      step: job.step,
+      status: job.status,
+      output: (job.output ?? null) as Record<string, unknown> | null,
+    });
+    if (action === "stop") return;
+    if (action === "approve") {
+      const outline = (job.output as { outline?: unknown } | null)?.outline;
+      const approved = await approveOutline(jobId, outline);
+      if (!approved.ok) {
+        // Coverage failed: park exactly where the manual flow would — admin decides.
+        logger.warn(`[STUDIO/1STEP] Automatikus vázlat-jóváhagyás elutasítva: ${approved.reason}`);
+        return;
+      }
+    }
+    // action === "continue": loop back into drive()
+  }
+}
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */
 lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: Response) => {

@@ -12,6 +12,7 @@ import {
   buildExtractPayload,
   downscaleTargetOf,
   extractSubmitDisabledReason,
+  oneStepSubmitDisabledReason,
   shouldDownscale,
   sourceFileFromRead,
   type SourceFile,
@@ -121,7 +122,35 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
       toast({ title: "A kivonatolás nem sikerült", description: e.message, variant: "destructive" }),
   });
 
+  // LS-6 (#164): feltöltés → tudástár → lecke egyetlen hívásban. A scope
+  // elhagyható — üres tantárgynál a szerver az olcsó modellel felismeri.
+  const oneStep = useMutation({
+    mutationFn: () =>
+      apiRequest<{ jobId: string; mapId: string; scope: { subject: string; classroom: number } }>(
+        "POST",
+        "/api/studio/lessons/one-step",
+        subject.trim() === ""
+          ? { ...(title.trim() !== "" ? { title: title.trim() } : {}), files }
+          : buildExtractPayload({ title, subject, classroom, files }),
+      ),
+    onSuccess: (r) => {
+      toast({
+        title: "Tananyaggyártás elindult",
+        description: `${r.scope.subject}, ${r.scope.classroom}. osztály — a tudástár elkészült, a lecke készül.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/maps"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/jobs"] });
+      setFiles([]);
+      setTitle("");
+      onCreated?.(r.mapId);
+    },
+    onError: (e: Error) =>
+      toast({ title: "Az egylépeses gyártás nem sikerült", description: e.message, variant: "destructive" }),
+  });
+
   const blocked = extractSubmitDisabledReason(subject, classroom, files.length);
+  const oneStepBlocked = oneStepSubmitDisabledReason(subject, classroom, files.length);
+  const busy = extract.isPending || oneStep.isPending;
 
   return (
     <Card data-testid="source-upload-form">
@@ -204,15 +233,27 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             className="min-h-11 gap-1"
-            disabled={blocked !== null || extract.isPending}
+            disabled={oneStepBlocked !== null || busy}
+            onClick={() => oneStep.mutate()}
+            data-testid="one-step-submit"
+          >
+            {oneStep.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
+            Tananyag készítése egy lépésben
+          </Button>
+          <Button
+            variant="outline"
+            className="min-h-11 gap-1"
+            disabled={blocked !== null || busy}
             onClick={() => extract.mutate()}
             data-testid="extract-submit"
           >
             {extract.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
-            Tudás-térkép kivonatolása
+            Csak tudás-térkép
           </Button>
-          {blocked && <span className="text-xs text-muted-foreground">{blocked}</span>}
-          {extract.isPending && (
+          {(oneStepBlocked ?? blocked) && !busy && (
+            <span className="text-xs text-muted-foreground">{oneStepBlocked ?? blocked}</span>
+          )}
+          {busy && (
             <span className="text-xs text-muted-foreground">
               A gép dolgozik a forráson — ez akár egy-két perc is lehet.
             </span>
