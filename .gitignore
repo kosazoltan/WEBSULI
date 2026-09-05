@@ -42,3 +42,4 @@ source/tests/screenshots/
 tmp/
 *.bundle
 *.local.cjs
+*.local.mts
