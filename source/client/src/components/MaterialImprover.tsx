@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { deleteImprovedConfirmMessage } from "@shared/improver-ui";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -435,9 +436,9 @@ export default function MaterialImprover() {
     applyMutation.mutate({ id });
   };
 
-  const handleDelete = (id: string) => {
-    // Megerősítés nélkül eddig egy elgépelt kattintás is véglegesen törölt egy javított anyagot.
-    if (!window.confirm("Biztosan törlöd ezt a javított anyagot? A művelet nem vonható vissza.")) {
+  const handleDelete = (id: string, status: string) => {
+    // #172: a szöveg explicit — csak a javítási másolat törlődik, a tananyag nem.
+    if (!window.confirm(deleteImprovedConfirmMessage(status))) {
       return;
     }
     logger.info('[DELETE] Directly deleting improved file:', id);
@@ -596,7 +597,7 @@ export default function MaterialImprover() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDelete(file.id)}
+                              onClick={() => handleDelete(file.id, file.status)}
                               className="border-red-300 text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -773,7 +774,7 @@ export default function MaterialImprover() {
                 variant="outline"
                 onClick={() => {
                   setPreviewImprovedId(null);
-                  handleDelete(previewData.id);
+                  handleDelete(previewData.id, previewData.status);
                 }}
                 className="border-red-300 text-red-700 hover:bg-red-50"
               >
