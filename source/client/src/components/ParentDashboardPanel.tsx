@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { hu } from "date-fns/locale";
-import { GraduationCap, Mail, Trophy, Star, Flame, RefreshCw, Send, BarChart3 } from "lucide-react";
+import { GraduationCap, Mail, Trophy, Star, Flame, RefreshCw, Send, BarChart3, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,6 +28,21 @@ type GameStats = {
   bestRunXp: number;
 };
 
+type MaterialViewSummary = {
+  materialId: string;
+  title: string;
+  viewCount: number;
+  lastViewed: string;
+};
+
+type LessonResultSummary = {
+  lessonId: string;
+  lessonTitle: string;
+  total: number;
+  correct: number;
+  percent: number;
+};
+
 type Student = {
   userId: string;
   name: string;
@@ -37,6 +52,10 @@ type Student = {
   bestStreak: number;
   lastActivity: string;
   games: Record<string, GameStats>;
+  /** #158: megtekintett tananyagok — régi szerver nem küldi → opcionális. */
+  materials?: MaterialViewSummary[];
+  /** #158: leckénkénti eredmények — régi szerver nem küldi → opcionális. */
+  lessonResults?: LessonResultSummary[];
 };
 
 type GameCatalogStat = {
@@ -298,6 +317,54 @@ export default function ParentDashboardPanel() {
                           );
                         })}
                       </div>
+
+                      {/* #158: megtekintett tananyagok — melyik anyagot, hányszor, mikor utoljára. */}
+                      {(s.materials?.length ?? 0) > 0 && (
+                        <div className="mt-2" data-testid={`student-materials-${s.userId}`}>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold flex items-center gap-1">
+                            <BookOpen className="w-3 h-3" /> Megtekintett tananyagok
+                          </p>
+                          <ul className="mt-1 space-y-0.5">
+                            {s.materials!.map((m) => (
+                              <li key={m.materialId} className="text-[11px] flex flex-wrap items-center gap-1.5">
+                                <span className="font-medium truncate max-w-56">{m.title}</span>
+                                <Badge variant="outline" className="text-[9px] px-1">{m.viewCount}×</Badge>
+                                <span className="text-muted-foreground">
+                                  {formatDistanceToNow(new Date(m.lastViewed), { locale: hu, addSuffix: true })}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* #158: leckénkénti eredmény — a Próba-válaszok százaléka. */}
+                      {(s.lessonResults?.length ?? 0) > 0 && (
+                        <div className="mt-2" data-testid={`student-lessons-${s.userId}`}>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold flex items-center gap-1">
+                            <BarChart3 className="w-3 h-3" /> Lecke-eredmények
+                          </p>
+                          <ul className="mt-1 space-y-0.5">
+                            {s.lessonResults!.map((l) => (
+                              <li key={l.lessonId} className="text-[11px] flex flex-wrap items-center gap-1.5">
+                                <span className="font-medium truncate max-w-56">{l.lessonTitle}</span>
+                                <Badge
+                                  className={
+                                    l.percent >= 75
+                                      ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100 text-[9px] px-1"
+                                      : l.percent >= 50
+                                        ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100 text-[9px] px-1"
+                                        : "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100 text-[9px] px-1"
+                                  }
+                                >
+                                  {l.percent}%
+                                </Badge>
+                                <span className="text-muted-foreground">{l.correct}/{l.total} helyes</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

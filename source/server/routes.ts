@@ -3466,6 +3466,56 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
 
       const students = Array.from(byUser.values()).sort((a, b) => b.totalXp - a.totalXp);
 
+      // #158 — melyik tanuló melyik tananyagot nézte, és leckénként milyen
+      // eredményt ért el. A csoportosítás tiszta függvényben (parent-dashboard.ts),
+      // unit-tesztelve; itt csak a lekérdezés él.
+      const { groupMaterialViewsByUser, groupLessonResultsByUser } = await import("./lib/parent-dashboard");
+      const { materialViews, htmlFiles, conceptResults, lessons } = await import("@shared/schema");
+
+      const viewRows = await db
+        .select({
+          userId: materialViews.userId,
+          materialId: materialViews.materialId,
+          title: htmlFiles.title,
+          viewedAt: materialViews.viewedAt,
+        })
+        .from(materialViews)
+        .innerJoin(htmlFiles, eq(materialViews.materialId, htmlFiles.id))
+        .where(sql`${materialViews.viewedAt} >= ${cutoff} AND ${materialViews.userId} IS NOT NULL`);
+      const materialsByUser = groupMaterialViewsByUser(
+        viewRows.map((v) => ({
+          userId: v.userId,
+          materialId: v.materialId,
+          title: v.title,
+          viewedAt: (v.viewedAt instanceof Date ? v.viewedAt : new Date(v.viewedAt as unknown as string)).toISOString(),
+        })),
+      );
+
+      const resultRows = await db
+        .select({
+          userId: conceptResults.userId,
+          lessonId: conceptResults.lessonId,
+          lessonJson: lessons.json,
+          correct: conceptResults.correct,
+        })
+        .from(conceptResults)
+        .innerJoin(lessons, eq(conceptResults.lessonId, lessons.id))
+        .where(sql`${conceptResults.createdAt} >= ${cutoff} AND ${conceptResults.userId} IS NOT NULL`);
+      const lessonResultsByUser = groupLessonResultsByUser(
+        resultRows.map((r) => ({
+          userId: r.userId,
+          lessonId: r.lessonId,
+          lessonTitle: ((r.lessonJson as { title?: string } | null)?.title ?? "Lecke"),
+          correct: r.correct,
+        })),
+      );
+
+      const studentsWithMaterials = students.map((s) => ({
+        ...s,
+        materials: materialsByUser.get(s.userId) ?? [],
+        lessonResults: lessonResultsByUser.get(s.userId) ?? [],
+      }));
+
       // LS-0d: per-játék összesítő — "mit játszanak valójában a gyerekek".
       // Ez adja a D3-döntés (melyik játék kapja először a közös motort) adatalapját.
       // Ugyanabból a `rows` halmazból számoljuk, nincs plusz adatbázis-kör.
@@ -3494,7 +3544,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       res.json({
         days,
         cutoff: cutoff.toISOString(),
-        students,
+        students: studentsWithMaterials,
         totalStudents: students.length,
         totalXp: students.reduce((s, x) => s + x.totalXp, 0),
         totalGames: students.reduce((s, x) => s + x.totalGames, 0),
