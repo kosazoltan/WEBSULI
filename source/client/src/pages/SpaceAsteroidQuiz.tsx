@@ -11,6 +11,8 @@ import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
+import { useCouponSession } from "@/game-engine/useCouponSession";
+import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
@@ -598,6 +600,10 @@ function buildPowerPickupMesh(): THREE.Group {
 
 export default function SpaceAsteroidQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // LS-4 (D3): the play-time coupon earned in a lesson, exactly as in Tsunami —
+  // without a coupon this is inert and free play stays the default.
+  const coupon = useCouponSession();
 
   // ----- Játékállapot (UI) -----
   const [phase, setPhase] = useState<Phase>(loadGrade() != null ? "intro" : "grade");
@@ -2065,6 +2071,9 @@ export default function SpaceAsteroidQuiz() {
     }}>
       <AchievementToast achievements={newlyUnlocked} />
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
+        {/* LS-4: earned play time — renders nothing without a coupon. */}
+        <CouponHud session={coupon} />
+        <CouponExpiredOverlay session={coupon} />
         <header className="flex items-center justify-between gap-1 mb-1">
           <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
           <div className="flex items-center gap-2 text-xs font-semibold">

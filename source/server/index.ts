@@ -20,6 +20,7 @@ import staticAuditRouter from "./routes/static-audit";
 import { aiPayloadGuard } from "./lib/ai-payload-guard";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 import { logger } from "./lib/logger";
+import { isLessonRoute, lessonCspDirectives } from "./lib/csp-profiles";
 
 const app = express();
 
@@ -148,8 +149,33 @@ const helmetMiddleware = helmet({
   referrerPolicy: { policy: "strict-origin-when-cross-origin" },
 });
 
-// Apply Helmet security headers with conditional CSP for /dev/ routes
+// Apply Helmet security headers with conditional CSP: strict for /lesson/*,
+// relaxed for /dev/ (legacy uploaded HTML), standard everywhere else.
 app.use((req, res, next) => {
+  if (isLessonRoute(req.path)) {
+    // LS-4: the lesson page is DATA rendered by our own audited bundle — the
+    // strict profile (no inline script, no eval) enforces "a lesson is not a
+    // program" at the response-header level.
+    helmet({
+      contentSecurityPolicy: {
+        directives: lessonCspDirectives({
+          allowedOrigins: ALLOWED_ORIGINS,
+          isDevelopment,
+          customDomain: process.env.CUSTOM_DOMAIN,
+        }),
+      },
+      hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      },
+      noSniff: true,
+      frameguard: { action: "sameorigin" },
+      xssFilter: true,
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    })(req, res, next);
+    return;
+  }
   if (req.path.startsWith("/dev/")) {
     // For /dev/ routes: Apply Helmet with relaxed CSP but keep other security headers
     helmet({

@@ -62,6 +62,22 @@ const PROBE_LESSON: Lesson = {
           coversConceptIds: ["c1"],
         },
         {
+          kind: "animate",
+          animKind: "numberLine",
+          params: { from: 0, to: 10, highlightTo: 7 },
+          caption: "A fényerősség skálája",
+          coversConceptIds: ["c1"],
+        },
+        {
+          kind: "try",
+          tryKind: "fillBlank",
+          spec: {
+            text: "A fotoszintézis a ___ részében zajlik, és ___ energiáját használja.",
+            answers: ["levél", "fény"],
+          },
+          coversConceptIds: ["c1"],
+        },
+        {
           kind: "recap",
           bullets: [
             "A fotoszintézis a kloroplasztiszokban zajlik.",

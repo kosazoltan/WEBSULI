@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, ChevronRight, HelpCircle, Lightbulb, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, HelpCircle, Lightbulb, Volume2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,9 @@ import {
 } from "@shared/lesson-schema";
 
 import { SectionProba } from "./SectionProba";
+import { ANIMATE_REGISTRY } from "./blocks/animate-blocks";
+import { TRY_REGISTRY } from "./blocks/try-blocks";
+import { prefersReducedMotion, readAloudEnabled, speak, speechSupported } from "@/lib/tts";
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.
@@ -23,10 +26,8 @@ import { SectionProba } from "./SectionProba";
  * foreign script executes, the age-band styling is consistent, and every tap target can
  * be held to 44 px in one place rather than in a hundred generated files.
  *
- * LS-2 renders explain / example / check / recap. `animate` and `try` blocks are part of
- * the schema but land in LS-4; until then they render as a visible placeholder rather
- * than silently disappearing — a lesson that is missing a third of itself must look
- * missing, not fine.
+ * LS-2 renders explain / example / check / recap; LS-4 lands the 8 animate and 3 try
+ * kinds from the registries in ./blocks (a static guard test pins full coverage).
  */
 
 const BAND_STYLES: Record<AgeBand, { body: string; heading: string }> = {
@@ -36,6 +37,17 @@ const BAND_STYLES: Record<AgeBand, { body: string; heading: string }> = {
 };
 
 function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain" }>; band: AgeBand }) {
+  // The gate is computed once per mount: reduced motion and speech support do not
+  // change mid-page in practice, and the button is the ONLY call site of speak() —
+  // so speech can never start without a user gesture (LS-4 TTS contract).
+  const [canSpeak] = useState(() =>
+    readAloudEnabled({
+      readAloud: block.readAloud,
+      reducedMotion: prefersReducedMotion(),
+      supported: speechSupported(),
+    }),
+  );
+
   return (
     <div className={cn("space-y-1", BAND_STYLES[band].body)} data-block="explain">
       {block.depth !== "core" && (
@@ -45,6 +57,17 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
         </span>
       )}
       <p>{block.text}</p>
+      {canSpeak && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="min-h-11"
+          data-testid="read-aloud"
+          onClick={() => speak(block.text)}
+        >
+          <Volume2 className="w-4 h-4 mr-1" /> Felolvasás
+        </Button>
+      )}
     </div>
   );
 }
@@ -190,18 +213,6 @@ function RecapBlock({ block }: { block: Extract<Block, { kind: "recap" }> }) {
   );
 }
 
-/** Blocks the schema allows but LS-4 will render. Visible on purpose — see file header. */
-function PendingBlock({ label }: { label: string }) {
-  return (
-    <div
-      className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground"
-      data-block="pending"
-    >
-      {label} — ez az elem a következő fejlesztési szakaszban jelenik meg.
-    </div>
-  );
-}
-
 export function LessonBlock({
   block,
   band,
@@ -220,10 +231,14 @@ export function LessonBlock({
       return <CheckBlock block={block} band={band} onPick={onPick} />;
     case "recap":
       return <RecapBlock block={block} />;
-    case "animate":
-      return <PendingBlock label={`Animáció (${block.animKind})`} />;
-    case "try":
-      return <PendingBlock label={`Gyakorlat (${block.tryKind})`} />;
+    case "animate": {
+      const Anim = ANIMATE_REGISTRY[block.animKind];
+      return <Anim params={block.params} caption={block.caption} />;
+    }
+    case "try": {
+      const Try = TRY_REGISTRY[block.tryKind];
+      return <Try spec={block.spec} />;
+    }
   }
 }
 

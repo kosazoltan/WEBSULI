@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
+import { useCouponSession } from "@/game-engine/useCouponSession";
+import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
@@ -1060,6 +1062,11 @@ type Phase = "menu" | "play" | "quiz" | "levelComplete" | "over";
 
 export default function BlockCraftQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // LS-4 (D3): the play-time coupon earned in a lesson, exactly as in BrainRot —
+  // without a coupon this is inert and free play stays the default.
+  const coupon = useCouponSession();
+
   const worldRef = useRef<VoxelWorld>(generateVoxelWorld(genCfgFor(LEVELS[0]!)));
   const playerRef = useRef<PlayerState>({
     x: WX / 2 + 0.5, y: WY, z: WZ / 2 + 0.5,
@@ -2160,6 +2167,9 @@ export default function BlockCraftQuiz() {
       <ClassroomGateModal accent="lime" />
       <AchievementToast achievements={newlyUnlocked} />
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
+        {/* LS-4: earned play time — renders nothing without a coupon. */}
+        <CouponHud session={coupon} />
+        <CouponExpiredOverlay session={coupon} />
         <header className="flex items-center justify-between gap-1 mb-1">
           <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
           <div className="flex items-center gap-2 text-xs font-semibold">

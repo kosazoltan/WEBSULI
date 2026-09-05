@@ -162,6 +162,49 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         await expect(page.getByText('Eredmény:')).toBeHidden();
     });
 
+    test('LS-4: az animáció reduced-motion alatt statikus kockát ad, a try-blokk osztályoz', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 740 });
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await page.goto('/__lesson-runtime-probe');
+
+        // 1. Az animate blokk reduced-motion alatt is teljes tartalommal renderel
+        //    (statikus kocka, nem tűnik el, nem animálódik a végtelenségig).
+        const anim = page.locator('[data-anim="numberLine"]');
+        await expect(anim).toBeVisible();
+        await expect(anim).toHaveText(/fényerősség skálája/i);
+
+        // 2. A try-blokk valódi interakciót ad: kitöltés -> ellenőrzés -> visszajelzés.
+        const fill0 = page.getByTestId('fill-0');
+        const fill1 = page.getByTestId('fill-1');
+        await expect(fill0).toBeVisible();
+        await fill0.fill('levél');
+        await fill1.fill('fény');
+        await page.getByTestId('try-check').click();
+        await expect(page.getByText(/Helyes!/)).toBeVisible();
+
+        // 3. Nincs vízszintes túlcsordulás az új blokkokkal sem.
+        const overflow = await page.evaluate(() =>
+            document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(overflow, 'vízszintes túlcsordulás 360px-en').toBeLessThanOrEqual(0);
+    });
+
+    test('LS-4: a /lesson/* válasz szigorú CSP-t hordoz (script-src nélkül unsafe-inline/eval)', async ({ page }) => {
+        // A lecke ADAT, nem program — ezt a válaszfejléc is kikényszeríti.
+        // A SPA shellt adja vissza minden /lesson/* útvonalra, így a fejléc a
+        // nem létező lecke-azonosítón is mérhető.
+        const resp = await page.request.get('/lesson/nem-letezo-lecke');
+        const csp = resp.headers()['content-security-policy'] ?? '';
+        expect(csp.length).toBeGreaterThan(0);
+
+        // A style-src-ben marad unsafe-inline (Tailwind stílusok), de a
+        // script-src szegmensnek szigorúnak kell lennie.
+        const scriptSegment = csp.split(';').map((s: string) => s.trim()).find((s: string) => s.startsWith('script-src'));
+        expect(scriptSegment).toBeDefined();
+        expect(scriptSegment).toContain("'self'");
+        expect(scriptSegment).not.toContain('unsafe-inline');
+        expect(scriptSegment).not.toContain('unsafe-eval');
+    });
+
     test('LS-3b: a kupon-HUD 360px-en elfér, olvasható, és a lejárat visszavezet a leckéhez', async ({ page }) => {
         // A HUD egy játék fölé kitett fix réteg: a kérdés geometriai — belefér-e egy
         // 360px-es telefonba, látszik-e a visszaszámláló, és ad-e valódi utat vissza.
