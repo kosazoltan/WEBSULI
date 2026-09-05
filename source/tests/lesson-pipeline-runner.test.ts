@@ -523,7 +523,7 @@ test("(j) animator: az érvényes kiegészítés elmentődik, a következő lép
   assert.equal((job?.output?.lesson as { sections: Array<{ blocks: unknown[] }> }).sections[0].blocks.length, 2, "az új animate blokk a leckében van");
 });
 
-test("(k) animator: invariáns-sértő kimenet hibára fut, a lecke érintetlen", async () => {
+test("(k) animator: invariáns-sértő kimenet FALLBACK — az eredeti lecke megy tovább (#169 spec-változás)", async () => {
   const tampered = {
     ...GOOD_LESSON,
     sections: [
@@ -549,11 +549,13 @@ test("(k) animator: invariáns-sértő kimenet hibára fut, a lecke érintetlen"
 
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
-  assert.equal(outcome.ok, false);
-  assert.equal(outcome.next.step, "error");
-  assert.match(outcome.reason, /nem-animate/i);
+  // #169: az animáció kozmetika — a sértés nem öli meg a gyártást, hanem az
+  // EREDETI lecke megy tovább a lektorra. A szerződés-ellenőrzés maga szigorú
+  // maradt (a rontott kimenet SOSEM kerül ki), csak a következménye változott.
+  assert.equal(outcome.ok, true, "a futás életben marad");
+  assert.equal(outcome.ok && outcome.next.step, "lektor", "a lánc megy tovább");
 
   const job = await store.loadJob("job-1");
-  assert.equal(job?.status, "error");
-  assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "a tárolt lecke bájtra ugyanaz — félkész animáció sosem kerül ki");
+  assert.equal(job?.status, "ok");
+  assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "a tárolt lecke bájtra az eredeti — félkész animáció sosem kerül ki");
 });
