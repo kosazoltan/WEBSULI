@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
+import { SourceUploadForm } from "@/components/studio/SourceUploadForm";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -320,44 +321,49 @@ export function KnowledgeMapPanel() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Tudás-térképek</CardTitle>
-        <CardDescription className="text-xs">
-          Feltöltött forrásból kivonatolt, forráshoz kötött fogalomjegyzékek. Jóváhagyás után
-          ezekből írható lecke.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> Betöltés…
-          </div>
-        ) : !data || data.maps.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Még nincs térkép. Tölts fel forrást a Tudás-térkép készítéséhez.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {data.maps.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setSelected(m.id)}
-                className="w-full text-left rounded-lg border border-border p-3 hover:bg-accent min-h-11"
-                data-testid={`map-row-${m.id}`}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{m.title}</span>
-                  <Badge variant="outline" className="text-[10px]">{m.subject}</Badge>
-                  <Badge variant="outline" className="text-[10px]">{m.classroom}. o.</Badge>
-                  {m.status === "approved" && <Badge className="bg-emerald-600 text-[10px]">Jóváhagyva</Badge>}
-                  {m.status === "draft" && <Badge variant="secondary" className="text-[10px]">Piszkozat</Badge>}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      {/* LS-2a-fix (#157): a feltöltő, ami nélkül a tudástár zsákutca volt. */}
+      <SourceUploadForm onCreated={(mapId) => setSelected(mapId)} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Tudás-térképek</CardTitle>
+          <CardDescription className="text-xs">
+            Feltöltött forrásból kivonatolt, forráshoz kötött fogalomjegyzékek. Jóváhagyás után
+            ezekből írható lecke.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Betöltés…
+            </div>
+          ) : !data || data.maps.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Még nincs térkép — a fenti űrlapon tölts fel forrást, és a gép kivonatolja.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {data.maps.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setSelected(m.id)}
+                  className="w-full text-left rounded-lg border border-border p-3 hover:bg-accent min-h-11"
+                  data-testid={`map-row-${m.id}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{m.title}</span>
+                    <Badge variant="outline" className="text-[10px]">{m.subject}</Badge>
+                    <Badge variant="outline" className="text-[10px]">{m.classroom}. o.</Badge>
+                    {m.status === "approved" && <Badge className="bg-emerald-600 text-[10px]">Jóváhagyva</Badge>}
+                    {m.status === "draft" && <Badge variant="secondary" className="text-[10px]">Piszkozat</Badge>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

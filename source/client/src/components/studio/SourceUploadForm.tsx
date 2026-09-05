@@ -1,0 +1,195 @@
+import { useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FileUp, Loader2, Upload, X } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  buildExtractPayload,
+  extractSubmitDisabledReason,
+  sourceFileFromRead,
+  type SourceFile,
+} from "@shared/studio-ui";
+
+/**
+ * LS-2a-fix (board #157) — the missing source-upload form.
+ *
+ * The trap this closes: the map list's empty state told the admin to "upload a
+ * source", but no upload existed anywhere — the extract endpoint was orphaned.
+ * This form reads the files client-side (text as text, pdf/image/docx as a
+ * data URL — the shape the extractor expects), then POSTs
+ * /api/studio/maps/extract. On success the map list refreshes and the new map
+ * opens for curation.
+ */
+
+function readFileFor(file: File): Promise<string> {
+  const isText = /\.(txt|md)$/i.test(file.name);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Nem sikerült beolvasni: ${file.name}`));
+    reader.onload = () => resolve(String(reader.result));
+    if (isText) reader.readAsText(file);
+    else reader.readAsDataURL(file);
+  });
+}
+
+export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState("");
+  const [classroom, setClassroom] = useState(4);
+  const [files, setFiles] = useState<SourceFile[]>([]);
+
+  const addFiles = async (list: FileList | null) => {
+    if (!list) return;
+    for (const file of Array.from(list)) {
+      try {
+        const content = await readFileFor(file);
+        const source = sourceFileFromRead(file.name, content);
+        if (!source) {
+          toast({
+            title: "Nem támogatott fájl",
+            description: `${file.name} — pdf, kép, docx vagy txt/md tölthető fel.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+        setFiles((prev) => [...prev.filter((f) => f.name !== source.name), source]);
+      } catch (e) {
+        toast({ title: "Beolvasási hiba", description: (e as Error).message, variant: "destructive" });
+      }
+    }
+    if (fileInput.current) fileInput.current.value = "";
+  };
+
+  const extract = useMutation({
+    mutationFn: () =>
+      apiRequest<{ mapId: string; cached: boolean }>(
+        "POST",
+        "/api/studio/maps/extract",
+        buildExtractPayload({ title, subject, classroom, files }),
+      ),
+    onSuccess: (r) => {
+      toast({
+        title: r.cached ? "Ez a forrás már fel volt dolgozva" : "Tudás-térkép elkészült",
+        description: r.cached
+          ? "A meglévő térképet nyitottuk meg — ugyanazért a forrásért nem fizetünk kétszer."
+          : "Nézd át a fogalmakat, majd hagyd jóvá a térképet.",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/maps"] });
+      setFiles([]);
+      setTitle("");
+      onCreated?.(r.mapId);
+    },
+    onError: (e: Error) =>
+      toast({ title: "A kivonatolás nem sikerült", description: e.message, variant: "destructive" }),
+  });
+
+  const blocked = extractSubmitDisabledReason(subject, classroom, files.length);
+
+  return (
+    <Card data-testid="source-upload-form">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileUp className="w-4 h-4 text-emerald-600" />
+          Forrás feltöltése — új tudás-térkép
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Tölts fel tananyag-forrást (pdf, kép, docx, txt) — a gép fogalomjegyzéket kivonatol
+          belőle, te átnézed és jóváhagyod, és abból készül a lecke.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Input
+            placeholder="Cím (nem kötelező)"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="min-h-11"
+            data-testid="extract-title"
+          />
+          <Input
+            placeholder="Tantárgy (pl. biológia)"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className="min-h-11"
+            data-testid="extract-subject"
+          />
+          <Input
+            type="number"
+            min={0}
+            max={12}
+            value={classroom}
+            onChange={(e) => setClassroom(Number(e.target.value))}
+            className="min-h-11"
+            aria-label="Osztály"
+            data-testid="extract-classroom"
+          />
+        </div>
+
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.docx,.txt,.md"
+          className="hidden"
+          onChange={(e) => void addFiles(e.target.files)}
+          data-testid="extract-file-input"
+        />
+        <Button
+          variant="outline"
+          className="min-h-11 gap-1"
+          onClick={() => fileInput.current?.click()}
+          data-testid="extract-pick-files"
+        >
+          <Upload className="w-4 h-4" />
+          Fájlok kiválasztása
+        </Button>
+
+        {files.length > 0 && (
+          <ul className="flex flex-wrap gap-2" data-testid="extract-file-list">
+            {files.map((f) => (
+              <li key={f.name}>
+                <Badge variant="secondary" className="gap-1">
+                  {f.name} · {f.kind}
+                  <button
+                    onClick={() => setFiles((prev) => prev.filter((p) => p.name !== f.name))}
+                    aria-label={`${f.name} eltávolítása`}
+                    className="ml-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            className="min-h-11 gap-1"
+            disabled={blocked !== null || extract.isPending}
+            onClick={() => extract.mutate()}
+            data-testid="extract-submit"
+          >
+            {extract.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
+            Tudás-térkép kivonatolása
+          </Button>
+          {blocked && <span className="text-xs text-muted-foreground">{blocked}</span>}
+          {extract.isPending && (
+            <span className="text-xs text-muted-foreground">
+              A gép dolgozik a forráson — ez akár egy-két perc is lehet.
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

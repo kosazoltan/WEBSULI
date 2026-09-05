@@ -253,4 +253,69 @@ export function quizExportDisabledReason(gameId: string, stats: ConceptStat[]): 
   return null;
 }
 
+/* ------------------------------------------------------------------ *
+ * LS-2a-fix — source upload for map extraction (board #157)
+ * ------------------------------------------------------------------ */
+
+/** A server-side SOURCE_KINDS tükre — a payload ezt a szűk halmazt küldheti. */
+export type SourceFileKind = "pdf" | "image" | "docx" | "text";
+
+export type SourceFile = { name: string; kind: SourceFileKind; content: string };
+
+const KIND_BY_EXT: Record<string, SourceFileKind> = {
+  pdf: "pdf",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  webp: "image",
+  gif: "image",
+  docx: "docx",
+  txt: "text",
+  md: "text",
+};
+
+/** Fájlnév → forrás-fajta; nem támogatott kiterjesztésre null (nem megy át csendben). */
+export function fileKindOf(fileName: string): SourceFileKind | null {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  return KIND_BY_EXT[ext] ?? null;
+}
+
+/**
+ * A beolvasott fájlból a szerver felé küldhető forrás-objektum: szövegfélék
+ * nyers szövegként, kép/PDF data-URL-ként (az extractor így várja). Ismeretlen
+ * fajtára null — a hívó dolga a hibát megmutatni.
+ */
+export function sourceFileFromRead(fileName: string, content: string): SourceFile | null {
+  const kind = fileKindOf(fileName);
+  if (!kind) return null;
+  return { name: fileName, kind, content };
+}
+
+/** A POST /api/studio/maps/extract törzse — a szerver extractRequestSchema alakja. */
+export function buildExtractPayload(input: {
+  title: string;
+  subject: string;
+  classroom: number;
+  files: SourceFile[];
+}): { title?: string; scope: { subject: string; classroom: number }; files: SourceFile[] } {
+  const title = input.title.trim();
+  return {
+    ...(title !== "" ? { title } : {}),
+    scope: { subject: input.subject, classroom: input.classroom },
+    files: input.files,
+  };
+}
+
+/** A kivonatolás gomb tiltásának indoka; null = mehet. */
+export function extractSubmitDisabledReason(
+  subject: string,
+  classroom: number,
+  fileCount: number,
+): string | null {
+  if (subject.trim() === "") return "Add meg a tantárgyat.";
+  if (!Number.isInteger(classroom) || classroom < 0 || classroom > 12) return "Az osztály 0 és 12 között lehet.";
+  if (fileCount === 0) return "Tölts fel legalább egy forrásfájlt.";
+  return null;
+}
+
 export type { LektorNote, RawNote };
