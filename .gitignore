@@ -41,3 +41,4 @@ source/tests/screenshots/
 # (a történelem átírása külön, tulajdonosi döntés).
 tmp/
 *.bundle
+*.local.cjs
