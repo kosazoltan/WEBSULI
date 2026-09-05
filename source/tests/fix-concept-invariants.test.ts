@@ -6,7 +6,7 @@ import {
   checkConceptFixResult,
   D1_RULE_TEXT,
 } from "../server/studio/step-io";
-import type { Lesson } from "../shared/lesson-schema";
+import type { Block, Lesson } from "../shared/lesson-schema";
 import type { MapConcept } from "../server/studio/coverage";
 
 /**
@@ -50,7 +50,7 @@ function lesson(concepts: string[]): Lesson {
 test("fixConcept: a célfogalom blokkja módosulhat", () => {
   const original = lesson(["c1"]);
   const candidate = lesson(["c1"]);
-  candidate.sections[0].blocks[0] = { ...candidate.sections[0].blocks[0], text: "Javított szöveg." };
+  (candidate.sections[0].blocks[0] as Extract<Block, { kind: "explain" }>).text = "Javított szöveg.";
   const out = checkConceptFixResult(original, candidate, "c1");
   assert.equal(out.ok, true);
 });
@@ -58,7 +58,7 @@ test("fixConcept: a célfogalom blokkja módosulhat", () => {
 test("fixConcept: MÁS fogalom blokkja nem változhat", () => {
   const original = lesson(["c2"]);
   const candidate = lesson(["c2"]);
-  candidate.sections[0].blocks[0] = { ...candidate.sections[0].blocks[0], text: "Átírva." };
+  (candidate.sections[0].blocks[0] as Extract<Block, { kind: "explain" }>).text = "Átírva.";
   const out = checkConceptFixResult(original, candidate, "c1");
   assert.equal(out.ok, false);
   assert.match(out.reasons.join("; "), /c2/i, "a sértő fogalom megnevezve");

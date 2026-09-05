@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
-import type { Lesson } from "../shared/lesson-schema";
+import type { Block, Lesson } from "../shared/lesson-schema";
 
 /**
  * LS-5 — game_quiz_items.conceptId export (master plan §5).
@@ -61,7 +61,7 @@ test("exportQuizItemsFromChecks: minden check sorrá lesz, conceptId kötve", ()
 
 test("exportQuizItemsFromChecks: fogalom nélküli check KIMARAD (nem lehet hangtalanul bekötni)", () => {
   const l = lessonWithChecks();
-  l.sections[0].blocks[0] = { ...l.sections[0].blocks[0], coversConceptIds: [] };
+  (l.sections[0].blocks[0] as Extract<Block, { kind: "check" }>).coversConceptIds = [];
   const rows = exportQuizItemsFromChecks(l, "space");
   assert.equal(rows.length, 1);
 });

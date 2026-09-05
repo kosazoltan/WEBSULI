@@ -6,7 +6,7 @@ import {
   checkAnimatorResult,
   D1_RULE_TEXT,
 } from "../server/studio/step-io";
-import type { Lesson } from "../shared/lesson-schema";
+import type { Block, Lesson } from "../shared/lesson-schema";
 import type { MapConcept } from "../server/studio/coverage";
 
 /**
@@ -34,30 +34,30 @@ function lessonWithBlocks(blocks: Lesson["sections"][0]["blocks"]): Lesson {
   };
 }
 
-const EXPLAIN = {
+const EXPLAIN: Extract<Block, { kind: "explain" }> = {
   kind: "explain",
   text: "A sejt az élőlények alapegysége.",
   depth: "core",
   readAloud: true,
   coversConceptIds: ["c1"],
-} as const;
+};
 
-const CHECK = {
+const CHECK: Extract<Block, { kind: "check" }> = {
   kind: "check",
   question: "Mi a sejt?",
   options: ["Sejt", "Kő", "Nap"],
   correctIndex: 0,
   feedbackPerOption: ["Igen.", "Nem.", "Nem."],
   coversConceptIds: ["c1"],
-} as const;
+};
 
-const ANIMATE = {
+const ANIMATE: Extract<Block, { kind: "animate" }> = {
   kind: "animate",
   animKind: "numberLine",
   params: { from: 0, to: 10 },
   caption: "Számegyenes",
   coversConceptIds: ["c1"],
-} as const;
+};
 
 test("invariánsok: a változatlan lecke átmegy", () => {
   const lesson = lessonWithBlocks([EXPLAIN, ANIMATE]);
