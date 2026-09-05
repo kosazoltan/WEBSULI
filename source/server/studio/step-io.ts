@@ -238,3 +238,82 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
     mapJson(map),
   ].join("\n");
 }
+
+/**
+ * Animátor: a kész leckébe `animate` blokkokat illeszt a vázlat javaslatai szerint.
+ *
+ * A szerződés szigorú, mert ez fizetett modellhívás, és ez a lecke utolsó gépi
+ * módosítása a lektor előtt: CSAK `animate` blokkokat adhat hozzá vagy cserélhet,
+ * minden más bájtra azonos marad, új fogalom-azonosító nem születhet (D1). A
+ * szabály gépi ellenőrzése: checkAnimatorResult.
+ */
+export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
+  return [
+    "You are the Animator. Add animated visualisations to an already-written lesson.",
+    "",
+    D1_RULE_TEXT,
+    "",
+    "Hard rules:",
+    "- You may ONLY add new `animate` blocks or replace existing `animate` blocks. Nothing else.",
+    "- Every non-animate block must remain verbatim — character for character, byte-identical.",
+    "- Every coversConceptIds must come from the ids already used by the lesson — never invent new ones.",
+    "- The title, subject, classroom, mapId and sourceOnly must stay exactly as they are.",
+    "- Choose animKind from: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts; give a params object the runtime can draw and a short Hungarian caption.",
+    "",
+    "Answer with JSON ONLY — the COMPLETE modified Lesson, matching the Lesson schema:",
+    '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [], "sourceOnly": true }',
+    "",
+    "Lesson:",
+    JSON.stringify(lesson, null, 2),
+    "",
+    "Concept map:",
+    mapJson(map),
+  ].join("\n");
+}
+
+export type AnimatorCheck = {
+  ok: boolean;
+  reasons: string[];
+};
+
+/**
+ * The animator's output must be the same lesson plus animations — nothing else.
+ *
+ * Three machine-checkable invariants: identity fields untouched, no invented
+ * concept id (D1), and the sequence of non-animate blocks byte-identical in
+ * every section. `animate` blocks are the ONLY place the candidate may differ.
+ */
+export function checkAnimatorResult(original: Lesson, candidate: Lesson): AnimatorCheck {
+  const reasons: string[] = [];
+
+  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly"] as const;
+  for (const field of identityFields) {
+    if (JSON.stringify(original[field]) !== JSON.stringify(candidate[field])) {
+      reasons.push(`A lecke azonosító mezője megváltozott: ${field}.`);
+    }
+  }
+
+  const originalIds = new Set(conceptIdsOf(original));
+  for (const id of conceptIdsOf(candidate)) {
+    if (!originalIds.has(id)) {
+      reasons.push(`Új fogalom-azonosító jelent meg: ${id}.`);
+    }
+  }
+
+  if (original.sections.length !== candidate.sections.length) {
+    reasons.push(
+      `A szakaszok száma megváltozott (${original.sections.length} -> ${candidate.sections.length}).`,
+    );
+  } else {
+    original.sections.forEach((section, index) => {
+      const originalNonAnimate = section.blocks.filter((b) => b.kind !== "animate");
+      const candidateNonAnimate =
+        candidate.sections[index]?.blocks.filter((b) => b.kind !== "animate") ?? [];
+      if (JSON.stringify(originalNonAnimate) !== JSON.stringify(candidateNonAnimate)) {
+        reasons.push(`A(z) ${index + 1}. szakasz nem-animate blokkjai megváltoztak.`);
+      }
+    });
+  }
+
+  return { ok: reasons.length === 0, reasons };
+}

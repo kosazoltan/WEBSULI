@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 export const STUDIO_STEPS = [
   "pedagogue",
   "author",
+  "animator",
   "lektor",
   "gate",
   "done",
@@ -74,6 +75,9 @@ export function nextStep(input: TransitionInput): Transition {
       return { step: "author", round };
 
     case "author":
+      return { step: "animator", round };
+
+    case "animator":
       return { step: "lektor", round };
 
     case "lektor": {

@@ -19,6 +19,7 @@ import { createPromptStore } from "../lib/prompt-store";
 export const STUDIO_PROMPT_NAMES = {
   pedagogue: "studio.pedagogue.v1",
   author: "studio.author.v1",
+  animator: "studio.animator.v1",
   lektor: "studio.lektor.v1",
 } as const;
 

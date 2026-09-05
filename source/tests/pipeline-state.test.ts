@@ -24,9 +24,12 @@ import {
  */
 
 test("the declared steps match the planned pipeline", () => {
+  // LS-4 (spec: master plan §4/§6 flow): the animator step sits between author and
+  // lektor — this list is the documented spec change for the slice.
   assert.deepEqual(STUDIO_STEPS, [
     "pedagogue",
     "author",
+    "animator",
     "lektor",
     "gate",
     "done",
@@ -34,9 +37,10 @@ test("the declared steps match the planned pipeline", () => {
   ]);
 });
 
-test("the happy path runs pedagogue -> author -> lektor -> gate -> done", () => {
+test("the happy path runs pedagogue -> author -> animator -> lektor -> gate -> done", () => {
   assert.equal(nextStep({ step: "pedagogue", ok: true, round: 0 }).step, "author");
-  assert.equal(nextStep({ step: "author", ok: true, round: 0 }).step, "lektor");
+  assert.equal(nextStep({ step: "author", ok: true, round: 0 }).step, "animator");
+  assert.equal(nextStep({ step: "animator", ok: true, round: 0 }).step, "lektor");
   assert.equal(nextStep({ step: "lektor", ok: true, round: 0, blockers: 0 }).step, "gate");
   assert.equal(nextStep({ step: "gate", ok: true, round: 0 }).step, "done");
 });
@@ -60,7 +64,7 @@ test("a THIRD round is refused — the job errors instead of looping", () => {
 });
 
 test("a failed step goes to error, never silently onward", () => {
-  for (const step of ["pedagogue", "author", "lektor", "gate"] as const) {
+  for (const step of ["pedagogue", "author", "animator", "lektor", "gate"] as const) {
     const r = nextStep({ step, ok: false, round: 0, error: "timeout" });
     assert.equal(r.step, "error", `${step} must fail closed`);
   }

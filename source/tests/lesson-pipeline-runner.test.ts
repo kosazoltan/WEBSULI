@@ -291,7 +291,7 @@ test("(b) pedagogue: a térképet nem fedő vázlat hibára fut, megnevezve a hi
   assert.equal(job?.output, null, "félkész vázlat soha nem kerül a jobra");
 });
 
-test("(c) author: a lecke elmentődik, a következő lépés lektor", async () => {
+test("(c) author: a lecke elmentődik, a következő lépés animator", async () => {
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_AUTHOR);
   store.seed({
     id: "job-1",
@@ -304,7 +304,7 @@ test("(c) author: a lecke elmentődik, a következő lépés lektor", async () =
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, true);
-  assert.equal(outcome.ok && outcome.next.step, "lektor");
+  assert.equal(outcome.ok && outcome.next.step, "animator");
   assert.equal(calls.length, 1);
 
   const job = await store.loadJob("job-1");
@@ -482,4 +482,78 @@ test("OPENROUTER_API_KEY hiányában a job hibára fut, tiszta magyar üzenettel
   const job = await store.loadJob(jobId);
   assert.equal(job?.status, "error");
   assert.match(job?.error ?? "", /OPENROUTER_API_KEY/);
+});
+
+test("(j) animator: az érvényes kiegészítés elmentődik, a következő lépés lektor", async () => {
+  const animatedLesson = {
+    ...GOOD_LESSON,
+    sections: [
+      {
+        ...GOOD_LESSON.sections[0],
+        blocks: [
+          ...GOOD_LESSON.sections[0].blocks,
+          {
+            kind: "animate",
+            animKind: "numberLine",
+            params: { from: 0, to: 10 },
+            caption: "Számegyenes",
+            coversConceptIds: ["c1"],
+          },
+        ],
+      },
+    ],
+  };
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeDeps(JSON.stringify(animatedLesson));
+  store.seed({
+    id: "job-1",
+    mapId: "m1",
+    step: "animator",
+    status: "running",
+    output: { lesson: GOOD_LESSON },
+  });
+
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.ok && outcome.next.step, "lektor");
+  assert.equal(calls.length, 1);
+
+  const job = await store.loadJob("job-1");
+  assert.equal(job?.status, "ok");
+  assert.equal((job?.output?.lesson as { sections: Array<{ blocks: unknown[] }> }).sections[0].blocks.length, 2, "az új animate blokk a leckében van");
+});
+
+test("(k) animator: invariáns-sértő kimenet hibára fut, a lecke érintetlen", async () => {
+  const tampered = {
+    ...GOOD_LESSON,
+    sections: [
+      {
+        ...GOOD_LESSON.sections[0],
+        blocks: [
+          {
+            ...GOOD_LESSON.sections[0].blocks[0],
+            text: "A gép átírta a magyarázatot.",
+          },
+        ],
+      },
+    ],
+  };
+  const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(JSON.stringify(tampered));
+  store.seed({
+    id: "job-1",
+    mapId: "m1",
+    step: "animator",
+    status: "running",
+    output: { lesson: GOOD_LESSON },
+  });
+
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.next.step, "error");
+  assert.match(outcome.reason, /nem-animate/i);
+
+  const job = await store.loadJob("job-1");
+  assert.equal(job?.status, "error");
+  assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "a tárolt lecke bájtra ugyanaz — félkész animáció sosem kerül ki");
 });

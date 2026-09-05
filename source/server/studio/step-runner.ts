@@ -19,9 +19,11 @@ import {
 } from "./pipeline";
 import { callStepModel, StepModelError } from "./run-step";
 import {
+  buildAnimatorPrompt,
   buildAuthorPrompt,
   buildLektorPrompt,
   buildPedagoguePrompt,
+  checkAnimatorResult,
   lessonIdsSubsetOfMap,
   lektorReportSchema,
   outlineCoversMap,
@@ -204,6 +206,8 @@ function cachedNext(job: JobView): Transition {
     case "pedagogue":
       return { step: "author", round: job.round };
     case "author":
+      return { step: "animator", round: job.round };
+    case "animator":
       return { step: "lektor", round: job.round };
     case "lektor":
       return nextStep({
@@ -274,6 +278,16 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
         buildAuthorPrompt(outline.sections, promptMapOf(map), blockers),
+      );
+      break;
+    }
+    case "animator": {
+      const lesson = job.output?.lesson as Lesson | undefined;
+      if (!lesson) return fail(store, job, "Az animátor lépéshez nincs lecke a jobban.");
+      input = { lesson, map: mapInputOf(map), concepts: map.concepts };
+      system = await promptLookup(
+        STUDIO_PROMPT_NAMES.animator,
+        buildAnimatorPrompt(lesson, promptMapOf(map)),
       );
       break;
     }
@@ -362,6 +376,26 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           job,
           `A lecke olyan fogalomra hivatkozik, ami nem szerepel a térképen: ${unknownIds.join(", ")}.`,
         );
+      }
+
+      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+      await store.saveStep(
+        job.id,
+        successPatch({ ...job.output, lesson: parsed.data }, { lessonId }),
+      );
+      return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
+    }
+
+    case "animator": {
+      const original = job.output?.lesson as Lesson | undefined;
+      if (!original) return fail(store, job, "Az animátor lépéshez nincs lecke a jobban.");
+
+      const parsed = lessonSchema.safeParse(json);
+      if (!parsed.success) return fail(store, job, `Az animált lecke alakilag hibás: ${zodIssues(parsed.error)}`);
+
+      const check = checkAnimatorResult(original, parsed.data);
+      if (!check.ok) {
+        return fail(store, job, `Az animátor megsértette a szerződést — ${check.reasons.join("; ")}`);
       }
 
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, parsed.data);

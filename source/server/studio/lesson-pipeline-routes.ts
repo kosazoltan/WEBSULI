@@ -48,7 +48,9 @@ async function drive(jobId: string): Promise<void> {
 
     const next = outcome.next;
     const auto =
-      next.step === "lektor" || (next.step === "author" && output?.approvedOutline !== undefined);
+      next.step === "animator" ||
+      next.step === "lektor" ||
+      (next.step === "author" && output?.approvedOutline !== undefined);
 
     await advanceJob(jobId, next, { status: auto ? "running" : "ok" });
     if (!auto) return;
