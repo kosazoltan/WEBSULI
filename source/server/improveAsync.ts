@@ -330,6 +330,39 @@ ${originalFile.content}
     const duration = Date.now() - startTime;
     logger.info(`[IMPROVE] Record ${dbRecordId}: AI stream completed in ${duration}ms, total ${fullContent.length} chars`);
 
+    // #171 — GYÖKÉROK: a 32k token-plafonnál a stream SZABÁLYOSAN zár ('done',
+    // nincs hiba), a kimenet mégis csonka — eddig ez a verify-kapun (#159)
+    // hibaként halt meg. Folytatásos körök: a részleges HTML visszamegy
+    // assistant-üzenetként, a modell a megszakadás pontjától folytatja.
+    {
+      const { buildContinuationMessages, joinContinuation, MAX_CONTINUATION_ROUNDS } = await import(
+        './improve/continuation'
+      );
+      let joined = fullContent;
+      for (
+        let round = 1;
+        !/<\/html>\s*$/i.test(joined.trim()) && round <= MAX_CONTINUATION_ROUNDS;
+        round++
+      ) {
+        logger.warn(
+          `[IMPROVE] Record ${dbRecordId}: A kimenet csonka (${joined.length} kar, nincs </html>) — folytatás ${round}/${MAX_CONTINUATION_ROUNDS}...`,
+        );
+        let continuation = '';
+        const contStream = improveProvider.streamChat(
+          buildContinuationMessages(systemPrompt, userPrompt, joined),
+          controller.signal,
+        );
+        for await (const chunk of contStream) {
+          if (chunk.type === 'error') throw new Error(chunk.message || 'AI stream error (continuation)');
+          if (chunk.type === 'content_delta' && chunk.content) continuation += chunk.content;
+        }
+        if (continuation.trim() === '') break; // a modell nem ad többet — a verify majd dönt
+        joined = joinContinuation(joined, continuation);
+        logger.info(`[IMPROVE] Record ${dbRecordId}: Folytatás ${round} kész, összesen ${joined.length} kar.`);
+      }
+      fullContent = joined;
+    }
+
     const aiResponse = { content: fullContent };
 
     if (!aiResponse || !aiResponse.content) {
