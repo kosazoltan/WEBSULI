@@ -6,6 +6,7 @@ import { resolveStudioModel } from "../ai/models";
 import { createPromptStore } from "../lib/prompt-store";
 import {
   applyVerbatimChecks,
+  emptyExtractionReason,
   sourceTextOf,
   type ExtractorFile,
   type ExtractorScope,
@@ -189,26 +190,33 @@ export async function runExtraction(input: RunInput): Promise<string> {
 
   const checked = applyVerbatimChecks(valid, searchableText);
 
-  const [map] = await db
-    .insert(knowledgeMaps)
-    .values({
-      title: input.title?.trim() || raw.title || "Névtelen térkép",
-      subject: input.scope.subject,
-      classroom: input.scope.classroom,
-      unit: input.scope.unit ?? null,
-      status: "draft",
-      sourceFiles: input.files.map((f) => ({ name: f.name, kind: f.kind })),
-      // #163: a TÁROLT kereshető szöveg az OCR-átiratokkal együtt — a
-      // "Forrás-ellenőrzés újra" ez ellen fut, képes forrásnál is működnie kell.
-      sourceText: searchableText,
-      inputHash: input.inputHash,
-      model,
-      createdBy: input.userId ?? null,
-    })
-    .returning({ id: knowledgeMaps.id });
+  // Audit 2026-09-05 (C): a map with zero concepts must NOT be persisted — its input_hash
+  // would poison the idempotency cache and every later upload of the same files would
+  // short-circuit onto a useless empty map ("A térkép nem tartalmaz fogalmat" forever).
+  const emptyReason = emptyExtractionReason(raw.concepts.length, checked.length);
+  if (emptyReason) throw new Error(emptyReason);
 
-  if (checked.length > 0) {
-    await db.insert(kmConcepts).values(
+  // Map + concepts in ONE transaction: a failed concept insert leaves no orphan map row.
+  const mapId = await db.transaction(async (tx) => {
+    const [map] = await tx
+      .insert(knowledgeMaps)
+      .values({
+        title: input.title?.trim() || raw.title || "Névtelen térkép",
+        subject: input.scope.subject,
+        classroom: input.scope.classroom,
+        unit: input.scope.unit ?? null,
+        status: "draft",
+        sourceFiles: input.files.map((f) => ({ name: f.name, kind: f.kind })),
+        // #163: a TÁROLT kereshető szöveg az OCR-átiratokkal együtt — a
+        // "Forrás-ellenőrzés újra" ez ellen fut, képes forrásnál is működnie kell.
+        sourceText: searchableText,
+        inputHash: input.inputHash,
+        model,
+        createdBy: input.userId ?? null,
+      })
+      .returning({ id: knowledgeMaps.id });
+
+    await tx.insert(kmConcepts).values(
       checked.map((c, index) => ({
         mapId: map.id,
         localId: c.id,
@@ -225,13 +233,14 @@ export async function runExtraction(input: RunInput): Promise<string> {
         orderIndex: index,
       })),
     );
-  }
+    return map.id;
+  });
 
   const failing = checked.filter((c) => !c.verbatimOk).length;
   logger.info(
-    `[STUDIO] Térkép kész: ${map.id} — ${checked.length} fogalom, ` +
+    `[STUDIO] Térkép kész: ${mapId} — ${checked.length} fogalom, ` +
       `${failing} nem szó szerinti, ${dropped} hibás alakú eldobva (modell: ${model}).`,
   );
 
-  return map.id;
+  return mapId;
 }

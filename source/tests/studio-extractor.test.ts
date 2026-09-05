@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   computeInputHash,
+  emptyExtractionReason,
   extractKnowledgeMap,
   applyVerbatimChecks,
   canApprove,
@@ -173,4 +174,23 @@ test("canApprove allows a map whose core concepts are quoted and reviewed", () =
 
 test("canApprove refuses an empty map", () => {
   assert.equal(canApprove([]).ok, false);
+});
+
+// Audit 2026-09-05 (szelet C): 0 fogalom → nincs térkép-sor (különben az input_hash cache mérgeződik).
+test("emptyExtractionReason: 0 nyers vagy 0 érvényes fogalom → ok-szöveg; különben null", () => {
+  assert.match(emptyExtractionReason(0, 0) ?? "", /egyetlen fogalmat sem/);
+  assert.match(emptyExtractionReason(7, 0) ?? "", /7 fogalmat adott.*egyik sem/);
+  assert.equal(emptyExtractionReason(7, 3), null);
+});
+
+test("run-extraction.ts: a térkép és a fogalmak EGY tranzakcióban mentődnek, az üres-őr a mentés előtt fut", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/run-extraction.ts", import.meta.url), "utf8");
+  const guardAt = src.indexOf("emptyExtractionReason(");
+  const txAt = src.indexOf("db.transaction(");
+  assert.ok(guardAt > 0 && txAt > 0);
+  assert.ok(guardAt < txAt, "az üres-őr a tranzakció ELŐTT áll");
+  assert.match(src, /tx\s*\.insert\(knowledgeMaps\)/);
+  assert.match(src, /tx\.insert\(kmConcepts\)/);
+  assert.doesNotMatch(src, /\bdb\s*\.insert\(knowledgeMaps\)/, "térkép-insert csak tranzakcióban");
 });

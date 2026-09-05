@@ -206,3 +206,18 @@ export function canApprove(
 
   return { ok: true };
 }
+
+/**
+ * Pure: why an extraction result must not become a map. `null` = fine. Lives here (DB-free module) so the
+ * unit test can import it; run-extraction.ts throws with this message so the job/run shows the teacher a
+ * real cause instead of a silent empty map.
+ */
+export function emptyExtractionReason(rawCount: number, checkedCount: number): string | null {
+  if (rawCount === 0) {
+    return "A modell egyetlen fogalmat sem adott vissza — a forrás valószínűleg olvashatatlan vagy üres. Próbáld jobb minőségű képpel / szöveggel.";
+  }
+  if (checkedCount === 0) {
+    return `A modell ${rawCount} fogalmat adott, de egyik sem volt alakilag érvényes — a kivonatolás nem menthető.`;
+  }
+  return null;
+}
