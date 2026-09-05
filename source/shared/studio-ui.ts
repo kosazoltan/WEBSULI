@@ -254,6 +254,26 @@ export function quizExportDisabledReason(gameId: string, stats: ConceptStat[]): 
 }
 
 /* ------------------------------------------------------------------ *
+ * #163 — client-side image downscale before upload (cost control)
+ * ------------------------------------------------------------------ */
+
+/** A leghosszabb él célmérete: elég az OCR-hez, töredék token a 4000px-hez képest. */
+export const DOWNSCALE_MAX_EDGE = 1600;
+
+/** Csak képet kicsinyítünk; pdf-oldalt nem rontunk. */
+export function shouldDownscale(kind: string, width: number, height: number): boolean {
+  return kind === "image" && Math.max(width, height) > DOWNSCALE_MAX_EDGE;
+}
+
+/** A cél-méret aránytartóan; kis kép változatlan. */
+export function downscaleTargetOf(width: number, height: number): { width: number; height: number } {
+  const longest = Math.max(width, height);
+  if (longest <= DOWNSCALE_MAX_EDGE) return { width, height };
+  const scale = DOWNSCALE_MAX_EDGE / longest;
+  return { width: Math.round(width * scale), height: Math.round(height * scale) };
+}
+
+/* ------------------------------------------------------------------ *
  * LS-2a-fix — source upload for map extraction (board #157)
  * ------------------------------------------------------------------ */
 

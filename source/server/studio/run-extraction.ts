@@ -11,6 +11,7 @@ import {
   type ExtractorScope,
   type RawExtraction,
 } from "./extractor";
+import { callOcrModel, mergeOcrIntoSourceText, ocrTextsOf } from "./ocr";
 import { conceptSchema, type Concept } from "../../shared/knowledge-map-schema";
 
 /**
@@ -150,7 +151,20 @@ export async function runExtraction(input: RunInput): Promise<string> {
   const dropped = raw.concepts.length - valid.length;
 
   const sourceText = sourceTextOf(input.files);
-  const checked = applyVerbatimChecks(valid, sourceText);
+
+  // #163 — kép-források átirata olcsó vision-modellel, hogy a D1 idézet-
+  // ellenőrzésnek legyen mi ellen futnia. Fail-open: az OCR-hiba üres átirat,
+  // a kivonatolás megy tovább.
+  const ocrModel = resolveStudioModel("ocr");
+  const ocrResults = await ocrTextsOf(input.files, (file) => callOcrModel(file, ocrModel));
+  const searchableText = mergeOcrIntoSourceText(sourceText, ocrResults);
+  if (ocrResults.length > 0) {
+    logger.info(
+      `[STUDIO/OCR] ${ocrResults.length} kép átírva (${ocrModel}); kereshető szöveg: ${searchableText.length} kar.`,
+    );
+  }
+
+  const checked = applyVerbatimChecks(valid, searchableText);
 
   const [map] = await db
     .insert(knowledgeMaps)
@@ -161,7 +175,9 @@ export async function runExtraction(input: RunInput): Promise<string> {
       unit: input.scope.unit ?? null,
       status: "draft",
       sourceFiles: input.files.map((f) => ({ name: f.name, kind: f.kind })),
-      sourceText,
+      // #163: a TÁROLT kereshető szöveg az OCR-átiratokkal együtt — a
+      // "Forrás-ellenőrzés újra" ez ellen fut, képes forrásnál is működnie kell.
+      sourceText: searchableText,
       inputHash: input.inputHash,
       model,
       createdBy: input.userId ?? null,

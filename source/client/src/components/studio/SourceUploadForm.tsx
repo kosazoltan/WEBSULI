@@ -10,7 +10,9 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   buildExtractPayload,
+  downscaleTargetOf,
   extractSubmitDisabledReason,
+  shouldDownscale,
   sourceFileFromRead,
   type SourceFile,
 } from "@shared/studio-ui";
@@ -34,6 +36,30 @@ function readFileFor(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result));
     if (isText) reader.readAsText(file);
     else reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * #163 — a fotót feltöltés ELŐTT kicsinyítjük (leghosszabb él 1600px, JPEG
+ * 0.85): az OCR-nek bőven elég, a vision-hívás töredék tokenből megvan, és a
+ * kérés is kisebb. A döntési számok a shared/studio-ui.ts-ben, unit-tesztelve.
+ */
+function downscaleImage(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onerror = () => resolve(dataUrl); // nem dekódolható: eredeti megy
+    img.onload = () => {
+      if (!shouldDownscale("image", img.naturalWidth, img.naturalHeight)) return resolve(dataUrl);
+      const { width, height } = downscaleTargetOf(img.naturalWidth, img.naturalHeight);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(dataUrl);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.src = dataUrl;
   });
 }
 
@@ -61,7 +87,10 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
           });
           continue;
         }
-        setFiles((prev) => [...prev.filter((f) => f.name !== source.name), source]);
+        // #163: fotó kicsinyítése feltöltés előtt (olcsóbb OCR, kisebb kérés).
+        const finalSource =
+          source.kind === "image" ? { ...source, content: await downscaleImage(source.content) } : source;
+        setFiles((prev) => [...prev.filter((f) => f.name !== finalSource.name), finalSource]);
       } catch (e) {
         toast({ title: "Beolvasási hiba", description: (e as Error).message, variant: "destructive" });
       }

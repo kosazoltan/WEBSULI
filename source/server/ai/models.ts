@@ -16,6 +16,7 @@
 
 export const STUDIO_STEPS = [
   "extract",
+  "ocr",
   "pedagogue",
   "author",
   "animator",
@@ -37,6 +38,7 @@ function envVarName(step: StudioStep): string {
  */
 const DEFAULT_MODELS: Record<StudioStep, string> = {
   extract: "openai/gpt-5.6-terra", // vision + verbatim quoting
+  ocr: "z-ai/glm-5.3-flash", // #163: cheap vision transcription of image sources
   pedagogue: "x-ai/grok-4.6", // planning, misconceptions
   author: "openai/gpt-5.6-terra", // long structured Hungarian output
   animator: "qwen/qwen3.8-flash", // bounded transform, cheap
@@ -47,6 +49,7 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
 
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   extract: "x-ai/grok-4.6",
+  ocr: "qwen/qwen3.8-flash", // vision-capable, same cheap class
   pedagogue: "openai/gpt-5.6-terra",
   author: "qwen/qwen3.8-max",
   animator: "z-ai/glm-5.3-flash",
