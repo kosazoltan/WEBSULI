@@ -250,6 +250,19 @@ export function buildAuthorPrompt(
  * Ha a forrás téved, azt `book_probably_wrong` jegyzetként jelezheti (az adminnak);
  * a leckét ő sem „javítja" soha.
  */
+/**
+ * #169 — az animátor-lépés kimenet-döntése. Az animáció kozmetikai réteg:
+ * ha az animált változat sérti a szerződést (vagy alakilag hibás), az EREDETI
+ * lecke megy tovább a lektorra — a gyártás sosem hal meg emiatt.
+ */
+export function animatorOutcome(
+  original: Lesson,
+  result: { ok: true; lesson: Lesson } | { ok: false; reason: string },
+): { lesson: Lesson; fellBack: boolean; reason: string | null } {
+  if (result.ok) return { lesson: result.lesson, fellBack: false, reason: null };
+  return { lesson: original, fellBack: true, reason: result.reason };
+}
+
 export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
   return [
     "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",

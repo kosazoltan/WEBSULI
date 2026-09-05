@@ -25,6 +25,7 @@ import {
   buildLektorPrompt,
   buildPedagoguePrompt,
   buildSchemaRetryUser,
+  animatorOutcome,
   checkAnimatorResult,
   checkConceptFixResult,
   lessonIdsSubsetOfMap,
@@ -428,18 +429,31 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const original = job.output?.lesson as Lesson | undefined;
       if (!original) return fail(store, job, "Az animátor lépéshez nincs lecke a jobban.");
 
+      // #169 — az animáció kozmetika: sértésnél/hibás alaknál az EREDETI lecke
+      // megy tovább a lektorra, a gyártás nem hal meg.
       const parsed = lessonSchema.safeParse(json);
-      if (!parsed.success) return fail(store, job, `Az animált lecke alakilag hibás: ${zodIssues(parsed.error)}`);
-
-      const check = checkAnimatorResult(original, parsed.data);
-      if (!check.ok) {
-        return fail(store, job, `Az animátor megsértette a szerződést — ${check.reasons.join("; ")}`);
+      const check = parsed.success ? checkAnimatorResult(original, parsed.data) : null;
+      const outcome = animatorOutcome(
+        original,
+        parsed.success && check && check.ok
+          ? { ok: true, lesson: parsed.data }
+          : {
+              ok: false,
+              reason: parsed.success
+                ? `szerződéssértés: ${(check as { reasons: string[] }).reasons.join("; ")}`
+                : `alakilag hibás animált lecke: ${zodIssues(parsed.error)}`,
+            },
+      );
+      if (outcome.fellBack) {
+        logger.warn(
+          `[STUDIO] Az animátor kimenete eldobva (${job.id}), az eredeti lecke megy tovább: ${outcome.reason?.slice(0, 300)}`,
+        );
       }
 
-      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, outcome.lesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: parsed.data }, { lessonId }),
+        successPatch({ ...job.output, lesson: outcome.lesson }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
