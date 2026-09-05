@@ -17,6 +17,8 @@ import { useToast } from "@/hooks/use-toast";
 import { JobMonitor } from "@/components/studio/JobMonitor";
 import { OutlineReview } from "@/components/studio/OutlineReview";
 import { LektorNotes } from "@/components/studio/LektorNotes";
+import { FeedbackPanel } from "@/components/studio/FeedbackPanel";
+import { feedbackPanelVisible } from "@shared/studio-ui";
 
 /**
  * LS-2c — the "Lecke készítése" flow, one screen, three phases:
@@ -120,6 +122,10 @@ export default function LessonStudioPanel() {
       )}
 
       {jobId && notesReady && <LektorNotes jobId={jobId} />}
+
+      {jobData && feedbackPanelVisible(jobData.job.step, jobData.produced.lessonId) && (
+        <FeedbackPanel lessonId={jobData.produced.lessonId as string} />
+      )}
     </div>
   );
 }

@@ -205,4 +205,52 @@ export const NOTE_KIND_LABELS: Record<string, string> = {
   age: "Életkor",
 };
 
+/* ------------------------------------------------------------------ *
+ * LS-5b — feedback panel view-model (concept stats, fix, quiz export)
+ * ------------------------------------------------------------------ */
+
+/** A row of GET /api/studio/lessons/:id/concept-stats. */
+export type ConceptStat = { conceptId: string; total: number; correct: number; rate: number };
+
+export type ConceptStatRow = {
+  conceptId: string;
+  /** pl. "c2 — 3/8 (38%)" */
+  label: string;
+  /** A küszöb alatt ÉS elég méréssel — a sor pirosan jelölhető. */
+  weak: boolean;
+  /** A "javítsd ezt a fogalmat" gomb kérhető rá (mindig, ha van sor). */
+  fixable: boolean;
+};
+
+/**
+ * A fogalom-statisztika sorai. A `weak` ugyanazzal a szabállyal számol, mint a
+ * szerver-oldali weakConceptIds (küszöb + minTotal) — a kliens csak megjeleníti,
+ * de a jelölésnek egyeznie kell azzal, amit a szerver gyengének tartana.
+ */
+export function conceptStatRows(
+  stats: ConceptStat[],
+  threshold: number,
+  opts: { minTotal?: number } = {},
+): ConceptStatRow[] {
+  const minTotal = opts.minTotal ?? 3;
+  return stats.map((s) => ({
+    conceptId: s.conceptId,
+    label: `${s.conceptId} — ${s.correct}/${s.total} (${Math.round(s.rate * 100)}%)`,
+    weak: s.total >= minTotal && s.rate < threshold,
+    fixable: true,
+  }));
+}
+
+/** A visszacsatolási panel csak KÉSZ lecke mellett értelmes. */
+export function feedbackPanelVisible(step: string, lessonId: string | null): boolean {
+  return step === "done" && lessonId !== null;
+}
+
+/** Az export gomb tiltásának indoka; null = engedélyezett. */
+export function quizExportDisabledReason(gameId: string, stats: ConceptStat[]): string | null {
+  if (gameId === "") return "Válassz játékot az exporthoz.";
+  if (stats.length === 0) return "Ehhez a leckéhez még nincs fogalom-eredmény.";
+  return null;
+}
+
 export type { LektorNote, RawNote };
