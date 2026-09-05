@@ -221,5 +221,7 @@ test("buildLektorPrompt: D1 szó szerint, a lecke JSON-ja és a térkép benne",
   assert.ok(prompt.includes(D1_RULE_TEXT), "a D1 szabály szó szerinti szövege a lektor promptjában is kötelező");
   assert.ok(prompt.includes("kitalalt-id"), "a lecke tartalma (a vizsgálandó szöveg) benne van");
   assert.ok(prompt.includes("book_probably_wrong"), "a lektor megkapja a D1-kivétel eszközét");
+  // #177: a recap blokknak séma szerint NINCS coversConceptIds — a lektor nem jelentheti hibának.
+  assert.match(prompt, /recap[^\n]*coversConceptIds[^\n]*(never|not)/i, "a recap-kivétel a lektor promptjában");
   assert.ok(prompt.includes("biológia"), "a térkép metaadata benne van");
 });

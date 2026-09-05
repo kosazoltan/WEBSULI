@@ -22,6 +22,7 @@ import {
   startJobFromMap,
 } from "./step-runner";
 import { exportQuizItemsFromChecks } from "./quiz-export";
+import { MAX_CHAIN_STEPS } from "./pipeline";
 import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
 import {
   createRun as createRunBase,
@@ -128,7 +129,8 @@ export const lessonPipelineRouter = express.Router();
 
 lessonPipelineRouter.use(isAuthenticatedAdmin);
 
-const MAX_CHAIN = 8;
+// #177: derived from MAX_AUTHOR_ROUNDS in pipeline.ts — a hand-picked 8 cut a legal round 2 short.
+const MAX_CHAIN = MAX_CHAIN_STEPS;
 
 /** Run the current step and keep going while the transition is automatic. */
 async function drive(jobId: string): Promise<void> {

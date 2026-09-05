@@ -23,6 +23,15 @@ export type NoteKind = (typeof NOTE_KINDS)[number];
 
 export type Severity = "blocker" | "warn" | "info";
 
+/**
+ * The `source_conflict` subkinds that may block. Measured live (#177, 2026-09-05): the
+ * Lektor model invented `missing_coversConceptIds` for a recap block — a block the schema
+ * deliberately leaves without concept ids — and the phantom blocker burned both Author
+ * rounds. An undocumented subkind is still recorded for the admin, but only as a warn;
+ * a `source_conflict` WITHOUT a subkind keeps the conservative blocker default.
+ */
+export const SOURCE_CONFLICT_BLOCKING_SUBKINDS = ["not_in_map", "contradicts_source"] as const;
+
 export type RawNote = {
   kind: NoteKind;
   /**
@@ -47,7 +56,11 @@ function severityOf(note: RawNote): Severity {
     case "source_conflict":
       // The one exception, and the reason this function exists: noticing that the book
       // is wrong is information for the admin, not grounds to change the lesson.
-      return note.subkind === "book_probably_wrong" ? "info" : "blocker";
+      if (note.subkind === "book_probably_wrong") return "info";
+      if (note.subkind === undefined) return "blocker";
+      return (SOURCE_CONFLICT_BLOCKING_SUBKINDS as readonly string[]).includes(note.subkind)
+        ? "blocker"
+        : "warn";
     case "coverage_gap":
       return note.subkind === "core" ? "blocker" : "warn";
     case "language":
