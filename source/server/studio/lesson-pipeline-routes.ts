@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from "express";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
@@ -580,9 +580,15 @@ lessonPipelineRouter.post("/lessons/:id/export-quiz", async (req: Request, res: 
     .limit(1);
   if (!lesson) return res.status(404).json({ message: "A lecke nem található." });
 
-  const rows = exportQuizItemsFromChecks(lesson.json as never, body.data.gameId, body.data.topic);
+  const rows = exportQuizItemsFromChecks(lesson.json as never, body.data.gameId, body.data.topic, req.params.id);
   if (rows.length === 0) return res.status(400).json({ message: "A leckében nincs fogalommal köthető check-blokk." });
 
-  await db.insert(gameQuizItems).values(rows);
+  // Audit 2026-09-05 (B): idempotent — a re-export of the same lesson→game replaces, not duplicates.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(gameQuizItems)
+      .where(and(eq(gameQuizItems.lessonId, req.params.id), eq(gameQuizItems.gameId, body.data.gameId)));
+    await tx.insert(gameQuizItems).values(rows);
+  });
   res.json({ exported: rows.length });
 });

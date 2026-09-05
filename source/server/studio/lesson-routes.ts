@@ -3,21 +3,24 @@ import { desc, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
-import { lessons, htmlFiles } from "../../shared/schema";
+import { lessons, htmlFiles, coupons } from "../../shared/schema";
 import { lessonSchema } from "../../shared/lesson-schema";
 import { logger } from "../lib/logger";
 import { normalizeFingerprint } from "../lib/public-input";
 import { gradeProba } from "../rewards/grade";
-import { applyBonus, remainingSeconds, BONUS_ALREADY_CLAIMED } from "../rewards/coupons";
+import { applyBonus, remainingSeconds, shouldIssueCoupon, BONUS_ALREADY_CLAIMED } from "../rewards/coupons";
 import {
   activeCoupon,
+  claimBonusAtomic,
   currentStreak,
   issueCoupon,
   loadCoupon,
   loadPublishedLesson,
   loadRewardPolicy,
-  persistBonus,
+  quizItemIdsOfLesson,
+  recentSectionCoupons,
   saveConceptResults,
+  serveItems,
   startCoupon,
   type Learner,
 } from "../rewards/store";
@@ -173,8 +176,17 @@ lessonPublicRouter.post("/:id/proba", async (req: Request, res: Response) => {
 
   await saveConceptResults(learner, row.id, parsed.data.sectionIdx, grade);
 
+  // Audit 2026-09-05 (B): one reward per section per day — replaying a perfect Próba
+  // no longer farms coupons. The learning record above is still saved.
+  const now = new Date();
+  const alreadyRewarded = !shouldIssueCoupon(
+    await recentSectionCoupons(learner, row.id, now),
+    parsed.data.sectionIdx,
+    now,
+  );
+
   let coupon = null;
-  if (grant.minutes !== null && grade.total > 0) {
+  if (grant.minutes !== null && grade.total > 0 && !alreadyRewarded) {
     const reason =
       grade.score >= policy.thresholds.perfect
         ? grade.isLessonFinal
@@ -189,7 +201,7 @@ lessonPublicRouter.post("/:id/proba", async (req: Request, res: Response) => {
       grant.minutes,
       reason,
       policy,
-      new Date(),
+      now,
     );
     coupon = { id: issued.id, minutes: issued.minutes, expiresAt: issued.expiresAt };
   }
@@ -201,6 +213,7 @@ lessonPublicRouter.post("/:id/proba", async (req: Request, res: Response) => {
     weakConceptIds: grade.weakConceptIds,
     isLessonFinal: grade.isLessonFinal,
     coupon,
+    alreadyRewarded,
   });
 });
 
@@ -214,7 +227,17 @@ lessonPublicRouter.post("/coupons/:id/start", async (req: Request, res: Response
 
   const now = new Date();
   // Already running is not an error: a reload must not lose the child's remaining time.
-  await startCoupon(coupon.id, now);
+  const started = await startCoupon(coupon.id, now);
+  if (started) {
+    // Audit 2026-09-05 (B): hand the lesson's own quiz items to this session so the
+    // in-game bonus (+30 s per correct lesson question) can actually be claimed.
+    const [lessonRow] = await db
+      .select({ lessonId: coupons.lessonId })
+      .from(coupons)
+      .where(eq(coupons.id, coupon.id))
+      .limit(1);
+    if (lessonRow) await serveItems(coupon.id, await quizItemIdsOfLesson(lessonRow.lessonId));
+  }
 
   const fresh = await loadCoupon(learner, req.params.id);
   res.json({ couponId: coupon.id, remainingSeconds: remainingSeconds(fresh ?? coupon, now) });
@@ -254,6 +277,7 @@ lessonPublicRouter.post("/coupons/:id/bonus", async (req: Request, res: Response
 
   const policy = await loadRewardPolicy();
   const now = new Date();
+  // Pure pre-check keeps the specific rejection reasons (expired / not served / claimed)…
   const result = applyBonus(coupon, parsed.data.quizItemId, policy.bonusSeconds, now);
 
   if (!result.ok) {
@@ -262,9 +286,13 @@ lessonPublicRouter.post("/coupons/:id/bonus", async (req: Request, res: Response
     return res.status(status).json({ message: "A bónusz nem érvényes.", reason: result.reason });
   }
 
-  await persistBonus(result.coupon);
+  // …and the write is atomic (audit 2026-09-05 B): a racing duplicate matches no row.
+  const claimed = await claimBonusAtomic(coupon.id, parsed.data.quizItemId, policy.bonusSeconds);
+  if (!claimed) {
+    return res.status(409).json({ message: "A bónusz nem érvényes.", reason: BONUS_ALREADY_CLAIMED });
+  }
   res.json({
     bonusSeconds: policy.bonusSeconds,
-    remainingSeconds: remainingSeconds(result.coupon, now),
+    remainingSeconds: remainingSeconds(claimed, now),
   });
 });

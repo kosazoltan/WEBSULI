@@ -1,14 +1,14 @@
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 
 import { db } from "../db";
-import { conceptResults, coupons, lessons, rewardPolicy } from "../../shared/schema";
+import { conceptResults, coupons, gameQuizItems, lessons, rewardPolicy } from "../../shared/schema";
 import {
   DEFAULT_REWARD_POLICY,
   parseRewardPolicy,
   type RewardPolicy,
 } from "../../shared/reward-policy";
 import type { ProbaGrade } from "./grade";
-import { expiryFor, type CouponState } from "./coupons";
+import { expiryFor, SECTION_REWARD_COOLDOWN_MS, type CouponState } from "./coupons";
 
 /**
  * LS-3a — the database side of the reward loop.
@@ -115,6 +115,65 @@ export async function saveConceptResults(
 }
 
 export type IssuedCoupon = { id: string; minutes: number; expiresAt: Date };
+
+/** Audit 2026-09-05 (B): the learner's coupons on this lesson from the last 24h (for shouldIssueCoupon). */
+export async function recentSectionCoupons(
+  learner: Learner,
+  lessonId: string,
+  now: Date,
+): Promise<Array<{ sectionIdx: number; issuedAt: Date }>> {
+  return db
+    .select({ sectionIdx: coupons.sectionIdx, issuedAt: coupons.issuedAt })
+    .from(coupons)
+    .where(
+      and(
+        eq(coupons.lessonId, lessonId),
+        learnerFilter(learner, coupons.userId, coupons.fingerprint),
+        gt(coupons.issuedAt, new Date(now.getTime() - SECTION_REWARD_COOLDOWN_MS)),
+      ),
+    );
+}
+
+/**
+ * Audit 2026-09-05 (B): the quiz items a coupon session may earn bonus on — the lesson's
+ * own exported checks (published by the gate). Writing them into served_items at start
+ * is what makes POST /coupons/:id/bonus reachable at all (it was dead: served_items=[]).
+ */
+export async function quizItemIdsOfLesson(lessonId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: gameQuizItems.id })
+    .from(gameQuizItems)
+    .where(and(eq(gameQuizItems.lessonId, lessonId), eq(gameQuizItems.isActive, true)));
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Audit 2026-09-05 (B): atomic bonus claim. The pure applyBonus check + a separate
+ * write let two parallel claims of one item both succeed; here the WHERE clause is the
+ * guard — the item must be served and NOT yet claimed — so exactly one UPDATE matches.
+ */
+export async function claimBonusAtomic(
+  couponId: string,
+  quizItemId: string,
+  bonusSeconds: number,
+): Promise<CouponState | null> {
+  const item = JSON.stringify([quizItemId]);
+  const rows = await db
+    .update(coupons)
+    .set({
+      bonusSeconds: sql`${coupons.bonusSeconds} + ${bonusSeconds}`,
+      claimedItems: sql`${coupons.claimedItems} || ${item}::jsonb`,
+    })
+    .where(
+      and(
+        eq(coupons.id, couponId),
+        sql`${coupons.servedItems} @> ${item}::jsonb`,
+        sql`NOT (${coupons.claimedItems} @> ${item}::jsonb)`,
+      ),
+    )
+    .returning();
+  return rows[0] ? toState(rows[0]) : null;
+}
 
 /** Write a granted coupon. */
 export async function issueCoupon(

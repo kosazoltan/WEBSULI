@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  shouldIssueCoupon,
   BONUS_ALREADY_CLAIMED,
   BONUS_NOT_SERVED,
   applyBonus,
@@ -112,4 +113,21 @@ test("a bónusz nem növelheti a hátralévő időt a lejárat fölé", () => {
     10,
     "a lejárat a bónusz fölött is felső korlát",
   );
+});
+
+/* ------------------------------------------------------------------ *
+ * Audit 2026-09-05 (szelet B) — kupon-idempotencia egy szakaszra
+ * ------------------------------------------------------------------ */
+
+test("shouldIssueCoupon: ugyanarra a szakaszra 24 órán belül volt kupon → nem jár újra (farmolás tilos)", () => {
+  const now = new Date("2026-09-05T12:00:00Z");
+  const recent = [{ sectionIdx: 2, issuedAt: new Date("2026-09-05T11:00:00Z") }];
+  assert.equal(shouldIssueCoupon(recent, 2, now), false);
+});
+
+test("shouldIssueCoupon: más szakasz, vagy 24 óránál régebbi kupon → jár", () => {
+  const now = new Date("2026-09-05T12:00:00Z");
+  assert.equal(shouldIssueCoupon([{ sectionIdx: 1, issuedAt: new Date("2026-09-05T11:00:00Z") }], 2, now), true);
+  assert.equal(shouldIssueCoupon([{ sectionIdx: 2, issuedAt: new Date("2026-09-04T11:59:00Z") }], 2, now), true);
+  assert.equal(shouldIssueCoupon([], 0, now), true);
 });

@@ -103,3 +103,21 @@ export function applyBonus(
 export function expiryFor(now: Date, couponTtlHours: number): Date {
   return new Date(now.getTime() + couponTtlHours * 3600 * 1000);
 }
+
+export const SECTION_REWARD_COOLDOWN_MS = 24 * 3600 * 1000;
+
+/**
+ * Audit 2026-09-05 (B): one reward per lesson section per day. Replaying the same
+ * perfect Próba used to mint a fresh coupon every POST (streak ladder 1→2→3→4 min,
+ * 10 min for the final) — unlimited game time from one section. The learning record
+ * (concept_results) still gets saved; only the coupon is withheld.
+ */
+export function shouldIssueCoupon(
+  recent: Array<{ sectionIdx: number; issuedAt: Date }>,
+  sectionIdx: number,
+  now: Date,
+): boolean {
+  return !recent.some(
+    (c) => c.sectionIdx === sectionIdx && now.getTime() - c.issuedAt.getTime() < SECTION_REWARD_COOLDOWN_MS,
+  );
+}
