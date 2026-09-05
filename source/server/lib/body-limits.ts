@@ -24,10 +24,25 @@ export const LARGE_BODY_PREFIXES = [
 
 const SESSION_COOKIE_NAME = "connect.sid";
 
+/** Methods that carry a request body; GET/DELETE/HEAD never need the 150 MB parser. */
+const BODY_METHODS: ReadonlySet<string> = new Set(["POST", "PUT", "PATCH"]);
+
 export function hasSessionCookie(req: Request): boolean {
   return typeof req.headers.cookie === "string" && req.headers.cookie.includes(`${SESSION_COOKIE_NAME}=`);
 }
 
+/**
+ * Audit 2026-09-05 (D): the cookie precheck is an optimisation, not a guard — any client
+ * can send `Cookie: connect.sid=x`. The real bound is the method: only body-carrying
+ * methods on the upload/AI prefixes may reach the large parser. A forged cookie on a
+ * POST still needs to survive the 401 downstream; that residual surface is accepted and
+ * documented in docs/specs/audit-4day-fixes-2026-09-05.md §5.
+ */
 export function needsLargeBody(req: Request): boolean {
-  return LARGE_BODY_PREFIXES.some((prefix) => req.path.startsWith(prefix)) && hasSessionCookie(req);
+  const method = typeof req.method === "string" ? req.method.toUpperCase() : "";
+  return (
+    BODY_METHODS.has(method) &&
+    LARGE_BODY_PREFIXES.some((prefix) => req.path.startsWith(prefix)) &&
+    hasSessionCookie(req)
+  );
 }

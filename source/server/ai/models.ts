@@ -51,7 +51,10 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   extract: "x-ai/grok-4.6",
   ocr: "qwen/qwen3.8-flash", // vision-capable, same cheap class
   pedagogue: "openai/gpt-5.6-terra",
-  author: "qwen/qwen3.8-max",
+  // Audit 2026-09-05 (D): was qwen/qwen3.8-max == the lektor PRIMARY — on author failover
+  // the same model would have reviewed itself (D1 broken silently). x-ai differs from
+  // both lektor rungs (qwen, z-ai).
+  author: "x-ai/grok-4.6",
   animator: "z-ai/glm-5.3-flash",
   lektor: "z-ai/glm-5.3",
 };
@@ -261,17 +264,31 @@ export function modelFamily(modelId: string): string {
 /**
  * Fails fast when the Author and the Lektor would run on the same vendor family,
  * which would silently disable the independent D1 source-fidelity review.
+ *
+ * Audit 2026-09-05 (D): checked across EVERY (author primary|fallback) × (lektor
+ * primary|fallback) pair — a failover must not collapse the two roles onto one vendor.
  */
-export function assertDistinctFamilies(env: EnvLike = process.env): void {
-  const author = resolveStudioModel("author", env);
-  const lektor = resolveStudioModel("lektor", env);
-  if (modelFamily(author) === modelFamily(lektor)) {
-    throw new Error(
-      `Studio model routing: author (${author}) and lektor (${lektor}) resolve to the ` +
-        `same model family "${modelFamily(author)}". The Lektor is the independent ` +
-        `source-fidelity check (D1) and must come from a different vendor family. ` +
-        `Set STUDIO_MODEL_LEKTOR or STUDIO_MODEL_AUTHOR to fix.`,
-    );
+export function assertDistinctFamilies(
+  env: EnvLike = process.env,
+  fallbacks: Partial<Record<StudioStep, string>> = FALLBACK_MODELS,
+): void {
+  const authors = [resolveStudioModel("author", env), fallbacks.author].filter(
+    (m): m is string => typeof m === "string" && m.length > 0,
+  );
+  const lektors = [resolveStudioModel("lektor", env), fallbacks.lektor].filter(
+    (m): m is string => typeof m === "string" && m.length > 0,
+  );
+  for (const author of authors) {
+    for (const lektor of lektors) {
+      if (modelFamily(author) === modelFamily(lektor)) {
+        throw new Error(
+          `Studio model routing: author (${author}) and lektor (${lektor}) resolve to the ` +
+            `same model family "${modelFamily(author)}". The Lektor is the independent ` +
+            `source-fidelity check (D1) and must come from a different vendor family — ` +
+            `including fallbacks. Set STUDIO_MODEL_LEKTOR or STUDIO_MODEL_AUTHOR to fix.`,
+        );
+      }
+    }
   }
 }
 

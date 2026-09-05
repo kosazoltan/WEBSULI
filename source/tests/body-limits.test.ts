@@ -12,7 +12,7 @@ import { LARGE_BODY_PREFIXES, needsLargeBody } from "../server/lib/body-limits";
  */
 
 function req(path: string, cookie?: string) {
-  return { path, headers: cookie ? { cookie } : {} } as unknown as Parameters<typeof needsLargeBody>[0];
+  return { method: "POST", path, headers: cookie ? { cookie } : {} } as unknown as Parameters<typeof needsLargeBody>[0];
 }
 
 const SID = "connect.sid=abc123";
@@ -37,4 +37,21 @@ test("publikus olcsó útvonal sütivel SEM kap nagy limitet", () => {
 
 test("a prefix-lista tartalmazza a /api/studio/-t (ratchet)", () => {
   assert.ok(LARGE_BODY_PREFIXES.includes("/api/studio/"));
+});
+
+/* Audit 2026-09-05 (szelet D): a süti-előszűrő hamisítható (`Cookie: connect.sid=x`) —
+ * a nagy parser csak body-t hordozó metóduson futhat; GET/DELETE mindig standard. */
+function reqM(method: string, path: string, cookie?: string) {
+  return { method, path, headers: cookie ? { cookie } : {} } as unknown as Parameters<typeof needsLargeBody>[0];
+}
+
+test("GET a nagy-body prefixen hamis sütivel is standard limitet kap", () => {
+  assert.equal(needsLargeBody(reqM("GET", "/api/studio/maps", "connect.sid=forged")), false);
+  assert.equal(needsLargeBody(reqM("DELETE", "/api/admin/backups/1", SID)), false);
+});
+
+test("POST/PUT/PATCH a nagy-body prefixen sütivel nagy limitet kap", () => {
+  assert.equal(needsLargeBody(reqM("POST", "/api/studio/maps/extract", SID)), true);
+  assert.equal(needsLargeBody(reqM("PUT", "/api/html-files/1", SID)), true);
+  assert.equal(needsLargeBody(reqM("PATCH", "/api/admin/x", SID)), true);
 });

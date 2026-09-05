@@ -4,7 +4,7 @@ services:
     runtime: node
     region: frankfurt
     rootDir: source
-    buildCommand: npm install --include=dev --legacy-peer-deps && (npm run db:migrate || echo MIGRATE_SKIPPED) && npm run build
+    buildCommand: npm ci --include=dev --legacy-peer-deps && npm run db:migrate && npm run build
     startCommand: node dist/index.js
     plan: starter
     healthCheckPath: /health

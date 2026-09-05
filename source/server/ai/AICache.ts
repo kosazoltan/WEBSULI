@@ -33,8 +33,9 @@ export class AICache {
     this.ttl = ttlHours * 60 * 60 * 1000; // Convert hours to milliseconds
     this.maxSize = maxSize;
     
-    // Cleanup expired entries every hour
-    setInterval(() => this.cleanup(), 60 * 60 * 1000);
+    // Cleanup expired entries every hour. unref(): the timer must not keep a test runner
+    // or CLI script alive after its work is done (audit 2026-09-05 D).
+    setInterval(() => this.cleanup(), 60 * 60 * 1000).unref();
   }
 
   /**

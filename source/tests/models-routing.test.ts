@@ -8,6 +8,7 @@ import {
   assertDistinctFamilies,
   providerForModel,
   LEGACY_MODELS,
+  FALLBACK_MODELS,
 } from "../server/ai/models";
 
 /**
@@ -112,4 +113,22 @@ test("the legacy route models are declared centrally", () => {
 
   assert.equal(providerForModel(LEGACY_MODELS.htmlFix), "anthropic");
   assert.equal(providerForModel(LEGACY_MODELS.analyzeFiles), "openai");
+});
+
+/* Audit 2026-09-05 (szelet D): a D1-garancia a FALLBACK-párokra is áll — az author
+ * fallbackja nem eshet a lektor primary családjára (különben ugyanaz a modell lektorálja magát). */
+test("assertDistinctFamilies: a shipped FALLBACK_MODELS minden author×lektor párja különböző család", () => {
+  assert.doesNotThrow(() => assertDistinctFamilies({}));
+  const authorCandidates = ["openai/gpt-5.6-terra", FALLBACK_MODELS.author].filter(Boolean) as string[];
+  const lektorCandidates = ["qwen/qwen3.8-max", FALLBACK_MODELS.lektor].filter(Boolean) as string[];
+  for (const a of authorCandidates) for (const l of lektorCandidates) {
+    assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l} azonos család`);
+  }
+});
+
+test("assertDistinctFamilies dob, ha az author FALLBACK-ja a lektor primary családjába esik", () => {
+  assert.throws(
+    () => assertDistinctFamilies({ STUDIO_MODEL_AUTHOR: "openai/gpt-5.6-terra", STUDIO_MODEL_LEKTOR: "z-ai/glm-5.3" }, { author: "z-ai/glm-5.3-flash" }),
+    /same model family/i,
+  );
 });
