@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 import { kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
@@ -619,10 +619,12 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
         .limit(1);
       if (!map) return null;
 
+      // #174: a kihúzott (rejected) fogalom nem tananyag — a vázlat-lefedettség
+      // és a fogalom-javítás sem követelheti.
       const concepts = await db
         .select({ localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
         .from(kmConcepts)
-        .where(eq(kmConcepts.mapId, mapId));
+        .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
 
       return {
         meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom },
@@ -738,7 +740,7 @@ export async function fixConceptOnLesson(
   const conceptRows = await db
     .select({ localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
     .from(kmConcepts)
-    .where(eq(kmConcepts.mapId, mapId));
+    .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
 
   if (!keyConfigured()) return { ok: false, error: NO_OPENROUTER_KEY_MESSAGE };
 

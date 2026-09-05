@@ -270,6 +270,88 @@ async function runOneStep(
     updateRun(runId, { mapId });
   }
 
+  // 2b) #174 — gépi kurálás + jóváhagyás: az egylépeses útvonal nem hagyhat
+  // "Piszkozat" zsákutcát. A D1 nem gyengül: az igazolt fogalom kept, a nem
+  // igazolható KULCSfogalom rejected (nem tanítjuk), a kiegészítő kept marad.
+  // A jóváhagyás a canApprove kapun MEGY ÁT, nem kerüli meg.
+  {
+    const [mapRow] = await db
+      .select({ status: knowledgeMaps.status })
+      .from(knowledgeMaps)
+      .where(eq(knowledgeMaps.id, mapId))
+      .limit(1);
+
+    if (mapRow && mapRow.status !== "approved") {
+      updateRun(runId, { phase: "extract", detail: "Tudástár gépi átnézése és jóváhagyása…" });
+      const { kmConcepts } = await import("../../shared/schema");
+      const { autoReviewDecision, summarizeAutoReview } = await import("./auto-approve");
+      const { canApprove } = await import("./extractor");
+
+      const concepts = await db
+        .select({
+          id: kmConcepts.id,
+          examWeight: kmConcepts.examWeight,
+          verbatimOk: kmConcepts.verbatimOk,
+          reviewState: kmConcepts.reviewState,
+        })
+        .from(kmConcepts)
+        .where(eq(kmConcepts.mapId, mapId));
+
+      // Csak a még átnézetlen (pending) fogalmakról dönt a gép — a kézi
+      // döntéseket (kept/edited/rejected) nem írja felül.
+      for (const c of concepts) {
+        if (c.reviewState !== "pending") continue;
+        const decision = autoReviewDecision({
+          examWeight: c.examWeight as "core" | "supporting",
+          verbatimOk: c.verbatimOk,
+        });
+        await db
+          .update(kmConcepts)
+          .set({ reviewState: decision, updatedAt: new Date() })
+          .where(eq(kmConcepts.id, c.id));
+      }
+      const summary = summarizeAutoReview(
+        concepts
+          .filter((c) => c.reviewState === "pending")
+          .map((c) => ({ examWeight: c.examWeight as "core" | "supporting", verbatimOk: c.verbatimOk })),
+      );
+
+      const fresh = await db
+        .select({
+          id: kmConcepts.id,
+          examWeight: kmConcepts.examWeight,
+          verbatimOk: kmConcepts.verbatimOk,
+          reviewState: kmConcepts.reviewState,
+        })
+        .from(kmConcepts)
+        .where(eq(kmConcepts.mapId, mapId));
+
+      const gate = canApprove(
+        fresh.map((c) => ({
+          id: c.id,
+          examWeight: c.examWeight as "core" | "supporting",
+          verbatimOk: c.verbatimOk,
+          reviewState: c.reviewState as "pending" | "kept" | "edited" | "rejected",
+        })),
+      );
+      if (!gate.ok) {
+        updateRun(runId, {
+          phase: "parked",
+          detail: `A tudástár gépi jóváhagyása nem lehetséges (${gate.reason}) — nézd át kézzel a Tudás-térkép fülön.`,
+        });
+        return;
+      }
+
+      await db
+        .update(knowledgeMaps)
+        .set({ status: "approved", approvedBy: userId ?? null, approvedAt: new Date(), updatedAt: new Date() })
+        .where(eq(knowledgeMaps.id, mapId));
+      logger.info(
+        `[STUDIO/1STEP] Térkép gépi kurálással jóváhagyva: ${mapId} (kept=${summary.kept}, rejected=${summary.rejected})`,
+      );
+    }
+  }
+
   // 3) Lesson job on the freshly built map, driven with outline auto-approval.
   const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom });
   if (!started.ok) {
