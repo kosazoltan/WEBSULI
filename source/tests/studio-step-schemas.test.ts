@@ -159,6 +159,26 @@ test("buildPedagoguePrompt: a térkép teljes JSON-ja benne, magyarul", () => {
   assert.ok(prompt.includes("7"));
 });
 
+// #179 — measured live (run c6843493, 2026-09-05): after #178 added MapConcept.id (the
+// km_concepts UUID) the prompts serialised the whole concept object, the model started
+// using the UUIDs as conceptIds, and coverage dropped to 0%. Prompts speak localId only.
+test("a promptok NEM tartalmazzák a fogalom DB-azonosítóját (UUID) — csak a localId-t (#179)", () => {
+  const withIds = MAP.map((c, i) => ({ ...c, id: `db-uuid-${i}-ne-lasd` }));
+  const pedagogue = buildPedagoguePrompt({ title: "T", subject: "biológia", classroom: 7, concepts: withIds });
+  const author = buildAuthorPrompt(GOOD_OUTLINE.sections, { subject: "biológia", classroom: 7, concepts: withIds }, []);
+  const lektor = buildLektorPrompt(
+    {
+      title: "T", subject: "s", classroom: 4, mapId: "m", misconceptions: [], sourceOnly: true as const,
+      sections: [{ heading: "H", probaEnabled: true, blocks: [{ kind: "explain" as const, text: "x", depth: "core" as const, readAloud: true, coversConceptIds: ["c1"] }] }],
+    } satisfies Lesson,
+    { subject: "biológia", classroom: 7, concepts: withIds },
+  );
+  for (const [name, p] of [["pedagogue", pedagogue], ["author", author], ["lektor", lektor]] as const) {
+    assert.ok(!p.includes("db-uuid-"), `${name} prompt kiszivárogtatja a DB-azonosítót`);
+    assert.ok(p.includes("c1"), `${name} prompt a localId-t használja`);
+  }
+});
+
 test("buildAuthorPrompt: D1 szó szerint, concept id-k visszhangozva", () => {
   const prompt = buildAuthorPrompt(GOOD_OUTLINE.sections, { subject: "biológia", classroom: 7, concepts: MAP }, []);
 
