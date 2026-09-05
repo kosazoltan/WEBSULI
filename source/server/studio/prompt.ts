@@ -19,6 +19,8 @@ import { createPromptStore } from "../lib/prompt-store";
 export const STUDIO_PROMPT_NAMES = {
   pedagogue: "studio.pedagogue.v1",
   author: "studio.author.v1",
+  /** Audit 2026-09-05: dedicated key — a DB-seeded general author prompt must not replace the scoped fix contract. */
+  authorFix: "studio.author.fix.v1",
   animator: "studio.animator.v1",
   lektor: "studio.lektor.v1",
 } as const;

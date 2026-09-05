@@ -53,3 +53,12 @@ test("quizExportDisabledReason: játék nélkül és üres statisztikával indok
   assert.equal(quizExportDisabledReason("space", STATS), null, "játék kiválasztva: mehet");
   assert.match(quizExportDisabledReason("space", []) ?? "", /nincs.*eredmény/i);
 });
+
+// Audit 2026-09-05 (szelet E): a hibás lekérés NEM "nincs adat" — külön hiba-ág + Újra gomb.
+test("FeedbackPanel: isError ág külön renderelődik, az üres-állapot csak hiba nélkül", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../client/src/components/studio/FeedbackPanel.tsx", import.meta.url), "utf8");
+  assert.match(src, /isError:\s*statsError/);
+  assert.match(src, /data-testid="feedback-error"/);
+  assert.match(src, /!statsLoading && !statsError && rows\.length === 0/);
+});

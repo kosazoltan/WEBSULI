@@ -91,11 +91,9 @@ export default function ParentDashboardPanel() {
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<DashboardResponse>({
     queryKey: ["/api/admin/parent-dashboard", days],
-    queryFn: async () => {
-      const r = await fetch(`/api/admin/parent-dashboard?days=${days}`, { credentials: "include" });
-      if (!r.ok) throw new Error("Dashboard betöltési hiba");
-      return r.json();
-    },
+    // Audit 2026-09-05 (E): apiRequest carries the timeout, network-error mapping and the
+    // server's JSON message — a 401/500 is no longer a generic "betöltési hiba".
+    queryFn: () => apiRequest<DashboardResponse>("GET", `/api/admin/parent-dashboard?days=${days}`),
     refetchOnWindowFocus: false,
   });
 
@@ -311,8 +309,8 @@ export default function ParentDashboardPanel() {
                                 <span>{meta?.emoji ?? "🎮"}</span>
                                 <span className="truncate">{meta?.name ?? gameId}</span>
                               </p>
-                              <p className="text-muted-foreground">XP: <strong>{g.totalXp}</strong> · Run: {g.gamesPlayed}</p>
-                              <p className="text-muted-foreground">Best: {g.bestRunXp} · Streak: {g.bestStreak}</p>
+                              <p className="text-muted-foreground">XP: <strong>{g.totalXp}</strong> · Futás: {g.gamesPlayed}</p>
+                              <p className="text-muted-foreground">Legjobb futás: {g.bestRunXp} · Legjobb sorozat: {g.bestStreak}</p>
                             </div>
                           );
                         })}

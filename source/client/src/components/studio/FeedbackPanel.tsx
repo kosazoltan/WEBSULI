@@ -41,7 +41,7 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
   const queryClient = useQueryClient();
   const [gameId, setGameId] = useState<string>("");
 
-  const { data: statsData, isLoading: statsLoading } = useQuery<{ stats: ConceptStat[] }>({
+  const { data: statsData, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useQuery<{ stats: ConceptStat[] }>({
     queryKey: ["/api/studio/lessons", lessonId, "concept-stats"],
     queryFn: () => apiRequest("GET", `/api/studio/lessons/${lessonId}/concept-stats`),
   });
@@ -90,7 +90,19 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
       <CardContent className="space-y-4">
         {statsLoading && <Loader2 className="w-4 h-4 animate-spin" data-testid="feedback-loading" />}
 
-        {!statsLoading && rows.length === 0 && (
+        {/* Audit 2026-09-05 (E): a failed request is NOT "no data yet" — say so, offer retry. */}
+        {statsError && (
+          <div className="rounded border border-red-300 bg-red-50 dark:bg-red-950/40 p-3 space-y-2" data-testid="feedback-error">
+            <p className="text-sm text-red-700 dark:text-red-300">
+              A fogalom-statisztika nem tölthető be.
+            </p>
+            <Button size="sm" variant="outline" className="min-h-11" onClick={() => void refetchStats()}>
+              Újra
+            </Button>
+          </div>
+        )}
+
+        {!statsLoading && !statsError && rows.length === 0 && (
           <p className="text-sm text-muted-foreground" data-testid="feedback-empty">
             Ehhez a leckéhez még nincs rögzített fogalom-eredmény — a gyerekek Próba-válaszaiból gyűlik.
           </p>

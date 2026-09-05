@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { BookOpen, Loader2, Sparkles } from "lucide-react";
 
@@ -38,10 +38,32 @@ type JobResponse = {
   produced: { outline: unknown; approvedOutline: boolean; lessonId: string | null };
 };
 
+const JOB_STORAGE_KEY = "websuli.studio.jobId";
+
+function readPersistedJobId(): string | null {
+  try {
+    return window.sessionStorage.getItem(JOB_STORAGE_KEY);
+  } catch {
+    return null; // private mode / storage disabled — behave like a fresh panel
+  }
+}
+
+function persistJobId(jobId: string | null): void {
+  try {
+    if (jobId) window.sessionStorage.setItem(JOB_STORAGE_KEY, jobId);
+    else window.sessionStorage.removeItem(JOB_STORAGE_KEY);
+  } catch {
+    // storage unavailable: nothing to persist, the panel still works for this session
+  }
+}
+
 export default function LessonStudioPanel() {
   const { toast } = useToast();
   const [mapId, setMapId] = useState<string>("");
-  const [jobId, setJobId] = useState<string | null>(null);
+  // Audit 2026-09-05 (E): survive a reload mid-pipeline — the server job keeps running,
+  // the admin must not lose the monitor / approval / notes view.
+  const [jobId, setJobId] = useState<string | null>(() => readPersistedJobId());
+  useEffect(() => persistJobId(jobId), [jobId]);
 
   const { data: mapsData, isLoading: mapsLoading } = useQuery<{ maps: MapListItem[] }>({
     queryKey: ["/api/studio/maps"],

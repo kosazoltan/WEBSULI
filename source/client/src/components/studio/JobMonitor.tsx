@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, Loader2 } from "lucide-react";
 
@@ -62,10 +63,14 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
 
   const view = jobMonitorView(data.job, data.produced);
 
-  if (view.finished && onDone) {
-    // Fire-and-forget: a state update inside render is React's business, not ours.
-    setTimeout(() => onDone(data.job), 0);
-  }
+  // Audit 2026-09-05 (E): fire onDone ONCE per finished job, not once per render.
+  const doneFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (view.finished && onDone && doneFor.current !== jobId) {
+      doneFor.current = jobId;
+      onDone(data.job);
+    }
+  }, [view.finished, jobId, onDone, data.job]);
 
   return (
     <Card data-testid="job-monitor">
@@ -134,8 +139,11 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
 /** Retry button for a failed job — POST /jobs/:id/resume is input-hash idempotent. */
 function ResumeButton({ jobId }: { jobId: string }) {
   const { toast } = useToast();
+  const [pending, setPending] = useState(false);
   // Local mutation state; a full useMutation here would need the toast anyway.
   const onResume = async () => {
+    if (pending) return; // audit 2026-09-05 (E): no double POST on a slow restart
+    setPending(true);
     try {
       await apiRequest("POST", `/api/studio/jobs/${jobId}/resume`);
       toast({ title: "Újraindítás", description: "A gépsor tovább fut." });
@@ -145,12 +153,14 @@ function ResumeButton({ jobId }: { jobId: string }) {
         description: e instanceof Error ? e.message : "Ismeretlen hiba.",
         variant: "destructive",
       });
+    } finally {
+      setPending(false);
     }
   };
 
   return (
-    <Button size="sm" className="min-h-11" onClick={() => void onResume()}>
-      Újra
+    <Button size="sm" className="min-h-11" onClick={() => void onResume()} disabled={pending}>
+      {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Újra"}
     </Button>
   );
 }

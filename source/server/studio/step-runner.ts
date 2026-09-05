@@ -896,7 +896,7 @@ export async function fixConceptOnLesson(
     classroom: mapRow.classroom,
     concepts: conceptRows.map((c) => ({ localId: c.localId, examWeight: c.examWeight as ExamWeight })),
   }, conceptId);
-  const system = await promptLookup(STUDIO_PROMPT_NAMES.author, fallback);
+  const system = await promptLookup(STUDIO_PROMPT_NAMES.authorFix, fallback);
 
   let json: unknown;
   try {
