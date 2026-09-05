@@ -166,6 +166,38 @@ export function buildPedagoguePrompt(map: PromptMap): string {
  * a `book_probably_wrong` az adminnak szól, kiszűrjük — a szerző soha nem kaphat olyan
  * üzenetet, ami arra bíztatná, hogy a forrás rovására „javítson" (D1).
  */
+/**
+ * #167 — a hat érvényes blokk-kind katalógusa mezőlistával. Élesben az author
+ * érvénytelen kindeket adott (mind a 8 blokk "Invalid discriminator value"),
+ * mert a prompt csak '"blocks": [...]'-t mutatott. A katalógus a promptban ÉS
+ * a séma-hiba utáni retry-üzenetben is szerepel.
+ */
+export const AUTHOR_BLOCK_CATALOG = [
+  "A blocks tömb elemei KIZÁRÓLAG az alábbi hat kind egyike lehetnek, pontosan ezekkel a mezőkkel:",
+  '- { "kind": "explain", "text": string, "depth": "core"|"deeper"|"why", "readAloud": boolean, "coversConceptIds": string[] }',
+  '- { "kind": "example", "problem": string, "steps": string[], "answer": string, "coversConceptIds": string[] }',
+  '- { "kind": "animate", "animKind": string, "params": object, "caption": string, "coversConceptIds": string[] }',
+  '- { "kind": "check", "question": string, "options": string[2..5], "correctIndex": number, "feedbackPerOption": string[ugyanannyi mint options], "hint"?: string, "coversConceptIds": string[] }',
+  '- { "kind": "try", "tryKind": "dragSort"|"fillBlank"|"match", "spec": object, "coversConceptIds": string[] }',
+  '- { "kind": "recap", "bullets": string[], "nextLessonId"?: string } (fogalom-hivatkozás nélkül)',
+  'Más kind (pl. "text", "quiz", "video") ÉRVÉNYTELEN, a lecke elutasításra kerül.',
+].join("\n");
+
+/**
+ * #167 — séma-bukás utáni egyszeri javító kör user-üzenete: a konkrét zod-hibák
+ * + a katalógus visszamegy a modellnek, hogy a második kör célzottan javítson.
+ */
+export function buildSchemaRetryUser(zodIssues: string): string {
+  return [
+    "A válaszod NEM felelt meg a Lesson sémának. Pontos hibák:",
+    zodIssues,
+    "",
+    AUTHOR_BLOCK_CATALOG,
+    "",
+    "Írd újra a TELJES leckét úgy, hogy minden blokk a fenti hat kind egyike legyen. Válaszolj CSAK JSON-nal.",
+  ].join("\n");
+}
+
 export function buildAuthorPrompt(
   sections: OutlineSection[],
   map: PromptMap,
@@ -184,6 +216,8 @@ export function buildAuthorPrompt(
     conceptIds.join(", "),
     "- sourceOnly must be true.",
     "- Every check block needs feedbackPerOption with exactly as many entries as options.",
+    "",
+    AUTHOR_BLOCK_CATALOG,
     "",
   ];
 

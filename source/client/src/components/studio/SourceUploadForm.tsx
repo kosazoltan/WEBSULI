@@ -162,6 +162,9 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
       const phase = query.state.data?.phase;
       return phase === "done" || phase === "error" || phase === "parked" ? false : 2500;
     },
+    // #166 — a poll háttér-fülben/fókuszvesztéskor is fusson: e nélkül a jelző
+    // "befagyott" (OCR 8/10), miközben a szerver rég továbbhaladt.
+    refetchIntervalInBackground: true,
   });
 
   const runFinished = run.data?.phase === "done" || run.data?.phase === "error" || run.data?.phase === "parked";

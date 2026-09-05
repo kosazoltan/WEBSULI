@@ -24,6 +24,7 @@ import {
   buildConceptFixPrompt,
   buildLektorPrompt,
   buildPedagoguePrompt,
+  buildSchemaRetryUser,
   checkAnimatorResult,
   checkConceptFixResult,
   lessonIdsSubsetOfMap,
@@ -369,8 +370,43 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     }
 
     case "author": {
-      const parsed = lessonSchema.safeParse(json);
-      if (!parsed.success) return fail(store, job, `A lecke alakilag hibás: ${zodIssues(parsed.error)}`);
+      let parsed = lessonSchema.safeParse(json);
+      if (!parsed.success) {
+        // #167 — élesben az author érvénytelen blokk-kindeket adott, és a futás
+        // azonnal hibára állt. Egyszeri javító kör: a konkrét zod-hibák + a
+        // blokk-katalógus visszamegy a modellnek, csak utána adjuk fel.
+        logger.warn(
+          `[STUDIO] Az author válasza séma-hibás, javító kör indul (${job.id}): ${zodIssues(parsed.error).slice(0, 300)}`,
+        );
+        try {
+          const retry = await callStepModel(provider, {
+            step: job.step,
+            model,
+            system,
+            user: buildSchemaRetryUser(zodIssues(parsed.error)),
+          });
+          json = retry.json;
+          if (retry.usage && usage) {
+            usage = {
+              promptTokens: usage.promptTokens + retry.usage.promptTokens,
+              completionTokens: usage.completionTokens + retry.usage.completionTokens,
+              totalTokens: usage.totalTokens + retry.usage.totalTokens,
+            };
+          }
+        } catch (error) {
+          return fail(
+            store,
+            job,
+            `A lecke alakilag hibás volt, és a javító kör is elbukott: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+        parsed = lessonSchema.safeParse(json);
+        if (!parsed.success) {
+          return fail(store, job, `A lecke a javító kör után is alakilag hibás: ${zodIssues(parsed.error)}`);
+        }
+      }
       const unknownIds = lessonIdsSubsetOfMap(parsed.data, map.concepts);
       if (unknownIds.length > 0) {
         return fail(

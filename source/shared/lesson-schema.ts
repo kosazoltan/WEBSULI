@@ -33,6 +33,9 @@ export const ANIM_KINDS = [
 /** Hands-on interactions (LS-4 implements them). */
 export const TRY_KINDS = ["dragSort", "fillBlank", "match"] as const;
 
+/** A hat érvényes blokk-kind — a blockSchema discriminated unionjával szinkronban. */
+export const BLOCK_KINDS = ["explain", "example", "animate", "check", "try", "recap"] as const;
+
 export const EXPLAIN_DEPTHS = ["core", "deeper", "why"] as const;
 
 export const AGE_BANDS = ["kid", "teen", "senior"] as const;
