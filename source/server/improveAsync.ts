@@ -513,6 +513,23 @@ ${originalFile.content}
       logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Mobile compatibility checks completed`);
     }
 
+    // #159 — FAIL-CLOSED verification gate (the last phase of the pipeline).
+    // Measured root cause (hőtan): a truncated output (no </html>, JS cut
+    // mid-line) was saved and applied — dead tab buttons, no quiz. A result
+    // that fails here is NEVER saved as applicable; it goes to 'error' with
+    // the problem list, so the admin sees exactly why and can re-run.
+    const { verifyImprovedHtml } = await import('./improve/verify-html');
+    const verification = verifyImprovedHtml(improvedHtml);
+    if (!verification.ok) {
+      logger.error(
+        `[IMPROVE] Record ${dbRecordId}: ❌ Verification gate rejected the output: ${verification.problems.join(' | ')}`,
+      );
+      throw new Error(
+        `A javított tananyag nem ment át a záró ellenőrzésen: ${verification.problems.join(' ')}`,
+      );
+    }
+    logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Verification gate passed (${verification.problems.length} problem)`);
+
     // ✅ CRITICAL: Update content AND status in ONE atomic operation
     // If we did this in two steps, the user could "Apply" the file
     // between status→pending and content→HTML, getting the placeholder!

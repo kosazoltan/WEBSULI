@@ -108,6 +108,24 @@ változatlan bemenettel újrafuttatni tilos.
 A záró jelentés tartalmazza: módosított fájlok, futtatott ellenőrzések (pass/fail),
 fennmaradó kockázatok.
 
+## Aktív munkafázis-követés (kötelező, tulajdonosi utasítás 2026-09-05)
+
+Alügynökök, háttérparancsok, python-szkriptek, CI-futások, deployok vagy bármely
+kiadott munkafázis futása alatt PASSZÍV VÁRAKOZÁS TILOS. Az orkesztrátor
+kötelessége aktívan és proaktívan ellenőrizni a folyamatokat, mert az autonóm
+kész-jelzések általában NEM érkeznek meg:
+
+- Háttérfolyamatra `process(action="wait", timeout=...)` vagy rendszeres
+  `poll` — soha nem "majd szól magától".
+- CI/deploy állapotra ütemezett újralekérdezés (`gh run list/watch`, curl
+  próba), a leghosszabb várható futásidőhöz igazított, tokentakarékos
+  időközökkel (nem másodpercenként, de nem is órákra magára hagyva).
+- Alügynök (delegate/subagent) munkája alatt a transcript/részeredmény
+  időszakos ellenőrzése; eltérülésnél azonnali steer.
+- Elakadni, megállni, a munkát "várakozásra" hivatkozva felfüggeszteni tilos:
+  amíg VAN futtatható következő lépés, azt kell csinálni, és a várakozási
+  időt párhuzamos érdemi munkával kitölteni.
+
 <!-- CHATGPT_CODEX_PROTOCOL_START -->
 
 ## ChatGPT/Codex programozási protokoll
