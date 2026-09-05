@@ -25,9 +25,9 @@ import type { LektorNote } from "../server/studio/lektor";
 
 const MAP_META: MapMeta = { id: "m1", title: "A sejt", subject: "biológia", classroom: 7 };
 const MAP_CONCEPTS: MapConcept[] = [
-  { localId: "c1", examWeight: "core" },
-  { localId: "c2", examWeight: "core" },
-  { localId: "s1", examWeight: "supporting" },
+  { id: "uuid-c1", localId: "c1", examWeight: "core" },
+  { id: "uuid-c2", localId: "c2", examWeight: "core" },
+  { id: "uuid-s1", localId: "s1", examWeight: "supporting" },
 ];
 
 function lessonCovering(ids: string[], withCheck = true) {
@@ -139,7 +139,8 @@ test("gate pass: a lecke publikálódik (html_files, publishedAt, coverage, kví
   assert.equal(pub.classroom, 7);
   assert.equal(pub.coverage.core.ratio, 1);
   assert.equal(pub.quizItems.length, 4 * 1, "1 fogalom-kötött check × 4 kupon-motoros játék");
-  assert.ok(pub.quizItems.every((q) => q.conceptId === "c1"));
+  // #178: the FK column gets the km_concepts UUID, never the lesson's local slug.
+  assert.ok(pub.quizItems.every((q) => q.conceptId === "uuid-c1"), "conceptId = km_concepts.id (UUID), nem 'c1'");
   const job = await store.loadJob("job-1");
   assert.equal(job?.status, "ok");
   assert.equal((job?.output as { htmlFileId?: string })?.htmlFileId, "file-1");

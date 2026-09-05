@@ -7,6 +7,7 @@ import {
   conceptResults,
   gameQuizItems,
   gamesCatalog,
+  kmConcepts,
   lektorNotes,
   lessons,
   studioJobs,
@@ -21,7 +22,7 @@ import {
   runPipelineStep,
   startJobFromMap,
 } from "./step-runner";
-import { exportQuizItemsFromChecks } from "./quiz-export";
+import { conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
 import { MAX_CHAIN_STEPS } from "./pipeline";
 import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
 import {
@@ -576,13 +577,24 @@ lessonPipelineRouter.post("/lessons/:id/export-quiz", async (req: Request, res: 
   if (!game) return res.status(400).json({ message: "Ismeretlen játék-azonosító." });
 
   const [lesson] = await db
-    .select({ json: lessons.json })
+    .select({ json: lessons.json, mapId: lessons.mapId })
     .from(lessons)
     .where(eq(lessons.id, req.params.id))
     .limit(1);
   if (!lesson) return res.status(404).json({ message: "A lecke nem található." });
 
-  const rows = exportQuizItemsFromChecks(lesson.json as never, body.data.gameId, body.data.topic, req.params.id);
+  // #178: concept_id is an FK to km_concepts.id — resolve the lesson's local slugs through the map.
+  const mapConcepts = await db
+    .select({ id: kmConcepts.id, localId: kmConcepts.localId })
+    .from(kmConcepts)
+    .where(eq(kmConcepts.mapId, lesson.mapId));
+  const rows = exportQuizItemsFromChecks(
+    lesson.json as never,
+    body.data.gameId,
+    body.data.topic,
+    req.params.id,
+    conceptIdResolver(mapConcepts),
+  );
   if (rows.length === 0) return res.status(400).json({ message: "A leckében nincs fogalommal köthető check-blokk." });
 
   // Audit 2026-09-05 (B): idempotent — a re-export of the same lesson→game replaces, not duplicates.

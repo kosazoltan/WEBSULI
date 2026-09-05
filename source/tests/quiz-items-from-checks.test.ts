@@ -55,8 +55,9 @@ test("exportQuizItemsFromChecks: minden check sorrá lesz, conceptId kötve", ()
   assert.equal(rows[0].prompt, "Mi az élőlények alapegysége?");
   assert.deepEqual(rows[0].options, ["A sejt", "A szerv", "A szövet"]);
   assert.equal(rows[0].correctIndex, 0);
-  assert.equal(rows[0].conceptId, "c1", "az ELSŐ fedett fogalom kötődik");
-  assert.equal(rows[1].conceptId, "c1", "az elsődleges fogalom a másodiknál is c1");
+  // #178 spec change: without a resolver the FK column stays null (see the #178 tests below).
+  assert.equal(rows[0].conceptId, null);
+  assert.equal(rows[1].conceptId, null);
 });
 
 test("exportQuizItemsFromChecks: fogalom nélküli check KIMARAD (nem lehet hangtalanul bekötni)", () => {
@@ -70,4 +71,26 @@ test("exportQuizItemsFromChecks: csak check-blokkokat exportál", () => {
   const l = lessonWithChecks();
   const rows = exportQuizItemsFromChecks(l, "blockcraft");
   assert.ok(rows.every((r) => r.options.length >= 2));
+});
+
+// #178 — measured live (run 0c2d09ad, 2026-09-05): the lesson carries the map's LOCAL
+// slugs ("s1-sarkany") in coversConceptIds, but game_quiz_items.concept_id is an FK to
+// km_concepts.id (a UUID). Writing the slug into the FK column made the publish
+// transaction fail and the lesson never reached the child.
+test("exportQuizItemsFromChecks: a conceptId a DB-azonosító (resolver), nem a lecke slugja", () => {
+  const resolve = (localId: string) => (localId === "c1" ? "uuid-c1" : null);
+  const rows = exportQuizItemsFromChecks(lessonWithChecks(), "space", "t", "lesson-1", resolve);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((r) => r.conceptId === "uuid-c1"), "a slug FK-ként érvénytelen — az UUID kell");
+});
+
+test("exportQuizItemsFromChecks: feloldatlan slug → conceptId null, a sor MEGMARAD (FK SET NULL-kompatibilis)", () => {
+  const rows = exportQuizItemsFromChecks(lessonWithChecks(), "space", "t", "lesson-1", () => null);
+  assert.equal(rows.length, 2, "a kvíz a gyereknek jár akkor is, ha a fogalom-kötés elveszett");
+  assert.ok(rows.every((r) => r.conceptId === null));
+});
+
+test("exportQuizItemsFromChecks: resolver nélkül a slug NEM kerülhet az FK-oszlopba", () => {
+  const rows = exportQuizItemsFromChecks(lessonWithChecks(), "space");
+  assert.ok(rows.every((r) => r.conceptId === null), "nincs feloldó → nincs conceptId, nem a nyers slug");
 });
