@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   MAX_AUTHOR_ROUNDS,
+  MAX_CHAIN_STEPS,
   STUDIO_STEPS,
+  type StudioStep,
   computeStepHash,
   nextStep,
   isTerminal,
@@ -76,6 +78,33 @@ test("a failed gate does NOT consume an author round", () => {
   const r = nextStep({ step: "gate", ok: true, round: 0, gatePassed: false });
   assert.equal(r.step, "author");
   assert.equal(r.round, 1);
+});
+
+test("MAX_CHAIN_STEPS covers the worst legal walk: lektor blockers every round, then a human (#177)", () => {
+  // Measured live (2026-09-05, job fd62b66a): drive() capped the chain at 8 steps while
+  // round 2 was still legal, so the job died with a fake "lépés-határ" error instead of
+  // the designed "N kör után emberi döntés" terminal. The safety net must be derived
+  // from MAX_AUTHOR_ROUNDS, never a hand-picked constant below the legal maximum.
+  let state: { step: StudioStep; round: number } = { step: "pedagogue", round: 0 };
+  let steps = 0;
+  while (!isTerminal(state.step)) {
+    steps++;
+    assert.ok(steps <= MAX_CHAIN_STEPS, `walk exceeded MAX_CHAIN_STEPS=${MAX_CHAIN_STEPS} at step ${steps} (${state.step})`);
+    state = nextStep({ step: state.step, ok: true, round: state.round, blockers: 1, gatePassed: false });
+  }
+  assert.equal(state.step, "error");
+  assert.match((state as { reason?: string }).reason ?? "", /kör/i, "the designed terminal, not the safety net");
+});
+
+test("MAX_CHAIN_STEPS also covers a gate that fails on every round", () => {
+  let state: { step: StudioStep; round: number } = { step: "pedagogue", round: 0 };
+  let steps = 0;
+  while (!isTerminal(state.step)) {
+    steps++;
+    assert.ok(steps <= MAX_CHAIN_STEPS, `gate-fail walk exceeded the bound at ${state.step}`);
+    state = nextStep({ step: state.step, ok: true, round: state.round, blockers: 0, gatePassed: false });
+  }
+  assert.equal(state.step, "error");
 });
 
 test("done and error are terminal", () => {

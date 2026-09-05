@@ -273,6 +273,8 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
     "",
     "Hard rules:",
     "- Every block's coversConceptIds must exist in the map below. An id that is not in the map is a source_conflict/not_in_map blocker.",
+    "- A recap block has NO coversConceptIds by schema (it restates the lesson) — never report a missing coversConceptIds on a recap.",
+    "- source_conflict subkinds are exactly: not_in_map | contradicts_source | book_probably_wrong. Do not invent other subkinds.",
     "- A core concept no block teaches is a coverage_gap/core blocker; a missing supporting concept is a coverage_gap warn.",
     "- Register, style and age-band problems are language / age warnings.",
     "- sourceOnly must be true.",

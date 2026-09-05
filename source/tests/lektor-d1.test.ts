@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyNotes, applyLektorVerdict, NOTE_KINDS } from "../server/studio/lektor";
+import {
+  classifyNotes,
+  applyLektorVerdict,
+  NOTE_KINDS,
+  SOURCE_CONFLICT_BLOCKING_SUBKINDS,
+} from "../server/studio/lektor";
 import type { Lesson } from "../shared/lesson-schema";
 
 /**
@@ -108,6 +113,25 @@ test("an unknown note kind is not silently trusted", () => {
   const notes = classifyNotes([{ kind: "vibe_check", message: "Fura." } as never]);
   assert.equal(notes.length, 0, "unknown kinds are dropped, not accepted");
   assert.ok(!NOTE_KINDS.includes("vibe_check" as never));
+});
+
+test("an invented source_conflict subkind is a warn, never a blocker (#177)", () => {
+  // Measured live (2026-09-05, run f415cc97): the Lektor reported
+  // `source_conflict/missing_coversConceptIds` on a recap block in BOTH rounds. The
+  // schema gives recap no coversConceptIds, so the Author could never "fix" it — a
+  // phantom blocker burned every round. Only the documented D1 subkinds may block.
+  const notes = classifyNotes([
+    { kind: "source_conflict", subkind: "missing_coversConceptIds", message: "x", blockPath: "6.1" },
+  ]);
+  assert.equal(notes.length, 1, "the admin still sees the note");
+  assert.equal(notes[0].severity, "warn");
+  assert.equal(notes[0].blocking, false);
+  assert.deepEqual(SOURCE_CONFLICT_BLOCKING_SUBKINDS, ["not_in_map", "contradicts_source"]);
+});
+
+test("a source_conflict without a subkind still blocks (conservative default)", () => {
+  const [n] = classifyNotes([{ kind: "source_conflict", message: "Nem a forrásból van." }]);
+  assert.equal(n.severity, "blocker");
 });
 
 test("applyLektorVerdict never mutates the lesson, whatever the notes say", () => {

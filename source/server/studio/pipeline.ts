@@ -34,6 +34,16 @@ export type StudioStep = (typeof STUDIO_STEPS)[number];
  */
 export const MAX_AUTHOR_ROUNDS = 2;
 
+/**
+ * Upper bound on automatic transitions in one drive() chain — a safety net, not a rule.
+ *
+ * Derived, not hand-picked (#177): the longest LEGAL walk is pedagogue + one full
+ * author→animator→lektor(→gate) pass per round for rounds 0..MAX_AUTHOR_ROUNDS, plus the
+ * terminal transition. A constant below that turned a legitimate second Author round
+ * into a fake "lépés-határ" error in production (job fd62b66a, 2026-09-05).
+ */
+export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 1;
+
 export function isTerminal(step: StudioStep): boolean {
   return step === "done" || step === "error";
 }
