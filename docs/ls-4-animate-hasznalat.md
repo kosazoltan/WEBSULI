@@ -26,11 +26,13 @@ BlockCraft játékok kupon-óráját.
 
 ## Ami a motorháztető alatt történik (és neked fontos)
 
-- **Szigorú CSP a lecke-oldalon.** A `/lesson/*` válaszok fejlécében a
-  script-szabály mostantól `'self'`-re szűkül — nincs inline script, nincs
-  eval. Ez fejléc-szinten mondja ki azt, amit a LS-2 óta a szerkezet:
-  **a lecke adat, nem program.** (Az örökölt, feltöltött HTML-anyagok profilja
-  változatlan; azok inline kódja a régi anyagok sajátja.)
+- **Szigorú CSP a lecke-oldalon.** A `/lesson/*` oldalakat a **Vercel**
+  szolgálja (a `source/vercel.json` headers szekciója) — a fejléc OTT él:
+  a script-szabály `'self'`-re szűkül, nincs inline script, nincs eval.
+  (A Render-oldali middleware is hordozza a profilt, de a lecke-oldalak
+  tényleges kiszolgálója a Vercel — ezt a release-próba mérte ki, a
+  `tests/vercel-lesson-csp.test.ts` őrteszt ratchetheli a konfigot.)
+  Az örökölt, feltöltött HTML-anyagok (`/dev/*`) profilja változatlan.
   Megjegyzés: emiatt a lecke-oldalakon a JSON-LD strukturáltadat-blokk nem fut
   — a funkciót nem érinti, a kereső-metaadatot igen; ha kell, nonce-csel
   visszahozható.
