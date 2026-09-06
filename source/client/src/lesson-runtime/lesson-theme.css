@@ -371,7 +371,10 @@
   color: var(--lesson-ink);
   border-color: var(--lesson-line);
 }
-[data-band] .text-muted-foreground {
+[data-band] .text-muted-foreground,
+[data-band] .text-gray-600 {
+  /* shadcn ghost buttons (dragSort "Újra" icon) are text-gray-600: measured live
+     rgb(75,85,99) on the kid surface ≈ 1.7:1 — an icon, invisible to the text meter. */
   color: var(--lesson-muted);
 }
 [data-band] .bg-background,

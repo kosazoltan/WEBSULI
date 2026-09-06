@@ -154,3 +154,29 @@ for (const { classroom, band } of BANDS) {
   });
 }
 
+/**
+ * Ikon-gombok színe (nem-szöveg kontraszt, WCAG 1.4.11: ≥ 3:1). A szöveg-mérő a csak-ikon
+ * gombokat nem látja; élesben a dragSort "Újra" ikon rgb(75,85,99) volt a kid felületen (~1.7).
+ */
+for (const { classroom, band } of BANDS) {
+  test(`${band}: az ikon-gombok színe ≥ 3:1 a saját hátterükön`, async ({ page }) => {
+    await openProbe(page, classroom);
+    const bad = await page.evaluate(() => {
+      const parse = (c: string) => { const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/); return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null; };
+      const lum = ({ r, g, b }: { r: number; g: number; b: number }) => { const f = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const bgOf = (el: Element | null) => { while (el) { const c = parse(getComputedStyle(el).backgroundColor); if (c && c.a >= 0.5) return c; el = el.parentElement; } return { r: 255, g: 255, b: 255, a: 1 }; };
+      const out: string[] = [];
+      document.querySelectorAll('[data-testid="lesson-runtime"] button').forEach((btn) => {
+        if ((btn.textContent ?? "").trim().length > 0) return; // szöveges gombot a kontraszt-spec méri
+        const ink = parse(getComputedStyle(btn).color); if (!ink) return;
+        const bg = bgOf(btn);
+        const [hi, lo] = [lum(ink), lum(bg)].sort((a, b) => b - a);
+        const cr = (hi + 0.05) / (lo + 0.05);
+        if (cr < 3) out.push(`${btn.getAttribute("aria-label") ?? "?"} ${cr.toFixed(2)}`);
+      });
+      return out;
+    });
+    expect(bad, `gyenge ikon-kontraszt: ${bad.join(", ")}`).toEqual([]);
+  });
+}
+
