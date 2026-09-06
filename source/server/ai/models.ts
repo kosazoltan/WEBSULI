@@ -38,7 +38,14 @@ function envVarName(step: StudioStep): string {
  */
 const DEFAULT_MODELS: Record<StudioStep, string> = {
   extract: "openai/gpt-5.6-terra", // vision + verbatim quoting
-  ocr: "z-ai/glm-5.3-flash", // #163: cheap vision transcription of image sources
+  // #190 (mérve 2026-09-06, 3 valódi kézírásos matek-lapon, kulcs-token recall):
+  //   qwen3-vl-32b-instruct  96.3%   <- ez
+  //   gemini-3.1-flash-lite  93.5%
+  //   glm-5.3-flash          88.2%   (a korábbi elsődleges)
+  // A tulajdonos kézírásos jegyzeteket is feltölt, és >=95% felismerést kért.
+  // A glm az `r`-t rendszeresen `m`-nek olvasta (r=4cm -> m=4cm), ami a
+  // fogalmak idézet-ellenőrzését is elbuktatta.
+  ocr: "qwen/qwen3-vl-32b-instruct",
   pedagogue: "x-ai/grok-4.6", // planning, misconceptions
   author: "openai/gpt-5.6-terra", // long structured Hungarian output
   animator: "qwen/qwen3.8-flash", // bounded transform, cheap
@@ -49,7 +56,8 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
 
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   extract: "x-ai/grok-4.6",
-  ocr: "qwen/qwen3.8-flash", // vision-capable, same cheap class
+  // #190: a mért második helyezett (93.5%), más családból mint az elsődleges.
+  ocr: "google/gemini-3.1-flash-lite",
   pedagogue: "openai/gpt-5.6-terra",
   // Audit 2026-09-05 (D): was qwen/qwen3.8-max == the lektor PRIMARY — on author failover
   // the same model would have reviewed itself (D1 broken silently). x-ai differs from

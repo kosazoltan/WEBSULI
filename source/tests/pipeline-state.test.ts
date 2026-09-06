@@ -59,10 +59,13 @@ test("the SECOND round of blockers is still allowed", () => {
   assert.equal(r.round, 2);
 });
 
-test("a THIRD round is refused — the job errors instead of looping", () => {
+test("a THIRD round is refused — LS-7 (#189): a kapu dönt, nem ember", () => {
+  // SPEC-VÁLTOZÁS (tulajdonosi döntés, 2026-09-06): a limit után nincs emberi
+  // kapu. A blokkoló nem öli meg a futást; a publikálási kapu mérése dönt, a
+  // lektor jelzése pedig megmarad a jegyzetekben.
   const r = nextStep({ step: "lektor", ok: true, round: MAX_AUTHOR_ROUNDS, blockers: 1 });
-  assert.equal(r.step, "error");
-  assert.match(r.reason ?? "", /kör/i);
+  assert.equal(r.step, "gate", "nem 'error' és nem újabb author-kör");
+  assert.equal(r.round, MAX_AUTHOR_ROUNDS, "a limit után nem nyílik új kör");
 });
 
 test("a failed step goes to error, never silently onward", () => {
@@ -80,11 +83,12 @@ test("a failed gate does NOT consume an author round", () => {
   assert.equal(r.round, 1);
 });
 
-test("MAX_CHAIN_STEPS covers the worst legal walk: lektor blockers every round, then a human (#177)", () => {
+test("MAX_CHAIN_STEPS covers the worst legal walk: lektor blockers every round (#177, LS-7 #189)", () => {
   // Measured live (2026-09-05, job fd62b66a): drive() capped the chain at 8 steps while
   // round 2 was still legal, so the job died with a fake "lépés-határ" error instead of
-  // the designed "N kör után emberi döntés" terminal. The safety net must be derived
-  // from MAX_AUTHOR_ROUNDS, never a hand-picked constant below the legal maximum.
+  // the designed terminal. The safety net must be derived from MAX_AUTHOR_ROUNDS.
+  // LS-7 (#189): a séta VÉGE már nem 'error' (emberi döntés), hanem 'done' — a
+  // tananyag elkészül, a hiány jelzés lesz. A HATÁR ugyanaz marad.
   let state: { step: StudioStep; round: number } = { step: "pedagogue", round: 0 };
   let steps = 0;
   while (!isTerminal(state.step)) {
@@ -92,11 +96,10 @@ test("MAX_CHAIN_STEPS covers the worst legal walk: lektor blockers every round, 
     assert.ok(steps <= MAX_CHAIN_STEPS, `walk exceeded MAX_CHAIN_STEPS=${MAX_CHAIN_STEPS} at step ${steps} (${state.step})`);
     state = nextStep({ step: state.step, ok: true, round: state.round, blockers: 1, gatePassed: false });
   }
-  assert.equal(state.step, "error");
-  assert.match((state as { reason?: string }).reason ?? "", /kör/i, "the designed terminal, not the safety net");
+  assert.equal(state.step, "done", "az autonóm futás elkészíti a tananyagot");
 });
 
-test("MAX_CHAIN_STEPS also covers a gate that fails on every round", () => {
+test("MAX_CHAIN_STEPS also covers a gate that fails on every round (LS-7 #189)", () => {
   let state: { step: StudioStep; round: number } = { step: "pedagogue", round: 0 };
   let steps = 0;
   while (!isTerminal(state.step)) {
@@ -104,7 +107,15 @@ test("MAX_CHAIN_STEPS also covers a gate that fails on every round", () => {
     assert.ok(steps <= MAX_CHAIN_STEPS, `gate-fail walk exceeded the bound at ${state.step}`);
     state = nextStep({ step: state.step, ok: true, round: state.round, blockers: 0, gatePassed: false });
   }
+  assert.equal(state.step, "done");
+});
+
+test("a séta TERMINÁLIS marad: technikai hiba továbbra is 'error' (#189)", () => {
+  // A ciklus-védelem nem gyengült: ha egy lépés hibázik, az error és megáll.
+  let state: { step: StudioStep; round: number } = { step: "pedagogue", round: 0 };
+  state = nextStep({ step: state.step, ok: false, round: 0, error: "modell-timeout" });
   assert.equal(state.step, "error");
+  assert.equal(isTerminal(state.step), true);
 });
 
 test("done and error are terminal", () => {

@@ -18,6 +18,8 @@ import { aggregateConceptResults } from "../rewards/aggregate";
 import {
   advanceJob,
   approveOutline,
+  forceApproveOutline,
+  retryOutlineRound,
   fixConceptOnLesson,
   runPipelineStep,
   startJobFromMap,
@@ -35,6 +37,7 @@ import {
   type OneStepRun,
 } from "./one-step-progress";
 import { markOrphanedJobs } from "./orphan-jobs";
+import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
 
 /* ------------------------------------------------------------------ *
@@ -411,6 +414,7 @@ async function driveOneStep(runId: string, jobId: string): Promise<void> {
       .select({
         step: studioJobs.step,
         status: studioJobs.status,
+        round: studioJobs.round,
         output: studioJobs.output,
         error: studioJobs.error,
         lessonId: studioJobs.lessonId,
@@ -445,13 +449,40 @@ async function driveOneStep(runId: string, jobId: string): Promise<void> {
       const outline = (job.output as { outline?: unknown } | null)?.outline;
       const approved = await approveOutline(jobId, outline);
       if (!approved.ok) {
-        // Coverage failed: park exactly where the manual flow would — admin decides.
-        logger.warn(`[STUDIO/1STEP] Automatikus vázlat-jóváhagyás elutasítva: ${approved.reason}`);
-        updateRun(runId, {
-          phase: "parked",
-          detail: `A vázlat kézi jóváhagyásra vár (${approved.reason})`,
+        // LS-7 (#189): a fedettségi hiány NEM parkol emberre. A gép javító kört
+        // fut; ha a kör-limitet is kimerítette, a vázlatot a mért hiánnyal
+        // ELFOGADJUK — a tananyag elkészül, a hiány jelzés lesz. (Mérve: a
+        // tulajdonos képernyőképén itt állt meg "Nem hagyható jóvá" hibával.)
+        const decision = autonomousDecision({
+          reason: "coverage",
+          round: job.round,
+          detail: approved.reason,
         });
-        return;
+        if (decision.action === "retry") {
+          logger.warn(
+            `[STUDIO/1STEP] Fedettségi hiány, gépi javító kör ${decision.nextRound}: ${approved.reason}`,
+          );
+          updateRun(runId, {
+            phase: "pedagogue",
+            detail: `Gépi javítás (${decision.nextRound}. kör): ${approved.reason}`,
+          });
+          const retried = await retryOutlineRound(jobId, decision.nextRound ?? job.round + 1);
+          if (!retried) {
+            updateRun(runId, { phase: "error", error: `A javító kör nem indult el: ${approved.reason}` });
+            return;
+          }
+          continue;
+        }
+        logger.warn(`[STUDIO/1STEP] Fedettségi hiány elfogadva jelzéssel: ${approved.reason}`);
+        const forced = await forceApproveOutline(jobId, outline, {
+          reason: "coverage",
+          note: decision.note ?? "A vázlat fedettsége hiányos.",
+          round: job.round,
+        });
+        if (!forced) {
+          updateRun(runId, { phase: "error", error: `A vázlat nem menthető: ${approved.reason}` });
+          return;
+        }
       }
       updateRun(runId, { phase: "author" });
     }

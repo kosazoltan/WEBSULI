@@ -391,7 +391,10 @@ test("(f) lektor: not_in_map blokkoló → author, round+1", async () => {
   assert.equal(notes[0].severity, "blocker");
 });
 
-test("(g) lektor: round>=2 blokkolókkal → error, emberi döntés szükséges", async () => {
+test("(g) lektor: round>=2 blokkolókkal → LS-7 (#189): a kapu dönt, jelzéssel", async () => {
+  // SPEC-VÁLTOZÁS (tulajdonosi döntés, 2026-09-06): nincs emberi kapu. A limit
+  // után a blokkoló nem öli meg a futást — a kapu felé megy, és a hiány
+  // `qualityNotes` jelzésként utazik a leckével.
   const { store, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_LEKTOR_BLOCKER);
   store.seed({
     id: "job-1",
@@ -404,13 +407,18 @@ test("(g) lektor: round>=2 blokkolókkal → error, emberi döntés szükséges"
 
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
-  assert.equal(outcome.ok, false);
-  assert.equal(outcome.next.step, "error");
-  assert.match(outcome.reason, /emberi döntés/);
+  assert.equal(outcome.ok, true, "a futás nem hal meg");
+  assert.equal(outcome.next.step, "gate", "a lektor a kapu felé enged, nem error-ra");
 
+  // A `step` léptetése az advanceJob dolga (a hívó végzi) — itt a lépés SAJÁT
+  // mentését ellenőrizzük: nem hibás, és a blokkoló jelzésként megmaradt.
   const job = await store.loadJob("job-1");
-  assert.equal(job?.step, "error");
-  assert.equal(job?.status, "error");
+  assert.equal(job?.status, "ok", "nem error-ra mentette a lépést");
+  assert.notEqual(job?.step, "error");
+  const notes = (job?.output as { qualityNotes?: Array<{ reason: string; note: string }> })?.qualityNotes ?? [];
+  assert.equal(notes.length, 1, "a blokkoló jelzésként megmarad");
+  assert.equal(notes[0].reason, "lektor_blocker");
+  assert.match(notes[0].note ?? "", /lektor/i);
 });
 
 test("(h) approve-outline: ismeretlen azonosítójú vázlat elutasítva, hívás nélkül", async () => {

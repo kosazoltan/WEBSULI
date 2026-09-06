@@ -8,6 +8,8 @@ import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { classifyNotes, type RawNote } from "./lektor";
+import { appendQualityNote, autonomousDecision } from "./autonomous";
+import { MAX_AUTHOR_ROUNDS } from "./pipeline";
 import { STUDIO_PROMPT_NAMES, studioPromptStore } from "./prompt";
 import {
   computeStepHash,
@@ -510,7 +512,32 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         );
       }
 
-      await store.saveStep(job.id, successPatch({ ...job.output, report: parsed.data, blockers }));
+      // LS-7 (#189): a limit után a blokkoló NEM állítja meg a futást — a kapu
+      // dönt. A hiányt jelzésként visszük tovább, hogy utólagos javító
+      // prompttal kezelhető legyen, és ne tűnjön el némán.
+      const carriedNotes =
+        blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS
+          ? appendQualityNote(job.output?.qualityNotes, {
+              reason: "lektor_blocker",
+              note:
+                autonomousDecision({
+                  reason: "lektor_blocker",
+                  round: job.round,
+                  detail: `${blockers} blokkoló jegyzet`,
+                }).note ?? "A lektor blokkolót jelzett.",
+              round: job.round,
+            })
+          : job.output?.qualityNotes;
+
+      await store.saveStep(
+        job.id,
+        successPatch({
+          ...job.output,
+          report: parsed.data,
+          blockers,
+          ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
+        }),
+      );
       return { ok: true, next: transition };
     }
   }
@@ -543,18 +570,38 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   const gate = checkCoverageGate(parsed.data, map.concepts);
   const gateOutput = { ok: gate.ok, reasons: gate.reasons, missingCore: gate.missingCore, unknownIds: gate.unknownIds };
 
+  let qualityNotes = job.output?.qualityNotes;
+
   if (!gate.ok) {
     const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
     if (transition.step === "error") {
       return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);
     }
-    await store.saveStep(job.id, {
-      status: "ok",
-      output: { ...job.output, gate: gateOutput },
-      error: null,
-      finishedAt: null,
+    // LS-7 (#189): a limit előtt javító kör; a limit UTÁN nem parkolunk emberre —
+    // a lecke elkészül, a kapu-hiány pedig jelzésként megy vele. Publikálás
+    // nélküli "done" némán üres tananyagot jelentene, ami rosszabb a hibánál.
+    if (transition.step !== "done") {
+      await store.saveStep(job.id, {
+        status: "ok",
+        output: { ...job.output, gate: gateOutput },
+        error: null,
+        finishedAt: null,
+      });
+      return { ok: true, next: transition };
+    }
+    const decision = autonomousDecision({
+      reason: "gate_rejected",
+      round: job.round,
+      detail: gate.reasons.join(" "),
     });
-    return { ok: true, next: transition };
+    qualityNotes = appendQualityNote(qualityNotes, {
+      reason: "gate_rejected",
+      note: decision.note ?? "A publikálási kapu hiányt mért.",
+      round: job.round,
+    });
+    logger.warn(
+      `[STUDIO/GATE] A kapu hiányt mért, de az autonóm futás publikál (job ${job.id}): ${gate.reasons.join(" ")}`,
+    );
   }
 
   const published = await store.publishLesson({
@@ -575,6 +622,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
       gate: gateOutput,
       htmlFileId: published.htmlFileId,
       exportedQuizItems: published.exportedQuizItems,
+      ...(qualityNotes !== undefined ? { qualityNotes } : {}),
     },
     error: null,
     finishedAt: new Date(),
@@ -644,6 +692,75 @@ export async function approveOutline(
     finishedAt: null,
   });
   return { ok: true };
+}
+
+/**
+ * LS-7 (#189) — autonóm vázlat-elfogadás a MÉRT hiánnyal.
+ *
+ * Ez NEM a kapu megkerülése: a séma-ellenőrzés (`outlineSchema`) továbbra is
+ * fail-closed, és a fedettség mérése megtörtént — az eredményt `qualityNotes`
+ * jelzésként visszük tovább, hogy utólagos javító prompttal kezelhető legyen.
+ * Csak akkor hívható, ha a gépi javító körök már elfogytak (autonomousDecision).
+ */
+export async function forceApproveOutline(
+  jobId: string,
+  outline: unknown,
+  note: { reason: "coverage"; note: string; round: number },
+  deps: PipelineDeps = {},
+): Promise<boolean> {
+  const { store } = await resolveDeps(deps);
+  const job = await store.loadJob(jobId);
+  if (!job) return false;
+
+  // A séma-kapu MEGMARAD: alaktalan vázlatból nem lesz lecke.
+  const parsed = outlineSchema.safeParse(outline);
+  if (!parsed.success) {
+    logger.error(`[STUDIO] Az autonóm vázlat-elfogadás alaki hibán bukott: ${zodIssues(parsed.error)}`);
+    return false;
+  }
+
+  await store.saveStep(job.id, {
+    output: {
+      ...job.output,
+      approvedOutline: parsed.data,
+      qualityNotes: appendQualityNote(job.output?.qualityNotes, note),
+    },
+    status: "running",
+    error: null,
+    finishedAt: null,
+  });
+  return true;
+}
+
+/**
+ * LS-7 (#189) — gépi javító kör a pedagógus lépésre: visszaállítjuk a jobot
+ * `pedagogue`-ra a következő körszámmal, és töröljük a bukott vázlatot, hogy a
+ * cache ne adja vissza ugyanazt. A hívó ezután újra `drive()`-ol.
+ */
+export async function retryOutlineRound(
+  jobId: string,
+  nextRound: number,
+  deps: PipelineDeps = {},
+): Promise<boolean> {
+  const { store } = await resolveDeps(deps);
+  const job = await store.loadJob(jobId);
+  if (!job) return false;
+
+  const output = { ...(job.output ?? {}) };
+  delete (output as Record<string, unknown>).outline;
+  delete (output as Record<string, unknown>).coverage;
+
+  await store.saveStep(job.id, {
+    step: "pedagogue",
+    round: nextRound,
+    // Az input-hash törlése kell, különben a cache visszaadja a bukott vázlatot.
+    inputHash: "",
+    output,
+    status: "running",
+    error: null,
+    finishedAt: null,
+  });
+  return true;
 }
 
 /**

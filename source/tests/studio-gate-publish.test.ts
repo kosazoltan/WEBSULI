@@ -165,7 +165,11 @@ test("gate fail (hiányzó core fogalom): NEM publikál, author round+1, ok megn
   assert.match(gate?.reasons.join(" ") ?? "", /c2/);
 });
 
-test("gate fail a kör-limit után → error (nem végtelen hurok), nincs publikálás", async () => {
+test("gate fail a kör-limit után → LS-7 (#189): PUBLIKÁL jelzéssel (nem néma 'done')", async () => {
+  // SPEC-VÁLTOZÁS (tulajdonosi döntés, 2026-09-06): nincs emberi kapu. A limit
+  // után a kapu-hiány nem hiba — a tananyag elkészül és PUBLIKÁLÓDIK, a hiány
+  // pedig `qualityNotes` jelzés. A publikálás nélküli "done" némán üres
+  // tananyagot adna, ami rosszabb lenne a hibánál.
   const store = new MemoryStore();
   store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
   const lesson = lessonCovering(["c1"]);
@@ -174,9 +178,29 @@ test("gate fail a kör-limit után → error (nem végtelen hurok), nincs publik
 
   const outcome = await runPipelineStep("job-1", deps(store));
 
-  assert.equal(outcome.ok, false);
-  assert.equal(outcome.next.step, "error");
-  assert.equal(store.published.length, 0);
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.next.step, "done");
+  assert.equal(store.published.length, 1, "a tananyag elkészül — a gyerek megkapja");
+
+  const job = await store.loadJob("job-1");
+  const notes = (job?.output as { qualityNotes?: Array<{ reason: string }> })?.qualityNotes ?? [];
+  assert.equal(notes.length, 1, "a kapu-hiány jelzésként megmarad");
+  assert.equal(notes[0].reason, "gate_rejected");
+  const gate = (job?.output as { gate?: { ok: boolean } })?.gate;
+  assert.equal(gate?.ok, false, "a mérés eredménye NEM lett meghamisítva");
+});
+
+test("gate fail a limit ELŐTT → javító kör, nincs publikálás (#189)", async () => {
+  const store = new MemoryStore();
+  store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
+  const lesson = lessonCovering(["c1"]);
+  store.lessons.set("lesson-1", { id: "lesson-1", mapId: "m1", json: lesson });
+  store.seed({ id: "job-1", mapId: "m1", step: "gate", round: 0, lessonId: "lesson-1", output: { lesson } });
+
+  const outcome = await runPipelineStep("job-1", deps(store));
+
+  assert.equal(outcome.next.step, "author", "előbb a gép javít");
+  assert.equal(store.published.length, 0, "hiányos leckét nem publikálunk, amíg van javító kör");
 });
 
 test("gate: fogalom-kötés nélküli check → publikál, 0 exportált kvíz (nem hiba)", async () => {

@@ -93,13 +93,9 @@ export function nextStep(input: TransitionInput): Transition {
     case "lektor": {
       if ((input.blockers ?? 0) === 0) return { step: "gate", round };
       if (round >= MAX_AUTHOR_ROUNDS) {
-        return {
-          step: "error",
-          round,
-          reason:
-            `A lektor ${MAX_AUTHOR_ROUNDS} kör után is blokkolót talált — ` +
-            `emberi döntés szükséges.`,
-        };
+        // LS-7 (#189): a limit után NEM állunk meg emberi döntésre. A kapu
+        // mérése dönt; a blokkoló jelzésként megmarad a lektor-jegyzetekben.
+        return { step: "gate", round };
       }
       return { step: "author", round: round + 1 };
     }
@@ -107,7 +103,9 @@ export function nextStep(input: TransitionInput): Transition {
     case "gate": {
       if (input.gatePassed === false) {
         if (round >= MAX_AUTHOR_ROUNDS) {
-          return { step: "error", round, reason: "A kapu a kör-limit után is elutasította a leckét." };
+          // LS-7 (#189): a tananyag elkészül; a kapu-hiány `qualityNotes`
+          // jelzés lesz, amit utólagos javító prompttal lehet kezelni.
+          return { step: "done", round };
         }
         return { step: "author", round: round + 1 };
       }
