@@ -34,6 +34,7 @@ import {
   type OneStepPhase,
   type OneStepRun,
 } from "./one-step-progress";
+import { markOrphanedJobs } from "./orphan-jobs";
 import { oneStepRuns } from "../../shared/schema";
 
 /* ------------------------------------------------------------------ *
@@ -106,6 +107,29 @@ export async function closeOrphanedOneStepRuns(): Promise<number> {
   }
   if (orphans.length > 0) {
     logger.warn(`[STUDIO/1STEP] ${orphans.length} árva futás hibára zárva (szerver-újraindulás).`);
+  }
+  return orphans.length;
+}
+
+/**
+ * #183 — ugyanaz a boot-sweep a studio_jobs sorokra. Mérve élesben: egy
+ * step=gate/status=running sor 10 órán át állt finished_at nélkül, mert az őt
+ * hajtó folyamat meghalt — a JobMonitor pedig 2 másodpercenként pollozta a
+ * végtelenségig. A #168-as söprés csak a one_step_runs táblát fedte le.
+ */
+export async function closeOrphanedStudioJobs(): Promise<number> {
+  const open = await db
+    .select({ id: studioJobs.id, status: studioJobs.status })
+    .from(studioJobs);
+  const orphans = markOrphanedJobs(open);
+  for (const o of orphans) {
+    await db
+      .update(studioJobs)
+      .set({ status: "error", step: "error", error: o.error, finishedAt: new Date() })
+      .where(eq(studioJobs.id, o.id));
+  }
+  if (orphans.length > 0) {
+    logger.warn(`[STUDIO] ${orphans.length} árva lecke-job hibára zárva (szerver-újraindulás).`);
   }
   return orphans.length;
 }

@@ -508,11 +508,16 @@ app.use((req, res, next) => {
 
     // #168 — az előző folyamat halálakor árván maradt one-step futások hibára
     // zárása, hogy a kliens állapotjelzője ne ragadjon be némán.
+    // #183 — ugyanez a studio_jobs sorokra: a JobMonitor a 'running' státuszt
+    // 2 másodpercenként pollozza, így egy árva sor örök pollt hajtott.
     try {
-      const { closeOrphanedOneStepRuns } = await import("./studio/lesson-pipeline-routes");
+      const { closeOrphanedOneStepRuns, closeOrphanedStudioJobs } = await import(
+        "./studio/lesson-pipeline-routes"
+      );
       await closeOrphanedOneStepRuns();
+      await closeOrphanedStudioJobs();
     } catch (sweepError) {
-      logger.error("[STARTUP] Az árva one-step futások zárása nem sikerült:", sweepError);
+      logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
       // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
     }
 
