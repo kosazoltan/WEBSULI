@@ -43,3 +43,10 @@ tmp/
 *.bundle
 *.local.cjs
 *.local.mts
+
+# Ügynök-munkaterületek (2026-09-06, #185): a Claude Code worktree-jei külön
+# teljes checkoutot hoznak létre saját node_modules-szal — mérve 956 MB egyetlen
+# árva worktree-ben. Eddig csak a LOKÁLIS .git/info/exclude fedte, ezért másik
+# gépen újra felhalmozódott volna. A megosztott szabály itt a helye.
+.claude/worktrees/
+.agents/**/__pycache__/
