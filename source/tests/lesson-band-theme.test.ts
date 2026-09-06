@@ -115,6 +115,10 @@ test("LessonRuntime: a gyökér data-band attribútumot kap, a recap kártyákk�
   assert.ok(recap.length > 0, "RecapBlock megtalálható");
   assert.doesNotMatch(recap, /<li\b/, "a recap nem lehet <li>-lista");
   assert.match(runtime, /data-testid="lesson-progress"/, "hiányzik a szakasz-haladásjelző");
+  // #183 tanulság: a definíció léte nem bizonyít mountot — m7 mutáció (a <LessonProgress />
+  // kivétele a fából) átcsúszott a puszta testid-grepen. A HÍVÁST követeljük a LessonRuntime-ban.
+  const root = runtime.slice(runtime.indexOf("export function LessonRuntime("));
+  assert.match(root, /<LessonProgress\s+sections=\{lesson\.sections\}/, "a LessonProgress nincs a LessonRuntime fájában mountolva");
 });
 
 test("az author-prompt megnevezi a bandet és a regisztert; UUID-t nem tartalmaz (#179)", () => {
