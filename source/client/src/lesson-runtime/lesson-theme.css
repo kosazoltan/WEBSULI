@@ -1,0 +1,441 @@
+/*
+ * LS-9 — age-band visual tokens for the Lesson Runtime.
+ *
+ * Owner decision (2026-09-06): variant "C · divergent" from the LS-9 board — a dark stage
+ * for every band, each with its own accent and character. Tokens are keyed on the root's
+ * `data-band` (derived from classroom in shared/lesson-schema.ts), so the SAME structured
+ * lesson paints three different ways and nothing in the JSX hardcodes a colour.
+ *
+ * #197 rule: whoever sets a background sets its ink. Every *-bg / surface token here has
+ * a matching *-ink token, and the runtime root applies both — the lesson never inherits
+ * the app theme's foreground, so light/dark app mode cannot break it.
+ *
+ * Motion: EVERY `animation` declaration lives inside the `prefers-reduced-motion:
+ * no-preference` block at the bottom. tests/lesson-band-theme.test.ts parses this file and
+ * fails on any animation declared outside that gate.
+ */
+
+[data-band] {
+  font-family: var(--lesson-font-body);
+  --lesson-radius: 12px;
+  --lesson-ok: #34d399;
+  --lesson-ok-ink: #062a1c;
+  --lesson-ok-bg: #0f2f27;
+  --lesson-ok-bg-ink: #c9ffe9;
+  --lesson-warn-bg: #3a2a08;
+  --lesson-warn-ink: #ffe4a8;
+  --lesson-error: #fb7185;
+  background: var(--lesson-bg);
+  color: var(--lesson-ink);
+}
+
+[data-band="kid"] {
+  --lesson-font-heading: "Nunito", "Quicksand", "Poppins", sans-serif;
+  --lesson-font-body: "Quicksand", "Nunito", "Poppins", sans-serif;
+  --lesson-bg: #12224a;
+  --lesson-surface: #1b2f63;
+  --lesson-ink: #f4f7ff;
+  --lesson-muted: #c3cdf0;
+  --lesson-line: #37508f;
+  --lesson-accent: #ffd166;
+  --lesson-accent-ink: #1b2340;
+  --lesson-check-head: #ffd166;
+  --lesson-check-head-ink: #1b2340;
+  --lesson-ok: #6ee7a8;
+  --lesson-ok-bg: #173d33;
+  --lesson-ok-bg-ink: #d9ffe9;
+  --lesson-ok-ink: #062a1c;
+  --lesson-radius: 20px;
+  --lesson-glow: 0 0 14px rgba(255, 209, 102, 0.45);
+}
+
+[data-band="teen"] {
+  --lesson-font-heading: "Montserrat", "Outfit", "Poppins", sans-serif;
+  --lesson-font-body: "Poppins", "Open Sans", sans-serif;
+  --lesson-bg: #0b1220;
+  --lesson-surface: #121b2e;
+  --lesson-ink: #e6edf7;
+  --lesson-muted: #9fb0c9;
+  --lesson-line: #25334d;
+  --lesson-accent: #22d3ee;
+  --lesson-accent-ink: #06202a;
+  --lesson-check-head: #fbbf24;
+  --lesson-check-head-ink: #1a1400;
+  --lesson-ok: #34d399;
+  --lesson-ok-bg: #0f2f27;
+  --lesson-ok-bg-ink: #c9ffe9;
+  --lesson-ok-ink: #062a1c;
+  --lesson-radius: 10px;
+  --lesson-glow: 0 0 10px rgba(34, 211, 238, 0.55);
+}
+
+[data-band="senior"] {
+  --lesson-font-heading: Georgia, "Times New Roman", serif;
+  --lesson-font-body: "Open Sans", "Poppins", sans-serif;
+  --lesson-bg: #111418;
+  --lesson-surface: #181c22;
+  --lesson-ink: #e7ebf0;
+  --lesson-muted: #a3adba;
+  --lesson-line: #2b323b;
+  --lesson-accent: #7dd3fc;
+  --lesson-accent-ink: #06202a;
+  --lesson-check-head: #fda4af;
+  --lesson-check-head-ink: #2a0710;
+  --lesson-ok: #86efac;
+  --lesson-ok-bg: #12291b;
+  --lesson-ok-bg-ink: #d9ffe4;
+  --lesson-ok-ink: #062a1c;
+  --lesson-radius: 4px;
+  --lesson-glow: none;
+  /* ruled paper, the senior character mark */
+  background-image: linear-gradient(var(--lesson-line) 1px, transparent 1px);
+  background-size: 100% 32px;
+}
+
+/* ---------- structure ---------- */
+
+.lesson-heading {
+  font-family: var(--lesson-font-heading);
+}
+
+.lesson-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: var(--lesson-radius);
+  background: var(--lesson-surface);
+  color: var(--lesson-ink);
+  border: 1px solid var(--lesson-line);
+}
+[data-band="kid"] .lesson-hero {
+  background: radial-gradient(circle at 85% 20%, #2b4a9a 0, transparent 40%), var(--lesson-surface);
+}
+[data-band="senior"] .lesson-hero {
+  border-color: var(--lesson-accent);
+}
+.lesson-emblem {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--lesson-radius) - 2px);
+  background: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+  box-shadow: var(--lesson-glow);
+}
+.lesson-chip {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+}
+[data-band="teen"] .lesson-chip,
+[data-band="senior"] .lesson-chip,
+[data-band="teen"] .lesson-block-head,
+[data-band="senior"] .lesson-block-head,
+[data-band="senior"] .lesson-progress {
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.lesson-progress {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 2px;
+  font-size: 12px;
+  color: var(--lesson-muted);
+  background: var(--lesson-bg);
+}
+.lesson-progress-steps {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+.lesson-progress-step {
+  height: 8px;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--lesson-line);
+  overflow: hidden;
+}
+.lesson-progress-step::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--lesson-accent);
+}
+.lesson-progress-step[data-state="done"]::after {
+  width: 100%;
+}
+.lesson-progress-step[data-state="now"]::after {
+  width: 55%;
+  box-shadow: var(--lesson-glow);
+}
+
+.lesson-section-no {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  background: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+  box-shadow: var(--lesson-glow);
+}
+
+.lesson-block {
+  border-radius: var(--lesson-radius);
+  padding: 14px 16px;
+  background: var(--lesson-surface);
+  color: var(--lesson-ink);
+  border: 1px solid var(--lesson-line);
+}
+.lesson-block-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+}
+.lesson-block[data-block="check"] .lesson-block-head {
+  background: var(--lesson-check-head);
+  color: var(--lesson-check-head-ink);
+}
+.lesson-muted {
+  color: var(--lesson-muted);
+}
+
+.lesson-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  text-align: left;
+  border-radius: calc(var(--lesson-radius) - 2px);
+  border: 2px solid var(--lesson-line);
+  background: var(--lesson-surface);
+  color: var(--lesson-ink);
+}
+.lesson-option:hover:not(:disabled) {
+  border-color: var(--lesson-accent);
+}
+.lesson-option:focus-visible {
+  outline: 3px solid var(--lesson-accent);
+  outline-offset: 2px;
+}
+.lesson-option-key {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 12px;
+  background: var(--lesson-line);
+  color: var(--lesson-ink);
+}
+.lesson-option[data-state="right"] {
+  border-color: var(--lesson-ok);
+  background: var(--lesson-ok-bg);
+  color: var(--lesson-ok-bg-ink);
+}
+.lesson-option[data-state="right"] .lesson-option-key {
+  background: var(--lesson-ok);
+  color: var(--lesson-ok-ink);
+}
+.lesson-option[data-state="wrong"] {
+  border-color: var(--lesson-error);
+}
+.lesson-feedback {
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+.lesson-feedback[data-state="right"] {
+  background: var(--lesson-ok-bg);
+  color: var(--lesson-ok-bg-ink);
+}
+.lesson-feedback[data-state="wrong"] {
+  background: var(--lesson-warn-bg);
+  color: var(--lesson-warn-ink);
+}
+.lesson-answer {
+  color: var(--lesson-ok);
+  font-weight: 600;
+}
+
+.lesson-recap-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 480px) {
+  .lesson-recap-cards {
+    grid-template-columns: 1fr;
+  }
+}
+.lesson-recap-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border-radius: calc(var(--lesson-radius) - 2px);
+  border: 1px solid var(--lesson-line);
+  background: var(--lesson-bg);
+  color: var(--lesson-ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.lesson-recap-ico {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+  box-shadow: var(--lesson-glow);
+}
+
+/* the runtime's own buttons (hint / read-aloud / next step) inherit the stage.
+   46px, not 44: measured senior@1280 the shadcn min-h-11 button rendered 43.99997px
+   (serif metrics) and failed the ≥44 tap-target gate — the gate stays, the button grows. */
+[data-band] .lesson-ghost-btn,
+[data-band] .lesson-outline-btn {
+  min-height: 46px;
+}
+[data-band] .lesson-ghost-btn {
+  color: var(--lesson-accent);
+}
+[data-band] .lesson-ghost-btn:hover {
+  background: var(--lesson-surface);
+  color: var(--lesson-accent);
+}
+[data-band] .lesson-outline-btn {
+  border-color: var(--lesson-accent);
+  color: var(--lesson-ink);
+  background: transparent;
+}
+[data-band] .lesson-outline-btn:hover {
+  background: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+}
+
+/* animate/try blocks were built on the light card; give them the stage surface */
+[data-band] .bg-card {
+  background: var(--lesson-surface);
+  color: var(--lesson-ink);
+  border-color: var(--lesson-line);
+}
+[data-band] .text-muted-foreground {
+  color: var(--lesson-muted);
+}
+[data-band] .bg-background,
+[data-band] input {
+  background: var(--lesson-bg);
+  color: var(--lesson-ink);
+  border-color: var(--lesson-line);
+}
+[data-band] input:focus-visible {
+  outline: 2px solid var(--lesson-accent);
+  outline-offset: 1px;
+}
+[data-band] .bg-muted\/40 {
+  background: var(--lesson-bg);
+  color: var(--lesson-ink);
+}
+/* shadcn primary buttons (try-block "Ellenőrzés", Próba submit) are an orange gradient;
+   on the dark stage they take the band accent instead — measured leak on senior@1280. */
+[data-band] .bg-gradient-to-r {
+  background-image: none;
+  background-color: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+  border-color: transparent;
+  box-shadow: var(--lesson-glow);
+}
+[data-band] .bg-gradient-to-r:hover {
+  filter: brightness(1.08);
+}
+[data-band] .lesson-anim-stroke {
+  stroke: var(--lesson-accent);
+}
+
+/* ---------- motion (gated) ---------- */
+
+@keyframes lesson-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes lesson-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes lesson-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-band] .lesson-block,
+  [data-band] .lesson-hero {
+    animation: lesson-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  [data-band] .lesson-block:nth-child(2) {
+    animation-delay: 0.05s;
+  }
+  [data-band] .lesson-block:nth-child(3) {
+    animation-delay: 0.1s;
+  }
+  [data-band] .lesson-block:nth-child(4) {
+    animation-delay: 0.15s;
+  }
+  [data-band] .lesson-block:nth-child(n + 5) {
+    animation-delay: 0.2s;
+  }
+  [data-band] .lesson-anim-stroke {
+    stroke-dasharray: 420;
+    stroke-dashoffset: 420;
+    animation: lesson-draw 1.2s 0.3s ease-out forwards;
+  }
+  [data-band] .lesson-option[data-state="right"] {
+    animation: lesson-pop 0.4s ease-out both;
+  }
+}

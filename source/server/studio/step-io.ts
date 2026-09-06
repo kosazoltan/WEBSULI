@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
-import { conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
+import { ageBandForClassroom, conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
+import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 
 /**
@@ -218,9 +219,13 @@ export function buildAuthorPrompt(
 ): string {
   const authorNotes = blockerNotes.filter((n) => n.subkind !== "book_probably_wrong");
   const conceptIds = [...new Set(sections.flatMap((s) => s.conceptIds))];
+  const band = ageBandForClassroom(map.classroom);
 
   const parts = [
     "You are the lesson author. Write a complete lesson from the outline, in Hungarian, in a register matching the pupil's age band.",
+    // LS-9: the band was only implied by the classroom number; now it is named and described,
+    // so the register is a rule the model can follow rather than a guess (spec §3).
+    `Age band: ${band} (classroom ${map.classroom}). ${bandRegisterForPrompt(band)}`,
     "",
     D1_RULE_TEXT,
     "",

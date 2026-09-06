@@ -89,8 +89,31 @@ const PROBE_LESSON: Lesson = {
   ],
 };
 
+/**
+ * LS-9: `?classroom=N` switches the age band (default 7 → teen) and `?sections=N`
+ * repeats the single section N times, so the progress bar's 2+ branch can be rendered.
+ * Non-numeric or out-of-range values fall back to the defaults — the probe must never
+ * crash on a typo in a test URL.
+ */
+function probeLesson(search: string): Lesson {
+  const q = new URLSearchParams(search);
+  const classroom = Number(q.get("classroom"));
+  const sections = Number(q.get("sections"));
+  const lesson: Lesson = {
+    ...PROBE_LESSON,
+    classroom: Number.isInteger(classroom) && classroom >= 0 && classroom <= 12 ? classroom : PROBE_LESSON.classroom,
+  };
+  if (Number.isInteger(sections) && sections >= 2 && sections <= 8) {
+    lesson.sections = Array.from({ length: sections }, (_, i) => ({
+      ...PROBE_LESSON.sections[0],
+      heading: `${PROBE_LESSON.sections[0].heading} (${i + 1})`,
+    }));
+  }
+  return lesson;
+}
+
 export default function LessonRuntimeProbe() {
-  return <LessonRuntime lesson={PROBE_LESSON} />;
+  return <LessonRuntime lesson={probeLesson(window.location.search)} />;
 }
 
 /**

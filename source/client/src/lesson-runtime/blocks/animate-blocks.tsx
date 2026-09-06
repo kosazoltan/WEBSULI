@@ -42,7 +42,7 @@ function NumberLineAnim({ params, caption }: AnimProps) {
     <figure className={FRAME} data-anim="numberLine">
       <svg viewBox={`0 0 ${width} 64`} className="w-full h-auto" role="img" aria-label={caption}>
         <line x1={pad} y1={40} x2={width - pad} y2={40} stroke="currentColor" strokeWidth="2" />
-        <line x1={x(from)} y1={40} x2={x(highlight)} y2={40} stroke="#10b981" strokeWidth="5" strokeLinecap="round" />
+        <line x1={x(from)} y1={40} x2={x(highlight)} y2={40} className="lesson-anim-stroke" stroke="#10b981" strokeWidth="5" strokeLinecap="round" />
         {Array.from({ length: 11 }, (_, i) => {
           const v = from + ((to - from) / 10) * i;
           return (

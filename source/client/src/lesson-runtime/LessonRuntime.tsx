@@ -1,8 +1,19 @@
 import { useState } from "react";
-import { CheckCircle2, ChevronRight, HelpCircle, Lightbulb, Volume2, XCircle } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  ChevronRight,
+  HelpCircle,
+  Leaf,
+  Lightbulb,
+  ListChecks,
+  Sparkles,
+  Target,
+  Volume2,
+  XCircle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   ageBandForClassroom,
@@ -11,11 +22,13 @@ import {
   type Lesson,
   type Section,
 } from "@shared/lesson-schema";
+import { BAND_THEME } from "@shared/lesson-band";
 
 import { SectionProba } from "./SectionProba";
 import { ANIMATE_REGISTRY } from "./blocks/animate-blocks";
 import { TRY_REGISTRY } from "./blocks/try-blocks";
 import { prefersReducedMotion, readAloudEnabled, speak, speechSupported } from "@/lib/tts";
+import "./lesson-theme.css";
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.
@@ -28,15 +41,27 @@ import { prefersReducedMotion, readAloudEnabled, speak, speechSupported } from "
  *
  * LS-2 renders explain / example / check / recap; LS-4 lands the 8 animate and 3 try
  * kinds from the registries in ./blocks (a static guard test pins full coverage).
+ *
+ * LS-9 (2026-09-06): the band now drives the whole visual system, not just font size.
+ * Measured before: kid/teen/senior rendered the same white card list. The root carries
+ * `data-band`, `lesson-theme.css` keys every colour token on it, and the structure gained
+ * a hero header, a sticky section progress bar, typed block headers and an infographic
+ * recap. Owner picked the dark "C · divergent" direction from the variant board.
  */
 
-const BAND_STYLES: Record<AgeBand, { body: string; heading: string }> = {
-  kid: { body: "text-lg leading-relaxed", heading: "text-2xl font-bold" },
-  teen: { body: "text-base leading-relaxed", heading: "text-xl font-semibold" },
-  senior: { body: "text-base leading-normal", heading: "text-lg font-semibold" },
-};
+const OPTION_KEYS = "ABCDEFGH";
+
+function BlockHead({ icon: Icon, label }: { icon: typeof BookOpen; label: string }) {
+  return (
+    <span className="lesson-block-head">
+      <Icon className="w-3.5 h-3.5" aria-hidden />
+      {label}
+    </span>
+  );
+}
 
 function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain" }>; band: AgeBand }) {
+  const theme = BAND_THEME[band];
   // The gate is computed once per mount: reduced motion and speech support do not
   // change mid-page in practice, and the button is the ONLY call site of speak() —
   // so speech can never start without a user gesture (LS-4 TTS contract).
@@ -49,9 +74,10 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
   );
 
   return (
-    <div className={cn("space-y-1", BAND_STYLES[band].body)} data-block="explain">
+    <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain">
+      <BlockHead icon={BookOpen} label={theme.labels.explain} />
       {block.depth !== "core" && (
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="lesson-muted inline-flex items-center gap-1 text-xs">
           <Lightbulb className="w-3 h-3" />
           {block.depth === "why" ? "Miért?" : "Mélyebben"}
         </span>
@@ -61,7 +87,7 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
         <Button
           variant="ghost"
           size="sm"
-          className="min-h-11"
+          className="lesson-ghost-btn min-h-11"
           data-testid="read-aloud"
           onClick={() => speak(block.text)}
         >
@@ -73,38 +99,36 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
 }
 
 function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example" }>; band: AgeBand }) {
+  const theme = BAND_THEME[band];
   const [shown, setShown] = useState(0);
   const allShown = shown >= block.steps.length;
 
   return (
-    <Card data-block="example">
-      <CardContent className="pt-4 space-y-3">
-        <p className={cn("font-medium", BAND_STYLES[band].body)}>{block.problem}</p>
+    <div className="lesson-block space-y-3" data-block="example">
+      <BlockHead icon={Sparkles} label={theme.labels.example} />
+      <p className={cn("font-medium", theme.body)}>{block.problem}</p>
 
-        <ol className="space-y-1 list-decimal list-inside text-sm">
-          {block.steps.slice(0, shown).map((step, i) => (
-            <li key={i}>{step}</li>
-          ))}
-        </ol>
+      <ol className="space-y-1 list-decimal list-inside text-sm">
+        {block.steps.slice(0, shown).map((step, i) => (
+          <li key={i}>{step}</li>
+        ))}
+      </ol>
 
-        {/* Steps reveal one at a time: seeing the whole solution at once teaches nothing. */}
-        {!allShown ? (
-          <Button
-            variant="outline"
-            className="min-h-11 min-w-11"
-            onClick={() => setShown((s) => s + 1)}
-            data-testid="example-next-step"
-          >
-            <ChevronRight className="w-4 h-4 mr-1" />
-            {shown === 0 ? "Első lépés" : "Következő lépés"}
-          </Button>
-        ) : (
-          <p className="font-semibold text-emerald-700 dark:text-emerald-400">
-            Eredmény: {block.answer}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      {/* Steps reveal one at a time: seeing the whole solution at once teaches nothing. */}
+      {!allShown ? (
+        <Button
+          variant="outline"
+          className="lesson-outline-btn min-h-11 min-w-11"
+          onClick={() => setShown((s) => s + 1)}
+          data-testid="example-next-step"
+        >
+          <ChevronRight className="w-4 h-4 mr-1" />
+          {shown === 0 ? "Első lépés" : "Következő lépés"}
+        </Button>
+      ) : (
+        <p className="lesson-answer">Eredmény: {block.answer}</p>
+      )}
+    </div>
   );
 }
 
@@ -117,6 +141,7 @@ function CheckBlock({
   band: AgeBand;
   onPick?: (pickedIndex: number) => void;
 }) {
+  const theme = BAND_THEME[band];
   const [picked, setPicked] = useState<number | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const correct = picked !== null && picked === block.correctIndex;
@@ -128,88 +153,86 @@ function CheckBlock({
   };
 
   return (
-    <Card data-block="check">
-      <CardContent className="pt-4 space-y-3">
-        <p className={cn("font-medium", BAND_STYLES[band].body)}>{block.question}</p>
+    <div className="lesson-block space-y-3" data-block="check">
+      <BlockHead icon={HelpCircle} label={theme.labels.check} />
+      <p className={cn("font-medium", theme.body)}>{block.question}</p>
 
-        <div className="grid gap-2">
-          {block.options.map((option, i) => {
-            const isPicked = picked === i;
-            const isRight = i === block.correctIndex;
-            return (
-              <button
-                key={i}
-                onClick={() => pick(i)}
-                disabled={correct}
-                data-testid={`check-option-${i}`}
-                className={cn(
-                  "text-left rounded-lg border p-3 min-h-11 transition-colors",
-                  "hover:bg-accent disabled:cursor-default",
-                  isPicked && isRight && "border-emerald-500 bg-emerald-50 dark:bg-emerald-950",
-                  isPicked && !isRight && "border-red-400 bg-red-50 dark:bg-red-950",
-                  !isPicked && "border-border",
-                )}
-              >
-                <span className="flex items-start gap-2">
-                  {isPicked &&
-                    (isRight ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                    ))}
-                  <span>{option}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Feedback is written per option, so a wrong pick teaches instead of just failing. */}
-        {picked !== null && (
-          <p
-            className={cn(
-              "text-sm rounded p-2",
-              correct
-                ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                : "bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-            )}
-            data-testid="check-feedback"
-          >
-            {block.feedbackPerOption[picked]}
-          </p>
-        )}
-
-        {block.hint && !correct && (
-          <div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-h-11 gap-1"
-              onClick={() => setHintOpen((h) => !h)}
+      <div className="grid gap-2">
+        {block.options.map((option, i) => {
+          const isPicked = picked === i;
+          const isRight = i === block.correctIndex;
+          const state = isPicked ? (isRight ? "right" : "wrong") : undefined;
+          return (
+            <button
+              key={i}
+              onClick={() => pick(i)}
+              disabled={correct}
+              data-testid={`check-option-${i}`}
+              data-state={state}
+              className="lesson-option transition-colors disabled:cursor-default"
             >
-              <HelpCircle className="w-4 h-4" />
-              {hintOpen ? "Tipp elrejtése" : "Kérek egy tippet"}
-            </Button>
-            {hintOpen && <p className="text-sm text-muted-foreground mt-1">{block.hint}</p>}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <span className="lesson-option-key" aria-hidden>
+                {OPTION_KEYS[i] ?? i + 1}
+              </span>
+              <span className="flex items-start gap-2">
+                {isPicked &&
+                  (isRight ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  ))}
+                <span>{option}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Feedback is written per option, so a wrong pick teaches instead of just failing. */}
+      {picked !== null && (
+        <p className="lesson-feedback" data-state={correct ? "right" : "wrong"} data-testid="check-feedback">
+          {block.feedbackPerOption[picked]}
+        </p>
+      )}
+
+      {block.hint && !correct && (
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="lesson-ghost-btn min-h-11 gap-1"
+            onClick={() => setHintOpen((h) => !h)}
+          >
+            <HelpCircle className="w-4 h-4" />
+            {hintOpen ? "Tipp elrejtése" : "Kérek egy tippet"}
+          </Button>
+          {hintOpen && <p className="lesson-muted text-sm mt-1">{block.hint}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 
-function RecapBlock({ block }: { block: Extract<Block, { kind: "recap" }> }) {
+/**
+ * Recap as an infographic: one card per idea. A bullet list reads as homework; a card
+ * with its own mark reads as something the child now owns (LS-9).
+ */
+function RecapBlock({ block, band }: { block: Extract<Block, { kind: "recap" }>; band: AgeBand }) {
+  const theme = BAND_THEME[band];
   return (
-    <Card data-block="recap">
-      <CardContent className="pt-4">
-        <p className="text-sm font-semibold mb-2">Amit megtanultunk</p>
-        <ul className="space-y-1 list-disc list-inside text-sm">
-          {block.bullets.map((b, i) => (
-            <li key={i}>{b}</li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
+    <div className="lesson-block" data-block="recap">
+      <BlockHead icon={ListChecks} label={theme.labels.recap} />
+      <div className="lesson-recap-cards">
+        {block.bullets.map((b, i) => (
+          <div key={i} className="lesson-recap-card" data-recap-item>
+            <span className="lesson-recap-ico" aria-hidden>
+              <Target className="w-4 h-4" />
+            </span>
+            <span>{b}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -230,7 +253,7 @@ export function LessonBlock({
     case "check":
       return <CheckBlock block={block} band={band} onPick={onPick} />;
     case "recap":
-      return <RecapBlock block={block} />;
+      return <RecapBlock block={block} band={band} />;
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
       return <Anim params={block.params} caption={block.caption} />;
@@ -260,6 +283,7 @@ function LessonSection({
   band: AgeBand;
   lessonId: string | null;
 }) {
+  const theme = BAND_THEME[band];
   const [answers, setAnswers] = useState<Record<number, number>>({});
 
   return (
@@ -268,7 +292,12 @@ function LessonSection({
       id={`section-${sectionIdx + 1}`}
       data-testid={`lesson-section-${sectionIdx}`}
     >
-      <h2 className={cn("border-b pb-1", BAND_STYLES[band].heading)}>{section.heading}</h2>
+      <h2 className={cn("lesson-heading flex items-center gap-3", theme.heading)}>
+        <span className="lesson-section-no" aria-hidden>
+          {sectionIdx + 1}
+        </span>
+        {section.heading}
+      </h2>
       {section.blocks.map((block, bi) => (
         <LessonBlock
           key={bi}
@@ -291,24 +320,60 @@ function LessonSection({
   );
 }
 
+/**
+ * Section progress. Shown only for 2+ sections: one step is not a journey. The "now"
+ * step is the first section whose Próba has not been submitted — the runtime does not
+ * track scroll, so it does not pretend to know where the eye is.
+ */
+function LessonProgress({ sections, band, current }: { sections: Section[]; band: AgeBand; current: number }) {
+  if (sections.length < 2) return null;
+  return (
+    <div className="lesson-progress" data-testid="lesson-progress" aria-label={BAND_THEME[band].labels.progress}>
+      <span>
+        {Math.min(current + 1, sections.length)} / {sections.length} szakasz
+      </span>
+      <div className="lesson-progress-steps">
+        {sections.map((s, i) => (
+          <a
+            key={i}
+            href={`#section-${i + 1}`}
+            className="lesson-progress-step"
+            data-progress-step
+            data-state={i < current ? "done" : i === current ? "now" : "todo"}
+            title={s.heading}
+            aria-label={s.heading}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?: string }) {
   const band = ageBandForClassroom(lesson.classroom);
+  const theme = BAND_THEME[band];
 
   return (
-    // #197: a lecke SAJÁT felületet kap (`bg-card` + `text-card-foreground`).
-    // Mérve élesben: enélkül a tartalom a téma `foreground` színét örökölte
-    // (rgb(2,8,23) — majdnem fekete), miközben a Preview keret háttere sötétkék,
-    // így 67/115 szövegelem kontrasztja 1.00–1.05 volt VILÁGOS ÉS SÖTÉT módban
-    // egyaránt. A felület-szín párban jár: aki hátteret ad, adja hozzá a rá
-    // szánt szövegszínt is, különben az öröklődés a másik témából hoz színt.
-    <div className="min-h-full bg-card text-card-foreground">
-      <article className="max-w-3xl mx-auto px-4 py-6 space-y-8" data-testid="lesson-runtime">
-        <header className="space-y-1">
-          <h1 className={BAND_STYLES[band].heading}>{lesson.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {lesson.subject} · {lesson.classroom}. osztály
-          </p>
+    // #197 + LS-9: the lesson brings its OWN surface AND ink via [data-band] tokens
+    // (lesson-theme.css). Measured live before #197: inheriting the app foreground gave
+    // 67/115 text elements a 1.00–1.05 contrast in both app modes. The band root pairs
+    // every background with its ink, so the app theme cannot break it.
+    <div className="min-h-full" data-band={band}>
+      <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
+        <header className="lesson-hero">
+          <div className="lesson-emblem" aria-hidden>
+            <Leaf className="w-7 h-7" />
+          </div>
+          <div className="min-w-0">
+            <h1 className={cn("lesson-heading leading-tight break-words", theme.heading)}>{lesson.title}</h1>
+            <div className="flex flex-wrap gap-2 mt-1.5">
+              <span className="lesson-chip">{lesson.subject}</span>
+              <span className="lesson-chip">{lesson.classroom}. osztály</span>
+            </div>
+          </div>
         </header>
+
+        <LessonProgress sections={lesson.sections} band={band} current={0} />
 
         {lesson.sections.map((section, si) => (
           <LessonSection

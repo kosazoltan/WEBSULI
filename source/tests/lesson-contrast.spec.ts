@@ -29,10 +29,17 @@ const ratio = (a: number, b: number) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
+// LS-9: a három korosztály három tokenkészletet kap, ezért mindhárom bandet külön mérjük.
+for (const { classroom, band } of [
+  { classroom: 2, band: "kid" },
+  { classroom: 7, band: "teen" },
+  { classroom: 11, band: "senior" },
+] as const)
 for (const mode of ["light", "dark"] as const) {
-  test(`a lecke minden szövege olvasható ${mode} módban (WCAG AA)`, async ({ page }) => {
+  test(`a lecke minden szövege olvasható ${mode} módban (WCAG AA) — ${band}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: mode });
-    await page.goto("/__lesson-runtime-probe");
+    await page.goto(`/__lesson-runtime-probe?classroom=${classroom}`);
+    await expect(page.locator(`[data-band="${band}"]`)).toHaveCount(1);
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(500);
 
