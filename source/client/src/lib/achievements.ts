@@ -21,7 +21,7 @@ const STORAGE_KEY = "websuli.achievements";
 const STATS_KEY = "websuli.lifetime-stats";
 const CHANGE_EVENT = "websuli:achievements-changed";
 
-export type AchievementCategory = "general" | "blockcraft" | "space" | "brainrot" | "quiz" | "streak";
+export type AchievementCategory = "general" | "blockcraft" | "space" | "brainrot" | "quiz" | "streak" | "tornado";
 
 export type Achievement = {
   /** Egyedi azonosító (pl. "first_diamond"). NE módosítsd később, mert tárolt. */
@@ -129,6 +129,13 @@ export const ACHIEVEMENT_CATALOG: Achievement[] = [
   { id: "daily_7", title: "Heti hős", description: "7 napos folyamatos streak.", icon: "🏅", category: "streak", points: 60, tier: "epic" },
   { id: "daily_30", title: "Havi legenda", description: "30 napos folyamatos streak.", icon: "🌟", category: "streak", points: 200, tier: "legendary" },
   { id: "daily_total_30", title: "30 nap összesen", description: "Összesen 30 napon teljesítettél daily-t.", icon: "📅", category: "streak", points: 80, tier: "epic" },
+
+  // --- TORNADO HUNTER 200 ---
+  { id: "tornado_first", title: "Első vihar", description: "Játssz egy kört a Tornado Hunter 200-ban.", icon: "🌪️", category: "tornado", points: 5, tier: "common" },
+  { id: "tornado_level_10", title: "Viharvadász", description: "Érd el a 10. szintet.", icon: "🌩️", category: "tornado", points: 20, tier: "common" },
+  { id: "tornado_level_50", title: "Tapasztalt vadász", description: "Érd el az 50. szintet.", icon: "⛈️", category: "tornado", points: 45, tier: "rare" },
+  { id: "tornado_level_100", title: "Vihar-veterán", description: "Érd el a 100. szintet.", icon: "🌀", category: "tornado", points: 80, tier: "epic" },
+  { id: "tornado_ultimate", title: "The Ultimate Storm", description: "Teljesítsd a 200. szintet.", icon: "🏆", category: "tornado", points: 200, tier: "legendary" },
 ];
 
 export const ACHIEVEMENT_BY_ID: Record<string, Achievement> = Object.fromEntries(
@@ -216,7 +223,7 @@ export function isUnlocked(id: string): boolean {
  * (vagy hagyhatja, az alap UI mutatja a profil-oldalon a piros pötty-jelölést).
  */
 export type RunStats = {
-  game: "block-craft-quiz" | "space-asteroid-quiz" | "brain-rot-steal" | "tsunami-english" | "word-ladder-hu-en" | "speed-quiz-math";
+  game: "block-craft-quiz" | "space-asteroid-quiz" | "brain-rot-steal" | "tsunami-english" | "word-ladder-hu-en" | "speed-quiz-math" | "tornado-hunter-200";
   xpGained: number;
   correctAnswers: number;
   wrongAnswers: number;
@@ -319,6 +326,15 @@ function checkAchievements(stats: LifetimeStats, run: RunStats): Achievement[] {
     tryUnlock("rot_50", stats.brainRotsCaught >= 50);
     tryUnlock("rot_200", stats.brainRotsCaught >= 200);
     tryUnlock("combo_4x", (run.maxComboMultiplier ?? 1) >= 4);
+  }
+
+  // --- Tornado Hunter 200 ---
+  if (run.game === "tornado-hunter-200") {
+    tryUnlock("tornado_first", true);
+    tryUnlock("tornado_level_10", (run.highestLevel ?? 0) >= 10);
+    tryUnlock("tornado_level_50", (run.highestLevel ?? 0) >= 50);
+    tryUnlock("tornado_level_100", (run.highestLevel ?? 0) >= 100);
+    tryUnlock("tornado_ultimate", run.fullClear === true);
   }
 
   if (newlyUnlocked.length > 0) {

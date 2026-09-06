@@ -83,6 +83,7 @@ const GAME_LABELS: Record<string, { name: string; emoji: string }> = {
   "speed-quiz-math": { name: "Gyors matek", emoji: "⚡" },
   "brain-rot-steal": { name: "Brain Rot", emoji: "🧠" },
   "space-asteroid-quiz": { name: "Aszteroida", emoji: "🚀" },
+  "tornado-hunter-200": { name: "Tornado Hunter", emoji: "🌪️" },
 };
 
 export default function ParentDashboardPanel() {

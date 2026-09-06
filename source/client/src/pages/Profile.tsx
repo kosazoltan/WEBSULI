@@ -28,6 +28,7 @@ const CATEGORY_LABELS: Record<Achievement["category"], string> = {
   space: "Galaktikus",
   brainrot: "Brain Rot",
   streak: "Daily / Sorozat",
+  tornado: "Tornado Hunter",
 };
 
 export default function Profile() {

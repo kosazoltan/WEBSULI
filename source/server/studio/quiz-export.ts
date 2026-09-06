@@ -26,6 +26,7 @@ export const COUPON_GAME_IDS = [
   "block-craft-quiz",
   "space-asteroid-quiz",
   "brain-rot-steal",
+  "tornado-hunter-200",
 ] as const;
 
 /** localId (lesson slug) → km_concepts.id (UUID), or null when the map has no such concept. */

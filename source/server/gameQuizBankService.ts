@@ -20,6 +20,7 @@ const ALLOWED_GAME_IDS = new Set([
   "word-ladder-hu-en",
   "block-craft-quiz",
   "space-asteroid-quiz",
+  "tornado-hunter-200",
 ]);
 
 export type GameQuizBankRow = {

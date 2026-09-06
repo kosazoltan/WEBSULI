@@ -13,6 +13,7 @@ import {
   Box,
   Brain,
   Rocket,
+  Tornado,
   Calendar,
   Award,
   Flame,
@@ -74,6 +75,9 @@ function normalizeGameId(id: string): string {
   ) {
     return "space-asteroid-quiz";
   }
+  if (k === "tornado-hunter-200" || k === "tornado-hunter" || k === "tornadohunter200") {
+    return "tornado-hunter-200";
+  }
   return k;
 }
 
@@ -84,6 +88,7 @@ const GAME_ICONS: Record<string, typeof Waves> = {
   "block-craft-quiz": Box,
   "brain-rot-steal": Brain,
   "space-asteroid-quiz": Rocket,
+  "tornado-hunter-200": Tornado,
 };
 
 const GAME_ACCENTS: Record<string, string> = {
@@ -93,6 +98,7 @@ const GAME_ACCENTS: Record<string, string> = {
   "block-craft-quiz": "from-lime-500 to-emerald-700",
   "brain-rot-steal": "from-purple-500 to-pink-600",
   "space-asteroid-quiz": "from-cyan-500 to-fuchsia-600",
+  "tornado-hunter-200": "from-sky-500 to-slate-600",
 };
 
 const PLAYABLE_IDS = new Set([
@@ -102,6 +108,7 @@ const PLAYABLE_IDS = new Set([
   "speed-quiz-math",
   "brain-rot-steal",
   "space-asteroid-quiz",
+  "tornado-hunter-200",
 ]);
 
 /** API / régi migráció szövegét felülírja (pl. „Hamarosan” helyett játszható leírás) */
@@ -128,6 +135,11 @@ const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }
     title: "Galaktikus Aszteroida Kvíz",
     description:
       "3D űrharc minden hullám és minden ütközés kvízt hoz a SAJÁT osztályod legutóbbi 3 tananyagából. Lődd ki az aszteroidákat, kristályokat, alien UFO-kat és ellenséges vadászgépeket!",
+  },
+  "tornado-hunter-200": {
+    title: "Tornado Hunter 200",
+    description:
+      "3D viharvadászat: 200 szint, 160 jármű, Storm Coin gazdaság. Keresd meg a tornádót, közelítsd meg biztonságosan, és a pontosztáskor autonóm matek/angol kvíz dönti el, sikerül-e a horgonyzás!",
   },
 };
 
@@ -190,6 +202,14 @@ const FALLBACK_CATALOG: GameCatalogRow[] = [
     description:
       "3D űrharc minden hullám és minden ütközés kvízt hoz a SAJÁT osztályod legutóbbi 3 tananyagából. Lődd ki az aszteroidákat, kristályokat, alien UFO-kat és ellenséges vadászgépeket!",
     sortOrder: 6,
+    createdAt: "",
+  },
+  {
+    id: "tornado-hunter-200",
+    title: "Tornado Hunter 200",
+    description:
+      "3D viharvadászat: 200 szint, 160 jármű, Storm Coin gazdaság. Keresd meg a tornádót, közelítsd meg biztonságosan, és a pontosztáskor autonóm matek/angol kvíz dönti el, sikerül-e a horgonyzás!",
+    sortOrder: 7,
     createdAt: "",
   },
 ];
@@ -503,6 +523,34 @@ export default function Games() {
                             </div>
                             <p className="text-sm text-white/70 leading-snug">{game.description}</p>
                             <p className="text-xs text-cyan-300/90 mt-2 font-medium">Indítás (osztály-választással) →</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </li>
+                );
+              }
+
+              if (playable && game.id === "tornado-hunter-200") {
+                return (
+                  <li key={game.id}>
+                    <Link href="/games/tornado-hunter-200">
+                      <Card className="glass-card border-white/20 hover:border-sky-400/50 transition-colors cursor-pointer group h-full">
+                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
+                          <div
+                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
+                          >
+                            <Icon className="w-7 h-7 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h2 className="text-lg font-bold text-white group-hover:text-sky-200 transition-colors">
+                                {game.title}
+                              </h2>
+                              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                            </div>
+                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
+                            <p className="text-xs text-sky-300/90 mt-2 font-medium">Viharvadászat indítása →</p>
                           </div>
                         </CardContent>
                       </Card>

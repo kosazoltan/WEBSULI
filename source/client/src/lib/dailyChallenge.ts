@@ -21,7 +21,8 @@ export type DailyGameId =
   | "brain-rot-steal"
   | "tsunami-english"
   | "word-ladder-hu-en"
-  | "speed-quiz-math";
+  | "speed-quiz-math"
+  | "tornado-hunter-200";
 
 const DAILY_GAMES: { id: DailyGameId; title: string; emoji: string }[] = [
   { id: "block-craft-quiz", title: "Kockavadász Quiz", emoji: "🧱" },
@@ -30,6 +31,7 @@ const DAILY_GAMES: { id: DailyGameId; title: string; emoji: string }[] = [
   { id: "tsunami-english", title: "Szökőár Szökés", emoji: "🌊" },
   { id: "word-ladder-hu-en", title: "Szólétra HU↔EN", emoji: "📚" },
   { id: "speed-quiz-math", title: "Speed Math Sprint", emoji: "⚡" },
+  { id: "tornado-hunter-200", title: "Tornado Hunter 200", emoji: "🌪️" },
 ];
 
 type DailyState = {

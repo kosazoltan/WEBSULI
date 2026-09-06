@@ -20,10 +20,10 @@ test("scheduledPublishing: a publikálás a html_files/user_id táblát frissít
 });
 
 test("games_catalog: a kliens által használt összes gameId-nek van katalógus-sora a migrációkban", () => {
-  const migrations = ["0002_add_game_scores.sql", "0003_games_wordladder_blockcraft.sql", "0007_games_catalog_asteroid_brainrot.sql"]
+  const migrations = ["0002_add_game_scores.sql", "0003_games_wordladder_blockcraft.sql", "0007_games_catalog_asteroid_brainrot.sql", "0012_games_catalog_tornado_hunter.sql"]
     .map((f) => read(join("migrations", f)))
     .join("\n");
-  for (const id of ["tsunami-english", "word-ladder-hu-en", "speed-quiz-math", "block-craft-quiz", "space-asteroid-quiz", "brain-rot-steal"]) {
+  for (const id of ["tsunami-english", "word-ladder-hu-en", "speed-quiz-math", "block-craft-quiz", "space-asteroid-quiz", "brain-rot-steal", "tornado-hunter-200"]) {
     assert.ok(migrations.includes(`'${id}'`), `games_catalog tartalmazza: ${id}`);
   }
 });

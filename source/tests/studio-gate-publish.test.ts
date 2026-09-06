@@ -11,6 +11,7 @@ import {
 } from "../server/studio/step-runner";
 import type { MapConcept } from "../server/studio/coverage";
 import type { LektorNote } from "../server/studio/lektor";
+import { COUPON_GAME_IDS } from "../server/studio/quiz-export";
 
 /**
  * Audit 2026-09-05 (spec: docs/specs/audit-4day-fixes-2026-09-05.md, szelet A).
@@ -138,7 +139,11 @@ test("gate pass: a lecke publikálódik (html_files, publishedAt, coverage, kví
   assert.equal(pub.title, "A sejt");
   assert.equal(pub.classroom, 7);
   assert.equal(pub.coverage.core.ratio, 1);
-  assert.equal(pub.quizItems.length, 4 * 1, "1 fogalom-kötött check × 4 kupon-motoros játék");
+  assert.equal(
+    pub.quizItems.length,
+    COUPON_GAME_IDS.length * 1,
+    `1 fogalom-kötött check × ${COUPON_GAME_IDS.length} kupon-motoros játék`,
+  );
   // #178: the FK column gets the km_concepts UUID, never the lesson's local slug.
   assert.ok(pub.quizItems.every((q) => q.conceptId === "uuid-c1"), "conceptId = km_concepts.id (UUID), nem 'c1'");
   const job = await store.loadJob("job-1");
