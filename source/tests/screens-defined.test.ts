@@ -120,7 +120,7 @@ test("every responsive variant prefix used in the client is a defined breakpoint
 
 test("the breakpoints the app already relies on are declared", () => {
   const screens = declaredScreens();
-  for (const required of ["xs", "fold", "tablet", "foldable", "uw"]) {
+  for (const required of ["xs", "fold", "tablet", "foldable", "uw", "coarse"]) {
     assert.ok(screens.has(required), `missing screen definition: ${required}`);
   }
 });

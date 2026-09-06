@@ -87,6 +87,8 @@ import {
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
 import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
+import { stepVehicle, STOPPED_SPEED } from "@/lib/tornado/drive";
+import { readStandardGamepad } from "@/lib/tornado/gamepad";
 import {
   toggleCamera,
   escAction,
@@ -969,6 +971,7 @@ function PlayScreen(props: {
   const recentQuizRef = useRef<string[]>([]);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   const touchRef = useRef({ fwd: false, back: false, left: false, right: false });
+  const padAnchorPrevRef = useRef(false);
   const finishedRef = useRef(false);
   const materialRef = useRef<Question[]>(materialQuestions);
   materialRef.current = materialQuestions;
@@ -1225,7 +1228,7 @@ function PlayScreen(props: {
     const p = playerRef.current;
     const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
     // Must be roughly stopped to anchor.
-    if (Math.abs(p.speed) > fromKm(0.02)) {
+    if (Math.abs(p.speed) > STOPPED_SPEED) {
       setAnchorMsg("Előbb állj meg a horgonyzáshoz!");
       sfxWarning();
       scheduleTimeout(() => setAnchorMsg(null), 1600);
@@ -1416,36 +1419,44 @@ function PlayScreen(props: {
       // --- vehicle control ---
       const p = playerRef.current;
       const upg = upgradesFor(props.progress, props.vehicle.id);
-      const accel = fromKm(props.vehicle.acceleration * 0.0016 * statMultiplier(upg, "engine"));
-      const maxSpeed = fromKm(props.vehicle.speed / 3600) * 60; // km/h → units/frame-ish scaled
-      const turn = 1.4 * (props.vehicle.handling / 80) * statMultiplier(upg, "suspension");
       const grip = gripAt(p.x, p.z);
 
       const k = keysRef.current;
       const t = touchRef.current;
-      const throttle = (k.fwd || t.fwd ? 1 : 0) - (k.back || t.back ? 1 : 0);
-      const steer = (k.right || t.right ? 1 : 0) - (k.left || t.left ? 1 : 0);
+      const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
+      const pad = readStandardGamepad(pads[0] ?? pads[1] ?? null);
+      if (pad.anchor && !padAnchorPrevRef.current) tryAnchorRef.current();
+      padAnchorPrevRef.current = pad.anchor;
+
+      const throttle = clampStick(
+        (k.fwd || t.fwd ? 1 : 0) - (k.back || t.back ? 1 : 0) + pad.throttle,
+      );
+      const steer = clampStick(
+        (k.right || t.right ? 1 : 0) - (k.left || t.left ? 1 : 0) + pad.steer,
+      );
 
       if (!p.anchored) {
-        p.speed += throttle * accel * 60 * dt;
-        if (k.brake) p.speed *= 1 - Math.min(1, dt * 4);
-        // Drag + surface friction.
-        p.speed *= 1 - Math.min(1, dt * (0.6 + (1 - grip) * 1.6));
-        p.speed = Math.max(-maxSpeed * 0.4, Math.min(maxSpeed, p.speed));
-        if (Math.abs(p.speed) > fromKm(0.02)) {
-          p.heading += steer * turn * dt * Math.sign(p.speed) * grip;
-        }
-        const nx = clampToWorld(p.x + Math.sin(p.heading) * p.speed * dt);
-        const nz = clampToWorld(p.z - Math.cos(p.heading) * p.speed * dt);
-        // Wind pushes the vehicle sideways near the funnel.
         const windPush = windForceOn(windRef.current, props.vehicle.windResistance) * dt * 30;
         const windAngle = (windRef.current.windDirection * Math.PI) / 180;
-        const px = clampToWorld(nx + Math.cos(windAngle) * windPush);
-        const pz = clampToWorld(nz + Math.sin(windAngle) * windPush);
-        const moved = Math.hypot(px - p.x, pz - p.z);
+        const next = stepVehicle(
+          p,
+          { throttle, steer, brake: k.brake || pad.brake },
+          dt,
+          {
+            speedKmh: props.vehicle.speed,
+            acceleration: props.vehicle.acceleration * statMultiplier(upg, "engine"),
+            handling: props.vehicle.handling * statMultiplier(upg, "suspension"),
+            grip,
+            windPush,
+            windAngle,
+          },
+        );
+        const moved = Math.hypot(next.x - p.x, next.z - p.z);
         distanceTravelledRef.current += toKm(moved);
-        p.x = px;
-        p.z = pz;
+        p.x = next.x;
+        p.z = next.z;
+        p.heading = next.heading;
+        p.speed = next.speed;
       } else {
         p.speed = 0;
       }
@@ -1545,7 +1556,7 @@ function PlayScreen(props: {
         windDir: w.windDirection,
         maxWind: Math.round(w.maximumWindSpeed),
         distanceKm: distKm,
-        anchorReady: distKm >= spec.anchorBand.min && distKm <= spec.anchorBand.max && Math.abs(p.speed) < fromKm(0.02),
+        anchorReady: distKm >= spec.anchorBand.min && distKm <= spec.anchorBand.max && Math.abs(p.speed) < STOPPED_SPEED,
         surface: surfaceAt(p.x, p.z),
         timeLeft: timeLeftRef.current,
         stormPct: Math.min(100, (w.currentWindSpeed / spec.windPeak) * 100),
@@ -1706,6 +1717,17 @@ function PlayScreen(props: {
           )}
 
           {/* Result overlay */}
+          <TouchControls
+            leftHanded={props.progress.settings.leftHanded}
+            touchRef={touchRef}
+            onAnchor={() => tryAnchorRef.current()}
+            onCamera={() => {
+              const next = toggleCamera(settingsRef.current.cameraMode);
+              settingsRef.current = { ...settingsRef.current, cameraMode: next };
+              props.onProgress(updateSettings(props.progress, { cameraMode: next }));
+            }}
+          />
+
           {result && (
             <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4">
               <div className="w-full max-w-sm rounded-xl border border-white/15 bg-slate-900/95 p-5 text-center">
@@ -1741,18 +1763,6 @@ function PlayScreen(props: {
             </div>
           )}
         </div>
-
-        {/* Touch controls */}
-        <TouchControls
-          leftHanded={props.progress.settings.leftHanded}
-          touchRef={touchRef}
-          onAnchor={() => tryAnchorRef.current()}
-          onCamera={() => {
-            const next = toggleCamera(settingsRef.current.cameraMode);
-            settingsRef.current = { ...settingsRef.current, cameraMode: next };
-            props.onProgress(updateSettings(props.progress, { cameraMode: next }));
-          }}
-        />
       </CardContent>
     </Card>
   );
@@ -1832,16 +1842,19 @@ function TouchControls(props: {
   );
 
   return (
-    <div className="sm:hidden flex items-center justify-between px-1">
+    <div
+      data-testid="tornado-touch-controls"
+      className="absolute inset-x-0 bottom-2 z-20 hidden coarse:flex items-end justify-between gap-2 px-2 pointer-events-none"
+    >
       {props.leftHanded ? (
         <>
-          {pedals}
-          {steer}
+          <div className="pointer-events-auto">{pedals}</div>
+          <div className="pointer-events-auto">{steer}</div>
         </>
       ) : (
         <>
-          {steer}
-          {pedals}
+          <div className="pointer-events-auto">{steer}</div>
+          <div className="pointer-events-auto">{pedals}</div>
         </>
       )}
     </div>
@@ -1868,4 +1881,8 @@ function TouchBtn(props: {
       {props.label}
     </button>
   );
+}
+
+function clampStick(v: number): number {
+  return Math.max(-1, Math.min(1, v));
 }

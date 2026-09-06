@@ -26,6 +26,9 @@ export default {
         tablet: "768px",
         foldable: "900px",
         uw: "1600px",
+        // Touch primary (phones, including landscape ≥640px). Width breakpoints
+        // hid Tornado Hunter's control bar on every phone in landscape.
+        coarse: { raw: "(pointer: coarse)" },
       },
       fontFamily: {
         // ✅ MAGYAR ÉKEZET-BARÁT FONTOK
