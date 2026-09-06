@@ -1,0 +1,85 @@
+{
+ "_comment": "#190 — ROGZITETT OCR-atiratok valodi kezirasos matek-lapokrol (merve 2026-09-06, OpenRouter). A teszt EZEKBOL szamol ujra, halozat NELKUL — igy a modellvalasztast indoklo szam reprodukalhato. A keyTokens '|' jele alternativakat jelol (barmelyik talalat eleg). Uj modell felvetele: futtasd le a harom lapon es tedd be ide a NYERS atiratot.",
+ "pages": {
+  "IMG-f88cd6d7d2a9ce88fbab8980afee9446-V_1_9c00f2.jpg": {
+   "tema": "Trapez terulete + kor kerulete/terulete, pi irracionalitasa",
+   "keyTokens": [
+    "trapez|T_Tr|Tr",
+    "a+c",
+    "ma",
+    "kor",
+    "kerulete",
+    "terulete",
+    "2r|2*r|2 r",
+    "pi|π",
+    "d=2r|d = 2r",
+    "r^2|r²",
+    "irracionalis",
+    "szakaszos",
+    "tizedestort",
+    "3,14",
+    "4 cm|4cm",
+    "8",
+    "16",
+    "cm^2|cm²"
+   ]
+  },
+  "IMG-5fd260a497ca75295451927728730fb5-V_1_d8cc12.jpg": {
+   "tema": "Haromszog terulete, teglalap, derekszogu haromszog",
+   "keyTokens": [
+    "haromszog",
+    "terulete",
+    "a * ma|a*ma|a ma",
+    "b * mb|b*mb|b mb",
+    "c * mc|c*mc|c mc",
+    "K = a + b + c|a+b+c",
+    "teglalap",
+    "derekszogu",
+    "T_D|TD",
+    "T1",
+    "T2",
+    "ma"
+   ]
+  },
+  "IMG-4223f652ff00a3688f47173700c4d026-V_1_646fdf.jpg": {
+   "tema": "300. oldal feladatok: haromszog teruletek, mertekegyseg-atvaltas (ha/km2)",
+   "keyTokens": [
+    "300",
+    "oldal",
+    "1,5",
+    "400",
+    "0,4",
+    "2 km|2km",
+    "km^2|km2",
+    "1 ha|1ha",
+    "0,001",
+    "b*mb|b mb",
+    "a*ma|a ma",
+    "ma",
+    "alpha|α|a"
+   ]
+  }
+ },
+ "transcripts": {
+  "qwen/qwen3-vl-32b-instruct": {
+   "IMG-f88cd6d7d2a9ce88fbab8980afee9446-V_1_9c00f2.jpg": "Téglalap:  \na  \nc  \nd / ma / b, m² / d  \na c  \n\nTₜᵣ = Tₕₑᵣ = (a+c)·ma / 2  \n\nJóvá Hétfő T₂  \nA kör kerülete, területe  \n\nk = 2·r·π = d·π  (d = 2·r)  \nT = r²·π  \n\nπ ∈ ℚ* (Irracionális) – végtelen nem szakaszos tizedes tört  \n\nπ ≈ 3,14  \n\n2484  \na = 4 cm  \nk = 2·r·π = 2·4·π = 8π (cm)  \nT = 4²·π = 16π (cm²)",
+   "IMG-5fd260a497ca75295451927728730fb5-V_1_d8cc12.jpg": "Háromszög területe\n\nT = a · ma / 2 (= b · mb / 2 = c · mc / 2)\n\nK = a + b + c\n\nTéglalap: T = a · b\nDerékszögű Δ = ?\n\na\nb\n90°\n\nT_D = a · b =\n2T_1 + 2T_2 / 2\na · ma / 2 = a · b / 2\n= T_1 + T_2\n\nA\nT_2\nT_2\nma\nT_1\nT_1\nD\na\nC\nb = ma\n\na\nb\na\nb\na\nb\na\nb",
+   "IMG-4223f652ff00a3688f47173700c4d026-V_1_646fdf.jpg": "300 oldal 1 K\n\n2/\na) 2·2 / 2 = 2\nb) 2·2 / 2 = 3·5 / 2 = 1,5\nc) 2·2 / 2 = 2\nd) 4·1 / 2 = 2\ne) 3·1 / 2 = 1,5\nf) 4·1 / 2 = 2\n\n3/\nc\na\nb = ma\n\nT = b · mb / 2 =\n= 0,4 · x / 2 =\n= 0,4 km²\n\na = 400m = 0,4 km\nb = 2 km = 2000m\nT = 0,4 km² (km²)\n\n1 ha = 0,001 km²\nm = (t)\n\nT = a · ma / 2 = 0,4 / 2\n= 0,4 km²"
+  },
+  "google/gemini-3.1-flash-lite": {
+   "IMG-f88cd6d7d2a9ce88fbab8980afee9446-V_1_9c00f2.jpg": "a\nc\nd ma d\na c\n\nTr= Tb+Tc / 2 = (a+c)ma / 2\n\nHétfő\nJövő T2\nA kör kerülete, területe\n\nK = 2r π = d π (d=2r)\nT = r² π\n\nπ ∈ Q* (Irracionális) - végtelen nem\nszakaszos\ntizedes-\n tört\n\nπ ≈ 3,14\n\n2484\na, r = 4 cm\nK = 2·r·π = 2·4·π = 8π (cm)\nT = r²·π = 4²·π = 16π (cm²)",
+   "IMG-5fd260a497ca75295451927728730fb5-V_1_d8cc12.jpg": "Háromszög területe\nT = a · ma / 2 (= b · mb / 2 = c · mc / 2)\nK = a + b + c\nTéglalap: T = a · b\nDerékszögű Δ = 2T\nT = a · b / 2\nb = ma\nT = a · b / 2\nTo = a · b = 2T1 + 2T2 / 2\na · ma / 2 = a · b / 2 = T1 + T2\na\nb\nA\nT2\nT2\nma\nT1\nT1\na\nb\na\na\nb\nA\nc",
+   "IMG-4223f652ff00a3688f47173700c4d026-V_1_646fdf.jpg": "300 oldal TK\n\n21.\na) 2.2 / 2 = 2\nb) 2.2 / 2 = 3.1 / 2 = 1,5\nc) 2.2 / 2 = 2\nd) 4.1 / 2 = 2\ne) 3.1 / 2 = 1,5\nf) 4.1 / 2 = 2\n\n3.\nT = b.mb / 2 =\n= 2.0,1 / 0,4.2 / 2 =\n= 0,4 km²\n\na = 400m = 0,4 km\nb = 2 km = 2000m\nT = 0,4.km² (km²)\n\n1 ha = 0,001 km²\nm = (t)\nT = a.ma / 2 = 0,4 / 8 =\n= 0,4 km²"
+  },
+  "z-ai/glm-5.3-flash": {
+   "IMG-f88cd6d7d2a9ce88fbab8980afee9446-V_1_9c00f2.jpg": "a\nc\nd  ma  b·mi·  d\na  c\n\nT tr = T BAPT = (a+c)·ma / 2\n\nJóó HELPÖ T Z\nA kör kerülete, területe\n\nK = 2 m π = d·π   (d = 2m)\nT = r²·π\n\nπ ∈ Q* (irracionális) — végtelen nem\n                              szakaszos\n                              tizedes —\n                              tört\n\nπ ≈ 3,14\n\n248 4\na) r = 4 cm\nK = 2·m·π = 2·4·π = 8π (cm)\nT = 4²·π = 16π (cm²)",
+   "IMG-5fd260a497ca75295451927728730fb5-V_1_d8cc12.jpg": "Háromszög területe\n\nT = a·ma / 2    (= b·mb / 2, = c·mc / 2)\n\nK = a + b + c\n\nTéglalap: T = ...\nDerékszögű △ = ...\n\na\nb\n\nma\n\nTD = a·b =\n2T₁ + 2T₂/2\na·ma / 2 = a·b / 2 =\n= T₁ + T₂\n\nT₂    A    T₄\n   T₂   ma\n        T₁\nB            C\n     a\n\na    b\na",
+   "IMG-4223f652ff00a3688f47173700c4d026-V_1_646fdf.jpg": "300 oldal TK\n\n2.\na) 2·2/2 = 2\nb) 3·1/2 = 1,5\nc) 2·2/2 = 2\nd) 4·1/2 = 2\ne) 3·1/2 = 1,5\nf) 4·1/2 = 2\n\n3.\n[c triangle: a, c, b = m_a]\nb = m_a\n\nT = b·m_b / 2 =\n= 2·0,1·4 / 0,4·4/2... \n\na = 400 m = 0,4 km\nb = 2 km ≠ 2000 m\nT = 0,4 km (km²\n\n1 ha = 0,001 km²\nm = (4)\n\nT = a·m_a / 2 = 0,4/2\n= 0,4 km²\n\n= 0,4 km²"
+  }
+ },
+ "measured": {
+  "qwen/qwen3-vl-32b-instruct": 0.9259,
+  "google/gemini-3.1-flash-lite": 0.9024,
+  "z-ai/glm-5.3-flash": 0.8675
+ }
+}

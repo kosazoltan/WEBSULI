@@ -38,11 +38,14 @@ function envVarName(step: StudioStep): string {
  */
 const DEFAULT_MODELS: Record<StudioStep, string> = {
   extract: "openai/gpt-5.6-terra", // vision + verbatim quoting
-  // #190 (mérve 2026-09-06, 3 valódi kézírásos matek-lapon, kulcs-token recall):
-  //   qwen3-vl-32b-instruct  96.3%   <- ez
-  //   gemini-3.1-flash-lite  93.5%
-  //   glm-5.3-flash          88.2%   (a korábbi elsődleges)
-  // A tulajdonos kézírásos jegyzeteket is feltölt, és >=95% felismerést kért.
+  // #190 (mérve 2026-09-06, 3 valódi kézírásos matek-lapon, kulcs-token recall;
+  //  a mérés REPRODUKÁLHATÓ: tests/studio-ocr-recall.test.ts a rögzített
+  //  átiratokból számol újra, hálózat nélkül):
+  //   qwen3-vl-32b-instruct  92.6%   <- ez
+  //   gemini-3.1-flash-lite  90.2%
+  //   glm-5.3-flash          86.8%   (a korábbi elsődleges)
+  // A tulajdonos kézírásos jegyzeteket is feltölt, és >=95% felismerést kért:
+  // ez a cél a mezőnyben NINCS elérve, a legjobb elérhető opciót választjuk.
   // A glm az `r`-t rendszeresen `m`-nek olvasta (r=4cm -> m=4cm), ami a
   // fogalmak idézet-ellenőrzését is elbuktatta.
   ocr: "qwen/qwen3-vl-32b-instruct",
@@ -56,7 +59,7 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
 
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   extract: "x-ai/grok-4.6",
-  // #190: a mért második helyezett (93.5%), más családból mint az elsődleges.
+  // #190: a mért második helyezett (90.2%), más családból mint az elsődleges.
   ocr: "google/gemini-3.1-flash-lite",
   pedagogue: "openai/gpt-5.6-terra",
   // Audit 2026-09-05 (D): was qwen/qwen3.8-max == the lektor PRIMARY — on author failover

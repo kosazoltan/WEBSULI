@@ -19,9 +19,10 @@ test("az ocr alapmodellje olcsó vision-képes modell, nem az extract modellje",
   assert.notEqual(ocr, extract, "az OCR nem a drága extract-modellen fut");
   // #190: a korábbi `/flash|mini|lite/` NÉV-minta hazug kapu volt — a modell
   // olcsósága nem a nevéből következik. A mért OpenRouter-ár (2026-09-06):
-  //   qwen/qwen3-vl-32b-instruct  $0.104/M input   <- ez, 96.3% kézírás-recall
-  //   z-ai/glm-5.3-flash          $0.075/M         (88.2%, `r`-t `m`-nek olvasta)
+  //   qwen/qwen3-vl-32b-instruct  $0.104/M input   <- ez, 92.6% kézírás-recall
+  //   z-ai/glm-5.3-flash          $0.075/M         (86.8%, `r`-t `m`-nek olvasta)
   //   openai/gpt-5.6-terra        $2.000/M         (az extract modellje)
+  // A recall-mérés a studio-ocr-recall tesztben reprodukálható.
   // A szabály tehát: az OCR olcsó OSZTÁLYBAN marad — ismert olcsó modellek
   // listája, amit ár-méréssel bővítünk, nem névtalálgatással.
   const CHEAP_VISION_MODELS = [
