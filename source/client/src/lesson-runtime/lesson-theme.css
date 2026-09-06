@@ -388,6 +388,24 @@
   background: var(--lesson-bg);
   color: var(--lesson-ink);
 }
+/* shadcn `outline` buttons (dragSort ↑↓, match, reset) are orange-on-white; on the stage
+   they take line/accent tokens. Measured live (Kristóf lesson, dragSort block) — the
+   single-section probe had no dragSort, so the probe lesson now carries one. */
+[data-band] .border-orange-300 {
+  background: var(--lesson-surface);
+  color: var(--lesson-accent);
+  border-color: var(--lesson-line);
+  backdrop-filter: none;
+}
+[data-band] .border-orange-300:hover:not(:disabled) {
+  background: var(--lesson-bg);
+  color: var(--lesson-accent);
+  border-color: var(--lesson-accent);
+}
+[data-band] .border-orange-300:disabled {
+  opacity: 0.4;
+}
+
 /* shadcn primary buttons (try-block "Ellenőrzés", Próba submit) are an orange gradient;
    on the dark stage they take the band accent instead — measured leak on senior@1280. */
 [data-band] .bg-gradient-to-r {

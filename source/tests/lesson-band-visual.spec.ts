@@ -107,3 +107,50 @@ test("no-preference → legalább 1 animált elem (VAN animáció, és kapuzott)
       [...document.querySelectorAll('[data-testid="lesson-runtime"] *')].filter((e) => getComputedStyle(e).animationName !== "none").length);
     expect(n).toBeGreaterThan(0);
 });
+
+/**
+ * Világos téma-szivárgás a sötét színpadon. Élesben (Kristóf-lecke) a dragSort ↑↓ gombok
+ * fehér/narancs shadcn-outline stílusban jelentek meg — a kontrasztmérő ezt ÁTENGEDI (a
+ * narancs a fehéren olvasható), csak a szem látta. Ez a kapu a színpad minden látható
+ * dobozának hátterét méri: a C·divergens irányban egyik sem lehet világos.
+ */
+for (const { classroom, band } of BANDS) {
+  test(`${band}: egyetlen elem sem hoz világos hátteret a sötét színpadra`, async ({ page }) => {
+    await openProbe(page, classroom);
+    const leaks = await page.evaluate(() => {
+      const lum = (c: string) => {
+        const m = c.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
+        if (!m) return null;
+        const a = m[4] === undefined ? 1 : Number(m[4]);
+        if (a < 0.5) return null;
+        const f = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+        return 0.2126 * f(+m[1]) + 0.7152 * f(+m[2]) + 0.0722 * f(+m[3]);
+      };
+      const out: string[] = [];
+      document.querySelectorAll('[data-testid="lesson-runtime"] *').forEach((el) => {
+        const st = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        if (r.width < 12 || r.height < 12) return;
+        const bg = lum(st.backgroundColor);
+        // a saját téma két gradiense (kid hero radial, senior ruled bg) nem szivárgás
+        const own = el.classList.contains("lesson-hero") || el.hasAttribute("data-band");
+        const hasGradient = st.backgroundImage.includes("gradient") && !own;
+        // akcent-felületek (chip, kulcs, fejléc, emblem, gomb) világosak lehetnek: sárga/cián/égszín
+        const accent = st.getPropertyValue("--lesson-accent").trim().toLowerCase();
+        const rgbOf = (hex: string) => { const n = parseInt(hex.slice(1), 16); return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`; };
+        const isAccent = accent.startsWith("#") && st.backgroundColor === rgbOf(accent);
+        const okCol = st.getPropertyValue("--lesson-ok").trim().toLowerCase();
+        const isOk = okCol.startsWith("#") && st.backgroundColor === rgbOf(okCol);
+        const head = st.getPropertyValue("--lesson-check-head").trim().toLowerCase();
+        const isHead = head.startsWith("#") && st.backgroundColor === rgbOf(head);
+        if (isAccent || isOk || isHead) return;
+        if ((bg !== null && bg > 0.35) || hasGradient) {
+          out.push(`${el.tagName.toLowerCase()}[${(el.getAttribute("class") ?? "").slice(0, 50)}] bg=${st.backgroundColor} img=${st.backgroundImage.slice(0, 30)}`);
+        }
+      });
+      return out;
+    });
+    expect(leaks, `világos hátterű elemek a színpadon: ${leaks.join(" | ")}`).toEqual([]);
+  });
+}
+

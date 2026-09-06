@@ -78,6 +78,15 @@ const PROBE_LESSON: Lesson = {
           coversConceptIds: ["c1"],
         },
         {
+          kind: "try",
+          tryKind: "dragSort",
+          spec: {
+            prompt: "Rendezd a folyamat lépéseit helyes sorrendbe:",
+            items: ["Fény éri a levelet", "A kloroplasztisz energiát köt meg", "Szerves anyag keletkezik"],
+          },
+          coversConceptIds: ["c1"],
+        },
+        {
           kind: "recap",
           bullets: [
             "A fotoszintézis a kloroplasztiszokban zajlik.",
