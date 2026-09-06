@@ -24,6 +24,7 @@ import {
 } from "./step-runner";
 import { conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
 import { MAX_CHAIN_STEPS } from "./pipeline";
+import { fromMapBody } from "./from-map-body";
 import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
 import {
   createRun as createRunBase,
@@ -167,10 +168,7 @@ async function drive(jobId: string): Promise<void> {
   );
 }
 
-const fromMapBody = z.object({
-  subject: z.string().trim().min(1).max(120),
-  classroom: z.number().int().min(0).max(12),
-});
+/* fromMapBody moved to ./from-map-body (#180) so the unit test can import it DB-free. */
 
 /**
  * POST /api/studio/lessons/one-step — LS-6 (#164): upload → map → lesson in one call.
@@ -447,7 +445,9 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
       .json({ message: "Hibás kérés.", issues: parsed.error.issues.map((i) => i.message) });
   }
 
-  const started = await startJobFromMap(req.params.mapId, parsed.data);
+  // #180: `{}` (the Studio panel's body) means "the map's own scope".
+  const scope = parsed.data && "subject" in parsed.data ? parsed.data : undefined;
+  const started = await startJobFromMap(req.params.mapId, scope);
   if (!started.ok) return res.status(409).json({ message: started.reason });
 
   await drive(started.jobId);
