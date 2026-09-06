@@ -65,6 +65,29 @@ test("OutlineSchema: üres conceptIds nem fogadható el", () => {
   assert.equal(parsed.success, false);
 });
 
+// #181 — measured live (job 88f3a8f7, 2026-09-06): grok-4.6 wrote a 130+ char animation
+// suggestion, the strict max(120) rejected the WHOLE otherwise-valid outline and the job
+// died with "A vázlat alakilag hibás". The field is advisory input for the animator only,
+// so an over-long hint is clamped, never a reason to lose a paid pedagogue round.
+test("OutlineSchema: túl hosszú animationSuggestions nem buktat, hanem 120-ra vágódik (#181)", () => {
+  const long = "x".repeat(300);
+  const parsed = outlineSchema.safeParse({
+    sections: [{ heading: "X", conceptIds: ["c1"], plannedBlocks: ["explain"], animationSuggestions: [long, "rövid"] }],
+  });
+  assert.equal(parsed.success, true, JSON.stringify(!parsed.success && parsed.error.issues));
+  if (parsed.success) {
+    assert.equal(parsed.data.sections[0].animationSuggestions[0].length, 120);
+    assert.equal(parsed.data.sections[0].animationSuggestions[1], "rövid");
+  }
+});
+
+test("OutlineSchema: üres animationSuggestion továbbra is hiba (nem lett bármit-elfogadó)", () => {
+  const parsed = outlineSchema.safeParse({
+    sections: [{ heading: "X", conceptIds: ["c1"], plannedBlocks: ["explain"], animationSuggestions: ["   "] }],
+  });
+  assert.equal(parsed.success, false);
+});
+
 test("outlineCoversMap: core 100% + supporting 100% → ok", () => {
   const out = outlineCoversMap(GOOD_OUTLINE.sections, MAP);
   assert.equal(out.ok, true);

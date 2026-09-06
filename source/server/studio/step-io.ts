@@ -24,7 +24,13 @@ export const outlineSectionSchema = z.object({
   plannedBlocks: z
     .array(z.enum(["explain", "example", "check", "recap", "animate", "try"]))
     .min(1),
-  animationSuggestions: z.array(z.string().trim().min(1).max(120)).default([]),
+  /**
+   * Advisory hints for the animator only — never a reason to reject the outline (#181:
+   * a 130-char hint from the model threw away a whole paid pedagogue round). Clamped.
+   */
+  animationSuggestions: z
+    .array(z.string().trim().min(1).transform((s) => s.slice(0, 120)))
+    .default([]),
 });
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
