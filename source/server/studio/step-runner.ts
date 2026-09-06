@@ -841,13 +841,26 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       // #174: a kihúzott (rejected) fogalom nem tananyag — a vázlat-lefedettség
       // és a fogalom-javítás sem követelheti.
       const concepts = await db
-        .select({ id: kmConcepts.id, localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
+        // #196: a `term` KELL a megalapozottság-ellenőrzéshez (grounding.ts) —
+        // enélkül a kapu némán nem mérne semmit, ami pontosan az a hazug-kapu
+        // minta, amit ez a jegy megszüntet.
+        .select({
+          id: kmConcepts.id,
+          localId: kmConcepts.localId,
+          term: kmConcepts.term,
+          examWeight: kmConcepts.examWeight,
+        })
         .from(kmConcepts)
         .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
 
       return {
         meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom },
-        concepts: concepts.map((c) => ({ id: c.id, localId: c.localId, examWeight: c.examWeight as ExamWeight })),
+        concepts: concepts.map((c) => ({
+          id: c.id,
+          localId: c.localId,
+          term: c.term,
+          examWeight: c.examWeight as ExamWeight,
+        })),
       };
     },
 
@@ -1000,7 +1013,12 @@ export async function fixConceptOnLesson(
   if (!mapRow) return { ok: false, error: "A lecke fogalomtérképe nem található." };
 
   const conceptRows = await db
-    .select({ id: kmConcepts.id, localId: kmConcepts.localId, examWeight: kmConcepts.examWeight })
+    .select({
+      id: kmConcepts.id,
+      localId: kmConcepts.localId,
+      term: kmConcepts.term, // #196: a megalapozottság-ellenőrzéshez kell
+      examWeight: kmConcepts.examWeight,
+    })
     .from(kmConcepts)
     .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
 

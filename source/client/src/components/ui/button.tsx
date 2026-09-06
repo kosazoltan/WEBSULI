@@ -10,7 +10,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 hover:-translate-y-0.5 border border-orange-400/20",
+          // #197: a gradiens `from-orange-500 to-amber-500` fehér felirattal csak
+          // 2.80 / 2.15 kontrasztot adott (WCAG AA: 4.5). MÉRVE a kirajzolt
+          // pixeleken az élő leckében: 2.73. Egy fokkal sötétebb árnyalat
+          // (orange-700 = 5.18, amber-700 = 5.02) megtartja a narancs karaktert,
+          // de olvashatóvá teszi a feliratot — gyerekek használják.
+          "bg-gradient-to-r from-orange-700 to-amber-700 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 hover:-translate-y-0.5 border border-orange-400/20",
         destructive:
           "bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-lg shadow-red-500/25 hover:shadow-red-500/40 hover:-translate-y-0.5 border border-red-400/20",
         outline:

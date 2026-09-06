@@ -92,7 +92,20 @@ const SCOPE_PROMPT = [
   "You are given a Hungarian primary/secondary school teaching source (text and/or images).",
   'Answer with a single JSON object, nothing else: {"subject": "<tantárgy magyarul>",',
   '"classroom": <0-12 integer>, "title": "<rövid magyar cím>"}.',
-  "Pick the classroom the material is most likely written for.",
+  // #196 (mérve élesben): a korábbi „Pick the classroom the material is most
+  // likely written for" találgatásra hívott. A 8. osztályos geometria-forrásra
+  // (háromszög területe, kör kerülete, körgyűrű, (n-2)·180°) a modell 4-et adott,
+  // és a lecke végig 4. osztályos szinten készült el.
+  "Determine the classroom ONLY from the mathematical/technical content that is actually",
+  "visible in the source. Ignore handwriting quality and page layout — a messy page is not",
+  "a sign of a younger pupil.",
+  "Anchor on the HARDEST concept present: it sets the year, because a source is not used",
+  "before its topics are taught. Examples of Hungarian curriculum anchors:",
+  "  area/perimeter formulas with variables (T = a·m/2), π, circle area/circumference,",
+  "  Pythagoras, powers, irrational numbers → grades 7-8, NOT grade 3-4;",
+  "  place value, written addition/subtraction, simple fractions → grades 2-4.",
+  "If the evidence is ambiguous, choose the HIGHER grade: teaching below the pupil's level",
+  "is the worse error.",
 ].join(" ");
 
 /** Parse the model's scope guess; clamp classroom; never throw. */
@@ -117,7 +130,7 @@ export async function inferScope(files: ExtractorFile[], callModel: ScopeModelFn
 
 type ScopeContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string; detail: "low" } };
+  | { type: "image_url"; image_url: { url: string; detail: "low" | "high" } };
 
 /**
  * A scope-hívás kérés-paraméterei — külön függvényben, mert a #165 gyökér-ok
@@ -153,7 +166,11 @@ export async function callScopeModel(files: ExtractorFile[], model: string): Pro
 
   const parts: ScopeContentPart[] = [];
   for (const file of files) {
-    if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "low" } });
+    // #196: `detail: "low"` mellett a modell a kézírásos képleteket (T = a·ma/2,
+    // r²π) nem tudja elolvasni, csak a lap "külalakját" látja — a 8. osztályos
+    // geometria-forrásra ezért adott 4. osztályt. Az osztály meghatározása a
+    // TARTALOMTÓL függ, tehát a tartalomnak olvashatónak kell lennie.
+    if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "high" } });
     else parts.push({ type: "text", text: file.content.slice(0, 4000) });
   }
 

@@ -295,23 +295,31 @@ export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?:
   const band = ageBandForClassroom(lesson.classroom);
 
   return (
-    <article className="max-w-3xl mx-auto px-4 py-6 space-y-8" data-testid="lesson-runtime">
-      <header className="space-y-1">
-        <h1 className={BAND_STYLES[band].heading}>{lesson.title}</h1>
-        <p className="text-sm text-muted-foreground">
-          {lesson.subject} · {lesson.classroom}. osztály
-        </p>
-      </header>
+    // #197: a lecke SAJÁT felületet kap (`bg-card` + `text-card-foreground`).
+    // Mérve élesben: enélkül a tartalom a téma `foreground` színét örökölte
+    // (rgb(2,8,23) — majdnem fekete), miközben a Preview keret háttere sötétkék,
+    // így 67/115 szövegelem kontrasztja 1.00–1.05 volt VILÁGOS ÉS SÖTÉT módban
+    // egyaránt. A felület-szín párban jár: aki hátteret ad, adja hozzá a rá
+    // szánt szövegszínt is, különben az öröklődés a másik témából hoz színt.
+    <div className="min-h-full bg-card text-card-foreground">
+      <article className="max-w-3xl mx-auto px-4 py-6 space-y-8" data-testid="lesson-runtime">
+        <header className="space-y-1">
+          <h1 className={BAND_STYLES[band].heading}>{lesson.title}</h1>
+          <p className="text-sm text-muted-foreground">
+            {lesson.subject} · {lesson.classroom}. osztály
+          </p>
+        </header>
 
-      {lesson.sections.map((section, si) => (
-        <LessonSection
-          key={si}
-          section={section}
-          sectionIdx={si}
-          band={band}
-          lessonId={lessonId ?? null}
-        />
-      ))}
-    </article>
+        {lesson.sections.map((section, si) => (
+          <LessonSection
+            key={si}
+            section={section}
+            sectionIdx={si}
+            band={band}
+            lessonId={lessonId ?? null}
+          />
+        ))}
+      </article>
+    </div>
   );
 }

@@ -227,6 +227,18 @@ export function buildAuthorPrompt(
     "Hard rules:",
     "- Every block's coversConceptIds may use ONLY the ids below — never invent new ones:",
     conceptIds.join(", "),
+    // #196 (mérve élesben, Kristóf-lecke): a szerző 8. osztályos geometriai
+    // forrásból 4. osztályos helyiérték-anyagot írt, és ráírta a geometriai
+    // címkéket. A fedettségi kapu 100%-ot mért, mert csak az ID-ket számolta.
+    "- A coversConceptIds id is a CLAIM that the block TEACHES that exact concept.",
+    "  The concept's own words MUST appear in the block's own text. Labelling a block",
+    "  with a concept it does not teach is a hard failure — the publishing gate now",
+    "  verifies every label against the block text and REJECTS the lesson.",
+    "- Teach ONLY what the map's concepts state. Never substitute easier material from",
+    "  general knowledge, and never adjust the difficulty to a different school year:",
+    "  the concepts come from the teacher's uploaded source and define the level.",
+    "- If a concept cannot be taught from the source, leave it out and say so in the",
+    "  report — do NOT invent a replacement topic.",
     "- sourceOnly must be true.",
     "- Every check block needs feedbackPerOption with exactly as many entries as options.",
     "",

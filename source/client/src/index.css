@@ -314,10 +314,21 @@
   }
 
   body {
-    @apply text-foreground font-sans antialiased;
+    @apply font-sans antialiased;
     font-family: 'Poppins', 'Nunito', 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
     min-height: 100vh;
+    /* #197 — MÉRVE élesben (Kristóf-lecke, px-alapú kontraszt): itt egy
+       hardkódolt SÖTÉT háttér állt `@apply text-foreground` mellett, a
+       `--foreground` viszont a VILÁGOS téma szövegszíne (hsl(222 84% 4.9%),
+       azaz majdnem fekete). Így a body sötét betűt rajzolt sötétkék alapra:
+       67/115 szövegelem kontrasztja 1.00–1.05 volt, VILÁGOS ÉS SÖTÉT módban
+       egyaránt — ezért volt a hiba mindkét témában azonos.
+
+       A sötétkék háttér a kezdőlap szándékos dizájnja, ezért marad; ami hiányzott,
+       az a HOZZÁ TARTOZÓ szövegszín. Aki hátteret ad, adja meg a rá szánt
+       előtérszínt is — különben az öröklődés a másik témából hoz színt. */
     background-color: #0A0E27; /* Sötét világűr háttér alapértelmezetten */
+    color: hsl(210 40% 98%); /* a sötét háttérhez tartozó VILÁGOS szövegszín */
   }
 
   /* Korcsoport-specifikus CSS változók */

@@ -1,5 +1,6 @@
 import { conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
+import { groundingReport, type UngroundedClaim } from "./grounding";
 
 /**
  * The publishing gate: does this lesson actually teach what the exam will ask?
@@ -19,7 +20,18 @@ import type { ExamWeight } from "../../shared/knowledge-map-schema";
 export const SUPPORTING_THRESHOLD = 0.9;
 
 /** `id` = km_concepts.id (UUID) when loaded from the DB; prompt/coverage fixtures may omit it (#178). */
-export type MapConcept = { id?: string; localId: string; examWeight: ExamWeight };
+export type MapConcept = {
+  id?: string;
+  localId: string;
+  examWeight: ExamWeight;
+  /**
+   * #196: a fogalom megnevezése. A megalapozottság-ellenőrzés (`grounding.ts`)
+   * ehhez köti a `coversConceptIds` címkét — enélkül egy címke puszta állítás.
+   * Opcionális, mert régebbi fixture-ök nem tartalmazzák; ilyenkor az adott
+   * fogalomra a megalapozottság nem mérhető, és NEM buktatunk vakon.
+   */
+  term?: string;
+};
 
 export type CoverageCount = { total: number; covered: number; ratio: number };
 
@@ -59,6 +71,8 @@ export type CoverageGateResult = {
   missingCore: string[];
   unknownIds: string[];
   reasons: string[];
+  /** #196: címkék, amelyeket a blokk saját szövege nem támaszt alá. */
+  ungrounded: UngroundedClaim[];
 };
 
 export function checkCoverageGate(
@@ -99,11 +113,29 @@ export function checkCoverageGate(
     );
   }
 
+  // #196 — MEGALAPOZOTTSÁG. A fenti számlálók csak ID-CÍMKÉKET néznek, a blokk
+  // szövegét nem. Mérve élesben (Kristóf-lecke): a szerző helyiértéket írt,
+  // ráírta a geometriai címkéket, és a kapu `core 7/7`, `supporting 15/15`,
+  // `ok: true` értékkel átengedte. A címke állítás; itt igazoljuk.
+  const allBlocks = lesson.sections.flatMap((s) => s.blocks as Array<Record<string, unknown>>);
+  const grounding = groundingReport(allBlocks, concepts);
+  if (grounding.ungrounded.length > 0) {
+    const sample = grounding.ungrounded
+      .slice(0, 5)
+      .map((u) => `${u.conceptId} („${u.term}") a(z) ${u.blockIndex}. ${u.kind} blokkon`)
+      .join("; ");
+    reasons.push(
+      `${grounding.ungrounded.length} fogalom-címkét a blokk saját szövege nem támaszt alá — ` +
+        `a lecke nem a forrásból dolgozott: ${sample}.`,
+    );
+  }
+
   return {
     ok: reasons.length === 0,
     coverage,
     missingCore,
     unknownIds: coverage.unknownIds,
     reasons,
+    ungrounded: grounding.ungrounded,
   };
 }
