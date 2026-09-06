@@ -49,6 +49,9 @@ test.describe("Tornado Hunter 200", () => {
     await expect(page.getByText("LEVEL 1/200")).toBeVisible();
     await expect(page.getByText(/WIND SPEED:/)).toBeVisible();
     await expect(page.getByText(/STORM:/)).toBeVisible();
+    await expect(page.getByTestId("tornado-touch-controls")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Gáz", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Fék", exact: true })).toBeVisible();
 
     // The canvas actually has pixels (WebGL initialised).
     const box = await canvas.boundingBox();

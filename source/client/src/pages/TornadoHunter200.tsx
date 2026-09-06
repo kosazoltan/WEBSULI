@@ -1626,13 +1626,13 @@ function PlayScreen(props: {
           </div>
 
           {/* Vehicle name */}
-          <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-black/55 text-[11px] font-semibold pointer-events-none">
+          <div className="absolute bottom-20 left-2 px-2 py-1 rounded bg-black/55 text-[11px] font-semibold pointer-events-none z-10">
             {props.vehicle.name.toUpperCase()}
           </div>
 
           {/* Anchor guidance */}
           {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (
-            <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-sky-900/70 text-[11px] font-semibold pointer-events-none max-w-[60%] text-right">
+            <div className="absolute bottom-20 right-2 px-2 py-1 rounded bg-sky-900/70 text-[11px] font-semibold pointer-events-none max-w-[60%] text-right z-10">
               {playerRef.current.anchored
                 ? "Horgony rögzítve — tartsd ki a vihart!"
                 : hud.anchorReady
@@ -1655,7 +1655,7 @@ function PlayScreen(props: {
 
           {/* Quiz overlay */}
           {activeQuiz && (
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 z-30">
               <div className="w-full max-w-md rounded-xl border border-sky-400/50 bg-slate-900/95 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-sky-300">
@@ -1694,7 +1694,7 @@ function PlayScreen(props: {
           )}
 
           {phase === "paused" && !result && (
-            <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-4 z-10">
+            <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-4 z-30">
               <div className="w-full max-w-sm rounded-xl border border-white/15 bg-slate-900/95 p-5 text-center">
                 <h3 className="text-xl font-extrabold text-white mb-2">Szünet</h3>
                 <p className="text-sm text-white/70 mb-4">A vihar vár. Folytasd, vagy lépj ki a szintekhez.</p>
@@ -1729,7 +1729,7 @@ function PlayScreen(props: {
           />
 
           {result && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-30">
               <div className="w-full max-w-sm rounded-xl border border-white/15 bg-slate-900/95 p-5 text-center">
                 <h3 className={`text-2xl font-extrabold mb-1 ${result.won ? "text-emerald-300" : "text-rose-300"}`}>
                   {result.won ? "Intercept sikeres!" : "Sikertelen intercept"}
@@ -1844,7 +1844,7 @@ function TouchControls(props: {
   return (
     <div
       data-testid="tornado-touch-controls"
-      className="absolute inset-x-0 bottom-2 z-20 hidden coarse:flex items-end justify-between gap-2 px-2 pointer-events-none"
+      className="absolute inset-x-0 bottom-2 z-20 flex items-end justify-between gap-2 px-2 pointer-events-none"
     >
       {props.leftHanded ? (
         <>

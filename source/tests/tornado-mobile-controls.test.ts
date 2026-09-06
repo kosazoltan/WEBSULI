@@ -31,14 +31,26 @@ function touchControlsBlock(): string {
   return code.slice(start, end);
 }
 
-test("TouchControls NEM sm:hidden / md:hidden — landscape telefonon is látszik", () => {
+test("TouchControls mindig látszik — nincs sm:hidden, nincs hidden+coarse:flex", () => {
   const block = touchControlsBlock();
   assert.doesNotMatch(block, /\bsm:hidden\b/);
   assert.doesNotMatch(block, /\bmd:hidden\b/);
   assert.doesNotMatch(block, /\blg:hidden\b/);
-  // Hide on mouse (pointer:fine), show on touch (pointer:coarse). Width
-  // breakpoints hid every landscape phone; pointer media does not.
-  assert.match(block, /(?:^|[\s"'`])coarse:flex/);
+  // `hidden coarse:flex` hides the bar on Steam Deck / mouse (pointer:fine).
+  // Sibling games always render on-screen buttons; Tornado must too.
+  assert.doesNotMatch(block, /(?:^|[\s"'`])hidden(?:[\s"'`]|$)/);
+  assert.doesNotMatch(block, /coarse:flex/);
+  assert.match(block, /(?:^|[\s"'`])flex(?:[\s"'`]|$)/);
+});
+
+test("TouchControls gombok: Gáz, Fék, kormány, horgony, Cam", () => {
+  const block = touchControlsBlock();
+  assert.match(block, /label="Gáz"/);
+  assert.match(block, /label="Fék"/);
+  assert.match(block, /label="◀"/);
+  assert.match(block, /label="▶"/);
+  assert.match(block, /label="⚓"/);
+  assert.match(block, /label="Cam"/);
 });
 
 test("TouchControls overlay a vásznon (absolute + z-index), nem flex-testvér ami összenyomódik", () => {
