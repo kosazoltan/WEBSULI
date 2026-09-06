@@ -179,8 +179,11 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
         await expect(fill0).toBeVisible();
         await fill0.fill('levél');
         await fill1.fill('fény');
-        await page.getByTestId('try-check').click();
-        await expect(page.getByText(/Helyes!/)).toBeVisible();
+        // LS-9 óta a mérőoldalon dragSort try-blokk is van, saját "Ellenőrzés" gombbal:
+        // a fillBlank gombját a SAJÁT blokkján belül keressük (strict mode).
+        const fillBlank = page.locator('[data-try="fillBlank"]');
+        await fillBlank.getByTestId('try-check').click();
+        await expect(fillBlank.getByText(/Helyes!/)).toBeVisible();
 
         // 3. Nincs vízszintes túlcsordulás az új blokkokkal sem.
         const overflow = await page.evaluate(() =>
