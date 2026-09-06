@@ -37,6 +37,18 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
     enabled: jobId.length > 0,
   });
 
+  // Audit 2026-09-05 (E): fire onDone ONCE per finished job, not once per render.
+  // #182: hooks BEFORE the early returns below — a hook after a conditional return
+  // changes the hook count between renders and crashes the whole admin page (React #310).
+  const doneFor = useRef<string | null>(null);
+  const finished = data ? jobMonitorView(data.job, data.produced).finished : false;
+  useEffect(() => {
+    if (finished && data && onDone && doneFor.current !== jobId) {
+      doneFor.current = jobId;
+      onDone(data.job);
+    }
+  }, [finished, jobId, onDone, data]);
+
   if (isError) {
     return (
       <Card>
@@ -62,15 +74,6 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
   }
 
   const view = jobMonitorView(data.job, data.produced);
-
-  // Audit 2026-09-05 (E): fire onDone ONCE per finished job, not once per render.
-  const doneFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (view.finished && onDone && doneFor.current !== jobId) {
-      doneFor.current = jobId;
-      onDone(data.job);
-    }
-  }, [view.finished, jobId, onDone, data.job]);
 
   return (
     <Card data-testid="job-monitor">
