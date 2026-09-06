@@ -13,6 +13,16 @@ import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
+import {
+  GAME_W,
+  GAME_H,
+  PLAYER_MAX_SPEED,
+  integratePlayer,
+  spawnReady,
+  splitRock,
+  enemyRenderSpin,
+  starScrollY,
+} from "@/lib/spaceAsteroid/physics";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
@@ -106,12 +116,9 @@ type MaterialQuizApi = {
 
 const GRADES: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
-/** Játéktér méretei (három.js world-units). 18×24 — kb. 3:4 portré-ratio, mobil-pásztázható. */
-const GAME_W = 18;
-const GAME_H = 24;
-const PLAYER_BASE_Y = -GAME_H / 2 + 2.4; // játékos a játéktér alsó harmadánál
+/** Játéktér méretei: `physics.ts` (18×24). A játékos az alsó 40%-ban mozog. */
+const PLAYER_BASE_Y = -GAME_H / 2 + 2.4;
 
-const PLAYER_SPEED = 7.5;
 const BULLET_SPEED = 14;
 const BULLET_COOLDOWN = 0.18;
 const BULLET_TRIPLE_COOLDOWN = 0.10;
@@ -645,6 +652,8 @@ export default function SpaceAsteroidQuiz() {
   const playerRef = useRef({
     x: 0,
     y: PLAYER_BASE_Y,
+    vx: 0,
+    vy: 0,
     invuln: 0, // sec
     cooldown: 0, // sec
     alive: true,
@@ -681,9 +690,12 @@ export default function SpaceAsteroidQuiz() {
   const detonateBombRef = useRef<() => void>(() => {});
   /** Boss legyőzve flag — a tick hullám-vége ága ne duplázza a phase-átmenetet. */
   const bossDefeatedRef = useRef(false);
+  const gameElapsedRef = useRef(0);
+  const lastSpawnAtRef = useRef(0);
+  const lastDtRef = useRef(1 / 60);
 
   const keysRef = useRef({ left: false, right: false, up: false, down: false, fire: false });
-  const touchRef = useRef({ left: false, right: false, up: false, fire: false });
+  const touchRef = useRef({ left: false, right: false, up: false, down: false, fire: false });
   const timeoutsRef = useRef<number[]>([]);
   const pushTimeout = useCallback((cb: () => void, ms: number): number => {
     const id = window.setTimeout(() => {
@@ -855,7 +867,7 @@ export default function SpaceAsteroidQuiz() {
     bulletsRef.current = [];
     pickupsRef.current = [];
     nextEntityIdRef.current = 1;
-    playerRef.current = { x: 0, y: PLAYER_BASE_Y, invuln: 1.5, cooldown: 0, alive: true, bobPhase: 0 };
+    playerRef.current = { x: 0, y: PLAYER_BASE_Y, vx: 0, vy: 0, invuln: 1.5, cooldown: 0, alive: true, bobPhase: 0 };
     waveRef.current = 1;
     livesRef.current = 3;
     powerLevelRef.current = 0;
@@ -886,6 +898,8 @@ export default function SpaceAsteroidQuiz() {
     enemiesSpawnedThisWaveRef.current = 0;
     waveIntermissionRef.current = false;
     lastTimeRef.current = null;
+    gameElapsedRef.current = 0;
+    lastSpawnAtRef.current = 0;
     enqueueQuiz("wave");
   }, [enqueueQuiz]);
 
@@ -1097,6 +1111,7 @@ export default function SpaceAsteroidQuiz() {
       const last = lastTimeRef.current;
       lastTimeRef.current = t;
       const dt = last == null ? 0 : Math.min(0.05, (t - last) / 1000);
+      lastDtRef.current = dt;
 
       tickRef.current(dt);
       renderRef.current(t / 1000);
@@ -1137,17 +1152,18 @@ export default function SpaceAsteroidQuiz() {
     const p = playerRef.current;
     if (!p.alive) return;
 
-    // Játékos mozgás
+    // Játékos mozgás — tehetetlenség + átló-normalizálás (physics.ts)
     let mx = 0, my = 0;
     if (keysRef.current.left || touchRef.current.left) mx -= 1;
     if (keysRef.current.right || touchRef.current.right) mx += 1;
     if (keysRef.current.up || touchRef.current.up) my += 1;
-    if (keysRef.current.down) my -= 1;
-    p.x += mx * PLAYER_SPEED * dt;
-    p.y += my * PLAYER_SPEED * 0.65 * dt;
-    p.x = clamp(p.x, -GAME_W / 2 + 0.7, GAME_W / 2 - 0.7);
-    p.y = clamp(p.y, -GAME_H / 2 + 1.6, -GAME_H / 2 + 6.4);
-    p.bobPhase += dt * 4;
+    if (keysRef.current.down || touchRef.current.down) my -= 1;
+    const integrated = integratePlayer(p, { mx, my }, dt);
+    p.x = integrated.x;
+    p.y = integrated.y;
+    p.vx = integrated.vx;
+    p.vy = integrated.vy;
+    p.bobPhase = integrated.bobPhase;
     if (p.cooldown > 0) p.cooldown -= dt;
     if (p.invuln > 0) p.invuln -= dt;
     // Pajzs-időzítő — másodpercenként, közben a render már 1s-os granuláris
@@ -1181,15 +1197,20 @@ export default function SpaceAsteroidQuiz() {
       if (b.y > GAME_H / 2 + 1 || b.y < -GAME_H / 2 - 1 || Math.abs(b.x) > GAME_W / 2 + 1) b.life = 0;
     }
 
-    // Spawn logika a hullámon belül
+    gameElapsedRef.current += dt;
+
+    // Spawn logika a hullámon belül — elapsed óra, nem fali idő (kvíz alatt áll)
     if (!waveIntermissionRef.current && enemiesSpawnedThisWaveRef.current < enemiesPerWaveRef.current) {
-      // Időközök: hullámmal arányosan rövidülnek, max 0.4 sec/spawn
       const spawnInterval = clamp(1.4 - waveRef.current * 0.06, 0.4, 1.4);
-      const ready = enemiesRef.current.length === 0
-        ? true
-        : (enemiesRef.current[enemiesRef.current.length - 1]!.spawnAt + spawnInterval) < (lastTimeRef.current ?? 0) / 1000;
-      if (ready) {
+      const emptyField = enemiesRef.current.length === 0;
+      if (spawnReady({
+        elapsed: gameElapsedRef.current,
+        lastSpawnAt: lastSpawnAtRef.current,
+        interval: spawnInterval,
+        emptyField,
+      })) {
         spawnEnemyForWave();
+        lastSpawnAtRef.current = gameElapsedRef.current;
       }
     }
 
@@ -1555,24 +1576,29 @@ export default function SpaceAsteroidQuiz() {
       return;
     }
 
-    // Hasadás csak rock-nál
+    // Hasadás csak rock-nál — szétrepülés merőleges kick-kel (physics.ts)
     if (e.kind === "rock" && e.size > 1) {
-      for (let k = 0; k < 2; k++) {
+      const parentSize = e.size as 2 | 3;
+      const shards = splitRock(
+        { x: e.x, y: e.y, vx: e.vx, vy: e.vy, size: parentSize },
+        Math.random,
+      );
+      for (const shard of shards) {
         const id = nextEntityIdRef.current++;
         const child: EnemyState = {
           id,
           kind: "rock",
-          size: (e.size - 1) as 1 | 2,
-          x: e.x + randRange(-0.4, 0.4),
-          y: e.y + randRange(-0.2, 0.2),
-          vx: e.vx + randRange(-1.2, 1.2),
-          vy: e.vy + randRange(-0.4, 0.4),
+          size: shard.size,
+          x: shard.x,
+          y: shard.y,
+          vx: shard.vx,
+          vy: shard.vy,
           rot: Math.random() * Math.PI * 2,
-          rotSpeed: randRange(-1.8, 1.8),
-          hp: e.size - 1,
+          rotSpeed: (Math.random() - 0.5) * 3.6,
+          hp: shard.size,
           flash: 0,
           dead: false,
-          spawnAt: (lastTimeRef.current ?? 0) / 1000,
+          spawnAt: gameElapsedRef.current,
           phase: 0,
           fireCooldown: 0,
         };
@@ -1751,11 +1777,9 @@ export default function SpaceAsteroidQuiz() {
     // Csillagok pásztázása (lassú lefelé Y-mozgás), játék közben gyorsabb
     const moving = phaseRef.current === "play" && !pausedRef.current;
     const pos = starfield.geometry.attributes.position;
+    const starDt = lastDtRef.current;
     for (let i = 0; i < pos.count; i++) {
-      let y = pos.getY(i);
-      y -= (moving ? 1.4 : 0.4) * (1 / 60);
-      if (y < -GAME_H * 1.2) y = GAME_H * 1.2;
-      pos.setY(i, y);
+      pos.setY(i, starScrollY(pos.getY(i), starDt, moving));
     }
     pos.needsUpdate = true;
 
@@ -1765,7 +1789,7 @@ export default function SpaceAsteroidQuiz() {
     playerGroup.position.y = p.y + Math.sin(p.bobPhase) * 0.04;
     playerGroup.position.z = 0;
     // Bedöntés mozgásirányhoz
-    const tilt = clamp((keysRef.current.right || touchRef.current.right ? 1 : 0) - (keysRef.current.left || touchRef.current.left ? 1 : 0), -1, 1);
+    const tilt = clamp(p.vx / Math.max(1, PLAYER_MAX_SPEED), -1, 1);
     playerGroup.rotation.z = -tilt * 0.45;
     playerGroup.rotation.y = tilt * 0.18;
     // Thruster pulzálás
@@ -1798,7 +1822,8 @@ export default function SpaceAsteroidQuiz() {
       const mesh = refs.enemyMeshById.get(e.id);
       if (!mesh) continue;
       mesh.position.set(e.x, e.y, 0);
-      mesh.rotation.set(now * 0.3 + e.rot, now * 0.25 + e.rot, e.rot);
+      const spin = enemyRenderSpin(e.kind, now, e.rot, e.vx);
+      mesh.rotation.set(spin.x, spin.y, spin.z);
       // Flash highlight (rövid fehér emissive felvillanás)
       if (mesh instanceof THREE.Mesh) {
         const mat = mesh.material as THREE.MeshStandardMaterial;
@@ -1977,12 +2002,12 @@ export default function SpaceAsteroidQuiz() {
   }, [phase, startNewRun]);
 
   /* ===================== Touch gomb-handler-ek ===================== */
-  const startHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "up" | "fire") => {
+  const startHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "up" | "down" | "fire") => {
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     touchRef.current[k] = true;
   };
-  const endHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "up" | "fire") => {
+  const endHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "up" | "down" | "fire") => {
     e.preventDefault();
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -2231,7 +2256,7 @@ export default function SpaceAsteroidQuiz() {
                 </div>
 
                 {/* Touch kontrollok */}
-                <div className="grid grid-cols-4 gap-1.5 w-full">
+                <div className="grid grid-cols-5 gap-1.5 w-full">
                   <Button
                     type="button"
                     size="sm"
@@ -2250,6 +2275,15 @@ export default function SpaceAsteroidQuiz() {
                     onPointerCancel={(e) => endHold(e, "up")}
                     onPointerLeave={(e) => endHold(e, "up")}
                   >Előre</Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-slate-700 hover:bg-slate-600 text-white border border-slate-200/35 shadow-md py-3 text-xs"
+                    onPointerDown={(e) => startHold(e, "down")}
+                    onPointerUp={(e) => endHold(e, "down")}
+                    onPointerCancel={(e) => endHold(e, "down")}
+                    onPointerLeave={(e) => endHold(e, "down")}
+                  >Le</Button>
                   <Button
                     type="button"
                     size="sm"
