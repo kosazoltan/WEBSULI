@@ -67,14 +67,31 @@ function downscaleImage(dataUrl: string): Promise<string> {
   });
 }
 
-export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) => void }) {
+export function SourceUploadForm({
+  onCreated,
+  showMapOnlyAction = true,
+  headerless = false,
+}: {
+  onCreated?: (mapId: string) => void;
+  /**
+   * LS-8 (#191): a kurátori „Csak tudás-térkép" gomb. A tananyagkészítés fülön
+   * `false` — ott a tudástár építése a folyamat láthatatlan része.
+   */
+  showMapOnlyAction?: boolean;
+  /** A befoglaló kártya adja a címet/leírást (nincs dupla fejléc). */
+  headerless?: boolean;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
-  const [classroom, setClassroom] = useState(4);
+  // LS-8 (#191): szövegként tároljuk, hogy ÜRESEN hagyható legyen. A kurátori
+  // úton a 4 marad az alapértelmezés (ott az osztály kötelező), az egylépéses
+  // úton üresen a gép ismeri fel a szkennelt szövegből.
+  const [classroomInput, setClassroomInput] = useState(headerless ? "" : "4");
+  const classroom = classroomInput.trim() === "" ? Number.NaN : Number(classroomInput);
   const [files, setFiles] = useState<SourceFile[]>([]);
 
   const addFiles = async (list: FileList | null) => {
@@ -135,7 +152,9 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
       apiRequest<{ runId: string }>(
         "POST",
         "/api/studio/lessons/one-step",
-        subject.trim() === ""
+        // LS-8 (#191): üres/érvénytelen osztály nem mehet a payloadba (NaN).
+        // Ha nincs használható scope, a szerver maga ismeri fel a szövegből.
+        subject.trim() === "" || !Number.isFinite(classroom)
           ? { ...(title.trim() !== "" ? { title: title.trim() } : {}), files }
           : buildExtractPayload({ title, subject, classroom, files }),
       ),
@@ -185,17 +204,25 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
 
   return (
     <Card data-testid="source-upload-form">
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <FileUp className="w-4 h-4 text-emerald-600" />
-          Forrás feltöltése — új tudás-térkép
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Tölts fel tananyag-forrást (pdf, kép, docx, txt) — a gép fogalomjegyzéket kivonatol
-          belőle, te átnézed és jóváhagyod, és abból készül a lecke.
-        </CardDescription>
-      </CardHeader>
+      {!headerless && (
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileUp className="w-4 h-4 text-emerald-600" />
+            Forrás feltöltése — új tudás-térkép
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Tölts fel tananyag-forrást (pdf, kép, docx, txt) — a gép fogalomjegyzéket kivonatol
+            belőle, te átnézed és jóváhagyod, és abból készül a lecke.
+          </CardDescription>
+        </CardHeader>
+      )}
       <CardContent className="space-y-3">
+        {headerless && (
+          <p className="text-xs text-muted-foreground" data-testid="one-step-hint">
+            A cím, tantárgy és osztály kitöltése <strong>nem kötelező</strong> — ha üresen
+            hagyod, a gép a feltöltött oldalak szövegéből ismeri fel őket.
+          </p>
+        )}
         <div className="grid gap-2 sm:grid-cols-3">
           <Input
             placeholder="Cím (nem kötelező)"
@@ -205,7 +232,7 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
             data-testid="extract-title"
           />
           <Input
-            placeholder="Tantárgy (pl. biológia)"
+            placeholder={headerless ? "Tantárgy (nem kötelező)" : "Tantárgy (pl. biológia)"}
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="min-h-11"
@@ -215,8 +242,13 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
             type="number"
             min={0}
             max={12}
-            value={classroom}
-            onChange={(e) => setClassroom(Number(e.target.value))}
+            // LS-8 (#191): egylépéses módban az osztály is elhagyható — a `4`-es
+            // előtöltés ellentmondott a „nem kötelező" feliratnak, és azt
+            // sugallta, hogy a felhasználónak döntenie kell. Üresen a gép a
+            // szkennelt szövegből ismeri fel (inferScope).
+            placeholder={headerless ? "Osztály (nem kötelező)" : undefined}
+            value={classroomInput}
+            onChange={(e) => setClassroomInput(e.target.value)}
             className="min-h-11"
             aria-label="Osztály"
             data-testid="extract-classroom"
@@ -269,20 +301,27 @@ export function SourceUploadForm({ onCreated }: { onCreated?: (mapId: string) =>
             data-testid="one-step-submit"
           >
             {oneStep.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
-            Tananyag készítése egy lépésben
+            Tananyag készítése
           </Button>
-          <Button
-            variant="outline"
-            className="min-h-11 gap-1"
-            disabled={blocked !== null || busy}
-            onClick={() => extract.mutate()}
-            data-testid="extract-submit"
-          >
-            {extract.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
-            Csak tudás-térkép
-          </Button>
-          {(oneStepBlocked ?? blocked) && !busy && (
-            <span className="text-xs text-muted-foreground">{oneStepBlocked ?? blocked}</span>
+          {/* LS-8 (#191): a „csak tudás-térkép" a KURÁTORI út gombja. A
+              tananyagkészítés fülön nem jelenik meg — ott a tudástár építése
+              a folyamat láthatatlan része, nem külön felhasználói döntés. */}
+          {showMapOnlyAction && (
+            <Button
+              variant="outline"
+              className="min-h-11 gap-1"
+              disabled={blocked !== null || busy}
+              onClick={() => extract.mutate()}
+              data-testid="extract-submit"
+            >
+              {extract.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
+              Csak tudás-térkép
+            </Button>
+          )}
+          {(oneStepBlocked ?? (showMapOnlyAction ? blocked : null)) && !busy && (
+            <span className="text-xs text-muted-foreground">
+              {oneStepBlocked ?? blocked}
+            </span>
           )}
           {busy && (
             <span className="text-xs text-muted-foreground">

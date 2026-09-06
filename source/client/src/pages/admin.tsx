@@ -33,8 +33,7 @@ import {
   FolderOpen,
   Sparkles,
   Activity,
-  GraduationCap,
-  BookOpen
+  GraduationCap
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -66,7 +65,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
 import ParentDashboardPanel from "@/components/ParentDashboardPanel";
-import { KnowledgeMapPanel } from "@/components/studio/KnowledgeMapEditor";
 import LessonStudioPanel from "@/components/studio/LessonStudioPanel";
 import BackupManager from "@/components/BackupManager";
 import TagManager from "@/components/TagManager";
@@ -359,8 +357,16 @@ export default function Admin() {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
     const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups", "email-debug", "parent-dashboard", "lesson-studio", "knowledge-maps"];
-    return tabParam && validTabs.includes(tabParam) ? tabParam : "files";
+    if (!tabParam || !validTabs.includes(tabParam)) return "files";
+    // LS-8 (#191): a tudás-térkép megszűnt önálló menüpontként — a tananyagkészítés
+    // fülön belüli „haladó" blokkba került. A régi deep link nem törhet el, ezért
+    // átirányítjuk (különben némán a 'files' fülre esne vissza).
+    return tabParam === "knowledge-maps" ? "lesson-studio" : tabParam;
   });
+  // A ?tab=knowledge-maps hívás a haladó blokkot NYITVA nyissa meg.
+  const [studioAdvancedInitial] = useState(
+    () => new URLSearchParams(window.location.search).get("tab") === "knowledge-maps",
+  );
 
   // Material views interface (moved before hooks)
   interface MaterialViewWithData {
@@ -759,13 +765,9 @@ export default function Admin() {
               <GraduationCap className="h-3 w-3" />
               Szülő-dash
             </TabsTrigger>
-            <TabsTrigger value="knowledge-maps" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white text-emerald-700 dark:text-emerald-400" data-testid="tab-knowledge-maps">
-              <BookOpen className="h-3 w-3" />
-              Tudás-térkép
-            </TabsTrigger>
             <TabsTrigger value="lesson-studio" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white text-emerald-700 dark:text-emerald-400" data-testid="tab-lesson-studio">
               <Sparkles className="h-3 w-3" />
-              Lecke készítése
+              Tananyag készítése
             </TabsTrigger>
             <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-database">
               <Database className="h-3 w-3" />
@@ -957,12 +959,8 @@ export default function Admin() {
         {activeTab === "parent-dashboard" && <ParentDashboardPanel />}
       </TabsContent>
 
-      <TabsContent value="knowledge-maps" className="space-y-2">
-        {activeTab === "knowledge-maps" && <KnowledgeMapPanel />}
-      </TabsContent>
-
       <TabsContent value="lesson-studio" className="space-y-2">
-        {activeTab === "lesson-studio" && <LessonStudioPanel />}
+        {activeTab === "lesson-studio" && <LessonStudioPanel initialAdvanced={studioAdvancedInitial} />}
       </TabsContent>
 
       <TabsContent value="tags" className="space-y-2">

@@ -423,4 +423,58 @@ export function oneStepPhaseRows(run: OneStepRunView): PhaseRow[] {
   });
 }
 
+/* ------------------------------------------------------------------ *
+ * LS-8 (#191) — a tananyagkészítés menüpont önmagában elég
+ * ------------------------------------------------------------------ */
+
+/**
+ * A tulajdonos kérése (2026-09-06): „Én csak a tananyag készítésnél annyit
+ * szeretnék látni, hogy töltsön föl a képeket, és utána a kész tananyagot."
+ *
+ * MÉRVE: a háttérfolyamat ezt már tudta (LS-6 egylépéses futás + #189 autonóm
+ * kapuk), a hiba a MENÜSZERVEZÉSBEN volt — az egygombos űrlap a „Tudás-térkép"
+ * fül alatt lakott, a „Lecke készítése" fül pedig jóváhagyott térképet kért.
+ * A tudástár előállítása nem szűnik meg, csak a felület mögé kerül.
+ */
+
+/** Az egylépéses úton a felhasználótól KÖTELEZŐEN bekért mezők. */
+export const ONE_STEP_ONLY_FIELDS = ["files"] as const;
+
+export type StudioMapSummary = {
+  id: string;
+  subject: string;
+  classroom: number;
+  title?: string;
+};
+
+export type LessonStudioView = {
+  /** `upload` = feltöltés-alapú egylépéses gyártás (ez az elsődleges út). */
+  mode: "upload";
+  /** A térkép-választó soha nem az elsődleges felület. */
+  showMapPicker: boolean;
+  /** A kurátori (térkép-alapú) út továbbra is elérhető, elrejtve. */
+  advancedAvailable: boolean;
+  /** Üres tudástár nem vezethet zsákutcába (#157 mintája). */
+  emptyStateIsDeadEnd: boolean;
+  mapCount: number;
+};
+
+/**
+ * A tananyagkészítés felület nézet-modellje.
+ *
+ * Szándékosan NEM függ attól, van-e már térkép: a feltöltés mindig az
+ * elsődleges út. Ha a meglévő térképek visszavinnék a választóra, a
+ * tulajdonos újra a régi, kétlépcsős folyamatot látná.
+ */
+export function lessonStudioView(input: { maps: StudioMapSummary[] }): LessonStudioView {
+  const mapCount = input.maps.length;
+  return {
+    mode: "upload",
+    showMapPicker: false,
+    advancedAvailable: mapCount > 0,
+    emptyStateIsDeadEnd: false,
+    mapCount,
+  };
+}
+
 export type { LektorNote, RawNote };
