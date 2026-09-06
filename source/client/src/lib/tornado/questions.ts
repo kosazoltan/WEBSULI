@@ -87,6 +87,39 @@ export function randomQuizDue(secondsSinceLastQuiz: number, rng: Rng = Math.rand
   return rng() < t;
 }
 
+/** At most one evaluation per second so a 60 fps loop cannot spam quizzes. */
+export const QUIZ_EVAL_INTERVAL_SEC = 1;
+
+export type RoamQuizInput = {
+  elapsed: number;
+  lastQuizAt: number;
+  lastEvalAt: number;
+  alreadyPending: boolean;
+  rng: Rng;
+};
+
+export type RoamQuizResult = {
+  fire: boolean;
+  lastEvalAt: number;
+};
+
+/**
+ * Frame-safe wrapper around `randomQuizDue`.
+ *
+ * The rAF loop used to call `randomQuizDue` 60×/s; after the 18 s gap the
+ * per-call chance compounded into an immediate quiz. This helper evaluates
+ * at most once per `QUIZ_EVAL_INTERVAL_SEC`, never while a quiz is already
+ * on screen, and otherwise delegates to `randomQuizDue`.
+ */
+export function shouldFireRoamQuiz(input: RoamQuizInput): RoamQuizResult {
+  if (input.alreadyPending) return { fire: false, lastEvalAt: input.lastEvalAt };
+  if (input.elapsed - input.lastEvalAt < QUIZ_EVAL_INTERVAL_SEC) {
+    return { fire: false, lastEvalAt: input.lastEvalAt };
+  }
+  const fire = randomQuizDue(input.elapsed - input.lastQuizAt, input.rng);
+  return { fire, lastEvalAt: input.elapsed };
+}
+
 /* ===================== Material-backed questions ===================== */
 
 export type MaterialRow = {

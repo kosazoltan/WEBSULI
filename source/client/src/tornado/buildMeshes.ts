@@ -16,6 +16,7 @@ import * as THREE from "three";
 import type { Vehicle } from "@/lib/tornado/vehicles";
 import type { GraphicsQuality } from "@/lib/tornado/progress";
 import { terrainHeight, isWater, roadFactor, CHUNK_SIZE, type WorldProp } from "@/lib/tornado/world";
+import { markSharedGeometry } from "./meshLifetime";
 
 export type QualityProfile = {
   /** Funnel particle count. */
@@ -47,7 +48,7 @@ const materialCache = new Map<string, THREE.Material>();
 function geo<T extends THREE.BufferGeometry>(key: string, make: () => T): T {
   const hit = geometryCache.get(key);
   if (hit) return hit as T;
-  const made = make();
+  const made = markSharedGeometry(make());
   geometryCache.set(key, made);
   return made;
 }

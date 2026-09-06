@@ -35,7 +35,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
-import { useCouponSession } from "@/game-engine/useCouponSession";
+import { useCouponSession, type CouponSession } from "@/game-engine/useCouponSession";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import {
   sfxSuccess,
@@ -67,7 +67,7 @@ import {
   pickQuestion,
   shuffleOptions,
   materialToQuestions,
-  randomQuizDue,
+  shouldFireRoamQuiz,
   resolveGrades,
   schoolLevelLabel,
   QUIZ_MODE_LABEL,
@@ -86,6 +86,11 @@ import {
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
 import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
+import {
+  toggleCamera,
+  escAction,
+} from "@/lib/tornado/controls";
+import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import {
   loadProgress,
   saveProgress,
@@ -142,7 +147,7 @@ import {
  * ===================================================================== */
 
 type Screen = "menu" | "garage" | "levels" | "settings" | "highscore" | "stats" | "play";
-type PlayPhase = "seeking" | "approach" | "quiz" | "result_win" | "result_lose";
+type PlayPhase = "seeking" | "approach" | "quiz" | "paused" | "result_win" | "result_lose";
 type QuizReason = "anchor" | "roam";
 
 const GAME_ID = "tornado-hunter-200";
@@ -251,6 +256,7 @@ export default function TornadoHunter200() {
             level={getSelectedLevelRef()}
             vehicle={selectedVehicle}
             progress={progress}
+            coupon={coupon}
             syncEligible={Boolean(syncEligibility?.eligible)}
             onExit={() => setScreen("levels")}
             onComplete={(next, unlocked) => {
@@ -878,6 +884,7 @@ function PlayScreen(props: {
   level: number;
   vehicle: Vehicle;
   progress: TornadoProgress;
+  coupon: CouponSession;
   syncEligible: boolean;
   onExit: () => void;
   onComplete: (next: TornadoProgress, unlocked: Achievement[]) => void;
@@ -928,7 +935,6 @@ function PlayScreen(props: {
   /* ------- refs mirrored from state for the animation loop ------- */
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
-  const coupon = useCouponSession();
   const rngRef = useRef({ next: 0 });
   const playerRef = useRef<PlayerState>({ x: fromKm(0.02) * 0, z: HALF_WORLD * 0, heading: 0, speed: 0, anchored: false });
   const tornadoPosRef = useRef({ x: 0, z: 0, angle: 0, born: 0, alive: true });
@@ -939,8 +945,26 @@ function PlayScreen(props: {
   const wrongRef = useRef(0);
   const anchorAttemptsRef = useRef(1);
   const lastQuizAtRef = useRef(0);
+  const lastEvalAtRef = useRef(-Infinity);
   const elapsedRef = useRef(0);
   const distanceTravelledRef = useRef(0);
+  const timeoutsRef = useRef<number[]>([]);
+  const pausedRef = useRef(false);
+  const prevPhaseRef = useRef<PlayPhase>("seeking");
+  const progressRef = useRef(props.progress);
+  progressRef.current = props.progress;
+  const onExitRef = useRef(props.onExit);
+  onExitRef.current = props.onExit;
+  const onProgressRef = useRef(props.onProgress);
+  onProgressRef.current = props.onProgress;
+  const scheduleTimeout = (fn: () => void, ms: number) => {
+    const id = window.setTimeout(() => {
+      timeoutsRef.current = timeoutsRef.current.filter((x) => x !== id);
+      fn();
+    }, ms);
+    timeoutsRef.current.push(id);
+    return id;
+  };
   const recentQuizRef = useRef<string[]>([]);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   const touchRef = useRef({ fwd: false, back: false, left: false, right: false });
@@ -1008,6 +1032,7 @@ function PlayScreen(props: {
     wrongRef.current = 0;
     anchorAttemptsRef.current = 1;
     lastQuizAtRef.current = 0;
+    lastEvalAtRef.current = -Infinity;
     elapsedRef.current = 0;
     distanceTravelledRef.current = 0;
     recentQuizRef.current = [];
@@ -1087,10 +1112,8 @@ function PlayScreen(props: {
             const anyObj = obj as THREE.Mesh;
             if (!QUALITY_PROFILES[quality]) return;
             // Only dispose per-scene throwaways; shared cache is freed below.
-            if (obj.userData.perScene) {
-              anyObj.geometry?.dispose?.();
-              const m = anyObj.material;
-              (Array.isArray(m) ? m : [m]).forEach((mm) => mm?.dispose?.());
+            if (obj.userData.perScene && shouldDisposeGeometry(anyObj.geometry)) {
+              anyObj.geometry.dispose();
             }
           }
         });
@@ -1101,6 +1124,11 @@ function PlayScreen(props: {
       lastTimeRef.current = null;
     };
   }, [quality, props.vehicle.id, props.level]);
+
+  useEffect(() => () => {
+    timeoutsRef.current.forEach((id) => window.clearTimeout(id));
+    timeoutsRef.current = [];
+  }, []);
 
   /* ------- keyboard ------- */
   useEffect(() => {
@@ -1130,9 +1158,24 @@ function PlayScreen(props: {
         case "f":
           tryAnchorRef.current();
           break;
-        case "escape":
-          props.onExit();
+        case "c": {
+          const next = toggleCamera(settingsRef.current.cameraMode);
+          settingsRef.current = { ...settingsRef.current, cameraMode: next };
+          onProgressRef.current(updateSettings(progressRef.current, { cameraMode: next }));
           break;
+        }
+        case "escape": {
+          const current: PlayPhase = pausedRef.current ? "paused" : phaseRef.current;
+          const action = escAction(current);
+          if (action === "pause") {
+            prevPhaseRef.current = phaseRef.current;
+            pausedRef.current = true;
+            setPhase("paused");
+          } else if (action === "exit") {
+            onExitRef.current();
+          }
+          break;
+        }
         case "r":
           if (phaseRef.current === "result_lose" || phaseRef.current === "result_win") restartRef.current();
           break;
@@ -1184,7 +1227,7 @@ function PlayScreen(props: {
     if (Math.abs(p.speed) > fromKm(0.02)) {
       setAnchorMsg("Előbb állj meg a horgonyzáshoz!");
       sfxWarning();
-      window.setTimeout(() => setAnchorMsg(null), 1600);
+      scheduleTimeout(() => setAnchorMsg(null), 1600);
       return;
     }
     // The scoring quiz — the brief's core mechanic. Distance/ground are checked
@@ -1276,7 +1319,7 @@ function PlayScreen(props: {
         surfaceGrip: grip,
       });
       setAnchorMsg(outcome.message);
-      window.setTimeout(() => setAnchorMsg((cur) => (cur === outcome.message ? null : cur)), 2400);
+      scheduleTimeout(() => setAnchorMsg((cur) => (cur === outcome.message ? null : cur)), 2400);
 
       if (outcome.ok) {
         playerRef.current.anchored = true;
@@ -1285,7 +1328,7 @@ function PlayScreen(props: {
         sfxSuccess();
         setPhase("approach");
         // Hold the anchor until the funnel's lifetime elapses → win.
-        window.setTimeout(() => finishRun(true), 2600);
+        scheduleTimeout(() => finishRun(true), 2600);
       } else {
         anchorAttemptsRef.current += 1;
         sfxError();
@@ -1314,22 +1357,21 @@ function PlayScreen(props: {
       props.onProgress(recordAnswer(props.progress, correct));
 
       // Reward coupon time on a correct MATERIAL answer (matches the other games).
-      if (correct && quiz.source === "material" && coupon.active) {
-        void coupon.claimBonus(quiz.id);
+      if (correct && quiz.source === "material" && props.coupon.active) {
+        void props.coupon.claimBonus(quiz.id);
       }
 
-      window.setTimeout(() => {
+      scheduleTimeout(() => {
         setQuizFlash(null);
         setActiveQuiz(null);
         if (quizReason === "anchor") {
           resolveAnchor(correct);
         } else {
-          // Free-roam quiz: a wrong answer just resumes driving.
           setPhase("approach");
         }
       }, 750);
     },
-    [activeQuiz, quizReason, spec, coupon, props.progress],
+    [activeQuiz, quizReason, spec, props.coupon, props.progress],
   );
 
   const restartRef = useRef<() => void>(() => {});
@@ -1345,6 +1387,7 @@ function PlayScreen(props: {
     wrongRef.current = 0;
     anchorAttemptsRef.current = 1;
     lastQuizAtRef.current = 0;
+    lastEvalAtRef.current = -Infinity;
     elapsedRef.current = 0;
     distanceTravelledRef.current = 0;
     recentQuizRef.current = [];
@@ -1363,7 +1406,7 @@ function PlayScreen(props: {
     if (!sc) return;
     const { renderer, scene, camera, vehicle, tornado, rain, lightning } = sc;
     const ph = phaseRef.current;
-    const playing = ph === "seeking" || ph === "approach";
+    const playing = (ph === "seeking" || ph === "approach") && !pausedRef.current;
 
     // Always spin the funnel and rain so paused screens still feel alive.
     animateTornado(tornado, dt, spec.tornadoIntensity);
@@ -1435,10 +1478,17 @@ function PlayScreen(props: {
       // Approach phase once within 2 km.
       if (ph === "seeking" && distKm < 2) setPhase("approach");
 
-      // --- autonomous free-roam quiz ---
-      if (!activeQuiz && !p.anchored) {
-        const since = elapsedRef.current - lastQuizAtRef.current;
-        if (randomQuizDue(since, drawRng)) raiseQuiz("roam");
+      // --- autonomous free-roam quiz (at most one eval / second) ---
+      if (!p.anchored) {
+        const decision = shouldFireRoamQuiz({
+          elapsed: elapsedRef.current,
+          lastQuizAt: lastQuizAtRef.current,
+          lastEvalAt: lastEvalAtRef.current,
+          alreadyPending: Boolean(activeQuiz) || phaseRef.current === "quiz",
+          rng: drawRng,
+        });
+        lastEvalAtRef.current = decision.lastEvalAt;
+        if (decision.fire) raiseQuiz("roam");
       }
 
       // --- lose conditions ---
@@ -1634,6 +1684,29 @@ function PlayScreen(props: {
             </div>
           )}
 
+          {phase === "paused" && !result && (
+            <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-4 z-10">
+              <div className="w-full max-w-sm rounded-xl border border-white/15 bg-slate-900/95 p-5 text-center">
+                <h3 className="text-xl font-extrabold text-white mb-2">Szünet</h3>
+                <p className="text-sm text-white/70 mb-4">A vihar vár. Folytasd, vagy lépj ki a szintekhez.</p>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 bg-sky-600 hover:bg-sky-500 font-bold"
+                    onClick={() => {
+                      pausedRef.current = false;
+                      setPhase(prevPhaseRef.current === "paused" ? "seeking" : prevPhaseRef.current);
+                    }}
+                  >
+                    Folytatás
+                  </Button>
+                  <Button variant="secondary" className="flex-1 bg-slate-700 hover:bg-slate-600" onClick={props.onExit}>
+                    Szintek
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Result overlay */}
           {result && (
             <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4">
@@ -1676,6 +1749,11 @@ function PlayScreen(props: {
           leftHanded={props.progress.settings.leftHanded}
           touchRef={touchRef}
           onAnchor={() => tryAnchorRef.current()}
+          onCamera={() => {
+            const next = toggleCamera(settingsRef.current.cameraMode);
+            settingsRef.current = { ...settingsRef.current, cameraMode: next };
+            props.onProgress(updateSettings(props.progress, { cameraMode: next }));
+          }}
         />
       </CardContent>
     </Card>
@@ -1716,7 +1794,9 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
         sc.scene.remove(o);
         o.traverse((child) => {
           if (child instanceof THREE.Mesh) {
-            child.geometry?.dispose?.();
+            if (shouldDisposeGeometry(child.geometry)) {
+              child.geometry.dispose();
+            }
           }
         });
       });
@@ -1730,6 +1810,7 @@ function TouchControls(props: {
   leftHanded: boolean;
   touchRef: React.MutableRefObject<{ fwd: boolean; back: boolean; left: boolean; right: boolean }>;
   onAnchor: () => void;
+  onCamera: () => void;
 }) {
   const hold = (key: "fwd" | "back" | "left" | "right", value: boolean) => (e: ReactPointerEvent) => {
     e.preventDefault();
@@ -1747,6 +1828,7 @@ function TouchControls(props: {
     <div className="flex gap-2 items-end">
       <TouchBtn onDown={hold("back", true)} onUp={hold("back", false)} label="Fék" small />
       <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent />
+      <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Cam" small />
       <TouchBtn onDown={hold("fwd", true)} onUp={hold("fwd", false)} label="Gáz" />
     </div>
   );

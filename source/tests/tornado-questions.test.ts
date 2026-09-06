@@ -8,6 +8,7 @@ import {
   resolveGrades,
   pickQuestion,
   randomQuizDue,
+  shouldFireRoamQuiz,
   makeRng,
   materialToQuestions,
   QUIZ_MIN_GAP_SEC,
@@ -178,4 +179,66 @@ test("az autonóm kvízdobás a megadott sávban, véletlenszerűen sül el", ()
   const rng2 = makeRng(5);
   for (let i = 0; i < 200; i++) results.add(randomQuizDue(mid, rng2));
   assert.deepEqual([...results].sort(), [false, true]);
+});
+
+test("shouldFireRoamQuiz 18 s alatt 60 hívásból 0-szor sül el", () => {
+  const rng = makeRng(1);
+  let lastEvalAt = -Infinity;
+  let fires = 0;
+  for (let i = 0; i < 60; i++) {
+    const r = shouldFireRoamQuiz({
+      elapsed: 10,
+      lastQuizAt: 0,
+      lastEvalAt,
+      alreadyPending: false,
+      rng,
+    });
+    lastEvalAt = r.lastEvalAt;
+    if (r.fire) fires += 1;
+  }
+  assert.equal(fires, 0);
+});
+
+test("shouldFireRoamQuiz a sávban max 1 igaz / másodperc (60 hívás 0.5 s alatt ≤1)", () => {
+  const rng = makeRng(3);
+  let lastEvalAt = -Infinity;
+  let fires = 0;
+  const start = QUIZ_MIN_GAP_SEC + 5;
+  for (let i = 0; i < 60; i++) {
+    const elapsed = start + i * (0.5 / 60);
+    const r = shouldFireRoamQuiz({
+      elapsed,
+      lastQuizAt: 0,
+      lastEvalAt,
+      alreadyPending: false,
+      rng,
+    });
+    lastEvalAt = r.lastEvalAt;
+    if (r.fire) fires += 1;
+  }
+  assert.ok(fires <= 1, `0.5 s alatt ${fires} kvíz (max 1)`);
+});
+
+test("shouldFireRoamQuiz pending=true esetén soha", () => {
+  const rng = makeRng(9);
+  const r = shouldFireRoamQuiz({
+    elapsed: 999,
+    lastQuizAt: 0,
+    lastEvalAt: -Infinity,
+    alreadyPending: true,
+    rng,
+  });
+  assert.equal(r.fire, false);
+});
+
+test("shouldFireRoamQuiz max-gap felett az első eval-tick-en igaz", () => {
+  const rng = makeRng(2);
+  const r = shouldFireRoamQuiz({
+    elapsed: QUIZ_MAX_GAP_SEC + 1,
+    lastQuizAt: 0,
+    lastEvalAt: -Infinity,
+    alreadyPending: false,
+    rng,
+  });
+  assert.equal(r.fire, true);
 });
