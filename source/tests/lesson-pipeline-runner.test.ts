@@ -6,12 +6,14 @@ import {
   advanceJob,
   approveOutline,
   runPipelineStep,
+  startJobFromMap,
   type JobPatch,
   type JobView,
   type MapMeta,
   type PipelineStore,
 } from "../server/studio/step-runner";
 import { computeStepHash } from "../server/studio/pipeline";
+import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import type { LektorNote } from "../server/studio/lektor";
@@ -624,4 +626,33 @@ test("(n) advanceJob: köztes átmenet finishedAt=null, terminális átmenet fin
 
   await advanceJob("job-1", { step: "error", round: 0, reason: "x" }, { status: "ok" }, { store });
   assert.ok(store.jobs.get("job-1")?.finishedAt instanceof Date);
+});
+
+// #180 — measured live (admin "Lecke-készítés indítása", 2026-09-05 22:54): the client posts
+// an EMPTY body, the route demanded subject+classroom -> 400 "Hibás kérés." The UI text
+// promises "a lecke a térkép szerinti tantárgyból és osztályba készül", so the map IS the
+// source of truth: no scope -> use the map's; an explicit but different scope stays a 409.
+test("(o) startJobFromMap: hiányzó scope → a térkép tantárgya/osztálya (#180)", async () => {
+  const { store } = makeDeps(CANNED_AUTHOR);
+  const started = await startJobFromMap("m1", undefined, { store });
+  assert.equal(started.ok, true, JSON.stringify(started));
+  const job = store.jobs.get((started as { jobId: string }).jobId);
+  assert.equal(job?.step, "pedagogue");
+  assert.equal(job?.mapId, "m1");
+});
+
+test("(p) startJobFromMap: a térképpel EGYEZŐ explicit scope továbbra is indít, az eltérő 409-et ad", async () => {
+  const { store } = makeDeps(CANNED_AUTHOR);
+  const same = await startJobFromMap("m1", { subject: MAP_META.subject, classroom: MAP_META.classroom }, { store });
+  assert.equal(same.ok, true);
+  const other = await startJobFromMap("m1", { subject: "matematika", classroom: MAP_META.classroom }, { store });
+  assert.equal(other.ok, false);
+  assert.match((other as { reason: string }).reason, /térkép/);
+});
+
+test("(q) fromMapBody: az üres törzs érvényes (a scope opcionális), a hiányos scope nem", () => {
+  assert.equal(fromMapBody.safeParse({}).success, true, "üres body = térkép scope");
+  assert.equal(fromMapBody.safeParse(undefined).success, true, "body nélkül is");
+  assert.equal(fromMapBody.safeParse({ subject: "biológia", classroom: 7 }).success, true);
+  assert.equal(fromMapBody.safeParse({ subject: "biológia" }).success, false, "fél scope nem elfogadható");
 });

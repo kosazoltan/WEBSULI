@@ -654,7 +654,7 @@ export async function approveOutline(
  */
 export async function startJobFromMap(
   mapId: string,
-  input: { subject: string; classroom: number },
+  input: { subject: string; classroom: number } | undefined,
   deps: PipelineDeps = {},
 ): Promise<{ ok: true; jobId: string } | { ok: false; reason: string }> {
   const { store } = await resolveDeps(deps);
@@ -663,7 +663,8 @@ export async function startJobFromMap(
   if (map.concepts.length === 0) {
     return { ok: false, reason: "A térkép nem tartalmaz fogalmat — a pedagógus nem tud vázlatot készíteni." };
   }
-  if (map.meta.subject !== input.subject || map.meta.classroom !== input.classroom) {
+  // #180: no scope in the request = the map's scope (the UI promises exactly that).
+  if (input && (map.meta.subject !== input.subject || map.meta.classroom !== input.classroom)) {
     return {
       ok: false,
       reason: "A kért tantárgy/osztály eltér a térkép adataitól — a lecke a térkép szerinti osztálynak készül.",
