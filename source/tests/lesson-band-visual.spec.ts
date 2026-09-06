@@ -45,7 +45,11 @@ for (const { classroom, band } of BANDS) {
   test(`${band}: nincs vízszintes túlfolyás és minden érintési cél ≥ 44 px (360/390/768/1280)`, async ({ page }) => {
     for (const w of VIEWPORTS) {
       await page.setViewportSize({ width: w, height: 900 });
-      await openProbe(page, classroom);
+      // 3 szakasz: a haladásjelző csak így renderel — élesben 6×8 px-es lépés-link bukott,
+      // amit az egy-szakaszos mérőoldal nem tudott megmutatni.
+      await page.goto(`/__lesson-runtime-probe?classroom=${classroom}&sections=3`);
+      await page.waitForLoadState("networkidle");
+      await page.waitForSelector('[data-testid="lesson-progress"]');
       const m = await page.evaluate(() => {
         const doc = document.documentElement;
         const small = [...document.querySelectorAll('[data-testid="lesson-runtime"] button, [data-testid="lesson-runtime"] a, [data-testid="lesson-runtime"] [role="button"]')]
