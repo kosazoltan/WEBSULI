@@ -12,6 +12,7 @@ import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScor
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { useCouponSession } from "@/game-engine/useCouponSession";
+import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
@@ -46,6 +47,7 @@ import AchievementToast from "@/components/AchievementToast";
 type EnemyKind = "rock" | "crystal" | "alien" | "fighter" | "boss";
 
 type Quiz = {
+  id?: string;
   prompt: string;
   options: string[];
   correctIndex: number;
@@ -730,6 +732,7 @@ export default function SpaceAsteroidQuiz() {
     const fromMat: Quiz[] = (materialQuizData?.items ?? [])
       .filter((q) => Array.isArray(q.options) && q.options.length === 4)
       .map((q) => ({
+        id: q.id,
         prompt: q.prompt,
         options: q.options.slice(0, 4),
         correctIndex: q.correctIndex,
@@ -910,6 +913,7 @@ export default function SpaceAsteroidQuiz() {
     }
     // Helyes válasz
     sfxSuccess();
+    maybeClaimCouponBonus(coupon, activeQuiz.id);
     setActiveQuiz(null);
     setRevealCorrectIdx(null);
     setWrongIdx(null);

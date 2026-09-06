@@ -36,6 +36,7 @@ import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScor
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import { useCouponSession, type CouponSession } from "@/game-engine/useCouponSession";
+import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import {
   sfxSuccess,
@@ -1356,10 +1357,7 @@ function PlayScreen(props: {
       }
       props.onProgress(recordAnswer(props.progress, correct));
 
-      // Reward coupon time on a correct MATERIAL answer (matches the other games).
-      if (correct && quiz.source === "material" && props.coupon.active) {
-        void props.coupon.claimBonus(quiz.id);
-      }
+      if (correct) maybeClaimCouponBonus(props.coupon, quiz.id);
 
       scheduleTimeout(() => {
         setQuizFlash(null);

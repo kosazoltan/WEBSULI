@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { useCouponSession } from "@/game-engine/useCouponSession";
+import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
@@ -35,9 +36,9 @@ import {
 const TILE = 24;
 
 type QuizSubject = "english" | "english-math" | "math" | "nature";
-type Quiz = { prompt: string; options: string[]; correctIndex: number; subject?: QuizSubject };
+type Quiz = { id?: string; prompt: string; options: string[]; correctIndex: number; subject?: QuizSubject };
 type QuizBankApi = {
-  items: { prompt: string; options: string[]; correctIndex: number }[];
+  items: { id?: string; prompt: string; options: string[]; correctIndex: number }[];
 };
 
 /**
@@ -1204,6 +1205,7 @@ export default function BlockCraftQuiz() {
           : t === "english" ? "english"
           : "english"; // hungarian topic alapú kérdéseket "english" csoportba tesszük
         return {
+          id: q.id,
           prompt: q.prompt,
           options: q.options.slice(0, 4),
           correctIndex: q.correctIndex,
@@ -1214,6 +1216,7 @@ export default function BlockCraftQuiz() {
     const remote: Quiz[] = (bankData?.items ?? [])
       .filter((q) => q.options?.length > 1)
       .map((q) => ({
+        id: q.id,
         prompt: q.prompt,
         options: q.options.slice(0, 4),
         correctIndex: q.correctIndex,
@@ -1871,6 +1874,7 @@ export default function BlockCraftQuiz() {
     }
 
     sfxSuccess();
+    maybeClaimCouponBonus(coupon, quiz.id);
     const tgt = mineTargetRef.current;
     let levelGoalReached = false;
     if (tgt) {

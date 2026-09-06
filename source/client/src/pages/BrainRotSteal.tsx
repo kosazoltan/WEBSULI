@@ -18,10 +18,11 @@ import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
 import { useCouponSession } from "@/game-engine/useCouponSession";
+import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 
 /* --- Típusok --- */
-type Quiz = { prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
+type Quiz = { id?: string; prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
 
 type BrainRot = {
   id: number;
@@ -288,6 +289,7 @@ export default function BrainRotSteal() {
         const t = (q.topic ?? "").toLowerCase();
         const cat: Quiz["category"] = t === "math" ? "math" : t === "hungarian" ? "hungarian" : "english";
         return {
+          id: q.id,
           prompt: q.prompt,
           options: q.options.slice(0, 4),
           correctIndex: q.correctIndex,
@@ -368,6 +370,7 @@ export default function BrainRotSteal() {
 
       // Helyes válasz!
       sfxSuccess();
+      maybeClaimCouponBonus(coupon, quiz.id);
       setRevealCorrectIdx(null);
       setWrongIdx(null);
       const multiplier = comboMultiplier;

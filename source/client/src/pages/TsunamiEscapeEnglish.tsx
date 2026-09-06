@@ -13,6 +13,7 @@ import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
 import { useCouponSession } from "@/game-engine/useCouponSession";
+import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import {
   ArrowLeft,
@@ -969,6 +970,7 @@ export default function TsunamiEscapeEnglish() {
     }
 
     sfxSuccess();
+    maybeClaimCouponBonus(coupon, quiz.id);
     setRewardBurst(true);
     timeoutsRef.current.push(window.setTimeout(() => setRewardBurst(false), 900));
 
