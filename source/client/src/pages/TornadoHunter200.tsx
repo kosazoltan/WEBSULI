@@ -1,3 +1,4 @@
+import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import {
   useCallback,
   useEffect,
@@ -990,6 +991,8 @@ function PlayScreen(props: {
     return id;
   };
   const recentQuizRef = useRef<string[]>([]);
+  const adaptiveRef = useRef(createAdaptiveSession(primaryGrade));
+  const answerLockedRef = useRef(false);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   const touchRef = useRef({ fwd: false, back: false, left: false, right: false });
   const padAnchorPrevRef = useRef(false);
@@ -1033,7 +1036,9 @@ function PlayScreen(props: {
 
   const raiseQuiz = useCallback(
     (reason: QuizReason) => {
+      answerLockedRef.current = false;
       const q = pickQuestion({
+        adaptiveBand: adaptiveRef.current.band,
         level: props.level,
         school: settingsRef.current.school,
         mode: settingsRef.current.quizMode,
@@ -1388,8 +1393,10 @@ function PlayScreen(props: {
   const answerQuiz = useCallback(
     (idx: number) => {
       const quiz = activeQuiz;
-      if (!quiz) return;
+      if (!quiz || answerLockedRef.current) return;
+      answerLockedRef.current = true;
       const correct = idx === quiz.correctIndex;
+      adaptiveRef.current.answer(correct);
       setQuizFlash({ idx, correct });
       if (correct) {
         correctRef.current += 1;
@@ -1427,6 +1434,7 @@ function PlayScreen(props: {
             prompt: quiz.prompt,
             options: quiz.options,
             correctIndex: quiz.correctIndex,
+            explanation: quiz.explanation ?? undefined,
           },
           chosenIndex: idx,
           attempt: 1, // vezetés közben nincs újrapróbálkozás: a vihar nem áll meg
@@ -1446,6 +1454,8 @@ function PlayScreen(props: {
 
   const restartRef = useRef<() => void>(() => {});
   restartRef.current = () => {
+    adaptiveRef.current.reset(primaryGrade);
+    answerLockedRef.current = false;
     finishedRef.current = false;
     rngRef.current.next = (props.level * 2654435761 + Math.floor(Math.random() * 9973)) >>> 0;
     tornadoPosRef.current = { x: 0, z: 0, angle: drawRng() * Math.PI * 2, born: 0, alive: true };

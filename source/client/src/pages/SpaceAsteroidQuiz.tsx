@@ -1,3 +1,4 @@
+import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -150,47 +151,47 @@ const ROUND_LIMIT_SEC = 360;
 /** Statikus fallback kvíz-bank — ha nincs tananyaghoz kötött kérdés a DB-ben. */
 const FALLBACK_QUIZZES: Quiz[] = [
   // === Angol szókincs ===
-  { prompt: "Star magyarul:", options: ["bolygó", "csillag", "hold", "felhő"], correctIndex: 1, topic: "english" },
-  { prompt: "Spaceship magyarul:", options: ["repülő", "tengeralattjáró", "űrhajó", "hajó"], correctIndex: 2, topic: "english" },
-  { prompt: "Asteroid magyarul:", options: ["csillagkép", "üstökös", "aszteroida", "bolygó"], correctIndex: 2, topic: "english" },
-  { prompt: "Galaxy magyarul:", options: ["galaxis", "naprendszer", "csillagrendszer", "fekete lyuk"], correctIndex: 0, topic: "english" },
-  { prompt: "Moon magyarul:", options: ["nap", "hold", "csillag", "föld"], correctIndex: 1, topic: "english" },
-  { prompt: "Sun magyarul:", options: ["hold", "csillag", "nap", "ég"], correctIndex: 2, topic: "english" },
-  { prompt: "Planet magyarul:", options: ["üstökös", "bolygó", "csillag", "üveg"], correctIndex: 1, topic: "english" },
-  { prompt: "Rocket magyarul:", options: ["rakéta", "vonat", "biciklik", "űrlény"], correctIndex: 0, topic: "english" },
-  { prompt: "Alien magyarul:", options: ["barát", "űrlény", "ember", "robot"], correctIndex: 1, topic: "english" },
-  { prompt: "Earth magyarul:", options: ["hold", "föld", "ég", "tűz"], correctIndex: 1, topic: "english" },
-  { prompt: "Light magyarul:", options: ["sötét", "fény", "árnyék", "súly"], correctIndex: 1, topic: "english" },
-  { prompt: "Speed magyarul:", options: ["sebesség", "súly", "magasság", "idő"], correctIndex: 0, topic: "english" },
-  { prompt: "Danger magyarul:", options: ["bátorság", "veszély", "biztonság", "pihenés"], correctIndex: 1, topic: "english" },
-  { prompt: "Shield magyarul:", options: ["pajzs", "kard", "kalap", "csésze"], correctIndex: 0, topic: "english" },
-  { prompt: "Power magyarul:", options: ["lassú", "puha", "erő", "kicsi"], correctIndex: 2, topic: "english" },
+  { prompt: "Star magyarul:", options: ["bolygó", "csillag", "hold", "felhő"], correctIndex: 1, topic: "english", explanation: "A star szó jelentése csillag az égitestek között. „I can see a star.” = „Látok egy csillagot.”" },
+  { prompt: "Spaceship magyarul:", options: ["repülő", "tengeralattjáró", "űrhajó", "hajó"], correctIndex: 2, topic: "english", explanation: "A spaceship magyarul űrhajó, vagyis világűrbeli utazásra való jármű. „The spaceship flies to Mars.” = „Az űrhajó a Marsra repül.”" },
+  { prompt: "Asteroid magyarul:", options: ["csillagkép", "üstökös", "aszteroida", "bolygó"], correctIndex: 2, topic: "english", explanation: "Az asteroid magyarul aszteroida, kisebb, Nap körül keringő égitest. „An asteroid moves through space.” = „Egy aszteroida halad az űrben.”" },
+  { prompt: "Galaxy magyarul:", options: ["galaxis", "naprendszer", "csillagrendszer", "fekete lyuk"], correctIndex: 0, topic: "english", explanation: "A galaxy magyarul galaxis, sok csillagot, gázt és port tartalmazó rendszer. „The Milky Way is a galaxy.” = „A Tejútrendszer egy galaxis.”" },
+  { prompt: "Moon magyarul:", options: ["nap", "hold", "csillag", "föld"], correctIndex: 1, topic: "english", explanation: "A moon magyarul hold, vagyis egy bolygó körül keringő égitest. „The Moon shines at night.” = „A Hold éjjel világít.”" },
+  { prompt: "Sun magyarul:", options: ["hold", "csillag", "Nap", "ég"], correctIndex: 2, topic: "english", explanation: "A Sun magyarul Nap, a Naprendszer központi csillaga. „The Sun is very bright.” = „A Nap nagyon fényes.”" },
+  { prompt: "Planet magyarul:", options: ["üstökös", "bolygó", "csillag", "üveg"], correctIndex: 1, topic: "english", explanation: "A planet magyarul bolygó: csillag körül keringő, saját fénnyel nem rendelkező égitest. „Earth is a planet.” = „A Föld bolygó.”" },
+  { prompt: "Rocket magyarul:", options: ["rakéta", "vonat", "biciklik", "űrlény"], correctIndex: 0, topic: "english", explanation: "A rocket magyarul rakéta, amely hajtóművével nagy sebességre gyorsulhat. „The rocket goes into space.” = „A rakéta az űrbe megy.”" },
+  { prompt: "Alien magyarul:", options: ["barát", "űrlény", "ember", "robot"], correctIndex: 1, topic: "english", explanation: "Az alien jelentése űrlény, vagyis feltételezett földön kívüli élőlény. „The alien is friendly.” = „Az űrlény barátságos.”" },
+  { prompt: "Earth magyarul:", options: ["hold", "Föld", "ég", "tűz"], correctIndex: 1, topic: "english", explanation: "Az Earth bolygónk neve, magyarul Föld. „Earth goes around the Sun.” = „A Föld a Nap körül kering.”" },
+  { prompt: "Light (főnév) magyarul:", options: ["sötét", "fény", "árnyék", "súly"], correctIndex: 1, topic: "english", explanation: "A light főnévként fény, amely lehetővé teszi a látást. „Turn on the light.” = „Kapcsold fel a fényt.”" },
+  { prompt: "Speed magyarul:", options: ["sebesség", "súly", "magasság", "idő"], correctIndex: 0, topic: "english", explanation: "A speed sebességet jelent. Az átlagsebesség a megtett út és az eltelt idő hányadosa: 60 km 2 óra alatt átlagosan 30 km/h." },
+  { prompt: "Danger magyarul:", options: ["bátorság", "veszély", "biztonság", "pihenés"], correctIndex: 1, topic: "english", explanation: "A danger magyarul veszély, vagyis sérülés vagy kár lehetősége. „Fire is dangerous.” = „A tűz veszélyes.”" },
+  { prompt: "Shield magyarul:", options: ["pajzs", "kard", "kalap", "csésze"], correctIndex: 0, topic: "english", explanation: "A shield magyarul pajzs, amely védelmet nyújt támadás ellen. „The knight has a shield.” = „A lovagnak van egy pajzsa.”" },
+  { prompt: "Power (erő értelemben) magyarul:", options: ["lassú", "puha", "erő", "kicsi"], correctIndex: 2, topic: "english", explanation: "A power ebben az értelemben erő vagy hatóerő. „The hero has great power.” = „A hősnek nagy ereje van.”" },
   // === Matematika ===
-  { prompt: "Mennyi 7 × 8?", options: ["49", "54", "56", "64"], correctIndex: 2, topic: "math" },
-  { prompt: "Mennyi 12 + 19?", options: ["29", "30", "31", "32"], correctIndex: 2, topic: "math" },
-  { prompt: "Mennyi 100 - 47?", options: ["43", "53", "57", "63"], correctIndex: 1, topic: "math" },
-  { prompt: "Mennyi 144 ÷ 12?", options: ["10", "11", "12", "13"], correctIndex: 2, topic: "math" },
-  { prompt: "Mennyi 9 × 9?", options: ["72", "81", "89", "99"], correctIndex: 1, topic: "math" },
-  { prompt: "Mennyi a 100 fele?", options: ["25", "40", "50", "75"], correctIndex: 2, topic: "math" },
-  { prompt: "Mennyi 25 × 4?", options: ["80", "90", "100", "125"], correctIndex: 2, topic: "math" },
-  { prompt: "Hány perc 2 óra?", options: ["60", "90", "120", "180"], correctIndex: 2, topic: "math" },
-  { prompt: "Hány másodperc 3 perc?", options: ["120", "150", "180", "240"], correctIndex: 2, topic: "math" },
-  { prompt: "Mennyi 56 ÷ 7?", options: ["6", "7", "8", "9"], correctIndex: 2, topic: "math" },
+  { prompt: "Mennyi 7 × 8?", options: ["49", "54", "56", "64"], correctIndex: 2, topic: "math", explanation: "7 × 8 = 56: hét darab nyolcas összege 8 + 8 + 8 + 8 + 8 + 8 + 8 = 56." },
+  { prompt: "Mennyi 12 + 19?", options: ["29", "30", "31", "32"], correctIndex: 2, topic: "math", explanation: "12 + 19 = 31: előbb 12 + 20 = 32, majd egyet levonva 31-et kapunk." },
+  { prompt: "Mennyi 100 - 47?", options: ["43", "53", "57", "63"], correctIndex: 1, topic: "math", explanation: "100 − 47 = 53, mert 100 − 40 = 60, és 60 − 7 = 53." },
+  { prompt: "Mennyi 144 ÷ 12?", options: ["10", "11", "12", "13"], correctIndex: 2, topic: "math", explanation: "144 ÷ 12 = 12, mert 12 × 12 = 144. Az osztás a szorzás fordított művelete." },
+  { prompt: "Mennyi 9 × 9?", options: ["72", "81", "89", "99"], correctIndex: 1, topic: "math", explanation: "9 × 9 = 81, mert kilencszer kilenc: 9 × 10 − 9 = 90 − 9 = 81." },
+  { prompt: "Mennyi a 100 fele?", options: ["25", "40", "50", "75"], correctIndex: 2, topic: "math", explanation: "100 fele 50, mert a felezés ugyanaz, mint a kettővel való osztás: 100 ÷ 2 = 50." },
+  { prompt: "Mennyi 25 × 4?", options: ["80", "90", "100", "125"], correctIndex: 2, topic: "math", explanation: "25 × 4 = 100, mert 25 + 25 + 25 + 25 = 100." },
+  { prompt: "Hány perc 2 óra?", options: ["60", "90", "120", "180"], correctIndex: 2, topic: "math", explanation: "2 óra = 120 perc, mert 1 óra 60 perc, tehát 2 × 60 = 120." },
+  { prompt: "Hány másodperc 3 perc?", options: ["120", "150", "180", "240"], correctIndex: 2, topic: "math", explanation: "3 perc = 180 másodperc, mert 1 perc 60 másodperc, tehát 3 × 60 = 180." },
+  { prompt: "Mennyi 56 ÷ 7?", options: ["6", "7", "8", "9"], correctIndex: 2, topic: "math", explanation: "56 ÷ 7 = 8, mert 7 × 8 = 56. A hányados megmutatja, hányszor fér meg a 7 az 56-ban." },
   // === Természet / Űr ===
-  { prompt: "Melyik a Naprendszer legnagyobb bolygója?", options: ["Föld", "Mars", "Jupiter", "Szaturnusz"], correctIndex: 2, topic: "nature" },
-  { prompt: "Hány bolygó van a Naprendszerben?", options: ["6", "7", "8", "9"], correctIndex: 2, topic: "nature" },
-  { prompt: "Melyik a hozzánk legközelebbi csillag?", options: ["Sirius", "Polaris", "Nap", "Vega"], correctIndex: 2, topic: "nature" },
-  { prompt: "Mi a Hold a Föld számára?", options: ["bolygó", "csillag", "kísérő", "üstökös"], correctIndex: 2, topic: "nature" },
-  { prompt: "Mi az aszteroidaöv?", options: ["a Mars és Jupiter között", "a Föld körül", "a Nap belsejében", "a Hold mögött"], correctIndex: 0, topic: "nature" },
-  { prompt: "Melyik bolygó a Vörös Bolygó?", options: ["Vénusz", "Mars", "Jupiter", "Szaturnusz"], correctIndex: 1, topic: "nature" },
-  { prompt: "Hány hold kering a Föld körül?", options: ["1", "2", "3", "4"], correctIndex: 0, topic: "nature" },
-  { prompt: "Mit termel a növény napfénnyel?", options: ["szén-dioxidot", "oxigént", "vizet", "hidrogént"], correctIndex: 1, topic: "nature" },
+  { prompt: "Melyik a Naprendszer legnagyobb bolygója?", options: ["Föld", "Mars", "Jupiter", "Szaturnusz"], correctIndex: 2, topic: "nature", explanation: "A Jupiter a Naprendszer legnagyobb bolygója; átmérője jóval nagyobb a Földénél." },
+  { prompt: "Hány bolygó van a Naprendszerben?", options: ["6", "7", "8", "9"], correctIndex: 2, topic: "nature", explanation: "A Naprendszerben 8 bolygó van: a Merkúrtól a Neptunuszig. A Plútó törpebolygó, ezért nem számít közéjük." },
+  { prompt: "Melyik a hozzánk legközelebbi csillag?", options: ["Sirius", "Polaris", "Nap", "Vega"], correctIndex: 2, topic: "nature", explanation: "A Nap a Földhöz legközelebbi csillag. A többi csillag, például a Sirius, sok fényévnyi távolságra van." },
+  { prompt: "Mi a Hold a Föld számára?", options: ["bolygó", "csillag", "kísérő", "üstökös"], correctIndex: 2, topic: "nature", explanation: "A Hold a Föld természetes kísérője, mert gravitációs vonzás hatására a Föld körül kering. Nem bocsát ki saját fényt." },
+  { prompt: "Hol található a fő aszteroidaöv?", options: ["a Mars és Jupiter között", "a Föld körül", "a Nap belsejében", "a Hold mögött"], correctIndex: 0, topic: "nature", explanation: "Az aszteroidaöv a Mars és a Jupiter pályája között található sok apró kőzetes égitest területe. Ezek a Nap körül keringenek." },
+  { prompt: "Melyik bolygó a Vörös Bolygó?", options: ["Vénusz", "Mars", "Jupiter", "Szaturnusz"], correctIndex: 1, topic: "nature", explanation: "A Marsot vörös bolygónak nevezik, mert felszínén sok vas-oxid, vagyis rozsda található. Ez vöröses színt ad neki." },
+  { prompt: "Hány hold kering a Föld körül?", options: ["1", "2", "3", "4"], correctIndex: 0, topic: "nature", explanation: "A Föld körül egy természetes hold, a Hold kering. Más bolygóknak lehet több holdjuk is, például a Jupiternek sok van." },
+  { prompt: "Mit termel a növény napfénnyel?", options: ["szén-dioxidot", "oxigént", "vizet", "hidrogént"], correctIndex: 1, topic: "nature", explanation: "A növény fotoszintézis során napfény, víz és szén-dioxid felhasználásával oxigént termel. Közben cukrot is előállít a növekedéshez." },
   // === Magyar nyelvtan ===
-  { prompt: "Melyik betű magánhangzó?", options: ["b", "k", "á", "p"], correctIndex: 2, topic: "hungarian" },
-  { prompt: "Hány szótagból áll a madár szó?", options: ["1", "2", "3", "4"], correctIndex: 1, topic: "hungarian" },
-  { prompt: "Melyik a múlt idejű ige?", options: ["fut", "futott", "futni fog", "futna"], correctIndex: 1, topic: "hungarian" },
-  { prompt: "Melyik főnév többes számú?", options: ["alma", "almák", "almás", "almázik"], correctIndex: 1, topic: "hungarian" },
-  { prompt: "Mi a melléknév: a piros alma?", options: ["alma", "piros", "az", "egy"], correctIndex: 1, topic: "hungarian" },
+  { prompt: "Melyik betű magánhangzó?", options: ["b", "k", "á", "p"], correctIndex: 2, topic: "hungarian", explanation: "Az á magánhangzó, mert kiejtésekor a levegő akadálytalanul áramlik ki. A b, k és p mássalhangzók." },
+  { prompt: "Hány szótagból áll a madár szó?", options: ["1", "2", "3", "4"], correctIndex: 1, topic: "hungarian", explanation: "A madár szó két szótagú: ma-dár. A szótagokat általában a bennük lévő magánhangzók száma alapján számoljuk." },
+  { prompt: "Melyik a múlt idejű ige?", options: ["fut", "futott", "futni fog", "futna"], correctIndex: 1, topic: "hungarian", explanation: "A futott múlt idejű ige, mert már megtörtént cselekvést fejez ki. A „fut” jelen idejű, a „futni fog” jövő idejű." },
+  { prompt: "Melyik főnév többes számú?", options: ["alma", "almák", "almás", "almázik"], correctIndex: 1, topic: "hungarian", explanation: "Az almák többes számú főnév: az -k toldalék jelzi, hogy több almáról van szó. Az alma egyes számú alak." },
+  { prompt: "Mi a melléknév: a piros alma?", options: ["alma", "piros", "az", "egy"], correctIndex: 1, topic: "hungarian", explanation: "A piros melléknév, mert az alma tulajdonságát, a színét nevezi meg. Az alma főnév, mert egy tárgyat jelöl." },
 ];
 
 const ENEMY_BASE_XP: Record<EnemyKind, number> = {
@@ -872,7 +873,11 @@ export default function SpaceAsteroidQuiz() {
     return () => window.clearInterval(id);
   }, [phase, paused, powerTimer]);
 
+  const adaptiveRef = useRef(createAdaptiveSession(4));
+  const answerLockedRef = useRef(false);
+
   const enqueueQuiz = useCallback((reason: QuizReason) => {
+    answerLockedRef.current = false;
     setQuizReason(reason);
     setActiveQuiz(pickQuiz());
     setPhase("quiz");
@@ -889,6 +894,8 @@ export default function SpaceAsteroidQuiz() {
   }, []);
 
   const startNewRun = useCallback(() => {
+    adaptiveRef.current.reset(grade ?? 4);
+    answerLockedRef.current = false;
     scoreSubmittedRef.current = false;
     streakProtector.resetProtector();
     setRevealCorrectIdx(null);
@@ -931,7 +938,7 @@ export default function SpaceAsteroidQuiz() {
     gameElapsedRef.current = 0;
     lastSpawnAtRef.current = 0;
     enqueueQuiz("wave");
-  }, [enqueueQuiz]);
+  }, [enqueueQuiz, grade]);
 
   /** G-1: magyarázó kártya rossz válaszra. */
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
@@ -941,12 +948,15 @@ export default function SpaceAsteroidQuiz() {
     setRevealCorrectIdx(null);
     setWrongIdx(null);
     setActiveQuiz(pickQuiz());
+    answerLockedRef.current = false;
   }, [pickQuiz]);
 
   /* ============== Quiz választ feldolgoz ============== */
 
   const onAnswer = (idx: number) => {
-    if (!activeQuiz) return;
+    if (!activeQuiz || phase !== "quiz" || answerLockedRef.current) return;
+    answerLockedRef.current = true;
+    adaptiveRef.current.answer(idx === activeQuiz.correctIndex);
     if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
     if (idx !== activeQuiz.correctIndex) {
       sfxError();
@@ -1262,7 +1272,7 @@ export default function SpaceAsteroidQuiz() {
 
     // Spawn logika a hullámon belül — elapsed óra, nem fali idő (kvíz alatt áll)
     if (!waveIntermissionRef.current && enemiesSpawnedThisWaveRef.current < enemiesPerWaveRef.current) {
-      const spawnInterval = clamp(1.4 - waveRef.current * 0.06, 0.4, 1.4);
+      const spawnInterval = clamp(1.4 - waveRef.current * 0.06, 0.4, 1.4) * (1.4 - adaptiveRef.current.band * 0.6);
       const emptyField = enemiesRef.current.length === 0;
       if (spawnReady({
         elapsed: gameElapsedRef.current,
