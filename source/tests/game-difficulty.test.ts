@@ -109,3 +109,28 @@ test("a kezdő sáv az osztályhoz igazodik, de sosem szélsőséges", () => {
     assert.ok(value >= DIFFICULTY_FLOOR && value <= 1, `${classroom}. osztály: ${value}`);
   }
 });
+
+/* ---------------------- a játékok tényleges bekötése ---------------------- */
+
+test("a nehézség-sáv be van kötve a játékokba, nem csak létezik", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const root = fileURLToPath(new URL("..", import.meta.url));
+
+  const strip = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  /*
+   * A mérés szerint (2026-09-07) a Matek Sprintben és a Brain Rotban NULLA
+   * adaptáció volt: az egyik semmit nem igazított, a másik pusztán az eltelt
+   * időtől gyorsult — vagyis akkor is nehezedett, ha a gyerek épp mindent
+   * elrontott. Egy zöld unit-teszt a modulra ezen semmit nem változtat, ha a
+   * játék nem hívja.
+   */
+  for (const file of ["SpeedQuizMath.tsx", "BrainRotSteal.tsx"]) {
+    const code = strip(readFileSync(join(root, "client/src/pages", file), "utf8"));
+    assert.match(code, /nextDifficulty\s*\(/, `${file}: a sáv nem mozdul`);
+    assert.match(code, /startingDifficulty\s*\(/, `${file}: nincs kezdő sáv`);
+  }
+});

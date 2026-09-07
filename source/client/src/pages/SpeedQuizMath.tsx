@@ -14,6 +14,7 @@ import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge"
 import AchievementToast from "@/components/AchievementToast";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
+import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 
 type GradeLevel = 3 | 4 | 5;
 type Phase = "menu" | "play" | "over" | "won";
@@ -293,6 +294,33 @@ export default function SpeedQuizMath() {
   // olvas, és az olvasásért nem jár büntetés.
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
   const attemptRef = useRef(0);
+
+  /**
+   * G-4: adaptív nehézség — az IDŐN keresztül, nem a tartalmon.
+   *
+   * A feladatok nehézségét az osztály adja; azt nem akarjuk menet közben
+   * átírni, mert a tananyag rögzített. Amit viszont igazítani lehet, az a
+   * gondolkodási idő: aki küzd, kapjon többet, aki repül, kevesebbet. Ez a
+   * mastery-tanulás alapmintája, és nem rontja a feladatok minőségét.
+   */
+  const difficultyRef = useRef(startingDifficulty(4));
+  const answerHistoryRef = useRef<boolean[]>([]);
+
+  const recordDifficultyAnswer = useCallback((correct: boolean) => {
+    const history = [...answerHistoryRef.current, correct].slice(-6);
+    answerHistoryRef.current = history;
+    difficultyRef.current = nextDifficulty({
+      recentCorrect: history,
+      current: difficultyRef.current,
+    });
+  }, []);
+
+  /** A kérdésre adott idő a nehézség-sávból: padlón +50%, tetején -25%. */
+  const questionSecondsFor = useCallback(
+    (level: GradeLevel) =>
+      Math.max(6, Math.round(QUESTION_SECONDS[level] * (1.5 - difficultyRef.current * 0.75))),
+    [],
+  );
   // A magyarázatot a game over ELŐTT mutatjuk meg: az utolsó hibából is tanulni kell.
   const pendingOverRef = useRef(false);
   const recentPromptsRef = useRef<string[]>([]);
@@ -313,10 +341,10 @@ export default function SpeedQuizMath() {
     const next = pickTask(grade, recentPromptsRef.current);
     recentPromptsRef.current = [...recentPromptsRef.current.slice(-5), next.prompt];
     setTask(next);
-    setQuestionTimeLeft(QUESTION_SECONDS[grade]);
+    setQuestionTimeLeft(questionSecondsFor(grade));
     setAnswerState("idle");
     attemptRef.current = 0;
-  }, [grade]);
+  }, [grade, questionSecondsFor]);
 
   /**
    * G-1: magyarázó kártya rossz válaszra és lejárt időre.
@@ -367,8 +395,8 @@ export default function SpeedQuizMath() {
     setFeedback(null);
     setAnswerState("idle");
     pendingOverRef.current = false;
-    setQuestionTimeLeft(QUESTION_SECONDS[grade]);
-  }, [grade]);
+    setQuestionTimeLeft(questionSecondsFor(grade));
+  }, [grade, questionSecondsFor]);
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
@@ -383,7 +411,9 @@ export default function SpeedQuizMath() {
     setWrongFlash(false);
     setAnswerState("idle");
     setTimeLeft(ROUND_SECONDS[grade]);
-    setQuestionTimeLeft(QUESTION_SECONDS[grade]);
+    difficultyRef.current = startingDifficulty(grade);
+    answerHistoryRef.current = [];
+    setQuestionTimeLeft(questionSecondsFor(grade));
     recentPromptsRef.current = [];
     const first = pickTask(grade, []);
     recentPromptsRef.current = [first.prompt];
@@ -438,8 +468,10 @@ export default function SpeedQuizMath() {
           // válaszért. A továbblépést (vagy a game overt) a kártya bezárása intézi,
           // ezért itt már nem hívunk nextTask()-ot.
           pendingOverRef.current = nextLives <= 0;
+          // A lejárt kérdés is rossz válasznak számít a nehézség-sávban.
+          recordDifficultyAnswer(false);
           showFeedbackFor(null);
-          return QUESTION_SECONDS[grade];
+          return questionSecondsFor(grade);
         }
         return prev - 1;
       });
@@ -449,7 +481,7 @@ export default function SpeedQuizMath() {
     // closure-ral a lejárt kérdés az ELŐZŐ feladat megoldását magyarázná el.
     // (Az exhaustive-deps szabály ebben a repóban ki van kapcsolva — #310 osztály —,
     // a függőségeket kézzel tartjuk karban.)
-  }, [phase, grade, endAsLose, feedback, showFeedbackFor]);
+  }, [phase, grade, endAsLose, feedback, showFeedbackFor, questionSecondsFor, recordDifficultyAnswer]);
 
   const handleAnswer = (idx: number) => {
     if (phase !== "play") return;
@@ -473,11 +505,13 @@ export default function SpeedQuizMath() {
       // hogy a gyerek észrevegye a büntetést, és túl kevés ahhoz, hogy tanuljon
       // belőle — a téves megoldás így érintetlenül maradt meg benne.
       pendingOverRef.current = nextLives <= 0;
+      recordDifficultyAnswer(false);
       showFeedbackFor(idx);
       return;
     }
 
     sfxSuccess();
+    recordDifficultyAnswer(true);
     setAnswerState("correct");
     const base = grade === 3 ? 30 : grade === 4 ? 36 : 44;
     const speedBonus = Math.max(0, questionTimeLeft - 1) * (grade === 5 ? 4 : 3);
