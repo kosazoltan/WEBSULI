@@ -59,4 +59,3 @@ A DOCX tényleges visszaolvasásakor a korábbi Mammoth/XML adapter hibázott (h
 - Bizonyítékok, 20 eredeti forrásoldal, átiratok, böngészőképek, visszaállítási mentések és lecke-linkek: `tmp/geometry-2026-09-07/REPORT.md`. A helyi, gitből kizárt mappa nem tartalmaz API-kulcsot.
 - Push/deploy NOT RUN: nem volt külön kérés rá. A kódváltozások helyi commitok; az öt lecke és a címjavítások az éles adatbázisban vannak. A feltöltőfelület és a játékok kódjavítása kiadást igényel.
 - PDF/DOCX teljes gyártási végponttól végpontig teszt NOT RUN: a tényleges bemenet képekből ellenőrzött szöveg volt. A besorolási fájlformátumok célzott tesztje és valódi DOCX szövegkinyerése PASS. A gépi tartalomhoz további felhasználáskor is szükséges a meglévő minőségjelzések figyelembevétele.
-
