@@ -23,6 +23,7 @@ import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { stepBrainRot } from "@/lib/brainRotPhysics";
+import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 
 /* --- Típusok --- */
@@ -260,6 +261,27 @@ export default function BrainRotSteal() {
   // Ref-tükör a rAF loop-nak: a runSeconds state dependency az animációs
   // useEffect-et másodpercenként újraindította (loop + lastTime reset).
   const runSecondsRef = useRef(0);
+
+  /**
+   * G-4: adaptív nehézség.
+   *
+   * Eddig a spawn-ütem tisztán az eltelt időtől függött
+   * (`SPAWN_INTERVAL_BASE - runSeconds * 15`), vagyis a játék akkor is
+   * gyorsult, ha a gyerek épp minden kérdést elrontott — a frusztrációra még
+   * több nyomással válaszolt. Mostantól a sáv a VÁLASZOKAT követi: három jó
+   * után nehezít, két rossz után (gyorsabban) könnyít.
+   */
+  const difficultyRef = useRef(startingDifficulty(4));
+  const answerHistoryRef = useRef<boolean[]>([]);
+
+  const recordDifficultyAnswer = useCallback((correct: boolean) => {
+    const history = [...answerHistoryRef.current, correct].slice(-6);
+    answerHistoryRef.current = history;
+    difficultyRef.current = nextDifficulty({
+      recentCorrect: history,
+      current: difficultyRef.current,
+    });
+  }, []);
   const [comboMultiplier, setComboMultiplier] = useState(1);
   /** Futáson belüli max combo — a combo_4x jelvényhez (a végső combo gyakran 1-re reset). */
   const maxComboRef = useRef(1);
@@ -375,6 +397,7 @@ export default function BrainRotSteal() {
         timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 400));
         setRevealCorrectIdx(quiz.correctIndex);
         setWrongIdx(idx);
+        recordDifficultyAnswer(false);
         const outcome = streakProtector.handleWrong({ streak });
         if (outcome === "warned") {
           sfxWarning();
@@ -397,6 +420,7 @@ export default function BrainRotSteal() {
       }
 
       // Helyes válasz!
+      recordDifficultyAnswer(true);
       sfxSuccess();
       maybeClaimCouponBonus(coupon, quiz.id);
       setRevealCorrectIdx(null);
@@ -453,6 +477,8 @@ export default function BrainRotSteal() {
     setTimeLeft(ROUND_LIMIT);
     setRunSeconds(0);
     runSecondsRef.current = 0;
+    difficultyRef.current = startingDifficulty(4);
+    answerHistoryRef.current = [];
     setComboMultiplier(1);
     maxComboRef.current = 1;
     wrongQuizAnswersRef.current = 0;
@@ -505,7 +531,16 @@ export default function BrainRotSteal() {
       const boardH = boardEl?.clientHeight ?? 400;
 
       // Spawn brain rots
-      if (now - lastSpawnRef.current > Math.max(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_BASE - runSecondsRef.current * 15)) {
+      // A nehézség-sáv és az eltelt idő EGYÜTT szabja meg az ütemet: az idő
+      // adja az alapívet, a sáv pedig azt, hogy a konkrét gyereknek gyorsuljon
+      // vagy lassuljon. A padlón (0.15) másfélszer lassabb, a tetején (1)
+      // negyedével gyorsabb az alapnál.
+      const paceScale = 1.4 - difficultyRef.current * 0.55;
+      const spawnEvery = Math.max(
+        SPAWN_INTERVAL_MIN,
+        (SPAWN_INTERVAL_BASE - runSecondsRef.current * 15) * paceScale,
+      );
+      if (now - lastSpawnRef.current > spawnEvery) {
         lastSpawnRef.current = now;
         setBrainRots((prev) => {
           if (prev.filter((r) => !r.caught).length >= MAX_BRAIN_ROTS) return prev;

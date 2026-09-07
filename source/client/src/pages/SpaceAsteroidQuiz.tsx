@@ -29,6 +29,7 @@ import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 /* =====================================================================
@@ -685,6 +686,10 @@ export default function SpaceAsteroidQuiz() {
   const alienKillsRef = useRef(0);
   const scoreRef = useRef(0);
   const shakeRef = useRef(0);
+  // G-5: a rajzoló hurok ref-ekből olvas, ezért a beállítást ide tükrözzük.
+  const reducedMotion = useReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
   // Friss closure-ref-ek a mount-olt RAF loop-hoz (stale closure ellen).
   // A render végén frissülnek; a loop mindig a legutolsó verziót hívja.
   const tickRef = useRef<(dt: number) => void>(() => {});
@@ -1937,8 +1942,11 @@ export default function SpaceAsteroidQuiz() {
       flashLight.intensity = Math.max(0, flashLight.intensity - 0.18);
     }
 
-    // Camera shake
-    if (shakeRef.current > 0) {
+    // Camera shake.
+    // G-5: mozgáscsökkentésnél teljesen elmarad. A rázás okozza a rosszullétet,
+    // nem a részecskék — és aki rosszul lesz tőle, nem hibát jelent, hanem
+    // abbahagyja a játékot.
+    if (shakeRef.current > 0 && !reducedMotionRef.current) {
       camera.position.x = (Math.random() - 0.5) * shakeRef.current * 0.6;
       camera.position.y = -2.5 + (Math.random() - 0.5) * shakeRef.current * 0.4;
     } else {
