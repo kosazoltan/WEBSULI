@@ -601,7 +601,7 @@ export default function SpeedQuizMath() {
       <main className="relative z-10 w-full max-w-3xl xl:max-w-4xl mx-auto px-3 sm:px-5 py-3 min-h-dvh min-h-screen flex flex-col pb-8 sm:pb-10">
         <header className="flex items-center justify-between gap-2 mb-2">
           <Link href="/games">
-            <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2">
+            <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3">
               <ArrowLeft className="w-4 h-4" />
               Játékok
             </Button>

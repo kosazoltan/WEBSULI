@@ -747,7 +747,7 @@ export default function BrainRotSteal() {
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-screen flex flex-col pb-20 sm:pb-10">
         <header className="flex items-center justify-between gap-2 mb-2">
           <Link href="/games">
-            <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2">
+            <Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3">
               <ArrowLeft className="w-4 h-4" />
               Játékok
             </Button>

@@ -1176,7 +1176,7 @@ export default function TsunamiEscapeEnglish() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-white bg-slate-900/45 border border-white/20 hover:bg-slate-800/70 gap-1 -ml-2"
+              className="text-white bg-slate-900/45 border border-white/20 hover:bg-slate-800/70 gap-1 -ml-2 h-11 px-3"
               data-testid="link-tsunami-back-games"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -1268,7 +1268,7 @@ export default function TsunamiEscapeEnglish() {
                       type="button"
                       size="sm"
                       variant={difficulty === "easy" ? "default" : "outline"}
-                      className={difficulty === "easy" ? "bg-emerald-600 text-white border border-emerald-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}
+                      className={`h-11 px-4 ${difficulty === "easy" ? "bg-emerald-600 text-white border border-emerald-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
                       onClick={() => setDifficulty("easy")}
                     >
                       Könnyű
@@ -1277,7 +1277,7 @@ export default function TsunamiEscapeEnglish() {
                       type="button"
                       size="sm"
                       variant={difficulty === "normal" ? "default" : "outline"}
-                      className={difficulty === "normal" ? "bg-cyan-600 text-white border border-cyan-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}
+                      className={`h-11 px-4 ${difficulty === "normal" ? "bg-cyan-600 text-white border border-cyan-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
                       onClick={() => setDifficulty("normal")}
                     >
                       Közepes
@@ -1286,7 +1286,7 @@ export default function TsunamiEscapeEnglish() {
                       type="button"
                       size="sm"
                       variant={difficulty === "hard" ? "default" : "outline"}
-                      className={difficulty === "hard" ? "bg-rose-600 text-white border border-rose-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}
+                      className={`h-11 px-4 ${difficulty === "hard" ? "bg-rose-600 text-white border border-rose-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
                       onClick={() => setDifficulty("hard")}
                     >
                       Nehéz

@@ -12,6 +12,15 @@ export default {
       },
     },
     extend: {
+      // G-13 (2026-09-07): a 13-as lépcső sem a Tailwind alapskáláján, sem itt nem
+      // létezett, a `Button size="lg"` mégis `h-13`-at kért. Definiálatlan kulcsra a
+      // Tailwind NEM ad ki szabályt és NEM hibázik: a gomb a szöveg magasságára, 26 px-re
+      // esett össze — öt játék INDÍTÓ gombja került a 44 px-es érintési minimum alá,
+      // miközben a festett pirula nagyobbnak látszott a kattintható területnél.
+      // A `tests/spacing-scale-defined.test.ts` őrzi a hibaosztályt.
+      spacing: {
+        13: "3.25rem",
+      },
       // JAVÍTÁS (2026-09-02): az `xs:` breakpoint 7 helyen használt (pl. "Belépés",
       // "Böngészés", "Játékok" gombfeliratok `hidden xs:inline`), de sosem volt definiálva →
       // a feliratok MINDEN képernyőn rejtve maradtak (ikon-only gombok, akadálymentesség).

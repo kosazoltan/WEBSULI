@@ -2160,7 +2160,7 @@ export default function SpaceAsteroidQuiz() {
         <CouponHud session={coupon} />
         <CouponExpiredOverlay session={coupon} />
         <header className="flex items-center justify-between gap-1 mb-1">
-          <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
+          <Link href="/games"><Button variant="ghost" size="sm" className="text-white/90 hover:bg-white/10 gap-1 -ml-2 h-11 px-3"><ArrowLeft className="w-4 h-4" />Játékok</Button></Link>
           <div className="flex items-center gap-2 text-xs font-semibold">
             <AudioToggleButton size="icon" />
             <span className="flex items-center gap-1 text-amber-300"><Star className="w-4 h-4" />{score}</span>

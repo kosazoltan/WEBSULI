@@ -129,3 +129,58 @@ test("a vezérlőgombok letiltják a böngésző kijelölését és gesztusait",
   expect(style!.touchAction, "a böngésző görgetne és kijelölne").toBe("none");
   expect(style!.userSelect, "hosszú nyomásra kijelölné a gomb feliratát").toBe("none");
 });
+
+/* ------------------------ G-13: 44 px-es érintési cél ------------------------ */
+
+/**
+ * Mérve (2026-09-07, Pixel 7, éles build): mind a hét játék NYITÓ képernyőjén
+ * a hangkapcsoló 32×32 px, a „Játékok" visszalépés 36 px magas, ötben pedig
+ * maga az INDÍTÓ gomb — a lap legfontosabb gombja — 26 px magas volt, mert a
+ * `Button size="lg"` osztálya (`h-13`) nem létező Tailwind-lépcsőre hivatkozott.
+ * A festett pirula közben nagyobbnak látszott a valóban kattintható területnél,
+ * ezért a hiba képernyőképen nem látszik — csak méréssel.
+ *
+ * A 44 px az iOS/Android akadálymentességi minimum; a leckefuttatóra a
+ * `lesson-band-visual.spec.ts` már ugyanezt kéri. Ez a suite a játékokra kéri.
+ */
+const GAME_PATHS = [
+  "/games/tornado-hunter-200",
+  "/games/space-asteroid-quiz",
+  "/games/speed-quiz-math",
+  "/games/brain-rot-steal",
+  "/games/block-craft-quiz",
+  "/games/tsunami-english",
+  "/games/word-ladder-hu-en",
+];
+
+for (const path of GAME_PATHS) {
+  test(`${path}: minden látható vezérlő eléri a 44 px-t`, async ({ page }) => {
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2500);
+
+    const small = await page.evaluate(() =>
+      [...document.querySelectorAll('button, a[href], [role="button"]')]
+        .filter((el) => (el as HTMLElement).offsetParent !== null)
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            t: (
+              (el as HTMLElement).innerText ||
+              el.getAttribute("aria-label") ||
+              el.getAttribute("data-testid") ||
+              el.tagName
+            )
+              .trim()
+              .replace(/\s+/g, " ")
+              .slice(0, 30),
+            w: Math.round(r.width),
+            h: Math.round(r.height),
+          };
+        })
+        // A 0 szélesség rejtett elem, nem érintési cél.
+        .filter((x) => x.w > 0 && (x.w < 44 || x.h < 44)),
+    );
+
+    expect(small, `44 px alatti érintési célok: ${JSON.stringify(small)}`).toEqual([]);
+  });
+}

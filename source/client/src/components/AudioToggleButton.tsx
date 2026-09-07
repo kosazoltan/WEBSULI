@@ -31,12 +31,15 @@ export default function AudioToggleButton({ size = "sm", className = "", showLab
       toggleMuted();
     }
   };
+  // G-13 (2026-09-07, Pixel 7, mérve): a gomb 32×32 px volt mind a hét játék
+  // fejlécében — az iOS/Android 44 px-es érintési minimum alatt. Az ikon mérete
+  // változatlan (w-4 h-4); csak a megfogható felület nő.
   return (
     <Button
       type="button"
       variant="ghost"
       size={size === "icon" ? "icon" : "sm"}
-      className={`text-white/85 hover:bg-white/10 ${size === "icon" ? "h-8 w-8 p-0" : "px-2 h-8"} ${className}`}
+      className={`text-white/85 hover:bg-white/10 ${size === "icon" ? "h-11 w-11 p-0" : "px-3 h-11"} ${className}`}
       onClick={handleClick}
       aria-label={muted ? "Hang bekapcsolása" : "Hang némítása"}
       title={muted ? "Hang bekapcsolása" : "Hang némítása"}
