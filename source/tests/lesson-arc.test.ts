@@ -86,10 +86,13 @@ const lesson = (sections: Section[]): Lesson => ({
   sourceOnly: true,
 });
 
+/** Öt kérdés: az M-6 óta ennyi kell ahhoz, hogy a Próba jutalmat is érjen. */
+const checks = (n = 5) => Array.from({ length: n }, check);
+
 /** A jó ívű alap-lecke: felvezetés → megmutatás → levezetés → visszakérdezés → zárás. */
 const soundLesson = () =>
   lesson([
-    section([explain(), animate(), example(), check(), recap()]),
+    section([explain(), animate(), example(), ...checks(), recap()]),
   ]);
 
 const codes = (l: Lesson): ArcCode[] => checkLessonArc(l).findings.map((f) => f.code);
@@ -106,8 +109,8 @@ test("a négylapos ívet követő lecke átmegy", () => {
 test("a több szakaszos lecke is átmegy, ha minden szakasz felvezet", () => {
   const report = checkLessonArc(
     lesson([
-      section([explain(), animate(), example(), check()], "Első"),
-      section([explain("deeper"), example(), check(), recap()], "Második"),
+      section([explain(), animate(), example(), ...checks()], "Első"),
+      section([explain("deeper"), example(), ...checks(), recap()], "Második"),
     ]),
   );
 
@@ -329,4 +332,70 @@ test("a szerződés minden ív-szabályt megnevez, amit a kapu mér", async () =
     LESSON_ARC_CONTRACT.includes(String(Math.round(MAX_DRILL_RATIO * 100))),
     "a drill-küszöb száma nem szerepel a szerződésben",
   );
+});
+
+/* ---------- M-6: a Próba legyen elérhető, ne csak elméletben ---------- */
+
+/**
+ * Próbafuttatáson mérve (2026-09-07, valós füzetfotókból épített lecke): a
+ * szakaszonkénti 2 kérdés mellett a kupon-küszöb (5 helyes válasz) SOSEM
+ * teljesülhet — a gyerek hibátlanul végigmegy a leckén, és nem kap játékidőt.
+ *
+ * Ez az M-4 bevezetésének következménye volt, és a felhasználó felé csendes:
+ * nem hibaüzenet, hanem elmaradó jutalom. Ezért a szerződés része lett, hogy a
+ * Próbát futtató szakasz hozzon annyi kérdést, amennyi a jutalomhoz kell.
+ *
+ * A küszöb ugyanabból a forrásból jön, mint a jutalom-számítás
+ * (`DEFAULT_REWARD_POLICY`), hogy a kettő ne csússzon szét.
+ */
+
+test("M-6 a Próbát futtató szakasz elég kérdést hozzon a jutalomhoz", async () => {
+  const { DEFAULT_REWARD_POLICY } = await import("../shared/reward-policy");
+  const kevés = lesson([
+    section([explain(), animate(), example(), check(), check(), recap()]),
+  ]);
+
+  const found = checkLessonArc(kevés).findings.map((f) => f.code);
+  assert.ok(found.includes("proba_unreachable"), JSON.stringify(found));
+
+  const elég = lesson([
+    section([
+      explain(),
+      explain("deeper"),
+      animate(),
+      example(),
+      ...Array.from({ length: DEFAULT_REWARD_POLICY.minCorrectForCoupon }, check),
+      recap(),
+    ]),
+  ]);
+
+  assert.ok(!checkLessonArc(elég).findings.some((f) => f.code === "proba_unreachable"));
+});
+
+test("M-6 a kérdés nélküli szakasz nem kap Próba-kifogást", () => {
+  // Ott nincs Próba: a `SectionProba` nulla kérdésnél nem is renderel.
+  const l = lesson([
+    section(
+      [explain(), animate(), example(), check(), check(), check(), check(), check()],
+      "Fő",
+    ),
+    section([explain(), recap()], "Zárás"),
+  ]);
+
+  assert.ok(!checkLessonArc(l).findings.some((f) => f.code === "proba_unreachable"));
+});
+
+test("M-6 a kikapcsolt Próbájú szakasznál nem kérünk kérdésszámot", () => {
+  const l: Lesson = lesson([
+    { ...section([explain(), animate(), example(), check(), recap()]), probaEnabled: false },
+  ]);
+
+  assert.ok(!checkLessonArc(l).findings.some((f) => f.code === "proba_unreachable"));
+});
+
+test("M-6 a küszöb átadható, hogy a hangolt jutalom-táblát kövesse", () => {
+  const l = lesson([section([explain(), animate(), example(), check(), check(), recap()])]);
+
+  const laza = checkLessonArc(l, { minChecksForProba: 2 }).findings.map((f) => f.code);
+  assert.ok(!laza.includes("proba_unreachable"), "2-es küszöbnél a 2 kérdés elég");
 });

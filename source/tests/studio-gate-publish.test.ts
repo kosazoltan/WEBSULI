@@ -12,6 +12,7 @@ import {
 import type { MapConcept } from "../server/studio/coverage";
 import type { LektorNote } from "../server/studio/lektor";
 import { COUPON_GAME_IDS } from "../server/studio/quiz-export";
+import { DEFAULT_REWARD_POLICY } from "../shared/reward-policy";
 
 /**
  * Audit 2026-09-05 (spec: docs/specs/audit-4day-fixes-2026-09-05.md, szelet A).
@@ -39,23 +40,13 @@ function lessonCovering(ids: string[], withCheck = true) {
     readAloud: true,
     coversConceptIds: [id],
   }));
-  if (withCheck) {
-    blocks.push({
-      kind: "check",
-      question: "Mi a sejt?",
-      options: ["Alapegység", "Szerv", "Szövet", "Rendszer"],
-      correctIndex: 0,
-      explanation: "A sejt az élőlények alapegysége.",
-      feedbackPerOption: ["Igen!", "Nem, az nagyobb.", "Nem, az több sejt.", "Nem, az még nagyobb."],
-      coversConceptIds: [ids[0]],
-    });
-  }
-  // M-2 (2026-09-07): a publikálható lecke mostantól DIDAKTIKAI ÍVET is hordoz —
-  // felvezetés (a fenti explain blokkok), megmutatás (animate), levezetett példa,
-  // visszakérdezés, végül összefoglaló. A régi próba-lecke ebből csak a magyarázatot
-  // és a kérdést tartalmazta, és az új kapu emiatt elutasította volna. A javítás a
-  // FIXTURE-ön van, nem a kapun: a kapu pont ezt a hiányt hivatott megfogni.
-  blocks.splice(1, 0, {
+  // M-6 (2026-09-07): a Próbát futtató szakasz annyi kérdést hozzon, amennyi a
+  // játékidőhöz kell — egy kérdéssel a gyerek hibátlan Próbával sem kapna
+  // jutalmat. A régi fixture EGY kérdést hozott, és az új kapu emiatt
+  // elutasította volna. A javítás itt is a fixture-ön van, nem a kapun.
+  const CHECKS = withCheck ? DEFAULT_REWARD_POLICY.minCorrectForCoupon : 0;
+  // Az ív sorrendje KÖT: megmutatás és levezetett példa a kérdések ELŐTT.
+  blocks.push({
     kind: "animate",
     animKind: "process",
     params: { steps: [`${ids[0]} lépései`] },
@@ -63,11 +54,22 @@ function lessonCovering(ids: string[], withCheck = true) {
     coversConceptIds: [ids[0]],
   });
   if (withCheck) {
-    blocks.splice(blocks.length - 1, 0, {
+    blocks.push({
       kind: "example",
       problem: `Mutasd meg, mit jelent: ${ids[0]}.`,
       steps: [`Vedd elő a(z) ${ids[0]} meghatározását.`],
       answer: `Ez a(z) ${ids[0]}.`,
+      coversConceptIds: [ids[0]],
+    });
+  }
+  for (let i = 0; i < CHECKS; i += 1) {
+    blocks.push({
+      kind: "check",
+      question: `Mi a sejt? (${i + 1}.)`,
+      options: ["Alapegység", "Szerv", "Szövet", "Rendszer"],
+      correctIndex: 0,
+      explanation: "A sejt az élőlények alapegysége.",
+      feedbackPerOption: ["Igen!", "Nem, az nagyobb.", "Nem, az több sejt.", "Nem, az még nagyobb."],
       coversConceptIds: [ids[0]],
     });
   }
@@ -163,8 +165,8 @@ test("gate pass: a lecke publikálódik (html_files, publishedAt, coverage, kví
   assert.equal(pub.coverage.core.ratio, 1);
   assert.equal(
     pub.quizItems.length,
-    COUPON_GAME_IDS.length * 1,
-    `1 fogalom-kötött check × ${COUPON_GAME_IDS.length} kupon-motoros játék`,
+    COUPON_GAME_IDS.length * DEFAULT_REWARD_POLICY.minCorrectForCoupon,
+    `${DEFAULT_REWARD_POLICY.minCorrectForCoupon} fogalom-kötött check × ${COUPON_GAME_IDS.length} kupon-motoros játék`,
   );
   // #178: the FK column gets the km_concepts UUID, never the lesson's local slug.
   assert.ok(pub.quizItems.every((q) => q.conceptId === "uuid-c1"), "conceptId = km_concepts.id (UUID), nem 'c1'");

@@ -137,3 +137,119 @@ test("a mérhető és a mérhetetlen fogalmak keveredhetnek — a mérhetőt meg
   assert.equal(r.measurable, 1, "csak a term-mel rendelkező fogalom mérhető");
   assert.equal(r.ok, false, "a mérhető címke viszont megbukik a helyiérték-szövegen");
 });
+
+/* ---------- M-5: a ragozás nem lehet ok a bukásra ---------- */
+
+/**
+ * Próbafuttatáson mérve (2026-09-07, 7. osztályos geometria füzetfotókból):
+ * a „kör kerülete" fogalmat a természetes magyar mondatok NEM alapozták meg —
+ * „a körön", „egy körnél", „a körvonal" mind megbukott, és csak a ragtalan
+ * „kör kerülete" ment át.
+ *
+ * Ennek az a következménye, hogy a kapu a SZÁRAZ, kulcsszó-ismétlő szöveget
+ * jutalmazza: a szerzőnek szó szerint bele kell írnia a fogalom nevét ahhoz,
+ * hogy a mondata „megalapozottnak" számítson. A tulajdonos épp ezt kifogásolta
+ * a leckéken.
+ *
+ * Az ok a szótő-vágás aszimmetriája: a `stem` az első 5 karaktert veszi, tehát
+ * egy HÁROM betűs szó („kör" → „kor") sosem egyezik meg egy ragozott alak
+ * ötkarakteres tövével („körön" → „koron"). A hosszú szavaknál ez működik
+ * („terület"/„területét" → „terul"), a rövideknél soha.
+ */
+
+test("M-5 a rövid fogalomszó ragozott alakja is megalapoz", () => {
+  const kor: MapConcept = {
+    id: "u1",
+    localId: "kor-kerulete",
+    examWeight: "core",
+    term: "kör kerülete",
+  };
+
+  for (const mondat of [
+    "A sugár a középponttól a körvonalig ér, az átmérő átér a körön. A kerület a körvonal hossza.",
+    "Egy körnél négy mennyiség fordul elő: a sugár, az átmérő, a kerület és a terület.",
+    "A kör kerülete K = 2rπ.",
+    "A kör kerületét a K = 2rπ képlettel számoljuk ki.",
+  ]) {
+    assert.equal(checkGrounding(mondat, kor), true, `megbukott: „${mondat.slice(0, 60)}…"`);
+  }
+});
+
+test("M-5 a lazítás NEM engedi át a más témájú szöveget", () => {
+  // Ez a #196 élő hibája: helyiérték-magyarázatra ráírt geometriai címke.
+  const haromszog: MapConcept = {
+    id: "u2",
+    localId: "haromszog-terulete",
+    examWeight: "core",
+    term: "háromszög területe",
+  };
+
+  assert.equal(
+    checkGrounding(
+      "A 3524 szám számjegyei helyiértéket jelölnek: az ezres, a százas, a tízes és az egyes helyiértéket.",
+      haromszog,
+    ),
+    false,
+    "a más témájú blokk továbbra sem alapozhat meg geometriai fogalmat",
+  );
+});
+
+test("M-5 egyetlen egyező szó nem elég — MINDEN érdemi szó kell", () => {
+  const korTerulete: MapConcept = {
+    id: "u3",
+    localId: "kor-terulete",
+    examWeight: "core",
+    term: "kör területe",
+  };
+
+  // „terület" megvan, „kör" nincs — ez a téglalapos mondat nem taníthatja a kör területét.
+  assert.equal(
+    checkGrounding("A téglalap területe a két oldal szorzata: T = a · b, a kerülete pedig 2(a+b).", korTerulete),
+    false,
+  );
+});
+
+test("M-5 a rövid szó eleje nem illeszkedhet bármibe, ami vele kezdődik", () => {
+  const kor: MapConcept = { id: "u4", localId: "kor", examWeight: "core", term: "kör sugara" };
+
+  // „korszak" és „kórház" is „kor"-ral kezdődik ékezet nélkül — de a „sugara"
+  // hiánya miatt a konjunkció megvéd. Ez a lazítás biztonsági korlátja.
+  assert.equal(
+    checkGrounding("A korszak végén a kórházak száma jelentősen megnőtt az országban.", kor),
+    false,
+  );
+});
+
+test("M-5 az összetett szó belsejében álló fogalomszó is megalapoz", () => {
+  // Próbafuttatáson mérve: „Négy darab 4 cm sugarú kör ÖSSZTERÜLETE" nem
+  // alapozta meg a „kör területe" fogalmat, mert az „összterülete" szótöve
+  // „osszt". A magyar összetett szavak (összterület, alapterület, félkör,
+  // körvonal) a tananyagban mindennaposak; ha ezek buknak, a szerző kénytelen
+  // széttagolt, mesterkélt mondatokat írni.
+  const korTerulete: MapConcept = {
+    id: "u5",
+    localId: "kor-terulete",
+    examWeight: "core",
+    term: "kör területe",
+  };
+
+  assert.equal(
+    checkGrounding("Négy darab 4 cm sugarú kör összterülete mennyi lesz összesen?", korTerulete),
+    true,
+  );
+});
+
+test("M-5 az összetett-szó lazítás sem enged át idegen témát", () => {
+  const haromszog: MapConcept = {
+    id: "u6",
+    localId: "haromszog-terulete",
+    examWeight: "core",
+    term: "háromszög területe",
+  };
+
+  assert.equal(
+    checkGrounding("A lakás alapterülete 64 négyzetméter, a bérleti díj ezen alapul.", haromszog),
+    false,
+    "a terület szó megvan, a háromszög nem — a fogalom nincs megalapozva",
+  );
+});

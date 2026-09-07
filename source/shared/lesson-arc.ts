@@ -1,4 +1,5 @@
 import type { Block, Lesson, Section } from "./lesson-schema";
+import { DEFAULT_REWARD_POLICY } from "./reward-policy";
 
 /**
  * M-1 — a lecke didaktikai íve, gépi ellenőrzés alatt.
@@ -49,7 +50,8 @@ export type ArcCode =
   | "quiz_without_example"
   | "drill_heavy"
   | "no_engagement_layer"
-  | "no_recap";
+  | "no_recap"
+  | "proba_unreachable";
 
 export type ArcFinding = {
   /** A szakasz sorszáma; lecke-szintű kifogásnál -1. */
@@ -72,7 +74,7 @@ const LESSON_LEVEL = -1;
 const firstIndexOf = (blocks: Block[], kind: Block["kind"]): number =>
   blocks.findIndex((b) => b.kind === kind);
 
-function checkSection(section: Section, idx: number): ArcFinding[] {
+function checkSection(section: Section, idx: number, minChecksForProba: number): ArcFinding[] {
   const found: ArcFinding[] = [];
   const blocks = section.blocks;
   const label = `„${section.heading}" (${idx + 1}. szakasz)`;
@@ -123,12 +125,43 @@ function checkSection(section: Section, idx: number): ArcFinding[] {
     });
   }
 
+  /*
+   * M-6 — a Próba legyen ELÉRHETŐ. Az M-4 óta a játékidőhöz nem elég a 100 %,
+   * hanem adott számú HELYES válasz kell. Ha a szakasz ennél kevesebb kérdést
+   * hoz, a gyerek hibátlanul végigmegy rajta, és mégsem kap jutalmat — ez nem
+   * hibaüzenet, hanem csendben elmaradó élmény, amit csak méréssel lehet
+   * észrevenni. (Próbafuttatáson pontosan ez történt, 2026-09-07.)
+   *
+   * Kérdés nélküli és kikapcsolt Próbájú szakaszra nem vonatkozik: ott nincs
+   * mit elérni.
+   */
+  const checks = blocks.filter((b) => b.kind === "check").length;
+  if (section.probaEnabled && checks > 0 && checks < minChecksForProba) {
+    found.push({
+      sectionIdx: idx,
+      code: "proba_unreachable",
+      message: `${label}: a szakasz ${checks} kérdést hoz, a játékidőhöz viszont ${minChecksForProba} helyes válasz kell — így a Próba hibátlan kitöltéssel sem ér jutalmat. Írj legalább ${minChecksForProba} kérdést, vagy kapcsold ki a Próbát.`,
+    });
+  }
+
   return found;
 }
 
 /** A lecke didaktikai íve: felvezetés → megmutatás → levezetés → visszakérdezés → zárás. */
-export function checkLessonArc(lesson: Lesson): ArcReport {
-  const findings = lesson.sections.flatMap((section, idx) => checkSection(section, idx));
+export type ArcOptions = {
+  /**
+   * Hány kérdést hozzon egy Próbát futtató szakasz. Alapból a jutalom-tábla
+   * küszöbe — így a két szabály nem tud szétcsúszni.
+   */
+  minChecksForProba?: number;
+};
+
+export function checkLessonArc(lesson: Lesson, options: ArcOptions = {}): ArcReport {
+  const minChecksForProba =
+    options.minChecksForProba ?? DEFAULT_REWARD_POLICY.minCorrectForCoupon;
+  const findings = lesson.sections.flatMap((section, idx) =>
+    checkSection(section, idx, minChecksForProba),
+  );
 
   const allBlocks = lesson.sections.flatMap((s) => s.blocks);
 
@@ -179,5 +212,6 @@ export const LESSON_ARC_CONTRACT = [
   `- A \`check\` és \`example\` blokkok együtt ne tegyék ki a szakasz blokkjainak több mint ${Math.round(MAX_DRILL_RATIO * 100)}%-át. A csupa feladat gyakorlósor, nem tananyag.`,
   "- A leckében legyen legalább egy `animate` vagy `try` blokk: ez tartja meg a figyelmet, és ez mutatja meg azt, amit szöveggel nehéz.",
   "- A lecke UTOLSÓ blokkja `recap` legyen, hogy a gyerek lássa, mit vitt haza.",
+  `- Ha a szakasz Próbát futtat (probaEnabled), írj bele legalább ${DEFAULT_REWARD_POLICY.minCorrectForCoupon} \`check\` kérdést: a játékidő ennyi HELYES válaszhoz kötött, kevesebb kérdésnél a gyerek hibátlan Próbával sem kap jutalmat.`,
   "A száraz felsorolás nem tananyag: a magyarázat kösse a fogalmat ahhoz, amit a gyerek már tud, és mondja ki, mire jó.",
 ].join("\n");
