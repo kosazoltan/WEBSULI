@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { titleFromHtmlDocument } from "@/lib/uploadTitle";
 import { Upload, FileCode, X, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,8 +58,12 @@ export default function SimpleHtmlUpload({ onUpload, onCancel, isPending = false
       setFileName(file.name);
       
       if (!title) {
-        const extractedTitle = file.name.replace(/\.(html|htm)$/i, '');
-        setTitle(extractedTitle);
+        // T-5: a dokumentum SAJÁT címe erősebb a fájlnévnél. A fájlnevek
+        // jellemzően ékezet nélküli, „biztonságos" alakban készülnek, és az
+        // ajánlott címet ritkán írja át bárki — így kerültek ki élesbe az olyan
+        // tananyagcímek, mint „25. Betegseg, gyogyulas". A fájlnév tartaléknak
+        // megmarad: cím nélküli dokumentum feltöltése nem akadhat el.
+        setTitle(titleFromHtmlDocument(result, file.name));
       }
       
       toast({
