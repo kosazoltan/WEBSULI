@@ -38,6 +38,19 @@ export function conceptIdResolver(concepts: readonly Pick<MapConcept, "id" | "lo
   return (localId) => byLocal.get(localId) ?? null;
 }
 
+/** A `check` blokk magyarázata a játéknak, vagy `null`, ha nincs használható. */
+function explanationOf(block: {
+  correctIndex: number;
+  feedbackPerOption: string[];
+}): string | null {
+  const text = block.feedbackPerOption[block.correctIndex];
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null;
+  // A játék kártyája néhány sort mutat; a hosszabb szöveg ott olvashatatlan.
+  return trimmed.length > 300 ? `${trimmed.slice(0, 297)}…` : trimmed;
+}
+
 export function exportQuizItemsFromChecks(
   lesson: Lesson,
   gameId: string,
@@ -58,6 +71,11 @@ export function exportQuizItemsFromChecks(
         prompt: block.question,
         options: block.options,
         correctIndex: block.correctIndex,
+        // T-1: a HELYES opció visszajelzése a magyarázat — az mondja meg,
+        // miért jó a jó válasz. A konkrét rossz opcióhoz tartozó mondatot a
+        // játék nem tudná kiválasztani: a válaszokat kevert sorrendben rajzolja,
+        // az indexek nem őrizhetők meg.
+        explanation: explanationOf(block),
         // Never the raw slug: it is not a km_concepts.id and the FK insert would fail.
         conceptId: resolveConceptId ? resolveConceptId(primaryLocalId) : null,
         lessonId: lessonId ?? null,

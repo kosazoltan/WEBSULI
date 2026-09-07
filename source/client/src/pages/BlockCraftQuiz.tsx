@@ -38,9 +38,24 @@ import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 const TILE = 24;
 
 type QuizSubject = "english" | "english-math" | "math" | "nature";
-type Quiz = { id?: string; prompt: string; options: string[]; correctIndex: number; subject?: QuizSubject };
+type Quiz = {
+  id?: string;
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+  /** T-1: a MIÉRT rossz válasznál — a lecke exportjából vagy a generátorból. */
+  explanation?: string | null;
+  subject?: QuizSubject;
+};
 type QuizBankApi = {
-  items: { id?: string; prompt: string; options: string[]; correctIndex: number }[];
+  items: {
+    id?: string;
+    prompt: string;
+    options: string[];
+    correctIndex: number;
+    /** T-1: a MIÉRT rossz válasznál; régi tételeknél hiányzik. */
+    explanation?: string | null;
+  }[];
 };
 
 /**
@@ -1211,6 +1226,8 @@ export default function BlockCraftQuiz() {
           prompt: q.prompt,
           options: q.options.slice(0, 4),
           correctIndex: q.correctIndex,
+        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+        explanation: q.explanation ?? undefined,
           subject,
         };
       });
@@ -1222,6 +1239,8 @@ export default function BlockCraftQuiz() {
         prompt: q.prompt,
         options: q.options.slice(0, 4),
         correctIndex: q.correctIndex,
+        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+        explanation: q.explanation ?? undefined,
         subject: "english" as QuizSubject,
       }));
     // 3) Statikus fallback (Minecraft-tematikus angol/matek/környezet/magyar)
@@ -1882,7 +1901,13 @@ export default function BlockCraftQuiz() {
       // kellene javítani. A kártya addig áll, amíg a gyerek be nem zárja.
       setFeedback(
         buildFeedback({
-          quiz: { prompt: quiz.prompt, options: quiz.options, correctIndex: quiz.correctIndex },
+          quiz: {
+            prompt: quiz.prompt,
+            options: quiz.options,
+            correctIndex: quiz.correctIndex,
+            // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
+            explanation: quiz.explanation ?? undefined,
+          },
           chosenIndex: idx,
           attempt: 0,
           ageBand: "kid",

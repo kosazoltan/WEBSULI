@@ -73,6 +73,8 @@ type Quiz = {
   prompt: string;
   options: string[];
   correctIndex: number;
+  /** T-1: a MIÉRT rossz válasznál — a lecke exportjából vagy a generátorból. */
+  explanation?: string | null;
   topic?: string | null;
   source?: "material" | "fallback";
 };
@@ -123,7 +125,15 @@ type QuizReason = "wave" | "hit";
 type MaterialQuizApi = {
   classroom: number;
   materials: { id: string; title: string; createdAt: string }[];
-  items: { id?: string; prompt: string; options: string[]; correctIndex: number; topic?: string | null }[];
+  items: {
+    id?: string;
+    prompt: string;
+    options: string[];
+    correctIndex: number;
+    /** T-1: a MIÉRT rossz válasznál; régi tételeknél hiányzik. */
+    explanation?: string | null;
+    topic?: string | null;
+  }[];
 };
 
 const GRADES: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -766,6 +776,8 @@ export default function SpaceAsteroidQuiz() {
         prompt: q.prompt,
         options: q.options.slice(0, 4),
         correctIndex: q.correctIndex,
+        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+        explanation: q.explanation ?? undefined,
         topic: q.topic ?? null,
         source: "material" as const,
       }));
@@ -954,6 +966,8 @@ export default function SpaceAsteroidQuiz() {
             prompt: activeQuiz.prompt,
             options: activeQuiz.options,
             correctIndex: activeQuiz.correctIndex,
+            // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
+            explanation: activeQuiz.explanation ?? undefined,
           },
           chosenIndex: idx,
           attempt: 0,

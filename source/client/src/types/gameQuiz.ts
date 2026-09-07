@@ -4,6 +4,8 @@ export type FourChoiceQuiz = {
   prompt: string;
   options: string[];
   correctIndex: number;
+  /** T-1: a MIÉRT, amit a játék rossz válasznál megmutat. Régi tételeknél hiányzik. */
+  explanation?: string;
 };
 
 export type GameQuizBankItemDTO = {
@@ -13,6 +15,8 @@ export type GameQuizBankItemDTO = {
   prompt: string;
   options: string[];
   correctIndex: number;
+  /** T-1: a lecke `check` blokkjának magyarázata, ha az export hozta. */
+  explanation?: string | null;
   sourceMaterialId: string | null;
 };
 

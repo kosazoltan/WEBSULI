@@ -31,6 +31,8 @@ export type GameQuizBankRow = {
   prompt: string;
   options: string[];
   correctIndex: number;
+  /** T-1: a MIÉRT, amit a játék rossz válasznál megmutat; régi soroknál null. */
+  explanation: string | null;
   sourceMaterialId: string | null;
 };
 
@@ -47,6 +49,7 @@ function sanitizeRow(r: typeof gameQuizItems.$inferSelect): GameQuizBankRow | nu
     prompt: r.prompt,
     options: opts,
     correctIndex: ci,
+    explanation: r.explanation ?? null,
     sourceMaterialId: r.sourceMaterialId,
   };
 }

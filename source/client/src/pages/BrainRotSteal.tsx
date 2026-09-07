@@ -27,7 +27,15 @@ import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 
 /* --- Típusok --- */
-type Quiz = { id?: string; prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
+type Quiz = {
+  id?: string;
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+  /** T-1: a MIÉRT rossz válasznál — a lecke exportjából vagy a generátorból. */
+  explanation?: string | null;
+  category: "english" | "math" | "hungarian";
+};
 
 type BrainRot = {
   id: number;
@@ -319,6 +327,8 @@ export default function BrainRotSteal() {
           prompt: q.prompt,
           options: q.options.slice(0, 4),
           correctIndex: q.correctIndex,
+        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+        explanation: q.explanation ?? undefined,
           category: cat,
         };
       });
@@ -410,7 +420,13 @@ export default function BrainRotSteal() {
         // kártya addig áll, amíg be nem zárja; a felfedést a bezárás oldja.
         setFeedback(
           buildFeedback({
-            quiz: { prompt: quiz.prompt, options: quiz.options, correctIndex: quiz.correctIndex },
+            quiz: {
+              prompt: quiz.prompt,
+              options: quiz.options,
+              correctIndex: quiz.correctIndex,
+              // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
+              explanation: quiz.explanation ?? undefined,
+            },
             chosenIndex: idx,
             attempt: 0,
             ageBand: "kid",

@@ -630,6 +630,8 @@ export default function TsunamiEscapeEnglish() {
         prompt: q.prompt,
         options: q.options.slice(0, 4) as [string, string, string, string],
         correctIndex: q.correctIndex,
+        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+        explanation: q.explanation ?? undefined,
       }));
     const english: SubjectQuizPools = {
       easy: [...withSubject(QUIZ_BANK, "english"), ...withSubject(easy, "english")],
@@ -978,7 +980,13 @@ export default function TsunamiEscapeEnglish() {
       // zárja; a víz nem emelkedik tovább közben, mert a játék áll.
       setExplainCard(
         buildFeedback({
-          quiz: { prompt: quiz.prompt, options: quiz.options, correctIndex: quiz.correctIndex },
+          quiz: {
+            prompt: quiz.prompt,
+            options: quiz.options,
+            correctIndex: quiz.correctIndex,
+            // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
+            explanation: quiz.explanation ?? undefined,
+          },
           chosenIndex: index,
           attempt: 0,
           ageBand: "kid",

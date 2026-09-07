@@ -22,6 +22,8 @@ export type MaterialQuizItem = {
   prompt: string;
   options: string[];
   correctIndex: number;
+  /** T-1: a MIÉRT, amit a játék rossz válasznál megmutat; régi tételeknél hiányzik. */
+  explanation?: string | null;
   topic?: string | null;
 };
 

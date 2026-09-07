@@ -346,6 +346,8 @@ export default function WordLadderHuEn() {
         prompt: q.prompt,
         options: q.options.slice(0, 4) as [string, string, string, string],
         correctIndex: q.correctIndex,
+        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+        explanation: q.explanation ?? undefined,
       }));
     return {
       easy: [...QUIZ_BANK, ...easy],
@@ -484,6 +486,8 @@ export default function WordLadderHuEn() {
             prompt: current.prompt,
             options: current.options,
             correctIndex: current.correctIndex,
+            // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
+            explanation: current.explanation ?? undefined,
           },
           chosenIndex: i,
           attempt: 0,

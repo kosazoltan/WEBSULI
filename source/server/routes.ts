@@ -974,6 +974,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           prompt: r.prompt,
           options: r.options,
           correctIndex: r.correctIndex,
+          // T-1: a magyarázat is menjen ki, különben a játék némán büntet.
+          explanation: r.explanation,
           sourceMaterialId: r.sourceMaterialId,
         })),
       });
@@ -1048,6 +1050,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           prompt: r.prompt,
           options: r.options,
           correctIndex: r.correctIndex,
+          // T-1: a magyarázat is menjen ki, különben a játék némán büntet.
+          explanation: r.explanation,
           sourceMaterialId: r.sourceMaterialId,
         })),
       });

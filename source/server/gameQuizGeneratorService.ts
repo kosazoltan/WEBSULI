@@ -29,6 +29,14 @@ export type GeneratedQuizItem = {
   options: string[];
   correctIndex: number;
   topic: "english" | "math" | "nature" | "hungarian";
+  /**
+   * T-1: a MIÉRT, amit a játék rossz válasznál megmutat.
+   *
+   * Enélkül a játék csak büntetett (élet, idő, XP), és a téves fogalom
+   * érintetlenül maradt a gyerekben — ez a legdrágább hiba egy tanuló-
+   * programban.
+   */
+  explanation: string;
 };
 
 export type QuizGenerationResult = {
@@ -48,14 +56,15 @@ KÖVETELMÉNYEK minden generált tétel esetén:
 - A kérdés szövege rövid (max 100 karakter), érthető a megadott osztálynak.
 - Válasz-opciók rövidek (max 30 karakter mindegyik), érthetőek, ugyanolyan hosszúak/stílusúak.
 - A rossz válaszok hihetőek legyenek, ne triviálisan hibásak.
+- KÖTELEZŐ "explanation" mező: EGY rövid magyar mondat (max 200 karakter) arról, hogy MIÉRT a helyes válasz a helyes. Matematikánál a levezetést írd le (pl. "7 x 8 = 56, mert 7 x 8 = 7 x 4 x 2 = 28 x 2."), szókincsnél a jelentést. NE hivatkozz sorszámra ("2. válasz"), mert a játék kevert sorrendben rajzol.
 - NE használj idézőjelet ("," " " """ stb.) a prompt vagy options szövegében — JSON-parse miatt csak \\" escape-elt formában lenne kezelhető. Idézőjel helyett írd át (pl. "Star magyarul" — idézőjel nélkül).
 
 KIMENET: SZIGORÚAN egyetlen JSON tömb, semmilyen magyarázat / markdown / előszó, csak nyers JSON.
 
 Pontos formátum (példa):
 [
-  {"prompt": "Mennyi 7 x 8?", "options": ["49", "54", "56", "64"], "correctIndex": 2, "topic": "math"},
-  {"prompt": "Star magyarul:", "options": ["bolygó", "csillag", "hold", "felhő"], "correctIndex": 1, "topic": "english"}
+  {"prompt": "Mennyi 7 x 8?", "options": ["49", "54", "56", "64"], "correctIndex": 2, "topic": "math", "explanation": "7 x 8 = 56; a 7 x 8 ugyanannyi, mint 7 x 4 x 2 = 28 x 2."},
+  {"prompt": "Star magyarul:", "options": ["bolygó", "csillag", "hold", "felhő"], "correctIndex": 1, "topic": "english", "explanation": "A star csillag; a bolygó planet, a hold moon."}
 ]`;
 
 /**
@@ -176,6 +185,11 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
       !Number.isInteger(item.correctIndex) ||
       item.correctIndex < 0 ||
       item.correctIndex > 3 ||
+      // T-1: magyarázat nélküli tétel nem kerül a bankba — a néma büntetés
+      // pont az, amit meg akarunk szüntetni.
+      typeof item.explanation !== "string" ||
+      item.explanation.trim().length < 5 ||
+      item.explanation.length > 300 ||
       typeof item.topic !== "string" ||
       !ALLOWED_TOPICS.has(item.topic)
     ) {
@@ -207,6 +221,7 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
         topic: item.topic,
         prompt: item.prompt,
         options: item.options,
+        explanation: item.explanation.trim(),
         correctIndex: item.correctIndex,
         sourceMaterialId: materialId,
         isActive: true,

@@ -513,6 +513,14 @@ export const gameQuizItems = pgTable(
     prompt: text("prompt").notNull(),
     options: jsonb("options").notNull().$type<string[]>(),
     correctIndex: integer("correct_index").notNull(),
+    /**
+     * T-1: a MIÉRT, amit a játék rossz válasznál megmutat.
+     *
+     * A lecke-séma LS-2 óta megköveteli a per-opció visszajelzést, de az eddig
+     * nem jutott el a játékokba: ugyanaz a kérdés a leckében tanított, a
+     * játékban némán büntetett. Opcionális, mert a régi sorokban nincs.
+     */
+    explanation: text("explanation"),
     sourceMaterialId: varchar("source_material_id").references(() => htmlFiles.id, { onDelete: "set null" }),
     /** LS-5: a lecke fogalma, amelyhez az elem tartozik — a feedback-loop így a játékbeli hibákat is fogalomhoz köti. */
     conceptId: varchar("concept_id", { length: 64 }).references(() => kmConcepts.id, { onDelete: "set null" }),
