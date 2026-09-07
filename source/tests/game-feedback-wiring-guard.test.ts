@@ -109,3 +109,31 @@ test("a komment-szűrő önellenőrzése", () => {
   const hits = (stripComments(fake).match(/buildFeedback\s*\(/g) ?? []).length;
   assert.equal(hits, 1);
 });
+
+/* ------------------------- rétegsorrend (z-index) ------------------------- */
+
+test("a magyarázó kártya minden játék-felugró FÖLÖTT van", () => {
+  // Komment-szűrés itt is kötelező: az első próbámban a magyarázó KOMMENTBEN
+  // szereplő „z-[60]" hivatkozást olvasta ki a minta, nem a tényleges osztályt.
+  const card = stripComments(
+    readFileSync(join(root, "client/src/game-engine/QuizFeedbackCard.tsx"), "utf8"),
+  );
+  const cardZ = Number(/z-\[(\d+)\]/.exec(card)?.[1] ?? "0");
+  assert.ok(cardZ > 0, "a kártyának explicit z-indexe legyen, ne öröklött");
+
+  /*
+   * Mért hiba (2026-09-07): az Aszteroida kvíz-overlay `z-[60]`, a kártya
+   * `z-50` volt. A kártya alá került, a bezáró gomb kattinthatatlan lett, és
+   * mivel a továbblépést az a gomb intézi, a játék ÖRÖKRE megállt volna. Ez a
+   * teszt minden játékoldalon megkeresi a legnagyobb z-indexet.
+   */
+  for (const file of WIRED) {
+    const code = pageCode(file);
+    const zs = [...code.matchAll(/z-\[(\d+)\]/g)].map((m) => Number(m[1]));
+    const highest = zs.length ? Math.max(...zs) : 0;
+    assert.ok(
+      cardZ > highest,
+      `${file}: a lap legmagasabb rétege z-[${highest}], a kártya z-[${cardZ}] — alá kerülne, és a játék megállna`,
+    );
+  }
+});

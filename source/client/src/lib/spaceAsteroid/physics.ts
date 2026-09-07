@@ -16,9 +16,69 @@ export const PLAYER_ACCEL = 28;
 export const PLAYER_FRICTION = 5.5;
 
 const PLAYER_X_PAD = 0.7;
-const PLAYER_Y_MIN = -GAME_H / 2 + 1.6;
+
+/**
+ * G-11 — a hajó nem csúszhat le a KÉPERNYŐRŐL.
+ *
+ * Élesben mérve (2026-09-07, Pixel 7): a hajó a jobb szélen félig kilógott a
+ * játéktérből. A határolás megvolt (±8,3 egység), csak nem azt korlátozta, ami
+ * számít: a pálya 18 egység széles, a kamera viszont FÜGGŐLEGES látószöggel néz,
+ * és a vízszintes kiterjedés ebből a képaránnyal jön. Álló telefonon a látható
+ * sáv jóval keskenyebb 18 egységnél — a hajó a pályán belül maradt, a képen
+ * mégis kicsúszott.
+ */
+
+/**
+ * A hajó félszélessége a modelljéből.
+ *
+ * Mérve a `buildPlayerShip` geometriájából: a szárny 0,85 széles doboz, a
+ * középtől 0,7-re eltolva → 0,7 + 0,425 = 1,125. A korábbi 0,7-es ráhagyás
+ * ennél KISEBB volt, ezért a szélen a szárny fele lelógott a képről (élesben
+ * ellenőrizve, Pixel 7).
+ */
+export const PLAYER_HALF_WIDTH = 1.125;
+
+/** A játéksíkon látható félszélesség a kamera adataiból. */
+export function visibleHalfWidth(fovDeg: number, aspect: number, distance: number): number {
+  if (!Number.isFinite(aspect) || aspect <= 0) return GAME_W / 2;
+  const halfHeight = Math.tan((fovDeg * Math.PI) / 360) * distance;
+  return halfHeight * aspect;
+}
+
+/**
+ * A hajó vízszintes határa: a pálya széle VAGY a látható sáv széle — amelyik
+ * szűkebb. A `PLAYER_X_PAD` mindkettőtől elhúz, hogy a hajó orra se érjen a
+ * szélére.
+ */
+export function playerXLimit(halfWidth: number): number {
+  const fromField = GAME_W / 2 - PLAYER_X_PAD;
+  if (!Number.isFinite(halfWidth) || halfWidth <= 0) return fromField;
+  // A látható szélétől a hajó TELJES félszélességével húzunk el, nem a régi
+  // 0,7-es pályaráhagyással: különben a szárny lelóg a képről.
+  return Math.max(1, Math.min(fromField, halfWidth - PLAYER_HALF_WIDTH));
+}
+export const PLAYER_Y_MIN = -GAME_H / 2 + 1.6;
 /** Lower 40% of the field — the old clamp used ~20% and felt like a rail. */
-const PLAYER_Y_MAX = -GAME_H / 2 + GAME_H * 0.4;
+export const PLAYER_Y_MAX = -GAME_H / 2 + GAME_H * 0.4;
+
+/* ------------------------------ kamera ---------------------------------- *
+ * G-12: a játékos hajója a KÉPEN legyen.
+ *
+ * Mérve (2026-09-07, Pixel 7, three.js vetítéssel): a korábbi kameraállással
+ * (pozíció y=-2.5, lookAt y=1.5) a hajó kiinduló helye ndc y = -1,26-ra
+ * vetült — vagyis a képernyő alsó éle ALATT. A teljes mozgássáv (-10,4 … -2,4)
+ * ndc -1,36 … -0,42 közé esett, tehát a gyerek a saját hajóját csak akkor
+ * látta, ha feltolta a képbe. Böngészőben ellenőrizve: alaphelyzetben nincs
+ * hajó a képen, felfelé húzásra megjelenik.
+ *
+ * A látható függőleges sáv ~18,7 egység, a pálya 24 — az egészet nem lehet
+ * mutatni. A döntés: a JÁTÉKOS sávja legyen bent, a pálya teteje lóghat ki,
+ * mert az aszteroidák onnan érkeznek befelé.
+ */
+export const CAMERA_FOV_DEG = 46;
+export const CAMERA_Z = 22;
+export const CAMERA_Y = -7;
+export const CAMERA_LOOK_Y = -2.5;
 
 export const SPLIT_VY_FLOOR = -2.8;
 const STAR_SCROLL = 1.4;
@@ -46,7 +106,16 @@ export function normalizeStick(mx: number, my: number): { mx: number; my: number
   return { mx, my };
 }
 
-export function integratePlayer(p: PlayerBody, input: StickInput, dt: number): PlayerBody {
+export function integratePlayer(
+  p: PlayerBody,
+  input: StickInput,
+  dt: number,
+  /**
+   * A vízszintes határ (`playerXLimit`). Elhagyva a régi, konstans pálya-szélt
+   * használja — így a meglévő hívók viselkedése nem változik.
+   */
+  xLimit?: number,
+): PlayerBody {
   const stick = normalizeStick(input.mx, input.my);
   const pressing = Math.hypot(stick.mx, stick.my) > 0;
   let vx = p.vx;
@@ -65,8 +134,11 @@ export function integratePlayer(p: PlayerBody, input: StickInput, dt: number): P
     vx *= s;
     vy *= s;
   }
-  const xMin = -GAME_W / 2 + PLAYER_X_PAD;
-  const xMax = GAME_W / 2 - PLAYER_X_PAD;
+  const limit = xLimit !== undefined && Number.isFinite(xLimit) && xLimit > 0
+    ? xLimit
+    : GAME_W / 2 - PLAYER_X_PAD;
+  const xMin = -limit;
+  const xMax = limit;
   const x = clamp(p.x + vx * dt, xMin, xMax);
   const y = clamp(p.y + vy * dt, PLAYER_Y_MIN, PLAYER_Y_MAX);
   if (x === xMin || x === xMax) vx = 0;

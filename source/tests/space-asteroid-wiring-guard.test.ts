@@ -32,9 +32,19 @@ test("a page hívja az integratePlayer / spawnReady / splitRock / starScrollY / 
   }
 });
 
-test("a touchRef és a hold-handler ismeri a down irányt", () => {
+test("a lefelé irány a vezérlésben is megvan", () => {
+  // A teszt SZÁNDÉKA változatlan (volt egy hiba, amikor a lefelé irány
+  // kimaradt), a mechanizmus viszont megváltozott: a négy nyílgombot joystick
+  // váltotta, mert az átlós irány két gomb egyidejű nyomását követelte, ami egy
+  // hüvelykujjal nem megy. A `startHold(..., "down")` helyett most a joystick
+  // vektorát képezzük irányokra.
   assert.match(code, /touchRef[\s\S]{0,200}down/);
-  assert.match(code, /startHold\([^)]*"down"/);
+  assert.match(
+    code,
+    /touchRef\.current\.down\s*=/,
+    "a lefelé irányt semmi nem állítja — a hajó nem tud hátrálni",
+  );
+  assert.match(code, /joystickToDirections\s*\(/, "a joystick nincs bekötve");
 });
 
 test("a komment-szűrő önellenőrzése: kikommentezett hívás nem számít", () => {

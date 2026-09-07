@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import * as THREE from "three";
@@ -22,6 +22,12 @@ import {
   splitRock,
   enemyRenderSpin,
   starScrollY,
+  playerXLimit,
+  visibleHalfWidth,
+  CAMERA_FOV_DEG,
+  CAMERA_Y,
+  CAMERA_Z,
+  CAMERA_LOOK_Y,
 } from "@/lib/spaceAsteroid/physics";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
@@ -30,6 +36,9 @@ import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge"
 import AchievementToast from "@/components/AchievementToast";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
+import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import HoldButton from "@/game-engine/HoldButton";
+import { joystickToDirections } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 /* =====================================================================
@@ -686,6 +695,8 @@ export default function SpaceAsteroidQuiz() {
   const alienKillsRef = useRef(0);
   const scoreRef = useRef(0);
   const shakeRef = useRef(0);
+  /** G-11: a hajó vízszintes határa, a kamera látómezejéből újraszámolva. */
+  const playerXLimitRef = useRef<number | undefined>(undefined);
   // G-5: a rajzoló hurok ref-ekből olvas, ezért a beállítást ide tükrözzük.
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
@@ -984,9 +995,12 @@ export default function SpaceAsteroidQuiz() {
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2("#03061f", 0.022);
 
-    const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
-    camera.position.set(0, -2.5, 22);
-    camera.lookAt(0, 1.5, 0);
+    // G-12: a kameraállás a fizika-modulból jön, mert teszt őrzi, hogy a
+    // játékos teljes mozgássávja a képen belül maradjon. A korábbi értékekkel
+    // (y=-2.5, lookAt 1.5) a hajó kiinduló helye a képernyő alsó éle ALATT volt.
+    const camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEG, 1, 0.1, 100);
+    camera.position.set(0, CAMERA_Y, CAMERA_Z);
+    camera.lookAt(0, CAMERA_LOOK_Y, 0);
 
     // Fények: enyhe ambient + erős keyfény fent + színes accentek
     const ambient = new THREE.AmbientLight("#a4d4ff", 0.55);
@@ -1121,6 +1135,10 @@ export default function SpaceAsteroidQuiz() {
       const h = Math.max(240, Math.floor(rect.height));
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
+      // A játéksík a z=0 körül van, a kamera z=22-nél áll.
+      playerXLimitRef.current = playerXLimit(
+        visibleHalfWidth(camera.fov, camera.aspect, camera.position.z),
+      );
       camera.updateProjectionMatrix();
     };
     handleResize();
@@ -1184,7 +1202,10 @@ export default function SpaceAsteroidQuiz() {
     if (keysRef.current.right || touchRef.current.right) mx += 1;
     if (keysRef.current.up || touchRef.current.up) my += 1;
     if (keysRef.current.down || touchRef.current.down) my -= 1;
-    const integrated = integratePlayer(p, { mx, my }, dt);
+    // G-11: a vízszintes határ a KAMERÁBÓL jön, nem konstansból. Álló telefonon
+    // a látható sáv keskenyebb a 18 egységes pályánál, ezért a hajó a pályán
+    // belül maradva is kicsúszott a képből (mérve: Pixel 7, jobb szél, félig).
+    const integrated = integratePlayer(p, { mx, my }, dt, playerXLimitRef.current);
     p.x = integrated.x;
     p.y = integrated.y;
     p.vx = integrated.vx;
@@ -1948,12 +1969,12 @@ export default function SpaceAsteroidQuiz() {
     // abbahagyja a játékot.
     if (shakeRef.current > 0 && !reducedMotionRef.current) {
       camera.position.x = (Math.random() - 0.5) * shakeRef.current * 0.6;
-      camera.position.y = -2.5 + (Math.random() - 0.5) * shakeRef.current * 0.4;
+      camera.position.y = CAMERA_Y + (Math.random() - 0.5) * shakeRef.current * 0.4;
     } else {
       camera.position.x = 0;
-      camera.position.y = -2.5;
+      camera.position.y = CAMERA_Y;
     }
-    camera.lookAt(0, 1.5, 0);
+    camera.lookAt(0, CAMERA_LOOK_Y, 0);
 
     renderer.render(scene, camera);
   };
@@ -2030,19 +2051,11 @@ export default function SpaceAsteroidQuiz() {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, startNewRun]);
 
-  /* ===================== Touch gomb-handler-ek ===================== */
-  const startHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "up" | "down" | "fire") => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    touchRef.current[k] = true;
-  };
-  const endHold = (e: ReactPointerEvent<HTMLButtonElement>, k: "left" | "right" | "up" | "down" | "fire") => {
-    e.preventDefault();
-    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    touchRef.current[k] = false;
-  };
+  /*
+   * A korábbi startHold/endHold gomb-kezelők elhagyva: a vezérlést a
+   * VirtualJoystick és a HoldButton vette át, azok maguk intézik a pointer
+   * capture-t és a preventDefaultot.
+   */
 
   /* ===================== Eredmény-szinkron ===================== */
   useEffect(() => {
@@ -2284,11 +2297,14 @@ export default function SpaceAsteroidQuiz() {
                   )}
                 </div>
 
-                {/* Touch kontrollok — G-8: a böngésző saját gesztusai kikapcsolva.
-                    touch-action:none nélkül a hosszú nyomás kijelöl, felugró menüt nyit
-                    és görget, vagyis a vezérlés megáll a gyerek keze alatt. */}
+                {/* Touch kontrollok — G-8: joystick + tüzelőgomb.
+                    A négy nyílgomb helyett tárcsa, mert az átlós irány két gomb
+                    EGYIDEJŰ nyomását követelte, ami egy hüvelykujjal nem megy: a
+                    gyerek négy irányra volt korlátozva egy nyolcirányú játékban.
+                    A böngésző saját gesztusai kikapcsolva — touch-action:none
+                    nélkül a hosszú nyomás kijelöl, felugró menüt nyit és görget. */}
                 <div
-                  className="grid grid-cols-5 gap-1.5 w-full"
+                  className="flex items-center justify-between gap-3 w-full"
                   style={{
                     touchAction: "none",
                     userSelect: "none",
@@ -2296,46 +2312,31 @@ export default function SpaceAsteroidQuiz() {
                     WebkitTapHighlightColor: "transparent",
                   }}
                 >
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs"
-                    onPointerDown={(e) => startHold(e, "left")}
-                    onPointerUp={(e) => endHold(e, "left")}
-                    onPointerCancel={(e) => endHold(e, "left")}
-                  >Balra</Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs"
-                    onPointerDown={(e) => startHold(e, "up")}
-                    onPointerUp={(e) => endHold(e, "up")}
-                    onPointerCancel={(e) => endHold(e, "up")}
-                  >Előre</Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-slate-700 hover:bg-slate-600 text-white border border-slate-200/35 shadow-md py-3 text-xs"
-                    onPointerDown={(e) => startHold(e, "down")}
-                    onPointerUp={(e) => endHold(e, "down")}
-                    onPointerCancel={(e) => endHold(e, "down")}
-                  >Le</Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs"
-                    onPointerDown={(e) => startHold(e, "right")}
-                    onPointerUp={(e) => endHold(e, "right")}
-                    onPointerCancel={(e) => endHold(e, "right")}
-                  >Jobbra</Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-rose-700 hover:bg-rose-600 text-white border border-rose-200/35 shadow-md py-3 text-xs"
-                    onPointerDown={(e) => startHold(e, "fire")}
-                    onPointerUp={(e) => endHold(e, "fire")}
-                    onPointerCancel={(e) => endHold(e, "fire")}
-                  >🚀 TŰZ</Button>
+                  <VirtualJoystick
+                    label="Hajó irányítása"
+                    radius={54}
+                    onChange={(v) => {
+                      const dirs = joystickToDirections(v);
+                      touchRef.current.left = dirs.left;
+                      touchRef.current.right = dirs.right;
+                      // A joystick „előre" iránya fölfelé mutat; a hajó `up`
+                      // vezérlője ugyanezt jelenti.
+                      touchRef.current.up = dirs.fwd;
+                      touchRef.current.down = dirs.back;
+                    }}
+                  />
+                  <HoldButton
+                    label="Tűz"
+                    onHoldStart={() => {
+                      touchRef.current.fire = true;
+                    }}
+                    onHoldEnd={() => {
+                      touchRef.current.fire = false;
+                    }}
+                    className="h-[108px] w-[108px] rounded-full bg-rose-700 hover:bg-rose-600 text-white border-2 border-rose-200/40 shadow-lg text-sm font-extrabold flex items-center justify-center active:scale-95"
+                  >
+                    🚀 TŰZ
+                  </HoldButton>
                 </div>
 
                 {/* HUD */}

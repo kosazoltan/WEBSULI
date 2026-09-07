@@ -77,7 +77,16 @@ export default function QuizFeedbackCard({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4"
+      /*
+       * A kártyának MINDEN játék-felugró fölött kell lennie.
+       *
+       * Mért hiba (2026-09-07, Aszteroida): a kvíz-overlay `z-[60]`, a kártya
+       * `z-50` volt — a kártya alá került, a „Értem, megyek tovább" gomb
+       * kattinthatatlan lett, és mivel a továbblépést ez a gomb intézi, a játék
+       * ÖRÖKRE megállt. A `tests/game-feedback-wiring-guard.test.ts` most azt is
+       * méri, hogy ez a szám minden lapon talált z-indexnél nagyobb.
+       */
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/80 p-4"
       role="dialog"
       aria-modal="true"
       aria-live="assertive"

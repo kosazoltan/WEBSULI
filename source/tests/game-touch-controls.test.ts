@@ -150,3 +150,30 @@ test("a HoldButton a capture-t használja, nem a leave-et", () => {
   assert.match(btn, /onContextMenu/, "hosszú nyomásra felugró menü jönne");
   assert.doesNotMatch(btn, /onPointerLeave/, "a leave épp a capture ellen dolgozik");
 });
+
+/* ------------------------------- joystick -------------------------------- */
+
+test("az Aszteroida joystickkal irányít, nem négy nyílgombbal", () => {
+  const code = stripComments(
+    readFileSync(join(root, "client/src/pages/SpaceAsteroidQuiz.tsx"), "utf8"),
+  );
+
+  // Miért számít: a négy nyílgombbal az ÁTLÓS irány két gomb egyidejű nyomását
+  // követelte, ami egy hüvelykujjal nem megy — a gyerek négy irányra volt
+  // korlátozva egy nyolcirányú játékban.
+  assert.match(code, /<VirtualJoystick\b/, "nincs joystick a lapon");
+  assert.match(code, /joystickToDirections\s*\(/, "a joystick vektora nincs bekötve a vezérlésbe");
+});
+
+test("a joystick felengedéskor nullázza az irányt", () => {
+  const joy = stripComments(
+    readFileSync(join(root, "client/src/game-engine/VirtualJoystick.tsx"), "utf8"),
+  );
+
+  // Enélkül a hajó a legutolsó irányba sodródna tovább, és a gyerek azt hinné,
+  // elromlott a vezérlés.
+  assert.match(joy, /magnitude:\s*0/, "felengedéskor nincs nullázás");
+  assert.match(joy, /setPointerCapture/, "capture nélkül a kicsúszó ujj elveszti a tárcsát");
+  assert.doesNotMatch(joy, /onPointerLeave/, "a leave a capture ellen dolgozna");
+  assert.match(joy, /touchAction:\s*"none"/, "a böngésző görgetne a tárcsán");
+});
