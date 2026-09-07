@@ -22,6 +22,8 @@ import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
+import { stepBrainRot } from "@/lib/brainRotPhysics";
+import { useReducedMotion } from "@/game-engine/useReducedMotion";
 
 /* --- Típusok --- */
 type Quiz = { id?: string; prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
@@ -342,6 +344,10 @@ export default function BrainRotSteal() {
     [phase, pickQuiz],
   );
 
+  // G-5: a mérés szerint ez a játék nulla helyen vette figyelembe a
+  // prefers-reduced-motion beállítást.
+  const reducedMotion = useReducedMotion();
+
   /**
    * G-1: magyarázó kártya rossz válaszra.
    *
@@ -510,6 +516,9 @@ export default function BrainRotSteal() {
       // D5: RAF throttle — setState legfeljebb ~10 FPS-enként (100ms), nem minden frame-ben
       const shouldRender = now - lastRenderMsRef.current >= 100;
       if (shouldRender) {
+        // A ténylegesen eltelt idő, nem a névleges 100 ms: terhelt telefonon a
+        // fojtott lépés hosszabb, és a fizikának ezt kell tudnia.
+        const stepMs = now - lastRenderMsRef.current;
         lastRenderMsRef.current = now;
 
         // Update brain rots
@@ -524,20 +533,25 @@ export default function BrainRotSteal() {
                 return { ...rot, escaping: true };
               }
 
-              let { x, y, vx, vy, rotation } = rot;
-              const { rotSpeed } = rot;
+              // G-10: idő-alapú lépés. Korábban `x += vx` volt, vagyis a
+              // sebesség a képkockaszámtól függött (120 Hz-en dupla tempó), és
+              // a 100 ms-os fojtás miatt a lény tízszer akkorát ugrott, mint
+              // amekkorát a szem folyamatosnak lát.
+              const moved = stepBrainRot(
+                {
+                  x: rot.x,
+                  y: rot.y,
+                  vx: rot.vx,
+                  vy: rot.vy,
+                  size: rot.size,
+                  rotation: rot.rotation,
+                  rotSpeed: rot.rotSpeed,
+                },
+                stepMs,
+                { width: boardW, height: boardH },
+              );
 
-              // Bounce off walls
-              x += vx;
-              y += vy;
-              if (x < rot.size / 2 || x > boardW - rot.size / 2) vx = -vx;
-              if (y < rot.size / 2 || y > boardH - rot.size / 2) vy = -vy;
-              x = Math.max(rot.size / 2, Math.min(boardW - rot.size / 2, x));
-              y = Math.max(rot.size / 2, Math.min(boardH - rot.size / 2, y));
-
-              rotation += rotSpeed;
-
-              return { ...rot, x, y, vx, vy, rotation };
+              return { ...rot, ...moved };
             })
             .filter((rot) => {
               if (rot.escaping) {
@@ -873,6 +887,13 @@ export default function BrainRotSteal() {
                             width: rot.size,
                             height: rot.size,
                             transform: `rotate(${rot.rotation}deg)`,
+                            // G-10: a fojtott (100 ms-os) lépések között a
+                            // böngésző interpolál, így a szem folyamatosnak
+                            // látja a mozgást anélkül, hogy 60 FPS-en kellene
+                            // React-állapotot írni. Mozgáscsökkentésnél kikapcsol.
+                            transition: reducedMotion
+                              ? undefined
+                              : "left 100ms linear, top 100ms linear",
                             opacity,
                             filter: isWarning ? "hue-rotate(40deg)" : "none",
                             /* Enlarge touch target on mobile for easier tapping */
