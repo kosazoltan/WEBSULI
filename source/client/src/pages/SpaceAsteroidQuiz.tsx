@@ -2255,8 +2255,18 @@ export default function SpaceAsteroidQuiz() {
                   )}
                 </div>
 
-                {/* Touch kontrollok */}
-                <div className="grid grid-cols-5 gap-1.5 w-full">
+                {/* Touch kontrollok — G-8: a böngésző saját gesztusai kikapcsolva.
+                    touch-action:none nélkül a hosszú nyomás kijelöl, felugró menüt nyit
+                    és görget, vagyis a vezérlés megáll a gyerek keze alatt. */}
+                <div
+                  className="grid grid-cols-5 gap-1.5 w-full"
+                  style={{
+                    touchAction: "none",
+                    userSelect: "none",
+                    WebkitTouchCallout: "none",
+                    WebkitTapHighlightColor: "transparent",
+                  }}
+                >
                   <Button
                     type="button"
                     size="sm"
@@ -2264,7 +2274,6 @@ export default function SpaceAsteroidQuiz() {
                     onPointerDown={(e) => startHold(e, "left")}
                     onPointerUp={(e) => endHold(e, "left")}
                     onPointerCancel={(e) => endHold(e, "left")}
-                    onPointerLeave={(e) => endHold(e, "left")}
                   >Balra</Button>
                   <Button
                     type="button"
@@ -2273,7 +2282,6 @@ export default function SpaceAsteroidQuiz() {
                     onPointerDown={(e) => startHold(e, "up")}
                     onPointerUp={(e) => endHold(e, "up")}
                     onPointerCancel={(e) => endHold(e, "up")}
-                    onPointerLeave={(e) => endHold(e, "up")}
                   >Előre</Button>
                   <Button
                     type="button"
@@ -2282,7 +2290,6 @@ export default function SpaceAsteroidQuiz() {
                     onPointerDown={(e) => startHold(e, "down")}
                     onPointerUp={(e) => endHold(e, "down")}
                     onPointerCancel={(e) => endHold(e, "down")}
-                    onPointerLeave={(e) => endHold(e, "down")}
                   >Le</Button>
                   <Button
                     type="button"
@@ -2291,7 +2298,6 @@ export default function SpaceAsteroidQuiz() {
                     onPointerDown={(e) => startHold(e, "right")}
                     onPointerUp={(e) => endHold(e, "right")}
                     onPointerCancel={(e) => endHold(e, "right")}
-                    onPointerLeave={(e) => endHold(e, "right")}
                   >Jobbra</Button>
                   <Button
                     type="button"
@@ -2300,7 +2306,6 @@ export default function SpaceAsteroidQuiz() {
                     onPointerDown={(e) => startHold(e, "fire")}
                     onPointerUp={(e) => endHold(e, "fire")}
                     onPointerCancel={(e) => endHold(e, "fire")}
-                    onPointerLeave={(e) => endHold(e, "fire")}
                   >🚀 TŰZ</Button>
                 </div>
 

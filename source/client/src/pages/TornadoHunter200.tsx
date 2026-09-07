@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -38,6 +37,7 @@ import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge"
 import { useCouponSession, type CouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
+import HoldButton from "@/game-engine/HoldButton";
 import {
   sfxSuccess,
   sfxError,
@@ -1820,10 +1820,10 @@ function TouchControls(props: {
   onAnchor: () => void;
   onCamera: () => void;
 }) {
-  const hold = (key: "fwd" | "back" | "left" | "right", value: boolean) => (e: ReactPointerEvent) => {
-    e.preventDefault();
+  // G-8: az esemény-kezelés (preventDefault, pointer capture) a HoldButton-ba
+  // került, itt már csak az irányjelző állítása marad.
+  const hold = (key: "fwd" | "back" | "left" | "right", value: boolean) => () => {
     props.touchRef.current[key] = value;
-    if (value && e.currentTarget instanceof HTMLElement) e.currentTarget.setPointerCapture?.(e.pointerId);
   };
 
   const steer = (
@@ -1861,25 +1861,33 @@ function TouchControls(props: {
   );
 }
 
+/**
+ * G-8: a gomb a közös HoldButton-ra épül.
+ *
+ * A korábbi változat `onPointerLeave`-re is elengedett, MIKÖZBEN pointer
+ * capture-t kért — a kettő egymás ellen dolgozott. Vezetés közben a hüvelykujj
+ * mindig elcsúszik a gomb széléről, és ilyenkor a kormányzás megállt. A capture
+ * most tartja a nyomást; elengedni csak felemeléssel vagy rendszer-megszakítással
+ * lehet.
+ */
 function TouchBtn(props: {
-  onDown: (e: ReactPointerEvent) => void;
-  onUp: (e: ReactPointerEvent) => void;
+  onDown: () => void;
+  onUp: () => void;
   label: string;
   small?: boolean;
   accent?: boolean;
 }) {
   return (
-    <button
-      onPointerDown={props.onDown}
-      onPointerUp={props.onUp}
-      onPointerCancel={props.onUp}
-      onPointerLeave={props.onUp}
-      className={`select-none rounded-full border font-bold flex items-center justify-center active:scale-95 ${
+    <HoldButton
+      label={props.label}
+      onHoldStart={props.onDown}
+      onHoldEnd={props.onUp}
+      className={`rounded-full border font-bold flex items-center justify-center active:scale-95 ${
         props.small ? "w-12 h-12 text-xs" : "w-14 h-14 text-sm"
       } ${props.accent ? "bg-amber-600/80 border-amber-300/60" : "bg-slate-800/80 border-white/15"}`}
     >
       {props.label}
-    </button>
+    </HoldButton>
   );
 }
 

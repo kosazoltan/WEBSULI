@@ -1510,7 +1510,17 @@ export default function TsunamiEscapeEnglish() {
                   <kbd className="px-1 rounded bg-white/15">→</kbd> vagy <kbd className="px-1 rounded bg-white/15">A</kbd>{" "}
                   <kbd className="px-1 rounded bg-white/15">D</kbd>, sprint: <kbd className="px-1 rounded bg-white/15">Shift</kbd>
                 </p>
-                <div className="grid grid-cols-3 gap-2 mt-1 sm:mt-3">
+                {/* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt
+                    és görgetett, a futás pedig megállt. */}
+                <div
+                  className="grid grid-cols-3 gap-2 mt-1 sm:mt-3"
+                  style={{
+                    touchAction: "none",
+                    userSelect: "none",
+                    WebkitTouchCallout: "none",
+                    WebkitTapHighlightColor: "transparent",
+                  }}
+                >
                 <Button
                   type="button"
                   variant="outline"
@@ -1519,7 +1529,6 @@ export default function TsunamiEscapeEnglish() {
                   onPointerDown={(e) => pressStart(e, "left")}
                   onPointerUp={(e) => pressEnd(e, "left")}
                   onPointerCancel={(e) => pressEnd(e, "left")}
-                  onPointerLeave={(e) => pressEnd(e, "left")}
                   aria-label="Balra"
                 >
                   <ArrowBigLeft className="w-8 h-8" />
@@ -1532,7 +1541,6 @@ export default function TsunamiEscapeEnglish() {
                   onPointerDown={(e) => pressStart(e, "sprint")}
                   onPointerUp={(e) => pressEnd(e, "sprint")}
                   onPointerCancel={(e) => pressEnd(e, "sprint")}
-                  onPointerLeave={(e) => pressEnd(e, "sprint")}
                   aria-label="Sprint"
                 >
                   <Wind className="w-7 h-7" />
@@ -1545,7 +1553,6 @@ export default function TsunamiEscapeEnglish() {
                   onPointerDown={(e) => pressStart(e, "right")}
                   onPointerUp={(e) => pressEnd(e, "right")}
                   onPointerCancel={(e) => pressEnd(e, "right")}
-                  onPointerLeave={(e) => pressEnd(e, "right")}
                   aria-label="Jobbra"
                 >
                   <ArrowBigRight className="w-8 h-8" />
