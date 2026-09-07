@@ -12,6 +12,8 @@ import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
+import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 type GradeLevel = 3 | 4 | 5;
 type Phase = "menu" | "play" | "over" | "won";
@@ -257,6 +259,12 @@ export default function SpeedQuizMath() {
   const [totalXp, setTotalXp] = useState(0);
   const [wrongFlash, setWrongFlash] = useState(false);
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
+  // G-1: a rossz válasz magyarázata. Amíg ez áll, az órák megállnak — a gyerek
+  // olvas, és az olvasásért nem jár büntetés.
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+  const attemptRef = useRef(0);
+  // A magyarázatot a game over ELŐTT mutatjuk meg: az utolsó hibából is tanulni kell.
+  const pendingOverRef = useRef(false);
   const recentPromptsRef = useRef<string[]>([]);
   const scoreSubmittedRef = useRef(false);
   const timeoutsRef = useRef<number[]>([]);
@@ -277,6 +285,56 @@ export default function SpeedQuizMath() {
     setTask(next);
     setQuestionTimeLeft(QUESTION_SECONDS[grade]);
     setAnswerState("idle");
+    attemptRef.current = 0;
+  }, [grade]);
+
+  /**
+   * G-1: magyarázó kártya rossz válaszra és lejárt időre.
+   *
+   * `chosenIndex === null` a lejárt idő. A feladat válaszai számok, a
+   * visszacsatolás motorja szöveggel dolgozik — a leképezés itt történik, hogy a
+   * motor egyetlen játék adatszerkezetéhez se kötődjön.
+   */
+  const showFeedbackFor = useCallback(
+    (chosenIndex: number | null) => {
+      setFeedback(
+        buildFeedback({
+          quiz: {
+            prompt: task.prompt,
+            options: task.options.map((n) => String(n)),
+            correctIndex: task.correctIndex,
+          },
+          chosenIndex,
+          attempt: attemptRef.current,
+          // 3–5. osztály: a lecke-séma ugyanezt a sávot adja (ageBandForClassroom).
+          ageBand: "kid",
+        }),
+      );
+    },
+    [task],
+  );
+
+  /** A kártya bezárása lépteti a játékot — nem az idő. */
+  const dismissFeedback = useCallback(() => {
+    setFeedback(null);
+    if (pendingOverRef.current) {
+      pendingOverRef.current = false;
+      setPhase("over");
+      return;
+    }
+    nextTask();
+  }, [nextTask]);
+
+  /**
+   * Egy javítási esély ugyanazon a feladaton: a gyerek ne bukott kérdéssel lépjen
+   * tovább. Életet már nem von — azt a hibás válasz egyszer elvette.
+   */
+  const retryTask = useCallback(() => {
+    attemptRef.current += 1;
+    setFeedback(null);
+    setAnswerState("idle");
+    pendingOverRef.current = false;
+    setQuestionTimeLeft(QUESTION_SECONDS[grade]);
   }, [grade]);
 
   const startGame = useCallback(() => {
@@ -321,6 +379,9 @@ export default function SpeedQuizMath() {
 
   useEffect(() => {
     if (phase !== "play") return;
+    // A magyarázat olvasása közben minden óra áll. Enélkül a kártya elolvasása
+    // életbe és köridőbe kerülne — vagyis a tanulást büntetnénk.
+    if (feedback) return;
     const id = window.setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -340,20 +401,22 @@ export default function SpeedQuizMath() {
           const nextLives = Math.max(0, livesRef.current - 1);
           livesRef.current = nextLives;
           setLives(nextLives);
-          if (nextLives <= 0) {
-            endAsLose();
-          } else {
-            // GUARD: game over után NE töltsünk be új feladatot —
-            // az "over" fázis utáni nextTask() phase-szennyezést okozott.
-            nextTask();
-          }
+          // A lejárt kérdés is tanít: ugyanaz a magyarázat jár érte, mint a rossz
+          // válaszért. A továbblépést (vagy a game overt) a kártya bezárása intézi,
+          // ezért itt már nem hívunk nextTask()-ot.
+          pendingOverRef.current = nextLives <= 0;
+          showFeedbackFor(null);
           return QUESTION_SECONDS[grade];
         }
         return prev - 1;
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [phase, grade, endAsLose, nextTask]);
+    // `showFeedbackFor` a `task`-ból épít, ezért itt kötelező függőség: elavult
+    // closure-ral a lejárt kérdés az ELŐZŐ feladat megoldását magyarázná el.
+    // (Az exhaustive-deps szabály ebben a repóban ki van kapcsolva — #310 osztály —,
+    // a függőségeket kézzel tartjuk karban.)
+  }, [phase, grade, endAsLose, feedback, showFeedbackFor]);
 
   const handleAnswer = (idx: number) => {
     if (phase !== "play") return;
@@ -373,12 +436,11 @@ export default function SpeedQuizMath() {
       livesRef.current = nextLives;
       setLives(nextLives);
       setTimeLeft((t) => Math.max(0, t - 1));
-      if (nextLives <= 0) {
-        setPhase("over");
-      } else {
-        // GUARD: game over után ne töltsünk új feladatot
-        timeoutsRef.current.push(window.setTimeout(nextTask, 140));
-      }
+      // G-1: 140 ms piros villanás helyett magyarázat. Ennyi idő arra volt elég,
+      // hogy a gyerek észrevegye a büntetést, és túl kevés ahhoz, hogy tanuljon
+      // belőle — a téves megoldás így érintetlenül maradt meg benne.
+      pendingOverRef.current = nextLives <= 0;
+      showFeedbackFor(idx);
       return;
     }
 
@@ -700,6 +762,14 @@ export default function SpeedQuizMath() {
           </CardContent>
         </Card>
       </main>
+
+      {feedback && (
+        <QuizFeedbackCard
+          card={feedback}
+          onDismiss={dismissFeedback}
+          onRetry={retryTask}
+        />
+      )}
     </div>
   );
 }
