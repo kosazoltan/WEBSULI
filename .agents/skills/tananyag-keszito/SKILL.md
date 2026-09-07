@@ -10,6 +10,12 @@ description: >
 
 # Tananyag Készítő v7.1
 
+## WEBSULI Studio — elsődleges útvonal
+
+Először olvasd el a [forrásalapú jobbítási folyamatot](../../../docs/lesson-improvement.md). Studio feladatnál strukturált `Lesson` JSON készül a meglévő futtatóhoz; az alábbi négylapos HTML-követelmények csak kifejezetten önálló HTML-export feladatára vonatkoznak. Ne cseréld le a Studio formátumát, ne írj át a feladaton kívüli tartalmat.
+
+Az évfolyamot a program a teljes forrásból határozza meg. A készítőtől ne kérj osztályt, és a szerző ne írja felül a besorolást. A forráspéldák adatai maradjanak meg; téves forrást dokumentált kurálás helyesbítsen. Sémakaput, fogalomfedettséget, külön tartalmi és valódi böngészős ellenőrzést használj, az éles alkalmazás előtt pedig készíts visszaállítási mentést.
+
 ## BEVEZETŐ
 
 Ez a skill interaktív, 4 oldalas HTML tananyagot generál K-8 diákok számára. A bemeneti anyag lehet kép, PDF, dokumentum, tankönyvi szöveg, vagy csak a téma + évfolyam megadása. Az elkészült fájl egyetlen önálló HTML, amely mobiltelefonon is teljes funkcionalitással működik.
@@ -25,7 +31,7 @@ Az üzenet tartalmazhat:
 - **Stílusutasítást**: ha nincs megadva, modern, bátorító, közvetlen hang
 - **CSS prefix megadás**: ha nincs, generálj 2-3 betűs egyedi prefixet a téma alapján (pl. `fo-`, `tr-`, `mk-`)
 
-Ha az évfolyam nincs megadva, kérd el MIELŐTT elkezded a generálást.
+Ha az évfolyam nincs megadva, a forrás tartalmából kell meghatározni. Studio esetén a program automatikus besorolása az irányadó, nem a készítő választása.
 
 ---
 
@@ -198,4 +204,3 @@ Mielőtt a HTML kódot kiadod, ellenőrizd mentálisan:
 ## KIMENETI FORMAT
 
 A kész HTML fájlt mentsd `/mnt/user-data/outputs/[tema]-tananyag-v7.html` helyre, majd használd a `present_files` tool-t a letölthetővé tételhez.
-
