@@ -22,6 +22,13 @@ type MathTask = {
   prompt: string;
   options: number[];
   correctIndex: number;
+  /**
+   * A levezetés, amit a gyerek rossz válasz után lát (G-2).
+   *
+   * Élesben mérve: enélkül a magyarázó kártya csak annyit tudott kiírni, hogy
+   * „A helyes válasz: 1770" — matekból ez kevés, mert a HOGYAN marad ki belőle.
+   */
+  explanation?: string;
   source: "teacher" | "generated";
 };
 type AnswerState = "idle" | "correct" | "wrong";
@@ -73,44 +80,44 @@ function uniqueOptions(correct: number, level: GradeLevel): number[] {
 
 const TEACHER_BANK: Record<GradeLevel, MathTask[]> = {
   3: [
-    { prompt: "Egy gyerek 18 matricát gyűjtött, majd kapott még 7-et. Hány matricája van most?", options: [23, 24, 25, 26], correctIndex: 2, source: "teacher" },
-    { prompt: "Az osztályban 27 ceruza volt, 9-et elhasználtak. Mennyi maradt?", options: [16, 17, 18, 19], correctIndex: 2, source: "teacher" },
-    { prompt: "4 dobozban dobozonként 6 alma van. Hány alma összesen?", options: [18, 20, 22, 24], correctIndex: 3, source: "teacher" },
-    { prompt: "A könyvtárban 35 könyv volt, majd hoztak még 14-et. Hány könyv lett?", options: [47, 48, 49, 50], correctIndex: 2, source: "teacher" },
-    { prompt: "Egy buszon 42 utas volt, 15 leszállt. Hány utas maradt?", options: [25, 26, 27, 28], correctIndex: 2, source: "teacher" },
-    { prompt: "7 zsákban 5-5 golyó van. Hány golyó összesen?", options: [30, 35, 40, 45], correctIndex: 1, source: "teacher" },
-    { prompt: "Misi 12 percet tanult reggel és 13 percet délután. Hány percet tanult összesen?", options: [23, 24, 25, 26], correctIndex: 2, source: "teacher" },
-    { prompt: "A büfében 50 zsemle volt, 21-et eladtak. Mennyi maradt?", options: [28, 29, 30, 31], correctIndex: 1, source: "teacher" },
-    { prompt: "Peti 14 matricát ragasztott a füzetére, majd kapott még 8-at. Hány matrica van most összesen?", options: [20, 21, 22, 23], correctIndex: 2, source: "teacher" },
-    { prompt: "Az asztalon 16 színes ceruha volt (köztük 4 törött). A törötteket félretették. Hány egész ceruha maradt az asztalon?", options: [10, 11, 12, 13], correctIndex: 2, source: "teacher" },
-    { prompt: "3 polcon polconként 7 könyv áll. Hány könyv van összesen a három polcon?", options: [18, 19, 20, 21], correctIndex: 3, source: "teacher" },
-    { prompt: "Egy dobozban 20 db kréta volt. 6-ot elhasználtak. Mennyi maradt?", options: [12, 13, 14, 15], correctIndex: 2, source: "teacher" },
+    { prompt: "Egy gyerek 18 matricát gyűjtött, majd kapott még 7-et. Hány matricája van most?", options: [23, 24, 25, 26], correctIndex: 2, explanation: "18 + 7 = 25 matrica.", source: "teacher" },
+    { prompt: "Az osztályban 27 ceruza volt, 9-et elhasználtak. Mennyi maradt?", options: [16, 17, 18, 19], correctIndex: 2, explanation: "27 - 9 = 18 ceruza maradt.", source: "teacher" },
+    { prompt: "4 dobozban dobozonként 6 alma van. Hány alma összesen?", options: [18, 20, 22, 24], correctIndex: 3, explanation: "Dobozonként 6, négy dobozban: 4 × 6 = 24 alma.", source: "teacher" },
+    { prompt: "A könyvtárban 35 könyv volt, majd hoztak még 14-et. Hány könyv lett?", options: [47, 48, 49, 50], correctIndex: 2, explanation: "35 + 14 = 49 könyv.", source: "teacher" },
+    { prompt: "Egy buszon 42 utas volt, 15 leszállt. Hány utas maradt?", options: [25, 26, 27, 28], correctIndex: 2, explanation: "42 - 15 = 27 utas maradt.", source: "teacher" },
+    { prompt: "7 zsákban 5-5 golyó van. Hány golyó összesen?", options: [30, 35, 40, 45], correctIndex: 1, explanation: "Zsákonként 5, hét zsákban: 7 × 5 = 35 golyó.", source: "teacher" },
+    { prompt: "Misi 12 percet tanult reggel és 13 percet délután. Hány percet tanult összesen?", options: [23, 24, 25, 26], correctIndex: 2, explanation: "12 + 13 = 25 perc.", source: "teacher" },
+    { prompt: "A büfében 50 zsemle volt, 21-et eladtak. Mennyi maradt?", options: [28, 29, 30, 31], correctIndex: 1, explanation: "50 - 21 = 29 zsemle maradt.", source: "teacher" },
+    { prompt: "Peti 14 matricát ragasztott a füzetére, majd kapott még 8-at. Hány matrica van most összesen?", options: [20, 21, 22, 23], correctIndex: 2, explanation: "14 + 8 = 22 matrica.", source: "teacher" },
+    { prompt: "Az asztalon 16 színes ceruha volt (köztük 4 törött). A törötteket félretették. Hány egész ceruha maradt az asztalon?", options: [10, 11, 12, 13], correctIndex: 2, explanation: "A 4 törött lekerül: 16 - 4 = 12 egész ceruza.", source: "teacher" },
+    { prompt: "3 polcon polconként 7 könyv áll. Hány könyv van összesen a három polcon?", options: [18, 19, 20, 21], correctIndex: 3, explanation: "Polconként 7, három polcon: 3 × 7 = 21 könyv.", source: "teacher" },
+    { prompt: "Egy dobozban 20 db kréta volt. 6-ot elhasználtak. Mennyi maradt?", options: [12, 13, 14, 15], correctIndex: 2, explanation: "20 - 6 = 14 kréta maradt.", source: "teacher" },
   ],
   4: [
-    { prompt: "Egy boltban 235 db füzet volt. Hozzáadtak még 147-et. Hány füzet lett?", options: [372, 382, 392, 402], correctIndex: 1, source: "teacher" },
-    { prompt: "A sportnapon 640 métert futottak, ebből 275 métert már teljesítettek. Mennyi van még hátra?", options: [355, 365, 375, 385], correctIndex: 1, source: "teacher" },
-    { prompt: "9 csapatban csapatonként 14 tanuló van. Hány tanuló összesen?", options: [116, 126, 136, 146], correctIndex: 1, source: "teacher" },
-    { prompt: "432 cukorkát 8 egyenlő csomagba osztanak. Hány cukorka jut egy csomagba?", options: [52, 53, 54, 55], correctIndex: 2, source: "teacher" },
-    { prompt: "Egy túrán délelőtt 1860 lépést, délután 975 lépést tettek meg. Hány lépés összesen?", options: [2815, 2825, 2835, 2845], correctIndex: 2, source: "teacher" },
-    { prompt: "Egy iskolában 720 tanuló van, ebből 268 alsós. Hány felsős tanuló van?", options: [442, 452, 462, 472], correctIndex: 1, source: "teacher" },
-    { prompt: "12 dobozban dobozonként 16 filctoll van. Hány filctoll összesen?", options: [182, 192, 202, 212], correctIndex: 1, source: "teacher" },
-    { prompt: "4500 Ft-od van. Veszel egy játékot 1750 Ft-ért és egy könyvet 980 Ft-ért. Mennyi pénzed marad?", options: [1670, 1770, 1870, 1970], correctIndex: 1, source: "teacher" },
-    { prompt: "A kiránduláson 156 fényképet készítettek hétfőn és 89-et kedden. Hány kép készült összesen?", options: [235, 245, 255, 265], correctIndex: 1, source: "teacher" },
-    { prompt: "Egy táskában 8 csomag ragasztólap van, mindegyikben 12 lap. Hány lap van összesen?", options: [84, 92, 96, 104], correctIndex: 2, source: "teacher" },
-    { prompt: "A medence hossza 25 m. Anna kétszer oda-vissza úszik (oda és vissza = egy oda-vissza pár). Hány métert úszik összesen?", options: [50, 75, 100, 125], correctIndex: 2, source: "teacher" },
+    { prompt: "Egy boltban 235 db füzet volt. Hozzáadtak még 147-et. Hány füzet lett?", options: [372, 382, 392, 402], correctIndex: 1, explanation: "235 + 147 = 382 füzet.", source: "teacher" },
+    { prompt: "A sportnapon 640 métert futottak, ebből 275 métert már teljesítettek. Mennyi van még hátra?", options: [355, 365, 375, 385], correctIndex: 1, explanation: "640 - 275 = 365 méter van hátra.", source: "teacher" },
+    { prompt: "9 csapatban csapatonként 14 tanuló van. Hány tanuló összesen?", options: [116, 126, 136, 146], correctIndex: 1, explanation: "Csapatonként 14, kilenc csapatban: 9 × 14 = 126 tanuló.", source: "teacher" },
+    { prompt: "432 cukorkát 8 egyenlő csomagba osztanak. Hány cukorka jut egy csomagba?", options: [52, 53, 54, 55], correctIndex: 2, explanation: "432 ÷ 8 = 54 cukorka jut egy csomagba.", source: "teacher" },
+    { prompt: "Egy túrán délelőtt 1860 lépést, délután 975 lépést tettek meg. Hány lépés összesen?", options: [2815, 2825, 2835, 2845], correctIndex: 2, explanation: "1860 + 975 = 2835 lépés.", source: "teacher" },
+    { prompt: "Egy iskolában 720 tanuló van, ebből 268 alsós. Hány felsős tanuló van?", options: [442, 452, 462, 472], correctIndex: 1, explanation: "720 - 268 = 452 felsős.", source: "teacher" },
+    { prompt: "12 dobozban dobozonként 16 filctoll van. Hány filctoll összesen?", options: [182, 192, 202, 212], correctIndex: 1, explanation: "Dobozonként 16, tizenkét dobozban: 12 × 16 = 192 filctoll.", source: "teacher" },
+    { prompt: "4500 Ft-od van. Veszel egy játékot 1750 Ft-ért és egy könyvet 980 Ft-ért. Mennyi pénzed marad?", options: [1670, 1770, 1870, 1970], correctIndex: 1, explanation: "Két vásárlás egymás után: 4500 - 1750 = 2750, majd 2750 - 980 = 1770 Ft.", source: "teacher" },
+    { prompt: "A kiránduláson 156 fényképet készítettek hétfőn és 89-et kedden. Hány kép készült összesen?", options: [235, 245, 255, 265], correctIndex: 1, explanation: "156 + 89 = 245 kép.", source: "teacher" },
+    { prompt: "Egy táskában 8 csomag ragasztólap van, mindegyikben 12 lap. Hány lap van összesen?", options: [84, 92, 96, 104], correctIndex: 2, explanation: "Csomagonként 12, nyolc csomagban: 8 × 12 = 96 lap.", source: "teacher" },
+    { prompt: "A medence hossza 25 m. Anna kétszer oda-vissza úszik (oda és vissza = egy oda-vissza pár). Hány métert úszik összesen?", options: [50, 75, 100, 125], correctIndex: 2, explanation: "Egy oda-vissza 2 × 25 = 50 m; kétszer: 2 × 50 = 100 m.", source: "teacher" },
   ],
   5: [
-    { prompt: "Egy osztály 24 csapatban gyűjt pontot. Egy csapat 18 pontot, egy másik 27 pontot szerzett. Mennyi a két csapat pontjainak összege?", options: [43, 44, 45, 46], correctIndex: 2, source: "teacher" },
-    { prompt: "Egy táborban 36 gyerek van. A gyerekek 3/4-e megy kirándulni. Hány gyerek indul?", options: [24, 26, 27, 28], correctIndex: 2, source: "teacher" },
-    { prompt: "Egy robotversenyen 1250 pontból 3 körben 285, 340 és 415 pontot szereztek. Mennyi pont maradt?", options: [190, 200, 210, 220], correctIndex: 2, source: "teacher" },
-    { prompt: "48 darab LED-et 6 sorba rendeznek egyenlően. Hány LED jut egy sorba?", options: [6, 7, 8, 9], correctIndex: 2, source: "teacher" },
-    { prompt: "Egy pályán 28 akadály van. Minden 4. akadály után bónusz jár. Hány bónuszpont-hely van?", options: [6, 7, 8, 9], correctIndex: 1, source: "teacher" },
-    { prompt: "A csapat 5600 XP-ből 2380 XP-t megszerzett hétfőn, és 1740 XP-t kedden. Mennyi hiányzik?", options: [1380, 1480, 1580, 1680], correctIndex: 1, source: "teacher" },
-    { prompt: "3 dobozban 24-24 kártya, és 2 dobozban 18-18 kártya van. Hány kártya összesen?", options: [98, 108, 118, 128], correctIndex: 1, source: "teacher" },
-    { prompt: "Egy játékban 5 kör van. Körönként 12 pont jár, de minden kör végén 3 pont levonás van. Mennyi pont marad 5 kör után?", options: [40, 45, 50, 55], correctIndex: 1, source: "teacher" },
-    { prompt: "Egy projekthez 144 lapot nyomtattak, ebből 37-et már összefűztek. Hány lap maradt még?", options: [105, 107, 109, 111], correctIndex: 1, source: "teacher" },
-    { prompt: "15 diák mindegyike 8 pontot szerzett a feleletválaszos körben. Hány pont az összesen?", options: [110, 115, 120, 125], correctIndex: 2, source: "teacher" },
-    { prompt: "Egy tábori versenyen 2,5 km-t kellett futni. Zoli már lefutotta 0,8 km-t. Hány km van még hátra?", options: [1.5, 1.6, 1.7, 1.8], correctIndex: 2, source: "teacher" },
+    { prompt: "Egy osztály 24 csapatban gyűjt pontot. Egy csapat 18 pontot, egy másik 27 pontot szerzett. Mennyi a két csapat pontjainak összege?", options: [43, 44, 45, 46], correctIndex: 2, explanation: "Csak a két csapat pontja kell: 18 + 27 = 45.", source: "teacher" },
+    { prompt: "Egy táborban 36 gyerek van. A gyerekek 3/4-e megy kirándulni. Hány gyerek indul?", options: [24, 26, 27, 28], correctIndex: 2, explanation: "A 36 negyede 36 ÷ 4 = 9, ennek háromszorosa 3 × 9 = 27 gyerek.", source: "teacher" },
+    { prompt: "Egy robotversenyen 1250 pontból 3 körben 285, 340 és 415 pontot szereztek. Mennyi pont maradt?", options: [190, 200, 210, 220], correctIndex: 2, explanation: "Először a három kör: 285 + 340 + 415 = 1040, majd 1250 - 1040 = 210 pont.", source: "teacher" },
+    { prompt: "48 darab LED-et 6 sorba rendeznek egyenlően. Hány LED jut egy sorba?", options: [6, 7, 8, 9], correctIndex: 2, explanation: "48 ÷ 6 = 8 LED jut egy sorba.", source: "teacher" },
+    { prompt: "Egy pályán 28 akadály van. Minden 4. akadály után bónusz jár. Hány bónuszpont-hely van?", options: [6, 7, 8, 9], correctIndex: 1, explanation: "Minden 4. akadály után jár bónusz: 28 ÷ 4 = 7 hely.", source: "teacher" },
+    { prompt: "A csapat 5600 XP-ből 2380 XP-t megszerzett hétfőn, és 1740 XP-t kedden. Mennyi hiányzik?", options: [1380, 1480, 1580, 1680], correctIndex: 1, explanation: "Két nap együtt: 2380 + 1740 = 4120, majd 5600 - 4120 = 1480 XP hiányzik.", source: "teacher" },
+    { prompt: "3 dobozban 24-24 kártya, és 2 dobozban 18-18 kártya van. Hány kártya összesen?", options: [98, 108, 118, 128], correctIndex: 1, explanation: "3 × 24 = 72 és 2 × 18 = 36, együtt 72 + 36 = 108 kártya.", source: "teacher" },
+    { prompt: "Egy játékban 5 kör van. Körönként 12 pont jár, de minden kör végén 3 pont levonás van. Mennyi pont marad 5 kör után?", options: [40, 45, 50, 55], correctIndex: 1, explanation: "Körönként 12 - 3 = 9 pont marad, öt körben 5 × 9 = 45 pont.", source: "teacher" },
+    { prompt: "Egy projekthez 144 lapot nyomtattak, ebből 37-et már összefűztek. Hány lap maradt még?", options: [105, 107, 109, 111], correctIndex: 1, explanation: "144 - 37 = 107 lap maradt.", source: "teacher" },
+    { prompt: "15 diák mindegyike 8 pontot szerzett a feleletválaszos körben. Hány pont az összesen?", options: [110, 115, 120, 125], correctIndex: 2, explanation: "Fejenként 8 pont, tizenöt diák: 15 × 8 = 120 pont.", source: "teacher" },
+    { prompt: "Egy tábori versenyen 2,5 km-t kellett futni. Zoli már lefutotta 0,8 km-t. Hány km van még hátra?", options: [1.5, 1.6, 1.7, 1.8], correctIndex: 2, explanation: "2,5 - 0,8 = 1,7 km van még hátra.", source: "teacher" },
   ],
 };
 
@@ -118,6 +125,8 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
   const roll = Math.random();
   let prompt: string | null;
   let result: number | null = null;
+  // Minden ág beállítja (a védelmi fallback is), ezért nincs kezdőérték.
+  let explanation: string;
 
   if (level === 3) {
     if (roll < 0.4) {
@@ -125,21 +134,25 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
       const b = randInt(4, 35);
       prompt = `${a} + ${b} = ?`;
       result = a + b;
+      explanation = `${a} + ${b} = ${a + b}.`;
     } else if (roll < 0.7) {
       const a = randInt(25, 100);
       const b = randInt(3, 24);
       prompt = `${a} - ${b} = ?`;
       result = a - b;
+      explanation = `${a} - ${b} = ${a - b}.`;
     } else if (roll < 0.84) {
       const a = randInt(2, 9);
       const b = randInt(2, 9);
       prompt = `${a} × ${b} = ?`;
       result = a * b;
+      explanation = `${a} × ${b} = ${a * b}.`;
     } else {
       const a = randInt(6, 22);
       const b = randInt(4, 18);
       prompt = `Dóri ${a} matricát ragasztott a füzetére, majd kapott még ${b}-et. Hány matrica van most összesen?`;
       result = a + b;
+      explanation = `${a} + ${b} = ${a + b} matrica.`;
     }
   } else if (level === 4) {
     if (roll < 0.3) {
@@ -147,27 +160,32 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
       const b = randInt(45, 260);
       prompt = `${a} + ${b} = ?`;
       result = a + b;
+      explanation = `${a} + ${b} = ${a + b}.`;
     } else if (roll < 0.55) {
       const a = randInt(300, 950);
       const b = randInt(80, 290);
       prompt = `${a} - ${b} = ?`;
       result = a - b;
+      explanation = `${a} - ${b} = ${a - b}.`;
     } else if (roll < 0.72) {
       const a = randInt(4, 12);
       const b = randInt(6, 19);
       prompt = `${a} × ${b} = ?`;
       result = a * b;
+      explanation = `${a} × ${b} = ${a * b}.`;
     } else if (roll < 0.86) {
       const b = randInt(3, 12);
       const r = randInt(4, 18);
       const a = b * r;
       prompt = `${a} ÷ ${b} = ?`;
       result = r;
+      explanation = `${a} ÷ ${b} = ${r}, mert ${b} × ${r} = ${a}.`;
     } else {
       const rows = randInt(3, 6);
       const each = randInt(6, 14);
       prompt = `${rows} polcon polconként ${each} könyv áll (minden polcon ugyanannyi). Hány könyv van összesen?`;
       result = rows * each;
+      explanation = `Polconként ${each}, ${rows} polcon: ${rows} × ${each} = ${rows * each} könyv.`;
     }
   } else {
     if (roll < 0.26) {
@@ -176,29 +194,34 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
       const c = randInt(10, 90);
       prompt = `(${a} + ${b}) - ${c} = ?`;
       result = a + b - c;
+      explanation = `Előbb a zárójel: ${a} + ${b} = ${a + b}, majd ${a + b} - ${c} = ${a + b - c}.`;
     } else if (roll < 0.48) {
       const a = randInt(12, 36);
       const b = randInt(8, 24);
       const c = randInt(4, 12);
       prompt = `${a} × ${b} - ${c} = ?`;
       result = a * b - c;
+      explanation = `Előbb a szorzás: ${a} × ${b} = ${a * b}, majd ${a * b} - ${c} = ${a * b - c}.`;
     } else if (roll < 0.66) {
       const b = randInt(5, 16);
       const r = randInt(12, 34);
       const a = b * r;
       prompt = `${a} ÷ ${b} = ?`;
       result = r;
+      explanation = `${a} ÷ ${b} = ${r}, mert ${b} × ${r} = ${a}.`;
     } else if (roll < 0.78) {
       const a = randInt(40, 120);
       const b = randInt(10, 40);
       const c = randInt(2, 5);
       prompt = `(${a} - ${b}) × ${c} = ?`;
       result = (a - b) * c;
+      explanation = `Előbb a zárójel: ${a} - ${b} = ${a - b}, majd ${a - b} × ${c} = ${(a - b) * c}.`;
     } else {
       const n = randInt(8, 14);
       const p = randInt(6, 12);
       prompt = `${n} csapat mindegyike ${p} pontot szerzett ugyanazon a fordulón. Mennyi a pontok összege?`;
       result = n * p;
+      explanation = `Csapatonként ${p}, ${n} csapat: ${n} × ${p} = ${n * p} pont.`;
     }
   }
 
@@ -206,10 +229,17 @@ function generatedTaskForGrade(level: GradeLevel): MathTask {
   if (prompt == null || result == null) {
     prompt = "12 + 8 = ?";
     result = 20;
+    explanation = "12 + 8 = 20.";
   }
   const options = uniqueOptions(result, level);
   const correctIndex = Math.max(0, options.findIndex((n) => n === result));
-  return { prompt, options, correctIndex, source: "generated" };
+  return {
+    prompt,
+    options,
+    correctIndex,
+    explanation,
+    source: "generated",
+  };
 }
 
 function isMathTask(task: MathTask): boolean {
@@ -303,6 +333,9 @@ export default function SpeedQuizMath() {
             prompt: task.prompt,
             options: task.options.map((n) => String(n)),
             correctIndex: task.correctIndex,
+            // A levezetés (G-2). Enélkül a kártya csak a végeredményt tudná
+            // kimondani, márpedig matekból a HOGYAN a tananyag.
+            explanation: task.explanation,
           },
           chosenIndex,
           attempt: attemptRef.current,
