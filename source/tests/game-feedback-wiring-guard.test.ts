@@ -30,10 +30,18 @@ function pageCode(file: string): string {
   return stripComments(readFileSync(join(root, "client/src/pages", file), "utf8"));
 }
 
-/** Azok a játékok, amelyekbe a magyarázó kártya már be van kötve. */
-const WIRED = ["SpeedQuizMath.tsx"];
+/** Azok a játékok, amelyekbe a magyarázó kártya be van kötve — mind a hét. */
+const WIRED = [
+  "SpeedQuizMath.tsx",
+  "TornadoHunter200.tsx",
+  "BrainRotSteal.tsx",
+  "WordLadderHuEn.tsx",
+  "TsunamiEscapeEnglish.tsx",
+  "SpaceAsteroidQuiz.tsx",
+  "BlockCraftQuiz.tsx",
+];
 
-for (const file of WIRED) {
+function guardGame(file: string) {
   const code = pageCode(file);
 
   test(`${file}: importálja a visszacsatolás motorját és a kártyát`, () => {
@@ -52,6 +60,21 @@ for (const file of WIRED) {
   test(`${file}: ki is rajzolja a kártyát`, () => {
     assert.match(code, /<QuizFeedbackCard\b/, "a kártya nincs a JSX-ben");
   });
+
+  test(`${file}: a kártya a JSX-ben van, nem egy sablon-literál belsejében`, () => {
+    // Megtörtént hiba (2026-09-07): a beszúrás három játékban a `<style>` blokk
+    // CSS-sablonja KÖZÉ került, ahol a JSX puszta szöveg — a teszt zöld volt, a
+    // kártya viszont sosem jelent meg. Ezért a stílusblokkokat kivágjuk, és úgy
+    // keressük.
+    const withoutStyles = code.replace(/<style>\{`[\s\S]*?`\}<\/style>/g, "");
+    assert.match(
+      withoutStyles,
+      /<QuizFeedbackCard\b/,
+      "a kártya csak stílus-sablonon belül szerepel — sosem renderelődik",
+    );
+  });
+
+  if (file !== "SpeedQuizMath.tsx") return;
 
   test(`${file}: a rossz válasz ága nem léptet automatikusan tovább`, () => {
     // A régi viselkedés: `setTimeout(nextTask, 140)` a hibás ágon — a magyarázat
@@ -78,6 +101,8 @@ for (const file of WIRED) {
     );
   });
 }
+
+for (const file of WIRED) guardGame(file);
 
 test("a komment-szűrő önellenőrzése", () => {
   const fake = `buildFeedback(x);\n// buildFeedback(\n/* buildFeedback( */`;

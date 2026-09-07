@@ -31,6 +31,8 @@ import {
   vGet, vSet, vIdx, vMineable, collidesAt, isExposed,
   PLAYER_EYE, MOVE_SPEED_BPS, JUMP_VELOCITY,
 } from "@/lib/voxelcraft";
+import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
@@ -1849,6 +1851,16 @@ export default function BlockCraftQuiz() {
     rafRef.current = requestAnimationFrame(stepRef.current);
   }, [phase]);
 
+  /** G-1: magyarázó kártya rossz válaszra. */
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+
+  const dismissFeedback = useCallback(() => {
+    setFeedback(null);
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
+    setQuiz(pickQuiz());
+  }, [pickQuiz]);
+
   const onAnswer = (idx: number) => {
     if (!quiz) return;
     if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
@@ -1865,11 +1877,17 @@ export default function BlockCraftQuiz() {
       } else {
         setStreak(0);
       }
-      window.setTimeout(() => {
-        setRevealCorrectIdx(null);
-        setWrongIdx(null);
-        setQuiz(pickQuiz());
-      }, 1500);
+      // G-1: a másfél másodperces felfedés megmutatta, MELYIK a jó válasz, de azt
+      // nem, hogy MIÉRT. A téves fogalom így érintetlenül maradt — pedig épp azt
+      // kellene javítani. A kártya addig áll, amíg a gyerek be nem zárja.
+      setFeedback(
+        buildFeedback({
+          quiz: { prompt: quiz.prompt, options: quiz.options, correctIndex: quiz.correctIndex },
+          chosenIndex: idx,
+          attempt: 0,
+          ageBand: "kid",
+        }),
+      );
       return;
     }
 
@@ -2421,6 +2439,8 @@ export default function BlockCraftQuiz() {
       })}</div>{streakProtector.warning && <p className="mt-2 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>}{revealCorrectIdx !== null && wrongIdx !== null && <p className="mt-2 text-[11px] text-emerald-300/95">A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong></p>}</motion.div></motion.div>}</AnimatePresence>
 
       <AnimatePresence>{achievement && <motion.div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-amber-500/95 text-slate-950 font-bold text-sm px-4 py-2 rounded-xl shadow-xl border border-amber-200/60 whitespace-nowrap" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>{achievement}</motion.div>}</AnimatePresence>
+      {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+
       <style>{`@keyframes shake {0%,100% { transform: translateX(0); }25% { transform: translateX(-5px); }75% { transform: translateX(5px); }} .animate-shake { animation: shake 0.16s ease-in-out 2; }`}</style>
     </div>
   );

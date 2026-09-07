@@ -20,6 +20,8 @@ import AchievementToast from "@/components/AchievementToast";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
+import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 /* --- Típusok --- */
 type Quiz = { id?: string; prompt: string; options: string[]; correctIndex: number; category: "english" | "math" | "hungarian" };
@@ -340,6 +342,20 @@ export default function BrainRotSteal() {
     [phase, pickQuiz],
   );
 
+  /**
+   * G-1: magyarázó kártya rossz válaszra.
+   *
+   * A brain rot a kártya alatt is a helyén marad — a gyerek ugyanazt a lényt
+   * kapja el újra, miután megértette, mit rontott el.
+   */
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+
+  const dismissFeedback = useCallback(() => {
+    setFeedback(null);
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
+  }, []);
+
   /* --- Válasz kezelés --- */
   const onAnswer = useCallback(
     (idx: number) => {
@@ -360,11 +376,17 @@ export default function BrainRotSteal() {
           setStreak(0);
           setComboMultiplier(1);
         }
-        // 1.5s reveal után a quiz "elnyel" — a brain rot fennmarad, új próba
-        timeoutsRef.current.push(window.setTimeout(() => {
-          setRevealCorrectIdx(null);
-          setWrongIdx(null);
-        }, 1500));
+        // G-1: a másfél másodperces felfedés megmutatta, MELYIK a jó válasz, de
+        // azt nem, hogy MIÉRT — a téves szó ugyanúgy megmaradt a gyerekben. A
+        // kártya addig áll, amíg be nem zárja; a felfedést a bezárás oldja.
+        setFeedback(
+          buildFeedback({
+            quiz: { prompt: quiz.prompt, options: quiz.options, correctIndex: quiz.correctIndex },
+            chosenIndex: idx,
+            attempt: 0,
+            ageBand: "kid",
+          }),
+        );
         return;
       }
 
@@ -1115,6 +1137,8 @@ export default function BrainRotSteal() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
 
       <style>{`
         @keyframes brshake {

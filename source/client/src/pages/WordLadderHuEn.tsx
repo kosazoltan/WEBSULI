@@ -38,6 +38,8 @@ import {
   encouragement,
   confettiParticles,
 } from "@/lib/wordLadderLogic";
+import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 const LS_XP = "websuli-wordladder-xp";
 const LS_BEST = "websuli-wordladder-streak";
@@ -448,6 +450,14 @@ export default function WordLadderHuEn() {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, startGame]);
 
+  /**
+   * G-1: magyarázó kártya rossz válaszra.
+   *
+   * A `feedback` állapot itt már a bátorító mondaté („Semmi baj!"), ezért ez
+   * külön néven él. A kártya bezárása után a létra lépése a szokott módon megy.
+   */
+  const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
+
   const onAnswer = (i: number) => {
     if (!current) return;
     if (phase !== "quiz") return;
@@ -465,6 +475,21 @@ export default function WordLadderHuEn() {
       sfxError();
       setStreak(0);
       setLastXpGain(null);
+      // G-1: a bátorító mondat („Semmi baj!") kedves, de nem tanít. A kártya
+      // megmondja, mi a helyes szó, és mit választott helyette a gyerek.
+      // A `feedback` név itt már foglalt (a bátorítás szövege), ezért explainCard.
+      setExplainCard(
+        buildFeedback({
+          quiz: {
+            prompt: current.prompt,
+            options: current.options,
+            correctIndex: current.correctIndex,
+          },
+          chosenIndex: i,
+          attempt: 0,
+          ageBand: "kid",
+        }),
+      );
     } else {
       correctCountRef.current += 1;
       sfxSuccess();
@@ -867,6 +892,8 @@ export default function WordLadderHuEn() {
           .wl-rung-next { animation: none; opacity: 0.85; }
         }
       `}</style>
+      {explainCard && <QuizFeedbackCard card={explainCard} onDismiss={() => setExplainCard(null)} />}
+
     </div>
   );
 }

@@ -28,6 +28,8 @@ import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevel
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
+import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 /* =====================================================================
  * Galaktikus Aszteroida Kvíz Vadász – Three.js 3D űrharc
@@ -903,6 +905,16 @@ export default function SpaceAsteroidQuiz() {
     enqueueQuiz("wave");
   }, [enqueueQuiz]);
 
+  /** G-1: magyarázó kártya rossz válaszra. */
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+
+  const dismissFeedback = useCallback(() => {
+    setFeedback(null);
+    setRevealCorrectIdx(null);
+    setWrongIdx(null);
+    setActiveQuiz(pickQuiz());
+  }, [pickQuiz]);
+
   /* ============== Quiz választ feldolgoz ============== */
 
   const onAnswer = (idx: number) => {
@@ -917,12 +929,21 @@ export default function SpaceAsteroidQuiz() {
       const outcome = streakProtector.handleWrong({ streak: combo });
       if (outcome === "warned") sfxWarning();
       else setCombo(0);
-      // Reveal után új kvíz (még quiz fázisban)
-      pushTimeout(() => {
-        setRevealCorrectIdx(null);
-        setWrongIdx(null);
-        setActiveQuiz(pickQuiz());
-      }, 1500);
+      // G-1: a másfél másodperces felfedés megmutatta, MELYIK a jó válasz, de azt
+      // nem, hogy MIÉRT. A téves fogalom így érintetlenül maradt — pedig épp azt
+      // kellene javítani. A kártya addig áll, amíg a gyerek be nem zárja.
+      setFeedback(
+        buildFeedback({
+          quiz: {
+            prompt: activeQuiz.prompt,
+            options: activeQuiz.options,
+            correctIndex: activeQuiz.correctIndex,
+          },
+          chosenIndex: idx,
+          attempt: 0,
+          ageBand: "kid",
+        }),
+      );
       return;
     }
     // Helyes válasz
@@ -2442,6 +2463,8 @@ export default function SpaceAsteroidQuiz() {
         }
         .animate-shake-spq { animation: shake-spq 0.16s ease-in-out 2; }
       `}</style>
+      {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+
     </div>
   );
 }

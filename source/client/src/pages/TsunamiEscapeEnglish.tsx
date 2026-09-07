@@ -48,6 +48,8 @@ import {
 } from "@/data/tsunamiSubjectQuizBanks";
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
+import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 const LS_XP = "websuli-tsunami-en-xp";
 const LS_BEST = "websuli-tsunami-en-best-streak";
@@ -946,6 +948,17 @@ export default function TsunamiEscapeEnglish() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [phase, gameLoop]);
 
+  /** G-1: magyarázó kártya rossz válaszra. */
+  const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
+
+  const dismissExplain = useCallback(() => {
+    setExplainCard(null);
+    setQuiz(null);
+    setPhase("play");
+    lastRef.current = null;
+    answerLockedRef.current = false;
+  }, []);
+
   const onAnswer = (index: number) => {
     if (!quiz) return;
     // VÁLASZ-LOCK: dupla kattintás ne dolgozza fel kétszer ugyanazt a kvízt
@@ -960,12 +973,17 @@ export default function TsunamiEscapeEnglish() {
       setStreak(0);
       waterRef.current = Math.min(88, waterRef.current + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current]);
       setWater(waterRef.current);
-      timeoutsRef.current.push(window.setTimeout(() => {
-        setQuiz(null);
-        setPhase("play");
-        lastRef.current = null;
-        answerLockedRef.current = false;
-      }, 280));
+      // G-1: 280 ms alatt a gyerek annyit érzékelt, hogy emelkedett a víz — azt
+      // nem, hogy mit rontott el. A magyarázó kártya addig áll, amíg be nem
+      // zárja; a víz nem emelkedik tovább közben, mert a játék áll.
+      setExplainCard(
+        buildFeedback({
+          quiz: { prompt: quiz.prompt, options: quiz.options, correctIndex: quiz.correctIndex },
+          chosenIndex: index,
+          attempt: 0,
+          ageBand: "kid",
+        }),
+      );
       return;
     }
 
@@ -1710,6 +1728,8 @@ export default function TsunamiEscapeEnglish() {
           animation: shake 0.18s ease-in-out 2;
         }
       `}</style>
+      {explainCard && <QuizFeedbackCard card={explainCard} onDismiss={dismissExplain} />}
+
     </div>
   );
 }

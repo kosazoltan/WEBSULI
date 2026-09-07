@@ -37,10 +37,13 @@ const FAR_DISTANCE_UNITS = 926; // a mért 3,56 km
 test("a viharfelhő nem ködösödik el — különben ugyanúgy eltűnne, mint a tölcsér", () => {
   const cloud = buildStormCloud("medium");
 
-  const materials: THREE.Material[] = [];
+  // A `fog` a Material ősosztályon nincs típusban, csak a konkrét anyagokon —
+  // ezért olvassuk így, a futásidejű érték viszont pontosan ez.
+  const materials: Array<THREE.Material & { fog?: boolean }> = [];
   cloud.group.traverse((o) => {
     if (o instanceof THREE.Mesh) {
-      materials.push(...(Array.isArray(o.material) ? o.material : [o.material]));
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      materials.push(...(list as Array<THREE.Material & { fog?: boolean }>));
     }
   });
 
@@ -93,7 +96,7 @@ test("az égbolt-kupola belülről látszik és nem takarja ki a jelenetet", () 
   const dome = buildSkyDome(new THREE.Color("#8fb6d9"), new THREE.Color("#2a3550"), 1200);
 
   assert.ok(dome instanceof THREE.Mesh);
-  const material = dome.material as THREE.Material;
+  const material = dome.material as THREE.Material & { fog?: boolean };
   assert.equal(material.side, THREE.BackSide, "kívülről nézve eltakarná a világot");
   assert.equal(material.fog, false, "a ködbe olvadó égbolt értelmetlen");
   assert.equal(material.depthWrite, false, "mélységírással kitakarná a tornádót");

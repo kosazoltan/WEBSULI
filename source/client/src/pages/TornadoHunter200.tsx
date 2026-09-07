@@ -39,6 +39,8 @@ import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import HoldButton from "@/game-engine/HoldButton";
 import { targetMarker } from "@/lib/tornado/targetMarker";
+import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import {
   sfxSuccess,
@@ -921,6 +923,15 @@ function PlayScreen(props: {
     score: 0,
   });
   const [activeQuiz, setActiveQuiz] = useState<Question | null>(null);
+  /**
+   * G-1: a rossz válasz magyarázata.
+   *
+   * Eddig 750 ms villanás jelezte a helyes választ, aztán ment tovább a játék.
+   * Ennyi idő alatt a gyerek látja, MELYIK volt a jó, de azt nem tudja meg, hogy
+   * MIÉRT — a téves fogalom megmarad. A kártya addig áll, amíg be nem zárja.
+   */
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+  const pendingResolveRef = useRef<(() => void) | null>(null);
   const [quizReason, setQuizReason] = useState<QuizReason>("roam");
   const [quizFlash, setQuizFlash] = useState<{ idx: number; correct: boolean } | null>(null);
   const [anchorMsg, setAnchorMsg] = useState<string | null>(null);
@@ -1392,7 +1403,7 @@ function PlayScreen(props: {
 
       if (correct) maybeClaimCouponBonus(props.coupon, quiz.id);
 
-      scheduleTimeout(() => {
+      const advance = () => {
         setQuizFlash(null);
         setActiveQuiz(null);
         if (quizReason === "anchor") {
@@ -1400,10 +1411,38 @@ function PlayScreen(props: {
         } else {
           setPhase("approach");
         }
-      }, 750);
+      };
+
+      if (correct) {
+        scheduleTimeout(advance, 750);
+        return;
+      }
+
+      // Rossz válasz: a továbblépést a magyarázó kártya bezárása intézi, nem az
+      // óra. A gyereknek olvasnia kell, és arra nem lehet 750 ms-ot adni.
+      pendingResolveRef.current = advance;
+      setFeedback(
+        buildFeedback({
+          quiz: {
+            prompt: quiz.prompt,
+            options: quiz.options,
+            correctIndex: quiz.correctIndex,
+          },
+          chosenIndex: idx,
+          attempt: 1, // vezetés közben nincs újrapróbálkozás: a vihar nem áll meg
+          ageBand: "kid",
+        }),
+      );
     },
     [activeQuiz, quizReason, spec, props.coupon, props.progress],
   );
+
+  const dismissFeedback = useCallback(() => {
+    setFeedback(null);
+    const resolve = pendingResolveRef.current;
+    pendingResolveRef.current = null;
+    resolve?.();
+  }, []);
 
   const restartRef = useRef<() => void>(() => {});
   restartRef.current = () => {
@@ -1718,6 +1757,8 @@ function PlayScreen(props: {
               </div>
             </div>
           )}
+
+          {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
 
           {/* Quiz overlay */}
           {activeQuiz && (
