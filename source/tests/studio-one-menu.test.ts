@@ -65,8 +65,8 @@ test("üres osztály-mező nem küld NaN-t a szervernek", () => {
   const code = form.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   assert.match(
     code,
-    /Number\.isFinite\(classroom\)/,
-    "az üres/érvénytelen osztályt ki kell szűrni a payload előtt",
+    /\{ \.\.\.\(title\.trim\(\) !== "" \? \{ title: title\.trim\(\) \} : \{\}\), files \}/,
+    "a forrásalapú gyártás payloadja sem üres, sem kézzel megadott osztályt nem küld",
   );
 });
 

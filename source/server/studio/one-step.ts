@@ -5,7 +5,7 @@
  * governance, not for the teacher's benefit. This module keeps every REAL gate
  * (verbatim check, coverage check, lektor) and removes only the manual clicks:
  *
- *   upload → [infer scope if omitted] → extraction (existing, hash-idempotent)
+ *   upload → infer scope from source → extraction (existing, hash-idempotent)
  *          → lesson job starts immediately → outline auto-approved IFF the
  *            mechanical coverage check passes → author → animator → lektor.
  *
@@ -27,7 +27,7 @@ const scopeSchema = z.object({
 
 export const oneStepRequestSchema = z.object({
   title: z.string().trim().min(1).max(255).optional(),
-  scope: scopeSchema.optional(), // omitted → inferred from the sources
+  scope: scopeSchema.optional(), // legacy metadata accepted; never used to select grade
   files: z
     .array(
       z.object({
@@ -40,6 +40,11 @@ export const oneStepRequestSchema = z.object({
 });
 
 export type OneStepRequest = z.infer<typeof oneStepRequestSchema>;
+
+/** Owner policy: legacy caller metadata never determines a manufactured lesson's grade. */
+export function inferOneStepScope(data: OneStepRequest, callModel: ScopeModelFn): Promise<ScopeInference> {
+  return inferScope(data.files as ExtractorFile[], callModel);
+}
 
 export type ParseResult<T> =
   | { ok: true; data: T }
@@ -130,7 +135,36 @@ export async function inferScope(files: ExtractorFile[], callModel: ScopeModelFn
 
 type ScopeContentPart =
   | { type: "text"; text: string }
+  | { type: "file"; file: { filename: string; file_data: string } }
   | { type: "image_url"; image_url: { url: string; detail: "low" | "high" } };
+
+/** Classify document content, never a truncated base64 string. */
+export async function scopeContentParts(
+  files: ExtractorFile[],
+  readDocx: (content: string) => Promise<string> = async (content) => {
+    const encoded = content.match(/^data:[^,]+;base64,(.+)$/s)?.[1];
+    if (!encoded) return content;
+    const [{ default: JSZip }, { DOMParser }] = await Promise.all([import("jszip"), import("@xmldom/xmldom")]);
+    const zip = await JSZip.loadAsync(Buffer.from(encoded, "base64"));
+    const document = zip.file("word/document.xml");
+    if (!document) throw new Error("A DOCX fő dokumentuma hiányzik.");
+    const xml = new DOMParser().parseFromString(await document.async("string"), "application/xml");
+    const paragraphs = xml.getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "p");
+    return Array.from(paragraphs).map(paragraph => Array.from(paragraph.getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "t")).map(text => text.textContent).join("")).join("\n");
+  },
+): Promise<ScopeContentPart[]> {
+  const parts: ScopeContentPart[] = [];
+  for (const file of files) {
+    if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "high" } });
+    else if (file.kind === "pdf") parts.push({ type: "file", file: { filename: file.name, file_data: file.content } });
+    else {
+      const text = file.kind === "docx" ? await readDocx(file.content) : file.content;
+      if (!text.trim()) throw new Error("A dokumentumból nem olvasható tananyagszöveg.");
+      parts.push({ type: "text", text });
+    }
+  }
+  return parts;
+}
 
 /**
  * A scope-hívás kérés-paraméterei — külön függvényben, mert a #165 gyökér-ok
@@ -164,15 +198,7 @@ export async function callScopeModel(files: ExtractorFile[], model: string): Pro
         },
   );
 
-  const parts: ScopeContentPart[] = [];
-  for (const file of files) {
-    // #196: `detail: "low"` mellett a modell a kézírásos képleteket (T = a·ma/2,
-    // r²π) nem tudja elolvasni, csak a lap "külalakját" látja — a 8. osztályos
-    // geometria-forrásra ezért adott 4. osztályt. Az osztály meghatározása a
-    // TARTALOMTÓL függ, tehát a tartalomnak olvashatónak kell lennie.
-    if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "high" } });
-    else parts.push({ type: "text", text: file.content.slice(0, 4000) });
-  }
+  const parts = await scopeContentParts(files);
 
   const params = scopeRequestParams(model, parts);
   // A `reasoning` OpenRouter-bővítés; az openai SDK típusa nem ismeri.

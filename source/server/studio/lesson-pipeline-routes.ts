@@ -27,7 +27,7 @@ import {
 import { conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
 import { MAX_CHAIN_STEPS } from "./pipeline";
 import { fromMapBody } from "./from-map-body";
-import { callScopeModel, decideOneStepAction, inferScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
+import { callScopeModel, decideOneStepAction, inferOneStepScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
 import {
   createRun as createRunBase,
   getRun as getRunBase,
@@ -251,25 +251,25 @@ lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: R
 });
 
 /** The whole one-step chain, reporting each phase into the progress store. */
-async function runOneStep(
+export async function runOneStep(
   runId: string,
   data: OneStepRequest,
   userId: string | undefined,
 ): Promise<void> {
   const { files, title } = data;
 
-  // 1) Scope: given, or inferred from the sources on the cheap model.
-  let scope = data.scope;
+  // 1) The source determines the grade, including for legacy clients sending scope.
+  let scope: { subject: string; classroom: number };
   let inferredTitle: string | undefined;
-  if (!scope) {
+  {
     updateRun(runId, { phase: "ocr", detail: "Tantárgy és osztály felismerése…" });
-    const inferred = await inferScope(files as ExtractorFile[], (f) =>
+    const inferred = await inferOneStepScope(data, (f) =>
       callScopeModel(f, resolveStudioModel("ocr")),
     );
     if (!inferred.ok) {
       updateRun(runId, {
         phase: "error",
-        error: `Nem sikerült felismerni a tantárgyat/osztályt (${inferred.reason}) — add meg kézzel.`,
+        error: `Nem sikerült felismerni a tantárgyat/osztályt (${inferred.reason}). Próbáld újra olvashatóbb forrással.`,
       });
       return;
     }
@@ -406,7 +406,7 @@ async function runOneStep(
 }
 
 /** drive() plus outline auto-approval; approveOutline re-validates coverage. */
-async function driveOneStep(runId: string, jobId: string): Promise<void> {
+export async function driveOneStep(runId: string, jobId: string): Promise<void> {
   for (let i = 0; i < MAX_CHAIN; i++) {
     await drive(jobId);
 
