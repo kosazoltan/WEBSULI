@@ -127,7 +127,9 @@
     "wouter": "^3.3.5",
     "ws": "^8.21.3",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0"
+    "zod-validation-error": "^3.4.0",
+    "jszip": "3.10.1",
+    "@xmldom/xmldom": "^0.9.8"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

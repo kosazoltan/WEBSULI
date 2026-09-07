@@ -25,6 +25,7 @@ export function normalizeText(input: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/π/g, " pi ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -41,7 +42,7 @@ const stem = (word: string): string => word.slice(0, STEM_LEN);
 function significantWords(term: string): string[] {
   return normalizeText(term)
     .split(" ")
-    .filter((w) => w.length >= 3);
+    .filter((w) => w.length >= 3 || w === "pi");
 }
 
 /**
@@ -99,6 +100,24 @@ export function blockText(block: Record<string, unknown>): string {
   for (const key of ["steps", "options"]) {
     const v = block[key];
     if (Array.isArray(v)) parts.push(...v.filter((x): x is string => typeof x === "string"));
+  }
+  // ProcessAnim renders its steps; arbitrary hidden animation metadata is not evidence.
+  if (block.kind === "animate" && block.animKind === "process" && block.params && typeof block.params === "object") {
+    const steps = (block.params as Record<string, unknown>).steps;
+    if (Array.isArray(steps)) parts.push(...steps.filter((x): x is string => typeof x === "string"));
+  }
+  // The runtime displays these fields inside try.spec; ids/hidden answers are not evidence.
+  if (block.kind === "try" && block.spec && typeof block.spec === "object") {
+    const spec = block.spec as Record<string, unknown>;
+    if (block.tryKind === "fillBlank" && typeof spec.text === "string") parts.push(spec.text);
+    if (block.tryKind === "dragSort" && Array.isArray(spec.items)) {
+      parts.push(...spec.items.filter((x): x is string => typeof x === "string"));
+    }
+    if (block.tryKind === "match" && Array.isArray(spec.pairs)) {
+      for (const pair of spec.pairs) {
+        if (pair && typeof pair.left === "string" && typeof pair.right === "string") parts.push(pair.left, pair.right);
+      }
+    }
   }
   return parts.join(" ");
 }

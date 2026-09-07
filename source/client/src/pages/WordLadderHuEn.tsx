@@ -1,3 +1,4 @@
+import { createAdaptiveSession, pickAdaptiveTier } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -314,6 +315,8 @@ export default function WordLadderHuEn() {
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A válasz-lock szinkron ref: két gyors kattintás ne dolgozódjon fel duplán.
   const answerLockedRef = useRef(false);
+  const adaptiveRef = useRef(createAdaptiveSession(4));
+  const recentAdaptiveRef = useRef<string[]>([]);
   // Az ad-hoc setTimeout-ok gyűjtve, unmountkor törölve.
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scoreSubmittedRef = useRef(false);
@@ -396,7 +399,11 @@ export default function WordLadderHuEn() {
     runBestStreakRef.current = 0;
     correctCountRef.current = 0;
     wrongCountRef.current = 0;
+    adaptiveRef.current.reset(userGrade ?? 4);
+    recentAdaptiveRef.current = [];
     const q = buildLongRunQueue(mergedPoolsRef.current);
+    const first = pickAdaptiveTier(mergedPoolsRef.current, adaptiveRef.current.band, []);
+    if (first) q[0] = first;
     setQueue(q);
     setCursor(0);
     // Csak fejlesztői módban: ?rung=N kezdőfok a zónaváltások/cél gyors ellenőrzéséhez.
@@ -417,7 +424,7 @@ export default function WordLadderHuEn() {
     setPhase("quiz");
     if (tickRef.current) clearInterval(tickRef.current);
     tickRef.current = setInterval(() => setRunSeconds((s) => s + 1), 1000);
-  }, []);
+  }, [userGrade]);
 
   useEffect(() => {
     return () => {
@@ -466,6 +473,8 @@ export default function WordLadderHuEn() {
     if (answerLockedRef.current) return;
     answerLockedRef.current = true;
     const isCorrect = i === current.correctIndex;
+    adaptiveRef.current.answer(isCorrect);
+    recentAdaptiveRef.current = [...recentAdaptiveRef.current.slice(-7), current.id];
 
     // 1) FELFEDÉS: a gyerek látja a zöld (helyes) és piros (hibás) választ.
     setChosenIdx(i);
@@ -518,6 +527,8 @@ export default function WordLadderHuEn() {
       setQueue(expanded);
       nextQuestion = expanded[nextCursor] ?? expanded[0] ?? null;
     }
+
+    nextQuestion = pickAdaptiveTier(mergedPoolsRef.current, adaptiveRef.current.band, recentAdaptiveRef.current) ?? nextQuestion;
 
     if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     // 2) LÉPÉS: a felfedés után a figura ugrik/csúszik.

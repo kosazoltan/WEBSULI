@@ -1,3 +1,4 @@
+import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -194,243 +195,243 @@ const QUIZ_FALLBACK: Quiz[] = [
   // ============================================================
   // === ANGOL SZÓKINCS (alap, Minecraft-témájú) ================
   // ============================================================
-  { prompt: "„Stone” jelentése:", options: ["kő", "hó", "fény", "híd"], correctIndex: 0, subject: "english" },
-  { prompt: "„Pickaxe” jelentése:", options: ["lapát", "csákány", "kard", "háló"], correctIndex: 1, subject: "english" },
-  { prompt: "„Diamond” magyarul:", options: ["arany", "gyémánt", "szén", "vas"], correctIndex: 1, subject: "english" },
-  { prompt: "„Forest” magyarul:", options: ["tenger", "hegy", "erdő", "hűtő"], correctIndex: 2, subject: "english" },
-  { prompt: "„Build” jelentése:", options: ["épít", "fut", "ugrik", "bányászik"], correctIndex: 0, subject: "english" },
-  { prompt: "Mit jelent: „Craft a tool”?", options: ["eszközt készít", "futni tanul", "többet alszik", "vizet gyűjt"], correctIndex: 0, subject: "english" },
-  { prompt: "„Grass” magyarul:", options: ["fű", "jég", "kő", "ég"], correctIndex: 0, subject: "english" },
-  { prompt: "„Dirt” magyarul:", options: ["homok", "föld", "víz", "ég"], correctIndex: 1, subject: "english" },
-  { prompt: "„Wood” / faanyag angolul a játékban gyakran:", options: ["water", "wood", "wind", "wolf"], correctIndex: 1, subject: "english" },
-  { prompt: "„Leaves” jelentése:", options: ["gyökerek", "levelek", "kövek", "felhők"], correctIndex: 1, subject: "english" },
-  { prompt: "„Coal” magyarul:", options: ["réz", "szén", "cukor", "kő"], correctIndex: 1, subject: "english" },
-  { prompt: "„Iron” magyarul:", options: ["arany", "vas", "ezüst", "réz"], correctIndex: 1, subject: "english" },
-  { prompt: "„Jump” jelentése:", options: ["fut", "ugrás / ugrik", "áll", "esik"], correctIndex: 1, subject: "english" },
-  { prompt: "„Mine” ebben a játékban:", options: ["fest", "bányászik", "főz", "úszik"], correctIndex: 1, subject: "english" },
-  { prompt: "„Block” jelentése:", options: ["kocka / blokk", "labda", "ajtó", "ablak"], correctIndex: 0, subject: "english" },
-  { prompt: "„Sky” magyarul:", options: ["föld", "ég / égbolt", "víz", "erdő"], correctIndex: 1, subject: "english" },
-  { prompt: "„River” magyarul:", options: ["hegy", "folyó", "út", "ház"], correctIndex: 1, subject: "english" },
-  { prompt: "„Bridge” magyarul:", options: ["híd", "bástya", "bokor", "bárány"], correctIndex: 0, subject: "english" },
-  { prompt: "„Castle” magyarul:", options: ["kert", "vár", "vonat", "villa"], correctIndex: 1, subject: "english" },
-  { prompt: "„Star” magyarul:", options: ["hold", "csillag", "felhő", "szél"], correctIndex: 1, subject: "english" },
-  { prompt: "„Moon” magyarul:", options: ["nap", "hold", "hó", "hajó"], correctIndex: 1, subject: "english" },
-  { prompt: "„Rain” magyarul:", options: ["hó", "eső", "szél", "nap"], correctIndex: 1, subject: "english" },
-  { prompt: "„Snow” magyarul:", options: ["jég", "hó", "eső", "homok"], correctIndex: 1, subject: "english" },
-  { prompt: "„Happy” magyarul:", options: ["szomorú", "boldog", "fáradt", "mérges"], correctIndex: 1, subject: "english" },
-  { prompt: "„Big” magyarul:", options: ["kicsi", "nagy", "lassú", "rövid"], correctIndex: 1, subject: "english" },
-  { prompt: "„Small” magyarul:", options: ["nagy", "kicsi", "kövér", "mély"], correctIndex: 1, subject: "english" },
+  { prompt: "„Stone” jelentése:", options: ["kő", "hó", "fény", "híd"], correctIndex: 0, subject: "english", explanation: "A stone kő. Példa: „The stone is hard.” = „A kő kemény.”" },
+  { prompt: "„Pickaxe” jelentése:", options: ["lapát", "csákány", "kard", "háló"], correctIndex: 1, subject: "english", explanation: "A pickaxe csákány, amelyet bányászáshoz használnak. „I have a pickaxe.” = „Van egy csákányom.”" },
+  { prompt: "„Diamond” magyarul:", options: ["arany", "gyémánt", "szén", "vas"], correctIndex: 1, subject: "english", explanation: "A diamond gyémánt. „This diamond is blue.” = „Ez a gyémánt kék.”" },
+  { prompt: "„Forest” magyarul:", options: ["tenger", "hegy", "erdő", "hűtő"], correctIndex: 2, subject: "english", explanation: "A forest erdő, sok fával borított terület. „The forest is dark.” = „Az erdő sötét.”" },
+  { prompt: "„Build” jelentése:", options: ["épít", "fut", "ugrik", "bányászik"], correctIndex: 0, subject: "english", explanation: "A build ige jelentése épít. „We build a house.” = „Házat építünk.”" },
+  { prompt: "Mit jelent: „Craft a tool”?", options: ["eszközt készít", "futni tanul", "többet alszik", "vizet gyűjt"], correctIndex: 0, subject: "english", explanation: "A craft azt jelenti, hogy elkészít valamit alapanyagokból, a tool pedig eszköz. „Craft a tool.” = „Készíts eszközt.”" },
+  { prompt: "„Grass” magyarul:", options: ["fű", "jég", "kő", "ég"], correctIndex: 0, subject: "english", explanation: "A grass fű. „The grass is green.” = „A fű zöld.”" },
+  { prompt: "„Dirt” magyarul:", options: ["homok", "föld", "víz", "ég"], correctIndex: 1, subject: "english", explanation: "A dirt föld vagy piszok; játékban általában földblokk. „The dirt is brown.” = „A föld barna.”" },
+  { prompt: "„Wood” / faanyag angolul a játékban gyakran:", options: ["water", "wood", "wind", "wolf"], correctIndex: 1, subject: "english", explanation: "A wood faanyag vagy fa. „I need wood.” = „Faanyagra van szükségem.”" },
+  { prompt: "„Leaves” jelentése:", options: ["gyökerek", "levelek", "kövek", "felhők"], correctIndex: 1, subject: "english", explanation: "A leaves a leaf, vagyis levél többes száma. „The leaves are green.” = „A levelek zöldek.”" },
+  { prompt: "„Coal” magyarul:", options: ["réz", "szén", "cukor", "kő"], correctIndex: 1, subject: "english", explanation: "A coal szén, amely tüzelőanyag is lehet. „Coal is black.” = „A szén fekete.”" },
+  { prompt: "„Iron” magyarul:", options: ["arany", "vas", "ezüst", "réz"], correctIndex: 1, subject: "english", explanation: "Az iron vas. „Iron is strong.” = „A vas erős.”" },
+  { prompt: "„Jump” jelentése:", options: ["fut", "ugrás / ugrik", "áll", "esik"], correctIndex: 1, subject: "english", explanation: "A jump lehet főnévként ugrás, igeként pedig ugrik. „I jump high.” = „Magasra ugrom.”" },
+  { prompt: "„Mine” ebben a játékban:", options: ["fest", "bányászik", "főz", "úszik"], correctIndex: 1, subject: "english", explanation: "A mine itt igeként bányászik; főnévként bányát is jelenthet. „We mine coal.” = „Szenet bányászunk.”" },
+  { prompt: "„Block” jelentése:", options: ["kocka / blokk", "labda", "ajtó", "ablak"], correctIndex: 0, subject: "english", explanation: "A block játékokban építőelem, vagyis blokk vagy kocka. „Break the block.” = „Törd ki a blokkot.”" },
+  { prompt: "„Sky” magyarul:", options: ["föld", "ég / égbolt", "víz", "erdő"], correctIndex: 1, subject: "english", explanation: "A sky az ég vagy égbolt. „The sky is blue.” = „Az ég kék.”" },
+  { prompt: "„River” magyarul:", options: ["hegy", "folyó", "út", "ház"], correctIndex: 1, subject: "english", explanation: "A river folyó, természetes vízfolyás. „The river is long.” = „A folyó hosszú.”" },
+  { prompt: "„Bridge” magyarul:", options: ["híd", "bástya", "bokor", "bárány"], correctIndex: 0, subject: "english", explanation: "A bridge híd, amely két partot vagy területet köt össze. „Cross the bridge.” = „Menj át a hídon.”" },
+  { prompt: "„Castle” magyarul:", options: ["kert", "vár", "vonat", "villa"], correctIndex: 1, subject: "english", explanation: "A castle vár, általában nagy, erődített épület. „The castle is old.” = „A vár régi.”" },
+  { prompt: "„Star” magyarul:", options: ["hold", "csillag", "felhő", "szél"], correctIndex: 1, subject: "english", explanation: "A star csillag. „I see a star.” = „Látok egy csillagot.”" },
+  { prompt: "„Moon” magyarul:", options: ["nap", "hold", "hó", "hajó"], correctIndex: 1, subject: "english", explanation: "A moon hold, a Föld természetes kísérője. „The moon is bright.” = „A hold fényes.”" },
+  { prompt: "„Rain” magyarul:", options: ["hó", "eső", "szél", "nap"], correctIndex: 1, subject: "english", explanation: "A rain eső; lehet főnév és ige is. „The rain is cold.” = „Az eső hideg.”" },
+  { prompt: "„Snow” magyarul:", options: ["jég", "hó", "eső", "homok"], correctIndex: 1, subject: "english", explanation: "A snow hó. „The snow is white.” = „A hó fehér.”" },
+  { prompt: "„Happy” magyarul:", options: ["szomorú", "boldog", "fáradt", "mérges"], correctIndex: 1, subject: "english", explanation: "A happy boldog; érzést vagy jókedvet fejez ki. „I am happy.” = „Boldog vagyok.”" },
+  { prompt: "„Big” magyarul:", options: ["kicsi", "nagy", "lassú", "rövid"], correctIndex: 1, subject: "english", explanation: "A big nagy, méretre utaló melléknév. „The house is big.” = „A ház nagy.”" },
+  { prompt: "„Small” magyarul:", options: ["nagy", "kicsi", "kövér", "mély"], correctIndex: 1, subject: "english", explanation: "A small kicsi, a big ellentéte. „The cat is small.” = „A macska kicsi.”" },
   // === SZITUÁCIÓS MINECRAFT KÉRDÉSEK ===
-  { prompt: "Éjszaka van, zombik jönnek! Mit csinálsz?", options: ["Build a shelter", "Go swimming", "Take a nap", "Eat diamonds"], correctIndex: 0, subject: "english" },
-  { prompt: "A creeper felrobban! Angolul:", options: ["The creeper explodes!", "The creeper sleeps", "The creeper sings", "The creeper dances"], correctIndex: 0, subject: "english" },
-  { prompt: "Hogyan mondod: 'Készíts egy kardot'?", options: ["Craft a sword", "Cook a sword", "Plant a sword", "Drink a sword"], correctIndex: 0, subject: "english" },
-  { prompt: "Mit jelent: 'Watch out for lava!'?", options: ["Vigyázz a lávára!", "Nézd a vizet!", "Keresd a gyémántot!", "Építs házat!"], correctIndex: 0, subject: "english" },
-  { prompt: "Éhes vagy Minecraftban. Mit csinálsz?", options: ["Find food", "Mine stone", "Jump around", "Sleep outside"], correctIndex: 0, subject: "english" },
-  { prompt: "'You found diamonds!' mit jelent?", options: ["Gyémántot találtál!", "Köveket látod!", "Fát vágsz!", "Vizet iszol!"], correctIndex: 0, subject: "english" },
-  { prompt: "Milyen eszközzel bányászol követ? Angolul:", options: ["With a pickaxe", "With a sword", "With a shovel", "With a bucket"], correctIndex: 0, subject: "english" },
-  { prompt: "'Help! A skeleton is shooting at me!' mit jelent?", options: ["Segítség! Egy csontváz lő rám!", "Segítség! Éhes vagyok!", "Hol van a ház?", "Fussunk!"], correctIndex: 0, subject: "english" },
-  { prompt: "'It’s dangerous to go alone!' mit jelent?", options: ["Veszélyes egyedl menni!", "Gyorsan bányássz!", "Keress vizet!", "Hol a gyémánt?"], correctIndex: 0, subject: "english" },
-  { prompt: "'Run! The creeper is behind you!' mit jelent?", options: ["Fuss! A creeper mögötted van!", "Allé! Zombi jön!", "Keress barlangot!", "Gyúíts tüzet!"], correctIndex: 0, subject: "english" },
+  { prompt: "Éjszaka van, zombik jönnek! Mit csinálsz?", options: ["Build a shelter", "Go swimming", "Take a nap", "Eat diamonds"], correctIndex: 0, subject: "english", explanation: "Éjszaka a menedék megépítése védelmet ad a szörnyek ellen. „Build a shelter.” = „Építs menedéket.”" },
+  { prompt: "A creeper felrobban! Angolul:", options: ["The creeper explodes!", "The creeper sleeps", "The creeper sings", "The creeper dances"], correctIndex: 0, subject: "english", explanation: "Az explode jelentése felrobban; a creeper egyes számú, ezért explodes alakot használunk. „The creeper explodes!” = „A creeper felrobban!”" },
+  { prompt: "Hogyan mondod: 'Készíts egy kardot'?", options: ["Craft a sword", "Cook a sword", "Plant a sword", "Drink a sword"], correctIndex: 0, subject: "english", explanation: "A craft készít, a sword kard. „Craft a sword.” = „Készíts egy kardot.”" },
+  { prompt: "Mit jelent: 'Watch out for lava!'?", options: ["Vigyázz a lávára!", "Nézd a vizet!", "Keresd a gyémántot!", "Építs házat!"], correctIndex: 0, subject: "english", explanation: "A watch out for figyelmeztetés: vigyázz valamire. „Watch out for lava!” = „Vigyázz a lávára!”" },
+  { prompt: "Éhes vagy Minecraftban. Mit csinálsz?", options: ["Find food", "Mine stone", "Jump around", "Sleep outside"], correctIndex: 0, subject: "english", explanation: "Éhségkor ételt kell keresni, mert az életerő és a futás is az éhségcsíktól függ. Angolul: „Find food.” = „Keress ételt.”" },
+  { prompt: "'You found diamonds!' mit jelent?", options: ["Gyémántot találtál!", "Köveket látod!", "Fát vágsz!", "Vizet iszol!"], correctIndex: 0, subject: "english", explanation: "A „found” a „find” múlt ideje, jelentése: talált. Egyszerű példa: „You found gold.” = „Aranyat találtál.”" },
+  { prompt: "Milyen eszközzel bányászol követ? Angolul:", options: ["With a pickaxe", "With a sword", "With a shovel", "With a bucket"], correctIndex: 0, subject: "english", explanation: "A kő bányászására a pickaxe, vagyis csákány való. Példa: „I mine stone with a pickaxe.” = „Csákánnyal bányászok követ.”" },
+  { prompt: "'Help! A skeleton is shooting at me!' mit jelent?", options: ["Segítség! Egy csontváz lő rám!", "Segítség! Éhes vagyok!", "Hol van a ház?", "Fussunk!"], correctIndex: 0, subject: "english", explanation: "A „skeleton” csontváz, a „is shooting at me” pedig azt jelenti, hogy rám lő. Példa: „A skeleton has a bow.” = „A csontváznál íj van.”" },
+  { prompt: "'It’s dangerous to go alone!' mit jelent?", options: ["Veszélyes egyedül menni!", "Gyorsan bányássz!", "Keress vizet!", "Hol a gyémánt?"], correctIndex: 0, subject: "english", explanation: "A „dangerous” jelentése veszélyes, az „alone” pedig egyedül. Példa: „It is dangerous at night.” = „Éjszaka veszélyes.”" },
+  { prompt: "'Run! The creeper is behind you!' mit jelent?", options: ["Fuss! A creeper mögötted van!", "Allé! Zombi jön!", "Keress barlangot!", "Gyúíts tüzet!"], correctIndex: 0, subject: "english", explanation: "A „behind you” jelentése mögötted van, ezért gyorsan el kell futni. Példa: „The creeper is behind me.” = „A creeper mögöttem van.”" },
   // === CRAFTING RECEPTEK ===
-  { prompt: "Mi kell a fáklyához? (angolul)", options: ["Coal + Stick", "Iron + Wood", "Diamond + Stone", "Grass + Dirt"], correctIndex: 0, subject: "english" },
-  { prompt: "'Crafting table' magyarul:", options: ["munkasztal / kézműasztal", "konyhaasztal", "íróasztal", "kereskedő"], correctIndex: 0, subject: "english" },
-  { prompt: "Mi kell a kardhoz? (alap: fa + fa) Angolul:", options: ["Wood + Wood", "Stone + Grass", "Coal + Stick", "Dirt + Sand"], correctIndex: 0, subject: "english" },
-  { prompt: "'Sword' magyarul:", options: ["kard", "pajzs", "páncél", "nyíl"], correctIndex: 0, subject: "english" },
-  { prompt: "'Bow' magyarul a Minecraftban:", options: ["ij", "kard", "pajzs", "csákány"], correctIndex: 0, subject: "english" },
+  { prompt: "Mi kell a fáklyához? (angolul)", options: ["Coal + Stick", "Iron + Wood", "Diamond + Stone", "Grass + Dirt"], correctIndex: 0, subject: "english", explanation: "A fáklya készítéséhez szén és bot kell; a coal a szén, a stick a bot. Példa: „I need coal and a stick.” = „Szénre és egy botra van szükségem.”" },
+  { prompt: "'Crafting table' magyarul:", options: ["munkasztal / kézműasztal", "konyhaasztal", "íróasztal", "kereskedő"], correctIndex: 0, subject: "english", explanation: "A crafting table a tárgykészítéshez használt munkasztal vagy kézműasztal. Példa: „Make a crafting table.” = „Készíts munkasztalt.”" },
+  { prompt: "Hogyan mondod angolul: két fadeszka és egy bot?", options: ["Two wood planks and a stick", "Stone + Grass", "Coal + Stick", "Dirt + Sand"], correctIndex: 0, subject: "english", explanation: "A wood plank fadeszka, a stick bot. Kettő többes számmal: two wood planks; egy bot: a stick." },
+  { prompt: "'Sword' magyarul:", options: ["kard", "pajzs", "páncél", "nyíl"], correctIndex: 0, subject: "english", explanation: "A sword kard, közelharcra használható fegyver. Példa: „My sword is strong.” = „A kardom erős.”" },
+  { prompt: "'Bow' magyarul a Minecraftban:", options: ["íj", "kard", "pajzs", "csákány"], correctIndex: 0, subject: "english", explanation: "A bow íj, amely nyilakat lő ki, ezért távolsági fegyver. Példa: „I have a bow and arrows.” = „Van egy íjam és nyilaim.”" },
   // === MOB-OK ANGOLUL ===
-  { prompt: "Skeleton = ?", options: ["csontváz", "zombi", "pók", "deneér"], correctIndex: 0, subject: "english" },
-  { prompt: "A 'Villager' magyarul:", options: ["falusi", "katona", "király", "boszorkány"], correctIndex: 0, subject: "english" },
-  { prompt: "Creeper = ?", options: ["robbanó zöld szörny", "repülő deneér", "vörös sárkány", "vízi hal"], correctIndex: 0, subject: "english" },
-  { prompt: "Zombie = ?", options: ["zombi", "démon", "kísértet", "varjú"], correctIndex: 0, subject: "english" },
-  { prompt: "Spider = ?", options: ["pók", "hangya", "méh", "bogarak"], correctIndex: 0, subject: "english" },
-  { prompt: "Witch = ?", options: ["boszorkány", "harcos", "varázslos herceg", "tündér"], correctIndex: 0, subject: "english" },
-  { prompt: "Enderman = ?", options: ["magas fekete lény", "zöld creeper", "csontváz", "vízi szörny"], correctIndex: 0, subject: "english" },
+  { prompt: "Skeleton = ?", options: ["csontváz", "zombi", "pók", "deneér"], correctIndex: 0, subject: "english", explanation: "A skeleton jelentése csontváz; a Minecraftban általában íjjal támad. Példa: „The skeleton is shooting.” = „A csontváz lő.”" },
+  { prompt: "A 'Villager' magyarul:", options: ["falusi", "katona", "király", "boszorkány"], correctIndex: 0, subject: "english", explanation: "A villager falusi lakos, akivel kereskedni lehet a játékban. Példa: „The villager trades emeralds.” = „A falusi smaragdokkal kereskedik.”" },
+  { prompt: "Creeper = ?", options: ["robbanó zöld szörny", "repülő deneér", "vörös sárkány", "vízi hal"], correctIndex: 0, subject: "english", explanation: "A creeper egy zöld, robbanó ellenséges lény; közel érve felrobbanhat. Példa: „The creeper is dangerous.” = „A creeper veszélyes.”" },
+  { prompt: "Zombie = ?", options: ["zombi", "démon", "kísértet", "varjú"], correctIndex: 0, subject: "english", explanation: "A zombie magyarul zombi, egy közelharcban támadó ellenség. Példa: „A zombie is coming.” = „Egy zombi közeledik.”" },
+  { prompt: "Spider = ?", options: ["pók", "hangya", "méh", "bogarak"], correctIndex: 0, subject: "english", explanation: "A spider pók; a Minecraftban gyorsan mozoghat és meg tud mászni falakat. Példa: „The spider climbs a wall.” = „A pók megmászik egy falat.”" },
+  { prompt: "Witch = ?", options: ["boszorkány", "harcos", "varázslos herceg", "tündér"], correctIndex: 0, subject: "english", explanation: "A witch boszorkány, aki italokat dobálhat a játékosra. Példa: „The witch throws a potion.” = „A boszorkány eldob egy főzetet.”" },
+  { prompt: "Enderman = ?", options: ["magas fekete lény", "zöld creeper", "csontváz", "vízi szörny"], correctIndex: 0, subject: "english", explanation: "Az Enderman magas, fekete lény, amely gyakran teleportál. Példa: „The Enderman is tall.” = „Az Enderman magas.”" },
   // === BIOME-OK ===
-  { prompt: "Desert biome = ?", options: ["sivatag", "óceán", "dzsungel", "hegy"], correctIndex: 0, subject: "english" },
-  { prompt: "'Nether' magyarul kb.:", options: ["alvílág / pokol", "mennyország", "óceán", "erdő"], correctIndex: 0, subject: "english" },
-  { prompt: "Jungle biome = ?", options: ["dzsungel", "sivatag", "tundra", "folyó"], correctIndex: 0, subject: "english" },
-  { prompt: "Ocean biome = ?", options: ["óceán", "hegy", "völgy", "barlang"], correctIndex: 0, subject: "english" },
-  { prompt: "Swamp biome = ?", options: ["mocsár", "sivatag", "mező", "tenger"], correctIndex: 0, subject: "english" },
+  { prompt: "Desert biome = ?", options: ["sivatag", "óceán", "dzsungel", "hegy"], correctIndex: 0, subject: "english", explanation: "A desert biome sivatagi életközösség, ahol sok a homok és kevés a növényzet. Példa: „The desert is hot.” = „A sivatag forró.”" },
+  { prompt: "'Nether' magyarul kb.:", options: ["alvilág / pokol", "mennyország", "óceán", "erdő"], correctIndex: 0, subject: "english", explanation: "A Nether egy veszélyes, alvilágszerű külön dimenzió a Minecraftban. Példa: „The Nether has lava.” = „A Netherben láva van.”" },
+  { prompt: "Jungle biome = ?", options: ["dzsungel", "sivatag", "tundra", "folyó"], correctIndex: 0, subject: "english", explanation: "A jungle biome dzsungel, sűrű fákkal és sok növénnyel. Példa: „Jungles have tall trees.” = „A dzsungelekben magas fák vannak.”" },
+  { prompt: "Ocean biome = ?", options: ["óceán", "hegy", "völgy", "barlang"], correctIndex: 0, subject: "english", explanation: "Az ocean biome óceán, vagyis nagy, összefüggő vízterület. Példa: „The ocean is deep.” = „Az óceán mély.”" },
+  { prompt: "Swamp biome = ?", options: ["mocsár", "sivatag", "mező", "tenger"], correctIndex: 0, subject: "english", explanation: "A swamp biome mocsár, amely sekély vízzel és nedves területekkel jellemző. Példa: „The swamp is wet.” = „A mocsár nedves.”" },
   // === SURVIVAL TIPPEK ===
-  { prompt: "First night tip: 'Dig into a hillside!' Mit jelent?", options: ["Áss bele egy dombba!", "Ugorj a vízbe!", "Fuss el!", "Aludj a fán!"], correctIndex: 0, subject: "english" },
-  { prompt: "'Always bring food on adventures!' mit jelent?", options: ["Mindig vigyél ételt a kalandhoz!", "Felejtsd el az ételt!", "Csak vizet igyy", "Aludj sokat!"], correctIndex: 0, subject: "english" },
-  { prompt: "'Mine deeper for rare ores!' mit jelent?", options: ["Mélyebbre bányássz ritka ércekért!", "Maradj a felszínen!", "Keress vizet!", "Gyűjts fát!"], correctIndex: 0, subject: "english" },
-  { prompt: "'Don't dig straight down!' mit jelent?", options: ["Ne áss egyenesen le!", "Mindig lefelé ássz!", "Gyorsan fuss!", "Bányássz követ!"], correctIndex: 0, subject: "english" },
+  { prompt: "First night tip: 'Dig into a hillside!' Mit jelent?", options: ["Áss bele egy dombba!", "Ugorj a vízbe!", "Fuss el!", "Aludj a fán!"], correctIndex: 0, subject: "english", explanation: "A „dig into” azt jelenti, hogy beleásni valamibe; a hillside domboldal. Példa: „Dig into the mountain.” = „Áss bele a hegybe.”" },
+  { prompt: "'Always bring food on adventures!' mit jelent?", options: ["Mindig vigyél ételt a kalandhoz!", "Felejtsd el az ételt!", "Csak vizet igyy", "Aludj sokat!"], correctIndex: 0, subject: "english", explanation: "Az „always” mindig, a „bring food” pedig ételt vinni. Példa: „Bring food on your trip.” = „Vigyél ételt az utadra.”" },
+  { prompt: "'Mine deeper for rare ores!' mit jelent?", options: ["Mélyebbre bányássz ritka ércekért!", "Maradj a felszínen!", "Keress vizet!", "Gyűjts fát!"], correctIndex: 0, subject: "english", explanation: "A „deeper” mélyebbre, a „rare ores” ritka ércek. Mélyebben többféle értékes ércet találhatunk. Példa: „Mine for iron.” = „Bányássz vasért.”" },
+  { prompt: "'Don't dig straight down!' mit jelent?", options: ["Ne áss egyenesen le!", "Mindig lefelé ássz!", "Gyorsan fuss!", "Bányássz követ!"], correctIndex: 0, subject: "english", explanation: "A „straight down” jelentése egyenesen lefelé; ez veszélyes, mert lávába vagy mély üregbe eshetsz. Példa: „Do not dig down.” = „Ne áss lefelé.”" },
   // === EXTRA SZÓKINCS ===
-  { prompt: "'Shield' magyarul:", options: ["pajzs", "kard", "sisak", "csizma"], correctIndex: 0, subject: "english" },
-  { prompt: "'Armor' magyarul:", options: ["páncél", "kesztyű", "sapka", "táska"], correctIndex: 0, subject: "english" },
-  { prompt: "'Cave' magyarul:", options: ["barlang", "folyó", "völgy", "domb"], correctIndex: 0, subject: "english" },
-  { prompt: "'Lava' magyarul:", options: ["láva", "víz", "homok", "jég"], correctIndex: 0, subject: "english" },
-  { prompt: "'Torch' magyarul:", options: ["fáklya", "lámpa", "gyertya", "tűz"], correctIndex: 0, subject: "english" },
-  { prompt: "'Chest' magyarul a játékban:", options: ["láda / mellény", "asztal", "ajtó", "ablak"], correctIndex: 0, subject: "english" },
-  { prompt: "'Spawn' jelentése Minecraftban:", options: ["megjelenés / születési pont", "tárgy", "csontváz", "bányász"], correctIndex: 0, subject: "english" },
-  { prompt: "Hogyan mondod: 'Gyere ide!'?", options: ["Come here!", "Go away!", "Mine this!", "Build that!"], correctIndex: 0, subject: "english" },
-  { prompt: "'Careful!' angolul, ha veszely van:", options: ["Careful! / Watch out!", "Hello!", "Good job!", "Let's go!"], correctIndex: 0, subject: "english" },
-  { prompt: "'Hungry' magyarul:", options: ["éhes", "szomjas", "fáradt", "beteg"], correctIndex: 0, subject: "english" },
-  { prompt: "'Dangerous' magyarul:", options: ["veszélyes", "békés", "mély", "gyönyörű"], correctIndex: 0, subject: "english" },
+  { prompt: "'Shield' magyarul:", options: ["pajzs", "kard", "sisak", "csizma"], correctIndex: 0, subject: "english", explanation: "A shield pajzs, amellyel támadásokat lehet kivédeni. Példa: „Use your shield.” = „Használd a pajzsodat.”" },
+  { prompt: "'Armor' magyarul:", options: ["páncél", "kesztyű", "sapka", "táska"], correctIndex: 0, subject: "english", explanation: "Az armor páncél, amely csökkenti az elszenvedett sebzést. Példa: „Iron armor protects you.” = „A vaspáncél megvéd.”" },
+  { prompt: "'Cave' magyarul:", options: ["barlang", "folyó", "völgy", "domb"], correctIndex: 0, subject: "english", explanation: "A cave barlang, vagyis föld alatti természetes üreg vagy járatrendszer. Példa: „There is a cave nearby.” = „Van egy barlang a közelben.”" },
+  { prompt: "'Lava' magyarul:", options: ["láva", "víz", "homok", "jég"], correctIndex: 0, subject: "english", explanation: "A „lava” magyarul láva. Példa: „The lava is hot.” – „A láva forró.”" },
+  { prompt: "'Torch' magyarul:", options: ["fáklya", "lámpa", "gyertya", "tűz"], correctIndex: 0, subject: "english", explanation: "A „torch” fáklya, amely fényt ad. Példa: „Carry a torch at night.” – „Vigyél fáklyát éjjel.”" },
+  { prompt: "'Chest' magyarul a játékban:", options: ["láda", "asztal", "ajtó", "ablak"], correctIndex: 0, subject: "english", explanation: "A játékokban a „chest” általában láda, amelyben tárgyakat tárolunk. Példa: „Open the chest.” – „Nyisd ki a ládát.”" },
+  { prompt: "'Spawn' jelentése Minecraftban:", options: ["megjelenés / születési pont", "tárgy", "csontváz", "bányász"], correctIndex: 0, subject: "english", explanation: "A „spawn” Minecraftban megjelenést vagy kezdőpontot jelent. Példa: „I spawned near a village.” – „Egy falu közelében jelentem meg.”" },
+  { prompt: "Hogyan mondod: 'Gyere ide!'?", options: ["Come here!", "Go away!", "Mine this!", "Build that!"], correctIndex: 0, subject: "english", explanation: "A „Come here!” jelentése: „Gyere ide!” A come mozgást fejez ki a beszélő felé. Példa: „Come here, please!” – „Gyere ide, kérlek!”" },
+  { prompt: "Hogyan mondod angolul: Vigyázz!?", options: ["Careful! / Watch out!", "Hello!", "Good job!", "Let's go!"], correctIndex: 0, subject: "english", explanation: "A „Careful!” jelentése: „Vigyázz!” A „Watch out!” is figyelmeztetés, főleg közvetlen veszély esetén. Példa: „Watch out for lava!” – „Vigyázz a lávára!”" },
+  { prompt: "'Hungry' magyarul:", options: ["éhes", "szomjas", "fáradt", "beteg"], correctIndex: 0, subject: "english", explanation: "A „hungry” magyarul éhes, vagyis valaki enni szeretne. Példa: „I am hungry.” – „Éhes vagyok.”" },
+  { prompt: "'Dangerous' magyarul:", options: ["veszélyes", "békés", "mély", "gyönyörű"], correctIndex: 0, subject: "english", explanation: "A „dangerous” jelentése veszélyes. Példa: „This cave is dangerous.” – „Ez a barlang veszélyes.”" },
   // ============================================================
   // === ANGOL MATEMATIKA (math vocabulary + egyszerű műveletek) =
   // ============================================================
-  { prompt: "What is 'add' in Hungarian?", options: ["szoroz", "összead", "kivon", "oszt"], correctIndex: 1, subject: "english-math" },
-  { prompt: "What is 'subtract' in Hungarian?", options: ["összead", "kivon", "szoroz", "oszt"], correctIndex: 1, subject: "english-math" },
-  { prompt: "What is 'multiply' in Hungarian?", options: ["szoroz", "összead", "kivon", "oszt"], correctIndex: 0, subject: "english-math" },
-  { prompt: "What is 'divide' in Hungarian?", options: ["szoroz", "oszt", "összead", "kivon"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Two plus three equals?' (2 + 3 = ?)", options: ["four", "five", "six", "seven"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Four times two equals?' (4 × 2 = ?)", options: ["six", "eight", "ten", "twelve"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Ten minus four equals?' (10 - 4 = ?)", options: ["five", "six", "seven", "eight"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Twelve divided by three equals?' (12 ÷ 3 = ?)", options: ["three", "four", "five", "six"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Half of ten is?' (10 fele?)", options: ["three", "four", "five", "six"], correctIndex: 2, subject: "english-math" },
-  { prompt: "'Double of six is?' (6 kétszerese?)", options: ["ten", "twelve", "fourteen", "sixteen"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Number' jelentése:", options: ["szám", "szín", "szó", "sor"], correctIndex: 0, subject: "english-math" },
-  { prompt: "'Equal' magyarul:", options: ["nagyobb", "egyenlő", "kisebb", "közel"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Greater than' magyarul:", options: ["kisebb, mint", "nagyobb, mint", "egyenlő", "nem egyenlő"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Less than' magyarul:", options: ["nagyobb, mint", "egyenlő", "kisebb, mint", "közel"], correctIndex: 2, subject: "english-math" },
-  { prompt: "'Sum' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 0, subject: "english-math" },
-  { prompt: "'Difference' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Product' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 2, subject: "english-math" },
-  { prompt: "'Quotient' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 3, subject: "english-math" },
-  { prompt: "'Triangle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 2, subject: "english-math" },
-  { prompt: "'Square' magyarul mértanban:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Circle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 0, subject: "english-math" },
-  { prompt: "'Rectangle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 3, subject: "english-math" },
-  { prompt: "'Half' magyarul:", options: ["egész", "fél", "negyed", "harmad"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Quarter' magyarul (tört):", options: ["egész", "fél", "negyed", "harmad"], correctIndex: 2, subject: "english-math" },
-  { prompt: "How many sides does a triangle have?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "english-math" },
-  { prompt: "How many sides does a square have?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Even number' magyarul:", options: ["páros szám", "páratlan szám", "prím szám", "nulla"], correctIndex: 0, subject: "english-math" },
-  { prompt: "'Odd number' magyarul:", options: ["páros szám", "páratlan szám", "prím szám", "nulla"], correctIndex: 1, subject: "english-math" },
+  { prompt: "What is 'add' in Hungarian?", options: ["szoroz", "összead", "kivon", "oszt"], correctIndex: 1, subject: "english-math", explanation: "Az „add” jelentése összead. Összeadáskor számokat egyesítünk: 2 + 3 = 5. Példa: „Add two and three.” – „Add össze a kettőt és a hármat.”" },
+  { prompt: "What is 'subtract' in Hungarian?", options: ["összead", "kivon", "szoroz", "oszt"], correctIndex: 1, subject: "english-math", explanation: "A „subtract” jelentése kivon. Kivonáskor egy számból elveszünk: 8 − 3 = 5. Példa: „Subtract three from eight.” – „Vonj ki hármat nyolcból.”" },
+  { prompt: "What is 'multiply' in Hungarian?", options: ["szoroz", "összead", "kivon", "oszt"], correctIndex: 0, subject: "english-math", explanation: "A „multiply” jelentése szoroz. A 4 × 3 azt jelenti, hogy négyszer veszünk hármat: 4 × 3 = 12. Példa: „Multiply four by three.” – „Szorozd meg a négyet hárommal.”" },
+  { prompt: "What is 'divide' in Hungarian?", options: ["szoroz", "oszt", "összead", "kivon"], correctIndex: 1, subject: "english-math", explanation: "A „divide” jelentése oszt. Osztáskor egy mennyiséget egyenlő részekre bontunk: 12 ÷ 3 = 4. Példa: „Divide twelve by three.” – „Oszd el a tizenkettőt hárommal.”" },
+  { prompt: "'Two plus three equals?' (2 + 3 = ?)", options: ["four", "five", "six", "seven"], correctIndex: 1, subject: "english-math", explanation: "Kettőhöz háromat adva ötöt kapunk: 2 + 3 = 5. Angolul az öt: five." },
+  { prompt: "'Four times two equals?' (4 × 2 = ?)", options: ["six", "eight", "ten", "twelve"], correctIndex: 1, subject: "english-math", explanation: "A négyszer kettő négy darab kettőt jelent: 2 + 2 + 2 + 2 = 8. Angolul a nyolc: eight." },
+  { prompt: "'Ten minus four equals?' (10 - 4 = ?)", options: ["five", "six", "seven", "eight"], correctIndex: 1, subject: "english-math", explanation: "Tízből négyet kivonva hat marad: 10 − 4 = 6. Angolul a hat: six." },
+  { prompt: "'Twelve divided by three equals?' (12 ÷ 3 = ?)", options: ["three", "four", "five", "six"], correctIndex: 1, subject: "english-math", explanation: "A 12-t három egyenlő részre osztva minden részben 4 lesz: 12 ÷ 3 = 4. Angolul: four." },
+  { prompt: "'Half of ten is?' (10 fele?)", options: ["three", "four", "five", "six"], correctIndex: 2, subject: "english-math", explanation: "A tíz fele öt, mert 10 ÷ 2 = 5. Angolul az öt: five." },
+  { prompt: "'Double of six is?' (6 kétszerese?)", options: ["ten", "twelve", "fourteen", "sixteen"], correctIndex: 1, subject: "english-math", explanation: "A hat kétszerese 12, mert 6 + 6 = 12, vagyis 2 × 6 = 12. Angolul: twelve." },
+  { prompt: "'Number' jelentése:", options: ["szám", "szín", "szó", "sor"], correctIndex: 0, subject: "english-math", explanation: "A „number” jelentése szám. Példa: „Seven is a number.” – „A hét egy szám.”" },
+  { prompt: "'Equal' magyarul:", options: ["nagyobb", "egyenlő", "kisebb", "közel"], correctIndex: 1, subject: "english-math", explanation: "Az „equal” magyarul egyenlő: két mennyiség értéke ugyanaz. Példa: „Two plus two equals four.” – „Kettő meg kettő egyenlő néggyel.”" },
+  { prompt: "'Greater than' magyarul:", options: ["kisebb, mint", "nagyobb, mint", "egyenlő", "nem egyenlő"], correctIndex: 1, subject: "english-math", explanation: "A „greater than” jelentése nagyobb, mint. Például 7 > 4, mert a hét nagyobb négynél." },
+  { prompt: "'Less than' magyarul:", options: ["nagyobb, mint", "egyenlő", "kisebb, mint", "közel"], correctIndex: 2, subject: "english-math", explanation: "A „less than” jelentése kisebb, mint. Például 3 < 8, mert a három kisebb nyolcnál." },
+  { prompt: "'Sum' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 0, subject: "english-math", explanation: "Az összeadás eredményét összegnek nevezzük. Például 4 + 5 = 9 esetén a 9 az összeg." },
+  { prompt: "'Difference' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 1, subject: "english-math", explanation: "A kivonás eredménye a különbség. Például 9 − 4 = 5 esetén az 5 a különbség." },
+  { prompt: "'Product' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 2, subject: "english-math", explanation: "A szorzás eredménye a szorzat. Például 3 × 4 = 12 esetén a 12 a szorzat." },
+  { prompt: "'Quotient' magyarul matekban:", options: ["összeg", "különbség", "szorzat", "hányados"], correctIndex: 3, subject: "english-math", explanation: "Az osztás eredményét hányadosnak nevezzük. Például 12 ÷ 3 = 4 esetén a 4 a hányados." },
+  { prompt: "'Triangle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 2, subject: "english-math", explanation: "A „triangle” magyarul háromszög, mert három oldala és három csúcsa van. Példa: „Draw a triangle.” – „Rajzolj egy háromszöget.”" },
+  { prompt: "'Square' magyarul mértanban:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 1, subject: "english-math", explanation: "A „square” mértanban négyzet: négy egyforma hosszú oldala és négy derékszöge van. Példa: „The square has four sides.” – „A négyzetnek négy oldala van.”" },
+  { prompt: "'Circle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 0, subject: "english-math", explanation: "A „circle” magyarul kör. A körvonal minden pontja ugyanakkora távolságra van a középponttól. Példa: „Draw a circle.” – „Rajzolj egy kört.”" },
+  { prompt: "'Rectangle' magyarul:", options: ["kör", "négyzet", "háromszög", "téglalap"], correctIndex: 3, subject: "english-math", explanation: "A „rectangle” magyarul téglalap. Négy derékszöge van, szemközti oldalai egyenlők. Példa: „A door is a rectangle.” – „Az ajtó téglalap.”" },
+  { prompt: "'Half' magyarul:", options: ["egész", "fél", "negyed", "harmad"], correctIndex: 1, subject: "english-math", explanation: "A „half” jelentése fél, vagyis egy egész két egyenlő részének egyike. Példa: „Half of the cake is mine.” – A torta fele az enyém." },
+  { prompt: "'Quarter' magyarul (tört):", options: ["egész", "fél", "negyed", "harmad"], correctIndex: 2, subject: "english-math", explanation: "A „quarter” tört értelemben negyed: az egész négy egyenlő részre osztva. Példa: „I ate a quarter of the pizza.” – Megettem a pizza negyedét." },
+  { prompt: "How many sides does a triangle have?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "english-math", explanation: "A háromszögnek 3 oldala van; neve is erre utal: három szakasz zárja körül a síkidomot." },
+  { prompt: "How many sides does a square have?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "english-math", explanation: "A négyzetnek 4 oldala van, és mind a négy oldala egyenlő hosszúságú. Szomszédos oldalai derékszöget zárnak be." },
+  { prompt: "'Even number' magyarul:", options: ["páros szám", "páratlan szám", "prím szám", "nulla"], correctIndex: 0, subject: "english-math", explanation: "Az „even number” páros szám: maradék nélkül osztható 2-vel. Példa: „Eight is an even number.” – A nyolc páros szám." },
+  { prompt: "'Odd number' magyarul:", options: ["páros szám", "páratlan szám", "prím szám", "nulla"], correctIndex: 1, subject: "english-math", explanation: "Az „odd number” páratlan szám: 2-vel osztva 1 a maradéka. Példa: „Seven is an odd number.” – A hét páratlan szám." },
   // ============================================================
   // === EGYSZERŰ MAGYAR MATEMATIKA (1-4. osztály szint) =========
   // ============================================================
-  { prompt: "Mennyi 5 + 3?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 9 - 4?", options: ["3", "4", "5", "6"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 7 + 6?", options: ["11", "12", "13", "14"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 15 - 8?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 4 × 3?", options: ["9", "10", "11", "12"], correctIndex: 3, subject: "math" },
-  { prompt: "Mennyi 6 × 2?", options: ["10", "12", "14", "16"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 8 × 5?", options: ["35", "40", "45", "50"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 18 ÷ 3?", options: ["5", "6", "7", "8"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 24 ÷ 4?", options: ["5", "6", "7", "8"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 100 - 37?", options: ["53", "63", "73", "83"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 25 + 48?", options: ["63", "73", "83", "93"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány cm van 1 méterben?", options: ["10", "100", "1000", "10000"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány perc van 1 órában?", options: ["30", "45", "60", "100"], correctIndex: 2, subject: "math" },
-  { prompt: "Hány nap van 1 hétben?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math" },
-  { prompt: "Hány hónap van 1 évben?", options: ["10", "11", "12", "13"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi a 10 fele?", options: ["2", "4", "5", "6"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi a 8 kétszerese?", options: ["10", "14", "16", "18"], correctIndex: 2, subject: "math" },
-  { prompt: "Melyik a páros szám?", options: ["3", "7", "8", "11"], correctIndex: 2, subject: "math" },
-  { prompt: "Melyik a páratlan szám?", options: ["4", "6", "9", "10"], correctIndex: 2, subject: "math" },
-  { prompt: "Hány oldala van egy háromszögnek?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány oldala van egy négyzetnek?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány csúcsa van egy kockának?", options: ["4", "6", "8", "12"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 12 + 12?", options: ["22", "24", "26", "28"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány nulla van 1000-ben?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 7 × 7?", options: ["42", "49", "56", "63"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 9 × 9?", options: ["72", "81", "90", "99"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi a 20 fele?", options: ["8", "10", "12", "15"], correctIndex: 1, subject: "math" },
-  { prompt: "Ha 3 almám van és kapok 4-et, hány lesz?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math" },
-  { prompt: "Ha 10 cukorkám volt és 6-ot megettem, hány maradt?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 50 + 50?", options: ["90", "100", "110", "150"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 5 + 3?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math", explanation: "5 + 3 = 8, mert az öthöz még három egységet adunk: 6, 7, 8." },
+  { prompt: "Mennyi 9 - 4?", options: ["3", "4", "5", "6"], correctIndex: 2, subject: "math", explanation: "9 − 4 = 5, mert kilencből négyet elvéve öt marad: 9 − 1 − 1 − 1 − 1 = 5." },
+  { prompt: "Mennyi 7 + 6?", options: ["11", "12", "13", "14"], correctIndex: 2, subject: "math", explanation: "7 + 6 = 13: a héthez hozzáadunk hatot, vagyis 7 + 3 + 3 = 10 + 3 = 13." },
+  { prompt: "Mennyi 15 - 8?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math", explanation: "15 − 8 = 7, mert 15-ből 5 elvétele után 10 marad, majd még 3 elvétele után 7." },
+  { prompt: "Mennyi 4 × 3?", options: ["9", "10", "11", "12"], correctIndex: 3, subject: "math", explanation: "4 × 3 = 12, mert négy darab hármas összege: 3 + 3 + 3 + 3 = 12." },
+  { prompt: "Mennyi 6 × 2?", options: ["10", "12", "14", "16"], correctIndex: 1, subject: "math", explanation: "6 × 2 = 12, mert hat kétszerese hat és még hat: 6 + 6 = 12." },
+  { prompt: "Mennyi 8 × 5?", options: ["35", "40", "45", "50"], correctIndex: 1, subject: "math", explanation: "8 × 5 = 40, mert nyolcszor ötöt adunk össze: 5 + 5 + 5 + 5 + 5 + 5 + 5 + 5 = 40." },
+  { prompt: "Mennyi 18 ÷ 3?", options: ["5", "6", "7", "8"], correctIndex: 1, subject: "math", explanation: "18 ÷ 3 = 6, mert 6 × 3 = 18. Az osztás a szorzás fordított művelete." },
+  { prompt: "Mennyi 24 ÷ 4?", options: ["5", "6", "7", "8"], correctIndex: 1, subject: "math", explanation: "24 ÷ 4 = 6, mert 6 × 4 = 24. Ennyi jut egy csoportba, ha 24-et négyfelé osztunk." },
+  { prompt: "Mennyi 100 - 37?", options: ["53", "63", "73", "83"], correctIndex: 1, subject: "math", explanation: "100 − 37 = 63: 100 − 30 = 70, majd 70 − 7 = 63." },
+  { prompt: "Mennyi 25 + 48?", options: ["63", "73", "83", "93"], correctIndex: 1, subject: "math", explanation: "25 + 48 = 73: 20 + 40 = 60, az 5 + 8 = 13, így 60 + 13 = 73." },
+  { prompt: "Hány cm van 1 méterben?", options: ["10", "100", "1000", "10000"], correctIndex: 1, subject: "math", explanation: "1 méter 100 centiméter, mert a centiméter a méter századrésze: 1 cm = 0,01 m." },
+  { prompt: "Hány perc van 1 órában?", options: ["30", "45", "60", "100"], correctIndex: 2, subject: "math", explanation: "1 óra 60 perc. Az óra számlapján a nagymutató egy teljes kör alatt 60 percet halad." },
+  { prompt: "Hány nap van 1 hétben?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math", explanation: "1 hét 7 napból áll: hétfő, kedd, szerda, csütörtök, péntek, szombat és vasárnap." },
+  { prompt: "Hány hónap van 1 évben?", options: ["10", "11", "12", "13"], correctIndex: 2, subject: "math", explanation: "1 évben 12 hónap van, januártól decemberig. Egy közönséges év 365 napos." },
+  { prompt: "Mennyi a 10 fele?", options: ["2", "4", "5", "6"], correctIndex: 2, subject: "math", explanation: "A 10 fele 5, mert a felezés osztás 2-vel: 10 ÷ 2 = 5." },
+  { prompt: "Mennyi a 8 kétszerese?", options: ["10", "14", "16", "18"], correctIndex: 2, subject: "math", explanation: "A 8 kétszerese 16, mert a kétszerezés azt jelenti, hogy a számot önmagához adjuk: 8 + 8 = 16." },
+  { prompt: "Melyik a páros szám?", options: ["3", "7", "8", "11"], correctIndex: 2, subject: "math", explanation: "A 8 páros szám, mert 2-vel maradék nélkül osztható: 8 ÷ 2 = 4." },
+  { prompt: "Melyik a páratlan szám?", options: ["4", "6", "9", "10"], correctIndex: 2, subject: "math", explanation: "A 9 páratlan szám, mert 2-vel osztva 4 maradék 1: 9 = 2 × 4 + 1." },
+  { prompt: "Hány oldala van egy háromszögnek?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "math", explanation: "A háromszög 3 oldalból áll. Három egyenes szakasz kapcsolódik össze zárt síkidommá." },
+  { prompt: "Hány oldala van egy négyzetnek?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "math", explanation: "A négyzetnek 4 oldala van. Ezek egyenlők, és a négy belső szöge mind derékszög." },
+  { prompt: "Hány csúcsa van egy kockának?", options: ["4", "6", "8", "12"], correctIndex: 2, subject: "math", explanation: "A kockának 8 csúcsa van. A csúcsok azok a pontok, ahol a kocka élei találkoznak." },
+  { prompt: "Mennyi 12 + 12?", options: ["22", "24", "26", "28"], correctIndex: 1, subject: "math", explanation: "12 + 12 = 24, mert két tucat összege 24: 10 + 10 = 20 és 2 + 2 = 4." },
+  { prompt: "Hány nulla van 1000-ben?", options: ["2", "3", "4", "5"], correctIndex: 1, subject: "math", explanation: "Az 1000-ben 3 nulla van: 1000 = 1 × 1000, vagyis egy ezres és három nulla." },
+  { prompt: "Mennyi 7 × 7?", options: ["42", "49", "56", "63"], correctIndex: 1, subject: "math", explanation: "7 × 7 = 49, mert hét darab hetest adunk össze: 7+7+7+7+7+7+7 = 49." },
+  { prompt: "Mennyi 9 × 9?", options: ["72", "81", "90", "99"], correctIndex: 1, subject: "math", explanation: "9 × 9 = 81, hiszen kilencszer kilencet összeadva 81-et kapunk." },
+  { prompt: "Mennyi a 20 fele?", options: ["8", "10", "12", "15"], correctIndex: 1, subject: "math", explanation: "A fele azt jelenti, hogy kettővel osztunk: 20 ÷ 2 = 10." },
+  { prompt: "Ha 3 almám van és kapok 4-et, hány lesz?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "math", explanation: "A kapott almákat hozzáadjuk: 3 + 4 = 7, tehát ennyi almád lesz." },
+  { prompt: "Ha 10 cukorkám volt és 6-ot megettem, hány maradt?", options: ["3", "4", "5", "6"], correctIndex: 1, subject: "math", explanation: "Az elfogyasztott cukorkákat kivonjuk: 10 − 6 = 4 marad." },
+  { prompt: "Mennyi 50 + 50?", options: ["90", "100", "110", "150"], correctIndex: 1, subject: "math", explanation: "Ötven és ötven együtt száz: 50 + 50 = 100." },
   // ============================================================
   // === KÖRNYEZETISMERET (egyszerű, 1-4. osztály szint) =========
   // ============================================================
-  { prompt: "Mi a fő különbség a fa és a növény között?", options: ["A fa nagyobb, fás szárú növény", "A fa nem él", "A növény nem zöld", "Nincs különbség"], correctIndex: 0, subject: "nature" },
-  { prompt: "Mi a fő különbség a növény és az állat között?", options: ["A növény fotoszintetizál, az állat mozog és eszik", "Az állat mindig nagyobb", "A növény is eszik húst", "Nincs különbség"], correctIndex: 0, subject: "nature" },
-  { prompt: "Mit csinál a növény a napfénnyel?", options: ["Eszik", "Alszik", "Fotoszintetizál (táplálékot készít)", "Elfut"], correctIndex: 2, subject: "nature" },
-  { prompt: "Mi a tölgy?", options: ["Állat", "Fa", "Gomba", "Hal"], correctIndex: 1, subject: "nature" },
-  { prompt: "Melyik növény NEM fa?", options: ["tölgy", "bükk", "pipacs", "fenyő"], correctIndex: 2, subject: "nature" },
-  { prompt: "Melyik állat NEM emlős?", options: ["kutya", "macska", "tyúk", "ló"], correctIndex: 2, subject: "nature" },
-  { prompt: "Hány lába van egy póknak?", options: ["4", "6", "8", "10"], correctIndex: 2, subject: "nature" },
-  { prompt: "Hány lába van egy rovarnak (pl. méh)?", options: ["4", "6", "8", "10"], correctIndex: 1, subject: "nature" },
-  { prompt: "Mit csinál a méh a virággal?", options: ["Eszi", "Nektárt gyűjt és beporzja", "Kitépi", "Elrejti"], correctIndex: 1, subject: "nature" },
-  { prompt: "Mi lesz a lárvából idővel?", options: ["Növény", "Kő", "Pillangó vagy bogár", "Hal"], correctIndex: 2, subject: "nature" },
-  { prompt: "Melyik évszakban hullik le a levél?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 2, subject: "nature" },
-  { prompt: "Melyik évszakban van a legmelegebb?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 1, subject: "nature" },
-  { prompt: "Mi a fő különbség nappal és éjszaka között?", options: ["A Föld forgása miatt a Nap látszólagos állása", "A Hold eltűnik", "A csillagok elfogynak", "Nincs különbség"], correctIndex: 0, subject: "nature" },
-  { prompt: "Mit iszik a növény?", options: ["tejet", "vizet (gyökerein át)", "levegőt", "semmit"], correctIndex: 1, subject: "nature" },
-  { prompt: "Hol él a hal?", options: ["levegőben", "földben", "vízben", "fán"], correctIndex: 2, subject: "nature" },
-  { prompt: "Mivel lélegzik a hal?", options: ["tüdővel", "kopoltyúval", "orral", "szájjal"], correctIndex: 1, subject: "nature" },
-  { prompt: "Melyik a mi bolygónk?", options: ["Mars", "Hold", "Föld", "Nap"], correctIndex: 2, subject: "nature" },
-  { prompt: "Mi a Nap?", options: ["csillag", "bolygó", "hold", "üstökös"], correctIndex: 0, subject: "nature" },
-  { prompt: "Mi a Hold?", options: ["csillag", "bolygó", "a Föld kísérője", "galaxis"], correctIndex: 2, subject: "nature" },
-  { prompt: "Hány napból áll egy hét?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "nature" },
-  { prompt: "Milyen halmazállapotú a jég?", options: ["folyékony", "szilárd", "légnemű", "ragadós"], correctIndex: 1, subject: "nature" },
-  { prompt: "Milyen halmazállapotú a víz?", options: ["folyékony", "szilárd", "légnemű", "kristályos"], correctIndex: 0, subject: "nature" },
-  { prompt: "Milyen halmazállapotú a levegő?", options: ["folyékony", "szilárd", "légnemű", "porszerű"], correctIndex: 2, subject: "nature" },
-  { prompt: "Mi képződik, ha a víz forró lesz?", options: ["Jég", "Gőz / pára", "Só", "Homok"], correctIndex: 1, subject: "nature" },
-  { prompt: "Melyik állat tojik tojást?", options: ["ló", "kutya", "tyúk", "macska"], correctIndex: 2, subject: "nature" },
-  { prompt: "Melyik NEM madár?", options: ["veréb", "galamb", "denevér", "fecske"], correctIndex: 2, subject: "nature" },
-  { prompt: "Mit eszik a nyúl?", options: ["húst", "növényeket (füvet, répát)", "köveket", "fémet"], correctIndex: 1, subject: "nature" },
-  { prompt: "Mit eszik a farkas?", options: ["csak füvet", "csak gyümölcsöt", "húst (ragadozó)", "köveket"], correctIndex: 2, subject: "nature" },
-  { prompt: "Milyen halmazállapotú a gyémánt?", options: ["folyékony", "szilárd", "légnemű", "gázszerű"], correctIndex: 1, subject: "nature" },
-  { prompt: "Honnan származik az eső?", options: ["a földből", "a felhőkből", "a kőzetekből", "a fákból"], correctIndex: 1, subject: "nature" },
-  { prompt: "Mitől nő a növény?", options: ["víztől, napfénytől, levegőtől", "csak vacsorától", "köztől", "semmitől"], correctIndex: 0, subject: "nature" },
-  { prompt: "Mi a legnagyobb szárazföldi állat?", options: ["oroszlán", "elefánt", "ló", "tigris"], correctIndex: 1, subject: "nature" },
-  { prompt: "Melyik a leghidegebb évszak?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 3, subject: "nature" },
+  { prompt: "Melyik állítás igaz a fára mint növényre?", options: ["A fa nagyobb, fás szárú növény", "A fa nem él", "A növény nem zöld", "Nincs különbség"], correctIndex: 0, subject: "nature", explanation: "A fa a növények egyik csoportja: fás, tartós szára van, és általában magasra nő." },
+  { prompt: "Mi a fő különbség a növény és az állat között?", options: ["A növény fotoszintetizál, az állat mozog és eszik", "Az állat mindig nagyobb", "A növény is eszik húst", "Nincs különbség"], correctIndex: 0, subject: "nature", explanation: "A növények többnyire fotoszintézissel készítik táplálékukat, az állatok pedig kész táplálékot fogyasztanak." },
+  { prompt: "Mit csinál a növény a napfénnyel?", options: ["Eszik", "Alszik", "Fotoszintetizál (táplálékot készít)", "Elfut"], correctIndex: 2, subject: "nature", explanation: "A növény a napfény energiájával fotoszintézis során cukrot, vagyis táplálékot készít." },
+  { prompt: "Mi a tölgy?", options: ["Állat", "Fa", "Gomba", "Hal"], correctIndex: 1, subject: "nature", explanation: "A tölgy fa: fás szárú növény, amelynek termése a makk." },
+  { prompt: "Melyik növény NEM fa?", options: ["tölgy", "bükk", "pipacs", "fenyő"], correctIndex: 2, subject: "nature", explanation: "A pipacs lágyszárú virágos növény, nem fás törzsű fa." },
+  { prompt: "Melyik állat NEM emlős?", options: ["kutya", "macska", "tyúk", "ló"], correctIndex: 2, subject: "nature", explanation: "A tyúk madár, toll borítja és tojással szaporodik; az emlősök kicsinyeiket tejjel táplálják." },
+  { prompt: "Hány lába van egy póknak?", options: ["4", "6", "8", "10"], correctIndex: 2, subject: "nature", explanation: "A pókoknak nyolc lábuk van, ezért nem rovarok, hanem pókszabásúak." },
+  { prompt: "Hány lába van egy rovarnak (pl. méh)?", options: ["4", "6", "8", "10"], correctIndex: 1, subject: "nature", explanation: "A rovarok testének három pár lába van, ezért összesen 6 lábuk van." },
+  { prompt: "Mit csinál a méh a virággal?", options: ["Eszi", "Nektárt gyűjt és beporozza", "Kitépi", "Elrejti"], correctIndex: 1, subject: "nature", explanation: "A méh nektárt gyűjt, közben virágport visz egyik virágról a másikra, így beporoz." },
+  { prompt: "Mi lesz a rovar lárvájából a fejlődés végén?", options: ["Növény", "Kő", "Kifejlett rovar, például pillangó vagy bogár", "Hal"], correctIndex: 2, subject: "nature", explanation: "A lárva fejlődés után kifejlett rovarrá alakul; például hernyóból báb után pillangó lesz." },
+  { prompt: "Melyik évszakban hullik le a levél?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 2, subject: "nature", explanation: "Ősszel sok lombhullató fa levele elszíneződik, majd lehullik a téli időszak előtt." },
+  { prompt: "Melyik évszakban van a legmelegebb?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 1, subject: "nature", explanation: "Nyáron kapjuk általában a legtöbb és legerősebb napsütést, ezért ekkor van a legmelegebb." },
+  { prompt: "Mi okozza a nappal és az éjszaka váltakozását?", options: ["A Föld forgása miatt a Nap látszólagos állása", "A Hold eltűnik", "A csillagok elfogynak", "Nincs különbség"], correctIndex: 0, subject: "nature", explanation: "A Föld forgása miatt hol a Nap felé, hol az ellenkező irányba nézünk: így váltakozik a nappal és az éjszaka." },
+  { prompt: "Mit iszik a növény?", options: ["tejet", "vizet (gyökerein át)", "levegőt", "semmit"], correctIndex: 1, subject: "nature", explanation: "A növény a gyökerein keresztül vizet vesz fel a talajból, és azt a szárába, leveleibe szállítja." },
+  { prompt: "Hol él a hal?", options: ["levegőben", "földben", "vízben", "fán"], correctIndex: 2, subject: "nature", explanation: "A hal vízben él, testének és légzésének működése ehhez az élőhelyhez alkalmazkodott." },
+  { prompt: "Mivel lélegzik a hal?", options: ["tüdővel", "kopoltyúval", "orral", "szájjal"], correctIndex: 1, subject: "nature", explanation: "A hal kopoltyúval lélegzik: ezzel vonja ki a vízben oldott oxigént." },
+  { prompt: "Melyik a mi bolygónk?", options: ["Mars", "Hold", "Föld", "Nap"], correctIndex: 2, subject: "nature", explanation: "A Föld a Naprendszer bolygója, ezen élnek az emberek és sok más élőlény." },
+  { prompt: "Mi a Nap?", options: ["csillag", "bolygó", "hold", "üstökös"], correctIndex: 0, subject: "nature", explanation: "A Nap csillag: saját fénye és hője van, mert a belsejében energia termelődik." },
+  { prompt: "Mi a Hold?", options: ["csillag", "bolygó", "a Föld kísérője", "galaxis"], correctIndex: 2, subject: "nature", explanation: "A Hold a Föld természetes kísérője, vagyis a Föld körül kering." },
+  { prompt: "Hány napból áll egy hét?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "nature", explanation: "Egy hét 7 napból áll: hétfőtől vasárnapig tart." },
+  { prompt: "Milyen halmazállapotú a jég?", options: ["folyékony", "szilárd", "légnemű", "ragadós"], correctIndex: 1, subject: "nature", explanation: "A jég szilárd halmazállapotú víz: alakja van, és nem folyik szét." },
+  { prompt: "Milyen halmazállapotú a víz szobahőmérsékleten?", options: ["folyékony", "szilárd", "légnemű", "kristályos"], correctIndex: 0, subject: "nature", explanation: "A víz folyékony halmazállapotú: folyik, és felveszi az edény alakját." },
+  { prompt: "Milyen halmazállapotú a levegő?", options: ["folyékony", "szilárd", "légnemű", "porszerű"], correctIndex: 2, subject: "nature", explanation: "A levegő légnemű: nincs saját alakja, és kitölti azt a teret, ahol van." },
+  { prompt: "Mivé alakul a folyékony víz párolgáskor?", options: ["Jég", "Vízgőzzé", "Só", "Homok"], correctIndex: 1, subject: "nature", explanation: "Párolgáskor a folyékony vízből légnemű vízgőz lesz. A vízgőz láthatatlan; a látható köd apró folyékony vízcseppekből áll." },
+  { prompt: "Melyik állat tojik tojást?", options: ["ló", "kutya", "tyúk", "macska"], correctIndex: 2, subject: "nature", explanation: "A tyúk madár, ezért tojással szaporodik. Az emlősök, például a ló, a kutya és a macska élő utódot hoznak világra." },
+  { prompt: "Melyik NEM madár?", options: ["veréb", "galamb", "denevér", "fecske"], correctIndex: 2, subject: "nature", explanation: "A denevér emlős: szőr borítja, kicsinyeit tejjel táplálja. Bár repül, nem madár." },
+  { prompt: "Mit eszik a nyúl?", options: ["húst", "növényeket (füvet, répát)", "köveket", "fémet"], correctIndex: 1, subject: "nature", explanation: "A nyúl növényevő állat, füvet, leveleket és zöldségeket is eszik. Fogai a növényi részek rágásához alkalmazkodtak." },
+  { prompt: "Mit eszik a farkas?", options: ["csak füvet", "csak gyümölcsöt", "húst (ragadozó)", "köveket"], correctIndex: 2, subject: "nature", explanation: "A farkas ragadozó, táplálékának fő része hús. Éles fogai és erős állkapcsa a zsákmány elfogásában segítik." },
+  { prompt: "Milyen halmazállapotú a gyémánt?", options: ["folyékony", "szilárd", "légnemű", "gázszerű"], correctIndex: 1, subject: "nature", explanation: "A gyémánt szilárd halmazállapotú, mert saját alakja és térfogata van. Szénatomok nagyon rendezett szerkezetéből áll." },
+  { prompt: "Honnan származik az eső?", options: ["a földből", "a felhőkből", "a kőzetekből", "a fákból"], correctIndex: 1, subject: "nature", explanation: "Az eső a felhőkből hullik le, amikor a bennük lévő vízcseppek elég nagyra és nehézzé válnak." },
+  { prompt: "Mitől nő a növény?", options: ["víztől, napfénytől, levegőtől és tápanyagoktól", "csak vacsorától", "köztől", "semmitől"], correctIndex: 0, subject: "nature", explanation: "A növény növekedéséhez vízre, napfényre és levegőre van szükség; a talajból tápanyagokat is felvesz." },
+  { prompt: "Mi a legnagyobb szárazföldi állat?", options: ["oroszlán", "elefánt", "ló", "tigris"], correctIndex: 1, subject: "nature", explanation: "Az elefánt a legnagyobb szárazföldi állat. Az afrikai elefánt tömege akár több tonna is lehet." },
+  { prompt: "Melyik a leghidegebb évszak?", options: ["tavasz", "nyár", "ősz", "tél"], correctIndex: 3, subject: "nature", explanation: "A tél a leghidegebb évszak, mert ilyenkor rövidebb ideig süt a Nap, és kisebb szögben éri a felszínt." },
   // ============================================================
   // === TOVÁBBI MATEMATIKA (bővítés v2, 2026-04-21) =============
   // ============================================================
-  { prompt: "Mennyi 13 + 17?", options: ["28", "29", "30", "31"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 45 - 27?", options: ["16", "18", "20", "22"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 8 + 9?", options: ["16", "17", "18", "19"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 20 - 7?", options: ["11", "12", "13", "14"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 16 + 14?", options: ["28", "29", "30", "31"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 3 × 6?", options: ["15", "18", "21", "24"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 5 × 7?", options: ["30", "35", "40", "45"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi 6 × 8?", options: ["42", "46", "48", "54"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 56 ÷ 7?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 72 ÷ 9?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 36 ÷ 6?", options: ["4", "5", "6", "7"], correctIndex: 2, subject: "math" },
-  { prompt: "Hány dm van 1 méterben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány mm van 1 cm-ben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány dkg van 1 kg-ban?", options: ["10", "100", "1000", "10000"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány dl van 1 literben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math" },
-  { prompt: "Hány másodperc van 1 percben?", options: ["30", "45", "60", "100"], correctIndex: 2, subject: "math" },
-  { prompt: "Hány óra van egy napon?", options: ["12", "18", "24", "48"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi a 100 fele?", options: ["25", "50", "75", "150"], correctIndex: 1, subject: "math" },
-  { prompt: "Mennyi a 50 kétszerese?", options: ["75", "100", "150", "200"], correctIndex: 1, subject: "math" },
-  { prompt: "Melyik a legnagyobb?", options: ["25", "52", "125", "99"], correctIndex: 2, subject: "math" },
-  { prompt: "Melyik a legkisebb?", options: ["18", "81", "8", "28"], correctIndex: 2, subject: "math" },
-  { prompt: "Ha egy dobozban 6 ceruza van, hány ceruza van 4 dobozban?", options: ["20", "22", "24", "26"], correctIndex: 2, subject: "math" },
-  { prompt: "Ha 24 almát 4 embernek egyenlően osztunk, mennyi jut egynek?", options: ["4", "5", "6", "8"], correctIndex: 2, subject: "math" },
-  { prompt: "Ha 50-ből elveszek 15-öt, mennyi marad?", options: ["25", "30", "35", "40"], correctIndex: 2, subject: "math" },
-  { prompt: "Mennyi 1000 - 250?", options: ["650", "750", "850", "950"], correctIndex: 1, subject: "math" },
+  { prompt: "Mennyi 13 + 17?", options: ["28", "29", "30", "31"], correctIndex: 2, subject: "math", explanation: "13 + 17 = 30, mert 10 + 10 = 20 és 3 + 7 = 10; így 20 + 10 = 30." },
+  { prompt: "Mennyi 45 - 27?", options: ["16", "18", "20", "22"], correctIndex: 1, subject: "math", explanation: "45 − 27 = 18. Először 45 − 20 = 25, majd 25 − 7 = 18." },
+  { prompt: "Mennyi 8 + 9?", options: ["16", "17", "18", "19"], correctIndex: 1, subject: "math", explanation: "8 + 9 = 17. Gondolhatunk rá így: 8 + 8 = 16, ehhez még 1-et adva 17-et kapunk." },
+  { prompt: "Mennyi 20 - 7?", options: ["11", "12", "13", "14"], correctIndex: 2, subject: "math", explanation: "20 − 7 = 13. Ha húszból elveszünk hét egységet, tíz és még három marad." },
+  { prompt: "Mennyi 16 + 14?", options: ["28", "29", "30", "31"], correctIndex: 2, subject: "math", explanation: "16 + 14 = 30, mert 10 + 10 = 20, a maradék 6 + 4 = 10; összesen 30." },
+  { prompt: "Mennyi 3 × 6?", options: ["15", "18", "21", "24"], correctIndex: 1, subject: "math", explanation: "3 × 6 = 18, mert háromszor hatot veszünk: 6 + 6 + 6 = 18." },
+  { prompt: "Mennyi 5 × 7?", options: ["30", "35", "40", "45"], correctIndex: 1, subject: "math", explanation: "5 × 7 = 35, mert ötször hetet veszünk: 7 + 7 + 7 + 7 + 7 = 35." },
+  { prompt: "Mennyi 6 × 8?", options: ["42", "46", "48", "54"], correctIndex: 2, subject: "math", explanation: "6 × 8 = 48, mert hatszor nyolc: 8 + 8 + 8 + 8 + 8 + 8 = 48." },
+  { prompt: "Mennyi 56 ÷ 7?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math", explanation: "56 ÷ 7 = 8, mert 7 × 8 = 56. Osztáskor azt keressük, hányszor van meg a 7 az 56-ban." },
+  { prompt: "Mennyi 72 ÷ 9?", options: ["6", "7", "8", "9"], correctIndex: 2, subject: "math", explanation: "72 ÷ 9 = 8, mert 9 × 8 = 72. Az osztást szorzással lehet ellenőrizni." },
+  { prompt: "Mennyi 36 ÷ 6?", options: ["4", "5", "6", "7"], correctIndex: 2, subject: "math", explanation: "36 ÷ 6 = 6, mert 6 × 6 = 36. Hat egyenlő részre osztva minden részbe 6 jut." },
+  { prompt: "Hány dm van 1 méterben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math", explanation: "1 méter 10 deciméter, mert a deciméter a méter tizedrésze: 1 dm = 0,1 m." },
+  { prompt: "Hány mm van 1 cm-ben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math", explanation: "1 centiméter 10 milliméter. A milliméter kisebb mértékegység: 1 mm a centiméter tizede." },
+  { prompt: "Hány dkg van 1 kg-ban?", options: ["10", "100", "1000", "10000"], correctIndex: 1, subject: "math", explanation: "1 kilogramm 100 dekagramm, mert 1 dkg = 10 g, míg 1 kg = 1000 g; 1000 ÷ 10 = 100." },
+  { prompt: "Hány dl van 1 literben?", options: ["5", "10", "100", "1000"], correctIndex: 1, subject: "math", explanation: "1 liter 10 deciliter, mert a deciliter a liter tizedrésze: 1 dl = 0,1 l." },
+  { prompt: "Hány másodperc van 1 percben?", options: ["30", "45", "60", "100"], correctIndex: 2, subject: "math", explanation: "Egy perc 60 másodpercből áll. Az időmérésben ez alapvető váltószám: 60 s = 1 perc." },
+  { prompt: "Hány óra van egy napon?", options: ["12", "18", "24", "48"], correctIndex: 2, subject: "math", explanation: "Egy naptári nap 24 óra: az éjféltől délig tartó 12 óra és a déltől éjfélig tartó 12 óra együtt 24. A világos és sötét időszak hossza évszakonként változik." },
+  { prompt: "Mennyi a 100 fele?", options: ["25", "50", "75", "150"], correctIndex: 1, subject: "math", explanation: "100 fele 50, mert a felezés osztást jelent: 100 ÷ 2 = 50." },
+  { prompt: "Mennyi a 50 kétszerese?", options: ["75", "100", "150", "200"], correctIndex: 1, subject: "math", explanation: "50 kétszerese 100, mert a kétszerezés azt jelenti, hogy kettővel szorzunk: 50 × 2 = 100." },
+  { prompt: "Melyik a legnagyobb?", options: ["25", "52", "125", "99"], correctIndex: 2, subject: "math", explanation: "A felsorolt számok közül a 125 a legnagyobb, mert háromjegyű, míg a többi csak egy- vagy kétjegyű." },
+  { prompt: "Melyik a legkisebb?", options: ["18", "81", "8", "28"], correctIndex: 2, subject: "math", explanation: "A felsorolt számok közül a 8 a legkisebb. Egyjegyű szám, és kisebb minden megadott kétjegyű számnál." },
+  { prompt: "Ha egy dobozban 6 ceruza van, hány ceruza van 4 dobozban?", options: ["20", "22", "24", "26"], correctIndex: 2, subject: "math", explanation: "Négy doboz tartalma: 4 × 6 = 24, mert minden dobozban ugyanannyi ceruza van." },
+  { prompt: "Ha 24 almát 4 embernek egyenlően osztunk, mennyi jut egynek?", options: ["4", "5", "6", "8"], correctIndex: 2, subject: "math", explanation: "Az egyenlő elosztást osztással számoljuk: 24 ÷ 4 = 6 alma jut egy embernek." },
+  { prompt: "Ha 50-ből elveszek 15-öt, mennyi marad?", options: ["25", "30", "35", "40"], correctIndex: 2, subject: "math", explanation: "Az elvételt kivonással fejezzük ki: 50 − 15 = 35, tehát ennyi marad." },
+  { prompt: "Mennyi 1000 - 250?", options: ["650", "750", "850", "950"], correctIndex: 1, subject: "math", explanation: "A kivonásnál 1000-ből 250-et veszünk el: 1000 − 250 = 750." },
   // ============================================================
   // === TOVÁBBI KÖRNYEZETISMERET (bővítés v2) =====================
   // ============================================================
-  { prompt: "Mi az a szivacs?", options: ["növény", "kőzet", "tengeri állat", "gáz"], correctIndex: 2, subject: "nature" },
-  { prompt: "Mi a különbség a gomba és a növény között?", options: ["A gomba nem fotoszintetizál", "A gomba mindig piros", "A gomba nem él", "Nincs különbség"], correctIndex: 0, subject: "nature" },
-  { prompt: "Melyik a legerősebb csontunk?", options: ["ujj", "comb", "fül", "orr"], correctIndex: 1, subject: "nature" },
-  { prompt: "Melyik szervvel lélegzünk?", options: ["máj", "tüdő", "gyomor", "vese"], correctIndex: 1, subject: "nature" },
-  { prompt: "Melyik szervvel pumpál vért a tested?", options: ["agy", "tüdő", "szív", "máj"], correctIndex: 2, subject: "nature" },
-  { prompt: "Milyen színű a vér a testedben?", options: ["kék", "piros", "zöld", "fekete"], correctIndex: 1, subject: "nature" },
-  { prompt: "Hány foga van egy felnőtt embernek (bölcsességfog nélkül)?", options: ["20", "28", "32", "40"], correctIndex: 1, subject: "nature" },
-  { prompt: "Mit termel a növény nappal?", options: ["szén-dioxidot", "oxigént", "füstöt", "vizet"], correctIndex: 1, subject: "nature" },
-  { prompt: "Hol van a szív a testedben?", options: ["lábban", "fejben", "a mellkas bal oldalán", "a has jobb oldalán"], correctIndex: 2, subject: "nature" },
-  { prompt: "Melyik a legnagyobb óceán?", options: ["Atlanti", "Indiai", "Csendes (Pacific)", "Jégtenger"], correctIndex: 2, subject: "nature" },
-  { prompt: "Milyen bolygó a Mars?", options: ["gázóriás", "kőzetbolygó", "hold", "csillag"], correctIndex: 1, subject: "nature" },
-  { prompt: "Melyik állat a leggyorsabb?", options: ["csiga", "teknős", "gepárd", "ló"], correctIndex: 2, subject: "nature" },
-  { prompt: "Melyik állat szúr?", options: ["teve", "szarvas", "szúnyog", "nyuszi"], correctIndex: 2, subject: "nature" },
-  { prompt: "Hány kontinens van a Földön?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "nature" },
-  { prompt: "Mi a Szahara?", options: ["óceán", "sivatag", "folyó", "jégmező"], correctIndex: 1, subject: "nature" },
-  { prompt: "Mi Magyarország fővárosa?", options: ["Debrecen", "Szeged", "Pécs", "Budapest"], correctIndex: 3, subject: "nature" },
-  { prompt: "Milyen hosszú az év?", options: ["300 nap", "365 nap", "400 nap", "500 nap"], correctIndex: 1, subject: "nature" },
+  { prompt: "Mi a természetben élő szivacs?", options: ["növény", "kőzet", "vízi állat", "gáz"], correctIndex: 2, subject: "nature", explanation: "A szivacs egyszerű felépítésű, vízben élő állat; testén átáramoltatja és megszűri a vizet." },
+  { prompt: "Mi a különbség a gomba és a növény között?", options: ["A gomba nem fotoszintetizál", "A gomba mindig piros", "A gomba nem él", "Nincs különbség"], correctIndex: 0, subject: "nature", explanation: "A gombák nem fotoszintetizálnak, ezért nem maguk készítik a tápanyagukat fény segítségével." },
+  { prompt: "Melyik az ember leghosszabb csontja?", options: ["ujj", "combcsont", "fül", "orr"], correctIndex: 1, subject: "nature", explanation: "A combcsont a combban található hosszú csont, amely a csípő és a térd között helyezkedik el." },
+  { prompt: "Melyik szervvel lélegzünk?", options: ["máj", "tüdő", "gyomor", "vese"], correctIndex: 1, subject: "nature", explanation: "A tüdő a légzés szerve: itt jut az oxigén a vérbe, és innen távozik a szén-dioxid." },
+  { prompt: "Melyik szervvel pumpál vért a tested?", options: ["agy", "tüdő", "szív", "máj"], correctIndex: 2, subject: "nature", explanation: "A szív izmos szerv, amely összehúzódásaival folyamatosan keringeti a vért a testben." },
+  { prompt: "Milyen színű a vér a testedben?", options: ["kék", "piros", "zöld", "fekete"], correctIndex: 1, subject: "nature", explanation: "A vér vörös a hemoglobin nevű festékanyag miatt; oxigénszegényen sötétebb vörösnek látszik." },
+  { prompt: "Hány foga van egy felnőtt embernek (bölcsességfog nélkül)?", options: ["20", "28", "32", "40"], correctIndex: 1, subject: "nature", explanation: "Bölcsességfogak nélkül egy felnőttnek általában 28 foga van: felül 14, alul 14." },
+  { prompt: "Mit termel a növény nappal?", options: ["szén-dioxidot", "oxigént", "füstöt", "vizet"], correctIndex: 1, subject: "nature", explanation: "Nappal a növények fotoszintézissel oxigént bocsátanak ki, miközben fény segítségével tápanyagot készítenek." },
+  { prompt: "Hol van a szív a testedben?", options: ["lábban", "fejben", "a mellkasban, kissé balra", "a has jobb oldalán"], correctIndex: 2, subject: "nature", explanation: "A szív a mellkasban, a két tüdő között található, és kissé a test bal oldala felé helyezkedik el." },
+  { prompt: "Melyik a legnagyobb óceán?", options: ["Atlanti", "Indiai", "Csendes (Pacific)", "Jégtenger"], correctIndex: 2, subject: "nature", explanation: "A Csendes-óceán a Föld legnagyobb és legmélyebb óceánja, Ázsia és Amerika között terül el." },
+  { prompt: "Milyen bolygó a Mars?", options: ["gázóriás", "kőzetbolygó", "hold", "csillag"], correctIndex: 1, subject: "nature", explanation: "A Mars kőzetbolygó: szilárd felszíne van, nem főként gázokból áll, mint a gázóriások." },
+  { prompt: "Melyik a leggyorsabb szárazföldi állat?", options: ["csiga", "teknős", "gepárd", "ló"], correctIndex: 2, subject: "nature", explanation: "A gepárd a leggyorsabb szárazföldi állat, rövid távon akár 100 km/h fölötti sebességet is elérhet." },
+  { prompt: "Melyik állat szúr?", options: ["teve", "szarvas", "szúnyog", "nyuszi"], correctIndex: 2, subject: "nature", explanation: "A szúnyog szájszervével szúrja át a bőrt, hogy vért szívjon; a nőstényeknek erre petéik fejlődéséhez van szükségük." },
+  { prompt: "Hány kontinens van a hétkontinenses felosztásban?", options: ["5", "6", "7", "8"], correctIndex: 2, subject: "nature", explanation: "Ebben a felosztásban 7 kontinens van: Európa, Ázsia, Afrika, Észak-Amerika, Dél-Amerika, Ausztrália és Antarktisz." },
+  { prompt: "Mi a Szahara?", options: ["óceán", "sivatag", "folyó", "jégmező"], correctIndex: 1, subject: "nature", explanation: "A Szahara Észak-Afrikában fekvő, rendkívül nagy forró sivatag; nem óceán vagy folyó." },
+  { prompt: "Mi Magyarország fővárosa?", options: ["Debrecen", "Szeged", "Pécs", "Budapest"], correctIndex: 3, subject: "nature", explanation: "Budapest Magyarország fővárosa, amelyet a Duna két partján fekvő városrészek alkotnak." },
+  { prompt: "Hány napos a közönséges, nem szökőév?", options: ["300 nap", "365 nap", "400 nap", "500 nap"], correctIndex: 1, subject: "nature", explanation: "Egy közönséges év 365 napos; szökőévben 366 nap van, hogy a naptár kövesse a Föld keringését." },
   // ============================================================
   // === TOVÁBBI ANGOL MATEMATIKA (bővítés v2) =====================
   // ============================================================
-  { prompt: "'Five plus six equals?' (5 + 6 = ?)", options: ["ten", "eleven", "twelve", "thirteen"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Eight minus three equals?' (8 - 3 = ?)", options: ["four", "five", "six", "seven"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Nine times two equals?' (9 × 2 = ?)", options: ["sixteen", "eighteen", "twenty", "twenty-two"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Zero' magyarul:", options: ["egy", "null", "tíz", "száz"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Hundred' magyarul:", options: ["tíz", "száz", "ezer", "millió"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Thousand' magyarul:", options: ["száz", "ezer", "millió", "milliárd"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Line' magyarul mértanban:", options: ["pont", "egyenes", "görbe", "sík"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Point' magyarul mértanban:", options: ["pont", "egyenes", "kör", "sík"], correctIndex: 0, subject: "english-math" },
-  { prompt: "'Angle' magyarul:", options: ["szög", "oldal", "csúcs", "lap"], correctIndex: 0, subject: "english-math" },
-  { prompt: "'Cube' magyarul mértanban:", options: ["gömb", "kocka", "kúp", "henger"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Sphere' magyarul:", options: ["kocka", "gömb", "henger", "kúp"], correctIndex: 1, subject: "english-math" },
-  { prompt: "'Cylinder' magyarul:", options: ["kocka", "gömb", "henger", "kúp"], correctIndex: 2, subject: "english-math" },
+  { prompt: "'Five plus six equals?' (5 + 6 = ?)", options: ["ten", "eleven", "twelve", "thirteen"], correctIndex: 1, subject: "english-math", explanation: "Összeadáskor a mennyiségeket egyesítjük: 5 + 6 = 11. English: Five plus six equals eleven. – Öt meg hat egyenlő tizenegy." },
+  { prompt: "'Eight minus three equals?' (8 - 3 = ?)", options: ["four", "five", "six", "seven"], correctIndex: 1, subject: "english-math", explanation: "Kivonáskor elvesszük a második számot az elsőből: 8 − 3 = 5. English: Eight minus three equals five. – Nyolc mínusz három egyenlő öt." },
+  { prompt: "'Nine times two equals?' (9 × 2 = ?)", options: ["sixteen", "eighteen", "twenty", "twenty-two"], correctIndex: 1, subject: "english-math", explanation: "A szorzás ismételt összeadás: 9 × 2 = 9 + 9 = 18. English: Nine times two equals eighteen. – Kilencszer kettő tizennyolc." },
+  { prompt: "'Zero' magyarul:", options: ["egy", "nulla", "tíz", "száz"], correctIndex: 1, subject: "english-math", explanation: "A zero magyarul nulla, számjeggyel 0. Példa: Zero apples. = Nulla alma, vagyis egy alma sincs." },
+  { prompt: "'Hundred' magyarul:", options: ["tíz", "száz", "ezer", "millió"], correctIndex: 1, subject: "english-math", explanation: "A hundred magyarul száz, vagyis 100. English: One hundred students are here. – Száz diák van itt." },
+  { prompt: "'Thousand' magyarul:", options: ["száz", "ezer", "millió", "milliárd"], correctIndex: 1, subject: "english-math", explanation: "A thousand magyarul ezer, vagyis 1000. English: A thousand birds flew away. – Ezer madár elrepült." },
+  { prompt: "'Line' magyarul mértanban:", options: ["pont", "egyenes", "görbe", "sík"], correctIndex: 1, subject: "english-math", explanation: "Mértanban a line magyarul egyenes: olyan vonal, amely mindkét irányban végtelen. English: Draw a line. – Rajzolj egy egyenest." },
+  { prompt: "'Point' magyarul mértanban:", options: ["pont", "egyenes", "kör", "sík"], correctIndex: 0, subject: "english-math", explanation: "Mértanban a point magyarul pont, amelynek nincs hossza, szélessége vagy vastagsága. English: Mark a point. – Jelölj meg egy pontot." },
+  { prompt: "'Angle' magyarul:", options: ["szög", "oldal", "csúcs", "lap"], correctIndex: 0, subject: "english-math", explanation: "Az angle magyarul szög. Két közös kezdőpontú félegyenes a síkot két szögtartományra bontja. Példa: a right angle = derékszög." },
+  { prompt: "'Cube' magyarul mértanban:", options: ["gömb", "kocka", "kúp", "henger"], correctIndex: 1, subject: "english-math", explanation: "A cube mértani testként kocka. Példa: „The cube has six faces.” = „A kockának hat lapja van.”" },
+  { prompt: "'Sphere' magyarul:", options: ["kocka", "gömb", "henger", "kúp"], correctIndex: 1, subject: "english-math", explanation: "A sphere magyarul gömb, amelynek minden felszíni pontja azonos távol van a középponttól. „The ball is a sphere.” = „A labda gömb.”" },
+  { prompt: "'Cylinder' magyarul:", options: ["kocka", "gömb", "henger", "kúp"], correctIndex: 2, subject: "english-math", explanation: "A cylinder henger: két egybevágó körlapja és ívelt palástja van. „The can is a cylinder.” = „A doboz henger.”" },
 ];
 
 const XP_BY_TILE: Record<number, number> = {
@@ -1121,6 +1122,8 @@ export default function BlockCraftQuiz() {
   // mindig friss égszín / fény paramétereket; setState helyett ref, hogy a re-effect
   // ne ölje meg a renderert minden szintátmenetnél.
   const activeLevelRef = useRef<LevelConfig>(LEVELS[0]!);
+  const adaptiveRef = useRef(createAdaptiveSession(4));
+  const answerLockedRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("menu");
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -1288,7 +1291,7 @@ export default function BlockCraftQuiz() {
   // Automatikus rebuilder: ha a bank változik (pl. remote data beérkezik), újrakeverjük.
   useEffect(() => {
     rebuildSubjectPools();
-  }, [rebuildSubjectPools]);
+  }, [rebuildSubjectPools, userGrade]);
 
   useEffect(() => {
     if (phase !== "play") return;
@@ -1314,6 +1317,7 @@ export default function BlockCraftQuiz() {
    *  4. Ha a választott kérdés szerepel a RECENT_WINDOW-ban, átugorjuk
    */
   const pickQuiz = useCallback((): Quiz => {
+    answerLockedRef.current = false;
     const pools = subjectPoolsRef.current;
     if (pools.size === 0) {
       rebuildSubjectPools();
@@ -1390,6 +1394,7 @@ export default function BlockCraftQuiz() {
     setXpFloat(null);
     setAchievement(null);
     if (options.resetSession) {
+      adaptiveRef.current.reset(userGrade ?? 4);
       setSessionXp(0);
       setStreak(0);
       setRunSeconds(0);
@@ -1404,12 +1409,13 @@ export default function BlockCraftQuiz() {
     setLevelRare(0);
     setLevelDiamonds(0);
     setLevelStartXp(options.carryXpFrom);
-    setTimeLeft(cfg.timeLimit);
+    setTimeLeft(adaptiveTimeBudget(cfg.timeLimit, adaptiveRef.current.band));
+    answerLockedRef.current = false;
     setPhase("play");
     lastTRef.current = null;
     // Minden pályán friss kérdés-sorrend.
     rebuildSubjectPools();
-  }, [rebuildSubjectPools]);
+  }, [rebuildSubjectPools, userGrade]);
 
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
@@ -1878,11 +1884,16 @@ export default function BlockCraftQuiz() {
     setRevealCorrectIdx(null);
     setWrongIdx(null);
     setQuiz(pickQuiz());
+    answerLockedRef.current = false;
   }, [pickQuiz]);
 
   const onAnswer = (idx: number) => {
-    if (!quiz) return;
-    if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
+    if (!quiz || phase !== "quiz" || answerLockedRef.current || revealCorrectIdx !== null) return;
+    answerLockedRef.current = true;
+    const previousBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
+    adaptiveRef.current.answer(idx === quiz.correctIndex);
+    const nextBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
+    setTimeLeft(t => Math.max(1, Math.min(nextBudget, t + nextBudget - previousBudget)));
     if (idx !== quiz.correctIndex) {
       sfxError();
       setWrongShake(true);
@@ -2280,7 +2291,7 @@ export default function BlockCraftQuiz() {
           */}
           {(() => {
             const cfg = activeLevelRef.current;
-            const timePct = (timeLeft / cfg.timeLimit) * 100;
+            const timePct = Math.min(100, (timeLeft / adaptiveTimeBudget(cfg.timeLimit, adaptiveRef.current.band)) * 100);
             const blocksPct = Math.min(100, (levelBlocks / cfg.goalBlocks) * 100);
             const rarePct = cfg.goalRareBlocks > 0 ? Math.min(100, (levelRare / cfg.goalRareBlocks) * 100) : 100;
             const showPlay = phase === "play" || phase === "quiz";

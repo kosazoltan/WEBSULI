@@ -4,6 +4,32 @@ import test from "node:test";
 import { checkGrounding, groundingReport } from "../server/studio/grounding";
 import type { MapConcept } from "../server/studio/coverage";
 
+test("a pi matematikai jel is mérhető, de idegen szöveg nem igazolja", () => {
+  const concept = { localId: "pi", term: "π" } as MapConcept;
+  assert.equal(checkGrounding("A π irracionális szám, közelítő értéke 3,14.", concept), true);
+  assert.equal(checkGrounding("A háromszög területe az alap és magasság szorzatának fele.", concept), false);
+  assert.equal(checkGrounding("π", concept), false);
+});
+
+test("folyamatábra látható lépése igazolhat fogalmat, rejtett adat nem", () => {
+  const concepts = [{ localId: "C", term: "Kör kerülete" } as MapConcept];
+  const block = { kind: "animate", animKind: "process", coversConceptIds: ["C"], params: { steps: ["A kör kerülete két sugár és π szorzata."] } };
+  assert.equal(groundingReport([block], concepts).ok, true);
+  assert.equal(groundingReport([{ ...block, params: { hidden: block.params.steps } }], concepts).ok, false);
+});
+
+test("try látható szövege mérhető, rejtett megoldása és címkéje nem bizonyíték", () => {
+  const c = [{ localId: "area", term: "Háromszög területe", examWeight: "core" }] as MapConcept[];
+  for (const [tryKind, spec] of [
+    ["fillBlank", { text: "A háromszög területe alap szor magasság osztva ___.", answers: ["2"] }],
+    ["dragSort", { items: ["A háromszög területe", "Alap szor magasság osztva kettővel"] }],
+    ["match", { pairs: [{ left: "A háromszög területe", right: "Alap szor magasság fele" }] }],
+  ]) {
+    assert.equal(groundingReport([{kind:"try",tryKind,spec,coversConceptIds:["area"]}],c).ok,true);
+  }
+  assert.equal(groundingReport([{kind:"try",tryKind:"fillBlank",spec:{text:"Írd be a hiányzó szót: ___",answers:["Háromszög területe"],concept:"Háromszög területe"},coversConceptIds:["area"]}],c).ok,false);
+});
+
 /**
  * #196 — a szerző MEGKERÜLTE a forrást, és hamis címkékkel átcsúszott a kapun.
  *

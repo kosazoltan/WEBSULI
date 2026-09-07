@@ -10,6 +10,10 @@ description: >
 
 # Tananyag Javító Skill v2.0 – Szinkronizálva v7.1-gyel
 
+## WEBSULI Studio lecke javítása
+
+Kövesd a [forrásalapú jobbítási folyamatot](../../../docs/lesson-improvement.md). `contentType=lesson` esetén a strukturált `lessons.json` a tananyag, a HTML csak helyőrző. Ilyenkor az alábbi négylapos HTML-ellenőrzés nem alkalmazandó. Őrizd meg a forrásból automatikusan meghatározott évfolyamot és a leckeazonosítókat; külön jelöltön végezd el a tartalmi, séma-, fogalom- és böngészős ellenőrzést. Csak mentés és párhuzamos módosításvizsgálat után alkalmazz tranzakciós javítást a leckére és kvízexportjára, majd olvasd vissza és az éles URL-en is ellenőrizd. Részletek és a háromszöges referencia a hivatkozott folyamatban.
+
 HTML tananyag fájlok validálása és javítása. Csonkolt, befejezetlen vagy hibás fájlok automatikus kiegészítése a **Tananyag Készítő v7.1** specifikáció szerint.
 
 ---

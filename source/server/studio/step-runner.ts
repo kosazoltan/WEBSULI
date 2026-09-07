@@ -66,7 +66,7 @@ import type { ZodError } from "zod";
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-1";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-source-review-2";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -169,11 +169,16 @@ export type StepOutcome =
 type ResolvedDeps = Required<PipelineDeps>;
 
 async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
+  const lookup = deps.promptLookup ?? ((name: string, fallback: string) => studioPromptStore.get(name, fallback));
   return {
     store: deps.store ?? (await createDrizzlePipelineStore()),
     providerFactory: deps.providerFactory ?? defaultProviderFactory,
     keyConfigured: deps.keyConfigured ?? (() => isOpenRouterConfigured()),
-    promptLookup: deps.promptLookup ?? ((name, fallback) => studioPromptStore.get(name, fallback)),
+    promptLookup: async (name, fallback) => {
+      const configured = await lookup(name, fallback);
+      if (configured === fallback) return fallback;
+      return configured + "\n\nAktuális kötelező szerződés és forrásadatok (eltérésnél ez az irányadó):\n" + fallback;
+    },
   };
 }
 
@@ -313,11 +318,18 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       }
       // Round N Author fixes what the round N-1 Lektor blocked — never older rounds' stale union.
       const blockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
-      input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts };
+      input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts,
+        ...(job.output?.gate ? { gateFeedback: job.output.gate, previousLesson: job.output.lesson } : {}),
+      };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
         buildAuthorPrompt(outline.sections, promptMapOf(map), blockers),
       );
+      if (job.output?.gate) {
+        system += "\nA kapu javítandó megállapításai és az előző lecke:\n" + JSON.stringify({
+          gateFeedback: job.output.gate, previousLesson: job.output.lesson,
+        });
+      }
       break;
     }
     case "animator": {
@@ -345,7 +357,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       return { ok: true, next: { step: job.step, round: job.round }, cached: true };
   }
 
-  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, input, job.round);
+  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, { input, system }, job.round);
 
   // Idempotency: this exact input was already paid for and its output is stored.
   if (job.status === "ok" && job.inputHash === hash && job.output !== null) {
@@ -452,10 +464,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         );
       }
 
-      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+      // Scope was inferred from the source before authoring; generated metadata cannot override it.
+      const lesson: Lesson = { ...parsed.data, mapId: job.mapId, subject: map.meta.subject, classroom: map.meta.classroom };
+      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, lesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: parsed.data }, { lessonId }),
+        successPatch({ ...job.output, lesson }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
@@ -568,7 +582,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
 
   const gate = checkCoverageGate(parsed.data, map.concepts);
-  const gateOutput = { ok: gate.ok, reasons: gate.reasons, missingCore: gate.missingCore, unknownIds: gate.unknownIds };
+  const gateOutput = { ok: gate.ok, reasons: gate.reasons, missingCore: gate.missingCore, unknownIds: gate.unknownIds, ungrounded: gate.ungrounded };
 
   let qualityNotes = job.output?.qualityNotes;
 
@@ -848,6 +862,8 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           id: kmConcepts.id,
           localId: kmConcepts.localId,
           term: kmConcepts.term,
+          definition: kmConcepts.definition,
+          quote: kmConcepts.quote,
           examWeight: kmConcepts.examWeight,
         })
         .from(kmConcepts)
@@ -859,6 +875,8 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           id: c.id,
           localId: c.localId,
           term: c.term,
+          definition: c.definition,
+          quote: c.quote,
           examWeight: c.examWeight as ExamWeight,
         })),
       };
@@ -1017,6 +1035,8 @@ export async function fixConceptOnLesson(
       id: kmConcepts.id,
       localId: kmConcepts.localId,
       term: kmConcepts.term, // #196: a megalapozottság-ellenőrzéshez kell
+      definition: kmConcepts.definition,
+      quote: kmConcepts.quote,
       examWeight: kmConcepts.examWeight,
     })
     .from(kmConcepts)
@@ -1030,7 +1050,7 @@ export async function fixConceptOnLesson(
   const fallback = buildConceptFixPrompt(original, {
     subject: mapRow.subject,
     classroom: mapRow.classroom,
-    concepts: conceptRows.map((c) => ({ id: c.id, localId: c.localId, examWeight: c.examWeight as ExamWeight })),
+    concepts: conceptRows.map((c) => ({ ...c, examWeight: c.examWeight as ExamWeight })),
   }, conceptId);
   const system = await promptLookup(STUDIO_PROMPT_NAMES.authorFix, fallback);
 

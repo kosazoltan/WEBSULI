@@ -31,6 +31,9 @@ export type MapConcept = {
    * fogalomra a megalapozottság nem mérhető, és NEM buktatunk vakon.
    */
   term?: string;
+  /** Curated teaching evidence, carried through to every model step. */
+  definition?: string;
+  quote?: string;
 };
 
 export type CoverageCount = { total: number; covered: number; ratio: number };

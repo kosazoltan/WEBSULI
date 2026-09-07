@@ -1,3 +1,4 @@
+import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -568,6 +569,7 @@ export default function TsunamiEscapeEnglish() {
   const [lastQuizXp, setLastQuizXp] = useState(25);
   const [correctQuizzesInRun, setCorrectQuizzesInRun] = useState(0);
   const [safeZoneX, setSafeZoneX] = useState(50);
+  const adaptiveRef = useRef(createAdaptiveSession(4));
   const [quizTimeLeft, setQuizTimeLeft] = useState(QUIZ_TIMEOUT_SEC.normal);
   const [stormFlash, setStormFlash] = useState(false);
   const [driftDir, setDriftDir] = useState(0);
@@ -707,6 +709,7 @@ export default function TsunamiEscapeEnglish() {
   }, []);
 
   const startGame = useCallback(() => {
+    adaptiveRef.current.reset(userGrade ?? 4);
     paramsRef.current = PRESETS[difficulty];
     runDifficultyRef.current = difficulty;
     runSubjectRef.current = subject;
@@ -739,7 +742,7 @@ export default function TsunamiEscapeEnglish() {
     lastRef.current = null;
     setQuiz(null);
     setPhase("play");
-  }, [difficulty, subject]);
+  }, [difficulty, subject, userGrade]);
 
   // R = quick-restart az "over" / "won" / "menu" képernyőn.
   useEffect(() => {
@@ -914,7 +917,7 @@ export default function TsunamiEscapeEnglish() {
       if (quizTimerRef.current >= quizEveryDyn) {
         quizTimerRef.current = 0;
         setQuiz(pickQuiz());
-        setQuizTimeLeft(QUIZ_TIMEOUT_SEC[runDifficultyRef.current]);
+        setQuizTimeLeft(adaptiveTimeBudget(QUIZ_TIMEOUT_SEC[runDifficultyRef.current], adaptiveRef.current.band));
         setPhase("quiz");
         return;
       }
@@ -967,6 +970,7 @@ export default function TsunamiEscapeEnglish() {
     // (dupla XP/streak/correctCount, akár korai "won" is lehetett).
     if (answerLockedRef.current) return;
     answerLockedRef.current = true;
+    adaptiveRef.current.answer(index === quiz.correctIndex);
     if (index !== quiz.correctIndex) {
       wrongAnswersRef.current += 1;
       sfxError();
@@ -987,7 +991,7 @@ export default function TsunamiEscapeEnglish() {
             // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
             explanation: quiz.explanation ?? undefined,
           },
-          chosenIndex: index,
+          chosenIndex: index < 0 ? null : index,
           attempt: 0,
           ageBand: "kid",
         }),
@@ -1038,30 +1042,21 @@ export default function TsunamiEscapeEnglish() {
     answerLockedRef.current = false;
   };
 
+  const answerRef = useRef(onAnswer);
+  answerRef.current = onAnswer;
+
   useEffect(() => {
-    if (phase !== "quiz") return;
+    if (phase !== "quiz" || explainCard) return;
     const id = setInterval(() => {
-      setQuizTimeLeft((prev) => {
-        if (prev <= 1) {
-          wrongAnswersRef.current += 1; // a timeout is hibának számít a statokban
-          answerLockedRef.current = false;
-          setWrongShake(true);
-          timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 220));
-          setStreak(0);
-          waterRef.current = Math.min(
-            88,
-            waterRef.current + QUIZ_WRONG_WATER_PENALTY[runDifficultyRef.current],
-          );
-          setWater(waterRef.current);
-          setQuiz(null);
-          setPhase("play");
-          return 0;
-        }
-        return prev - 1;
-      });
+      if (answerLockedRef.current) return;
+      setQuizTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, explainCard]);
+
+  useEffect(() => {
+    if (phase === "quiz" && !explainCard && quizTimeLeft <= 0) answerRef.current(-1);
+  }, [phase, explainCard, quizTimeLeft]);
 
   const surfacePct = useMemo(() => Math.min(100, water), [water]);
   const selectedSubjectMeta = TSUNAMI_SUBJECT_META[subject];

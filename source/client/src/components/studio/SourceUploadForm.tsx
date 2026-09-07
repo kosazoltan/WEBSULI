@@ -9,9 +9,7 @@ import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  buildExtractPayload,
   downscaleTargetOf,
-  extractSubmitDisabledReason,
   oneStepPhaseRows,
   oneStepSubmitDisabledReason,
   shouldDownscale,
@@ -86,12 +84,6 @@ export function SourceUploadForm({
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("");
-  // LS-8 (#191): szövegként tároljuk, hogy ÜRESEN hagyható legyen. A kurátori
-  // úton a 4 marad az alapértelmezés (ott az osztály kötelező), az egylépéses
-  // úton üresen a gép ismeri fel a szkennelt szövegből.
-  const [classroomInput, setClassroomInput] = useState(headerless ? "" : "4");
-  const classroom = classroomInput.trim() === "" ? Number.NaN : Number(classroomInput);
   const [files, setFiles] = useState<SourceFile[]>([]);
 
   const addFiles = async (list: FileList | null) => {
@@ -124,7 +116,7 @@ export function SourceUploadForm({
       apiRequest<{ mapId: string; cached: boolean }>(
         "POST",
         "/api/studio/maps/extract",
-        buildExtractPayload({ title, subject, classroom, files }),
+        { ...(title.trim() !== "" ? { title: title.trim() } : {}), files },
       ),
     onSuccess: (r) => {
       toast({
@@ -142,8 +134,7 @@ export function SourceUploadForm({
       toast({ title: "A kivonatolás nem sikerült", description: e.message, variant: "destructive" }),
   });
 
-  // LS-6 (#164): feltöltés → tudástár → lecke egyetlen hívásban. A scope
-  // elhagyható — üres tantárgynál a szerver az olcsó modellel felismeri.
+  // Feltöltés → tudástár → lecke. A tantárgyat és évfolyamot a forrás határozza meg.
   // LS-6b (#165): a szerver 202 + runId-t ad azonnal; a futást a fázispanel
   // pollozza, hogy a tanár LÁSSA, melyik gyártási lépés fut éppen.
   const [runId, setRunId] = useState<string | null>(null);
@@ -152,11 +143,8 @@ export function SourceUploadForm({
       apiRequest<{ runId: string }>(
         "POST",
         "/api/studio/lessons/one-step",
-        // LS-8 (#191): üres/érvénytelen osztály nem mehet a payloadba (NaN).
-        // Ha nincs használható scope, a szerver maga ismeri fel a szövegből.
-        subject.trim() === "" || !Number.isFinite(classroom)
-          ? { ...(title.trim() !== "" ? { title: title.trim() } : {}), files }
-          : buildExtractPayload({ title, subject, classroom, files }),
+        // The source determines subject and grade; the author supplies only files/title.
+        { ...(title.trim() !== "" ? { title: title.trim() } : {}), files },
       ),
     onSuccess: (r) => {
       setRunId(r.runId);
@@ -197,8 +185,8 @@ export function SourceUploadForm({
     prevFinished.current = runFinished;
   }, [runFinished, run.data?.mapId, queryClient, onCreated]);
 
-  const blocked = extractSubmitDisabledReason(subject, classroom, files.length);
-  const oneStepBlocked = oneStepSubmitDisabledReason(subject, classroom, files.length);
+  const blocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
+  const oneStepBlocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
   const runActive = runId !== null && !runFinished;
   const busy = extract.isPending || oneStep.isPending || runActive;
 
@@ -219,11 +207,11 @@ export function SourceUploadForm({
       <CardContent className="space-y-3">
         {headerless && (
           <p className="text-xs text-muted-foreground" data-testid="one-step-hint">
-            A cím, tantárgy és osztály kitöltése <strong>nem kötelező</strong> — ha üresen
-            hagyod, a gép a feltöltött oldalak szövegéből ismeri fel őket.
+            Csak a forrást töltsd fel. A program a tartalomból felismeri a tantárgyat és az
+            osztályt; címet külön is megadhatsz.
           </p>
         )}
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2">
           <Input
             placeholder="Cím (nem kötelező)"
             value={title}
@@ -231,29 +219,8 @@ export function SourceUploadForm({
             className="min-h-11"
             data-testid="extract-title"
           />
-          <Input
-            placeholder={headerless ? "Tantárgy (nem kötelező)" : "Tantárgy (pl. biológia)"}
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            className="min-h-11"
-            data-testid="extract-subject"
-          />
-          <Input
-            type="number"
-            min={0}
-            max={12}
-            // LS-8 (#191): egylépéses módban az osztály is elhagyható — a `4`-es
-            // előtöltés ellentmondott a „nem kötelező" feliratnak, és azt
-            // sugallta, hogy a felhasználónak döntenie kell. Üresen a gép a
-            // szkennelt szövegből ismeri fel (inferScope).
-            placeholder={headerless ? "Osztály (nem kötelező)" : undefined}
-            value={classroomInput}
-            onChange={(e) => setClassroomInput(e.target.value)}
-            className="min-h-11"
-            aria-label="Osztály"
-            data-testid="extract-classroom"
-          />
         </div>
+        {!headerless && <p className="text-sm text-muted-foreground">A tantárgyat és az osztályt a program a feltöltött tananyagból határozza meg.</p>}
 
         <input
           ref={fileInput}

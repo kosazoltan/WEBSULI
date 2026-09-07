@@ -13,6 +13,7 @@ import {
   type PipelineStore,
 } from "../server/studio/step-runner";
 import { computeStepHash } from "../server/studio/pipeline";
+import { buildPedagoguePrompt } from "../server/studio/step-io";
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
@@ -234,6 +235,53 @@ function pedagogueHash(): string {
 
 const CANNED_PEDAGOGUE = JSON.stringify(GOOD_OUTLINE);
 const CANNED_AUTHOR = JSON.stringify(GOOD_LESSON);
+
+test("a tárolt prompt mellett is eljut a teljes forrás a tényleges modellkérésbe", async () => {
+  for (const step of ['pedagogue','author','animator','lektor'] as const) {
+    const deps=makeDeps(step==='pedagogue'?CANNED_PEDAGOGUE:step==='lektor'?JSON.stringify({notes:[]}):CANNED_AUTHOR);
+    deps.store.maps.get('m1')!.concepts=[{id:'internal-uuid-should-not-leak',localId:'c1',examWeight:'core',term:'A sejt',definition:'Az élőlények szerkezeti alapegysége.',quote:'A sejt az élőlények alapegysége.'},MAP_CONCEPTS[1]];
+    deps.store.seed({id:'evidence',mapId:'m1',step,output:{approvedOutline:GOOD_OUTLINE,lesson:GOOD_LESSON}});
+    await runPipelineStep('evidence',{...deps,promptLookup:async()=> 'Egyéni stílus: tömör magyar szöveg.'});
+    assert.equal(deps.calls.length,1);
+    const system=deps.calls[0].system;
+    assert.ok(system.includes('Egyéni stílus'));
+    assert.ok(system.includes('Az élőlények szerkezeti alapegysége.'));
+    assert.ok(system.includes('A sejt az élőlények alapegysége.'));
+    assert.ok(system.includes('"term": "A sejt"'));
+    assert.ok(!system.includes('internal-uuid-should-not-leak'));
+  }
+});
+
+test("megváltozott tárolt prompt érvényteleníti a modellválasz gyorsítótárát", async () => {
+  const deps=makeDeps(CANNED_PEDAGOGUE);
+  deps.store.seed({id:'prompt-cache',mapId:'m1',step:'pedagogue',output:null});
+  let style='Stílus A';const options={...deps,promptLookup:async()=>style};
+  await runPipelineStep('prompt-cache',options);
+  const cached=await runPipelineStep('prompt-cache',options);
+  assert.ok(cached.ok);assert.equal(cached.cached,true);
+  style='Stílus B';
+  await runPipelineStep('prompt-cache',options);
+  assert.equal(deps.calls.length,2);
+  assert.ok(deps.calls[1].system.includes('Stílus B'));
+});
+
+test("a szerző metaadata nem írhatja felül a forrásból felismert osztályt és térképet", async () => {
+  const deps=makeDeps(JSON.stringify({...GOOD_LESSON,classroom:4,subject:"téves",mapId:"kitalált"}));
+  deps.store.seed({id:"scope",mapId:"m1",step:"author",output:{approvedOutline:GOOD_OUTLINE}});
+  assert.equal((await runPipelineStep("scope",deps)).ok,true);
+  const lesson=deps.store.jobs.get("scope")?.output?.lesson as typeof GOOD_LESSON;
+  assert.equal(lesson.classroom,7);assert.equal(lesson.subject,"biológia");assert.equal(lesson.mapId,"m1");
+});
+
+test("a kapu konkrét hibái és az előző lecke visszajutnak a szerző javító köréhez", async () => {
+  const deps = makeDeps(CANNED_AUTHOR);
+  const gate = {ok:false,reasons:["A fogalom magyarázata hiányzik"],ungrounded:[{blockIndex:0,conceptId:"c1"}]};
+  deps.store.seed({id:"retry",mapId:"m1",step:"author",round:1,output:{approvedOutline:GOOD_OUTLINE,lesson:GOOD_LESSON,gate}});
+  assert.equal((await runPipelineStep("retry",deps)).ok,true);
+  const input=JSON.parse(deps.calls[0].system.split('A kapu javítandó megállapításai és az előző lecke:\n')[1]);
+  assert.deepEqual(input.gateFeedback,gate);
+  assert.deepEqual(input.previousLesson,GOOD_LESSON);
+});
 const CANNED_LEKTOR_BENIGN = JSON.stringify({
   notes: [{ kind: "source_conflict", subkind: "book_probably_wrong", message: "A könyv téved." }],
 });
@@ -261,7 +309,10 @@ test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async
 
   const job = await store.loadJob(jobId);
   assert.equal(job?.status, "ok");
-  assert.equal(job?.inputHash, pedagogueHash(), "a vázlat input-hash-e a lépés bemenetét rögzíti");
+  assert.equal(job?.inputHash, computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, {
+    input: { map: MAP_META, concepts: MAP_CONCEPTS },
+    system: buildPedagoguePrompt({title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom, concepts: MAP_CONCEPTS}),
+  }, 0), "a vázlat hash-e a bemenetet és az effektív promptot is rögzíti");
   assert.deepEqual(job?.output?.outline, GOOD_OUTLINE);
 
   // The system prompt is fetched through the prompt store under the versioned name

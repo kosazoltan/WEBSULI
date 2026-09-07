@@ -5,6 +5,8 @@ szabálykönyve ebben a repóban. Magyarul dolgozunk; a kód-azonosítók angolo
 
 ## Alapelvek
 
+- Tananyaggyártás vagy -javítás előtt olvasd el a `docs/lesson-improvement.md` folyamatot. Az évfolyamot a program a forrásból állapítja meg. A javításnál forrásellenőrzés, mentés, séma/fedettség, valódi böngészős próba és alkalmazás utáni visszaolvasás szükséges.
+
 - A felhasználó konkrét feladatából és az érintett forrásfájlokból indulj ki.
 - Kód, teszt, build és célzott ellenőrzés előnyt élvez a széles audittal szemben.
 - Tervezésnél ne állj meg, ha a feladat biztonságosan implementálható.

@@ -79,7 +79,7 @@ const HEADLINES: Record<FeedbackAgeBand, Record<AnswerOutcome, string>> = {
 function asSentence(text: string): string {
   const trimmed = text.trim();
   if (trimmed.length === 0) return trimmed;
-  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  return /[.!?][”"'»)]*$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
 function optionAt(options: string[], index: number | null): string | null {

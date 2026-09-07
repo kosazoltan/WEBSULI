@@ -18,8 +18,8 @@ import {
 import {
   buildConceptUpdate,
   parseConceptPatch,
-  parseExtractRequest,
 } from "./request";
+import { parseOneStepRequest, inferOneStepScope, callScopeModel } from "./one-step";
 import {
   LEGACY_MODELS,
   STUDIO_STEPS,
@@ -30,6 +30,7 @@ import {
   providerForModel,
   requiredKeyFor,
   resolveLegacyModel,
+  resolveStudioModel,
   studioModelMap,
 } from "../ai/models";
 
@@ -194,12 +195,16 @@ studioRouter.get("/maps/:id", async (req: Request, res: Response) => {
  * instead of paying for the vision call twice.
  */
 studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
-  const parsed = parseExtractRequest(req.body);
+  const parsed = parseOneStepRequest(req.body);
   if (!parsed.ok) {
     return res.status(400).json({ message: "Hibás kérés.", issues: parsed.issues });
   }
 
-  const { files, scope, title } = parsed.data;
+  const inferred=await inferOneStepScope(parsed.data,files=>callScopeModel(files,resolveStudioModel("ocr")));
+  if(!inferred.ok)return res.status(422).json({message:"A forrásból nem sikerült felismerni a tantárgyat és az osztályt. Próbáld újra olvashatóbb forrással."});
+  const { files } = parsed.data;
+  const scope=inferred.scope;
+  const title=parsed.data.title ?? inferred.title;
   const inputHash = computeInputHash(files, scope);
 
   const [existing] = await db
