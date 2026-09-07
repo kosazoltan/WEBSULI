@@ -4,6 +4,20 @@ import test from "node:test";
 import { checkGrounding, groundingReport } from "../server/studio/grounding";
 import type { MapConcept } from "../server/studio/coverage";
 
+test("a pi matematikai jel is mérhető, de idegen szöveg nem igazolja", () => {
+  const concept = { localId: "pi", term: "π" } as MapConcept;
+  assert.equal(checkGrounding("A π irracionális szám, közelítő értéke 3,14.", concept), true);
+  assert.equal(checkGrounding("A háromszög területe az alap és magasság szorzatának fele.", concept), false);
+  assert.equal(checkGrounding("π", concept), false);
+});
+
+test("folyamatábra látható lépése igazolhat fogalmat, rejtett adat nem", () => {
+  const concepts = [{ localId: "C", term: "Kör kerülete" } as MapConcept];
+  const block = { kind: "animate", animKind: "process", coversConceptIds: ["C"], params: { steps: ["A kör kerülete két sugár és π szorzata."] } };
+  assert.equal(groundingReport([block], concepts).ok, true);
+  assert.equal(groundingReport([{ ...block, params: { hidden: block.params.steps } }], concepts).ok, false);
+});
+
 test("try látható szövege mérhető, rejtett megoldása és címkéje nem bizonyíték", () => {
   const c = [{ localId: "area", term: "Háromszög területe", examWeight: "core" }] as MapConcept[];
   for (const [tryKind, spec] of [
