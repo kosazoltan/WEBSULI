@@ -110,3 +110,26 @@ test("WordLadderHuEn: a lapba égetett kvíz-tételeknek is van magyarázata", a
   const missing = items.filter(([whole]) => !/explanation:\s*"/.test(whole)).map((m) => m[1]);
   assert.deepEqual(missing, [], `magyarázat nélküli tételek: ${missing.join(", ")}`);
 });
+
+test("BrainRotSteal: a lapba égetett kvíz-tételeknek is van magyarázata", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const src = readFileSync(
+    fileURLToPath(new URL("../client/src/pages/BrainRotSteal.tsx", import.meta.url)),
+    "utf8",
+  );
+
+  // Soralapú keresés: a promptokban escape-elt idézőjelek is vannak
+  // (`\"Brother\" magyarul:`), amiken egy objektum-mintás regex elcsúszik —
+  // az első próbám emiatt 75 helyett 45 tételt „talált", és hamis zöldet adott.
+  const items = src
+    .split("\n")
+    .filter((line) => /\{ prompt:/.test(line) && /correctIndex:\s*\d/.test(line));
+
+  assert.ok(items.length >= 70, `csak ${items.length} tételt találtam — a minta elavult`);
+
+  const missing = items
+    .filter((line) => !/explanation:\s*"/.test(line))
+    .map((line) => line.trim().slice(0, 50));
+  assert.deepEqual(missing, [], `magyarázat nélküli tételek:\n${missing.join("\n")}`);
+});
