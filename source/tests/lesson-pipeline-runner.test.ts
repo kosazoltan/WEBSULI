@@ -234,6 +234,24 @@ function pedagogueHash(): string {
 
 const CANNED_PEDAGOGUE = JSON.stringify(GOOD_OUTLINE);
 const CANNED_AUTHOR = JSON.stringify(GOOD_LESSON);
+
+test("a szerző metaadata nem írhatja felül a forrásból felismert osztályt és térképet", async () => {
+  const deps=makeDeps(JSON.stringify({...GOOD_LESSON,classroom:4,subject:"téves",mapId:"kitalált"}));
+  deps.store.seed({id:"scope",mapId:"m1",step:"author",output:{approvedOutline:GOOD_OUTLINE}});
+  assert.equal((await runPipelineStep("scope",deps)).ok,true);
+  const lesson=deps.store.jobs.get("scope")?.output?.lesson as typeof GOOD_LESSON;
+  assert.equal(lesson.classroom,7);assert.equal(lesson.subject,"biológia");assert.equal(lesson.mapId,"m1");
+});
+
+test("a kapu konkrét hibái és az előző lecke visszajutnak a szerző javító köréhez", async () => {
+  const deps = makeDeps(CANNED_AUTHOR);
+  const gate = {ok:false,reasons:["A fogalom magyarázata hiányzik"],ungrounded:[{blockIndex:0,conceptId:"c1"}]};
+  deps.store.seed({id:"retry",mapId:"m1",step:"author",round:1,output:{approvedOutline:GOOD_OUTLINE,lesson:GOOD_LESSON,gate}});
+  assert.equal((await runPipelineStep("retry",deps)).ok,true);
+  const input=JSON.parse(deps.calls[0].system.split('A kapu javítandó megállapításai és az előző lecke:\n')[1]);
+  assert.deepEqual(input.gateFeedback,gate);
+  assert.deepEqual(input.previousLesson,GOOD_LESSON);
+});
 const CANNED_LEKTOR_BENIGN = JSON.stringify({
   notes: [{ kind: "source_conflict", subkind: "book_probably_wrong", message: "A könyv téved." }],
 });

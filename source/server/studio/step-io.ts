@@ -188,11 +188,15 @@ export function buildPedagoguePrompt(map: PromptMap): string {
  */
 export const AUTHOR_BLOCK_CATALOG = [
   "A blocks tömb elemei KIZÁRÓLAG az alábbi hat kind egyike lehetnek, pontosan ezekkel a mezőkkel:",
+  "Minden nem-recap blokk coversConceptIds tömbje LEGALÁBB EGY valódi fogalomazonosítót tartalmazzon, amelyet a látható szövege ténylegesen tanít. Üres tömb tilos.",
   '- { "kind": "explain", "text": string, "depth": "core"|"deeper"|"why", "readAloud": boolean, "coversConceptIds": string[] }',
   '- { "kind": "example", "problem": string, "steps": string[], "answer": string, "coversConceptIds": string[] }',
-  '- { "kind": "animate", "animKind": string, "params": object, "caption": string, "coversConceptIds": string[] }',
+  '- { "kind": "animate", "animKind": "numberLine"|"fraction"|"timeline"|"geometry"|"process"|"map"|"wordBuilder"|"sentenceParts", "params": object, "caption": string, "coversConceptIds": string[] }',
+  'Geometriai animációhoz animKind="geometry". Ne találj ki új animKind értéket (például triangleHeightCases).',
   '- { "kind": "check", "question": string, "options": string[2..5], "correctIndex": number, "feedbackPerOption": string[ugyanannyi mint options], "hint"?: string, "coversConceptIds": string[] }',
   '- { "kind": "try", "tryKind": "dragSort"|"fillBlank"|"match", "spec": object, "coversConceptIds": string[] }',
+  'A try.spec PONTOS alakja: fillBlank: {"text":"Mondat ___ hiánnyal", "answers":["megoldás"]}, ugyanannyi answers, mint ___; match: {"pairs":[{"left":"fogalom", "right":"jelentés"}]}; dragSort: {"items":["második","első"], "correctOrder":["első","második"]}, azonos elemekkel, eltérő sorrendben. Ne használj helyettük prompt, blanks vagy solution mezőt.',
+  'A geometry params PONTOS alakja: {"shape":"triangle"|"circle"|"square", "label":"rövid cím"}. Ez egyszerű körvonalat rajzol. A caption csak ezt ígérheti: nincs benne magasságvonal, körcikk, jelölt szög vagy mozgatás. Bonyolultabb összefüggést example/explain blokkban vezess le.',
   '- { "kind": "recap", "bullets": string[], "nextLessonId"?: string } (fogalom-hivatkozás nélkül)',
   'Más kind (pl. "text", "quiz", "video") ÉRVÉNYTELEN, a lecke elutasításra kerül.',
 ].join("\n");
@@ -246,6 +250,7 @@ export function buildAuthorPrompt(
     "  report — do NOT invent a replacement topic.",
     "- sourceOnly must be true.",
     "- Every check block needs feedbackPerOption with exactly as many entries as options.",
+    "- If gateFeedback is supplied, repair its listed blocks in previousLesson as well as lektor findings. Teach each claimed concept explicitly in visible text; do not just append hidden keywords or remove the concept's teaching.",
     "",
     AUTHOR_BLOCK_CATALOG,
     "",
@@ -338,6 +343,7 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "- Every coversConceptIds must come from the ids already used by the lesson — never invent new ones.",
     "- The title, subject, classroom, mapId and sourceOnly must stay exactly as they are.",
     "- Choose animKind from: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts; give a params object the runtime can draw and a short Hungarian caption.",
+    'Geometry params: {"shape":"triangle"|"circle"|"square", "label":"short label"}. Only an outline is drawn: do not promise heights, sector shading, marked angles or controls in the caption.',
     "",
     "Answer with JSON ONLY — the COMPLETE modified Lesson, matching the Lesson schema:",
     '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [], "sourceOnly": true }',

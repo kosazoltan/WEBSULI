@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AUTHOR_BLOCK_CATALOG, buildAuthorPrompt, buildSchemaRetryUser } from "../server/studio/step-io";
-import { BLOCK_KINDS } from "../shared/lesson-schema";
+import { ANIM_KINDS, BLOCK_KINDS } from "../shared/lesson-schema";
 
 /**
  * #167 — az author élesben érvénytelen blokk-kindeket adott (mérve:
@@ -12,6 +12,14 @@ import { BLOCK_KINDS } from "../shared/lesson-schema";
 
 const SECTIONS = [{ heading: "H", conceptIds: ["c1"], blocks: [] }] as never[];
 const MAP = { meta: { title: "T", subject: "s", classroom: 4 }, concepts: [] } as never;
+
+test("az author és javító prompt a runtime összes animációtípusát közli", () => {
+  for (const prompt of [buildAuthorPrompt(SECTIONS as never, MAP, []), buildSchemaRetryUser('Invalid animKind')]) {
+    const animate = prompt.split('\n').find(line => line.includes('"kind": "animate"')) ?? '';
+    const enumeration = animate.match(/"animKind": (.*?), "params"/)?.[1] ?? '';
+    assert.deepEqual(enumeration.split('|').map(value => JSON.parse(value)), [...ANIM_KINDS]);
+  }
+});
 
 test("az author-prompt katalógusa MIND a hat blokk-kindet felsorolja mezőkkel", () => {
   for (const kind of BLOCK_KINDS) {

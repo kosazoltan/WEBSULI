@@ -100,6 +100,19 @@ export function blockText(block: Record<string, unknown>): string {
     const v = block[key];
     if (Array.isArray(v)) parts.push(...v.filter((x): x is string => typeof x === "string"));
   }
+  // The runtime displays these fields inside try.spec; ids/hidden answers are not evidence.
+  if (block.kind === "try" && block.spec && typeof block.spec === "object") {
+    const spec = block.spec as Record<string, unknown>;
+    if (block.tryKind === "fillBlank" && typeof spec.text === "string") parts.push(spec.text);
+    if (block.tryKind === "dragSort" && Array.isArray(spec.items)) {
+      parts.push(...spec.items.filter((x): x is string => typeof x === "string"));
+    }
+    if (block.tryKind === "match" && Array.isArray(spec.pairs)) {
+      for (const pair of spec.pairs) {
+        if (pair && typeof pair.left === "string" && typeof pair.right === "string") parts.push(pair.left, pair.right);
+      }
+    }
+  }
   return parts.join(" ");
 }
 

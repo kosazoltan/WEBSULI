@@ -313,11 +313,18 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       }
       // Round N Author fixes what the round N-1 Lektor blocked — never older rounds' stale union.
       const blockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
-      input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts };
+      input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts,
+        ...(job.output?.gate ? { gateFeedback: job.output.gate, previousLesson: job.output.lesson } : {}),
+      };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
         buildAuthorPrompt(outline.sections, promptMapOf(map), blockers),
       );
+      if (job.output?.gate) {
+        system += "\nA kapu javítandó megállapításai és az előző lecke:\n" + JSON.stringify({
+          gateFeedback: job.output.gate, previousLesson: job.output.lesson,
+        });
+      }
       break;
     }
     case "animator": {
@@ -452,10 +459,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         );
       }
 
-      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+      // Scope was inferred from the source before authoring; generated metadata cannot override it.
+      const lesson: Lesson = { ...parsed.data, mapId: job.mapId, subject: map.meta.subject, classroom: map.meta.classroom };
+      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, lesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: parsed.data }, { lessonId }),
+        successPatch({ ...job.output, lesson }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
@@ -568,7 +577,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
 
   const gate = checkCoverageGate(parsed.data, map.concepts);
-  const gateOutput = { ok: gate.ok, reasons: gate.reasons, missingCore: gate.missingCore, unknownIds: gate.unknownIds };
+  const gateOutput = { ok: gate.ok, reasons: gate.reasons, missingCore: gate.missingCore, unknownIds: gate.unknownIds, ungrounded: gate.ungrounded };
 
   let qualityNotes = job.output?.qualityNotes;
 

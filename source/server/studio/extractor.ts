@@ -129,6 +129,21 @@ export type ExtractResult = {
  * Concepts that fail the verbatim check are KEPT but flagged, because the teacher
  * needs to see what the model tried to claim.
  */
+/** Page numbers have no meaning for unpaginated text/image uploads. Keep PDF validation strict. */
+export function parseExtractorConcept(raw: unknown, files: ExtractorFile[]) {
+  if (raw && typeof raw === "object" && "sourceRef" in raw) {
+    const ref = raw.sourceRef;
+    if (ref && typeof ref === "object" && "file" in ref) {
+      const file = files.find((f) => f.name === ref.file);
+      if (file && (file.kind === "text" || file.kind === "image")) {
+        const { page: _page, ...unpaginatedRef } = ref as Record<string, unknown>;
+        return conceptSchema.safeParse({ ...raw, sourceRef: unpaginatedRef });
+      }
+    }
+  }
+  return conceptSchema.safeParse(raw);
+}
+
 export async function extractKnowledgeMap(
   input: { files: ExtractorFile[]; scope: ExtractorScope },
   deps: ExtractorDeps,
@@ -143,7 +158,7 @@ export async function extractKnowledgeMap(
   const raw = await deps.runModel(input);
 
   const valid = (raw.concepts ?? [])
-    .map((c) => conceptSchema.safeParse(c))
+    .map((c) => parseExtractorConcept(c, input.files))
     .filter((r): r is { success: true; data: Concept } => r.success)
     .map((r) => r.data);
 
