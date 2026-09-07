@@ -23,6 +23,15 @@ export type RewardPolicy = {
     /** At this percentage the ladder advances. */
     perfect: number;
   };
+  /**
+   * M-4 — hány HELYES válasz kell egy Próbában, mielőtt játékidő jár.
+   *
+   * A tulajdonos mérése (2026-09-07): a küszöb korábban csak százalék volt, ezért egy
+   * egyetlen kérdésből álló szakasz 1/1 = 100 %-ot adott, és a gyerek azonnal mehetett
+   * játszani. Így végigjátsszák a leckét, nem tanulják. A szám itt van, nem a
+   * `computeCoupon` belsejében: a tulajdonos a Studióból hangolja, deploy nélkül.
+   */
+  minCorrectForCoupon: number;
   /** Seconds added for one verified correct in-game quiz answer. */
   bonusSeconds: number;
   /** How long an unspent coupon stays valid. */
@@ -40,6 +49,7 @@ export const DEFAULT_REWARD_POLICY: RewardPolicy = {
   ladder: [1, 2, 3, 4],
   lessonPerfectMax: 10,
   thresholds: { retry: 80, perfect: 100 },
+  minCorrectForCoupon: 5,
   bonusSeconds: 30,
   couponTtlHours: 24,
   freePlay: true,
@@ -56,6 +66,8 @@ export type ProbaOutcome = {
   score: number;
   /** Whether this was the lesson's last section. */
   isLessonFinal: boolean;
+  /** M-4: how many questions the child actually got right in this Próba. */
+  correctCount: number;
 };
 
 export type CouponGrant = {
@@ -102,10 +114,18 @@ export function parseRewardPolicy(value: unknown): RewardPolicy {
     return DEFAULT_REWARD_POLICY;
   }
 
+  // M-4: az élő `reward_policy` sor még nem ismeri ezt a mezőt. Hiányzó értéknél NEM
+  // esünk vissza a teljes alapértelmezésre — az elvenné a tulajdonos hangolt létráját —,
+  // csak ezt az egy mezőt pótoljuk.
+  const minCorrect = isFiniteNumber(raw.minCorrectForCoupon)
+    ? raw.minCorrectForCoupon
+    : DEFAULT_REWARD_POLICY.minCorrectForCoupon;
+
   return {
     ladder: ladder as number[],
     lessonPerfectMax: raw.lessonPerfectMax,
     thresholds: { retry: thresholds.retry, perfect: thresholds.perfect },
+    minCorrectForCoupon: minCorrect,
     bonusSeconds: raw.bonusSeconds,
     couponTtlHours: raw.couponTtlHours,
     freePlay: raw.freePlay,
@@ -129,10 +149,22 @@ export function computeCoupon(
   state: LadderState,
   outcome: ProbaOutcome,
 ): CouponGrant {
-  const { score, isLessonFinal } = outcome;
+  const { score, isLessonFinal, correctCount } = outcome;
 
   if (score < policy.thresholds.retry) {
     return { minutes: null, nextStreak: 0 };
+  }
+
+  // M-4 — a játékidő ára HELYES VÁLASZOK száma, nem puszta százalék.
+  //
+  // A sorozatot szándékosan NEM nullázzuk: a gyerek nem hibázott, csak kevés kérdés
+  // volt a szakaszban. Egy hibátlan teljesítményért visszavenni a létrafokot büntetés
+  // lenne azért, ahogy a tananyag fel van osztva — arról nem ő tehet.
+  // Hiányzó számnál ZÁRUNK, nem nyitunk: `undefined < 5` JS-ben false, tehát egy
+  // hívó, aki elfelejti átadni a darabszámot, némán kikapcsolná ezt a szabályt.
+  const correct = Number.isFinite(correctCount) ? correctCount : 0;
+  if (correct < policy.minCorrectForCoupon) {
+    return { minutes: null, nextStreak: state.streak };
   }
 
   if (score >= policy.thresholds.perfect) {

@@ -41,6 +41,7 @@ import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
+import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 
@@ -581,8 +582,27 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   const map = await store.loadMap(job.mapId);
   if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
 
-  const gate = checkCoverageGate(parsed.data, map.concepts);
-  const gateOutput = { ok: gate.ok, reasons: gate.reasons, missingCore: gate.missingCore, unknownIds: gate.unknownIds, ungrounded: gate.ungrounded };
+  const coverageGate = checkCoverageGate(parsed.data, map.concepts);
+
+  // M-2 (2026-09-07) — a DIDAKTIKAI ÍV kapuja a fedettségi kapu mellé.
+  //
+  // A fedettség azt méri, hogy a lecke a térkép MINDEN fogalmát tanítja-e; a
+  // felépítéséről semmit nem mond. Élesben mérve: egy csupa `check` blokkból álló
+  // szakasz `ok: true`-val ment át, mert minden fogalom-címke a helyén volt. A
+  // gyerek viszont felvezetés és levezetett példa nélkül kapott kvízt. A két kapu
+  // külön mér, de egy `reasons` listába ír: a szerző javító köre így egyszerre
+  // látja a fogalmi és a felépítésbeli hiányt.
+  const arc = checkLessonArc(parsed.data);
+  const reasons = [...coverageGate.reasons, ...arc.reasons];
+  const gate = { ...coverageGate, ok: coverageGate.ok && arc.ok, reasons };
+  const gateOutput = {
+    ok: gate.ok,
+    reasons: gate.reasons,
+    missingCore: gate.missingCore,
+    unknownIds: gate.unknownIds,
+    ungrounded: gate.ungrounded,
+    arc: arc.findings,
+  };
 
   let qualityNotes = job.output?.qualityNotes;
 

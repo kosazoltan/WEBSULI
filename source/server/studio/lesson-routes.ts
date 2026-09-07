@@ -171,7 +171,9 @@ lessonPublicRouter.post("/:id/proba", async (req: Request, res: Response) => {
   const grant = computeCoupon(
     policy,
     { streak },
-    { score: grade.score, isLessonFinal: grade.isLessonFinal },
+    // M-4: a helyes válaszok SZÁMA is számít, nem csak a százalék — egyetlen jó válasz
+    // nem nyit játékidőt.
+    { score: grade.score, isLessonFinal: grade.isLessonFinal, correctCount: grade.correctCount },
   );
 
   await saveConceptResults(learner, row.id, parsed.data.sectionIdx, grade);
@@ -214,6 +216,9 @@ lessonPublicRouter.post("/:id/proba", async (req: Request, res: Response) => {
     isLessonFinal: grade.isLessonFinal,
     coupon,
     alreadyRewarded,
+    // M-4: a küszöb megy a lappal, hogy a gyerek KONKRÉT számot lásson ahelyett, hogy
+    // a hibátlan Próbája után egy üres „nézd át ezeket" listát kapna.
+    minCorrectForCoupon: policy.minCorrectForCoupon,
   });
 });
 

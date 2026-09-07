@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { apiRequest } from "@/lib/queryClient";
 import type { Section } from "@shared/lesson-schema";
+import { probaMessage } from "./probaMessage";
 
 /**
  * LS-3b — the section Próba, which is where play time is earned.
@@ -27,6 +28,9 @@ export type ProbaResult = {
   weakConceptIds: string[];
   isLessonFinal: boolean;
   coupon: { id: string; minutes: number } | null;
+  /** M-4: hány helyes válasz kell játékidőhöz (a reward_policy táblából). */
+  minCorrectForCoupon?: number;
+  alreadyRewarded?: boolean;
 };
 
 type Props = {
@@ -115,25 +119,49 @@ export function SectionProba({ lessonId, sectionIdx, section, answers }: Props) 
             </Link>
           </div>
         ) : (
-          <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 space-y-2">
-            <p className="text-sm text-amber-900 dark:text-amber-200">
-              Ez még nem elég a játékidőhöz. Nézd át ezeket, aztán próbáld újra:
-            </p>
-            <ul className="text-sm list-disc list-inside">
-              {result.weakConceptIds.map((id) => (
-                <li key={id}>{id}</li>
-              ))}
-            </ul>
-            <Button
-              variant="outline"
-              className="min-h-11"
-              onClick={() => setResult(null)}
-              data-testid={`section-proba-retry-${sectionIdx}`}
-            >
-              <RefreshCcw className="w-4 h-4 mr-1" />
-              Újra
-            </Button>
-          </div>
+          /*
+           * M-4: a kupon-küszöb óta a „nem járt játékidő" nem egyet jelent. A gyerek
+           * lehet, hogy MINDENT eltalált, csak kevés kérdés volt — ilyenkor a régi
+           * „nézd át ezeket" felirat üres lista fölött állt, és olyat kért számon,
+           * ami nincs. A `probaMessage` dönti el, melyik eset áll fenn.
+           */
+          (() => {
+            const message = probaMessage({
+              correctCount: result.correctCount,
+              total: result.total,
+              minCorrectForCoupon: result.minCorrectForCoupon ?? 0,
+              hasCoupon: false,
+              alreadyRewarded: result.alreadyRewarded ?? false,
+              weakConceptIds: result.weakConceptIds,
+            });
+
+            return (
+              <div
+                className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3 space-y-2"
+                data-testid={`section-proba-message-${message.kind}`}
+              >
+                {message.kind !== "coupon" && (
+                  <p className="text-sm text-amber-900 dark:text-amber-200">{message.text}</p>
+                )}
+                {message.kind === "review" && message.weakConceptIds.length > 0 && (
+                  <ul className="text-sm list-disc list-inside">
+                    {message.weakConceptIds.map((id) => (
+                      <li key={id}>{id}</li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => setResult(null)}
+                  data-testid={`section-proba-retry-${sectionIdx}`}
+                >
+                  <RefreshCcw className="w-4 h-4 mr-1" />
+                  Újra
+                </Button>
+              </div>
+            );
+          })()
         )}
       </CardContent>
     </Card>
