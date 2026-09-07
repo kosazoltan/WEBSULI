@@ -38,6 +38,8 @@ import { useCouponSession, type CouponSession } from "@/game-engine/useCouponSes
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import HoldButton from "@/game-engine/HoldButton";
+import { targetMarker } from "@/lib/tornado/targetMarker";
+import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import {
   sfxSuccess,
   sfxError,
@@ -119,6 +121,12 @@ import {
   buildRain,
   animateRain,
   skyColorFor,
+  buildSkyDome,
+  buildStormCloud,
+  animateStormCloud,
+  skyDomeRadiusFor,
+  cameraFarFor,
+  type StormCloud,
   disposeMeshCaches,
   type TornadoMesh,
 } from "@/tornado/buildMeshes";
@@ -904,6 +912,8 @@ function PlayScreen(props: {
     windDir: 45,
     maxWind: 0,
     distanceKm: 0,
+    /** A cél iránya a jármű orrához képest — a G-9b céljelzőnek. */
+    targetRelDeg: 0,
     anchorReady: false,
     surface: "grass" as ReturnType<typeof surfaceAt>,
     timeLeft: spec.timeLimit,
@@ -987,10 +997,18 @@ function PlayScreen(props: {
     rain: THREE.Points;
     chunks: Map<string, THREE.Object3D[]>;
     lightning: THREE.PointLight;
+    skyDome: THREE.Mesh;
+    stormCloud: StormCloud;
   } | null>(null);
 
   const rafRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
+
+  // G-5: a rajzoló hurok ref-ekből olvas (nem indul újra minden renderre),
+  // ezért a beállítást ide tükrözzük.
+  const reducedMotion = useReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
 
   /* ------- deterministic-ish RNG for quiz draws ------- */
   const drawRng = useCallback(() => {
@@ -1060,7 +1078,7 @@ function PlayScreen(props: {
     const scene = new THREE.Scene();
     scene.fog = new THREE.Fog(sky.getHex(), profile.fogFar * 0.4, profile.fogFar);
 
-    const camera = new THREE.PerspectiveCamera(62, 1, 0.5, profile.fogFar + 200);
+    const camera = new THREE.PerspectiveCamera(62, 1, 0.5, cameraFarFor(profile));
 
     scene.add(new THREE.HemisphereLight("#cfe4ff", "#2b2f24", 0.9));
     const sun = new THREE.DirectionalLight("#fff4d6", 0.9);
@@ -1073,14 +1091,26 @@ function PlayScreen(props: {
     const vehicleGroup = buildVehicle(props.vehicle);
     scene.add(vehicleGroup);
 
+    // G-9: színátmenetes égbolt a sík háttérszín helyett. A `setClearColor`
+    // egyetlen színt ad, amitől a horizont papírkivágás-hatású volt.
+    const skyDome = buildSkyDome(sky, sky.clone().multiplyScalar(0.45), skyDomeRadiusFor(profile));
+    scene.add(skyDome);
+
     const tornado = buildTornado(quality);
     scene.add(tornado.group);
+
+    // G-9: a szuperfelhő a köd FÖLÖTT látszik, ezért messziről is megmutatja,
+    // merre van a tornádó. Mérve: 3,56 km-nél (926 egység) a tölcsér a 900-as
+    // ködhatáron kívül esett, vagyis a „Menj közelebb a tornádóhoz!" utasítás
+    // láthatatlan célra mutatott.
+    const stormCloud = buildStormCloud(quality);
+    scene.add(stormCloud.group);
 
     const rain = buildRain(quality);
     rain.visible = false;
     scene.add(rain);
 
-    sceneRef.current = { renderer, scene, camera, vehicle: vehicleGroup, tornado, rain, chunks: new Map(), lightning };
+    sceneRef.current = { renderer, scene, camera, vehicle: vehicleGroup, tornado, rain, chunks: new Map(), lightning, skyDome, stormCloud };
 
     const handleResize = () => {
       const rect = canvas.parentElement?.getBoundingClientRect();
@@ -1469,6 +1499,11 @@ function PlayScreen(props: {
       tp.z = clampToWorld(tp.z + Math.sin(tp.angle) * spec.tornadoSpeed * dt);
       tornado.group.position.set(tp.x, 0, tp.z);
       tornado.group.scale.setScalar(spec.tornadoScale);
+      // A szuperfelhő a tölcsér fölött marad, és lassan forog. A kupola a
+      // kamerát követi, különben a széle belógna a képbe.
+      sc.stormCloud.group.position.set(tp.x, 0, tp.z);
+      animateStormCloud(sc.stormCloud, dt, reducedMotionRef.current ? 0.25 : 1);
+      sc.skyDome.position.set(camera.position.x, 0, camera.position.z);
 
       // --- distance & wind ---
       const dxu = p.x - tp.x;
@@ -1551,11 +1586,14 @@ function PlayScreen(props: {
       hudTickRef.current = 0;
       const w = windRef.current;
       const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
+      const targetBearing = bearingBetween(p.x, p.z, tornadoPosRef.current.x, tornadoPosRef.current.z);
       setHud({
         wind: Math.round(w.currentWindSpeed),
         windDir: w.windDirection,
         maxWind: Math.round(w.maximumWindSpeed),
         distanceKm: distKm,
+        // A jármű iránya radiánban tárolódik, 0 = észak, az óramutató irányában.
+        targetRelDeg: ((targetBearing - (p.heading * 180) / Math.PI + 540) % 360) - 180,
         anchorReady: distKm >= spec.anchorBand.min && distKm <= spec.anchorBand.max && Math.abs(p.speed) < STOPPED_SPEED,
         surface: surfaceAt(p.x, p.z),
         timeLeft: timeLeftRef.current,
@@ -1629,6 +1667,34 @@ function PlayScreen(props: {
           <div className="absolute bottom-20 left-2 px-2 py-1 rounded bg-black/55 text-[11px] font-semibold pointer-events-none z-10">
             {props.vehicle.name.toUpperCase()}
           </div>
+
+          {/* G-9b: céljelző nyíl.
+              Mérve (Pixel 7, 1. pálya): a cél 3,25 km-re volt, az álló telefon
+              vízszintes látószöge viszont csak ~33°. A gyerek azt olvasta, hogy
+              „Menj közelebb a tornádóhoz!", de azt nem tudhatta, merre forduljon —
+              húsz másodperc alatt 0,2 km-t közeledett, félig véletlenül. */}
+          {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (() => {
+            const marker = targetMarker({
+              heading: 0,
+              targetBearing: hud.targetRelDeg,
+              halfFovDeg: 16.5,
+            });
+            if (!marker.visible) return null;
+            return (
+              <div
+                className={`absolute top-1/2 -translate-y-1/2 ${marker.side === "right" ? "right-2" : "left-2"} z-10 pointer-events-none flex flex-col items-center gap-1`}
+                data-testid="tornado-target-marker"
+                data-side={marker.side}
+              >
+                <div className="px-2 py-1 rounded-full bg-amber-500/90 text-slate-950 text-lg font-black leading-none">
+                  {marker.side === "right" ? "▶" : "◀"}
+                </div>
+                <span className="px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-bold text-amber-200">
+                  {hud.distanceKm.toFixed(1)} km
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Anchor guidance */}
           {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (

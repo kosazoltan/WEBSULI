@@ -455,3 +455,141 @@ export function skyColorFor(intensity: number): THREE.Color {
   const t = Math.max(0, Math.min(1, intensity / 10));
   return new THREE.Color().setHSL(0.58 - t * 0.06, 0.35 - t * 0.2, 0.72 - t * 0.5);
 }
+
+/* ======================= G-9: látható vihar ======================= */
+
+/**
+ * Szuperfelhő (mezociklon) a tölcsér fölött.
+ *
+ * Élesben mérve (2026-09-07, Pixel 7, 1. pálya): a HUD azt írta ki, hogy „Menj
+ * közelebb a tornádóhoz!", a tornádó viszont 3,56 km-re volt — az 926
+ * világegység, a köd pedig a legjobb profilon is 900-nál elvág. A gyerek olyan
+ * célt kapott, amit nem látott, és a képernyőn csak üres mező volt.
+ *
+ * A valóságban a szuperfelhő kilométerekről látszik, jóval a látótávolság
+ * fölött. Ezért ez a felhő KÖD NÉLKÜL rajzolódik (`fog: false`), magasan ül, és
+ * elég széles ahhoz, hogy messziről is irányt mutasson. Ez nem díszítés: ez a
+ * navigáció.
+ */
+export type StormCloud = {
+  group: THREE.Group;
+  /** A korongok külön sebességgel forognak — így nem merev tárcsa. */
+  discs: THREE.Mesh[];
+};
+
+export function buildStormCloud(quality: GraphicsQuality): StormCloud {
+  const group = new THREE.Group();
+  const discs: THREE.Mesh[] = [];
+  const layers = quality === "low" ? 3 : quality === "medium" ? 5 : 7;
+
+  for (let i = 0; i < layers; i++) {
+    const t = i / Math.max(1, layers - 1);
+    // Alul szélesebb, fölfelé keskenyedő üllő-alak, mint a valódi szuperfelhőnél.
+    const radius = 150 - t * 55;
+    const material = new THREE.MeshLambertMaterial({
+      color: new THREE.Color().setHSL(0.62, 0.12, 0.30 + t * 0.14),
+      transparent: true,
+      opacity: 0.55 - t * 0.12,
+      depthWrite: false,
+      // A lényeg: a köd nem nyelheti el, különben ugyanúgy eltűnne, mint a tölcsér.
+      fog: false,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    });
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius * 0.86, 26, quality === "low" ? 10 : 16, 1, true),
+      material,
+    );
+    disc.position.y = 150 + i * 24;
+    disc.userData.spin = 0.06 + (1 - t) * 0.05;
+    group.add(disc);
+    discs.push(disc);
+  }
+
+  group.renderOrder = -1;
+  return { group, discs };
+}
+
+/**
+ * A szuperfelhő lassú forgása.
+ *
+ * A `motion` szorzó a mozgáscsökkentésé (`prefers-reduced-motion`): a felhő nem
+ * áll meg teljesen — az élettelen kép rosszabb —, csak lelassul.
+ */
+export function animateStormCloud(cloud: StormCloud, dt: number, motion = 1): void {
+  cloud.group.rotation.y += 0.05 * dt * motion;
+  for (const disc of cloud.discs) {
+    disc.rotation.y += (disc.userData.spin as number) * dt * motion;
+  }
+}
+
+/**
+ * Égbolt-kupola függőleges színátmenettel.
+ *
+ * A sík `setClearColor` egyetlen színt ad, amitől a horizont „papírkivágás"
+ * hatású — ez látszott a mért képernyőképen is. A kupola belülről látszik
+ * (`BackSide`), köd nélkül, mélységírás nélkül, hogy semmit ne takarjon ki.
+ */
+export function buildSkyDome(
+  horizon: THREE.Color,
+  zenith: THREE.Color,
+  radius: number,
+): THREE.Mesh {
+  const geometry = new THREE.SphereGeometry(radius, 24, 12);
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    uniforms: {
+      horizonColor: { value: horizon },
+      zenithColor: { value: zenith },
+    },
+    vertexShader: `
+      varying float vHeight;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vHeight = normalize(world.xyz).y;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 horizonColor;
+      uniform vec3 zenithColor;
+      varying float vHeight;
+      void main() {
+        // A horizont közelében lágy átmenet: a kemény vágás mesterségesnek látszik.
+        float t = smoothstep(-0.05, 0.55, vHeight);
+        gl_FragColor = vec4(mix(horizonColor, zenithColor, t), 1.0);
+      }
+    `,
+  });
+  const dome = new THREE.Mesh(geometry, material);
+  dome.renderOrder = -2;
+  return dome;
+}
+
+/**
+ * Az égbolt-kupola sugara és a kamera vágósíkja egy párt alkot.
+ *
+ * Mérve (2026-09-07): a kamera `far` értéke `fogFar + 200` volt (közepes
+ * profilon 820), a kupolát viszont `fogFar + 400`-ra tettem, a szuperfelhő
+ * pedig a ~890 egységre lévő tornádó fölött ült. Mindkettő a vágósíkon KÍVÜL
+ * esett, ezért a képernyőn semmi nem változott — a hiba nem az anyagokban volt,
+ * hanem abban, hogy a kamera odáig el sem látott.
+ *
+ * Ezért a két érték egy helyen születik, és teszt őrzi a viszonyukat: a
+ * vágósíknak a kupolán TÚL kell lennie, különben a kupola eltűnik.
+ */
+export function skyDomeRadiusFor(profile: QualityProfile): number {
+  return profile.fogFar + 400;
+}
+
+/**
+ * A kamera hátsó vágósíkja.
+ *
+ * A ködön jóval túl kell látnia: a szuperfelhő és az égbolt szándékosan a ködön
+ * kívül él, mert épp az a dolguk, hogy messziről mutassák az irányt.
+ */
+export function cameraFarFor(profile: QualityProfile): number {
+  return skyDomeRadiusFor(profile) + 1200;
+}
