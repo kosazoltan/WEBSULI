@@ -22,7 +22,7 @@ test("try látható szövege mérhető, rejtett megoldása és címkéje nem biz
   const c = [{ localId: "area", term: "Háromszög területe", examWeight: "core" }] as MapConcept[];
   for (const [tryKind, spec] of [
     ["fillBlank", { text: "A háromszög területe alap szor magasság osztva ___.", answers: ["2"] }],
-    ["dragSort", { items: ["A háromszög területe", "Alap szor magasság osztva kettővel"] }],
+    ["dragSort", { items: ["A háromszög területe", "Alap szor magasság osztva kettővel"], correctOrder: ["A háromszög területe", "Alap szor magasság osztva kettővel"] }],
     ["match", { pairs: [{ left: "A háromszög területe", right: "Alap szor magasság fele" }] }],
   ]) {
     assert.equal(groundingReport([{kind:"try",tryKind,spec,coversConceptIds:["area"]}],c).ok,true);

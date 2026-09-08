@@ -35,9 +35,20 @@ type Props = {
   section: Section;
   /** Which option the child picked per block index, collected by the runtime. */
   answers: Record<number, number>;
+  /** Human-readable name for a weak concept id (B4). */
+  conceptLabel?: (id: string) => string;
+  /** Called after a successful Próba response so the progress bar can advance (B1). */
+  onSuccess?: () => void;
 };
 
-export function SectionProba({ lessonId, sectionIdx, section, answers }: Props) {
+export function SectionProba({
+  lessonId,
+  sectionIdx,
+  section,
+  answers,
+  conceptLabel,
+  onSuccess,
+}: Props) {
   const [result, setResult] = useState<ProbaResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +74,7 @@ export function SectionProba({ lessonId, sectionIdx, section, answers }: Props) 
         fingerprint,
       });
       setResult(data);
+      if (data.coupon || data.score >= 0) onSuccess?.();
     } catch {
       setError("Most nem sikerült beküldeni. Próbáld újra egy pillanat múlva.");
     } finally {
@@ -121,7 +133,7 @@ export function SectionProba({ lessonId, sectionIdx, section, answers }: Props) 
             </p>
             <ul className="text-sm list-disc list-inside">
               {result.weakConceptIds.map((id) => (
-                <li key={id}>{id}</li>
+                <li key={id}>{conceptLabel ? conceptLabel(id) : id}</li>
               ))}
             </ul>
             <Button

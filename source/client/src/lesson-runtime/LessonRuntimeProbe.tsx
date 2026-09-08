@@ -83,6 +83,7 @@ const PROBE_LESSON: Lesson = {
           spec: {
             prompt: "Rendezd a folyamat lépéseit helyes sorrendbe:",
             items: ["Fény éri a levelet", "A kloroplasztisz energiát köt meg", "Szerves anyag keletkezik"],
+            correctOrder: ["Fény éri a levelet", "A kloroplasztisz energiát köt meg", "Szerves anyag keletkezik"],
           },
           coversConceptIds: ["c1"],
         },

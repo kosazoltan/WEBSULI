@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -277,17 +277,24 @@ function LessonSection({
   sectionIdx,
   band,
   lessonId,
+  conceptLabel,
+  onProbaSuccess,
+  sectionRef,
 }: {
   section: Section;
   sectionIdx: number;
   band: AgeBand;
   lessonId: string | null;
+  conceptLabel: (id: string) => string;
+  onProbaSuccess: () => void;
+  sectionRef: (el: HTMLElement | null) => void;
 }) {
   const theme = BAND_THEME[band];
   const [answers, setAnswers] = useState<Record<number, number>>({});
 
   return (
     <section
+      ref={sectionRef}
       className="space-y-4"
       id={`section-${sectionIdx + 1}`}
       data-testid={`lesson-section-${sectionIdx}`}
@@ -314,6 +321,8 @@ function LessonSection({
           sectionIdx={sectionIdx}
           section={section}
           answers={answers}
+          conceptLabel={conceptLabel}
+          onSuccess={onProbaSuccess}
         />
       )}
     </section>
@@ -321,9 +330,9 @@ function LessonSection({
 }
 
 /**
- * Section progress. Shown only for 2+ sections: one step is not a journey. The "now"
- * step is the first section whose Próba has not been submitted — the runtime does not
- * track scroll, so it does not pretend to know where the eye is.
+ * Section progress. Shown only for 2+ sections: one step is not a journey.
+ * `current` tracks the section the learner is looking at (IntersectionObserver)
+ * or has just cleared via Próba.
  */
 function LessonProgress({ sections, band, current }: { sections: Section[]; band: AgeBand; current: number }) {
   if (sections.length < 2) return null;
@@ -349,9 +358,48 @@ function LessonProgress({ sections, band, current }: { sections: Section[]; band
   );
 }
 
+function conceptLabel(lesson: Lesson, conceptId: string): string {
+  for (const section of lesson.sections) {
+    for (const block of section.blocks) {
+      if (block.kind === "explain" && block.coversConceptIds.includes(conceptId)) {
+        const sentence = block.text.split(/[.!?]/)[0]?.trim();
+        if (sentence && sentence.length >= 3) {
+          return sentence.length > 72 ? `${sentence.slice(0, 69)}…` : sentence;
+        }
+      }
+    }
+  }
+  const misconception = lesson.misconceptions.find((m) => m.conceptId === conceptId);
+  if (misconception?.text) {
+    const t = misconception.text.trim();
+    return t.length > 72 ? `${t.slice(0, 69)}…` : t;
+  }
+  return conceptId;
+}
+
 export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?: string }) {
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
+  const [current, setCurrent] = useState(0);
+  const sectionEls = useRef<(HTMLElement | null)[]>([]);
+
+  useEffect(() => {
+    const nodes = sectionEls.current.filter((n): n is HTMLElement => n !== null);
+    if (nodes.length < 2) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) return;
+        const idx = nodes.indexOf(visible.target as HTMLElement);
+        if (idx >= 0) setCurrent(idx);
+      },
+      { rootMargin: "-45% 0px -45% 0px", threshold: [0, 0.25, 0.5, 1] },
+    );
+    for (const node of nodes) observer.observe(node);
+    return () => observer.disconnect();
+  }, [lesson.sections.length]);
 
   return (
     // #197 + LS-9: the lesson brings its OWN surface AND ink via [data-band] tokens
@@ -373,7 +421,7 @@ export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?:
           </div>
         </header>
 
-        <LessonProgress sections={lesson.sections} band={band} current={0} />
+        <LessonProgress sections={lesson.sections} band={band} current={current} />
 
         {lesson.sections.map((section, si) => (
           <LessonSection
@@ -382,6 +430,11 @@ export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?:
             sectionIdx={si}
             band={band}
             lessonId={lessonId ?? null}
+            conceptLabel={(id) => conceptLabel(lesson, id)}
+            onProbaSuccess={() => setCurrent((c) => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))}
+            sectionRef={(el) => {
+              sectionEls.current[si] = el;
+            }}
           />
         ))}
       </article>

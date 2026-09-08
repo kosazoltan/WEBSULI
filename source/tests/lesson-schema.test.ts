@@ -132,8 +132,25 @@ test("animate and try only accept the planned kinds", () => {
   assert.throws(() =>
     blockSchema.parse({ kind: "animate", animKind: "explosion", params: {}, caption: "c", coversConceptIds: ["c1"] }),
   );
+
+  const validTrySpecs: Record<(typeof TRY_KINDS)[number], Record<string, unknown>> = {
+    dragSort: { items: ["a", "b"], correctOrder: ["a", "b"] },
+    fillBlank: { text: "A ___ b.", answers: ["x"] },
+    match: { pairs: [{ left: "a", right: "b" }] },
+  };
   for (const tryKind of TRY_KINDS) {
-    assert.ok(blockSchema.parse({ kind: "try", tryKind, spec: {}, coversConceptIds: ["c1"] }));
+    assert.throws(
+      () => blockSchema.parse({ kind: "try", tryKind, spec: {}, coversConceptIds: ["c1"] }),
+      `${tryKind}: üres spec elutasítandó (B2)`,
+    );
+    assert.ok(
+      blockSchema.parse({
+        kind: "try",
+        tryKind,
+        spec: validTrySpecs[tryKind],
+        coversConceptIds: ["c1"],
+      }),
+    );
   }
   assert.throws(() => blockSchema.parse({ kind: "try", tryKind: "essay", spec: {}, coversConceptIds: ["c1"] }));
 });
