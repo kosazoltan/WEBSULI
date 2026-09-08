@@ -27,6 +27,7 @@ import { xpForAttempt } from "@/game-engine/retry-policy";
 import { stepBrainRot } from "@/lib/brainRotPhysics";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
+import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 
 /* --- Típusok --- */
 type Quiz = {
@@ -245,6 +246,16 @@ function spawnBrainRot(boardW: number, boardH: number): BrainRot {
 export default function BrainRotSteal() {
   const boardRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>("menu");
+
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
+          setPhase(patch.phase);
+        }
+      },
+    });
+  }, []);
 
   /**
    * LS-3b: the play-time coupon earned in a lesson, if there is one.
@@ -1064,7 +1075,7 @@ export default function BrainRotSteal() {
 
             {/* --- GAME OVER --- */}
             {phase === "over" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-8 text-center">
+              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-8 text-center" data-testid="br-over">
                 <motion.div
                   initial={{ scale: 0, rotate: -180 }}
                   animate={{ scale: 1, rotate: 0 }}
@@ -1197,6 +1208,7 @@ export default function BrainRotSteal() {
                       className={cls}
                       disabled={revealCorrectIdx !== null}
                       onClick={() => onAnswer(i)}
+                      {...correctDataAttrs(i === quiz.correctIndex)}
                     >
                       <span className="text-white/40 mr-2 font-mono text-xs">{String.fromCharCode(65 + i)})</span>
                       {o}

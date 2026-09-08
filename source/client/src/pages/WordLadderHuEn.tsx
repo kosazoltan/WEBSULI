@@ -25,6 +25,7 @@ import {
 } from "@/data/englishGameQuizExtras";
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
+import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import {
   LADDER_RUNGS,
   LADDER_EASY,
@@ -334,6 +335,19 @@ export default function WordLadderHuEn() {
    * ezért ez külön néven él. A kártya bezárása után indul a létra lépése (A1).
    */
   const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
+
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.phase === "won" || patch.phase === "menu") {
+          setPhase(patch.phase);
+        }
+        if (patch.phase === "play") {
+          setPhase("quiz");
+        }
+      },
+    });
+  }, []);
 
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
     queryKey: ["/api/games/quiz-bank/word-ladder-hu-en"],
@@ -849,6 +863,7 @@ export default function WordLadderHuEn() {
                                 onClick={() => onAnswer(idx)}
                                 data-testid={`wl-option-${idx}`}
                                 data-state={revealing ? (isCorrectOpt ? "correct" : isChosen ? "wrong" : "idle") : "idle"}
+                                {...correctDataAttrs(idx === current.correctIndex)}
                               >
                                 <span className="mr-2 inline-flex w-6 h-6 items-center justify-center rounded-full bg-black/25 text-xs shrink-0">
                                   {revealing && isCorrectOpt ? <Check className="w-4 h-4" /> : revealing && isChosen ? <X className="w-4 h-4" /> : String.fromCharCode(65 + idx)}

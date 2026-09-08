@@ -35,6 +35,8 @@ import {
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { blockCraftSubjectFromTopic, type BlockCraftSubject } from "@/lib/blockCraftSubjects";
+import { useCoarsePointer } from "@/hooks/useCoarsePointer";
+import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
@@ -1081,6 +1083,7 @@ type Phase = "menu" | "play" | "quiz" | "levelComplete" | "over";
 
 export default function BlockCraftQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const coarsePointer = useCoarsePointer();
 
   // LS-4 (D3): the play-time coupon earned in a lesson, exactly as in BrainRot —
   // without a coupon this is inert and free play stays the default.
@@ -1152,6 +1155,18 @@ export default function BlockCraftQuiz() {
   const totalDiamondsRef = useRef(0);   // total real DIAMOND tiles mined during the whole run
   const [levelStartXp, setLevelStartXp] = useState(0);
   const [gameWon, setGameWon] = useState(false);
+
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.phase === "menu" || patch.phase === "play" || patch.phase === "levelComplete" || patch.phase === "over") {
+          setPhase(patch.phase);
+        }
+        if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
+        if (typeof patch.correctCount === "number") setSessionXp(Math.max(0, patch.correctCount) * 10);
+      },
+    });
+  }, []);
   // Subject-breakdown: melyik tantárgyból hány jó választ adott.
   const [subjectStats, setSubjectStats] = useState<Record<QuizSubject, number>>({
     english: 0,
@@ -2362,8 +2377,9 @@ export default function BlockCraftQuiz() {
                     ))}
                   </div>
                 )}
-                {/* === KONTROLLGOMBOK (mobil + fallback) === */}
-                <div className="grid grid-cols-4 gap-1.5 w-full">
+                {/* === KONTROLLGOMBOK (csak coarse pointer — C2: egérnél a vászon kapja a helyet) === */}
+                {coarsePointer ? (
+                <div className="grid grid-cols-4 gap-1.5 w-full" data-testid="bc-touch-controls">
                   <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")}>⟵ Balra</Button>
                   <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "fwd")} onPointerUp={(e) => endHold(e, "fwd")} onPointerCancel={(e) => endHold(e, "fwd")}>▲ Előre</Button>
                   <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "back")} onPointerUp={(e) => endHold(e, "back")} onPointerCancel={(e) => endHold(e, "back")}>▼ Hátra</Button>
@@ -2372,6 +2388,11 @@ export default function BlockCraftQuiz() {
                   <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs col-span-2" onClick={tryMineLook}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász (E)</Button>
                   <Button type="button" size="sm" className="bg-amber-700 hover:bg-amber-600 text-white border border-amber-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={tryPlaceLook} disabled={(inventory[selType] ?? 0) <= 0}>Lerak (F)</Button>
                 </div>
+                ) : (
+                  <p className="w-full text-center text-[11px] text-white/55" data-testid="bc-keyboard-hint">
+                    Billentyűzet: WASD mozgás · Space ugrás · E bányász · F lerak
+                  </p>
+                )}
                 {/* === KOMPAKT HUD === */}
                 <div className="w-full flex items-center gap-1.5">
                   <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden">
@@ -2405,7 +2426,7 @@ export default function BlockCraftQuiz() {
             const isLast = levelIdx >= LEVELS.length - 1;
             const earned = sessionXp - levelStartXp;
             return (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center">
+              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center" data-testid="bc-level-complete">
                 <div className="flex items-center gap-2"><Star className="w-9 h-9 text-amber-300" /><Star className="w-12 h-12 text-amber-200" /><Star className="w-9 h-9 text-amber-300" /></div>
                 <p className="text-lg font-extrabold text-lime-200">Pálya teljesítve!</p>
                 <p className="text-sm font-semibold text-white/90">{cfg.name}</p>
@@ -2435,7 +2456,7 @@ export default function BlockCraftQuiz() {
           })()}
 
           {phase === "over" && (
-            <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center">
+            <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center" data-testid="bc-over">
               <Box className={`w-12 h-12 ${gameWon ? "text-amber-300" : "text-lime-400"}`} />
               <p className="text-lg font-bold">{gameWon ? "Bajnok lettél! Mind az 5 pálya teljesítve!" : "Bányászat vége"}</p>
               <p className="text-sm font-semibold text-lime-100/90 max-w-sm">
@@ -2471,7 +2492,7 @@ export default function BlockCraftQuiz() {
             : dim
               ? "h-auto py-3 text-left bg-white/5 text-white/40 border border-lime-900/20 text-[15px]"
               : "h-auto py-3 text-left bg-white/10 hover:bg-lime-800/50 text-white border border-lime-900/40 text-[15px]";
-        return <Button key={`${o}-${i}`} variant="secondary" className={cls} disabled={revealCorrectIdx !== null} onClick={() => onAnswer(i)}>{o}</Button>;
+        return <Button key={`${o}-${i}`} variant="secondary" className={cls} disabled={revealCorrectIdx !== null} onClick={() => onAnswer(i)} {...correctDataAttrs(i === quiz.correctIndex)}>{o}</Button>;
       })}</div>{streakProtector.warning && <p className="mt-2 text-[11px] text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>}{revealCorrectIdx !== null && wrongIdx !== null && <p className="mt-2 text-[11px] text-emerald-300/95">A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong></p>}</motion.div></motion.div>}</AnimatePresence>
 
       <AnimatePresence>{achievement && <motion.div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-amber-500/95 text-slate-950 font-bold text-sm px-4 py-2 rounded-xl shadow-xl border border-amber-200/60 whitespace-nowrap" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}>{achievement}</motion.div>}</AnimatePresence>
