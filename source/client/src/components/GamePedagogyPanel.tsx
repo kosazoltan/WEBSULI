@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from "react";
-import { ChevronDown, Target } from "lucide-react";
+import { Target } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Accent = "cyan" | "amber" | "lime" | "fuchsia";
@@ -47,7 +48,13 @@ export type GamePedagogyPanelProps = {
 function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className }: GamePedagogyPanelProps) {
   const a = accentStyles[accent];
   return (
-    <div className={cn("space-y-2", className)}>
+    <Dialog>
+      <DialogTrigger className={cn("game-help shrink-0 min-h-[44px] rounded-lg border border-white/25 bg-slate-900 px-3 py-2 text-xs font-bold text-white text-left", className)}>
+        <Target className="inline h-4 w-4 mr-2" aria-hidden /> Hogyan játsszak?
+      </DialogTrigger>
+      <DialogContent className="border-slate-600 bg-slate-950 text-white">
+        <DialogTitle>A küldetésed</DialogTitle>
+        <DialogDescription className="sr-only">Játékszabályok és tanulási célok</DialogDescription>
       <div
         className={cn(
           "rounded-xl border-2 bg-gradient-to-br px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]",
@@ -64,17 +71,9 @@ function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className
         <p className={cn("text-sm sm:text-[15px] font-bold leading-snug", a.title)}>{kidMission}</p>
       </div>
 
-      <details className="group rounded-lg border border-white/20 bg-black/30 text-left backdrop-blur-sm">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] font-semibold text-white/85 [&::-webkit-details-marker]:hidden">
-          <span>Szülőknek: mit tanul ebből a gyerek?</span>
-          <ChevronDown
-            className="h-4 w-4 shrink-0 text-white/60 transition-transform duration-200 group-open:rotate-180"
-            aria-hidden
-          />
-        </summary>
-        <div className="border-t border-white/10 px-3 py-2 text-[11px] leading-relaxed text-white/70">{parentBody}</div>
-      </details>
-    </div>
+        <div className="text-sm leading-relaxed text-slate-200">{parentBody}</div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

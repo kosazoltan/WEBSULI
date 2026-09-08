@@ -83,6 +83,29 @@ test("az első hiba után jár egy javítási esély, a másodikra már nem", ()
   assert.equal(second.retryable, false, "a végtelen próbálkozás már nem tanulás");
 });
 
+test("nulla életnél nincs újrapróba — a magyarázat megmarad, új pont nem jár", () => {
+  const card = buildFeedback({
+    quiz: QUIZ_WITH_EXPLANATION,
+    chosenIndex: 1,
+    attempt: 0,
+    remainingLives: 0,
+  });
+
+  assert.equal(card.retryable, false, "0 élet + Újrapróbálom = pontszerzés élet nélkül");
+  assert.ok(card.why.trim().length >= 10, "a magyarázat ettől még olvasható");
+});
+
+test("megmaradt élettel az első hiba után jár a javítási esély", () => {
+  const card = buildFeedback({
+    quiz: QUIZ_WITH_EXPLANATION,
+    chosenIndex: 1,
+    attempt: 0,
+    remainingLives: 2,
+  });
+
+  assert.equal(card.retryable, true);
+});
+
 test("a magyarázat sosem sorszámmal hivatkozik a válaszra", () => {
   const quizzes: QuizLike[] = [QUIZ_WITH_EXPLANATION, QUIZ_WITHOUT_EXPLANATION];
 

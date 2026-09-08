@@ -44,6 +44,12 @@ export type FeedbackInput = {
   /** Hányadik próbálkozás ezen a kérdésen (0 = első). */
   attempt: number;
   ageBand?: FeedbackAgeBand;
+  /**
+   * Életek a hiba UTÁN. 0-nál nincs újrapróba: a magyarázat olvasható,
+   * de új pontot élet nélkül nem lehet szerezni. Ha nincs megadva, a
+   * játék nem élet-alapú, és a régi attempt-szabály marad.
+   */
+  remainingLives?: number;
 };
 
 export type FeedbackCard = {
@@ -141,6 +147,9 @@ export function buildFeedback(input: FeedbackInput): FeedbackCard {
     correctAnswer: correctAnswer ?? "",
     // Egyetlen javítási esély az első hiba után: a gyerek ne bukott kérdéssel
     // lépjen tovább, de a végtelen próbálkozás már nem tanulás, hanem találgatás.
-    retryable: outcome !== "correct" && attempt === 0,
+    retryable:
+      outcome !== "correct" &&
+      attempt === 0 &&
+      (input.remainingLives === undefined || input.remainingLives > 0),
   };
 }

@@ -320,11 +320,20 @@ export default function WordLadderHuEn() {
   // Az ad-hoc setTimeout-ok gyűjtve, unmountkor törölve.
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scoreSubmittedRef = useRef(false);
+  /** Rossz válasz után a lépés-lánc a magyarázó kártya bezárásáig vár. */
+  const pendingStepRef = useRef<(() => void) | null>(null);
+  /** A futamidő-óra refen olvassa, hogy a kártya alatt ne ketyegjen. */
+  const explainOpenRef = useRef(false);
   /** Futáson belüli max streak — leaderboard/achievement-hez. */
   const runBestStreakRef = useRef(0);
   /** Helyes / hibás válaszok száma a futásban (a streak NEM egyenlő ezekkel). */
   const correctCountRef = useRef(0);
   const wrongCountRef = useRef(0);
+  /**
+   * G-1: magyarázó kártya rossz válaszra. A `feedback` állapot a bátorító mondaté,
+   * ezért ez külön néven él. A kártya bezárása után indul a létra lépése (A1).
+   */
+  const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
 
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
     queryKey: ["/api/games/quiz-bank/word-ladder-hu-en"],
@@ -422,8 +431,15 @@ export default function WordLadderHuEn() {
     setLastXpGain(null);
     setCurrent(q[0] ?? null);
     setPhase("quiz");
+    setExplainCard(null);
+    pendingStepRef.current = null;
+    explainOpenRef.current = false;
     if (tickRef.current) clearInterval(tickRef.current);
-    tickRef.current = setInterval(() => setRunSeconds((s) => s + 1), 1000);
+    tickRef.current = setInterval(() => {
+      // A magyarázat olvasása nem büntethető idővel.
+      if (explainOpenRef.current) return;
+      setRunSeconds((s) => s + 1);
+    }, 1000);
   }, [userGrade]);
 
   useEffect(() => {
@@ -432,6 +448,7 @@ export default function WordLadderHuEn() {
       if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
       timeoutsRef.current.forEach((t) => clearTimeout(t));
       timeoutsRef.current = [];
+      pendingStepRef.current = null;
     };
   }, []);
 
@@ -460,12 +477,57 @@ export default function WordLadderHuEn() {
   }, [phase, startGame]);
 
   /**
-   * G-1: magyarázó kártya rossz válaszra.
-   *
-   * A `feedback` állapot itt már a bátorító mondaté („Semmi baj!"), ezért ez
-   * külön néven él. A kártya bezárása után a létra lépése a szokott módon megy.
+   * A1: a lépés-lánc és a magyarázó kártya összekötése.
+   * Rossz válasznál a kérdéscsere a kártya bezárásáig vár.
    */
-  const [explainCard, setExplainCard] = useState<FeedbackCard | null>(null);
+  explainOpenRef.current = explainCard !== null;
+
+  const runStepChain = useCallback(
+    (
+      target: number,
+      nextCursor: number,
+      nextQuestion: Quiz | null,
+      isCorrect: boolean,
+      fromRung: number,
+    ) => {
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+      // 2) LÉPÉS: a felfedés után a figura ugrik/csúszik.
+      stepTimerRef.current = setTimeout(() => {
+        const ms = milestoneFor(fromRung, target);
+        setRung(target);
+        setStepDelta(isCorrect ? 1 : -1);
+        setPhase("step");
+        if (ms) showBanner(ms, 1800);
+
+        // 3) KÖVETKEZŐ KÉRDÉS vagy CÉL. A kérdéscsere CSAK itt történik: a lépés alatt még az
+        // előző kérdés látszik a zöld/piros jelöléssel (különben a következő kérdés helyes
+        // válasza szivárogna ki a felfedő színezéssel).
+        stepTimerRef.current = setTimeout(() => {
+          if (target >= RUNGS) {
+            finishWon();
+            setCurrent(null);
+            return;
+          }
+          setCursor(nextCursor);
+          setCurrent(nextQuestion);
+          setChosenIdx(null);
+          answerLockedRef.current = false;
+          setFeedback(null);
+          setLastXpGain(null);
+          setPhase("quiz");
+        }, STEP_MS);
+      }, REVEAL_MS);
+    },
+    [finishWon, showBanner],
+  );
+
+  const dismissExplain = useCallback(() => {
+    setExplainCard(null);
+    explainOpenRef.current = false;
+    const pending = pendingStepRef.current;
+    pendingStepRef.current = null;
+    pending?.();
+  }, []);
 
   const onAnswer = (i: number) => {
     if (!current) return;
@@ -503,6 +565,7 @@ export default function WordLadderHuEn() {
           ageBand: "kid",
         }),
       );
+      explainOpenRef.current = true;
     } else {
       correctCountRef.current += 1;
       sfxSuccess();
@@ -530,33 +593,16 @@ export default function WordLadderHuEn() {
 
     nextQuestion = pickAdaptiveTier(mergedPoolsRef.current, adaptiveRef.current.band, recentAdaptiveRef.current) ?? nextQuestion;
 
-    if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
-    // 2) LÉPÉS: a felfedés után a figura ugrik/csúszik.
-    stepTimerRef.current = setTimeout(() => {
-      const ms = milestoneFor(rung, target);
-      setRung(target);
-      setStepDelta(isCorrect ? 1 : -1);
-      setPhase("step");
-      if (ms) showBanner(ms, 1800);
-
-      // 3) KÖVETKEZŐ KÉRDÉS vagy CÉL. A kérdéscsere CSAK itt történik: a lépés alatt még az
-      // előző kérdés látszik a zöld/piros jelöléssel (különben a következő kérdés helyes
-      // válasza szivárogna ki a felfedő színezéssel).
-      stepTimerRef.current = setTimeout(() => {
-        if (target >= RUNGS) {
-          finishWon();
-          setCurrent(null);
-          return;
-        }
-        setCursor(nextCursor);
-        setCurrent(nextQuestion);
-        setChosenIdx(null);
-        answerLockedRef.current = false;
-        setFeedback(null);
-        setLastXpGain(null);
-        setPhase("quiz");
-      }, STEP_MS);
-    }, REVEAL_MS);
+    const fromRung = rung;
+    const startStep = () => runStepChain(target, nextCursor, nextQuestion, isCorrect, fromRung);
+    if (!isCorrect) {
+      // A1: a lépés és a kérdéscsere a kártya bezárásáig vár — különben a gyerek
+      // a magyarázatot egy már kicserélt kérdés mögött olvassa.
+      pendingStepRef.current = startStep;
+    } else {
+      pendingStepRef.current = null;
+      startStep();
+    }
   };
 
   useEffect(() => {
@@ -615,6 +661,7 @@ export default function WordLadderHuEn() {
 
   return (
     <div
+      data-game="WordLadderHuEn" data-playing={inRun}
       className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
       style={{
         background: phase === "won" ? LADDER_ZONES[LADDER_ZONES.length - 1]!.background : zone.background,
@@ -667,7 +714,7 @@ export default function WordLadderHuEn() {
           </div>
         </header>
 
-        <Card className="glass-card border-white/15 bg-black/25 flex-1 flex flex-col min-h-0 shadow-2xl">
+        <Card className="border-white/15 bg-slate-950 text-white flex-1 flex flex-col min-h-0 shadow-2xl">
           <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-2">
               <BookOpen className="w-5 h-5 text-amber-200" />
@@ -689,13 +736,13 @@ export default function WordLadderHuEn() {
                 </>
               }
             />
-            <p className="text-[10px] text-amber-100/80 mb-3 border border-white/15 rounded-lg px-2 py-1 bg-black/20">
+            <p data-game-sync className="text-[10px] text-amber-100/80 mb-3 border border-white/15 rounded-lg px-2 py-1 bg-black/20">
               {syncBanner}
             </p>
 
             {phase === "menu" && (
               <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6" data-testid="wl-menu">
-                <div className="relative w-28 h-56">
+                <div className="relative w-28 h-32 min-h-0">
                   <Ladder rung={0} total={RUNGS} />
                   <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: "6%" }}>
                     <motion.div animate={reducedMotion ? undefined : { y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 1.4 }}>
@@ -734,7 +781,7 @@ export default function WordLadderHuEn() {
                   target={RUNGS}
                   className="mb-2"
                 />
-                <div className="flex-1 flex gap-2 sm:gap-3 min-h-[min(52vh,420px)]">
+                <div className="flex-1 flex gap-2 sm:gap-3 min-h-0">
                   {/* LÉTRA */}
                   <div className="relative w-[72px] sm:w-[92px] shrink-0" data-testid="wl-ladder">
                     <Ladder rung={rung} total={RUNGS} />
@@ -782,7 +829,7 @@ export default function WordLadderHuEn() {
                         <p className="text-base sm:text-lg font-bold mb-3 leading-snug" data-testid="wl-prompt">
                           {current.prompt}
                         </p>
-                        <div className="grid gap-2">
+                        <div className="wl-answers grid gap-2">
                           {current.options.map((opt, idx) => {
                             const revealing = phase === "reveal" || phase === "step";
                             const isCorrectOpt = idx === current.correctIndex;
@@ -907,7 +954,7 @@ export default function WordLadderHuEn() {
           .wl-rung-next { animation: none; opacity: 0.85; }
         }
       `}</style>
-      {explainCard && <QuizFeedbackCard card={explainCard} onDismiss={() => setExplainCard(null)} />}
+      {explainCard && <QuizFeedbackCard card={explainCard} onDismiss={dismissExplain} />}
 
     </div>
   );

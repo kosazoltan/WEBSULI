@@ -374,44 +374,120 @@
     @apply animate-pulse bg-muted rounded;
   }
 
-  /*
-   * Game-page reszponzivitás:
-   *  - Mobilon (default) min-h-screen — a játéktér elfér, de görgethető is.
-   *  - Asztali (lg+ ≥1024px) max-h-screen + overflow-hidden — fix viewport;
-   *    A Card belül görget, hogy a header / canvas mindig látható maradjon.
-   *
-   *  Használat: a játék-page fő <div>-jére tedd a "game-shell-fixed" classt,
-   *  és a görgethető Card-tartalmra adj data-game-card-content attribútumot.
-   */
-  .game-shell-fixed {
-    /* Mobile: alap min-h-screen marad, no fix viewport */
-  }
 }
 
-@media (min-width: 1024px) {
-  .game-shell-fixed > main {
-    max-height: 100dvh;
-    overflow: hidden;
-  }
-  .game-shell-fixed [data-game-card-content] {
-    overflow-y: auto;
-    overflow-x: hidden;
-    /* Vékony scrollbar — kevésbé feltűnő desktopon */
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
-  }
-  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar {
-    width: 8px;
-  }
-  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.25);
-    border-radius: 4px;
-  }
-  .game-shell-fixed [data-game-card-content]::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.4);
+/* Game surfaces own their colours: the site's light glass cards and orange
+   buttons must not overwrite a game's world or obscure its HUD. */
+.game-shell-fixed > main {
+  padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom));
+  max-width: 1200px;
+}
+.game-shell-fixed > main > header { margin-bottom: 4px; flex-shrink: 0; background: #0b172de8; border-radius: 12px; padding: 0 8px; }
+.game-shell-fixed > main > .rounded-lg {
+  color: #f1f5f9;
+  background: linear-gradient(145deg, #14243d, #0b1224);
+  border-color: #58718f;
+  box-shadow: inset 0 1px 0 #ffffff18, 0 12px 32px #0005;
+}
+.game-shell-fixed .glass-card::before { display: none; }
+.game-shell-fixed .glass-card:hover { transform: none; }
+.game-shell-fixed button { white-space: normal; }
+.game-shell-fixed button:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; }
+.game-shell-fixed[data-playing="true"],
+.game-shell-fixed[data-fixed-screen="true"] {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.game-shell-fixed[data-playing="true"] > main,
+.game-shell-fixed[data-fixed-screen="true"] > main {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+.game-shell-fixed [data-game-card-content] { min-height: 0; }
+.game-shell-fixed[data-playing="true"] [data-game-card-content],
+.game-shell-fixed[data-fixed-screen="true"] [data-game-card-content] {
+  padding: 6px;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.game-shell-fixed[data-playing="true"] .game-help,
+.game-shell-fixed[data-playing="true"] [data-game-sync] { display: none; }
+.game-play-stack > :not(.game-scene) { flex-shrink: 0; }
+.game-play-stack > div:not(.game-scene) button {
+  background-image: none; background-color: #163c50; border-color: #56b7ac;
+  color: #f1fffc; box-shadow: inset 0 -3px 0 #061e2c; min-height: 44px;
+}
+.game-play-stack > div:not(.game-scene) button:hover { background-color: #20576b; }
+.game-play-stack > div:not(.game-scene) button:active { box-shadow: none; }
+.game-scene { min-width: 0; min-height: 0; flex-basis: 0; }
+.game-scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+@media (max-width: 500px) {
+  .tornado-pedals { display: grid; grid-template-columns: repeat(2, minmax(44px, 1fr)); }
+  .tornado-pedals button { width: 48px; height: 48px; }
+}
+[data-collectible-world] { isolation: isolate; background: radial-gradient(ellipse at 50% 15%, #8d60cc55, transparent 65%), linear-gradient(160deg, #191944, #102f42) !important; }
+[data-collectible-world]::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, #bdfaff88 1px, transparent 2px); background-size: 67px 73px; opacity: .5; }
+[data-collectible-world]::after { content: ""; position: absolute; z-index: -1; inset: 45% -30% -40%; pointer-events: none; transform: perspective(180px) rotateX(36deg); background-image: linear-gradient(#63cddf22 1px, transparent 1px), linear-gradient(90deg, #63cddf22 1px, transparent 1px); background-size: 36px 36px; border-top: 2px solid #6ce9ec66; }
+.math-run { display: grid; gap: 6px; grid-template-rows: auto auto auto 3px 3px minmax(0, 1fr) auto auto; }
+.math-world { min-height: 0; border-radius: 14px; overflow: hidden; background: #162447; }
+.math-world svg { width: 100%; height: 100%; display: block; }
+.math-answers button { min-height: 44px; }
+@media (min-width: 700px) {
+  .math-run { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto 3px minmax(0, 1fr) auto; }
+  .math-stats, .math-lives, .math-goal { grid-column: 1 / -1; }
+  .math-world { grid-column: 1; grid-row: 5 / 7; }
+  .math-question { grid-column: 2; grid-row: 5; display: flex; flex-direction: column; justify-content: center; }
+  .math-answers { grid-column: 2; grid-row: 6; }
+}
+@media (min-width: 650px) and (max-height: 500px) {
+  .game-play-stack { display: grid; grid-template-columns: minmax(0, 1fr) 250px; grid-auto-rows: auto; align-content: start; align-items: stretch; }
+  .game-play-stack > .game-scene { grid-column: 1; grid-row: 1 / span 8; }
+  .game-play-stack > :not(.game-scene) { grid-column: 2; }
+  .game-goal { padding-top: 3px; padding-bottom: 3px; }
+  .math-run { gap: 3px; }
+}
+.game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] button {
+  background-image: none; background-color: #153756; border-color: #67b9c8;
+  color: white; min-height: 44px;
+}
+.game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"] { background: #071b2ded; }
+.game-shell-fixed[data-game="WordLadderHuEn"] [data-state="correct"] { background-color: #166534 !important; border-color: #86efac !important; }
+.game-shell-fixed[data-game="WordLadderHuEn"] [data-state="wrong"] { background-color: #9f1239 !important; border-color: #fda4af !important; }
+@media (min-width: 650px) and (max-height: 500px) {
+  [data-playing="true"] .tsunami-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; }
+  [data-playing="true"] .tsunami-layout > .game-title { grid-column: 1 / -1; margin: 0; }
+  [data-playing="true"] .tsunami-layout > .game-scene { grid-column: 1; grid-row: 2 / 4; height: 100%; }
+  [data-playing="true"] .tsunami-layout > .game-goal { grid-column: 2; grid-row: 2; }
+  [data-playing="true"] .tsunami-layout > .tsunami-controls { grid-column: 2; grid-row: 3; }
+  [data-playing="true"] .tsunami-layout > .game-key-hint { display: none; }
+  .brain-run { display: grid; grid-template-columns: minmax(0, 1fr) 230px; grid-auto-rows: auto; align-items: start; }
+  .brain-run > [data-collectible-world] { grid-column: 1; grid-row: 1 / span 5; height: 100%; }
+  .brain-run > :not([data-collectible-world]) { grid-column: 2; }
+  .brain-run > .grid { grid-template-columns: 1fr; }
+  .wl-answers { grid-template-columns: 1fr 1fr; }
+  [data-testid="wl-quiz"] { padding: 8px; }
+  [data-testid="wl-quiz"] > div:last-child { min-height: 0; padding-top: 4px; }
+  [data-testid="wl-prompt"] { margin-bottom: 4px; }
+}
+.game-shell-fixed[data-game="SpeedQuizMath"] [data-game-card-content] > div:last-child button {
+  background-image: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-shell-fixed *, .game-shell-fixed *::before, .game-shell-fixed *::after {
+    animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

@@ -1133,6 +1133,7 @@ export default function TsunamiEscapeEnglish() {
 
   return (
     <div
+      data-game="TsunamiEscapeEnglish" data-playing={phase === "play" || phase === "quiz"}
       className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
       style={{
         background:
@@ -1192,8 +1193,8 @@ export default function TsunamiEscapeEnglish() {
         </header>
 
         <Card className="border border-cyan-200/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0 mb-3 shadow-[0_20px_60px_rgba(6,182,212,0.22)]">
-          <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col flex-1 min-h-0">
-            <div className="flex items-center gap-2 mb-2">
+          <CardContent data-game-card-content className="tsunami-layout p-3 sm:p-4 flex flex-col flex-1 min-h-0">
+            <div className="game-title flex items-center gap-2 mb-2">
               <Waves className="w-5 h-5 text-cyan-300" />
               <h1 className="text-base sm:text-lg font-extrabold leading-tight">
                 Szökőár szökés — Tudáspróba (3–5. o.)
@@ -1215,23 +1216,26 @@ export default function TsunamiEscapeEnglish() {
                 </>
               }
             />
-            <p className="text-[11px] text-cyan-100/95 mb-3 leading-snug border border-cyan-400/35 rounded-lg px-2 py-1.5 bg-slate-900/90">
+            <p data-game-sync className="text-[11px] text-cyan-100/95 mb-3 leading-snug border border-cyan-400/35 rounded-lg px-2 py-1.5 bg-slate-900/90">
               {syncBanner}
             </p>
 
             {phase === "menu" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6">
-                <Trophy className="w-16 h-16 text-amber-300 drop-shadow-[0_0_20px_rgba(251,191,36,0.55)]" />
-                <p className="text-xs text-center text-amber-100/90 max-w-sm font-semibold">
-                  Jutalom minden jó válaszra: XP. A láng ikon = hány helyes válasz jött egymás után — tartsd életben a sorozatot!
-                </p>
+              <div className="flex flex-col items-center justify-center flex-1 gap-2 py-2 min-h-0">
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold rounded-full px-8 border border-cyan-100/50 shadow-[0_10px_24px_rgba(56,189,248,0.4)] min-h-[44px]"
+                  onClick={startGame}
+                  data-testid="button-tsunami-start"
+                >
+                  Indítás: {selectedSubjectMeta.label} · {difficultyLabel(difficulty)}
+                </Button>
                 <p className="text-sm text-center text-white/75 max-w-xs">
-                  Legjobb sorozat (helyi): <strong className="text-orange-300">{bestStreak}</strong> helyes
-                  egymás után
+                  Legjobb sorozat: <strong className="text-orange-300">{bestStreak}</strong>
                 </p>
                 <div className="w-full max-w-xl">
-                  <p className="text-xs text-cyan-100/90 text-center font-semibold mb-2">Tantárgy mód</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                  <p className="text-xs text-cyan-100/90 text-center font-semibold mb-1.5">Tantárgy mód</p>
+                  <div className="grid grid-cols-3 gap-1.5">
                     {(["mixed", ...TSUNAMI_SUBJECT_ORDER] as TsunamiSubject[]).map((id) => {
                       const meta = TSUNAMI_SUBJECT_META[id];
                       const active = subject === id;
@@ -1240,7 +1244,7 @@ export default function TsunamiEscapeEnglish() {
                           key={id}
                           type="button"
                           variant={active ? "default" : "outline"}
-                          className={`h-auto min-h-[70px] flex flex-col items-start justify-center gap-0.5 text-left rounded-xl border px-3 py-2 ${
+                          className={`h-auto min-h-[44px] flex flex-col items-start justify-center gap-0.5 text-left rounded-xl border px-2 py-1.5 ${
                             active
                               ? "bg-gradient-to-br from-cyan-500 to-blue-700 text-white border-cyan-100/60 shadow-[0_0_20px_rgba(34,211,238,0.28)]"
                               : "bg-slate-900/75 border-white/20 text-white hover:bg-slate-800/90"
@@ -1248,15 +1252,14 @@ export default function TsunamiEscapeEnglish() {
                           onClick={() => setSubject(id)}
                         >
                           <span className="text-[10px] font-black tracking-wide text-amber-200">{meta.chip}</span>
-                          <span className="text-xs font-extrabold">{meta.label}</span>
-                          <span className="text-[10px] leading-tight text-white/70">{meta.short}</span>
+                          <span className="text-xs font-extrabold leading-tight">{meta.label}</span>
                         </Button>
                       );
                     })}
                   </div>
-                  <p className="mt-2 text-[11px] text-cyan-100/80 text-center">{selectedSubjectMeta.mission}</p>
+                  <p className="mt-1.5 text-[11px] text-cyan-100/80 text-center">{selectedSubjectMeta.mission}</p>
                 </div>
-                <div className="w-full max-w-xs space-y-2">
+                <div className="w-full max-w-xs space-y-1.5">
                   <p className="text-xs text-cyan-100/90 text-center font-semibold">Nehézség</p>
                   <div className="flex gap-2 justify-center flex-wrap">
                     <Button
@@ -1288,14 +1291,6 @@ export default function TsunamiEscapeEnglish() {
                     </Button>
                   </div>
                 </div>
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold rounded-full px-8 border border-cyan-100/50 shadow-[0_10px_24px_rgba(56,189,248,0.4)]"
-                  onClick={startGame}
-                  data-testid="button-tsunami-start"
-                >
-                  Indítás: {selectedSubjectMeta.label} · {difficultyLabel(difficulty)}
-                </Button>
               </div>
             )}
 
@@ -1313,7 +1308,7 @@ export default function TsunamiEscapeEnglish() {
                   target={winQuizTarget(runDifficultyRef.current)}
                   className="mb-2"
                 />
-                <div className="relative flex-1 min-h-[min(52vh,440px)] sm:min-h-[420px] rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
+                <div className="relative flex-1 game-scene min-h-0 rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
                 {/* Ég + nap */}
                 <div
                   className="absolute inset-0"
@@ -1526,7 +1521,7 @@ export default function TsunamiEscapeEnglish() {
 
             {phase === "play" && (
               <>
-                <p className="hidden md:block text-[11px] text-white/65 text-center mt-2 mb-1">
+                <p className="game-key-hint hidden md:block text-[11px] text-white/65 text-center mt-2 mb-1">
                   Billentyűzet: <kbd className="px-1 rounded bg-white/15">←</kbd>{" "}
                   <kbd className="px-1 rounded bg-white/15">→</kbd> vagy <kbd className="px-1 rounded bg-white/15">A</kbd>{" "}
                   <kbd className="px-1 rounded bg-white/15">D</kbd>, sprint: <kbd className="px-1 rounded bg-white/15">Shift</kbd>
@@ -1534,7 +1529,7 @@ export default function TsunamiEscapeEnglish() {
                 {/* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt
                     és görgetett, a futás pedig megállt. */}
                 <div
-                  className="grid grid-cols-3 gap-2 mt-1 sm:mt-3"
+                  className="tsunami-controls grid grid-cols-3 gap-2 mt-1 sm:mt-3"
                   style={{
                     touchAction: "none",
                     userSelect: "none",
