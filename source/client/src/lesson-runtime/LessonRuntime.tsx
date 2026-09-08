@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -28,6 +28,10 @@ import { SectionProba } from "./SectionProba";
 import { ANIMATE_REGISTRY } from "./blocks/animate-blocks";
 import { TRY_REGISTRY } from "./blocks/try-blocks";
 import { prefersReducedMotion, readAloudEnabled, speak, speechSupported } from "@/lib/tts";
+import {
+  useLessonProgress,
+  type TrySnapshot,
+} from "./useLessonProgress";
 import "./lesson-theme.css";
 
 /**
@@ -136,18 +140,22 @@ function CheckBlock({
   block,
   band,
   onPick,
+  picked: controlledPicked,
 }: {
   block: Extract<Block, { kind: "check" }>;
   band: AgeBand;
   onPick?: (pickedIndex: number) => void;
+  /** B7: restored pick from localStorage (controlled when provided). */
+  picked?: number | null;
 }) {
   const theme = BAND_THEME[band];
-  const [picked, setPicked] = useState<number | null>(null);
+  const [localPicked, setLocalPicked] = useState<number | null>(controlledPicked ?? null);
+  const picked = controlledPicked !== undefined ? controlledPicked : localPicked;
   const [hintOpen, setHintOpen] = useState(false);
   const correct = picked !== null && picked === block.correctIndex;
 
   const pick = (i: number) => {
-    setPicked(i);
+    setLocalPicked(i);
     // The section's Próba is graded on the server from these indices (LS-3b).
     onPick?.(i);
   };
@@ -240,10 +248,16 @@ export function LessonBlock({
   block,
   band,
   onPick,
+  picked,
+  tryPersisted,
+  onTryPersist,
 }: {
   block: Block;
   band: AgeBand;
   onPick?: (pickedIndex: number) => void;
+  picked?: number | null;
+  tryPersisted?: TrySnapshot;
+  onTryPersist?: (snap: TrySnapshot) => void;
 }) {
   switch (block.kind) {
     case "explain":
@@ -251,7 +265,7 @@ export function LessonBlock({
     case "example":
       return <ExampleBlock block={block} band={band} />;
     case "check":
-      return <CheckBlock block={block} band={band} onPick={onPick} />;
+      return <CheckBlock block={block} band={band} onPick={onPick} picked={picked} />;
     case "recap":
       return <RecapBlock block={block} band={band} />;
     case "animate": {
@@ -260,7 +274,7 @@ export function LessonBlock({
     }
     case "try": {
       const Try = TRY_REGISTRY[block.tryKind];
-      return <Try spec={block.spec} />;
+      return <Try spec={block.spec} persisted={tryPersisted} onPersist={onTryPersist} />;
     }
   }
 }
@@ -280,6 +294,10 @@ function LessonSection({
   conceptLabel,
   onProbaSuccess,
   sectionRef,
+  initialAnswers,
+  tryBlocks,
+  onAnswersChange,
+  onTryPersist,
 }: {
   section: Section;
   sectionIdx: number;
@@ -288,9 +306,24 @@ function LessonSection({
   conceptLabel: (id: string) => string;
   onProbaSuccess: () => void;
   sectionRef: (el: HTMLElement | null) => void;
+  initialAnswers: Record<number, number>;
+  tryBlocks: Record<string, TrySnapshot>;
+  onAnswersChange: (answers: Record<number, number>) => void;
+  onTryPersist: (blockIdx: number, snap: TrySnapshot) => void;
 }) {
   const theme = BAND_THEME[band];
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [answers, setAnswers] = useState<Record<number, number>>(initialAnswers);
+
+  const pick = useCallback(
+    (bi: number, pickedIndex: number) => {
+      setAnswers((prev) => {
+        const next = { ...prev, [bi]: pickedIndex };
+        onAnswersChange(next);
+        return next;
+      });
+    },
+    [onAnswersChange],
+  );
 
   return (
     <section
@@ -310,7 +343,10 @@ function LessonSection({
           key={bi}
           block={block}
           band={band}
-          onPick={(pickedIndex) => setAnswers((prev) => ({ ...prev, [bi]: pickedIndex }))}
+          picked={answers[bi] ?? null}
+          onPick={(pickedIndex) => pick(bi, pickedIndex)}
+          tryPersisted={tryBlocks[String(bi)]}
+          onTryPersist={(snap) => onTryPersist(bi, snap)}
         />
       ))}
 
@@ -377,10 +413,22 @@ function conceptLabel(lesson: Lesson, conceptId: string): string {
   return conceptId;
 }
 
-export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?: string }) {
+export function LessonRuntime({
+  lesson,
+  lessonId,
+  persistId,
+}: {
+  lesson: Lesson;
+  lessonId?: string;
+  /** B7 storage key when there is no publish id (probe / offline preview). */
+  persistId?: string;
+}) {
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
-  const [current, setCurrent] = useState(0);
+  // B7: persist under htmlFileId when present; probe uses persistId for reload round-trips.
+  const progress = useLessonProgress(persistId ?? lessonId);
+  const current = progress.snapshot.current;
+  const setCurrent = progress.setCurrent;
   const sectionEls = useRef<(HTMLElement | null)[]>([]);
 
   useEffect(() => {
@@ -399,7 +447,7 @@ export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?:
     );
     for (const node of nodes) observer.observe(node);
     return () => observer.disconnect();
-  }, [lesson.sections.length]);
+  }, [lesson.sections.length, setCurrent]);
 
   return (
     // #197 + LS-9: the lesson brings its OWN surface AND ink via [data-band] tokens
@@ -423,20 +471,33 @@ export function LessonRuntime({ lesson, lessonId }: { lesson: Lesson; lessonId?:
 
         <LessonProgress sections={lesson.sections} band={band} current={current} />
 
-        {lesson.sections.map((section, si) => (
-          <LessonSection
-            key={si}
-            section={section}
-            sectionIdx={si}
-            band={band}
-            lessonId={lessonId ?? null}
-            conceptLabel={(id) => conceptLabel(lesson, id)}
-            onProbaSuccess={() => setCurrent((c) => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))}
-            sectionRef={(el) => {
-              sectionEls.current[si] = el;
-            }}
-          />
-        ))}
+        {lesson.sections.map((section, si) => {
+          const stored = progress.snapshot.sections[String(si)];
+          const initialAnswers: Record<number, number> = {};
+          if (stored?.answers) {
+            for (const [k, v] of Object.entries(stored.answers)) {
+              if (typeof v === "number") initialAnswers[Number(k)] = v;
+            }
+          }
+          return (
+            <LessonSection
+              key={si}
+              section={section}
+              sectionIdx={si}
+              band={band}
+              lessonId={lessonId ?? null}
+              conceptLabel={(id) => conceptLabel(lesson, id)}
+              initialAnswers={initialAnswers}
+              tryBlocks={stored?.tryBlocks ?? {}}
+              onAnswersChange={(answers) => progress.setSectionAnswers(si, answers)}
+              onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)}
+              onProbaSuccess={() => setCurrent((c) => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))}
+              sectionRef={(el) => {
+                sectionEls.current[si] = el;
+              }}
+            />
+          );
+        })}
       </article>
     </div>
   );

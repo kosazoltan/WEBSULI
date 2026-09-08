@@ -17,6 +17,7 @@ import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { scoreCorrectAnswer } from "@/game-engine/retry-policy";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
+import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 
 type GradeLevel = 3 | 4 | 5;
 type Phase = "menu" | "play" | "over" | "won";
@@ -296,6 +297,17 @@ export default function SpeedQuizMath() {
   // olvas, és az olvasásért nem jár büntetés.
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
   const attemptRef = useRef(0);
+
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
+          setPhase(patch.phase);
+        }
+        if (typeof patch.correctCount === "number") setCorrect(Math.max(0, patch.correctCount));
+      },
+    });
+  }, []);
 
   /**
    * G-4: adaptív nehézség — az IDŐN keresztül, nem a tartalmon.
@@ -777,6 +789,7 @@ export default function SpeedQuizMath() {
                             : "bg-slate-900/95 hover:bg-cyan-700/45 border-cyan-200/35"
                       }`}
                       onClick={() => handleAnswer(idx)}
+                      {...correctDataAttrs(idx === task.correctIndex)}
                     >
                       {opt}
                     </Button>
@@ -786,7 +799,10 @@ export default function SpeedQuizMath() {
             )}
 
             {(phase === "over" || phase === "won") && (
-              <div className="flex-1 flex flex-col justify-center items-center text-center gap-3 py-8">
+              <div
+                className="flex-1 flex flex-col justify-center items-center text-center gap-3 py-8"
+                data-testid={phase === "won" ? "sq-won" : "sq-over"}
+              >
                 {phase === "won" ? (
                   <Trophy className="w-14 h-14 text-amber-300" />
                 ) : (

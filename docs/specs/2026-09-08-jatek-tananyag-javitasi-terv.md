@@ -1,7 +1,7 @@
 # Játékélmény + tananyaglogika — javítási terv (2026-09-08)
 
-**Státusz:** részben végrehajtva (2026-09-08) — A1, A2 (policy + Matek + Brain Rot), A3, A4 (már létező merge-szűrés), A5 (Aszteroida), B1–B6, C1 kész; B7, C2, D1, D2 még nyitott
-**Ág:** `codex/game-viewport-experience` (a viewport-munka még commitolatlan)
+**Státusz:** végrehajtva (2026-09-08) — A1–A5, B1–B7, C1–C2, D1–D2 kész; mastery onRetry a Viharvadász/Aszteroida dokumentált modellje szerint kivétel marad
+**Ág:** `main` (viewport + javítások merge után)
 **Készült:** valós mérésekből (böngésző + futtatott ellenőrzések) és forrásból igazolt kódolvasásból
 **Célközönség:** AI-ügynök, amely a feladatokat egyenként, sorrendben végrehajtja
 

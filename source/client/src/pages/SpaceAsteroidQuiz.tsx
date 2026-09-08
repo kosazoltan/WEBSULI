@@ -41,6 +41,8 @@ import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import HoldButton from "@/game-engine/HoldButton";
 import { joystickToDirections } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
+import { useCoarsePointer } from "@/hooks/useCoarsePointer";
+import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 
 /* =====================================================================
  * Galaktikus Aszteroida Kvíz Vadász – Three.js 3D űrharc
@@ -632,6 +634,7 @@ function buildPowerPickupMesh(): THREE.Group {
 
 export default function SpaceAsteroidQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const coarsePointer = useCoarsePointer();
 
   // LS-4 (D3): the play-time coupon earned in a lesson, exactly as in Tsunami —
   // without a coupon this is inert and free play stays the default.
@@ -666,6 +669,21 @@ export default function SpaceAsteroidQuiz() {
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const [paused, setPaused] = useState(false);
   const [gameWon, setGameWon] = useState(false);
+
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.phase === "intro" || patch.phase === "grade" || patch.phase === "play" || patch.phase === "over") {
+          setPhase(patch.phase);
+        }
+        if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
+        if (typeof patch.correctCount === "number") {
+          setScore(Math.max(0, patch.correctCount) * 10);
+          setWave(12);
+        }
+      },
+    });
+  }, []);
 
   const scoreSubmittedRef = useRef(false);
   const { data: syncEligibility } = useSyncEligibilityQuery();
@@ -2258,6 +2276,7 @@ export default function SpaceAsteroidQuiz() {
                     size="lg"
                     className="bg-gradient-to-r from-cyan-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 border border-cyan-300/40 font-bold text-white shadow-lg text-base"
                     onClick={startNewRun}
+                    data-testid="sa-start"
                   >
                     <Rocket className="w-4 h-4 mr-2" />Indulhat — {grade}. osztály
                   </Button>
@@ -2322,14 +2341,11 @@ export default function SpaceAsteroidQuiz() {
                   )}
                 </div>
 
-                {/* Touch kontrollok — G-8: joystick + tüzelőgomb.
-                    A négy nyílgomb helyett tárcsa, mert az átlós irány két gomb
-                    EGYIDEJŰ nyomását követelte, ami egy hüvelykujjal nem megy: a
-                    gyerek négy irányra volt korlátozva egy nyolcirányú játékban.
-                    A böngésző saját gesztusai kikapcsolva — touch-action:none
-                    nélkül a hosszú nyomás kijelöl, felugró menüt nyit és görget. */}
+                {/* Touch kontrollok — csak coarse pointer (C2). */}
+                {coarsePointer ? (
                 <div
                   className="flex items-center justify-between gap-3 w-full"
+                  data-testid="sa-touch-controls"
                   style={{
                     touchAction: "none",
                     userSelect: "none",
@@ -2363,6 +2379,11 @@ export default function SpaceAsteroidQuiz() {
                     🚀 TŰZ
                   </HoldButton>
                 </div>
+                ) : (
+                  <p className="w-full text-center text-[11px] text-white/55" data-testid="sa-keyboard-hint">
+                    Billentyűzet: nyilak / WASD mozgat · Space tűz · B bomba
+                  </p>
+                )}
 
                 {/* HUD */}
                 <div className="w-full flex items-center gap-1.5">
@@ -2396,7 +2417,7 @@ export default function SpaceAsteroidQuiz() {
               </div>
 
             {phase === "over" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center">
+              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8 text-center" data-testid="sa-over">
                 <Rocket className={`w-12 h-12 ${gameWon ? "text-amber-300" : "text-cyan-400"}`} />
                 <p className="text-lg font-bold">{gameWon ? "Kalandod sikeres! Mind a 12 hullám teljesítve!" : "Kör vége"}</p>
                 <p className="text-sm text-white/75">XP: <strong className="text-amber-300">{score}</strong> · Hullám: <strong>{wave}/12</strong> · Kilőve: <strong>{enemiesKilled}</strong></p>
@@ -2470,6 +2491,7 @@ export default function SpaceAsteroidQuiz() {
                       className={cls}
                       disabled={revealCorrectIdx !== null}
                       onClick={() => onAnswer(i)}
+                      {...correctDataAttrs(i === activeQuiz.correctIndex)}
                     >
                       {o}
                     </Button>

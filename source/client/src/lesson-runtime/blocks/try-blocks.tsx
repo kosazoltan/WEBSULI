@@ -5,29 +5,35 @@ import { ArrowDown, ArrowUp, CheckCircle2, RotateCcw, XCircle } from "lucide-rea
 import type { TryKind } from "@shared/lesson-schema";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { TrySnapshot } from "../useLessonProgress";
 
 /**
  * LS-4 — the three planned hands-on kinds (master plan §4).
  *
- * Every kind grades itself locally and shows per-attempt feedback; the results are
- * not persisted here (the LS-5 feedback loop owns aggregation). Touch-first: the
- * reorderer uses 44 px arrow buttons instead of HTML5 drag, which is unreliable
- * under touch. Specs come from a model, so readers are tolerant like the animate
- * blocks.
+ * Every kind grades itself locally and shows per-attempt feedback. Touch-first:
+ * the reorderer uses 44 px arrow buttons instead of HTML5 drag. Specs come from
+ * a model, so readers are tolerant like the animate blocks.
+ *
+ * B7: optional persisted + onPersist restore answers across refresh.
  */
 
-type TryProps = { spec: Record<string, unknown> };
+type TryProps = {
+  spec: Record<string, unknown>;
+  persisted?: TrySnapshot;
+  onPersist?: (snap: TrySnapshot) => void;
+};
 
 function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
-function DragSort({ spec }: TryProps) {
+function DragSort({ spec, persisted, onPersist }: TryProps) {
   const initial = strArray(spec.items);
   const correct = strArray(spec.correctOrder);
   const hint = typeof spec.hint === "string" ? spec.hint.trim() : "";
-  const [order, setOrder] = useState<string[]>(initial);
-  const [checked, setChecked] = useState(false);
+  const restored = persisted?.kind === "dragSort" ? persisted : null;
+  const [order, setOrder] = useState<string[]>(() => restored?.order ?? initial);
+  const [checked, setChecked] = useState(() => restored?.checked ?? false);
 
   const move = (i: number, delta: number) => {
     const target = i + delta;
@@ -36,6 +42,7 @@ function DragSort({ spec }: TryProps) {
     [next[i], next[target]] = [next[target], next[i]];
     setOrder(next);
     setChecked(false);
+    onPersist?.({ kind: "dragSort", order: next, checked: false });
   };
 
   if (initial.length === 0 || correct.length === 0) {
@@ -63,8 +70,26 @@ function DragSort({ spec }: TryProps) {
         </div>
       ))}
       <div className="flex items-center gap-2 pt-1">
-        <Button className="min-h-11" onClick={() => setChecked(true)} data-testid="try-check">Ellenőrzés</Button>
-        <Button variant="ghost" className="min-h-11" onClick={() => { setOrder(initial); setChecked(false); }} aria-label="Újra">
+        <Button
+          className="min-h-11"
+          onClick={() => {
+            setChecked(true);
+            onPersist?.({ kind: "dragSort", order, checked: true });
+          }}
+          data-testid="try-check"
+        >
+          Ellenőrzés
+        </Button>
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          onClick={() => {
+            setOrder(initial);
+            setChecked(false);
+            onPersist?.({ kind: "dragSort", order: initial, checked: false });
+          }}
+          aria-label="Újra"
+        >
           <RotateCcw className="w-4 h-4" />
         </Button>
         {checked && (
@@ -79,19 +104,24 @@ function DragSort({ spec }: TryProps) {
   );
 }
 
-function FillBlank({ spec }: TryProps) {
+function FillBlank({ spec, persisted, onPersist }: TryProps) {
   const text = typeof spec.text === "string" ? spec.text : "";
   const answers = strArray(spec.answers);
   const hint = typeof spec.hint === "string" ? spec.hint.trim() : "";
   const blanks = (text.match(/___+/g) ?? []).length;
-  const [values, setValues] = useState<string[]>(Array.from({ length: Math.max(blanks, 1) }, () => ""));
-  const [checked, setChecked] = useState(false);
+  const restored = persisted?.kind === "fillBlank" ? persisted : null;
+  const [values, setValues] = useState<string[]>(() => {
+    if (restored?.values && restored.values.length === Math.max(blanks, 1)) return restored.values;
+    return Array.from({ length: Math.max(blanks, 1) }, () => "");
+  });
+  const [checked, setChecked] = useState(() => restored?.checked ?? false);
 
   const setValue = (i: number, v: string) => {
     const next = [...values];
     next[i] = v;
     setValues(next);
     setChecked(false);
+    onPersist?.({ kind: "fillBlank", values: next, checked: false });
   };
 
   if (blanks < 1 || answers.length !== blanks) {
@@ -125,7 +155,16 @@ function FillBlank({ spec }: TryProps) {
         </span>
       ))}</p>
       <div className="flex items-center gap-2">
-        <Button className="min-h-11" onClick={() => setChecked(true)} data-testid="try-check">Ellenőrzés</Button>
+        <Button
+          className="min-h-11"
+          onClick={() => {
+            setChecked(true);
+            onPersist?.({ kind: "fillBlank", values, checked: true });
+          }}
+          data-testid="try-check"
+        >
+          Ellenőrzés
+        </Button>
         {checked && (
           isCorrect
             ? <span className="inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 className="w-4 h-4" /> Helyes!</span>
@@ -138,14 +177,15 @@ function FillBlank({ spec }: TryProps) {
   );
 }
 
-function Match({ spec }: TryProps) {
+function Match({ spec, persisted, onPersist }: TryProps) {
   const pairs = Array.isArray(spec.pairs)
     ? (spec.pairs as Array<Record<string, unknown>>)
         .filter((p) => p && typeof p.left === "string" && typeof p.right === "string")
         .map((p) => ({ left: p.left as string, right: p.right as string }))
     : [];
+  const restored = persisted?.kind === "match" ? persisted : null;
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
-  const [matched, setMatched] = useState<Set<number>>(new Set());
+  const [matched, setMatched] = useState<Set<number>>(() => new Set(restored?.matched ?? []));
   const [failed, setFailed] = useState<Set<number>>(new Set());
 
   const pickLeft = (i: number) => {
@@ -156,7 +196,11 @@ function Match({ spec }: TryProps) {
   const pickRight = (i: number) => {
     if (selectedLeft === null) return;
     if (selectedLeft === i) {
-      setMatched((m) => new Set(m).add(i));
+      setMatched((m) => {
+        const next = new Set(m).add(i);
+        onPersist?.({ kind: "match", matched: Array.from(next) });
+        return next;
+      });
     } else {
       setFailed((f) => new Set(f).add(selectedLeft).add(i));
     }

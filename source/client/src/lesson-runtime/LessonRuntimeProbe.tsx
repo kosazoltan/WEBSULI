@@ -123,7 +123,8 @@ function probeLesson(search: string): Lesson {
 }
 
 export default function LessonRuntimeProbe() {
-  return <LessonRuntime lesson={probeLesson(window.location.search)} />;
+  // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
+  return <LessonRuntime lesson={probeLesson(window.location.search)} persistId="probe-lesson" />;
 }
 
 /**

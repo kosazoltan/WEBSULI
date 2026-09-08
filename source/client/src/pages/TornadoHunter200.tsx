@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import AchievementToast from "@/components/AchievementToast";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -183,6 +184,7 @@ export default function TornadoHunter200() {
   const [progress, setProgress] = useState<TornadoProgress>(() => loadProgress());
   const [screen, setScreen] = useState<Screen>("menu");
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
+  const [forceResult, setForceResult] = useState<boolean | null>(null);
 
   const coupon = useCouponSession();
   const { data: syncEligibility } = useSyncEligibilityQuery();
@@ -192,6 +194,20 @@ export default function TornadoHunter200() {
   useEffect(() => {
     saveProgress(progress);
   }, [progress]);
+
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.screen === "menu" || patch.screen === "levels" || patch.screen === "play") {
+          setScreen(patch.screen);
+        }
+        if (patch.phase === "result_win") {
+          setScreen("play");
+          setForceResult(true);
+        }
+      },
+    });
+  }, []);
 
   const selectedVehicle = vehicleById(progress.selectedVehicleId) ?? VEHICLES[0]!;
 
@@ -273,6 +289,7 @@ export default function TornadoHunter200() {
             progress={progress}
             coupon={coupon}
             syncEligible={Boolean(syncEligibility?.eligible)}
+            forceResult={forceResult}
             onExit={() => setScreen("levels")}
             onComplete={(next, unlocked) => {
               setProgress(next);
@@ -901,6 +918,7 @@ function PlayScreen(props: {
   progress: TornadoProgress;
   coupon: CouponSession;
   syncEligible: boolean;
+  forceResult?: boolean | null;
   onExit: () => void;
   onComplete: (next: TornadoProgress, unlocked: Achievement[]) => void;
   onProgress: (next: TornadoProgress) => void;
@@ -1358,6 +1376,12 @@ function PlayScreen(props: {
     [props, spec],
   );
 
+  useEffect(() => {
+    if (props.forceResult === true) {
+      finishRun(true);
+    }
+  }, [props.forceResult, finishRun]);
+
   const resolveAnchor = useCallback(
     (answerCorrect: boolean) => {
       const pending = pendingAnchorRef.current;
@@ -1798,6 +1822,7 @@ function PlayScreen(props: {
                               ? "border-rose-400 bg-rose-800/40"
                               : "border-white/15 bg-slate-800/70 hover:border-sky-400/60 hover:bg-slate-700/70"
                         }`}
+                        {...correctDataAttrs(i === activeQuiz.correctIndex)}
                       >
                         {String.fromCharCode(65 + i)}. {opt}
                       </button>
@@ -1847,7 +1872,7 @@ function PlayScreen(props: {
           />
 
           {result && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-30">
+            <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-30" data-testid="th-result">
               <div className="w-full max-w-sm rounded-xl border border-white/15 bg-slate-900/95 p-5 text-center">
                 <h3 className={`text-2xl font-extrabold mb-1 ${result.won ? "text-emerald-300" : "text-rose-300"}`}>
                   {result.won ? "Intercept sikeres!" : "Sikertelen intercept"}

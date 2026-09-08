@@ -16,6 +16,7 @@ import AchievementToast from "@/components/AchievementToast";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
+import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import {
   ArrowLeft,
   ArrowBigLeft,
@@ -574,6 +575,16 @@ export default function TsunamiEscapeEnglish() {
   const [stormFlash, setStormFlash] = useState(false);
   const [driftDir, setDriftDir] = useState(0);
   const [lightGraphics, setLightGraphics] = useState(false);
+
+  useEffect(() => {
+    return installGameTestApi({
+      forceState: (patch) => {
+        if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
+          setPhase(patch.phase);
+        }
+      },
+    });
+  }, []);
 
   const keysRef = useRef({ left: false, right: false, sprint: false });
   const playerXRef = useRef(playerX);
@@ -1578,7 +1589,7 @@ export default function TsunamiEscapeEnglish() {
             )}
 
             {phase === "won" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center">
+              <div className="flex flex-col items-center justify-center flex-1 gap-3 py-6 text-center" data-testid="ts-won">
                 <Trophy className="w-16 h-16 text-amber-300 drop-shadow-lg" />
                 <p className="text-xl font-black text-amber-200">Sikerült elmenekülni!</p>
                 <p className="text-sm font-semibold text-emerald-200/95 max-w-sm">
@@ -1703,6 +1714,7 @@ export default function TsunamiEscapeEnglish() {
                     variant="secondary"
                     className="h-auto py-3 text-left justify-start whitespace-normal bg-slate-900/95 hover:bg-cyan-700/45 text-white border border-cyan-200/35"
                     onClick={() => onAnswer(i)}
+                    {...correctDataAttrs(i === quiz.correctIndex)}
                   >
                     {opt}
                   </Button>
