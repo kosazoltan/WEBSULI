@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { ageBandForClassroom, conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
+import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 
@@ -163,6 +164,9 @@ export function buildPedagoguePrompt(map: PromptMap): string {
     "- Minden szakaszhoz tervezz blokkokat (plannedBlocks) a megengedett típusokból: explain, example, check, recap, animate, try.",
     "- Ahol animáció segítene, írd be az animationSuggestions mezőbe.",
     "",
+    LESSON_ARC_CONTRACT,
+    "A plannedBlocks sorrendje EZT az ívet kövesse — a vázlat sorrendje lesz a lecke sorrendje.",
+    "",
     `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
     "",
     "A válasz CSAK JSON legyen, a következő alakban:",
@@ -264,6 +268,8 @@ export function buildAuthorPrompt(
     "- If gateFeedback is supplied, repair its listed blocks in previousLesson as well as lektor findings. Teach each claimed concept explicitly in visible text; do not just append hidden keywords or remove the concept's teaching.",
     "",
     AUTHOR_BLOCK_CATALOG,
+    "",
+    LESSON_ARC_CONTRACT,
     "",
   ];
 

@@ -65,8 +65,33 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // Egy pár szavas blokk nem taníthat fogalmat, bármit is állít a címke.
   if (haystack.split(" ").filter(Boolean).length < 4) return false;
 
-  const stems = new Set(haystack.split(" ").filter(Boolean).map(stem));
-  return words.every((w) => stems.has(stem(w)));
+  const tokens = haystack.split(" ").filter(Boolean);
+  const stems = new Set(tokens.map(stem));
+
+  /*
+   * M-5 (2026-09-07, próbafuttatáson mérve) — a RÖVID fogalomszavak ragozott
+   * alakja eddig sosem egyezett. A `stem` az első 5 karaktert veszi, tehát a
+   * három betűs „kör" („kor") sosem lett azonos a „körön" ötkarakteres tövével
+   * („koron"). Hosszú szavaknál a vágás elvégzi a dolgát („terület"/„területét"
+   * → „terul"), rövideknél viszont bármilyen toldalék elrontotta a mérést.
+   *
+   * A következmény nem apró: a kapu így a SZÁRAZ, kulcsszó-ismétlő szöveget
+   * jutalmazta — a szerzőnek szó szerint bele kellett írnia a fogalom ragtalan
+   * nevét. Épp azt a stílust kényszerítette ki, amit a tananyagon kifogásoltunk.
+   *
+   * A lazítás korlátja a KONJUNKCIÓ: a fogalom MINDEN érdemi szavának meg kell
+   * lennie, ezért egy véletlen előtag-egyezés („korszak" a „kör"-re) önmagában
+   * nem alapoz meg semmit.
+   */
+  const present = (word: string): boolean => {
+    if (stems.has(stem(word))) return true;
+    // Rövid szó (kör, sík, tér): a ragozott alak eleje egyezzen.
+    if (word.length < STEM_LEN) return tokens.some((t) => t.startsWith(word));
+    // Hosszabb szó: állhat ÖSSZETÉTEL belsejében is („összterülete", „alapterület").
+    return tokens.some((t) => t.includes(stem(word)));
+  };
+
+  return words.every(present);
 }
 
 export type UngroundedClaim = {

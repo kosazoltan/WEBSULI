@@ -12,6 +12,7 @@ import {
 import type { MapConcept } from "../server/studio/coverage";
 import type { LektorNote } from "../server/studio/lektor";
 import { COUPON_GAME_IDS } from "../server/studio/quiz-export";
+import { DEFAULT_REWARD_POLICY } from "../shared/reward-policy";
 
 /**
  * Audit 2026-09-05 (spec: docs/specs/audit-4day-fixes-2026-09-05.md, szelet A).
@@ -39,10 +40,32 @@ function lessonCovering(ids: string[], withCheck = true) {
     readAloud: true,
     coversConceptIds: [id],
   }));
+  // M-6 (2026-09-07): a Próbát futtató szakasz annyi kérdést hozzon, amennyi a
+  // játékidőhöz kell — egy kérdéssel a gyerek hibátlan Próbával sem kapna
+  // jutalmat. A régi fixture EGY kérdést hozott, és az új kapu emiatt
+  // elutasította volna. A javítás itt is a fixture-ön van, nem a kapun.
+  const CHECKS = withCheck ? DEFAULT_REWARD_POLICY.minCorrectForCoupon : 0;
+  // Az ív sorrendje KÖT: megmutatás és levezetett példa a kérdések ELŐTT.
+  blocks.push({
+    kind: "animate",
+    animKind: "process",
+    params: { steps: [`${ids[0]} lépései`] },
+    caption: `Így épül fel: ${ids[0]}.`,
+    coversConceptIds: [ids[0]],
+  });
   if (withCheck) {
     blocks.push({
+      kind: "example",
+      problem: `Mutasd meg, mit jelent: ${ids[0]}.`,
+      steps: [`Vedd elő a(z) ${ids[0]} meghatározását.`],
+      answer: `Ez a(z) ${ids[0]}.`,
+      coversConceptIds: [ids[0]],
+    });
+  }
+  for (let i = 0; i < CHECKS; i += 1) {
+    blocks.push({
       kind: "check",
-      question: "Mi a sejt?",
+      question: `Mi a sejt? (${i + 1}.)`,
       options: ["Alapegység", "Szerv", "Szövet", "Rendszer"],
       correctIndex: 0,
       explanation: "A sejt az élőlények alapegysége.",
@@ -50,6 +73,7 @@ function lessonCovering(ids: string[], withCheck = true) {
       coversConceptIds: [ids[0]],
     });
   }
+  blocks.push({ kind: "recap", bullets: ["A sejt az élőlények alapegysége."] });
   return {
     title: "A sejt",
     subject: "biológia",
@@ -141,8 +165,8 @@ test("gate pass: a lecke publikálódik (html_files, publishedAt, coverage, kví
   assert.equal(pub.coverage.core.ratio, 1);
   assert.equal(
     pub.quizItems.length,
-    COUPON_GAME_IDS.length * 1,
-    `1 fogalom-kötött check × ${COUPON_GAME_IDS.length} kupon-motoros játék`,
+    COUPON_GAME_IDS.length * DEFAULT_REWARD_POLICY.minCorrectForCoupon,
+    `${DEFAULT_REWARD_POLICY.minCorrectForCoupon} fogalom-kötött check × ${COUPON_GAME_IDS.length} kupon-motoros játék`,
   );
   // #178: the FK column gets the km_concepts UUID, never the lesson's local slug.
   assert.ok(pub.quizItems.every((q) => q.conceptId === "uuid-c1"), "conceptId = km_concepts.id (UUID), nem 'c1'");
@@ -231,4 +255,75 @@ test("gate: lecke nélküli job → error, publikálás nélkül", async () => {
 
   assert.equal(outcome.ok, false);
   assert.equal(store.published.length, 0);
+});
+
+/* --------------------- M-2: a didaktikai ív kapuja --------------------- */
+
+/**
+ * A tulajdonos által jelzett hiba tiszta alakja: a lecke minden fogalmat „lefed",
+ * ezért a FEDETTSÉGI kapu átengedné — de felvezetés és levezetett példa nélkül
+ * kérdez vissza. Ez az, ami élesben kiment.
+ */
+function drillOnlyLesson(ids: string[]) {
+  const blocks: unknown[] = ids.map((id, i) => ({
+    kind: "check",
+    question: `Mi az, hogy ${id}?`,
+    options: ["Alapegység", "Szerv"],
+    correctIndex: 0,
+    feedbackPerOption: ["Igen.", "Nem."],
+    coversConceptIds: [id],
+    _i: i,
+  }));
+  return {
+    title: "A sejt",
+    subject: "biológia",
+    classroom: 7,
+    mapId: "m1",
+    sections: [{ heading: "A sejt", probaEnabled: true, blocks }],
+    misconceptions: [],
+    sourceOnly: true,
+  };
+}
+
+test("gate: a csupa kérdésből álló lecke NEM publikálódik, pedig a fedettsége teljes", async () => {
+  const store = new MemoryStore();
+  store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
+  const lesson = drillOnlyLesson(["c1", "c2", "s1"]);
+  store.lessons.set("lesson-1", { id: "lesson-1", mapId: "m1", json: lesson });
+  store.seed({ id: "job-1", mapId: "m1", step: "gate", lessonId: "lesson-1", output: { lesson } });
+
+  const outcome = await runPipelineStep("job-1", deps(store));
+
+  assert.equal(store.published.length, 0, "felvezetés és levezetés nélküli lecke nem mehet ki");
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.ok && outcome.next.step, "author", "a szerző kap egy javító kört");
+
+  const job = await store.loadJob("job-1");
+  const gate = (job?.output as { gate?: { ok: boolean; reasons: string[]; arc?: unknown[] } })?.gate;
+  assert.equal(gate?.ok, false);
+  assert.ok(
+    gate?.reasons.some((r) => /magyarázattal kezdődik/.test(r)),
+    `a kapu nevezze meg a hiányzó felvezetést: ${JSON.stringify(gate?.reasons)}`,
+  );
+  assert.ok(
+    gate?.reasons.some((r) => /levezetett példát/.test(r)),
+    `a kapu nevezze meg a hiányzó levezetést: ${JSON.stringify(gate?.reasons)}`,
+  );
+  assert.ok(Array.isArray(gate?.arc) && gate.arc.length > 0, "az ív-kifogások a job kimenetébe kerüljenek");
+});
+
+test("gate: a fedettségi és az ív-kifogás EGY listába kerül, a szerző mindkettőt látja", async () => {
+  const store = new MemoryStore();
+  // Csak c1-et tanítja → hiányzó core fogalom, ÉS nincs íve sem.
+  store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
+  const lesson = drillOnlyLesson(["c1"]);
+  store.lessons.set("lesson-1", { id: "lesson-1", mapId: "m1", json: lesson });
+  store.seed({ id: "job-1", mapId: "m1", step: "gate", lessonId: "lesson-1", output: { lesson } });
+
+  await runPipelineStep("job-1", deps(store));
+
+  const job = await store.loadJob("job-1");
+  const reasons = (job?.output as { gate?: { reasons: string[] } })?.gate?.reasons ?? [];
+  assert.ok(reasons.some((r) => /kulcsfogalmat/.test(r)), "fedettségi hiány");
+  assert.ok(reasons.some((r) => /felvezetés|magyarázattal/.test(r)), "ív-hiány");
 });
