@@ -1155,8 +1155,8 @@ export default function SpaceAsteroidQuiz() {
     const handleResize = () => {
       if (!canvas.parentElement) return;
       const rect = canvas.parentElement.getBoundingClientRect();
-      const w = Math.max(320, Math.floor(rect.width));
-      const h = Math.max(240, Math.floor(rect.height));
+      const w = Math.max(1, Math.floor(rect.width));
+      const h = Math.max(1, Math.floor(rect.height));
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       // A játéksík a z=0 körül van, a kamera z=22-nél áll.
@@ -2161,7 +2161,8 @@ export default function SpaceAsteroidQuiz() {
   })();
 
   return (
-    <div className="game-shell-fixed min-h-screen relative overflow-hidden text-white" style={{
+    <div data-game="SpaceAsteroidQuiz" data-playing={phase === "play" || phase === "quiz"}
+      className="game-shell-fixed min-h-screen relative overflow-hidden text-white" style={{
       background: "radial-gradient(ellipse at 22% 18%, rgba(255,0,255,0.18), transparent 38%), radial-gradient(ellipse at 80% 12%, rgba(0,240,255,0.20), transparent 42%), linear-gradient(180deg, #02041a 0%, #08051b 100%)",
     }}>
       <AchievementToast achievements={newlyUnlocked} />
@@ -2277,8 +2278,8 @@ export default function SpaceAsteroidQuiz() {
               useEffect azonnal a komponens mountjakor inicializálni tudja a scenet,
               és nem kell minden átmenetnél a teljes 3D scene-t újraépíteni.
             */}
-            <div className={`flex flex-col items-center gap-1.5 ${phase === "play" || phase === "quiz" ? "" : "hidden"}`}>
-                <div className="relative rounded-xl overflow-hidden border-2 border-cyan-700/70 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black min-h-[min(56dvh,420px)] sm:min-h-[360px]">
+            <div className={`game-play-stack flex flex-1 min-h-0 flex-col items-center gap-1.5 ${phase === "play" || phase === "quiz" ? "" : "hidden"}`}>
+                <div className="relative rounded-xl overflow-hidden border-2 border-cyan-700/70 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black game-scene flex-1 min-h-0">
                   <canvas ref={canvasRef} className="block touch-manipulation w-full h-full" style={{ width: "100%", height: "100%" }} />
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_56%,rgba(0,0,0,0.32)_100%)]" />
                   <div className={`pointer-events-none absolute left-2 top-2 rounded-lg border bg-slate-950/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
@@ -2430,7 +2431,7 @@ export default function SpaceAsteroidQuiz() {
               aria-label="Mini-teszt"
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              className={`w-full max-w-md rounded-2xl border-2 border-cyan-400/55 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake-spq" : ""}`}
+              className={`game-quiz w-full max-w-md rounded-2xl border-2 border-cyan-400/55 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake-spq" : ""}`}
             >
               <div className="flex items-center gap-2 mb-1">
                 <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
@@ -2450,18 +2451,18 @@ export default function SpaceAsteroidQuiz() {
                   : "Csak helyes válasz után folytatódik a játék. Próbálkozhatsz többször is — minden rossz válaszra új kvíz jön."}
               </p>
               <p className="text-base font-semibold mb-4">{activeQuiz.prompt}</p>
-              <div className="grid gap-2">
+              <div className="game-quiz-answers grid gap-2">
                 {activeQuiz.options.map((o, i) => {
                   const isCorrect = revealCorrectIdx === i;
                   const isWrong = wrongIdx === i;
                   const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
                   const cls = isCorrect
-                    ? "h-auto py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[15px] font-bold"
+                    ? "min-h-[44px] h-auto py-3 text-left bg-emerald-700/70 hover:bg-emerald-700/70 text-white border-2 border-emerald-300 text-[15px] font-bold"
                     : isWrong
-                      ? "h-auto py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[15px]"
+                      ? "min-h-[44px] h-auto py-3 text-left bg-rose-800/70 hover:bg-rose-800/70 text-white border-2 border-rose-300 text-[15px]"
                       : dim
-                        ? "h-auto py-3 text-left bg-white/5 text-white/40 border border-cyan-900/20 text-[15px]"
-                        : "h-auto py-3 text-left bg-white/10 hover:bg-cyan-800/55 text-white border border-cyan-900/40 text-[15px]";
+                        ? "min-h-[44px] h-auto py-3 text-left bg-white/5 text-white/40 border border-cyan-900/20 text-[15px]"
+                        : "min-h-[44px] h-auto py-3 text-left bg-white/10 hover:bg-cyan-800/55 text-white border border-cyan-900/40 text-[15px]";
                   return (
                     <Button
                       key={`${o}-${i}`}

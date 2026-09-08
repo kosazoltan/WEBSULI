@@ -134,20 +134,94 @@ export const blockSchema = z
     recapBlock,
   ])
   .superRefine((block, ctx) => {
-    if (block.kind !== "check") return;
-    if (block.feedbackPerOption.length !== block.options.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["feedbackPerOption"],
-        message: "Minden válaszlehetőséghez tartoznia kell visszajelzésnek.",
-      });
+    if (block.kind === "check") {
+      if (block.feedbackPerOption.length !== block.options.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["feedbackPerOption"],
+          message: "Minden válaszlehetőséghez tartoznia kell visszajelzésnek.",
+        });
+      }
+      if (block.correctIndex >= block.options.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["correctIndex"],
+          message: "A helyes válasz indexe a válaszlehetőségeken kívülre mutat.",
+        });
+      }
+      return;
     }
-    if (block.correctIndex >= block.options.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["correctIndex"],
-        message: "A helyes válasz indexe a válaszlehetőségeken kívülre mutat.",
-      });
+
+    if (block.kind !== "try") return;
+    const spec = block.spec;
+    const asStrings = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
+
+    if (block.tryKind === "dragSort") {
+      const items = asStrings(spec.items);
+      const correctOrder = asStrings(spec.correctOrder);
+      if (items.length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["spec", "items"],
+          message: "A sorrendezőnek legalább két eleme legyen.",
+        });
+      }
+      if (correctOrder.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["spec", "correctOrder"],
+          message: "A sorrendezőhöz meg kell adni a helyes sorrendet.",
+        });
+      } else if (items.length > 0 && correctOrder.length !== items.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["spec", "correctOrder"],
+          message: "A helyes sorrend hossza egyezzen az elemek számával.",
+        });
+      }
+      return;
+    }
+
+    if (block.tryKind === "fillBlank") {
+      const text = typeof spec.text === "string" ? spec.text : "";
+      const answers = asStrings(spec.answers);
+      const blanks = (text.match(/___+/g) ?? []).length;
+      if (blanks < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["spec", "text"],
+          message: "A kitöltős szövegben legyen legalább egy ___ helyőrző.",
+        });
+      }
+      if (answers.length !== blanks) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["spec", "answers"],
+          message: "Annyi helyes válasz kell, ahány üres hely van a szövegben.",
+        });
+      }
+      return;
+    }
+
+    if (block.tryKind === "match") {
+      const pairs = Array.isArray(spec.pairs) ? spec.pairs : [];
+      const valid = pairs.filter(
+        (p): p is { left: string; right: string } =>
+          !!p &&
+          typeof p === "object" &&
+          typeof (p as { left?: unknown }).left === "string" &&
+          typeof (p as { right?: unknown }).right === "string" &&
+          (p as { left: string }).left.trim().length > 0 &&
+          (p as { right: string }).right.trim().length > 0,
+      );
+      if (valid.length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["spec", "pairs"],
+          message: "A párosítónak legalább egy érvényes párja legyen.",
+        });
+      }
     }
   });
 

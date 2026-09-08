@@ -950,21 +950,43 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
     async publishLesson(input) {
       // Audit 2026-09-05 (A): one transaction — a lesson is either fully reachable
       // (html_files row + publishedAt + quiz export) or untouched.
+      // B6: re-publish keeps the existing htmlFileId so old /preview links stay valid.
       return db.transaction(async (tx) => {
-        const [file] = await tx
-          .insert(htmlFiles)
-          .values({
-            title: input.title,
-            content: LESSON_PLACEHOLDER_HTML,
-            description: "Websuli lecke — a lecke-futtató jeleníti meg.",
-            classroom: input.classroom,
-            contentType: "lesson",
-          })
-          .returning({ id: htmlFiles.id });
+        const [existing] = await tx
+          .select({ htmlFileId: lessons.htmlFileId })
+          .from(lessons)
+          .where(eq(lessons.id, input.lessonId))
+          .limit(1);
+
+        let fileId = existing?.htmlFileId ?? null;
+        if (fileId) {
+          await tx
+            .update(htmlFiles)
+            .set({
+              title: input.title,
+              description: "Websuli lecke — a lecke-futtató jeleníti meg.",
+              classroom: input.classroom,
+              contentType: "lesson",
+            })
+            .where(eq(htmlFiles.id, fileId));
+        } else {
+          const [file] = await tx
+            .insert(htmlFiles)
+            .values({
+              title: input.title,
+              content: LESSON_PLACEHOLDER_HTML,
+              description: "Websuli lecke — a lecke-futtató jeleníti meg.",
+              classroom: input.classroom,
+              contentType: "lesson",
+            })
+            .returning({ id: htmlFiles.id });
+          fileId = file.id;
+        }
+
         await tx
           .update(lessons)
           .set({
-            htmlFileId: file.id,
+            htmlFileId: fileId,
             publishedAt: new Date(),
             coverage: input.coverage as never,
             updatedAt: new Date(),
@@ -975,9 +997,9 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
         if (input.quizItems.length > 0) {
           await tx
             .insert(gameQuizItems)
-            .values(input.quizItems.map((q) => ({ ...q, sourceMaterialId: file.id })));
+            .values(input.quizItems.map((q) => ({ ...q, sourceMaterialId: fileId })));
         }
-        return { htmlFileId: file.id, exportedQuizItems: input.quizItems.length };
+        return { htmlFileId: fileId, exportedQuizItems: input.quizItems.length };
       });
     },
 

@@ -100,9 +100,37 @@ function guardGame(file: string) {
       "a köridő nem áll meg a kártya alatt — az olvasás büntetve lenne",
     );
   });
+
+  test(`${file}: nulla életnél a kártya nem ad Újrapróbálom gombot`, () => {
+    assert.match(
+      code,
+      /remainingLives:\s*livesRef\.current/,
+      "a kártya nem tudja, hány élet maradt — 0 életnél is új pont járna",
+    );
+    assert.match(
+      code,
+      /onRetry=\{lives > 0 \? retryTask : undefined\}/,
+      "élet nélkül is megjelenhet az Újrapróbálom",
+    );
+  });
 }
 
 for (const file of WIRED) guardGame(file);
+
+test("WordLadderHuEn: a magyarázó kártya bezárása indítja a lépés-láncot (A1)", () => {
+  const code = pageCode("WordLadderHuEn.tsx");
+  assert.match(code, /pendingStepRef/, "pendingStepRef hiányzik — a kártya alatt tovább lépne a kérdés");
+  assert.match(
+    code,
+    /onDismiss=\{dismissExplain\}/,
+    "a kártya onDismiss-e nem a pending lépés-láncot futtatja",
+  );
+  assert.match(
+    code,
+    /if\s*\(\s*explainOpenRef\.current\s*\)\s*return;/,
+    "a futamidő a kártya alatt is ketyegne",
+  );
+});
 
 test("a komment-szűrő önellenőrzése", () => {
   const fake = `buildFeedback(x);\n// buildFeedback(\n/* buildFeedback( */`;

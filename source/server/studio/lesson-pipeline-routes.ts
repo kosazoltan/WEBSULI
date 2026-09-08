@@ -538,6 +538,8 @@ lessonPipelineRouter.get("/jobs/:id", async (req: Request, res: Response) => {
       coverage: output?.coverage ?? null,
       approvedOutline: output?.approvedOutline !== undefined,
       lessonId: row.lessonId,
+      // B5: quality notes from gate/lektor after round-limit publish (LS-7).
+      qualityNotes: Array.isArray(output?.qualityNotes) ? output.qualityNotes : [],
     },
   });
 });

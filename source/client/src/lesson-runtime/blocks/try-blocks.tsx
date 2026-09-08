@@ -25,6 +25,7 @@ function strArray(v: unknown): string[] {
 function DragSort({ spec }: TryProps) {
   const initial = strArray(spec.items);
   const correct = strArray(spec.correctOrder);
+  const hint = typeof spec.hint === "string" ? spec.hint.trim() : "";
   const [order, setOrder] = useState<string[]>(initial);
   const [checked, setChecked] = useState(false);
 
@@ -37,11 +38,15 @@ function DragSort({ spec }: TryProps) {
     setChecked(false);
   };
 
-  const isCorrect = checked && (correct.length === 0 ? true : order.every((v, i) => v === correct[i]));
-
-  if (initial.length === 0) {
-    return <div className="text-sm text-muted-foreground border rounded-lg p-4" data-try="dragSort">Ehhez a gyakorlathoz nincs megadott elem.</div>;
+  if (initial.length === 0 || correct.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground border rounded-lg p-4" data-try="dragSort">
+        Ehhez a gyakorlathoz nincs megadott elem.
+      </div>
+    );
   }
+
+  const isCorrect = checked && order.every((v, i) => v === correct[i]);
 
   return (
     <div className="border rounded-lg bg-card p-4 space-y-2" data-try="dragSort">
@@ -65,7 +70,9 @@ function DragSort({ spec }: TryProps) {
         {checked && (
           isCorrect
             ? <span className="inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 className="w-4 h-4" /> Helyes!</span>
-            : <span className="inline-flex items-center gap-1 text-red-500"><XCircle className="w-4 h-4" /> Még nem jó — próbáld újra!</span>
+            : <span className="inline-flex items-center gap-1 text-red-500" data-testid="try-feedback">
+                <XCircle className="w-4 h-4" /> {hint || "Még nem jó — próbáld újra!"}
+              </span>
         )}
       </div>
     </div>
@@ -75,6 +82,7 @@ function DragSort({ spec }: TryProps) {
 function FillBlank({ spec }: TryProps) {
   const text = typeof spec.text === "string" ? spec.text : "";
   const answers = strArray(spec.answers);
+  const hint = typeof spec.hint === "string" ? spec.hint.trim() : "";
   const blanks = (text.match(/___+/g) ?? []).length;
   const [values, setValues] = useState<string[]>(Array.from({ length: Math.max(blanks, 1) }, () => ""));
   const [checked, setChecked] = useState(false);
@@ -86,7 +94,18 @@ function FillBlank({ spec }: TryProps) {
     setChecked(false);
   };
 
-  const isCorrect = checked && answers.every((a, i) => values[i]?.trim().toLowerCase() === a.trim().toLowerCase());
+  if (blanks < 1 || answers.length !== blanks) {
+    return (
+      <div className="text-sm text-muted-foreground border rounded-lg p-4" data-try="fillBlank">
+        Ehhez a gyakorlathoz nincs megadott elem.
+      </div>
+    );
+  }
+
+  const isCorrect =
+    checked &&
+    answers.length > 0 &&
+    answers.every((a, i) => values[i]?.trim().toLowerCase() === a.trim().toLowerCase());
 
   return (
     <div className="border rounded-lg bg-card p-4 space-y-3" data-try="fillBlank">
@@ -110,7 +129,9 @@ function FillBlank({ spec }: TryProps) {
         {checked && (
           isCorrect
             ? <span className="inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 className="w-4 h-4" /> Helyes!</span>
-            : <span className="inline-flex items-center gap-1 text-red-500"><XCircle className="w-4 h-4" /> Nem stimmel minden — nézd át újra!</span>
+            : <span className="inline-flex items-center gap-1 text-red-500" data-testid="try-feedback">
+                <XCircle className="w-4 h-4" /> {hint || "Nem stimmel minden — nézd át újra!"}
+              </span>
         )}
       </div>
     </div>

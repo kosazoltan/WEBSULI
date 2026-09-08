@@ -1,3 +1,4 @@
+import MathTowerScene from "@/components/MathTowerScene";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, Flame, Gauge, Heart, Rocket, RotateCcw, Star, Trophy } from "lucide-react";
@@ -14,6 +15,7 @@ import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge"
 import AchievementToast from "@/components/AchievementToast";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
+import { scoreCorrectAnswer } from "@/game-engine/retry-policy";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 
 type GradeLevel = 3 | 4 | 5;
@@ -367,6 +369,7 @@ export default function SpeedQuizMath() {
           },
           chosenIndex,
           attempt: attemptRef.current,
+          remainingLives: livesRef.current,
           // 3–5. osztály: a lecke-séma ugyanezt a sávot adja (ageBandForClassroom).
           ageBand: "kid",
         }),
@@ -388,17 +391,24 @@ export default function SpeedQuizMath() {
 
   /**
    * Egy javítási esély ugyanazon a feladaton: a gyerek ne bukott kérdéssel lépjen
-   * tovább. Életet már nem von — azt a hibás válasz egyszer elvette.
+   * tovább. Csak megmaradt élettel indítható; újabb hibás válasz életbe kerül.
    */
   const retryTask = useCallback(() => {
+    if (pendingOverRef.current || livesRef.current <= 0) {
+      dismissFeedback();
+      return;
+    }
     attemptRef.current += 1;
     setFeedback(null);
     setAnswerState("idle");
     pendingOverRef.current = false;
     setQuestionTimeLeft(questionSecondsFor(grade));
-  }, [grade, questionSecondsFor]);
+  }, [dismissFeedback, grade, questionSecondsFor]);
 
   const startGame = useCallback(() => {
+    setFeedback(null);
+    pendingOverRef.current = false;
+    attemptRef.current = 0;
     scoreSubmittedRef.current = false;
     livesRef.current = 3;
     timeoutCountRef.current = 0;
@@ -419,7 +429,7 @@ export default function SpeedQuizMath() {
     recentPromptsRef.current = [first.prompt];
     setTask(first);
     setPhase("play");
-  }, [grade]);
+  }, [grade, questionSecondsFor]);
 
   const endAsLose = useCallback(() => setPhase("over"), []);
   const endAsWin = useCallback(() => {
@@ -484,12 +494,15 @@ export default function SpeedQuizMath() {
   }, [phase, grade, endAsLose, feedback, showFeedbackFor, questionSecondsFor, recordDifficultyAnswer]);
 
   const handleAnswer = (idx: number) => {
-    if (phase !== "play") return;
+    if (phase !== "play" || livesRef.current <= 0 || feedback) return;
     // VÁLASZ-LOCK: az answerState csak a nextTask()-ban áll vissza "idle"-re —
     // dupla kattintás nem dolgozza fel kétszer ugyanazt a feladatot
     // (dupla correct/score/answered, korai győzelem).
     if (answerState !== "idle") return;
-    setAnswered((n) => n + 1);
+    // A2: ugyanarra a feladatra a retry ne növelje kétszer az answered számlálót.
+    if (attemptRef.current === 0) {
+      setAnswered((n) => n + 1);
+    }
 
     if (idx !== task.correctIndex) {
       sfxError();
@@ -516,11 +529,18 @@ export default function SpeedQuizMath() {
     const base = grade === 3 ? 30 : grade === 4 ? 36 : 44;
     const speedBonus = Math.max(0, questionTimeLeft - 1) * (grade === 5 ? 4 : 3);
     const comboBonus = streak * 8;
-    const add = base + speedBonus + comboBonus;
+    const add = scoreCorrectAnswer({
+      attempt: attemptRef.current,
+      base,
+      speedBonus,
+      comboBonus,
+    });
 
     setScore((s) => s + add);
     setTotalXp((x) => x + add);
     setStreak((s) => {
+      // A2: retry után a kombó nem nő.
+      if (attemptRef.current > 0) return s;
       const ns = s + 1;
       setBestStreak((b) => Math.max(b, ns));
       return ns;
@@ -587,10 +607,10 @@ export default function SpeedQuizMath() {
 
   const runProgress = Math.max(0, Math.min(100, (timeLeft / ROUND_SECONDS[grade]) * 100));
   const qProgress = Math.max(0, Math.min(100, (questionTimeLeft / QUESTION_SECONDS[grade]) * 100));
-  const obbyProgress = Math.max(0, Math.min(100, (correct / TARGET_CORRECT[grade]) * 100));
 
   return (
     <div
+      data-game="SpeedQuizMath" data-playing={phase === "play"}
       className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
       style={{
         background:
@@ -643,7 +663,7 @@ export default function SpeedQuizMath() {
                 }
               />
             )}
-            <p className={`text-[11px] text-cyan-100/95 border border-cyan-700/45 rounded px-2 ${phase === "play" ? "py-1 mb-2" : "py-1.5 mb-3"} bg-slate-900/95`}>
+            <p data-game-sync className={`text-[11px] text-cyan-100/95 border border-cyan-700/45 rounded px-2 ${phase === "play" ? "py-1 mb-2" : "py-1.5 mb-3"} bg-slate-900/95`}>
               {syncBanner}
             </p>
 
@@ -675,6 +695,7 @@ export default function SpeedQuizMath() {
                   size="lg"
                   className="bg-gradient-to-r from-cyan-500 via-blue-500 to-fuchsia-600 hover:from-cyan-400 hover:to-fuchsia-500 font-bold text-white px-8 border border-cyan-100/40 text-base"
                   onClick={startGame}
+                  data-testid="sq-start"
                 >
                   <Gauge className="w-4 h-4 mr-2" />
                   Indul a torony — rajta!
@@ -683,23 +704,23 @@ export default function SpeedQuizMath() {
             )}
 
             {phase === "play" && (
-              <div className="flex flex-col gap-2 flex-1 min-h-0">
-                <div className="grid grid-cols-4 gap-1.5 text-[11px] font-semibold">
+              <div className="math-run flex-1 min-h-0">
+                <div className="math-stats grid grid-cols-4 gap-1.5 text-[11px] font-semibold">
                   <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Szint: {LEVEL_LABEL[grade]}</div>
                   <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Kör: {timeLeft}s</div>
                   <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Kérdés: {questionTimeLeft}s</div>
-                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5">Pont: {score}</div>
+                  <div className="rounded-lg border border-white/20 bg-slate-900/90 px-2 py-1.5" data-testid="sq-score">Pont: {score}</div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="math-lives flex flex-wrap items-center gap-2 text-xs">
                   <div className="flex items-center gap-1 text-rose-300">
                     {[0, 1, 2].map((i) => (
                       <Heart key={i} className={`w-4 h-4 ${i < lives ? "fill-rose-400 text-rose-300" : "text-white/20"}`} />
                     ))}
-                    <span className="ml-1 text-white/75 font-semibold">Életek (akadály)</span>
+                    <span className="ml-1 text-white/75 font-semibold">Életek</span>
                   </div>
                   <span className="rounded-full border border-orange-400/40 bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-200">
-                    Kombó = sorozat · minél több jó válasz egymás után, annál menőbb
+                    Sorozat: {streak}
                   </span>
                 </div>
 
@@ -713,47 +734,20 @@ export default function SpeedQuizMath() {
                   subtitle={`${LEVEL_LABEL[grade]} · ${timeLeft}s a körből · ${lives} élet · kombó: ${streak}`}
                   current={correct}
                   target={TARGET_CORRECT[grade]}
-                  className="w-full"
+                  className="math-goal w-full"
                 />
 
-                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div className="math-clock h-1.5 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${runProgress}%` }} />
                 </div>
-                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div className="math-clock h-1.5 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-fuchsia-400 to-pink-500" style={{ width: `${qProgress}%` }} />
                 </div>
 
-                <div className="rounded-xl border border-cyan-300/45 bg-slate-950/85 p-2">
-                  <div className="mb-1 flex items-center justify-between text-[10px] text-white/70">
-                    <span>Obby haladás: {correct}/{TARGET_CORRECT[grade]}</span>
-                    <span>Kombó: {streak}</span>
-                  </div>
-                  <div className="relative h-12 rounded-lg border border-white/10 bg-slate-950/70 overflow-hidden">
-                    <div className="absolute inset-y-0 left-0 w-full bg-[linear-gradient(90deg,rgba(6,182,212,0.14)_0%,rgba(236,72,153,0.14)_100%)]" />
-                    {[...Array(12)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="absolute top-4 h-2.5 w-8 rounded-md border border-cyan-100/20 bg-cyan-300/20"
-                        style={{ left: `${4 + i * 8}%` }}
-                      />
-                    ))}
-                    <div
-                      className="absolute top-2 transition-all duration-300"
-                      style={{ left: `calc(${obbyProgress}% - 12px)` }}
-                    >
-                      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-fuchsia-500 to-cyan-400 border border-white/40 shadow-lg" />
-                    </div>
-                    <div className="absolute right-2 top-1.5 text-[10px] text-amber-200 font-bold">CÉL</div>
-                  </div>
-                  <div className="mt-1.5 hidden sm:grid grid-cols-3 gap-1.5 text-[10px]">
-                    <div className="rounded-md border border-cyan-400/30 bg-cyan-950/40 px-2 py-1 text-cyan-100">Neo Jump</div>
-                    <div className="rounded-md border border-fuchsia-400/30 bg-fuchsia-950/40 px-2 py-1 text-fuchsia-100">Laser Gate</div>
-                    <div className="rounded-md border border-amber-400/30 bg-amber-950/40 px-2 py-1 text-amber-100">Sky Finish</div>
-                  </div>
-                </div>
+                <MathTowerScene current={correct} target={TARGET_CORRECT[grade]} />
 
                 <div
-                  className={`rounded-xl border ${
+                  className={`math-question rounded-xl border ${
                     answerState === "correct"
                       ? "border-emerald-400"
                       : wrongFlash || answerState === "wrong"
@@ -762,7 +756,7 @@ export default function SpeedQuizMath() {
                   } bg-slate-950/90 p-2.5 transition-colors`}
                 >
                   <p className="text-[11px] text-white/60 mb-1">
-                    Gyors teszt #{answered + 1} — válaszd ki a helyest (fent a kérdés-idő sáv)
+                    Gyors teszt #{answered + 1} — válaszd ki a helyes választ!
                   </p>
                   <p className="text-lg sm:text-xl font-black tracking-wide text-cyan-50 leading-tight">{task.prompt}</p>
                   <p className="text-[10px] text-white/55 mt-1">
@@ -770,7 +764,7 @@ export default function SpeedQuizMath() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="math-answers grid grid-cols-2 gap-1.5" data-testid="sq-answers">
                   {task.options.map((opt, idx) => (
                     <Button
                       key={`${opt}-${idx}`}
@@ -834,7 +828,7 @@ export default function SpeedQuizMath() {
         <QuizFeedbackCard
           card={feedback}
           onDismiss={dismissFeedback}
-          onRetry={retryTask}
+          onRetry={lives > 0 ? retryTask : undefined}
         />
       )}
     </div>

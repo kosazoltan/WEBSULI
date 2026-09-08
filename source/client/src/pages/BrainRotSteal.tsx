@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import CollectibleAvatar from "@/components/CollectibleAvatar";
 import { ArrowLeft, Brain, Star, Flame, RotateCcw, Zap, Trophy, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +23,7 @@ import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
+import { xpForAttempt } from "@/game-engine/retry-policy";
 import { stepBrainRot } from "@/lib/brainRotPhysics";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
@@ -215,7 +217,7 @@ let nextId = 0;
 
 function spawnBrainRot(boardW: number, boardH: number): BrainRot {
   const template = pickRandom(BRAIN_ROT_EMOJIS);
-  const size = randInt(40, 70);
+  const size = randInt(60, 80);
   const x = randInt(size, boardW - size);
   const y = randInt(size, boardH - size);
   const speed = 0.3 + Math.random() * 1.2;
@@ -255,6 +257,8 @@ export default function BrainRotSteal() {
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [caughtRot, setCaughtRot] = useState<BrainRot | null>(null);
+  /** A2: ugyanazon lény második helyes válaszánál csökkentett XP. */
+  const quizAttemptRef = useRef(0);
   const [wrongShake, setWrongShake] = useState(false);
   const [revealCorrectIdx, setRevealCorrectIdx] = useState<number | null>(null);
   const [wrongIdx, setWrongIdx] = useState<number | null>(null);
@@ -371,6 +375,7 @@ export default function BrainRotSteal() {
       setBrainRots((prev) => prev.map((r) => (r.id === rot.id ? { ...r, caught: true } : r)));
       setCaughtRot(rot);
       setQuiz(pickQuiz());
+      quizAttemptRef.current = 0;
       setPhase("quiz");
     },
     [phase, pickQuiz],
@@ -428,10 +433,11 @@ export default function BrainRotSteal() {
               explanation: quiz.explanation ?? undefined,
             },
             chosenIndex: idx,
-            attempt: 0,
+            attempt: quizAttemptRef.current,
             ageBand: "kid",
           }),
         );
+        quizAttemptRef.current = 1;
         return;
       }
 
@@ -441,20 +447,25 @@ export default function BrainRotSteal() {
       maybeClaimCouponBonus(coupon, quiz.id);
       setRevealCorrectIdx(null);
       setWrongIdx(null);
-      const multiplier = comboMultiplier;
-      const xpGain = Math.round(caughtRot.xpValue * multiplier);
+      const isRetry = quizAttemptRef.current > 0;
+      const multiplier = isRetry ? 1 : comboMultiplier;
+      const full = Math.round(caughtRot.xpValue * multiplier);
+      const xpGain = isRetry ? xpForAttempt(caughtRot.xpValue, 1) : full;
       setSessionXp((x) => x + xpGain);
       setStreak((s) => {
+        if (isRetry) return s;
         const newStreak = s + 1;
         setBestStreak((bs) => Math.max(bs, newStreak));
         return newStreak;
       });
       setTotalCaught((c) => c + 1);
       setComboMultiplier((m) => {
+        if (isRetry) return m;
         const next = Math.min(4, m + 0.25);
         if (next > maxComboRef.current) maxComboRef.current = next;
         return next;
       });
+      quizAttemptRef.current = 0;
 
       // Vizuális visszajelzés
       spawnParticles(caughtRot.x, caughtRot.y, "#fbbf24", 20, "\u2B50");
@@ -699,6 +710,7 @@ export default function BrainRotSteal() {
 
   return (
     <div
+      data-game="BrainRotSteal" data-playing={phase === "play" || phase === "quiz"}
       className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
       style={{
         background:
@@ -807,7 +819,7 @@ export default function BrainRotSteal() {
               />
             )}
 
-            <p className="text-[10px] sm:text-[11px] text-purple-100/90 mb-1.5 sm:mb-2 border border-purple-700/45 rounded px-2 py-1 sm:py-1.5 bg-slate-900/95">
+            <p data-game-sync className="text-[10px] sm:text-[11px] text-purple-100/90 mb-1.5 sm:mb-2 border border-purple-700/45 rounded px-2 py-1 sm:py-1.5 bg-slate-900/95">
               {syncBanner}
             </p>
 
@@ -867,7 +879,7 @@ export default function BrainRotSteal() {
 
             {/* --- GAME --- */}
             {phase === "play" && (
-              <div className="flex flex-col items-center gap-1.5 sm:gap-2 flex-1">
+              <div className="brain-run flex flex-col items-center gap-1.5 sm:gap-2 flex-1 min-h-0">
                 <GameNextGoalBar
                   accent="fuchsia"
                   headline={
@@ -911,8 +923,9 @@ export default function BrainRotSteal() {
                 {/* Game board */}
                 <div
                   ref={boardRef}
+                  data-collectible-world
                   className="relative w-full rounded-xl sm:rounded-2xl overflow-hidden border-2 border-purple-500/40 shadow-[0_0_40px_rgba(147,51,234,0.2)] bg-gradient-to-br from-slate-900/90 via-purple-950/40 to-slate-900/90 backdrop-blur-sm flex-1"
-                  style={{ minHeight: "min(60vh, 420px)", touchAction: "manipulation" }}
+                  style={{ minHeight: 0, touchAction: "manipulation" }}
                 >
                   {/* Grid background */}
                   <div className="absolute inset-0 opacity-[0.04]" style={{
@@ -948,8 +961,7 @@ export default function BrainRotSteal() {
                             opacity,
                             filter: isWarning ? "hue-rotate(40deg)" : "none",
                             /* Enlarge touch target on mobile for easier tapping */
-                            padding: "8px",
-                            margin: "-8px",
+                            padding: "2px",
                           }}
                           whileHover={{ scale: 1.2 }}
                           whileTap={{ scale: 0.85 }}
@@ -964,12 +976,7 @@ export default function BrainRotSteal() {
                               animation: `pulse ${1 + Math.sin(rot.pulsePhase) * 0.5}s ease-in-out infinite`,
                             }}
                           />
-                          <span
-                            className="relative z-10 drop-shadow-lg"
-                            style={{ fontSize: rot.size * 0.65 }}
-                          >
-                            {rot.emoji}
-                          </span>
+                          <CollectibleAvatar name={rot.name} value={rot.xpValue} />
                           {/* XP badge */}
                           <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-black bg-black/70 text-amber-300 px-1 rounded-sm whitespace-nowrap">
                             {rot.xpValue} XP

@@ -199,6 +199,7 @@ export default function TornadoHunter200() {
 
   return (
     <div
+      data-game="TornadoHunter200" data-playing={screen === "play"} data-fixed-screen={screen !== "menu"}
       className="game-shell-fixed min-h-screen relative overflow-hidden text-white"
       style={{
         background:
@@ -311,7 +312,7 @@ function MenuScreen(props: {
   const { progress, selectedVehicle } = props;
   return (
     <Card className="border border-sky-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent className="p-3 sm:p-5 flex flex-col gap-4 flex-1 overflow-y-auto">
+      <CardContent data-game-card-content className="p-3 sm:p-5 flex flex-col gap-4 flex-1 overflow-y-auto">
         <div className="flex items-center gap-2">
           <TornadoIcon className="w-7 h-7 text-sky-300" />
           <div>
@@ -450,7 +451,7 @@ function GarageScreen(props: { progress: TornadoProgress; commit: (p: TornadoPro
 
   return (
     <Card className="border border-lime-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent className="p-3 sm:p-4 flex flex-col gap-3 flex-1 min-h-0">
+      <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-3 flex-1 min-h-0">
         <ScreenHeader icon={<Car className="w-5 h-5 text-lime-300" />} title="Storm Garage" onBack={props.onBack} />
 
         {flash && (
@@ -620,7 +621,7 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
 
   return (
     <Card className="border border-sky-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent className="p-3 sm:p-4 flex flex-col gap-2 flex-1 min-h-0">
+      <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-2 flex-1 min-h-0">
         <ScreenHeader icon={<TornadoIcon className="w-5 h-5 text-sky-300" />} title="Szintek (1–200)" onBack={props.onBack} />
         <div className="overflow-y-auto flex-1 min-h-0 flex flex-col gap-2 pr-1">
           {groups.map(({ stage, levels }) => {
@@ -696,7 +697,7 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
 
   return (
     <Card className="border border-slate-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent className="p-3 sm:p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
+      <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
         <ScreenHeader icon={<SettingsIcon className="w-5 h-5 text-slate-300" />} title="Beállítások" onBack={props.onBack} />
 
         <div>
@@ -799,7 +800,7 @@ function HighscoreScreen(props: { progress: TornadoProgress; onBack: () => void 
 
   return (
     <Card className="border border-amber-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent className="p-3 sm:p-4 flex flex-col gap-3 flex-1 overflow-y-auto">
+      <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-3 flex-1 overflow-y-auto">
         <ScreenHeader icon={<Trophy className="w-5 h-5 text-amber-300" />} title="Highscore" onBack={props.onBack} />
         <div className="grid grid-cols-2 gap-2">
           <BigStat label="Total Score" value={fmt(props.progress.totalScore)} />
@@ -844,7 +845,7 @@ function StatsScreen(props: { progress: TornadoProgress; onBack: () => void }) {
   ];
   return (
     <Card className="border border-cyan-400/40 bg-slate-950/80 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent className="p-3 sm:p-4 flex flex-col gap-2 flex-1 overflow-y-auto">
+      <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col gap-2 flex-1 overflow-y-auto">
         <ScreenHeader icon={<BarChart3 className="w-5 h-5 text-cyan-300" />} title="Statisztika" onBack={props.onBack} />
         <div className="flex flex-col gap-1">
           {rows.map(([label, value]) => (
@@ -1130,8 +1131,8 @@ function PlayScreen(props: {
 
     const handleResize = () => {
       const rect = canvas.parentElement?.getBoundingClientRect();
-      const w = Math.max(320, Math.floor(rect?.width ?? 640));
-      const h = Math.max(320, Math.floor(rect?.height ?? 480));
+      const w = Math.max(1, Math.floor(rect?.width ?? 640));
+      const h = Math.max(1, Math.floor(rect?.height ?? 480));
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
@@ -1657,7 +1658,7 @@ function PlayScreen(props: {
 
   return (
     <Card className="border border-sky-400/45 bg-slate-950/85 backdrop-blur-md flex-1 flex flex-col min-h-0">
-      <CardContent className="p-1.5 sm:p-2 flex flex-col flex-1 min-h-0 gap-1.5">
+      <CardContent data-game-card-content className="p-1.5 sm:p-2 flex flex-col flex-1 min-h-0 gap-1.5">
         {/* Top HUD row */}
         <div className="flex items-center justify-between text-[11px] sm:text-xs font-semibold gap-1 flex-wrap">
           <Button variant="ghost" size="sm" className="text-white/80 hover:bg-white/10 gap-1 -ml-1 h-7" onClick={props.onExit}>
@@ -1713,7 +1714,7 @@ function PlayScreen(props: {
           </div>
 
           {/* Vehicle name */}
-          <div className="absolute bottom-20 left-2 px-2 py-1 rounded bg-black/55 text-[11px] font-semibold pointer-events-none z-10">
+          <div className="absolute bottom-32 sm:bottom-20 left-2 px-2 py-1 rounded bg-black/55 text-[11px] font-semibold pointer-events-none z-10">
             {props.vehicle.name.toUpperCase()}
           </div>
 
@@ -1747,7 +1748,7 @@ function PlayScreen(props: {
 
           {/* Anchor guidance */}
           {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (
-            <div className="absolute bottom-20 right-2 px-2 py-1 rounded bg-sky-900/70 text-[11px] font-semibold pointer-events-none max-w-[60%] text-right z-10">
+            <div className="absolute bottom-32 sm:bottom-20 right-2 px-2 py-1 rounded bg-sky-900/70 text-[11px] font-semibold pointer-events-none max-w-[60%] text-right z-10">
               {playerRef.current.anchored
                 ? "Horgony rögzítve — tartsd ki a vihart!"
                 : hud.anchorReady
@@ -1950,7 +1951,7 @@ function TouchControls(props: {
     </div>
   );
   const pedals = (
-    <div className="flex gap-2 items-end">
+    <div className="tornado-pedals flex gap-2 items-end">
       <TouchBtn onDown={hold("back", true)} onUp={hold("back", false)} label="Fék" small />
       <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent />
       <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Cam" small />

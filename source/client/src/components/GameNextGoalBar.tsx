@@ -44,7 +44,7 @@ function GameNextGoalBar({
   const pct = target > 0 ? Math.min(100, Math.max(0, (current / target) * 100)) : 0;
   return (
     <div
-      className={cn("rounded-xl border-2 px-3 py-2.5 backdrop-blur-sm", shell[accent], className)}
+      className={cn("game-goal shrink-0 rounded-xl border px-2 py-1.5 backdrop-blur-sm", shell[accent], className)}
       role="region"
       aria-label="Következő cél"
     >
@@ -53,18 +53,17 @@ function GameNextGoalBar({
           <Flag className="h-4 w-4 text-white drop-shadow" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/60">Következő cél</p>
           <p className="text-sm font-extrabold leading-snug text-white drop-shadow-sm">{headline}</p>
           {subtitle ? <p className="text-[11px] text-white/75 mt-0.5 leading-snug">{subtitle}</p> : null}
           {showBar && target > 0 ? (
-            <div className="mt-2">
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/40 ring-1 ring-white/10">
+            <div className="mt-1 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/40 ring-1 ring-white/10">
                 <div
                   className={cn("h-full rounded-full transition-[width] duration-500 ease-out", barFill[accent])}
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <p className="text-[10px] font-semibold text-white/55 mt-1 tabular-nums">
+              <p className="text-[10px] font-semibold text-white/80 tabular-nums">
                 {current} / {target} · {Math.round(pct)}%
               </p>
             </div>

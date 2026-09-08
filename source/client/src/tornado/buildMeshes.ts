@@ -135,6 +135,30 @@ export function buildVehicle(vehicle: Vehicle): THREE.Group {
   bar.position.set(0, height + 1.08, -length * 0.12);
   group.add(bar);
 
+  // Small, shared details give the vehicle a readable silhouette without
+  // textures or shadow maps on phones. These have no collision geometry.
+  const detailBox = geo("vehicle-detail-box", () => new THREE.BoxGeometry(1, 1, 1));
+  const addDetail = (x: number, y: number, z: number, w: number, h: number, d: number, material: THREE.Material) => {
+    const detail = new THREE.Mesh(detailBox, material);
+    detail.position.set(x, y, z);
+    detail.scale.set(w, h, d);
+    group.add(detail);
+  };
+  const trim = mat("vehicle-trim", "#d8e6ed");
+  const darkTrim = mat("vehicle-dark-trim", "#203149");
+  const headlamp = mat("vehicle-headlamp", "#fff4ba", { emissive: "#ffd66b", emissiveIntensity: 0.65 });
+  const tailLamp = mat("vehicle-tail-lamp", "#ff5b54", { emissive: "#ff342e", emissiveIntensity: 0.45 });
+  for (const side of [-1, 1]) {
+    addDetail(side * width * .32, 1.15, length / 2 + .04, .48, .28, .12, headlamp);
+    addDetail(side * width * .35, 1.15, -length / 2 - .04, .28, .38, .12, tailLamp);
+    addDetail(side * (width / 2 + .025), 1.05, 0, .06, .12, length * .7, trim);
+    addDetail(side * width * .25, height + 1.22, -length * .12, .35, .16, .31, headlamp);
+  }
+  addDetail(0, .72, length / 2 + .08, width * .9, .22, .25, darkTrim);
+  addDetail(0, .72, -length / 2 - .08, width * .9, .22, .25, darkTrim);
+  addDetail(0, 1.1, length / 2 + .07, width * .4, .3, .12, darkTrim);
+  addDetail(0, 1.12, -length / 2 - .08, .5, .22, .08, trim);
+
   // Wheels
   const wheelGeo = geo("wheel", () => {
     const g = new THREE.CylinderGeometry(0.62, 0.62, 0.42, 10);
@@ -149,6 +173,14 @@ export function buildVehicle(vehicle: Vehicle): THREE.Group {
       w.position.set((sx * width) / 2 + sx * 0.08, 0.62, (sz * length) / 2 - sz * 1.1);
       group.add(w);
       wheels.push(w);
+      const hub = new THREE.Mesh(geo("vehicle-hub", () => {
+        const g = new THREE.CylinderGeometry(.3, .3, .05, 8);
+        g.rotateZ(Math.PI / 2);
+        return g;
+      }), trim);
+      hub.position.copy(w.position);
+      hub.position.x += sx * .23;
+      group.add(hub);
     }
   }
   group.userData.wheels = wheels;

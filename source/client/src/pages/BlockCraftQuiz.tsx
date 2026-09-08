@@ -34,11 +34,12 @@ import {
 } from "@/lib/voxelcraft";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
+import { blockCraftSubjectFromTopic, type BlockCraftSubject } from "@/lib/blockCraftSubjects";
 
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
 
-type QuizSubject = "english" | "english-math" | "math" | "nature";
+type QuizSubject = BlockCraftSubject;
 type Quiz = {
   id?: string;
   prompt: string;
@@ -492,9 +493,8 @@ const MC_PAL: Record<number, { main: string; dark: string; darker: string; light
 
 function desiredCanvasCssSize(el: HTMLCanvasElement) {
   const parent = el.parentElement;
-  const parentW = Math.max(320, Math.floor(parent?.clientWidth ?? 380));
-  const maxH = parentW >= 640 ? 520 : 440;
-  const height = Math.min(maxH, Math.max(300, Math.round(parentW * 0.56)));
+  const parentW = Math.max(1, Math.floor(parent?.clientWidth ?? 380));
+  const height = Math.max(1, Math.floor(parent?.clientHeight ?? 300));
   return { width: parentW, height };
 }
 
@@ -1158,6 +1158,7 @@ export default function BlockCraftQuiz() {
     "english-math": 0,
     math: 0,
     nature: 0,
+    hungarian: 0,
   });
   const [timeLeft, setTimeLeft] = useState(LEVELS[0]!.timeLimit);
   const [achievement, setAchievement] = useState<string | null>(null);
@@ -1218,12 +1219,7 @@ export default function BlockCraftQuiz() {
     const fromMaterial: Quiz[] = materialItems
       .filter((q) => Array.isArray(q.options) && q.options.length === 4)
       .map((q) => {
-        const t = (q.topic ?? "").toLowerCase();
-        const subject: QuizSubject =
-          t === "math" ? "math"
-          : t === "nature" ? "nature"
-          : t === "english" ? "english"
-          : "english"; // hungarian topic alapú kérdéseket "english" csoportba tesszük
+        const subject = blockCraftSubjectFromTopic(q.topic);
         return {
           id: q.id,
           prompt: q.prompt,
@@ -1256,7 +1252,10 @@ export default function BlockCraftQuiz() {
    * Round-robin stratégia: sorban angol → angol-matek → matek → környezet
    * → angol stb. Így egyenletes lesz a tananyag-elosztas.
    */
-  const subjectOrder = useMemo<QuizSubject[]>(() => ["english", "english-math", "math", "nature"], []);
+  const subjectOrder = useMemo<QuizSubject[]>(
+    () => ["english", "english-math", "math", "nature", "hungarian"],
+    [],
+  );
   const subjectPoolsRef = useRef<Map<QuizSubject, Quiz[]>>(new Map());
   const subjectCursorsRef = useRef<Map<QuizSubject, number>>(new Map());
   const subjectRoundRef = useRef(0);
@@ -1400,7 +1399,7 @@ export default function BlockCraftQuiz() {
       setRunSeconds(0);
       setBlocksMined(0);
       setRareBlocks(0);
-      setSubjectStats({ english: 0, "english-math": 0, math: 0, nature: 0 });
+      setSubjectStats({ english: 0, "english-math": 0, math: 0, nature: 0, hungarian: 0 });
     } else {
       // Új pálya kezdetén streak frissítés (kezdjük újra), de XP marad.
       setStreak(0);
@@ -1554,7 +1553,7 @@ export default function BlockCraftQuiz() {
       if (width === appliedW && height === appliedH) return;
       appliedW = width;
       appliedH = height;
-      renderer.setSize(width, height, true);
+      renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     };
@@ -2221,7 +2220,8 @@ export default function BlockCraftQuiz() {
   }, []);
 
   return (
-    <div className="game-shell-fixed min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
+    <div data-game="BlockCraftQuiz" data-playing={phase === "play" || phase === "quiz"}
+      className="game-shell-fixed min-h-screen relative overflow-hidden text-white" style={{ background: "radial-gradient(circle at 15% 15%, rgba(34,197,94,0.18), transparent 38%), radial-gradient(circle at 88% 8%, rgba(34,211,238,0.2), transparent 42%), linear-gradient(180deg, #0b1727 0%, #1b2f45 100%)" }}>
       <ClassroomGateModal accent="lime" />
       <AchievementToast achievements={newlyUnlocked} />
       <main className="relative z-10 w-full max-w-xl lg:max-w-3xl mx-auto px-2 sm:px-5 py-2 sm:py-4 min-h-dvh min-h-screen flex flex-col pb-20 sm:pb-10">
@@ -2258,12 +2258,15 @@ export default function BlockCraftQuiz() {
           <p className="text-[11px] text-lime-100/90 mb-2 border border-lime-700/45 rounded px-2 py-1.5 bg-slate-900/95">{syncBanner}</p></>}
 
           {phase === "menu" && (
-            <div className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
-              <div className="grid grid-cols-5 gap-2 p-3 rounded-xl bg-black/45 border border-lime-700/45">
+            <div className="flex flex-col items-center justify-center flex-1 gap-3 py-2 min-h-0">
+              <Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base min-h-[44px]" onClick={startGame} data-testid="bc-start">
+                <Pickaxe className="w-4 h-4 mr-2" />Indulhat a bányászat!
+              </Button>
+              <div className="grid grid-cols-5 gap-2 p-2 rounded-xl bg-black/45 border border-lime-700/45">
                 {[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}
               </div>
-              <div className="w-full max-w-sm rounded-xl border border-lime-600/45 bg-slate-900/85 p-3">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-lime-200 mb-1.5">5 progresszív pálya — XP halmozódik</p>
+              <div className="w-full max-w-sm rounded-xl border border-lime-600/45 bg-slate-900/85 p-3 min-h-0 overflow-hidden">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-lime-200 mb-1.5">5 pálya — XP halmozódik</p>
                 <ul className="space-y-1 text-[11px] text-white/85">
                   {LEVELS.map((lv) => (
                     <li key={lv.id} className="flex items-center justify-between gap-2 border-b border-lime-900/30 last:border-b-0 pb-1 last:pb-0">
@@ -2275,12 +2278,9 @@ export default function BlockCraftQuiz() {
                   ))}
                 </ul>
               </div>
-              <p className="text-xs text-white/80 text-center max-w-xs">
-                Igazi Minecraft-irányítás: <strong>kattints a játéktérre</strong>, az egérrel nézel körbe, <strong>WASD</strong>: mozgás, <strong>Space</strong>: ugrás, <strong>bal klikk / E</strong>: bányász-kvíz, <strong>jobb klikk / F</strong>: blokk-lerakás, <strong>1–9</strong>: hotbar. Mobilon: gombok + húzd az ujjad a nézelődéshez, koppints a blokkra a bányászathoz.
+              <p className="hidden sm:block text-xs text-white/80 text-center max-w-xs">
+                WASD mozgás, Space ugrás, E bányász-kvíz. Mobilon: gombok + koppintás a blokkra.
               </p>
-              <Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base" onClick={startGame}>
-                <Pickaxe className="w-4 h-4 mr-2" />Indulhat a bányászat!
-              </Button>
             </div>
           )}
 
@@ -2296,12 +2296,12 @@ export default function BlockCraftQuiz() {
             const rarePct = cfg.goalRareBlocks > 0 ? Math.min(100, (levelRare / cfg.goalRareBlocks) * 100) : 100;
             const showPlay = phase === "play" || phase === "quiz";
             return (
-              <div className={`flex flex-col items-center gap-1.5 ${showPlay ? "" : "hidden"}`}>
+              <div className={`game-play-stack flex flex-1 min-h-0 flex-col items-center gap-1.5 ${showPlay ? "" : "hidden"}`}>
                 {/* === CANVAS LEGFELÜL (mobil-first) === */}
-                <div className="relative rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black min-h-[min(50dvh,340px)] sm:min-h-[280px]">
+                <div className="relative rounded-xl overflow-hidden border-2 border-lime-700/70 shadow-[0_0_28px_rgba(34,197,94,0.18)] w-full bg-black game-scene flex-1 min-h-0">
                   <canvas
                     ref={canvasRef}
-                    className="block touch-none w-full max-w-full cursor-crosshair select-none"
+                    className="block touch-none w-full h-full max-w-full cursor-crosshair select-none"
                     onPointerDown={onCanvasPointerDown}
                     onPointerMove={onCanvasPointerMove}
                     onPointerUp={onCanvasPointerUp}
@@ -2460,7 +2460,7 @@ export default function BlockCraftQuiz() {
         </CardContent></Card>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div ref={quizDialogRef} role="dialog" aria-modal="true" aria-label="Mini-teszt" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="grid gap-2">{quiz.options.map((o, i) => {
+      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div ref={quizDialogRef} role="dialog" aria-modal="true" aria-label="Mini-teszt" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`game-quiz w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="game-quiz-answers grid gap-2">{quiz.options.map((o, i) => {
         const isCorrect = revealCorrectIdx === i;
         const isWrong = wrongIdx === i;
         const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;

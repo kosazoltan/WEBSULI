@@ -26,7 +26,13 @@ export type JobMonitorProps = {
 };
 
 export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
-  const { data, isError, error } = useQuery<{ job: JobSummary; produced: { approvedOutline?: boolean } }>({
+  const { data, isError, error } = useQuery<{
+    job: JobSummary;
+    produced: {
+      approvedOutline?: boolean;
+      qualityNotes?: Array<{ reason?: string; note?: string; round?: number }>;
+    };
+  }>({
     queryKey: ["/api/studio/jobs", jobId],
     queryFn: () => apiRequest("GET", `/api/studio/jobs/${jobId}`),
     refetchInterval: (query) => {
@@ -133,6 +139,26 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
             <CheckCircle2 className="w-4 h-4" />
             {view.stepLabel === "Kész" ? "A lecke elkészült." : "Ez a lépés elkészült."}
           </p>
+        )}
+
+        {Array.isArray(data.produced.qualityNotes) && data.produced.qualityNotes.length > 0 && (
+          <div
+            className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3 space-y-2"
+            data-testid="studio-quality-notes"
+          >
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4" />
+              Minőségi jelzés
+            </p>
+            <ul className="text-sm text-amber-900 dark:text-amber-200 list-disc list-inside space-y-1">
+              {data.produced.qualityNotes.map((n, i) => (
+                <li key={`${n.reason ?? "note"}-${i}`}>
+                  {n.note ?? n.reason ?? "Ismeretlen minőségi megjegyzés"}
+                  {typeof n.round === "number" ? ` (kör ${n.round})` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </CardContent>
     </Card>
