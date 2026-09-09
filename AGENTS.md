@@ -9,7 +9,7 @@ szabálykönyve ebben a repóban. Magyarul dolgozunk; a kód-azonosítók angolo
 
 - A felhasználó konkrét feladatából és az érintett forrásfájlokból indulj ki.
 - Kód, teszt, build és célzott ellenőrzés előnyt élvez a széles audittal szemben.
-- Tervezésnél ne állj meg, ha a feladat biztonságosan implementálható.
+- **Háromfázisú munka kötelező** (tulajdonosi utasítás 2026-09-09): először terv (`docs/specs/`), utána mesterséges intelligencia számára olvasható végrehajtási utasítás (`*-vegrehajtas.md`), majd a javítás / módosítás / bővítés. A 1–2. fázis átugrása tilos. Ha a tulajdonos már kérte a munkát, a 2. fázis után azonnal a 3. következik — ne várj második „mehet” üzenetre. Részletek: `docs/agent-haromfazisu-munka.md`.
 - Titkot (API-kulcs, jelszó, token) soha ne írj chatbe, kódba vagy commitba —
   csak környezeti változó / secret-store hivatkozást használj.
 
@@ -92,6 +92,13 @@ A DENY-t parancs-átfogalmazással megkerülni TILOS. Repo-specifikus bővítés
 `scripts/qa/repo-rules.json`-ban további minták (deny/warn) definiálhatók a hook-kód
 módosítása nélkül — így minden repo a saját AGENTS.md-tiltásait kódolhatja.
 <!-- agentic-qa-kit:end -->
+
+## Háromfázisú munka (kötelező, tulajdonosi utasítás 2026-09-09)
+
+A repo-ban rögzített sorrend: **terv → AI-olvasható végrehajtási utasítás → kód**.
+A teljes szabály: `docs/agent-haromfazisu-munka.md`. A Cursor-szabály: `.cursor/rules/haromfazisu-munka.mdc`.
+
+Ez szigorítja a fenti „Terv-először” és spec-kötelezettség blokkot: a terv mellett külön, ügynöknek szóló végrehajtási fájl is kell, mielőtt a kódolás elindul.
 
 ## Verifikáció
 

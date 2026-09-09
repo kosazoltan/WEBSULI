@@ -35,6 +35,7 @@ import ChatInterface, { ChatMessage } from "./ChatInterface";
 import SystemPromptEditor from "./SystemPromptEditor";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
+import { CREATOR_PAGE_SCALE } from "@shared/studio-ui";
 import { logger } from "../lib/logger";
 
 type Phase = 'upload' | 'chatgpt' | 'claude' | 'preview';
@@ -263,6 +264,7 @@ export default function EnhancedMaterialCreator() {
 
   // Phase 4: Preview & Publish
   const [isPublishing, setIsPublishing] = useState(false);
+  const [publishedFileId, setPublishedFileId] = useState<string | null>(null);
   
   // Helper: Add message with limit to prevent memory issues
   const addMessageWithLimit = (
@@ -916,23 +918,29 @@ export default function EnhancedMaterialCreator() {
       
       // apiRequest: a mutáló útvonalak CSRF-védettek, a tokent ez teszi rá.
       // Nyelv fetch-csel ez a kérés élesben 403-at kapott volna (SEC-107).
-      await apiRequest('POST', '/api/html-files', {
-        title: titleWithClassroom,
-        description,
-        content: generatedHtml
-        // ✅ classroom mező TÖRÖLVE - a backend a címből kinyeri
-      });
+      const file = await apiRequest<{ id: string }>(
+        "POST",
+        "/api/html-files",
+        {
+          title: titleWithClassroom,
+          description,
+          content: generatedHtml,
+          classroom,
+          contentType: "html",
+        },
+        { timeout: 180000 },
+      );
 
-      await queryClient.invalidateQueries({ queryKey: ['/api/html-files'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/materials'] });
+      queryClient.removeQueries({ queryKey: ["/api/html-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/html-files"], type: "all" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/materials"] });
+
+      setPublishedFileId(file.id);
 
       toast({
         title: "✅ Sikeres publikálás!",
-        description: "Az anyag felkerült a platformra"
+        description: `"${titleWithClassroom}" megjelent a Fájlok listában és a főoldalon.`,
       });
-
-      // Reset wizard
-      resetWizard();
 
     } catch (error) {
       // ✅ JAVÍTÁS: Részletesebb hibaüzenet
@@ -972,6 +980,7 @@ export default function EnhancedMaterialCreator() {
     setTitle("");
     setDescription("");
     setClassroom(1);
+    setPublishedFileId(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -1002,7 +1011,11 @@ export default function EnhancedMaterialCreator() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 space-y-6">
+    <div
+      className="max-w-7xl mx-auto p-4 space-y-6 origin-top-left"
+      data-testid="creator-page-scale"
+      style={{ zoom: CREATOR_PAGE_SCALE }}
+    >
       {/* Progress Header */}
       <Card>
         <CardHeader>
@@ -1403,7 +1416,7 @@ Miben segíthetek? Szeretnéd, hogy készítsek egy strukturált tananyag szöve
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[600px]">
+              <div className="h-[480px]">
                 <ChatInterface
                   title="ChatGPT - Szöveg asszisztens"
                   description="Készíts tananyag szöveget a dokumentum alapján"
@@ -1539,7 +1552,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                   </div>
                   <iframe
                     srcDoc={generatedHtml}
-                    className="w-full h-[400px]"
+                    className="w-full h-[320px]"
                     title="HTML Preview"
                     sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                     allow="autoplay; fullscreen; clipboard-write; microphone"
@@ -1626,7 +1639,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                 </Card>
               )}
               
-              <div className={generatedHtml ? "h-[350px]" : "h-[600px]"}>
+              <div className={generatedHtml ? "h-[280px]" : "h-[480px]"}>
                 <ChatInterface
                   title="Claude - HTML szakértő"
                   description={generatedHtml ? "Kérj módosítást az elkészült HTML-hez" : "Interaktív HTML tananyag készítése"}
@@ -1768,6 +1781,16 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                   </>
                 )}
               </Button>
+              {publishedFileId && (
+                <>
+                  <Button asChild variant="outline" data-testid="publish-open-saved">
+                    <a href={`/preview/${publishedFileId}`}>Megnyitás a listában</a>
+                  </Button>
+                  <Button variant="ghost" onClick={resetWizard} data-testid="publish-reset">
+                    Új tananyag
+                  </Button>
+                </>
+              )}
             </CardFooter>
           </Card>
         </TabsContent>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { BookOpen, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Globe, Loader2, Sparkles, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,9 @@ import { OutlineReview } from "@/components/studio/OutlineReview";
 import { LektorNotes } from "@/components/studio/LektorNotes";
 import { FeedbackPanel } from "@/components/studio/FeedbackPanel";
 import { SourceUploadForm } from "@/components/studio/SourceUploadForm";
+import { WebResearchAgentPanel } from "@/components/studio/WebResearchAgentPanel";
 import { KnowledgeMapPanel } from "@/components/studio/KnowledgeMapEditor";
-import { feedbackPanelVisible, lessonStudioView } from "@shared/studio-ui";
+import { CREATOR_PAGE_SCALE, feedbackPanelVisible, lessonStudioView } from "@shared/studio-ui";
 
 /**
  * LS-8 (#191) — a tananyagkészítés EGY menüpont, és önmagában elég.
@@ -75,6 +76,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   // Audit 2026-09-05 (E): survive a reload mid-pipeline — the server job keeps running,
   // the admin must not lose the monitor / approval / notes view.
   const [jobId, setJobId] = useState<string | null>(() => readPersistedJobId());
+  const [studioMode, setStudioMode] = useState<"upload" | "web">("upload");
   useEffect(() => persistJobId(jobId), [jobId]);
 
   const { data: mapsData, isLoading: mapsLoading } = useQuery<{ maps: MapListItem[] }>({
@@ -102,7 +104,36 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   const notesReady = step === "lektor" || step === "gate" || step === "done";
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4 origin-top-left"
+      data-testid="creator-page-scale"
+      style={{ zoom: CREATOR_PAGE_SCALE }}
+    >
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={studioMode === "upload" ? "default" : "outline"}
+          className="min-h-11 gap-1"
+          onClick={() => setStudioMode("upload")}
+          data-testid="studio-mode-upload"
+        >
+          <Upload className="w-4 h-4" />
+          Feltöltés
+        </Button>
+        <Button
+          size="sm"
+          variant={studioMode === "web" ? "default" : "outline"}
+          className="min-h-11 gap-1"
+          onClick={() => setStudioMode("web")}
+          data-testid="studio-mode-web"
+        >
+          <Globe className="w-4 h-4" />
+          Internetes keresés
+        </Button>
+      </div>
+      {studioMode === "web" ? (
+        <WebResearchAgentPanel />
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -124,6 +155,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
           )}
         </CardContent>
       </Card>
+      )}
 
       {jobId && <JobMonitor jobId={jobId} />}
 

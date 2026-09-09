@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { lessonStudioView, ONE_STEP_ONLY_FIELDS, oneStepSubmitDisabledReason } from "../shared/studio-ui";
+import { CREATOR_PAGE_SCALE, lessonStudioView, ONE_STEP_ONLY_FIELDS, oneStepSubmitDisabledReason } from "../shared/studio-ui";
 
 /**
  * LS-8 (#191) — a tulajdonos panasza: „Még mindig külön el kell készítenem a
@@ -108,3 +108,32 @@ test("az admin tab-lista nem kínál külön tudás-térkép menüpontot", () =>
   // kihagyott érték némán a 'files' fülre esik vissza).
   assert.match(code, /"knowledge-maps"/, "a ?tab=knowledge-maps deep link maradjon érvényes");
 });
+
+test("a tananyagkészítő felület 80%-os nagyítással jelenik meg", () => {
+  assert.equal(CREATOR_PAGE_SCALE, 0.8);
+  const panel = readFileSync(
+    new URL("../client/src/components/studio/LessonStudioPanel.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(panel, /creator-page-scale/);
+  assert.match(panel, /CREATOR_PAGE_SCALE/);
+});
+
+test("a tananyagkészítésen van internetes keresés mód", () => {
+  const panel = readFileSync(
+    new URL("../client/src/components/studio/LessonStudioPanel.tsx", import.meta.url),
+    "utf8",
+  );
+  const code = panel.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.match(code, /studio-mode-web/);
+  assert.match(code, /WebResearchAgentPanel/);
+});
+
+test("a mobil Anyagok menü tartalmazza a tananyagkészítést", () => {
+  const nav = readFileSync(
+    new URL("../client/src/components/MobileBottomNav.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(nav, /lesson-studio/);
+});
+

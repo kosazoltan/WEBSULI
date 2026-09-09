@@ -111,6 +111,11 @@ export const LEGACY_MODELS = {
   improve: ["claude-opus-5", "z-ai/glm-5.3-flash"],
   /** Quiz item generation from a material (gameQuizGeneratorService.ts) */
   quizGenerator: "claude-opus-5",
+  /**
+   * Tananyagkészítés — internetes keresős ügynök (web-research-routes.ts).
+   * Tulajdonosi kérés 2026-09-09: Claude Opus 5, minimum effort, saját Anthropic kulcs.
+   */
+  webResearch: "claude-opus-5",
 } as const;
 
 export type LegacyTask = keyof typeof LEGACY_MODELS;
@@ -139,6 +144,7 @@ export const TASK_EFFORT: Partial<Record<LegacyTask, "low" | "medium" | "high">>
   claudeHtml: "medium",
   improve: "medium",
   quizGenerator: "medium",
+  webResearch: "low",
 };
 
 /** Effort for a task, or undefined when the task/model takes none. */
@@ -183,6 +189,7 @@ const TASK_KEYS: Record<LegacyTask, "openai" | "anthropic"> = {
   claudeHtml: "anthropic",
   improve: "anthropic",
   quizGenerator: "anthropic",
+  webResearch: "anthropic",
 };
 
 export const AI_KEY_NAMES = {

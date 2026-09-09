@@ -460,6 +460,12 @@ export type LessonStudioView = {
 };
 
 /**
+ * A tananyagkészítő oldal nagyítása a jelenlegi méret 80%-ára
+ * (tulajdonosi kérés 2026-09-09: kevesebb görgetés).
+ */
+export const CREATOR_PAGE_SCALE = 0.8;
+
+/**
  * A tananyagkészítés felület nézet-modellje.
  *
  * Szándékosan NEM függ attól, van-e már térkép: a feltöltés mindig az

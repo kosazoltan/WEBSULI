@@ -66,3 +66,24 @@ test("EnhancedMaterialCreator: az AI-generált előnézet iframe nem kap allow-s
     assert.ok(!s.includes("allow-same-origin"), `nincs allow-same-origin: ${s}`);
   }
 });
+
+test("studio publishLesson invalidálja a html-files listacache-t", () => {
+  const src = read("server/studio/step-runner.ts");
+  assert.match(src, /getHtmlFilesCache/);
+  assert.match(src, /invalidate\(\)/);
+});
+
+test("EnhancedMaterialCreator publikáláskor küldi a classroomot és a contentType-ot", () => {
+  const src = read("client/src/components/EnhancedMaterialCreator.tsx");
+  assert.match(src, /contentType:\s*["']html["']/);
+  assert.match(src, /classroom,/);
+});
+
+test("WebResearchAgentPanel előnézeti iframe nem kap allow-same-origin-t", () => {
+  const src = read("client/src/components/studio/WebResearchAgentPanel.tsx");
+  const sandboxes = src.match(/sandbox="[^"]*"/g) ?? [];
+  assert.ok(sandboxes.length >= 1, "van előnézeti iframe");
+  for (const s of sandboxes) {
+    assert.ok(!s.includes("allow-same-origin"), `nincs allow-same-origin: ${s}`);
+  }
+});

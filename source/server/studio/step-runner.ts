@@ -4,6 +4,7 @@ import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lesso
 import type { IAIProvider } from "../ai/AIProvider";
 import { resolveStudioModel } from "../ai/models";
 import { isOpenRouterConfigured, OpenRouterProvider } from "../ai/OpenRouterProvider";
+import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
@@ -951,7 +952,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       // Audit 2026-09-05 (A): one transaction — a lesson is either fully reachable
       // (html_files row + publishedAt + quiz export) or untouched.
       // B6: re-publish keeps the existing htmlFileId so old /preview links stay valid.
-      return db.transaction(async (tx) => {
+      const result = await db.transaction(async (tx) => {
         const [existing] = await tx
           .select({ htmlFileId: lessons.htmlFileId })
           .from(lessons)
@@ -1001,6 +1002,11 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
         }
         return { htmlFileId: fileId, exportedQuizItems: input.quizItems.length };
       });
+      // A lista-cache a GET /api/html-files előtt áll. Invalidálás CSAK a sikeres
+      // commit után: különben az előnézet (/preview/:id) működik, a főoldal/Fájlok
+      // lista pedig 5 percig a régi sort szolgálja.
+      getHtmlFilesCache().invalidate();
+      return result;
     },
 
     async upsertLesson(lessonId, mapId, json) {

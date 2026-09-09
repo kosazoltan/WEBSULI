@@ -68,7 +68,7 @@ export const insertHtmlFileSchema = createInsertSchema(htmlFiles).omit({
   title: z.string().min(1, "A cím nem lehet üres"),
   content: z.string().min(1, "A tartalom nem lehet üres"),
   classroom: z.number().int().min(0).max(12).optional(),
-  contentType: z.enum(['html', 'pdf']).optional(),
+  contentType: z.enum(['html', 'pdf', 'lesson']).optional(),
 });
 
 export type InsertHtmlFile = z.infer<typeof insertHtmlFileSchema>;

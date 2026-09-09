@@ -1,7 +1,7 @@
 # Spec: {{FELADAT NEVE}}
 
 > Dátum: ÉÉÉÉ-HH-NN · Szerző: · Állapot: VÁZLAT / JÓVÁHAGYVA
-> Szabály: 3+ fájlt érintő vagy bizonytalan feladat csak JÓVÁHAGYOTT spec után indul.
+> Szabály: 3+ fájlt érintő vagy bizonytalan feladat csak spec + AI-olvasható végrehajtási utasítás után indul (`docs/agent-haromfazisu-munka.md`). A végrehajtás külön fájl: `YYYY-MM-DD-<nev>-vegrehajtas.md`.
 
 ## 1. Cél
 
@@ -36,3 +36,8 @@
 ## 8. Kockázatok / visszavonási terv
 
 <!-- Mi romolhat el; hogyan vonható vissza (revert/feature flag/void). -->
+
+## 9. Végrehajtási utasítás
+
+<!-- Kötelező 2. fázis: külön fájl `docs/specs/YYYY-MM-DD-<nev>-vegrehajtas.md`. Itt csak a relatív útvonal. -->
+- Végrehajtás: `docs/specs/YYYY-MM-DD-<nev>-vegrehajtas.md`

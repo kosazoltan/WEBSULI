@@ -133,6 +133,7 @@ test("minden legacy feladat megmondja, melyik kulcs kell hozzá", () => {
     "chatgptChat",
     "improve",
     "quizGenerator",
+    "webResearch",
   ];
 
   for (const task of tasks) {
@@ -168,6 +169,13 @@ test("a hosszú generáló feladatok medium reasoning efforttal futnak", () => {
   for (const task of ["improve", "claudeHtml", "analyzeFiles", "chatgptChat"] as LegacyTask[]) {
     assert.equal(effortFor(task), "medium", `${task} effortja nem medium`);
   }
+});
+
+test("a webes tananyag-ügynök Opus 5 low efforton fut", () => {
+  assert.equal(resolveLegacyModel("webResearch"), "claude-opus-5");
+  assert.equal(effortFor("webResearch"), "low");
+  assert.equal(providerForModel(LEGACY_MODELS.webResearch), "anthropic");
+  assert.equal(requiredKeyFor("webResearch"), "AI_INTEGRATIONS_ANTHROPIC_API_KEY");
 });
 
 test("providerForModel az azonosító alakjából dönt", () => {

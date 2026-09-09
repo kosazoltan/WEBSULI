@@ -638,3 +638,12 @@
     }
   }
 }
+
+/* Tananyagkészítő 80% (2026-09-09). A zoom Chrome/Edge; Firefox a transform ágat kapja. */
+@supports not (zoom: 1) {
+  [data-testid="creator-page-scale"] {
+    transform: scale(0.8);
+    transform-origin: top left;
+    width: 125%;
+  }
+}

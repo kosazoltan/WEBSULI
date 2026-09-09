@@ -50,6 +50,22 @@ test.describe("LS-8: tananyagkészítés — egy menüpont", () => {
     expect(errors, `konzol/oldal hibák: ${errors.join(" | ")}`).toEqual([]);
   });
 
+  test("az internetes keresés mód a tananyagkészítés panelen elérhető", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/__studio-panel-probe");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("creator-page-scale")).toBeVisible();
+    await expect(page.getByTestId("studio-mode-web")).toBeVisible();
+    await page.getByTestId("studio-mode-web").click();
+    await expect(page.getByTestId("web-research-agent-panel")).toBeVisible();
+    await expect(page.getByTestId("web-research-save")).toBeVisible();
+    await expect(page.getByTestId("source-upload-form")).toHaveCount(0);
+
+    expect(errors, `konzol/oldal hibák: ${errors.join(" | ")}`).toEqual([]);
+  });
+
   test("nincs vízszintes túlcsordulás és levágott szöveg (360px és 1280px)", async ({ page }) => {
     for (const width of [360, 1280]) {
       await page.setViewportSize({ width, height: 900 });

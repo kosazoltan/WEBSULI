@@ -33,6 +33,7 @@ import { assertDistinctFamilies, effortFor, resolveLegacyModel } from "./ai/mode
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { studioRouter } from "./studio/routes";
 import { lessonPipelineRouter } from "./studio/lesson-pipeline-routes";
+import { webResearchRouter } from "./studio/web-research-routes";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
@@ -786,6 +787,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // LS-2c: a lecke-pipeline admin végpontjai (szintén admin-őrzött, saját routerben).
   app.use("/api/studio", lessonPipelineRouter);
+
+  // 2026-09-09: internetes tananyag-ügynök (Claude Opus 5, effort low, web_search).
+  app.use("/api/studio", webResearchRouter);
 
   // LS-2: a lecke olvasó oldala PUBLIKUS (ezt tölti a gyerek böngészője), és csak
   // publikált, sémára újraellenőrzött leckét ad ki.

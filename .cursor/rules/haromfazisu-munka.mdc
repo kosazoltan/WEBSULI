@@ -1,0 +1,14 @@
+---
+description: Kötelező háromfázisú munka — terv, majd AI-olvasható végrehajtási utasítás, utána kód.
+alwaysApply: true
+---
+
+# Háromfázisú munka (2026-09-09)
+
+Kódolás előtt olvasd: `docs/agent-haromfazisu-munka.md`.
+
+1. Terv a `docs/specs/` sablon szerint (cél / nem-cél / fájlok / EARS).
+2. AI-olvasható végrehajtási utasítás: `docs/specs/YYYY-MM-DD-*-vegrehajtas.md` — fájlútvonal, lépés, tesztparancs, elvárt kimenet.
+3. Csak ezután javítás / módosítás / bővítés.
+
+Tilos a kódolás az 1–2. fázis előtt. Ha a tulajdonos már kérte a munkát, a 2. fázis után ne várj második megerősítésre. Ne találj ki fájlt, API-t, tesztet; ellenőrizetlen állítás: UNKNOWN / UNVERIFIED.
