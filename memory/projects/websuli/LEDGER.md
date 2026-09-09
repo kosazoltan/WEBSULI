@@ -230,3 +230,19 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   mobil (375px) elrendezés túlcsordulás nélkül. Menet közben talált+javított hiba: a lépés
   alatt a következő kérdés helyes válasza szivárgott ki a felfedő színezéssel → a
   kérdéscsere csak a lépés után.
+
+## 2026-09-09 — Tananyag Készítő v7.4 közös spec + internetes ügynök javítás + Grok lektor
+- Spec: docs/specs/2026-09-09-webes-tananyag-agent-es-mentes.md (10. pont: 2. kör),
+  docs/specs/2026-09-09-tananyag-keszito-v74-integracio.md (+ vegrehajtas, + a skill másolata).
+- Kiindulás: a Cursor-commit (ce87955) élesben bizonyítottan elhasalt (180 s abszolút korlát a
+  HTML közepén → "Időtúllépés", a chat eldobta a választ). Javítás: pause_turn folytatás,
+  stop_reason kapu, tétlenségi + 20 perces korlát, 64K kimenet, verifier-figyelmeztetés.
+- v7.4: server/ai/lesson-html-spec.ts egy helyen (motor referencia-kóddal, TTS, diktálás,
+  latin-ext fontok + fallback + glyph-warmup, 8 téma). Bekötve 4 promptba; a DB-ben aktív
+  egyedi material_creator prompt MELLÉ is (az felülírta a beépített szabályokat).
+- Modellek: qwen/qwen3.8-max eltűnt az OpenRouterről → lektor x-ai/grok-4.6 (Zoltán döntése),
+  author-fallback qwen3.8-max-0902; minden más id az élő listákban létezik.
+- Kapuk: tsc 0, eslint 0 warning, 1039/1039 unit, Playwright 3/3, npm run build OK.
+  Valós Opus 5 futások: v7.1 prompt 223 s/17,3K token; v7.4 32K-nál csonka → 64K: 382 s/34,1K,
+  headless-Chrome önteszt 15/15 feladat a saját mintaválasszal, fontok/TTS/alert rendben.
+- Helyi .env: AI_INTEGRATIONS_ANTHROPIC_API_KEY a D:/Hermes/.env-ből (érték sehol nem szerepel).
