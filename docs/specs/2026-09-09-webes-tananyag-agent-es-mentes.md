@@ -82,3 +82,41 @@ Ellenőrzött tények (kódból, 2026-09-09):
 ## 9. Végrehajtási utasítás
 
 - Végrehajtás: `docs/specs/2026-09-09-webes-tananyag-agent-vegrehajtas.md`
+
+## 10. Felülvizsgálat — Claude Code, 2026-09-09 (2. kör)
+
+Kódolvasás + hivatalos doksi (platform.claude.com web-search-tool, 2026-09-09) alapján ellenőrzött tények:
+
+- `web_search_20250305` + `claude-opus-5` a hivatalos példákban szerepel; `allowed_callers: ["direct"]` ezen a verzión az alapérték (ártalmatlan).
+- `output_config.effort: "low"` az Opus 5 legalacsonyabb szintje — a „minimum effort" kérés teljesül. Kulcs: `AI_INTEGRATIONS_ANTHROPIC_API_KEY` (render.yaml:44 deklarálja; a helyi `.env`-ben NINCS, ezért helyi valós hívás nem tesztelhető).
+- `POST /api/html-files` már invalidálja a lista-cache-t; a Studio `publishLesson` invalidálása az 1. körben bekerült.
+
+Talált hibák az 1. kör route-jában (`server/studio/web-research-routes.ts`):
+
+1. Nincs `pause_turn` kezelés — a szerveroldali keresőciklus 10 iteráció után szünetel, a válasz csonkán „kész"-nek látszott. Javítás: folytatási ciklus (max. 5), a szüneteltetett assistant-üzenet változatlan visszaküldésével.
+2. `max_tokens` (16384) elérése nem volt észlelve — csonka HTML is menthető volt. Javítás: `stop_reason` ellenőrzés (`max_tokens` / `refusal` → hiba), `max_tokens` 32000, a HTML csak záró `</html>` mellett menthető.
+3. 180 s abszolút időkorlát — több keresés + hosszú HTML Opus-sebességgel könnyen túllépi, a stream félbeszakadt. Javítás: 120 s tétlenségi (esemény nélküli) időkorlát + 15 perc kemény plafon.
+4. Nincs visszajelzés keresés közben, és a forráslista nem került a leírásba. Javítás: `status` és `sources` SSE-esemény, a források a panelen és a mentett leírásban.
+5. A teljes HTML a chat-buborékba ömlött (sok görgetés). Javítás: a `<!-- HTML_START -->` után a chat csak státuszt kap (`content_replace`), a HTML az előnézetbe megy.
+6. A `title` mező a sémában volt, de a prompt nem használta. Javítás: a kért cím a system promptba kerül.
+7. A system prompt a v7.1 követelmények töredékét tartalmazta. Javítás: a claude-chat v7.1 blokk (4 tab, kognitív elemek, technikai tiltások) átemelve.
+
+### 10.1 Valós API-próba (2026-09-09, helyi kulccsal a Hermes `.env`-ből)
+
+A route pontos request-alakjával (`claude-opus-5`, `effort: low`, `web_search_20250305`, v7.1 prompt, 5. osztály) futtatott szkript: `stop_reason: end_turn`, 1 keresés / 9 találat, 537 kimeneti token, 13 s, `pause_turn` nem történt. A Render `websuli-api-eu` szolgáltatás env-listájában az `AI_INTEGRATIONS_ANTHROPIC_API_KEY` kulcsnév szerepel (érték nem ellenőrzött).
+
+### 10.2 Elavult modell (tulajdonosi kérés, 2026-09-09)
+
+Az OpenRouter nyilvános `/models` listájában a `qwen/qwen3.8-max` (Studio `lektor` primary) már nem létezik (csak `qwen3.8-max-0902`). Tulajdonosi döntés: a lektor `x-ai/grok-4.6`; az author-fallback ezért `qwen/qwen3.8-max-0902` (a D1-garancia — author és lektor különböző család, fallbackokkal együtt — áll, `tests/models-routing.test.ts` zöld). Minden más modell-id (Anthropic Models API, OpenAI `/v1/models`, OpenRouter `/models`) létezik.
+
+### 10.3 Éles felületi próba (websuli.vip, 2026-09-09 19:48–19:52, admin-munkamenettel)
+
+- A tananyagkészítés fül a friss frontenddel: „Feltöltés / Internetes keresés” váltó, 80%-os méret, egy képernyőn elfér görgetés nélkül (1409×633-as nézetben is). A tulajdonos saját fülén a régi bundle volt gyorsítótárban (nincs váltó, 100% méret) — frissítés kell.
+- Internetes keresés mód: 5. osztály + törtek utasításra az ügynök keresett (Sulinet, oktatas.hu kerettanterv, kooperativ.hu, matekmegoldasok.hu), forrásokkal összefoglalt, majd elkezdte a 4 fülös HTML-t (45-ös feladatbank, 75-ös kvízbank, forrásblokk).
+- **Bizonyított hiba az 1. körös (ce87955, éles) route-ban:** ~3 perc után „Időtúllépés: a keresés vagy a tananyagkészítés túl sokáig tartott.” — a 180 s abszolút korlát a HTML közepén megszakította a streamet, a kliens pedig eldobta a választ (konzol: `[WebResearchAgent] Error: Időtúllépés…`). A 2. körös javítás (tétlenségi korlát + 15 perc plafon) ezt oldja meg; élesre csak deploy után kerül.
+- További éles lelet: a modell a `<!-- HTML_START -->` után ```html kerítésbe tette a dokumentumot → `extractGeneratedHtml` mostantól leszedi a kerítést, a prompt tiltja.
+- Mentést élesben nem nyomtam meg: a `POST /api/html-files` e-mail-értesítést küld az osztály feliratkozóinak.
+
+### 10.4 A javított logika teljes futása (valós API, 2026-09-09 19:53–19:56)
+
+Ugyanaz az utasítás, mint az éles próbán, a 2. körös route-logikával (idle-timeout, 32 000 token, kerítés-szűrés): `end_turn`, 2 keresés, **223 s**, **17 347 kimeneti token**, lezárt `</html>`, kerítés nélkül, max. eseményköz 9,9 s. Mindkét szám a régi route korlátja felett van (180 s, 16 384 token) — a régi verzió ezt az anyagot sem tudta volna elkészíteni. A kész HTML fejnélküli Chrome-ban: 4 fül működik, Feladatok 15 beviteli mező, Kvíz 25 kérdés A/B/C, nincs `alert`, nincs Google Fonts, nincs túlcsordulás, nincs JS-hiba.

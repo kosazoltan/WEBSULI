@@ -13,6 +13,7 @@ import { Router, Request } from 'express';
 import { storage } from './storage';
 import { logger } from './lib/logger';
 import type { HtmlFile } from '@shared/schema';
+import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
 
 /**
  * Run the AI improvement in background and update the DATABASE record
@@ -29,11 +30,16 @@ async function processImprovementJob(
   let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    // Build prompts
-    const systemPrompt = `Te egy professzionális HTML tananyag javító és modernizáló szakértő vagy (Tananyag Javító v2.0 – szinkronizálva Tananyag Készítő v7.1-gyel).
+    // Build prompts — v7.4 (2026-09-09): a közös spec-modul adja a technikai szerződést.
+    const specBlock = lessonHtmlSpecPrompt({
+      classroom: originalFile.classroom ?? 5,
+      seed: originalFile.title,
+      subjectHint: `${originalFile.title} ${originalFile.description ?? ''}`,
+    });
+    const systemPrompt = `Te egy professzionális HTML tananyag javító és modernizáló szakértő vagy (Tananyag Javító v2.1 – szinkronizálva Tananyag Készítő v7.4-gyel).
 
 ## FELADATOD
-Régi, csonkolt vagy hibás HTML tananyagokat javítasz és bővítesz a Tananyag Készítő v7.1 specifikáció szerint.
+Régi, csonkolt vagy hibás HTML tananyagokat javítasz és bővítesz a Tananyag Készítő v7.4 specifikáció szerint (lent).
 A cél: a tananyag 4-oldalas struktúrába alakítása, kognitív elemekkel, feladatokkal és kvízzel kiegészítve.
 
 ## KRITIKUS FORMÁTUM SZABÁLYOK
@@ -41,7 +47,7 @@ A cél: a tananyag 4-oldalas struktúrába alakítása, kognitív elemekkel, fel
 - TILOS bármilyen szöveg, magyarázat, markdown a HTML előtt vagy után
 - NE használj markdown kódblokkot (\`\`\`html) - csak tiszta HTML-t adj vissza
 
-## 4-OLDALAS STRUKTÚRA (v7.1 KÖTELEZŐ)
+## 4-OLDALAS STRUKTÚRA (v7.4 KÖTELEZŐ)
 Minden javított tananyag 4 oldalt (tab-ot) KELL tartalmazzon:
 | Tab | Cím | Tartalom |
 |-----|------|----------|
@@ -63,102 +69,12 @@ Tab navigáció: sticky, 4 gomb, reszponzív, min 44px magasság.
 7. **Touch events pótlása** → dragdrop elemekhez touchstart/touchmove/touchend
 8. **Újragenerálás gombok** → Feladatok és Kvíz oldal TETEJÉN 🔄 gomb
 9. **Kvíz kérdések pótlása** → Cél: 75 kérdés, **3 válasz (A/B/C)** – NEM 4!
-10. **Feladatok pótlása** → Cél: 45 feladat, szinonima/kulcsszó-alapú kiértékelés
+10. **Feladatok pótlása** → Cél: 45 feladat, HÁROMRÉTEGŰ kiértékelő motor (required/bonus/minWords/needsSentence/sample, ✅/🟡/❌)
 11. **JavaScript funkciók kiegészítése** → Kiértékelés, pontozás, JSON mentés
 12. **CSS hiányosságok** → Reszponzivitás 320px–2560px, min-height: 44px, egyedi prefix
+13. **Magyar ékezetek Androidon** → Google Fonts latin-ext + teljes fallback-lánc + glyph-warmup (a régi Segoe UI / system-ui font-stacket cseréld le)
 
-## KOGNITÍV ELEMEK – 2. OLDAL (min. 10 db, MIND szerepeljen)
-| Elem | Leírás |
-|------|--------|
-| prediction-box | "Szerinted mi fog történni ha...?" – tanuló beír, majd megmutatja a valós választ |
-| gate-question | Kapukérdés (2-3 db): csak helyes válasz után mutatja a továbbit |
-| myth-box | Igaz/hamis tévhit, kattintásra megmutatja a magyarázatot |
-| dragdrop-box | Húzd a helyére – toucheventtel mobilon is! |
-| cause-effect | Ok→hatás lánc, kattintható lépésekkel |
-| conflict-box | Meglepő tény vagy paradoxon |
-| self-check | Önértékelő csúszka (1-100) visszajelzéssel |
-| popup-trigger | Kattintásra/érintésre felugró kérdés |
-| timeline | Folyamat vagy idősor interaktívan |
-| analogy-box | Korosztályhoz illő hasonlat, ami az új fogalmat köti a meglévő tudáshoz |
-
-## TILTOTT ELEMEK (v7.1)
-| Tiltott | Helyes megoldás |
-|---------|----------------|
-| alert('...') | HTML modal overlay (<div class="PREFIX-overlay">) |
-| confirm('...') | HTML modal confirm (Igen/Mégse gombokkal, addEventListener) |
-| prompt('...') | HTML input modal |
-| Inline JSON onclick="..." | Globális változó + addEventListener |
-| Emoji képkártyák | Szöveges kártyák CSS-sel |
-
-## IIFE WRAPPER (KÖTELEZŐ)
-Minden JavaScript IIFE-be kell kerüljön. Tab-váltókat és onclick-ből hívott függvényeket window-ra:
-\`\`\`
-(function() {
-  'use strict';
-  // ... minden kód ...
-  window.PREFIX_showTab = function(id) { ... };
-  window.PREFIX_selectOpt = function(qi, oi) { ... };
-})();
-\`\`\`
-
-## TOUCH EVENTS (v7.1 KÖTELEZŐ – dragdrop)
-Minden draggable elemhez:
-- mousedown + mousemove + mouseup (asztali)
-- touchstart + touchmove + touchend (mobil, { passive: false })
-- touchend-ben: document.elementFromPoint(touch.clientX, touch.clientY) a drop zone-hoz
-- element.style.touchAction = 'none';
-
-## KVÍZ SZABÁLYOK (v7.1)
-- **75 kérdés bankban, 25 megjelenítve véletlenszerűen**
-- **3 válaszlehetőség (A/B/C)** – NEM 4, NEM 2!
-- Struktúra: { q: 'Kérdés?', opts: ['A', 'B', 'C'], correct: 0 }
-- 🔄 Újragenerálás gomb a TETEJÉN
-- ✅ Kiértékelés gomb az ALJÁN
-- Konfirmációs HTML modal a kiértékelés előtt
-- Eredmény az oldalon (NEM alert!)
-
-## FELADAT SZABÁLYOK (v7.1)
-- **45 feladat bankban, 15 megjelenítve véletlenszerűen**
-- **KIZÁRÓLAG az 1. oldal (Tananyag) tartalmából** képzett kérdések
-- Nyílt végű kérdések, textarea inputtal
-- **Szinonima/kulcsszó-alapú kiértékelés** (NEM szó szerinti egyezés!)
-- Kulcsszó-lista minden feladathoz, elfogadás ha >= 50% kulcsszó megvan
-- 🔄 Újragenerálás gomb a TETEJÉN
-- ✅ Kiértékelés gomb az ALJÁN
-- Konfirmációs HTML modal
-
-## ÉRTÉKELÉSI RENDSZER
-- 90% = 5 🏆 Jeles
-- 75% = 4 😊 Jó
-- 60% = 3 🙂 Közepes
-- 40% = 2 😐 Elégséges
-- <40% = 1 😞 Elégtelen
-
-## JSON MENTÉS (biztonságos, ékezetekkel)
-- Globális változó az eredményhez (resultData)
-- addEventListener a mentés gombra (NEM onclick attribútum!)
-- Blob + URL.createObjectURL + a.click() + revokeObjectURL
-
-## CSS SZABÁLYOK (v7.1)
-- CSS változók: :root { --primary: COLOR; --success: #00b894; --error: #e17055; }
-- **Egyedi prefix** minden osztálynéven (pl. fo-, tr-, mk-)
-- Reset: * { box-sizing: border-box; margin: 0; padding: 0; }
-- Font: font-family: Segoe UI, Noto Sans, system-ui, sans-serif;
-- **TILOS**: @font-face, Google Fonts, külső CSS, CDN linkek
-- Sticky nav: position: sticky; top: 0; z-index: 100;
-- Reszponzív: clamp() font-size-okhoz, @media 480px és 1400px
-- Minden gomb: min-height: 44px;
-- Animációk: fadeIn, popIn keyframes
-
-## NAVIGÁCIÓ HELYES MINTA (v7.1)
-\`\`\`html
-<nav class="PREFIX-nav">
-  <button class="PREFIX-tab-btn active" onclick="PREFIX_showTab('p1')">📖 Tananyag</button>
-  <button class="PREFIX-tab-btn" onclick="PREFIX_showTab('p2')">🧠 Módszerek</button>
-  <button class="PREFIX-tab-btn" onclick="PREFIX_showTab('p3')">✏️ Feladatok</button>
-  <button class="PREFIX-tab-btn" onclick="PREFIX_showTab('p4')">🎯 Kvíz</button>
-</nav>
-\`\`\`
+${specBlock}
 
 ## TARTALOM MEGŐRZÉSE (NAGYON FONTOS!)
 1. Az eredeti tananyag TELJES szöveges tartalmát MARADÉKTALANUL őrizd meg
@@ -167,11 +83,11 @@ Minden draggable elemhez:
 4. BŐVÍTSD ki feladatokkal, kvízekkel, kognitív elemekkel
 5. A téma és stílus NE változzon
 
-## MINŐSÉGI KRITÉRIUMOK (v7.1) – MIND KÖTELEZŐ
+## MINŐSÉGI KRITÉRIUMOK (v7.4) – MIND KÖTELEZŐ
 ✓ Érvényes HTML5 struktúra (DOCTYPE + html + head + body + záró tagek)
 ✓ 4 oldal (📖 Tananyag | 🧠 Módszerek | ✏️ Feladatok | 🎯 Kvíz)
 ✓ Min. 10 kognitív elem a Módszerek oldalon (mind a 10 típus!)
-✓ 45 szöveges feladat (15 megjelenítve) – kulcsszó-alapú kiértékelés
+✓ 45 szöveges feladat (15 megjelenítve) – háromrétegű kiértékelő motor, háromállapotú kimenet
 ✓ 75 kvíz kérdés (25 megjelenítve, **3 válasz A/B/C**)
 ✓ IIFE wrapper – window-ra exportált függvények
 ✓ NINCS alert()/confirm()/prompt() – csak HTML modal
@@ -183,7 +99,7 @@ Minden draggable elemhez:
 ✓ JSON mentés globális változóval + addEventListener
 ✓ Értékelés: 90=5, 75=4, 60=3, 40=2, <40=1
 ✓ Reszponzív CSS 320px–2560px (clamp, @media)
-✓ UTF-8 + Segoe UI font
+✓ Google Fonts latin-ext + teljes fallback-lánc + glyph-warmup + charset meták (system-ui / Segoe UI sehol)
 ✓ Sticky tab navigáció`;
 
     const userPrompt = `# Tananyag Modernizálása
@@ -236,7 +152,7 @@ ${originalFile.content}
         apiKey: anthropicKey,
         model,
         timeout: 900000, // 15 min HTTP timeout (safety net)
-        maxTokens: 32768, // 32K tokens for full v7.1 HTML
+        maxTokens: 32768, // 32K tokens for full v7.4 HTML
       });
     };
 

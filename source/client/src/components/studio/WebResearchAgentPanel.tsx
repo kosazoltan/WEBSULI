@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, Loader2, CheckCircle2, Eye } from "lucide-react";
+import { Globe, Loader2, CheckCircle2, Eye, Link2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,19 @@ import { useToast } from "@/hooks/use-toast";
 import { CLASSROOMS, DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
 import { logger } from "@/lib/logger";
 
-type StreamChunk = { type?: string; content?: string; html?: string; message?: string };
+type WebSource = { url: string; title: string };
+
+/** A szerver SSE-eseményei (server/studio/web-research-agent.ts `WebResearchEvent`). */
+type StreamChunk = {
+  type?: string;
+  content?: string;
+  html?: string;
+  message?: string;
+  sources?: WebSource[];
+  warnings?: string[];
+};
+
+const MAX_DESCRIPTION_CHARS = 1000;
 
 async function csrfHeader(): Promise<Record<string, string>> {
   const res = await fetch("/api/csrf-token", { credentials: "include" });
@@ -28,12 +40,28 @@ async function csrfHeader(): Promise<Record<string, string>> {
   return data.csrfToken ? { "X-CSRF-Token": data.csrfToken } : {};
 }
 
+/** A mentett leírás: rövid összefoglaló + a felhasznált források URL-jei (korlátos hossz). */
+export function buildDescription(classroomLabel: string, sources: WebSource[]): string {
+  const base = `Internetes forrásokból készült tananyag, ${classroomLabel}.`;
+  if (sources.length === 0) return base;
+  let out = `${base} Források:`;
+  for (const s of sources) {
+    const next = `${out} ${s.url};`;
+    if (next.length > MAX_DESCRIPTION_CHARS) break;
+    out = next;
+  }
+  return out;
+}
+
 export function WebResearchAgentPanel() {
   const { toast } = useToast();
   const [classroom, setClassroom] = useState<number>(DEFAULT_CLASSROOM);
   const [title, setTitle] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [sources, setSources] = useState<WebSource[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [generatedHtml, setGeneratedHtml] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -41,10 +69,18 @@ export function WebResearchAgentPanel() {
   const handleSend = async (message: string) => {
     setIsLoading(true);
     setSavedId(null);
+    setStatus("Válasz készül…");
     const userMessage: ChatMessage = { role: "user", content: message };
     const history = [...messages, userMessage];
     setMessages(history);
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+    const setAssistant = (content: string) =>
+      setMessages((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = { role: "assistant", content };
+        return next;
+      });
 
     try {
       const csrf = await csrfHeader();
@@ -91,15 +127,24 @@ export function WebResearchAgentPanel() {
           }
           if (parsed.type === "content_delta") {
             assistantMessage += parsed.content ?? "";
-            setMessages((prev) => {
-              const next = [...prev];
-              next[next.length - 1] = { role: "assistant", content: assistantMessage };
-              return next;
-            });
+            setAssistant(assistantMessage);
+          } else if (parsed.type === "content_replace") {
+            assistantMessage = parsed.content ?? "";
+            setAssistant(assistantMessage || "A HTML tananyag készül…");
+          } else if (parsed.type === "status") {
+            setStatus(parsed.message ?? null);
+          } else if (parsed.type === "sources" && Array.isArray(parsed.sources)) {
+            setSources(parsed.sources);
           } else if (parsed.type === "html_generated" && parsed.html) {
             setGeneratedHtml(parsed.html);
+            setWarnings(Array.isArray(parsed.warnings) ? parsed.warnings : []);
+            if (Array.isArray(parsed.sources) && parsed.sources.length > 0) setSources(parsed.sources);
             if (!title.trim()) {
               setTitle(`Tananyag — ${getClassroomLabel(classroom, false)}`);
+            }
+            if (!assistantMessage.trim()) {
+              assistantMessage = "A HTML tananyag elkészült — lásd az előnézetet lent.";
+              setAssistant(assistantMessage);
             }
             toast({ title: "HTML elkészült", description: "Mentheted a többi tananyag közé." });
           } else if (parsed.type === "error") {
@@ -107,22 +152,31 @@ export function WebResearchAgentPanel() {
           }
         }
       }
+      if (!assistantMessage.trim()) {
+        setMessages((prev) => prev.slice(0, -1));
+      }
     } catch (error) {
-      toast({
-        title: "Keresési hiba",
-        description: error instanceof Error ? error.message : "Ismeretlen hiba",
-        variant: "destructive",
+      const reason = error instanceof Error ? error.message : "Ismeretlen hiba";
+      toast({ title: "Keresési hiba", description: reason, variant: "destructive" });
+      // Éles próba 2026-09-09: hibánál a már megérkezett válasz (források, összefoglaló)
+      // ne vesszen el — a buborék marad, a hiba oka a végére kerül. Üres választ eldobunk.
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last || last.role !== "assistant") return prev;
+        if (!last.content.trim()) return prev.slice(0, -1);
+        return [...prev.slice(0, -1), { role: "assistant", content: `${last.content}\n\n⚠️ ${reason}` }];
       });
-      setMessages((prev) => prev.slice(0, -1));
       logger.error("[WebResearchAgent]", error);
     } finally {
       setIsLoading(false);
+      setStatus(null);
     }
   };
 
   const handleSave = async () => {
     if (!generatedHtml) return;
-    const saveTitle = title.trim() || `Tananyag — ${getClassroomLabel(classroom, false)}`;
+    const classroomLabel = getClassroomLabel(classroom, false);
+    const saveTitle = title.trim() || `Tananyag — ${classroomLabel}`;
     setIsSaving(true);
     try {
       const file = await apiRequest<{ id: string }>(
@@ -130,7 +184,7 @@ export function WebResearchAgentPanel() {
         "/api/html-files",
         {
           title: saveTitle,
-          description: `Internetes forrásokból készült tananyag, ${getClassroomLabel(classroom, false)}.`,
+          description: buildDescription(classroomLabel, sources),
           content: generatedHtml,
           classroom,
           contentType: "html",
@@ -211,6 +265,47 @@ export function WebResearchAgentPanel() {
             aiIcon={<Globe className="w-5 h-5 text-primary" />}
           />
         </div>
+        {isLoading && status && (
+          <div
+            className="flex items-center gap-2 text-xs text-muted-foreground"
+            data-testid="web-research-status"
+            aria-live="polite"
+          >
+            <Loader2 className="w-3 h-3 animate-spin" />
+            {status}
+          </div>
+        )}
+        {sources.length > 0 && (
+          <div className="border rounded-lg p-2" data-testid="web-research-sources">
+            <div className="flex items-center gap-1 text-xs font-medium mb-1">
+              <Link2 className="w-3 h-3" />
+              Felhasznált források ({sources.length})
+            </div>
+            <ul className="text-xs space-y-0.5 max-h-24 overflow-y-auto">
+              {sources.map((s) => (
+                <li key={s.url} className="truncate">
+                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline">
+                    {s.title || s.url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {generatedHtml && !isLoading && warnings.length > 0 && (
+          <div
+            className="border border-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-2 text-xs"
+            data-testid="web-research-warnings"
+            role="alert"
+          >
+            <div className="font-medium mb-1">⚠️ Az ellenőrző hibát talált a HTML-ben — mentés előtt kérj javítást a chatben:</div>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {generatedHtml && !isLoading && (
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-muted px-3 py-2 border-b flex items-center gap-2">

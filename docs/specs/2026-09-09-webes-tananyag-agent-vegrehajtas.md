@@ -337,3 +337,15 @@ Lint a módosított TS/TSX fájlokon.
 Böngésző (ha a dev szerver fut): `/admin?tab=lesson-studio` — feltöltés + Internetes keresés; `/admin?tab=enhanced` 80%. Ha nincs bejelentkezés, a probe-on ellenőrizd.
 
 Kész csak futtatott paranccsal.
+
+---
+
+### 2. kör (Claude Code, 2026-09-09) — a felülvizsgálat 10. pontja szerint
+
+**Files:**
+- Modify: `source/server/studio/web-research-agent.ts` — v7.1 követelményblokk, cím a promptban, `htmlLooksComplete`, SSE-eseménytípusok.
+- Modify: `source/server/studio/web-research-routes.ts` — folytatási ciklus `pause_turn`-re, `stop_reason` kapu, tétlenségi időkorlát, `status`/`sources`/`content_replace` események.
+- Modify: `source/client/src/components/studio/WebResearchAgentPanel.tsx` — státuszsor, forráslista, leírás forrásokkal, `content_replace`.
+- Test: `source/tests/web-research-agent.test.ts` — új esetek (csonka HTML, cím a promptban, statikus őr a route-ra: `pause_turn`, `stop_reason`).
+
+Verifikáció: `npx.cmd tsc --noEmit`; `npx.cmd eslint <érintett fájlok>`; `node --import tsx --test tests/web-research-agent.test.ts ...`; Playwright `tests/studio-one-menu.spec.ts` (build:e2e + saját szerver az 5000-en). Valós Anthropic-hívás helyben NEM futtatható (nincs kulcs a `.env`-ben) — NOT RUN, kockázat: a request-alak a hivatalos doksi példájával egyezik.

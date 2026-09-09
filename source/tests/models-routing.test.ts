@@ -120,7 +120,7 @@ test("the legacy route models are declared centrally", () => {
 test("assertDistinctFamilies: a shipped FALLBACK_MODELS minden author×lektor párja különböző család", () => {
   assert.doesNotThrow(() => assertDistinctFamilies({}));
   const authorCandidates = ["openai/gpt-5.6-terra", FALLBACK_MODELS.author].filter(Boolean) as string[];
-  const lektorCandidates = ["qwen/qwen3.8-max", FALLBACK_MODELS.lektor].filter(Boolean) as string[];
+  const lektorCandidates = ["x-ai/grok-4.6", FALLBACK_MODELS.lektor].filter(Boolean) as string[];
   for (const a of authorCandidates) for (const l of lektorCandidates) {
     assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l} azonos család`);
   }

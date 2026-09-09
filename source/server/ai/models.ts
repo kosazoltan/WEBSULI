@@ -52,7 +52,10 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   pedagogue: "x-ai/grok-4.6", // planning, misconceptions
   author: "openai/gpt-5.6-terra", // long structured Hungarian output
   animator: "qwen/qwen3.8-flash", // bounded transform, cheap
-  lektor: "qwen/qwen3.8-max", // MUST differ in family from author
+  // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
+  // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
+  // x-ai ≠ author (openai) és ≠ author-fallback (qwen) — a D1-garancia áll.
+  lektor: "x-ai/grok-4.6", // MUST differ in family from author
   gateHelper: "z-ai/glm-5.3-flash", // cheap classification
   quizPolish: "z-ai/glm-5.3-flash",
 };
@@ -62,10 +65,11 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   // #190: a mért második helyezett (90.2%), más családból mint az elsődleges.
   ocr: "google/gemini-3.1-flash-lite",
   pedagogue: "openai/gpt-5.6-terra",
-  // Audit 2026-09-05 (D): was qwen/qwen3.8-max == the lektor PRIMARY — on author failover
-  // the same model would have reviewed itself (D1 broken silently). x-ai differs from
-  // both lektor rungs (qwen, z-ai).
-  author: "x-ai/grok-4.6",
+  // Audit 2026-09-05 (D): the author fallback must not share a family with the lektor
+  // PRIMARY, otherwise on author failover the same model would review itself (D1 broken
+  // silently). 2026-09-09: the lektor moved to x-ai, so the author fallback is qwen again —
+  // the live OpenRouter id (`qwen3.8-max-0902`), differing from both lektor rungs (x-ai, z-ai).
+  author: "qwen/qwen3.8-max-0902",
   animator: "z-ai/glm-5.3-flash",
   lektor: "z-ai/glm-5.3",
 };
