@@ -31,10 +31,9 @@ test("every studio step has a default model", () => {
   }
 });
 
-test("the animator runs on qwen3.8-flash (no local GPU available)", () => {
-  // Owner decision 2026-09-04: the workstation GPU is dead, so nothing may route to a
-  // local Ollama tag such as qwen3.8:27b. Flash is the hosted replacement.
-  assert.equal(resolveStudioModel("animator", {}), "qwen/qwen3.8-flash");
+test("the animator runs on GPT-5.6 Terra (2026-09-09: qwen3.8-flash 429 on OpenRouter), Grok 4.6 fallback", () => {
+  assert.equal(resolveStudioModel("animator", {}), "openai/gpt-5.6-terra");
+  assert.equal(FALLBACK_MODELS.animator, "x-ai/grok-4.6");
 });
 
 test("no default model is a local Ollama tag", () => {

@@ -51,7 +51,9 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   ocr: "qwen/qwen3-vl-32b-instruct",
   pedagogue: "x-ai/grok-4.6", // planning, misconceptions
   author: "openai/gpt-5.6-terra", // long structured Hungarian output
-  animator: "qwen/qwen3.8-flash", // bounded transform, cheap
+  // 2026-09-09 (tulajdonosi döntés, mérve): a qwen3.8-flash az OpenRouteren 429-et ad; a
+  // Terra 41 s alatt sémahelyes, mértéktartó (5 animáció) kimenetet adott ugyanarra a leckére.
+  animator: "openai/gpt-5.6-terra",
   // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
   // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
   // x-ai ≠ author (openai) és ≠ author-fallback (qwen) — a D1-garancia áll.
@@ -70,7 +72,8 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   // silently). 2026-09-09: the lektor moved to x-ai, so the author fallback is qwen again —
   // the live OpenRouter id (`qwen3.8-max-0902`), differing from both lektor rungs (x-ai, z-ai).
   author: "qwen/qwen3.8-max-0902",
-  animator: "z-ai/glm-5.3-flash",
+  // 2026-09-09: a glm-5.3-flash 213 s után érvénytelen JSON-t adott; a Grok 4.6 117 s, sémahelyes (17 animáció).
+  animator: "x-ai/grok-4.6",
   lektor: "z-ai/glm-5.3",
 };
 

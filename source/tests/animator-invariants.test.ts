@@ -134,3 +134,26 @@ test("buildAnimatorPrompt: D1 szó szerint, a blokkoló szabályok és az id-k b
   assert.ok(/ONLY (add|touch|modify|replace).*`animate` blocks/i.test(prompt), "a szerződés: csak animate blokkokhoz nyúlhat");
   assert.ok(prompt.includes("byte-identical"), "a nem-animate blokkok bájtra azonos maradását kimondja");
 });
+
+// 2026-09-09 — éles mérés: a modell bájtra azonos blokkokat adott vissza más kulcssorrenddel,
+// és a sorrend-érzékeny összehasonlítás hamis szerződéssértést jelzett.
+import { canonicalJson } from "../server/studio/step-io";
+
+test("checkAnimatorResult: a kulcssorrend eltérése nem szerződéssértés", () => {
+  const original = {
+    title: "A sejt", subject: "biológia", classroom: 7, mapId: "m1", sourceOnly: true, misconceptions: [],
+    sections: [{ heading: "A sejt", probaEnabled: true, blocks: [
+      { kind: "explain", text: "A sejt az élőlények alapegysége.", depth: "core", readAloud: true, coversConceptIds: ["c1"] },
+    ] }],
+  } as never;
+  const reordered = {
+    misconceptions: [], sourceOnly: true, mapId: "m1", classroom: 7, subject: "biológia", title: "A sejt",
+    sections: [{ probaEnabled: true, heading: "A sejt", blocks: [
+      { coversConceptIds: ["c1"], readAloud: true, depth: "core", text: "A sejt az élőlények alapegysége.", kind: "explain" },
+      { kind: "animate", animKind: "numberLine", params: { from: 0, to: 10 }, caption: "Számegyenes", coversConceptIds: ["c1"] },
+    ] }],
+  } as never;
+  const check = checkAnimatorResult(original, reordered);
+  assert.deepEqual(check, { ok: true, reasons: [] });
+  assert.equal(canonicalJson({ b: [{ y: 1, x: 2 }], a: 1 }), '{"a":1,"b":[{"x":2,"y":1}]}');
+});

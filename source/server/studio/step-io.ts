@@ -388,12 +388,34 @@ export type AnimatorCheck = {
  * concept id (D1), and the sequence of non-animate blocks byte-identical in
  * every section. `animate` blocks are the ONLY place the candidate may differ.
  */
+/**
+ * Kulcssorrend-független JSON-alak az egyezés-vizsgálatokhoz. Éles mérés 2026-09-09:
+ * az animátor (Terra, Grok) bájtra azonos nem-animate blokkokat adott vissza, csak a
+ * kulcsok sorrendje tért el — a sorrend-érzékeny JSON.stringify ezt „szerződéssértésnek”
+ * jelezte, és a runner MINDEN animált leckét eldobott.
+ */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value));
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      out[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
 export function checkAnimatorResult(original: Lesson, candidate: Lesson): AnimatorCheck {
   const reasons: string[] = [];
 
   const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly"] as const;
   for (const field of identityFields) {
-    if (JSON.stringify(original[field]) !== JSON.stringify(candidate[field])) {
+    if (canonicalJson(original[field]) !== canonicalJson(candidate[field])) {
       reasons.push(`A lecke azonosító mezője megváltozott: ${field}.`);
     }
   }
@@ -414,7 +436,7 @@ export function checkAnimatorResult(original: Lesson, candidate: Lesson): Animat
       const originalNonAnimate = section.blocks.filter((b) => b.kind !== "animate");
       const candidateNonAnimate =
         candidate.sections[index]?.blocks.filter((b) => b.kind !== "animate") ?? [];
-      if (JSON.stringify(originalNonAnimate) !== JSON.stringify(candidateNonAnimate)) {
+      if (canonicalJson(originalNonAnimate) !== canonicalJson(candidateNonAnimate)) {
         reasons.push(`A(z) ${index + 1}. szakasz nem-animate blokkjai megváltoztak.`);
       }
     });
@@ -441,7 +463,7 @@ export function checkConceptFixResult(
 
   const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly"] as const;
   for (const f of identityFields) {
-    if (JSON.stringify(original[f]) !== JSON.stringify(candidate[f])) {
+    if (canonicalJson(original[f]) !== canonicalJson(candidate[f])) {
       reasons.push(`A lecke azonosító mezője megváltozott: ${f}.`);
     }
   }
@@ -468,7 +490,7 @@ export function checkConceptFixResult(
     section.blocks.forEach((block, bi) => {
       const coveredIds = "coversConceptIds" in block ? block.coversConceptIds : [];
       const isTarget = coveredIds.includes(conceptId);
-      if (!isTarget && JSON.stringify(block) !== JSON.stringify(candidateSection.blocks[bi])) {
+      if (!isTarget && canonicalJson(block) !== canonicalJson(candidateSection.blocks[bi])) {
         const covered = coveredIds.join(", ");
         reasons.push(
           `A(z) ${i + 1}. szakasz ${bi + 1}. blokkja nem a(z) ${conceptId} fogalmat fedi` +

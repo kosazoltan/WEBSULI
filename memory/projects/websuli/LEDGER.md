@@ -258,3 +258,13 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 - Javítás (step-runner.ts): modellhívás-hibánál egy próba a lépés fallback-modelljén (minden
   lépésre); animátornál kettős hiba esetén az EREDETI lecke megy tovább a lektorra; a hibaüzenet
   a szolgáltatói okot és mindkét modellt megnevezi. 3 új runner-teszt (m/n/o), 1042/1042 zöld.
+
+## 2026-09-09 — Animátor: hamis szerződéssértés (kulcssorrend) + modellcsere Terra/Grok
+- Mérés az elbukott job leckéjén: Terra 41 s / 4,8K token / 5 animáció, Grok 4.6 117 s / 9,3K / 17
+  animáció — mindkettő sémahelyes, de a `checkAnimatorResult` „nem-animate blokkok megváltoztak”-ot
+  jelzett. Diff: bájtra azonos tartalom, CSAK a JSON-kulcsok sorrendje más → a sorrend-érzékeny
+  `JSON.stringify` minden animált leckét eldobatott (a fix-concept ellenőrző ugyanígy).
+- Javítás: `canonicalJson` (rekurzívan rendezett kulcsok) a 4 egyezés-vizsgálatban; teszt.
+- Tulajdonosi döntés: animátor elsődleges `openai/gpt-5.6-terra` (OpenRouteren, ~0,07 $/lecke),
+  fallback `x-ai/grok-4.6`. Újramérve a javított ellenőrzővel: Terra 56 s, contractOk, fellBack=false.
+- Kapuk: tsc 0, eslint 0, 1043/1043 unit, build OK.
