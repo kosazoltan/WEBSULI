@@ -2,7 +2,7 @@ import { and, eq, ne } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
-import { resolveStudioModel } from "../ai/models";
+import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 import { isOpenRouterConfigured, OpenRouterProvider } from "../ai/OpenRouterProvider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -239,6 +239,16 @@ function coverageReason(c: OutlineCoverage): string {
   return `A vázlat nem felel meg a térképnek — ${parts.join("; ")}.`;
 }
 
+/** A lépéshiba üzenete a szolgáltatói okkal (pl. „Rate limit exceeded”) — a nyers modellválasz nélkül. */
+function describeStepError(error: unknown): string {
+  if (error instanceof StepModelError) {
+    const cause = (error as { cause?: unknown }).cause;
+    const causeMessage = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+    return causeMessage ? `${error.message} (${causeMessage})` : error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Persist the error state and return the failed outcome. */
 async function fail(store: PipelineStore, job: JobView, reason: string): Promise<StepOutcome> {
   logger.error(`[STUDIO] ${job.step} lépés hiba (job ${job.id}): ${reason}`);
@@ -368,18 +378,46 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   await store.saveStep(job.id, { status: "running", finishedAt: null, error: null });
 
-  const model = resolveStudioModel(job.step);
-  const provider = providerFactory(model);
+  const primaryModel = resolveStudioModel(job.step);
+  let model = primaryModel;
 
   let json: unknown;
   let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null = null;
-  try {
-    const result = await callStepModel(provider, {
+  // Az animátor lépés kozmetika (#169): ha a MODELLHÍVÁS hal meg (pl. OpenRouter 429),
+  // az eredeti lecke megy tovább a lektorra — a gyártás nem áll meg.
+  let animatorModelFailure: string | null = null;
+  const attempt = (m: string) =>
+    callStepModel(providerFactory(m), {
       step: job.step,
-      model,
+      model: m,
       system,
       user: "Válaszolj kizárólag a kért JSON-nal.",
     });
+  try {
+    let result: Awaited<ReturnType<typeof attempt>>;
+    try {
+      result = await attempt(primaryModel);
+    } catch (primaryError) {
+      // Éles hiba 2026-09-09: a `FALLBACK_MODELS` eddig csak dokumentálva volt, a runner
+      // sosem használta — az animátor 429-en (rate limit) végleg elhalt. Egy próba a
+      // lépés fallback-modelljével, csak modellhívás-hibára (nem séma-sértésre).
+      const fallbackModel = FALLBACK_MODELS[job.step];
+      if (!(primaryError instanceof StepModelError) || !fallbackModel || fallbackModel === primaryModel) {
+        throw primaryError;
+      }
+      logger.warn(
+        `[STUDIO] ${job.step} (${job.id}): az elsődleges modell (${primaryModel}) hibázott — ${describeStepError(primaryError)} → fallback: ${fallbackModel}`,
+      );
+      try {
+        result = await attempt(fallbackModel);
+        model = fallbackModel;
+      } catch (fallbackError) {
+        throw new StepModelError(
+          job.step,
+          `${describeStepError(primaryError)} [${primaryModel}]; fallback: ${describeStepError(fallbackError)} [${fallbackModel}]`,
+        );
+      }
+    }
     json = result.json;
     usage = result.usage ?? null;
   } catch (error) {
@@ -389,7 +427,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         : `A(z) "${job.step}" lépés modellhívása hibára futott: ${
             error instanceof Error ? error.message : String(error)
           }`;
-    return fail(store, job, reason);
+    if (job.step === "animator" && job.output?.lesson) {
+      animatorModelFailure = reason;
+      json = null;
+    } else {
+      return fail(store, job, reason);
+    }
   }
 
   const successPatch = (
@@ -429,7 +472,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           `[STUDIO] Az author válasza séma-hibás, javító kör indul (${job.id}): ${zodIssues(parsed.error).slice(0, 300)}`,
         );
         try {
-          const retry = await callStepModel(provider, {
+          // ugyanazon a modellen, amelyik az első választ adta (elsődleges vagy fallback)
+          const retry = await callStepModel(providerFactory(model), {
             step: job.step,
             model,
             system,
@@ -482,17 +526,19 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
       // #169 — az animáció kozmetika: sértésnél/hibás alaknál az EREDETI lecke
       // megy tovább a lektorra, a gyártás nem hal meg.
-      const parsed = lessonSchema.safeParse(json);
-      const check = parsed.success ? checkAnimatorResult(original, parsed.data) : null;
+      const parsed = animatorModelFailure ? null : lessonSchema.safeParse(json);
+      const check = parsed?.success ? checkAnimatorResult(original, parsed.data) : null;
       const outcome = animatorOutcome(
         original,
-        parsed.success && check && check.ok
+        parsed?.success && check && check.ok
           ? { ok: true, lesson: parsed.data }
           : {
               ok: false,
-              reason: parsed.success
-                ? `szerződéssértés: ${(check as { reasons: string[] }).reasons.join("; ")}`
-                : `alakilag hibás animált lecke: ${zodIssues(parsed.error)}`,
+              reason: animatorModelFailure
+                ? `modellhiba: ${animatorModelFailure}`
+                : parsed?.success
+                  ? `szerződéssértés: ${(check as { reasons: string[] }).reasons.join("; ")}`
+                  : `alakilag hibás animált lecke: ${zodIssues((parsed as { error: ZodError }).error)}`,
             },
       );
       if (outcome.fellBack) {

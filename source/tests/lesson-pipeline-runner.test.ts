@@ -715,3 +715,80 @@ test("(q) fromMapBody: az üres törzs érvényes (a scope opcionális), a hián
   assert.equal(fromMapBody.safeParse({ subject: "biológia", classroom: 7 }).success, true);
   assert.equal(fromMapBody.safeParse({ subject: "biológia" }).success, false, "fél scope nem elfogadható");
 });
+
+/* ------------------------------------------------------------------ *
+ * 2026-09-09 — éles hiba: az animátor OpenRouter 429-en (rate limit) végleg elhalt,
+ * pedig a FALLBACK_MODELS csak dokumentálva volt, a runner nem használta.
+ * ------------------------------------------------------------------ */
+import { FALLBACK_MODELS, resolveStudioModel } from "../server/ai/models";
+
+function makeFailoverDeps(opts: { failModels: Set<string>; cannedResponse: string }) {
+  const base = makeDeps(opts.cannedResponse);
+  const calls: string[] = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub",
+    model,
+    chat: async () => {
+      calls.push(model);
+      if (opts.failModels.has(model)) throw new Error("[OpenRouter] Rate limit exceeded");
+      return { content: opts.cannedResponse, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  return { ...base, providerFactory, calls };
+}
+
+test("(m) modellhiba: az elsődleges modell 429-e után a lépés a FALLBACK_MODELS modelljén fut le", async () => {
+  const primary = resolveStudioModel("author");
+  const fallback = FALLBACK_MODELS.author!;
+  assert.notEqual(primary, fallback);
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
+    failModels: new Set([primary]),
+    cannedResponse: CANNED_AUTHOR,
+  });
+  store.seed({ id: "job-1", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  assert.equal(outcome.ok, true);
+  assert.deepEqual(calls, [primary, fallback], "előbb az elsődleges, majd a fallback modell");
+  const job = await store.loadJob("job-1");
+  assert.equal(job?.status, "ok");
+  assert.equal((job as { model?: string | null })?.model, fallback, "a job a ténylegesen használt modellt rögzíti");
+});
+
+test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az eredeti lecke megy tovább a lektorra", async () => {
+  const primary = resolveStudioModel("animator");
+  const fallback = FALLBACK_MODELS.animator!;
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
+    failModels: new Set([primary, fallback]),
+    cannedResponse: "{}",
+  });
+  store.seed({ id: "job-1", mapId: "m1", step: "animator", status: "running", output: { lesson: GOOD_LESSON } });
+
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  assert.equal(outcome.ok, true, "a gyártás nem áll meg");
+  assert.equal(outcome.ok && outcome.next.step, "lektor");
+  assert.deepEqual(calls, [primary, fallback]);
+  const job = await store.loadJob("job-1");
+  assert.equal(job?.status, "ok");
+  assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "az eredeti lecke változatlanul megy tovább");
+});
+
+test("(o) author: ha az elsődleges ÉS a fallback modell is hibázik, a hiba mindkét modellt és az okot megnevezi", async () => {
+  const primary = resolveStudioModel("author");
+  const fallback = FALLBACK_MODELS.author!;
+  const { store, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
+    failModels: new Set([primary, fallback]),
+    cannedResponse: CANNED_AUTHOR,
+  });
+  store.seed({ id: "job-1", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  assert.equal(outcome.ok, false);
+  assert.ok(outcome.reason.includes(primary), `az elsődleges modell neve szerepel: ${outcome.reason}`);
+  assert.ok(outcome.reason.includes(fallback), `a fallback modell neve szerepel: ${outcome.reason}`);
+  assert.match(outcome.reason, /Rate limit exceeded/);
+});

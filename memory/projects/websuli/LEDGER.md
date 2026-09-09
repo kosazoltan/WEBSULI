@@ -246,3 +246,15 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
   Valós Opus 5 futások: v7.1 prompt 223 s/17,3K token; v7.4 32K-nál csonka → 64K: 382 s/34,1K,
   headless-Chrome önteszt 15/15 feladat a saját mintaválasszal, fontok/TTS/alert rendben.
 - Helyi .env: AI_INTEGRATIONS_ANTHROPIC_API_KEY a D:/Hermes/.env-ből (érték sehol nem szerepel).
+
+## 2026-09-09 — Studio animátor lépés: OpenRouter 429 → fallback-modell + kozmetikai továbbengedés
+- Éles hiba (job 14bb50b7, 18:43–18:51): „animator lépés modellhívása hibára futott: a szolgáltató
+  hibát jelzett”; a felület tévesen a Publikálási kapunál mutatta. Helyi reprodukció ugyanazzal a
+  leckével: qwen/qwen3.8-flash → OpenRouter 429 „Rate limit exceeded” (16 s); z-ai/glm-5.3-flash →
+  213 s, érvénytelen JSON.
+- Gyökérok: a FALLBACK_MODELS csak dokumentálva volt, a step-runner sosem használta; a
+  modellhívás-hiba az animátornál is végleg leállította a gyártást (#169 csak séma/szerződés-
+  sértésre engedte tovább az eredeti leckét).
+- Javítás (step-runner.ts): modellhívás-hibánál egy próba a lépés fallback-modelljén (minden
+  lépésre); animátornál kettős hiba esetén az EREDETI lecke megy tovább a lektorra; a hibaüzenet
+  a szolgáltatói okot és mindkét modellt megnevezi. 3 új runner-teszt (m/n/o), 1042/1042 zöld.
