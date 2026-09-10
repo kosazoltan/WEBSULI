@@ -1,0 +1,7 @@
+# Végrehajtási utasítás
+
+1. Home.tsx: bontsd ki isError/isFetching/refetch mezőket; kizárólag a tananyaglista query kapjon retry:2, refetchOnReconnect:true és refetchOnWindowFocus:true beállítást. Add át a UserFileList hibáját és újrapróbáló callbackjét.
+2. UserFileList.tsx: opcionális isError/isRetrying/onRetry props. Hiba esetén role=alert figyelmeztetés és tiltott gomb folyamatban levő kérésnél. Ha van adat, a lista maradjon. Adat nélküli hibánál a meglévő üres kártya helyett jelenjen meg a hiba; a játékok maradjanak elérhetők. Nyers szerverhiba ne kerüljön a felületre.
+3. material-list-recovery.spec.ts: mockolt API-val a valódi főoldalt rendereld Chrome-ban. HTTP 500 után ne legyen üres üzenet; retry után egy ismert tananyag jelenjen meg. Külön HTTP 200 [] esetben legyen üres üzenet. Mérj vízszintes overflow-t és látható gombot mobil/asztali viewporton.
+4. Ellenőrzés source könyvtárból: npm.cmd run check; npm.cmd run lint; npm.cmd run check:test; npx.cmd playwright test --config playwright.material-recovery.config.ts --reporter=line. A külön konfiguráció kizárólag Vite szervert indít az 5178-as porton. Elvárt: 0 hiba, minden célzott teszt PASS. Hiba esetén az okot javítsd, ne a tesztet gyengítsd.
+5. git diff --check és önreview. Dokumentáld a tényleges eredményeket, a domainvizsgálatot és a hozzáférési korlátot. Éles infrastruktúra módosítása előtt olvasd vissza a beállítást és mentsd visszaállítható formában, titok nélkül a jelentésben.
