@@ -13,10 +13,11 @@ export function isPlayableQuestion<T>(value: T): value is T & ChoiceQuestion {
 /** Legacy exports contain one copy per game. Do not bias selection towards those copies.
  * Source identity and answer/explanation are preserved; similar prompts are not merged.
  */
-export function uniqueQuizContent<T extends ChoiceQuestion & { sourceMaterialId?: string | null; explanation?: string | null }>(items: T[]): T[] {
+export function uniqueQuizContent<T extends ChoiceQuestion & { id?: string; questionVersion?: string; sourceMaterialId?: string | null; explanation?: string | null }>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter(q => {
-    const key = JSON.stringify([q.sourceMaterialId ?? null, q.prompt.normalize("NFC").trim(), q.options, q.correctIndex, q.explanation ?? null]);
+    const key = q.id && q.questionVersion ? `canonical:${q.id}`
+      : JSON.stringify([q.sourceMaterialId ?? null, q.prompt.normalize("NFC").trim(), q.options, q.correctIndex, q.explanation ?? null]);
     if (seen.has(key)) return false;
     seen.add(key); return true;
   });

@@ -9,6 +9,7 @@ import {
 } from "../../shared/reward-policy";
 import type { ProbaGrade } from "./grade";
 import { expiryFor, SECTION_REWARD_COOLDOWN_MS, type CouponState } from "./coupons";
+import { canonicalLessonQuiz } from "../studio/canonical-quiz-bank";
 
 /**
  * LS-3a — the database side of the reward loop.
@@ -140,6 +141,10 @@ export async function recentSectionCoupons(
  * is what makes POST /coupons/:id/bonus reachable at all (it was dead: served_items=[]).
  */
 export async function quizItemIdsOfLesson(lessonId: string): Promise<string[]> {
+  const lesson = await loadPublishedLesson(lessonId);
+  if (!lesson) return [];
+  const bank = canonicalLessonQuiz(lesson);
+  if (bank !== null) return bank.map(q => q.id);
   const rows = await db
     .select({ id: gameQuizItems.id })
     .from(gameQuizItems)
@@ -295,7 +300,7 @@ export async function serveItems(couponId: string, itemIds: string[]): Promise<v
 /** The published lesson JSON, or null. */
 export async function loadPublishedLesson(lessonId: string) {
   const [row] = await db
-    .select({ id: lessons.id, json: lessons.json, publishedAt: lessons.publishedAt })
+    .select({ id: lessons.id, json: lessons.json, htmlFileId: lessons.htmlFileId, version: lessons.version, publishedAt: lessons.publishedAt })
     .from(lessons)
     .where(eq(lessons.id, lessonId))
     .limit(1);

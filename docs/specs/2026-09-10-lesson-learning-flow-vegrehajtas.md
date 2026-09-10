@@ -12,9 +12,18 @@ Kapcsolódó szerződés: `2026-09-10-lesson-learning-flow.md`. A felhasználó 
 
 ## Állapotnapló
 
+- 2026-09-11, kanonikus bank: a fúziós lecke bankja öt játékban és kuponban azonos tételverzióval olvasható, új exportmásolat nélkül. PASS: 20 célzott teszt; typecheck, test-typecheck (a DB-futtatóval együtt), lint, diff-check. Valódi, eldobható PostgreSQL 17-en 3 integrációs próba PASS: publikált verzió/kupon/öt játék azonossága; 250 régi másolatból 50 kérdés limit előtti SQL-deduplikálással; sérült bank nem éleszti fel a régi exportot. Saját konténer a futás után eltávolítva. Éles DB/migráció/deploy nem történt. A Neon-kapcsoló új hitelesítést kér; helyi tesztelést ez nem akadályozta.
+- Háromszög-labor utáni teljes ellenőrzés (a kanonikus bank előtti állapot): PASS typecheck, lint, test-typecheck, 1078 egységteszt, build; további 4 Chrome-tipográfiai próba PASS. A kanonikus szelet utáni teljes kör még hátravan.
+
 ### Háromszög-labor végrehajtási szerződés
 
 Az E2 interakció a meglévő animate blokk új `triangleArea` fajtája. Kötelező, validált base/height/unit forrásadat; nincs modellből érkező kód. Jóslás után a csúcs vízszintes mozgatása változatlan magasságnál azonos területet mutat, a magasság változtatása arányosan változtatja azt. A magasság talppontja az alap meghosszabbítására is eshet. A SVG közös matematikai függvényből rajzol, nem díszábra. Önálló magyarázat és mintaválasz zárja; ez nem szerveres mérés vagy jutalom. Az author, animator és javító katalógus csak ténylegesen tanított háromszög-területhez engedje. Natív modális nézet, örökölt magyar fontok, billentyűzet/érintés és 44 px kezelők; 320-as álló, fekvő és asztali Chrome teljes render/határ/átfedés próba. Nagyított hosszú szöveg saját olvasóterületen görgethető, a lapozó nem fedheti el. A bank/tárolás ettől nem változik.
+
+### Kanonikus játékbank végrehajtási szerződés
+
+Az új fúziós lecke `experience.quiz` bankja már fizikailag egyetlen példány a `lessons.json`-ban. Ezt használjuk közvetlenül, nem vezetünk be új másolattáblát. A publikált, érvényes lecke kérdései a közös játék API-kon jelennek meg; a leckeazonosító, stabil kérdésazonosító és válasz/magyarázat/fogalom tartalmi hash együtt adja a minden játékban azonos, legfeljebb 64 karakteres tételazonosságot. A helyes és hibás válaszok teljes magyarázata megmarad. Új fúziós publikálás/javítás nem ír öt exportmásolatot; a régi leckék exportja kompatibilis marad. A javítás korábbi teljes mentése a régi másolatokat is megőrzi. A legutóbbi anyagok lekérdezésében a SQL-deduplikálás előzze meg a limitet, és kanonikus bank mellett az elavult exportokat ne szolgáljuk ki. A kuponban szolgált tételazonosítók ugyanebből a bankból származzanak. A tényleges válaszellenőrzés és verziózott próbálkozás külön következő szelet. Célzott tiszta függvényteszt, régi publikálási regresszió és típusellenőrzés szükséges; éles tartalmat e szeletben nem módosítunk.
+
+Kanonikus bank utóellenőrzése: helyi, kizárólag erre a futásra indított PostgreSQL 17 konténerben a valódi Drizzle séma és szolgáltatás fusson. Szintetikus lecke, publikált/régi/piszkozat verzió, öt játék és kuponazonosság; 5×50 régi exportból 50 külön kérdés maradjon, a limit előtti deduplikálás bizonyítására. Hibás fúziós bank ne keltsen életre régi exportot, és az eltérő fogalmi kötésű kanonikus tételek azonos megfogalmazás mellett se olvadjanak össze. A futtató ne olvasson ENV-fájlt, csak saját localhost adatbázist és véletlen, átmeneti jelszót használjon; a végén csak a saját konténert állítsa le.
 
 ### Az új bankverzió végrehajtható méretezési szerződése
 

@@ -131,7 +131,7 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     if (repairHash(written.json) !== repairHash(repair.candidate)) throw new Error("A lecke visszaolvasása eltérést mutat.");
     await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
     const exports = exportQuizItemsForPublish(repair.candidate, current.id, conceptIdResolver(source.concepts));
-    const inserted = await tx.insert(gameQuizItems).values(exports.map(item => ({ ...item, sourceMaterialId: original.id }))).returning();
+    const inserted = exports.length ? await tx.insert(gameQuizItems).values(exports.map(item => ({ ...item, sourceMaterialId: original.id }))).returning() : [];
     if (inserted.length !== exports.length) throw new Error("Hiányos kvízexport; a művelet visszaáll.");
     const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title }).where(eq(htmlFiles.id, original.id)).returning();
     await tx.update(materialImprovementBackups).set({ backupData: { ...backupData, expectedQuizHash: quizHash(inserted), expectedMaterialHash: materialHash(updated) } }).where(eq(materialImprovementBackups.id, backup.id));

@@ -19,6 +19,7 @@
     "db:migrate": "tsx server/migrate.ts",
     "lint": "eslint client/src server --max-warnings 0",
     "test": "node --import tsx --test \"tests/*.test.ts\"",
+    "test:learning-db": "node --import tsx scripts/run-learning-db-tests.ts",
     "test:e2e": "playwright test",
     "verify": "npm run check && npm run lint && npm run check:test && npm test && npm run build"
   },

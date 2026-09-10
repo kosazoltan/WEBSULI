@@ -24,7 +24,8 @@ import {
   runPipelineStep,
   startJobFromMap,
 } from "./step-runner";
-import { conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
+import { COUPON_GAME_IDS, conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
+import { canonicalLessonQuiz } from "./canonical-quiz-bank";
 import { MAX_CHAIN_STEPS } from "./pipeline";
 import { fromMapBody } from "./from-map-body";
 import { callScopeModel, decideOneStepAction, inferOneStepScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
@@ -645,11 +646,19 @@ lessonPipelineRouter.post("/lessons/:id/export-quiz", async (req: Request, res: 
   if (!game) return res.status(400).json({ message: "Ismeretlen játék-azonosító." });
 
   const [lesson] = await db
-    .select({ json: lessons.json, mapId: lessons.mapId })
+    .select({ id: lessons.id, json: lessons.json, mapId: lessons.mapId, htmlFileId: lessons.htmlFileId, version: lessons.version, publishedAt: lessons.publishedAt })
     .from(lessons)
     .where(eq(lessons.id, req.params.id))
     .limit(1);
   if (!lesson) return res.status(404).json({ message: "A lecke nem található." });
+
+  const sharedBank = canonicalLessonQuiz(lesson, body.data.gameId);
+  if (sharedBank !== null) {
+    if (!lesson.publishedAt) return res.status(409).json({ message: "Előbb publikáld az ellenőrzött leckét." });
+    if (!(COUPON_GAME_IDS as readonly string[]).includes(body.data.gameId)) return res.status(400).json({ message: "Ez a játék nem használ tananyagkvízt." });
+    if (!sharedBank.length) return res.status(422).json({ message: "A lecke kérdésbankja javítást igényel." });
+    return res.json({ exported: 0, shared: sharedBank.length, canonical: true });
+  }
 
   // #178: concept_id is an FK to km_concepts.id — resolve the lesson's local slugs through the map.
   const mapConcepts = await db
