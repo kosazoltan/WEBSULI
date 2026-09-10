@@ -17,7 +17,7 @@ A szöveges értékelő helyi fogalom- és megfogalmazásvizsgálat, nem által�
 
 A szóbeli gyakorlás mikrofon nélkül is működik. Diktálás és felolvasás kizárólag kattintásra; böngésző- vagy engedélyhiánynál gépelés/önellenőrzés marad. Idegen nyelvnél célnyelvi szószedet, példamondat, magyar fordítás és állítható sebességű felolvasás szükséges.
 
-Hat tartalomfüggő paletta, változó kártyaszínek és formák helyettesítik az egyetlen évfolyamszínt. Betűkészlet ékezetbiztos fallbackkel; 320–2560 px, álló/fekvő nézet, legalább 44 px érintési terület. A hosszú tananyag természetesen görgethető; a négy lap navigációja elérhető marad.
+Hat tartalomfüggő paletta, változó kártyaszínek és formák helyettesítik az egyetlen évfolyamszínt. Csak a helyben csomagolt Nunito, Source Sans 3 és Source Serif 4, mért magyar karakterkészlettel; 320–2560 px, álló/fekvő nézet, legalább 44 px érintési terület. A hosszú tananyag természetesen görgethető; a négy lap navigációja elérhető marad.
 
 ## Útvonalak, promptok, méret és hibakezelés
 
@@ -84,3 +84,7 @@ Kapcsolódó bizonyíték: [lezárt gyártás](specs/2026-09-07-remaining-learni
 
 
 A módszer történeti referenciája: [a tulajdonos v7.4 skillje](specs/tananyag-keszito-SKILL-v7_4.md). Fúziós terv: [2026-09-10](specs/2026-09-10-lesson-method-fusion.md), [lezárt ellenőrzési napló](specs/2026-09-10-lesson-method-fusion-evidence.md). Ellentét esetén az aktuális közös szerződés és a tulajdonosi automatikus évfolyam-szabály az irányadó.
+
+### Magyar tipográfia ellenőrzése
+
+A közös szerződés `source/shared/lesson-typography.ts`. A betűk normál és dőlt változata, licence és ellenőrzési manifestje `source/client/public/fonts/` alatt van. A régi Google Fonts utasítást ez felülírja: a megjelenítő saját eredetű fontokat enged, ezért a helyi betűk útvonalát a külön API-host is kiszolgálja. Az adapter a tárolt tartalom módosítása nélkül egységesíti a HTML-előnézeteket és a publikált HTML-t. Böngészős próba: `npx.cmd playwright test --config playwright.lesson-typography.config.ts` a `source` mappából. A vizsgálat blokkolt Google mellett is ellenőrzi az ő/Ő/ű/Ű és bontott Unicode ékezeteket, hat betűváltozatot, 400/600/800 súlyt.

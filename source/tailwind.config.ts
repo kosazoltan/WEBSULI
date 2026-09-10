@@ -41,13 +41,13 @@ export default {
       },
       fontFamily: {
         // ✅ MAGYAR ÉKEZET-BARÁT FONTOK
-        'kid-display': ['Nunito', 'Quicksand', 'Poppins', 'sans-serif'],
-        'kid-body': ['Quicksand', 'Nunito', 'Poppins', 'sans-serif'],
-        'teen-display': ['Montserrat', 'Outfit', 'Poppins', 'sans-serif'],
-        'teen-body': ['Poppins', 'Open Sans', 'sans-serif'],
-        'senior-display': ['Montserrat', 'Poppins', 'sans-serif'],
-        'senior-body': ['Open Sans', 'Lato', 'sans-serif'],
-        'sans': ['Poppins', 'Nunito', 'Segoe UI', 'Noto Sans', 'system-ui', 'sans-serif'], // Alapértelmezett
+        'kid-display': ['Nunito', 'sans-serif'],
+        'kid-body': ['Nunito', 'sans-serif'],
+        'teen-display': ['Source Sans 3', 'sans-serif'],
+        'teen-body': ['Source Sans 3', 'sans-serif'],
+        'senior-display': ['Source Sans 3', 'sans-serif'],
+        'senior-body': ['Source Sans 3', 'sans-serif'],
+        'sans': ['Source Sans 3', 'sans-serif'], // Alapértelmezett
         'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       colors: {

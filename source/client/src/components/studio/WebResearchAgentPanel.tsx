@@ -1,3 +1,4 @@
+import { withLessonTypography } from "@shared/lesson-typography";
 import { useState } from "react";
 import { Globe, Loader2, CheckCircle2, Eye, Link2 } from "lucide-react";
 
@@ -317,7 +318,7 @@ export function WebResearchAgentPanel() {
               <span className="text-sm">Előnézet</span>
             </div>
             <iframe
-              srcDoc={generatedHtml}
+              srcDoc={withLessonTypography(generatedHtml)}
               className="w-full h-[320px]"
               title="Webes tananyag előnézet"
               sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"

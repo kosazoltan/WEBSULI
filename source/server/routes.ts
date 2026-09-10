@@ -1,3 +1,5 @@
+import { withLessonTypography } from "../shared/lesson-typography";
+import { registerLessonFontAssets } from "./lesson-font-assets";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import express from "express";
@@ -715,6 +717,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
 // (az auth.ts login/logout route-jai is ugyanazt az őrt használják, közvetlenül).
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerLessonFontAssets(app);
   // Auth setup is now handled in index.ts to ensure correct order
   // await setupAuth(app);
 
@@ -4298,7 +4301,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         res.send(pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
-        const wrappedHtml = wrapHtmlWithResponsiveContainer(file.content);
+        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(file.content), file.classroom);
 
         // CRITICAL: No-cache headers to prevent Vercel/browser from serving stale content after Apply
         res.setHeader('Content-Type', 'text/html; charset=utf-8');

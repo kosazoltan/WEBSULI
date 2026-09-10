@@ -1,3 +1,4 @@
+import { LESSON_FONT_CSS, LESSON_TYPOGRAPHY_CONTRACT, type LessonFont } from "../../shared/lesson-typography";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 /**
@@ -14,16 +15,14 @@ import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 
 export const LESSON_SPEC_VERSION = "7.4";
 
-/** Betűpár és paletta — Google Fonts, KÖTELEZŐ latin-ext alkészlettel. */
+/** Betűpár és paletta — ellenőrzött, helyben kiszolgált magyar készlet. */
 export type LessonTheme = {
   id: string;
   name: string;
   mood: string;
-  bodyFont: string;
-  headingFont: string;
-  displayFont?: string;
-  /** Google Fonts `family=` paraméterek (a css2 URL-hez). */
-  fontsQuery: string;
+  bodyFont: LessonFont;
+  headingFont: LessonFont;
+  displayFont?: LessonFont;
   primary: string;
   accent: string;
   background: string;
@@ -34,8 +33,8 @@ export type LessonTheme = {
   prefix: string;
 };
 
-const FALLBACK_SANS = "'Noto Sans',Roboto,'Droid Sans','DejaVu Sans',Arial,sans-serif";
-const FALLBACK_SERIF = "'Noto Serif',Roboto,Georgia,'DejaVu Serif',serif";
+const FALLBACK_SANS = "'Source Sans 3',sans-serif";
+const FALLBACK_SERIF = "'Source Serif 4',serif";
 
 export const LESSON_THEMES: readonly LessonTheme[] = [
   {
@@ -43,8 +42,7 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     name: "Tenger",
     mood: "nyugodt, tiszta, matematikához és természettudományhoz",
     bodyFont: "Nunito",
-    headingFont: "Poppins",
-    fontsQuery: "family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800",
+    headingFont: "Nunito",
     primary: "#0b4f6c",
     accent: "#34a0c8",
     background: "#f4f9fb",
@@ -59,8 +57,7 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     name: "Erdő",
     mood: "természetes, meleg, biológiához / környezetismerethez",
     bodyFont: "Nunito",
-    headingFont: "Quicksand",
-    fontsQuery: "family=Nunito:wght@400;600;700&family=Quicksand:wght@600;700",
+    headingFont: "Nunito",
     primary: "#2f6b3a",
     accent: "#a3c94f",
     background: "#f6f9f2",
@@ -75,8 +72,7 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     name: "Naplemente",
     mood: "energikus, bátorító, nyelvtanuláshoz és alsó tagozathoz",
     bodyFont: "Nunito",
-    headingFont: "Poppins",
-    fontsQuery: "family=Nunito:wght@400;600;700;800&family=Poppins:wght@600;700;800",
+    headingFont: "Nunito",
     primary: "#c2410c",
     accent: "#f59e0b",
     background: "#fff8f1",
@@ -91,15 +87,14 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     name: "Pergamen",
     mood: "klasszikus, elegáns, történelemhez és irodalomhoz",
     bodyFont: "Nunito",
-    headingFont: "Cinzel",
-    displayFont: "Noto Serif",
-    fontsQuery: "family=Nunito:wght@400;600;700&family=Cinzel:wght@600;700&family=Noto+Serif:wght@400;700",
+    headingFont: "Source Serif 4",
+    displayFont: "Source Serif 4",
     primary: "#7a2e2e",
     accent: "#c9a227",
     background: "#f8f3e7",
     surface: "#fffdf7",
     text: "#2b1d12",
-    headerStyle: "pergamen-színű fejléc, díszbetűs (Cinzel) cím, arany vonallal",
+    headerStyle: "pergamen-színű fejléc, Source Serif 4 cím, arany vonallal",
     layoutHint: "időszalag függőleges vonallal, idézet-boxok, fejezetek kártyákon sorszámozott medalionnal",
     prefix: "pg",
   },
@@ -107,9 +102,8 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     id: "ur",
     name: "Űr",
     mood: "modern, technológiai, informatikához / fizikához / felső tagozathoz",
-    bodyFont: "Inter",
-    headingFont: "Orbitron",
-    fontsQuery: "family=Inter:wght@400;600;700&family=Orbitron:wght@600;700",
+    bodyFont: "Source Sans 3",
+    headingFont: "Source Sans 3",
     primary: "#1e1b4b",
     accent: "#22d3ee",
     background: "#0f172a",
@@ -123,9 +117,8 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     id: "cukorka",
     name: "Cukorka",
     mood: "játékos, barátságos, 1–3. évfolyamhoz",
-    bodyFont: "Quicksand",
-    headingFont: "Baloo 2",
-    fontsQuery: "family=Quicksand:wght@500;600;700&family=Baloo+2:wght@600;700;800",
+    bodyFont: "Nunito",
+    headingFont: "Nunito",
     primary: "#be185d",
     accent: "#14b8a6",
     background: "#fff5fa",
@@ -139,9 +132,8 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     id: "labor",
     name: "Labor",
     mood: "tiszta, precíz, kémiához / matematikához / méréshez",
-    bodyFont: "Roboto",
-    headingFont: "Montserrat",
-    fontsQuery: "family=Roboto:wght@400;500;700&family=Montserrat:wght@600;700;800",
+    bodyFont: "Source Sans 3",
+    headingFont: "Source Sans 3",
     primary: "#1d4ed8",
     accent: "#facc15",
     background: "#f8fafc",
@@ -156,8 +148,7 @@ export const LESSON_THEMES: readonly LessonTheme[] = [
     name: "Kréta",
     mood: "iskolai tábla-hangulat, bármely tantárgyhoz",
     bodyFont: "Nunito",
-    headingFont: "Poppins",
-    fontsQuery: "family=Nunito:wght@400;600;700&family=Poppins:wght@600;700",
+    headingFont: "Nunito",
     primary: "#14532d",
     accent: "#fde68a",
     background: "#eef2ee",
@@ -213,8 +204,8 @@ export function pickLessonTheme(seed: string, classroom: number, subjectHint = "
   return LESSON_THEMES.find((t) => t.id === id) ?? LESSON_THEMES[0];
 }
 
-export function googleFontsLink(theme: LessonTheme): string {
-  return `https://fonts.googleapis.com/css2?${theme.fontsQuery}&subset=latin,latin-ext&display=swap`;
+export function lessonFontsLink(): string {
+  return LESSON_FONT_CSS;
 }
 
 function ageBand(classroom: number): string {
@@ -235,7 +226,7 @@ export function lessonThemePrompt(theme: LessonTheme, classroom: number): string
     `- Paletta: --primary ${theme.primary}; --accent ${theme.accent}; --bg ${theme.background}; --surface ${theme.surface}; --text ${theme.text}; --success #00b894; --error #e17055. Kontraszt min. 4.5:1.`,
     `- Fejléc: ${theme.headerStyle}.`,
     `- Elrendezés: ${theme.layoutHint}.`,
-    `- Google Fonts link (PONTOSAN így, a latin-ext kötelező): <link href="${googleFontsLink(theme)}" rel="stylesheet">`,
+    `- Helyi betűk (PONTOSAN így): <link href="${lessonFontsLink()}" rel="stylesheet">`,
     `- font-family törzs: ${body}`,
     `- font-family címsor: ${heading}`,
     `- font-family díszbetű: ${display}`,
@@ -453,17 +444,9 @@ HTML: <span class="[prefix]-en" data-tts="apple">apple</span> <button class="[pr
 - Iframe-ben (window.self !== window.top) figyelmeztetés + „Megnyitás saját ablakban" gomb; not-allowed esetén a valódi okot (beágyazás) magyarázd.
 - Aktív felismerés leállítása fülváltáskor és új feladatok generálásakor.
 
-## MAGYAR ÉKEZETEK ÉS BETŰTÍPUSOK (ANDROID) — v7.4, KÖTELEZŐ, NÉGY RÉTEG
-Az ő/Ő/ű/Ű a Google Fonts latin-ext alkészletében van; Android WebView enélkül ékezet nélkül mutatja őket, a \`system-ui\` kulcsszó pedig kiszámíthatatlan.
-1. Google Fonts URL a <head>-ben \`&subset=latin,latin-ext&display=swap\` paraméterrel (a MEGJELENÍTÉSI TÉMA adja a pontos linket).
-2. MINDEN font-family teljes fallback-lánccal: 'Betű','Noto Sans',Roboto,'Droid Sans','DejaVu Sans',Arial,sans-serif (díszbetűnél 'Noto Serif',Roboto,Georgia,'DejaVu Serif',serif). TILOS a \`system-ui\`, a \`Segoe UI\` és a csupasz \`sans-serif\` első fallbackként.
-3. Glyph-warmup elem a <body> LEGELEJÉN, minden használt betűcsaládra külön sor:
-\`\`\`html
-<div class="[prefix]-gw" aria-hidden="true"><i class="[prefix]-gw1">ÁÉÍÓÖŐÚÜŰáéíóöőúüű</i><i class="[prefix]-gw2">ŐŰőűÖÜöü</i><i class="[prefix]-gw3">ŐŰőűÖÜöü</i></div>
-\`\`\`
-CSS: .[prefix]-gw{position:fixed;top:-300px;left:0;opacity:0;pointer-events:none;font-size:1px;line-height:1;user-select:none} .[prefix]-gw i{font-style:normal} és gw1/gw2/gw3 a törzs/címsor/díszbetű font-stackkel.
-4. A <head> első két eleme: <meta charset="utf-8"> és <meta http-equiv="Content-Type" content="text/html; charset=utf-8">; <html lang="hu"> kötelező (idegen nyelvi elemeken lang="en" stb.).
-- JS string-literálban \`\\uXXXX\` escape (\\u0151 = ő, \\u0171 = ű); kódazonosítók ASCII; a megjelenített HTML-szövegben valódi UTF-8 ékezet.
+## MAGYAR ÉKEZETEK ÉS BETŰTÍPUSOK — ELLENŐRZÖTT HELYI KÉSZLET
+${LESSON_TYPOGRAPHY_CONTRACT}
+A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" content="text/html; charset=utf-8">; <html lang="hu">.
 
 ## TECHNIKAI KÖVETELMÉNYEK
 - EGYETLEN önálló HTML (CSS + JS beágyazva); külső függőség CSAK a Google Fonts link.
@@ -489,7 +472,7 @@ CSS: .[prefix]-gw{position:fixed;top:-300px;left:0;opacity:0;pointer-events:none
 ## ÖNELLENŐRZÉS A HTML LEZÁRÁSA ELŐTT
 - 4 oldal, mind a 10 kognitív elem, dragdrop touch + ujjkövetés, feladatok az 1. oldalból, háromrétegű motor + háromállapotú kimenet + mintaválasz gomb, Újragenerálás TETEJÉN / Kiértékelés ALJÁN, fél pontok, kvíz 25/75 A-B-C.
 - Nincs alert/confirm/prompt, nincs accordion, minden interaktív elem 44px, prefix mindenhol, IIFE + 'use strict'.
-- Google Fonts latin-ext, teljes fallback-láncok, system-ui sehol, glyph-warmup a body elején, charset meták, lang="hu".
+- Kizárólag a három engedélyezett, helyben kiszolgált font, UTF-8 és lang="hu"; tényleges ő/Ő/ű/Ű renderpróba.
 - A dokumentum <!DOCTYPE html>-lel kezdődik és </html>-lel zárul, a <script> blokkok lezártak.`;
 
 export type LessonSpecPromptOptions = {

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
-  googleFontsLink,
+  lessonFontsLink,
   LESSON_HTML_SPEC_V74,
   LESSON_SPEC_VERSION,
   LESSON_THEMES,
@@ -33,11 +33,10 @@ test("a v7.4 spec a skill kötelező elemeit tartalmazza", () => {
   assert.match(s, /SpeechRecognition/);
   assert.match(s, /window\.self !== window\.top/);
   // ékezetek / Android
-  assert.match(s, /subset=latin,latin-ext/);
-  assert.match(s, /-gw1/);
+  assert.match(s, /fonts\/lesson-fonts\.css/);
+  assert.match(s, /Nunito, Source Sans 3, Source Serif 4/);
   assert.match(s, /http-equiv="Content-Type"/);
-  assert.match(s, /'Noto Sans',Roboto,'Droid Sans'/);
-  assert.match(s, /TILOS a `system-ui`/);
+  assert.match(s, /Ne tölts be Google Fonts vagy más külső fontot/);
   // mennyiségek és szerkezet
   assert.match(s, /\| Szöveges feladat \| 45 \| 15/);
   assert.match(s, /\| Kvízkérdés \| 75 \| 25/);
@@ -77,14 +76,13 @@ test("a tantárgy és a korosztály irányítja a téma-jelölteket", () => {
   for (const id of small) assert.ok(["cukorka", "naplemente", "erdo", "kreta"].includes(id), id);
 });
 
-test("a téma-prompt Google Fonts linkje latin-ext alkészletet kér és teljes fallback-láncot ad", () => {
+test("a téma-prompt csak a mért helyi magyar fontokat kéri (jóváhagyott tipográfiai szerződésváltás)", () => {
   for (const theme of LESSON_THEMES) {
-    const link = googleFontsLink(theme);
-    assert.match(link, /^https:\/\/fonts\.googleapis\.com\/css2\?family=/);
-    assert.match(link, /&subset=latin,latin-ext&display=swap$/);
+    const link = lessonFontsLink();
+    assert.equal(link, "/fonts/lesson-fonts.css");
     const p = lessonThemePrompt(theme, 5);
     assert.ok(p.includes(link));
-    assert.match(p, /'Noto Sans',Roboto,'Droid Sans','DejaVu Sans',Arial,sans-serif/);
+    assert.match(p, /Source Sans 3/);
     assert.doesNotMatch(p, /system-ui/);
     assert.match(p, new RegExp(`\\\`${theme.prefix}-\\\``));
   }
@@ -108,7 +106,7 @@ test("a webes ügynök promptja a v7.4 specet és a témát hordozza", () => {
   const p = webResearchSystemPrompt(5, "Törtek — 5. osztály", "Keress törtes tananyagot");
   assert.ok(p.includes(LESSON_HTML_SPEC_V74));
   assert.match(p, /## MEGJELENÍTÉSI TÉMA/);
-  assert.match(p, /subset=latin,latin-ext/);
+  assert.match(p, /fonts\/lesson-fonts\.css/);
 });
 
 test("routes.ts mindkét készítő promptja és az Okosítás a közös specet fűzi be", () => {

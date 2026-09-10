@@ -1,3 +1,4 @@
+import { withLessonTypography } from "@shared/lesson-typography";
 import { parseLessonRepair } from "@shared/lesson-repair";
 import { LessonRuntime } from "@/lesson-runtime/LessonRuntime";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
@@ -201,13 +202,13 @@ export default function MaterialImprover() {
       }
       
       logger.info('[makeRunnableHtml] Returning full HTML structure, length:', html.length);
-      return html;
+      return withLessonTypography(html, 7, "", window.location.origin);
     }
     
     // Otherwise, wrap the content in a full HTML structure
     const wrappedHtml = `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`;
     logger.info('[makeRunnableHtml] Wrapped HTML with basic structure, length:', wrappedHtml.length);
-    return wrappedHtml;
+    return withLessonTypography(wrappedHtml, 7, "", window.location.origin);
   }, []);
 
   const structuredPreview = useMemo(() => parseLessonRepair(previewData?.content), [previewData?.content]);

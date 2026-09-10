@@ -21,3 +21,7 @@ Először olvasd el a [közös, forrásalapú módszert](../../../docs/lesson-im
 10. Külön jelentsd az elkészült jelöltet, ellenőrzött jelöltet, alkalmazott adatot és kiadott programkódot. Teszt nélkül nem írható PASS. Lokális fájlra valós abszolút hivatkozást adj; ne feltételezz `/mnt` útvonalat vagy nem elérhető megjelenítőeszközt.
 
 A részletes méretkeretek, pontozás, hibakörök, publikus és tárolási szerződés a közös módszerben és az ott hivatkozott forráskódban van. Ezt a skillt az összes gyártási/javítási útvonalra alkalmazd; a Studio nem kivétel a négylapos tanulási módszer alól.
+
+## Magyar tipográfia — jóváhagyott korrekció (2026-09-10)
+
+A korábbi Google Fonts / glyph-warmup előírást felváltja a `source/shared/lesson-typography.ts` szerződés. Kizárólag a repóban ellenőrzött Nunito, Source Sans 3, Source Serif 4 családok használhatók tananyagszöveghez; normál és dőlt fájlok a `source/client/public/fonts/` alatt. HTML-ben `/fonts/lesson-fonts.css`, külső font nélkül. Az ékezethelyességet a tényleges cmap és Chrome által használt font ellenőrzi, nem a fallback neve. A hibás Unicode-szöveget külön vizsgáld; ne állítsd, hogy betűcsere önmagában javítja.

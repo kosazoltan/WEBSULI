@@ -315,7 +315,7 @@
 
   body {
     @apply font-sans antialiased;
-    font-family: 'Poppins', 'Nunito', 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
+    font-family: "Source Sans 3", sans-serif;
     min-height: 100vh;
     /* #197 — MÉRVE élesben (Kristóf-lecke, px-alapú kontraszt): itt egy
        hardkódolt SÖTÉT háttér állt `@apply text-foreground` mellett, a

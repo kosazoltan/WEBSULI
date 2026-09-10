@@ -1,7 +1,7 @@
 /* Additive, scoped themes: the app's light/dark mode cannot change their ink. */
 [data-band][data-experience] {
-  --lesson-font-body: "Nunito", "Noto Sans", Roboto, "Droid Sans", "DejaVu Sans", Arial, sans-serif;
-  --lesson-font-heading: "Poppins", "Noto Sans", Roboto, "Droid Sans", "DejaVu Sans", Arial, sans-serif;
+  --lesson-font-body: "Source Sans 3", sans-serif;
+  --lesson-font-heading: "Source Sans 3", sans-serif;
   --lesson-radius: 20px; --lesson-bg: #f1f7fc; --lesson-surface: #fff; --lesson-ink: #172c45;
   --lesson-muted: #435e79; --lesson-line: #c3d6e9; --lesson-accent: #14618a; --lesson-accent-ink: #fff;
   --lesson-check-head: #c85a17; --lesson-check-head-ink: #fff; --lesson-glow: none;
@@ -14,7 +14,7 @@
 [data-band][data-experience="forest"] { --lesson-bg: #f2f7ee; --lesson-ink: #213c2e; --lesson-muted: #43644f; --lesson-accent: #2a6844; --lesson-line: #c5d9c8; --fusion-secondary: #aa641c; --fusion-soft: #e5f1de; --lesson-radius: 28px; }
 [data-band][data-experience="sunset"] { --lesson-bg: #fff6ee; --lesson-ink: #482d30; --lesson-muted: #765154; --lesson-accent: #a43846; --lesson-line: #eacdc6; --fusion-secondary: #a6631c; --fusion-soft: #fbe3d3; --lesson-radius: 24px; }
 [data-band][data-experience="cosmos"] { --lesson-bg: #131b35; --lesson-surface: #1d2947; --lesson-ink: #f1f4ff; --lesson-muted: #becee8; --lesson-accent: #bbadff; --lesson-accent-ink: #221948; --lesson-line: #4a597a; --fusion-secondary: #64dae5; --fusion-soft: #303956; --lesson-radius: 12px; --lesson-check-head: #ffcb80; --lesson-check-head-ink: #382307; }
-[data-band][data-experience="paper"] { --lesson-bg: #f8f4e9; --lesson-surface: #fffdf6; --lesson-ink: #3c342c; --lesson-muted: #6e5e4d; --lesson-accent: #5e4b85; --lesson-line: #d8ccb5; --fusion-secondary: #936227; --fusion-soft: #ede6d5; --lesson-radius: 5px; --lesson-font-heading: Georgia, "Noto Serif", "DejaVu Serif", serif; background-image: linear-gradient(#d8ccb533 1px, transparent 1px); background-size: 100% 32px; }
+[data-band][data-experience="paper"] { --lesson-bg: #f8f4e9; --lesson-surface: #fffdf6; --lesson-ink: #3c342c; --lesson-muted: #6e5e4d; --lesson-accent: #5e4b85; --lesson-line: #d8ccb5; --fusion-secondary: #936227; --fusion-soft: #ede6d5; --lesson-radius: 14px; --lesson-font-heading: "Source Serif 4", serif; background-image: linear-gradient(#d8ccb533 1px, transparent 1px); background-size: 100% 32px; }
 [data-band][data-experience="berry"] { --lesson-bg: #fbf2fa; --lesson-ink: #442a49; --lesson-muted: #705279; --lesson-accent: #854785; --lesson-line: #ddc5dd; --fusion-secondary: #256f85; --fusion-soft: #efe0ef; --lesson-radius: 22px; }
 [data-experience] > article { max-width: 1050px; }
 [data-experience] .lesson-hero { position: relative; isolation: isolate; overflow: hidden; padding: clamp(22px, 4vw, 48px); border-bottom: 5px solid var(--fusion-secondary); background: var(--fusion-soft); }
