@@ -4,6 +4,6 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["tests/**/*.ts", "server/**/*.ts", "shared/**/*.ts"],
+  "include": ["tests/**/*.ts", "server/**/*.ts", "shared/**/*.ts", "scripts/lesson-fusion-live.ts"],
   "exclude": ["node_modules", "build", "dist"]
 }
