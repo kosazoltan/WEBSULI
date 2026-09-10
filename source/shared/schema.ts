@@ -858,6 +858,24 @@ export const coupons = pgTable(
   }),
 );
 
+export const lessonAttempts = pgTable("lesson_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+  bankVersion: varchar("bank_version", { length: 64 }).notNull(),
+  status: varchar("status", { length: 16 }).notNull().default("active"),
+  questions: jsonb("questions").notNull().$type<import("./lesson-attempt").AttemptQuestion[]>(),
+  answers: jsonb("answers").notNull().default(sql`'{}'::jsonb`).$type<Record<string, import("./lesson-attempt").AttemptAnswer>>(),
+  hints: jsonb("hints").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+  result: jsonb("result").$type<import("./lesson-attempt").AttemptResult>(),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  finishedAt: timestamp("finished_at"),
+}, table => ({
+  activeUnique: uniqueIndex("lesson_attempts_active_unique").on(table.userId, table.lessonId).where(sql`${table.status} = 'active'`),
+  historyIdx: index("lesson_attempts_history_idx").on(table.userId, table.lessonId, table.startedAt),
+  reportIdx: index("lesson_attempts_report_idx").on(table.lessonId, table.finishedAt),
+}));
+
 export type CouponRow = typeof coupons.$inferSelect;
 export type InsertCouponRow = typeof coupons.$inferInsert;
 

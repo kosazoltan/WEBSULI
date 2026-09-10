@@ -2,6 +2,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import pg from "pg";
 
 const cwd = fileURLToPath(new URL("../", import.meta.url));
@@ -30,6 +31,12 @@ try {
   if (!ready) throw new Error("Disposable PostgreSQL did not become ready");
   const ddl = command(process.execPath, ["node_modules/drizzle-kit/bin.cjs", "export", "--dialect=postgresql", "--schema=./shared/schema.ts"]);
   await pool.query(ddl);
+  // This database was created above, has no external data, and is owned by this run.
+  // Exercise the additive migration from the preceding schema, then its repeatability.
+  await pool.query("DROP TABLE lesson_attempts");
+  const migration = await readFile(new URL("../migrations/0016_lesson_attempts.sql", import.meta.url), "utf8");
+  await pool.query(migration);
+  await pool.query(migration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {

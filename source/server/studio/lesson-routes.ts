@@ -25,6 +25,7 @@ import {
   type Learner,
 } from "../rewards/store";
 import { computeCoupon } from "../../shared/reward-policy";
+import { practiceRouter } from "../rewards/practice-router";
 
 /**
  * Public read side of the Lesson Studio (LS-2).
@@ -37,6 +38,7 @@ import { computeCoupon } from "../../shared/reward-policy";
  */
 
 export const lessonPublicRouter = express.Router();
+lessonPublicRouter.use("/practice", practiceRouter);
 
 /** GET /api/lessons/by-file/:htmlFileId — the lesson behind a `contentType:'lesson'` material. */
 lessonPublicRouter.get("/by-file/:htmlFileId", async (req: Request, res: Response) => {

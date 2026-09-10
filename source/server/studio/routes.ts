@@ -5,6 +5,7 @@ import { db } from "../db";
 import { knowledgeMaps, kmConcepts } from "../../shared/schema";
 import { isAuthenticatedAdmin } from "../auth";
 import { logger } from "../lib/logger";
+import { practiceReport } from "../rewards/lesson-attempts";
 import {
   EXAM_WEIGHTS,
   REVIEW_STATES,
@@ -49,6 +50,10 @@ import {
 export const studioRouter = express.Router();
 
 studioRouter.use(isAuthenticatedAdmin);
+studioRouter.get("/lessons/:lessonId/learning-report", async (req: Request, res: Response) => {
+  try { res.json(await practiceReport(req.params.lessonId)); }
+  catch { res.status(500).json({ message: "A tanulási riport most nem érhető el." }); }
+});
 
 /**
  * Concept rows as the approval gate wants them.
