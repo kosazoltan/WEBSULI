@@ -17,6 +17,8 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900], 
     }
     const quiz = page.locator('[data-quiz-id]');
     await expect(quiz).toHaveCount(25);
+    await expect(page.locator('[data-quiz-id]:visible')).toHaveCount(1);
+    await page.getByRole("button", { name: "Teljes kvíz", exact: true }).click();
     await quiz.first().getByRole("button").nth(1).click();
     await expect(quiz.first().getByRole("button").first()).toBeDisabled();
     for (let i = 1; i < 25; i++) await quiz.nth(i).getByRole("button").first().click();
@@ -30,6 +32,8 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900], 
     await expect(page.getByRole("region", { name: "Kvíz eredmény" })).toContainText("24 / 25 pont");
     await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
     await expect(page.locator('[data-task-id]')).toHaveCount(15);
+    await expect(page.locator('[data-task-id]:visible')).toHaveCount(1);
+    await page.getByRole("button", { name: "Teljes feladatsor", exact: true }).click();
     const first = page.locator('[data-task-id]').first();
     const id = await first.getAttribute("data-task-id");
     await first.locator("textarea").fill(String((Number(id!.slice(1)) + 1) * 2));
@@ -48,9 +52,10 @@ test("cognitive gates unlock methods, sorting works with accessible controls, th
   const ocean = await page.locator('[data-experience]').evaluate(e => getComputedStyle(e).backgroundColor);
   await page.getByRole("tab", { name: "Módszerek", exact: true }).click();
   await expect(page.locator('[data-method="sorting"]')).toHaveCount(0);
-  await page.locator('[data-method="gate"]').first().getByRole("button").first().click();
-  await expect(page.locator('[data-method="sorting"]')).toBeVisible();
-  const sort = page.locator('[data-method="sorting"]');
+  const methods = page.getByRole("tabpanel", { name: "Módszerek", exact: true });
+  await methods.locator('[data-method="gate"]').first().getByRole("button").first().click();
+  await expect(methods.locator('[data-method="sorting"]')).toBeVisible();
+  const sort = methods.locator('[data-method="sorting"]');
   // Reacquire the moving control: a coordinate double-click hits a different row after the first move.
   await sort.getByRole("button", { name: "Azonosítom az alapot és a magasságot. feljebb", exact: true }).click();
   await sort.getByRole("button", { name: "Azonosítom az alapot és a magasságot. feljebb", exact: true }).click();
@@ -112,14 +117,16 @@ test("oral exercises remain usable without a microphone and actual touch drag or
   });
   await page.goto("/__lesson-runtime-probe?fusion=1");
   await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
+  await page.getByRole("button", { name: "Teljes feladatsor", exact: true }).click();
   expect(await page.getByText("Szóbeli gyakorlás", { exact: false }).count()).toBeGreaterThanOrEqual(2);
   await expect(page.getByRole("button", { name: "Válasz diktálása" })).toHaveCount(0);
   const writtenAnswer = page.locator("[data-task-id] textarea").first();
   await writtenAnswer.fill("Gépeléssel is működik.");
   await expect(writtenAnswer).toHaveValue("Gépeléssel is működik.");
   await page.getByRole("tab", { name: "Módszerek", exact: true }).click();
-  await page.locator('[data-method="gate"]').first().getByRole("button").first().click();
-  const sort = page.locator('[data-method="sorting"]');
+  const methods = page.getByRole("tabpanel", { name: "Módszerek", exact: true });
+  await methods.locator('[data-method="gate"]').first().getByRole("button").first().click();
+  const sort = methods.locator('[data-method="sorting"]');
   await sort.scrollIntoViewIfNeeded();
   const cdp = await context.newCDPSession(page);
   for (const destination of [0, 1]) {

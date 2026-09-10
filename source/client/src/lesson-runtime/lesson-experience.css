@@ -74,3 +74,61 @@
 
 /* Switching tabs must not restart an opacity-zero entrance on readable content. */
 [data-experience] .lesson-block, [data-experience] .lesson-hero, [data-experience] figure[data-anim] { animation: none; }
+
+/* A readable book: deliberate hierarchy, one active exercise, optional overview. */
+[data-experience] .lesson-hero { display: grid; grid-template-columns: minmax(0,1fr) 210px; align-items: center; gap: 24px; border: 1px solid var(--lesson-line); border-bottom: 1px solid var(--lesson-line); min-height: 220px; background: var(--lesson-surface); box-shadow: 0 14px 40px #142c4510; overflow: visible; }
+[data-experience] .lesson-hero::after, [data-experience] .lesson-hero > .lesson-emblem { display: none; }
+[data-experience] .lesson-hero h1 { font-size: clamp(28px, 3.6vw, 42px); line-height: 1.25; padding-block: .12em; letter-spacing: -.025em; margin: 8px 0 15px; }
+.lesson-cover-art { width: 100%; max-height: 180px; }
+[data-experience][data-learning-age="1-2"] .lesson-block { font-size: 1.2rem; line-height: 1.8; --lesson-radius: 26px; }
+[data-experience][data-learning-age="3-4"] .lesson-block { font-size: 1.1rem; line-height: 1.75; }
+[data-experience][data-learning-age="5-6"] .lesson-block { font-size: 1.05rem; line-height: 1.7; }
+[data-experience][data-learning-age="7-8"] .lesson-block { font-size: 1rem; line-height: 1.65; }
+.learning-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; }
+.learning-quiet { display: flex; align-items: center; gap: 6px; font-size: .8rem; border-radius: 10px; padding: 6px 10px; }
+.learning-quiet[aria-pressed="true"] { background: var(--fusion-soft); }
+.learning-book-head { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 0 0 18px; border-bottom: 1px solid var(--lesson-line); }
+.learning-book-head .fusion-label { margin: 0; flex: 1; min-width: 0; }
+.learning-book-head select { max-width: 100%; min-width: 0; width: 100%; min-height: 44px; border: 1px solid var(--lesson-line); background: var(--lesson-surface); color: var(--lesson-ink); border-radius: 10px; padding: 8px 34px 8px 12px; font-size: 1rem; text-overflow: ellipsis; }
+.learning-pager { position: sticky; bottom: 8px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--lesson-surface); color: var(--lesson-ink); border: 1px solid var(--lesson-line); border-radius: 14px; box-shadow: 0 8px 24px #142c4512; padding: 4px 10px; margin: 18px 0; }
+.learning-pager .lesson-outline-btn { margin: 0; }
+.learning-round-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.fusion-panel-quiz .learning-pager { position: static; }
+.learning-page-count { font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.learning-page-count > span { color: var(--lesson-muted); font-weight: 400; }
+.learning-methods-inline { border: 1px solid var(--lesson-line); padding: 14px 18px; border-radius: 16px; background: var(--fusion-soft); }
+.learning-methods-inline summary { cursor: pointer; min-height: 44px; align-content: center; font-weight: 700; color: var(--lesson-accent); }
+.fusion-view [hidden] { display: none!important; }
+[data-experience] .fusion-task, [data-experience] .fusion-quiz { margin-top: 16px; box-shadow: 0 10px 35px #142c4509; }
+[data-experience] .fusion-quiz .lesson-option-key { border-radius: 9px; background: var(--fusion-soft); color: var(--lesson-accent); min-width: 34px; min-height: 34px; display: grid; place-items: center; }
+[data-experience]:has(.fusion-view[data-quiet="true"]) { --lesson-bg: #f7f6f2; --lesson-surface: #fffefa; --lesson-ink: #28313a; --lesson-muted: #535d68; --lesson-accent: #384f68; --lesson-accent-ink: #fff; --lesson-line: #d5d8d8; --fusion-soft: #eeefea; --fusion-secondary: #687b6d; background-image: none; }
+[data-experience]:has(.fusion-view[data-quiet="true"]) .lesson-cover-art { opacity: .25; }
+[data-experience]:has(.fusion-view[data-quiet="true"]) * { animation: none!important; transition: none!important; }
+@media (max-width: 650px) {
+  [data-experience] .lesson-hero { grid-template-columns: minmax(0,1fr) 80px; padding: 20px; gap: 8px; min-height: 150px; }
+  [data-experience] .lesson-hero h1 { font-size: 27px; }
+  .learning-toolbar > .fusion-eyebrow { font-size: .65rem; max-width: 120px; }
+  .learning-pager { bottom: 4px; padding: 4px; gap: 4px; }
+  .learning-pager .lesson-outline-btn { padding: 8px; }
+  .learning-book-head .learning-mode { font-size: .8rem; }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .learning-toolbar { padding-top: 4px; }
+  .fusion-round-head { margin-bottom: 4px; }
+  .fusion-round-head h2 { font-size: 22px; }
+  .fusion-quiz .fusion-choices { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .fusion-quiz .lesson-option { flex-direction: row; gap: 5px; padding: 6px 8px; }
+  .fusion-view .fusion-quiz { padding: 12px 18px; }
+  .fusion-panel { padding-top: 12px; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] { display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: auto minmax(0,1fr) auto; gap: 4px 8px; height: calc(100dvh - 120px); padding-top: 4px; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .fusion-round-head { grid-column: 1 / -1; flex-wrap: nowrap; gap: 8px; margin: 0; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .fusion-round-head h2,
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .fusion-round-head .fusion-eyebrow { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .fusion-round-head p { font-size: .85rem; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .learning-round-actions { flex-wrap: nowrap; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .learning-round-actions button { margin: 0; padding: 6px 10px; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .fusion-quiz { grid-column: 1 / -1; min-height: 0; overflow-y: auto; margin: 0; padding: 6px 12px; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .fusion-quiz h3 { margin: 2px 0 6px; font-size: 1rem; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] .learning-pager { margin: 0; padding: 2px 8px; box-shadow: none; }
+  .fusion-panel-quiz[data-overview="false"][data-finished="false"] > .fusion-primary { margin: 0; padding: 6px 14px; font-size: .875rem; }
+}
