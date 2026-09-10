@@ -330,6 +330,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
     D1_RULE_TEXT,
     SOURCE_REVIEW_RULES,
     "Minden eltéréshez adj konkrét blockPath értéket és ellenőrizhető indokot. A forrásszámok cseréje vagy hibás levezetés source_conflict/contradicts_source; valóban hiányzó tanítás coverage_gap. A látható feladatot és minden válaszhoz tartozó magyarázatot is ellenőrizd.",
+    "Az algebrai egyezés mellett az adatok együttes megvalósíthatóságát is vizsgáld. Például a háromszög egyik oldalához tartozó magasság nem lehet nagyobb bármelyik másik oldalnál, és két oldalból T ≤ a·b/2. Ha a lehetetlen adatok már a kurált forrásban is így szerepelnek, konkrét számolással source_conflict/book_probably_wrong adminjegyzetet adj; a forrást és a tanuló leckéjét nem írhatod át. Ha a szerző találta ki az ellentmondást, az contradicts_source hiba.",
     "",
     `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
     "",

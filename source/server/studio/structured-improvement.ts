@@ -65,8 +65,8 @@ export async function generateStructuredImprovement(fileId: string, instruction?
     const provider = new OpenRouterProvider({ apiKey: process.env.OPENROUTER_API_KEY ?? "", model, timeout: 180000, maxTokens: 24000 });
     return (await callStepModel(provider, { step, model, system, user })).json;
   };
-  const { candidate } = await buildStructuredImprovement(original, source, call, instruction);
-  return lessonRepairSchema.parse({ kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(source), previousLesson: original, candidate });
+  const { candidate, review } = await buildStructuredImprovement(original, source, call, instruction);
+  return lessonRepairSchema.parse({ kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(source), previousLesson: original, candidate, reviewNotes: review.notes });
 }
 
 /** Shared generation path: also executable against read-only source with local artifacts. */

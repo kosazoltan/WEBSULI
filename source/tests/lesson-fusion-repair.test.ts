@@ -46,6 +46,10 @@ test("repair preserves source classification and rejects stale lesson/source bef
   assert.throws(() => assertRepairFresh(repair, current, { ...source, classroom: 8 }, repairHash("metadata")), /megváltozott/);
   assert.equal(parseLessonRepair("<html>helyőrző</html>"), null);
   assert.equal(parseLessonRepair(JSON.stringify(repair))?.candidate.experience?.quiz.length, 75);
+  const reviewNotes = [{ kind: "source_conflict" as const, subkind: "book_probably_wrong", message: "A forrás egyik magassága nagyobb a másik oldalnál.", blockPath: "0.1" }];
+  const audited = parseLessonRepair(JSON.stringify({ ...repair, reviewNotes }))!;
+  assert.deepEqual(audited.reviewNotes, reviewNotes);
+  assert.deepEqual(audited.candidate, lesson); // Audit notes must not rewrite the pupil's source.
 });
 test("HTML gate parses inert JSON and catches missing banks, invalid samples and disconnected UI", () => {
   const html = htmlDocument();
