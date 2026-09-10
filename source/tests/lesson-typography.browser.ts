@@ -1,7 +1,19 @@
 import { expect, test } from "@playwright/test";
 import { HUNGARIAN_FONT_PROBE, LESSON_FONTS, withLessonTypography } from "../shared/lesson-typography";
 import { readFileSync } from "node:fs";
+import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 const manifest = JSON.parse(readFileSync(new URL("../client/public/fonts/manifest.json", import.meta.url), "utf8")) as { fonts: Array<{ family: string; style: string; internalFamily: string; postScriptName: string }> };
+
+test("lesson theme cannot replace the age-appropriate Hungarian font", async ({ page }) => {
+  for (const [classroom, subject, body, heading] of [[2, "matematika", "Nunito", "Nunito"], [7, "irodalom", "Source Sans 3", "Source Serif 4"]] as const) {
+    const lesson = fusionFixture(); lesson.classroom = classroom; lesson.subject = subject;
+    await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: lesson }));
+    await page.goto("/__lesson-runtime-probe?candidate=1");
+    const cssName = (name: string) => name.includes(" ") ? `"${name}"` : name;
+    await expect(page.locator("[data-band]")).toHaveCSS("font-family", `${cssName(body)}, sans-serif`);
+    await expect(page.locator("h1")).toHaveCSS("font-family", `${cssName(heading)}, ${heading === "Source Serif 4" ? "serif" : "sans-serif"}`);
+  }
+});
 
 for (const [width, height] of [[390, 844], [844, 390], [1440, 1000]]) {
   test(`Hungarian font files really render in Chrome at ${width}x${height}, without Google`, async ({ page, context }) => {

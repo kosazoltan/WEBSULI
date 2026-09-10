@@ -23,7 +23,7 @@ export function withLessonTypography(html: string, classroom = 7, subject = "", 
 <style id="websuli-typography">
 html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
 body { font-family:"${body}",sans-serif!important; line-height:1.65; }
-body :where(p,div,span,li,a,button,input,textarea,select,label,td,th,dt,dd,summary,blockquote,figcaption,text):not(.katex *):not(.MathJax *) { font-family:"${body}",sans-serif!important; }
+body :where(p,div,span,strong,em,b,i,u,small,mark,li,a,button,input,textarea,select,label,td,th,dt,dd,summary,blockquote,figcaption,text):not(.katex *):not(.MathJax *) { font-family:"${body}",sans-serif!important; }
 body :where(h1,h2,h3,h4,h5,h6) { font-family:"${heading}",serif!important; line-height:1.3; padding-block:.08em; }
 body :where(h1,h2,h3,h4,h5,h6) :where(span,a,strong,em) { font-family:inherit!important; }
 button,input,textarea,select { font-size:inherit; }

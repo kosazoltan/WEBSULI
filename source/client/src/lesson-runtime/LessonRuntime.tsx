@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -23,6 +23,7 @@ import {
   type Section,
 } from "@shared/lesson-schema";
 import { BAND_THEME } from "@shared/lesson-band";
+import { lessonFontPair } from "@shared/lesson-typography";
 
 import { SectionProba } from "./SectionProba";
 import { ANIMATE_REGISTRY } from "./blocks/animate-blocks";
@@ -429,6 +430,12 @@ export function LessonRuntime({
 }) {
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
+  const fonts = lessonFontPair(lesson.classroom, lesson.subject);
+  const headingFont = lesson.experience?.theme === "paper" && lesson.classroom > 4 ? "Source Serif 4" : fonts.heading;
+  const typography = {
+    "--lesson-font-body": `"${fonts.body}", sans-serif`,
+    "--lesson-font-heading": `"${headingFont}", ${headingFont === "Source Serif 4" ? "serif" : "sans-serif"}`,
+  } as CSSProperties;
   // B7: persist under htmlFileId when present; probe uses persistId for reload round-trips.
   const progress = useLessonProgress(persistId ?? lessonId);
   const current = progress.snapshot.current;
@@ -459,7 +466,7 @@ export function LessonRuntime({
     // (lesson-theme.css). Measured live before #197: inheriting the app foreground gave
     // 67/115 text elements a 1.00–1.05 contrast in both app modes. The band root pairs
     // every background with its ink, so the app theme cannot break it.
-    <div className="min-h-full" data-band={band} data-experience={lesson.experience?.theme}>
+    <div className="min-h-full" data-band={band} data-experience={lesson.experience?.theme} style={typography}>
       <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
         <header className="lesson-hero">
           <div className="lesson-emblem" aria-hidden>
