@@ -1,6 +1,36 @@
 # Forrásalapú tananyaggyártás és visszaállítható jobbítás
 
-Ez a Studio strukturált `Lesson` tananyagaira vonatkozó munkamenet. A hagyományos önálló HTML fájl és a lecke-futtató által megjelenített JSON eltérő formátum: a Studio leckéjét nem kell négylapos HTML-lé átalakítani. A `contentType=lesson` anyag HTML mezője csak helyőrző; a tényleges tartalom a `lessons.json`.
+A kötelező módszer 2026-09-10-től a **fúzió 7.4**: a v7.4 négy tanulási lapja és gazdag gyakorlása együtt a Studio forráshű, fogalomhoz kötött tanításával. Ez feltöltött forrásra, teljes és célzott javításra, valamint internetes készítésre egyaránt vonatkozik. A HTML és a strukturált JSON technikai formátuma eltér; a pedagógiai követelmények azonosak. A Studio JSON-t a közös runtime jeleníti meg négy lapon. A `contentType=lesson` HTML mezője helyőrző: javítani a tényleges `lessons.json` tartalmát kell.
+
+## Kötelező közös módszer
+
+| Lap | Kötelező tartalom és működés |
+| --- | --- |
+| Tananyag | Teljes, olvasható tanítás, eredeti kidolgozott példák, ábrák; a fogalomcímke nem helyettesíti a magyarázatot. |
+| Módszerek | 11–20 elem, mind a 10 típus: előrejelzés, kapukérdés (legalább 2), tévhit, sorrendezés, ok–hatás, konfliktus, önértékelés, felugró kérdés, folyamat/idősor, analógia. |
+| Feladatok | 45 különböző nyílt kérdésből 15; bankban legalább 5 szóbeli, minden körben legalább 2. Saját válasz, szinonimák, mintaválasz, részpont, helyi mentés. |
+| Kvíz | 75 különböző kérdésből 25; kérdésenként 3 opció és külön magyarázat. Első választ rögzítő pontozás, üres válasz 0. |
+
+Az eredmény pont, százalék, gyakorló osztályzat és eltelt idő formájában jelenik meg, JSON-ként letölthető. A határok: 90/75/60/40 százalék. Új kör előtt alkalmazásbeli megerősítés szükséges. Az idő a kör megnyitásától a kiértékelésig eltelt idő, nem figyelem- vagy aktívmunka-mérés.
+
+A szöveges értékelő helyi fogalom- és megfogalmazásvizsgálat, nem általános szemantikus mesterséges intelligencia. Téves számot, előjelet vagy tizedesjelet nem fogadhat el fuzzy egyezéssel. Minden saját mintaválasznak teljes pontot kell kapnia; a hiányzó/ragozott szinonimát a rubrikában kell javítani, nem az ellenőrzést kikapcsolni. A mintaválasz megtekintése az exportban is jelölt.
+
+A szóbeli gyakorlás mikrofon nélkül is működik. Diktálás és felolvasás kizárólag kattintásra; böngésző- vagy engedélyhiánynál gépelés/önellenőrzés marad. Idegen nyelvnél célnyelvi szószedet, példamondat, magyar fordítás és állítható sebességű felolvasás szükséges.
+
+Hat tartalomfüggő paletta, változó kártyaszínek és formák helyettesítik az egyetlen évfolyamszínt. Betűkészlet ékezetbiztos fallbackkel; 320–2560 px, álló/fekvő nézet, legalább 44 px érintési terület. A hosszú tananyag természetesen görgethető; a négy lap navigációja elérhető marad.
+
+## Útvonalak, promptok, méret és hibakezelés
+
+- **Feltöltött forrás / Studio:** kivonat és kurált térkép → pedagógus → Tananyag-szerző → animátor → külön bankgyártó → lektor → publikációs kapu. A bankgyártó hét ellenőrzött részt készít (módszerek; 3×15 feladat; 3×25 kvíz), nem egy csonkolódó óriásválaszt. Minden rész menthető, érvényes promptazonosságnál folytatható, hibánál egy célzott javító körrel. A bank a lektor előtt készül el.
+- **Teljes lecke javítása:** tényleges JSON + kurált forrás → külön javított tanítás → friss bankok → forrás-/séma-/lektorvizsgálat → összehasonlítható előnézet → ellenőrzött, mentett tranzakciós alkalmazás. A tanítás fedettségét és szerkezetét még a bankgyártás előtt ellenőrizni kell. Egy célzott javító kör a teljes hibás blokkokat és az előző választ is visszakapja; ismételt hibánál a bankgyártás el sem indul. Külön átnézett tanítási mentésből is csak az összes kapu újbóli teljesítésével lehet folytatni. Sikertelen gyártás nem írja felül az eredetit.
+- **Célzott fogalomjavítás:** csak az érintett tanítási blokkok változhatnak; a bankok az új tanításból újraépülnek, hogy régi megoldás ne maradjon bennük. Utána ugyanaz a lektor és tranzakciós alkalmazás érvényes.
+- **Önálló HTML / internetes készítés / HTML-okosítás:** a teljes v7.4 referencia után a közös fúziós szerződés és a HTML-adatszerződés következik. A bank egy `websuli-lesson-data` JSON-elemben szerepel, ezt olvassa a működő JavaScript; külön rejtett és látható bank tilos. A program besorolása és indoklása is ebben van. A 64 000 tokenes kimenetkeret mellett a csonkolási végjel és a bankhiány továbbra is kemény hiba. Webes források URL-je megőrzendő; keresőtalálat nem bizonyítja a teljes tartalom olvasását.
+
+Közös szerződés: `source/shared/lesson-experience.ts`; HTML-adatszerződés: `source/shared/lesson-html-data.ts`; banképítés: `source/server/studio/experience-builder.ts`. Modellazonosítót ne másolj a skillbe: az aktuális `source/server/ai/models.ts` és környezeti konfiguráció az irányadó. A szolgáltató ténylegesen kapja meg a beállított kimenetkeretet. Titkot ne másolj promptba vagy dokumentációba.
+
+A feladat minden fogalma az adott fejezet explain/example blokkjában tanított fogalomra mutasson. A puszta érvényes azonosító nem bizonyítja a kérdés forráshűségét: ezt a lektor és a külön tartalmi vizsgálat ellenőrzi. Rövid forrást nem lehet kitalált témával vagy ismétlődő kérdésekkel 45/75-re feltölteni; hiány esetén a gyártás érthető hibával álljon meg.
+
+Új fúziós job körlimitnél sem publikálhat hiányos bankkal, blokkoló lektorhibával vagy bukó tartalmi kapuval. A korábbi, experience nélküli leckék olvashatók maradnak; ettől még nem minősülnek fúziós leckének. A módszer bevezetése nem írja át tömegesen a meglévő tananyagokat.
 
 ## 1. Forrás és automatikus besorolás
 
@@ -25,10 +55,12 @@ Szerzői ellenőrzés:
 
 A lektor minden állítást a kurált definícióhoz és idézethez mérjen, konkrét blokkhelyet és ellenőrizhető indokot adjon. A kapu hibái és az előző lecke is jusson vissza a szerző javító köréhez. A címke-/szóegyezés szükséges jelzés, önmagában nem tartalmi bizonyíték.
 
+A lektor az adatok együttes megvalósíthatóságát is vizsgálja: az egyező algebrai eredmény nem elég. A forrásból átvett ellentmondás `book_probably_wrong` adminjegyzet, nem engedély a tanulói tartalom önálló átírására. A teljes és célzott javítás külön `reviewNotes` mezőben őrzi meg a nem blokkoló megállapításokat is; ezek az admin-jelölt adatai, nem a tanulói lecke részei.
+
 ## 3. Jelölt változat ellenőrzése, alkalmazás előtt
 
 1. Készíts külön javított jelöltet, változatlan lecke- és térképazonosítóval, a program által megállapított évfolyammal.
-2. Futtasd a `lessonSchema` és `checkCoverageGate` ellenőrzést az aktív kurált fogalmakon. A kapu a core fogalmak teljességét, legalább 90% supporting fedettséget, ismeretlen azonosítókat és megalapozatlan címkéket vizsgál. A konkrét javításnál törekedj teljes supporting fedettségre is. Ne gyengítsd a kaput és ne szórj kulcsszavakat a hibák eltüntetésére.
+2. Futtasd a `lessonSchema`, `experienceProblems`, `checkLessonArc` és `checkCoverageGate` ellenőrzést az aktív kurált fogalmakon. A kapu a core fogalmak teljességét, legalább 90% supporting fedettséget, ismeretlen azonosítókat és megalapozatlan címkéket vizsgál. A konkrét javításnál törekedj teljes supporting fedettségre is. Ne gyengítsd a kaput és ne szórj kulcsszavakat a hibák eltüntetésére.
 3. Ettől függetlenül vesd össze a teljes állítást és minden számsort a forrással. Nézd meg a hibás válaszok indoklását is.
 4. Valódi böngészőben ellenőrizd mobilon és asztali nézetben az összes szakaszt: átfedés, vágás, vízszintes túlcsordulás, JavaScript-hiba, félrevezető ábra. Próbáld ki a tényleges kitöltős, párosító, sorrendező és feleletválasztós interakciókat. A teszt nélküli állapot nem „hibamentes”.
 
@@ -44,8 +76,11 @@ A lektor minden állítást a kurált definícióhoz és idézethez mérjen, kon
 
 ## 5. Kész állapot és regressziós példa
 
-Külön jelentsd: elkészült jelölt; ellenőrzött jelölt; alkalmazott és visszaolvasott adat; éles böngészőben ellenőrzött anyag; kiadott programkód. A `done` job és a zöld unit teszt nem bizonyít önmagában tartalmi minőséget. A jelenlegi autonóm politika figyelmeztetéssel is publikálhat a körlimit után; a jobbítási ellenőrzést ez nem helyettesíti.
+Külön jelentsd: elkészült jelölt; ellenőrzött jelölt; alkalmazott és visszaolvasott adat; éles böngészőben ellenőrzött anyag; kiadott programkód. A `done` job és a zöld unit teszt nem bizonyít önmagában tartalmi minőséget. A régi jobok körlimitnél figyelmeztető publikálási politikája nem vonatkozik az új fúziós leckék kötelező kapuira.
 
 A 2026-09-07-i háromszöges javítás referencia, nem minden tananyaghoz elvárt darabszám: a program 7. osztályt állapított meg, 13/13 fogalom lefedett, a mentés utáni alkalmazás visszaolvasása és a 390/1280 px render sikeres. A különböző források eltérő évfolyamot és fogalomszámot adhatnak.
 
 Kapcsolódó bizonyíték: [lezárt gyártás](specs/2026-09-07-remaining-learning-fixes.md), [promptjavítás specifikációja](specs/2026-09-07-lesson-improvement-prompts.md). A helyi képek és adatmentések helye a lezárt gyártás jelentésében szerepel; a repó munkamenetét ez a dokumentum rögzíti tartósan.
+
+
+A módszer történeti referenciája: [a tulajdonos v7.4 skillje](specs/tananyag-keszito-SKILL-v7_4.md). Fúziós terv: [2026-09-10](specs/2026-09-10-lesson-method-fusion.md), [lezárt ellenőrzési napló](specs/2026-09-10-lesson-method-fusion-evidence.md). Ellentét esetén az aktuális közös szerződés és a tulajdonosi automatikus évfolyam-szabály az irányadó.

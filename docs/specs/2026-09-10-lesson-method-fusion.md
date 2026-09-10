@@ -42,3 +42,5 @@ A forráshű, fogalomhoz kötött, automatikus évfolyam-besorolású Studio meg
 ## Ellenőrzés
 
 Célzott séma/értékelő/generálási/retry/publikálási tesztek; meglévő regressziók; valós Chrome megjelenítés és feladat/kvíz interakció; teljes typecheck/lint/unit/build a zárásnál. Valódi modellhívás lokális jelöltre, titkok kiírása és éles tartalomírás nélkül. Végén mért eredmények és fennmaradó korlátok.
+
+Lezárt végrehajtás és mért eredmények: [ellenőrzési napló](2026-09-10-lesson-method-fusion-evidence.md).
