@@ -44,12 +44,15 @@ export type RawExtraction = {
 };
 
 export type ExtractorDeps = {
+  /** Hash of the actual prompt/model configuration resolved for this request. */
+  signature?: string;
   /** Returns a stored map for this hash, or null when nothing is cached. */
   findByHash: (hash: string) => Promise<{ id: string; [k: string]: unknown } | null>;
   save: (map: Record<string, unknown>) => Promise<unknown>;
   runModel: (input: {
     files: ExtractorFile[];
     scope: ExtractorScope;
+    repair?: ExtractionRepair;
   }) => Promise<RawExtraction>;
 };
 
@@ -60,7 +63,10 @@ export type ExtractorDeps = {
  * scope and extraction version remain significant. Cached maps keep their original
  * sourceFiles/sourceRef names together; a new upload must not rename old provenance.
  */
-export const EXTRACTION_VERSION = "source-ledger-2";
+export const EXTRACTION_VERSION = "source-ledger-3";
+export function extractionSignature(config: { model: string; systemPrompt: string; ocrModel: string; ocrPrompt: string; provider: string }): string {
+  return createHash("sha256").update(JSON.stringify([EXTRACTION_VERSION, config.model, config.systemPrompt, config.ocrModel, config.ocrPrompt, config.provider])).digest("hex");
+}
 export function computeInputHash(
   files: Array<{ name: string; content: string; kind?: SourceKind }>,
   scope: ExtractorScope,
@@ -121,8 +127,8 @@ export type ExtractResult = {
 /**
  * Produce (or reuse) the KnowledgeMap for an upload.
  *
- * Concepts that fail schema validation are dropped rather than crashing the job: a
- * single malformed item from the model should not throw away a 40-concept extraction.
+ * Malformed concepts receive one bounded repair. Valid proposals stay untouched;
+ * an unresolved malformed item must not silently disappear from the taught source.
  * Concepts that fail the verbatim check are KEPT but flagged, because the teacher
  * needs to see what the model tried to claim.
  */
@@ -141,11 +147,49 @@ export function parseExtractorConcept(raw: unknown, files: ExtractorFile[]) {
   return conceptSchema.safeParse(raw);
 }
 
+export type ExtractionIssue = { index: number; fields: string[] };
+export type ExtractionRepair = { concepts: unknown[]; issues: ExtractionIssue[] };
+export class ExtractionShapeError extends Error {
+  constructor(public readonly issues: ExtractionIssue[]) {
+    super(`A forrásjegyzék ${issues.length} hibás fogalmát nem sikerült javítani. A hiányos jegyzék nem lett elmentve. Érintett elemek: ${issues.map(i => `${i.index + 1}. (${i.fields.join(", ")})`).join("; ")}.`);
+    this.name = "ExtractionShapeError";
+  }
+}
+
+/** Original order and every valid concept survive a targeted repair unchanged. */
+export async function completeExtractionConcepts(raw: RawExtraction, files: ExtractorFile[], repair: (input: ExtractionRepair) => Promise<RawExtraction>): Promise<Concept[]> {
+  const inspect = (items: unknown[]) => {
+    const seen = new Set<string>();
+    const issues: ExtractionIssue[] = [];
+    const concepts: Concept[] = [];
+    items.forEach((item, index) => {
+      const parsed = parseExtractorConcept(item, files);
+      if (!parsed.success) { issues.push({ index, fields: [...new Set(parsed.error.issues.map(i => i.path.join(".")))] }); return; }
+      const fields = [];
+      if (seen.has(parsed.data.id)) fields.push("id: ismétlődés");
+      if (!files.some(f => f.name === parsed.data.sourceRef.file)) fields.push("sourceRef.file: ismeretlen forrás");
+      if (fields.length) { issues.push({ index, fields }); return; }
+      seen.add(parsed.data.id);
+      concepts.push(parsed.data);
+    });
+    return { issues, concepts };
+  };
+  const first = inspect(raw.concepts);
+  if (!first.issues.length) return first.concepts;
+  const fixed = await repair({ concepts: first.issues.map(i => raw.concepts[i.index]), issues: first.issues });
+  if (!Array.isArray(fixed.concepts) || fixed.concepts.length !== first.issues.length) throw new ExtractionShapeError(first.issues);
+  const combined = [...raw.concepts];
+  first.issues.forEach((issue, n) => { combined[issue.index] = fixed.concepts[n]; });
+  const result = inspect(combined);
+  if (result.issues.length) throw new ExtractionShapeError(result.issues);
+  return result.concepts;
+}
+
 export async function extractKnowledgeMap(
   input: { files: ExtractorFile[]; scope: ExtractorScope },
   deps: ExtractorDeps,
 ): Promise<ExtractResult> {
-  const inputHash = computeInputHash(input.files, input.scope);
+  const inputHash = computeInputHash(input.files, input.scope, deps.signature);
 
   const cached = await deps.findByHash(inputHash);
   if (cached) {
@@ -154,10 +198,9 @@ export async function extractKnowledgeMap(
 
   const raw = await deps.runModel(input);
 
-  const valid = (raw.concepts ?? [])
-    .map((c) => parseExtractorConcept(c, input.files))
-    .filter((r): r is { success: true; data: Concept } => r.success)
-    .map((r) => r.data);
+  const valid = await completeExtractionConcepts(raw, input.files, repair => deps.runModel({ ...input, repair }));
+  const emptyReason = emptyExtractionReason(raw.concepts.length, valid.length);
+  if (emptyReason) throw new Error(emptyReason);
 
   const checked = applyVerbatimChecks(valid, sourceTextOf(input.files));
 

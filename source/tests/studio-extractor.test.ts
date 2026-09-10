@@ -7,6 +7,9 @@ import {
   extractKnowledgeMap,
   applyVerbatimChecks,
   canApprove,
+  completeExtractionConcepts,
+  extractionSignature,
+  ExtractionShapeError,
   type ExtractorDeps,
   type RawExtraction,
 } from "../server/studio/extractor";
@@ -111,11 +114,10 @@ test("extractKnowledgeMap stamps the map with the input hash it was built from",
   assert.equal(result.map.inputHash, computeInputHash(FILES, SCOPE));
 });
 
-test("extractKnowledgeMap drops a malformed concept but keeps the rest of the run", async () => {
-  // A 40-concept extraction must not be lost because the model emitted one bad item;
-  // equally, the bad item must not reach the map. Reverse-mutation (2026-09-04) showed
-  // the suite stayed green without this case, so it earns its place.
+test("hibás fogalom sikertelen javítása után nem ment részleges jegyzéket (jóváhagyott teljességi szerződés)", async () => {
+  let saved = false;
   const deps = fakeDeps({
+    save: async () => { saved = true; },
     runModel: async (): Promise<RawExtraction> => ({
       title: "Vegyes",
       concepts: [
@@ -137,9 +139,43 @@ test("extractKnowledgeMap drops a malformed concept but keeps the rest of the ru
     }),
   });
 
-  const result = await extractKnowledgeMap({ files: FILES, scope: SCOPE }, deps);
-  const ids = (result.map.concepts ?? []).map((c) => c.id);
-  assert.deepEqual(ids, ["good"], "only the schema-valid concept survives");
+  await assert.rejects(() => extractKnowledgeMap({ files: FILES, scope: SCOPE }, deps), ExtractionShapeError);
+  assert.equal(saved, false, "a korábbi néma eldobás helyett látható megállás");
+});
+
+test("a javító kör csak a hibás fogalmat kapja; az eredeti jó tartalom és sorrend megmarad", async () => {
+  const good = { id: "a", term: "terület", definition: "A síkidom mérete.", quote: "A síkidom mérete.", sourceRef: { file: "jegyzet.txt" }, type: "definition", examWeight: "core", relatedIds: [] };
+  const broken = { ...good, id: "b", quote: "" };
+  let calls = 0;
+  const result = await completeExtractionConcepts({ title: "Teszt", concepts: [good, broken] }, FILES, async repair => {
+    calls++;
+    assert.deepEqual(repair.concepts, [broken]);
+    assert.deepEqual(repair.issues, [{ index: 1, fields: ["quote"] }]);
+    return { title: "változó címet nem alkalmazunk", concepts: [{ ...broken, quote: "A termelő szervezetek maguk állítják elő a tápanyagot." }] };
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(result[0], good);
+  assert.deepEqual(result.map(c => c.id), ["a", "b"]);
+});
+
+test("ismétlődő azonosító és ismeretlen forráshely nem tűnhet el a diagnosztikából", async () => {
+  const concept = { id: "a", term: "terület", definition: "A síkidom mérete.", quote: "A síkidom mérete.", sourceRef: { file: "jegyzet.txt" }, type: "definition", examWeight: "core" };
+  let calls = 0;
+  await assert.rejects(() => completeExtractionConcepts({ title: "Teszt", concepts: [concept, { ...concept, sourceRef: { file: "ismeretlen.txt" } }] }, FILES, async repair => {
+    calls++;
+    assert.deepEqual(repair.issues[0].fields, ["id: ismétlődés", "sourceRef.file: ismeretlen forrás"]);
+    return { title: "Teszt", concepts: repair.concepts };
+  }), ExtractionShapeError);
+  assert.equal(calls, 1, "nincs végtelen javító ciklus");
+});
+
+test("a valódi prompt, modell, OCR-szerződés és szolgáltató változása új cache-kulcs", () => {
+  const config = { model: "model-a", systemPrompt: "Pontos forrásidézetek", ocrModel: "ocr-a", ocrPrompt: "Pontos átirat", provider: "provider-a" };
+  const original = computeInputHash(FILES, SCOPE, extractionSignature(config));
+  for (const key of Object.keys(config) as Array<keyof typeof config>) {
+    assert.notEqual(computeInputHash(FILES, SCOPE, extractionSignature({ ...config, [key]: config[key] + " módosítás" })), original, key);
+  }
+  assert.equal(computeInputHash(FILES.map(f => ({ ...f, name: "új-" + f.name })), SCOPE, extractionSignature(config)), original);
 });
 
 test("applyVerbatimChecks marks an invented quote as not verbatim (D1)", () => {

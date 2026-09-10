@@ -12,6 +12,10 @@ import type { ExtractorFile } from "../server/studio/extractor";
 
 const img = (n: string): ExtractorFile => ({ name: n, kind: "image", content: `data:image/jpeg;base64,${n}` });
 
+test("az OCR-prompt változása nem használ régi átiratot", () => {
+  assert.notEqual(ocrCacheKeyOf("ugyanaz-a-kép", "azonos-modell", "régi prompt"), ocrCacheKeyOf("ugyanaz-a-kép", "azonos-modell", "új prompt"));
+});
+
 test("párhuzamos pool: sorrend tartva, tényleges konkurencia > 1, progress darabszámmal", async () => {
   let inFlight = 0;
   let maxInFlight = 0;

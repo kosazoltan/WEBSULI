@@ -136,7 +136,7 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
   }
   return orphans.length;
 }
-import { computeInputHash, type ExtractorFile } from "./extractor";
+import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
 import { resolveStudioModel } from "../ai/models";
 
@@ -278,7 +278,9 @@ export async function runOneStep(
   }
 
   // 2) Map: reuse by content hash or extract now (same as /maps/extract).
-  const inputHash = computeInputHash(files as ExtractorFile[], scope);
+  const { runExtraction, loadExtractionConfig } = await import("./run-extraction");
+  const config = await loadExtractionConfig();
+  const inputHash = computeInputHash(files as ExtractorFile[], scope, extractionSignature(config));
   const [existing] = await db
     .select({ id: knowledgeMaps.id })
     .from(knowledgeMaps)
@@ -292,13 +294,13 @@ export async function runOneStep(
     logger.info(`[STUDIO/1STEP] Térkép gyorsítótárból: ${mapId}`);
   } else {
     updateRun(runId, { phase: "ocr", detail: null });
-    const { runExtraction } = await import("./run-extraction");
     try {
       mapId = await runExtraction({
         files: files as ExtractorFile[],
         scope,
         title: title ?? inferredTitle,
         inputHash,
+        config,
         userId,
         onPhase: (phase, detail) => updateRun(runId, { phase, detail }),
       });
@@ -306,7 +308,7 @@ export async function runOneStep(
       logger.error(
         `[STUDIO/1STEP] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,
       );
-      updateRun(runId, { phase: "error", error: "A kivonatolás nem sikerült. Próbáld újra." });
+      updateRun(runId, { phase: "error", error: error instanceof ExtractionShapeError ? error.message : "A kivonatolás nem sikerült. Próbáld újra." });
       return;
     }
     updateRun(runId, { mapId });

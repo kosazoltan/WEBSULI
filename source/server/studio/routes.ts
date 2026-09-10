@@ -13,6 +13,8 @@ import {
   applyVerbatimChecks,
   canApprove,
   computeInputHash,
+  extractionSignature,
+  ExtractionShapeError,
   type ExtractorFile,
 } from "./extractor";
 import {
@@ -205,7 +207,9 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
   const { files } = parsed.data;
   const scope=inferred.scope;
   const title=parsed.data.title ?? inferred.title;
-  const inputHash = computeInputHash(files, scope);
+  const { runExtraction, loadExtractionConfig } = await import("./run-extraction");
+  const config = await loadExtractionConfig();
+  const inputHash = computeInputHash(files, scope, extractionSignature(config));
 
   const [existing] = await db
     .select({ id: knowledgeMaps.id })
@@ -218,13 +222,13 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
     return res.json({ mapId: existing.id, cached: true });
   }
 
-  const { runExtraction } = await import("./run-extraction");
   try {
     const mapId = await runExtraction({
       files: files as ExtractorFile[],
       scope,
       title,
       inputHash,
+      config,
       userId: (req.user as { id?: string } | undefined)?.id,
     });
     res.status(201).json({ mapId, cached: false });
@@ -232,7 +236,7 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
     logger.error(
       `[STUDIO] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,
     );
-    res.status(502).json({ message: "A kivonatolás nem sikerült. Próbáld újra." });
+    res.status(502).json({ message: error instanceof ExtractionShapeError ? error.message : "A kivonatolás nem sikerült. Próbáld újra." });
   }
 });
 

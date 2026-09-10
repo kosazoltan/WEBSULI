@@ -85,8 +85,8 @@ export type OcrCacheStore = {
 };
 
 /** Determinista kulcs: a kép tartalma + a modell (más modell átirata más). */
-export function ocrCacheKeyOf(imageContent: string, model: string): string {
-  return createHash("sha256").update(model).update("\0").update(imageContent).digest("hex");
+export function ocrCacheKeyOf(imageContent: string, model: string, prompt = OCR_SYSTEM_PROMPT): string {
+  return createHash("sha256").update(JSON.stringify([model, prompt, imageContent])).digest("hex");
 }
 
 /**
@@ -124,7 +124,7 @@ export function mergeOcrIntoSourceText(baseText: string, ocrResults: OcrResult[]
   return parts.filter((p) => p !== "").join("\n");
 }
 
-const OCR_SYSTEM_PROMPT = [
+export const OCR_SYSTEM_PROMPT = [
   "You are a verbatim transcriber for Hungarian school material photographed or screenshotted by a teacher.",
   "Transcribe ALL legible text from the image EXACTLY as written — same wording, same accents, same punctuation.",
   "Do not translate, summarize, correct, or reorder anything. Do not describe the image.",

@@ -22,7 +22,7 @@ for (const [width, height] of [[390, 844], [844, 390], [1440, 900]]) {
     await page.setViewportSize({ width, height });
     await page.goto("/__studio-panel-probe");
     await expect(page.getByTestId("source-upload-form")).toBeVisible();
-    expect(mapsRead).toBe(0, "the collapsed ledger should not fetch its list");
+    expect(mapsRead, "the collapsed ledger should not fetch its list").toBe(0);
     await page.getByTestId("extract-file-input").setInputFiles({ name: "terület.txt", mimeType: "text/plain", buffer: Buffer.from("A háromszög területe az alap és a magasság szorzatának fele.") });
     await page.getByTestId("one-step-submit").click();
     const progress = page.getByTestId("creation-progress");
