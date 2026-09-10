@@ -38,9 +38,11 @@ test("a v7.4 spec a skill kötelező elemeit tartalmazza", () => {
   assert.match(s, /http-equiv="Content-Type"/);
   assert.match(s, /Ne tölts be Google Fonts vagy más külső fontot/);
   // mennyiségek és szerkezet
-  assert.match(s, /\| Szöveges feladat \| 45 \| 15/);
-  assert.match(s, /\| Kvízkérdés \| 75 \| 25/);
-  assert.match(s, /TILOS accordion/);
+  // Approved v2 contract: coverage-based amounts and an optional full overview.
+  assert.match(s, /bankPlan.taskRound/);
+  assert.match(s, /bankPlan.quizRound/);
+  assert.match(s, /teljes áttekintéssel/);
+  assert.doesNotMatch(s, /külső függőség CSAK a Google Fonts/);
   assert.match(s, /alert\(\)\/confirm\(\)\/prompt\(\)/);
   assert.match(s, /'use strict'/);
 });
@@ -86,7 +88,13 @@ test("a téma-prompt csak a mért helyi magyar fontokat kéri (jóváhagyott tip
     assert.doesNotMatch(p, /system-ui/);
     assert.match(p, new RegExp(`\\\`${theme.prefix}-\\\``));
   }
-  assert.match(lessonThemePrompt(LESSON_THEMES[0], 2), /1–3\. évfolyam/);
+  assert.match(lessonThemePrompt(LESSON_THEMES[0], 2), /1–2\. évfolyam/);
+  assert.match(lessonThemePrompt(LESSON_THEMES[0], 4), /3–4\. évfolyam/);
+  for (const theme of LESSON_THEMES) {
+    assert.match(lessonThemePrompt(theme, 2), /font-family címsor: 'Nunito',sans-serif/);
+    assert.match(lessonThemePrompt(theme, 4), /font-family törzs: 'Nunito',sans-serif/);
+    assert.match(lessonThemePrompt(theme, 7), /font-family törzs: 'Source Sans 3',sans-serif/);
+  }
   assert.match(lessonThemePrompt(LESSON_THEMES[0], 0), /programozási alapismeretek/);
 });
 
@@ -123,6 +131,7 @@ test("routes.ts mindkét készítő promptja és az Okosítás a közös specet 
   // a régi kötelező font-sor eltűnt (a „Segoe UI” csak a cserére utasító prioritásban maradhat)
   assert.doesNotMatch(improve, /Font: font-family: Segoe UI/);
   assert.doesNotMatch(improve, /UTF-8 \+ Segoe UI font/);
+  assert.doesNotMatch(improve, /Google Fonts latin-ext \+|Cél: 75 kérdés|Cél: 45 feladat/);
 });
 
 test("a készítő route-on nincs 60 s-os abszolút korlát, és 64K a kimenet", () => {

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { fusionFixture } from "../shared/fixtures/lesson-fusion";
+import { fusionFixture, compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 
 for (const [width, height] of [[390, 844], [844, 390], [1440, 900]]) {
   test(`lesson cover and single exercise controls fit ${width}x${height}`, async ({ page }) => {
@@ -61,6 +61,31 @@ test("guided chapters and individual exercises preserve answers and provide an o
   await expect(page.locator(".fusion-view")).toHaveAttribute("data-quiet", "true");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+for (const [width, height] of [[390, 844], [844, 390]]) {
+  test(`current short bank scores a fourth option and restores its first answer at ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: compactFusionFixture() }));
+    await page.goto("/__lesson-runtime-probe?candidate=1");
+    await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+    if (await page.locator("[data-quiz-id]:visible").getAttribute("data-quiz-id") !== "q2") await page.getByRole("button", { name: "Következő kérdés", exact: true }).click();
+    const question = page.locator("[data-quiz-id]:visible");
+    await expect(question.getByRole("button")).toHaveCount(4);
+    for (const button of await question.getByRole("button").all()) {
+      const b = (await button.boundingBox())!;
+      const pager = (await page.locator("[role=tabpanel]:visible .learning-pager").boundingBox())!;
+      expect(b.y).toBeGreaterThanOrEqual(0);
+      expect(b.y + b.height).toBeLessThanOrEqual(Math.min(height, pager.y));
+    }
+    await question.getByRole("button", { name: "D Kétszeres lesz" }).click();
+    await expect(page.getByRole("tabpanel", { name: "Kvíz", exact: true })).toContainText("1 megválaszolva · 1 pont");
+    await page.reload();
+    await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+    await expect(page.getByRole("tabpanel", { name: "Kvíz", exact: true })).toContainText("1 megválaszolva · 1 pont");
+    await page.getByRole("button", { name: "Kvíz kiértékelése", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Kvíz eredmény" })).toContainText("1 / 2 pont");
+  });
+}
 
 for (const [width, height] of [[390, 844], [844, 390]]) {
   test(`a three-choice lesson question is playable with its explanation at ${width}x${height}`, async ({ page }) => {

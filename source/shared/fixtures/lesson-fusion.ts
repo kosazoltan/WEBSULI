@@ -1,4 +1,5 @@
-import { LESSON_METHOD_VERSION, METHOD_KINDS, type LessonExperience } from "../lesson-experience";
+import { LEGACY_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION, METHOD_KINDS, type LessonExperience } from "../lesson-experience";
+import { planLessonBank } from "../lesson-bank-plan";
 import type { Lesson } from "../lesson-schema";
 
 /** Synthetic, deterministic browser fixture. Never persisted as a manufactured lesson. */
@@ -27,6 +28,24 @@ export function fusionFixture(): Lesson {
       { kind: "animate", animKind: "process", params: { steps: ["Alap × magasság: 6 × 4 = 24 cm²", "A szorzat fele: 24 / 2 = 12 cm²", "A háromszög területe: 12 cm²"] }, caption: "A terület kiszámításának lépései", coversConceptIds: ["area"] },
       { kind: "recap", bullets: ["Az alaphoz tartozó magasságot használd.", "A szorzat felét számold ki.", "A terület egysége cm², nem cm."] },
     ] }],
-    experience: { version: LESSON_METHOD_VERSION, theme: "ocean", methods, tasks, quiz, glossary: [] },
+    experience: { version: LEGACY_LESSON_METHOD_VERSION, theme: "ocean", methods, tasks, quiz, glossary: [] },
   };
+}
+
+/** Current small-source contract: real recall/application instead of numeric filler. */
+export function compactFusionFixture(): Lesson {
+  const lesson = fusionFixture();
+  const old = lesson.experience!;
+  lesson.experience = {
+    ...old, version: LESSON_METHOD_VERSION, bankPlan: planLessonBank(lesson), methods: old.methods.slice(0, 2),
+    tasks: [
+      { ...old.tasks[0], q: "Mondd el, hogyan számolod ki a háromszög területét!", required: [["alap"], ["magasság"], ["fele"]], needsSentence: true, sample: "A terület az alap és a magasság szorzatának fele.", mode: "oral" },
+      { ...old.tasks[1], q: "Mekkora a 6 cm alapú, 4 cm magas háromszög területe?", required: [["12"]], sample: "12 cm²", mode: "written" },
+    ],
+    quiz: [
+      { ...old.quiz[0], intent: "recall", question: "Melyik műveletsor adja a háromszög területét?", options: ["Alap × magasság / 2", "Oldalak összege", "Alap + magasság"], correctIndex: 0 },
+      { ...old.quiz[1], intent: "apply", question: "Az alap marad, a magasság a kétszeresére nő. Hogyan változik a terület?", options: ["Nem változik", "A felére csökken", "Négyszeres lesz", "Kétszeres lesz"], correctIndex: 3, feedbackPerOption: ["A szorzatban a magasság is szerepel.", "A magasság nőtt, ezért a terület sem csökken.", "Csak a magasság változott, az alap maradt.", "Az alap és a magasság szorzata, így a fele is kétszeres lesz."] },
+    ],
+  };
+  return lesson;
 }

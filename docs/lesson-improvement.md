@@ -7,9 +7,9 @@ A kötelező módszer 2026-09-10-től a **fúzió 7.4**: a v7.4 négy tanulási 
 | Lap | Kötelező tartalom és működés |
 | --- | --- |
 | Tananyag | Teljes, olvasható tanítás, eredeti kidolgozott példák, ábrák; a fogalomcímke nem helyettesíti a magyarázatot. |
-| Módszerek | 11–20 elem, mind a 10 típus: előrejelzés, kapukérdés (legalább 2), tévhit, sorrendezés, ok–hatás, konfliktus, önértékelés, felugró kérdés, folyamat/idősor, analógia. |
-| Feladatok | 45 különböző nyílt kérdésből 15; bankban legalább 5 szóbeli, minden körben legalább 2. Saját válasz, szinonimák, mintaválasz, részpont, helyi mentés. |
-| Kvíz | 75 különböző kérdésből 25; kérdésenként 3 opció és külön magyarázat. Első választ rögzítő pontozás, üres válasz 0. |
+| Módszerek | Legfeljebb hatfogalmas csomagonként két különböző, témához illő interakció; nem kötelező mind a tíz típus. |
+| Feladatok | Csomagonként max(2, fogalomszám), minden fogalmat lefedve, legalább egy szóbeli és egy írásos. Rövid kör: 1–2. évfolyam legfeljebb 3, később 5. Saját válasz, mintaválasz, részpont és helyi mentés. |
+| Kvíz | Minden tanított fogalomhoz egy felidéző és egy alkalmazó kérdés, 3–4 különböző opció és saját magyarázat. Rövid kör: 1–2. évfolyam legfeljebb 5, később 10. Első választ rögzítő pontozás; teljes áttekintés is van. |
 
 Az eredmény pont, százalék, gyakorló osztályzat és eltelt idő formájában jelenik meg, JSON-ként letölthető. A határok: 90/75/60/40 százalék. Új kör előtt alkalmazásbeli megerősítés szükséges. Az idő a kör megnyitásától a kiértékelésig eltelt idő, nem figyelem- vagy aktívmunka-mérés.
 
@@ -21,14 +21,14 @@ Hat tartalomfüggő paletta, változó kártyaszínek és formák helyettesítik
 
 ## Útvonalak, promptok, méret és hibakezelés
 
-- **Feltöltött forrás / Studio:** kivonat és kurált térkép → pedagógus → Tananyag-szerző → animátor → külön bankgyártó → lektor → publikációs kapu. A bankgyártó hét ellenőrzött részt készít (módszerek; 3×15 feladat; 3×25 kvíz), nem egy csonkolódó óriásválaszt. Minden rész menthető, érvényes promptazonosságnál folytatható, hibánál egy célzott javító körrel. A bank a lektor előtt készül el.
+- **Feltöltött forrás / Studio:** kivonat és kurált térkép → pedagógus → Tananyag-szerző → animátor → külön bankgyártó → lektor → publikációs kapu. A fusion-7.4-2 bankgyártó fejezetenként, legfeljebb hatfogalmas csomagokban készít együtt módszert, nyílt feladatot és kvízt. A terv a tanítás összes fogalmát fedi; kis forrásból kis bank készül. A régi fusion-7.4-1 45/75 bankjai kompatibilisek maradnak. Minden rész menthető, érvényes promptazonosságnál folytatható, hibánál egy célzott javító körrel. A bank a lektor előtt készül el.
 - **Teljes lecke javítása:** tényleges JSON + kurált forrás → külön javított tanítás → friss bankok → forrás-/séma-/lektorvizsgálat → összehasonlítható előnézet → ellenőrzött, mentett tranzakciós alkalmazás. A tanítás fedettségét és szerkezetét még a bankgyártás előtt ellenőrizni kell. Egy célzott javító kör a teljes hibás blokkokat és az előző választ is visszakapja; ismételt hibánál a bankgyártás el sem indul. Külön átnézett tanítási mentésből is csak az összes kapu újbóli teljesítésével lehet folytatni. Sikertelen gyártás nem írja felül az eredetit.
-- **Célzott fogalomjavítás:** csak az érintett tanítási blokkok változhatnak; a bankok az új tanításból újraépülnek, hogy régi megoldás ne maradjon bennük. Utána ugyanaz a lektor és tranzakciós alkalmazás érvényes.
+- **Célzott fogalomjavítás:** csak az érintett tanítási blokkok változhatnak; a bankok újraellenőrződnek, csak a megváltozott fejezet/forrás csomagjai épülnek újra; a változatlanok azonosítói megmaradnak. Utána ugyanaz a lektor és tranzakciós alkalmazás érvényes.
 - **Önálló HTML / internetes készítés / HTML-okosítás:** a teljes v7.4 referencia után a közös fúziós szerződés és a HTML-adatszerződés következik. A bank egy `websuli-lesson-data` JSON-elemben szerepel, ezt olvassa a működő JavaScript; külön rejtett és látható bank tilos. A program besorolása és indoklása is ebben van. A 64 000 tokenes kimenetkeret mellett a csonkolási végjel és a bankhiány továbbra is kemény hiba. Webes források URL-je megőrzendő; keresőtalálat nem bizonyítja a teljes tartalom olvasását.
 
 Közös szerződés: `source/shared/lesson-experience.ts`; HTML-adatszerződés: `source/shared/lesson-html-data.ts`; banképítés: `source/server/studio/experience-builder.ts`. Modellazonosítót ne másolj a skillbe: az aktuális `source/server/ai/models.ts` és környezeti konfiguráció az irányadó. A szolgáltató ténylegesen kapja meg a beállított kimenetkeretet. Titkot ne másolj promptba vagy dokumentációba.
 
-A feladat minden fogalma az adott fejezet explain/example blokkjában tanított fogalomra mutasson. A puszta érvényes azonosító nem bizonyítja a kérdés forráshűségét: ezt a lektor és a külön tartalmi vizsgálat ellenőrzi. Rövid forrást nem lehet kitalált témával vagy ismétlődő kérdésekkel 45/75-re feltölteni; hiány esetén a gyártás érthető hibával álljon meg.
+A feladat minden fogalma az adott fejezet explain/example blokkjában tanított fogalomra mutasson. A puszta érvényes azonosító nem bizonyítja a kérdés forráshűségét: ezt a lektor és a külön tartalmi vizsgálat ellenőrzi. Rövid forrást nem lehet kitalált témával vagy ismétlődő kérdésekkel feltölteni; a bankméretet a tényleges fogalmak adják. Hiányzó felidézés, alkalmazás, nyílt vagy szóbeli változat esetén a gyártás érthető hibával álljon meg.
 
 Új fúziós job körlimitnél sem publikálhat hiányos bankkal, blokkoló lektorhibával vagy bukó tartalmi kapuval. A korábbi, experience nélküli leckék olvashatók maradnak; ettől még nem minősülnek fúziós leckének. A módszer bevezetése nem írja át tömegesen a meglévő tananyagokat.
 
@@ -37,7 +37,7 @@ A feladat minden fogalma az adott fejezet explain/example blokkjában tanított 
 - Őrizd meg az eredeti fájlokat és az egyes átiratokhoz tartozó forráshivatkozást. Az ismételt fotókat azonosítsd; a kézírásból származó bizonytalanságot jelöld, ne egészítsd ki kitalált feladattal.
 - Az évfolyamot és tantárgyat a program a teljes forrás tartalmából állapítja meg. A készítőtől ne kérj évfolyamot. A korábban megadott évfolyam sem írja felül a program besorolását; a szerzőmodell sem változtathatja meg a térkép metaadatait.
 - Forráshiba és generálási hiba külön eset. Valószínű könyv-/füzethibát `book_probably_wrong` jelzéssel, az eredeti állítás megőrzésével dokumentálj. A tulajdonos által kért javításkor készíts ellenőrzött, verziózott átiratot a helyesbítés indokával; ezután abból épüljön a kurált tudástár. A generátor önállóan nem cserélhet forrástényeket.
-- A fogalom idézete összefüggő, szó szerinti forrásrészlet legyen. Ne ragassz össze kihagyás nélkül távoli mondatokat. Elutasított idézetnél ellenőrizd, nem egy fontos fogalom veszett-e el pusztán formai hiba miatt.
+- A fogalom idézete összefüggő, szó szerinti forrásrészlet legyen. Ne ragassz össze kihagyás nélkül távoli mondatokat. A gép a nem igazolt kulcsfogalmat pending állapotban tartja, nem utasíthatja el automatikusan a teljesnek látszó részlista kedvéért. Elutasított régi idézetnél ellenőrizd, nem egy fontos fogalom veszett-e el pusztán formai hiba miatt.
 
 ## 2. A gyártási prompt ellenőrzése
 

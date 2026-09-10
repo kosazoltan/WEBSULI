@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fusionFixture } from "../shared/fixtures/lesson-fusion";
+import { fusionFixture, compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { lessonRepairSchema, parseLessonRepair } from "../shared/lesson-repair";
 import { assertRepairCandidate, assertRepairFresh, repairHash, buildStructuredImprovement } from "../server/studio/structured-improvement";
 import { hasHtmlLessonData, readHtmlLessonData } from "../shared/lesson-html-data";
@@ -8,12 +8,12 @@ import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
 
 const source = { subject: "matematika", classroom: 7, concepts: [{ localId: "area", term: "terület", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] };
 test("repair checks teaching before spending on banks, retries concrete errors, and rejects lektor blockers", async () => {
-  const original = fusionFixture(); const e = original.experience!;
+  const original = fusionFixture(); const e = compactFusionFixture().experience!;
   const badTeaching = structuredClone(original); badTeaching.sections[0].blocks.shift();
   let stoppedCalls = 0;
   await assert.rejects(buildStructuredImprovement(original, source, async () => { stoppedCalls++; return badTeaching; }), /bankgyártás nem indult/);
   assert.equal(stoppedCalls, 2);
-  const parts = [{ methods: e.methods, glossary: [] }, ...[0, 15, 30].map(i => ({ tasks: e.tasks.slice(i, i + 15) })), ...[0, 25, 50].map(i => ({ quiz: e.quiz.slice(i, i + 25) }))];
+  const parts = [{ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }];
   let calls = 0;
   await assert.rejects(buildStructuredImprovement(original, source, async (step, _system, user) => {
     const index = calls++;
@@ -22,7 +22,7 @@ test("repair checks teaching before spending on banks, retries concrete errors, 
     if (step === "lektor") return { notes: [{ kind: "source_conflict", subkind: "contradicts_source", message: "A minta hibás." }] };
     return parts[index - 2];
   }), /lektor javítást kér/);
-  assert.equal(calls, 10);
+  assert.equal(calls, 4); // Two teaching calls, one current-version packet, one lektor.
   assert.equal(original.experience!.tasks.length, 45);
 });
 function htmlDocument() {

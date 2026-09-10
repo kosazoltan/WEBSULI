@@ -4301,7 +4301,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         res.send(pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
-        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(file.content), file.classroom);
+        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(file.content), file.classroom, file.title);
 
         // CRITICAL: No-cache headers to prevent Vercel/browser from serving stale content after Apply
         res.setHeader('Content-Type', 'text/html; charset=utf-8');

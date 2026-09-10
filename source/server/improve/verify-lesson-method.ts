@@ -13,7 +13,7 @@ export function verifyLessonMethodHtml(html: string): HtmlVerification {
     if (lang && data.experience.language !== lang) problems.push("A nyelvlecke szószedetének/TTS-ének nyelve hiányzik vagy hibás.");
     const scripts = (html.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? []).filter(s => !/type\s*=\s*["']application\/json["']/i.test(s));
     if (!scripts.some(s => s.includes(HTML_LESSON_DATA_ID) && /JSON\s*\.\s*parse/.test(s))) problems.push("A futó JavaScript nem olvassa a közös feladatbankot.");
-  } catch { problems.push("A fúziós JSON-bank hiányos vagy hibás: 45 nyílt feladat, 75 kvíz, 10 módszertípus és évfolyamindoklás szükséges."); }
+  } catch { problems.push("A fúziós JSON-bank hiányos vagy hibás: érvényes verzió, fogalomfedő bankterv, szóbeli/írásos feladatok, felidéző/alkalmazó kvíz és évfolyamindoklás szükséges."); }
   for (const value of ["teaching", "methods", "tasks", "quiz"]) {
     for (const attr of ["data-lesson-tab", "data-lesson-panel"]) if (!new RegExp(`${attr}\\s*=\\s*["']${value}["']`).test(html)) problems.push(`Hiányzó ${attr}: ${value}.`);
   }

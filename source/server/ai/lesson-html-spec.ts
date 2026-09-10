@@ -1,4 +1,4 @@
-import { LESSON_FONT_CSS, LESSON_TYPOGRAPHY_CONTRACT, type LessonFont } from "../../shared/lesson-typography";
+import { LESSON_FONT_CSS, LESSON_TYPOGRAPHY_CONTRACT, lessonFontPair, type LessonFont } from "../../shared/lesson-typography";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 /**
@@ -32,9 +32,6 @@ export type LessonTheme = {
   layoutHint: string;
   prefix: string;
 };
-
-const FALLBACK_SANS = "'Source Sans 3',sans-serif";
-const FALLBACK_SERIF = "'Source Serif 4',serif";
 
 export const LESSON_THEMES: readonly LessonTheme[] = [
   {
@@ -210,26 +207,27 @@ export function lessonFontsLink(): string {
 
 function ageBand(classroom: number): string {
   if (classroom === 0) return "0. (programozási alapismeretek) → 7–8. évfolyamos szint: pontos szaknyelv, ok-okozat, elvont fogalmak";
-  if (classroom <= 3) return "1–3. évfolyam: rövid mondatok, egyszerű szavak, sok vizuális elem, törzsszöveg min. 18px";
-  if (classroom <= 6) return "4–6. évfolyam: közepes mondatok, analógiák, hétköznapi példák";
+  if (classroom <= 2) return "1–2. évfolyam: rövid mondatok, egyszerű szavak, egy utasítás egyszerre, törzsszöveg min. 20px";
+  if (classroom <= 4) return "3–4. évfolyam: rövid magyarázatok, szemléletes példák, önálló próbálkozás, törzsszöveg min. 18px";
+  if (classroom <= 6) return "5–6. évfolyam: analógiák, hétköznapi alkalmazás, jól elkülönített lépések";
   return "7–8. (és felsőbb) évfolyam: összetettebb gondolatok, ok-okozat, elvont fogalmak";
 }
 
 /** A kiválasztott téma promptba illő leírása (a modell ettől indokolt esetben eltérhet). */
 export function lessonThemePrompt(theme: LessonTheme, classroom: number): string {
-  const body = `'${theme.bodyFont}',${FALLBACK_SANS}`;
-  const heading = `'${theme.headingFont}',${FALLBACK_SANS}`;
-  const display = theme.displayFont ? `'${theme.displayFont}',${FALLBACK_SERIF}` : heading;
+  const pair = lessonFontPair(classroom, theme.headingFont === "Source Serif 4" ? "irodalom" : "");
+  const body = `'${pair.body}',sans-serif`;
+  const heading = `'${pair.heading}',${pair.heading === "Source Serif 4" ? "serif" : "sans-serif"}`;
   return [
     "## MEGJELENÍTÉSI TÉMA (ehhez a tananyaghoz kiválasztva — kövesd, hogy a tananyagok változatosak legyenek)",
     `- Téma: **${theme.name}** (${theme.mood}). CSS prefix: \`${theme.prefix}-\` (ha ütközne, válts 2–3 betűs másikra).`,
     `- Paletta: --primary ${theme.primary}; --accent ${theme.accent}; --bg ${theme.background}; --surface ${theme.surface}; --text ${theme.text}; --success #00b894; --error #e17055. Kontraszt min. 4.5:1.`,
-    `- Fejléc: ${theme.headerStyle}.`,
+    `- Fejléc: ${theme.headerStyle.replace(/Source Serif 4/g, pair.heading)}.`,
     `- Elrendezés: ${theme.layoutHint}.`,
     `- Helyi betűk (PONTOSAN így): <link href="${lessonFontsLink()}" rel="stylesheet">`,
     `- font-family törzs: ${body}`,
     `- font-family címsor: ${heading}`,
-    `- font-family díszbetű: ${display}`,
+    `- Díszbetű helyett is a címsor betűjét használd: ${heading}. Az életkori betűválasztást a színtéma nem írhatja felül.`,
     `- Korosztály: ${ageBand(classroom)}.`,
     "- Ne másold a példa-HTML kinézetét: a téma szerinti saját fejléc, kártyastílus és gombforma készüljön.",
   ].join("\n");
@@ -237,7 +235,7 @@ export function lessonThemePrompt(theme: LessonTheme, classroom: number): string
 
 /**
  * A Tananyag Készítő v7.4 követelményei — app-ra szabva. Referencia-kódok (kiértékelő
- * motor, TTS) szó szerint a skillből, hogy a modell azokat építse be, ne rögtönözzön.
+ * motor, TTS) a skillből, a közös pontozási szerződéshez igazított javításokkal.
  */
 export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ SPECIFIKÁCIÓ
 
@@ -250,23 +248,23 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 | Tab | Cím | Tartalom |
 |-----|-----|----------|
 | 1 | 📖 Tananyag | Részletes lexikális tudás (+ szószedet idegen nyelvnél) |
-| 2 | 🧠 Módszerek | Min. 10 kognitív aktivációs elem (MIND a 10 típus) |
-| 3 | ✏️ Feladatok | 45 feladatból 15 véletlenszerű |
-| 4 | 🎯 Kvíz | 75 kérdésből 25 véletlenszerű, 3 válasz (A/B/C) |
+| 2 | 🧠 Módszerek | Bankcsomagonként két releváns, különböző interakció |
+| 3 | ✏️ Feladatok | Fogalomfedő bank, korosztályhoz illő rövid kör |
+| 4 | 🎯 Kvíz | Felidézés és alkalmazás minden fogalomhoz; 3–4 válasz |
 
 ## OLDAL 1 – TANANYAG
 - Folyamatos, érthetően tagolt szöveg — NEM vázlat. Teljes anyag fejezetekre bontva; definíciók, példák, felsorolások, összefoglalók.
-- Korosztály: 1–3. évf. rövid mondatok, egyszerű szavak, sok vizuális elem; 4–6. évf. közepes mondatok, analógiák, hétköznapi példák; 7–8. évf. összetettebb gondolatok, ok-okozat, elvont fogalmak.
+- Korosztály: 1–2. évf. egy rövid utasítás egyszerre; 3–4. évf. szemléletes példák és önálló próbálkozás; 5–6. évf. analógiák, hétköznapi alkalmazás; 7–8. évf. ok-okozat, elvont fogalmak. 1–4. évf. Nunito; később Source Sans 3 törzs, irodalmi/történelmi címsorhoz Source Serif 4.
 - Info-boxok (érdekesség, figyelem, összefoglalás). Vizuális kártyák SZÖVEGES tartalommal (NEM emoji állatképek). Legalább 1 ciklus-diagram / folyamatábra / kártyasor CSS-ből vagy inline SVG-ből.
-- Fejezetek KÁRTYÁKON (TILOS accordion / <details> / collapsible — minden tartalom mindig látszódjon). Minden fejezet végén mini-összefoglaló box.
+- Fejezetek KÁRTYÁKON, alapból lapozható könyvként, külön teljes áttekintéssel. A fejezet tanítása látható, a releváns kiegészítő módszer külön megnyitható. Minden fejezet végén mini-összefoglaló box.
 - Az 1. oldal végén „Források" blokk a felhasznált URL-ekkel (ha voltak).
 - Idegen nyelvnél SZÓSZEDET: idegen szó + magyar jelentés + szófaj + példamondat (idegen + magyar), MINDEN idegen elem mellett 🔊 TTS gomb.
 
-## OLDAL 2 – MÓDSZEREK (mind a 10 szerepeljen, mobilon érintéssel használható)
+## OLDAL 2 – MÓDSZEREK (ebből válassz a témához, mobilon érintéssel használható)
 | Komponens | Leírás |
 |-----------|--------|
 | prediction-box | „Szerinted mi fog történni, ha…?" – a tanuló beír, majd megmutatja a valós választ |
-| gate-question | Kapukérdés (2–3 db): csak helyes válasz után mutatja a továbbit |
+| gate-question | Kapukérdés: helyes válasz után mutatja a kapcsolódó módszert; a tananyaghoz való hozzáférést nem zárja el |
 | myth-box | Igaz/hamis tévhit, magyarázattal |
 | dragdrop-box | Húzd a helyére – touch + mouse event, ujjkövető „ghost" elem, célzóna-kiemelés |
 | cause-effect | Ok→hatás lánc, kattintható lépésekkel |
@@ -279,7 +277,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 - Minden kattintható elem min. 44×44 px. Popup-ok ne takarják egymást.
 
 ## OLDAL 3 – SZÖVEGES FELADATOK
-- KIZÁRÓLAG az 1. oldal tartalmából képzett, nyílt végű kérdések, textarea inputtal. 45 a bankban, 15 véletlenszerűen.
+- KIZÁRÓLAG az 1. oldal tartalmából képzett, nyílt végű kérdések, textarea inputtal. A bank és rövid kör méretét a közös bankPlan szerződés adja.
 - KIÉRTÉKELÉS: HÁROMRÉTEGŰ MOTOR (kötelező, a lapos kulcsszó-egyezés TILOS). Minden feladat OBJEKTUM:
 \`\`\`javascript
 {
@@ -292,27 +290,24 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
   sample:       "Valódi, követendő mintaválasz, ami a 🟡/❌ eseteknél megjelenik."
 }
 \`\`\`
-- Egy \`required\` fogalom akkor teljesül, ha BÁRMELYIK szinonimája előfordul; többszavas kifejezésnél minden szó valahol. Felsoroló feladatnál (\`írj 3 főnevet\`) a \`required\` üres, a helyes elemek \`bonus\`-ba mennek.
-- A motor három rétege: (1) fogalmi illesztés szinonimákkal; (2) fuzzy egyezés — Levenshtein (rövid szó 0, közepes 1, hosszú 2 tűrés) + könnyű magyar tövezés + összetett szó résztring + ékezet-leszedés; (3) minőségi kapuk — minimális szószám és koherencia-kapu (needsSentence esetén kell egy kötőszó/funkciószó ÉS egy „saját" szó, ami egyik fogalomban sincs).
+- Egy \`required\` fogalom akkor teljesül, ha BÁRMELYIK szinonimája előfordul; többszavas kifejezésnél minden szó szükséges. Legalább egy required csoport mindig kell. A bonus önmagában nem ad teljes pontot.
+- A motor három rétege: (1) fogalmi illesztés szinonimákkal; (2) hosszú szavaknál korlátozott elírástűrés és magyar tövezés; szám, rövid szó és tagadás nem javítható más válasszá; (3) minimális szószám, koherencia és váratlan tagadás vizsgálata. Ez gyakorló visszajelzés, nem teljes jelentéselemzés vagy hivatalos osztályzat.
 - HÁROMÁLLAPOTÚ KIMENET: ✅ Elfogadva (1 pont): minden kötelező fogalom + koherens; 🟡 Részben jó (0.5): a kötelezők fele megvan VAGY minden megvan, de szólista-szerű → „📖 Mintaválasz megnézése" gomb; ❌ Hiányos (0): túl rövid vagy túl kevés kötelező fogalom. A fél pontok beszámítanak.
 - A MOTOR REFERENCIA-IMPLEMENTÁCIÓJA (ES5, az IIFE-be ágyazva, EZT építsd be — ne rögtönözz mást):
 \`\`\`javascript
 function ee_norm(s){
-  s = (s||'').toLowerCase();
-  s = s.replace(/[\\u00e1\\u00e0]/g,'a').replace(/[\\u00e9\\u00e8]/g,'e').replace(/\\u00ed/g,'i')
-       .replace(/[\\u00f3\\u00f2\\u00f6\\u0151]/g,'o').replace(/[\\u00fa\\u00f9\\u00fc\\u0171]/g,'u');
-  s = s.replace(/[.,!?;:"'()\\-\\/]/g,' ');
-  s = s.replace(/\\s+/g,' ').replace(/^\\s+|\\s+$/g,'');
-  return s;
+  s = (s||'').toLocaleLowerCase('hu').normalize('NFD').replace(/\\p{M}/gu,'')
+    .replace(/(\\d)[,.](?=\\d)/g,'$1.').replace(/\\u2212/g,'-');
+  return (s.match(/[+-]?\\d+(?:\\.\\d+)?|[\\p{L}]+/gu)||[]).map(function(t){return t.replace(/^\\+(?=\\d)/,'');}).join(' ');
 }
 function ee_stem(w){
-  var suf = ['ban','ben','bol','bel','rol','rel','tol','tel','nak','nek',
-             'val','vel','hoz','hez','ra','re','ba','be','ot','et','at',
-             'ok','ek','k','t','n','i'];
+  var suf = ['juk','unk','ban','ben','bol','rol','tol','nak','nek',
+             'val','vel','hoz','hez','uk','ja','je','ra','re','ba','be','ot','et','at',
+             'ok','ek','k','t','n'];
   var i;
   for(i=0;i<suf.length;i++){
     var s = suf[i];
-    if(w.length > s.length + 2 && w.slice(-s.length) === s){ return w.slice(0, w.length - s.length); }
+    if(w.length > s.length + 3 && w.slice(-s.length) === s){ return w.slice(0, w.length - s.length); }
   }
   return w;
 }
@@ -331,15 +326,15 @@ function ee_lev(a, b){
   }
   return prev[n];
 }
-function ee_tol(len){ if(len<=4) return 0; if(len<=7) return 1; return 2; }
+function ee_tol(len){ return len>8?2:1; }
 function ee_wordHit(answerTokens, answerStems, word){
   var p = ee_norm(word); var ps = ee_stem(p); var t;
   for(t=0;t<answerTokens.length;t++){
     var tok = answerTokens[t];
     if(tok === p) return true;
-    if(answerStems[t] === ps) return true;
-    if(p.length >= 4 && tok.indexOf(p) !== -1) return true;
-    if(p.length >= 4 && tok.length >= 4 && p.indexOf(tok) !== -1) return true;
+    if(/\\d/.test(tok+p) || ['nem','ne','not','no'].indexOf(p)!==-1) continue;
+    if(Math.min(tok.length,p.length)>=4 && (answerStems[t]===p || tok===ps || answerStems[t]===ps)) return true;
+    if(Math.min(tok.length,p.length)<5) continue;
     if(ee_lev(tok, p) <= ee_tol(Math.max(tok.length, p.length))) return true;
   }
   return false;
@@ -349,7 +344,6 @@ function ee_phraseHit(answerNorm, answerTokens, answerStems, phrase){
   if(parts.length === 1){ return ee_wordHit(answerTokens, answerStems, parts[0]); }
   var i;
   for(i=0;i<parts.length;i++){
-    if(parts[i].length < 2) continue;
     if(!ee_wordHit(answerTokens, answerStems, parts[i])) return false;
   }
   return true;
@@ -363,7 +357,7 @@ function ee_conceptHit(answerNorm, answerTokens, answerStems, concept){
 }
 function ee_evaluate(answer, task){
   var norm = ee_norm(answer);
-  var tokens = norm ? norm.split(' ') : [];
+  var tokens = norm ? norm.split(' ').slice(0,500) : [];
   var stems = []; var i;
   for(i=0;i<tokens.length;i++){ stems[i]=ee_stem(tokens[i]); }
   var wordCount = tokens.length;
@@ -374,19 +368,20 @@ function ee_evaluate(answer, task){
   for(i=0;i<bon.length;i++){ if(ee_conceptHit(norm,tokens,stems,bon[i])) hitBonus++; }
   var totalReq = req.length;
   if(wordCount < minW){
-    return {state:'fail', score:0, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'tul rovid'};
+    return {state:'fail', score:0, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'A válasz még túl rövid.'};
   }
   if(totalReq === 0){
-    var anyBonus = hitBonus > 0;
-    return {state: anyBonus?'ok':'partial', score: anyBonus?1:0.5,
-            hitReq:0, totalReq:0, hitBonus:hitBonus, reason:'bonusz-alapu'};
+    return {state:'fail', score:0, reason:'Hiányzó értékelési feltétel.'};
   }
   var ratio = hitReq / totalReq;
   var FUNC = [' mert ',' es ',' olyan ',' ami ',' amit ',' azt ',' hogy ',
-              ' lehet ',' tudom ',' tudjuk ',' mint ',' ezert ',' igy ',' mivel ',' tehat ',
+              ' lehet ',' tudom ',' tudjuk ',' mint ',' ezert ',' igy ',' mivel ',' tehat ',' ha ',' akkor ',' vagyis ',' mig ',' az ',' because ',' and ',
               ' is ',' are ',' there ',' have ',' has ',' do ',' does ',' a ',' an ',' the ',
-              ' some ',' any ',' isn t ',' aren t ',' don t ',' how ',' much ',' many ',' of ',' on ',' in '];
+              ' some ',' any ',' how ',' much ',' many ',' of ',' on ',' in '];
   var padded = ' ' + norm + ' '; var hasFunc = false, f;
+  var sampleWords = ee_norm(task.sample).split(' ');
+  var unexpectedNegation = (tokens.indexOf('nem')!==-1 || tokens.indexOf('not')!==-1)
+    && sampleWords.indexOf('nem')===-1 && sampleWords.indexOf('not')===-1;
   for(f=0;f<FUNC.length;f++){ if(padded.indexOf(FUNC[f]) !== -1){ hasFunc=true; break; } }
   var allConcepts = [];
   for(i=0;i<req.length;i++){ allConcepts = allConcepts.concat(req[i]); }
@@ -397,24 +392,24 @@ function ee_evaluate(answer, task){
     if(!ee_conceptHit(' '+tokens[i]+' ', [tokens[i]], [stems[i]], allConcepts)){ hasOwnWord = true; break; }
   }
   if(ratio >= 1){
-    if(task.needsSentence && !(hasFunc && hasOwnWord)){
+    if((task.needsSentence && !(hasFunc && hasOwnWord)) || unexpectedNegation){
       return {state:'partial', score:0.5, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus,
-              reason:'fogalmak megvannak, de inkabb szolista mint mondat'};
+              reason:unexpectedNegation?'A tagadás eltér a mintaválasztól.':'A fogalmak megvannak, de összefüggő mondat szükséges.'};
     }
-    return {state:'ok', score:1, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'minden kotelezo fogalom megvan'};
+    return {state:'ok', score:1, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'Minden kötelező fogalom megvan.'};
   }
   if(ratio >= 0.5){
-    return {state:'partial', score:0.5, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'kotelezo fogalmak resze hianyzik'};
+    return {state:'partial', score:0.5, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'A kötelező fogalmak egy része még hiányzik.'};
   }
-  return {state:'fail', score:0, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'tul keves kotelezo fogalom'};
+  return {state:'fail', score:0, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'A lényegi fogalmak még hiányoznak.'};
 }
 \`\`\`
-- UI a 3. oldalon: TETEJÉN 🔄 Újragenerálás (új 15 a 45-ből) konfirmációs HTML modallal; ALJÁN ✅ Kiértékelés; feladatonként ✅/🟡/❌ + indok + „📖 Mintaválasz" gomb a 🟡/❌ eseteknél; eredmény az oldalon (NEM alert); osztályzat 90%=5 Jeles, 75%=4 Jó, 60%=3 Közepes, 40%=2 Elégséges, <40%=1 Elégtelen; JSON eredmény-export (Blob + createObjectURL, addEventListener), localStorage név/e-mail mentés, mailto link.
+- UI a 3. oldalon: TETEJÉN 🔄 Újragenerálás (új, bankPlan szerinti kör) konfirmációs HTML modallal; ALJÁN ✅ Kiértékelés; feladatonként ✅/🟡/❌ + indok + „📖 Mintaválasz" gomb a 🟡/❌ eseteknél; eredmény az oldalon (NEM alert); osztályzat 90%=5 Jeles, 75%=4 Jó, 60%=3 Közepes, 40%=2 Elégséges, <40%=1 Elégtelen; JSON eredmény-export (Blob + createObjectURL, addEventListener), localStorage név/e-mail mentés, mailto link.
 - ÖNTESZT (kötelező, a build részeként gondold végig): minden feladat \`sample\` mintaválasza a SAJÁT feladatára ✅-t adjon; üres válasz mindenhol ❌.
 
 ## OLDAL 4 – KVÍZ
-- 75 kérdés a bankban, 25 véletlenszerűen; 3 válasz (A/B/C) — NEM 4. Struktúra: { q:'...', opts:['A','B','C'], correct:0 }.
-- Azonnali helyes/helytelen visszajelzés; pontszám = helyes/25×100 %; ugyanaz az osztályzási skála.
+- Fogalomfedő bank; körméret a bankPlan.quizRound szerint; 3 vagy 4 válasz. A közös JSON-adatszerződés mezőneveit használd.
+- Azonnali helyes/helytelen visszajelzés; pontszám = helyes/körméret×100 %; ugyanaz az osztályzási skála.
 - TETEJÉN 🔄 Újragenerálás (konfirmációs modallal), ALJÁN ✅ Kiértékelés; eredmény az oldalon.
 
 ## TEXT-TO-SPEECH (IDEGEN NYELVI LECKÉNÉL KÖTELEZŐ)
@@ -449,29 +444,29 @@ ${LESSON_TYPOGRAPHY_CONTRACT}
 A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" content="text/html; charset=utf-8">; <html lang="hu">.
 
 ## TECHNIKAI KÖVETELMÉNYEK
-- EGYETLEN önálló HTML (CSS + JS beágyazva); külső függőség CSAK a Google Fonts link.
+- EGYETLEN önálló HTML (CSS + JS beágyazva); betűk kizárólag a helyi /fonts/lesson-fonts.css hivatkozásból. Google Fonts link tilos.
 - IIFE wrapper: (function(){ 'use strict'; ... })(); az onclick-ből hívott függvények window-ra exportálva (window.PREFIX_showTab = function(id){...}).
 - ES5-kompatibilis JS (var, hagyományos függvények, nincs arrow function / template literal a kritikus utakon).
 - CSS prefix minden osztálynéven, kivétel nélkül. Reset: * { box-sizing:border-box; margin:0; padding:0 }.
 - Reszponzív 320–2560px: clamp() betűméret, @media 480px és 1400px, 0 vízszintes túlcsordulás. Sticky tab-nav (position:sticky; top:0; z-index:100), min. 44px magas gombok.
-- TILOS: alert()/confirm()/prompt() (csak HTML modal, callback-mintával); inline JSON onclick-ben (globális változó + addEventListener); accordion/<details>; smart/tipográfiai idézőjel („") és cirill karakter a JS-ben; emoji-képkártya tartalomként.
+- TILOS: alert()/confirm()/prompt() (csak HTML modal, callback-mintával); inline JSON onclick-ben (globális változó + addEventListener); rejtett kötelező tanítás; smart/tipográfiai idézőjel („") és cirill karakter a JS-ben; emoji-képkártya tartalomként.
 - Konfirmációs HTML modal minden kiértékelés és újragenerálás előtt.
 
 ## KIMENET-TAKARÉKOSSÁG (a teljes anyag egy válaszban elférjen)
 - A kódban NE írj kommenteket és üres sorokat; a CSS tömör (egy szabály egy sor); a feladat- és kvízbank egy objektum egy sor.
 - Feladat: \`q\` max. 120 karakter, \`required\` fogalmanként 2–4 szinonima, \`sample\` 1 tömör mondat. Kvíz: rövid kérdés, 3 rövid válasz.
-- A 45/75-ös bank és mind a 10 kognitív elem KÖTELEZŐ — a takarékosság a szövegezésen és a kódon spórol, nem a mennyiségen.
+- A forrásfedettség és a bankPlan szerinti méret kötelező; nem készül általános 45/75-ös bank. A témához illő két módszer fontosabb, mint mind a tíz mechanikus használata.
 
 ## MENNYISÉGEK
 | Típus | Generált | Megjelenített |
 |-------|----------|---------------|
-| Szöveges feladat | 45 | 15 (véletlenszerű) |
-| Kvízkérdés | 75 | 25 (véletlenszerű) |
-| Kognitív elem | min. 10 | mind (2. oldalon) |
+| Szöveges feladat | bankPlan szerinti, minden fogalomhoz | bankPlan.taskRound, teljes áttekintéssel |
+| Kvízkérdés | fogalmanként két különböző célú | bankPlan.quizRound, teljes áttekintéssel |
+| Kognitív elem | csomagonként két különböző | fejezethez kötve és külön a 2. lapon |
 
 ## ÖNELLENŐRZÉS A HTML LEZÁRÁSA ELŐTT
-- 4 oldal, mind a 10 kognitív elem, dragdrop touch + ujjkövetés, feladatok az 1. oldalból, háromrétegű motor + háromállapotú kimenet + mintaválasz gomb, Újragenerálás TETEJÉN / Kiértékelés ALJÁN, fél pontok, kvíz 25/75 A-B-C.
-- Nincs alert/confirm/prompt, nincs accordion, minden interaktív elem 44px, prefix mindenhol, IIFE + 'use strict'.
+- 4 oldal, témához illő kognitív elemek, dragdrop touch + ujjkövetés, feladatok az 1. oldalból, háromrétegű motor + háromállapotú kimenet + mintaválasz gomb, Újragenerálás TETEJÉN / Kiértékelés ALJÁN, fél pontok, fogalomfedő kvízbank és bankPlan szerinti kör.
+- Nincs alert/confirm/prompt, a tanítás teljes áttekintése elérhető, minden interaktív elem 44px, prefix mindenhol, IIFE + 'use strict'.
 - Kizárólag a három engedélyezett, helyben kiszolgált font, UTF-8 és lang="hu"; tényleges ő/Ő/ű/Ű renderpróba.
 - A dokumentum <!DOCTYPE html>-lel kezdődik és </html>-lel zárul, a <script> blokkok lezártak.`;
 

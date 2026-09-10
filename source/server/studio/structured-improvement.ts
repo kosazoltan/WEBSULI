@@ -96,7 +96,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
 export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: (step: "author" | "lektor", system: string, user: string) => Promise<unknown>, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }) {
   assertRepairTeaching(original, candidate, source);
-  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, call: (system, user) => call("author", system, user) });
+  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user) => call("author", system, user) });
   assertRepairCandidate(original, candidate, source);
   const review = lektorReportSchema.parse(await call("lektor", buildLektorPrompt(candidate, source), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);

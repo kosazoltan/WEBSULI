@@ -318,7 +318,7 @@ export function WebResearchAgentPanel() {
               <span className="text-sm">Előnézet</span>
             </div>
             <iframe
-              srcDoc={withLessonTypography(generatedHtml)}
+              srcDoc={withLessonTypography(generatedHtml, classroom, title)}
               className="w-full h-[320px]"
               title="Webes tananyag előnézet"
               sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"

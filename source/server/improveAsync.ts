@@ -74,11 +74,11 @@ Tab navigáció: sticky, 4 gomb, reszponzív, min 44px magasság.
 6. **IIFE wrapper hozzáadása** → (function(){ 'use strict'; ... })() – tab-váltókat window-ra!
 7. **Touch events pótlása** → dragdrop elemekhez touchstart/touchmove/touchend
 8. **Újragenerálás gombok** → Feladatok és Kvíz oldal TETEJÉN 🔄 gomb
-9. **Kvíz kérdések pótlása** → Cél: 75 kérdés, **3 válasz (A/B/C)** – NEM 4!
-10. **Feladatok pótlása** → Cél: 45 feladat, HÁROMRÉTEGŰ kiértékelő motor (required/bonus/minWords/needsSentence/sample, ✅/🟡/❌)
+9. **Kvíz kérdések pótlása** → Cél: minden tanított fogalomhoz felidéző és alkalmazó kérdés; 3 vagy 4 válasz.
+10. **Feladatok pótlása** → Cél: a bankPlan szerinti teljes írásos/szóbeli fedettség, HÁROMRÉTEGŰ kiértékelő motor (required/bonus/minWords/needsSentence/sample, ✅/🟡/❌)
 11. **JavaScript funkciók kiegészítése** → Kiértékelés, pontozás, JSON mentés
 12. **CSS hiányosságok** → Reszponzivitás 320px–2560px, min-height: 44px, egyedi prefix
-13. **Magyar ékezetek Androidon** → Google Fonts latin-ext + teljes fallback-lánc + glyph-warmup (a régi Segoe UI / system-ui font-stacket cseréld le)
+13. **Magyar ékezetek Androidon** → Kizárólag helyi Nunito, Source Sans 3, Source Serif 4; /fonts/lesson-fonts.css. Ellenőrzött magyar ő/Ő/ű/Ű, UTF-8; külső font és glyph-warmup helyett tényleges fontellenőrzés.
 
 ${specBlock}
 
@@ -92,9 +92,9 @@ ${specBlock}
 ## MINŐSÉGI KRITÉRIUMOK (v7.4) – MIND KÖTELEZŐ
 ✓ Érvényes HTML5 struktúra (DOCTYPE + html + head + body + záró tagek)
 ✓ 4 oldal (📖 Tananyag | 🧠 Módszerek | ✏️ Feladatok | 🎯 Kvíz)
-✓ Min. 10 kognitív elem a Módszerek oldalon (mind a 10 típus!)
-✓ 45 szöveges feladat (15 megjelenítve) – háromrétegű kiértékelő motor, háromállapotú kimenet
-✓ 75 kvíz kérdés (25 megjelenítve, **3 válasz A/B/C**)
+✓ Bankcsomagonként két különböző, tartalomhoz illő módszer
+✓ Fogalomfedő nyílt bank és bankPlan.taskRound – háromrétegű kiértékelő motor, háromállapotú kimenet
+✓ Fogalmanként recall és apply kvíz; bankPlan.quizRound; 3–4 válasz
 ✓ IIFE wrapper – window-ra exportált függvények
 ✓ NINCS alert()/confirm()/prompt() – csak HTML modal
 ✓ Touch events dragdrop-ban (touchstart/touchmove/touchend)
@@ -105,7 +105,7 @@ ${specBlock}
 ✓ JSON mentés globális változóval + addEventListener
 ✓ Értékelés: 90=5, 75=4, 60=3, 40=2, <40=1
 ✓ Reszponzív CSS 320px–2560px (clamp, @media)
-✓ Google Fonts latin-ext + teljes fallback-lánc + glyph-warmup + charset meták (system-ui / Segoe UI sehol)
+✓ Helyi, ellenőrzött Nunito / Source Sans 3 / Source Serif 4 és UTF-8; sem Google Fonts, sem külső font nem szükséges
 ✓ Sticky tab navigáció`;
 
     const userPrompt = `# Tananyag Modernizálása

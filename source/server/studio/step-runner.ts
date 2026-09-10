@@ -45,7 +45,7 @@ import { checkCoverageGate, type Coverage } from "./coverage";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
-import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
+import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 
@@ -71,7 +71,7 @@ import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-b
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-1";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-2";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -552,7 +552,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
       let completedLesson = outcome.lesson;
       let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
-      if (job.output?.methodVersion === LESSON_METHOD_VERSION || original.experience) {
+      if (isFusionMethodVersion(job.output?.methodVersion) || original.experience) {
         try {
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
@@ -588,7 +588,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
 
-      if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (job.output?.methodVersion === LESSON_METHOD_VERSION || (job.output?.lesson as Lesson | undefined)?.experience)) {
+      if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || (job.output?.lesson as Lesson | undefined)?.experience)) {
         return fail(store, job, "A fúziós lecke lektori hibái a javítókör után is fennállnak; hibás megoldások nem publikálhatók.");
       }
       const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers });
@@ -659,7 +659,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
 
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
   // Missing experience is a hard failure, including after the autonomous round limit.
-  if (job.output?.methodVersion === LESSON_METHOD_VERSION || parsed.data.experience) {
+  if (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience) {
     const problems = experienceProblems(parsed.data);
     if (problems.length) return fail(store, job, `A fúziós módszer kapuja elutasította a leckét: ${problems.join("; ")}`);
   }
@@ -687,7 +687,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   let qualityNotes = job.output?.qualityNotes;
 
   if (!gate.ok) {
-    if (job.round >= MAX_AUTHOR_ROUNDS && (job.output?.methodVersion === LESSON_METHOD_VERSION || parsed.data.experience)) return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
+    if (job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience)) return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
     const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
     if (transition.step === "error") {
       return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);

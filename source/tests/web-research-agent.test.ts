@@ -62,12 +62,14 @@ test("htmlLooksComplete: záró </html> nélkül hamis, vele igaz", () => {
   assert.equal(htmlLooksComplete("<html></HTML >"), true);
 });
 
-test("a system prompt tartalmazza a kért címet és a v7.1 követelményblokkot", () => {
+test("a system prompt tartalmazza a kért címet és az elfogadott fogalomfedő bankkövetelményt", () => {
   const p = webResearchSystemPrompt(7, "Törtek — 7. osztály");
   assert.match(p, /Törtek — 7\. osztály/);
   assert.ok(p.includes(LESSON_HTML_REQUIREMENTS));
-  assert.match(p, /45 feladat/);
-  assert.match(p, /75 kérdés/);
+  assert.match(p, /bankPlan.taskRound/);
+  assert.match(p, /bankPlan.quizRound/);
+  assert.match(p, /intent=recall/);
+  assert.match(p, /intent=apply/);
   assert.match(p, /TILOS: alert\(\)/);
   assert.doesNotMatch(webResearchSystemPrompt(7), /kért címe/);
 });

@@ -12,7 +12,8 @@ import { callStepModel } from "../server/studio/run-step";
 import { classifyNotes } from "../server/studio/lektor";
 import { buildLektorPrompt, lektorReportSchema } from "../server/studio/step-io";
 
-const out = new URL("../../tmp/lesson-fusion/", import.meta.url);
+const originalOut = new URL("../../tmp/lesson-fusion/", import.meta.url);
+const out = process.argv.includes("--current-bank") ? new URL("../../tmp/lesson-bank-v2/", import.meta.url) : originalOut;
 await mkdir(out, { recursive: true });
 async function main() {
 const reviewOnly = process.argv.includes("--review-existing");
@@ -44,7 +45,7 @@ const call = async (step: "author" | "lektor", system: string, user: string) => 
   tokensIn += result.usage?.promptTokens ?? 0; tokensOut += result.usage?.completionTokens ?? 0;
   return result.json;
 };
-const progress = { checkpoint, save: async (cp: ExperienceCheckpoint) => { await writeFile(new URL("checkpoint.json", out), JSON.stringify(cp)); process.stdout.write(`Érvényes bankrészek: ${Object.keys(cp.parts).length}/7\n`); } };
+const progress = { checkpoint, save: async (cp: ExperienceCheckpoint) => { await writeFile(new URL("checkpoint.json", out), JSON.stringify(cp)); process.stdout.write(`Érvényes, mentett bankcsomagok: ${Object.keys(cp.parts).length}\n`); } };
 const sourceMap = { subject: lesson.subject, classroom: lesson.classroom, concepts: source };
 if (reviewOnly) {
   const existing = lessonSchema.parse(JSON.parse(await readFile(new URL("candidate.json", out), "utf8")));
@@ -57,7 +58,7 @@ if (reviewOnly) {
 }
 const resumed = process.argv.includes("--verified-teaching");
 const { candidate, review } = resumed
-  ? await finishStructuredImprovement(lesson, lessonSchema.parse(JSON.parse(await readFile(new URL("verified-teaching.json", out), "utf8"))), sourceMap, call, progress)
+  ? await finishStructuredImprovement(lesson, lessonSchema.parse(JSON.parse(await readFile(new URL("verified-teaching.json", originalOut), "utf8"))), sourceMap, call, progress)
   : await buildStructuredImprovement(lesson, sourceMap, call,
   "A korábbi próbán a lektor forráseltérést talált: az általános területképlet a kurált forrás kiegészítő téglalapjával legyen levezetve. Az a=12 cm, m_a=25 cm, T=150 cm², m_b=15 cm, b=20 cm teljes példaláncot tanítsd meg explain/example blokkban. A többi jól tanított forrástartalom is maradjon.",
   progress);

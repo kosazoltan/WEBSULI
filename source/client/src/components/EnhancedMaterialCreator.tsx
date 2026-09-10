@@ -1552,7 +1552,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                     <span className="text-sm font-medium">Előnézet</span>
                   </div>
                   <iframe
-                    srcDoc={withLessonTypography(generatedHtml)}
+                    srcDoc={withLessonTypography(generatedHtml, classroom, title)}
                     className="w-full h-[320px]"
                     title="HTML Preview"
                     sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
@@ -1744,7 +1744,7 @@ Kész vagyok elkészíteni az interaktív HTML tananyagot. Mit szeretnél? (Pl: 
                     <Label>HTML előnézet</Label>
                     <ScrollArea className="h-96 border rounded-lg mt-2">
                       <iframe
-                        srcDoc={withLessonTypography(generatedHtml)}
+                        srcDoc={withLessonTypography(generatedHtml, classroom, title)}
                         className="w-full h-full min-h-[600px]"
                         title="HTML Preview"
                         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"

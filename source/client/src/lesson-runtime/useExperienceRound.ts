@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sampleIds } from "@shared/lesson-experience-score";
 
 const roundSchema = z.object({
-  ids: z.array(z.string()), answers: z.record(z.string()).default({}), picks: z.record(z.number().int().min(0).max(2)).default({}),
+  ids: z.array(z.string()), answers: z.record(z.string()).default({}), picks: z.record(z.number().int().min(0).max(3)).default({}),
   sampleViewed: z.array(z.string()).default([]), startedAt: z.number().nonnegative(), finishedAt: z.number().positive().optional(),
 });
 export type ExperienceRound = z.infer<typeof roundSchema>;
