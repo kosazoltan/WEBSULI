@@ -95,7 +95,10 @@ test("a téma-prompt Google Fonts linkje latin-ext alkészletet kér és teljes 
 test("lessonHtmlSpecPrompt = téma + teljes spec", () => {
   const p = lessonHtmlSpecPrompt({ classroom: 7, seed: "Kerület és terület", subjectHint: "matematika" });
   assert.match(p, /## MEGJELENÍTÉSI TÉMA/);
-  assert.ok(p.endsWith(LESSON_HTML_SPEC_V74));
+  // Spec change: the current fusion contract follows the historical v7.4 reference.
+  assert.ok(p.includes(LESSON_HTML_SPEC_V74));
+  assert.ok(p.indexOf("HTML-fúzió adatszerződés") > p.indexOf(LESSON_HTML_SPEC_V74));
+  assert.match(p, /websuli-lesson-data/);
 });
 
 // ---------------------------------------------------------------- bekötés a 4 HTML-gyártó helyre
@@ -132,10 +135,11 @@ test("a készítő route-on nincs 60 s-os abszolút korlát, és 64K a kimenet",
   assert.match(read("server/studio/web-research-routes.ts"), /MAX_TOKENS = 64_000/);
 });
 
-test("a webes ügynök route-ja verifikálja a HTML-t és warnings-t küld", () => {
+test("a webes ügynök route-ja hibánál visszatartja a HTML-t", () => {
   const src = read("server/studio/web-research-routes.ts");
-  assert.match(src, /verifyImprovedHtml\(html\)/);
-  assert.match(src, /warnings: verification\.problems/);
+  assert.match(src, /verifyLessonMethodHtml\(html\)/);
+  assert.match(src, /if \(verification\.ok\) send\(\{ type: "html_generated"/);
+  assert.match(src, /else send\(\{ type: "error"/);
   assert.match(src, /cache_control: \{ type: "ephemeral" \}/);
   const panel = read("client/src/components/studio/WebResearchAgentPanel.tsx");
   assert.match(panel, /web-research-warnings/);

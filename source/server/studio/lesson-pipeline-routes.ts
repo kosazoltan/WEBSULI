@@ -611,9 +611,18 @@ lessonPipelineRouter.post("/lessons/:id/fix-concept", async (req: Request, res: 
   const body = z.object({ conceptId: z.string().trim().min(1).max(64) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ message: "conceptId kötelező (1-64 karakter)." });
 
-  const result = await fixConceptOnLesson(req.params.id, body.data.conceptId);
-  if (!result.ok) return res.status(409).json({ message: result.error });
-  res.json({ lessonId: req.params.id, message: result.message });
+  const lessonId = req.params.id;
+  const actorId = req.user!.id;
+  const runId = createRun();
+  updateRun(runId, { phase: "author", lessonId, detail: "Fogalomjavítás és a gyakorlóbankok frissítése…" });
+  res.status(202).json({ runId, lessonId });
+  // Seven bank calls must not keep an HTTP request open across proxy timeouts.
+  void fixConceptOnLesson(lessonId, body.data.conceptId, {}, actorId).then(result => {
+    updateRun(runId, result.ok ? { phase: "done", detail: result.message } : { phase: "error", error: result.error });
+  }).catch(error => {
+    logger.error("[STUDIO] Fogalomjavítási futás meghiúsult", error);
+    updateRun(runId, { phase: "error", error: "A fogalomjavítás nem fejeződött be. A mentett állapotot ellenőrizd újrapróbálás előtt." });
+  });
 });
 
 const exportQuizBody = z.object({

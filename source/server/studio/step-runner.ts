@@ -552,7 +552,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
       let completedLesson = outcome.lesson;
       let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
-      if (job.output?.methodVersion === LESSON_METHOD_VERSION) {
+      if (job.output?.methodVersion === LESSON_METHOD_VERSION || original.experience) {
         try {
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
@@ -588,6 +588,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
 
+      if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (job.output?.methodVersion === LESSON_METHOD_VERSION || (job.output?.lesson as Lesson | undefined)?.experience)) {
+        return fail(store, job, "A fúziós lecke lektori hibái a javítókör után is fennállnak; hibás megoldások nem publikálhatók.");
+      }
       const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers });
       if (transition.step === "error") {
         // The run itself was clean, but the pipeline dead-ends: the Author↔Lektor
@@ -684,6 +687,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   let qualityNotes = job.output?.qualityNotes;
 
   if (!gate.ok) {
+    if (job.round >= MAX_AUTHOR_ROUNDS && (job.output?.methodVersion === LESSON_METHOD_VERSION || parsed.data.experience)) return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
     const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
     if (transition.step === "error") {
       return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);
@@ -1133,19 +1137,26 @@ export async function fixConceptOnLesson(
   lessonId: string,
   conceptId: string,
   deps: PipelineDeps = {},
+  actorId?: string,
 ): Promise<FixConceptResult> {
   const { providerFactory, keyConfigured, promptLookup } = await resolveDeps(deps);
   // Lazy, mint a createDrizzlePipelineStore-ban: a modul importja nem nyithat adatbázis-kapcsolatot.
   const { db } = await import("../db");
 
   const [row] = await db
-    .select({ json: lessons.json, mapId: lessons.mapId })
+    .select()
     .from(lessons)
     .where(eq(lessons.id, lessonId))
     .limit(1);
   if (!row) return { ok: false, error: "A lecke nem található." };
 
-  const original = row.json as Lesson;
+  if (!actorId) return { ok: false, error: "A mentéshez hitelesített készítő szükséges." };
+  if (!row.htmlFileId) return { ok: false, error: "Csak már elérhető lecke javítható ezen az útvonalon." };
+  const [originalMaterial] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, row.htmlFileId));
+  if (!originalMaterial) return { ok: false, error: "Az eredeti tananyag metaadatai nem találhatók." };
+  const original = lessonSchema.parse(row.json);
+  // The narrow author edits teaching only. Updated banks are rebuilt and reviewed separately.
+  const teaching = { ...original, experience: undefined };
   const mapId = row.mapId;
 
   const [mapRow] = await db
@@ -1172,7 +1183,7 @@ export async function fixConceptOnLesson(
   const model = resolveStudioModel("author");
   const provider = providerFactory(model);
 
-  const fallback = buildConceptFixPrompt(original, {
+  const fallback = buildConceptFixPrompt(teaching, {
     subject: mapRow.subject,
     classroom: mapRow.classroom,
     concepts: conceptRows.map((c) => ({ ...c, examWeight: c.examWeight as ExamWeight })),
@@ -1198,11 +1209,26 @@ export async function fixConceptOnLesson(
     return { ok: false, error: `A javított lecke érvénytelen: ${zodIssues(parsed.error)}` };
   }
 
-  const check = checkConceptFixResult(original, parsed.data, conceptId);
+  const check = checkConceptFixResult(teaching, { ...parsed.data, experience: undefined }, conceptId);
   if (!check.ok) {
     return { ok: false, error: `A javítás túllépett a célfogalmon — a lecke érintetlen: ${check.reasons.join("; ")}` };
   }
 
-  await db.update(lessons).set({ json: parsed.data as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
-  return { ok: true, message: `A(z) ${conceptId} fogalom blokkjai frissítve.` };
+  try {
+    const source = { ...mapRow, concepts: conceptRows.map(c => ({ ...c, examWeight: c.examWeight as ExamWeight })).sort((a, b) => a.localId.localeCompare(b.localId)) };
+    const candidate = parsed.data;
+    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user) => (await callStepModel(provider, { step: "author", model, system, user })).json });
+    const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
+    assertRepairCandidate(original, candidate, source);
+    const lektorModel = resolveStudioModel("lektor");
+    const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel), { step: "lektor", model: lektorModel, system: buildLektorPrompt(candidate, source), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
+    if (classifyNotes(report.notes).some(n => n.blocking)) return { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." };
+    const { improvedHtmlFiles } = await import("../../shared/schema");
+    const [improved] = await db.insert(improvedHtmlFiles).values({ originalFileId: row.htmlFileId, title: candidate.title, classroom: candidate.classroom, contentType: "lesson", content: JSON.stringify({ kind: "lesson-repair-fusion-1", lessonId, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(originalMaterial), sourceHash: repairHash(source), previousLesson: original, candidate }), improvementPrompt: `Célzott fogalomjavítás: ${conceptId}`, createdBy: actorId, status: "pending" }).returning();
+    await applyStructuredImprovement(improved.id, actorId, `Célzott fogalomjavítás, friss bankokkal: ${conceptId}`);
+    getHtmlFilesCache().invalidate();
+    return { ok: true, message: `A(z) ${conceptId} fogalom javítása és a hozzá igazított gyakorlóbank mentéssel, együtt frissítve.` };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "A javítás nem alkalmazható; az eredeti érintetlen." };
+  }
 }

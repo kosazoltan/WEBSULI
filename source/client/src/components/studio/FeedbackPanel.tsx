@@ -52,8 +52,17 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
   });
 
   const fixConcept = useMutation({
-    mutationFn: (conceptId: string) =>
-      apiRequest<{ message: string }>("POST", `/api/studio/lessons/${lessonId}/fix-concept`, { conceptId }),
+    mutationFn: async (conceptId: string) => {
+      const { runId } = await apiRequest<{ runId: string }>("POST", `/api/studio/lessons/${lessonId}/fix-concept`, { conceptId });
+      const started = Date.now();
+      while (Date.now() - started < 60 * 60 * 1000) {
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        const run = await apiRequest<{ phase: string; detail: string | null; error: string | null }>("GET", `/api/studio/lessons/one-step/${runId}`);
+        if (run.phase === "done") return { message: run.detail ?? "A tananyag és a gyakorlóbank frissült." };
+        if (run.phase === "error" || run.phase === "parked") throw new Error(run.error ?? run.detail ?? "A javítás megállt.");
+      }
+      throw new Error("A javítás egy órán belül nem zárult le; újraindítás előtt ellenőrizd a futás állapotát.");
+    },
     onSuccess: (r) => {
       toast({ title: "Fogalom javítva", description: r.message });
       void queryClient.invalidateQueries({ queryKey: ["/api/studio/lessons", lessonId, "concept-stats"] });

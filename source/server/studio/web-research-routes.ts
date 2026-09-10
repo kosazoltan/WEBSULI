@@ -5,7 +5,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { isAuthenticatedAdmin } from "../auth";
 import { effortFor, resolveLegacyModel } from "../ai/models";
 import { logger } from "../lib/logger";
-import { verifyImprovedHtml } from "../improve/verify-html";
+import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import {
   extractGeneratedHtml,
   htmlLooksComplete,
@@ -180,7 +180,7 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
       send({
         type: "error",
         message:
-          "A válasz elérte a hosszkorlátot, a tananyag csonka lett. Kérj rövidebb tananyagot vagy kevesebb feladatot.",
+          "A válasz elérte a hosszkorlátot, a tananyag csonka lett. A hiányos változat nem menthető; ismételd meg a készítést. A kötelező bankméretet nem csökkentjük.",
       });
     } else if (stopReason === "refusal") {
       send({ type: "error", message: "A modell elutasította a kérést. Fogalmazd át az utasítást." });
@@ -193,9 +193,10 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
         });
       } else if (html) {
         // v7.4: determinisztikus kapu (teljes dokumentum, JS parse, onclick-export, alert-tilalom).
-        // Nem blokkol — az admin a figyelmeztetések ismeretében dönt a mentésről.
-        const verification = verifyImprovedHtml(html);
-        send({ type: "html_generated", html, sources, warnings: verification.problems });
+        // Hiányos módszer vagy csonka kód nem kínálható mentésre.
+        const verification = verifyLessonMethodHtml(html);
+        if (verification.ok) send({ type: "html_generated", html, sources });
+        else send({ type: "error", message: `A tananyag minőségkapuja hibát talált: ${verification.problems.join("; ")}` });
       } else if (htmlStarted) {
         send({ type: "error", message: "A HTML-jelölő után nem érkezett teljes HTML-dokumentum." });
       }

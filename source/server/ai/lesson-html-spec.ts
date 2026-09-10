@@ -1,3 +1,5 @@
+import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
+import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 /**
  * Tananyag Készítő v7.4 — a HTML-tananyagot gyártó AI-utak KÖZÖS specifikációja.
  *
@@ -501,5 +503,5 @@ export type LessonSpecPromptOptions = {
 /** A teljes spec + a kiválasztott téma egy blokkban, a hívó preambuluma UTÁN fűzendő. */
 export function lessonHtmlSpecPrompt(opts: LessonSpecPromptOptions): string {
   const theme = opts.theme ?? pickLessonTheme(opts.seed, opts.classroom, opts.subjectHint);
-  return `${lessonThemePrompt(theme, opts.classroom)}\n\n${LESSON_HTML_SPEC_V74}`;
+  return `${lessonThemePrompt(theme, opts.classroom)}\n\n${LESSON_HTML_SPEC_V74}\n\n${LESSON_METHOD_CONTRACT}\n\n${HTML_LESSON_DATA_CONTRACT}`;
 }

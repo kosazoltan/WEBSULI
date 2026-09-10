@@ -30,6 +30,12 @@ async function processImprovementJob(
   let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
+    if (originalFile.contentType === 'lesson') {
+      const { generateStructuredImprovement } = await import('./studio/structured-improvement');
+      const candidate = await generateStructuredImprovement(originalFile.id, customPrompt);
+      await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, JSON.stringify(candidate), 'pending');
+      return;
+    }
     // Build prompts — v7.4 (2026-09-09): a közös spec-modul adja a technikai szerződést.
     const specBlock = lessonHtmlSpecPrompt({
       classroom: originalFile.classroom ?? 5,
@@ -145,14 +151,14 @@ ${originalFile.content}
           apiKey: process.env.OPENROUTER_API_KEY ?? '',
           model,
           timeout: 900000,
-          maxTokens: 32768,
+          maxTokens: 64000,
         });
       }
       return new ClaudeProvider({
         apiKey: anthropicKey,
         model,
         timeout: 900000, // 15 min HTTP timeout (safety net)
-        maxTokens: 32768, // 32K tokens for full v7.4 HTML
+        maxTokens: 64000, // Full v7.4 HTML and both exercise banks.
       });
     };
 
@@ -467,8 +473,8 @@ ${originalFile.content}
     // mid-line) was saved and applied — dead tab buttons, no quiz. A result
     // that fails here is NEVER saved as applicable; it goes to 'error' with
     // the problem list, so the admin sees exactly why and can re-run.
-    const { verifyImprovedHtml } = await import('./improve/verify-html');
-    const verification = verifyImprovedHtml(improvedHtml);
+    const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
+    const verification = verifyLessonMethodHtml(improvedHtml);
     if (!verification.ok) {
       logger.error(
         `[IMPROVE] Record ${dbRecordId}: ❌ Verification gate rejected the output: ${verification.problems.join(' | ')}`,
@@ -545,7 +551,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
       }
 
       const anthropicKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-      if (!anthropicKey) {
+      if (originalFile.contentType === 'lesson' ? !process.env.OPENROUTER_API_KEY : !anthropicKey) {
         return res.status(500).json({ 
           message: 'AI API kulcs nincs beállítva.' 
         });
@@ -559,7 +565,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
         // AUDIT 2026-09-01: szerver-újraindítás után a memóriában futó job elveszett, a DB-sor
         // örökre 'processing' maradt, és minden új kérés 409-et kapott. A 15 perces AI-limit
         // után a rekord biztosan halott → hibára állítjuk és engedjük az új javítást.
-        const STALE_JOB_MS = 15 * 60 * 1000;
+        const STALE_JOB_MS = (originalFile.contentType === 'lesson' ? 60 : 15) * 60 * 1000;
         if (elapsed * 1000 > STALE_JOB_MS) {
           logger.warn(`[IMPROVE] Stale processing job ${activeJob.id} (${elapsed}s) for ${originalFile.title} → marking as error`);
           await storage.updateImprovedHtmlFileStatus(activeJob.id, 'error', undefined, 'Megszakadt feldolgozás (szerver újraindult vagy időtúllépés).');
@@ -596,7 +602,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
       });
 
       // Process in background (fire-and-forget with catch to prevent unhandled rejection)
-      processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey)
+      processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey ?? '')
         .catch(err => logger.error(`[IMPROVE] FATAL unhandled error in background job ${dbRecord.id}:`, err));
 
     } catch (error: unknown) {
@@ -623,8 +629,8 @@ export function registerImprovementRoutes(adminRouter: Router) {
     const elapsed = Math.round((Date.now() - new Date(record.createdAt).getTime()) / 1000);
 
     if (record.status === 'processing') {
-      // Auto-detect stuck jobs: if processing for more than 15 minutes
-      const MAX_PROCESSING_TIME_MS = 15 * 60 * 1000; // 15 minutes
+      // Structured repair includes separately generated banks; HTML is a single long call.
+      const MAX_PROCESSING_TIME_MS = (record.contentType === 'lesson' ? 60 : 15) * 60 * 1000;
       if (elapsed * 1000 > MAX_PROCESSING_TIME_MS) {
         // GYÖKÉROK JAVÍTÁS: Check if the AI actually finished writing content
         // (race condition: processImprovementJob may have completed but we haven't polled yet)
