@@ -24,6 +24,7 @@ export const methodSchema = z.object({
   options: z.array(text(500)).min(2).max(4).optional(), correctIndex: z.number().int().min(0).optional(),
   steps: z.array(text(500)).min(2).max(8).optional(),
 }).superRefine((m, ctx) => {
+  if (m.options && new Set(m.options.map(s => s.toLocaleLowerCase("hu"))).size !== m.options.length) ctx.addIssue({ code: "custom", message: "A módszer válaszlehetőségei legyenek különbözők." });
   if (["gate", "myth", "popup"].includes(m.kind) && (!m.options || m.correctIndex === undefined || m.correctIndex >= m.options.length)) {
     ctx.addIssue({ code: "custom", message: "A kérdéshez options és érvényes correctIndex kell." });
   }

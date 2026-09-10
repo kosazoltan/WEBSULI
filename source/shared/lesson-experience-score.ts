@@ -1,11 +1,12 @@
 import type { OpenTask } from "./lesson-experience";
 
 export function normalizeAnswer(value: string): string {
-  return value.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const normalized = value.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/(\d)[,.](?=\d)/g, "$1.").replace(/\u2212/g, "-");
+  return (normalized.match(/[+-]?\d+(?:\.\d+)?|[\p{L}]+/gu) ?? []).map(t => t.replace(/^\+(?=\d)/, "")).join(" ");
 }
 const tokensOf = (s: string) => normalizeAnswer(s).split(/\s+/).filter(Boolean);
 function stem(w: string): string {
-  for (const suffix of ["ban", "ben", "bol", "rol", "tol", "nak", "nek", "val", "vel", "hoz", "hez", "ra", "re", "ba", "be", "ot", "et", "at", "ok", "ek", "k", "t", "n"]) {
+  for (const suffix of ["juk", "unk", "ban", "ben", "bol", "rol", "tol", "nak", "nek", "val", "vel", "hoz", "hez", "uk", "ja", "je", "ra", "re", "ba", "be", "ot", "et", "at", "ok", "ek", "k", "t", "n"]) {
     if (w.length > suffix.length + 3 && w.endsWith(suffix)) return w.slice(0, -suffix.length);
   }
   return w;
@@ -22,8 +23,10 @@ function distance(a: string, b: string): number {
 function wordHit(token: string, word: string): boolean {
   if (token === word) return true;
   // Numbers, negation and short words may never be "corrected" into another answer.
-  if (/\d/.test(token + word) || ["nem", "ne", "not", "no"].includes(word) || Math.min(token.length, word.length) < 5) return false;
-  return stem(token) === stem(word) || distance(token, word) <= (Math.max(token.length, word.length) > 8 ? 2 : 1);
+  if (/\d/.test(token + word) || ["nem", "ne", "not", "no"].includes(word)) return false;
+  if (Math.min(token.length, word.length) >= 4 && (stem(token) === word || token === stem(word) || stem(token) === stem(word))) return true;
+  if (Math.min(token.length, word.length) < 5) return false;
+  return distance(token, word) <= (Math.max(token.length, word.length) > 8 ? 2 : 1);
 }
 function conceptHit(tokens: string[], alternatives: string[]): boolean {
   return alternatives.some(phrase => tokensOf(phrase).every(word => tokens.some(token => wordHit(token, word))));
@@ -36,10 +39,11 @@ export function evaluateOpenAnswer(answer: string, task: OpenTask): AnswerScore 
   if (hits < Math.ceil(task.required.length / 2)) return { state: "fail", score: 0, reason: "A lényegi fogalmak még hiányoznak." };
   const concepts = [...task.required, ...task.bonus].flat();
   const ownWord = tokens.some(t => t.length >= 4 && !conceptHit([t], concepts));
-  const connective = tokens.some(t => ["mert", "es", "ami", "amit", "hogy", "ezert", "igy", "mivel", "tehat", "ha", "akkor", "because", "and", "is", "are", "the"].includes(t));
+  const connective = tokens.some(t => ["mert", "es", "olyan", "ami", "amit", "azt", "hogy", "lehet", "tudom", "tudjuk", "mint", "ezert", "igy", "mivel", "tehat", "ha", "akkor", "vagyis", "mig", "a", "az", "because", "and", "is", "are", "there", "have", "has", "do", "does", "an", "the", "some", "any", "how", "much", "many", "of", "on", "in"].includes(t));
   const hasUnexpectedNegation = tokens.some(t => ["nem", "not"].includes(t)) && !tokensOf(task.sample).some(t => ["nem", "not"].includes(t));
   if (hits < task.required.length || (task.needsSentence && !(ownWord && connective)) || hasUnexpectedNegation) {
-    return { state: "partial", score: 0.5, reason: "Részben jó. Hasonlítsd össze a mintaválasszal, és fogalmazd meg az összefüggést." };
+    const reason = hits < task.required.length ? `Részben jó. Még ${task.required.length - hits} kötelező fogalom hiányzik.` : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak, de összefüggő mondat és saját megfogalmazás is szükséges.";
+    return { state: "partial", score: 0.5, reason };
   }
   return { state: "ok", score: 1, reason: "A szükséges fogalmak és a megfogalmazás is rendben vannak." };
 }
@@ -57,4 +61,11 @@ export function sampleIds<T extends { id: string }>(bank: readonly T[], count: n
     [ids[i], ids[j]] = [ids[j], ids[i]];
   }
   return ids.slice(0, count);
+}
+
+/** Keep oral practice present in every round, not only somewhere in the full bank. */
+export function sampleTaskIds(bank: readonly OpenTask[], count = 15, random = Math.random): string[] {
+  const oral = new Set(sampleIds(bank.filter(t => t.mode === "oral"), Math.min(2, count), random));
+  const selected = [...oral, ...sampleIds(bank.filter(t => !oral.has(t.id)), count - oral.size, random)];
+  return sampleIds(selected.map(id => ({ id })), count, random);
 }

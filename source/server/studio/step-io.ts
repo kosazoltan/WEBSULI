@@ -261,6 +261,7 @@ export function buildAuthorPrompt(
     "  The concept's own words MUST appear in the block's own text. Labelling a block",
     "  with a concept it does not teach is a hard failure — the publishing gate now",
     "  verifies every label against the block text and REJECTS the lesson.",
+    "  Introduce each claimed concept by its complete Hungarian term in a natural visible question/problem or teaching sentence. A question may give this topic context without giving away its answer. For match/dragSort, include meaningful concept labels in the visible items; hidden metadata and feedback shown only after an answer are not initial teaching evidence. Do not add an unrelated keyword list.",
     "- Teach ONLY what the map's concepts state. Never substitute easier material from",
     "  general knowledge, and never adjust the difficulty to a different school year:",
     "  the concepts come from the teacher's uploaded source and define the level.",
