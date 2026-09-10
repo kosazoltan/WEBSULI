@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { LearningReport } from "./LearningReport";
 import {
   conceptStatRows,
   quizExportDisabledReason,
@@ -73,9 +74,9 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
 
   const exportQuiz = useMutation({
     mutationFn: () =>
-      apiRequest<{ exported: number }>("POST", `/api/studio/lessons/${lessonId}/export-quiz`, { gameId }),
+      apiRequest<{ exported: number; shared?: number; canonical?: boolean }>("POST", `/api/studio/lessons/${lessonId}/export-quiz`, { gameId }),
     onSuccess: (r) =>
-      toast({ title: "Kvíz exportálva", description: `${r.exported} kérdés került a játék bankjába.` }),
+      toast(r.canonical ? { title: "Közös kérdésbank", description: `${r.shared} kérdés már elérhető a játékban.` } : { title: "Kvíz exportálva", description: `${r.exported} kérdés került a játék bankjába.` }),
     onError: (e: Error) =>
       toast({ title: "Az export nem futott le", description: e.message, variant: "destructive" }),
   });
@@ -164,6 +165,7 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
           </Button>
           {exportBlocked && <span className="text-xs text-muted-foreground">{exportBlocked}</span>}
         </div>
+        <LearningReport lessonId={lessonId} />
       </CardContent>
     </Card>
   );

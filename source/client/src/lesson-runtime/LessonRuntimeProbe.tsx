@@ -143,7 +143,8 @@ export default function LessonRuntimeProbe() {
   }, [live]);
   if (live && !candidate) return <p>{error || "Helyi jelölt betöltése…"}</p>;
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
-  return <LessonRuntime lesson={candidate ?? probeLesson(window.location.search)} persistId={live ? "local-candidate" : "probe-lesson"} />;
+  const practice = new URLSearchParams(window.location.search).get("practice") === "1";
+  return <LessonRuntime lesson={candidate ?? probeLesson(window.location.search)} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} />;
 }
 
 /**
