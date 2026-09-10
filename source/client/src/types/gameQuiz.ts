@@ -1,4 +1,4 @@
-/** Négyválaszos játék-kvíz (Szökőár, Szólétra, DB-bank) */
+/** Három- vagy négyválaszos játék-kvíz; a típus neve visszafelé kompatibilis. */
 export type FourChoiceQuiz = {
   id: string;
   prompt: string;

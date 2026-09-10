@@ -1,3 +1,4 @@
+import { isPlayableQuestion, uniqueQuizContent } from "@shared/game-quiz-contract";
 import { useQuery } from "@tanstack/react-query";
 
 /**
@@ -25,6 +26,7 @@ export type MaterialQuizItem = {
   /** T-1: a MIÉRT, amit a játék rossz válasznál megmutat; régi tételeknél hiányzik. */
   explanation?: string | null;
   topic?: string | null;
+  sourceMaterialId?: string | null;
 };
 
 export type MaterialQuizResponse = {
@@ -49,7 +51,7 @@ export function useMaterialQuizzes(grade: number | null, topicFilter?: MaterialQ
   });
 
   const filteredItems: MaterialQuizItem[] = (() => {
-    const items = q.data?.items ?? [];
+    const items = uniqueQuizContent((q.data?.items ?? []).filter(isPlayableQuestion));
     if (!topicFilter) return items;
     return items.filter((i) => (i.topic ?? "").toLowerCase() === topicFilter);
   })();

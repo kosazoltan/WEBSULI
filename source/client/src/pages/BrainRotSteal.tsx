@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
@@ -333,14 +334,14 @@ export default function BrainRotSteal() {
   /* --- Quiz valasztas --- */
   const fullQuizPool = useMemo(() => {
     const matMapped: Quiz[] = materialItems
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q) => {
         const t = (q.topic ?? "").toLowerCase();
         const cat: Quiz["category"] = t === "math" ? "math" : t === "hungarian" ? "hungarian" : "english";
         return {
           id: q.id,
           prompt: q.prompt,
-          options: q.options.slice(0, 4),
+          options: [...q.options],
           correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,

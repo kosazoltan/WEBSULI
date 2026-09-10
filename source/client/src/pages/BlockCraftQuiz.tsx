@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -1232,13 +1233,13 @@ export default function BlockCraftQuiz() {
     // 1) Tananyag-kvízek (AI-generált, az osztályod legutóbbi 3 anyagából).
     //    Topic → BlockCraft `subject` mapping (angol/matek/környezet/magyar).
     const fromMaterial: Quiz[] = materialItems
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q) => {
         const subject = blockCraftSubjectFromTopic(q.topic);
         return {
           id: q.id,
           prompt: q.prompt,
-          options: q.options.slice(0, 4),
+          options: [...q.options],
           correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
@@ -1247,11 +1248,11 @@ export default function BlockCraftQuiz() {
       });
     // 2) Régi quiz-bank (block-craft-quiz gameId-vel mentett tételek)
     const remote: Quiz[] = (bankData?.items ?? [])
-      .filter((q) => q.options?.length > 1)
+      .filter(isPlayableQuestion)
       .map((q) => ({
         id: q.id,
         prompt: q.prompt,
-        options: q.options.slice(0, 4),
+        options: [...q.options],
         correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,

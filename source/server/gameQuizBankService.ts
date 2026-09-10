@@ -1,3 +1,4 @@
+import { isPlayableQuestion, uniqueQuizContent } from "../shared/game-quiz-contract";
 /**
  * Játék kvíz-bank (PostgreSQL).
  *
@@ -21,6 +22,7 @@ const ALLOWED_GAME_IDS = new Set([
   "block-craft-quiz",
   "space-asteroid-quiz",
   "tornado-hunter-200",
+  "brain-rot-steal",
 ]);
 
 export type GameQuizBankRow = {
@@ -37,14 +39,13 @@ export type GameQuizBankRow = {
 };
 
 function sanitizeRow(r: typeof gameQuizItems.$inferSelect): GameQuizBankRow | null {
+  if (!isPlayableQuestion(r)) return null;
   const opts = r.options;
-  if (!Array.isArray(opts) || opts.length !== 4 || !opts.every((x) => typeof x === "string")) return null;
   const ci = r.correctIndex;
-  if (typeof ci !== "number" || ci < 0 || ci > 3) return null;
   return {
     id: r.id,
     gameId: r.gameId,
-    tier: r.tier,
+    tier: ({ "1": "easy", "2": "medium", "3": "hard", med: "medium" } as Record<string, string>)[r.tier] ?? r.tier,
     topic: r.topic,
     prompt: r.prompt,
     options: opts,
@@ -131,6 +132,6 @@ export async function listLatestMaterialQuizzes(
       title: m.title,
       createdAt: (m.createdAt instanceof Date ? m.createdAt : new Date(m.createdAt as unknown as string)).toISOString(),
     })),
-    items,
+    items: uniqueQuizContent(items),
   };
 }

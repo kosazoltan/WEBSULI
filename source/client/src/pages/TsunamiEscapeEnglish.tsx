@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
@@ -637,11 +638,11 @@ export default function TsunamiEscapeEnglish() {
   const mergedPools = useMemo<ActiveQuizPools>(() => {
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
     const matMed = materialItems
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q, idx) => ({
         id: q.id ?? `mat-${idx}`,
         prompt: q.prompt,
-        options: q.options.slice(0, 4) as [string, string, string, string],
+        options: [...q.options],
         correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,

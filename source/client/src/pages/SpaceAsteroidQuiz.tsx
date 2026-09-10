@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -789,11 +790,11 @@ export default function SpaceAsteroidQuiz() {
 
   const quizPool = useMemo<Quiz[]>(() => {
     const fromMat: Quiz[] = (materialQuizData?.items ?? [])
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q) => ({
         id: q.id,
         prompt: q.prompt,
-        options: q.options.slice(0, 4),
+        options: [...q.options],
         correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
