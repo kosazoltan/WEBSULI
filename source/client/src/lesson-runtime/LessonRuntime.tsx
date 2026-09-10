@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useCallback, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -33,6 +33,8 @@ import {
   type TrySnapshot,
 } from "./useLessonProgress";
 import "./lesson-theme.css";
+import { LessonExperienceView } from "./LessonExperienceView";
+import { experienceFingerprint } from "./useExperienceRound";
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.
@@ -53,6 +55,7 @@ import "./lesson-theme.css";
  * recap. Owner picked the dark "C · divergent" direction from the variant board.
  */
 
+const FullTeachingContext = createContext(false);
 const OPTION_KEYS = "ABCDEFGH";
 
 function BlockHead({ icon: Icon, label }: { icon: typeof BookOpen; label: string }) {
@@ -104,7 +107,8 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
 
 function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example" }>; band: AgeBand }) {
   const theme = BAND_THEME[band];
-  const [shown, setShown] = useState(0);
+  const fullTeaching = useContext(FullTeachingContext);
+  const [shown, setShown] = useState(fullTeaching ? block.steps.length : 0);
   const allShown = shown >= block.steps.length;
 
   return (
@@ -118,7 +122,7 @@ function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example"
         ))}
       </ol>
 
-      {/* Steps reveal one at a time: seeing the whole solution at once teaches nothing. */}
+      {/* Legacy stepper stays available; the fusion teaching page shows the worked example in full. */}
       {!allShown ? (
         <Button
           variant="outline"
@@ -430,6 +434,7 @@ export function LessonRuntime({
   const current = progress.snapshot.current;
   const setCurrent = progress.setCurrent;
   const sectionEls = useRef<(HTMLElement | null)[]>([]);
+  const experienceKey = `${persistId ?? lessonId ?? lesson.mapId}:${experienceFingerprint(lesson.experience ?? {})}`;
 
   useEffect(() => {
     const nodes = sectionEls.current.filter((n): n is HTMLElement => n !== null);
@@ -454,7 +459,7 @@ export function LessonRuntime({
     // (lesson-theme.css). Measured live before #197: inheriting the app foreground gave
     // 67/115 text elements a 1.00–1.05 contrast in both app modes. The band root pairs
     // every background with its ink, so the app theme cannot break it.
-    <div className="min-h-full" data-band={band}>
+    <div className="min-h-full" data-band={band} data-experience={lesson.experience?.theme}>
       <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
         <header className="lesson-hero">
           <div className="lesson-emblem" aria-hidden>
@@ -469,6 +474,11 @@ export function LessonRuntime({
           </div>
         </header>
 
+        {lesson.experience ? <LessonExperienceView key={experienceKey} experience={lesson.experience} storageKey={`websuli:fusion:${experienceKey}`}>
+          <FullTeachingContext.Provider value={true}>
+          <LessonProgress sections={lesson.sections} band={band} current={current} />
+          {lesson.sections.map((section, si) => <LessonSection key={si} section={section} sectionIdx={si} band={band} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} />)}
+        </FullTeachingContext.Provider></LessonExperienceView> : <>
         <LessonProgress sections={lesson.sections} band={band} current={current} />
 
         {lesson.sections.map((section, si) => {
@@ -498,6 +508,7 @@ export function LessonRuntime({
             />
           );
         })}
+        </>}
       </article>
     </div>
   );

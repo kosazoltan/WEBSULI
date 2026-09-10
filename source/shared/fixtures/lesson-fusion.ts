@@ -24,7 +24,7 @@ export function fusionFixture(): Lesson {
     sections: [{ heading: "Az alap és a magasság együtt számít", probaEnabled: false, blocks: [
       { kind: "explain", text: "A háromszög területe az alap és a hozzá tartozó magasság szorzatának fele: T = a · m / 2. A magasság merőleges az alap egyenesére. A területet négyzetes egységben, például cm²-ben adjuk meg. Azonos alapnál a kétszeres magasság kétszeres területet jelent.", depth: "core", readAloud: true, coversConceptIds: ["area"] },
       { kind: "example", problem: "Egy háromszög alapja 6 cm, magassága 4 cm. Mekkora a területe?", steps: ["Összeszorzom: 6 · 4 = 24.", "Kettővel osztom: 24 / 2 = 12."], answer: "12 cm²", coversConceptIds: ["area"] },
-      { kind: "animate", animKind: "geometry", params: { shape: "triangle", label: "Háromszög" }, caption: "A háromszög körvonala", coversConceptIds: ["area"] },
+      { kind: "animate", animKind: "process", params: { steps: ["Alap × magasság: 6 × 4 = 24 cm²", "A szorzat fele: 24 / 2 = 12 cm²", "A háromszög területe: 12 cm²"] }, caption: "A terület kiszámításának lépései", coversConceptIds: ["area"] },
       { kind: "recap", bullets: ["Az alaphoz tartozó magasságot használd.", "A szorzat felét számold ki.", "A terület egysége cm², nem cm."] },
     ] }],
     experience: { version: LESSON_METHOD_VERSION, theme: "ocean", methods, tasks, quiz, glossary: [] },
