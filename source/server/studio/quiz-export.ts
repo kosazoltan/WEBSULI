@@ -59,7 +59,10 @@ export function exportQuizItemsFromChecks(
   resolveConceptId?: ConceptIdResolver,
 ): InsertGameQuizItem[] {
   const rows: InsertGameQuizItem[] = [];
-  for (const section of lesson.sections) {
+  const sections = lesson.experience
+    ? [{ blocks: lesson.experience.quiz.map(q => ({ ...q, kind: "check" as const })) }]
+    : lesson.sections;
+  for (const section of sections) {
     for (const block of section.blocks) {
       if (block.kind !== "check") continue;
       const primaryLocalId = block.coversConceptIds[0];

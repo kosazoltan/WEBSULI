@@ -6,6 +6,7 @@ import { ageBandForClassroom, conceptIdsOf, type Lesson } from "../../shared/les
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
+import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -166,6 +167,8 @@ export function buildPedagoguePrompt(map: PromptMap): string {
     "",
     LESSON_ARC_CONTRACT,
     "A plannedBlocks sorrendje EZT az ívet kövesse — a vázlat sorrendje lesz a lecke sorrendje.",
+    LESSON_METHOD_CONTRACT,
+    "Most csak a Tananyag lap fejezeteit tervezd. A módszerek és feladatbankok külön, kisebb gyártási körökben készülnek el ebből a tanításból.",
     "",
     `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
     "",
@@ -270,6 +273,8 @@ export function buildAuthorPrompt(
     AUTHOR_BLOCK_CATALOG,
     "",
     LESSON_ARC_CONTRACT,
+    LESSON_METHOD_CONTRACT,
+    "Most kizárólag a részletes Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Ne rövidítsd vázlattá a bankok kedvéért: az experience bankokat külön lépés gyártja. Ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",
     "",
   ];
 
@@ -317,6 +322,8 @@ export function animatorOutcome(
 
 export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
   return [
+    LESSON_METHOD_CONTRACT,
+    "Ha a lecke experience mezőt tartalmaz, a methods/tasks/quiz tételeit és a szószedetet is vizsgáld: valóban a Tananyag lapról kérdez-e, helyes-e minden megoldás és mintaválasz, van-e érdemi változatosság. Hiányos vagy hibás bank source_conflict/contradicts_source, a blockPath mezőben experience.tasks.N vagy experience.quiz.N útvonallal.",
     "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",
     "",
     D1_RULE_TEXT,
@@ -413,7 +420,7 @@ function sortKeysDeep(value: unknown): unknown {
 export function checkAnimatorResult(original: Lesson, candidate: Lesson): AnimatorCheck {
   const reasons: string[] = [];
 
-  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly"] as const;
+  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly", "experience"] as const;
   for (const field of identityFields) {
     if (canonicalJson(original[field]) !== canonicalJson(candidate[field])) {
       reasons.push(`A lecke azonosító mezője megváltozott: ${field}.`);

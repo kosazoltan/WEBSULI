@@ -45,6 +45,9 @@ import { checkCoverageGate, type Coverage } from "./coverage";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
+import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
+import { experienceProblems } from "../../shared/lesson-experience-validation";
+import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -68,7 +71,7 @@ import type { ZodError } from "zod";
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-source-review-2";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-1";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -185,7 +188,7 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
 }
 
 const defaultProviderFactory = (model: string): IAIProvider =>
-  new OpenRouterProvider({ model, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+  new OpenRouterProvider({ model, apiKey: process.env.OPENROUTER_API_KEY ?? "", timeout: 180000, maxTokens: 24000 });
 
 function normalizeStep(raw: string): StudioStep {
   return (STUDIO_STEPS as readonly string[]).includes(raw) ? (raw as StudioStep) : "error";
@@ -547,10 +550,32 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         );
       }
 
-      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, outcome.lesson);
+      let completedLesson = outcome.lesson;
+      let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
+      if (job.output?.methodVersion === LESSON_METHOD_VERSION) {
+        try {
+          const experience = await buildLessonExperience(completedLesson, map.concepts, {
+            checkpoint,
+            call: async (bankSystem, user) => {
+              const bankModel = resolveStudioModel("author");
+              const result = await callStepModel(providerFactory(bankModel), { step: "author", model: bankModel, system: bankSystem, user });
+              if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
+              return result.json;
+            },
+            save: async (next) => {
+              checkpoint = next;
+              await store.saveStep(job.id, { output: { ...job.output, experienceCheckpoint: next } });
+            },
+          });
+          completedLesson = { ...completedLesson, experience };
+        } catch (error) {
+          return fail(store, job, error instanceof Error ? error.message : "A feladatbank gyártása sikertelen.");
+        }
+      }
+      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, completedLesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: outcome.lesson }, { lessonId }),
+        successPatch({ ...job.output, lesson: completedLesson, ...(checkpoint ? { experienceCheckpoint: checkpoint } : {}) }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
@@ -630,6 +655,11 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
 
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
+  // Missing experience is a hard failure, including after the autonomous round limit.
+  if (job.output?.methodVersion === LESSON_METHOD_VERSION || parsed.data.experience) {
+    const problems = experienceProblems(parsed.data);
+    if (problems.length) return fail(store, job, `A fúziós módszer kapuja elutasította a leckét: ${problems.join("; ")}`);
+  }
 
   // M-2 (2026-09-07) — a DIDAKTIKAI ÍV kapuja a fedettségi kapu mellé.
   //
@@ -878,6 +908,7 @@ export async function startJobFromMap(
     promptVersion: PIPELINE_PROMPT_VERSION,
     inputHash: hash,
   });
+  await store.saveStep(jobId, { output: { methodVersion: LESSON_METHOD_VERSION } });
   return { ok: true, jobId };
 }
 
@@ -1175,4 +1206,3 @@ export async function fixConceptOnLesson(
   await db.update(lessons).set({ json: parsed.data as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
   return { ok: true, message: `A(z) ${conceptId} fogalom blokkjai frissítve.` };
 }
-

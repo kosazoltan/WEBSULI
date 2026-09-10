@@ -57,6 +57,9 @@ export async function callStepModel(
   }
 
   const text = stripJsonFences(response.content ?? "").trim();
+  if (response.finishReason === "length" || response.finishReason === "max_tokens") {
+    throw new StepModelError(input.step, "a válasz elérte a hosszkorlátot; csonka eredmény nem használható");
+  }
   if (text.length === 0) {
     throw new StepModelError(input.step, "a válasz üres");
   }
