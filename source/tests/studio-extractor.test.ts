@@ -51,6 +51,14 @@ test("computeInputHash changes when the scope changes", () => {
   );
 });
 
+test("content cache survives renamed files but separates versions and source kinds", () => {
+  const renamed = FILES.map((f, i) => ({ ...f, name: `mas-nev-${i}` }));
+  assert.equal(computeInputHash(FILES, SCOPE), computeInputHash(renamed, SCOPE));
+  assert.notEqual(computeInputHash(FILES, SCOPE), computeInputHash(FILES, SCOPE, "next-source-ledger"));
+  assert.notEqual(computeInputHash(FILES, SCOPE), computeInputHash(FILES.map(f => ({ ...f, kind: "image" })), SCOPE));
+  assert.notEqual(computeInputHash(FILES, SCOPE), computeInputHash([...FILES, FILES[0]], SCOPE));
+});
+
 function fakeDeps(overrides: Partial<ExtractorDeps> = {}): ExtractorDeps & { calls: number } {
   const state = {
     calls: 0,

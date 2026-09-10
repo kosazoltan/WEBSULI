@@ -56,22 +56,19 @@ export type ExtractorDeps = {
 /**
  * Content-addressed key for one extraction job.
  *
- * Sorted by file name so re-uploading the same set in a different order is recognised
- * as the same job; scope is included because the same book extracted for a different
- * classroom is legitimately a different map.
+ * File names are provenance, not identity. Exact content digests are sorted; kind,
+ * scope and extraction version remain significant. Cached maps keep their original
+ * sourceFiles/sourceRef names together; a new upload must not rename old provenance.
  */
+export const EXTRACTION_VERSION = "source-ledger-2";
 export function computeInputHash(
-  files: Array<{ name: string; content: string }>,
+  files: Array<{ name: string; content: string; kind?: SourceKind }>,
   scope: ExtractorScope,
+  version = EXTRACTION_VERSION,
 ): string {
   const hash = createHash("sha256");
-  const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name, "hu"));
-  for (const file of sorted) {
-    hash.update(file.name);
-    hash.update("\u0000");
-    hash.update(file.content);
-    hash.update("\u0000");
-  }
+  const contentKeys = files.map(file => [file.kind ?? "text", createHash("sha256").update(file.content).digest("hex")].join(":"));
+  hash.update(JSON.stringify({ version, files: contentKeys.sort() }));
   hash.update(
     JSON.stringify({
       subject: scope.subject,

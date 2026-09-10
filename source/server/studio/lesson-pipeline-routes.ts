@@ -313,8 +313,8 @@ export async function runOneStep(
   }
 
   // 2b) #174 — gépi kurálás + jóváhagyás: az egylépeses útvonal nem hagyhat
-  // "Piszkozat" zsákutcát. A D1 nem gyengül: az igazolt fogalom kept, a nem
-  // igazolható KULCSfogalom rejected (nem tanítjuk), a kiegészítő kept marad.
+  // "Piszkozat" zsákutcát. Az igazolt fogalom kept, a nem igazolható
+  // kulcsfogalom pending marad: a hiányzó forrás nem törölhető a teljességért.
   // A jóváhagyás a canApprove kapun MEGY ÁT, nem kerüli meg.
   {
     const [mapRow] = await db
@@ -379,7 +379,7 @@ export async function runOneStep(
       if (!gate.ok) {
         updateRun(runId, {
           phase: "parked",
-          detail: `A tudástár gépi jóváhagyása nem lehetséges (${gate.reason}) — nézd át kézzel a Tudás-térkép fülön.`,
+          detail: `Forrásellenőrzés szükséges: ${gate.reason} A bizonytalan kulcsfogalmak megmaradtak; a forrásjegyzékben javíthatók vagy újraellenőrizhetők.`,
         });
         return;
       }
@@ -389,7 +389,7 @@ export async function runOneStep(
         .set({ status: "approved", approvedBy: userId ?? null, approvedAt: new Date(), updatedAt: new Date() })
         .where(eq(knowledgeMaps.id, mapId));
       logger.info(
-        `[STUDIO/1STEP] Térkép gépi kurálással jóváhagyva: ${mapId} (kept=${summary.kept}, rejected=${summary.rejected})`,
+        `[STUDIO/1STEP] Térkép gépi kurálással jóváhagyva: ${mapId} (kept=${summary.kept}, pending=${summary.pending})`,
       );
     }
   }
