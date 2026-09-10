@@ -30,7 +30,9 @@ Kapcsolódó szerződés: `2026-09-10-lesson-learning-flow.md`. A felhasználó 
 
 ## Még nyitott a teljes jóváhagyott irányból
 
-- Három emberi fázisra egyszerűsített adminfelület, feltételes animátor és teljes forrásdiagnosztika.
+- Újabb végrehajtott szelet: a kész, minden fejezetben tanított fogalmakhoz kötött és megjeleníthető ábrák esetén nincs új animátorhívás. A hiányos paraméter és tanítatlan hivatkozás nem jogosít újrahasználatra; a lektor továbbra is ténylegesen fut. A runner az eredeti bank változatlan csomagjait is átadja újrahasználatra. PASS: 57 célzott teszt, typecheck, test-typecheck, lint. A háromfázisú feltöltési felület, a lenyitható részletek, a látható forráshiba és a csak megnyitáskor betöltött haladó forrásjegyzék három Chrome-viewportban PASS (390×844, 844×390, 1440×900). Mobil és asztali képernyőképek szemmel ellenőrizve; ez mockolt szállítású UI-próba, nem éles modellgyártás. A forrásdiagnosztika és az alábbi további szeletek még nyitottak.
+
+- Teljes forrásdiagnosztika és az effektív kivonatolóprompt/modell azonosítása a gyorsítótárban.
 - Kanonikus fizikai kvíztárolás, verziózott szerveres mérés és jutalom; adaptív/esedékes ismétlés és tanári riport.
 - Forráshoz kötött mini labor, döntési történet; minden játék teljes játszhatósági és visszatérési próbája.
 - A valós háromszög-jelölt fenti forráshibájának tanuló számára korrekt kezelése; éles alkalmazás/kiadás és résztvevős pedagógiai próba.

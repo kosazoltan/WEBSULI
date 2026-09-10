@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { jobMonitorView, type JobSummary } from "@shared/studio-ui";
+import { jobMonitorView, lessonCreationStageLabel, type JobSummary } from "@shared/studio-ui";
 
 /**
  * LS-2c — the lesson pipeline monitor: polls GET /api/studio/jobs/:id every 2 seconds
@@ -61,7 +61,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2 text-destructive">
             <AlertTriangle className="w-4 h-4" />
-            Nem sikerült lekérdezni a gépsort
+            Nem sikerült lekérdezni a készítés állapotát
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -74,7 +74,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
   if (!data) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground p-6">
-        <Loader2 className="w-4 h-4 animate-spin" /> Gépsor betöltése…
+        <Loader2 className="w-4 h-4 animate-spin" /> Állapot betöltése…
       </div>
     );
   }
@@ -107,14 +107,17 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
           </Badge>
         </CardTitle>
         <CardDescription className="text-xs">
-          Aktuális lépés: <strong>{view.stepLabel}</strong>
-          {view.roundLabel ? ` · ${view.roundLabel}` : ""}
+          <strong>{lessonCreationStageLabel(data.job.step)}</strong>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <details className="text-xs text-muted-foreground">
+          <summary className="flex min-h-11 cursor-pointer items-center">Feldolgozási részletek</summary>
+          <p>{view.stepLabel}{view.roundLabel ? ` · ${view.roundLabel}` : ""}</p>
+        </details>
         {view.waitingApproval && (
           <p className="text-sm text-amber-700 dark:text-amber-400">
-            A gépsor a vázlatod jóváhagyását várja — a lenti vázlatot átnézve folytathatod.
+            A vázlat jóváhagyásra vár — a lenti vázlatot átnézve folytathatod.
           </p>
         )}
 
@@ -130,7 +133,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
 
         {data.job.step === "gate" && (
           <p className="text-sm text-muted-foreground">
-            A publikálási kapu fut (séma + fedettség ellenőrzés) — siker esetén a lecke azonnal megjelenik a főoldalon.
+            A tanítás teljességét és szerkezetét ellenőrizzük. Siker esetén a lecke megjelenik a főoldalon.
           </p>
         )}
 

@@ -48,6 +48,7 @@ import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
+import { canReuseLessonVisuals } from "./visual-reuse";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -71,7 +72,7 @@ import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-b
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-2";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-2-visual-reuse";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -383,6 +384,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   const primaryModel = resolveStudioModel(job.step);
   let model = primaryModel;
+  const reusedVisuals = job.step === "animator" && canReuseLessonVisuals(job.output?.lesson);
+  let bankModelUsed: string | null = null;
 
   let json: unknown;
   let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null = null;
@@ -397,6 +400,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       user: "Válaszolj kizárólag a kért JSON-nal.",
     });
   try {
+    if (reusedVisuals) {
+      json = job.output?.lesson;
+      usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    } else {
     let result: Awaited<ReturnType<typeof attempt>>;
     try {
       result = await attempt(primaryModel);
@@ -423,6 +430,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     }
     json = result.json;
     usage = result.usage ?? null;
+    }
   } catch (error) {
     const reason =
       error instanceof StepModelError
@@ -445,7 +453,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     status: "ok",
     output,
     inputHash: hash,
-    model,
+    model: reusedVisuals ? bankModelUsed : model,
     promptVersion: PIPELINE_PROMPT_VERSION,
     tokensIn: usage?.promptTokens ?? null,
     tokensOut: usage?.completionTokens ?? null,
@@ -556,8 +564,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         try {
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
+            previous: original.experience,
             call: async (bankSystem, user) => {
               const bankModel = resolveStudioModel("author");
+              bankModelUsed = bankModel;
               const result = await callStepModel(providerFactory(bankModel), { step: "author", model: bankModel, system: bankSystem, user });
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
@@ -575,7 +585,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, completedLesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: completedLesson, ...(checkpoint ? { experienceCheckpoint: checkpoint } : {}) }, { lessonId }),
+        successPatch({ ...job.output, lesson: completedLesson, animatorReused: reusedVisuals,
+          ...(checkpoint ? { experienceCheckpoint: checkpoint } : {}) }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }

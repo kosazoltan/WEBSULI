@@ -18,6 +18,9 @@ import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import type { LektorNote } from "../server/studio/lektor";
+import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { buildLessonExperience } from "../server/studio/experience-builder";
+import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -219,6 +222,59 @@ function makeDeps(cannedResponse: string) {
 
   return { store, calls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
 }
+
+test("kész, forrásfogalomhoz kötött ábrák: nulla animátorhívás, utána a lektor ténylegesen fut", async () => {
+  const lesson = compactFusionFixture();
+  delete lesson.experience;
+  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  deps.store.seed({ id: "reuse", mapId: "m1", step: "animator", output: { lesson } });
+  const result = await runPipelineStep("reuse", deps);
+  assert.ok(result.ok && result.next.step === "lektor");
+  assert.equal(deps.calls.length, 0);
+  const saved = deps.store.jobs.get("reuse")!;
+  assert.deepEqual(saved.output?.lesson, lesson);
+  assert.equal(saved.output?.animatorReused, true);
+  assert.equal(saved.model, null, "kihagyott hívás nem szerepel modellfutásként");
+  assert.equal(saved.tokensIn, 0);
+  saved.step = "lektor";
+  const checked = await runPipelineStep("reuse", deps);
+  assert.ok(checked.ok && checked.next.step === "gate");
+  assert.equal(deps.calls.length, 1, "a tartalmi ellenőrzés nem maradhat ki");
+});
+
+test("a kész bank és ábra változatlan újrafuttatása megtartja a kérdésazonosítókat modellhívás nélkül", async () => {
+  const lesson = compactFusionFixture();
+  const packet = lesson.experience!;
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet });
+  const deps = makeDeps("{}");
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-reuse", mapId: "m1", step: "animator", output: { lesson } });
+  const result = await runPipelineStep("bank-reuse", deps);
+  assert.ok(result.ok);
+  assert.equal(deps.calls.length, 0);
+  assert.deepEqual((deps.store.jobs.get("bank-reuse")?.output?.lesson as typeof lesson).experience?.quiz, lesson.experience.quiz);
+});
+
+test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra nem jogosít újrahasználatra", () => {
+  const lesson = compactFusionFixture();
+  assert.equal(canReuseLessonVisuals(lesson), true);
+  assert.equal(canReuseLessonVisuals({}), false);
+  const noData = structuredClone(lesson);
+  const visual = noData.sections[0].blocks.find(b => b.kind === "animate")!;
+  assert.equal(visual.kind, "animate");
+  if (visual.kind !== "animate") throw new Error("Hiányzó tesztábra");
+  visual.params = {};
+  assert.equal(canReuseLessonVisuals(noData), false);
+  visual.params = { steps: ["", ""] };
+  assert.equal(canReuseLessonVisuals(noData), false);
+  visual.params = { steps: ["Első lépés", "Második lépés"] };
+  visual.coversConceptIds = ["nem-tanított"];
+  assert.equal(canReuseLessonVisuals(noData), false);
+  const missing = structuredClone(lesson);
+  missing.sections.push({ ...missing.sections[0], blocks: missing.sections[0].blocks.filter(b => b.kind !== "animate") });
+  assert.equal(canReuseLessonVisuals(missing), false);
+});
 
 /** The pedagogue input hash the runner must compute — recomputed here to pin equality. */
 function pedagogueHash(): string {

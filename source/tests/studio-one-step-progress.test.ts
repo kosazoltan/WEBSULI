@@ -8,7 +8,7 @@ import {
   pruneRuns,
   __resetRunsForTest,
 } from "../server/studio/one-step-progress";
-import { oneStepPhaseRows, ONE_STEP_PHASES } from "../shared/studio-ui";
+import { oneStepPhaseRows, ONE_STEP_PHASES, lessonCreationStages, lessonCreationStageLabel } from "../shared/studio-ui";
 
 /**
  * LS-6b (#165) — the one-step progress store and its client view-model. The
@@ -71,4 +71,22 @@ test("ONE_STEP_PHASES: a lektor után 'gate' (publikálási kapu) fázis áll", 
 test("oneStepPhaseRows: done fázisnál minden sor done, a gate is", () => {
   const rows = oneStepPhaseRows({ phase: "done", detail: "A lecke elkészült.", error: null });
   assert.ok(rows.every((r) => r.state === "done"));
+});
+
+test("három emberi fázis: a tényleges készítési lépések ugyanazon gyártási szakaszban vannak", () => {
+  for (const phase of ["pedagogue", "author", "animator"]) {
+    const rows = lessonCreationStages({ phase, detail: null, error: null });
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows.map(r => r.state), ["done", "active", "pending"]);
+    assert.equal(lessonCreationStageLabel(phase), "Tananyag készítése");
+  }
+  assert.deepEqual(lessonCreationStages({ phase: "ocr", detail: "3/10", error: null }).map(r => r.state), ["active", "pending", "pending"]);
+  assert.deepEqual(lessonCreationStages({ phase: "gate", detail: null, error: null }).map(r => r.state), ["done", "done", "active"]);
+});
+
+test("ismeretlen/hibás/parkoló fázis nem állítja hamisan késznek az előző lépéseket", () => {
+  for (const phase of ["error", "parked", "unknown"]) {
+    assert.ok(lessonCreationStages({ phase, detail: null, error: "Forráshiba" }).every(r => r.state === "pending"));
+  }
+  assert.ok(lessonCreationStages({ phase: "done", detail: null, error: null }).every(r => r.state === "done"));
 });

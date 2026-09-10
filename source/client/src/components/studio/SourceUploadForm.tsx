@@ -10,14 +10,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   downscaleTargetOf,
-  oneStepPhaseRows,
   oneStepSubmitDisabledReason,
   shouldDownscale,
   sourceFileFromRead,
   type SourceFile,
 } from "@shared/studio-ui";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Check, CircleDashed, PauseCircle } from "lucide-react";
+import { CreationProgress } from "./CreationProgress";
 
 /**
  * LS-2a-fix (board #157) — the missing source-upload form.
@@ -308,23 +307,7 @@ export function SourceUploadForm({
                     ? "A gyártás kézi döntésre vár"
                     : "Tananyag készül…"}
             </p>
-            <ul className="space-y-1">
-              {oneStepPhaseRows(run.data).map((row) => (
-                <li key={row.key} className="flex items-start gap-2 text-sm">
-                  {row.state === "done" && <Check className="w-4 h-4 mt-0.5 text-emerald-600" />}
-                  {row.state === "active" && <Loader2 className="w-4 h-4 mt-0.5 animate-spin text-blue-600" />}
-                  {row.state === "pending" && <CircleDashed className="w-4 h-4 mt-0.5 text-muted-foreground" />}
-                  {row.state === "error" && <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600" />}
-                  {row.state === "parked" && <PauseCircle className="w-4 h-4 mt-0.5 text-amber-600" />}
-                  <span className={row.state === "pending" ? "text-muted-foreground" : ""}>
-                    {row.label}
-                    {row.detail && (
-                      <span className="block text-xs text-muted-foreground">{row.detail}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <CreationProgress run={run.data} />
             {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 {run.data.phase === "done" && run.data.htmlFileId && (
