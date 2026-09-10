@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 
 import type { AnimKind } from "@shared/lesson-schema";
+import { TriangleAreaLab } from "./TriangleAreaLab";
 
 /**
  * LS-4 — the eight planned animation kinds (master plan §4).
@@ -213,4 +214,5 @@ export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
   map: MapAnim,
   wordBuilder: WordBuilderAnim,
   sentenceParts: SentencePartsAnim,
+  triangleArea: TriangleAreaLab,
 };

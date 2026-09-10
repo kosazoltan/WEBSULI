@@ -34,6 +34,7 @@ import {
   type TrySnapshot,
 } from "./useLessonProgress";
 import "./lesson-theme.css";
+import "./triangle-lab.css";
 import { LessonExperienceView } from "./LessonExperienceView";
 import { LessonCoverArt } from "./LessonCoverArt";
 import { experienceFingerprint } from "./useExperienceRound";

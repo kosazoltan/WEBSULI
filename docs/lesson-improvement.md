@@ -87,6 +87,10 @@ Kapcsolódó bizonyíték: [lezárt gyártás](specs/2026-09-07-remaining-learni
 
 A módszer történeti referenciája: [a tulajdonos v7.4 skillje](specs/tananyag-keszito-SKILL-v7_4.md). Fúziós terv: [2026-09-10](specs/2026-09-10-lesson-method-fusion.md), [lezárt ellenőrzési napló](specs/2026-09-10-lesson-method-fusion-evidence.md). Ellentét esetén az aktuális közös szerződés és a tulajdonosi automatikus évfolyam-szabály az irányadó.
 
+### Forráshoz kötött háromszög-labor
+
+A Studio `triangleArea` animációja a ténylegesen tanított háromszög-területhez használható. A base/height/unit a forráspélda adata; kötelező, szigorúan validált paraméterek. Jóslás → csúcs és merőleges magasság mozgatása → saját magyarázat és összevetés. A modell nem adhat hozzá végrehajtandó kódot, az interakció a közös runtime része. A kísérleti változatok nem helyettesítik a forráspéldát, önmagukban nem adnak jegyet vagy kupont. Az author/animator/javító katalógus egyezzen a sémával. Böngészőpróba: `npx.cmd playwright test --config playwright.lesson-labs.config.ts`; külön vizsgáld a gombok szülő-olvasóterületen belüli láthatóságát is. HTML-es tananyaghoz e komponens önmagában nem jelent új interakciós támogatást.
+
 ### Magyar tipográfia ellenőrzése
 
 A közös szerződés `source/shared/lesson-typography.ts`. A betűk normál és dőlt változata, licence és ellenőrzési manifestje `source/client/public/fonts/` alatt van. A régi Google Fonts utasítást ez felülírja: a megjelenítő saját eredetű fontokat enged, ezért a helyi betűk útvonalát a külön API-host is kiszolgálja. Az adapter a tárolt tartalom módosítása nélkül egységesíti a HTML-előnézeteket és a publikált HTML-t. Böngészős próba: `npx.cmd playwright test --config playwright.lesson-typography.config.ts` a `source` mappából. A vizsgálat blokkolt Google mellett is ellenőrzi az ő/Ő/ű/Ű és bontott Unicode ékezeteket, hat betűváltozatot, 400/600/800 súlyt.

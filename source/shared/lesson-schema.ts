@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { experienceSchema } from "./lesson-experience";
+import { triangleAreaLabParamsSchema } from "./triangle-area-lab";
 
 /**
  * The Lesson: what a child actually reads, as structured data rather than an HTML blob.
@@ -29,6 +30,7 @@ export const ANIM_KINDS = [
   "map",
   "wordBuilder",
   "sentenceParts",
+  "triangleArea",
 ] as const;
 
 /** Hands-on interactions (LS-4 implements them). */
@@ -135,6 +137,13 @@ export const blockSchema = z
     recapBlock,
   ])
   .superRefine((block, ctx) => {
+    if (block.kind === "animate" && block.animKind === "triangleArea") {
+      const parsed = triangleAreaLabParamsSchema.safeParse(block.params);
+      if (!parsed.success) for (const issue of parsed.error.issues) {
+        ctx.addIssue({ ...issue, path: ["params", ...issue.path] });
+      }
+      return;
+    }
     if (block.kind === "check") {
       if (block.feedbackPerOption.length !== block.options.length) {
         ctx.addIssue({
