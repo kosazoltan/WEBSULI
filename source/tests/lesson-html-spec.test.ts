@@ -146,7 +146,7 @@ test("a webes ügynök route-ja hibánál visszatartja a HTML-t", () => {
   const src = read("server/studio/web-research-routes.ts");
   assert.match(src, /verifyLessonMethodHtml\(html\)/);
   // Gate result is now handled before the artifact event, including automatic repair.
-  assert.match(src, /decideWebResearchResult\(\{ stopReason, fullContent, repairAttempts \}, html => verifyLessonMethodHtml\(html\)\)/);
+  assert.match(src, /decideWebResearchResult\(\{ stopReason, fullContent, repairAttempts, sources \}, html => verifyLessonMethodHtml\(html\)\)/);
   assert.match(src, /if \(result\.type === "error"\) \{ send\(\{ type: "error", message: result\.message \}\); break; \}/);
   assert.match(src, /send\(\{ type: "html_generated", html: result\.html, sources \}\)/);
   assert.match(src, /cache_control: \{ type: "ephemeral" \}/);

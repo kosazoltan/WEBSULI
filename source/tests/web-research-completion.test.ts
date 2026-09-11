@@ -4,7 +4,8 @@ import { decideWebResearchResult, webResearchSystemPrompt } from "../server/stud
 import { consumeWebResearchStream } from "../shared/web-research-stream";
 
 const summary = "Röviden: találtam NAT 2020-hoz illő forrásokat. Készül a tananyag:";
-const doc = `<!DOCTYPE html><html lang="hu"><body>${"tanítás ".repeat(20)}</body></html>`;
+const sources = [{ url: "https://www.oktatas.hu/forras", title: "Tanterv" }];
+const doc = `<!DOCTYPE html><html lang="hu"><body>${"tanítás ".repeat(20)}<a href="${sources[0].url}">Tanterv</a></body></html>`;
 const verify = () => ({ ok: true, problems: [] });
 test("a készítési prompt nem engedélyre vár és a bank látható szövegét nem normalizálja", () => {
   const prompt = webResearchSystemPrompt(4);
@@ -13,28 +14,35 @@ test("a készítési prompt nem engedélyre vár és a bank látható szövegét
   assert.match(prompt, /teljes HTML végével záruljon/);
 });
 test("a keresési összefoglaló end_turn után tényleges készítést kér", () => {
-  const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: summary, repairAttempts: 0 }, verify);
+  const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: summary, repairAttempts: 0, sources }, verify);
   assert.equal(result.type, "retry");
   if (result.type === "retry") assert.match(result.instruction, /HTML_START/);
 });
 test("ismételt üres eredmény látható végleges hiba, nem complete", () => {
-  assert.equal(decideWebResearchResult({ stopReason: "end_turn", fullContent: summary, repairAttempts: 2 }, verify).type, "error");
+  assert.equal(decideWebResearchResult({ stopReason: "end_turn", fullContent: summary, repairAttempts: 2, sources }, verify).type, "error");
 });
 test("csonkolás, elutasítás és kimerült keresés érvényesnek látszó HTML-lel sem siker", () => {
   for (const stopReason of ["max_tokens", "model_context_window_exceeded", "refusal", "pause_turn", "tool_use", null]) {
-    assert.equal(decideWebResearchResult({ stopReason, fullContent: doc, repairAttempts: 0 }, verify).type, "error", String(stopReason));
+    assert.equal(decideWebResearchResult({ stopReason, fullContent: doc, repairAttempts: 0, sources }, verify).type, "error", String(stopReason));
   }
 });
 test("jelölő nélküli teljes HTML is kapuellenőrzésre kerül, nem vész el", () => {
   let checked = "";
-  const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: `Kész.\n${doc}`, repairAttempts: 0 }, html => { checked = html; return verify(); });
+  const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: `Kész.\n${doc}`, repairAttempts: 0, sources }, html => { checked = html; return verify(); });
   assert.equal(result.type, "ready"); assert.equal(checked, doc);
 });
 test("hibás HTML javítása a konkrét kapuüzenetet tartalmazza; a kapu nem kerülhető meg", () => {
-  const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: doc, repairAttempts: 0 }, () => ({ ok: false, problems: ["q4: hiányzó alkalmazó kérdés"] }));
+  const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: doc, repairAttempts: 0, sources }, () => ({ ok: false, problems: ["q4: hiányzó alkalmazó kérdés"] }));
   assert.equal(result.type, "retry");
   if (result.type === "retry") assert.match(result.instruction, /q4: hiányzó alkalmazó kérdés/);
-  assert.equal(decideWebResearchResult({ stopReason: "end_turn", fullContent: doc, repairAttempts: 2 }, () => ({ ok: false, problems: ["hiba"] })).type, "error");
+  assert.equal(decideWebResearchResult({ stopReason: "end_turn", fullContent: doc, repairAttempts: 2, sources }, () => ({ ok: false, problems: ["hiba"] })).type, "error");
+});
+test("a keresőtalálat nem elég: a mentett tananyag is hivatkozzon a használt forrásra", () => {
+  const run = (fullContent: string) => decideWebResearchResult({ stopReason: "end_turn", fullContent, repairAttempts: 0, sources }, verify);
+  assert.equal(run(doc).type, "ready");
+  assert.equal(run(doc.replace(sources[0].url, "https://unrelated.example/")).type, "retry");
+  assert.equal(run(doc.replace(/<a[^>]*>.*?<\/a>/, "")).type, "retry");
+  assert.equal(run(doc.replace(/<a[^>]*>.*?<\/a>/, `<script>const hidden = '<a href="${sources[0].url}">Tanterv</a>';</script>`)).type, "retry");
 });
 
 function stream(chunks: string[]) {

@@ -20,6 +20,8 @@ Feltöltéses Studio pipeline, régi tananyagok vagy bankok tömeges átírása,
 - Unit, lint, typecheck, build és célzott böngészőteszt PASS; kiadáskor zöld PR CI, külön önreview, pontos éles revision és publikált tartalom visszaolvasása.
 
 ## Kiadás és visszaállítás
+Az önreview további elfogadása: a futás idejére rögzített cím/korosztály ne írhassa felül a közben szerkesztett mezőt; a HTML-ben legyen a tényleges keresési forrásra mutató kattintható hivatkozás. Forrás nélküli dokumentum javító körbe kerül. A CI-probe hiányára vonatkozó review-észrevételt a meglévő `playwright.config.ts` `npm run build:e2e` webServer parancsa cáfolja: ez kifejezetten engedélyezi a próbafelületet.
+
 Feature branch → PR → zöld CI → merge → frontend/backend éles revision ellenőrzése. Előtte ellenőrzött adatmentés és aktív készítések vizsgálata. Visszaállás: előző ellenőrzött commit/deploy; korábbi tananyagot nem írunk felül. A teszt új tananyagát csak azonosított, bizonyított saját adatként lehet kezelni. Titok/nyers környezet soha nem kerül naplóba vagy commitba.
 
 ## Mért ellenőrzések

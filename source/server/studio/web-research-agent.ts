@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { WebSource } from "../../shared/web-research-stream";
 
 /**
  * Internetes tananyag-ügynök — tiszta séma, prompt és HTML-kivonat (nincs SDK-hívás).
@@ -43,7 +44,7 @@ const MAX_ARTIFACT_REPAIRS = 2;
 
 /** An SDK turn finishing is not evidence that the requested lesson exists. */
 export function decideWebResearchResult(
-  result: { stopReason: string | null; fullContent: string; repairAttempts: number },
+  result: { stopReason: string | null; fullContent: string; repairAttempts: number; sources: WebSource[] },
   verify: (html: string) => { ok: boolean; problems: string[] },
 ): Completion {
   const { stopReason, fullContent, repairAttempts } = result;
@@ -55,6 +56,7 @@ export function decideWebResearchResult(
   const html = extractGeneratedHtml(fullContent);
   const problems = !html ? ["Csak keresési összefoglaló érkezett, tananyag nem."]
     : !htmlLooksComplete(html) ? ["A HTML dokumentum nincs lezárva."] : verify(html).problems;
+  if (html && !hasResearchCitation(html, result.sources)) problems.push("A HTML tanításában hiányzik a keresésből ténylegesen felhasznált forrás kattintható hivatkozása (<a href=...>).");
   if (html && problems.length === 0) return { type: "ready", html };
   const reason = problems.join("; ");
   if (repairAttempts >= MAX_ARTIFACT_REPAIRS) {
@@ -66,6 +68,17 @@ export function decideWebResearchResult(
       + "Most készítsd el a TELJES, ellenőrizhető négyoldalas tananyagot az előző körben megismert források alapján. Őrizd meg a forrásokat és az összes helyes tartalmat, a konkrét hibát javítsd. Ne kérj újabb engedélyt, ne adj puszta ígéretet vagy tervet. Ne rövidítsd vagy lazítsd a bankkövetelményt.\n"
       + `${HTML_START}\n<!DOCTYPE html> kezdetű, </html>-lel lezárt teljes dokumentumot adj; minden bank és működő interakció legyen benne.`,
   };
+}
+
+/** A source list beside the chat does not travel with the saved lesson. */
+function hasResearchCitation(html: string, sources: WebSource[]): boolean {
+  const normalize = (value: string) => {
+    try { const url = new URL(value.replace(/&amp;/gi, "&")); url.hash = ""; return url.href.replace(/\/$/, ""); }
+    catch { return ""; }
+  };
+  const known = new Set(sources.map(source => normalize(source.url)).filter(Boolean));
+  const body = html.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>|<!--[\s\S]*?-->/gi, "");
+  return [...body.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi)].some(match => known.has(normalize(match[1])));
 }
 
 /**
@@ -101,7 +114,7 @@ export function webResearchSystemPrompt(classroom: number, title?: string, topic
     "",
     "FELADATOD:",
     "1. Ha a felhasználó tananyagot vagy forrást kér, KERESS az interneten (web_search) magyar tantervi, tankönyvi vagy NAT/OFI-hoz illő forrásokat, az adott évfolyamhoz igazítva.",
-    "2. Ez tananyagkészítő felület: a keresés a készítés része. Csak a megtalált, idézhető forrásokból dolgozz. A tanítás forráshivatkozásai a HTML-ben is maradjanak meg. A találati cím/snippet nem bizonyítja a teljes dokumentum olvasását. Ha a forrás ezt nem támasztja alá, ne állíts országosan kötelező havi témasort.",
+    "2. Ez tananyagkészítő felület: a keresés a készítés része. Csak a megtalált, idézhető forrásokból dolgozz. A tanítás végén legyenek a ténylegesen felhasznált keresési források kattintható <a href=\"forrás URL\"> hivatkozásai. A találati cím/snippet nem bizonyítja a teljes dokumentum olvasását. Ha a forrás ezt nem támasztja alá, ne állíts országosan kötelező havi témasort.",
     '3. A feladat akkor kész, ha TELJES, önálló HTML-t adsz, MINDIG így kezdve: <!-- HTML_START -->. Egy összefoglaló, ígéret vagy "Készül a tananyag" mondat nem eredmény. Ne zárd le ezzel a válaszodat és ne kérj újabb engedélyt.',
     "4. A HTML-t a <!-- HTML_START --> után azonnal <!DOCTYPE html>-lel kezdd, és </html>-lel zárd; a HTML után ne írj semmit. NE tedd markdown kódblokkba (```), nyers HTML-t adj.",
     "",

@@ -177,7 +177,7 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
       }
       // max_tokens/refusal/pause_turn exhaustion and htmlLooksComplete are checked
       // before the same strict HTML/bank gate. An end_turn without HTML is NOT success.
-      const result = decideWebResearchResult({ stopReason, fullContent, repairAttempts }, html => verifyLessonMethodHtml(html));
+      const result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
       if (result.type === "retry") {
         repairAttempts += 1;
         messages.push({ role: "assistant", content: final.content });

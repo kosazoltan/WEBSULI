@@ -208,6 +208,7 @@ export function WebResearchAgentPanel() {
           <div className="space-y-1">
             <Label htmlFor="web-research-classroom">Keresési korosztály (támpont)</Label>
             <Select
+              disabled={isLoading || isSaving}
               value={String(classroom)}
               onValueChange={(v) => setClassroom(parseInt(v, 10))}
             >
@@ -227,6 +228,7 @@ export function WebResearchAgentPanel() {
             <Label htmlFor="web-research-title">Cím a mentéshez</Label>
             <Input
               id="web-research-title"
+              disabled={isLoading || isSaving}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="pl. Törtek — 5. osztály"

@@ -73,3 +73,20 @@ test("megszakadt streamből még a megérkezett HTML sem mentődik automatikusan
   await expect(page.getByTestId("web-research-save")).toBeDisabled();
   expect(writes).toBe(0);
 });
+
+test("a futás közben a mentési cím nem változhat észrevétlenül", async ({ page }) => {
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  await page.route("**/api/studio/web-research/chat", async r => { await pending; await r.fulfill({ contentType: "text/event-stream", body: sse([artifact, complete]) }); });
+  const writes: Record<string, unknown>[] = [];
+  await page.route("**/api/html-files", r => { writes.push(r.request().postDataJSON()); return r.fulfill({ status: 201, json: { id: "titled-lesson" } }); });
+  await open(page);
+  await page.getByTestId("web-research-title").fill("A választott cím");
+  await send(page);
+  await expect(page.getByTestId("web-research-title")).toBeDisabled();
+  await expect(page.getByTestId("web-research-classroom")).toBeDisabled();
+  finish();
+  await expect(page.getByTestId("web-research-open-saved")).toBeVisible();
+  expect(writes[0].title).toBe("A választott cím");
+  await expect(page.getByTestId("web-research-title")).toBeEnabled();
+});
