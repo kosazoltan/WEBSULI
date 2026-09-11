@@ -9,6 +9,7 @@ Az éles Chrome-próba még két előnézeti hibát talált: a szerver által HT
 - A böngészős segédprogramok működjenek elérhető és blokkolt localStorage esetén, szerveroldali logger nélkül. A szerver naplózása változatlan.
 - HTML/PDF előnézetnél a tényleges fejléc után fennmaradó képernyőt az iframe tölti ki. Álló/fekvő mobilon és asztali nézetben külső görgetés, alsó kilógás és levágott fejléc nélkül.
 - Nem cél: a generált tananyag átírása, bankok módosítása, sandbox-jogok bővítése vagy új generálás.
+- Review alapján kiterjesztés: az App.tsx közös minimummagassága és az index.css body-magassága is kövesse a dinamikus viewportot, 100vh fallbackkel; külön teszt a diktálás engedélymegtagadási és inicializálási hibáira. A címsor miatti vh/dvh eltérést és a dvh-t nem támogató böngészőt CSS-szimulációval ellenőrizzük; fizikai mobilkészülék nem áll rendelkezésre.
 - Elfogadás: tényleges beillesztett segédscript Chrome-próbája mindkét tárolási módban; három viewport keretpróbája; az éles tananyag négy lapja, üres/teljes/részpontozása és kvízválaszzárolása; teljes CI és kiadás utáni ismételt próba.
 
 ## Kiadás
@@ -18,3 +19,4 @@ Nincs adatbázismódosítás. Visszaállási pont: a8c1c2e1a1971677c0165bb03f61e
 - 8 célzott Chrome-teszt PASS: strukturált lecke navigációja változatlan; HTML-keret három méreten; normál és opaque-origin localStorage hiba nélkül.
 - Teljes helyi verify PASS (típusok, lint, unit, build).
 - Önreview: sandbox-engedélyek változatlanok, csak a beillesztett script használ console-t; a szerver logger-hívásai megmaradtak. A tényleges fejlécméretből számolt maradék hely megszünteti a minimum magasság és a dupla levonás hibáját.
+- A három review-megállapítás kezelve: dvh fallback, közös shell/body min-height, diktálás két hibaága. Bővített célzott Chrome-suite 10 PASS; a nagyobb vh és hiányzó dvh támogatás CSS-szimulációja is sikeres. React-szempontú önreview: nincs új hook, effektus vagy hálózati kérés, csak CSS-méretezés.

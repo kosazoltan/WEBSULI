@@ -130,7 +130,7 @@ export default function Preview() {
   }
 
   return (
-    <div className={isLesson ? "min-h-screen bg-background" : "h-dvh flex flex-col overflow-hidden bg-background"}>
+    <div className={isLesson ? "min-h-screen bg-background" : "h-screen supports-[height:100dvh]:h-dvh flex flex-col overflow-hidden bg-background"}>
       {/* The lesson owns sticky navigation; a fixed preview toolbar would cover its tabs. */}
       <div className="relative shrink-0 z-50 border-b bg-card/95 backdrop-blur">
         <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 flex items-center justify-between gap-2">
