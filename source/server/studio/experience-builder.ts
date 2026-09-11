@@ -35,7 +35,7 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
   }
   const replace = <T extends { id: string }>(items: T[], updates: T[]) => items.map(item => updates.find(update => update.id === item.id) ?? item);
   return { methods: replace(original.methods, patch.methods), tasks: replace(original.tasks, patch.tasks),
-    quiz: replace(original.quiz, patch.quiz), glossary: patch.glossary ?? original.glossary };
+    quiz: replace(original.quiz, patch.quiz), glossary: patch.glossary?.length ? patch.glossary : original.glossary };
 }
 
 function packetCounts(value: unknown): string {
@@ -97,7 +97,7 @@ ${unit.conceptIds.length * 2} kvíz: minden fogalomhoz egy intent=recall és egy
 ${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább egy elem.` : "glossary: []."}
 Korábbi kérdések, ne ismételd: ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question) })}
 ${errors ? `Az előző válasz hibái: ${errors}.
-${repairBase ? "JAVÍTÁSI MÓD: a teljes csomag már megvan. Csak a javítandó tételeket add vissza methods/tasks/quiz tömbökben, eredeti id-val és minden mezőjükkel. A változatlan tömb lehet üres vagy elhagyható: a program megőrzi a korábbi tételeket. Tételt törölni, új id-t megadni tilos. A glossary elhagyva változatlan marad. A program ID szerint egyesít, utána a TELJES bankot újra ellenőrzi." : "A korábbi csomag alakja hibás. Add vissza a TELJES csomagot, a fent előírt összes tétellel; részleges javítólista nem elegendő."}
+${repairBase ? "JAVÍTÁSI MÓD: a teljes csomag már megvan. Csak a javítandó tételeket add vissza methods/tasks/quiz tömbökben, eredeti id-val és minden mezőjükkel. A változatlan tömb lehet üres vagy elhagyható: a program megőrzi a korábbi tételeket. Tételt törölni, új id-t megadni tilos. A glossary üresen vagy elhagyva változatlan marad; nem üresen a teljes javított szószedetet tartalmazza. A program ID szerint egyesít, utána a TELJES bankot újra ellenőrzi." : "A korábbi csomag alakja hibás. Add vissza a TELJES csomagot, a fent előírt összes tétellel; részleges javítólista nem elegendő."}
 Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       const response = await deps.call(system, prompt);
       let candidate = response;

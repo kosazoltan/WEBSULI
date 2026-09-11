@@ -121,6 +121,21 @@ test("bank patch rejects unknown/duplicate IDs, keeps absent banks and does not 
   assert.throws(() => applyBankPacketRepair(original, { tasks: [replacement, replacement] }), /egyedi/);
 });
 
+test("language task repair preserves the taught glossary when the repair sends an empty list", async () => {
+  const lesson = compactFusionFixture(), e = lesson.experience!;
+  lesson.subject = "angol";
+  const glossary = [{ word: "water", translation: "víz", partOfSpeech: "főnév", example: "Plants need water.", exampleTranslation: "A növényeknek vízre van szükségük." }];
+  const tasks = structuredClone(e.tasks); tasks[0].required = [["hiányzófogalom"]];
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async () => ++calls === 1
+    ? { methods: e.methods, tasks, quiz: e.quiz, glossary }
+    : { methods: [], tasks: [e.tasks[0]], quiz: [], glossary: [] } });
+  assert.equal(calls, 2); assert.equal(result.language, "en-GB");
+  assert.deepEqual(result.glossary.map(({ sourceHash: _hash, ...entry }) => entry), glossary);
+  const revised = [{ ...glossary[0], translation: "a víz" }];
+  assert.deepEqual(applyBankPacketRepair({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary }, { glossary: revised }).glossary, revised);
+});
+
 test("a partial repair still fails closed on invalid concept, answer or unchanged sample", async () => {
   const lesson = compactFusionFixture(), e = lesson.experience!;
   for (const repair of [

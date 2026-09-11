@@ -31,9 +31,11 @@ Az eredeti banképítővel és az éles futás mentett növényes tanításával
 
 Javítás: alakilag teljes, egyedi ID-jú csomagnál a második válasz meglévő tételeket cserél ID szerint, a többit megőrzi. Ismeretlen/ismétlődő ID elutasítva. Alakilag hiányos első csomagnál teljes új válasz kell. Az egyesített eredmény minden korábbi séma-, fogalom-, rubrika- és ismétlődéskapun átmegy. Csak ez menthető kész ellenőrzőpontként.
 
+A nyelvi leckék szószedeténél az üres vagy hiányzó javítólista szintén megtartást jelent. Nem üres glossary esetén teljes szószedetcsere történik, utólagos teljes bankellenőrzéssel. A felülvizsgálatban jelzett üres-szószedet esetet előbb bukó teszttel reprodukáltuk, majd javítottuk; a célzott kör 43/43 teszt PASS.
+
 ## Ellenőrzött eredmény a kiadás előtt
 - A teljes izolált bankgyártás ugyanazon mentett növényes tanításon elkészült: 7 csomag, 14 módszer, 35 nyílt feladat, 70 kvízkérdés; 12 modellhívás, 342 066 ms. Öt részleges javítás után is megmaradtak a megfelelő tételek. Minden csomag és az összesített bank a változatlan ellenőrzési kapukon ment át.
 - A korábbi tanítás 35 fogalmat rendelt a fejezetekhez; a víz általi virágporszállítás nem szerepelt a banktervben. Ez a régi mentett tanítás fedettsége, nem az új csomagkezelés eredménye. Az éles újragyártás fedettségét külön vissza kell olvasni.
-- `npm.cmd run verify`: PASS; 1107/1107 teszt, 0 kihagyott; lint, alkalmazás- és teszttípusok, build PASS. `git diff --check`: PASS.
+- `npm.cmd run verify`: PASS; a szószedet-regresszióval együtt 1108/1108 teszt, 0 kihagyott; lint, alkalmazás- és teszttípusok, build PASS. `git diff --check`: PASS. A négy célzott Chrome készítési/helyreállítási E2E-teszt is PASS.
 - Teljes éles adatmentés készült, 37 tábla. Visszaállítás izolált PostgreSQL 17-ben PASS (176 anyag, 13 lecke); éles adatírás nem történt.
 - A publikálási és valódi böngészős elfogadás az éles újrafuttatás után igazolható; a helyi siker önmagában ezt nem helyettesíti.
