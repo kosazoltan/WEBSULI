@@ -1,219 +1,65 @@
 import express, { type Request, type Response } from "express";
-import Anthropic from "@anthropic-ai/sdk";
-import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-
+import { z } from "zod";
 import { isAuthenticatedAdmin } from "../auth";
-import { effortFor, resolveLegacyModel } from "../ai/models";
-import { logger } from "../lib/logger";
-import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
-import {
-  decideWebResearchResult,
-  HTML_START,
-  webResearchChatSchema,
-  webResearchSystemPrompt,
-  WEB_SEARCH_TOOL,
-  type WebResearchEvent,
-  type WebSource,
-} from "./web-research-agent";
+import { webResearchChatSchema, type WebResearchEvent } from "./web-research-agent";
+import { generateWebResearchLesson, WebResearchFailure } from "./web-research-runner";
+import { createResearchJobs, publicResearchJob, ResearchJobConflict } from "./web-research-jobs";
+import { researchJobStore } from "./web-research-job-store";
 
-/**
- * POST /api/studio/web-research/chat — SSE. Admin. Claude Opus 5, effort low, web_search.
- * A kulcs értéke soha nem kerül logba.
- *
- * Felülvizsgálat 2026-09-09 (2. kör):
- * - `pause_turn`: a szerveroldali keresőciklus szünetelhet; a szüneteltetett assistant-
- *   üzenetet változatlanul visszaküldve folytatjuk (hivatalos doksi), legfeljebb 5×.
- * - `stop_reason` kapu: `max_tokens` / `refusal` esetén hiba, nem csonka HTML.
- * - Időkorlát: nem abszolút (a keresés + hosszú HTML 3 percnél tovább tarthat), hanem
- *   tétlenségi (esemény nélküli) + kemény plafon.
- * - A HTML nem ömlik a chatbe: a marker után a kliens csak státuszt kap.
- */
 export const webResearchRouter = express.Router();
 webResearchRouter.use(isAuthenticatedAdmin);
+const jobs = createResearchJobs(researchJobStore, generateWebResearchLesson);
+const startSchema = webResearchChatSchema.extend({ id: z.string().uuid() });
+const idSchema = z.string().uuid();
+const routeError = (res: Response, error: unknown) => res.status(error instanceof ResearchJobConflict ? 409 : 500).json({ message:
+  error instanceof WebResearchFailure || error instanceof ResearchJobConflict ? error.message : "A futás állapota most nem érhető el. Próbáld újra a követést." });
 
-const IDLE_TIMEOUT_MS = 120_000;
-const HARD_TIMEOUT_MS = 20 * 60_000;
-const MAX_CONTINUATIONS = 5;
-// v7.4 mérés (2026-09-09): a teljes spec szerinti anyag 32K tokennél csonkult a kvízbank
-// elején (46 feladat + motor + TTS kész volt). Opus 5 128K-ig ad kimenetet, streamelve.
-const MAX_TOKENS = 64_000;
+webResearchRouter.post("/web-research/jobs", async (req, res) => {
+  const parsed = startSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "Hibás készítési kérés." });
+  if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY?.trim()) return res.status(503).json({ message: "Az Anthropic API kulcs nincs beállítva." });
+  const { id, ...input } = parsed.data;
+  try { return res.status(202).json(publicResearchJob(await jobs.start(id, req.user!.id, input))); }
+  catch (error) { return routeError(res, error); }
+});
+webResearchRouter.get("/web-research/jobs/:id", async (req, res) => {
+  if (!idSchema.safeParse(req.params.id).success) return res.status(400).json({ message: "Hibás futásazonosító." });
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const job = await jobs.read(req.params.id, req.user!.id);
+    return job ? res.json(publicResearchJob(job)) : res.status(404).json({ message: "A futás nem található ehhez a felhasználóhoz." });
+  } catch (error) { return routeError(res, error); }
+});
+webResearchRouter.get("/web-research/jobs/:id/diagnostics", async (req, res) => {
+  if (!idSchema.safeParse(req.params.id).success) return res.status(400).json({ message: "Hibás futásazonosító." });
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const job = await jobs.read(req.params.id, req.user!.id);
+    return job ? res.json({ diagnostics: job.diagnostics, candidate: job.candidate }) : res.status(404).json({ message: "A futás nem található." });
+  } catch (error) { return routeError(res, error); }
+});
+webResearchRouter.post("/web-research/jobs/:id/publish", async (req, res) => {
+  if (!idSchema.safeParse(req.params.id).success) return res.status(400).json({ message: "Hibás futásazonosító." });
+  try { return res.json(publicResearchJob(await jobs.publish(req.params.id, req.user!.id))); }
+  catch (error) { return routeError(res, error); }
+});
 
+/** Legacy SSE consumers use the same runner; new UI follows a durable job instead. */
 webResearchRouter.post("/web-research/chat", async (req: Request, res: Response) => {
   const parsed = webResearchChatSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ message: "Hibás kérés. Adj meg szöveget és osztályt (0–12)." });
-  }
-
-  const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-  if (!key || !key.trim()) {
-    return res.status(503).json({ message: "Az Anthropic API kulcs nincs beállítva." });
-  }
-
+  if (!parsed.success) return res.status(400).json({ message: "Hibás kérés. Adj meg szöveget és osztályt (0–12)." });
   const controller = new AbortController();
-  let idleTimer: NodeJS.Timeout | undefined;
-  let timedOut = false;
-  let heartbeat: NodeJS.Timeout | undefined;
-  const hardTimer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, HARD_TIMEOUT_MS);
-  const touch = () => {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, IDLE_TIMEOUT_MS);
-  };
-  const clearTimers = () => {
-    clearTimeout(hardTimer);
-    if (idleTimer) clearTimeout(idleTimer);
-    if (heartbeat) clearInterval(heartbeat);
-  };
-  const send = (event: WebResearchEvent) => {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  const send = (event: WebResearchEvent) => { if (!res.writableEnded && !res.destroyed) res.write(`data: ${JSON.stringify(event)}\n\n`); };
+  const heartbeat = setInterval(() => { if (!res.writableEnded && !res.destroyed) res.write(": heartbeat\n\n"); }, 15_000);
+  res.on("close", () => { if (!res.writableEnded) controller.abort(); clearInterval(heartbeat); });
   try {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-    heartbeat = setInterval(() => { if (!res.writableEnded) res.write(": heartbeat\n\n"); }, 15_000);
-
-    const anthropic = new Anthropic({
-      apiKey: key,
-      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-    });
-
-    const messages: MessageParam[] = (parsed.data.conversationHistory ?? []).map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-    messages.push({ role: "user", content: parsed.data.message });
-    const firstUser = messages.find((m) => m.role === "user" && typeof m.content === "string");
-    const topicSeed = typeof firstUser?.content === "string" ? firstUser.content.slice(0, 200) : parsed.data.message.slice(0, 200);
-
-    res.on("close", () => {
-      if (!res.writableEnded) controller.abort();
-      clearTimers();
-    });
-
-    let fullContent = "";
-    let htmlStarted = false;
-    const sources: WebSource[] = [];
-    const seenUrls = new Set<string>();
-    let stopReason: string | null = null;
-    let continuations = 0;
-    let repairAttempts = 0;
-    const startedAt = Date.now();
-
-    touch();
-    for (;;) {
-      const stream = anthropic.messages.stream(
-        {
-          model: resolveLegacyModel("webResearch"),
-          output_config: { effort: effortFor("webResearch") },
-          max_tokens: MAX_TOKENS,
-          // A system blokk stabil (spec + téma) → prompt-cache; a téma seedje az első
-          // felhasználói üzenet, így egy beszélgetésen belül nem változik.
-          system: [
-            {
-              type: "text",
-              text: webResearchSystemPrompt(parsed.data.classroom, parsed.data.title, topicSeed),
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-          tools: [WEB_SEARCH_TOOL],
-          messages,
-        },
-        { signal: controller.signal },
-      );
-
-      for await (const event of stream) {
-        touch();
-        if (event.type === "content_block_start") {
-          const block = event.content_block;
-          if (block.type === "server_tool_use") {
-            send({ type: "status", message: "Keresés az interneten…" });
-          } else if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
-            for (const r of block.content) {
-              if (r.type === "web_search_result" && r.url && !seenUrls.has(r.url)) {
-                seenUrls.add(r.url);
-                sources.push({ url: r.url, title: r.title || r.url });
-              }
-            }
-            send({ type: "sources", sources });
-            send({ type: "status", message: `Források feldolgozása (${sources.length})…` });
-          }
-          continue;
-        }
-        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-          const text = event.delta.text;
-          if (!text) continue;
-          fullContent += text;
-          if (htmlStarted) continue;
-          const markerAt = fullContent.indexOf(HTML_START) >= 0 ? fullContent.indexOf(HTML_START) : fullContent.search(/<!doctype\s+html\b|<html\b/i);
-          if (markerAt >= 0) {
-            htmlStarted = true;
-            // A marker egy része már kimehetett a chatbe — a buborékot a marker előtti
-            // szövegre cseréljük, a HTML az előnézetbe megy, nem a beszélgetésbe.
-            send({ type: "content_replace", content: fullContent.slice(0, markerAt).trimEnd() });
-            send({ type: "status", message: "A HTML tananyag készül…" });
-            continue;
-          }
-          send({ type: "content_delta", content: text });
-        }
-      }
-
-      const final = await stream.finalMessage();
-      stopReason = final.stop_reason;
-      logger.info("[WEB-RESEARCH] turn", { stopReason, continuations, repairAttempts, elapsedMs: Date.now() - startedAt,
-        outputTokens: final.usage.output_tokens, inputTokens: final.usage.input_tokens, chars: fullContent.length, sourceCount: sources.length });
-      if (stopReason === "pause_turn" && continuations < MAX_CONTINUATIONS) {
-        continuations += 1;
-        messages.push({ role: "assistant", content: final.content });
-        logger.info(`[WEB-RESEARCH] pause_turn → folytatás #${continuations}`);
-        continue;
-      }
-      // max_tokens/refusal/pause_turn exhaustion and htmlLooksComplete are checked
-      // before the same strict HTML/bank gate. An end_turn without HTML is NOT success.
-      const result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
-      if (result.type === "retry") {
-        repairAttempts += 1;
-        messages.push({ role: "assistant", content: final.content });
-        messages.push({ role: "user", content: result.instruction });
-        logger.info("[WEB-RESEARCH] artifact-retry", { repairAttempts, reason: result.reason });
-        send({ type: "status", message: `A teljes tananyag elkészítése és ellenőrzése (${repairAttempts}/2)…` });
-        send({ type: "content_replace", content: "A forráskeresés után a teljes tananyag készítése és ellenőrzése folyamatban van…" });
-        fullContent = "";
-        htmlStarted = false;
-        continue;
-      }
-      if (result.type === "error") { send({ type: "error", message: result.message }); break; }
-      if (sources.length === 0) { send({ type: "error", message: "Nem érkezett ellenőrizhető internetes forráshivatkozás. A tananyag nem menthető." }); break; }
-      send({ type: "html_generated", html: result.html, sources });
-      send({ type: "complete" });
-      break;
-    }
-    clearTimers();
-    res.write("data: [DONE]\n\n");
-    res.end();
-  } catch (error: unknown) {
-    clearTimers();
-    const err = error instanceof Error ? error : new Error(String(error));
-    const aborted = err.name === "AbortError" || controller.signal.aborted;
-    const message = timedOut
-      ? "Időtúllépés: a keresés vagy a tananyagkészítés túl sokáig nem adott választ."
-      : aborted
-        ? "A kérés megszakadt."
-        : "AI hiba történt a webes keresés közben.";
-    logger.error("[WEB-RESEARCH]", aborted ? `aborted (timeout=${timedOut})` : err.message);
-    if (!res.headersSent) {
-      return res.status(timedOut ? 408 : 500).json({ message });
-    }
-    if (!res.writableEnded) {
-      send({ type: "error", message });
-      res.end();
-    }
-  }
+    const artifact = await generateWebResearchLesson(parsed.data, { signal: controller.signal, onEvent: send });
+    send({ type: "html_generated", ...artifact });
+    send({ type: "complete" });
+  } catch (error) { send({ type: "error", message: error instanceof Error ? error.message : "A tananyagkészítés hibával megállt." }); }
+  finally { clearInterval(heartbeat); if (!res.destroyed) res.end("data: [DONE]\n\n"); }
 });

@@ -1,5 +1,5 @@
 import { withLessonTypography } from "@shared/lesson-typography";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Globe, Loader2, CheckCircle2, Eye, Link2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -17,31 +17,22 @@ import {
 import ChatInterface, { type ChatMessage } from "@/components/ChatInterface";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { CLASSROOMS, DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
-import { readHtmlLessonData } from "@shared/lesson-html-data";
-import { consumeWebResearchStream, type WebSource } from "@shared/web-research-stream";
+import { CLASSROOMS, DEFAULT_CLASSROOM } from "@shared/classrooms";
+import type { WebResearchJob } from "@shared/web-research-job";
+import { type WebSource } from "@shared/web-research-stream";
 import { logger } from "@/lib/logger";
 
-const MAX_DESCRIPTION_CHARS = 1000;
-
-async function csrfHeader(): Promise<Record<string, string>> {
-  const res = await fetch("/api/csrf-token", { credentials: "include" });
-  if (!res.ok) return {};
-  const data = (await res.json()) as { csrfToken?: string };
-  return data.csrfToken ? { "X-CSRF-Token": data.csrfToken } : {};
+type PendingResearch = { id: string; message: string; classroom: number; title?: string; conversationHistory?: ChatMessage[] };
+const STORAGE_KEY = "websuli:web-research:pending";
+function storedResearch(): PendingResearch | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    return value && typeof value.id === "string" && typeof value.message === "string" && typeof value.classroom === "number" ? value : null;
+  } catch { return null; }
 }
-
-/** A mentett leírás: rövid összefoglaló + a felhasznált források URL-jei (korlátos hossz). */
-export function buildDescription(classroomLabel: string, sources: WebSource[]): string {
-  const base = `Internetes forrásokból készült tananyag, ${classroomLabel}.`;
-  if (sources.length === 0) return base;
-  let out = `${base} Források:`;
-  for (const s of sources) {
-    const next = `${out} ${s.url};`;
-    if (next.length > MAX_DESCRIPTION_CHARS) break;
-    out = next;
-  }
-  return out;
+function rememberResearch(value: PendingResearch | null) {
+  try { if (value) localStorage.setItem(STORAGE_KEY, JSON.stringify(value)); else localStorage.removeItem(STORAGE_KEY); }
+  catch { logger.warn("A készítés követése ebben a böngészőben nem őrizhető meg újratöltéshez."); }
 }
 
 export function WebResearchAgentPanel() {
@@ -52,143 +43,101 @@ export function WebResearchAgentPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [sources, setSources] = useState<WebSource[]>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
+
   const [generatedHtml, setGeneratedHtml] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
+  const [pending, setPending] = useState<PendingResearch | null>(storedResearch);
+
+  useEffect(() => {
+    if (!pending) return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setIsLoading(true);
+    setTitle(pending.title || "");
+    setClassroom(pending.classroom);
+    setStatus("A szerveren futó készítés követése… Az oldalt nyugodtan újratöltheted.");
+    const follow = async () => {
+      try {
+        let job: WebResearchJob;
+        try { job = await apiRequest<WebResearchJob>("GET", `/api/studio/web-research/jobs/${pending.id}`, undefined, { timeout: 15_000 }); }
+        catch (error) {
+          if ((error as { status?: number }).status !== 404) throw error;
+          // A lost start response is retried with the SAME key and input, never a new AI run.
+          job = await apiRequest<WebResearchJob>("POST", "/api/studio/web-research/jobs", pending, { timeout: 15_000 });
+        }
+        if (disposed) return;
+        if (job.state === "ready" && !job.error) {
+          // Also recovers a server restart between durable generation and publication.
+          job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 });
+          if (disposed) return;
+        }
+        setSources(job.sources);
+        setStatus(job.stage);
+        setFailure(job.error || null);
+        setMessages([{ role: "user", content: job.message }, { role: "assistant", content: job.state === "done" ? "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." : job.content || job.stage }]);
+        if (job.state === "done" || job.state === "ready") {
+          if (!job.html || (job.state === "done" && !job.materialId)) {
+            setFailure("A szerver nem igazolta vissza a teljes tananyagot és a mentését.");
+            setIsLoading(false);
+            return;
+          }
+          setGeneratedHtml(job.html);
+          setTitle(job.title);
+          setClassroom(job.classroom ?? pending.classroom);
+          setSavedId(job.materialId || null);
+          if (job.state === "done") {
+            setIsLoading(false);
+            void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }).catch(error => logger.error("[WebResearchAgent] list refresh", error));
+            return;
+          }
+          // Ready is durable even if publication failed or the worker restarted here.
+          setIsLoading(false);
+          setStatus(null);
+          return;
+        }
+        if (job.state === "error") { setIsLoading(false); return; }
+      } catch (error) {
+        if (disposed) return;
+        const code = (error as { status?: number }).status;
+        if (code && [400, 401, 403, 409].includes(code)) {
+          setFailure(error instanceof Error ? error.message : "A futás nem követhető ezzel a hozzáféréssel.");
+          setIsLoading(false);
+          rememberResearch(null);
+          return;
+        }
+        setStatus("A kapcsolat átmenetileg megszakadt. A készítés a szerveren folytatódik; újracsatlakozás…");
+      }
+      if (!disposed) timer = setTimeout(() => void follow(), 2500);
+    };
+    void follow();
+    return () => { disposed = true; if (timer) clearTimeout(timer); };
+  }, [pending]);
+
   const handleSend = async (message: string) => {
     if (isLoading || isSaving) return;
+    setFailure(null); setSavedId(null); setGeneratedHtml(""); setSources([]);
+    const request: PendingResearch = { id: crypto.randomUUID(), message, classroom, ...(title.trim() ? { title: title.trim() } : {}),
+      ...(messages.length ? { conversationHistory: messages.slice(-50) } : {}) };
+    rememberResearch(request);
     setIsLoading(true);
-    setFailure(null);
-    setSavedId(null);
-    setGeneratedHtml("");
-    setSources([]);
-    setWarnings([]);
-    setStatus("Válasz készül…");
-    const userMessage: ChatMessage = { role: "user", content: message };
-    const history = [...messages, userMessage];
-    setMessages(history);
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-    const setAssistant = (content: string) =>
-      setMessages((prev) => {
-        const next = [...prev];
-        next[next.length - 1] = { role: "assistant", content };
-        return next;
-      });
-
-    try {
-      const csrf = await csrfHeader();
-      const response = await fetch("/api/studio/web-research/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrf["X-CSRF-Token"] ?? "",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          message,
-          classroom,
-          conversationHistory: messages.filter((m) => m.role === "user" || m.role === "assistant"),
-          title: title.trim() || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const errBody = (await response.json().catch(() => ({}))) as { message?: string };
-        throw new Error(errBody.message || `Hiba (${response.status})`);
-      }
-      if (!response.body) throw new Error("Üres válasz a szervertől.");
-
-      let assistantMessage = "";
-      const artifact = await consumeWebResearchStream(response.body, parsed => {
-        if (parsed.type === "content_delta") {
-          assistantMessage += parsed.content ?? "";
-          setAssistant(assistantMessage);
-        } else if (parsed.type === "content_replace") {
-          assistantMessage = parsed.content ?? "";
-          setAssistant(assistantMessage || "A HTML tananyag készül…");
-        } else if (parsed.type === "status") {
-          setStatus(parsed.message ?? null);
-        } else if (parsed.type === "sources" && Array.isArray(parsed.sources)) {
-          setSources(parsed.sources);
-        }
-      });
-      const generated = readHtmlLessonData(artifact.html);
-      const saveTitle = title.trim() || `${generated.subject} — ${getClassroomLabel(generated.classroom, false)}`;
-      setClassroom(generated.classroom);
-      setTitle(saveTitle);
-      setGeneratedHtml(artifact.html);
-      setSources(artifact.sources ?? []);
-      setWarnings(artifact.warnings ?? []);
-      setStatus("A kész tananyag mentése…");
-      setAssistant("Az ellenőrzött tananyag elkészült. Mentés folyamatban…");
-      const saved = await saveArtifact(artifact.html, artifact.sources ?? [], saveTitle);
-      setAssistant(saved ? "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." : "A tananyag elkészült, de a mentés nem sikerült. A mentést lent újrapróbálhatod.");
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Ismeretlen hiba";
-      setFailure(reason);
-      toast({ title: "Keresési hiba", description: reason, variant: "destructive" });
-      // Éles próba 2026-09-09: hibánál a már megérkezett válasz (források, összefoglaló)
-      // ne vesszen el — a buborék marad, a hiba oka a végére kerül. Üres választ eldobunk.
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (!last || last.role !== "assistant") return prev;
-        if (!last.content.trim()) return prev.slice(0, -1);
-        return [...prev.slice(0, -1), { role: "assistant", content: `${last.content}\n\n⚠️ ${reason}` }];
-      });
-      logger.error("[WebResearchAgent]", error);
-    } finally {
-      setIsLoading(false);
-      setStatus(null);
-    }
-  };
-
-  const saveArtifact = async (html: string, artifactSources: WebSource[], saveTitle: string): Promise<boolean> => {
-    const inferredClassroom = readHtmlLessonData(html).classroom;
-    const classroomLabel = getClassroomLabel(inferredClassroom, false);
-    setIsSaving(true);
-    setFailure(null);
-    try {
-      const file = await apiRequest<{ id: string }>(
-        "POST",
-        "/api/html-files",
-        {
-          title: saveTitle,
-          description: buildDescription(classroomLabel, artifactSources),
-          content: html,
-          classroom: inferredClassroom,
-          contentType: "html",
-        },
-        { timeout: 180000 },
-      );
-      if (!file.id) throw new Error("A szerver nem igazolta vissza a mentett tananyag azonosítóját.");
-      setSavedId(file.id);
-      void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }).catch(error => logger.error("[WebResearchAgent] list refresh", error));
-      toast({
-        title: "Elmentve a tananyagok közé",
-        description: `"${saveTitle}" megjelent a Fájlok listában és a főoldalon.`,
-      });
-      return true;
-    } catch (error) {
-      setFailure(error instanceof Error ? error.message : "Nem sikerült menteni.");
-      toast({
-        title: "Mentési hiba",
-        description: error instanceof Error ? error.message : "Nem sikerült menteni.",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
+    setPending(request);
   };
 
   const handleSave = async () => {
-    if (!generatedHtml || isSaving || isLoading || savedId) return;
-    const saved = await saveArtifact(generatedHtml, sources, title.trim() || "Internetes tananyag");
-    if (saved) setMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." }]);
+    if (!pending || !generatedHtml || isSaving || isLoading || savedId) return;
+    setIsSaving(true); setFailure(null);
+    try {
+      const job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 });
+      if (job.state !== "done" || !job.materialId) throw new Error("A szerver nem igazolta vissza a mentést.");
+      setSavedId(job.materialId);
+      void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }).catch(error => logger.error("[WebResearchAgent] list refresh", error));
+      setMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." }]);
+      toast({ title: "Elmentve a tananyagok közé" });
+    } catch (error) { setFailure(error instanceof Error ? error.message : "Nem sikerült menteni; a kész tananyag a szerveren megmaradt."); }
+    finally { setIsSaving(false); }
   };
 
   return (
@@ -273,20 +222,6 @@ export function WebResearchAgentPanel() {
                     {s.title || s.url}
                   </a>
                 </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {generatedHtml && !isLoading && warnings.length > 0 && (
-          <div
-            className="border border-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-2 text-xs"
-            data-testid="web-research-warnings"
-            role="alert"
-          >
-            <div className="font-medium mb-1">⚠️ Az ellenőrző hibát talált a HTML-ben — mentés előtt kérj javítást a chatben:</div>
-            <ul className="list-disc pl-4 space-y-0.5">
-              {warnings.map((w) => (
-                <li key={w}>{w}</li>
               ))}
             </ul>
           </div>

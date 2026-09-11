@@ -139,17 +139,17 @@ test("a készítő route-on nincs 60 s-os abszolút korlát, és 64K a kimenet",
   assert.doesNotMatch(routes, /Request timeout \(60s\)/);
   assert.match(routes, /touchClaude\(\)/);
   assert.match(routes, /max_tokens: 64000/);
-  assert.match(read("server/studio/web-research-routes.ts"), /MAX_TOKENS = 64_000/);
+  assert.match(read("server/studio/web-research-runner.ts"), /MAX_TOKENS = 64_000/);
 });
 
 test("a webes ügynök route-ja hibánál visszatartja a HTML-t", () => {
-  const src = read("server/studio/web-research-routes.ts");
+  const src = read("server/studio/web-research-runner.ts");
   assert.match(src, /verifyLessonMethodHtml\(html\)/);
   // Gate result is now handled before the artifact event, including automatic repair.
   assert.match(src, /decideWebResearchResult\(\{ stopReason, fullContent, repairAttempts, sources \}, html => verifyLessonMethodHtml\(html\)\)/);
-  assert.match(src, /if \(result\.type === "error"\) \{ send\(\{ type: "error", message: result\.message \}\); break; \}/);
-  assert.match(src, /send\(\{ type: "html_generated", html: result\.html, sources \}\)/);
+  assert.match(src, /if \(result\.type === "error"\) throw new WebResearchFailure\(result.message\)/);
+  assert.match(src, /return \{ html: result\.html, sources \}/);
   assert.match(src, /cache_control: \{ type: "ephemeral" \}/);
   const panel = read("client/src/components/studio/WebResearchAgentPanel.tsx");
-  assert.match(panel, /web-research-warnings/);
+  assert.match(panel, /web-research-error/);
 });

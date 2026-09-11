@@ -75,7 +75,7 @@ test("a system prompt tartalmazza a kért címet és az elfogadott fogalomfedő 
 });
 
 test("a route kezeli a pause_turn-t és a stop_reason-t, nincs abszolút 180 s-os korlát", () => {
-  const src = readFileSync(new URL("../server/studio/web-research-routes.ts", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../server/studio/web-research-runner.ts", import.meta.url), "utf8");
   assert.match(src, /pause_turn/);
   assert.match(src, /stop_reason/);
   // Completion moved to a tested pure decision; the route must call that decision.

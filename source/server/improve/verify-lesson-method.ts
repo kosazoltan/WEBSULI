@@ -2,6 +2,7 @@ import { readHtmlLessonData, HTML_LESSON_DATA_ID } from "../../shared/lesson-htm
 import { evaluateOpenAnswer } from "../../shared/lesson-experience-score";
 import { lessonLanguage } from "../../shared/lesson-experience";
 import { verifyImprovedHtml, type HtmlVerification } from "./verify-html";
+import { ZodError } from "zod";
 
 /** Shape and sample checks, not a substitute for rendering or source review. */
 export function verifyLessonMethodHtml(html: string): HtmlVerification {
@@ -13,7 +14,11 @@ export function verifyLessonMethodHtml(html: string): HtmlVerification {
     if (lang && data.experience.language !== lang) problems.push("A nyelvlecke szószedetének/TTS-ének nyelve hiányzik vagy hibás.");
     const scripts = (html.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? []).filter(s => !/type\s*=\s*["']application\/json["']/i.test(s));
     if (!scripts.some(s => s.includes(HTML_LESSON_DATA_ID) && /JSON\s*\.\s*parse/.test(s))) problems.push("A futó JavaScript nem olvassa a közös feladatbankot.");
-  } catch { problems.push("A fúziós JSON-bank hiányos vagy hibás: érvényes verzió, fogalomfedő bankterv, szóbeli/írásos feladatok, felidéző/alkalmazó kvíz és évfolyamindoklás szükséges."); }
+  } catch (error) {
+    if (error instanceof ZodError) {
+      for (const issue of error.issues) problems.push(`JSON-bank ${issue.path.join(".") || "gyökér"}: ${issue.message}`);
+    } else problems.push(`A fúziós JSON-bank nem olvasható: ${error instanceof Error ? error.message : "érvénytelen JSON"}`);
+  }
   for (const value of ["teaching", "methods", "tasks", "quiz"]) {
     for (const attr of ["data-lesson-tab", "data-lesson-panel"]) if (!new RegExp(`${attr}\\s*=\\s*["']${value}["']`).test(html)) problems.push(`Hiányzó ${attr}: ${value}.`);
   }
