@@ -324,7 +324,7 @@ test("API-kulcs nélkül a lánc nem indul el, és ezt meg is mondja", async () 
   assert.equal(outcome.ok, false);
   assert.equal(outcome.next.step, "error");
   assert.ok(
-    !outcome.ok && outcome.reason.includes("OPENROUTER_API_KEY"),
+    !outcome.ok && outcome.reason.includes("saját API-kulcsa"),
     "a hibaüzenetnek meg kell mondania, mi hiányzik",
   );
 });

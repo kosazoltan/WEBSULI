@@ -12,16 +12,20 @@ import {
 } from './AIProvider';
 
 export class OpenAIProvider implements IAIProvider {
-  readonly name = 'OpenAI';
+  readonly name: string;
   readonly model: string;
   private client: OpenAI;
   private timeout: number;
+  private maxTokens?: number;
 
-  constructor(config: AIProviderConfig) {
+  constructor(config: AIProviderConfig, vendor: "openai" | "xai" = "openai") {
+    this.name = vendor === "xai" ? "xAI" : "OpenAI";
+    this.maxTokens = config.maxTokens;
     this.model = config.model;
     this.timeout = config.timeout || 60000; // Default 60s
     this.client = new OpenAI({
       apiKey: config.apiKey,
+      baseURL: vendor === "xai" ? "https://api.x.ai/v1" : "https://api.openai.com/v1",
       timeout: this.timeout,
     });
   }
@@ -35,7 +39,7 @@ export class OpenAIProvider implements IAIProvider {
             role: msg.role,
             content: msg.content,
           })),
-          temperature: 0.7,
+          ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
         },
         { signal }
       );
@@ -73,7 +77,7 @@ export class OpenAIProvider implements IAIProvider {
             role: msg.role,
             content: msg.content,
           })),
-          temperature: 0.7,
+          ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
           stream: true,
         },
         { signal }

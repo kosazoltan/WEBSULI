@@ -769,7 +769,7 @@ test("(i) resume: azonos input-hash → gyorsítótár, nincs második hívás",
   assert.equal(second.ok && second.next.step, "author");
 });
 
-test("OPENROUTER_API_KEY hiányában a job hibára fut, tiszta magyar üzenettel", async () => {
+test("saját API-kulcsa hiányában a job hibára fut, tiszta magyar üzenettel", async () => {
   const { store, providerFactory } = makeDeps(CANNED_PEDAGOGUE);
   const jobId = await store.createJob({
     mapId: "m1",
@@ -788,11 +788,11 @@ test("OPENROUTER_API_KEY hiányában a job hibára fut, tiszta magyar üzenettel
 
   assert.equal(outcome.ok, false);
   assert.equal(outcome.next.step, "error");
-  assert.match(outcome.reason, /OPENROUTER_API_KEY/);
+  assert.match(outcome.reason, /saját API-kulcsa/);
 
   const job = await store.loadJob(jobId);
   assert.equal(job?.status, "error");
-  assert.match(job?.error ?? "", /OPENROUTER_API_KEY/);
+  assert.match(job?.error ?? "", /saját API-kulcsa/);
 });
 
 test("(j) animator: az érvényes kiegészítés elmentődik, a következő lépés lektor", async () => {
@@ -981,14 +981,14 @@ function makeFailoverDeps(opts: { failModels: Set<string>; cannedResponse: strin
 }
 
 test("(m) modellhiba: az elsődleges modell 429-e után a lépés a FALLBACK_MODELS modelljén fut le", async () => {
-  const primary = resolveStudioModel("author");
-  const fallback = FALLBACK_MODELS.author!;
+  const primary = resolveStudioModel("pedagogue");
+  const fallback = FALLBACK_MODELS.pedagogue!;
   assert.notEqual(primary, fallback);
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
     failModels: new Set([primary]),
-    cannedResponse: CANNED_AUTHOR,
+    cannedResponse: CANNED_PEDAGOGUE,
   });
-  store.seed({ id: "job-1", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  store.seed({ id: "job-1", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
 
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
@@ -1018,11 +1018,11 @@ test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az ered
   assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "az eredeti lecke változatlanul megy tovább");
 });
 
-test("(o) author: ha az elsődleges ÉS a fallback modell is hibázik, a hiba mindkét modellt és az okot megnevezi", async () => {
+test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   const primary = resolveStudioModel("author");
-  const fallback = FALLBACK_MODELS.author!;
-  const { store, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
-    failModels: new Set([primary, fallback]),
+  assert.equal(FALLBACK_MODELS.author, undefined);
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
+    failModels: new Set([primary]),
     cannedResponse: CANNED_AUTHOR,
   });
   store.seed({ id: "job-1", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
@@ -1030,7 +1030,7 @@ test("(o) author: ha az elsődleges ÉS a fallback modell is hibázik, a hiba mi
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, false);
-  assert.ok(outcome.reason.includes(primary), `az elsődleges modell neve szerepel: ${outcome.reason}`);
-  assert.ok(outcome.reason.includes(fallback), `a fallback modell neve szerepel: ${outcome.reason}`);
-  assert.match(outcome.reason, /Rate limit exceeded/);
+  assert.deepEqual(calls, [primary]);
+  assert.equal((await store.loadJob("job-1"))?.status, "error");
+  assert.ok(outcome.reason.length > 0);
 });

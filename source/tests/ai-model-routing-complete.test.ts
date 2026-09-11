@@ -101,8 +101,8 @@ test("az okosítás tartalék modellje MÁS szolgáltatónál van", () => {
     providerForModel(fallback),
     "a tartaléknak másik szolgáltatót kell hívnia",
   );
-  assert.equal(providerForModel(fallback), "openrouter");
-  assert.equal(fallback, "z-ai/glm-5.3-flash");
+  assert.equal(providerForModel(fallback), "openai");
+  assert.equal(fallback, "gpt-5.6-terra");
 });
 
 test("nincs elavult modell-generáció a routingban", () => {

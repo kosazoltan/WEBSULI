@@ -33,6 +33,7 @@ import {
   modelFamily,
   providerForModel,
   requiredKeyFor,
+  keyNameForModel,
   resolveLegacyModel,
   resolveStudioModel,
   studioModelMap,
@@ -133,7 +134,9 @@ studioRouter.get("/ai-status", async (_req: Request, res: Response) => {
       step,
       model: studio[step],
       family: modelFamily(studio[step]),
-      ready: keys.openrouter.configured,
+      provider: providerForModel(studio[step]),
+      requiredKey: keyNameForModel(studio[step]),
+      ready: keys[providerForModel(studio[step])].configured,
     })),
     d1: { independentLektor: d1Independent, message: d1Message },
   });
