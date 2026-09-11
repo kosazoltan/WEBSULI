@@ -12,3 +12,5 @@ CREATE TABLE IF NOT EXISTS lesson_workflow_runs (
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS lesson_workflow_owner_created ON lesson_workflow_runs(owner_id, created_at DESC);
+--> statement-breakpoint
+ALTER TABLE improved_html_files ADD COLUMN IF NOT EXISTS baseline_hash varchar;

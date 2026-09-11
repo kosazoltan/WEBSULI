@@ -49,7 +49,7 @@ import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesso
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase } from "../workflows/engine";
+import { workflowPhase, workflowFence } from "../workflows/engine";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -1088,6 +1088,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       // (html_files row + publishedAt + quiz export) or untouched.
       // B6: re-publish keeps the existing htmlFileId so old /preview links stay valid.
       const result = await db.transaction(async (tx) => {
+        await workflowFence(tx);
         const [existing] = await tx
           .select({ htmlFileId: lessons.htmlFileId })
           .from(lessons)
@@ -1135,6 +1136,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             .insert(gameQuizItems)
             .values(input.quizItems.map((q) => ({ ...q, sourceMaterialId: fileId })));
         }
+        await workflowFence(tx);
         return { htmlFileId: fileId, exportedQuizItems: input.quizItems.length };
       });
       // A lista-cache a GET /api/html-files előtt áll. Invalidálás CSAK a sikeres

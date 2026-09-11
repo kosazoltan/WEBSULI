@@ -403,6 +403,7 @@ export const improvedHtmlFiles = pgTable("improved_html_files", {
   classroom: integer("classroom").notNull().default(1),
   contentType: varchar("content_type").notNull().default('html'),
   improvementPrompt: text("improvement_prompt"),
+  baselineHash: varchar("baseline_hash"),
   improvementNotes: text("improvement_notes"),
   status: varchar("status").notNull().default('pending'), // pending, approved, rejected, applied
   createdBy: varchar("created_by").references(() => users.id),

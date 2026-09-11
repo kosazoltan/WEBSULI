@@ -96,6 +96,19 @@ test("checkpoint után, ready előtt megszakadt webes munka új AI nélkül foly
   await restarted.publish("checkpoint-gap", "owner"); assert.equal(m.materials.size, 1);
 });
 
+test("commit utáni visszaolvasási hiba nem állítja vissza a done jobot és nem publikál kétszer", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0; let broken = true;
+  m.store.verifyMaterial = async () => { if (broken) throw new Error("Synthetic readback outage"); return true; };
+  const jobs = createResearchJobs(m.store, async () => { calls++; return artifact; }, workflows.store);
+  await jobs.start("post-commit", "owner", input);
+  await until(() => workflows.records.get("post-commit")?.view.state === "error");
+  assert.equal(m.rows.get("post-commit")!.state, "done"); assert.equal(m.materials.size, 1);
+  broken = false;
+  await createResearchJobs(m.store, async () => { throw new Error("Must reuse completed response"); }, workflows.store).publish("post-commit", "owner");
+  assert.equal(workflows.records.get("post-commit")!.view.state, "done");
+  assert.equal(calls, 1); assert.equal(m.materials.size, 1);
+});
+
 test("hibás vagy hiányzó checkpoint nem kínál folytatást és nem indít új AI-hívást", async () => {
   const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0;
   const jobs = createResearchJobs(m.store, async () => { calls++; return { ...artifact, html: "Hiányos válasz" }; }, workflows.store);

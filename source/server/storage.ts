@@ -1522,7 +1522,7 @@ export class DatabaseStorage implements IStorage {
     createBackup: boolean,
     notes?: string
   ): Promise<{ success: boolean; originalFile: HtmlFile; backupId?: string }> {
-    const { workflowPhase, workflowMode } = await import('./workflows/engine');
+    const { workflowPhase, workflowMode, workflowFence } = await import('./workflows/engine');
     const candidate = await this.getImprovedHtmlFile(improvedFileId);
     if (candidate?.contentType === 'lesson') {
       const { applyStructuredImprovement } = await import('./studio/structured-improvement');
@@ -1583,6 +1583,15 @@ export class DatabaseStorage implements IStorage {
       }
 
       if (workflowMode() === 'apply') await workflowPhase('apply');
+      await workflowFence(tx);
+      if (improved.status === 'applied') {
+        if (original.content !== improved.content) throw new Error('A korábban alkalmazott anyag azóta megváltozott. Készíts új javítást.');
+        return { success: true, originalFile: original };
+      }
+      const { htmlBaselineHash } = await import('./improve/html-baseline');
+      if (improved.baselineHash && htmlBaselineHash(original) !== improved.baselineHash) {
+        throw new Error('Az eredeti tananyag a javítás készítése óta megváltozott. Készíts új javítójelöltet.');
+      }
       // 5. Create backup if requested
       let backupId: string | undefined;
       if (createBackup || fusionHtml) {
@@ -1644,6 +1653,7 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(improvedHtmlFiles.id, improvedFileId));
 
+      await workflowFence(tx);
       return {
         success: true,
         originalFile: updated,

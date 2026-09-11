@@ -16,6 +16,7 @@ import type { HtmlFile } from '@shared/schema';
 import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
 import { executeWorkflow, workflowPhase } from "./workflows/engine";
 import { workflowStore } from "./workflows/store";
+import { htmlBaselineHash } from "./improve/html-baseline";
 
 /**
  * Run the AI improvement in background and update the DATABASE record
@@ -606,6 +607,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
         classroom: originalFile.classroom,
         contentType: originalFile.contentType || 'html',
         improvementPrompt: customPrompt || 'Default improvement',
+        baselineHash: originalFile.contentType === 'lesson' ? null : htmlBaselineHash(originalFile),
         status: 'processing',
         createdBy: userId,
       });

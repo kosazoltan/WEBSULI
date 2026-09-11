@@ -14,7 +14,7 @@ import { callStepModel } from "./run-step";
 import { OpenRouterProvider } from "../ai/OpenRouterProvider";
 import { resolveStudioModel } from "../ai/models";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
-import { workflowPhase, workflowMode } from "../workflows/engine";
+import { workflowPhase, workflowMode, workflowFence } from "../workflows/engine";
 
 export const repairHash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
@@ -133,6 +133,7 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     assertRepairFresh(repair, current, source, materialHash(original));
     const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, source);
     if (workflowMode() === "apply") await workflowPhase("apply");
+    await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
     const backupData = { ...original, structuredLesson: current, quizItems: quiz, expectedCurrentHash: repairHash(repair.candidate), expectedCurrentVersion: current.version + 1 };
     const [backup] = await tx.insert(materialImprovementBackups).values({ originalFileId: original.id, improvedFileId: improved.id, createdBy: userId, notes: notes ?? "Fúziós lecke alkalmazása előtti teljes mentés", backupData }).returning();
@@ -145,6 +146,7 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title }).where(eq(htmlFiles.id, original.id)).returning();
     await tx.update(materialImprovementBackups).set({ backupData: { ...backupData, expectedQuizHash: quizHash(inserted), expectedMaterialHash: materialHash(updated) } }).where(eq(materialImprovementBackups.id, backup.id));
     await tx.update(improvedHtmlFiles).set({ status: "applied", appliedAt: new Date(), appliedBy: userId, improvementNotes: notes ?? improved.improvementNotes }).where(eq(improvedHtmlFiles.id, improved.id));
+    await workflowFence(tx);
     return { success: true, originalFile: updated, backupId: backup.id };
   });
 }

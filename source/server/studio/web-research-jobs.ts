@@ -46,7 +46,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     };
     try {
       await workflowPhase("generate");
-      const artifact = await workflowCheckpoint("web-result", job.input, () => job.state === "ready" && job.html
+      const artifact = await workflowCheckpoint("web-result", job.input, () => ["ready", "done"].includes(job.state) && job.html
         ? Promise.resolve({ html: job.html, sources: job.sources }) : generate(job.input, {
         onEvent(event) {
           if (event.type === "status") { job.stage = event.message; persist(); }
@@ -83,9 +83,12 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       await checkpoint.catch(() => undefined);
       job.error = error instanceof WebResearchFailure ? error.message : "A tananyagkészítés vagy mentés hibával megállt. A mentett futás állapota visszaolvasható.";
       job.stage = job.error;
-      const previous = job.state;
-      if (job.state !== "ready") job.state = "error";
-      await store.update(job, previous).catch(() => logger.error("[WEB-RESEARCH] job failure could not be persisted"));
+      const committed = await store.read(job.id, job.userId).catch(() => null);
+      if (committed?.state !== "done") {
+        const previous = job.state;
+        if (job.state !== "ready") job.state = "error";
+        await store.update(job, previous).catch(() => logger.error("[WEB-RESEARCH] job failure could not be persisted"));
+      }
       if (workflows) throw error;
     }
   }
@@ -120,8 +123,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     if (tracked) {
       const job = await read(id, userId);
       if (!job) throw new WebResearchFailure("A futás nem található.");
-      if (job.state === "done") return job;
-      if (job.state !== "ready" && !job.canResume) throw new WebResearchFailure("Még nincs ellenőrzött, menthető tananyag.");
+      if (job.state === "done" && tracked.view.state === "done") return job;
+      if (!["ready", "done"].includes(job.state) && !job.canResume) throw new WebResearchFailure("Még nincs ellenőrzött, menthető tananyag.");
       await run(job, true);
       return (await store.read(id, userId))!;
     }

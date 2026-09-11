@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createWorkflowStore } from "../server/workflows/store";
-import { executeWorkflow, workflowPhase, workflowCheckpoint, WorkflowConflict } from "../server/workflows/engine";
+import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowFence, WorkflowConflict } from "../server/workflows/engine";
 import { workflowDefinition } from "../shared/lesson-workflow";
 import express from "express";
 import type { AddressInfo } from "node:net";
@@ -14,6 +14,44 @@ const { dbPool } = await import("../server/db");
 const store = createWorkflowStore(async () => dbPool);
 before(async () => { await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('workflow-owner','workflow@test.invalid',true),('workflow-other','workflow-other@test.invalid',true)"); });
 after(() => dbPool.end());
+
+test("lejárt vagy átvett workflow-engedély a domain tranzakció írását is visszagörgeti", async () => {
+  const { db } = await import("../server/db");
+  const { sql } = await import("drizzle-orm");
+  await dbPool.query("INSERT INTO html_files(id,title,content,user_id) VALUES ('fenced-material','Fenced','Original','workflow-owner')");
+  for (const scenario of ["taken-over", "expired-in-transaction"]) {
+    const id = `fence-${scenario}`;
+    await assert.rejects(executeWorkflow(store, { id, owner: "workflow-owner", mode: "web" }, async () => {
+      for (const step of ["generate", "gate", "publish"]) await workflowPhase(step);
+      if (scenario === "taken-over") await dbPool.query("UPDATE lesson_workflow_runs SET lease_token='replacement' WHERE id=$1", [id]);
+      await db.transaction(async tx => {
+        await workflowFence(tx);
+        await tx.execute(sql`UPDATE html_files SET content='Must roll back' WHERE id='fenced-material'`);
+        if (scenario === "expired-in-transaction") await tx.execute(sql`UPDATE lesson_workflow_runs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=${id}`);
+        await workflowFence(tx);
+      });
+      await workflowPhase("readback"); return { kind: "material", id: "fenced-material" };
+    }), WorkflowConflict);
+    assert.equal((await dbPool.query("SELECT content FROM html_files WHERE id='fenced-material'")).rows[0].content, "Original");
+  }
+});
+
+test("új HTML-jelölt nem írhatja felül a készítése után módosított eredetit", async () => {
+  const { storage } = await import("../server/storage");
+  const { htmlBaselineHash } = await import("../server/improve/html-baseline");
+  const candidate = `<!DOCTYPE html><html><body>${"Javított tananyag. ".repeat(20)}</body></html>`;
+  await dbPool.query("INSERT INTO html_files(id,title,content,user_id) VALUES ('baseline-material','Eredeti','Original','workflow-owner')");
+  const original = await storage.getHtmlFile("baseline-material");
+  await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,baseline_hash,created_by) VALUES ('baseline-candidate','baseline-material','Javított',$1,$2,'workflow-owner')", [candidate, htmlBaselineHash(original!)]);
+  await dbPool.query("UPDATE html_files SET content='Edited after generation' WHERE id='baseline-material'");
+  await assert.rejects(storage.applyImprovedFileToOriginal("baseline-candidate", "workflow-owner", true), /megváltozott/);
+  assert.equal((await storage.getHtmlFile("baseline-material"))!.content, "Edited after generation");
+  assert.equal((await storage.getAllMaterialImprovementBackups("baseline-material")).length, 0);
+  await dbPool.query("UPDATE html_files SET content='Original' WHERE id='baseline-material'");
+  await storage.applyImprovedFileToOriginal("baseline-candidate", "workflow-owner", true);
+  await storage.applyImprovedFileToOriginal("baseline-candidate", "workflow-owner", true);
+  assert.equal((await storage.getAllMaterialImprovementBackups("baseline-material")).length, 1);
+});
 
 test("felhasználó törlése a saját futásait eltávolítja, más tulajdonos naplóját megtartja", async () => {
   const { storage } = await import("../server/storage");

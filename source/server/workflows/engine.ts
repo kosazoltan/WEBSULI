@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
+import { sql, type SQL } from "drizzle-orm";
 import { assertWorkflowStep, workflowDefinition, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 
 export type WorkflowRecord = { view: WorkflowView; owner: string; checkpoints: Record<string, unknown> };
@@ -18,6 +19,19 @@ export class WorkflowWaiting extends Error {
   constructor(message: string, readonly stepCompleted = false) { super(message); }
 }
 export const workflowMode = () => context.getStore()?.record.view.definition.mode;
+/** Call before domain writes and immediately before returning from their transaction.
+ * The row lock prevents takeover until commit; the final wall-clock check rejects an expired writer.
+ * No workflowPhase/persist call may occur between these fences (it uses another connection).
+ */
+export async function workflowFence(tx: { execute(query: SQL): Promise<{ rows: unknown[] }> }) {
+  const ctx = context.getStore();
+  if (!ctx) return;
+  if (ctx.lostLease) throw new WorkflowConflict("A futás végrehajtási engedélye elveszett; nincs közzététel.");
+  const result = await tx.execute(sql`SELECT id FROM lesson_workflow_runs WHERE id=${ctx.record.view.id}
+    AND owner_id=${ctx.record.owner} AND lease_token=${ctx.token} AND revision=${ctx.record.view.revision}
+    AND lease_until>clock_timestamp() FOR UPDATE`);
+  if (result.rows.length !== 1) throw new WorkflowConflict("Elavult vagy lejárt végrehajtó nem menthet tananyagot.");
+}
 const hash = (input: unknown) => createHash("sha256").update(JSON.stringify(input)).digest("hex");
 export function savedWorkflowResult<T>(record: WorkflowRecord, name: string, input: unknown): T | undefined {
   if (record.view.definition.version !== WORKFLOW_VERSION) return undefined;

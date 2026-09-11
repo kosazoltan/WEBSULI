@@ -43,6 +43,8 @@ Pedagógiai módszer, prompttartalom, fontok, játékok vagy meglévő tananyago
 
 Kiadás előtti review-szelet: a felhasználó törlése a saját futásnaplóit kaszkáddal törölje, hogy a meglévő törlés/visszaállítás ne ütközzön új FK-ba. A checkpoint mentése és a webes job ready állapota közötti megszakadás után a felület külön folytatást kínáljon, kizárólag érvényes, pontos bemenetű mentett eredményből, új AI-hívás nélkül. Másik javítójelölt megnyitása annak saját naplóját mutassa. Elfogadás: izolált DB-törlés, webes újraindulási teszt és két jelölt közötti böngészős váltás.
 
+Második review-szelet: a nyilvános tananyag írásának tranzakciójában is zárolt, aktuális workflow-engedély kell, a tranzakció végén is ellenőrizve. A webes commit utáni visszaolvasási hibát ismételt publikálás nélkül lehessen lezárni. Új HTML-javítójelölt rögzítse az eredeti tartalom és metaadatok hash-ét; megváltozott eredetire nem alkalmazható. Régi, ilyen hash nélkül készült HTML-jelöltre a meglévő mentéses út megmarad, a frissesség utólag nem állítható. Érintett plusz fájlok: shared/schema.ts, improve/html-baseline.ts, web-research-job-store.ts és step-runner.ts tranzakciói. Elfogadás: elavult és tranzakció közben lejárt engedély mellett nincs commit; újraalkalmazás nem hoz új mentést; eltérő HTML-baseline esetén az eredeti változatlan.
+
 A migráció kizárólag új táblát/indexet hoz létre. Élesítés előtt aktív futások ellenőrzése és friss visszaállítható mentés kell. Kódvisszaállításkor a naplótábla megmaradhat; éles adatot nem törlünk. Új folyamat csak az adott verziójához tartozó kóddal folytatható.
 
 ## Állapot
@@ -50,8 +52,8 @@ A migráció kizárólag új táblát/indexet hoz létre. Élesítés előtt akt
 Megvalósítva a hét mód, a tényleges lépésvédelmek, a tulajdonosra szűrt tartós napló és az adminba integrált mobilábra. A régi AI-fül a közös készítőt használja. A külön force-apply gomb megszűnt; régi API-címe is a normál mentéses alkalmazást hívja. A teljes Studio-lánc próbája közben a státuszpatch javítva: lektor/pedagógus nem ad át undefined leckeazonosítót.
 
 Helyi ellenőrzés (2026-09-11):
-- `npm.cmd run verify`: PASS, typecheck, lint, teszt-typecheck, 1150 unit teszt, build.
-- `npm.cmd run test:learning-db`: PASS, 13 eset. Az új migráció kétszer futott idempotensen az eldobható PostgreSQL 17-en. Valódi mentés/visszaolvasás, hibás jelölt, egyszeri alkalmazás, konkurens engedély, tulajdonosi HTTP API és felhasználótörlés ellenőrizve.
+- `npm.cmd run verify`: PASS, typecheck, lint, teszt-typecheck, 1151 unit teszt, build.
+- `npm.cmd run test:learning-db`: PASS, 15 eset. Az új migráció kétszer futott idempotensen az eldobható PostgreSQL 17-en. Valódi mentés/visszaolvasás, hibás jelölt, egyszeri alkalmazás, konkurens engedély, tulajdonosi HTTP API és felhasználótörlés ellenőrizve. Tranzakción belül lejárt engedély visszagörgette a tananyagírást; eltérő HTML-baseline mellett nincs felülírás és nincs új mentés.
 - `npx.cmd playwright test --config playwright.workflow.config.ts --reporter=line`: PASS, 9 eset, 320/390/844/1440 px, mind a hét mód; kontraszt, átfedés, vízszintes túlcsordulás, újratöltés, megszakadás, régi AI-menü, mobil navigáció, jelöltváltás és a mentett webes eredmény folytatása.
 - Külön önreview: a fehér felirat/fehér háttér kontrasztja javítva, megszakadt lépés részlete nem mutat „Folyamatban” állapotot, alkalmazáskor teljes tartalomegyezés és sorzár védi a mentést. A meglévő kapuk nem lazultak.
 
