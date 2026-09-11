@@ -317,6 +317,7 @@
     @apply font-sans antialiased;
     font-family: "Source Sans 3", sans-serif;
     min-height: 100vh;
+    min-height: 100dvh; /* Older engines retain the 100vh fallback above. */
     /* #197 — MÉRVE élesben (Kristóf-lecke, px-alapú kontraszt): itt egy
        hardkódolt SÖTÉT háttér állt `@apply text-foreground` mellett, a
        `--foreground` viszont a VILÁGOS téma szövegszíne (hsl(222 84% 4.9%),

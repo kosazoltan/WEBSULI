@@ -92,7 +92,7 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <div className="min-h-screen">
+          <div className="min-h-screen supports-[height:100dvh]:min-h-dvh">
             <Toaster />
             <Router />
           </div>

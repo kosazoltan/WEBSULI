@@ -26,4 +26,8 @@ Pontozási konzisztencia: a HTML-promptba másolt régi értékelőből kikerül
 - Izolált PostgreSQL 17: egyedi indítás, tulajdonosi izoláció, beszúrás utáni kényszerített hiba teljes rollbackje, párhuzamos publikálás egyetlen anyaggal, 7. osztály visszaolvasása, lezárt állapot megőrzése PASS. A teszt kezdeti sorrend-feltételezését és Drizzle-kivételcsomagolásra vonatkozó ellenőrzését javítottuk; az adatbázis-viselkedési mérce nem változott.
 - Önreview: késői állapotírás nem írhat felül kész eredményt; ready újramenthető szerver-újraindulás után; done csak HTML+azonosítóval jelenhet meg. A régi SSE-kliensek ugyanazt a generálót használják.
 - A HTTP-től leválasztás miatt a generáló ciklus külön fájlba került; a diff nagyobb része áthelyezés.
-- Következő: PR/CI, kiadás után tényleges forráskeresés és új tananyag visszaolvasás/render.
+- PR55 CI: 1139 unit és 136 Playwright PASS; a8c1c2e kiadása mindkét éles szolgáltatáson igazolt.
+- Éles Chrome, az eredeti negyedikes angolos kérés: 16 forrás, elsőre end_turn, 29994 kimeneti token, 338171 ms. Oldalfrissítés után ugyanaz a futás folytatódott; a szerver automatikusan mentett.
+- Publikus API/adatbázis tartalomegyezés és változatlan szigorú kapu PASS: 4. osztály, 12 fogalom, 8 módszer, 12 feladat (4 szóbeli), 24 kvíz.
+- Éles pontozás: üres 0; minden mintaválasz 12/12; részválasz 11.5/12; teljes kvíz 24/24; az első rossz kvízválasz későbbi javítása továbbra is 0 pont. Magyar ékezetes Nunito render igazolt.
+- A renderpróba két meglévő előnézeti hibát feltárt; célzott követő javítás: docs/specs/2026-09-11-material-preview-runtime.md.
