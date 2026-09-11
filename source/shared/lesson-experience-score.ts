@@ -31,6 +31,11 @@ function wordHit(token: string, word: string): boolean {
 function conceptHit(tokens: string[], alternatives: string[]): boolean {
   return alternatives.some(phrase => tokensOf(phrase).every(word => tokens.some(token => wordHit(token, word))));
 }
+/** Generation diagnostics use the exact learner-side matcher, not another approximation. */
+export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "required">): string[][] {
+  const tokens = tokensOf(answer).slice(0, 500);
+  return task.required.filter(group => !conceptHit(tokens, group));
+}
 export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; reason: string };
 export function evaluateOpenAnswer(answer: string, task: OpenTask): AnswerScore {
   const tokens = tokensOf(answer).slice(0, 500);

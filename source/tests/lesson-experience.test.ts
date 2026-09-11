@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fusionFixture, compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { experienceSchema, experienceTheme } from "../shared/lesson-experience";
-import { evaluateOpenAnswer, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
+import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
 import { applyBankPacketRepair, buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
@@ -134,6 +134,27 @@ test("language task repair preserves the taught glossary when the repair sends a
   assert.deepEqual(result.glossary.map(({ sourceHash: _hash, ...entry }) => entry), glossary);
   const revised = [{ ...glossary[0], translation: "a víz" }];
   assert.deepEqual(applyBankPacketRepair({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary }, { glossary: revised }).glossary, revised);
+});
+
+test("rubric repair names the exact missing short-word group and preserves the grading rule", async () => {
+  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const task = { ...e.tasks[0], required: [["gyökér"], ["mag"]], bonus: [], minWords: 2, needsSentence: false,
+    sample: "A növény gyökérre és magra tagolódik." };
+  assert.equal(evaluateOpenAnswer(task.sample, task).score, 0.5);
+  assert.deepEqual(missingAnswerConcepts(task.sample, task), [["mag"]]);
+  assert.deepEqual(missingAnswerConcepts("GYÖKÉR és MAG", task), []);
+  const corrected = { ...task, required: [["gyökér"], ["mag", "magra"]] };
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+    if (++calls === 1) return { methods: e.methods, tasks: [task, ...e.tasks.slice(1)], quiz: e.quiz, glossary: [] };
+    assert.match(user, /fel nem ismert kötelező szinonimacsoportok: \[\["mag"\]\]/);
+    assert.match(user, /ne töröld a hiányzó fogalmat/);
+    return { tasks: [corrected] };
+  } });
+  assert.equal(calls, 2); assert.equal(evaluateOpenAnswer(task.sample, result.tasks[0]).score, 1);
+  assert.equal(evaluateOpenAnswer("gyökér", result.tasks[0]).score, 0);
+  assert.equal(evaluateOpenAnswer(task.sample, task).score, 0.5);
+  assert.deepEqual(experienceProblems(lesson, result), []);
 });
 
 test("a partial repair still fails closed on invalid concept, answer or unchanged sample", async () => {

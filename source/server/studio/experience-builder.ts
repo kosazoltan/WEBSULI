@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, METHOD_KINDS, experienceSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
-import { evaluateOpenAnswer, normalizeAnswer } from "../../shared/lesson-experience-score";
+import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { planLessonBank } from "../../shared/lesson-bank-plan";
 import type { Lesson } from "../../shared/lesson-schema";
@@ -69,7 +69,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const validate = (packet: Packet): string[] => {
       const local = experienceSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
-      for (const t of packet.tasks) if (evaluateOpenAnswer(t.sample, t).score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${evaluateOpenAnswer(t.sample, t).reason}`);
+      for (const t of packet.tasks) {
+        const score = evaluateOpenAnswer(t.sample, t);
+        if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);
+      }
       for (const [past, added] of [[tasks.map(t => t.q), packet.tasks.map(t => t.q)], [quiz.map(q => q.question), packet.quiz.map(q => q.question)]]) {
         const keys = [...past, ...added].map(normalizeAnswer);
         if (new Set(keys).size !== keys.length) problems.push("Ismétlődő kérdés egy korábbi csomaggal.");
@@ -93,6 +96,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
 A végleges, egyesített csomag pontosan 2 módszer, ${Math.max(2, unit.conceptIds.length)} feladat és ${unit.conceptIds.length * 2} kvíz.
 Két különböző, ehhez a témához illő módszer a listából: ${METHOD_KINDS.join(", ")}. Mind: id,sectionIndex,coversConceptIds,kind,title,prompt,answer. gate/myth/popup: options és correctIndex. sorting/causeEffect/timeline: steps helyes sorrendben. Ne erőltess idővonalat, ha nincs időbeli folyamat.
 ${Math.max(2, unit.conceptIds.length)} nyílt feladat, az összes fogalom lefedésével; legalább egy oral és egy written. Mind: id,sectionIndex,coversConceptIds,q,required:string[][] (szinonimacsoportok),bonus:string[][],minWords,needsSentence,sample,mode. Saját mintaválasz teljes pontot érjen; needsSentence csak valódi mondatfeladatnál.
+Az értékelő szóalakokat illeszt, nem nyelvi modell. Minden required csoportban legyen a mintaválaszban ténylegesen használt alak is, a fogalom eredeti alakja mellett: például ["mag","magra"], ["víz","vízre"]. Rövid szavaknál a ragozás felismerése nem garantált. Hibajavításnál a megnevezett csoport jelentését és a kérdés követelményeit őrizd meg; ne töröld a hiányzó fogalmat. Egész mintamondatot ne használj szinonimaként. A sample természetes, teljes válasz legyen a kérdésre.
 ${unit.conceptIds.length * 2} kvíz: minden fogalomhoz egy intent=recall és egy intent=apply. Mind: id,sectionIndex,coversConceptIds:[egyetlen ID],intent,question,options (3 vagy 4 különböző),correctIndex,feedbackPerOption (minden opcióhoz magyarázat). Felidézés és valódi alkalmazás külön kérdés, ne csak számot cserélj!
 ${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább egy elem.` : "glossary: []."}
 Korábbi kérdések, ne ismételd: ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question) })}
