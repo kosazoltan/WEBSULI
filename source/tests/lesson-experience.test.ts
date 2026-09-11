@@ -93,7 +93,7 @@ test("one repaired task preserves every previously generated method, task and qu
   const lesson = compactFusionFixture(), e = lesson.experience!;
   const first = { methods: e.methods, tasks: structuredClone(e.tasks), quiz: e.quiz, glossary: [] };
   // Production failure: one sample needed a rubric repair, the model returned only that task.
-  first.tasks[0].required = [["nemszerepelamintában"]];
+  first.tasks[0].sample = "Az alap és a magasság szorzata.";
   let calls = 0;
   const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
     if (++calls === 1) return first;
@@ -125,7 +125,7 @@ test("language task repair preserves the taught glossary when the repair sends a
   const lesson = compactFusionFixture(), e = lesson.experience!;
   lesson.subject = "angol";
   const glossary = [{ word: "water", translation: "víz", partOfSpeech: "főnév", example: "Plants need water.", exampleTranslation: "A növényeknek vízre van szükségük." }];
-  const tasks = structuredClone(e.tasks); tasks[0].required = [["hiányzófogalom"]];
+  const tasks = structuredClone(e.tasks); tasks[0].sample = "Az alap és a magasság szorzata.";
   let calls = 0;
   const result = await buildLessonExperience(lesson, [], { call: async () => ++calls === 1
     ? { methods: e.methods, tasks, quiz: e.quiz, glossary }
@@ -134,6 +134,34 @@ test("language task repair preserves the taught glossary when the repair sends a
   assert.deepEqual(result.glossary.map(({ sourceHash: _hash, ...entry }) => entry), glossary);
   const revised = [{ ...glossary[0], translation: "a víz" }];
   assert.deepEqual(applyBankPacketRepair({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary }, { glossary: revised }).glossary, revised);
+});
+
+test("a complete sentence needs no off-rubric filler and adding bonus terms cannot reduce its score", () => {
+  const task = { ...fusionFixture().experience!.tasks[0], required: [["takarólevelek"], ["porzót", "porzó"], ["termőt", "termő"], ["védik", "védi"]],
+    bonus: [["kívülről", "kívül"]], minWords: 4, needsSentence: true,
+    sample: "A takarólevelek kívülről védik a porzót és a termőt." };
+  assert.deepEqual(missingAnswerConcepts(task.sample, task), []);
+  assert.equal(evaluateOpenAnswer(task.sample, { ...task, bonus: [] }).score, 1);
+  assert.equal(evaluateOpenAnswer(task.sample, task).score, 1);
+  assert.equal(evaluateOpenAnswer("A porzót és a termőt kívülről védik a takarólevelek.", task).score, 1);
+  assert.equal(evaluateOpenAnswer("takarólevelek porzót termőt védik kívülről", task).score, 0.5);
+  assert.equal(evaluateOpenAnswer("A takarólevelek a porzót védik.", task).score, 0.5);
+  assert.equal(evaluateOpenAnswer("A takarólevelek nem védik a porzót és a termőt.", task).score, 0.5);
+  assert.equal(evaluateOpenAnswer("", task).score, 0);
+});
+
+test("rubric repair preserves every required group and base form, including reordered overlapping groups", () => {
+  const e = compactFusionFixture().experience!;
+  const task = { ...e.tasks[0], required: [["gyökér"], ["mag"]] };
+  const original = { methods: e.methods, tasks: [task], quiz: e.quiz, glossary: [] };
+  for (const required of [[["gyökér"]], [["gyökér"], ["magra"]], [["gyökér", "mag", "magra"]]]) {
+    assert.throws(() => applyBankPacketRepair(original, { tasks: [{ ...task, required }] }), /kötelező csoport/);
+  }
+  const required = [["mag", "magra"], ["gyökér", "gyökérre"]];
+  assert.deepEqual(applyBankPacketRepair(original, { tasks: [{ ...task, required }] }).tasks[0].required, required);
+  const overlapping = { ...task, required: [["víz"], ["víz", "vízre"]] };
+  const swapped = [["víz", "vízre", "vízből"], ["víz"]];
+  assert.deepEqual(applyBankPacketRepair({ ...original, tasks: [overlapping] }, { tasks: [{ ...overlapping, required: swapped }] }).tasks[0].required, swapped);
 });
 
 test("rubric repair names the exact missing short-word group and preserves the grading rule", async () => {
@@ -165,7 +193,7 @@ test("a partial repair still fails closed on invalid concept, answer or unchange
     { tasks: [e.tasks[0]], quiz: [{ ...e.quiz[0], correctIndex: 9 }] },
   ]) {
     let calls = 0, saves = 0;
-    const tasks = structuredClone(e.tasks); tasks[0].required = [["hiányzófogalom"]];
+    const tasks = structuredClone(e.tasks); tasks[0].sample = "Az alap és a magasság szorzata.";
     await assert.rejects(buildLessonExperience(lesson, [], {
       call: async () => ++calls === 1 ? { methods: e.methods, tasks, quiz: e.quiz, glossary: [] } : repair,
       save: async () => { saves++; },

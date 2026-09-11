@@ -23,6 +23,22 @@ const packetPatchSchema = z.object({
 type PacketContent = z.infer<typeof packetPatchSchema> & { glossary: z.infer<typeof glossaryEntrySchema>[] };
 const BANKS = ["methods", "tasks", "quiz"] as const;
 
+/** Each old AND-group must survive in a distinct new group, including its alternatives. */
+function retainsRequiredGroups(before: string[][], after: string[][]): boolean {
+  const groups = after.map(group => new Set(group.map(normalizeAnswer)));
+  const owner = new Map<number, number>();
+  const match = (oldIndex: number, visited: Set<number>): boolean => {
+    for (let i = 0; i < groups.length; i++) {
+      if (visited.has(i) || !before[oldIndex].every(term => groups[i].has(normalizeAnswer(term)))) continue;
+      visited.add(i);
+      const previous = owner.get(i);
+      if (previous === undefined || match(previous, visited)) { owner.set(i, oldIndex); return true; }
+    }
+    return false;
+  };
+  return before.every((_, index) => match(index, new Set()));
+}
+
 /** A repair is a replacement by existing ID, never an incomplete new packet. */
 export function applyBankPacketRepair(original: PacketContent, response: unknown): PacketContent {
   const patch = packetPatchSchema.parse(response);
@@ -31,6 +47,12 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
     const ids = patch[bank].map(item => item.id);
     if (known.size !== original[bank].length || new Set(ids).size !== ids.length || ids.some(id => !known.has(id))) {
       throw new Error(`${bank}: a javítás csak egyedi, már létező tételazonosítót cserélhet.`);
+    }
+  }
+  for (const task of patch.tasks) {
+    const previous = original.tasks.find(item => item.id === task.id)!;
+    if (!retainsRequiredGroups(previous.required, task.required)) {
+      throw new Error(`${task.id}: a javítás nem törölhet kötelező csoportot vagy korábbi elfogadott szóalakot, és nem vonhat össze kötelező csoportokat.`);
     }
   }
   const replace = <T extends { id: string }>(items: T[], updates: T[]) => items.map(item => updates.find(update => update.id === item.id) ?? item);
@@ -97,6 +119,7 @@ A végleges, egyesített csomag pontosan 2 módszer, ${Math.max(2, unit.conceptI
 Két különböző, ehhez a témához illő módszer a listából: ${METHOD_KINDS.join(", ")}. Mind: id,sectionIndex,coversConceptIds,kind,title,prompt,answer. gate/myth/popup: options és correctIndex. sorting/causeEffect/timeline: steps helyes sorrendben. Ne erőltess idővonalat, ha nincs időbeli folyamat.
 ${Math.max(2, unit.conceptIds.length)} nyílt feladat, az összes fogalom lefedésével; legalább egy oral és egy written. Mind: id,sectionIndex,coversConceptIds,q,required:string[][] (szinonimacsoportok),bonus:string[][],minWords,needsSentence,sample,mode. Saját mintaválasz teljes pontot érjen; needsSentence csak valódi mondatfeladatnál.
 Az értékelő szóalakokat illeszt, nem nyelvi modell. Minden required csoportban legyen a mintaválaszban ténylegesen használt alak is, a fogalom eredeti alakja mellett: például ["mag","magra"], ["víz","vízre"]. Rövid szavaknál a ragozás felismerése nem garantált. Hibajavításnál a megnevezett csoport jelentését és a kérdés követelményeit őrizd meg; ne töröld a hiányzó fogalmat. Egész mintamondatot ne használj szinonimaként. A sample természetes, teljes válasz legyen a kérdésre.
+A javított required minden korábbi csoportot külön őrizzen meg, annak összes korábbi alakjával. Új szinonimát hozzáadhatsz; csoportot vagy alakot törölni, két kötelező csoportot összevonni tilos. Ezt a program is ellenőrzi.
 ${unit.conceptIds.length * 2} kvíz: minden fogalomhoz egy intent=recall és egy intent=apply. Mind: id,sectionIndex,coversConceptIds:[egyetlen ID],intent,question,options (3 vagy 4 különböző),correctIndex,feedbackPerOption (minden opcióhoz magyarázat). Felidézés és valódi alkalmazás külön kérdés, ne csak számot cserélj!
 ${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább egy elem.` : "glossary: []."}
 Korábbi kérdések, ne ismételd: ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question) })}
