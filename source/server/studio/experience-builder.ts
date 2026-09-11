@@ -59,7 +59,7 @@ function retainsRequiredGroups(before: string[][], after: string[][]): boolean {
 }
 
 /** A repair is a replacement by existing ID, never an incomplete new packet. */
-export function applyBankPacketRepair(original: PacketContent, response: unknown): PacketContent {
+export function applyBankPacketRepair(original: PacketContent, response: unknown, reviewedIds?: ReadonlySet<string>): PacketContent {
   const patch = packetPatchSchema.parse(response);
   for (const bank of BANKS) {
     const known = new Set(original[bank].map(item => item.id));
@@ -67,12 +67,20 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
     if (known.size !== original[bank].length || new Set(ids).size !== ids.length || ids.some(id => !known.has(id))) {
       throw new Error(`${bank}: a javítás csak egyedi, már létező tételazonosítót cserélhet.`);
     }
+    for (const item of patch[bank]) {
+      if (reviewedIds && !reviewedIds.has(item.id) && canonicalJson(item) !== canonicalJson(original[bank].find(i => i.id === item.id))) {
+        throw new Error(`${item.id}: a lektor által nem érintett tétel nem módosítható.`);
+      }
+    }
   }
   for (const task of patch.tasks) {
     const previous = original.tasks.find(item => item.id === task.id)!;
-    if (!retainsRequiredGroups(previous.required, task.required)) {
+    if (!reviewedIds?.has(task.id) && !retainsRequiredGroups(previous.required, task.required)) {
       throw new Error(`${task.id}: a javítás nem törölhet kötelező csoportot vagy korábbi elfogadott szóalakot, és nem vonhat össze kötelező csoportokat.`);
     }
+  }
+  if (reviewedIds && patch.glossary?.length && canonicalJson(patch.glossary) !== canonicalJson(original.glossary)) {
+    throw new Error("A nem érintett szószedet nem módosítható.");
   }
   const replace = <T extends { id: string }>(items: T[], updates: T[]) => items.map(item => updates.find(update => update.id === item.id) ?? item);
   return { methods: replace(original.methods, patch.methods), tasks: replace(original.tasks, patch.tasks),
@@ -138,7 +146,17 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       const parsed = packetSchema.safeParse(saved);
       if (parsed.success && validate(parsed.data).length === 0) { packet = parsed.data; break; }
     }
-    let previous: unknown, repairBase: Packet | undefined, errors = "";
+    // If teaching is unchanged, preserve the entire reviewed packet and replace
+    // only its criticized IDs. This also retains fixes from preceding rounds.
+    const priorHash = checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
+    const prior = packetSchema.safeParse(checkpoint.parts[priorHash]);
+    const reviewedIds = new Set(reviewFeedback.map(f => (f.previousItem as { id?: string } | undefined)?.id));
+    const known = prior.success ? new Set([...prior.data.methods, ...prior.data.tasks, ...prior.data.quiz].map(i => i.id)) : new Set<string>();
+    const reviewBase = reviewFeedback.length && prior.success && validate(prior.data).length === 0
+      && [...reviewedIds].every(id => id && known.has(id)) ? prior.data : undefined;
+    const allowedReviewIds = reviewBase ? reviewedIds as Set<string> : undefined;
+    let previous: unknown = reviewBase, repairBase: Packet | undefined = reviewBase;
+    let errors = reviewBase ? "A lektor konkrét hibáit javítsd az eredeti tételazonosítókon." : "";
     for (let attempt = 0; !packet && attempt < 2; attempt++) {
       const prompt = `${repairBase ? "Kimenet: a lent leírt JAVÍTÁSI MÓD szerinti JSON tételcserék." : "Kimenet: TELJES JSON-csomag methods, tasks, quiz és glossary tömbökkel; a három bank nem lehet üres."}
 A végleges, egyesített csomag pontosan 2 módszer, ${Math.max(2, unit.conceptIds.length)} feladat és ${unit.conceptIds.length * 2} kvíz.
@@ -146,7 +164,7 @@ ${reviewFeedback.length ? "LEKTORI JAVÍTÁS: a reviewFeedback konkrét hibáit 
 Két különböző, ehhez a témához illő módszer a listából: ${METHOD_KINDS.join(", ")}. Mind: id,sectionIndex,coversConceptIds,kind,title,prompt,answer. gate/myth/popup: options és correctIndex. sorting/causeEffect/timeline: steps helyes sorrendben. Ne erőltess idővonalat, ha nincs időbeli folyamat.
 ${Math.max(2, unit.conceptIds.length)} nyílt feladat, az összes fogalom lefedésével; legalább egy oral és egy written. Mind: id,sectionIndex,coversConceptIds,q,required:string[][] (szinonimacsoportok),bonus:string[][],minWords,needsSentence,sample,mode. Saját mintaválasz teljes pontot érjen; needsSentence csak valódi mondatfeladatnál.
 Az értékelő szóalakokat illeszt, nem nyelvi modell. Minden required csoportban legyen a mintaválaszban ténylegesen használt alak is, a fogalom eredeti alakja mellett: például ["mag","magra"], ["víz","vízre"]. Rövid szavaknál a ragozás felismerése nem garantált. Hibajavításnál a megnevezett csoport jelentését és a kérdés követelményeit őrizd meg; ne töröld a hiányzó fogalmat. Egész mintamondatot ne használj szinonimaként. A sample természetes, teljes válasz legyen a kérdésre.
-A javított required minden korábbi csoportot külön őrizzen meg, annak összes korábbi alakjával. Új szinonimát hozzáadhatsz; csoportot vagy alakot törölni, két kötelező csoportot összevonni tilos. Ezt a program is ellenőrzi.
+${reviewBase ? `TARTALMI LEKTORI JAVÍTÁS: csak ezek az ID-k módosíthatók: ${JSON.stringify([...allowedReviewIds!])}. Ezek kérdését és hibás rubrikáját a forrás szerint összhangba hozhatod; a nem érintett tételeket a program változatlanul megőrzi, azokat ne küldd vissza.` : "A javított required minden korábbi csoportot külön őrizzen meg, annak összes korábbi alakjával. Új szinonimát hozzáadhatsz; csoportot vagy alakot törölni, két kötelező csoportot összevonni tilos. Ezt a program is ellenőrzi."}
 ${unit.conceptIds.length * 2} kvíz: minden fogalomhoz egy intent=recall és egy intent=apply. Mind: id,sectionIndex,coversConceptIds:[egyetlen ID],intent,question,options (3 vagy 4 különböző),correctIndex,feedbackPerOption (minden opcióhoz magyarázat). Felidézés és valódi alkalmazás külön kérdés, ne csak számot cserélj!
 ${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább egy elem.` : "glossary: []."}
 Korábbi kérdések, ne ismételd: ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question) })}
@@ -156,7 +174,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       const response = await deps.call(system, prompt);
       let candidate = response;
       if (repairBase) {
-        try { candidate = applyBankPacketRepair(repairBase, response); }
+        try { candidate = applyBankPacketRepair(repairBase, response, allowedReviewIds); }
         catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; continue; }
       }
       previous = candidate;

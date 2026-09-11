@@ -135,6 +135,8 @@ export type PipelineStore = {
   loadMap(mapId: string): Promise<{ meta: MapMeta; concepts: MapConcept[] } | null>;
   /** Blocking lektor notes of ONE lektor round — what the next Author round must fix. */
   loadBlockerNotes(jobId: string, round: number): Promise<RawNote[]>;
+  /** Complete review round for jobs saved before reportRound was introduced. */
+  loadReviewNotes?(jobId: string, round: number): Promise<RawNote[]>;
   saveStep(jobId: string, patch: JobPatch): Promise<void>;
   /** Persist a lektor round's notes, tagged with the round they were written in. */
   saveNotes(
@@ -337,7 +339,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const blockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
       const report = lektorReportSchema.safeParse(job.output?.report);
       const reviewNotes = job.round > 0 && job.output?.reportRound === job.round - 1 && report.success
-        ? classifyNotes(report.data.notes).filter(n => !n.adminOnly) : blockers;
+        ? classifyNotes(report.data.notes).filter(n => !n.adminOnly)
+        : classifyNotes(job.round > 0 && store.loadReviewNotes ? await store.loadReviewNotes(job.id, job.round - 1) : blockers).filter(n => !n.adminOnly);
       const previousLesson = job.round > 0 ? job.output?.lesson as Lesson | undefined : undefined;
       const previousTeaching = previousLesson ? { ...previousLesson, experience: undefined } : undefined;
       bankReview = { round: job.round, feedback: previousLesson ? resolveBankReview(previousLesson, reviewNotes) : [] };
@@ -1039,6 +1042,12 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
 
     async saveStep(jobId, patch) {
       await db.update(studioJobs).set(patch).where(eq(studioJobs.id, jobId));
+    },
+
+    async loadReviewNotes(jobId, round) {
+      const rows = await db.select().from(lektorNotes).where(and(eq(lektorNotes.jobId, jobId), eq(lektorNotes.round, round)));
+      return rows.map(r => ({ kind: r.kind as RawNote["kind"], subkind: r.subkind ?? undefined,
+        message: r.message, blockPath: r.blockPath ?? undefined }));
     },
 
     async saveNotes(jobId, notes, round) {

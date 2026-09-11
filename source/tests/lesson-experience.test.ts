@@ -294,7 +294,7 @@ test("bank review invalidates only its packet, resumes the repair and never revi
   calls = 0;
   const repaired = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback, save, call: async (system, user) => {
     calls++; assert.match(system, /rubrika csak egyet fogad el/); assert.match(system, /previousItem/); assert.match(user, /LEKTORI JAVÍTÁS/);
-    const packet = structuredClone(packets[1]); packet.tasks[0].q = "Pontosított második kérdés a területről"; return packet;
+    return { tasks: [{ ...first.tasks[2], q: "Pontosított második kérdés a területről" }] };
   } });
   assert.equal(calls, 1);
   assert.deepEqual(repaired.quiz.filter(q => q.sectionIndex === 0), first.quiz.filter(q => q.sectionIndex === 0));
@@ -302,9 +302,23 @@ test("bank review invalidates only its packet, resumes the repair and never revi
   const neverCall = async () => { throw new Error("A javított csomag már elkészült."); };
   assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback, call: neverCall }), repaired);
   assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, call: neverCall }), repaired);
+  const nextFeedback = resolveBankReview({ ...lesson, experience: repaired }, [{ kind: "language", blockPath: "experience.tasks.3", message: "A másik feladat nyelvi javítása." }]);
+  const next = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback: nextFeedback, save, call: async () => ({ tasks: [{ ...repaired.tasks[3], q: "Másik feladat, pontosított megfogalmazással" }] }) });
+  assert.equal(next.tasks[2].q, repaired.tasks[2].q, "korábbi lektori javítás a következő célzott javításban is megmarad");
+  assert.equal(next.tasks[3].q, "Másik feladat, pontosított megfogalmazással");
+  assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, call: neverCall }), next);
   calls = 0;
   await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback: [{ ...reviewFeedback[0], conceptIds: ["removed"] }], call: async system => {
     assert.match(system, /rubrika csak egyet fogad el/); return structuredClone(packets[calls++]);
   } });
   assert.equal(calls, 2, "feloldhatatlan fogalomhivatkozás nem veszhet el");
+});
+
+test("content review may fix the criticized rubric but cannot rewrite unrelated items or glossary", () => {
+  const e = compactFusionFixture().experience!;
+  const allowed = new Set([e.tasks[0].id]);
+  const corrected = { ...e.tasks[0], q: "Egyértelmű kérdés", required: [["helyes"]] };
+  assert.deepEqual(applyBankPacketRepair(e, { tasks: [corrected] }, allowed).tasks[0], corrected);
+  assert.throws(() => applyBankPacketRepair(e, { tasks: [{ ...e.tasks[1], q: "Nem kért átírás" }] }, allowed), /nem érintett/);
+  assert.throws(() => applyBankPacketRepair(e, { glossary: [{ word: "a", translation: "egy", partOfSpeech: "névelő", example: "A cat", exampleTranslation: "Egy macska" }] }, allowed), /szószedet/);
 });
