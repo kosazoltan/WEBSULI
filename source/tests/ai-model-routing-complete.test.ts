@@ -73,6 +73,7 @@ test("a render.yaml deklarálja mind a három AI-kulcsot", () => {
     "AI_INTEGRATIONS_ANTHROPIC_API_KEY",
     "AI_INTEGRATIONS_OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
+    "XAI_API_KEY",
   ].filter((key) => !yaml.includes(key));
 
   assert.deepEqual(missing, [], `a render.yaml-ból hiányzik: ${missing.join(", ")}`);

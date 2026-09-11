@@ -1,3 +1,4 @@
+import { studioConnection } from "../ai/studio-provider";
 /**
  * #163 — OCR layer for image sources (owner decision, 2026-09-05).
  *
@@ -154,26 +155,19 @@ export function ocrRequestParams(model: string, imageDataUrl: string) {
 /** The default OCR callable: one cheap vision call per image. */
 export async function callOcrModel(file: ExtractorFile, model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
-  const useOpenRouter = Boolean(process.env.OPENROUTER_API_KEY);
-  const client = new OpenAI(
-    useOpenRouter
-      ? { baseURL: "https://openrouter.ai/api/v1", apiKey: process.env.OPENROUTER_API_KEY, timeout: 120000 }
-      : {
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
-          timeout: 120000,
-        },
-  );
+  const connection = studioConnection(model);
+  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000 });
 
-  const imageParams = ocrRequestParams(model, file.content);
+  const imageParams = ocrRequestParams(connection.model, file.content);
   const params = file.kind === "pdf" ? { ...imageParams, max_completion_tokens: 24000,
     messages: [
       { role: "system", content: OCR_SYSTEM_PROMPT + " Transcribe every PDF page and label its page number. Preserve formulas and units. Mark unreadable text explicitly." },
       { role: "user", content: [{ type: "file", file: { filename: file.name, file_data: file.content } }] },
     ] } : imageParams;
-  // A `reasoning` OpenRouter-bővítés; az openai SDK típusa nem ismeri.
+  const request = connection.vendor === "openrouter" ? params : (({ reasoning: _reasoning, ...rest }) => rest)(params);
+  // The reasoning extension is only sent to OpenRouter.
   const response = await client.chat.completions.create(
-    params as unknown as Parameters<typeof client.chat.completions.create>[0],
+    request as unknown as Parameters<typeof client.chat.completions.create>[0],
   );
   if ("choices" in response) {
     if (response.choices[0]?.finish_reason !== "stop") throw new Error("A forrás átírása csonkolt; teljes szöveg szükséges.");

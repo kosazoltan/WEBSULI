@@ -468,7 +468,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   } catch (error) {
     const reason =
       error instanceof StepModelError
-        ? error.message
+        ? describeStepError(error)
         : `A(z) "${job.step}" lépés modellhívása hibára futott: ${
             error instanceof Error ? error.message : String(error)
           }`;

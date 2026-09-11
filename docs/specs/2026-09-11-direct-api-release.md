@@ -1,5 +1,7 @@
 # Kiadás: közvetlen API és fogalomazonosító-javítás
 
+További review-elfogadás: az OCR és scope a közös modellalapú kapcsolatot használja, saját kulcs hiányakor nem küld más szolgáltatónak kérést. OpenRouter reasoning mező csak OpenRouterhez kerül. A fallback nélküli author hiba is megőrzi a szolgáltatói okot. Render XAI deklarációt regressziós teszt védi. OCR-modellek nem változnak.
+
 Review-kiegészítés: a célzott fogalomjavítás induláskor mind az author, mind a lektor konfigurációját ellenőrizze. Hiányzó kulcs esetén adatbázis-hozzáférés és fizetős modellhívás nélkül térjen vissza hibával. Érintett: step-runner.ts és lesson-pipeline-runner.test.ts; külön regresszió az author és a lektor hiányára.
 
 Cél: a helyi javítások PR, zöld CI, merge és élesítés útján kerüljenek a websuli.vip szolgáltatásba. Nem-cél: tananyagok tömeges újragenerálása vagy migrációs változtatás.

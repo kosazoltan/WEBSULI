@@ -1,3 +1,4 @@
+import { studioConnection } from "../ai/studio-provider";
 /**
  * LS-6 (#164) — one-step lesson manufacturing (owner decision, 2026-09-05).
  *
@@ -188,23 +189,16 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
 /** Default scope model call: one cheap vision call over all sources. */
 export async function callScopeModel(files: ExtractorFile[], model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
-  const useOpenRouter = Boolean(process.env.OPENROUTER_API_KEY);
-  const client = new OpenAI(
-    useOpenRouter
-      ? { baseURL: "https://openrouter.ai/api/v1", apiKey: process.env.OPENROUTER_API_KEY, timeout: 120000 }
-      : {
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
-          timeout: 120000,
-        },
-  );
+  const connection = studioConnection(model);
+  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000 });
 
   const parts = await scopeContentParts(files);
 
-  const params = scopeRequestParams(model, parts);
-  // A `reasoning` OpenRouter-bővítés; az openai SDK típusa nem ismeri.
+  const params = scopeRequestParams(connection.model, parts);
+  const request = connection.vendor === "openrouter" ? params : (({ reasoning: _reasoning, ...rest }) => rest)(params);
+  // The reasoning extension is only sent to OpenRouter.
   const response = await client.chat.completions.create(
-    params as unknown as Parameters<typeof client.chat.completions.create>[0],
+    request as unknown as Parameters<typeof client.chat.completions.create>[0],
   );
   if ("choices" in response) return response.choices[0]?.message?.content ?? "";
   return "";

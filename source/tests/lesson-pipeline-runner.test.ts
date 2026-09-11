@@ -1090,5 +1090,5 @@ test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   assert.equal(outcome.ok, false);
   assert.deepEqual(calls, [primary]);
   assert.equal((await store.loadJob("job-1"))?.status, "error");
-  assert.ok(outcome.reason.length > 0);
+  assert.match(outcome.reason, /Rate limit exceeded/);
 });
