@@ -19,4 +19,6 @@ Forrásból készülő és javított, magyarul olvasható négylapos tananyag; f
 
 ## Kockázat és visszaállás
 
+A görgetésmentes vezérlés végső mérése 844×390-en négy menü indítógombját a képernyő alá helyezte: Matek sprint, Szólétra, Brain Rot, Aszteroida. A már jóváhagyott mobil cél részeként ezek menüje rövid fekvő nézetben kétoszlopos lesz. Érintett: négy oldal menüjelölése, közös `index.css`, meglévő hétjátékos viewport teszt. Elfogadás: indítás előtt nulla programozott görgetés, teljes indítógomb és legalább 44 px érintési méret; 390×844, 360×640, 844×390, 1366×768; a futó játék és lezáró képernyő nem változhat.
+
 Push előtt rögzített kiadási alap és tiszta saját diff; az ismeretlen untracked fájlokat megőrizzük. Merge előtt a jelenlegi Vercel/Render verzió és adatbázis-visszaállási pont ellenőrzött. Additív sémát először eldobható PostgreSQL-en tesztelünk; rollbackkor a régi kód az új táblát/oszlopot érintetlenül hagyhatja. Régi szerverhez új kliens időleges eltérését nem fedjük el hamis mentési sikerrel. Titok nem kerül naplóba vagy commitba. Újabb szerkesztést helyreállítás sem írhat felül.

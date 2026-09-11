@@ -680,7 +680,7 @@ export default function SpeedQuizMath() {
             </p>
 
             {phase === "menu" && (
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 py-6">
+              <div data-game-menu="math" className="flex-1 flex flex-col items-center justify-center gap-4 py-6">
                 <div className="grid grid-cols-3 gap-2 w-full max-w-xl">
                   {[3, 4, 5].map((g) => (
                     <Button

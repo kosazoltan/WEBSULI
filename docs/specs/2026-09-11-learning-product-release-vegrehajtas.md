@@ -9,6 +9,8 @@
 
 ## Állapot
 
+- A négy kilógó fekvő indító (a mérésben az alsó él rendre 405,5 / 486 / 564,5 / 453 px a 390 px nézetben) kapjon szemantikus menüjelölést. Csak 650 px feletti szélesség és legfeljebb 500 px magasság mellett válts két oszlopra. A dekoráció és üres tér csökkenhet, az utasítás, osztályválasztás és indító nem tűnhet el. A meglévő indítótesztből a mesterséges `scrollIntoViewIfNeeded` helyett az eredeti állapotot ellenőrizd; ez szigorítás. Futtasd a teljes játékcsomagot és nézd meg a javított fekvő képet.
+
 - CI #34559966293: 119 böngészőteszt sikeres, 4 lista-helyreállítás sikertelen, 1 szószedet-próba bizonytalan. A riportban a szimulált 500 helyett a valódi seed lista, a szószedetnél hiányzó jelölt látszik. A célzott konfiguráció tiltja a service workert a hálózati mockok mellett, az általános CI-konfiguráció nem. A tesztfájlokhoz kell kötni ezt a már meglévő izolációt, változatlan elvárásokkal. A produkciós service worker működését ez nem változtatja meg. Ezután az általános konfigurációval és eldobható adatbázison kell futtatni a két érintett csomagot, majd új CI.
 
 - Kezdés: 20 helyi commit az origin/main előtt, nincs távoli eltérés, még nincs PR. Követett worktree tiszta; a korábbi négy ismeretlen untracked bejegyzés megőrizve. Kiadásra explicit tulajdonosi engedély van.

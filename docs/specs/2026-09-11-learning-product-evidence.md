@@ -24,8 +24,6 @@ Az éles Neon adatbázis teljes, csak olvasással készített archívuma helyile
 
 A GitHub által igazolt utolsó sikeres Vercel Production commit a kiadás előtt: `c15a31225d9f0bf97a4f1111cc8306482405aa6d`. Az új migrációk additívak, a korábbi kód visszaállításakor megmaradhatnak. Tartalomalkalmazás külön mentést és előállapot-ellenőrzést használ. Egy későbbi szerkesztést rollback nem írhat felül.
 
-## Mérés határai
-
 ## CI-környezet egyezése
 
 A PR #45 első általános CI-futásában a két mockolt hálózati csomagból négy lista-próba hibázott, a szószedet bizonytalan volt (119 másik sikeres). A riport tényleges seed listát, illetve a lokálisan befogott jelölt helyett 404-et mutatott. A célzott konfigurációkban már alkalmazott `serviceWorkers: block` beállítás a két tesztfájlba került, így az általános konfigurációban sem kerüli meg a service worker a hibaszimulációt. Egyetlen elvárás vagy próbálkozásszám sem csökkent. A [Playwright dokumentáció](https://playwright.dev/docs/network#missing-network-events-and-service-workers) ezt a hálózati mockokhoz írja elő. PASS: mind a 14 érintett böngészőteszt az általános CI-konfigurációval, saját eldobható PostgreSQL 17 adatbázissal, 52,1 másodperc alatt; teszt-típusellenőrzés és lint is sikeres.
@@ -34,4 +32,8 @@ A négy betűkészlet-próba ismételt futása is sikeres: valódi Chrome-ban a 
 
 ## Mérés határai és kiadás
 
-A telefonméretek asztali Chrome-ban emulált viewportok; fizikai iOS/Android készüléken nem futott próba. A játékok rövid fekvő menüiben egyes másodlagos tartalmak belső görgetést igényelhetnek; a fő vezérlők elérését a tesztek külön ellenőrzik. Gyermekrésztvevős tanulási hatásvizsgálat még nem történt. A hozzá tartozó, mérhető próbaterv külön dokumentum.
+Az indítókra külön, görgetés előtti mérést végeztünk. Ez négy korábbi fekvő menühibát tárt fel. A rövid fekvő kétoszlopos javítás után mind a 45 játékpróba ismét PASS (33,3 másodperc), immár a hét játék indítóit mind a négy méretben előzetes görgetés nélkül és legalább 44 px magassággal ellenőrizve. A típusellenőrzés, teszt-típusellenőrzés és lint szintén PASS. A változás kizárólag menüjelölést és szűk médiatartományú CSS-t érint; nem ad állapotot, hálózati hívást vagy új eseményfigyelőt.
+
+A telefonméretek asztali Chrome-ban emulált viewportok; fizikai iOS/Android készüléken nem futott próba. A hosszabb szabálymagyarázat külön megnyitható; az indítás és a játék fő vezérlői a vizsgált méretekben görgetés nélkül elérhetők. Gyermekrésztvevős tanulási hatásvizsgálat még nem történt. A hozzá tartozó, mérhető próbaterv külön dokumentum.
+
+A teljes képernyős képi visszaellenőrzés az űrjáték rejtett, de inicializálás miatt felszerelt játékterének fekvő CSS-felülírását is feltárta. A rácselrendezés most csak a nem rejtett játékteret érinti; a teszt külön ellenőrzi az inaktív játékterek rejtettségét. A javított űr-, szólétra- és matekmenü képi ellenőrzése sikeres.

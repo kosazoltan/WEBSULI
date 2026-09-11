@@ -2254,7 +2254,7 @@ export default function SpaceAsteroidQuiz() {
                     {matStatusLabel}
                   </p>
                 )}
-                <div className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
+                <div data-game-menu="space" className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
                   <div className="grid grid-cols-2 gap-2 max-w-sm w-full">
                     <div className="rounded-xl border border-cyan-600/45 bg-slate-900/85 p-2 text-center">
                       <p className="text-[10px] uppercase tracking-wide text-cyan-300 font-bold">Szikla</p>

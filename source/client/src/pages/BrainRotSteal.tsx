@@ -840,7 +840,7 @@ export default function BrainRotSteal() {
 
             {/* --- MENU --- */}
             {phase === "menu" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5 py-4 sm:py-6">
+              <div data-game-menu="brain" className="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5 py-4 sm:py-6">
                 <motion.div
                   className="text-5xl sm:text-7xl"
                   animate={{

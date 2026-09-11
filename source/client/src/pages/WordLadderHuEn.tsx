@@ -755,7 +755,7 @@ export default function WordLadderHuEn() {
             </p>
 
             {phase === "menu" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-6" data-testid="wl-menu">
+              <div data-game-menu="ladder" className="flex flex-col items-center justify-center flex-1 gap-4 py-6" data-testid="wl-menu">
                 <div className="relative w-28 h-32 min-h-0">
                   <Ladder rung={0} total={RUNGS} />
                   <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: "6%" }}>
