@@ -13,7 +13,7 @@ import {
   type PipelineStore,
 } from "../server/studio/step-runner";
 import { computeStepHash } from "../server/studio/pipeline";
-import { buildPedagoguePrompt } from "../server/studio/step-io";
+import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
@@ -235,6 +235,34 @@ function makeDeps(cannedResponse: string) {
 
   return { store, calls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
 }
+
+test("lektor receives measured inflection scores from the current lesson, including failed samples", async () => {
+  const lesson = compactFusionFixture();
+  const base = lesson.experience!.tasks[0];
+  lesson.experience!.tasks = [
+    { ...base, id: "body", minWords: 1, needsSentence: false, sample: "A virágos növények testét növényi szervek építik fel.", required: [["növényi szervek", "szervek"], ["virágos növények teste", "virágos növény testét"]] },
+    { ...base, id: "lily", minWords: 1, needsSentence: false, sample: "A liliom lepellevelei két körben helyezkednek el, egyformák, és alakjukban, színükben nem különülnek el.", required: [["lepellevelek", "lepellevél"], ["egyformák", "egyforma"], ["két körben", "két kör"], ["nem különülnek el", "nem különülnek", "nem különül el"]] },
+    { ...base, id: "wrong", minWords: 1, sample: "Bicikli", required: [["gyökér"]] },
+  ];
+  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  deps.store.seed({ id: "scoring", mapId: "m1", step: "lektor", output: { lesson, sampleGradingEvidence: [{ id: "stale", score: 1 }] } });
+  await runPipelineStep("scoring", { ...deps, promptLookup: async () => "Konfigurált lektori prompt." });
+  const evidenceText = deps.calls[0].system.split("A program pontozási mérése (adat):\n")[1];
+  assert.ok(evidenceText, "the measured scores must reach the actual provider request");
+  const evidence = JSON.parse(evidenceText.split("\n")[0]);
+  assert.deepEqual(evidence.map((e: { id: string; blockPath: string; score: number }) => [e.id, e.blockPath, e.score]),
+    [["body", "experience.tasks.0", 1], ["lily", "experience.tasks.1", 1], ["wrong", "experience.tasks.2", 0]]);
+  assert.deepEqual(evidence[0].missingRequired, []);
+  assert.deepEqual(evidence[2].missingRequired, [["gyökér"]]);
+  assert.match(deps.calls[0].system, /tényleges értékelő/);
+  assert.match(deps.calls[0].system, /tartalmi helyesség/);
+  const defaultEvidence = buildLektorPrompt(lesson, { ...MAP_META, concepts: MAP_CONCEPTS }).split("A program pontozási mérése (adat):\n")[1];
+  assert.deepEqual(JSON.parse(defaultEvidence), evidence, "direct lesson repair receives the same measured evidence");
+  const legacy = makeDeps(JSON.stringify({ notes: [] }));
+  legacy.store.seed({ id: "legacy", mapId: "m1", step: "lektor", output: { lesson: GOOD_LESSON } });
+  await runPipelineStep("legacy", legacy);
+  assert.equal(legacy.calls[0].system.includes("A program pontozási mérése (adat):"), false);
+});
 
 test("kész, forrásfogalomhoz kötött ábrák: nulla animátorhívás, utána a lektor ténylegesen fut", async () => {
   const lesson = compactFusionFixture();

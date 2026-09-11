@@ -8,6 +8,7 @@ import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
+import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -324,6 +325,19 @@ export function animatorOutcome(
   return { lesson: original, fellBack: true, reason: result.reason };
 }
 
+export function buildLektorGradingEvidence(lesson: Lesson): string {
+  if (!lesson.experience?.tasks.length) return "";
+  const evidence = lesson.experience.tasks.map((task, index) => ({
+    id: task.id, blockPath: `experience.tasks.${index}`,
+    ...evaluateOpenAnswer(task.sample, task), missingRequired: missingAnswerConcepts(task.sample, task),
+  }));
+  return "\nA következő adat a tényleges értékelő futási eredménye az aktuális mintaválaszokon, nem modellbecslés. " +
+    "Az értékelő kezeli a normalizálást és egyes ragozott alakokat; nem követel szó szerinti karakteregyezést. " +
+    "Ha score=1 és missingRequired üres, ne állítsd, hogy a minta szóalak-eltérés miatt nem kap teljes pontot. " +
+    "Ez csak a minta illeszkedését igazolja. A tartalmi helyesség, a kérdés és a rubrika összhangja, más helyes válaszok igazságos elfogadása továbbra is lektori feladat.\n" +
+    "A program pontozási mérése (adat):\n" + JSON.stringify(evidence);
+}
+
 export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
   return [
     LESSON_METHOD_CONTRACT,
@@ -351,6 +365,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
     "",
     "Concept map:",
     mapJson(map),
+    buildLektorGradingEvidence(lesson),
   ].join("\n");
 }
 

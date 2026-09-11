@@ -26,6 +26,7 @@ import {
   buildAuthorPrompt,
   buildConceptFixPrompt,
   buildLektorPrompt,
+  buildLektorGradingEvidence,
   buildPedagoguePrompt,
   buildSchemaRetryUser,
   animatorOutcome,
@@ -72,7 +73,7 @@ import { canReuseLessonVisuals } from "./visual-reuse";
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-4-review";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-5-grade";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -394,10 +395,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const lesson = job.output?.lesson as Lesson | undefined;
       if (!lesson) return fail(store, job, "A lektor lépéshez nincs lecke a jobban.");
       input = { lesson, map: mapInputOf(map), concepts: map.concepts };
+      const defaultPrompt = buildLektorPrompt(lesson, promptMapOf(map));
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
-        buildLektorPrompt(lesson, promptMapOf(map)),
+        defaultPrompt,
       );
+      if (system !== defaultPrompt) system += buildLektorGradingEvidence(lesson);
       break;
     }
     case "done":

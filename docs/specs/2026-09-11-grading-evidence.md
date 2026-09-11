@@ -1,0 +1,17 @@
+# Lektori pontozási állítások mért bizonyítéka
+
+Cél: a lektor a tényleges tanulói értékelő eredményét kapja a mintaválaszokhoz, és ne találgassa a szóalak-illesztés működését. Az első bankkészítő prompt is egyértelműen közölje a kötelező csoportok ÉS és a szinonimák VAGY kapcsolatát, valamint a szabad példaválasztás korlátját.
+
+Mért gyökérok: a növényes éles futás első javított bankjának 2. és 22. feladatát a lektor elutasította állítólagos szóalak-eltérés miatt. Ugyanezen mentett mintákra az evaluateOpenAnswer score=1 és a missingAnswerConcepts üres lista. A lektor eddig nem kapta meg ezt a mérést. A bankkészítő a több tetszőleges példát engedő kérdések figyelmeztetését csak lektori javításban kapta meg, első készítéskor nem.
+
+Hatókör: source/server/studio/step-runner.ts; source/server/studio/step-io.ts; source/server/studio/experience-builder.ts; source/tests/lesson-pipeline-runner.test.ts; source/tests/lesson-experience.test.ts; docs/lesson-improvement.md. A közös buildLektorPrompt adja a mérést a közvetlen tananyagjavító útvonalnak is; konfigurált rendszerprompt esetén a runner külön hozzáfűzi. Az input mező önmagában csak a hash része: a bizonyítéknak a tényleges elküldött rendszerüzenetben kell szerepelnie.
+
+Nem-cél: értékelő vagy minőségkapu lazítása, lektori megállapítások szűrése, új séma, modellcsere, futó éles munka módosítása. A mintára kapott teljes pont kizárólag a minta illeszkedését bizonyítja; nem bizonyítja a kérdés igazságosságát vagy a tudományos tartalom helyességét. Ezeket a lektor továbbra is vizsgálja.
+
+Elfogadás: amikor a lektor bankos leckét kap, minden feladathoz az eredeti azonosító, útvonal, score, reason és valóban hiányzó csoport kerüljön az adatba. A report az aktuális leckéből számolódjon. Hibás minta mért hibája változatlanul látszódjon. A lektor konfigurált rendszerprompt mellett is kapja meg az értelmezési utasítást. Az első bankkészítő prompt is tisztázza a kérdés és a kötelező csoportok összhangját. Minden meglévő teszt változatlanul zöld.
+
+Kiadás: a jelenlegi éles futás terminális állapotáig nincs deploy. Visszaállási pont a 650e412 kiadás és a következő kiadás előtt készített, visszaállítással ellenőrzött adatmentés. A kész régi és új leckét a kódkiadás nem módosítja. Validáció: regresszió előbb FAIL, aztán PASS; teljes verify; PR és CI; valódi mentett minták és valódi lektori próba.
+
+Mért ellenőrzés (2026-09-11): a két új regresszió a javítás előtt FAIL, utána a célzott kör 57/57 PASS. `npm.cmd run verify`: lint, típusellenőrzés, 1122/1122 teszt (0 kihagyott), build PASS. `git diff --check` PASS. Az új 24 karakteres promptverzióval a valódi adatbázisos indítás tranzakcióban sikeres, majd ROLLBACK. A valódi mentett bank új lektori próbája 308100 ms alatt lefutott: a két téves pontozási blocker eltűnt, három tényleges nyelvi megállapítás megmaradt; ez az ellenőrzés nem írt éles adatot. A kódkiadás előtti teljes adatmentést izolált PostgreSQL 17-be visszaállítottuk: 177 anyag és 17 lecke, éles írás nélkül.
+
+A javítást megelőző 650e412 kiadáson a normál Chrome-feltöltés már automatikusan publikálta az új növényes leckét: 6 fejezet, 16 módszer, 38 feladat (17 szóbeli), 74 kvíztétel. A régi lecke hash-e és dátuma változatlan. A forrásfedettség 20/20 alapfogalom és 15/15 támogató fogalom; a felépítés és bankellenőrzés PASS. Valódi Chrome-ban 390×844, 844×390 és 1440×900 méreten mind a négy fül, tényleges válaszadás és pontozás, újratöltés és ékezetes betűk ellenőrzése PASS. A kiadási verzió későbbi ellenőrzése ettől külön szükséges.
