@@ -7,8 +7,7 @@ import { effortFor, resolveLegacyModel } from "../ai/models";
 import { logger } from "../lib/logger";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import {
-  extractGeneratedHtml,
-  htmlLooksComplete,
+  decideWebResearchResult,
   HTML_START,
   webResearchChatSchema,
   webResearchSystemPrompt,
@@ -53,6 +52,7 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
   const controller = new AbortController();
   let idleTimer: NodeJS.Timeout | undefined;
   let timedOut = false;
+  let heartbeat: NodeJS.Timeout | undefined;
   const hardTimer = setTimeout(() => {
     timedOut = true;
     controller.abort();
@@ -67,6 +67,7 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
   const clearTimers = () => {
     clearTimeout(hardTimer);
     if (idleTimer) clearTimeout(idleTimer);
+    if (heartbeat) clearInterval(heartbeat);
   };
   const send = (event: WebResearchEvent) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -76,6 +77,8 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    heartbeat = setInterval(() => { if (!res.writableEnded) res.write(": heartbeat\n\n"); }, 15_000);
 
     const anthropic = new Anthropic({
       apiKey: key,
@@ -90,8 +93,8 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
     const firstUser = messages.find((m) => m.role === "user" && typeof m.content === "string");
     const topicSeed = typeof firstUser?.content === "string" ? firstUser.content.slice(0, 200) : parsed.data.message.slice(0, 200);
 
-    req.on("close", () => {
-      controller.abort();
+    res.on("close", () => {
+      if (!res.writableEnded) controller.abort();
       clearTimers();
     });
 
@@ -101,6 +104,8 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
     const seenUrls = new Set<string>();
     let stopReason: string | null = null;
     let continuations = 0;
+    let repairAttempts = 0;
+    const startedAt = Date.now();
 
     touch();
     for (;;) {
@@ -147,7 +152,7 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
           if (!text) continue;
           fullContent += text;
           if (htmlStarted) continue;
-          const markerAt = fullContent.indexOf(HTML_START);
+          const markerAt = fullContent.indexOf(HTML_START) >= 0 ? fullContent.indexOf(HTML_START) : fullContent.search(/<!doctype\s+html\b|<html\b/i);
           if (markerAt >= 0) {
             htmlStarted = true;
             // A marker egy része már kimehetett a chatbe — a buborékot a marker előtti
@@ -162,47 +167,35 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
 
       const final = await stream.finalMessage();
       stopReason = final.stop_reason;
+      logger.info("[WEB-RESEARCH] turn", { stopReason, continuations, repairAttempts, elapsedMs: Date.now() - startedAt,
+        outputTokens: final.usage.output_tokens, inputTokens: final.usage.input_tokens, chars: fullContent.length, sourceCount: sources.length });
       if (stopReason === "pause_turn" && continuations < MAX_CONTINUATIONS) {
         continuations += 1;
         messages.push({ role: "assistant", content: final.content });
         logger.info(`[WEB-RESEARCH] pause_turn → folytatás #${continuations}`);
         continue;
       }
+      // max_tokens/refusal/pause_turn exhaustion and htmlLooksComplete are checked
+      // before the same strict HTML/bank gate. An end_turn without HTML is NOT success.
+      const result = decideWebResearchResult({ stopReason, fullContent, repairAttempts }, html => verifyLessonMethodHtml(html));
+      if (result.type === "retry") {
+        repairAttempts += 1;
+        messages.push({ role: "assistant", content: final.content });
+        messages.push({ role: "user", content: result.instruction });
+        logger.info("[WEB-RESEARCH] artifact-retry", { repairAttempts, reason: result.reason });
+        send({ type: "status", message: `A teljes tananyag elkészítése és ellenőrzése (${repairAttempts}/2)…` });
+        send({ type: "content_replace", content: "A forráskeresés után a teljes tananyag készítése és ellenőrzése folyamatban van…" });
+        fullContent = "";
+        htmlStarted = false;
+        continue;
+      }
+      if (result.type === "error") { send({ type: "error", message: result.message }); break; }
+      if (sources.length === 0) { send({ type: "error", message: "Nem érkezett ellenőrizhető internetes forráshivatkozás. A tananyag nem menthető." }); break; }
+      send({ type: "html_generated", html: result.html, sources });
+      send({ type: "complete" });
       break;
     }
     clearTimers();
-
-    logger.info(
-      `[WEB-RESEARCH] kész: stop=${stopReason}, folytatás=${continuations}, szöveg=${fullContent.length}, források=${sources.length}`,
-    );
-
-    if (stopReason === "max_tokens") {
-      send({
-        type: "error",
-        message:
-          "A válasz elérte a hosszkorlátot, a tananyag csonka lett. A hiányos változat nem menthető; ismételd meg a készítést. A kötelező bankméretet nem csökkentjük.",
-      });
-    } else if (stopReason === "refusal") {
-      send({ type: "error", message: "A modell elutasította a kérést. Fogalmazd át az utasítást." });
-    } else {
-      const html = extractGeneratedHtml(fullContent);
-      if (html && !htmlLooksComplete(html)) {
-        send({
-          type: "error",
-          message: "A HTML nem záródott le (</html> hiányzik), ezért nem menthető. Kérd újra a készítést.",
-        });
-      } else if (html) {
-        // v7.4: determinisztikus kapu (teljes dokumentum, JS parse, onclick-export, alert-tilalom).
-        // Hiányos módszer vagy csonka kód nem kínálható mentésre.
-        const verification = verifyLessonMethodHtml(html);
-        if (verification.ok) send({ type: "html_generated", html, sources });
-        else send({ type: "error", message: `A tananyag minőségkapuja hibát talált: ${verification.problems.join("; ")}` });
-      } else if (htmlStarted) {
-        send({ type: "error", message: "A HTML-jelölő után nem érkezett teljes HTML-dokumentum." });
-      }
-    }
-
-    send({ type: "complete" });
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (error: unknown) {

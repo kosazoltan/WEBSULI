@@ -24,17 +24,48 @@ export type WebResearchChatRequest = z.infer<typeof webResearchChatSchema>;
 
 export const HTML_START = "<!-- HTML_START -->";
 
-/** A marker utáni önálló HTML, a komment nélkül. Marker nélkül null. */
+/** Prefer the marker; a complete raw document is also a candidate, subject to the same gate. */
 export function extractGeneratedHtml(fullText: string): string | null {
   const i = fullText.indexOf(HTML_START);
-  if (i < 0) return null;
-  let html = fullText.slice(i).replace(HTML_START, "").trim();
+  const start = i >= 0 ? i : fullText.search(/<!doctype\s+html\b|<html\b/i);
+  if (start < 0) return null;
+  let html = fullText.slice(start).replace(HTML_START, "").trim();
   // Éles próba 2026-09-09: a modell a marker után ```html … ``` markdown-kerítésbe tette a
   // dokumentumot; a kerítés a mentett fájl tetején/alján szövegként jelent volna meg.
   html = html.replace(/^```[a-zA-Z]*\s*/, "").replace(/\s*```\s*$/, "").trim();
   if (html.length < 100) return null;
   if (!html.toLowerCase().includes("<html")) return null;
   return html;
+}
+
+type Completion = { type: "ready"; html: string } | { type: "retry"; instruction: string; reason: string } | { type: "error"; message: string };
+const MAX_ARTIFACT_REPAIRS = 2;
+
+/** An SDK turn finishing is not evidence that the requested lesson exists. */
+export function decideWebResearchResult(
+  result: { stopReason: string | null; fullContent: string; repairAttempts: number },
+  verify: (html: string) => { ok: boolean; problems: string[] },
+): Completion {
+  const { stopReason, fullContent, repairAttempts } = result;
+  if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
+    return { type: "error", message: "A válasz elérte a hosszkorlátot. A csonka tananyag nem menthető; új készítés szükséges." };
+  }
+  if (stopReason === "refusal") return { type: "error", message: "A modell elutasította a tananyagkészítést." };
+  if (stopReason !== "end_turn") return { type: "error", message: "A keresés nem fejeződött be szabályosan. Nem készült menthető tananyag." };
+  const html = extractGeneratedHtml(fullContent);
+  const problems = !html ? ["Csak keresési összefoglaló érkezett, tananyag nem."]
+    : !htmlLooksComplete(html) ? ["A HTML dokumentum nincs lezárva."] : verify(html).problems;
+  if (html && problems.length === 0) return { type: "ready", html };
+  const reason = problems.join("; ");
+  if (repairAttempts >= MAX_ARTIFACT_REPAIRS) {
+    return { type: "error", message: `A tananyag az automatikus javítás után sem készült el: ${reason}` };
+  }
+  return {
+    type: "retry", reason,
+    instruction: `A felhasználó már kérte a tananyag elkészítését. A korábbi válasz nem teljesítette a készítési szerződést: ${reason}\n`
+      + "Most készítsd el a TELJES, ellenőrizhető négyoldalas tananyagot az előző körben megismert források alapján. Őrizd meg a forrásokat és az összes helyes tartalmat, a konkrét hibát javítsd. Ne kérj újabb engedélyt, ne adj puszta ígéretet vagy tervet. Ne rövidítsd vagy lazítsd a bankkövetelményt.\n"
+      + `${HTML_START}\n<!DOCTYPE html> kezdetű, </html>-lel lezárt teljes dokumentumot adj; minden bank és működő interakció legyen benne.`,
+  };
 }
 
 /**
@@ -45,17 +76,7 @@ export function htmlLooksComplete(html: string): boolean {
   return /<\/html\s*>/i.test(html);
 }
 
-export type WebSource = { url: string; title: string };
-
-/** A route által küldött SSE-események (a kliens ugyanezt a formát olvassa). */
-export type WebResearchEvent =
-  | { type: "content_delta"; content: string }
-  | { type: "content_replace"; content: string }
-  | { type: "status"; message: string }
-  | { type: "sources"; sources: WebSource[] }
-  | { type: "html_generated"; html: string; sources: WebSource[]; warnings?: string[] }
-  | { type: "error"; message: string }
-  | { type: "complete" };
+export type { WebSource, WebResearchEvent } from "../../shared/web-research-stream";
 
 import { LESSON_HTML_SPEC_V74, lessonHtmlSpecPrompt } from "../ai/lesson-html-spec";
 
@@ -80,8 +101,8 @@ export function webResearchSystemPrompt(classroom: number, title?: string, topic
     "",
     "FELADATOD:",
     "1. Ha a felhasználó tananyagot vagy forrást kér, KERESS az interneten (web_search) magyar tantervi, tankönyvi vagy NAT/OFI-hoz illő forrásokat, az adott évfolyamhoz igazítva.",
-    "2. Csak a megtalált, idézhető forrásokból dolgozz. Minden ténymegállapításhoz URL. Foglald össze röviden magyarul, mit találtál, és kérdezd meg, készülhet-e a tananyag, ha a felhasználó még nem kérte kifejezetten.",
-    '3. Ha a felhasználó kéri a tananyag elkészítését ("készítsd el", "generáld", "csináld meg"), adj TELJES, önálló HTML-t, és MINDIG így kezdd: <!-- HTML_START -->',
+    "2. Ez tananyagkészítő felület: a keresés a készítés része. Csak a megtalált, idézhető forrásokból dolgozz. A tanítás forráshivatkozásai a HTML-ben is maradjanak meg. A találati cím/snippet nem bizonyítja a teljes dokumentum olvasását. Ha a forrás ezt nem támasztja alá, ne állíts országosan kötelező havi témasort.",
+    '3. A feladat akkor kész, ha TELJES, önálló HTML-t adsz, MINDIG így kezdve: <!-- HTML_START -->. Egy összefoglaló, ígéret vagy "Készül a tananyag" mondat nem eredmény. Ne zárd le ezzel a válaszodat és ne kérj újabb engedélyt.',
     "4. A HTML-t a <!-- HTML_START --> után azonnal <!DOCTYPE html>-lel kezdd, és </html>-lel zárd; a HTML után ne írj semmit. NE tedd markdown kódblokkba (```), nyers HTML-t adj.",
     "",
     lessonHtmlSpecPrompt({

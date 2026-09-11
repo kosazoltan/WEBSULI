@@ -19,19 +19,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CLASSROOMS, DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
 import { readHtmlLessonData } from "@shared/lesson-html-data";
+import { consumeWebResearchStream, type WebSource } from "@shared/web-research-stream";
 import { logger } from "@/lib/logger";
-
-type WebSource = { url: string; title: string };
-
-/** A szerver SSE-eseményei (server/studio/web-research-agent.ts `WebResearchEvent`). */
-type StreamChunk = {
-  type?: string;
-  content?: string;
-  html?: string;
-  message?: string;
-  sources?: WebSource[];
-  warnings?: string[];
-};
 
 const MAX_DESCRIPTION_CHARS = 1000;
 
@@ -67,10 +56,16 @@ export function WebResearchAgentPanel() {
   const [generatedHtml, setGeneratedHtml] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const handleSend = async (message: string) => {
+    if (isLoading || isSaving) return;
     setIsLoading(true);
+    setFailure(null);
     setSavedId(null);
+    setGeneratedHtml("");
+    setSources([]);
+    setWarnings([]);
     setStatus("Válasz készül…");
     const userMessage: ChatMessage = { role: "user", content: message };
     const history = [...messages, userMessage];
@@ -107,60 +102,34 @@ export function WebResearchAgentPanel() {
       }
       if (!response.body) throw new Error("Üres válasz a szervertől.");
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
       let assistantMessage = "";
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.replace(/^data: /, "").trim();
-          if (!line || line === "[DONE]") continue;
-          let parsed: StreamChunk;
-          try {
-            parsed = JSON.parse(line) as StreamChunk;
-          } catch {
-            continue;
-          }
-          if (parsed.type === "content_delta") {
-            assistantMessage += parsed.content ?? "";
-            setAssistant(assistantMessage);
-          } else if (parsed.type === "content_replace") {
-            assistantMessage = parsed.content ?? "";
-            setAssistant(assistantMessage || "A HTML tananyag készül…");
-          } else if (parsed.type === "status") {
-            setStatus(parsed.message ?? null);
-          } else if (parsed.type === "sources" && Array.isArray(parsed.sources)) {
-            setSources(parsed.sources);
-          } else if (parsed.type === "html_generated" && parsed.html) {
-            const generated = readHtmlLessonData(parsed.html);
-            setClassroom(generated.classroom);
-            setGeneratedHtml(parsed.html);
-            setWarnings(Array.isArray(parsed.warnings) ? parsed.warnings : []);
-            if (Array.isArray(parsed.sources) && parsed.sources.length > 0) setSources(parsed.sources);
-            if (!title.trim()) {
-              setTitle(`${generated.subject} — ${getClassroomLabel(generated.classroom, false)}`);
-            }
-            if (!assistantMessage.trim()) {
-              assistantMessage = "A HTML tananyag elkészült — lásd az előnézetet lent.";
-              setAssistant(assistantMessage);
-            }
-            toast({ title: "HTML elkészült", description: "Mentheted a többi tananyag közé." });
-          } else if (parsed.type === "error") {
-            throw new Error(parsed.message || "Ismeretlen AI hiba");
-          }
+      const artifact = await consumeWebResearchStream(response.body, parsed => {
+        if (parsed.type === "content_delta") {
+          assistantMessage += parsed.content ?? "";
+          setAssistant(assistantMessage);
+        } else if (parsed.type === "content_replace") {
+          assistantMessage = parsed.content ?? "";
+          setAssistant(assistantMessage || "A HTML tananyag készül…");
+        } else if (parsed.type === "status") {
+          setStatus(parsed.message ?? null);
+        } else if (parsed.type === "sources" && Array.isArray(parsed.sources)) {
+          setSources(parsed.sources);
         }
-      }
-      if (!assistantMessage.trim()) {
-        setMessages((prev) => prev.slice(0, -1));
-      }
+      });
+      const generated = readHtmlLessonData(artifact.html);
+      const saveTitle = title.trim() || `${generated.subject} — ${getClassroomLabel(generated.classroom, false)}`;
+      setClassroom(generated.classroom);
+      setTitle(saveTitle);
+      setGeneratedHtml(artifact.html);
+      setSources(artifact.sources ?? []);
+      setWarnings(artifact.warnings ?? []);
+      setStatus("A kész tananyag mentése…");
+      setAssistant("Az ellenőrzött tananyag elkészült. Mentés folyamatban…");
+      const saved = await saveArtifact(artifact.html, artifact.sources ?? [], saveTitle);
+      setAssistant(saved ? "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." : "A tananyag elkészült, de a mentés nem sikerült. A mentést lent újrapróbálhatod.");
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Ismeretlen hiba";
+      setFailure(reason);
       toast({ title: "Keresési hiba", description: reason, variant: "destructive" });
       // Éles próba 2026-09-09: hibánál a már megérkezett válasz (források, összefoglaló)
       // ne vesszen el — a buborék marad, a hiba oka a végére kerül. Üres választ eldobunk.
@@ -177,41 +146,49 @@ export function WebResearchAgentPanel() {
     }
   };
 
-  const handleSave = async () => {
-    if (!generatedHtml) return;
-    const inferredClassroom = readHtmlLessonData(generatedHtml).classroom;
+  const saveArtifact = async (html: string, artifactSources: WebSource[], saveTitle: string): Promise<boolean> => {
+    const inferredClassroom = readHtmlLessonData(html).classroom;
     const classroomLabel = getClassroomLabel(inferredClassroom, false);
-    const saveTitle = title.trim() || `Tananyag — ${classroomLabel}`;
     setIsSaving(true);
+    setFailure(null);
     try {
       const file = await apiRequest<{ id: string }>(
         "POST",
         "/api/html-files",
         {
           title: saveTitle,
-          description: buildDescription(classroomLabel, sources),
-          content: generatedHtml,
+          description: buildDescription(classroomLabel, artifactSources),
+          content: html,
           classroom: inferredClassroom,
           contentType: "html",
         },
         { timeout: 180000 },
       );
-      queryClient.removeQueries({ queryKey: ["/api/html-files"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/html-files"], type: "all" });
+      if (!file.id) throw new Error("A szerver nem igazolta vissza a mentett tananyag azonosítóját.");
       setSavedId(file.id);
+      void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }).catch(error => logger.error("[WebResearchAgent] list refresh", error));
       toast({
         title: "Elmentve a tananyagok közé",
         description: `"${saveTitle}" megjelent a Fájlok listában és a főoldalon.`,
       });
+      return true;
     } catch (error) {
+      setFailure(error instanceof Error ? error.message : "Nem sikerült menteni.");
       toast({
         title: "Mentési hiba",
         description: error instanceof Error ? error.message : "Nem sikerült menteni.",
         variant: "destructive",
       });
+      return false;
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSave = async () => {
+    if (!generatedHtml || isSaving || isLoading || savedId) return;
+    const saved = await saveArtifact(generatedHtml, sources, title.trim() || "Internetes tananyag");
+    if (saved) setMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." }]);
   };
 
   return (
@@ -223,7 +200,7 @@ export function WebResearchAgentPanel() {
         </CardTitle>
         <CardDescription className="text-xs">
           Írd le, milyen tananyagot keressen. A program forrásokat keres, majd négyoldalas tananyagot készít. Az évfolyamot az elkészült tartalom alapján állapítja meg.
-          Mentés nélkül nem jelenik meg a többi anyag között.
+          Az ellenőrzött tananyagot automatikusan elmenti a tananyagok közé.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -264,12 +241,13 @@ export function WebResearchAgentPanel() {
             description="Pl.: Keress 5. osztályos törtes tananyagot, és készíts belőle interaktív HTML-t"
             messages={messages}
             onSendMessage={handleSend}
-            isLoading={isLoading}
+            isLoading={isLoading || isSaving}
             placeholder="Pl.: Keress tananyagot 5. osztályos törtekhez, és készítsd el"
-            aiName="Claude"
+            aiName="Tananyagkészítő"
             aiIcon={<Globe className="w-5 h-5 text-primary" />}
           />
         </div>
+        {failure && <div role="alert" data-testid="web-research-error" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive break-words">{failure}</div>}
         {isLoading && status && (
           <div
             className="flex items-center gap-2 text-xs text-muted-foreground"
@@ -330,12 +308,12 @@ export function WebResearchAgentPanel() {
       <CardFooter className="flex flex-wrap gap-2">
         <Button
           onClick={() => void handleSave()}
-          disabled={!generatedHtml || isSaving || isLoading}
+          disabled={!generatedHtml || isSaving || isLoading || !!savedId}
           className="flex-1 min-h-11"
           data-testid="web-research-save"
         >
           {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-          Mentés a tananyagok közé
+          {savedId ? "Elmentve a tananyagok közé" : "Mentés a tananyagok közé"}
         </Button>
         {savedId && (
           <Button asChild variant="outline" className="min-h-11" data-testid="web-research-open-saved">
