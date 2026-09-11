@@ -10,7 +10,7 @@ export type ResearchArtifact = { html: string; sources: WebSource[] };
 export type ResearchObserver = {
   signal?: AbortSignal;
   onEvent: (event: WebResearchEvent) => void;
-  onCandidate?: (content: string, diagnostic: { stopReason?: string | null; outputTokens?: number; elapsedMs?: number; problems?: string }) => Promise<void>;
+  onCandidate?: (content: string, diagnostic: { stopReason?: string | null; inputTokens?: number; outputTokens?: number; elapsedMs?: number; problems?: string }) => Promise<void>;
 };
 const MAX_TOKENS = 64_000;
 const MAX_CONTINUATIONS = 5;
@@ -111,7 +111,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
 
       const final = await stream.finalMessage();
       stopReason = final.stop_reason;
-      await onCandidate?.(fullContent, { stopReason, outputTokens: final.usage.output_tokens, elapsedMs: Date.now() - startedAt });
+      await onCandidate?.(fullContent, { stopReason, inputTokens: final.usage.input_tokens, outputTokens: final.usage.output_tokens, elapsedMs: Date.now() - startedAt });
       logger.info("[WEB-RESEARCH] turn", { stopReason, continuations, repairAttempts, elapsedMs: Date.now() - startedAt,
         outputTokens: final.usage.output_tokens, inputTokens: final.usage.input_tokens, chars: fullContent.length, sourceCount: sources.length });
       if (stopReason === "pause_turn" && continuations < MAX_CONTINUATIONS) {

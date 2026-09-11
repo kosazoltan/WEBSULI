@@ -62,6 +62,7 @@ import { hu } from "date-fns/locale";
 import { Link } from "wouter";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WorkflowHistory } from "@/components/studio/WorkflowMonitor";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
 import ParentDashboardPanel from "@/components/ParentDashboardPanel";
@@ -81,7 +82,6 @@ import { logger } from "../lib/logger";
 // AUTH ENABLED - Only admin emails can access protected features
 
 // Lazy load heavy admin components for better performance
-const EnhancedMaterialCreator = lazy(() => import("@/components/EnhancedMaterialCreator"));
 const DatabaseManager = lazy(() => import("@/components/DatabaseManager"));
 const PdfUpload = lazy(() => import("@/components/PdfUpload"));
 const AdminFileDashboard = lazy(() => import("@/components/AdminFileDashboard"));
@@ -356,7 +356,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
-    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups", "email-debug", "parent-dashboard", "lesson-studio", "knowledge-maps"];
+    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups", "email-debug", "parent-dashboard", "lesson-studio", "knowledge-maps", "workflows"];
     if (!tabParam || !validTabs.includes(tabParam)) return "files";
     // LS-8 (#191): a tudás-térkép megszűnt önálló menüpontként — a tananyagkészítés
     // fülön belüli „haladó" blokkba került. A régi deep link nem törhet el, ezért
@@ -769,6 +769,7 @@ export default function Admin() {
               <Sparkles className="h-3 w-3" />
               Tananyag készítése
             </TabsTrigger>
+            <TabsTrigger value="workflows" className="flex items-center gap-1 text-[11px] h-6 px-2" data-testid="tab-workflows">Futások</TabsTrigger>
             <TabsTrigger value="database" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white" data-testid="tab-database">
               <Database className="h-3 w-3" />
               Adatbázis
@@ -918,7 +919,7 @@ export default function Admin() {
               </CardContent>
             </Card>
           }>
-            <EnhancedMaterialCreator />
+            <LessonStudioPanel initialAdvanced={false} />
           </Suspense>
         )}
       </TabsContent>
@@ -961,6 +962,10 @@ export default function Admin() {
 
       <TabsContent value="lesson-studio" className="space-y-2">
         {activeTab === "lesson-studio" && <LessonStudioPanel initialAdvanced={studioAdvancedInitial} />}
+      </TabsContent>
+
+      <TabsContent value="workflows" className="space-y-2">
+        {activeTab === "workflows" && <WorkflowHistory />}
       </TabsContent>
 
       <TabsContent value="tags" className="space-y-2">

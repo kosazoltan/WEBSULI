@@ -1,0 +1,12 @@
+# Végrehajtás — közös tananyag-folyamat
+
+1. Olvasd a kapcsolódó specifikációt és őrizd meg a meglévő idegen untracked fájlokat. Ág: `codex/lesson-workflow`.
+2. Készíts verziózott, szerializálható lépésdefiníciót `source/shared/lesson-workflow.ts` alatt; minden mód saját, tényleges lépéseit tartalmazza. A DTO csak státuszokat, mért adatokat és anyaghivatkozásokat adjon ki.
+3. `source/server/workflows/` alatt készíts izolált tárolóinterfészt és PostgreSQL implementációt, védett állapotfrissítéssel. A lépés előtt és után várt mentés legyen; hibás tárolás ne jelezhessen kész futást. Az új SQL migráció additív.
+4. Kösd be a `lesson-pipeline-routes.ts`, `step-runner.ts`, `web-research-jobs.ts`, `web-research-routes.ts`, `structured-improvement.ts`, `improveAsync.ts` és a tényleges alkalmazási útvonalak műveleteit. A meglévő kapuk nem gyengülhetnek. A futás eredményét a domain tárolóból olvasd vissza lezárás előtt.
+5. Az adminhoz adj tulajdonosra szűrt futáslistát, részleteket és közös folyamatábrát. Kösd a feltöltés, webes készítés, javítás és célzott javítás nézetéhez; sem várakozásból, sem fázisindexből nem következtethetsz sikerre.
+6. Új unit tesztekben vizsgáld az előfeltételt, hibát, körkorlátot, ismeretlen verziót, változott bemenetet, párhuzamos indítást, régi írásokat és az alkalmazásra váró jelöltet. Futtasd: `node --import tsx --test tests/lesson-workflow.test.ts` a source könyvtárból.
+7. Az új tárolót izolált PostgreSQL-en vizsgáld; éles `.env` környezettel ne indíts teljes Express-t. Futtasd a kapcsolódó meglévő pipeline/web-research/javítás teszteket, majd `npm.cmd run check` és `npm.cmd run lint`.
+8. Valódi Chrome/Playwright próbában ellenőrizd az adminba bekötött nézetet, kattintható lépésrészleteket, hibát, újratöltést és mindegyik módot 320/390/844/1440 px méretekben; készíts képernyőképeket és nézd meg őket.
+9. Összevetés a speccel és önreview. PR-kész állapotban `npm.cmd run verify`, utána pontos commitra zöld CI. A deploy előtt friss mentés és aktív futás ellenőrzése; utána mindkét szolgáltatás verziójának és az éles nézetnek visszaolvasása.
+10. Az eredményeket és a nem futtatott ellenőrzések pontos okát a specifikáció állapotrészébe írd. A lezárás ne állítson ellenőrzés nélkül hibamentességet.

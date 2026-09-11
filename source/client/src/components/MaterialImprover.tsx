@@ -8,6 +8,7 @@ import { deleteImprovedConfirmMessage, IMPROVER_ZOOM } from "@shared/improver-ui
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { WorkflowMonitor } from "./studio/WorkflowMonitor";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -72,6 +73,7 @@ export default function MaterialImprover() {
   const [selectedFileId, setSelectedFileId] = useState<string>("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [previewImprovedId, setPreviewImprovedId] = useState<string | null>(null);
+  const [workflowId, setWorkflowId] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
 
   // Get all HTML files
@@ -304,6 +306,7 @@ export default function MaterialImprover() {
       // Poll the seven-part lesson repair; server marks stale jobs after 60 minutes.
       // HTML jobs have a shorter server timeout; both paths return their stored error.
       const jobId = startData.jobId;
+      setWorkflowId(jobId);
       const maxPollTime = 3660000; // 61 minutes: allow the server to persist its timeout error
       const pollInterval = 5000; // 5 seconds
       const startTime = Date.now();
@@ -376,15 +379,16 @@ export default function MaterialImprover() {
   const applyMutation = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
       logger.info('[APPLY] Calling API: POST /api/admin/improved-files/' + id + '/apply');
-      const result = await apiRequest("POST", "/api/admin/improved-files/" + id + "/apply", {
+      const result = await apiRequest<{ workflowId: string }>("POST", "/api/admin/improved-files/" + id + "/apply", {
         createBackup: true,
         notes,
       });
       logger.info('[APPLY] API response:', result);
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       logger.info('[APPLY] ✅ Success');
+      setWorkflowId(result.workflowId);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       toast({
@@ -476,6 +480,7 @@ export default function MaterialImprover() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <WorkflowMonitor id={workflowId ?? previewImprovedId} />
           <div className="space-y-2">
             <Label htmlFor="file-select">Válassz fájlt a javításhoz</Label>
             <Select value={selectedFileId} onValueChange={setSelectedFileId}>
@@ -747,33 +752,7 @@ export default function MaterialImprover() {
                 <CheckCircle className="h-4 w-4 mr-2" />
                 {previewData.status === "applied" ? "Újra alkalmaz" : "Alkalmaz"}
               </Button>
-              <Button
-                onClick={async () => {
-                  // A FORCE APPLY nyers SQL-lel írja felül az anyagot, megkerülve a normál
-                  // alkalmazási útvonalat — véletlen kattintás ellen megerősítést kérünk.
-                  if (!window.confirm("Biztosan végrehajtod a FORCE APPLY-t? Ez nyers SQL-lel, a normál validáció megkerülésével írja felül az anyagot.")) {
-                    return;
-                  }
-                  try {
-                    toast({ title: "⏳ FORCE APPLY…", description: "Raw SQL-frissítés folyamatban…" });
-                    const result = await apiRequest<{ success: boolean; log?: string[] }>("POST", `/api/admin/improved-files/${previewData.id}/force-apply`);
-                    const data = result;
-                    logger.info('[FORCE-APPLY] Result:', data);
-                    queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
-                    toast({
-                      title: data.success ? "✅ FORCE APPLY SIKERES!" : "❌ FORCE APPLY HIBA",
-                      description: data.log?.slice(-2).join('\n') || JSON.stringify(data),
-                    });
-                  } catch (err) {
-                    logger.error('[FORCE-APPLY] Error:', err);
-                    toast({ title: "❌ FORCE APPLY HIBA", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
-                  }
-                }}
-                className="bg-orange-600 hover:bg-orange-700 text-white"
-              >
-                ⚡ Force Apply (RAW SQL)
-              </Button>
+
               <Button
                 variant="outline"
                 onClick={() => {

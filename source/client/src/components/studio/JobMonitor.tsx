@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { jobMonitorView, lessonCreationStageLabel, type JobSummary } from "@shared/studio-ui";
+import { WorkflowMonitor } from "./WorkflowMonitor";
 
 /**
  * LS-2c — the lesson pipeline monitor: polls GET /api/studio/jobs/:id every 2 seconds
@@ -111,6 +112,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <WorkflowMonitor id={jobId} />
         <details className="text-xs text-muted-foreground">
           <summary className="flex min-h-11 cursor-pointer items-center">Feldolgozási részletek</summary>
           <p>{view.stepLabel}{view.roundLabel ? ` · ${view.roundLabel}` : ""}</p>

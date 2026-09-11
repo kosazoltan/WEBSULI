@@ -45,10 +45,13 @@ try {
   const sourceMigration = await readFile(new URL("../migrations/0018_source_classification.sql", import.meta.url), "utf8");
   await pool.query(sourceMigration);
   await pool.query(sourceMigration);
+  const workflowMigration = await readFile(new URL("../migrations/0019_lesson_workflow_runs.sql", import.meta.url), "utf8");
+  await pool.query(workflowMigration);
+  await pool.query(workflowMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "tests/learning-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });

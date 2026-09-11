@@ -5,8 +5,25 @@ import { lessonRepairSchema, parseLessonRepair } from "../shared/lesson-repair";
 import { assertRepairCandidate, assertRepairFresh, repairHash, buildStructuredImprovement } from "../server/studio/structured-improvement";
 import { hasHtmlLessonData, readHtmlLessonData } from "../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
+import { executeWorkflow, workflowPhase } from "../server/workflows/engine";
+import { memoryWorkflows } from "./helpers/workflow-store";
 
 const source = { subject: "matematika", classroom: 7, concepts: [{ localId: "area", term: "terület", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] };
+test("a tényleges fúziós javító a workflow lépéseit használja és jelöltet ad vissza", async () => {
+  const { store } = memoryWorkflows(); const original = fusionFixture(); const e = compactFusionFixture().experience!;
+  const view = await executeWorkflow(store, { id: "repair-flow", owner: "owner", mode: "repair" }, async () => {
+    await workflowPhase("source"); let calls = 0;
+    const result = await buildStructuredImprovement(original, source, async step => {
+      if (step === "lektor") return { notes: [] };
+      return calls++ === 0 ? original : { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+    });
+    assert.ok(result.candidate.experience!.tasks.length);
+    await workflowPhase("save"); await workflowPhase("readback");
+    return { kind: "candidate", id: "verified-candidate" };
+  });
+  assert.equal(view.state, "ready");
+  assert.deepEqual(view.visits.map(v => v.step), ["source", "author", "banks", "lektor", "gate", "save", "readback"]);
+});
 test("repair checks teaching before spending on banks, retries concrete errors, and rejects lektor blockers", async () => {
   const original = fusionFixture(); const e = compactFusionFixture().experience!;
   const badTeaching = structuredClone(original); badTeaching.sections[0].blocks.shift();

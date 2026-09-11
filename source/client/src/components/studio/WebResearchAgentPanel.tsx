@@ -21,6 +21,7 @@ import { CLASSROOMS, DEFAULT_CLASSROOM } from "@shared/classrooms";
 import type { WebResearchJob } from "@shared/web-research-job";
 import { type WebSource } from "@shared/web-research-stream";
 import { logger } from "@/lib/logger";
+import { WorkflowMonitor } from "./WorkflowMonitor";
 
 type PendingResearch = { id: string; message: string; classroom: number; title?: string; conversationHistory?: ChatMessage[] };
 const STORAGE_KEY = "websuli:web-research:pending";
@@ -71,7 +72,14 @@ export function WebResearchAgentPanel() {
         if (disposed) return;
         if (job.state === "ready" && !job.error) {
           // Also recovers a server restart between durable generation and publication.
-          job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 });
+          try { job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 }); }
+          catch (error) {
+            if ((error as { status?: number }).status !== 409) throw error;
+            // The worker owns publication until its lease expires; keep following it.
+            setStatus("A szerver az ellenőrzött tananyag mentését végzi…");
+            if (!disposed) timer = setTimeout(() => void follow(), 2500);
+            return;
+          }
           if (disposed) return;
         }
         setSources(job.sources);
@@ -153,6 +161,7 @@ export function WebResearchAgentPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <WorkflowMonitor id={pending?.id ?? savedId} />
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label htmlFor="web-research-classroom">Keresési korosztály (támpont)</Label>

@@ -40,6 +40,9 @@ import {
 import { markOrphanedJobs } from "./orphan-jobs";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
+import { executeWorkflow, workflowPhase, workflowResource, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { workflowStore } from "../workflows/store";
+import { htmlFiles } from "../../shared/schema";
 
 /* ------------------------------------------------------------------ *
  * #168 — a futás-státusz DB-perzisztálása (Render-restart ellen).
@@ -219,6 +222,7 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
   const userId = (req.user as { id?: string } | undefined)?.id;
   // Fire-and-forget: the run loop reports through the progress store.
   void runOneStep(runId, parsed.data, userId).catch((error) => {
+    if (error instanceof WorkflowWaiting) return;
     logger.error(`[STUDIO/1STEP] Váratlan hiba: ${error instanceof Error ? error.message : String(error)}`);
     updateRun(runId, { phase: "error", error: "Váratlan hiba történt. Próbáld újra." });
   });
@@ -257,6 +261,26 @@ export async function runOneStep(
   data: OneStepRequest,
   userId: string | undefined,
 ): Promise<void> {
+  if (!userId) throw new Error("A futáshoz hitelesített készítő szükséges.");
+  await executeWorkflow(workflowStore, { id: runId, owner: userId, mode: "upload", request: data }, async () => {
+    await runOneStepCore(runId, data, userId);
+    const run = await getRun(runId);
+    if (run?.phase === "parked") throw new WorkflowWaiting(run.detail ?? "Forrásellenőrzés szükséges.");
+    if (run?.phase !== "done" || !run.lessonId) throw new Error(run?.error ?? "A készítés nem adott vissza teljes leckét.");
+    return readPublishedLesson(run.lessonId);
+  });
+}
+
+async function readPublishedLesson(lessonId: string) {
+  await workflowPhase("readback");
+  const [row] = await db.select({ id: htmlFiles.id, content: lessons.json, publishedAt: lessons.publishedAt })
+    .from(lessons).innerJoin(htmlFiles, eq(lessons.htmlFileId, htmlFiles.id)).where(eq(lessons.id, lessonId));
+  if (!row?.id || !row.content || !row.publishedAt) throw new Error("A közzétett tananyag nem olvasható vissza.");
+  return { kind: "material" as const, id: row.id };
+}
+
+async function runOneStepCore(runId: string, data: OneStepRequest, userId: string) {
+  await workflowPhase("source");
   const { title } = data;
   const { normalizeDocumentSources } = await import("./document-source");
   const { createCachedSourceOcr } = await import("./run-extraction");
@@ -267,6 +291,7 @@ export async function runOneStep(
   let inferredTitle: string | undefined;
   let classification: import("../../shared/source-classification").ScopeClassification;
   {
+    await workflowPhase("scope");
     updateRun(runId, { phase: "ocr", detail: "Tantárgy és osztály felismerése…" });
     const inferred = await inferOneStepScope({ ...data, files }, (f) =>
       callScopeModel(f, resolveStudioModel("ocr")),
@@ -284,6 +309,7 @@ export async function runOneStep(
   }
 
   // 2) Map: reuse by content hash or extract now (same as /maps/extract).
+  await workflowPhase("knowledge");
   const { runExtraction, loadExtractionConfig } = await import("./run-extraction");
   const config = await loadExtractionConfig();
   const inputHash = computeInputHash(files as ExtractorFile[], scope, extractionSignature(config));
@@ -326,6 +352,7 @@ export async function runOneStep(
   // kulcsfogalom pending marad: a hiányzó forrás nem törölhető a teljességért.
   // A jóváhagyás a canApprove kapun MEGY ÁT, nem kerüli meg.
   {
+    await workflowPhase("sourceCheck");
     const [mapRow] = await db
       .select({ status: knowledgeMaps.status })
       .from(knowledgeMaps)
@@ -410,6 +437,7 @@ export async function runOneStep(
     return;
   }
   updateRun(runId, { phase: "pedagogue", jobId: started.jobId });
+  await workflowResource(started.jobId);
 
   await driveOneStep(runId, started.jobId);
 }
@@ -501,6 +529,27 @@ export async function driveOneStep(runId: string, jobId: string): Promise<void> 
 }
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */
+async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: () => Promise<void>) {
+  const id = (await workflowStore.related(jobId, owner)) ?? jobId;
+  const previous = await workflowStore.read(id, owner);
+  if (!start && !previous) {
+    if (await workflowStore.exists(jobId)) throw new WorkflowConflict("A futás másik készítőhöz tartozik.");
+    // Pre-release jobs have no invented workflow history.
+    await beforeDrive?.();
+    return drive(jobId);
+  }
+  try {
+    await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start }, async () => {
+      await beforeDrive?.();
+      await drive(jobId);
+      const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
+      if (job?.step === "done" && job.lessonId) return readPublishedLesson(job.lessonId);
+      if (!job || job.step === "error" || job.status === "error") throw new Error(job?.error ?? "A készítés megállt.");
+      throw new WorkflowWaiting("A tanulási terv jóváhagyására vár.", true);
+    });
+  } catch (error) { if (!(error instanceof WorkflowWaiting)) throw error; }
+}
+
 lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: Response) => {
   const parsed = fromMapBody.safeParse(req.body);
   if (!parsed.success) {
@@ -514,8 +563,12 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
   const started = await startJobFromMap(req.params.mapId, scope);
   if (!started.ok) return res.status(409).json({ message: started.reason });
 
-  await drive(started.jobId);
   res.status(201).json({ jobId: started.jobId });
+  void driveTracked(started.jobId, req.user!.id, true).catch(error => {
+    logger.error("[STUDIO] Követett készítés megállt", error);
+    void db.update(studioJobs).set({ status: "error", error: "A követett készítés megállt. Ellenőrizd a Futások naplóját.", finishedAt: new Date() }).where(eq(studioJobs.id, started.jobId))
+      .catch(() => logger.error("[STUDIO] A megállás státuszát sem sikerült menteni."));
+  });
 });
 
 /** GET /api/studio/jobs/:id — pollable job state plus what the pipeline produced. */
@@ -581,11 +634,15 @@ lessonPipelineRouter.get("/jobs/:id/notes", async (req: Request, res: Response) 
 
 /** POST /api/studio/jobs/:id/approve-outline — the admin gate between pedagogue and author. */
 lessonPipelineRouter.post("/jobs/:id/approve-outline", async (req: Request, res: Response) => {
-  const approved = await approveOutline(req.params.id, req.body?.outline);
-  if (!approved.ok) return res.status(409).json({ message: approved.reason });
-
-  await drive(req.params.id);
-  res.json({ jobId: req.params.id });
+  const trackedId = (await workflowStore.related(req.params.id, req.user!.id)) ?? req.params.id;
+  if (await workflowStore.exists(req.params.id) && !await workflowStore.read(trackedId, req.user!.id)) return res.status(404).json({ message: "A futás nem található." });
+  try {
+    await driveTracked(req.params.id, req.user!.id, false, async () => {
+      const approved = await approveOutline(req.params.id, req.body?.outline);
+      if (!approved.ok) throw new WorkflowWaiting(approved.reason, true);
+    });
+    res.json({ jobId: req.params.id });
+  } catch (error) { res.status(409).json({ message: error instanceof Error ? error.message : "A folytatás megállt." }); }
 });
 
 /** POST /api/studio/jobs/:id/resume — re-run the current step (input-hash idempotent). */
@@ -597,8 +654,10 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
     .limit(1);
   if (!exists) return res.status(404).json({ message: "A job nem található." });
 
-  await drive(req.params.id);
-  res.json({ jobId: req.params.id });
+  try {
+    await driveTracked(req.params.id, req.user!.id);
+    res.json({ jobId: req.params.id });
+  } catch (error) { res.status(409).json({ message: error instanceof Error ? error.message : "A folytatás megállt." }); }
 });
 
 /* ------------------------------------------------------------------ *
@@ -626,8 +685,12 @@ lessonPipelineRouter.post("/lessons/:id/fix-concept", async (req: Request, res: 
   updateRun(runId, { phase: "author", lessonId, detail: "Fogalomjavítás és a gyakorlóbankok frissítése…" });
   res.status(202).json({ runId, lessonId });
   // Seven bank calls must not keep an HTTP request open across proxy timeouts.
-  void fixConceptOnLesson(lessonId, body.data.conceptId, {}, actorId).then(result => {
-    updateRun(runId, result.ok ? { phase: "done", detail: result.message } : { phase: "error", error: result.error });
+  void executeWorkflow(workflowStore, { id: runId, owner: actorId, mode: "concept", request: { lessonId, conceptId: body.data.conceptId } }, async () => {
+    const result = await fixConceptOnLesson(lessonId, body.data.conceptId, {}, actorId);
+    if (!result.ok) throw new Error(result.error);
+    return readPublishedLesson(lessonId);
+  }).then(() => {
+    updateRun(runId, { phase: "done", detail: "A javítás alkalmazva és visszaolvasva." });
   }).catch(error => {
     logger.error("[STUDIO] Fogalomjavítási futás meghiúsult", error);
     updateRun(runId, { phase: "error", error: "A fogalomjavítás nem fejeződött be. A mentett állapotot ellenőrizd újrapróbálás előtt." });

@@ -49,6 +49,7 @@ import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesso
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { canReuseLessonVisuals } from "./visual-reuse";
+import { workflowPhase } from "../workflows/engine";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -300,6 +301,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   if (isTerminal(job.step)) {
     return { ok: true, next: { step: job.step, round: job.round }, cached: true };
   }
+  await workflowPhase(job.step);
   if (job.step === "gate") {
     return runGate(store, job);
   }
@@ -491,7 +493,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     tokensOut: usage?.completionTokens ?? null,
     error: null,
     finishedAt: new Date(),
-    lessonId: extra.lessonId,
+    ...(extra.lessonId ? { lessonId: extra.lessonId } : {}),
   });
 
   switch (job.step) {
@@ -1191,6 +1193,7 @@ export async function fixConceptOnLesson(
   deps: PipelineDeps = {},
   actorId?: string,
 ): Promise<FixConceptResult> {
+  await workflowPhase("source");
   const { providerFactory, keyConfigured, promptLookup } = await resolveDeps(deps);
   // Lazy, mint a createDrizzlePipelineStore-ban: a modul importja nem nyithat adatbázis-kapcsolatot.
   const { db } = await import("../db");
@@ -1244,6 +1247,7 @@ export async function fixConceptOnLesson(
 
   let json: unknown;
   try {
+    await workflowPhase("author");
     const result = await callStepModel(provider, {
       step: "author",
       model,
@@ -1269,14 +1273,20 @@ export async function fixConceptOnLesson(
   try {
     const source = { ...mapRow, concepts: conceptRows.map(c => ({ ...c, examWeight: c.examWeight as ExamWeight })).sort((a, b) => a.localId.localeCompare(b.localId)) };
     const candidate = parsed.data;
+    await workflowPhase("banks");
     candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user) => (await callStepModel(provider, { step: "author", model, system, user })).json });
     const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
     assertRepairCandidate(original, candidate, source);
     const lektorModel = resolveStudioModel("lektor");
+    await workflowPhase("lektor");
     const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel), { step: "lektor", model: lektorModel, system: buildLektorPrompt(candidate, source), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
     if (classifyNotes(report.notes).some(n => n.blocking)) return { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." };
+    await workflowPhase("gate");
+    assertRepairCandidate(original, candidate, source);
     const { improvedHtmlFiles } = await import("../../shared/schema");
+    await workflowPhase("save");
     const [improved] = await db.insert(improvedHtmlFiles).values({ originalFileId: row.htmlFileId, title: candidate.title, classroom: candidate.classroom, contentType: "lesson", content: JSON.stringify({ kind: "lesson-repair-fusion-1", lessonId, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(originalMaterial), sourceHash: repairHash(source), previousLesson: original, candidate, reviewNotes: report.notes }), improvementPrompt: `Célzott fogalomjavítás: ${conceptId}`, createdBy: actorId, status: "pending" }).returning();
+    await workflowPhase("apply");
     await applyStructuredImprovement(improved.id, actorId, `Célzott fogalomjavítás, friss bankokkal: ${conceptId}`);
     getHtmlFilesCache().invalidate();
     return { ok: true, message: `A(z) ${conceptId} fogalom javítása és a hozzá igazított gyakorlóbank mentéssel, együtt frissítve.` };

@@ -11,6 +11,11 @@ const decode = (row: typeof aiGenerationRequests.$inferSelect): StoredResearchJo
 
 /** Uses the existing request table; publishing + done state commit together. */
 export const researchJobStore: ResearchJobStore = {
+  async verifyMaterial(id, userId, html) {
+    const { db } = await import("../db");
+    const [row] = await db.select({ content: htmlFiles.content }).from(htmlFiles).where(and(eq(htmlFiles.id, id), eq(htmlFiles.userId, userId)));
+    return row?.content === html;
+  },
   async create(job) {
     const { db } = await import("../db");
     const inserted = await db.insert(aiGenerationRequests).values({ id: job.id, userId: job.userId, prompt: JSON.stringify(job.input), status: status(job.state), generatedContent: JSON.stringify(job) }).onConflictDoNothing().returning({ id: aiGenerationRequests.id });

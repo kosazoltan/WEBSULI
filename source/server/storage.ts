@@ -1522,18 +1522,20 @@ export class DatabaseStorage implements IStorage {
     createBackup: boolean,
     notes?: string
   ): Promise<{ success: boolean; originalFile: HtmlFile; backupId?: string }> {
+    const { workflowPhase, workflowMode } = await import('./workflows/engine');
     const candidate = await this.getImprovedHtmlFile(improvedFileId);
     if (candidate?.contentType === 'lesson') {
       const { applyStructuredImprovement } = await import('./studio/structured-improvement');
       return applyStructuredImprovement(improvedFileId, userId, notes);
     }
+    if (workflowMode() === 'apply') await workflowPhase('gate');
     // CRITICAL: Use transaction for atomic operation
     return await db.transaction(async (tx) => {
       // 1. Get improved file
       const [improved] = await tx
         .select()
-        .from(improvedHtmlFiles)
-        .where(eq(improvedHtmlFiles.id, improvedFileId));
+          .from(improvedHtmlFiles)
+          .where(eq(improvedHtmlFiles.id, improvedFileId)).for('update');
       
       if (!improved) {
         throw new Error('Improved file not found');
@@ -1573,13 +1575,14 @@ export class DatabaseStorage implements IStorage {
       // 5. Get original file
       const [original] = await tx
         .select()
-        .from(htmlFiles)
-        .where(eq(htmlFiles.id, improved.originalFileId));
+          .from(htmlFiles)
+          .where(eq(htmlFiles.id, improved.originalFileId)).for('update');
       
       if (!original) {
         throw new Error('Original file not found');
       }
 
+      if (workflowMode() === 'apply') await workflowPhase('apply');
       // 5. Create backup if requested
       let backupId: string | undefined;
       if (createBackup || fusionHtml) {
@@ -1625,7 +1628,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // VERIFY: Confirm the content was actually written
-      if (updated.content?.length !== improved.content?.length) {
+      if (updated.content !== improved.content) {
         throw new Error(`Content verification failed: expected ${improved.content?.length} bytes in htmlFiles, got ${updated.content?.length} bytes`);
       }
       logger.info(`[APPLY] ✅ htmlFiles.id=${original.id} updated: new content=${updated.content?.length} bytes, title=${updated.title}`);

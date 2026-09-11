@@ -5,6 +5,7 @@ import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
 import { createResearchJobs, checkedResearchArtifact, publicResearchJob, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
 import { WebResearchFailure } from "../server/studio/web-research-runner";
+import { memoryWorkflows } from "./helpers/workflow-store";
 
 const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és területképlete.", subject: "Matematika", experience: compactFusionFixture().experience };
 const htmlFor = (value: unknown) => `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}"></section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(value)}</script><script>const data = JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
@@ -33,6 +34,24 @@ function memoryStore() {
   return { store, rows, materials, setPublicationUnavailable(value: boolean) { publicationUnavailable = value; } };
 }
 async function until(check: () => boolean) { for (let i = 0; i < 100 && !check(); i++) await delay(5); assert.ok(check()); }
+
+test("valódi webes vezérlő és workflow együtt: hiba, visszatöltés, mentés és kész eredmény", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0;
+  m.setPublicationUnavailable(true);
+  const generate = async () => { calls++; return artifact; };
+  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  await jobs.start("tracked", "owner", input);
+  await until(() => workflows.records.get("tracked")?.view.state === "error");
+  assert.equal(workflows.records.get("tracked")!.view.visits.at(-1)!.step, "publish");
+  assert.equal(m.materials.size, 0);
+  m.setPublicationUnavailable(false);
+  const restarted = createResearchJobs(m.store, generate, workflows.store);
+  await restarted.publish("tracked", "owner");
+  assert.equal(calls, 1); assert.equal(m.materials.size, 1);
+  const view = workflows.records.get("tracked")!.view;
+  assert.equal(view.state, "done"); assert.deepEqual(view.visits.map(v => v.step), ["generate", "gate", "publish", "readback"]);
+  assert.deepEqual(view.result, { kind: "material", id: "tracked" });
+});
 
 test("háttérmunka: az indítás azonnali, kliens nélkül elment, ugyanaz az ID csak egyszer generál", async () => {
   const m = memoryStore(); let calls = 0; let finish!: () => void;
