@@ -65,7 +65,7 @@ export type ExtractorDeps = {
  * scope and extraction version remain significant. Cached maps keep their original
  * sourceFiles/sourceRef names together; a new upload must not rename old provenance.
  */
-export const EXTRACTION_VERSION = "source-ledger-5";
+export const EXTRACTION_VERSION = "source-ledger-6-transcript";
 export function extractionSignature(config: { model: string; systemPrompt: string; ocrModel: string; ocrPrompt: string; provider: string }): string {
   return createHash("sha256").update(JSON.stringify([EXTRACTION_VERSION, config.model, config.systemPrompt, config.ocrModel, config.ocrPrompt, config.provider])).digest("hex");
 }
