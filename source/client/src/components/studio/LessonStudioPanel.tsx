@@ -152,7 +152,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
           {/* A nézet-modell köti a UI-t a tesztelt döntéshez: feltöltés-mód az
               elsődleges, térkép-választó soha nem az. */}
           {view.mode === "upload" && (
-            <><SourceUploadForm onReview={setReviewMapId} showMapOnlyAction={false} headerless />
+            <><SourceUploadForm onReview={setReviewMapId} persistRun showMapOnlyAction={false} headerless />
             {reviewMapId && <div className="mt-4 space-y-3" data-testid="one-step-source-review">
               <Button variant="ghost" onClick={() => setReviewMapId(null)}>Forrásellenőrzés bezárása</Button>
               <KnowledgeMapEditor mapId={reviewMapId} />

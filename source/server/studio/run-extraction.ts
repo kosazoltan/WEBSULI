@@ -218,7 +218,7 @@ export async function runExtraction(input: RunInput): Promise<string> {
         classroom: input.scope.classroom,
         unit: input.scope.unit ?? null,
         status: "draft",
-        sourceFiles: input.files.map((f) => ({ name: f.name, kind: f.kind })),
+        sourceFiles: files.map((f) => ({ name: f.name, kind: f.kind, extractedText: f.extractedText })),
         // #163: a TÁROLT kereshető szöveg az OCR-átiratokkal együtt — a
         // "Forrás-ellenőrzés újra" ez ellen fut, képes forrásnál is működnie kell.
         sourceText: searchableText,

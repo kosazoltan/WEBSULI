@@ -73,11 +73,14 @@ function downscaleImage(dataUrl: string): Promise<string> {
 export function SourceUploadForm({
   onCreated,
   onReview,
+  persistRun = false,
   showMapOnlyAction = true,
   headerless = false,
 }: {
   onCreated?: (mapId: string) => void;
   onReview?: (mapId: string) => void;
+  /** Only the main lesson form owns the persistent run monitor. */
+  persistRun?: boolean;
   /**
    * LS-8 (#191): a kurátori „Csak tudás-térkép" gomb. A tananyagkészítés fülön
    * `false` — ott a tudástár építése a folyamat láthatatlan része.
@@ -144,13 +147,14 @@ export function SourceUploadForm({
   // Feltöltés → tudástár → lecke. A tantárgyat és évfolyamot a forrás határozza meg.
   // LS-6b (#165): a szerver 202 + runId-t ad azonnal; a futást a fázispanel
   // pollozza, hogy a tanár LÁSSA, melyik gyártási lépés fut éppen.
-  const [runId, setRunId] = useState<string | null>(readPersistedRunId);
+  const [runId, setRunId] = useState<string | null>(() => persistRun ? readPersistedRunId() : null);
   useEffect(() => {
+    if (!persistRun) return;
     try {
       if (runId) sessionStorage.setItem(RUN_STORAGE_KEY, runId);
       else sessionStorage.removeItem(RUN_STORAGE_KEY);
     } catch { /* The live status remains available without browser storage. */ }
-  }, [runId]);
+  }, [runId, persistRun]);
   const oneStep = useMutation({
     mutationFn: () =>
       apiRequest<{ runId: string }>(
@@ -344,7 +348,7 @@ export function SourceUploadForm({
                     <a href={`/preview/${run.data.htmlFileId}`}>Lecke megnyitása</a>
                   </Button>
                 )}
-                {run.data.phase === "parked" && run.data.mapId && onReview && <Button variant="outline" size="sm" data-testid="one-step-review-source" onClick={() => onReview(run.data!.mapId!)}>
+                {(run.data.phase === "parked" || run.data.phase === "error") && run.data.mapId && onReview && <Button variant="outline" size="sm" data-testid="one-step-review-source" onClick={() => onReview(run.data!.mapId!)}>
                   Forrásellenőrzés megnyitása
                 </Button>}
                 <Button variant="ghost" size="sm" onClick={() => setRunId(null)}>

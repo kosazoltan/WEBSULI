@@ -71,6 +71,7 @@ export const sourceFileSchema = z.object({
   name: filledString(255),
   kind: z.enum(SOURCE_KINDS),
   pages: z.number().int().positive().optional(),
+  extractedText: z.string().optional(),
 });
 
 export const knowledgeMapSchema = z.object({

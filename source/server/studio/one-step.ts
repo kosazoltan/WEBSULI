@@ -38,7 +38,10 @@ export const oneStepRequestSchema = z.object({
         content: z.string().min(1),
       }),
     )
-    .min(1),
+    .min(1)
+    .refine(files => new Set(files.map(file => file.name)).size === files.length, {
+      message: "Azonos nevű forrásfájlok nem tölthetők fel együtt. Nevezd át az egyik fájlt.",
+    }),
 });
 
 export type OneStepRequest = z.infer<typeof oneStepRequestSchema>;

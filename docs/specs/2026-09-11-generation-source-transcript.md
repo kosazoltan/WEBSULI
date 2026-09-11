@@ -20,6 +20,8 @@ Nincs adatmodell-migráció, régi tananyag törlése vagy vak felülírása. Ni
 - Megállás és hiba navigálás után is megmarad, amíg az admin bezárja vagy új futást indít. A feltöltés fájljai csak sikeres publikáláskor ürülnek.
 
 ## EARS elfogadás
+Kiadás előtti review-kiegészítés: az átirat fájlonként megmarad a meglévő `sourceFiles` JSON-mezőben (opcionális `extractedText`, nincs SQL-migráció). A `routes.ts` kézi idézetszerkesztése és újraellenőrzése is kizárólag a hivatkozott fájlt használja. Régi, egyfájlos jegyzéknél a tárolt közös átirat használható; többfájlos, fájlonkénti bizonyíték nélküli jegyzéknél a kapu zárt marad. Azonos fájlneveket a közös kérési séma még a modellhívás előtt elutasít. A fő feltöltő kizárólagos tulajdonosa a tartós futásjelzőnek; a haladó feltöltő nem olvashatja/törölheti azt. `error` állapotból is megnyitható a már létrejött forrásjegyzék. Érintett további fájlok: `one-step.ts`, `routes.ts`, `shared/schema.ts`, `shared/knowledge-map-schema.ts`, valamint a meglévő regressziós tesztek.
+
 1. Amikor OCR-forrás készül, a kivonatoló és az idézetellenőr azonos szöveget kapjon; a szár/virágos növény regressziós példák igazolható idézettel folytatódjanak.
 2. Ha a gépi javítás nem talál pontos bizonyítékot, az ellenőrzési kapu maradjon zárt, látható okkal és elérhető forrásellenőrzéssel.
 3. Ha a felhasználó elnavigál és visszatér, a gyártás állapota és eredményhivatkozása maradjon elérhető.

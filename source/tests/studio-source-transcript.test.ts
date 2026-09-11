@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { conceptSchema } from "../shared/knowledge-map-schema";
-import { attachSourceTranscripts, checkSourceQuotes, repairSourceQuotes } from "../server/studio/source-transcript";
-import { scopeContentParts } from "../server/studio/one-step";
+import { attachSourceTranscripts, checkSourceQuotes, repairSourceQuotes, sourceTextForReference } from "../server/studio/source-transcript";
+import { parseOneStepRequest, scopeContentParts } from "../server/studio/one-step";
+import { buildConceptUpdate } from "../server/studio/request";
+import { applyVerbatimChecks } from "../server/studio/extractor";
 
 const exact = "Összeköti egymással a növény szerveit, szállítja közöttük a tápanyagokat.";
 const paraphrase = "Összeköti egymással a növény szerveit, és szállítja közöttük a tápanyagokat.";
@@ -48,4 +50,24 @@ test("üres vagy hiányzó képátirat nem indíthat kivonatolást", ()=>{
 
 test("egy modellhiba nem jelent sikeres javítást", async()=>{
   await assert.rejects(repairSourceQuotes([concept],files,async()=>{throw new Error("provider failed");}),/provider failed/);
+});
+
+test("a tárolt átirat kézi javításkor és újraellenőrzéskor is a hivatkozott fájlhoz tartozik",()=>{
+  const stored=JSON.parse(JSON.stringify([...files,{name:"other.txt",extractedText:paraphrase}]));
+  const own=sourceTextForReference(stored,exact+"\n"+paraphrase,"plant.jpg");
+  assert.equal(own,exact);
+  assert.equal(buildConceptUpdate({quote:paraphrase},own).verbatimOk,false);
+  assert.equal(applyVerbatimChecks([{...concept,quote:paraphrase}],own)[0].verbatimOk,false);
+  assert.equal(buildConceptUpdate({quote:exact},own).verbatimOk,true);
+  assert.equal(sourceTextForReference(stored,exact,"missing.txt"),"");
+  assert.equal(sourceTextForReference([{name:"plant.jpg"}],exact,"plant.jpg"),exact);
+  assert.equal(sourceTextForReference([{name:"plant.jpg"},{name:"other.txt"}],exact,"plant.jpg"),"");
+  assert.equal(sourceTextForReference([{name:"plant.jpg",extractedText:exact},{name:"plant.jpg",extractedText:paraphrase}],null,"plant.jpg"),"");
+});
+
+test("duplikált fájlnév még OCR előtt hibás kérés, a belső feldolgozó is elutasítja",()=>{
+  assert.equal(parseOneStepRequest({files:[files[0],files[0]]}).ok,false);
+  assert.equal(parseOneStepRequest({files:[files[0],{...files[0],name:" plant.jpg "}]}).ok,false);
+  assert.equal(parseOneStepRequest({files:[files[0],{...files[0],name:"second.jpg"}]}).ok,true);
+  assert.throws(()=>attachSourceTranscripts([files[0],files[0]],[]),/Azonos nevű/);
 });

@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+// Route fixtures must own requests on production builds too, including after reload.
+test.use({ serviceWorkers: "block" });
 
 test("a megállt feltöltés visszatérés után is látható és a konkrét forrás megnyitható", async ({ page }) => {
   const errors:string[]=[];
@@ -15,6 +17,12 @@ test("a megállt feltöltés visszatérés után is látható és a konkrét for
   await expect(page.getByTestId("extract-file-list")).toContainText("plants.txt");
   await page.reload();
   await expect(page.getByTestId("one-step-progress")).toContainText("14 fogalom");
+  await page.getByTestId("studio-advanced-toggle").click();
+  await expect(page.getByTestId("studio-advanced-body")).toBeVisible();
+  await expect(page.getByTestId("one-step-progress")).toHaveCount(1);
+  expect(await page.evaluate(()=>sessionStorage.getItem("websuli.studio.oneStepRunId"))).toBe("run-plant");
+  await page.reload();
+  await expect(page.getByTestId("one-step-progress")).toContainText("14 fogalom");
   for (const size of [{width:360,height:800},{width:844,height:390},{width:1280,height:900}]) {
     await page.setViewportSize(size);
     await expect(page.getByTestId("one-step-review-source")).toBeVisible();
@@ -26,6 +34,14 @@ test("a megállt feltöltés visszatérés után is látható és a konkrét for
   await page.getByTestId("one-step-review-source").click();
   await expect(page.getByTestId("one-step-source-review")).toContainText("Virágos növények");
   expect(errors).toEqual([]);
+});
+
+test("a hibával leállt futás meglévő forrásjegyzéke is megnyitható",async({page})=>{
+  await page.addInitScript(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","error-run"));
+  await page.route("**/api/studio/lessons/one-step/error-run",route=>route.fulfill({json:{phase:"error",error:"A szerzői lépés hibát jelzett",detail:null,mapId:"plant",lessonId:null}}));
+  await page.goto("/__studio-panel-probe");
+  await expect(page.getByTestId("one-step-progress")).toContainText("A szerzői lépés hibát jelzett");
+  await expect(page.getByTestId("one-step-review-source")).toBeVisible();
 });
 
 test("csak a közzétett lecke kész; hálózati hiba újraellenőrizhető, újratöltés után megnyitható",async({page})=>{
