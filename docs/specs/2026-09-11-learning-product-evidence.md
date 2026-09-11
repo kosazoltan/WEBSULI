@@ -37,3 +37,11 @@ Az indítókra külön, görgetés előtti mérést végeztünk. Ez négy koráb
 A telefonméretek asztali Chrome-ban emulált viewportok; fizikai iOS/Android készüléken nem futott próba. A hosszabb szabálymagyarázat külön megnyitható; az indítás és a játék fő vezérlői a vizsgált méretekben görgetés nélkül elérhetők. Gyermekrésztvevős tanulási hatásvizsgálat még nem történt. A hozzá tartozó, mérhető próbaterv külön dokumentum.
 
 A teljes képernyős képi visszaellenőrzés az űrjáték rejtett, de inicializálás miatt felszerelt játékterének fekvő CSS-felülírását is feltárta. A rácselrendezés most csak a nem rejtett játékteret érinti; a teszt külön ellenőrzi az inaktív játékterek rejtettségét. A javított űr-, szólétra- és matekmenü képi ellenőrzése sikeres.
+
+## Éles kiadás és előnézeti korrekció
+
+PR #45 összeolvasztva, telepített frontend/backend: `a5c2d267c6948a48963479df89e0de2ba84b03ee`. A teljes CI sikeres; a 124 böngészőpróbából egy korábbi főoldali CTA-mérés újrapróbálást igényelt (43,999996185 px a 44 px határnál), 123 elsőre átment. Nem csökkentettük a mércét.
+
+A mentést külön PostgreSQL 17 példányba ténylegesen visszaállítottuk: 176 anyag, 12 lecke, 0 éles írás. A háromszöges mintalecke külön mentés után a 2. verzióra váltott; a teljes JSON és a 28 kérdés visszaolvasása sikeres. Az éles frontend és backend mind a hat fontfájljának SHA-256 lenyomata egyezik a mért készlettel. A service workerrel végzett újratöltés is a 2. verziót adta.
+
+Az éles megjelenítési vizsgálat adat-, betű-, kvíz- és játékellenőrzése sikeres volt, de a képek külön ellenőrzése feltárta, hogy a /preview fix eszközsávja eltakarja a fúziós lapfüleket. Ezt a puszta DOM-láthatóság nem mutatta ki. Az új, valós előnézeti útvonalas takarásvizsgálat mindhárom méretben bukott a javítás előtt; a normál dokumentumfolyamba helyezett strukturált előnézettel 3/3 PASS (5,2 s), képi ellenőrzéssel együtt. Típusellenőrzés, teszt-típusellenőrzés és lint PASS. A korrekció terve: `2026-09-11-preview-navigation.md`; a végső éles próba már a lapfülek tényleges érinthetőségét is vizsgálja.
