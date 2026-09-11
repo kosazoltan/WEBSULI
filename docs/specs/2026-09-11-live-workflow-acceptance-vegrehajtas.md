@@ -1,0 +1,10 @@
+# Végrehajtási utasítás
+
+1. Olvasd az AGENTS.md, docs/lesson-improvement.md, source/client/src/components/studio/SourceUploadForm.tsx, source/server/workflows/engine.ts és a DB-tesztek szerződését. Friss git állapot és normál adminmunkamenet szükséges.
+2. Készíts rövid, matematikailag ellenőrzött magyar TXT-forrást tmp/workflow-acceptance/ alatt, TESZT névvel; normál fájlválasztóval töltsd fel. Ne állíts be kézi évfolyamot.
+3. A futás közben töltsd újra a böngészőt. Naplózd a futásazonosítót és a valódi eredményt. Csak olvasási DB-kapcsolattal ellenőrizd a workflow és tananyag kapcsolatát, valamint az egyszeri publikálást. Ne olvasd ki a munkamenet titkát és ne indíts teljes szervert éles ENV-vel.
+4. A létrejött anyagon normál adminjavítást indíts. Az eredetit mentsd helyi, nem commitolt fájlba, a jelöltet ellenőrizd, alkalmazd, majd olvasd vissza a mentést és eredményt. Ha a készítés hibás, a konkrét kaput és mentett állapotot vizsgáld; ne pótold kézzel a gyártási eredményt.
+5. Futtasd source alatt: npm.cmd run test:learning-db. Ez saját eldobható PostgreSQL-t indít, valódi tranzakció/lease/folytatás ellenőrzéssel. A szerverfolyamat megszakításának hiányzó esetét külön, izolált ellenőrzéssel egészítsd ki, ha szükséges; éles szervert ne állíts le.
+6. Négy lap és pontozás: valódi böngésző, magyar ékezetek, helyes/hibás válasz és újratöltés. Mobil álló/fekvő nézetet ellenőrizz. Írd le a PASS/FAIL/NOT RUN eredményeket, külön az éles és izolált bizonyítékokat.
+
+Izolált leállítás részlete: source/tests/workflow-db.integration.ts új esetében külön Node-folyamat a valódi engine/store réteggel ment egy kész checkpointot, majd a következő szintetikus szolgáltatói válasz közben megállítjuk ezt a saját gyermekfolyamatot. A tesztadatbázisban a lease lejáratát előrehozzuk (nem várunk 90 másodpercet). Friss végrehajtás az első választ cache-ből olvassa, a befejezetlen választ újra kéri, majd egyszer fejez be. A szolgáltató itt szintetikus; számlázási vagy éles szerver-újraindítási bizonyítékot nem jelent. Ellenőrzés: npm.cmd run test:learning-db és npm.cmd run check:test.
