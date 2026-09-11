@@ -274,6 +274,50 @@ function makeDeps(cannedResponse: string) {
   return { store, calls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
 }
 
+for (const repair of ["valid", "unknown-id", "invalid-schema", "provider-error"] as const) {
+  test(`author concept-id repair: ${repair}`, async () => {
+    const correctId = "terulet-mertekegysege";
+    const typo = "terulet-mertekegyseg";
+    const valid = structuredClone(GOOD_LESSON);
+    valid.sections[0].blocks[0].coversConceptIds = [correctId];
+    const broken = structuredClone(valid);
+    broken.sections[0].blocks[0].coversConceptIds = [typo];
+    const deps = makeDeps("");
+    deps.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: correctId, examWeight: "core" }] });
+    deps.store.seed({ id: "id-repair", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+    let calls = 0;
+    const providerFactory = (model: string) => ({
+      ...deps.providerFactory(model),
+      chat: async (messages: AIMessage[]) => {
+        calls++;
+        if (calls === 2) {
+          assert.ok(messages[1].content.includes(typo));
+          const payload = JSON.parse(messages[1].content.slice(messages[1].content.lastIndexOf('\n') + 1));
+          assert.deepEqual(payload.previousLesson, broken);
+          assert.deepEqual(payload.allowedConceptIds, [correctId]);
+          assert.ok(payload.originalInput);
+          if (repair === "provider-error") throw new Error("test provider failure");
+        }
+        return { content: JSON.stringify(calls === 1 || repair === "unknown-id" ? broken : repair === "invalid-schema" ? { sections: [] } : valid),
+          usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      },
+    });
+    const result = await runPipelineStep("id-repair", { ...deps, providerFactory });
+    assert.equal(calls, 2, "exactly one correction, no endless regeneration");
+    assert.equal(result.ok, repair === "valid");
+    assert.equal(deps.store.lessons.size, repair === "valid" ? 1 : 0);
+    if (result.ok) {
+      assert.equal(result.next.step, "animator");
+      assert.deepEqual([...deps.store.lessons.values()][0].json, valid);
+      const job = deps.store.jobs.get("id-repair");
+      assert.equal(job?.tokensIn, 20);
+      assert.equal(job?.tokensOut, 10);
+    } else {
+      assert.equal((await deps.store.loadJob("id-repair"))?.status, "error");
+    }
+  });
+}
+
 test("lektor receives measured inflection scores from the current lesson, including failed samples", async () => {
   const lesson = compactFusionFixture();
   const base = lesson.experience!.tasks[0];
