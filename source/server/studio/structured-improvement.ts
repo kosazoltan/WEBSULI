@@ -14,6 +14,7 @@ import { callStepModel } from "./run-step";
 import { OpenRouterProvider } from "../ai/OpenRouterProvider";
 import { resolveStudioModel } from "../ai/models";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
+import { workflowPhase, workflowMode, workflowFence } from "../workflows/engine";
 
 export const repairHash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
@@ -53,6 +54,7 @@ async function loadSource(mapId: string) {
 
 /** Read-only original/source; paid generation writes only the separate candidate. */
 export async function generateStructuredImprovement(fileId: string, instruction?: string): Promise<LessonRepair> {
+  await workflowPhase("source");
   const { db } = await import("../db");
   const [row] = await db.select().from(lessons).where(eq(lessons.htmlFileId, fileId));
   if (!row) throw new Error("A strukturált lecke nem található; HTML-helyőrzőből nem gyártunk tananyagot.");
@@ -71,6 +73,7 @@ export async function generateStructuredImprovement(fileId: string, instruction?
 
 /** Shared generation path: also executable against read-only source with local artifacts. */
 export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: (step: "author" | "lektor", system: string, user: string) => Promise<unknown>, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }) {
+  await workflowPhase("author");
   const outline = original.sections.map(s => ({ heading: s.heading, conceptIds: [...new Set(s.blocks.flatMap(b => "coversConceptIds" in b ? b.coversConceptIds : []))], plannedBlocks: s.blocks.map(b => b.kind), animationSuggestions: [] }));
   const prompt = buildAuthorPrompt(outline, source, []);
   const request = `A korábbi lecke forrással egyező tanítását, kidolgozott példáit és jó ábráit őrizd meg, a hiányokat és forráseltéréseket javítsd. A teljes forráspélda számait és levezetését tanítsd meg, ne csak kérdésben jelenjen meg! Ne rövidítsd vázlattá! mapId=${original.mapId}. Az évfolyamot a program már a forrásból állapította meg, ne változtasd. Minden szakasz explain blokkal induljon. A Próba csak legalább 5 check blokk mellett kapcsolható be; máskülönben probaEnabled=false. A külön experience bankokat ne írd ki.\nKérés: ${instruction ?? "Négyoldalas fúziós módszer, teljes tanítás és változatos gyakorlás."}\nKorábbi lecke (adat):\n${JSON.stringify({ ...original, experience: undefined })}`;
@@ -96,16 +99,21 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
 export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: (step: "author" | "lektor", system: string, user: string) => Promise<unknown>, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }) {
   assertRepairTeaching(original, candidate, source);
+  await workflowPhase("banks");
   candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user) => call("author", system, user) });
   assertRepairCandidate(original, candidate, source);
+  await workflowPhase("lektor");
   const review = lektorReportSchema.parse(await call("lektor", buildLektorPrompt(candidate, source), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);
   if (blockers.length) throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+  await workflowPhase("gate");
+  assertRepairCandidate(original, candidate, source);
   return { candidate, review };
 }
 
 /** Backup, lesson, public metadata and game banks commit or roll back together. */
 export async function applyStructuredImprovement(improvementId: string, userId: string, notes?: string) {
+  if (workflowMode() === "apply") await workflowPhase("gate");
   const { db } = await import("../db");
   return db.transaction(async tx => {
     const [improved] = await tx.select().from(improvedHtmlFiles).where(eq(improvedHtmlFiles.id, improvementId)).for("update");
@@ -124,6 +132,8 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const source = { ...map, concepts: concepts.map(c => ({ id: c.id, localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight as MapConcept["examWeight"] })).sort((a, b) => a.localId.localeCompare(b.localId)) };
     assertRepairFresh(repair, current, source, materialHash(original));
     const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, source);
+    if (workflowMode() === "apply") await workflowPhase("apply");
+    await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
     const backupData = { ...original, structuredLesson: current, quizItems: quiz, expectedCurrentHash: repairHash(repair.candidate), expectedCurrentVersion: current.version + 1 };
     const [backup] = await tx.insert(materialImprovementBackups).values({ originalFileId: original.id, improvedFileId: improved.id, createdBy: userId, notes: notes ?? "Fúziós lecke alkalmazása előtti teljes mentés", backupData }).returning();
@@ -136,6 +146,7 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title }).where(eq(htmlFiles.id, original.id)).returning();
     await tx.update(materialImprovementBackups).set({ backupData: { ...backupData, expectedQuizHash: quizHash(inserted), expectedMaterialHash: materialHash(updated) } }).where(eq(materialImprovementBackups.id, backup.id));
     await tx.update(improvedHtmlFiles).set({ status: "applied", appliedAt: new Date(), appliedBy: userId, improvementNotes: notes ?? improved.improvementNotes }).where(eq(improvedHtmlFiles.id, improved.id));
+    await workflowFence(tx);
     return { success: true, originalFile: updated, backupId: backup.id };
   });
 }

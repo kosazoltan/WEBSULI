@@ -14,6 +14,9 @@ import { storage } from './storage';
 import { logger } from './lib/logger';
 import type { HtmlFile } from '@shared/schema';
 import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
+import { executeWorkflow, workflowPhase } from "./workflows/engine";
+import { workflowStore } from "./workflows/store";
+import { htmlBaselineHash } from "./improve/html-baseline";
 
 /**
  * Run the AI improvement in background and update the DATABASE record
@@ -25,6 +28,16 @@ async function processImprovementJob(
   userId: string,
   anthropicKey: string
 ) {
+  return executeWorkflow(workflowStore, { id: dbRecordId, owner: userId, mode: originalFile.contentType === 'lesson' ? 'repair' : 'html', request: { original: originalFile, customPrompt } }, async () => {
+    await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey);
+    await workflowPhase("readback");
+    const saved = await storage.getImprovedHtmlFile(dbRecordId);
+    if (saved?.status !== 'pending' || !saved.content || saved.content.includes('<!-- Feldolgozás alatt... -->')) throw new Error(saved?.improvementNotes || 'A javított jelölt nem készült el.');
+    return { kind: 'candidate' as const, id: saved.id };
+  });
+}
+
+async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile, customPrompt: string | undefined, userId: string, anthropicKey: string) {
   const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
   // AUDIT 2026-09-01: a 15 perces abort-timer azonosítója a catch-ágban is elérhető legyen
   let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -33,10 +46,14 @@ async function processImprovementJob(
     if (originalFile.contentType === 'lesson') {
       const { generateStructuredImprovement } = await import('./studio/structured-improvement');
       const candidate = await generateStructuredImprovement(originalFile.id, customPrompt);
+      await workflowPhase("save");
       await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, JSON.stringify(candidate), 'pending');
       return;
     }
     // Build prompts — v7.4 (2026-09-09): a közös spec-modul adja a technikai szerződést.
+    await workflowPhase("source");
+    if (!originalFile.content?.trim()) throw new Error("Az eredeti tananyag üres.");
+    await workflowPhase("author");
     const specBlock = lessonHtmlSpecPrompt({
       classroom: originalFile.classroom ?? 5,
       seed: originalFile.title,
@@ -474,6 +491,7 @@ ${originalFile.content}
     // that fails here is NEVER saved as applicable; it goes to 'error' with
     // the problem list, so the admin sees exactly why and can re-run.
     const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
+    await workflowPhase("gate");
     const verification = verifyLessonMethodHtml(improvedHtml);
     if (!verification.ok) {
       logger.error(
@@ -488,6 +506,7 @@ ${originalFile.content}
     // ✅ CRITICAL: Update content AND status in ONE atomic operation
     // If we did this in two steps, the user could "Apply" the file
     // between status→pending and content→HTML, getting the placeholder!
+    await workflowPhase("save");
     await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, improvedHtml, 'pending');
 
     logger.info(`[IMPROVE] Record ${dbRecordId}: ✅ Success! Content saved (${improvedHtml.length} bytes), status → pending`);
@@ -518,6 +537,7 @@ ${originalFile.content}
       const dbErrorTyped = dbError instanceof Error ? dbError : new Error(String(dbError));
       logger.error(`[IMPROVE] Record ${dbRecordId}: Failed to save error status:`, dbErrorTyped.message);
     }
+    throw new Error(userMessage, { cause: error });
   }
 }
 
@@ -587,6 +607,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
         classroom: originalFile.classroom,
         contentType: originalFile.contentType || 'html',
         improvementPrompt: customPrompt || 'Default improvement',
+        baselineHash: originalFile.contentType === 'lesson' ? null : htmlBaselineHash(originalFile),
         status: 'processing',
         createdBy: userId,
       });

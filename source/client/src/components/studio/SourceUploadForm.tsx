@@ -17,6 +17,7 @@ import {
 } from "@shared/studio-ui";
 import { useQuery } from "@tanstack/react-query";
 import { CreationProgress } from "./CreationProgress";
+import { WorkflowMonitor } from "./WorkflowMonitor";
 
 const RUN_STORAGE_KEY = "websuli.studio.oneStepRunId";
 function readPersistedRunId(): string | null {
@@ -358,6 +359,7 @@ export function SourceUploadForm({
             )}
           </div>
         )}
+        <WorkflowMonitor id={runId} />
       </CardContent>
     </Card>
   );

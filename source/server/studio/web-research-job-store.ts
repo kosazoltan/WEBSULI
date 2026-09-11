@@ -4,6 +4,7 @@ import type { ResearchJobStore, StoredResearchJob } from "./web-research-jobs";
 import { checkedResearchArtifact } from "./web-research-jobs";
 import { WebResearchFailure } from "./web-research-runner";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
+import { workflowFence } from "../workflows/engine";
 
 const status = (state: StoredResearchJob["state"]) => `web_research_${state}`;
 const decode = (row: typeof aiGenerationRequests.$inferSelect): StoredResearchJob | null =>
@@ -11,6 +12,11 @@ const decode = (row: typeof aiGenerationRequests.$inferSelect): StoredResearchJo
 
 /** Uses the existing request table; publishing + done state commit together. */
 export const researchJobStore: ResearchJobStore = {
+  async verifyMaterial(id, userId, html) {
+    const { db } = await import("../db");
+    const [row] = await db.select({ content: htmlFiles.content }).from(htmlFiles).where(and(eq(htmlFiles.id, id), eq(htmlFiles.userId, userId)));
+    return row?.content === html;
+  },
   async create(job) {
     const { db } = await import("../db");
     const inserted = await db.insert(aiGenerationRequests).values({ id: job.id, userId: job.userId, prompt: JSON.stringify(job.input), status: status(job.state), generatedContent: JSON.stringify(job) }).onConflictDoNothing().returning({ id: aiGenerationRequests.id });
@@ -28,6 +34,7 @@ export const researchJobStore: ResearchJobStore = {
   async publish(id, userId) {
     const { db } = await import("../db");
     const result = await db.transaction(async tx => {
+      await workflowFence(tx);
       const [row] = await tx.select().from(aiGenerationRequests).where(and(eq(aiGenerationRequests.id, id), eq(aiGenerationRequests.userId, userId))).for("update");
       const job = row ? decode(row) : null;
       if (!job) throw new WebResearchFailure("A futás nem található.");
@@ -40,6 +47,7 @@ export const researchJobStore: ResearchJobStore = {
       job.error = undefined;
       job.stage = "A tananyag elkészült és elmentve.";
       await tx.update(aiGenerationRequests).set({ status: status("done"), generatedContent: JSON.stringify(job), error: null }).where(eq(aiGenerationRequests.id, id));
+      await workflowFence(tx);
       return job;
     });
     getHtmlFilesCache().invalidate();

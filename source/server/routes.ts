@@ -36,6 +36,8 @@ import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { studioRouter } from "./studio/routes";
 import { lessonPipelineRouter } from "./studio/lesson-pipeline-routes";
 import { webResearchRouter } from "./studio/web-research-routes";
+import { workflowRouter } from "./workflows/routes";
+import { applyTrackedImprovement } from "./workflows/apply";
 import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { ViewDedup } from "./lib/view-dedup";
@@ -795,6 +797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // 2026-09-09: internetes tananyag-ügynök (Claude Opus 5, effort low, web_search).
   app.use("/api/studio", webResearchRouter);
+  app.use("/api/studio", workflowRouter);
 
   // LS-2: a lecke olvasó oldala PUBLIKUS (ezt tölti a gyerek böngészője), és csak
   // publikált, sémára újraellenőrzött leckét ad ki.
@@ -5306,7 +5309,7 @@ Crawl-delay: 1`;
   adminRouter.post("/improved-files/:id/apply", async (req: Request, res) => {
     try {
       const { id } = req.params;
-      const { createBackup = true, notes } = req.body || {};
+      const { notes } = req.body || {};
       const userId = req.user?.id;
 
       if (!userId) {
@@ -5322,7 +5325,7 @@ Crawl-delay: 1`;
       }
 
       // Delegate entirely to storage (single DB query inside transaction)
-      const result = await storage.applyImprovedFileToOriginal(id, userId, createBackup, notes);
+      const result = await applyTrackedImprovement(id, userId, notes);
       
       logger.info(`[APPLY-IMPROVED] ✅ Success! originalFileId: ${result.originalFile.id}, backupId: ${result.backupId || 'none'}`);
 
@@ -5331,6 +5334,7 @@ Crawl-delay: 1`;
         originalFileId: result.originalFile.id,
         originalFileTitle: result.originalFile.title,
         backupId: result.backupId,
+        workflowId: result.workflowId,
         message: 'Javított fájl sikeresen alkalmazva',
       });
     } catch (error: unknown) {
@@ -5422,114 +5426,15 @@ Crawl-delay: 1`;
     }
   });
 
-  // POST /api/admin/improved-files/:id/force-apply - FORCE APPLY with RAW SQL (bypass ORM)
-  // This endpoint bypasses Drizzle ORM and directly executes SQL to prove the DB update works
+  // Older clients use this URL; all applications now share validation and backup.
   adminRouter.post("/improved-files/:id/force-apply", async (req: Request, res) => {
-    const { id } = req.params;
-    const log: string[] = [];
-    
     try {
-      const candidate = await storage.getImprovedHtmlFile(id);
-      if (candidate && (candidate.contentType === 'lesson' || hasHtmlLessonData(candidate.content))) {
-        const result = await storage.applyImprovedFileToOriginal(id, req.user!.id, true, 'Fúziós tananyag ellenőrzött alkalmazása');
-        getHtmlFilesCache().invalidate();
-        return res.json({ ...result, log: ['Ellenőrzött tananyag mentéssel alkalmazva és visszaolvasva.'] });
-      }
-      const { dbPool } = await import('./db');
-      const client = await dbPool.connect();
-      
-      try {
-        log.push(`[1] Connected to database with raw SQL client`);
-        
-        // Step 1: Read improved file
-        const improvedResult = await client.query(
-          'SELECT id, title, content, description, original_file_id, status FROM improved_html_files WHERE id = $1',
-          [id]
-        );
-        
-        if (improvedResult.rows.length === 0) {
-          log.push(`[ERROR] Improved file ${id} NOT FOUND in improved_html_files`);
-          return res.status(404).json({ log, error: 'Improved file not found' });
-        }
-        
-        const improved = improvedResult.rows[0];
-        log.push(`[2] Found improved file: status=${improved.status}, contentLength=${improved.content?.length || 0}, originalFileId=${improved.original_file_id}`);
-        log.push(`[2b] First 150 chars: ${improved.content?.substring(0, 150)}`);
-        
-        // Step 2: Read original file BEFORE update
-        const originalBefore = await client.query(
-          'SELECT id, title, content FROM html_files WHERE id = $1',
-          [improved.original_file_id]
-        );
-        
-        if (originalBefore.rows.length === 0) {
-          log.push(`[ERROR] Original file ${improved.original_file_id} NOT FOUND in html_files`);
-          return res.status(404).json({ log, error: 'Original file not found' });
-        }
-        
-        const origBefore = originalBefore.rows[0];
-        log.push(`[3] Original file BEFORE update: contentLength=${origBefore.content?.length || 0}`);
-        log.push(`[3b] First 150 chars: ${origBefore.content?.substring(0, 150)}`);
-        
-        // Step 3: Check if improved content is valid
-        if (!improved.content || improved.content.length < 200 || improved.content.includes('Feldolgozás alatt')) {
-          log.push(`[ERROR] Improved content is INVALID: length=${improved.content?.length}, placeholder=${improved.content?.includes('Feldolgozás alatt')}`);
-          return res.status(400).json({ log, error: 'Improved content is empty or placeholder' });
-        }
-        
-        // Step 4: FORCE UPDATE with raw SQL - DIRECT write
-        log.push(`[4] Executing: UPDATE html_files SET content = $1, title = $2 WHERE id = $3`);
-        log.push(`[4b] Params: content.length=${improved.content.length}, title=${improved.title}, id=${improved.original_file_id}`);
-        
-        const updateResult = await client.query(
-          'UPDATE html_files SET content = $1, title = $2 WHERE id = $3 RETURNING id, title, length(content) as content_length',
-          [improved.content, improved.title, improved.original_file_id]
-        );
-        
-        log.push(`[5] UPDATE result: rowCount=${updateResult.rowCount}, returned=${JSON.stringify(updateResult.rows[0])}`);
-        
-        if (updateResult.rowCount === 0) {
-          log.push(`[ERROR] UPDATE affected 0 rows! The WHERE clause did not match.`);
-          return res.status(500).json({ log, error: 'UPDATE affected 0 rows' });
-        }
-        
-        // Step 5: VERIFY - Read original file AFTER update
-        const originalAfter = await client.query(
-          'SELECT id, title, length(content) as content_length, substring(content from 1 for 150) as first_150 FROM html_files WHERE id = $1',
-          [improved.original_file_id]
-        );
-        
-        const origAfter = originalAfter.rows[0];
-        log.push(`[6] Original file AFTER update: contentLength=${origAfter.content_length}, title=${origAfter.title}`);
-        log.push(`[6b] First 150 chars: ${origAfter.first_150}`);
-        
-        // Step 6: Mark improved file as applied
-        await client.query(
-          "UPDATE improved_html_files SET status = 'applied', applied_at = NOW() WHERE id = $1",
-          [id]
-        );
-        log.push(`[7] Improved file status → 'applied'`);
-        
-        log.push(`[8] ✅ FORCE APPLY COMPLETE!`);
-        
-        res.json({ 
-          success: true, 
-          log,
-          before: { contentLength: origBefore.content?.length, title: origBefore.title },
-          after: { contentLength: origAfter.content_length, title: origAfter.title },
-        });
-        
-      } finally {
-        client.release();
-      }
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      log.push(`[FATAL ERROR] ${err.message}`);
-      log.push(`[STACK] ${err.stack}`);
-      res.status(500).json({ log, error: process.env.NODE_ENV === 'development' ? err.message : undefined });
+      const result = await applyTrackedImprovement(req.params.id, req.user!.id, 'Ellenőrzött alkalmazás mentéssel');
+      res.json({ ...result, log: ['A tananyag mentéssel alkalmazva és visszaolvasva.'] });
+    } catch (error) {
+      res.status(409).json({ message: error instanceof Error ? error.message : 'Az alkalmazás megállt.' });
     }
   });
-
   // ========================================
   // MATERIAL IMPROVEMENT BACKUP ENDPOINTS
   // ========================================

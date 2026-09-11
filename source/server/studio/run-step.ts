@@ -1,6 +1,7 @@
 import { stripJsonFences } from "../ai/OpenRouterProvider";
 import type { AIResponse, IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
+import { workflowCheckpoint, workflowUsage } from "../workflows/engine";
 
 /**
  * LS-2c — the call layer between the pipeline state machine and the provider.
@@ -46,6 +47,13 @@ export async function callStepModel(
   provider: IAIProvider,
   input: StepCallInput,
 ): Promise<StepCallResult> {
+  return workflowCheckpoint("studio-model", input, async () => {
+    const result = await callUncachedStepModel(provider, input);
+    await workflowUsage(result.usage);
+    return result;
+  });
+}
+async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput): Promise<StepCallResult> {
   let response: AIResponse;
   try {
     response = await provider.chat([

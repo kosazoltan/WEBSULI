@@ -15,6 +15,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { LearningReport } from "./LearningReport";
+import { WorkflowMonitor } from "./WorkflowMonitor";
 import {
   conceptStatRows,
   quizExportDisabledReason,
@@ -41,6 +42,7 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [gameId, setGameId] = useState<string>("");
+  const [workflowId, setWorkflowId] = useState<string | null>(null);
 
   const { data: statsData, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useQuery<{ stats: ConceptStat[] }>({
     queryKey: ["/api/studio/lessons", lessonId, "concept-stats"],
@@ -55,6 +57,7 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
   const fixConcept = useMutation({
     mutationFn: async (conceptId: string) => {
       const { runId } = await apiRequest<{ runId: string }>("POST", `/api/studio/lessons/${lessonId}/fix-concept`, { conceptId });
+      setWorkflowId(runId);
       const started = Date.now();
       while (Date.now() - started < 60 * 60 * 1000) {
         await new Promise(resolve => setTimeout(resolve, 4000));
@@ -98,6 +101,7 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <WorkflowMonitor id={workflowId} />
         {statsLoading && <Loader2 className="w-4 h-4 animate-spin" data-testid="feedback-loading" />}
 
         {/* Audit 2026-09-05 (E): a failed request is NOT "no data yet" — say so, offer retry. */}

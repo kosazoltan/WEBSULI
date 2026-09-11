@@ -5,6 +5,7 @@ import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
 import { createResearchJobs, checkedResearchArtifact, publicResearchJob, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
 import { WebResearchFailure } from "../server/studio/web-research-runner";
+import { memoryWorkflows } from "./helpers/workflow-store";
 
 const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és területképlete.", subject: "Matematika", experience: compactFusionFixture().experience };
 const htmlFor = (value: unknown) => `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}"></section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(value)}</script><script>const data = JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
@@ -34,6 +35,24 @@ function memoryStore() {
 }
 async function until(check: () => boolean) { for (let i = 0; i < 100 && !check(); i++) await delay(5); assert.ok(check()); }
 
+test("valódi webes vezérlő és workflow együtt: hiba, visszatöltés, mentés és kész eredmény", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0;
+  m.setPublicationUnavailable(true);
+  const generate = async () => { calls++; return artifact; };
+  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  await jobs.start("tracked", "owner", input);
+  await until(() => workflows.records.get("tracked")?.view.state === "error");
+  assert.equal(workflows.records.get("tracked")!.view.visits.at(-1)!.step, "publish");
+  assert.equal(m.materials.size, 0);
+  m.setPublicationUnavailable(false);
+  const restarted = createResearchJobs(m.store, generate, workflows.store);
+  await restarted.publish("tracked", "owner");
+  assert.equal(calls, 1); assert.equal(m.materials.size, 1);
+  const view = workflows.records.get("tracked")!.view;
+  assert.equal(view.state, "done"); assert.deepEqual(view.visits.map(v => v.step), ["generate", "gate", "publish", "readback"]);
+  assert.deepEqual(view.result, { kind: "material", id: "tracked" });
+});
+
 test("háttérmunka: az indítás azonnali, kliens nélkül elment, ugyanaz az ID csak egyszer generál", async () => {
   const m = memoryStore(); let calls = 0; let finish!: () => void;
   const paused = new Promise<void>(resolve => { finish = resolve; });
@@ -51,6 +70,55 @@ test("háttérmunka: az indítás azonnali, kliens nélkül elment, ugyanaz az I
   assert.equal((await jobs.start("id", "owner", input)).state, "done");
   await jobs.publish("id", "owner"); assert.equal(m.materials.size, 1); assert.equal(calls, 1);
   assert.equal("candidate" in publicResearchJob(saved!), false);
+});
+
+test("checkpoint után, ready előtt megszakadt webes munka új AI nélkül folytatható", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0;
+  const update = m.store.update; let failReady = true;
+  m.store.update = async (job, expected) => {
+    if (job.state === "ready" && failReady) { failReady = false; throw new Error("Synthetic crash before ready persisted"); }
+    return update(job, expected);
+  };
+  const generate = async () => { calls++; return artifact; };
+  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  await jobs.start("checkpoint-gap", "owner", input);
+  await until(() => workflows.records.get("checkpoint-gap")?.view.state === "error");
+  assert.equal(m.rows.get("checkpoint-gap")!.state, "running");
+  m.rows.get("checkpoint-gap")!.createdAt = Date.now() - 26 * 60_000;
+  const restarted = createResearchJobs(m.store, generate, workflows.store);
+  const recovered = await restarted.read("checkpoint-gap", "owner");
+  assert.equal(recovered!.state, "error"); assert.equal(publicResearchJob(recovered!).canResume, true);
+  await assert.rejects(restarted.publish("checkpoint-gap", "other"));
+  await restarted.publish("checkpoint-gap", "owner");
+  assert.equal(calls, 1); assert.equal(m.materials.size, 1);
+  assert.equal(workflows.records.get("checkpoint-gap")!.view.state, "done");
+  assert.equal(workflows.records.get("checkpoint-gap")!.view.visits[0].cacheHits, 1);
+  await restarted.publish("checkpoint-gap", "owner"); assert.equal(m.materials.size, 1);
+});
+
+test("commit utáni visszaolvasási hiba nem állítja vissza a done jobot és nem publikál kétszer", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0; let broken = true;
+  m.store.verifyMaterial = async () => { if (broken) throw new Error("Synthetic readback outage"); return true; };
+  const jobs = createResearchJobs(m.store, async () => { calls++; return artifact; }, workflows.store);
+  await jobs.start("post-commit", "owner", input);
+  await until(() => workflows.records.get("post-commit")?.view.state === "error");
+  assert.equal(m.rows.get("post-commit")!.state, "done"); assert.equal(m.materials.size, 1);
+  broken = false;
+  await createResearchJobs(m.store, async () => { throw new Error("Must reuse completed response"); }, workflows.store).publish("post-commit", "owner");
+  assert.equal(workflows.records.get("post-commit")!.view.state, "done");
+  assert.equal(calls, 1); assert.equal(m.materials.size, 1);
+});
+
+test("hibás vagy hiányzó checkpoint nem kínál folytatást és nem indít új AI-hívást", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0;
+  const jobs = createResearchJobs(m.store, async () => { calls++; return { ...artifact, html: "Hiányos válasz" }; }, workflows.store);
+  await jobs.start("invalid-checkpoint", "owner", input);
+  await until(() => workflows.records.get("invalid-checkpoint")?.view.state === "error");
+  assert.equal((await jobs.read("invalid-checkpoint", "owner"))!.canResume, false);
+  await assert.rejects(jobs.publish("invalid-checkpoint", "owner"), /Még nincs/);
+  workflows.records.get("invalid-checkpoint")!.checkpoints = {};
+  assert.equal((await jobs.read("invalid-checkpoint", "owner"))!.canResume, false);
+  assert.equal(calls, 1); assert.equal(m.materials.size, 0);
 });
 test("más tulajdonos és eltérő kérés nem vehet át futást", async () => {
   const m = memoryStore(); const jobs = createResearchJobs(m.store, async () => artifact);

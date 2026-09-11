@@ -21,6 +21,7 @@ import { CLASSROOMS, DEFAULT_CLASSROOM } from "@shared/classrooms";
 import type { WebResearchJob } from "@shared/web-research-job";
 import { type WebSource } from "@shared/web-research-stream";
 import { logger } from "@/lib/logger";
+import { WorkflowMonitor } from "./WorkflowMonitor";
 
 type PendingResearch = { id: string; message: string; classroom: number; title?: string; conversationHistory?: ChatMessage[] };
 const STORAGE_KEY = "websuli:web-research:pending";
@@ -48,6 +49,7 @@ export function WebResearchAgentPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [canResume, setCanResume] = useState(false);
 
   const [pending, setPending] = useState<PendingResearch | null>(storedResearch);
 
@@ -71,12 +73,20 @@ export function WebResearchAgentPanel() {
         if (disposed) return;
         if (job.state === "ready" && !job.error) {
           // Also recovers a server restart between durable generation and publication.
-          job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 });
+          try { job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 }); }
+          catch (error) {
+            if ((error as { status?: number }).status !== 409) throw error;
+            // The worker owns publication until its lease expires; keep following it.
+            setStatus("A szerver az ellenőrzött tananyag mentését végzi…");
+            if (!disposed) timer = setTimeout(() => void follow(), 2500);
+            return;
+          }
           if (disposed) return;
         }
         setSources(job.sources);
         setStatus(job.stage);
         setFailure(job.error || null);
+        setCanResume(job.canResume === true);
         setMessages([{ role: "user", content: job.message }, { role: "assistant", content: job.state === "done" ? "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." : job.content || job.stage }]);
         if (job.state === "done" || job.state === "ready") {
           if (!job.html || (job.state === "done" && !job.materialId)) {
@@ -118,7 +128,7 @@ export function WebResearchAgentPanel() {
 
   const handleSend = async (message: string) => {
     if (isLoading || isSaving) return;
-    setFailure(null); setSavedId(null); setGeneratedHtml(""); setSources([]);
+    setFailure(null); setSavedId(null); setGeneratedHtml(""); setSources([]); setCanResume(false);
     const request: PendingResearch = { id: crypto.randomUUID(), message, classroom, ...(title.trim() ? { title: title.trim() } : {}),
       ...(messages.length ? { conversationHistory: messages.slice(-50) } : {}) };
     rememberResearch(request);
@@ -127,12 +137,14 @@ export function WebResearchAgentPanel() {
   };
 
   const handleSave = async () => {
-    if (!pending || !generatedHtml || isSaving || isLoading || savedId) return;
+    if (!pending || (!generatedHtml && !canResume) || isSaving || isLoading || savedId) return;
     setIsSaving(true); setFailure(null);
     try {
       const job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 });
       if (job.state !== "done" || !job.materialId) throw new Error("A szerver nem igazolta vissza a mentést.");
       setSavedId(job.materialId);
+      setGeneratedHtml(job.html || ""); setCanResume(false);
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/workflows"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }).catch(error => logger.error("[WebResearchAgent] list refresh", error));
       setMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." }]);
       toast({ title: "Elmentve a tananyagok közé" });
@@ -153,6 +165,7 @@ export function WebResearchAgentPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <WorkflowMonitor id={pending?.id ?? savedId} />
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label htmlFor="web-research-classroom">Keresési korosztály (támpont)</Label>
@@ -245,12 +258,12 @@ export function WebResearchAgentPanel() {
       <CardFooter className="flex flex-wrap gap-2">
         <Button
           onClick={() => void handleSave()}
-          disabled={!generatedHtml || isSaving || isLoading || !!savedId}
+          disabled={(!generatedHtml && !canResume) || isSaving || isLoading || !!savedId}
           className="flex-1 min-h-11"
           data-testid="web-research-save"
         >
           {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-          {savedId ? "Elmentve a tananyagok közé" : "Mentés a tananyagok közé"}
+          {savedId ? "Elmentve a tananyagok közé" : canResume ? "Folytatás a mentett eredményből" : "Mentés a tananyagok közé"}
         </Button>
         {savedId && (
           <Button asChild variant="outline" className="min-h-11" data-testid="web-research-open-saved">

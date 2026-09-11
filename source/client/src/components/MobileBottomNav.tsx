@@ -36,6 +36,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
       tabs: [
         { value: "enhanced", label: "AI készítő", icon: Wand2 },
         { value: "lesson-studio", label: "Tananyag készítése", icon: Sparkles },
+        { value: "workflows", label: "Tananyagkészítési futások", icon: Activity },
         { value: "pdf-upload", label: "PDF feltöltés", icon: FileText },
         { value: "improve-materials", label: "Okosítás", icon: Sparkles },
       ]

@@ -22,6 +22,44 @@ import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
+import { executeWorkflow, workflowPhase, WorkflowWaiting } from "../server/workflows/engine";
+import { memoryWorkflows } from "./helpers/workflow-store";
+
+test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu és visszaolvasott eredmény", async () => {
+  const lesson = compactFusionFixture(); lesson.mapId = "m1";
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => compactFusionFixture().experience! });
+  const outline = { sections: [{ heading: lesson.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
+  const deps = makeDeps("{}");
+  deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+  const answers = [outline, lesson, { notes: [] }]; let calls = 0; let publications = 0;
+  deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+    chat: async () => ({ content: JSON.stringify(answers[calls++]), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } }),
+  } as unknown as IAIProvider);
+  deps.store.publishLesson = async () => { publications++; return { htmlFileId: "published-fixture", exportedQuizItems: lesson.experience!.quiz.length }; };
+  const started = await startJobFromMap("m1", undefined, deps); assert.ok(started.ok);
+  const { store } = memoryWorkflows(); const input = { id: started.jobId, owner: "test", mode: "studio" as const };
+  await assert.rejects(executeWorkflow(store, input, async () => {
+    const first = await runPipelineStep(started.jobId, deps); assert.ok(first.ok);
+    await advanceJob(started.jobId, first.next, { status: "ok" }, deps);
+    throw new WorkflowWaiting("Vázlat jóváhagyása", true);
+  }), WorkflowWaiting);
+  const done = await executeWorkflow(store, { ...input, retry: true, continuation: true }, async () => {
+    assert.equal((await approveOutline(started.jobId, outline, deps)).ok, true);
+    for (let i = 0; i < 4; i++) {
+      const step = await runPipelineStep(started.jobId, deps); assert.ok(step.ok, JSON.stringify(step));
+      await advanceJob(started.jobId, step.next, { status: "running" }, deps);
+    }
+    await workflowPhase("readback");
+    const job = await deps.store.loadJob(started.jobId); assert.equal(job!.step, "done");
+    assert.equal(job!.output?.htmlFileId, "published-fixture");
+    assert.ok(deps.store.lessons.has(job!.lessonId!));
+    return { kind: "material", id: String(job!.output?.htmlFileId) };
+  });
+  assert.equal(done.state, "done"); assert.equal(publications, 1); assert.equal(calls, 3);
+  assert.deepEqual(done.visits.map(v => v.step), ["pedagogue", "author", "animator", "lektor", "gate", "readback"]);
+  assert.equal(done.visits[2].tokensOut, undefined, "újrahasznált banknál nincs kitalált tokenhasználat");
+});
 
 test("the pipeline prompt version fits the persisted job column", () => {
   const sqlType = studioJobs.promptVersion.getSQLType();

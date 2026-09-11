@@ -13,4 +13,5 @@ export type WebResearchJob = {
   classroom?: number;
   materialId?: string;
   error?: string;
+  canResume?: boolean;
 };
