@@ -597,7 +597,7 @@ export const knowledgeMaps = pgTable(
     status: varchar("status", { length: 16 }).notNull().default("draft"),
     sourceFiles: jsonb("source_files")
       .notNull()
-      .$type<Array<{ name: string; kind: string; pages?: number }>>(),
+      .$type<Array<{ name: string; kind: string; pages?: number; extractedText?: string }>>(),
     /** A kivonatolt nyers forrásszöveg — ehhez mérjük a szó szerinti idézeteket (D1). */
     sourceText: text("source_text"),
     classification: jsonb("classification").$type<import("./source-classification").ScopeClassification>(),

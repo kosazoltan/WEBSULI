@@ -1,4 +1,5 @@
 import express, { type Request, type Response } from "express";
+import { sourceTextForReference } from "./source-transcript";
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import { db } from "../db";
@@ -266,7 +267,7 @@ studioRouter.patch("/concepts/:id", async (req: Request, res: Response) => {
   if (!concept) return res.status(404).json({ message: "A fogalom nem található." });
 
   const [map] = await db
-    .select({ id: knowledgeMaps.id, status: knowledgeMaps.status, sourceText: knowledgeMaps.sourceText })
+    .select({ id: knowledgeMaps.id, status: knowledgeMaps.status, sourceText: knowledgeMaps.sourceText, sourceFiles: knowledgeMaps.sourceFiles })
     .from(knowledgeMaps)
     .where(eq(knowledgeMaps.id, concept.mapId))
     .limit(1);
@@ -281,7 +282,7 @@ studioRouter.patch("/concepts/:id", async (req: Request, res: Response) => {
   // a kliens nem hitelesítheti a saját állítását.
   const update = buildConceptUpdate(
     parsed.data as Record<string, unknown>,
-    map?.sourceText ?? "",
+    sourceTextForReference(map?.sourceFiles ?? [], map?.sourceText ?? null, concept.sourceRef.file),
   );
 
   const [saved] = await db
@@ -340,7 +341,7 @@ studioRouter.post("/maps/:id/approve", async (req: Request, res: Response) => {
 /** POST /api/studio/maps/:id/recheck — re-run D1 over every concept. */
 studioRouter.post("/maps/:id/recheck", async (req: Request, res: Response) => {
   const [map] = await db
-    .select({ id: knowledgeMaps.id, sourceText: knowledgeMaps.sourceText })
+    .select({ id: knowledgeMaps.id, sourceText: knowledgeMaps.sourceText, sourceFiles: knowledgeMaps.sourceFiles })
     .from(knowledgeMaps)
     .where(eq(knowledgeMaps.id, req.params.id))
     .limit(1);
@@ -349,10 +350,10 @@ studioRouter.post("/maps/:id/recheck", async (req: Request, res: Response) => {
 
   const concepts = await db.select().from(kmConcepts).where(eq(kmConcepts.mapId, map.id));
 
-  const checked = applyVerbatimChecks(
-    concepts.map((c) => ({ id: c.id, quote: c.quote, examWeight: c.examWeight as (typeof EXAM_WEIGHTS)[number] })),
-    map.sourceText ?? "",
-  );
+  const checked = concepts.flatMap(c => applyVerbatimChecks(
+    [{ id: c.id, quote: c.quote, examWeight: c.examWeight as (typeof EXAM_WEIGHTS)[number] }],
+    sourceTextForReference(map.sourceFiles, map.sourceText, c.sourceRef.file),
+  ));
 
   await Promise.all(
     checked.map((c) =>

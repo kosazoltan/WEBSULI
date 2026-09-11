@@ -20,7 +20,7 @@ import { LektorNotes } from "@/components/studio/LektorNotes";
 import { FeedbackPanel } from "@/components/studio/FeedbackPanel";
 import { SourceUploadForm } from "@/components/studio/SourceUploadForm";
 import { WebResearchAgentPanel } from "@/components/studio/WebResearchAgentPanel";
-import { KnowledgeMapPanel } from "@/components/studio/KnowledgeMapEditor";
+import { KnowledgeMapEditor, KnowledgeMapPanel } from "@/components/studio/KnowledgeMapEditor";
 import { CREATOR_PAGE_SCALE, feedbackPanelVisible, lessonStudioView } from "@shared/studio-ui";
 
 /**
@@ -72,6 +72,7 @@ function persistJobId(jobId: string | null): void {
 export default function LessonStudioPanel({ initialAdvanced = false }: { initialAdvanced?: boolean }) {
   const { toast } = useToast();
   const [mapId, setMapId] = useState<string>("");
+  const [reviewMapId, setReviewMapId] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(initialAdvanced);
   // Audit 2026-09-05 (E): survive a reload mid-pipeline — the server job keeps running,
   // the admin must not lose the monitor / approval / notes view.
@@ -151,7 +152,11 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
           {/* A nézet-modell köti a UI-t a tesztelt döntéshez: feltöltés-mód az
               elsődleges, térkép-választó soha nem az. */}
           {view.mode === "upload" && (
-            <SourceUploadForm onCreated={() => undefined} showMapOnlyAction={false} headerless />
+            <><SourceUploadForm onReview={setReviewMapId} persistRun showMapOnlyAction={false} headerless />
+            {reviewMapId && <div className="mt-4 space-y-3" data-testid="one-step-source-review">
+              <Button variant="ghost" onClick={() => setReviewMapId(null)}>Forrásellenőrzés bezárása</Button>
+              <KnowledgeMapEditor mapId={reviewMapId} />
+            </div>}</>
           )}
         </CardContent>
       </Card>

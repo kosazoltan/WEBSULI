@@ -18,6 +18,12 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { CreationProgress } from "./CreationProgress";
 
+const RUN_STORAGE_KEY = "websuli.studio.oneStepRunId";
+function readPersistedRunId(): string | null {
+  try { return sessionStorage.getItem(RUN_STORAGE_KEY); }
+  catch { return null; } // Storage may be unavailable in a restricted browser.
+}
+
 /**
  * LS-2a-fix (board #157) — the missing source-upload form.
  *
@@ -66,10 +72,15 @@ function downscaleImage(dataUrl: string): Promise<string> {
 
 export function SourceUploadForm({
   onCreated,
+  onReview,
+  persistRun = false,
   showMapOnlyAction = true,
   headerless = false,
 }: {
   onCreated?: (mapId: string) => void;
+  onReview?: (mapId: string) => void;
+  /** Only the main lesson form owns the persistent run monitor. */
+  persistRun?: boolean;
   /**
    * LS-8 (#191): a kurátori „Csak tudás-térkép" gomb. A tananyagkészítés fülön
    * `false` — ott a tudástár építése a folyamat láthatatlan része.
@@ -136,7 +147,14 @@ export function SourceUploadForm({
   // Feltöltés → tudástár → lecke. A tantárgyat és évfolyamot a forrás határozza meg.
   // LS-6b (#165): a szerver 202 + runId-t ad azonnal; a futást a fázispanel
   // pollozza, hogy a tanár LÁSSA, melyik gyártási lépés fut éppen.
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(() => persistRun ? readPersistedRunId() : null);
+  useEffect(() => {
+    if (!persistRun) return;
+    try {
+      if (runId) sessionStorage.setItem(RUN_STORAGE_KEY, runId);
+      else sessionStorage.removeItem(RUN_STORAGE_KEY);
+    } catch { /* The live status remains available without browser storage. */ }
+  }, [runId, persistRun]);
   const oneStep = useMutation({
     mutationFn: () =>
       apiRequest<{ runId: string }>(
@@ -146,9 +164,8 @@ export function SourceUploadForm({
         { ...(title.trim() !== "" ? { title: title.trim() } : {}), files },
       ),
     onSuccess: (r) => {
+      prevFinished.current = false;
       setRunId(r.runId);
-      setFiles([]);
-      setTitle("");
     },
     onError: (e: Error) =>
       toast({ title: "Az egylépeses gyártás nem sikerült", description: e.message, variant: "destructive" }),
@@ -163,7 +180,11 @@ export function SourceUploadForm({
     htmlFileId?: string | null;
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
-    queryFn: () => apiRequest("GET", `/api/studio/lessons/one-step/${runId}`),
+    queryFn: async () => {
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; lessonId: string | null; htmlFileId?: string | null }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
+      return result;
+    },
     enabled: runId !== null,
     refetchInterval: (query) => {
       const phase = query.state.data?.phase;
@@ -179,10 +200,17 @@ export function SourceUploadForm({
   useEffect(() => {
     if (runFinished && !prevFinished.current) {
       void queryClient.invalidateQueries({ queryKey: ["/api/studio/maps"] });
-      if (run.data?.mapId) onCreated?.(run.data.mapId);
+      if (run.data?.phase === "done" && run.data.htmlFileId) {
+        void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
+        setFiles([]);
+        setTitle("");
+        if (run.data.mapId) onCreated?.(run.data.mapId);
+      } else {
+        toast({ title: "Az új tananyag még nem készült el", description: run.data?.error ?? run.data?.detail ?? "A gyártás megállt.", variant: "destructive" });
+      }
     }
     prevFinished.current = runFinished;
-  }, [runFinished, run.data?.mapId, queryClient, onCreated]);
+  }, [runFinished, run.data, queryClient, onCreated, toast]);
 
   const blocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
   const oneStepBlocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
@@ -296,7 +324,12 @@ export function SourceUploadForm({
           )}
         </div>
 
-        {runId !== null && run.data && (
+        {runId !== null && run.isError && <div role="alert" className="rounded-md border border-red-300 p-3 text-sm space-y-2" data-testid="one-step-status-error">
+          <p>Nem sikerült ellenőrizni a tananyagkészítés állapotát. {run.error.message}</p>
+          <Button variant="outline" onClick={() => void run.refetch()}>Állapot újraellenőrzése</Button>
+          <Button variant="ghost" onClick={() => setRunId(null)}>Bezárás</Button>
+        </div>}
+        {runId !== null && run.data && !run.isError && (
           <div className="rounded-md border p-3 space-y-1.5" data-testid="one-step-progress">
             <p className="text-sm font-medium">
               {run.data.phase === "done"
@@ -304,7 +337,7 @@ export function SourceUploadForm({
                 : run.data.phase === "error"
                   ? "A gyártás megállt hibával"
                   : run.data.phase === "parked"
-                    ? "A gyártás kézi döntésre vár"
+                    ? "Az új tananyag még nem készült el — forrásellenőrzés szükséges"
                     : "Tananyag készül…"}
             </p>
             <CreationProgress run={run.data} />
@@ -315,6 +348,9 @@ export function SourceUploadForm({
                     <a href={`/preview/${run.data.htmlFileId}`}>Lecke megnyitása</a>
                   </Button>
                 )}
+                {(run.data.phase === "parked" || run.data.phase === "error") && run.data.mapId && onReview && <Button variant="outline" size="sm" data-testid="one-step-review-source" onClick={() => onReview(run.data!.mapId!)}>
+                  Forrásellenőrzés megnyitása
+                </Button>}
                 <Button variant="ghost" size="sm" onClick={() => setRunId(null)}>
                   Bezárás
                 </Button>

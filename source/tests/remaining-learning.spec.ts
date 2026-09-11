@@ -12,7 +12,7 @@ test.beforeEach(async({page})=>{
   if(p==='/api/auth/user')data={id:'fixture',isAdmin:true,firstName:'Teszt',classroom:7,classrooms:[7]};
   if(p==='/api/studio/maps')data={maps:[]};
   if(p.includes('material-quizzes'))data={items:[],materials:[]};
-  if(p.includes('one-step'))data={runId:'fixture-run',phase:'done'};
+  if(p.includes('one-step'))data={runId:'fixture-run',phase:'done',htmlFileId:'fixture-published-lesson'};
   await route.fulfill({json:data});
  });
 });

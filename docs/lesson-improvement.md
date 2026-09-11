@@ -113,6 +113,12 @@ A módszer történeti referenciája: [a tulajdonos v7.4 skillje](specs/tananyag
 
 A Studio `triangleArea` animációja a ténylegesen tanított háromszög-területhez használható. A base/height/unit a forráspélda adata; kötelező, szigorúan validált paraméterek. Jóslás → csúcs és merőleges magasság mozgatása → saját magyarázat és összevetés. A modell nem adhat hozzá végrehajtandó kódot, az interakció a közös runtime része. A kísérleti változatok nem helyettesítik a forráspéldát, önmagukban nem adnak jegyet vagy kupont. Az author/animator/javító katalógus egyezzen a sémával. Böngészőpróba: `npx.cmd playwright test --config playwright.lesson-labs.config.ts`; külön vizsgáld a gombok szülő-olvasóterületen belüli láthatóságát is. HTML-es tananyaghoz e komponens önmagában nem jelent új interakciós támogatást.
 
+### Közös forrásátirat és megállt készítés
+
+A képes kivonatoló ugyanazt a fájlonkénti OCR-átiratot kapja, mint az idézetellenőr. A kép vizuális kontextus; az idézet az átirat összefüggő részlete. Az eltérő idézetet legfeljebb két automatikus kör javítja, kizárólag a quote mezőn; fogalom, definíció, súly és forráshely nem változhat. A szerver minden javított idézetet újra ellenőriz az eredeti fájl átiratában. Üres OCR nem indíthat ellenőrizhetetlen gyártást. A javítás nem lazíthatja a forráskaput.
+
+A futásazonosító a böngésző munkamenetében megmarad. Hiba vagy megállás esetén a felület mutassa az okot és a forrásellenőrzéshez vezető gombot; közzétett anyaghivatkozás nélkül nem jelezhet sikert. A régi tananyag megléte nem bizonyítja az új készítés sikerét. Regresszió: `studio-source-transcript.test.ts`, `studio-generation-recovery.spec.ts`. A 2026-09-11-i növényes futás a forráskapunál állt meg, nem az adatbázis-kapcsolat szakadt meg.
+
 ### Magyar tipográfia ellenőrzése
 
 A közös szerződés `source/shared/lesson-typography.ts`. A betűk normál és dőlt változata, licence és ellenőrzési manifestje `source/client/public/fonts/` alatt van. A régi Google Fonts utasítást ez felülírja: a megjelenítő saját eredetű fontokat enged, ezért a helyi betűk útvonalát a külön API-host is kiszolgálja. Az adapter a tárolt tartalom módosítása nélkül egységesíti a HTML-előnézeteket és a publikált HTML-t. Böngészős próba: `npx.cmd playwright test --config playwright.lesson-typography.config.ts` a `source` mappából. A vizsgálat blokkolt Google mellett is ellenőrzi az ő/Ő/ű/Ű és bontott Unicode ékezeteket, hat betűváltozatot, 400/600/800 súlyt.
