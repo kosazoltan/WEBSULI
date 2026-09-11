@@ -410,6 +410,8 @@ test("a lektori javítókör már a még le nem futott fogalmi kapu hibáit is m
   assert.equal(input.gateFeedback?.ok, false);
   assert.ok(input.gateFeedback.ungrounded.some((u: { conceptId: string }) => u.conceptId === "c1"));
   assert.match(deps.calls[0].system, /háromszög területe/);
+  assert.equal(deps.store.jobs.get("early-gate")!.output?.gate, undefined,
+    "A korai mérés nem válhat a későbbi, már javított lecke elavult kapujelentésévé.");
 });
 
 test("tiszta lektor utáni kapujavítás megőrzi az előző kör feloldott bankjavítását", async () => {

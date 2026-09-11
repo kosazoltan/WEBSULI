@@ -558,7 +558,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, lesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson, bankReview, ...(authorGateFeedback ? { gate: authorGateFeedback } : {}) }, { lessonId }),
+        successPatch({ ...job.output, lesson, bankReview }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
