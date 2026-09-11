@@ -14,12 +14,10 @@ import { DEFAULT_REWARD_POLICY } from "./reward-policy";
  *   - `buildPedagoguePrompt`: felsorolja a hat blokktípust, ívet nem ír elő;
  *   - `checkCoverageGate`: fogalmi fedettséget mér, felépítést nem.
  *
- * Ez a modul a négylapos tananyag-elrendezést fordítja le a Studio blokk-nyelvére:
- *
- *   1. lap — elmélet ................ `explain`
- *   2. lap — figyelemfenntartó réteg . `animate`, `try`
- *   3. lap — szöveges feladat ....... `example` (feladat + levezetés + eredmény)
- *   4. lap — kvíz ................... `check`
+ * Ez a modul a Tananyag lap belső tanítási ívét ellenőrzi: felvezetés,
+ * levezetett példa, érdemi szemléltetés, visszakérdezés és összefoglalás.
+ * A külön Módszerek/Feladatok/Kvíz lapokat a lesson-experience séma és
+ * ellenőrzője írja elő. A hat blokktípus önmagában nem helyettesíti őket.
  *
  * Tiszta függvény: nincs benne óra, véletlen és hálózat, így egy elutasított lecke
  * pontosan reprodukálható a JSON-jából.
@@ -32,7 +30,7 @@ import { DEFAULT_REWARD_POLICY } from "./reward-policy";
 /** A visszakérdezés és a számolás blokkjai — ezek a „drill". */
 const DRILL_KINDS = new Set<Block["kind"]>(["check", "example"]);
 
-/** A figyelemfenntartó réteg blokkjai — a négylapos elrendezés 2. lapja. */
+/** A Tananyag lapon belüli szemléltetés; a külön módszerbank ezen felül kell. */
 const ENGAGEMENT_KINDS = new Set<Block["kind"]>(["animate", "try"]);
 
 /**

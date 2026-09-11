@@ -1,3 +1,6 @@
+import { withLessonTypography } from "@shared/lesson-typography";
+import { parseLessonRepair } from "@shared/lesson-repair";
+import { LessonRuntime } from "@/lesson-runtime/LessonRuntime";
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -199,23 +202,24 @@ export default function MaterialImprover() {
       }
       
       logger.info('[makeRunnableHtml] Returning full HTML structure, length:', html.length);
-      return html;
+      return withLessonTypography(html, previewData?.classroom ?? 7, previewData?.title ?? "", window.location.origin);
     }
     
     // Otherwise, wrap the content in a full HTML structure
     const wrappedHtml = `<!doctype html><html lang="hu"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;min-height:100vh;">${html}</body></html>`;
     logger.info('[makeRunnableHtml] Wrapped HTML with basic structure, length:', wrappedHtml.length);
-    return wrappedHtml;
-  }, []);
+    return withLessonTypography(wrappedHtml, previewData?.classroom ?? 7, previewData?.title ?? "", window.location.origin);
+  }, [previewData?.classroom, previewData?.title]);
 
+  const structuredPreview = useMemo(() => parseLessonRepair(previewData?.content), [previewData?.content]);
   const renderedOriginal = useMemo(
-    () => makeRunnableHtml(previewData?.originalFile?.content),
-    [previewData?.originalFile?.content, makeRunnableHtml]
+    () => structuredPreview ? undefined : makeRunnableHtml(previewData?.originalFile?.content),
+    [previewData?.originalFile?.content, makeRunnableHtml, structuredPreview]
   );
 
   const renderedImproved = useMemo(
-    () => makeRunnableHtml(previewData?.content),
-    [previewData?.content, makeRunnableHtml]
+    () => structuredPreview ? undefined : makeRunnableHtml(previewData?.content),
+    [previewData?.content, makeRunnableHtml, structuredPreview]
   );
 
   // Create Blob URL for opening in external browser
@@ -293,14 +297,14 @@ export default function MaterialImprover() {
       // Show loading toast
       toast({
         title: "🤖 AI feldolgozás…",
-        description: "A tananyag javítása folyamatban, ez akár 8-15 percig is tarthat.",
-        duration: 960000,
+        description: "A tananyag és a gyakorlóbankok javítása több lépésben fut. Az állapotot itt követheted.",
+        duration: 3660000,
       });
 
-      // 2. Poll for completion (every 5 seconds, max 16 minutes)
-      // NOTE: Server AI timeout is 15 min, so poll 16 min to catch server-side error
+      // Poll the seven-part lesson repair; server marks stale jobs after 60 minutes.
+      // HTML jobs have a shorter server timeout; both paths return their stored error.
       const jobId = startData.jobId;
-      const maxPollTime = 960000; // 16 minutes max (server timeout is 15 min)
+      const maxPollTime = 3660000; // 61 minutes: allow the server to persist its timeout error
       const pollInterval = 5000; // 5 seconds
       const startTime = Date.now();
       let consecutive404s = 0;
@@ -346,7 +350,7 @@ export default function MaterialImprover() {
         logger.info(`[IMPROVE] Job ${jobId}: ${pollData.elapsed}s elapsed...`);
       }
 
-      throw new Error('Időtúllépés: A javítás túl sokáig tartott (16 perc). Próbáld újra.');
+      throw new Error('Időtúllépés: A javítás túl sokáig tartott (61 perc). Próbáld újra.');
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/improved-files"] });
@@ -639,7 +643,7 @@ export default function MaterialImprover() {
               
               {/* Running HTML Preview - Original */}
               <TabsContent value="run-original" className="mt-4">
-                {renderedOriginal ? (
+                {structuredPreview ? <LessonRuntime lesson={structuredPreview.previousLesson} /> : renderedOriginal ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
                     <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -671,7 +675,7 @@ export default function MaterialImprover() {
 
               {/* Running HTML Preview - Improved */}
               <TabsContent value="run-improved" className="mt-4">
-                {renderedImproved ? (
+                {structuredPreview ? <LessonRuntime lesson={structuredPreview.candidate} /> : renderedImproved ? (
                   <div className="border-2 border-border rounded-lg overflow-hidden bg-white">
                     <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
                       <div className="flex items-center gap-2">

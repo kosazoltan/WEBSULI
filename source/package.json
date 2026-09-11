@@ -19,6 +19,7 @@
     "db:migrate": "tsx server/migrate.ts",
     "lint": "eslint client/src server --max-warnings 0",
     "test": "node --import tsx --test \"tests/*.test.ts\"",
+    "test:learning-db": "node --import tsx scripts/run-learning-db-tests.ts",
     "test:e2e": "playwright test",
     "verify": "npm run check && npm run lint && npm run check:test && npm test && npm run build"
   },
@@ -77,6 +78,7 @@
     "@types/pg": "^8.15.6",
     "@types/qrcode": "^1.5.6",
     "@types/web-push": "^3.6.4",
+    "acorn": "^8.15.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.4.1",

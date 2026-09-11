@@ -1522,6 +1522,11 @@ export class DatabaseStorage implements IStorage {
     createBackup: boolean,
     notes?: string
   ): Promise<{ success: boolean; originalFile: HtmlFile; backupId?: string }> {
+    const candidate = await this.getImprovedHtmlFile(improvedFileId);
+    if (candidate?.contentType === 'lesson') {
+      const { applyStructuredImprovement } = await import('./studio/structured-improvement');
+      return applyStructuredImprovement(improvedFileId, userId, notes);
+    }
     // CRITICAL: Use transaction for atomic operation
     return await db.transaction(async (tx) => {
       // 1. Get improved file
@@ -1549,6 +1554,15 @@ export class DatabaseStorage implements IStorage {
       if (isPlaceholder || !hasHtmlStructure) {
         throw new Error(`A javított fájl tartalma üres vagy hiányos (${contentLength} byte). Az AI feldolgozás valószínűleg nem fejeződött be. Töröld és próbáld újra!`);
       }
+      const { hasHtmlLessonData, readHtmlLessonData } = await import('../shared/lesson-html-data');
+      const fusionHtml = hasHtmlLessonData(improved.content);
+      let inferredClassroom: number | undefined;
+      if (fusionHtml) {
+        const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
+        const result = verifyLessonMethodHtml(improved.content);
+        if (!result.ok) throw new Error(result.problems.join('; '));
+        inferredClassroom = readHtmlLessonData(improved.content).classroom;
+      }
 
       // 4. Validate age (max 30 days)
       const ageInDays = (Date.now() - new Date(improved.createdAt).getTime()) / (1000 * 60 * 60 * 24);
@@ -1568,7 +1582,7 @@ export class DatabaseStorage implements IStorage {
 
       // 5. Create backup if requested
       let backupId: string | undefined;
-      if (createBackup) {
+      if (createBackup || fusionHtml) {
         const [backup] = await tx
           .insert(materialImprovementBackups)
           .values({
@@ -1599,6 +1613,7 @@ export class DatabaseStorage implements IStorage {
         .update(htmlFiles)
         .set({
           content: improved.content,
+          ...(inferredClassroom !== undefined ? { classroom: inferredClassroom } : {}),
           title: improved.title, // Update title if changed
           description: improved.description || original.description, // Update description if provided
         })
@@ -1678,6 +1693,11 @@ export class DatabaseStorage implements IStorage {
     backupId: string,
     _userId: string
   ): Promise<{ success: boolean; restoredFile: HtmlFile }> {
+    const saved = await this.getMaterialImprovementBackup(backupId);
+    if (saved?.backupData && typeof saved.backupData === 'object' && 'structuredLesson' in saved.backupData) {
+      const { restoreStructuredImprovement } = await import('./studio/structured-improvement');
+      return restoreStructuredImprovement(backupId, _userId);
+    }
     return await db.transaction(async (tx) => {
       // 1. Get backup
       const [backup] = await tx
@@ -1690,7 +1710,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 2. Validate backup data structure
-      const backupData = backup.backupData as { id: string; content: string; title?: string; description?: string | null };
+      const backupData = backup.backupData as { id: string; content: string; title?: string; description?: string | null; classroom?: number };
       if (!backupData || !backupData.id || !backupData.content) {
         throw new Error('Invalid backup data structure');
       }
@@ -1702,6 +1722,7 @@ export class DatabaseStorage implements IStorage {
           content: backupData.content,
           title: backupData.title || 'Restored',
           description: backupData.description || null,
+          ...(backupData.classroom !== undefined ? { classroom: backupData.classroom } : {}),
         })
         .where(eq(htmlFiles.id, backup.originalFileId))
         .returning();

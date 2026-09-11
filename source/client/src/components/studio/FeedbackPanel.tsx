@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { LearningReport } from "./LearningReport";
 import {
   conceptStatRows,
   quizExportDisabledReason,
@@ -52,8 +53,17 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
   });
 
   const fixConcept = useMutation({
-    mutationFn: (conceptId: string) =>
-      apiRequest<{ message: string }>("POST", `/api/studio/lessons/${lessonId}/fix-concept`, { conceptId }),
+    mutationFn: async (conceptId: string) => {
+      const { runId } = await apiRequest<{ runId: string }>("POST", `/api/studio/lessons/${lessonId}/fix-concept`, { conceptId });
+      const started = Date.now();
+      while (Date.now() - started < 60 * 60 * 1000) {
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        const run = await apiRequest<{ phase: string; detail: string | null; error: string | null }>("GET", `/api/studio/lessons/one-step/${runId}`);
+        if (run.phase === "done") return { message: run.detail ?? "A tananyag és a gyakorlóbank frissült." };
+        if (run.phase === "error" || run.phase === "parked") throw new Error(run.error ?? run.detail ?? "A javítás megállt.");
+      }
+      throw new Error("A javítás egy órán belül nem zárult le; újraindítás előtt ellenőrizd a futás állapotát.");
+    },
     onSuccess: (r) => {
       toast({ title: "Fogalom javítva", description: r.message });
       void queryClient.invalidateQueries({ queryKey: ["/api/studio/lessons", lessonId, "concept-stats"] });
@@ -64,9 +74,9 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
 
   const exportQuiz = useMutation({
     mutationFn: () =>
-      apiRequest<{ exported: number }>("POST", `/api/studio/lessons/${lessonId}/export-quiz`, { gameId }),
+      apiRequest<{ exported: number; shared?: number; canonical?: boolean }>("POST", `/api/studio/lessons/${lessonId}/export-quiz`, { gameId }),
     onSuccess: (r) =>
-      toast({ title: "Kvíz exportálva", description: `${r.exported} kérdés került a játék bankjába.` }),
+      toast(r.canonical ? { title: "Közös kérdésbank", description: `${r.shared} kérdés már elérhető a játékban.` } : { title: "Kvíz exportálva", description: `${r.exported} kérdés került a játék bankjába.` }),
     onError: (e: Error) =>
       toast({ title: "Az export nem futott le", description: e.message, variant: "destructive" }),
   });
@@ -155,6 +165,7 @@ export function FeedbackPanel({ lessonId }: { lessonId: string }) {
           </Button>
           {exportBlocked && <span className="text-xs text-muted-foreground">{exportBlocked}</span>}
         </div>
+        <LearningReport lessonId={lessonId} />
       </CardContent>
     </Card>
   );

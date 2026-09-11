@@ -28,6 +28,9 @@ interface HtmlFileApi {
 interface UserFileListProps {
   files: HtmlFileApi[];
   isLoading: boolean;
+  isError?: boolean;
+  isRetrying?: boolean;
+  onRetry?: () => void;
   onViewFile: (file: HtmlFileApi) => void;
   onToggleView?: () => void;
 }
@@ -66,7 +69,7 @@ const cardVariants = {
   },
 };
 
-function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileListProps) {
+function UserFileList({ files, isLoading, isError = false, isRetrying = false, onRetry, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -146,6 +149,21 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   const totalClassrooms = allClassrooms.size;
   const availableClassrooms = Array.from(allClassrooms).sort((a, b) => a - b);
 
+  const connectionError = isError ? (
+    <div role="alert" className="mx-auto max-w-xl rounded-xl border border-amber-300 bg-slate-950 p-6 text-center text-white">
+      <h2 className="text-xl font-semibold">A tananyagokat most nem sikerült betölteni</h2>
+      <p className="mt-3 text-slate-200">
+        Átmeneti kapcsolati hiba történt. Ez nem jelenti azt, hogy a tananyagok eltűntek.
+        {files.length > 0 && " A korábban betöltött listát továbbra is láthatod."}
+      </p>
+      {onRetry && (
+        <Button onClick={onRetry} disabled={isRetrying} className="mt-4 min-h-11">
+          {isRetrying ? "Újrapróbálás…" : "Újrapróbálom"}
+        </Button>
+      )}
+    </div>
+  ) : null;
+
   if (isLoading) {
     return (
       <div className="min-h-screen relative">
@@ -178,7 +196,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
 
           <div className="py-8">
             <div className="text-center mb-8">
-              <Card className="max-w-md mx-auto">
+              {connectionError || <Card className="max-w-md mx-auto">
                 <CardContent className="pt-12 pb-12">
                   <FileCode className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
                   <h3 className="text-xl font-semibold text-foreground mb-2">
@@ -194,7 +212,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
                     </Button>
                   </Link>
                 </CardContent>
-              </Card>
+              </Card>}
             </div>
             <HomePracticeGames />
           </div>
@@ -206,6 +224,7 @@ function UserFileList({ files, isLoading, onViewFile, onToggleView }: UserFileLi
   return (
     <div className="min-h-screen relative">
       <div className="container py-3 relative z-10">
+        {connectionError}
         {/* Hero Section */}
         <HeroSection
           totalFiles={totalFiles}

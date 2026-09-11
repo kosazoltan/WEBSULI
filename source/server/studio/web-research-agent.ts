@@ -74,8 +74,8 @@ export function webResearchSystemPrompt(classroom: number, title?: string, topic
     classroom === 0 ? "programozási alapismeretek (osztály 0)" : `${classroom}. osztály`;
   const requestedTitle = title?.trim();
   const lines = [
-    "Te a WEBSULI tananyagkészítő ügynöke vagy (Tananyag Készítő v7.1).",
-    `Célosztály: ${grade}.`,
+    "Te a WEBSULI tananyagkészítő ügynöke vagy (Tananyag Készítő v7.4 fúzió).",
+    `Keresési támpont: ${grade}. A végső évfolyamot a tananyag fogalmaiból te állapítod meg, nem a készítő.`,
     requestedTitle ? `A tananyag kért címe: ${requestedTitle}` : null,
     "",
     "FELADATOD:",

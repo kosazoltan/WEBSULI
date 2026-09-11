@@ -24,7 +24,8 @@ import {
   runPipelineStep,
   startJobFromMap,
 } from "./step-runner";
-import { conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
+import { COUPON_GAME_IDS, conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
+import { canonicalLessonQuiz } from "./canonical-quiz-bank";
 import { MAX_CHAIN_STEPS } from "./pipeline";
 import { fromMapBody } from "./from-map-body";
 import { callScopeModel, decideOneStepAction, inferOneStepScope, parseOneStepRequest, type OneStepRequest } from "./one-step";
@@ -136,7 +137,7 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
   }
   return orphans.length;
 }
-import { computeInputHash, type ExtractorFile } from "./extractor";
+import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
 import { resolveStudioModel } from "../ai/models";
 
@@ -256,14 +257,18 @@ export async function runOneStep(
   data: OneStepRequest,
   userId: string | undefined,
 ): Promise<void> {
-  const { files, title } = data;
+  const { title } = data;
+  const { normalizeDocumentSources } = await import("./document-source");
+  const { createCachedSourceOcr } = await import("./run-extraction");
+  const files = await normalizeDocumentSources(data.files, await createCachedSourceOcr(resolveStudioModel("ocr")));
 
   // 1) The source determines the grade, including for legacy clients sending scope.
   let scope: { subject: string; classroom: number };
   let inferredTitle: string | undefined;
+  let classification: import("../../shared/source-classification").ScopeClassification;
   {
     updateRun(runId, { phase: "ocr", detail: "Tantárgy és osztály felismerése…" });
-    const inferred = await inferOneStepScope(data, (f) =>
+    const inferred = await inferOneStepScope({ ...data, files }, (f) =>
       callScopeModel(f, resolveStudioModel("ocr")),
     );
     if (!inferred.ok) {
@@ -275,10 +280,13 @@ export async function runOneStep(
     }
     scope = inferred.scope;
     inferredTitle = inferred.title;
+    classification = inferred.classification;
   }
 
   // 2) Map: reuse by content hash or extract now (same as /maps/extract).
-  const inputHash = computeInputHash(files as ExtractorFile[], scope);
+  const { runExtraction, loadExtractionConfig } = await import("./run-extraction");
+  const config = await loadExtractionConfig();
+  const inputHash = computeInputHash(files as ExtractorFile[], scope, extractionSignature(config));
   const [existing] = await db
     .select({ id: knowledgeMaps.id })
     .from(knowledgeMaps)
@@ -292,13 +300,14 @@ export async function runOneStep(
     logger.info(`[STUDIO/1STEP] Térkép gyorsítótárból: ${mapId}`);
   } else {
     updateRun(runId, { phase: "ocr", detail: null });
-    const { runExtraction } = await import("./run-extraction");
     try {
       mapId = await runExtraction({
         files: files as ExtractorFile[],
         scope,
+        classification,
         title: title ?? inferredTitle,
         inputHash,
+        config,
         userId,
         onPhase: (phase, detail) => updateRun(runId, { phase, detail }),
       });
@@ -306,15 +315,15 @@ export async function runOneStep(
       logger.error(
         `[STUDIO/1STEP] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,
       );
-      updateRun(runId, { phase: "error", error: "A kivonatolás nem sikerült. Próbáld újra." });
+      updateRun(runId, { phase: "error", error: error instanceof ExtractionShapeError ? error.message : "A kivonatolás nem sikerült. Próbáld újra." });
       return;
     }
     updateRun(runId, { mapId });
   }
 
   // 2b) #174 — gépi kurálás + jóváhagyás: az egylépeses útvonal nem hagyhat
-  // "Piszkozat" zsákutcát. A D1 nem gyengül: az igazolt fogalom kept, a nem
-  // igazolható KULCSfogalom rejected (nem tanítjuk), a kiegészítő kept marad.
+  // "Piszkozat" zsákutcát. Az igazolt fogalom kept, a nem igazolható
+  // kulcsfogalom pending marad: a hiányzó forrás nem törölhető a teljességért.
   // A jóváhagyás a canApprove kapun MEGY ÁT, nem kerüli meg.
   {
     const [mapRow] = await db
@@ -379,7 +388,7 @@ export async function runOneStep(
       if (!gate.ok) {
         updateRun(runId, {
           phase: "parked",
-          detail: `A tudástár gépi jóváhagyása nem lehetséges (${gate.reason}) — nézd át kézzel a Tudás-térkép fülön.`,
+          detail: `Forrásellenőrzés szükséges: ${gate.reason} A bizonytalan kulcsfogalmak megmaradtak; a forrásjegyzékben javíthatók vagy újraellenőrizhetők.`,
         });
         return;
       }
@@ -389,7 +398,7 @@ export async function runOneStep(
         .set({ status: "approved", approvedBy: userId ?? null, approvedAt: new Date(), updatedAt: new Date() })
         .where(eq(knowledgeMaps.id, mapId));
       logger.info(
-        `[STUDIO/1STEP] Térkép gépi kurálással jóváhagyva: ${mapId} (kept=${summary.kept}, rejected=${summary.rejected})`,
+        `[STUDIO/1STEP] Térkép gépi kurálással jóváhagyva: ${mapId} (kept=${summary.kept}, pending=${summary.pending})`,
       );
     }
   }
@@ -611,9 +620,18 @@ lessonPipelineRouter.post("/lessons/:id/fix-concept", async (req: Request, res: 
   const body = z.object({ conceptId: z.string().trim().min(1).max(64) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ message: "conceptId kötelező (1-64 karakter)." });
 
-  const result = await fixConceptOnLesson(req.params.id, body.data.conceptId);
-  if (!result.ok) return res.status(409).json({ message: result.error });
-  res.json({ lessonId: req.params.id, message: result.message });
+  const lessonId = req.params.id;
+  const actorId = req.user!.id;
+  const runId = createRun();
+  updateRun(runId, { phase: "author", lessonId, detail: "Fogalomjavítás és a gyakorlóbankok frissítése…" });
+  res.status(202).json({ runId, lessonId });
+  // Seven bank calls must not keep an HTTP request open across proxy timeouts.
+  void fixConceptOnLesson(lessonId, body.data.conceptId, {}, actorId).then(result => {
+    updateRun(runId, result.ok ? { phase: "done", detail: result.message } : { phase: "error", error: result.error });
+  }).catch(error => {
+    logger.error("[STUDIO] Fogalomjavítási futás meghiúsult", error);
+    updateRun(runId, { phase: "error", error: "A fogalomjavítás nem fejeződött be. A mentett állapotot ellenőrizd újrapróbálás előtt." });
+  });
 });
 
 const exportQuizBody = z.object({
@@ -634,11 +652,19 @@ lessonPipelineRouter.post("/lessons/:id/export-quiz", async (req: Request, res: 
   if (!game) return res.status(400).json({ message: "Ismeretlen játék-azonosító." });
 
   const [lesson] = await db
-    .select({ json: lessons.json, mapId: lessons.mapId })
+    .select({ id: lessons.id, json: lessons.json, mapId: lessons.mapId, htmlFileId: lessons.htmlFileId, version: lessons.version, publishedAt: lessons.publishedAt })
     .from(lessons)
     .where(eq(lessons.id, req.params.id))
     .limit(1);
   if (!lesson) return res.status(404).json({ message: "A lecke nem található." });
+
+  const sharedBank = canonicalLessonQuiz(lesson, body.data.gameId);
+  if (sharedBank !== null) {
+    if (!lesson.publishedAt) return res.status(409).json({ message: "Előbb publikáld az ellenőrzött leckét." });
+    if (!(COUPON_GAME_IDS as readonly string[]).includes(body.data.gameId)) return res.status(400).json({ message: "Ez a játék nem használ tananyagkvízt." });
+    if (!sharedBank.length) return res.status(422).json({ message: "A lecke kérdésbankja javítást igényel." });
+    return res.json({ exported: 0, shared: sharedBank.length, canonical: true });
+  }
 
   // #178: concept_id is an FK to km_concepts.id — resolve the lesson's local slugs through the map.
   const mapConcepts = await db

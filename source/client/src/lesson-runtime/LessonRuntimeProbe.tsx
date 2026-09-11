@@ -1,7 +1,10 @@
 import { LessonRuntime } from "./LessonRuntime";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import type { CouponSession } from "@/game-engine/useCouponSession";
-import type { Lesson } from "@shared/lesson-schema";
+import { lessonSchema, type Lesson } from "@shared/lesson-schema";
+import { useEffect, useState } from "react";
+import { fusionFixture } from "@shared/fixtures/lesson-fusion";
+import { EXPERIENCE_THEMES } from "@shared/lesson-experience";
 
 /**
  * A fixed lesson used to render the runtime in a browser test (LS-2).
@@ -107,6 +110,12 @@ const PROBE_LESSON: Lesson = {
  */
 function probeLesson(search: string): Lesson {
   const q = new URLSearchParams(search);
+  if (q.has("fusion")) {
+    const lesson = fusionFixture();
+    const theme = EXPERIENCE_THEMES.find(t => t === q.get("theme"));
+    if (theme) lesson.experience!.theme = theme;
+    return lesson;
+  }
   const classroom = Number(q.get("classroom"));
   const sections = Number(q.get("sections"));
   const lesson: Lesson = {
@@ -123,8 +132,19 @@ function probeLesson(search: string): Lesson {
 }
 
 export default function LessonRuntimeProbe() {
+  const [candidate, setCandidate] = useState<Lesson | null>(null);
+  const [error, setError] = useState("");
+  const live = new URLSearchParams(window.location.search).get("candidate") === "1";
+  useEffect(() => {
+    if (!live) return;
+    const abort = new AbortController();
+    void fetch("/tmp/lesson-fusion.json", { signal: abort.signal }).then(r => { if (!r.ok) throw new Error("Hiányzó helyi jelölt."); return r.json(); }).then(value => setCandidate(lessonSchema.parse(value))).catch(e => { if (!abort.signal.aborted) setError(String(e)); });
+    return () => abort.abort();
+  }, [live]);
+  if (live && !candidate) return <p>{error || "Helyi jelölt betöltése…"}</p>;
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
-  return <LessonRuntime lesson={probeLesson(window.location.search)} persistId="probe-lesson" />;
+  const practice = new URLSearchParams(window.location.search).get("practice") === "1";
+  return <LessonRuntime lesson={candidate ?? probeLesson(window.location.search)} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} />;
 }
 
 /**

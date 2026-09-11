@@ -6,6 +6,17 @@ import type { CouponSession } from "../client/src/game-engine/useCouponSession.t
 
 const UUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
+test("canonical id sends the actual first selection, including a timeout", async () => {
+  const id = "a".repeat(64);
+  const seen: unknown[] = [];
+  const coupon = session({ claimBonus: async (id, pickedIndex) => { seen.push([id, pickedIndex]); } });
+  maybeClaimCouponBonus(coupon, id, 1);
+  maybeClaimCouponBonus(coupon, `db:${id}`, -1);
+  await Promise.resolve();
+  assert.deepEqual(seen, [[id, 1], [id, -1]]);
+  assert.equal(isClaimableQuizItemId("g".repeat(64)), false);
+});
+
 function session(over: Partial<CouponSession> = {}): CouponSession {
   return {
     active: true,
@@ -38,7 +49,7 @@ test("a quiz-bank db: előtagot levágja, a nyers UUID-t küldi", async () => {
       seen.push(id);
     },
   });
-  maybeClaimCouponBonus(coupon, `db:${UUID}`);
+  maybeClaimCouponBonus(coupon, `db:${UUID}`, 2);
   await Promise.resolve();
   assert.deepEqual(seen, [UUID]);
 });
@@ -50,7 +61,7 @@ test("aktív kupon + UUID → claimBonus egyszer, az id-vel", async () => {
       seen.push(id);
     },
   });
-  maybeClaimCouponBonus(coupon, UUID);
+  maybeClaimCouponBonus(coupon, UUID, 2);
   await Promise.resolve();
   assert.deepEqual(seen, [UUID]);
 });
@@ -63,7 +74,7 @@ test("inaktív kupon → 0 hívás", async () => {
       seen.push(id);
     },
   });
-  maybeClaimCouponBonus(coupon, UUID);
+  maybeClaimCouponBonus(coupon, UUID, 2);
   await Promise.resolve();
   assert.deepEqual(seen, []);
 });
@@ -75,9 +86,9 @@ test("nem-UUID id → 0 hívás még aktív kuponon is", async () => {
       seen.push(id);
     },
   });
-  maybeClaimCouponBonus(coupon, "1");
-  maybeClaimCouponBonus(coupon, "mat-0");
-  maybeClaimCouponBonus(coupon, undefined);
+  maybeClaimCouponBonus(coupon, "1", 2);
+  maybeClaimCouponBonus(coupon, "mat-0", 2);
+  maybeClaimCouponBonus(coupon, undefined, 2);
   await Promise.resolve();
   assert.deepEqual(seen, []);
 });

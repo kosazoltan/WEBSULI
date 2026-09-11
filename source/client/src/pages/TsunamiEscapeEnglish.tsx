@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
@@ -56,7 +57,7 @@ import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 const LS_XP = "websuli-tsunami-en-xp";
 const LS_BEST = "websuli-tsunami-en-best-streak";
 
-type Quiz = TsunamiSubjectQuiz;
+type Quiz = TsunamiSubjectQuiz & { optionIndices?: number[]; topic?: string | null };
 
 const withSubject = (items: FourChoiceQuiz[], subject: TsunamiCoreSubject): TsunamiSubjectQuiz[] =>
   items.map((item) => ({ ...item, subject }));
@@ -511,6 +512,7 @@ function shuffleQuiz(q: Quiz): Quiz {
   return {
     ...q,
     options: indexed.map((x) => x.opt),
+    optionIndices: indexed.map(x => q.optionIndices?.[x.idx] ?? x.idx),
     correctIndex: correctIndex < 0 ? 0 : correctIndex,
   };
 }
@@ -632,16 +634,16 @@ export default function TsunamiEscapeEnglish() {
   // material-tétel az `english` subject `med` (medium) tier-jébe kerül, függetlenül
   // a topic-tól, így az alap "english" mode-ban (ami a leggyakoribb) elérhető.
   const { grade: userGrade } = useClassroomGrade();
-  const { items: materialItems } = useMaterialQuizzes(userGrade);
+  const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
   const mergedPools = useMemo<ActiveQuizPools>(() => {
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
     const matMed = materialItems
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q, idx) => ({
         id: q.id ?? `mat-${idx}`,
         prompt: q.prompt,
-        options: q.options.slice(0, 4) as [string, string, string, string],
+        options: [...q.options],
         correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
@@ -657,6 +659,8 @@ export default function TsunamiEscapeEnglish() {
     };
   }, [quizBankResponse, materialItems]);
 
+  const rewardQuestionsRef = useRef<Quiz[]>([]);
+  rewardQuestionsRef.current = coupon.active ? materialItems.map((q, i) => ({ ...q, id: q.id ?? `mat-${i}`, explanation: q.explanation ?? undefined, subject: "english" })) : [];
   const mergedPoolsRef = useRef(mergedPools);
   mergedPoolsRef.current = mergedPools;
 
@@ -702,6 +706,7 @@ export default function TsunamiEscapeEnglish() {
     else if (eff < 0.82) pool = [...poolM, ...poolH];
     else pool = [...poolH];
 
+    if (rewardQuestionsRef.current.length) pool = rewardQuestionsRef.current;
     if (pool.length === 0) pool = [...poolE];
 
     const recent = recentQuizIdsRef.current;
@@ -982,6 +987,7 @@ export default function TsunamiEscapeEnglish() {
     if (answerLockedRef.current) return;
     answerLockedRef.current = true;
     adaptiveRef.current.answer(index === quiz.correctIndex);
+    maybeClaimCouponBonus(coupon, quiz.id, quiz.optionIndices?.[index] ?? index);
     if (index !== quiz.correctIndex) {
       wrongAnswersRef.current += 1;
       sfxError();
@@ -1011,7 +1017,7 @@ export default function TsunamiEscapeEnglish() {
     }
 
     sfxSuccess();
-    maybeClaimCouponBonus(coupon, quiz.id);
+
     setRewardBurst(true);
     timeoutsRef.current.push(window.setTimeout(() => setRewardBurst(false), 900));
 
@@ -1072,7 +1078,7 @@ export default function TsunamiEscapeEnglish() {
   const surfacePct = useMemo(() => Math.min(100, water), [water]);
   const selectedSubjectMeta = TSUNAMI_SUBJECT_META[subject];
   const runSubjectMeta = TSUNAMI_SUBJECT_META[runSubjectRef.current];
-  const quizSubjectMeta = quiz ? TSUNAMI_SUBJECT_META[quiz.subject] : runSubjectMeta;
+  const quizSubjectMeta = quiz?.topic ? { label: quiz.topic, chip: "LECKE" } : quiz ? TSUNAMI_SUBJECT_META[quiz.subject] : runSubjectMeta;
 
   useEffect(() => {
     if (phase !== "over" && phase !== "won") return;

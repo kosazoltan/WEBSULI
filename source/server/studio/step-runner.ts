@@ -45,6 +45,10 @@ import { checkCoverageGate, type Coverage } from "./coverage";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
+import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
+import { experienceProblems } from "../../shared/lesson-experience-validation";
+import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
+import { canReuseLessonVisuals } from "./visual-reuse";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -68,7 +72,7 @@ import type { ZodError } from "zod";
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-source-review-2";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-2-visual-reuse";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -185,7 +189,7 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
 }
 
 const defaultProviderFactory = (model: string): IAIProvider =>
-  new OpenRouterProvider({ model, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+  new OpenRouterProvider({ model, apiKey: process.env.OPENROUTER_API_KEY ?? "", timeout: 180000, maxTokens: 24000 });
 
 function normalizeStep(raw: string): StudioStep {
   return (STUDIO_STEPS as readonly string[]).includes(raw) ? (raw as StudioStep) : "error";
@@ -380,6 +384,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   const primaryModel = resolveStudioModel(job.step);
   let model = primaryModel;
+  const reusedVisuals = job.step === "animator" && canReuseLessonVisuals(job.output?.lesson);
+  let bankModelUsed: string | null = null;
 
   let json: unknown;
   let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null = null;
@@ -394,6 +400,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       user: "Válaszolj kizárólag a kért JSON-nal.",
     });
   try {
+    if (reusedVisuals) {
+      json = job.output?.lesson;
+      usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    } else {
     let result: Awaited<ReturnType<typeof attempt>>;
     try {
       result = await attempt(primaryModel);
@@ -420,6 +430,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     }
     json = result.json;
     usage = result.usage ?? null;
+    }
   } catch (error) {
     const reason =
       error instanceof StepModelError
@@ -442,7 +453,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     status: "ok",
     output,
     inputHash: hash,
-    model,
+    model: reusedVisuals ? bankModelUsed : model,
     promptVersion: PIPELINE_PROMPT_VERSION,
     tokensIn: usage?.promptTokens ?? null,
     tokensOut: usage?.completionTokens ?? null,
@@ -547,10 +558,35 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         );
       }
 
-      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, outcome.lesson);
+      let completedLesson = outcome.lesson;
+      let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
+      if (isFusionMethodVersion(job.output?.methodVersion) || original.experience) {
+        try {
+          const experience = await buildLessonExperience(completedLesson, map.concepts, {
+            checkpoint,
+            previous: original.experience,
+            call: async (bankSystem, user) => {
+              const bankModel = resolveStudioModel("author");
+              bankModelUsed = bankModel;
+              const result = await callStepModel(providerFactory(bankModel), { step: "author", model: bankModel, system: bankSystem, user });
+              if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
+              return result.json;
+            },
+            save: async (next) => {
+              checkpoint = next;
+              await store.saveStep(job.id, { output: { ...job.output, experienceCheckpoint: next } });
+            },
+          });
+          completedLesson = { ...completedLesson, experience };
+        } catch (error) {
+          return fail(store, job, error instanceof Error ? error.message : "A feladatbank gyártása sikertelen.");
+        }
+      }
+      const lessonId = await store.upsertLesson(job.lessonId, job.mapId, completedLesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: outcome.lesson }, { lessonId }),
+        successPatch({ ...job.output, lesson: completedLesson, animatorReused: reusedVisuals,
+          ...(checkpoint ? { experienceCheckpoint: checkpoint } : {}) }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
@@ -563,6 +599,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
 
+      if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || (job.output?.lesson as Lesson | undefined)?.experience)) {
+        return fail(store, job, "A fúziós lecke lektori hibái a javítókör után is fennállnak; hibás megoldások nem publikálhatók.");
+      }
       const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers });
       if (transition.step === "error") {
         // The run itself was clean, but the pipeline dead-ends: the Author↔Lektor
@@ -630,6 +669,11 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
 
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
+  // Missing experience is a hard failure, including after the autonomous round limit.
+  if (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience) {
+    const problems = experienceProblems(parsed.data);
+    if (problems.length) return fail(store, job, `A fúziós módszer kapuja elutasította a leckét: ${problems.join("; ")}`);
+  }
 
   // M-2 (2026-09-07) — a DIDAKTIKAI ÍV kapuja a fedettségi kapu mellé.
   //
@@ -654,6 +698,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   let qualityNotes = job.output?.qualityNotes;
 
   if (!gate.ok) {
+    if (job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience)) return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
     const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
     if (transition.step === "error") {
       return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);
@@ -878,6 +923,7 @@ export async function startJobFromMap(
     promptVersion: PIPELINE_PROMPT_VERSION,
     inputHash: hash,
   });
+  await store.saveStep(jobId, { output: { methodVersion: LESSON_METHOD_VERSION } });
   return { ok: true, jobId };
 }
 
@@ -1102,19 +1148,26 @@ export async function fixConceptOnLesson(
   lessonId: string,
   conceptId: string,
   deps: PipelineDeps = {},
+  actorId?: string,
 ): Promise<FixConceptResult> {
   const { providerFactory, keyConfigured, promptLookup } = await resolveDeps(deps);
   // Lazy, mint a createDrizzlePipelineStore-ban: a modul importja nem nyithat adatbázis-kapcsolatot.
   const { db } = await import("../db");
 
   const [row] = await db
-    .select({ json: lessons.json, mapId: lessons.mapId })
+    .select()
     .from(lessons)
     .where(eq(lessons.id, lessonId))
     .limit(1);
   if (!row) return { ok: false, error: "A lecke nem található." };
 
-  const original = row.json as Lesson;
+  if (!actorId) return { ok: false, error: "A mentéshez hitelesített készítő szükséges." };
+  if (!row.htmlFileId) return { ok: false, error: "Csak már elérhető lecke javítható ezen az útvonalon." };
+  const [originalMaterial] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, row.htmlFileId));
+  if (!originalMaterial) return { ok: false, error: "Az eredeti tananyag metaadatai nem találhatók." };
+  const original = lessonSchema.parse(row.json);
+  // The narrow author edits teaching only. Updated banks are rebuilt and reviewed separately.
+  const teaching = { ...original, experience: undefined };
   const mapId = row.mapId;
 
   const [mapRow] = await db
@@ -1141,7 +1194,7 @@ export async function fixConceptOnLesson(
   const model = resolveStudioModel("author");
   const provider = providerFactory(model);
 
-  const fallback = buildConceptFixPrompt(original, {
+  const fallback = buildConceptFixPrompt(teaching, {
     subject: mapRow.subject,
     classroom: mapRow.classroom,
     concepts: conceptRows.map((c) => ({ ...c, examWeight: c.examWeight as ExamWeight })),
@@ -1167,12 +1220,26 @@ export async function fixConceptOnLesson(
     return { ok: false, error: `A javított lecke érvénytelen: ${zodIssues(parsed.error)}` };
   }
 
-  const check = checkConceptFixResult(original, parsed.data, conceptId);
+  const check = checkConceptFixResult(teaching, { ...parsed.data, experience: undefined }, conceptId);
   if (!check.ok) {
     return { ok: false, error: `A javítás túllépett a célfogalmon — a lecke érintetlen: ${check.reasons.join("; ")}` };
   }
 
-  await db.update(lessons).set({ json: parsed.data as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
-  return { ok: true, message: `A(z) ${conceptId} fogalom blokkjai frissítve.` };
+  try {
+    const source = { ...mapRow, concepts: conceptRows.map(c => ({ ...c, examWeight: c.examWeight as ExamWeight })).sort((a, b) => a.localId.localeCompare(b.localId)) };
+    const candidate = parsed.data;
+    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user) => (await callStepModel(provider, { step: "author", model, system, user })).json });
+    const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
+    assertRepairCandidate(original, candidate, source);
+    const lektorModel = resolveStudioModel("lektor");
+    const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel), { step: "lektor", model: lektorModel, system: buildLektorPrompt(candidate, source), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
+    if (classifyNotes(report.notes).some(n => n.blocking)) return { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." };
+    const { improvedHtmlFiles } = await import("../../shared/schema");
+    const [improved] = await db.insert(improvedHtmlFiles).values({ originalFileId: row.htmlFileId, title: candidate.title, classroom: candidate.classroom, contentType: "lesson", content: JSON.stringify({ kind: "lesson-repair-fusion-1", lessonId, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(originalMaterial), sourceHash: repairHash(source), previousLesson: original, candidate, reviewNotes: report.notes }), improvementPrompt: `Célzott fogalomjavítás: ${conceptId}`, createdBy: actorId, status: "pending" }).returning();
+    await applyStructuredImprovement(improved.id, actorId, `Célzott fogalomjavítás, friss bankokkal: ${conceptId}`);
+    getHtmlFilesCache().invalidate();
+    return { ok: true, message: `A(z) ${conceptId} fogalom javítása és a hozzá igazított gyakorlóbank mentéssel, együtt frissítve.` };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "A javítás nem alkalmazható; az eredeti érintetlen." };
+  }
 }
-

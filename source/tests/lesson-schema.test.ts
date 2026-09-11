@@ -124,9 +124,14 @@ test("check rejects a correctIndex that points outside the options", () => {
 });
 
 test("animate and try only accept the planned kinds", () => {
+  const story = { title: "Döntés", start: "a", nodes: [
+    { id: "a", text: "Mit teszel?", choices: [{ label: "Első", feedback: "Indoklás", next: "b" }, { label: "Második", feedback: "Indoklás", next: "c" }] },
+    { id: "b", text: "Végpont", choices: [], conclusion: "Következtetés" },
+    { id: "c", text: "Végpont", choices: [], conclusion: "Következtetés" },
+  ] };
   for (const animKind of ANIM_KINDS) {
     assert.ok(
-      blockSchema.parse({ kind: "animate", animKind, params: {}, caption: "c", coversConceptIds: ["c1"] }),
+      blockSchema.parse({ kind: "animate", animKind, params: animKind === "decisionStory" ? story : animKind === "triangleArea" ? { base: 6, height: 4, unit: "cm" } : {}, caption: "c", coversConceptIds: ["c1"] }),
     );
   }
   assert.throws(() =>

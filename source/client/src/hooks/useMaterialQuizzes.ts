@@ -1,3 +1,4 @@
+import { isPlayableQuestion, uniqueQuizContent } from "@shared/game-quiz-contract";
 import { useQuery } from "@tanstack/react-query";
 
 /**
@@ -25,6 +26,7 @@ export type MaterialQuizItem = {
   /** T-1: a MIÉRT, amit a játék rossz válasznál megmutat; régi tételeknél hiányzik. */
   explanation?: string | null;
   topic?: string | null;
+  sourceMaterialId?: string | null;
 };
 
 export type MaterialQuizResponse = {
@@ -33,23 +35,22 @@ export type MaterialQuizResponse = {
   items: MaterialQuizItem[];
 };
 
-export function useMaterialQuizzes(grade: number | null, topicFilter?: MaterialQuizTopic) {
+export function useMaterialQuizzes(grade: number | null, topicFilter?: MaterialQuizTopic, lessonId?: string | null) {
   const q = useQuery<MaterialQuizResponse>({
-    queryKey: ["/api/games/material-quizzes", grade ?? "none"],
-    enabled: grade != null,
+    queryKey: ["/api/games/material-quizzes", grade ?? "none", lessonId ?? "recent"],
+    enabled: grade != null || !!lessonId,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      if (grade == null) return { classroom: 0, materials: [], items: [] };
-      const res = await fetch(`/api/games/material-quizzes?classroom=${grade}&limit=3`, {
+      const res = await fetch(`/api/games/material-quizzes?classroom=${grade ?? 0}&limit=3${lessonId ? `&lessonId=${encodeURIComponent(lessonId)}` : ""}`, {
         credentials: "include",
       });
-      if (!res.ok) return { classroom: grade, materials: [], items: [] };
+      if (!res.ok) throw new Error("A tananyag kérdéseit nem sikerült betölteni.");
       return res.json();
     },
   });
 
   const filteredItems: MaterialQuizItem[] = (() => {
-    const items = q.data?.items ?? [];
+    const items = uniqueQuizContent((q.data?.items ?? []).filter(isPlayableQuestion));
     if (!topicFilter) return items;
     return items.filter((i) => (i.topic ?? "").toLowerCase() === topicFilter);
   })();

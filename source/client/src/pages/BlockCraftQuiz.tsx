@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -1226,19 +1227,19 @@ export default function BlockCraftQuiz() {
   // Az osztály-szintű tananyag-bázis: a játékos legutóbbi 3 anyagából AI-vel
   // generált kvíz-tételek (Claude). Ha még nincs kapcsolt kérdés, üres marad.
   const { grade: userGrade } = useClassroomGrade();
-  const { items: materialItems } = useMaterialQuizzes(userGrade);
+  const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
   const bank = useMemo<Quiz[]>(() => {
     // 1) Tananyag-kvízek (AI-generált, az osztályod legutóbbi 3 anyagából).
     //    Topic → BlockCraft `subject` mapping (angol/matek/környezet/magyar).
     const fromMaterial: Quiz[] = materialItems
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q) => {
         const subject = blockCraftSubjectFromTopic(q.topic);
         return {
           id: q.id,
           prompt: q.prompt,
-          options: q.options.slice(0, 4),
+          options: [...q.options],
           correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
@@ -1247,19 +1248,19 @@ export default function BlockCraftQuiz() {
       });
     // 2) Régi quiz-bank (block-craft-quiz gameId-vel mentett tételek)
     const remote: Quiz[] = (bankData?.items ?? [])
-      .filter((q) => q.options?.length > 1)
+      .filter(isPlayableQuestion)
       .map((q) => ({
         id: q.id,
         prompt: q.prompt,
-        options: q.options.slice(0, 4),
+        options: [...q.options],
         correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
         subject: "english" as QuizSubject,
       }));
     // 3) Statikus fallback (Minecraft-tematikus angol/matek/környezet/magyar)
-    return [...fromMaterial, ...remote, ...QUIZ_FALLBACK];
-  }, [bankData, materialItems]);
+    return coupon.active && fromMaterial.length ? fromMaterial : [...fromMaterial, ...remote, ...QUIZ_FALLBACK];
+  }, [bankData, materialItems, coupon.active]);
 
   /**
    * Stratified pool: a kvízeket tantargy szerint csoportosítja és minden
@@ -1368,8 +1369,8 @@ export default function BlockCraftQuiz() {
       subjectCursorsRef.current.set(subj, cursor);
     }
     // Végső fallback — sose kellene idejutnunk.
-    return QUIZ_FALLBACK[Math.floor(Math.random() * QUIZ_FALLBACK.length)] ?? QUIZ_FALLBACK[0]!;
-  }, [rebuildSubjectPools, subjectOrder]);
+    return bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!;
+  }, [bank, rebuildSubjectPools, subjectOrder]);
 
   /** Bányász-kvíz indítása egy konkrét voxelre (a crosshair-cél). */
   const tryMineAt = useCallback(
@@ -1908,6 +1909,7 @@ export default function BlockCraftQuiz() {
     adaptiveRef.current.answer(idx === quiz.correctIndex);
     const nextBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
     setTimeLeft(t => Math.max(1, Math.min(nextBudget, t + nextBudget - previousBudget)));
+    maybeClaimCouponBonus(coupon, quiz.id, idx);
     if (idx !== quiz.correctIndex) {
       sfxError();
       setWrongShake(true);
@@ -1942,7 +1944,7 @@ export default function BlockCraftQuiz() {
     }
 
     sfxSuccess();
-    maybeClaimCouponBonus(coupon, quiz.id);
+
     const tgt = mineTargetRef.current;
     let levelGoalReached = false;
     if (tgt) {

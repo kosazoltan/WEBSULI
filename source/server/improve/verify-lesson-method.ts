@@ -1,0 +1,21 @@
+import { readHtmlLessonData, HTML_LESSON_DATA_ID } from "../../shared/lesson-html-data";
+import { evaluateOpenAnswer } from "../../shared/lesson-experience-score";
+import { lessonLanguage } from "../../shared/lesson-experience";
+import { verifyImprovedHtml, type HtmlVerification } from "./verify-html";
+
+/** Shape and sample checks, not a substitute for rendering or source review. */
+export function verifyLessonMethodHtml(html: string): HtmlVerification {
+  const problems = verifyImprovedHtml(html).problems;
+  try {
+    const data = readHtmlLessonData(html);
+    for (const t of data.experience.tasks) if (evaluateOpenAnswer(t.sample, t).score !== 1) problems.push(`${t.id}: a mintaválasz nem kap teljes pontot.`);
+    const lang = lessonLanguage(data.subject);
+    if (lang && data.experience.language !== lang) problems.push("A nyelvlecke szószedetének/TTS-ének nyelve hiányzik vagy hibás.");
+    const scripts = (html.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? []).filter(s => !/type\s*=\s*["']application\/json["']/i.test(s));
+    if (!scripts.some(s => s.includes(HTML_LESSON_DATA_ID) && /JSON\s*\.\s*parse/.test(s))) problems.push("A futó JavaScript nem olvassa a közös feladatbankot.");
+  } catch { problems.push("A fúziós JSON-bank hiányos vagy hibás: érvényes verzió, fogalomfedő bankterv, szóbeli/írásos feladatok, felidéző/alkalmazó kvíz és évfolyamindoklás szükséges."); }
+  for (const value of ["teaching", "methods", "tasks", "quiz"]) {
+    for (const attr of ["data-lesson-tab", "data-lesson-panel"]) if (!new RegExp(`${attr}\\s*=\\s*["']${value}["']`).test(html)) problems.push(`Hiányzó ${attr}: ${value}.`);
+  }
+  return { ok: problems.length === 0, problems };
+}

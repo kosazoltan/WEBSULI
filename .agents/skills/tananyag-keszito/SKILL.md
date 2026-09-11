@@ -1,206 +1,29 @@
 ---
 name: tananyag-keszito
-description: >
-  Interaktív, mobilbarát HTML tananyag létrehozása magyar diákok számára a Tananyag Készítő v7.1 specifikáció szerint.
-  MINDIG AKTIVÁLÓDJON ha a felhasználó tananyag projektben dolgozik, vagy ha tananyagot, oktatási anyagot, feladatlapot,
-  kvízt, interaktív HTML tanulást, diákoknak szóló leckét, vagy iskolai anyagot kér – bármilyen tantárgyhoz, évfolyamhoz.
-  Aktiválódjon ha a kérés mellékletet (képet, dokumentumot, tankönyvi szöveget) tartalmaz oktatási célzattal.
-  CSAK akkor ne aktiválódjon, ha a felhasználó KIFEJEZETTEN azt mondja, hogy ne használja ezt a skill-t.
+description: Feltöltött forrásból vagy internetes keresésből készülő HTML és Studio JSON tananyagok közös fúziós módszere. Aktiválódjon tananyag készítése esetén.
 ---
 
-# Tananyag Készítő v7.1
+# Tananyag készítése — fúzió 7.4
 
-## WEBSULI Studio — elsődleges útvonal
+Először olvasd el a [közös, forrásalapú módszert](../../../docs/lesson-improvement.md), majd a feladathoz szükséges [v7.4 referenciarészeket](../../../docs/specs/tananyag-keszito-SKILL-v7_4.md). A referencia történeti; a közös fúziós szerződés pontosítja az értékelést, besorolást, bankokat és a két technikai formátumot.
 
-Először olvasd el a [forrásalapú jobbítási folyamatot](../../../docs/lesson-improvement.md). Studio feladatnál strukturált `Lesson` JSON készül a meglévő futtatóhoz; az alábbi négylapos HTML-követelmények csak kifejezetten önálló HTML-export feladatára vonatkoznak. Ne cseréld le a Studio formátumát, ne írj át a feladaton kívüli tartalmat.
+## Kötelező menet
 
-Az évfolyamot a program a teljes forrásból határozza meg. A készítőtől ne kérj osztályt, és a szerző ne írja felül a besorolást. A forráspéldák adatai maradjanak meg; téves forrást dokumentált kurálás helyesbítsen. Sémakaput, fogalomfedettséget, külön tartalmi és valódi böngészős ellenőrzést használj, az éles alkalmazás előtt pedig készíts visszaállítási mentést.
+1. Olvasd a repo vezérlőfájljait; terv és külön AI-végrehajtási leírás előzze meg a kódot.
+2. Azonosítsd a tényleges forrást és tartalomtípust. `contentType=lesson` esetén a `lessons.json` a tananyag; HTML-helyőrzőt tilos javítómodellnek küldeni. Feltöltött kép/PDF/szöveg vagy webes forrás azonosítását, bizonytalanságát és idézeteit őrizd meg.
+3. A program a forrás tartalmából állapítja meg a tantárgyat és évfolyamot. A készítőtől ne kérj osztályt; a keresési korosztály csak támpont. Javítás nem írhatja felül a kurált besorolást.
+4. Mindkét formátumban négy lap szükséges: teljes Tananyag, témához illő Módszerek, fogalomfedő írásbeli-szóbeli bank, külön felidéző/alkalmazó Kvíz. Az új fusion-7.4-2 mérete a bankPlan szerint alakul; a régi fusion-7.4-1 továbbra is olvasható. Nyelvleckénél szószedet és célnyelvi felolvasás. Kérdés kizárólag ténylegesen tanított tartalomból.
+5. Studio esetén a legfeljebb hatfogalmas, önállóan ellenőrzött csomagokat készítő bankgyártót és a közös runtime-ot használd. HTML esetén a teljes közös promptot és az egyetlen JSON-bankot olvasó négylapos megjelenítést. Egyéni prompt nem helyettesítheti a módszerszerződést.
+6. A meglévő jó tanítást és konkrét kidolgozott példákat őrizd meg. Ne tömöríts vázlattá és ne találj ki tartalmat a bankszámért. Célzott javításnál az idegen tanítási blokkok érintetlenek; a kapcsolódó bankok újraellenőrzendők. A változatlan fejezet és forrás azonos kivonatú csomagja újrahasználható; megváltozott forrás/módszerverzió mellett tilos a régi válasz átvétele.
+7. Kötelező a séma-, forrás-, fedettség-, mintaválasz-, lektor- és csonkolásvizsgálat. Minden saját minta teljes pont, üres válasz nulla. Hiányos bank vagy blokkoló lektorhiba nem publikálható kész anyagként.
+8. Valódi böngészőben próbáld ki mind a négy lapot, téves/részleges/helyes válaszokat, újrasorsolást és eredménymegőrzést. Ellenőrizd a változatos palettát, ékezeteket, ábrákat, átfedést, túlcsordulást, 44 px vezérlőket 320 px mobilon, álló/fekvő és asztali nézetben. A nyílt/szóbeli pontozás helyi heurisztika; ezt a tanuló is lássa. Publikált Studio-kvíznél bejelentkezve a szerver rögzíti az első választ és a segítséget; próbáld ki a mentési hibát, újrapróbálást, újratöltést, bankverzió-váltást, jutalomkorlátot és tanári riportot is. A vendég/HTML/előnézet helyi eredménye nem szerveres mérés.
+9. Javítást külön jelöltként készíts. Alkalmazás előtt teljes mentés, előállapot-/forráshash és konkurens gyártás ellenőrzése; lecke+metaadat+kvízbank egy tranzakcióban; utána visszaolvasás. A visszaállítás sem írhat felül későbbi szerkesztést.
+10. Külön jelentsd az elkészült jelöltet, ellenőrzött jelöltet, alkalmazott adatot és kiadott programkódot. Teszt nélkül nem írható PASS. Lokális fájlra valós abszolút hivatkozást adj; ne feltételezz `/mnt` útvonalat vagy nem elérhető megjelenítőeszközt.
 
-## BEVEZETŐ
+A részletes méretkeretek, pontozás, hibakörök, publikus és tárolási szerződés a közös módszerben és az ott hivatkozott forráskódban van. Ezt a skillt az összes gyártási/javítási útvonalra alkalmazd; a Studio nem kivétel a négylapos tanulási módszer alól.
 
-Ez a skill interaktív, 4 oldalas HTML tananyagot generál K-8 diákok számára. A bemeneti anyag lehet kép, PDF, dokumentum, tankönyvi szöveg, vagy csak a téma + évfolyam megadása. Az elkészült fájl egyetlen önálló HTML, amely mobiltelefonon is teljes funkcionalitással működik.
+## Magyar tipográfia — jóváhagyott korrekció (2026-09-10)
 
----
+A közös módszer 2026-09-11-es kiegészítése is kötelező: tényleges PDF/DOCX szöveg, teljes-forrás összevetés, indokolt gépi besorolás; témához illő közös geometriai labor/döntési történet HTML-ben és Studio-ban; szerveren ellenőrzött első játékbónusz-válasz és visszatérés a leckéhez. A grafika és a szóbeli gyakorlat nem helyettesíti a forráshű tanítást vagy a tanári értékelést.
 
-## BEMENET FELDOLGOZÁSA
-
-Az üzenet tartalmazhat:
-- **Képeket / dokumentumokat**: tankönyvi oldalak, vázlatok – dolgozd fel teljes mélységgel
-- **Témamegjelölést**: pl. "fotoszintézis", "törtszámok", "középkori Magyar Királyság"
-- **Évfolyam / korosztály**: mindig igazítsd hozzá a szókincset, mondathosszt, példákat
-- **Stílusutasítást**: ha nincs megadva, modern, bátorító, közvetlen hang
-- **CSS prefix megadás**: ha nincs, generálj 2-3 betűs egyedi prefixet a téma alapján (pl. `fo-`, `tr-`, `mk-`)
-
-Ha az évfolyam nincs megadva, a forrás tartalmából kell meghatározni. Studio esetén a program automatikus besorolása az irányadó, nem a készítő választása.
-
----
-
-## 4 OLDALAS STRUKTÚRA (KÖTELEZŐ)
-
-| Tab | Cím | Tartalom |
-|-----|-----|----------|
-| 1 | 📖 Tananyag | Részletes lexikális tudás |
-| 2 | 🧠 Módszerek | Min. 8-10 kognitív aktivációs elem |
-| 3 | ✏️ Feladatok | 45 feladatból 15 véletlenszerű |
-| 4 | 🎯 Kvíz | 75 kérdésből 25 véletlenszerű |
-
----
-
-## OLDAL 1 – TANANYAG
-
-**Cél**: A tanuló korosztályának megfelelő, mélységes, lexikális tudás – NEM vázlat, hanem folyamatos, érthetően tagolt szöveg.
-
-### Tartalmi elvek
-- Teljes tankönyvi anyag feldolgozása fejezetekre bontva
-- Definíciók, példák, felsorolások, összefoglalók
-- Korosztályhoz igazított szókincs és mondatstruktúra:
-  - 1-3. évf.: rövid mondatok, sok vizuális elem, egyszerű szavak
-  - 4-6. évf.: közepes mondatok, analógiák, hétköznapi példák
-  - 7-8. évf.: összetettebb gondolatok, ok-okozat, elvont fogalmak
-- Info-box-ok (érdekesség, figyelem, összefoglalás)
-- Vizuális kártyák szöveges tartalommal (NEM emoji állatképek)
-- Ciklus-diagramok, folyamatábrák ahol releváns (CSS/SVG-vel)
-
-### Kötelező elemek az 1. oldalon
-- Fejezetek accordionban vagy kártyákon
-- Minden fejezet végén mini-összefoglaló box
-- Legalább 1 vizuális diagram vagy kártyasor
-
----
-
-## OLDAL 2 – MÓDSZEREK (KOGNITÍV AKTIVÁCIÓ)
-
-**Cél**: Legalább 8-10 különböző pedagógiai eszköz, mind mobilon is érintéssel használható.
-
-### Kötelező komponensek (mind szerepeljen)
-
-| Komponens | Leírás |
-|-----------|--------|
-| `prediction-box` | "Szerinted mi fog történni ha...?" – tanuló beír, majd megmutatja a valós választ |
-| `gate-question` | Kapukérdés (2-3 db): csak helyes válasz után mutatja a továbbit |
-| `myth-box` | Igaz/hamis tévhit, magyarázattal |
-| `dragdrop-box` | Húzd a helyére – toucheventtel mobilon is |
-| `cause-effect` | Ok→hatás lánc, kattintható lépésekkel |
-| `conflict-box` | Meglepő tény vagy paradoxon |
-| `self-check` | Önértékelő csúszka (1-5) visszajelzéssel |
-| `popup-trigger` | Kattintásra/érintésre felugró kérdés |
-| `timeline` | Folyamat vagy idősor interaktívan |
-| `analogy-box` | Korosztályhoz illő hasonlat, ami az új fogalmat köti a meglévő tudáshoz |
-
-### Mobilos követelmények a 2. oldalon
-- Minden `dragdrop-box`: `touchstart`, `touchmove`, `touchend` eventek + `mousedown`, `mousemove`, `mouseup`
-- Minden kattintható elem: min. 44px × 44px érintési terület
-- Popup-ok: ne takarják el egymást, legyen bezáró gomb
-
----
-
-## OLDAL 3 – SZÖVEGES FELADATOK
-
-**Kritikus szabályok:**
-- **KIZÁRÓLAG az 1. oldal (Tananyag) tartalmából képzett kérdések** – semmit ne kérdezz, ami az anyagban nem szerepel
-- 45 feladatot generálj, ebből 15 jelenik meg véletlenszerűen
-- Nyílt végű kérdések, `textarea` inputtal
-
-### Kiértékelés logikája
-A kiértékelés NEM szó szerinti egyezést vizsgál, hanem:
-1. Kulcsszó-lista minden feladathoz (szinonimák + rokonértelmű szavak is)
-2. A válasz LÉNYEGÉT vizsgálja: ha a kulcsfogalom jelen van a válaszban, fogadja el
-3. Elfogadás ha: **a kulcsszavak legalább X%-a** megtalálható a válaszban (feladatonként meghatározott küszöb)
-4. Matematikai pontszámítás: `(elfogadott feladatok száma / 15) × 100 = %`
-
-### Kötelező UI elemek
-- **TETEJÉN**: 🔄 Újragenerálás gomb (új 15 feladat a 45-ből)
-- **ALJÁN**: ✅ Kiértékelés gomb
-- Konfirmációs modal mielőtt elveti a kitöltést újragenerálásnál
-- Eredmény megjelenítése az oldalon (ne alert!)
-- Osztályzat: 90%=5 Jeles, 75%=4 Jó, 60%=3 Közepes, 40%=2 Elégséges, <40%=1 Elégtelen
-
----
-
-## OLDAL 4 – KVÍZ
-
-- 75 kérdést generálj, ebből 25 jelenik meg véletlenszerűen
-- 3 válaszlehetőség (A/B/C) minden kérdésnél
-- Helyes/helytelen visszajelzés azonnal minden kérdésnél
-- Pontszámítás: `(helyes válaszok száma / 25) × 100 = %`
-
-### Kötelező UI elemek
-- **TETEJÉN**: 🔄 Újragenerálás gomb (új 25 kérdés a 75-ből)
-- **ALJÁN**: ✅ Kiértékelés gomb
-- Konfirmációs modal mielőtt elveti a kitöltést
-- Eredmény megjelenítése az oldalon (ne alert!)
-- Ugyanaz az osztályzási skála mint a 3. oldalon
-
----
-
-## TECHNIKAI KÖVETELMÉNYEK
-
-### Kötelező
-- `IIFE` wrapper: `(function() { ... })();`
-- `UTF-8` meta charset, `Segoe UI` font stack
-- CSS prefix: minden osztálynév egyedi prefix-szel (pl. `fo-tab`, `fo-card`)
-- Reszponzív: 320px–2560px között minden törésponton működik
-- **TILOS**: `alert()`, `confirm()`, `prompt()` – csak HTML modal
-- **TILOS**: inline JSON `onclick` attribútumban – globális változó + `addEventListener`
-- Touch events minden interaktív elemnél
-- Min. 44px kattintható terület
-
-### Fájlstruktúra
-- Egyetlen önálló HTML fájl (CSS + JS beágyazva)
-- Külső dependencia csak CDN-ről, offline fallback-kel ha lehetséges
-- Fájlnév: `[tema]-tananyag-v7.html` (ékezetmentesen, kötőjellel)
-
-### Tab-váltás
-```javascript
-// Példa tab-váltás logika
-function showTab(tabId) {
-  document.querySelectorAll('.[prefix]-tab-content').forEach(t => t.style.display = 'none');
-  document.querySelectorAll('.[prefix]-tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(tabId).style.display = 'block';
-  document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
-}
-```
-
-### Drag & Drop (mobilon is)
-```javascript
-// Minden draggable elemre:
-element.addEventListener('mousedown', startDrag);
-element.addEventListener('touchstart', startDrag, { passive: false });
-// + mousemove/touchmove/mouseup/touchend
-```
-
----
-
-## MINŐSÉGELLENŐRZÉSI LISTA (generálás előtt gondold végig)
-
-Mielőtt a HTML kódot kiadod, ellenőrizd mentálisan:
-
-- [ ] 1. oldal: korosztálynak megfelelő szókincs?
-- [ ] 2. oldal: mind a 10 kognitív elem szerepel?
-- [ ] 2. oldal: dragdrop touch eventekkel?
-- [ ] 3. oldal: minden feladat az 1. oldal tartalmából?
-- [ ] 3. oldal: szinonima-alapú kiértékelés implementálva?
-- [ ] 3. oldal: Újragenerálás gomb TETEJÉN, Kiértékelés ALJÁN?
-- [ ] 3. oldal: matematikailag helyes pontszámítás?
-- [ ] 4. oldal: Újragenerálás gomb TETEJÉN, Kiértékelés ALJÁN?
-- [ ] 4. oldal: matematikailag helyes pontszámítás?
-- [ ] Nincs egyetlen `alert()` sem?
-- [ ] Minden interaktív elem min. 44px?
-- [ ] CSS prefix következetes?
-- [ ] IIFE wrapper van?
-
----
-
-## MENNYISÉGEK
-
-| Típus | Generált | Megjelenített |
-|-------|----------|--------------|
-| Szöveges feladat | 45 | 15 (véletlenszerű) |
-| Kvízkérdés | 75 | 25 (véletlenszerű) |
-| Kognitív elem | min. 10 | mind (2. oldalon) |
-
----
-
-## KIMENETI FORMAT
-
-A kész HTML fájlt mentsd `/mnt/user-data/outputs/[tema]-tananyag-v7.html` helyre, majd használd a `present_files` tool-t a letölthetővé tételhez.
+A korábbi Google Fonts / glyph-warmup előírást felváltja a `source/shared/lesson-typography.ts` szerződés. Kizárólag a repóban ellenőrzött Nunito, Source Sans 3, Source Serif 4 családok használhatók tananyagszöveghez; normál és dőlt fájlok a `source/client/public/fonts/` alatt. HTML-ben `/fonts/lesson-fonts.css`, külső font nélkül. Az ékezethelyességet a tényleges cmap és Chrome által használt font ellenőrzi, nem a fallback neve. A hibás Unicode-szöveget külön vizsgáld; ne állítsd, hogy betűcsere önmagában javítja.

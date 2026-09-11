@@ -85,8 +85,8 @@ export type OcrCacheStore = {
 };
 
 /** Determinista kulcs: a kép tartalma + a modell (más modell átirata más). */
-export function ocrCacheKeyOf(imageContent: string, model: string): string {
-  return createHash("sha256").update(model).update("\0").update(imageContent).digest("hex");
+export function ocrCacheKeyOf(imageContent: string, model: string, prompt = OCR_SYSTEM_PROMPT): string {
+  return createHash("sha256").update(JSON.stringify([model, prompt, imageContent])).digest("hex");
 }
 
 /**
@@ -124,7 +124,7 @@ export function mergeOcrIntoSourceText(baseText: string, ocrResults: OcrResult[]
   return parts.filter((p) => p !== "").join("\n");
 }
 
-const OCR_SYSTEM_PROMPT = [
+export const OCR_SYSTEM_PROMPT = [
   "You are a verbatim transcriber for Hungarian school material photographed or screenshotted by a teacher.",
   "Transcribe ALL legible text from the image EXACTLY as written — same wording, same accents, same punctuation.",
   "Do not translate, summarize, correct, or reorder anything. Do not describe the image.",
@@ -165,11 +165,19 @@ export async function callOcrModel(file: ExtractorFile, model: string): Promise<
         },
   );
 
-  const params = ocrRequestParams(model, file.content);
+  const imageParams = ocrRequestParams(model, file.content);
+  const params = file.kind === "pdf" ? { ...imageParams, max_completion_tokens: 24000,
+    messages: [
+      { role: "system", content: OCR_SYSTEM_PROMPT + " Transcribe every PDF page and label its page number. Preserve formulas and units. Mark unreadable text explicitly." },
+      { role: "user", content: [{ type: "file", file: { filename: file.name, file_data: file.content } }] },
+    ] } : imageParams;
   // A `reasoning` OpenRouter-bővítés; az openai SDK típusa nem ismeri.
   const response = await client.chat.completions.create(
     params as unknown as Parameters<typeof client.chat.completions.create>[0],
   );
-  if ("choices" in response) return response.choices[0]?.message?.content?.trim() ?? "";
+  if ("choices" in response) {
+    if (response.choices[0]?.finish_reason !== "stop") throw new Error("A forrás átírása csonkolt; teljes szöveg szükséges.");
+    return response.choices[0]?.message?.content?.trim() ?? "";
+  }
   return "";
 }

@@ -70,8 +70,8 @@ export type CouponSession = {
   lessonId: string | null;
   sectionIdx: number | null;
   minutes: number;
-  /** Report a correct in-game answer; the server decides whether it is worth anything. */
-  claimBonus: (quizItemId: string) => Promise<void>;
+  /** Report the first answer, including a wrong answer or timeout (-1). */
+  claimBonus: (quizItemId: string, pickedIndex: number) => Promise<void>;
 };
 
 const IDLE: CouponSession = {
@@ -108,7 +108,7 @@ export function useCouponSession(): CouponSession {
         // No coupon at all is the normal free-play case, not the end of a session:
         // only tear down a session that had actually started.
         setClock((prev) => (prev ? applyServerSync(prev, null, now) : null));
-        setMeta(null);
+        if (!clockRef.current) setMeta(null);
         return;
       }
 
@@ -125,14 +125,11 @@ export function useCouponSession(): CouponSession {
        * safe to call on every sync — and it must be called by someone, or an issued
        * coupon would sit at its full grant forever, never counting down.
        */
-      if (!data.coupon.started) {
-        try {
-          await apiRequest("POST", `/api/lessons/coupons/${data.coupon.id}/start`, {
+      if (data.coupon.remainingSeconds > 0 && (!data.coupon.started || clockRef.current?.couponId !== data.coupon.id)) {
+          const started = await apiRequest<{ remainingSeconds: number }>("POST", `/api/lessons/coupons/${data.coupon.id}/start`, {
             fingerprint: readFingerprint() ?? undefined,
           });
-        } catch {
-          // Already running, or a transient failure: the next sync retries.
-        }
+          data.coupon.remainingSeconds = started.remainingSeconds;
       }
 
       setClock((prev) =>
@@ -185,7 +182,7 @@ export function useCouponSession(): CouponSession {
   }, [sync]);
 
   const claimBonus = useCallback(
-    async (quizItemId: string) => {
+    async (quizItemId: string, pickedIndex: number) => {
       const current = clockRef.current;
       if (!current || current.expired) return;
 
@@ -194,7 +191,7 @@ export function useCouponSession(): CouponSession {
         const data = await apiRequest<{ remainingSeconds: number }>(
           "POST",
           `/api/lessons/coupons/${current.couponId}/bonus`,
-          { quizItemId, fingerprint: readFingerprint() ?? undefined },
+          { quizItemId, pickedIndex, fingerprint: readFingerprint() ?? undefined },
         );
 
         setClock((prev) =>

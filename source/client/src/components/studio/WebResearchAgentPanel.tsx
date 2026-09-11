@@ -1,3 +1,4 @@
+import { withLessonTypography } from "@shared/lesson-typography";
 import { useState } from "react";
 import { Globe, Loader2, CheckCircle2, Eye, Link2 } from "lucide-react";
 
@@ -17,6 +18,7 @@ import ChatInterface, { type ChatMessage } from "@/components/ChatInterface";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CLASSROOMS, DEFAULT_CLASSROOM, getClassroomLabel } from "@shared/classrooms";
+import { readHtmlLessonData } from "@shared/lesson-html-data";
 import { logger } from "@/lib/logger";
 
 type WebSource = { url: string; title: string };
@@ -136,11 +138,13 @@ export function WebResearchAgentPanel() {
           } else if (parsed.type === "sources" && Array.isArray(parsed.sources)) {
             setSources(parsed.sources);
           } else if (parsed.type === "html_generated" && parsed.html) {
+            const generated = readHtmlLessonData(parsed.html);
+            setClassroom(generated.classroom);
             setGeneratedHtml(parsed.html);
             setWarnings(Array.isArray(parsed.warnings) ? parsed.warnings : []);
             if (Array.isArray(parsed.sources) && parsed.sources.length > 0) setSources(parsed.sources);
             if (!title.trim()) {
-              setTitle(`Tananyag — ${getClassroomLabel(classroom, false)}`);
+              setTitle(`${generated.subject} — ${getClassroomLabel(generated.classroom, false)}`);
             }
             if (!assistantMessage.trim()) {
               assistantMessage = "A HTML tananyag elkészült — lásd az előnézetet lent.";
@@ -175,7 +179,8 @@ export function WebResearchAgentPanel() {
 
   const handleSave = async () => {
     if (!generatedHtml) return;
-    const classroomLabel = getClassroomLabel(classroom, false);
+    const inferredClassroom = readHtmlLessonData(generatedHtml).classroom;
+    const classroomLabel = getClassroomLabel(inferredClassroom, false);
     const saveTitle = title.trim() || `Tananyag — ${classroomLabel}`;
     setIsSaving(true);
     try {
@@ -186,7 +191,7 @@ export function WebResearchAgentPanel() {
           title: saveTitle,
           description: buildDescription(classroomLabel, sources),
           content: generatedHtml,
-          classroom,
+          classroom: inferredClassroom,
           contentType: "html",
         },
         { timeout: 180000 },
@@ -217,14 +222,14 @@ export function WebResearchAgentPanel() {
           Internetes keresés — tananyag-ügynök
         </CardTitle>
         <CardDescription className="text-xs">
-          Írd le, milyen tananyagot keressen. Claude Opus 5 az interneten keres, majd HTML tananyagot készít.
+          Írd le, milyen tananyagot keressen. A program forrásokat keres, majd négyoldalas tananyagot készít. Az évfolyamot az elkészült tartalom alapján állapítja meg.
           Mentés nélkül nem jelenik meg a többi anyag között.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <Label htmlFor="web-research-classroom">Osztály</Label>
+            <Label htmlFor="web-research-classroom">Keresési korosztály (támpont)</Label>
             <Select
               value={String(classroom)}
               onValueChange={(v) => setClassroom(parseInt(v, 10))}
@@ -252,7 +257,7 @@ export function WebResearchAgentPanel() {
             />
           </div>
         </div>
-        <Badge variant="outline" className="text-xs">Claude Opus 5 · minimum effort · Anthropic kulcs</Badge>
+        <Badge variant="outline" className="text-xs">Tananyag · Módszerek · Feladatok · Kvíz</Badge>
         <div className="h-[480px]">
           <ChatInterface
             title="Tananyagkészítő ügynök"
@@ -313,7 +318,7 @@ export function WebResearchAgentPanel() {
               <span className="text-sm">Előnézet</span>
             </div>
             <iframe
-              srcDoc={generatedHtml}
+              srcDoc={withLessonTypography(generatedHtml, classroom, title)}
               className="w-full h-[320px]"
               title="Webes tananyag előnézet"
               sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"

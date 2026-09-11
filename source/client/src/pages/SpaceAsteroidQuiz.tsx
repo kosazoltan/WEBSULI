@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -775,10 +776,10 @@ export default function SpaceAsteroidQuiz() {
 
   // ----- Quiz bank lekérdezés (osztály-alapú) -----
   const { data: materialQuizData } = useQuery<MaterialQuizApi>({
-    queryKey: ["/api/games/material-quizzes", grade],
-    enabled: grade != null,
+    queryKey: ["/api/games/material-quizzes", grade, coupon.lessonId],
+    enabled: grade != null || !!coupon.lessonId,
     queryFn: async () => {
-      const res = await fetch(`/api/games/material-quizzes?classroom=${grade}&limit=3`, {
+      const res = await fetch(`/api/games/material-quizzes?classroom=${grade ?? 0}&limit=3${coupon.lessonId ? `&lessonId=${encodeURIComponent(coupon.lessonId)}` : ""}`, {
         credentials: "include",
       });
       if (!res.ok) return { classroom: grade ?? 0, materials: [], items: [] };
@@ -789,11 +790,11 @@ export default function SpaceAsteroidQuiz() {
 
   const quizPool = useMemo<Quiz[]>(() => {
     const fromMat: Quiz[] = (materialQuizData?.items ?? [])
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q) => ({
         id: q.id,
         prompt: q.prompt,
-        options: q.options.slice(0, 4),
+        options: [...q.options],
         correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
@@ -802,8 +803,8 @@ export default function SpaceAsteroidQuiz() {
       }));
     const fb = FALLBACK_QUIZZES.map((q) => ({ ...q, source: "fallback" as const }));
     // Tananyag-kvízek elöl, fallback hátul.
-    return [...fromMat, ...fb];
-  }, [materialQuizData]);
+    return coupon.active && fromMat.length ? fromMat : [...fromMat, ...fb];
+  }, [materialQuizData, coupon.active]);
 
   const recentQuizPromptsRef = useRef<string[]>([]);
   const RECENT_WINDOW = 12;
@@ -976,6 +977,7 @@ export default function SpaceAsteroidQuiz() {
     answerLockedRef.current = true;
     adaptiveRef.current.answer(idx === activeQuiz.correctIndex);
     if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
+    maybeClaimCouponBonus(coupon, activeQuiz.id, idx);
     if (idx !== activeQuiz.correctIndex) {
       sfxError();
       setWrongShake(true);
@@ -1006,7 +1008,7 @@ export default function SpaceAsteroidQuiz() {
     }
     // Helyes válasz
     sfxSuccess();
-    maybeClaimCouponBonus(coupon, activeQuiz.id);
+
     setActiveQuiz(null);
     setRevealCorrectIdx(null);
     setWrongIdx(null);
@@ -2252,7 +2254,7 @@ export default function SpaceAsteroidQuiz() {
                     {matStatusLabel}
                   </p>
                 )}
-                <div className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
+                <div data-game-menu="space" className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
                   <div className="grid grid-cols-2 gap-2 max-w-sm w-full">
                     <div className="rounded-xl border border-cyan-600/45 bg-slate-900/85 p-2 text-center">
                       <p className="text-[10px] uppercase tracking-wide text-cyan-300 font-bold">Szikla</p>

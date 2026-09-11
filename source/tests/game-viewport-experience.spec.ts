@@ -83,11 +83,10 @@ async function startControlVisible(page: Page, g: (typeof MENU_GAMES)[number], v
     ? page.getByTestId(g.startTestId)
     : page.getByRole("button", { name: g.startName! }).first();
   await expect(loc).toBeVisible({ timeout: 15_000 });
-  await loc.scrollIntoViewIfNeeded();
   const box = await loc.boundingBox();
   expect(box, "start control box").not.toBeNull();
-  // Landscape short height: menu may require internal scroll; require the control
-  // itself fits after scrollIntoView, not that the whole menu is unscrollable.
+  // Assert the initial menu. Scrolling here would hide an unreachable start control.
+  expect(box!.height).toBeGreaterThanOrEqual(44);
   expect(box!.height).toBeLessThanOrEqual(vp.height);
   expect(box!.y).toBeGreaterThanOrEqual(-2);
   expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height + 4);
@@ -103,6 +102,10 @@ for (const vp of VIEWPORTS) {
       const overflow = await pageOverflow(page);
       expect(overflow.x, "vízszintes").toBeLessThanOrEqual(2);
       await startControlVisible(page, g, vp);
+      // Canvas-based games stay mounted for initialization, but must stay hidden in the menu.
+      for (const inactiveScene of await page.locator(".game-play-stack.hidden").all()) {
+        await expect(inactiveScene).toBeHidden();
+      }
     });
   }
 }

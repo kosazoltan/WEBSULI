@@ -20,8 +20,11 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { isAdmin } = useAuth();
 
-  const { data: files = [], isLoading } = useQuery<HtmlFileApi[]>({
+  const { data: files = [], isLoading, isError, isFetching, refetch } = useQuery<HtmlFileApi[]>({
     queryKey: ["/api/html-files"],
+    retry: 2,
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -50,6 +53,9 @@ export default function Home() {
         <UserFileList
           files={files}
           isLoading={isLoading}
+          isError={isError}
+          isRetrying={isFetching}
+          onRetry={() => { void refetch(); }}
           onViewFile={handleViewFile}
           onToggleView={isAdmin ? () => setLocation("/admin") : undefined}
         />

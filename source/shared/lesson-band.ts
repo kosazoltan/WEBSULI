@@ -23,6 +23,15 @@ export type BandTheme = {
   heading: string;
 };
 
+/** More precise presentation groups without changing the legacy content register. */
+export function learningAgeGroup(classroom: number): "1-2" | "3-4" | "5-6" | "7-8" | "9+" {
+  if (classroom <= 2) return "1-2";
+  if (classroom <= 4) return "3-4";
+  if (classroom <= 6) return "5-6";
+  if (classroom <= 8) return "7-8";
+  return "9+";
+}
+
 export const BAND_THEME: Record<AgeBand, BandTheme> = {
   kid: {
     labels: { explain: "Nézd csak!", example: "Csináljuk együtt", check: "Te jössz!", recap: "Ezt már tudod", progress: "Hol járunk?" },

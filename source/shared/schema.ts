@@ -600,6 +600,7 @@ export const knowledgeMaps = pgTable(
       .$type<Array<{ name: string; kind: string; pages?: number }>>(),
     /** A kivonatolt nyers forrásszöveg — ehhez mérjük a szó szerinti idézeteket (D1). */
     sourceText: text("source_text"),
+    classification: jsonb("classification").$type<import("./source-classification").ScopeClassification>(),
     inputHash: varchar("input_hash", { length: 64 }).notNull().unique(),
     model: varchar("model", { length: 120 }),
     createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
@@ -846,6 +847,8 @@ export const coupons = pgTable(
     reason: varchar("reason", { length: 24 }).notNull(),
     servedItems: jsonb("served_items").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
     claimedItems: jsonb("claimed_items").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+    quizSnapshot: jsonb("quiz_snapshot").notNull().default(sql`'[]'::jsonb`).$type<import("./coupon-quiz").CouponQuizQuestion[]>(),
+    quizAnswers: jsonb("quiz_answers").notNull().default(sql`'{}'::jsonb`).$type<Record<string, import("./coupon-quiz").CouponQuizAnswer>>(),
     issuedAt: timestamp("issued_at").notNull().defaultNow(),
     serverStartedAt: timestamp("server_started_at"),
     expiresAt: timestamp("expires_at").notNull(),
@@ -857,6 +860,24 @@ export const coupons = pgTable(
     expiryIdx: index("coupons_expires_at_idx").on(table.expiresAt),
   }),
 );
+
+export const lessonAttempts = pgTable("lesson_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+  bankVersion: varchar("bank_version", { length: 64 }).notNull(),
+  status: varchar("status", { length: 16 }).notNull().default("active"),
+  questions: jsonb("questions").notNull().$type<import("./lesson-attempt").AttemptQuestion[]>(),
+  answers: jsonb("answers").notNull().default(sql`'{}'::jsonb`).$type<Record<string, import("./lesson-attempt").AttemptAnswer>>(),
+  hints: jsonb("hints").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+  result: jsonb("result").$type<import("./lesson-attempt").AttemptResult>(),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  finishedAt: timestamp("finished_at"),
+}, table => ({
+  activeUnique: uniqueIndex("lesson_attempts_active_unique").on(table.userId, table.lessonId).where(sql`${table.status} = 'active'`),
+  historyIdx: index("lesson_attempts_history_idx").on(table.userId, table.lessonId, table.startedAt),
+  reportIdx: index("lesson_attempts_report_idx").on(table.lessonId, table.finishedAt),
+}));
 
 export type CouponRow = typeof coupons.$inferSelect;
 export type InsertCouponRow = typeof coupons.$inferInsert;

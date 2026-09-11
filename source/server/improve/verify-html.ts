@@ -1,3 +1,4 @@
+import { parse } from "acorn";
 /**
  * #159 — deterministic verification agent for improved HTML (end of pipeline).
  *
@@ -33,11 +34,12 @@ export function verifyImprovedHtml(html: string): HtmlVerification {
   //    minden window.* exportot megöl, az összes gomb halott lesz.
   const scripts = trimmed.match(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi) ?? [];
   for (const block of scripts) {
+    if (/type\s*=\s*["'](?:application\/(?:ld\+)?json|importmap)["']/i.test(block.slice(0, block.indexOf(">") + 1))) continue;
     const js = block.replace(/<\/?script[^>]*>/gi, "");
     if (js.trim().length < 10) continue;
     try {
       // Parse-only check: never executed.
-      new Function(js);
+      parse(js, { ecmaVersion: "latest", sourceType: /type\s*=\s*["']module["']/i.test(block) ? "module" : "script", allowReturnOutsideFunction: true });
     } catch (e) {
       problems.push(`JavaScript szintaktikai hiba a tananyagban: ${(e as Error).message} — a vezérlőgombok nem működnének.`);
       break;

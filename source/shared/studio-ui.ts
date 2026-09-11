@@ -378,6 +378,26 @@ export type OneStepRunView = {
   error: string | null;
 };
 
+export const LESSON_CREATION_STAGES = [
+  { key: "source", label: "Forrás feldolgozása", phases: ["indul", "ocr", "extract"] },
+  { key: "lesson", label: "Tananyag készítése", phases: ["pedagogue", "author", "animator"] },
+  { key: "review", label: "Ellenőrzés és közzététel", phases: ["lektor", "gate"] },
+] as const;
+
+export function lessonCreationStageLabel(phase: string): string {
+  return phase === "done" ? "Kész" : LESSON_CREATION_STAGES.find(s => (s.phases as readonly string[]).includes(phase))?.label ?? "Folyamat állapota";
+}
+
+export function lessonCreationStages(run: OneStepRunView) {
+  const current = LESSON_CREATION_STAGES.findIndex(s => (s.phases as readonly string[]).includes(run.phase));
+  return LESSON_CREATION_STAGES.map((stage, index) => ({
+    key: stage.key, label: stage.label,
+    // error/parked do not identify the failed phase. Do not invent completed stages.
+    state: run.phase === "done" || (current >= 0 && index < current) ? "done" as const
+      : index === current ? "active" as const : "pending" as const,
+  }));
+}
+
 export type PhaseRowState = "done" | "active" | "pending" | "error" | "parked";
 
 export type PhaseRow = {

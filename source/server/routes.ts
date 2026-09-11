@@ -1,3 +1,5 @@
+import { withLessonTypography } from "../shared/lesson-typography";
+import { registerLessonFontAssets } from "./lesson-font-assets";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import express from "express";
@@ -43,6 +45,7 @@ import { getMaterialOrigin } from "./utils/config";
 const materialViewDedup = new ViewDedup();
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
+import { hasHtmlLessonData } from "../shared/lesson-html-data";
 import { extractClassroomFromTitle } from "@shared/classrooms";
 
 // ========== AI Configuration Validation ==========
@@ -714,6 +717,7 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
 // (az auth.ts login/logout route-jai is ugyanazt az őrt használják, közvetlenül).
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerLessonFontAssets(app);
   // Auth setup is now handled in index.ts to ensure correct order
   // await setupAuth(app);
 
@@ -848,6 +852,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/health', (_req, res) => {
     res.status(200).json({
       status: 'ok',
+      revision: /^[a-f0-9]{40}$/i.test(process.env.RENDER_GIT_COMMIT ?? '') ? process.env.RENDER_GIT_COMMIT : null,
       timestamp: Date.now(),
       uptime: process.uptime()
     });
@@ -1044,7 +1049,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "classroom 0–12 között legyen." });
       }
       const limit = Number.isFinite(limitRaw) ? limitRaw : 3;
-      const result = await gameQuizBankService.listLatestMaterialQuizzes(classroomRaw, limit);
+      const lessonId = typeof req.query.lessonId === "string" && req.query.lessonId.length <= 128 ? req.query.lessonId : undefined;
+      const result = await gameQuizBankService.listLatestMaterialQuizzes(classroomRaw, limit, lessonId);
       res.json({
         classroom: result.classroom,
         materials: result.materials,
@@ -1058,6 +1064,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // T-1: a magyarázat is menjen ki, különben a játék némán büntet.
           explanation: r.explanation,
           sourceMaterialId: r.sourceMaterialId,
+          questionVersion: r.questionVersion,
+          feedbackPerOption: r.feedbackPerOption,
+          coversConceptIds: r.coversConceptIds,
         })),
       });
     } catch (e) {
@@ -1706,7 +1715,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       systemPrompt += `\n\nMETADATA:
 ${title ? `- Cím: ${title}` : '- Cím: még nincs'}
 ${description ? `- Leírás: ${description}` : ''}
-${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs megadva'}`;
+${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végleges besorolást a tartalomból állapítsd meg.` : '- Évfolyam: a tartalomból állapítsd meg, ne kérdezd a készítőt.'}`;
 
       // Send initial message
       res.write(`data: ${JSON.stringify({
@@ -1718,7 +1727,7 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
       const stream = anthropic.messages.stream({
         model: resolveLegacyModel("claudeChat"),
         output_config: { effort: effortFor("claudeChat") },
-        max_tokens: 8192, // Larger for full HTML generation
+        max_tokens: 64000, // Full four-page method, including both banks.
         system: systemPrompt,
         messages: messages
       });
@@ -1759,6 +1768,13 @@ ${classroom ? `- Osztály: ${classroom}. osztály` : '- Osztály: még nincs meg
       if (isCollectingHtml && htmlContent.length > 100) {
         // Clean HTML (remove the marker)
         const cleanHtml = htmlContent.replace('<!-- HTML_START -->', '').trim();
+        const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
+        const final = await stream.finalMessage();
+        const verification = verifyLessonMethodHtml(cleanHtml);
+        if (final.stop_reason !== 'end_turn' || !verification.ok) {
+          throw new Error(`A tananyag nem menthető: ${verification.problems.join('; ') || 'A generálás nem fejeződött be.'}`);
+        }
+
 
         res.write(`data: ${JSON.stringify({
           type: 'html_generated',
@@ -2291,7 +2307,7 @@ ${textContent ? `SZÖVEGES TARTALOM (ezt alakítsd HTML-lé):\n${textContent}\n`
 METADATA:
 ${metadata?.title ? `Cím: ${metadata.title}` : ''}
 ${metadata?.description ? `Leírás: ${metadata.description}` : ''}
-${metadata?.classroom ? `Osztály: ${metadata.classroom}. osztály` : ''}
+${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; a végleges évfolyamot a tartalomból állapítsd meg.` : ''}
 
 ${specBlock}
 
@@ -2366,6 +2382,13 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       // Send HTML if generated
       if (isCollectingHtml && htmlContent.length > 100) {
         const cleanHtml = htmlContent.replace('<!-- HTML_START -->', '').trim();
+        const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
+        const final = await stream.finalMessage();
+        const verification = verifyLessonMethodHtml(cleanHtml);
+        if (final.stop_reason !== 'end_turn' || !verification.ok) {
+          throw new Error(`A tananyag nem menthető: ${verification.problems.join('; ') || 'A generálás nem fejeződött be.'}`);
+        }
+
         res.write(`data: ${JSON.stringify({
           type: 'html_generated',
           html: cleanHtml
@@ -2888,6 +2911,15 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       }
 
       logger.info('🔵 [UPLOAD] Creating file in database...');
+      // New generated HTML carries a program-derived grade; creator/title metadata cannot override it.
+      if (hasHtmlLessonData(result.data.content)) {
+        const { readHtmlLessonData } = await import('../shared/lesson-html-data');
+        const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
+        const verification = verifyLessonMethodHtml(result.data.content);
+        if (!verification.ok) return res.status(422).json({ message: verification.problems.join('; ') });
+        classroom = readHtmlLessonData(result.data.content).classroom;
+      }
+
       const file = await storage.createHtmlFile(result.data, userId, classroom);
       logger.info('✅ [UPLOAD] File created in DB:', file.id);
 
@@ -4274,7 +4306,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         res.send(pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
-        const wrappedHtml = wrapHtmlWithResponsiveContainer(file.content);
+        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(file.content), file.classroom, file.title);
 
         // CRITICAL: No-cache headers to prevent Vercel/browser from serving stale content after Apply
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -5397,6 +5429,12 @@ Crawl-delay: 1`;
     const log: string[] = [];
     
     try {
+      const candidate = await storage.getImprovedHtmlFile(id);
+      if (candidate && (candidate.contentType === 'lesson' || hasHtmlLessonData(candidate.content))) {
+        const result = await storage.applyImprovedFileToOriginal(id, req.user!.id, true, 'Fúziós tananyag ellenőrzött alkalmazása');
+        getHtmlFilesCache().invalidate();
+        return res.json({ ...result, log: ['Ellenőrzött tananyag mentéssel alkalmazva és visszaolvasva.'] });
+      }
       const { dbPool } = await import('./db');
       const client = await dbPool.connect();
       

@@ -14,8 +14,10 @@
  */
 
 import { z } from "zod";
+import { readDocxText } from "./document-source";
 import { SOURCE_KINDS } from "../../shared/knowledge-map-schema";
 import type { ExtractorFile, ExtractorScope } from "./extractor";
+import { scopeClassificationSchema, type ScopeClassification } from "../../shared/source-classification";
 
 /* ---------------------------- request schema ---------------------------- */
 
@@ -88,15 +90,16 @@ export function decideOneStepAction(job: OneStepJobSnapshot): OneStepAction {
 /* ----------------------------- scope inference -------------------------- */
 
 export type ScopeInference =
-  | { ok: true; scope: ExtractorScope; title?: string }
+  | { ok: true; scope: ExtractorScope; title?: string; classification: ScopeClassification }
   | { ok: false; reason: string };
 
 export type ScopeModelFn = (files: ExtractorFile[]) => Promise<string>;
 
+
 const SCOPE_PROMPT = [
   "You are given a Hungarian primary/secondary school teaching source (text and/or images).",
   'Answer with a single JSON object, nothing else: {"subject": "<tantárgy magyarul>",',
-  '"classroom": <0-12 integer>, "title": "<rövid magyar cím>"}.',
+  '"classroom": <0-12 integer>, "title": "<rövid magyar cím>", "classification": {"reason": "<magyar indoklás konkrét forrásbeli témákkal>", "confidence": "low|medium|high", "gradeRange": [<min>, <max>], "mixedContent": <boolean>}}.',
   // #196 (mérve élesben): a korábbi „Pick the classroom the material is most
   // likely written for" találgatásra hívott. A 8. osztályos geometria-forrásra
   // (háromszög területe, kör kerülete, körgyűrű, (n-2)·180°) a modell 4-et adott,
@@ -104,13 +107,14 @@ const SCOPE_PROMPT = [
   "Determine the classroom ONLY from the mathematical/technical content that is actually",
   "visible in the source. Ignore handwriting quality and page layout — a messy page is not",
   "a sign of a younger pupil.",
-  "Anchor on the HARDEST concept present: it sets the year, because a source is not used",
-  "before its topics are taught. Examples of Hungarian curriculum anchors:",
+  "Use the dominant learning goals, prerequisite knowledge and depth of actual exercises together.",
+  "A passing mention of an advanced word is not a requirement to assign the hardest grade.",
+  "Examples of Hungarian curriculum anchors (use these as evidence, not a rigid keyword rule):",
   "  area/perimeter formulas with variables (T = a·m/2), π, circle area/circumference,",
   "  Pythagoras, powers, irrational numbers → grades 7-8, NOT grade 3-4;",
   "  place value, written addition/subtraction, simple fractions → grades 2-4.",
-  "If the evidence is ambiguous, choose the HIGHER grade: teaching below the pupil's level",
-  "is the worse error.",
+  "When ambiguous, report a plausible grade range and lower confidence with a reason; do not automatically choose the higher grade.",
+  "Mark mixedContent when sources contain substantially different levels or subjects. Still choose the best supported main grade autonomously.",
 ].join(" ");
 
 /** Parse the model's scope guess; clamp classroom; never throw. */
@@ -119,7 +123,7 @@ export async function inferScope(files: ExtractorFile[], callModel: ScopeModelFn
     const answer = await callModel(files);
     const match = answer.match(/\{[\s\S]*\}/);
     if (!match) return { ok: false, reason: "A modell válaszában nincs JSON." };
-    const parsed = JSON.parse(match[0]) as { subject?: unknown; classroom?: unknown; title?: unknown };
+    const parsed = JSON.parse(match[0]) as { subject?: unknown; classroom?: unknown; title?: unknown; classification?: unknown };
     const subject = typeof parsed.subject === "string" ? parsed.subject.trim() : "";
     const classroomRaw = typeof parsed.classroom === "number" ? Math.round(parsed.classroom) : NaN;
     if (subject === "" || Number.isNaN(classroomRaw)) {
@@ -127,7 +131,10 @@ export async function inferScope(files: ExtractorFile[], callModel: ScopeModelFn
     }
     const classroom = Math.min(12, Math.max(0, classroomRaw));
     const title = typeof parsed.title === "string" && parsed.title.trim() !== "" ? parsed.title.trim() : undefined;
-    return { ok: true, scope: { subject, classroom }, title };
+    const checked = scopeClassificationSchema.safeParse(parsed.classification);
+    const classification: ScopeClassification = checked.success && checked.data.gradeRange[0] <= classroom && classroom <= checked.data.gradeRange[1]
+      ? checked.data : { reason: "A besoroláshoz nem érkezett ellenőrizhető indoklás; bizonytalan gépi javaslat.", confidence: "low", gradeRange: [classroom, classroom], mixedContent: false };
+    return { ok: true, scope: { subject, classroom }, title, classification };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
   }
@@ -141,22 +148,13 @@ type ScopeContentPart =
 /** Classify document content, never a truncated base64 string. */
 export async function scopeContentParts(
   files: ExtractorFile[],
-  readDocx: (content: string) => Promise<string> = async (content) => {
-    const encoded = content.match(/^data:[^,]+;base64,(.+)$/s)?.[1];
-    if (!encoded) return content;
-    const [{ default: JSZip }, { DOMParser }] = await Promise.all([import("jszip"), import("@xmldom/xmldom")]);
-    const zip = await JSZip.loadAsync(Buffer.from(encoded, "base64"));
-    const document = zip.file("word/document.xml");
-    if (!document) throw new Error("A DOCX fő dokumentuma hiányzik.");
-    const xml = new DOMParser().parseFromString(await document.async("string"), "application/xml");
-    const paragraphs = xml.getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "p");
-    return Array.from(paragraphs).map(paragraph => Array.from(paragraph.getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "t")).map(text => text.textContent).join("")).join("\n");
-  },
+  readDocx: (content: string) => Promise<string> = readDocxText,
 ): Promise<ScopeContentPart[]> {
   const parts: ScopeContentPart[] = [];
   for (const file of files) {
-    if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "high" } });
-    else if (file.kind === "pdf") parts.push({ type: "file", file: { filename: file.name, file_data: file.content } });
+    if (file.extractedText !== undefined) parts.push({ type: "text", text: file.extractedText });
+    else if (file.kind === "image") parts.push({ type: "image_url", image_url: { url: file.content, detail: "high" } });
+    else if (file.kind === "pdf" && file.content.startsWith("data:")) parts.push({ type: "file", file: { filename: file.name, file_data: file.content } });
     else {
       const text = file.kind === "docx" ? await readDocx(file.content) : file.content;
       if (!text.trim()) throw new Error("A dokumentumból nem olvasható tananyagszöveg.");

@@ -19,7 +19,9 @@ export default defineConfig({
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     rollupOptions: {
+      input: { main: path.resolve(import.meta.dirname, "client/index.html"), "lesson-interactions": path.resolve(import.meta.dirname, "client/src/lesson-interactions.tsx") },
       output: {
+        entryFileNames: chunk => chunk.name === "lesson-interactions" ? "lesson-interactions.js" : "assets/[name]-[hash].js",
         manualChunks: {
           // Separate vendor chunks for better caching
           'react-vendor': ['react', 'react-dom', 'wouter'],

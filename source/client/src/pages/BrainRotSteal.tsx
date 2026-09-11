@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
@@ -31,6 +32,7 @@ import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-ho
 
 /* --- Típusok --- */
 type Quiz = {
+  topic?: string;
   id?: string;
   prompt: string;
   options: string[];
@@ -328,27 +330,28 @@ export default function BrainRotSteal() {
 
   // Tananyag-kvíz: a játékos osztályának legutóbbi 3 anyagából (Claude-generált).
   const { grade: userGrade } = useClassroomGrade();
-  const { items: materialItems } = useMaterialQuizzes(userGrade);
+  const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
   /* --- Quiz valasztas --- */
   const fullQuizPool = useMemo(() => {
     const matMapped: Quiz[] = materialItems
-      .filter((q) => Array.isArray(q.options) && q.options.length === 4)
+      .filter(isPlayableQuestion)
       .map((q) => {
         const t = (q.topic ?? "").toLowerCase();
         const cat: Quiz["category"] = t === "math" ? "math" : t === "hungarian" ? "hungarian" : "english";
         return {
           id: q.id,
           prompt: q.prompt,
-          options: q.options.slice(0, 4),
+          options: [...q.options],
           correctIndex: q.correctIndex,
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
           category: cat,
+          topic: q.topic ?? undefined,
         };
       });
-    return [...matMapped, ...ALL_QUIZZES];
-  }, [materialItems]);
+    return coupon.active && matMapped.length ? matMapped : [...matMapped, ...ALL_QUIZZES];
+  }, [materialItems, coupon.active]);
 
   const pickQuiz = useCallback((): Quiz => {
     return pickRandom(fullQuizPool);
@@ -416,6 +419,7 @@ export default function BrainRotSteal() {
       if (!quiz || !caughtRot) return;
       if (revealCorrectIdx !== null) return;
 
+      if (quizAttemptRef.current === 0) maybeClaimCouponBonus(coupon, quiz.id, idx);
       if (idx !== quiz.correctIndex) {
         sfxError();
         wrongQuizAnswersRef.current += 1;
@@ -455,7 +459,7 @@ export default function BrainRotSteal() {
       // Helyes válasz!
       recordDifficultyAnswer(true);
       sfxSuccess();
-      maybeClaimCouponBonus(coupon, quiz.id);
+
       setRevealCorrectIdx(null);
       setWrongIdx(null);
       const isRetry = quizAttemptRef.current > 0;
@@ -836,7 +840,7 @@ export default function BrainRotSteal() {
 
             {/* --- MENU --- */}
             {phase === "menu" && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5 py-4 sm:py-6">
+              <div data-game-menu="brain" className="flex flex-col items-center justify-center flex-1 gap-4 sm:gap-5 py-4 sm:py-6">
                 <motion.div
                   className="text-5xl sm:text-7xl"
                   animate={{
@@ -1159,7 +1163,7 @@ export default function BrainRotSteal() {
                   <span className="text-2xl">{caughtRot.emoji}</span>
                   <div>
                     <p className={`text-xs font-bold uppercase ${CATEGORY_LABELS[quiz.category].color}`}>
-                      {CATEGORY_LABELS[quiz.category].icon} {CATEGORY_LABELS[quiz.category].label} kvíz
+                      {CATEGORY_LABELS[quiz.category].icon} {quiz.topic || CATEGORY_LABELS[quiz.category].label} kvíz
                     </p>
                     <p className="text-[10px] text-white/50">
                       {caughtRot.name} | {Math.round(caughtRot.xpValue * comboMultiplier)} XP

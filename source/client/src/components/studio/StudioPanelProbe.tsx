@@ -1,4 +1,5 @@
 import LessonStudioPanel from "@/components/studio/LessonStudioPanel";
+import { LearningReport } from "./LearningReport";
 
 /**
  * LS-8 (#191) — böngészős mérőoldal a tananyagkészítés panelhez.
@@ -14,7 +15,7 @@ import LessonStudioPanel from "@/components/studio/LessonStudioPanel";
 export default function StudioPanelProbe() {
   return (
     <div className="p-4" data-testid="studio-panel-probe">
-      <LessonStudioPanel />
+      {new URLSearchParams(window.location.search).get("report") === "1" ? <LearningReport lessonId="practice-probe" /> : <LessonStudioPanel />}
     </div>
   );
 }

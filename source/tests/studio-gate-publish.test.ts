@@ -327,3 +327,16 @@ test("gate: a fedettségi és az ív-kifogás EGY listába kerül, a szerző min
   assert.ok(reasons.some((r) => /kulcsfogalmat/.test(r)), "fedettségi hiány");
   assert.ok(reasons.some((r) => /felvezetés|magyarázattal/.test(r)), "ív-hiány");
 });
+
+
+test("fusion jobs never publish missing banks even at the autonomous round limit", async () => {
+  const { LESSON_METHOD_VERSION } = await import("../shared/lesson-experience");
+  const store = new MemoryStore();
+  store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
+  const lesson = lessonCovering(["c1", "c2", "s1"]);
+  store.seed({ id: "fusion-missing", mapId: "m1", step: "gate", round: 99, lessonId: "lesson-1", output: { lesson, methodVersion: LESSON_METHOD_VERSION } });
+  const result = await runPipelineStep("fusion-missing", deps(store));
+  assert.equal(result.ok, false);
+  assert.equal(store.published.length, 0);
+  assert.match((await store.loadJob("fusion-missing"))?.error ?? "", /fúziós módszer/);
+});

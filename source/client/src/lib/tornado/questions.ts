@@ -1,3 +1,4 @@
+import { isPlayableQuestion } from "../../../../shared/game-quiz-contract";
 /**
  * Tornado Hunter 200 — the question engine.
  *
@@ -19,6 +20,7 @@ export type SchoolLevel = 1 | 2 | 3 | 4 | 5 | 6 | "auto";
 export type Question = {
   id: string;
   subject: Subject;
+  topic?: string | null;
   /** School grade, 1..6. */
   grade: number;
   prompt: string;
@@ -28,6 +30,7 @@ export type Question = {
   /** 1..5 within the grade. */
   difficulty: number;
   source: "bank" | "material";
+  optionIndices?: number[];
 };
 
 export type Rng = () => number;
@@ -135,18 +138,15 @@ export type MaterialRow = {
 /**
  * Convert `/api/games/material-quizzes` rows into questions.
  *
- * Anything malformed is dropped rather than repaired: a four-option multiple
+ * Anything malformed is dropped rather than repaired: a three- or four-option multiple
  * choice with a valid answer index is the contract, and a half-broken row would
  * surface as an unanswerable question in the child's face.
  */
 export function materialToQuestions(rows: readonly MaterialRow[], grade: number): Question[] {
   const out: Question[] = [];
   rows.forEach((row, idx) => {
-    const options = Array.isArray(row.options) ? row.options : null;
-    if (!options || options.length !== 4) return;
-    if (!options.every((o) => typeof o === "string" && o.length > 0)) return;
-    if (!Number.isInteger(row.correctIndex) || row.correctIndex < 0 || row.correctIndex > 3) return;
-    if (typeof row.prompt !== "string" || row.prompt.trim().length === 0) return;
+    if (!isPlayableQuestion(row)) return;
+    const options = row.options;
     const topic = (row.topic ?? "").toLowerCase();
     out.push({
       id: row.id ?? `material-${idx}`,
@@ -156,6 +156,7 @@ export function materialToQuestions(rows: readonly MaterialRow[], grade: number)
       options: options as string[],
       correctIndex: row.correctIndex,
       explanation: row.explanation,
+      topic: row.topic,
       difficulty: 3,
       source: "material",
     });
@@ -421,6 +422,7 @@ export function shuffleOptions(q: Question, rng: Rng = Math.random): Question {
   return {
     ...q,
     options: idx.map((i) => q.options[i]!),
+    optionIndices: idx.map(i => q.optionIndices?.[i] ?? i),
     correctIndex: idx.indexOf(q.correctIndex),
   };
 }

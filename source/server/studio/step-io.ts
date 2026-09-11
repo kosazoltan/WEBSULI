@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
@@ -6,6 +7,7 @@ import { ageBandForClassroom, conceptIdsOf, type Lesson } from "../../shared/les
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
+import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -166,6 +168,8 @@ export function buildPedagoguePrompt(map: PromptMap): string {
     "",
     LESSON_ARC_CONTRACT,
     "A plannedBlocks sorrendje EZT az ívet kövesse — a vázlat sorrendje lesz a lecke sorrendje.",
+    LESSON_METHOD_CONTRACT,
+    "Most csak a Tananyag lap fejezeteit tervezd. A módszerek és feladatbankok külön, kisebb gyártási körökben készülnek el ebből a tanításból.",
     "",
     `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
     "",
@@ -195,12 +199,14 @@ export const AUTHOR_BLOCK_CATALOG = [
   "Minden nem-recap blokk coversConceptIds tömbje LEGALÁBB EGY valódi fogalomazonosítót tartalmazzon, amelyet a látható szövege ténylegesen tanít. Üres tömb tilos.",
   '- { "kind": "explain", "text": string, "depth": "core"|"deeper"|"why", "readAloud": boolean, "coversConceptIds": string[] }',
   '- { "kind": "example", "problem": string, "steps": string[], "answer": string, "coversConceptIds": string[] }',
-  '- { "kind": "animate", "animKind": "numberLine"|"fraction"|"timeline"|"geometry"|"process"|"map"|"wordBuilder"|"sentenceParts", "params": object, "caption": string, "coversConceptIds": string[] }',
-  'Geometriai animációhoz animKind="geometry". Ne találj ki új animKind értéket (például triangleHeightCases).',
+  '- { "kind": "animate", "animKind": "numberLine"|"fraction"|"timeline"|"geometry"|"process"|"map"|"wordBuilder"|"sentenceParts"|"triangleArea"|"decisionStory", "params": object, "caption": string, "coversConceptIds": string[] }',
+  'Geometriai körvonalhoz animKind="geometry". Ne találj ki új animKind értéket (például triangleHeightCases).',
   '- { "kind": "check", "question": string, "options": string[2..5], "correctIndex": number, "feedbackPerOption": string[ugyanannyi mint options], "hint"?: string, "coversConceptIds": string[] }',
   '- { "kind": "try", "tryKind": "dragSort"|"fillBlank"|"match", "spec": object, "coversConceptIds": string[] }',
   'A try.spec PONTOS alakja: fillBlank: {"text":"Mondat ___ hiánnyal", "answers":["megoldás"]}, ugyanannyi answers, mint ___; match: {"pairs":[{"left":"fogalom", "right":"jelentés"}]}; dragSort: {"items":["második","első"], "correctOrder":["első","második"]}, azonos elemekkel, eltérő sorrendben. Ne használj helyettük prompt, blanks vagy solution mezőt.',
   'A geometry params PONTOS alakja: {"shape":"triangle"|"circle"|"square", "label":"rövid cím"}. Ez egyszerű körvonalat rajzol. A caption csak ezt ígérheti: nincs benne magasságvonal, körcikk, jelölt szög vagy mozgatás. Bonyolultabb összefüggést example/explain blokkban vezess le.',
+  'A triangleArea params PONTOS alakja: {"base":6,"height":4,"unit":"cm"}. base/height: 0.1–1000 közötti szám, unit: cm vagy m. Kizárólag a fejezetben ténylegesen tanított háromszög-területhez, a forrás példájának alap/magasság adataival. Jóslás, oldalirányú csúcsmozgatás, merőleges magasság és területváltozás, önálló magyarázat. A laborban mozgatott változatok szemléltető kísérletek, nem új forrásadatok; az eredeti kidolgozott példát őrizd meg.',
+  DECISION_STORY_CONTRACT,
   '- { "kind": "recap", "bullets": string[], "nextLessonId"?: string } (fogalom-hivatkozás nélkül)',
   'Más kind (pl. "text", "quiz", "video") ÉRVÉNYTELEN, a lecke elutasításra kerül.',
 ].join("\n");
@@ -258,6 +264,7 @@ export function buildAuthorPrompt(
     "  The concept's own words MUST appear in the block's own text. Labelling a block",
     "  with a concept it does not teach is a hard failure — the publishing gate now",
     "  verifies every label against the block text and REJECTS the lesson.",
+    "  Introduce each claimed concept by its complete Hungarian term in a natural visible question/problem or teaching sentence. A question may give this topic context without giving away its answer. For match/dragSort, include meaningful concept labels in the visible items; hidden metadata and feedback shown only after an answer are not initial teaching evidence. Do not add an unrelated keyword list.",
     "- Teach ONLY what the map's concepts state. Never substitute easier material from",
     "  general knowledge, and never adjust the difficulty to a different school year:",
     "  the concepts come from the teacher's uploaded source and define the level.",
@@ -270,6 +277,8 @@ export function buildAuthorPrompt(
     AUTHOR_BLOCK_CATALOG,
     "",
     LESSON_ARC_CONTRACT,
+    LESSON_METHOD_CONTRACT,
+    "Most kizárólag a részletes Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Ne rövidítsd vázlattá a bankok kedvéért: az experience bankokat külön lépés gyártja. Ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",
     "",
   ];
 
@@ -317,11 +326,14 @@ export function animatorOutcome(
 
 export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
   return [
+    LESSON_METHOD_CONTRACT,
+    "Ha a lecke experience mezőt tartalmaz, a methods/tasks/quiz tételeit és a szószedetet is vizsgáld: valóban a Tananyag lapról kérdez-e, helyes-e minden megoldás és mintaválasz, van-e érdemi változatosság. Hiányos vagy hibás bank source_conflict/contradicts_source, a blockPath mezőben experience.tasks.N vagy experience.quiz.N útvonallal.",
     "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",
     "",
     D1_RULE_TEXT,
     SOURCE_REVIEW_RULES,
     "Minden eltéréshez adj konkrét blockPath értéket és ellenőrizhető indokot. A forrásszámok cseréje vagy hibás levezetés source_conflict/contradicts_source; valóban hiányzó tanítás coverage_gap. A látható feladatot és minden válaszhoz tartozó magyarázatot is ellenőrizd.",
+    "Az algebrai egyezés mellett az adatok együttes megvalósíthatóságát is vizsgáld. Például a háromszög egyik oldalához tartozó magasság nem lehet nagyobb bármelyik másik oldalnál, és két oldalból T ≤ a·b/2. Ha a lehetetlen adatok már a kurált forrásban is így szerepelnek, konkrét számolással source_conflict/book_probably_wrong adminjegyzetet adj; a forrást és a tanuló leckéjét nem írhatod át. Ha a szerző találta ki az ellentmondást, az contradicts_source hiba.",
     "",
     `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
     "",
@@ -361,8 +373,10 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "- Every non-animate block must remain verbatim — character for character, byte-identical.",
     "- Every coversConceptIds must come from the ids already used by the lesson — never invent new ones.",
     "- The title, subject, classroom, mapId and sourceOnly must stay exactly as they are.",
-    "- Choose animKind from: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts; give a params object the runtime can draw and a short Hungarian caption.",
+    "- Choose animKind from: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts, triangleArea, decisionStory; give a params object the runtime can draw and a short Hungarian caption.",
     'Geometry params: {"shape":"triangle"|"circle"|"square", "label":"short label"}. Only an outline is drawn: do not promise heights, sector shading, marked angles or controls in the caption.',
+    'triangleArea params: {"base":6,"height":4,"unit":"cm"}; numeric dimensions 0.1–1000, unit cm or m. Use ONLY for triangle area already taught in that section, with base/height from its source example. The lab includes prediction, horizontal apex movement, perpendicular height and area, and explanation. Experimental changes illustrate the formula; never substitute them for the original worked source example.',
+  DECISION_STORY_CONTRACT,
     'For a process use params={"steps":["visible first step","visible next step"]}. A circle is not a polygon. When the runtime cannot draw the intended construction, keep the original teaching; do not insert a misleading substitute.',
     "",
     "Answer with JSON ONLY — the COMPLETE modified Lesson, matching the Lesson schema:",
@@ -413,7 +427,7 @@ function sortKeysDeep(value: unknown): unknown {
 export function checkAnimatorResult(original: Lesson, candidate: Lesson): AnimatorCheck {
   const reasons: string[] = [];
 
-  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly"] as const;
+  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly", "experience"] as const;
   for (const field of identityFields) {
     if (canonicalJson(original[field]) !== canonicalJson(candidate[field])) {
       reasons.push(`A lecke azonosító mezője megváltozott: ${field}.`);

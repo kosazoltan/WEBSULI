@@ -82,6 +82,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   const { data: mapsData, isLoading: mapsLoading } = useQuery<{ maps: MapListItem[] }>({
     queryKey: ["/api/studio/maps"],
     queryFn: () => apiRequest("GET", "/api/studio/maps"),
+    enabled: advancedOpen,
   });
 
   const { data: jobData } = useQuery<JobResponse>({
@@ -100,7 +101,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
   const view = lessonStudioView({ maps: mapsData?.maps ?? [] });
   const selectedMap = mapsData?.maps.find((m) => m.id === mapId);
   const step = jobData?.job.step;
-  const outlineReady = step === "author" || step === "lektor" || step === "gate" || step === "done";
+  const outlineReady = step === "author" || step === "animator" || step === "lektor" || step === "gate" || step === "done";
   const notesReady = step === "lektor" || step === "gate" || step === "done";
 
   return (
@@ -141,10 +142,9 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
             Tananyag készítése
           </CardTitle>
           <CardDescription className="text-xs">
-            Töltsd fel a tankönyv- vagy füzetoldalak képeit — minden más automatikus:
-            a gép felismeri a tantárgyat és az osztályt, fogalomjegyzéket épít belőlük,
-            majd megírja és közzéteszi a kész tananyagot. Neked csak a képek feltöltése
-            és a kész lecke megnyitása marad.
+            Töltsd fel a tankönyv- vagy füzetoldalakat. A program feldolgozza a forrást,
+            megállapítja az évfolyamot, majd elkészíti és ellenőrzi a tananyagot.
+            Ha fontos forrásrész bizonytalan, jelzi, mit kell átnézni.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -159,7 +159,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
 
       {jobId && <JobMonitor jobId={jobId} />}
 
-      {jobId && outlineReady && selectedMap && (
+      {jobId && outlineReady && selectedMap && (advancedOpen || !jobData?.produced.approvedOutline) && (
         <OutlineReview jobId={jobId} mapId={selectedMap.id} />
       )}
 
@@ -176,25 +176,25 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
         <CardHeader className="py-3">
           <Button
             variant="ghost"
-            className="h-auto justify-start gap-2 p-0 text-xs text-muted-foreground hover:bg-transparent"
+            className="min-h-11 h-auto justify-start gap-2 p-0 text-sm text-muted-foreground hover:bg-transparent"
             onClick={() => setAdvancedOpen((v) => !v)}
             aria-expanded={advancedOpen}
             data-testid="studio-advanced-toggle"
           >
             {advancedOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            Haladó: tudás-térképek kézi kezelése
+            Haladó: forrásjegyzék és ellenőrzés
           </Button>
         </CardHeader>
         {advancedOpen && (
           <CardContent className="space-y-4" data-testid="studio-advanced-body">
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Meglévő, jóváhagyott tudás-térképből is indítható lecke — ez a
-                folyamat a fenti automatikus úthoz nem szükséges.
+                Itt láthatók a forrásból azonosított fogalmak és idézetek.
+                A jóváhagyott forrásjegyzékből új lecke is indítható.
               </p>
               <Select value={mapId} onValueChange={setMapId}>
                 <SelectTrigger className="min-h-11" data-testid="lesson-map-select">
-                  <SelectValue placeholder={mapsLoading ? "Térképek betöltése…" : "Válassz tudás-térképet…"} />
+                  <SelectValue placeholder={mapsLoading ? "Források betöltése…" : "Válassz forrásjegyzéket…"} />
                 </SelectTrigger>
                 <SelectContent>
                   {(mapsData?.maps ?? []).map((m) => (
@@ -210,7 +210,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <Badge variant="outline">{selectedMap.subject}</Badge>
                   <Badge variant="outline">{selectedMap.classroom}. osztály</Badge>
-                  <span>A lecke a térkép szerinti tantárgyból és osztályba készül.</span>
+                  <span>A tantárgyat és évfolyamot a program a forrásból állapította meg.</span>
                 </div>
               )}
 
@@ -221,7 +221,7 @@ export default function LessonStudioPanel({ initialAdvanced = false }: { initial
                 data-testid="start-lesson"
               >
                 {start.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
-                Lecke-készítés indítása térképből
+                Tananyag készítése ebből a forrásból
               </Button>
             </div>
 

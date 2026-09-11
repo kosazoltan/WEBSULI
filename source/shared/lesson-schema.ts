@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { experienceSchema } from "./lesson-experience";
+import { triangleAreaLabParamsSchema } from "./triangle-area-lab";
+import { decisionStoryParamsSchema } from "./decision-story";
 
 /**
  * The Lesson: what a child actually reads, as structured data rather than an HTML blob.
@@ -28,6 +31,8 @@ export const ANIM_KINDS = [
   "map",
   "wordBuilder",
   "sentenceParts",
+  "triangleArea",
+  "decisionStory",
 ] as const;
 
 /** Hands-on interactions (LS-4 implements them). */
@@ -134,6 +139,13 @@ export const blockSchema = z
     recapBlock,
   ])
   .superRefine((block, ctx) => {
+    if (block.kind === "animate" && (block.animKind === "triangleArea" || block.animKind === "decisionStory")) {
+      const parsed = (block.animKind === "triangleArea" ? triangleAreaLabParamsSchema : decisionStoryParamsSchema).safeParse(block.params);
+      if (!parsed.success) for (const issue of parsed.error.issues) {
+        ctx.addIssue({ ...issue, path: ["params", ...issue.path] });
+      }
+      return;
+    }
     if (block.kind === "check") {
       if (block.feedbackPerOption.length !== block.options.length) {
         ctx.addIssue({
@@ -238,6 +250,8 @@ export const misconceptionSchema = z.object({
 });
 
 export const lessonSchema = z.object({
+  /** Optional only for backwards compatibility; all new jobs require this layer. */
+  experience: experienceSchema.optional(),
   title: filled(255),
   subject: filled(120),
   /** 0-12, matching shared/classrooms.ts. */

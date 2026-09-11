@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -22,7 +22,8 @@ import {
   type Lesson,
   type Section,
 } from "@shared/lesson-schema";
-import { BAND_THEME } from "@shared/lesson-band";
+import { BAND_THEME, learningAgeGroup } from "@shared/lesson-band";
+import { lessonFontPair } from "@shared/lesson-typography";
 
 import { SectionProba } from "./SectionProba";
 import { ANIMATE_REGISTRY } from "./blocks/animate-blocks";
@@ -33,6 +34,11 @@ import {
   type TrySnapshot,
 } from "./useLessonProgress";
 import "./lesson-theme.css";
+import "./triangle-lab.css";
+import "./decision-story.css";
+import { LessonExperienceView } from "./LessonExperienceView";
+import { LessonCoverArt } from "./LessonCoverArt";
+import { experienceFingerprint } from "./useExperienceRound";
 
 /**
  * The Lesson Runtime: one audited renderer for every lesson.
@@ -53,6 +59,7 @@ import "./lesson-theme.css";
  * recap. Owner picked the dark "C · divergent" direction from the variant board.
  */
 
+const FullTeachingContext = createContext(false);
 const OPTION_KEYS = "ABCDEFGH";
 
 function BlockHead({ icon: Icon, label }: { icon: typeof BookOpen; label: string }) {
@@ -104,7 +111,8 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
 
 function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example" }>; band: AgeBand }) {
   const theme = BAND_THEME[band];
-  const [shown, setShown] = useState(0);
+  const fullTeaching = useContext(FullTeachingContext);
+  const [shown, setShown] = useState(fullTeaching ? block.steps.length : 0);
   const allShown = shown >= block.steps.length;
 
   return (
@@ -118,7 +126,7 @@ function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example"
         ))}
       </ol>
 
-      {/* Steps reveal one at a time: seeing the whole solution at once teaches nothing. */}
+      {/* Legacy stepper stays available; the fusion teaching page shows the worked example in full. */}
       {!allShown ? (
         <Button
           variant="outline"
@@ -425,13 +433,21 @@ export function LessonRuntime({
 }) {
   const band = ageBandForClassroom(lesson.classroom);
   const theme = BAND_THEME[band];
+  const fonts = lessonFontPair(lesson.classroom, lesson.subject);
+  const headingFont = lesson.experience?.theme === "paper" && lesson.classroom > 4 ? "Source Serif 4" : fonts.heading;
+  const typography = {
+    "--lesson-font-body": `"${fonts.body}", sans-serif`,
+    "--lesson-font-heading": `"${headingFont}", ${headingFont === "Source Serif 4" ? "serif" : "sans-serif"}`,
+  } as CSSProperties;
   // B7: persist under htmlFileId when present; probe uses persistId for reload round-trips.
   const progress = useLessonProgress(persistId ?? lessonId);
   const current = progress.snapshot.current;
   const setCurrent = progress.setCurrent;
   const sectionEls = useRef<(HTMLElement | null)[]>([]);
+  const experienceKey = `${persistId ?? lessonId ?? lesson.mapId}:${experienceFingerprint(lesson.experience ?? {})}`;
 
   useEffect(() => {
+    if (lesson.experience) return;
     const nodes = sectionEls.current.filter((n): n is HTMLElement => n !== null);
     if (nodes.length < 2) return;
     const observer = new IntersectionObserver(
@@ -447,28 +463,34 @@ export function LessonRuntime({
     );
     for (const node of nodes) observer.observe(node);
     return () => observer.disconnect();
-  }, [lesson.sections.length, setCurrent]);
+  }, [lesson.sections.length, lesson.experience, setCurrent]);
 
   return (
     // #197 + LS-9: the lesson brings its OWN surface AND ink via [data-band] tokens
     // (lesson-theme.css). Measured live before #197: inheriting the app foreground gave
     // 67/115 text elements a 1.00–1.05 contrast in both app modes. The band root pairs
     // every background with its ink, so the app theme cannot break it.
-    <div className="min-h-full" data-band={band}>
+    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience={lesson.experience?.theme} style={typography}>
       <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
         <header className="lesson-hero">
           <div className="lesson-emblem" aria-hidden>
             <Leaf className="w-7 h-7" />
           </div>
           <div className="min-w-0">
+            {lesson.experience && <p className="fusion-eyebrow">Felfedezésből tudás</p>}
             <h1 className={cn("lesson-heading leading-tight break-words", theme.heading)}>{lesson.title}</h1>
             <div className="flex flex-wrap gap-2 mt-1.5">
               <span className="lesson-chip">{lesson.subject}</span>
               <span className="lesson-chip">{lesson.classroom}. osztály</span>
             </div>
           </div>
+          {lesson.experience && <LessonCoverArt subject={lesson.subject} />}
         </header>
 
+        {lesson.experience ? <LessonExperienceView key={experienceKey} experience={lesson.experience} lessonId={lessonId} headings={lesson.sections.map(s => s.heading)} storageKey={`websuli:fusion:${experienceKey}`}>
+          {activeSection => <FullTeachingContext.Provider value={true}>
+          {lesson.sections.map((section, si) => <div key={si} hidden={activeSection !== null && activeSection !== si}><LessonSection section={section} sectionIdx={si} band={band} lessonId={lessonId ?? null} conceptLabel={id => conceptLabel(lesson, id)} initialAnswers={progress.snapshot.sections[String(si)]?.answers ?? {}} tryBlocks={progress.snapshot.sections[String(si)]?.tryBlocks ?? {}} onAnswersChange={answers => progress.setSectionAnswers(si, answers)} onTryPersist={(bi, snap) => progress.setTrySnapshot(si, bi, snap)} onProbaSuccess={() => setCurrent(c => Math.max(c, Math.min(si + 1, lesson.sections.length - 1)))} sectionRef={el => { sectionEls.current[si] = el; }} /></div>)}
+        </FullTeachingContext.Provider>}</LessonExperienceView> : <>
         <LessonProgress sections={lesson.sections} band={band} current={current} />
 
         {lesson.sections.map((section, si) => {
@@ -498,6 +520,7 @@ export function LessonRuntime({
             />
           );
         })}
+        </>}
       </article>
     </div>
   );

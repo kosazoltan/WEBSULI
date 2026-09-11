@@ -59,7 +59,10 @@ export function exportQuizItemsFromChecks(
   resolveConceptId?: ConceptIdResolver,
 ): InsertGameQuizItem[] {
   const rows: InsertGameQuizItem[] = [];
-  for (const section of lesson.sections) {
+  const sections = lesson.experience
+    ? [{ blocks: lesson.experience.quiz.map(q => ({ ...q, kind: "check" as const })) }]
+    : lesson.sections;
+  for (const section of sections) {
     for (const block of section.blocks) {
       if (block.kind !== "check") continue;
       const primaryLocalId = block.coversConceptIds[0];
@@ -92,6 +95,9 @@ export function exportQuizItemsForPublish(
   lessonId: string,
   resolveConceptId: ConceptIdResolver,
 ): InsertGameQuizItem[] {
+  // The full, versioned fusion bank already lives once in lessons.json. Public game
+  // APIs read it there; five physical export copies would make identities diverge.
+  if (lesson.experience) return [];
   return COUPON_GAME_IDS.flatMap((gameId) =>
     exportQuizItemsFromChecks(lesson, gameId, lesson.title.slice(0, 128), lessonId, resolveConceptId),
   );
