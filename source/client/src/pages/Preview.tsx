@@ -130,9 +130,9 @@ export default function Preview() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={isLesson ? "min-h-screen bg-background" : "h-dvh flex flex-col overflow-hidden bg-background"}>
       {/* The lesson owns sticky navigation; a fixed preview toolbar would cover its tabs. */}
-      <div className={`${isLesson ? "relative" : "fixed top-0 left-0 right-0"} z-50 border-b bg-card/95 backdrop-blur`}>
+      <div className="relative shrink-0 z-50 border-b bg-card/95 backdrop-blur">
         <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 flex items-center justify-between gap-2">
           <Button
             variant="ghost"
@@ -204,7 +204,7 @@ export default function Preview() {
         </div>
       </div>
       {/* Responsive container - optimized for all screen sizes including Samsung Z Fold */}
-      <div className={isLesson ? "w-full" : "pt-12 sm:pt-14 h-[calc(100vh-3rem)] sm:h-[calc(100vh-3.5rem)] tablet:h-[calc(100vh-4rem)]"}>
+      <div className={isLesson ? "w-full" : "w-full flex-1 min-h-0"}>
         {isLoading ? (
           <div className="w-full h-full flex items-center justify-center py-20">
             <p className="text-muted-foreground">Betöltés…</p>
@@ -225,14 +225,11 @@ export default function Preview() {
           <iframe
             ref={iframeRef}
             src={renderUrl}
-            className="w-full h-full border-0"
+            className="block w-full h-full border-0"
             title={isPdf ? 'PDF Preview' : 'HTML Preview'}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
             allow="autoplay; fullscreen; clipboard-write; microphone"
             data-testid="iframe-preview"
-            style={{
-              minHeight: '400px', // Minimum height for very small screens
-            }}
           />
         )}
       </div>
