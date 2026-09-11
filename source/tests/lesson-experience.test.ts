@@ -262,6 +262,19 @@ test("reviewed bank indices resolve before rewriting; unknown targets are global
   assert.equal(feedback[2].conceptIds, undefined); assert.equal(feedback[3].conceptIds, undefined);
 });
 
+test("short sample repair receives actual and required word counts without lowering the threshold", async () => {
+  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const short = { ...e.tasks[0], sample: "Az alap és a magasság szorzatának fele.", minWords: 10 };
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+    if (++calls === 1) return { methods: e.methods, tasks: [short, e.tasks[1]], quiz: e.quiz, glossary: [] };
+    assert.match(user, /A minta szószáma: 7; minWords: 10/);
+    return { tasks: [{ ...short, sample: "A háromszög területe az alap és a hozzá tartozó magasság szorzatának fele." }] };
+  } });
+  assert.equal(calls, 2); assert.equal(result.tasks[0].minWords, 10);
+  assert.equal(evaluateOpenAnswer(result.tasks[0].sample, result.tasks[0]).score, 1);
+});
+
 test("bank review invalidates only its packet, resumes the repair and never revives the rejected base", async () => {
   const lesson = compactFusionFixture();
   const second = structuredClone(lesson.sections[0]); second.heading = "Második összefüggés";

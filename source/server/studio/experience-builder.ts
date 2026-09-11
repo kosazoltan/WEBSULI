@@ -118,7 +118,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       for (const t of packet.tasks) {
         const score = evaluateOpenAnswer(t.sample, t);
-        if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);
+        const wordCount = normalizeAnswer(t.sample).split(/\s+/).filter(Boolean).slice(0, 500).length;
+        if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A minta szószáma: ${wordCount}; minWords: ${t.minWords}. A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);
       }
       for (const [past, added] of [[tasks.map(t => t.q), packet.tasks.map(t => t.q)], [quiz.map(q => q.question), packet.quiz.map(q => q.question)]]) {
         const keys = [...past, ...added].map(normalizeAnswer);

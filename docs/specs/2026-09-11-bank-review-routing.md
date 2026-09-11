@@ -23,6 +23,7 @@ Nem emelünk token-, idő- vagy körkeretet. Nem engedünk át hibás mintát, c
 Célzott teszt, teljes verify, diff önellenőrzés, PR és zöld CI. Éles futás lezárulása után friss adatmentés és kiadás; visszaállítási kódpont: 1f123c9. Az adatmentést és valódi eredményeket az állapotnaplóban rögzítjük.
 
 ## Megvalósítás és helyi bizonyíték
+Az éles régi kódú futás utolsó hibája: a teljes darabszámú bank egyik mintája a minimális szószám alatt maradt a javítás után is. A javítás diagnosztikája ezért az értékelő azonos normalizálásából számolt tényleges és minimális szószámot is megadja. Nem csökkenti automatikusan a küszöböt; regresszió igazolja a bővített minta változatlan küszöb melletti elfogadását.
 A javított csomag hash-ét a tanítás alap-hash-éhez tartozó ellenőrzőpont-hivatkozás őrzi: egy későbbi, másik hibát javító kör nem hozhatja vissza az elutasított alapcsomagot. Az aktuális jegyzetek körszűrése változatlan. A szerző az előző tanítást kapja meg, a teljes bank szövegét nem küldjük neki újra; a bankmodell csak a rá vonatkozó korábbi tételeket kapja.
 
 49 célzott teszt PASS. Teljes `npm.cmd run verify`: lint, típusellenőrzés, 1114/1114 teszt (0 kihagyott), build PASS. `git diff --check` PASS. Önelllenőrzés: régi kör, admin-only információ, feloldhatatlan cél és későbbi cache-visszaesés kezelve; az éles gyártás futása közben nincs deploy. A valódi növényes visszajátszás és a publikációs ellenőrzés még folyamatban.
