@@ -276,6 +276,50 @@ test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra 
   assert.equal(canReuseLessonVisuals(missing), false);
 });
 
+test("lektori bankhiba a szerzőn át a banképítőhöz jut; az előző lecke és nyelvi javítás sem vész el", async () => {
+  const lesson = compactFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet });
+  const notes = [
+    { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "RUBRIKA-HIBA: több helyes példát enged a kérdés." },
+    { kind: "language", blockPath: "experience.tasks.1.sample", message: "NYELVI-HIBA: hibás alany." },
+    { kind: "source_conflict", subkind: "book_probably_wrong", message: "ADMIN-ONLY-FORRAS" },
+  ];
+  const deps = makeDeps(JSON.stringify({ notes }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "review-bank", mapId: "m1", step: "lektor", output: { lesson, methodVersion: lesson.experience.version } });
+  const reviewed = await runPipelineStep("review-bank", deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "author" && reviewed.next.round === 1);
+  const job = deps.store.jobs.get("review-bank")!;
+  assert.equal(job.output?.reportRound, 0);
+  job.step = "author"; job.round = 1;
+  job.output = { ...job.output, approvedOutline: GOOD_OUTLINE };
+  const authored = { ...lesson, experience: undefined };
+  const authorDeps = makeDeps(JSON.stringify(authored));
+  assert.ok((await runPipelineStep(job.id, { ...authorDeps, store: deps.store })).ok);
+  assert.match(authorDeps.calls[0].system, /previousLesson/);
+  assert.match(authorDeps.calls[0].system, /RUBRIKA-HIBA/);
+  assert.match(authorDeps.calls[0].system, /NYELVI-HIBA/);
+  assert.doesNotMatch(authorDeps.calls[0].system + authorDeps.calls[0].user, /ADMIN-ONLY-FORRAS/);
+  assert.equal((job.output?.lesson as typeof lesson).experience, undefined);
+  job.step = "animator";
+  const bankDeps = makeDeps(JSON.stringify(packet));
+  assert.ok((await runPipelineStep(job.id, { ...bankDeps, store: deps.store })).ok);
+  assert.equal(bankDeps.calls.length, 1);
+  assert.match(bankDeps.calls[0].system, /RUBRIKA-HIBA/); assert.match(bankDeps.calls[0].system, /NYELVI-HIBA/);
+  assert.match(bankDeps.calls[0].system, /previousItem/);
+  assert.doesNotMatch(bankDeps.calls[0].system, /ADMIN-ONLY-FORRAS/);
+  const result = (job.output?.lesson as typeof lesson).experience!;
+  assert.equal(result.quiz.length, packet.quiz.length);
+  job.round = 2;
+  const staleDeps = makeDeps("{}");
+  assert.ok((await runPipelineStep(job.id, { ...staleDeps, store: deps.store })).ok);
+  assert.equal(staleDeps.calls.length, 0);
+  assert.deepEqual((job.output?.lesson as typeof lesson).experience, result);
+});
+
 /** The pedagogue input hash the runner must compute — recomputed here to pin equality. */
 function pedagogueHash(): string {
   return computeStepHash(
