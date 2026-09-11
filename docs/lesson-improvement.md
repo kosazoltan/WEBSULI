@@ -129,6 +129,8 @@ A lektor bankra vonatkozó megállapításait az ellenőrzött lecke tételindex
 
 A fenti kötelezőcsoport-megőrzés a mintaválasz illesztési hibájának javítására vonatkozik. Ha a tartalmi lektor éppen a kérdést vagy a rubrika helyességét kifogásolja, az adott, feloldott tétel kérdése és követelménye a forrás alapján összhangba hozható. Változatlan tanításnál csak a kifogásolt tételazonosítók módosíthatók: a banképítő az utolsó javított csomagra alkalmazza a cserét, a többi tételt és korábbi javítást megőrzi. Az egyesített bank ugyanúgy teljes ellenőrzésre és tartalmi lektorálásra kerül.
 
+A lektor a tényleges tanulói értékelő mintánkénti pontszámát és hiányzó csoportjait kapja, a közvetlen javításnál és a konfigurált promptot használó gyártásnál is. A ragozás illesztését nem találgathatja. A teljes mintapontszám nem bizonyít tartalmi helyességet vagy igazságos kérdést: ezek továbbra is lektori feladatok. A bankkészítő már elsőre ismerje a required ÉS/VAGY kapcsolatát; a szabadon választható példákból nem tehet kötelezővé egy önkényes mintalistát, és a minWords nem zárhat ki tömör, teljes választ.
+
 A szerző első javítóköre előtt a determinisztikus fogalmi és felépítési ellenőrzést is mérjük meg, hogy a lektor és a kapu hibái együtt legyenek javíthatók. Ha tiszta lektori jelentés után egy kapujavítás mégis megváltoztatja a tanítást, a közvetlenül előző kör feloldott bankjavításai továbbra is eljutnak az új bankhoz. A tiszta jelentés a javított bank elfogadását jelenti, nem engedély a korábbi hiba újragenerálására. Elavult kör vagy más térkép bankvisszajelzését nem örökítjük, az admin-only jegyzetet itt is kizárjuk.
 
 ### Magyar tipográfia ellenőrzése

@@ -71,6 +71,17 @@ test("builder uses one coverage packet for a small source, retains evidence and 
   assert.deepEqual(reused.quiz, actual.quiz);
 });
 
+test("initial bank prompt explains all required groups and freely chosen examples before a lektor repair", async () => {
+  const lesson = compactFusionFixture(); const packet = lesson.experience!;
+  let received = "";
+  await buildLessonExperience(lesson, [{ localId: "area", examWeight: "core" }], {
+    call: async (_system, user) => { received = user; return packet; },
+  });
+  assert.match(received, /csoportok között ÉS/);
+  assert.match(received, /csoporton belül VAGY/);
+  assert.match(received, /tetszőleges.*péld/);
+});
+
 test("compact bank enforces every taught concept, intent, oral/written mode and valid four-choice index", () => {
   const lesson = compactFusionFixture();
   assert.deepEqual(experienceProblems(lesson), []);
