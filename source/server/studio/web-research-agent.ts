@@ -111,7 +111,8 @@ export function webResearchSystemPrompt(classroom: number, title?: string, topic
       subjectHint: `${requestedTitle ?? ""} ${topicSeed ?? ""}`,
     }),
     "",
-    "BESZÉLGETÉS: tömör, magyar. Ha kész a HTML, egy rövid mondattal jelezd ELŐTTE, hogy készül.",
+    "Minden megjelenített magyar szöveg helyes magyar ékezetekkel készüljön, a JSON-bank sample, answer, feedback és classroomEvidence mezőiben is. Ékezetmentesítés csak a kiértékelő ideiglenes összehasonlítási másolatán történhet; a tárolt/megjelenített mintaválaszt nem írhatja át.",
+    "BESZÉLGETÉS: a rövid magyar bevezető opcionális. A válasz a teljes HTML végével záruljon; önmagában bevezetővel nem fejezheted be a készítést.",
   ];
   return lines.filter((line): line is string => line !== null).join("\n");
 }

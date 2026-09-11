@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decideWebResearchResult } from "../server/studio/web-research-agent";
+import { decideWebResearchResult, webResearchSystemPrompt } from "../server/studio/web-research-agent";
 import { consumeWebResearchStream } from "../shared/web-research-stream";
 
 const summary = "Röviden: találtam NAT 2020-hoz illő forrásokat. Készül a tananyag:";
 const doc = `<!DOCTYPE html><html lang="hu"><body>${"tanítás ".repeat(20)}</body></html>`;
 const verify = () => ({ ok: true, problems: [] });
+test("a készítési prompt nem engedélyre vár és a bank látható szövegét nem normalizálja", () => {
+  const prompt = webResearchSystemPrompt(4);
+  assert.match(prompt, /ne kérj újabb engedélyt/);
+  assert.match(prompt, /JSON-bank sample, answer, feedback és classroomEvidence/);
+  assert.match(prompt, /teljes HTML végével záruljon/);
+});
 test("a keresési összefoglaló end_turn után tényleges készítést kér", () => {
   const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: summary, repairAttempts: 0 }, verify);
   assert.equal(result.type, "retry");
