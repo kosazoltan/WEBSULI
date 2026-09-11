@@ -145,8 +145,10 @@ test("a készítő route-on nincs 60 s-os abszolút korlát, és 64K a kimenet",
 test("a webes ügynök route-ja hibánál visszatartja a HTML-t", () => {
   const src = read("server/studio/web-research-routes.ts");
   assert.match(src, /verifyLessonMethodHtml\(html\)/);
-  assert.match(src, /if \(verification\.ok\) send\(\{ type: "html_generated"/);
-  assert.match(src, /else send\(\{ type: "error"/);
+  // Gate result is now handled before the artifact event, including automatic repair.
+  assert.match(src, /decideWebResearchResult\(\{ stopReason, fullContent, repairAttempts, sources \}, html => verifyLessonMethodHtml\(html\)\)/);
+  assert.match(src, /if \(result\.type === "error"\) \{ send\(\{ type: "error", message: result\.message \}\); break; \}/);
+  assert.match(src, /send\(\{ type: "html_generated", html: result\.html, sources \}\)/);
   assert.match(src, /cache_control: \{ type: "ephemeral" \}/);
   const panel = read("client/src/components/studio/WebResearchAgentPanel.tsx");
   assert.match(panel, /web-research-warnings/);
