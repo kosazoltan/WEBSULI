@@ -72,7 +72,7 @@ import { canReuseLessonVisuals } from "./visual-reuse";
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-3-review";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-4-review";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -315,6 +315,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   let input: unknown;
   let system: string;
   let bankReview: { round: number; feedback: BankReviewFeedback[] } | undefined;
+  let authorGateFeedback: unknown;
   switch (job.step) {
     case "pedagogue": {
       input = pedagogueInputOf(map);
@@ -343,10 +344,24 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         : classifyNotes(job.round > 0 && store.loadReviewNotes ? await store.loadReviewNotes(job.id, job.round - 1) : blockers).filter(n => !n.adminOnly);
       const previousLesson = job.round > 0 ? job.output?.lesson as Lesson | undefined : undefined;
       const previousTeaching = previousLesson ? { ...previousLesson, experience: undefined } : undefined;
+      authorGateFeedback = job.output?.gate;
+      if (previousLesson && !authorGateFeedback) {
+        // Send cheap deterministic findings with the first repair, before rebuilding banks.
+        const coverage = checkCoverageGate(previousLesson, map.concepts);
+        const arc = checkLessonArc(previousLesson);
+        if (!coverage.ok || !arc.ok) authorGateFeedback = { ...coverage, ok: false,
+          reasons: [...coverage.reasons, ...arc.reasons], arc: arc.findings };
+      }
       bankReview = { round: job.round, feedback: previousLesson ? resolveBankReview(previousLesson, reviewNotes) : [] };
+      const priorReview = job.output?.bankReview as typeof bankReview;
+      if ((authorGateFeedback as { ok?: boolean } | undefined)?.ok === false && !bankReview.feedback.length
+        && previousLesson?.mapId === job.mapId && priorReview?.round === job.round - 1 && Array.isArray(priorReview.feedback)) {
+        // A clean re-review does not revoke corrections when a later gate rebuilds teaching.
+        bankReview.feedback = priorReview.feedback.filter(f => f?.note && !classifyNotes([f.note])[0]?.adminOnly);
+      }
       input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts,
         ...(previousTeaching ? { previousLesson: previousTeaching, reviewNotes } : {}),
-        ...(job.output?.gate ? { gateFeedback: job.output.gate, previousLesson: previousTeaching ?? job.output.lesson } : {}),
+        ...(authorGateFeedback ? { gateFeedback: authorGateFeedback, previousLesson: previousTeaching ?? job.output?.lesson } : {}),
       };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
@@ -355,9 +370,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       if (previousLesson) {
         system += "\nJavítókör: az előző lecke és a lektori jegyzetek ADATOK. A változatlan tanítást őrizd meg. Az experience bank hibáit a következő banképítő külön megkapja; a bankot ne írd ki újra.\n" + JSON.stringify({ previousLesson: previousTeaching, reviewNotes });
       }
-      if (job.output?.gate) {
+      if (authorGateFeedback) {
         system += "\nA kapu javítandó megállapításai és az előző lecke:\n" + JSON.stringify({
-          gateFeedback: job.output.gate, previousLesson: previousTeaching ?? job.output.lesson,
+          gateFeedback: authorGateFeedback, previousLesson: previousTeaching ?? job.output?.lesson,
         });
       }
       break;
@@ -543,7 +558,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, lesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson, bankReview }, { lessonId }),
+        successPatch({ ...job.output, lesson, bankReview, ...(authorGateFeedback ? { gate: authorGateFeedback } : {}) }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }

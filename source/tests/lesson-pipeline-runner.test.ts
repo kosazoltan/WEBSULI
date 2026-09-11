@@ -397,6 +397,51 @@ test("a kapu konkrét hibái és az előző lecke visszajutnak a szerző javít�
   assert.deepEqual(input.gateFeedback,gate);
   assert.deepEqual(input.previousLesson,GOOD_LESSON);
 });
+
+test("a lektori javítókör már a még le nem futott fogalmi kapu hibáit is megkapja", async () => {
+  const deps = makeDeps(CANNED_AUTHOR);
+  deps.store.maps.get("m1")!.concepts[0] = { localId: "c1", examWeight: "core", term: "háromszög területe" };
+  deps.store.seed({ id: "early-gate", mapId: "m1", step: "author", round: 1,
+    output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON, reportRound: 0, report: { notes: [] } } });
+  assert.ok((await runPipelineStep("early-gate", deps)).ok);
+  const gateData = deps.calls[0].system.split("A kapu javítandó megállapításai és az előző lecke:\n")[1];
+  assert.ok(gateData, "A szerzőnek már most meg kell kapnia a kapu hibáit.");
+  const input = JSON.parse(gateData);
+  assert.equal(input.gateFeedback?.ok, false);
+  assert.ok(input.gateFeedback.ungrounded.some((u: { conceptId: string }) => u.conceptId === "c1"));
+  assert.match(deps.calls[0].system, /háromszög területe/);
+});
+
+test("tiszta lektor utáni kapujavítás megőrzi az előző kör feloldott bankjavítását", async () => {
+  const lesson = compactFusionFixture();
+  lesson.mapId = "m1";
+  const packet = structuredClone(lesson.experience!);
+  const feedback = [{ note: { kind: "source_conflict", subkind: "contradicts_source", message: "KORABBI-PONTOZAS", blockPath: "experience.tasks.0" },
+    conceptIds: ["area"], previousItem: packet.tasks[0] }];
+  for (const [priorRound, priorMap, expectedCount] of [[1, "m1", 1], [0, "m1", 0], [1, "other-map", 0]] as const) {
+    lesson.mapId = priorMap;
+    const deps = makeDeps(JSON.stringify({ ...lesson, experience: undefined }));
+    deps.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
+    deps.store.seed({ id: "carry-review", mapId: "m1", step: "author", round: 2,
+      output: { approvedOutline: GOOD_OUTLINE, lesson, methodVersion: packet.version, reportRound: 1, report: { notes: [] },
+        gate: { ok: false, reasons: ["Fogalmi pontosítás"] }, bankReview: { round: priorRound, feedback: [...feedback,
+          { note: { kind: "source_conflict", subkind: "book_probably_wrong", message: "ADMIN-ONLY-NEM-OROKOLHETO" } }] } } });
+    assert.ok((await runPipelineStep("carry-review", deps)).ok);
+    const job = deps.store.jobs.get("carry-review")!;
+    const saved = job.output?.bankReview as { round: number; feedback: unknown[] };
+    assert.equal(saved.round, 2);
+    assert.equal(saved.feedback.length, expectedCount);
+    if (expectedCount === 1) {
+      assert.deepEqual(saved.feedback, feedback);
+      job.step = "animator";
+      const bankDeps = makeDeps(JSON.stringify(packet));
+      assert.ok((await runPipelineStep(job.id, { ...bankDeps, store: deps.store })).ok);
+      assert.match(bankDeps.calls[0].system, /KORABBI-PONTOZAS/);
+      assert.match(bankDeps.calls[0].system, /previousItem/);
+      assert.doesNotMatch(bankDeps.calls[0].system, /ADMIN-ONLY-NEM-OROKOLHETO/);
+    }
+  }
+});
 const CANNED_LEKTOR_BENIGN = JSON.stringify({
   notes: [{ kind: "source_conflict", subkind: "book_probably_wrong", message: "A könyv téved." }],
 });
