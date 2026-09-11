@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, METHOD_KINDS, experienceSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
-import { evaluateOpenAnswer, normalizeAnswer } from "../../shared/lesson-experience-score";
+import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { planLessonBank } from "../../shared/lesson-bank-plan";
 import type { Lesson } from "../../shared/lesson-schema";
@@ -23,6 +23,22 @@ const packetPatchSchema = z.object({
 type PacketContent = z.infer<typeof packetPatchSchema> & { glossary: z.infer<typeof glossaryEntrySchema>[] };
 const BANKS = ["methods", "tasks", "quiz"] as const;
 
+/** Each old AND-group must survive in a distinct new group, including its alternatives. */
+function retainsRequiredGroups(before: string[][], after: string[][]): boolean {
+  const groups = after.map(group => new Set(group.map(normalizeAnswer)));
+  const owner = new Map<number, number>();
+  const match = (oldIndex: number, visited: Set<number>): boolean => {
+    for (let i = 0; i < groups.length; i++) {
+      if (visited.has(i) || !before[oldIndex].every(term => groups[i].has(normalizeAnswer(term)))) continue;
+      visited.add(i);
+      const previous = owner.get(i);
+      if (previous === undefined || match(previous, visited)) { owner.set(i, oldIndex); return true; }
+    }
+    return false;
+  };
+  return before.every((_, index) => match(index, new Set()));
+}
+
 /** A repair is a replacement by existing ID, never an incomplete new packet. */
 export function applyBankPacketRepair(original: PacketContent, response: unknown): PacketContent {
   const patch = packetPatchSchema.parse(response);
@@ -31,6 +47,12 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
     const ids = patch[bank].map(item => item.id);
     if (known.size !== original[bank].length || new Set(ids).size !== ids.length || ids.some(id => !known.has(id))) {
       throw new Error(`${bank}: a javítás csak egyedi, már létező tételazonosítót cserélhet.`);
+    }
+  }
+  for (const task of patch.tasks) {
+    const previous = original.tasks.find(item => item.id === task.id)!;
+    if (!retainsRequiredGroups(previous.required, task.required)) {
+      throw new Error(`${task.id}: a javítás nem törölhet kötelező csoportot vagy korábbi elfogadott szóalakot, és nem vonhat össze kötelező csoportokat.`);
     }
   }
   const replace = <T extends { id: string }>(items: T[], updates: T[]) => items.map(item => updates.find(update => update.id === item.id) ?? item);
@@ -69,7 +91,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const validate = (packet: Packet): string[] => {
       const local = experienceSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
-      for (const t of packet.tasks) if (evaluateOpenAnswer(t.sample, t).score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${evaluateOpenAnswer(t.sample, t).reason}`);
+      for (const t of packet.tasks) {
+        const score = evaluateOpenAnswer(t.sample, t);
+        if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);
+      }
       for (const [past, added] of [[tasks.map(t => t.q), packet.tasks.map(t => t.q)], [quiz.map(q => q.question), packet.quiz.map(q => q.question)]]) {
         const keys = [...past, ...added].map(normalizeAnswer);
         if (new Set(keys).size !== keys.length) problems.push("Ismétlődő kérdés egy korábbi csomaggal.");
@@ -93,6 +118,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
 A végleges, egyesített csomag pontosan 2 módszer, ${Math.max(2, unit.conceptIds.length)} feladat és ${unit.conceptIds.length * 2} kvíz.
 Két különböző, ehhez a témához illő módszer a listából: ${METHOD_KINDS.join(", ")}. Mind: id,sectionIndex,coversConceptIds,kind,title,prompt,answer. gate/myth/popup: options és correctIndex. sorting/causeEffect/timeline: steps helyes sorrendben. Ne erőltess idővonalat, ha nincs időbeli folyamat.
 ${Math.max(2, unit.conceptIds.length)} nyílt feladat, az összes fogalom lefedésével; legalább egy oral és egy written. Mind: id,sectionIndex,coversConceptIds,q,required:string[][] (szinonimacsoportok),bonus:string[][],minWords,needsSentence,sample,mode. Saját mintaválasz teljes pontot érjen; needsSentence csak valódi mondatfeladatnál.
+Az értékelő szóalakokat illeszt, nem nyelvi modell. Minden required csoportban legyen a mintaválaszban ténylegesen használt alak is, a fogalom eredeti alakja mellett: például ["mag","magra"], ["víz","vízre"]. Rövid szavaknál a ragozás felismerése nem garantált. Hibajavításnál a megnevezett csoport jelentését és a kérdés követelményeit őrizd meg; ne töröld a hiányzó fogalmat. Egész mintamondatot ne használj szinonimaként. A sample természetes, teljes válasz legyen a kérdésre.
+A javított required minden korábbi csoportot külön őrizzen meg, annak összes korábbi alakjával. Új szinonimát hozzáadhatsz; csoportot vagy alakot törölni, két kötelező csoportot összevonni tilos. Ezt a program is ellenőrzi.
 ${unit.conceptIds.length * 2} kvíz: minden fogalomhoz egy intent=recall és egy intent=apply. Mind: id,sectionIndex,coversConceptIds:[egyetlen ID],intent,question,options (3 vagy 4 különböző),correctIndex,feedbackPerOption (minden opcióhoz magyarázat). Felidézés és valódi alkalmazás külön kérdés, ne csak számot cserélj!
 ${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább egy elem.` : "glossary: []."}
 Korábbi kérdések, ne ismételd: ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question) })}

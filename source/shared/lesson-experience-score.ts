@@ -31,18 +31,23 @@ function wordHit(token: string, word: string): boolean {
 function conceptHit(tokens: string[], alternatives: string[]): boolean {
   return alternatives.some(phrase => tokensOf(phrase).every(word => tokens.some(token => wordHit(token, word))));
 }
+/** Generation diagnostics use the exact learner-side matcher, not another approximation. */
+export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "required">): string[][] {
+  const tokens = tokensOf(answer).slice(0, 500);
+  return task.required.filter(group => !conceptHit(tokens, group));
+}
 export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; reason: string };
 export function evaluateOpenAnswer(answer: string, task: OpenTask): AnswerScore {
   const tokens = tokensOf(answer).slice(0, 500);
   if (tokens.length < task.minWords) return { state: "fail", score: 0, reason: "A válasz még túl rövid." };
   const hits = task.required.filter(c => conceptHit(tokens, c)).length;
   if (hits < Math.ceil(task.required.length / 2)) return { state: "fail", score: 0, reason: "A lényegi fogalmak még hiányoznak." };
-  const concepts = [...task.required, ...task.bonus].flat();
-  const ownWord = tokens.some(t => t.length >= 4 && !conceptHit([t], concepts));
+  // A correct sentence may use only rubric words. Off-rubric filler cannot prove
+  // originality, and adding a bonus term must never lower an otherwise correct score.
   const connective = tokens.some(t => ["mert", "es", "olyan", "ami", "amit", "azt", "hogy", "lehet", "tudom", "tudjuk", "mint", "ezert", "igy", "mivel", "tehat", "ha", "akkor", "vagyis", "mig", "a", "az", "because", "and", "is", "are", "there", "have", "has", "do", "does", "an", "the", "some", "any", "how", "much", "many", "of", "on", "in"].includes(t));
   const hasUnexpectedNegation = tokens.some(t => ["nem", "not"].includes(t)) && !tokensOf(task.sample).some(t => ["nem", "not"].includes(t));
-  if (hits < task.required.length || (task.needsSentence && !(ownWord && connective)) || hasUnexpectedNegation) {
-    const reason = hits < task.required.length ? `Részben jó. Még ${task.required.length - hits} kötelező fogalom hiányzik.` : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak, de összefüggő mondat és saját megfogalmazás is szükséges.";
+  if (hits < task.required.length || (task.needsSentence && !connective) || hasUnexpectedNegation) {
+    const reason = hits < task.required.length ? `Részben jó. Még ${task.required.length - hits} kötelező fogalom hiányzik.` : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak; fogalmazd őket összefüggő mondattá.";
     return { state: "partial", score: 0.5, reason };
   }
   return { state: "ok", score: 1, reason: "A szükséges fogalmak és a megfogalmazás is rendben vannak." };
