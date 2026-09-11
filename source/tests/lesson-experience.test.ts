@@ -5,7 +5,7 @@ import { experienceSchema, experienceTheme } from "../shared/lesson-experience";
 import { evaluateOpenAnswer, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
-import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
+import { applyBankPacketRepair, buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
 import { planLessonBank } from "../shared/lesson-bank-plan";
 
@@ -87,6 +87,67 @@ test("bad bank gets a targeted retry then fails closed", async () => {
   let calls = 0;
   await assert.rejects(buildLessonExperience(fusionFixture(), [], { call: async (_system, user) => { if (++calls === 2) assert.match(user, /előző válasz hibái/); return {}; } }), /javító kör után/);
   assert.equal(calls, 2);
+});
+
+test("one repaired task preserves every previously generated method, task and quiz", async () => {
+  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const first = { methods: e.methods, tasks: structuredClone(e.tasks), quiz: e.quiz, glossary: [] };
+  // Production failure: one sample needed a rubric repair, the model returned only that task.
+  first.tasks[0].required = [["nemszerepelamintában"]];
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+    if (++calls === 1) return first;
+    assert.match(user, /JAVÍTÁSI MÓD/);
+    assert.match(user, /mintaválasz nem teljes pont/);
+    return { methods: [], tasks: [e.tasks[0]], quiz: [], glossary: [] };
+  } });
+  assert.equal(calls, 2);
+  assert.deepEqual(result.methods.map(m => m.prompt), e.methods.map(m => m.prompt));
+  assert.deepEqual(result.tasks.map(t => t.q), e.tasks.map(t => t.q));
+  assert.deepEqual(result.quiz.map(q => q.question), e.quiz.map(q => q.question));
+  assert.deepEqual(experienceProblems(lesson, result), []);
+});
+
+test("bank patch rejects unknown/duplicate IDs, keeps absent banks and does not mutate the base", () => {
+  const e = compactFusionFixture().experience!;
+  const original = { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: e.glossary };
+  const before = structuredClone(original);
+  const replacement = { ...e.tasks[0], q: "Új, pontosított kérdés" };
+  const merged = applyBankPacketRepair(original, { tasks: [replacement] });
+  assert.equal(merged.tasks[0].q, replacement.q);
+  assert.deepEqual(merged.methods, original.methods); assert.deepEqual(merged.quiz, original.quiz);
+  assert.deepEqual(merged.glossary, original.glossary); assert.deepEqual(original, before);
+  assert.throws(() => applyBankPacketRepair(original, { tasks: [{ ...replacement, id: "unknown" }] }), /létező/);
+  assert.throws(() => applyBankPacketRepair(original, { tasks: [replacement, replacement] }), /egyedi/);
+});
+
+test("a partial repair still fails closed on invalid concept, answer or unchanged sample", async () => {
+  const lesson = compactFusionFixture(), e = lesson.experience!;
+  for (const repair of [
+    { tasks: [] },
+    { tasks: [{ ...e.tasks[0], coversConceptIds: ["unknown"] }] },
+    { tasks: [e.tasks[0]], quiz: [{ ...e.quiz[0], correctIndex: 9 }] },
+  ]) {
+    let calls = 0, saves = 0;
+    const tasks = structuredClone(e.tasks); tasks[0].required = [["hiányzófogalom"]];
+    await assert.rejects(buildLessonExperience(lesson, [], {
+      call: async () => ++calls === 1 ? { methods: e.methods, tasks, quiz: e.quiz, glossary: [] } : repair,
+      save: async () => { saves++; },
+    }), /javító kör után/);
+    assert.equal(calls, 2); assert.equal(saves, 0);
+  }
+});
+
+test("incomplete first packet requires a full replacement with actual counts in retry", async () => {
+  const lesson = compactFusionFixture(), e = lesson.experience!;
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+    if (++calls === 1) return { methods: [], tasks: [], quiz: [], glossary: [] };
+    assert.match(user, /methods=0, tasks=0, quiz=0/); assert.match(user, /TELJES csomagot/);
+    assert.doesNotMatch(user, /JAVÍTÁSI MÓD/);
+    return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+  } });
+  assert.equal(calls, 2); assert.deepEqual(experienceProblems(lesson, result), []);
 });
 
 test("programming classroom zero uses the older learner round rather than the first-grade limit", () => {
