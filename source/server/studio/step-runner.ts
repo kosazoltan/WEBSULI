@@ -72,7 +72,7 @@ import { canReuseLessonVisuals } from "./visual-reuse";
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-3-review-routing";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-3-review";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
