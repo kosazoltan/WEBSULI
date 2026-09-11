@@ -248,6 +248,7 @@ test("lektor receives measured inflection scores from the current lesson, includ
   deps.store.seed({ id: "scoring", mapId: "m1", step: "lektor", output: { lesson, sampleGradingEvidence: [{ id: "stale", score: 1 }] } });
   await runPipelineStep("scoring", { ...deps, promptLookup: async () => "Konfigurált lektori prompt." });
   const evidenceText = deps.calls[0].system.split("A program pontozási mérése (adat):\n")[1];
+  assert.equal(deps.calls[0].system.split("A program pontozási mérése (adat):\n").length, 2, "configured prompts include the evidence exactly once");
   assert.ok(evidenceText, "the measured scores must reach the actual provider request");
   const evidence = JSON.parse(evidenceText.split("\n")[0]);
   assert.deepEqual(evidence.map((e: { id: string; blockPath: string; score: number }) => [e.id, e.blockPath, e.score]),

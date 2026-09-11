@@ -26,7 +26,6 @@ import {
   buildAuthorPrompt,
   buildConceptFixPrompt,
   buildLektorPrompt,
-  buildLektorGradingEvidence,
   buildPedagoguePrompt,
   buildSchemaRetryUser,
   animatorOutcome,
@@ -395,12 +394,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const lesson = job.output?.lesson as Lesson | undefined;
       if (!lesson) return fail(store, job, "A lektor lépéshez nincs lecke a jobban.");
       input = { lesson, map: mapInputOf(map), concepts: map.concepts };
-      const defaultPrompt = buildLektorPrompt(lesson, promptMapOf(map));
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
-        defaultPrompt,
+        buildLektorPrompt(lesson, promptMapOf(map)),
       );
-      if (system !== defaultPrompt) system += buildLektorGradingEvidence(lesson);
       break;
     }
     case "done":
