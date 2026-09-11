@@ -1205,6 +1205,11 @@ export async function fixConceptOnLesson(
 ): Promise<FixConceptResult> {
   await workflowPhase("source");
   const { providerFactory, keyConfigured, promptLookup } = await resolveDeps(deps);
+  const model = resolveStudioModel("author");
+  const lektorModel = resolveStudioModel("lektor");
+  if (!keyConfigured(model) || !keyConfigured(lektorModel)) {
+    return { ok: false, error: NO_OPENROUTER_KEY_MESSAGE };
+  }
   // Lazy, mint a createDrizzlePipelineStore-ban: a modul importja nem nyithat adatbázis-kapcsolatot.
   const { db } = await import("../db");
 
@@ -1243,9 +1248,6 @@ export async function fixConceptOnLesson(
     .from(kmConcepts)
     .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
 
-  if (!keyConfigured(resolveStudioModel("author"))) return { ok: false, error: NO_OPENROUTER_KEY_MESSAGE };
-
-  const model = resolveStudioModel("author");
   const provider = providerFactory(model);
 
   const fallback = buildConceptFixPrompt(teaching, {
@@ -1287,7 +1289,6 @@ export async function fixConceptOnLesson(
     candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user) => (await callStepModel(provider, { step: "author", model, system, user })).json });
     const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
     assertRepairCandidate(original, candidate, source);
-    const lektorModel = resolveStudioModel("lektor");
     await workflowPhase("lektor");
     const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel), { step: "lektor", model: lektorModel, system: buildLektorPrompt(candidate, source), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
     if (classifyNotes(report.notes).some(n => n.blocking)) return { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." };

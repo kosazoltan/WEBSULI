@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PIPELINE_PROMPT_VERSION,
   advanceJob,
+  fixConceptOnLesson,
   approveOutline,
   runPipelineStep,
   startJobFromMap,
@@ -24,6 +25,19 @@ import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
 import { executeWorkflow, workflowPhase, WorkflowWaiting } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
+
+for (const missingCall of [1, 2]) {
+  test(`fogalomjavítás: hiányzó ${missingCall === 1 ? "author" : "lektor"} kulcsnál nem indul modellhívás`, async () => {
+    const deps = makeDeps("{}");
+    let checks = 0;
+    deps.keyConfigured = () => ++checks !== missingCall;
+    deps.providerFactory = () => { throw new Error("Nem indulhat fizetős hívás"); };
+    const result = await fixConceptOnLesson("unused", "area", deps, "test");
+    assert.equal(result.ok, false);
+    assert.equal(checks, missingCall);
+    assert.match("error" in result ? result.error : "", /kulcs/i);
+  });
+}
 
 test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu és visszaolvasott eredmény", async () => {
   const lesson = compactFusionFixture(); lesson.mapId = "m1";
