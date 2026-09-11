@@ -21,6 +21,15 @@ import type { LektorNote } from "../server/studio/lektor";
 import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
+import { studioJobs } from "../shared/schema";
+
+test("the pipeline prompt version fits the persisted job column", () => {
+  const sqlType = studioJobs.promptVersion.getSQLType();
+  const width = /^varchar\((\d+)\)$/.exec(sqlType);
+  assert.ok(width, `Expected bounded prompt column, received ${sqlType}.`);
+  assert.ok(PIPELINE_PROMPT_VERSION.length <= Number(width[1]),
+    `Prompt version has ${PIPELINE_PROMPT_VERSION.length} characters; database allows ${width[1]}.`);
+});
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
