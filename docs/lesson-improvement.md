@@ -119,6 +119,10 @@ A képes kivonatoló ugyanazt a fájlonkénti OCR-átiratot kapja, mint az idéz
 
 A futásazonosító a böngésző munkamenetében megmarad. Hiba vagy megállás esetén a felület mutassa az okot és a forrásellenőrzéshez vezető gombot; közzétett anyaghivatkozás nélkül nem jelezhet sikert. A régi tananyag megléte nem bizonyítja az új készítés sikerét. Regresszió: `studio-source-transcript.test.ts`, `studio-generation-recovery.spec.ts`. A 2026-09-11-i növényes futás a forráskapunál állt meg, nem az adatbázis-kapcsolat szakadt meg.
 
+### Feladatbank célzott javítása
+
+A teljes, alakilag helyes bankcsomag javító válasza tételcsere: a program csak meglévő, egyedi ID alapján egyesíti az eredetivel. Az üres vagy elhagyott methods/tasks/quiz javítólista nem törli a korábban kész tételeket. Hibás alakú vagy darabszámú első csomag után viszont teljes válasz szükséges. Az egyesített bankon ugyanúgy lefut minden darabszám-, fogalom-, mintaválasz- és ismétlődésellenőrzés; hibás bank nem publikálható. A 2026-09-11-i későbbi növényes bankhiba reprodukciójában egyetlen rubrikajavítás részleges válaszát a program tévesen teljes csomagnak tekintette; ez külön hiba a korábbi forráskaputól. Részletek: [mért gyökérok](specs/2026-09-11-bank-generation-contract.md), regresszió: `lesson-experience.test.ts`.
+
 ### Magyar tipográfia ellenőrzése
 
 A közös szerződés `source/shared/lesson-typography.ts`. A betűk normál és dőlt változata, licence és ellenőrzési manifestje `source/client/public/fonts/` alatt van. A régi Google Fonts utasítást ez felülírja: a megjelenítő saját eredetű fontokat enged, ezért a helyi betűk útvonalát a külön API-host is kiszolgálja. Az adapter a tárolt tartalom módosítása nélkül egységesíti a HTML-előnézeteket és a publikált HTML-t. Böngészős próba: `npx.cmd playwright test --config playwright.lesson-typography.config.ts` a `source` mappából. A vizsgálat blokkolt Google mellett is ellenőrzi az ő/Ő/ű/Ű és bontott Unicode ékezeteket, hat betűváltozatot, 400/600/800 súlyt.
