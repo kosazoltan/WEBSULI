@@ -451,6 +451,19 @@ const CANNED_LEKTOR_BLOCKER = JSON.stringify({
   notes: [{ kind: "source_conflict", subkind: "not_in_map", message: "A c1 állítás nincs a térképen." }],
 });
 
+test("végső lektorhiba az aktuális jelentést menti és megnevezi a valódi okot", async () => {
+  const lesson = compactFusionFixture();
+  const deps = makeDeps(CANNED_LEKTOR_BLOCKER);
+  deps.store.seed({ id: "final-review", mapId: "m1", step: "lektor", round: 2,
+    output: { lesson, report: { notes: [] }, reportRound: 1 } });
+  const result = await runPipelineStep("final-review", deps);
+  assert.equal(result.ok, false);
+  const job = deps.store.jobs.get("final-review")!;
+  assert.match(job.error!, /A c1 állítás nincs a térképen/);
+  assert.equal(job.output!.reportRound, 2);
+  assert.deepEqual(job.output!.report, JSON.parse(CANNED_LEKTOR_BLOCKER));
+});
+
 test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async () => {
   const { store, calls, promptNames, providerFactory, keyConfigured, promptLookup } = makeDeps(CANNED_PEDAGOGUE);
   const jobId = await store.createJob({

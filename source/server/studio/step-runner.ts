@@ -256,9 +256,9 @@ function describeStepError(error: unknown): string {
 }
 
 /** Persist the error state and return the failed outcome. */
-async function fail(store: PipelineStore, job: JobView, reason: string): Promise<StepOutcome> {
+async function fail(store: PipelineStore, job: JobView, reason: string, output?: JobView["output"]): Promise<StepOutcome> {
   logger.error(`[STUDIO] ${job.step} lépés hiba (job ${job.id}): ${reason}`);
-  await store.saveStep(job.id, { status: "error", step: "error", error: reason, finishedAt: new Date() });
+  await store.saveStep(job.id, { status: "error", step: "error", error: reason, finishedAt: new Date(), ...(output ? { output } : {}) });
   return { ok: false, next: { step: "error", round: job.round, reason }, reason };
 }
 
@@ -633,7 +633,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const blockers = notes.filter((n) => n.blocking).length;
 
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || (job.output?.lesson as Lesson | undefined)?.experience)) {
-        return fail(store, job, "A fúziós lecke lektori hibái a javítókör után is fennállnak; hibás megoldások nem publikálhatók.");
+        return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${notes.filter(n => n.blocking).map(n => n.message).join("; ")}`,
+          { ...job.output, report: parsed.data, reportRound: job.round, blockers });
       }
       const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers });
       if (transition.step === "error") {
