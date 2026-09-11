@@ -19,6 +19,10 @@ export class WorkflowWaiting extends Error {
 }
 export const workflowMode = () => context.getStore()?.record.view.definition.mode;
 const hash = (input: unknown) => createHash("sha256").update(JSON.stringify(input)).digest("hex");
+export function savedWorkflowResult<T>(record: WorkflowRecord, name: string, input: unknown): T | undefined {
+  if (record.view.definition.version !== WORKFLOW_VERSION) return undefined;
+  return structuredClone(record.checkpoints[hash([WORKFLOW_VERSION, name, input])]) as T | undefined;
+}
 export function redactWorkflowError(error: unknown): string {
   return (error instanceof Error ? error.message : "A művelet hibával megállt.")
     .replace(/https?:\/\/\S+/gi, "[hivatkozás]")

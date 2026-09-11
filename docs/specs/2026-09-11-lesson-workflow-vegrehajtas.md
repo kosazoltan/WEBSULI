@@ -10,3 +10,4 @@
 8. Valódi Chrome/Playwright próbában ellenőrizd az adminba bekötött nézetet, kattintható lépésrészleteket, hibát, újratöltést és mindegyik módot 320/390/844/1440 px méretekben; készíts képernyőképeket és nézd meg őket.
 9. Összevetés a speccel és önreview. PR-kész állapotban `npm.cmd run verify`, utána pontos commitra zöld CI. A deploy előtt friss mentés és aktív futás ellenőrzése; utána mindkét szolgáltatás verziójának és az éles nézetnek visszaolvasása.
 10. Az eredményeket és a nem futtatott ellenőrzések pontos okát a specifikáció állapotrészébe írd. A lezárás ne állítson ellenőrzés nélkül hibamentességet.
+11. A kiadás előtti review három esetét a közös szerződésen belül javítsd: tulajdonos-FK kaszkád, webes checkpointból explicit folytatás változatlan inputtal, valamint javítójelölthöz igazított monitor. Előbb regressziós tesztekkel ellenőrizd, utána új commitra ismét CI.

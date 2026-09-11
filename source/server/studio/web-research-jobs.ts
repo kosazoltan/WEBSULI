@@ -5,7 +5,7 @@ import { type ResearchArtifact, type ResearchObserver, WebResearchFailure } from
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { logger } from "../lib/logger";
-import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, type WorkflowStore } from "../workflows/engine";
+import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, savedWorkflowResult, type WorkflowStore } from "../workflows/engine";
 
 export type StoredResearchJob = WebResearchJob & {
   userId: string;
@@ -22,8 +22,8 @@ export interface ResearchJobStore {
 }
 export class ResearchJobConflict extends Error {}
 export function publicResearchJob(job: StoredResearchJob): WebResearchJob {
-  const { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error } = job;
-  return { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error,
+  const { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume } = job;
+  return { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume,
     ...(state === "done" || state === "ready" ? { html: job.html } : {}) };
 }
 export function checkedResearchArtifact(artifact: ResearchArtifact) {
@@ -90,7 +90,11 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     }
   }
   async function run(job: StoredResearchJob, retry = false) {
-    return workflows ? executeWorkflow(workflows, { id: job.id, owner: job.userId, mode: "web", retry, request: job.input }, () => runWork(job)) : runWork(job);
+    return workflows ? executeWorkflow(workflows, { id: job.id, owner: job.userId, mode: "web", retry, request: job.input }, async () => {
+      // Change the domain state only after acquiring the workflow's exclusive lease.
+      if (job.state === "error") { job.state = "running"; job.error = undefined; job.canResume = false; await store.update(job, "error"); }
+      return runWork(job);
+    }) : runWork(job);
   }
   async function read(id: string, userId: string) {
     const job = await store.read(id, userId);
@@ -99,17 +103,25 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       job.error = "A szerverfutás megszakadt vagy túllépte az időkeretet. Új készítést indíthatsz; a régi források és diagnózis megmaradtak.";
       job.stage = job.error;
       await store.update(job, "running");
-      return store.read(id, userId);
+    }
+    if (job?.state === "error" && workflows) {
+      const tracked = await workflows.read(id, userId);
+      const artifact = tracked && savedWorkflowResult<ResearchArtifact>(tracked, "web-result", job.input);
+      job.canResume = false;
+      if (artifact && tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
+        try { checkedResearchArtifact(artifact); job.canResume = true; }
+        catch { /* An invalid saved artifact cannot be recovered by republishing it. */ }
+      }
     }
     return job;
   }
   async function publish(id: string, userId: string) {
     const tracked = workflows ? await workflows.read(id, userId) : null;
     if (tracked) {
-      const job = await store.read(id, userId);
+      const job = await read(id, userId);
       if (!job) throw new WebResearchFailure("A futás nem található.");
       if (job.state === "done") return job;
-      if (job.state !== "ready") throw new WebResearchFailure("Még nincs ellenőrzött, menthető tananyag.");
+      if (job.state !== "ready" && !job.canResume) throw new WebResearchFailure("Még nincs ellenőrzött, menthető tananyag.");
       await run(job, true);
       return (await store.read(id, userId))!;
     }

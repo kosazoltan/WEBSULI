@@ -85,3 +85,39 @@ test("a régi AI menü is a közös feltöltéses és internetes készítőre ve
   await expect(page.getByRole("button", { name: "Internetes keresés", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Fájlok kiválasztása" })).toBeVisible();
 });
+
+test("alkalmazás után másik jelölt megnyitása annak saját naplóját mutatja", async ({ page }) => {
+  const candidates = ["A", "B"].map(id => ({ id: `candidate-${id}`, title: `Jelölt ${id}`, originalFileId: `original-${id}`, classroom: 7, status: "pending", createdAt: new Date(1700000000000).toISOString(), content: "<p>Tesztanyag</p>" }));
+  await page.route("**/api/admin/improved-files**", route => {
+    const path = new URL(route.request().url()).pathname;
+    return route.fulfill({ json: path.endsWith("/apply") ? { workflowId: "apply:candidate-A" } : candidates.find(c => path.endsWith(`/${c.id}`)) ?? candidates });
+  });
+  await page.route("**/api/studio/workflows/*", route => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-1)!);
+    const base = id.startsWith("apply:") ? runs.find(r => r.definition.mode === "apply")! : runs.find(r => r.definition.mode === "html")!;
+    return route.fulfill({ json: { run: { ...base, id } } });
+  });
+  await page.goto("/admin?tab=improve-materials");
+  await page.getByRole("row").filter({ hasText: "Jelölt A" }).getByRole("button", { name: "Alkalmaz", exact: true }).click();
+  await expect(page.getByTestId("workflow-graph")).toContainText(workflowDefinition("apply").label);
+  const requested = page.waitForRequest(req => req.url().endsWith("/api/studio/workflows/candidate-B"));
+  await page.getByRole("row").filter({ hasText: "Jelölt B" }).getByRole("button", { name: "Előnézet", exact: true }).click();
+  await requested;
+  await expect(page.getByTestId("workflow-graph")).toContainText(workflowDefinition("html").label);
+  await expect(page.getByTestId("workflow-graph")).not.toContainText(workflowDefinition("apply").label);
+});
+
+test("megszakadt webes munka kész checkpointja a felületről folytatható", async ({ page }) => {
+  const id = "checkpoint-recovery"; let published = false;
+  await page.addInitScript(() => localStorage.setItem("websuli:web-research:pending", JSON.stringify({ id: "checkpoint-recovery", message: "Teszt", classroom: 4 })));
+  await page.route("**/api/studio/web-research/jobs/**", route => {
+    if (route.request().method() === "POST") published = true;
+    return route.fulfill({ json: { id, state: published ? "done" : "error", message: "Teszt", content: "", sources: [], title: "Teszt", createdAt: 1700000000000, stage: "Megszakadt", canResume: !published, ...(published ? { materialId: id, html: "<p>Mentett eredmény</p>" } : { error: "A futás megszakadt." }) } });
+  });
+  await page.goto("/admin?tab=lesson-studio");
+  await page.getByRole("button", { name: "Internetes keresés", exact: true }).click();
+  const resume = page.getByRole("button", { name: "Folytatás a mentett eredményből" });
+  await expect(resume).toBeEnabled(); await resume.click();
+  await expect(page.getByTestId("web-research-open-saved")).toHaveAttribute("href", `/preview/${id}`);
+  expect(published).toBe(true);
+});

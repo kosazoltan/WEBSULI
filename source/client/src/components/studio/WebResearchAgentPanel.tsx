@@ -49,6 +49,7 @@ export function WebResearchAgentPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [canResume, setCanResume] = useState(false);
 
   const [pending, setPending] = useState<PendingResearch | null>(storedResearch);
 
@@ -85,6 +86,7 @@ export function WebResearchAgentPanel() {
         setSources(job.sources);
         setStatus(job.stage);
         setFailure(job.error || null);
+        setCanResume(job.canResume === true);
         setMessages([{ role: "user", content: job.message }, { role: "assistant", content: job.state === "done" ? "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." : job.content || job.stage }]);
         if (job.state === "done" || job.state === "ready") {
           if (!job.html || (job.state === "done" && !job.materialId)) {
@@ -126,7 +128,7 @@ export function WebResearchAgentPanel() {
 
   const handleSend = async (message: string) => {
     if (isLoading || isSaving) return;
-    setFailure(null); setSavedId(null); setGeneratedHtml(""); setSources([]);
+    setFailure(null); setSavedId(null); setGeneratedHtml(""); setSources([]); setCanResume(false);
     const request: PendingResearch = { id: crypto.randomUUID(), message, classroom, ...(title.trim() ? { title: title.trim() } : {}),
       ...(messages.length ? { conversationHistory: messages.slice(-50) } : {}) };
     rememberResearch(request);
@@ -135,12 +137,14 @@ export function WebResearchAgentPanel() {
   };
 
   const handleSave = async () => {
-    if (!pending || !generatedHtml || isSaving || isLoading || savedId) return;
+    if (!pending || (!generatedHtml && !canResume) || isSaving || isLoading || savedId) return;
     setIsSaving(true); setFailure(null);
     try {
       const job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 });
       if (job.state !== "done" || !job.materialId) throw new Error("A szerver nem igazolta vissza a mentést.");
       setSavedId(job.materialId);
+      setGeneratedHtml(job.html || ""); setCanResume(false);
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/workflows"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }).catch(error => logger.error("[WebResearchAgent] list refresh", error));
       setMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." }]);
       toast({ title: "Elmentve a tananyagok közé" });
@@ -254,12 +258,12 @@ export function WebResearchAgentPanel() {
       <CardFooter className="flex flex-wrap gap-2">
         <Button
           onClick={() => void handleSave()}
-          disabled={!generatedHtml || isSaving || isLoading || !!savedId}
+          disabled={(!generatedHtml && !canResume) || isSaving || isLoading || !!savedId}
           className="flex-1 min-h-11"
           data-testid="web-research-save"
         >
           {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-          {savedId ? "Elmentve a tananyagok közé" : "Mentés a tananyagok közé"}
+          {savedId ? "Elmentve a tananyagok közé" : canResume ? "Folytatás a mentett eredményből" : "Mentés a tananyagok közé"}
         </Button>
         {savedId && (
           <Button asChild variant="outline" className="min-h-11" data-testid="web-research-open-saved">

@@ -585,7 +585,7 @@ export default function MaterialImprover() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setPreviewImprovedId(file.id)}
+                                  onClick={() => { setWorkflowId(null); setPreviewImprovedId(file.id); }}
                                   className="border-red-300 text-red-700 hover:bg-red-50"
                                 >
                                   <Eye className="h-4 w-4 mr-1" />

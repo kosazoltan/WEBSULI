@@ -15,6 +15,19 @@ const store = createWorkflowStore(async () => dbPool);
 before(async () => { await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('workflow-owner','workflow@test.invalid',true),('workflow-other','workflow-other@test.invalid',true)"); });
 after(() => dbPool.end());
 
+test("felhasználó törlése a saját futásait eltávolítja, más tulajdonos naplóját megtartja", async () => {
+  const { storage } = await import("../server/storage");
+  await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('workflow-delete','delete@test.invalid',true)");
+  const create = async (id: string, owner: string) => store.create({ owner, checkpoints: {}, view: { id, definition: workflowDefinition("web"), state: "error", visits: [], createdAt: Date.now(), updatedAt: Date.now(), revision: 0 } });
+  await create("deleted-run", "workflow-delete"); await create("retained-run", "workflow-other");
+  assert.equal(await storage.deleteUser("workflow-delete"), true);
+  assert.equal(await store.read("deleted-run", "workflow-delete"), null);
+  assert.ok(await store.read("retained-run", "workflow-other"));
+  const constraint = await dbPool.query("SELECT confdeltype FROM pg_constraint WHERE conrelid='lesson_workflow_runs'::regclass AND contype='f'");
+  assert.equal(constraint.rows[0].confdeltype, "c");
+  await dbPool.query("DELETE FROM lesson_workflow_runs WHERE id='retained-run'");
+});
+
 test("valódi HTML-alkalmazás: mentés, teljes visszaolvasás, ismételt kérés és hibás jelölt", async () => {
   const { applyTrackedImprovement } = await import("../server/workflows/apply");
   const original = "<!DOCTYPE html><html><body><p>Korábbi ellenőrzött tartalom.</p></body></html>";

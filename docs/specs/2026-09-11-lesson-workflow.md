@@ -41,6 +41,8 @@ Pedagógiai módszer, prompttartalom, fontok, játékok vagy meglévő tananyago
 
 ## Kiadási kockázat és visszaállás
 
+Kiadás előtti review-szelet: a felhasználó törlése a saját futásnaplóit kaszkáddal törölje, hogy a meglévő törlés/visszaállítás ne ütközzön új FK-ba. A checkpoint mentése és a webes job ready állapota közötti megszakadás után a felület külön folytatást kínáljon, kizárólag érvényes, pontos bemenetű mentett eredményből, új AI-hívás nélkül. Másik javítójelölt megnyitása annak saját naplóját mutassa. Elfogadás: izolált DB-törlés, webes újraindulási teszt és két jelölt közötti böngészős váltás.
+
 A migráció kizárólag új táblát/indexet hoz létre. Élesítés előtt aktív futások ellenőrzése és friss visszaállítható mentés kell. Kódvisszaállításkor a naplótábla megmaradhat; éles adatot nem törlünk. Új folyamat csak az adott verziójához tartozó kóddal folytatható.
 
 ## Állapot
@@ -48,9 +50,9 @@ A migráció kizárólag új táblát/indexet hoz létre. Élesítés előtt akt
 Megvalósítva a hét mód, a tényleges lépésvédelmek, a tulajdonosra szűrt tartós napló és az adminba integrált mobilábra. A régi AI-fül a közös készítőt használja. A külön force-apply gomb megszűnt; régi API-címe is a normál mentéses alkalmazást hívja. A teljes Studio-lánc próbája közben a státuszpatch javítva: lektor/pedagógus nem ad át undefined leckeazonosítót.
 
 Helyi ellenőrzés (2026-09-11):
-- `npm.cmd run verify`: PASS, typecheck, lint, teszt-typecheck, 1148 unit teszt, build.
-- `npm.cmd run test:learning-db`: PASS, 12 eset. Az új migráció kétszer futott idempotensen az eldobható PostgreSQL 17-en. Valódi mentés/visszaolvasás, hibás jelölt, egyszeri alkalmazás, konkurens engedély és tulajdonosi HTTP API ellenőrizve.
-- `npx.cmd playwright test --config playwright.workflow.local.mts --reporter=line`: PASS, 7 eset, 320/390/844/1440 px, mind a hét mód; kontraszt, átfedés, vízszintes túlcsordulás, újratöltés, megszakadás, régi AI-menü és mobil navigáció. Az azonos konfiguráció tartós változata `playwright.workflow.config.ts`.
+- `npm.cmd run verify`: PASS, typecheck, lint, teszt-typecheck, 1150 unit teszt, build.
+- `npm.cmd run test:learning-db`: PASS, 13 eset. Az új migráció kétszer futott idempotensen az eldobható PostgreSQL 17-en. Valódi mentés/visszaolvasás, hibás jelölt, egyszeri alkalmazás, konkurens engedély, tulajdonosi HTTP API és felhasználótörlés ellenőrizve.
+- `npx.cmd playwright test --config playwright.workflow.config.ts --reporter=line`: PASS, 9 eset, 320/390/844/1440 px, mind a hét mód; kontraszt, átfedés, vízszintes túlcsordulás, újratöltés, megszakadás, régi AI-menü, mobil navigáció, jelöltváltás és a mentett webes eredmény folytatása.
 - Külön önreview: a fehér felirat/fehér háttér kontrasztja javítva, megszakadt lépés részlete nem mutat „Folyamatban” állapotot, alkalmazáskor teljes tartalomegyezés és sorzár védi a mentést. A meglévő kapuk nem lazultak.
 
-Korlát: a réteg nem automatikus munkasor, és nem hoz újra létre megölt, még nem mentett AI-kérést. A tartós napló és a kész részeredmény megmarad, megszakadás látszik. Régi anyagok és futások naplóját nem generáljuk utólag. Fizetős éles próbagyártás mind a hét módban NOT RUN; a hét mód regressziója izolált/modellezett szolgáltatói válaszokkal történt. Kiadás és éles naplópróba még következik.
+Korlát: a réteg nem automatikus munkasor, és nem hoz újra létre megölt, még nem mentett AI-kérést. A tartós napló és a kész részeredmény megmarad, megszakadás látszik. A hibára váltott webes futás teljes, ellenőrzött checkpointja külön gombbal folytatható új AI nélkül; ezt a ready állapot előtti mentési résben is teszteltük. Régi anyagok és futások naplóját nem generáljuk utólag. Fizetős éles próbagyártás mind a hét módban NOT RUN; a hét mód regressziója izolált/modellezett szolgáltatói válaszokkal történt. Az éles adminellenőrzéshez jelenleg nincs elérhető bejelentkezett tulajdonosi munkamenet. Kiadás következik; a végső kiadási evidencia a PR #57-hez kerül.
