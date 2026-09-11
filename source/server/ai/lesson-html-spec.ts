@@ -384,16 +384,8 @@ function ee_evaluate(answer, task){
   var unexpectedNegation = (tokens.indexOf('nem')!==-1 || tokens.indexOf('not')!==-1)
     && sampleWords.indexOf('nem')===-1 && sampleWords.indexOf('not')===-1;
   for(f=0;f<FUNC.length;f++){ if(padded.indexOf(FUNC[f]) !== -1){ hasFunc=true; break; } }
-  var allConcepts = [];
-  for(i=0;i<req.length;i++){ allConcepts = allConcepts.concat(req[i]); }
-  for(i=0;i<bon.length;i++){ allConcepts = allConcepts.concat(bon[i]); }
-  var hasOwnWord = false;
-  for(i=0;i<tokens.length;i++){
-    if(tokens[i].length < 4) continue;
-    if(!ee_conceptHit(' '+tokens[i]+' ', [tokens[i]], [stems[i]], allConcepts)){ hasOwnWord = true; break; }
-  }
   if(ratio >= 1){
-    if((task.needsSentence && !(hasFunc && hasOwnWord)) || unexpectedNegation){
+    if((task.needsSentence && !hasFunc) || unexpectedNegation){
       return {state:'partial', score:0.5, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus,
               reason:unexpectedNegation?'A tagadás eltér a mintaválasztól.':'A fogalmak megvannak, de összefüggő mondat szükséges.'};
     }
