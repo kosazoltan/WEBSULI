@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PIPELINE_PROMPT_VERSION,
   advanceJob,
+  fixConceptOnLesson,
   approveOutline,
   runPipelineStep,
   startJobFromMap,
@@ -24,6 +25,19 @@ import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
 import { executeWorkflow, workflowPhase, WorkflowWaiting } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
+
+for (const missingCall of [1, 2]) {
+  test(`fogalomjavítás: hiányzó ${missingCall === 1 ? "author" : "lektor"} kulcsnál nem indul modellhívás`, async () => {
+    const deps = makeDeps("{}");
+    let checks = 0;
+    deps.keyConfigured = () => ++checks !== missingCall;
+    deps.providerFactory = () => { throw new Error("Nem indulhat fizetős hívás"); };
+    const result = await fixConceptOnLesson("unused", "area", deps, "test");
+    assert.equal(result.ok, false);
+    assert.equal(checks, missingCall);
+    assert.match("error" in result ? result.error : "", /kulcs/i);
+  });
+}
 
 test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu és visszaolvasott eredmény", async () => {
   const lesson = compactFusionFixture(); lesson.mapId = "m1";
@@ -272,6 +286,50 @@ function makeDeps(cannedResponse: string) {
   } as unknown as IAIProvider);
 
   return { store, calls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
+}
+
+for (const repair of ["valid", "unknown-id", "invalid-schema", "provider-error"] as const) {
+  test(`author concept-id repair: ${repair}`, async () => {
+    const correctId = "terulet-mertekegysege";
+    const typo = "terulet-mertekegyseg";
+    const valid = structuredClone(GOOD_LESSON);
+    valid.sections[0].blocks[0].coversConceptIds = [correctId];
+    const broken = structuredClone(valid);
+    broken.sections[0].blocks[0].coversConceptIds = [typo];
+    const deps = makeDeps("");
+    deps.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: correctId, examWeight: "core" }] });
+    deps.store.seed({ id: "id-repair", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+    let calls = 0;
+    const providerFactory = (model: string) => ({
+      ...deps.providerFactory(model),
+      chat: async (messages: AIMessage[]) => {
+        calls++;
+        if (calls === 2) {
+          assert.ok(messages[1].content.includes(typo));
+          const payload = JSON.parse(messages[1].content.slice(messages[1].content.lastIndexOf('\n') + 1));
+          assert.deepEqual(payload.previousLesson, broken);
+          assert.deepEqual(payload.allowedConceptIds, [correctId]);
+          assert.ok(payload.originalInput);
+          if (repair === "provider-error") throw new Error("test provider failure");
+        }
+        return { content: JSON.stringify(calls === 1 || repair === "unknown-id" ? broken : repair === "invalid-schema" ? { sections: [] } : valid),
+          usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      },
+    });
+    const result = await runPipelineStep("id-repair", { ...deps, providerFactory });
+    assert.equal(calls, 2, "exactly one correction, no endless regeneration");
+    assert.equal(result.ok, repair === "valid");
+    assert.equal(deps.store.lessons.size, repair === "valid" ? 1 : 0);
+    if (result.ok) {
+      assert.equal(result.next.step, "animator");
+      assert.deepEqual([...deps.store.lessons.values()][0].json, valid);
+      const job = deps.store.jobs.get("id-repair");
+      assert.equal(job?.tokensIn, 20);
+      assert.equal(job?.tokensOut, 10);
+    } else {
+      assert.equal((await deps.store.loadJob("id-repair"))?.status, "error");
+    }
+  });
 }
 
 test("lektor receives measured inflection scores from the current lesson, including failed samples", async () => {
@@ -769,7 +827,7 @@ test("(i) resume: azonos input-hash → gyorsítótár, nincs második hívás",
   assert.equal(second.ok && second.next.step, "author");
 });
 
-test("OPENROUTER_API_KEY hiányában a job hibára fut, tiszta magyar üzenettel", async () => {
+test("saját API-kulcsa hiányában a job hibára fut, tiszta magyar üzenettel", async () => {
   const { store, providerFactory } = makeDeps(CANNED_PEDAGOGUE);
   const jobId = await store.createJob({
     mapId: "m1",
@@ -788,11 +846,11 @@ test("OPENROUTER_API_KEY hiányában a job hibára fut, tiszta magyar üzenettel
 
   assert.equal(outcome.ok, false);
   assert.equal(outcome.next.step, "error");
-  assert.match(outcome.reason, /OPENROUTER_API_KEY/);
+  assert.match(outcome.reason, /saját API-kulcsa/);
 
   const job = await store.loadJob(jobId);
   assert.equal(job?.status, "error");
-  assert.match(job?.error ?? "", /OPENROUTER_API_KEY/);
+  assert.match(job?.error ?? "", /saját API-kulcsa/);
 });
 
 test("(j) animator: az érvényes kiegészítés elmentődik, a következő lépés lektor", async () => {
@@ -981,14 +1039,14 @@ function makeFailoverDeps(opts: { failModels: Set<string>; cannedResponse: strin
 }
 
 test("(m) modellhiba: az elsődleges modell 429-e után a lépés a FALLBACK_MODELS modelljén fut le", async () => {
-  const primary = resolveStudioModel("author");
-  const fallback = FALLBACK_MODELS.author!;
+  const primary = resolveStudioModel("pedagogue");
+  const fallback = FALLBACK_MODELS.pedagogue!;
   assert.notEqual(primary, fallback);
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
     failModels: new Set([primary]),
-    cannedResponse: CANNED_AUTHOR,
+    cannedResponse: CANNED_PEDAGOGUE,
   });
-  store.seed({ id: "job-1", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  store.seed({ id: "job-1", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
 
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
@@ -1018,11 +1076,11 @@ test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az ered
   assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "az eredeti lecke változatlanul megy tovább");
 });
 
-test("(o) author: ha az elsődleges ÉS a fallback modell is hibázik, a hiba mindkét modellt és az okot megnevezi", async () => {
+test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   const primary = resolveStudioModel("author");
-  const fallback = FALLBACK_MODELS.author!;
-  const { store, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
-    failModels: new Set([primary, fallback]),
+  assert.equal(FALLBACK_MODELS.author, undefined);
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
+    failModels: new Set([primary]),
     cannedResponse: CANNED_AUTHOR,
   });
   store.seed({ id: "job-1", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
@@ -1030,7 +1088,7 @@ test("(o) author: ha az elsődleges ÉS a fallback modell is hibázik, a hiba mi
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, false);
-  assert.ok(outcome.reason.includes(primary), `az elsődleges modell neve szerepel: ${outcome.reason}`);
-  assert.ok(outcome.reason.includes(fallback), `a fallback modell neve szerepel: ${outcome.reason}`);
+  assert.deepEqual(calls, [primary]);
+  assert.equal((await store.loadJob("job-1"))?.status, "error");
   assert.match(outcome.reason, /Rate limit exceeded/);
 });

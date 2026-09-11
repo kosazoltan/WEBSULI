@@ -11,7 +11,7 @@ import { buildAuthorPrompt, buildLektorPrompt, canonicalJson, lektorReportSchema
 import { classifyNotes } from "./lektor";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 import { callStepModel } from "./run-step";
-import { OpenRouterProvider } from "../ai/OpenRouterProvider";
+import { createStudioProvider } from "../ai/studio-provider";
 import { resolveStudioModel } from "../ai/models";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence } from "../workflows/engine";
@@ -64,7 +64,7 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const source = await loadSource(row.mapId);
   const call = async (step: "author" | "lektor", system: string, user: string) => {
     const model = resolveStudioModel(step);
-    const provider = new OpenRouterProvider({ apiKey: process.env.OPENROUTER_API_KEY ?? "", model, timeout: 180000, maxTokens: 24000 });
+    const provider = createStudioProvider(model);
     return (await callStepModel(provider, { step, model, system, user })).json;
   };
   const { candidate, review } = await buildStructuredImprovement(original, source, call, instruction);

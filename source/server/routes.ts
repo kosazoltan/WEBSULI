@@ -783,8 +783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   assertDistinctFamilies();
   if (!isOpenRouterConfigured()) {
     logger.warn(
-      '[AI] OPENROUTER_API_KEY nincs beállítva — a Studio lépések a meglévő ' +
-      'OpenAI/Claude providerekre esnek vissza.',
+      '[AI] OPENROUTER_API_KEY nincs beállítva — a Qwen/Gemini OCR nem elérhető.',
     );
   }
 

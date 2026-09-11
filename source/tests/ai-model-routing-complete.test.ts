@@ -73,6 +73,7 @@ test("a render.yaml deklarálja mind a három AI-kulcsot", () => {
     "AI_INTEGRATIONS_ANTHROPIC_API_KEY",
     "AI_INTEGRATIONS_OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
+    "XAI_API_KEY",
   ].filter((key) => !yaml.includes(key));
 
   assert.deepEqual(missing, [], `a render.yaml-ból hiányzik: ${missing.join(", ")}`);
@@ -101,8 +102,8 @@ test("az okosítás tartalék modellje MÁS szolgáltatónál van", () => {
     providerForModel(fallback),
     "a tartaléknak másik szolgáltatót kell hívnia",
   );
-  assert.equal(providerForModel(fallback), "openrouter");
-  assert.equal(fallback, "z-ai/glm-5.3-flash");
+  assert.equal(providerForModel(fallback), "openai");
+  assert.equal(fallback, "gpt-5.6-terra");
 });
 
 test("nincs elavult modell-generáció a routingban", () => {

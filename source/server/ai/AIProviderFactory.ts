@@ -85,7 +85,7 @@ export class AIProviderFactory {
         'openrouter',
         new OpenRouterProvider({
           apiKey: process.env.OPENROUTER_API_KEY!,
-          model: resolveStudioModel('author'),
+          model: resolveStudioModel('ocr'),
           timeout: 180000,
         })
       );

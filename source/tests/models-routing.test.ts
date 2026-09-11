@@ -27,13 +27,13 @@ test("every studio step has a default model", () => {
   for (const step of STUDIO_STEPS) {
     const model = resolveStudioModel(step, {});
     assert.ok(model && model.length > 0, `no default for step ${step}`);
-    assert.ok(model.includes("/"), `${step} must be an OpenRouter-style id, got ${model}`);
+    assert.equal(providerForModel(model), step === "ocr" ? "openrouter" : ["pedagogue", "lektor"].includes(step) ? "xai" : "openai");
   }
 });
 
 test("the animator runs on GPT-5.6 Terra (2026-09-09: qwen3.8-flash 429 on OpenRouter), Grok 4.6 fallback", () => {
-  assert.equal(resolveStudioModel("animator", {}), "openai/gpt-5.6-terra");
-  assert.equal(FALLBACK_MODELS.animator, "x-ai/grok-4.6");
+  assert.equal(resolveStudioModel("animator", {}), "gpt-5.6-terra");
+  assert.equal(FALLBACK_MODELS.animator, "grok-4.6");
 });
 
 test("no default model is a local Ollama tag", () => {
@@ -72,8 +72,8 @@ test("modelFamily reads the vendor prefix", () => {
   assert.equal(modelFamily("anthropic/claude-opus-5"), "anthropic");
 });
 
-test("modelFamily on an id without a vendor prefix returns the whole id", () => {
-  assert.equal(modelFamily("gpt-5"), "gpt-5");
+test("modelFamily recognizes native OpenAI ids", () => {
+  assert.equal(modelFamily("gpt-5"), "openai");
 });
 
 test("assertDistinctFamilies passes with the shipped defaults", () => {

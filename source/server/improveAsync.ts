@@ -1,3 +1,5 @@
+import { studioModelReady } from "./ai/studio-provider";
+import { resolveStudioModel } from "./ai/models";
 /**
  * Async Material Improvement Module
  * 
@@ -145,7 +147,7 @@ ${originalFile.content}
 ⚠️ EMLÉKEZTETŐ: A válaszod CSAK a teljes, javított HTML kód legyen - semmi szöveg előtte vagy utána!`;
 
     const { ClaudeProvider } = await import('./ai/ClaudeProvider');
-    const { OpenRouterProvider } = await import('./ai/OpenRouterProvider');
+    const { createStudioProvider } = await import('./ai/studio-provider');
     const { LEGACY_MODELS, providerForModel } = await import('./ai/models');
 
     // Model priority comes from models.ts, not from a literal here: the primary is
@@ -157,19 +159,14 @@ ${originalFile.content}
     /**
      * Build the provider that serves this rung of the chain.
      *
-     * The chain crosses vendors on purpose (Claude → OpenRouter/GLM): the reason we fall
+     * The chain crosses vendors on purpose (Claude → OpenAI/Terra): the reason we fall
      * back at all is that Anthropic is overloaded, and a second Anthropic model would
      * hit the same wall. So the provider is chosen from the model id, not fixed.
      */
     const createProvider = (modelIndex: number) => {
       const model = MODEL_CHAIN[modelIndex];
-      if (providerForModel(model) === 'openrouter') {
-        return new OpenRouterProvider({
-          apiKey: process.env.OPENROUTER_API_KEY ?? '',
-          model,
-          timeout: 900000,
-          maxTokens: 64000,
-        });
+      if (providerForModel(model) !== 'anthropic') {
+        return createStudioProvider(model, 900000, 64000);
       }
       return new ClaudeProvider({
         apiKey: anthropicKey,
@@ -571,7 +568,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
       }
 
       const anthropicKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
-      if (originalFile.contentType === 'lesson' ? !process.env.OPENROUTER_API_KEY : !anthropicKey) {
+      if (originalFile.contentType === 'lesson' ? !['author', 'lektor'].every(step => studioModelReady(resolveStudioModel(step as 'author' | 'lektor'))) : !anthropicKey) {
         return res.status(500).json({ 
           message: 'AI API kulcs nincs beállítva.' 
         });

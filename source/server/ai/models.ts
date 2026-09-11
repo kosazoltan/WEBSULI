@@ -11,7 +11,7 @@
  * makes that a startup error rather than a silent quality loss.
  *
  * Owner decision 2026-09-04: no local models. The workstation GPU is dead, so every id
- * here is a hosted OpenRouter id; a local Ollama tag (`name:tag`) must never appear.
+ * here is hosted; Terra and Grok use direct vendor APIs (2026-09-11).
  */
 
 export const STUDIO_STEPS = [
@@ -33,11 +33,11 @@ function envVarName(step: StudioStep): string {
 }
 
 /**
- * Primary model per pipeline step (verified against OpenRouter /api/v1/models, 2026-09-04).
+ * Terra/Grok direct access verified 2026-09-11; OCR retains OpenRouter routing.
  * Fallbacks live in FALLBACK_MODELS and are used by the provider factory on failure.
  */
 const DEFAULT_MODELS: Record<StudioStep, string> = {
-  extract: "openai/gpt-5.6-terra", // vision + verbatim quoting
+  extract: "gpt-5.6-terra", // vision + verbatim quoting
   // #190 (mérve 2026-09-06, 3 valódi kézírásos matek-lapon, kulcs-token recall;
   //  a mérés REPRODUKÁLHATÓ: tests/studio-ocr-recall.test.ts a rögzített
   //  átiratokból számol újra, hálózat nélkül):
@@ -49,38 +49,33 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // A glm az `r`-t rendszeresen `m`-nek olvasta (r=4cm -> m=4cm), ami a
   // fogalmak idézet-ellenőrzését is elbuktatta.
   ocr: "qwen/qwen3-vl-32b-instruct",
-  pedagogue: "x-ai/grok-4.6", // planning, misconceptions
-  author: "openai/gpt-5.6-terra", // long structured Hungarian output
+  pedagogue: "grok-4.6", // planning, misconceptions
+  author: "gpt-5.6-terra", // long structured Hungarian output
   // 2026-09-09 (tulajdonosi döntés, mérve): a qwen3.8-flash az OpenRouteren 429-et ad; a
   // Terra 41 s alatt sémahelyes, mértéktartó (5 animáció) kimenetet adott ugyanarra a leckére.
-  animator: "openai/gpt-5.6-terra",
+  animator: "gpt-5.6-terra",
   // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
   // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
-  // x-ai ≠ author (openai) és ≠ author-fallback (qwen) — a D1-garancia áll.
-  lektor: "x-ai/grok-4.6", // MUST differ in family from author
-  gateHelper: "z-ai/glm-5.3-flash", // cheap classification
-  quizPolish: "z-ai/glm-5.3-flash",
+  // x-ai és openai külön család; a szerzőnek nincs külső fallbackje.
+  lektor: "grok-4.6", // MUST differ in family from author
+  gateHelper: "gpt-5.6-terra", // cheap classification
+  quizPolish: "gpt-5.6-terra",
 };
 
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
-  extract: "x-ai/grok-4.6",
+  extract: "grok-4.6",
   // #190: a mért második helyezett (90.2%), más családból mint az elsődleges.
   ocr: "google/gemini-3.1-flash-lite",
-  pedagogue: "openai/gpt-5.6-terra",
-  // Audit 2026-09-05 (D): the author fallback must not share a family with the lektor
-  // PRIMARY, otherwise on author failover the same model would review itself (D1 broken
-  // silently). 2026-09-09: the lektor moved to x-ai, so the author fallback is qwen again —
-  // the live OpenRouter id (`qwen3.8-max-0902`), differing from both lektor rungs (x-ai, z-ai).
-  author: "qwen/qwen3.8-max-0902",
-  // 2026-09-09: a glm-5.3-flash 213 s után érvénytelen JSON-t adott; a Grok 4.6 117 s, sémahelyes (17 animáció).
-  animator: "x-ai/grok-4.6",
-  lektor: "z-ai/glm-5.3",
+  pedagogue: "gpt-5.6-terra",
+  // Author and reviewer have no cross-vendor fallback: retain independent review.
+  animator: "grok-4.6",
+
 };
 
 /**
  * Model ids the pre-Studio routes already used.
  *
- * These are vendor SDK ids (Anthropic / OpenAI direct) plus one OpenRouter id, not a
+ * These are vendor SDK ids (Anthropic / OpenAI direct), not a
  * single family — the admin features predate the Studio and call the vendors straight.
  * They live here for the same reason the Studio ids do: a model change must be one edit
  * in one file, not a hunt through 5,600 lines of request handlers.
@@ -106,16 +101,8 @@ export const LEGACY_MODELS = {
   chatgptChat: "gpt-5.6-sol",
   /** Enhanced Creator Claude HTML generation stream (routes.ts ~2417) */
   claudeHtml: "claude-opus-5",
-  /**
-   * The "okosítás" (improveAsync.ts): full HTML modernisation, ordered by preference.
-   *
-   * A list rather than one id because the primary is regularly overloaded; the runner
-   * walks down it. The fallback is `z-ai/glm-5.3-flash` **via OpenRouter** (owner
-   * decision) rather than another Anthropic model: when Anthropic is the thing that is
-   * overloaded, a second Anthropic id is not a fallback, and the old haiku fallback
-   * produced material worse than the input.
-   */
-  improve: ["claude-opus-5", "z-ai/glm-5.3-flash"],
+  /** HTML modernisation: Anthropic primary, direct OpenAI Terra fallback. */
+  improve: ["claude-opus-5", "gpt-5.6-terra"],
   /** Quiz item generation from a material (gameQuizGeneratorService.ts) */
   quizGenerator: "claude-opus-5",
   /**
@@ -159,15 +146,10 @@ export function effortFor(task: LegacyTask): "low" | "medium" | "high" | undefin
   return TASK_EFFORT[task];
 }
 
-/**
- * Which provider serves a given model id.
- *
- * An OpenRouter id always carries a vendor prefix (`z-ai/glm-5.3-flash`); the direct
- * vendor SDK ids never do. That single distinction is enough, and it matters because
- * the improve chain deliberately mixes vendors: its fallback is only a real fallback if
- * it is reached through a different provider than the one that just failed.
- */
-export function providerForModel(modelId: string): "openai" | "anthropic" | "openrouter" {
+/** Prefixes retained in old environment overrides also route directly. */
+export function providerForModel(modelId: string): AIVendor {
+  if (modelId.startsWith("openai/")) return "openai";
+  if (modelId.startsWith("x-ai/") || modelId.startsWith("grok-")) return "xai";
   if (modelId.includes("/")) return "openrouter";
   return modelId.startsWith("claude") ? "anthropic" : "openai";
 }
@@ -203,6 +185,7 @@ export const AI_KEY_NAMES = {
   openai: "AI_INTEGRATIONS_OPENAI_API_KEY",
   anthropic: "AI_INTEGRATIONS_ANTHROPIC_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
+  xai: "XAI_API_KEY",
 } as const;
 
 export type AIVendor = keyof typeof AI_KEY_NAMES;
@@ -256,14 +239,14 @@ export function aiKeyStatus(env: EnvLike = process.env): AIKeyStatus {
   };
 
   const featuresOf = (vendor: AIVendor): string[] => {
-    if (vendor === "openrouter") return ["studioExtract", "studioPipeline"];
-    return (Object.keys(TASK_KEYS) as LegacyTask[]).filter((t) => TASK_KEYS[t] === vendor);
+    return [...(Object.keys(TASK_KEYS) as LegacyTask[]).filter((t) => TASK_KEYS[t] === vendor),
+      ...STUDIO_STEPS.filter(step => providerForModel(resolveStudioModel(step, env)) === vendor)];
   };
 
   return Object.fromEntries(
     (Object.keys(AI_KEY_NAMES) as AIVendor[]).map((vendor) => {
       const envVar = AI_KEY_NAMES[vendor];
-      const configured = isSet(envVar);
+      const configured = isSet(envVar) || (vendor === "openai" && isSet("OPENAI_API_KEY"));
       return [vendor, { configured, envVar, blockedFeatures: configured ? [] : featuresOf(vendor) }];
     }),
   ) as AIKeyStatus;
@@ -283,7 +266,7 @@ export function resolveStudioModel(step: StudioStep, env: EnvLike = process.env)
 /** Vendor prefix of an OpenRouter id (`openai/gpt-5` → `openai`). */
 export function modelFamily(modelId: string): string {
   const slash = modelId.indexOf("/");
-  return slash === -1 ? modelId : modelId.slice(0, slash);
+  return slash === -1 ? (modelId.startsWith("gpt-") ? "openai" : modelId.startsWith("grok-") ? "x-ai" : modelId.startsWith("claude") ? "anthropic" : modelId) : modelId.slice(0, slash);
 }
 
 /**

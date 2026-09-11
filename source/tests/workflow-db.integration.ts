@@ -5,6 +5,8 @@ import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowFence, Work
 import { workflowDefinition } from "../shared/lesson-workflow";
 import express from "express";
 import type { AddressInfo } from "node:net";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 assert.equal(url.hostname, "127.0.0.1");
@@ -14,6 +16,62 @@ const { dbPool } = await import("../server/db");
 const store = createWorkflowStore(async () => dbPool);
 before(async () => { await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('workflow-owner','workflow@test.invalid',true),('workflow-other','workflow-other@test.invalid',true)"); });
 after(() => dbPool.end());
+
+test("folyamatleállítás után a kész válasz megmarad, a befejezetlen újrafut és nincs dupla befejezés", async () => {
+  const id = "workflow-process-loss";
+  // Only the disposable database configured and asserted above reaches the child.
+  const child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+    import { Pool } from 'pg';
+    import { createWorkflowStore } from './server/workflows/store.ts';
+    import { executeWorkflow, workflowPhase, workflowCheckpoint } from './server/workflows/engine.ts';
+    const pool = new Pool({connectionString:process.env.DATABASE_URL});
+    await executeWorkflow(createWorkflowStore(async()=>pool), {id:'${id}',owner:'workflow-owner',mode:'web',request:{source:'process-loss'}}, async()=>{
+      await workflowPhase('generate');
+      await workflowCheckpoint('complete',{source:'stable'},async()=>({text:'Persisted first answer'}));
+      await workflowCheckpoint('incomplete',{source:'stable'},async()=>{
+        process.stdout.write('CHECKPOINT_SAVED\\n');
+        await new Promise(()=>{});
+      });
+    });
+  `], { cwd: process.cwd(), env: process.env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  const exited = once(child, "exit");
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Checkpoint child did not become ready")), 15_000);
+      child.once("error", () => { clearTimeout(timeout); reject(new Error("Checkpoint child could not start")); });
+      child.once("exit", () => { clearTimeout(timeout); reject(new Error("Checkpoint child exited before interruption")); });
+      child.stdout.on("data", chunk => {
+        if (String(chunk).includes("CHECKPOINT_SAVED")) { clearTimeout(timeout); resolve(); }
+      });
+    });
+    child.kill(); await exited;
+    const persisted = await store.read(id, "workflow-owner");
+    assert.equal(persisted!.view.state, "running");
+    assert.equal(Object.keys(persisted!.checkpoints).length, 2); // request hash + completed answer
+    // Model lease expiration deterministically; the worker itself was really terminated.
+    await dbPool.query("UPDATE lesson_workflow_runs SET lease_until=now()-interval '1 second' WHERE id=$1", [id]);
+    assert.equal((await store.read(id, "workflow-owner"))!.view.state, "interrupted");
+    let incompleteCalls = 0; let completions = 0;
+    const input = { id, owner: "workflow-owner", mode: "web" as const, request: { source: "process-loss" }, retry: true };
+    const work = async () => {
+      await workflowPhase("generate");
+      const cached = await workflowCheckpoint("complete", { source: "stable" }, async () => { throw new Error("Completed answer must not be regenerated"); });
+      assert.deepEqual(cached, { text: "Persisted first answer" });
+      await workflowCheckpoint("incomplete", { source: "stable" }, async () => { incompleteCalls++; return { text: "Restarted answer" }; });
+      await workflowPhase("gate"); await workflowPhase("publish");
+      completions++;
+      await workflowPhase("readback"); return { kind: "material" as const, id: "process-loss-result" };
+    };
+    const done = await executeWorkflow(createWorkflowStore(async () => dbPool), input, work);
+    assert.equal(done.state, "done");
+    assert.equal(done.visits[0].cacheHits, 1);
+    await executeWorkflow(createWorkflowStore(async () => dbPool), input, work);
+    assert.equal(incompleteCalls, 1); assert.equal(completions, 1);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await exited;
+  }
+});
 
 test("lejárt vagy átvett workflow-engedély a domain tranzakció írását is visszagörgeti", async () => {
   const { db } = await import("../server/db");
