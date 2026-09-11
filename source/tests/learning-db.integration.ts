@@ -19,6 +19,35 @@ const { quizItemIdsOfLesson } = await import("../server/rewards/store");
 const { answerPractice, beginPractice, finishPractice, markPracticeHint, PracticeError, practiceReport, practiceReview, readPractice } = await import("../server/rewards/lesson-attempts");
 after(() => dbPool.end());
 
+test("real DB: coupon snapshots, first wrong answer, racing correct retries, expiry and bank changes", async () => {
+  const { startCouponQuiz, answerCouponQuiz, CouponQuizError } = await import("../server/rewards/coupon-quiz");
+  const learner = { userId: "learner-b", fingerprint: null };
+  const now = new Date();
+  await db.insert(coupons).values({ id: "coupon-answer-test", userId: learner.userId, lessonId: "practice", sectionIdx: 0,
+    minutes: 10, reason: "section_good", expiresAt: new Date(now.getTime() + 3600_000) });
+  const starts = await Promise.all(Array.from({ length: 4 }, () => startCouponQuiz(learner, "coupon-answer-test", now)));
+  assert.ok(starts.every(s => s.remainingSeconds === 600));
+  const [saved] = await db.select().from(coupons).where(eq(coupons.id, "coupon-answer-test"));
+  assert.equal(saved.quizSnapshot.length, fusionFixture().experience!.quiz.length);
+  const [wrong, right, changed] = saved.quizSnapshot;
+  assert.equal((await answerCouponQuiz(learner, saved.id, wrong.id, (wrong.correctIndex + 1) % wrong.options.length, 30, now)).bonusSeconds, 0);
+  await assert.rejects(answerCouponQuiz(learner, saved.id, wrong.id, wrong.correctIndex, 30, now), (e: unknown) => e instanceof CouponQuizError && e.reason === "first_answer_saved");
+  const retries = await Promise.all(Array.from({ length: 5 }, () => answerCouponQuiz(learner, saved.id, right.id, right.correctIndex, 30, now)));
+  assert.ok(retries.every(r => r.remainingSeconds === 630));
+  await assert.rejects(answerCouponQuiz({ userId: "learner-a", fingerprint: null }, saved.id, right.id, right.correctIndex, 30, now), (e: unknown) => e instanceof CouponQuizError && e.status === 404);
+  await assert.rejects(answerCouponQuiz(learner, saved.id, changed.id, 8, 30, now), (e: unknown) => e instanceof CouponQuizError && e.reason === "invalid_answer");
+  const expired = new Date(now.getTime() + 3601_000);
+  await assert.rejects(startCouponQuiz(learner, saved.id, expired), (e: unknown) => e instanceof CouponQuizError && e.reason === "expired");
+  const [lesson] = await db.select().from(lessons).where(eq(lessons.id, "practice"));
+  await db.update(lessons).set({ publishedAt: null }).where(eq(lessons.id, lesson.id));
+  try {
+    await assert.rejects(answerCouponQuiz(learner, saved.id, changed.id, changed.correctIndex, 30, now), (e: unknown) => e instanceof CouponQuizError && e.reason === "bank_changed");
+  } finally { await db.update(lessons).set({ publishedAt: lesson.publishedAt }).where(eq(lessons.id, lesson.id)); }
+  const bank = await listLatestMaterialQuizzes(1, 1, "practice");
+  assert.deepEqual(bank.items.map(q => q.id).sort(), saved.quizSnapshot.map(q => q.id).sort());
+  assert.equal((await listLatestMaterialQuizzes(7, 3, "draft")).items.length, 0);
+});
+
 before(async () => {
   await db.insert(gamesCatalog).values(COUPON_GAME_IDS.map(id => ({ id, title: id })));
   await db.insert(knowledgeMaps).values({ id: "map", title: "Szintetikus próba", subject: "matematika", classroom: 7, sourceFiles: [], inputHash: "integration-only" });

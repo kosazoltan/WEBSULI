@@ -39,6 +39,7 @@ type MapDetail = {
     title: string;
     subject: string;
     classroom: number;
+    classification?: import("@shared/source-classification").ScopeClassification | null;
     unit?: string | null;
     status: "draft" | "review" | "approved";
     sourceFiles: Array<{ name: string; kind: string }>;
@@ -242,6 +243,11 @@ export function KnowledgeMapEditor({ mapId }: { mapId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {data.map.classification && <details className="rounded-lg border p-3 text-sm">
+            <summary className="cursor-pointer">A gépi évfolyambesorolás indoklása</summary>
+            <p className="mt-2">{data.map.classification.reason}</p>
+            <p className="mt-1 text-muted-foreground">Becsült sáv: {data.map.classification.gradeRange.join("–")}. osztály · Bizonyosság: {({ low: "alacsony", medium: "közepes", high: "magas" })[data.map.classification.confidence]}{data.map.classification.mixedContent ? " · Vegyes szintű vagy témájú forrás" : ""}</p>
+          </details>}
           <div className="grid grid-cols-3 gap-3 text-sm">
             <div>
               <div className="text-[11px] text-muted-foreground">Kulcsfogalom igazolva</div>

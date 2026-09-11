@@ -3,25 +3,21 @@ import { desc, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
-import { lessons, htmlFiles, coupons } from "../../shared/schema";
+import { lessons, htmlFiles } from "../../shared/schema";
 import { lessonSchema } from "../../shared/lesson-schema";
 import { logger } from "../lib/logger";
 import { normalizeFingerprint } from "../lib/public-input";
 import { gradeProba } from "../rewards/grade";
-import { applyBonus, remainingSeconds, shouldIssueCoupon, BONUS_ALREADY_CLAIMED } from "../rewards/coupons";
+import { remainingSeconds, shouldIssueCoupon } from "../rewards/coupons";
+import { answerCouponQuiz, startCouponQuiz, CouponQuizError } from "../rewards/coupon-quiz";
 import {
   activeCoupon,
-  claimBonusAtomic,
   currentStreak,
   issueCoupon,
-  loadCoupon,
   loadPublishedLesson,
   loadRewardPolicy,
-  quizItemIdsOfLesson,
   recentSectionCoupons,
   saveConceptResults,
-  serveItems,
-  startCoupon,
   type Learner,
 } from "../rewards/store";
 import { computeCoupon } from "../../shared/reward-policy";
@@ -133,8 +129,9 @@ const probaBody = z.object({
 
 const bonusBody = z.object({
   quizItemId: z.string().min(1).max(64),
+  pickedIndex: z.number().int().min(-1).max(3),
   fingerprint: z.string().max(128).optional(),
-});
+}).strict();
 
 /** Which child this is: the session when logged in, otherwise the browser fingerprint. */
 function learnerOf(req: Request, fingerprint?: string): Learner | null {
@@ -229,25 +226,13 @@ lessonPublicRouter.post("/coupons/:id/start", async (req: Request, res: Response
   const learner = learnerOf(req, req.body?.fingerprint);
   if (!learner) return res.status(400).json({ message: "Hiányzó azonosító." });
 
-  const coupon = await loadCoupon(learner, req.params.id);
-  if (!coupon) return res.status(404).json({ message: "Nincs ilyen kupon." });
-
-  const now = new Date();
-  // Already running is not an error: a reload must not lose the child's remaining time.
-  const started = await startCoupon(coupon.id, now);
-  if (started) {
-    // Audit 2026-09-05 (B): hand the lesson's own quiz items to this session so the
-    // in-game bonus (+30 s per correct lesson question) can actually be claimed.
-    const [lessonRow] = await db
-      .select({ lessonId: coupons.lessonId })
-      .from(coupons)
-      .where(eq(coupons.id, coupon.id))
-      .limit(1);
-    if (lessonRow) await serveItems(coupon.id, await quizItemIdsOfLesson(lessonRow.lessonId));
+  try {
+    res.json(await startCouponQuiz(learner, req.params.id));
+  } catch (error) {
+    if (error instanceof CouponQuizError) return res.status(error.status).json({ message: error.message, reason: error.reason });
+    logger.error("[COUPON] Start failed", error);
+    res.status(500).json({ message: "A játékidő indítása nem sikerült. Próbáld újra." });
   }
-
-  const fresh = await loadCoupon(learner, req.params.id);
-  res.json({ couponId: coupon.id, remainingSeconds: remainingSeconds(fresh ?? coupon, now) });
 });
 
 /** GET /api/lessons/coupons/active — what the game HUD counts down. */
@@ -279,27 +264,12 @@ lessonPublicRouter.post("/coupons/:id/bonus", async (req: Request, res: Response
   const learner = learnerOf(req, parsed.data.fingerprint);
   if (!learner) return res.status(400).json({ message: "Hiányzó azonosító." });
 
-  const coupon = await loadCoupon(learner, req.params.id);
-  if (!coupon) return res.status(404).json({ message: "Nincs ilyen kupon." });
-
-  const policy = await loadRewardPolicy();
-  const now = new Date();
-  // Pure pre-check keeps the specific rejection reasons (expired / not served / claimed)…
-  const result = applyBonus(coupon, parsed.data.quizItemId, policy.bonusSeconds, now);
-
-  if (!result.ok) {
-    // Replay gets its own code so the client can stay quiet instead of showing an error.
-    const status = result.reason === BONUS_ALREADY_CLAIMED ? 409 : 400;
-    return res.status(status).json({ message: "A bónusz nem érvényes.", reason: result.reason });
+  try {
+    const policy = await loadRewardPolicy();
+    res.json(await answerCouponQuiz(learner, req.params.id, parsed.data.quizItemId, parsed.data.pickedIndex, policy.bonusSeconds));
+  } catch (error) {
+    if (error instanceof CouponQuizError) return res.status(error.status).json({ message: error.message, reason: error.reason });
+    logger.error("[COUPON] Answer failed", error);
+    res.status(500).json({ message: "A válasz mentése nem sikerült." });
   }
-
-  // …and the write is atomic (audit 2026-09-05 B): a racing duplicate matches no row.
-  const claimed = await claimBonusAtomic(coupon.id, parsed.data.quizItemId, policy.bonusSeconds);
-  if (!claimed) {
-    return res.status(409).json({ message: "A bónusz nem érvényes.", reason: BONUS_ALREADY_CLAIMED });
-  }
-  res.json({
-    bonusSeconds: policy.bonusSeconds,
-    remainingSeconds: remainingSeconds(claimed, now),
-  });
 });

@@ -48,6 +48,16 @@ A feladat minden fogalma az adott fejezet explain/example blokkjában tanított 
 
 ## 1. Forrás és automatikus besorolás
 
+### Kiadási kiegészítés, 2026-09-11
+
+A PDF/DOCX bináris tartalma nem idézet: a szerver teljes szöveget nyer ki, a szkennelt PDF-et gyorsítótárazott OCR-rel dolgozza fel. A kivonatolás után egy független teljes-forrás összevetés pótolja a kimaradt fogalmakat; hibás pótlással nem készül teljesnek látszó részlista. A besorolás a fő tanulási célokat, előfeltételeket és feladatmélységet követi. Indoklás, valószínű évfolyamsáv, bizonytalanság és vegyes tartalom is tárolódik, a haladó forrásnézetben olvasható. Egy kiragadott nehéz szó nem kényszerít magasabb évfolyamot.
+
+Interakcióhoz a közös `triangleArea` és `decisionStory` adatmodellt használd, amikor azt a tényleges tanítás indokolja. Az utóbbi végpontokkal záródó döntési gráf, választásonkénti következménnyel és saját magyarázattal; nincs automatikus szóbeli jegy. A Studio animációblokk és a HTML `data-lesson-interaction` jelölő ugyanazt a felülvizsgált komponenst tölti be. Modell által írt külön JavaScript nem szükséges.
+
+A játékbónusz az első választ a szerveren ellenőrzi és a kupon kérdésváltozatával együtt tárolja; rossz válasz később nem cserélhető jutalomért. A jutalomjáték a kupon leckéjének aktuális teljes bankját kéri le, a témát és a válaszok eredeti indexét megőrzi keverés után is. A visszatérés a lecke azonosítójával történik.
+
+A [kiadási ellenőrzés](specs/2026-09-11-learning-product-evidence.md) és a [pedagógiai próbaterv](learning-pilot.md) különíti el a program működését a résztvevőkkel még nem mért tanulási hatástól.
+
 - Őrizd meg az eredeti fájlokat és az egyes átiratokhoz tartozó forráshivatkozást. Az ismételt fotókat azonosítsd; a kézírásból származó bizonytalanságot jelöld, ne egészítsd ki kitalált feladattal.
 - Az évfolyamot és tantárgyat a program a teljes forrás tartalmából állapítja meg. A készítőtől ne kérj évfolyamot. A korábban megadott évfolyam sem írja felül a program besorolását; a szerzőmodell sem változtathatja meg a térkép metaadatait.
 - Forráshiba és generálási hiba külön eset. Valószínű könyv-/füzethibát `book_probably_wrong` jelzéssel, az eredeti állítás megőrzésével dokumentálj. A tulajdonos által kért javításkor készíts ellenőrzött, verziózott átiratot a helyesbítés indokával; ezután abból épüljön a kurált tudástár. A generátor önállóan nem cserélhet forrástényeket.

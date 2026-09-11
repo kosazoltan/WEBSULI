@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 import type { FeedbackCard } from "./feedback";
 import { useReducedMotion } from "./useReducedMotion";
@@ -75,7 +76,7 @@ export default function QuizFeedbackCard({
 
   const showRetry = card.retryable && typeof onRetry === "function";
 
-  return (
+  const content = (
     <div
       /*
        * A kártyának MINDEN játék-felugró fölött kell lennie.
@@ -146,4 +147,7 @@ export default function QuizFeedbackCard({
       </div>
     </div>
   );
+  // Escape transformed/isolated game containers: the explanation must remain
+  // above the question overlay, and its continue button must receive the click.
+  return typeof document === "undefined" ? content : createPortal(content, document.body);
 }

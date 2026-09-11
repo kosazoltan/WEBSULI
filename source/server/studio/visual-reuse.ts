@@ -1,6 +1,7 @@
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { lessonSchema, type Block } from "../../shared/lesson-schema";
 import { triangleAreaLabParamsSchema } from "../../shared/triangle-area-lab";
+import { decisionStoryParamsSchema } from "../../shared/decision-story";
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const texts = (v: unknown): boolean => Array.isArray(v) && v.length >= 2 && v.every(s => typeof s === "string" && s.trim().length > 0);
@@ -13,6 +14,7 @@ function hasRenderableData(block: Extract<Block, { kind: "animate" }>): boolean 
   const p = block.params;
   switch (block.animKind) {
     case "triangleArea": return triangleAreaLabParamsSchema.safeParse(p).success;
+    case "decisionStory": return decisionStoryParamsSchema.safeParse(p).success;
     case "numberLine": return finite(p.from) && finite(p.to) && p.to > p.from
       && (p.highlightTo === undefined || (finite(p.highlightTo) && p.highlightTo >= p.from && p.highlightTo <= p.to));
     case "fraction": return finite(p.numerator) && finite(p.denominator) && Number.isInteger(p.numerator)

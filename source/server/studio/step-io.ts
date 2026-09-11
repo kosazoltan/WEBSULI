@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
@@ -198,13 +199,14 @@ export const AUTHOR_BLOCK_CATALOG = [
   "Minden nem-recap blokk coversConceptIds tömbje LEGALÁBB EGY valódi fogalomazonosítót tartalmazzon, amelyet a látható szövege ténylegesen tanít. Üres tömb tilos.",
   '- { "kind": "explain", "text": string, "depth": "core"|"deeper"|"why", "readAloud": boolean, "coversConceptIds": string[] }',
   '- { "kind": "example", "problem": string, "steps": string[], "answer": string, "coversConceptIds": string[] }',
-  '- { "kind": "animate", "animKind": "numberLine"|"fraction"|"timeline"|"geometry"|"process"|"map"|"wordBuilder"|"sentenceParts"|"triangleArea", "params": object, "caption": string, "coversConceptIds": string[] }',
+  '- { "kind": "animate", "animKind": "numberLine"|"fraction"|"timeline"|"geometry"|"process"|"map"|"wordBuilder"|"sentenceParts"|"triangleArea"|"decisionStory", "params": object, "caption": string, "coversConceptIds": string[] }',
   'Geometriai körvonalhoz animKind="geometry". Ne találj ki új animKind értéket (például triangleHeightCases).',
   '- { "kind": "check", "question": string, "options": string[2..5], "correctIndex": number, "feedbackPerOption": string[ugyanannyi mint options], "hint"?: string, "coversConceptIds": string[] }',
   '- { "kind": "try", "tryKind": "dragSort"|"fillBlank"|"match", "spec": object, "coversConceptIds": string[] }',
   'A try.spec PONTOS alakja: fillBlank: {"text":"Mondat ___ hiánnyal", "answers":["megoldás"]}, ugyanannyi answers, mint ___; match: {"pairs":[{"left":"fogalom", "right":"jelentés"}]}; dragSort: {"items":["második","első"], "correctOrder":["első","második"]}, azonos elemekkel, eltérő sorrendben. Ne használj helyettük prompt, blanks vagy solution mezőt.',
   'A geometry params PONTOS alakja: {"shape":"triangle"|"circle"|"square", "label":"rövid cím"}. Ez egyszerű körvonalat rajzol. A caption csak ezt ígérheti: nincs benne magasságvonal, körcikk, jelölt szög vagy mozgatás. Bonyolultabb összefüggést example/explain blokkban vezess le.',
   'A triangleArea params PONTOS alakja: {"base":6,"height":4,"unit":"cm"}. base/height: 0.1–1000 közötti szám, unit: cm vagy m. Kizárólag a fejezetben ténylegesen tanított háromszög-területhez, a forrás példájának alap/magasság adataival. Jóslás, oldalirányú csúcsmozgatás, merőleges magasság és területváltozás, önálló magyarázat. A laborban mozgatott változatok szemléltető kísérletek, nem új forrásadatok; az eredeti kidolgozott példát őrizd meg.',
+  DECISION_STORY_CONTRACT,
   '- { "kind": "recap", "bullets": string[], "nextLessonId"?: string } (fogalom-hivatkozás nélkül)',
   'Más kind (pl. "text", "quiz", "video") ÉRVÉNYTELEN, a lecke elutasításra kerül.',
 ].join("\n");
@@ -371,9 +373,10 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "- Every non-animate block must remain verbatim — character for character, byte-identical.",
     "- Every coversConceptIds must come from the ids already used by the lesson — never invent new ones.",
     "- The title, subject, classroom, mapId and sourceOnly must stay exactly as they are.",
-    "- Choose animKind from: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts, triangleArea; give a params object the runtime can draw and a short Hungarian caption.",
+    "- Choose animKind from: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts, triangleArea, decisionStory; give a params object the runtime can draw and a short Hungarian caption.",
     'Geometry params: {"shape":"triangle"|"circle"|"square", "label":"short label"}. Only an outline is drawn: do not promise heights, sector shading, marked angles or controls in the caption.',
     'triangleArea params: {"base":6,"height":4,"unit":"cm"}; numeric dimensions 0.1–1000, unit cm or m. Use ONLY for triangle area already taught in that section, with base/height from its source example. The lab includes prediction, horizontal apex movement, perpendicular height and area, and explanation. Experimental changes illustrate the formula; never substitute them for the original worked source example.',
+  DECISION_STORY_CONTRACT,
     'For a process use params={"steps":["visible first step","visible next step"]}. A circle is not a polygon. When the runtime cannot draw the intended construction, keep the original teaching; do not insert a misleading substitute.',
     "",
     "Answer with JSON ONLY — the COMPLETE modified Lesson, matching the Lesson schema:",

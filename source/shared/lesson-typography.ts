@@ -1,3 +1,4 @@
+import { withLessonInteractions } from "./lesson-interactions";
 /** Only these measured, bundled families may be used for lesson text. */
 export const LESSON_FONTS = ["Nunito", "Source Sans 3", "Source Serif 4"] as const;
 export type LessonFont = typeof LESSON_FONTS[number];
@@ -11,7 +12,7 @@ export function lessonFontPair(classroom: number, subject = ""): { body: LessonF
 }
 
 /** Preview and published HTML share this adapter; stored originals stay intact.
- * This is typography, not HTML sanitization. Never changes text or executable code.
+ * This is not HTML sanitization. Text and author scripts stay intact; opt-in interaction data receives the shared runtime.
  */
 export function withLessonTypography(html: string, classroom = 7, subject = "", assetOrigin = ""): string {
   if (!html.trim()) return html;
@@ -33,10 +34,10 @@ button,input,textarea,select { font-size:inherit; }
     if (tag.startsWith("<!--websuli-typography:start-->")) return "";
     return /\bhref=["']https?:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)\//i.test(tag) ? "" : tag;
   });
-  if (/<\/head\s*>/i.test(out)) return out.replace(/<\/head\s*>/i, `${css}</head>`);
-  if (/<html\b[^>]*>/i.test(out)) return out.replace(/<html\b[^>]*>/i, tag => `${tag}<head><meta charset="utf-8">${css}</head>`);
+  if (/<\/head\s*>/i.test(out)) return withLessonInteractions(out.replace(/<\/head\s*>/i, `${css}</head>`), origin);
+  if (/<html\b[^>]*>/i.test(out)) return withLessonInteractions(out.replace(/<html\b[^>]*>/i, tag => `${tag}<head><meta charset="utf-8">${css}</head>`), origin);
   out = `<!doctype html><html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${css}</head><body>${out}</body></html>`;
-  return out;
+  return withLessonInteractions(out, origin);
 }
 
 export const LESSON_TYPOGRAPHY_CONTRACT = `Magyar tipográfia (${LESSON_FONT_VERSION}): kizárólag Nunito, Source Sans 3, Source Serif 4.

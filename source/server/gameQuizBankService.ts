@@ -14,7 +14,7 @@ import { isPlayableQuestion, uniqueQuizContent } from "../shared/game-quiz-contr
 import { and, desc, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems, htmlFiles, lessons } from "@shared/schema";
-import { canonicalBanks } from "./studio/canonical-quiz-bank";
+import { canonicalBanks, canonicalLessonQuiz } from "./studio/canonical-quiz-bank";
 import { COUPON_GAME_IDS } from "./studio/quiz-export";
 
 const ALLOWED_GAME_IDS = new Set([
@@ -104,9 +104,22 @@ export type LatestMaterialQuizzes = {
 export async function listLatestMaterialQuizzes(
   classroom: number,
   materialLimit = 3,
+  lessonId?: string,
 ): Promise<LatestMaterialQuizzes> {
   const cls = Math.max(0, Math.min(12, Math.floor(classroom)));
   const limit = Math.max(1, Math.min(10, Math.floor(materialLimit)));
+
+  // A lesson reward always practices that published lesson, even outside the latest three.
+  if (lessonId) {
+    const [lesson] = await db.select().from(lessons).where(and(eq(lessons.id, lessonId), isNotNull(lessons.publishedAt))).limit(1);
+    if (!lesson) return { classroom: cls, materials: [], items: [] };
+    const [material] = lesson.htmlFileId ? await db.select().from(htmlFiles).where(eq(htmlFiles.id, lesson.htmlFileId)).limit(1) : [];
+    const canonical = canonicalLessonQuiz(lesson);
+    const legacy = canonical === null ? await db.select().from(gameQuizItems).where(and(eq(gameQuizItems.lessonId, lessonId), eq(gameQuizItems.isActive, true))) : [];
+    return { classroom: material?.classroom ?? cls,
+      materials: material ? [{ id: material.id, title: material.title, createdAt: material.createdAt.toISOString() }] : [],
+      items: uniqueQuizContent(canonical ?? legacy.map(sanitizeRow).filter((q): q is GameQuizBankRow => q !== null)) };
+  }
 
   const latestMaterials = await db
     .select({

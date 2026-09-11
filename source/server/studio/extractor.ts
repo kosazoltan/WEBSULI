@@ -29,6 +29,8 @@ export type ExtractorFile = {
   kind: SourceKind;
   /** Extracted text for text-ish inputs, or a base64 data URL for images/PDF pages. */
   content: string;
+  /** Server-derived document transcript; never the encoded binary payload. */
+  extractedText?: string;
 };
 
 export type ExtractorScope = {
@@ -63,7 +65,7 @@ export type ExtractorDeps = {
  * scope and extraction version remain significant. Cached maps keep their original
  * sourceFiles/sourceRef names together; a new upload must not rename old provenance.
  */
-export const EXTRACTION_VERSION = "source-ledger-3";
+export const EXTRACTION_VERSION = "source-ledger-5";
 export function extractionSignature(config: { model: string; systemPrompt: string; ocrModel: string; ocrPrompt: string; provider: string }): string {
   return createHash("sha256").update(JSON.stringify([EXTRACTION_VERSION, config.model, config.systemPrompt, config.ocrModel, config.ocrPrompt, config.provider])).digest("hex");
 }
@@ -89,7 +91,7 @@ export function computeInputHash(
 export function sourceTextOf(files: ExtractorFile[]): string {
   return files
     .filter((f) => f.kind === "text" || f.kind === "docx" || f.kind === "pdf")
-    .map((f) => f.content)
+    .map((f) => f.extractedText ?? (f.content.startsWith("data:") ? "" : f.content))
     .join("\n");
 }
 
@@ -183,6 +185,24 @@ export async function completeExtractionConcepts(raw: RawExtraction, files: Extr
   const result = inspect(combined);
   if (result.issues.length) throw new ExtractionShapeError(result.issues);
   return result.concepts;
+}
+
+/** One independent source pass supplements omissions; it cannot replace valid originals. */
+export async function completeSourceCoverage(concepts: Concept[], files: ExtractorFile[], audit: (existing: Concept[]) => Promise<RawExtraction>): Promise<Concept[]> {
+  const missing = await audit(concepts);
+  const ids = new Set(concepts.map(c => c.id));
+  const additions = missing.concepts.map((item, index) => {
+    const parsed = parseExtractorConcept(item, files);
+    if (!parsed.success || !files.some(f => f.name === parsed.data.sourceRef.file)) {
+      throw new Error("A forrásfedettség ellenőrzése hibás pótlást adott. Hiányos jegyzék nem menthető.");
+    }
+    let id = parsed.data.id;
+    let suffix = 0;
+    while (ids.has(id)) id = `coverage-${index + 1}-${++suffix}`;
+    ids.add(id);
+    return { ...parsed.data, id };
+  });
+  return [...concepts, ...additions];
 }
 
 export async function extractKnowledgeMap(

@@ -961,9 +961,9 @@ function PlayScreen(props: {
   const grades = resolveGrades(props.progress.settings.school, props.level);
   const primaryGrade = grades[grades.length - 1]!;
   const { data: materialData } = useQuery<{ items: unknown[] }>({
-    queryKey: ["/api/games/material-quizzes", primaryGrade],
+    queryKey: ["/api/games/material-quizzes", primaryGrade, props.coupon.lessonId],
     queryFn: async () => {
-      const res = await fetch(`/api/games/material-quizzes?classroom=${primaryGrade}&limit=3`, {
+      const res = await fetch(`/api/games/material-quizzes?classroom=${primaryGrade}&limit=3${props.coupon.lessonId ? `&lessonId=${encodeURIComponent(props.coupon.lessonId)}` : ""}`, {
         credentials: "include",
       });
       if (!res.ok) return { items: [] };
@@ -1060,7 +1060,7 @@ function PlayScreen(props: {
         adaptiveBand: adaptiveRef.current.band,
         level: props.level,
         school: settingsRef.current.school,
-        mode: settingsRef.current.quizMode,
+        mode: props.coupon.active ? "mixed" : settingsRef.current.quizMode,
         material: materialRef.current,
         recent: recentQuizRef.current,
         rng: drawRng,
@@ -1433,7 +1433,7 @@ function PlayScreen(props: {
       }
       props.onProgress(recordAnswer(props.progress, correct));
 
-      if (correct) maybeClaimCouponBonus(props.coupon, quiz.id);
+      maybeClaimCouponBonus(props.coupon, quiz.id, quiz.optionIndices?.[idx] ?? idx);
 
       const advance = () => {
         setQuizFlash(null);
@@ -1801,7 +1801,7 @@ function PlayScreen(props: {
               <div className="w-full max-w-md rounded-xl border border-sky-400/50 bg-slate-900/95 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-sky-300">
-                    {quizReason === "anchor" ? "Horgonyzási kérdés" : "Viharkérdés"} · {SUBJECT_LABEL[activeQuiz.subject]}
+                    {quizReason === "anchor" ? "Horgonyzási kérdés" : "Viharkérdés"} · {activeQuiz.topic || SUBJECT_LABEL[activeQuiz.subject]}
                     {activeQuiz.source === "material" ? " · tananyag" : ""}
                   </span>
                 </div>

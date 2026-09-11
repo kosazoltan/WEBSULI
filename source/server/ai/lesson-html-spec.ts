@@ -1,6 +1,7 @@
 import { LESSON_FONT_CSS, LESSON_TYPOGRAPHY_CONTRACT, lessonFontPair, type LessonFont } from "../../shared/lesson-typography";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
+import { HTML_INTERACTION_CONTRACT } from "../../shared/lesson-interactions";
 /**
  * Tananyag Készítő v7.4 — a HTML-tananyagot gyártó AI-utak KÖZÖS specifikációja.
  *
@@ -441,6 +442,7 @@ HTML: <span class="[prefix]-en" data-tts="apple">apple</span> <button class="[pr
 
 ## MAGYAR ÉKEZETEK ÉS BETŰTÍPUSOK — ELLENŐRZÖTT HELYI KÉSZLET
 ${LESSON_TYPOGRAPHY_CONTRACT}
+${HTML_INTERACTION_CONTRACT}
 A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" content="text/html; charset=utf-8">; <html lang="hu">.
 
 ## TECHNIKAI KÖVETELMÉNYEK

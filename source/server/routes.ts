@@ -852,6 +852,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/health', (_req, res) => {
     res.status(200).json({
       status: 'ok',
+      revision: /^[a-f0-9]{40}$/i.test(process.env.RENDER_GIT_COMMIT ?? '') ? process.env.RENDER_GIT_COMMIT : null,
       timestamp: Date.now(),
       uptime: process.uptime()
     });
@@ -1048,7 +1049,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "classroom 0–12 között legyen." });
       }
       const limit = Number.isFinite(limitRaw) ? limitRaw : 3;
-      const result = await gameQuizBankService.listLatestMaterialQuizzes(classroomRaw, limit);
+      const lessonId = typeof req.query.lessonId === "string" && req.query.lessonId.length <= 128 ? req.query.lessonId : undefined;
+      const result = await gameQuizBankService.listLatestMaterialQuizzes(classroomRaw, limit, lessonId);
       res.json({
         classroom: result.classroom,
         materials: result.materials,
@@ -1062,6 +1064,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // T-1: a magyarázat is menjen ki, különben a játék némán büntet.
           explanation: r.explanation,
           sourceMaterialId: r.sourceMaterialId,
+          questionVersion: r.questionVersion,
+          feedbackPerOption: r.feedbackPerOption,
+          coversConceptIds: r.coversConceptIds,
         })),
       });
     } catch (e) {

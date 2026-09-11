@@ -20,6 +20,7 @@ export type SchoolLevel = 1 | 2 | 3 | 4 | 5 | 6 | "auto";
 export type Question = {
   id: string;
   subject: Subject;
+  topic?: string | null;
   /** School grade, 1..6. */
   grade: number;
   prompt: string;
@@ -29,6 +30,7 @@ export type Question = {
   /** 1..5 within the grade. */
   difficulty: number;
   source: "bank" | "material";
+  optionIndices?: number[];
 };
 
 export type Rng = () => number;
@@ -154,6 +156,7 @@ export function materialToQuestions(rows: readonly MaterialRow[], grade: number)
       options: options as string[],
       correctIndex: row.correctIndex,
       explanation: row.explanation,
+      topic: row.topic,
       difficulty: 3,
       source: "material",
     });
@@ -419,6 +422,7 @@ export function shuffleOptions(q: Question, rng: Rng = Math.random): Question {
   return {
     ...q,
     options: idx.map((i) => q.options[i]!),
+    optionIndices: idx.map(i => q.optionIndices?.[i] ?? i),
     correctIndex: idx.indexOf(q.correctIndex),
   };
 }

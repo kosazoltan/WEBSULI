@@ -600,6 +600,7 @@ export const knowledgeMaps = pgTable(
       .$type<Array<{ name: string; kind: string; pages?: number }>>(),
     /** A kivonatolt nyers forrásszöveg — ehhez mérjük a szó szerinti idézeteket (D1). */
     sourceText: text("source_text"),
+    classification: jsonb("classification").$type<import("./source-classification").ScopeClassification>(),
     inputHash: varchar("input_hash", { length: 64 }).notNull().unique(),
     model: varchar("model", { length: 120 }),
     createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
@@ -846,6 +847,8 @@ export const coupons = pgTable(
     reason: varchar("reason", { length: 24 }).notNull(),
     servedItems: jsonb("served_items").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
     claimedItems: jsonb("claimed_items").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
+    quizSnapshot: jsonb("quiz_snapshot").notNull().default(sql`'[]'::jsonb`).$type<import("./coupon-quiz").CouponQuizQuestion[]>(),
+    quizAnswers: jsonb("quiz_answers").notNull().default(sql`'{}'::jsonb`).$type<Record<string, import("./coupon-quiz").CouponQuizAnswer>>(),
     issuedAt: timestamp("issued_at").notNull().defaultNow(),
     serverStartedAt: timestamp("server_started_at"),
     expiresAt: timestamp("expires_at").notNull(),

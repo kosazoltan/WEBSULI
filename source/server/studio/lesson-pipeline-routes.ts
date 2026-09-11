@@ -257,14 +257,18 @@ export async function runOneStep(
   data: OneStepRequest,
   userId: string | undefined,
 ): Promise<void> {
-  const { files, title } = data;
+  const { title } = data;
+  const { normalizeDocumentSources } = await import("./document-source");
+  const { createCachedSourceOcr } = await import("./run-extraction");
+  const files = await normalizeDocumentSources(data.files, await createCachedSourceOcr(resolveStudioModel("ocr")));
 
   // 1) The source determines the grade, including for legacy clients sending scope.
   let scope: { subject: string; classroom: number };
   let inferredTitle: string | undefined;
+  let classification: import("../../shared/source-classification").ScopeClassification;
   {
     updateRun(runId, { phase: "ocr", detail: "Tantárgy és osztály felismerése…" });
-    const inferred = await inferOneStepScope(data, (f) =>
+    const inferred = await inferOneStepScope({ ...data, files }, (f) =>
       callScopeModel(f, resolveStudioModel("ocr")),
     );
     if (!inferred.ok) {
@@ -276,6 +280,7 @@ export async function runOneStep(
     }
     scope = inferred.scope;
     inferredTitle = inferred.title;
+    classification = inferred.classification;
   }
 
   // 2) Map: reuse by content hash or extract now (same as /maps/extract).
@@ -299,6 +304,7 @@ export async function runOneStep(
       mapId = await runExtraction({
         files: files as ExtractorFile[],
         scope,
+        classification,
         title: title ?? inferredTitle,
         inputHash,
         config,

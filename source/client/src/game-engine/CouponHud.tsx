@@ -52,7 +52,7 @@ export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
 
   const back =
     session.lessonId !== null
-      ? `/lesson/${session.lessonId}#section-${(session.sectionIdx ?? 0) + 1}`
+      ? `/lesson/${session.lessonId}${session.sectionIdx != null && session.sectionIdx >= 0 ? `#section-${session.sectionIdx + 1}` : ""}`
       : "/games";
 
   return (

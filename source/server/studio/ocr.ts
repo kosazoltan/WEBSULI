@@ -165,11 +165,19 @@ export async function callOcrModel(file: ExtractorFile, model: string): Promise<
         },
   );
 
-  const params = ocrRequestParams(model, file.content);
+  const imageParams = ocrRequestParams(model, file.content);
+  const params = file.kind === "pdf" ? { ...imageParams, max_completion_tokens: 24000,
+    messages: [
+      { role: "system", content: OCR_SYSTEM_PROMPT + " Transcribe every PDF page and label its page number. Preserve formulas and units. Mark unreadable text explicitly." },
+      { role: "user", content: [{ type: "file", file: { filename: file.name, file_data: file.content } }] },
+    ] } : imageParams;
   // A `reasoning` OpenRouter-bővítés; az openai SDK típusa nem ismeri.
   const response = await client.chat.completions.create(
     params as unknown as Parameters<typeof client.chat.completions.create>[0],
   );
-  if ("choices" in response) return response.choices[0]?.message?.content?.trim() ?? "";
+  if ("choices" in response) {
+    if (response.choices[0]?.finish_reason !== "stop") throw new Error("A forrás átírása csonkolt; teljes szöveg szükséges.");
+    return response.choices[0]?.message?.content?.trim() ?? "";
+  }
   return "";
 }

@@ -776,10 +776,10 @@ export default function SpaceAsteroidQuiz() {
 
   // ----- Quiz bank lekérdezés (osztály-alapú) -----
   const { data: materialQuizData } = useQuery<MaterialQuizApi>({
-    queryKey: ["/api/games/material-quizzes", grade],
-    enabled: grade != null,
+    queryKey: ["/api/games/material-quizzes", grade, coupon.lessonId],
+    enabled: grade != null || !!coupon.lessonId,
     queryFn: async () => {
-      const res = await fetch(`/api/games/material-quizzes?classroom=${grade}&limit=3`, {
+      const res = await fetch(`/api/games/material-quizzes?classroom=${grade ?? 0}&limit=3${coupon.lessonId ? `&lessonId=${encodeURIComponent(coupon.lessonId)}` : ""}`, {
         credentials: "include",
       });
       if (!res.ok) return { classroom: grade ?? 0, materials: [], items: [] };
@@ -803,8 +803,8 @@ export default function SpaceAsteroidQuiz() {
       }));
     const fb = FALLBACK_QUIZZES.map((q) => ({ ...q, source: "fallback" as const }));
     // Tananyag-kvízek elöl, fallback hátul.
-    return [...fromMat, ...fb];
-  }, [materialQuizData]);
+    return coupon.active && fromMat.length ? fromMat : [...fromMat, ...fb];
+  }, [materialQuizData, coupon.active]);
 
   const recentQuizPromptsRef = useRef<string[]>([]);
   const RECENT_WINDOW = 12;
@@ -977,6 +977,7 @@ export default function SpaceAsteroidQuiz() {
     answerLockedRef.current = true;
     adaptiveRef.current.answer(idx === activeQuiz.correctIndex);
     if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
+    maybeClaimCouponBonus(coupon, activeQuiz.id, idx);
     if (idx !== activeQuiz.correctIndex) {
       sfxError();
       setWrongShake(true);
@@ -1007,7 +1008,7 @@ export default function SpaceAsteroidQuiz() {
     }
     // Helyes válasz
     sfxSuccess();
-    maybeClaimCouponBonus(coupon, activeQuiz.id);
+
     setActiveQuiz(null);
     setRevealCorrectIdx(null);
     setWrongIdx(null);

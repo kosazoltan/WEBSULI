@@ -1227,7 +1227,7 @@ export default function BlockCraftQuiz() {
   // Az osztály-szintű tananyag-bázis: a játékos legutóbbi 3 anyagából AI-vel
   // generált kvíz-tételek (Claude). Ha még nincs kapcsolt kérdés, üres marad.
   const { grade: userGrade } = useClassroomGrade();
-  const { items: materialItems } = useMaterialQuizzes(userGrade);
+  const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
   const bank = useMemo<Quiz[]>(() => {
     // 1) Tananyag-kvízek (AI-generált, az osztályod legutóbbi 3 anyagából).
@@ -1259,8 +1259,8 @@ export default function BlockCraftQuiz() {
         subject: "english" as QuizSubject,
       }));
     // 3) Statikus fallback (Minecraft-tematikus angol/matek/környezet/magyar)
-    return [...fromMaterial, ...remote, ...QUIZ_FALLBACK];
-  }, [bankData, materialItems]);
+    return coupon.active && fromMaterial.length ? fromMaterial : [...fromMaterial, ...remote, ...QUIZ_FALLBACK];
+  }, [bankData, materialItems, coupon.active]);
 
   /**
    * Stratified pool: a kvízeket tantargy szerint csoportosítja és minden
@@ -1369,8 +1369,8 @@ export default function BlockCraftQuiz() {
       subjectCursorsRef.current.set(subj, cursor);
     }
     // Végső fallback — sose kellene idejutnunk.
-    return QUIZ_FALLBACK[Math.floor(Math.random() * QUIZ_FALLBACK.length)] ?? QUIZ_FALLBACK[0]!;
-  }, [rebuildSubjectPools, subjectOrder]);
+    return bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!;
+  }, [bank, rebuildSubjectPools, subjectOrder]);
 
   /** Bányász-kvíz indítása egy konkrét voxelre (a crosshair-cél). */
   const tryMineAt = useCallback(
@@ -1909,6 +1909,7 @@ export default function BlockCraftQuiz() {
     adaptiveRef.current.answer(idx === quiz.correctIndex);
     const nextBudget = adaptiveTimeBudget(activeLevelRef.current.timeLimit, adaptiveRef.current.band);
     setTimeLeft(t => Math.max(1, Math.min(nextBudget, t + nextBudget - previousBudget)));
+    maybeClaimCouponBonus(coupon, quiz.id, idx);
     if (idx !== quiz.correctIndex) {
       sfxError();
       setWrongShake(true);
@@ -1943,7 +1944,7 @@ export default function BlockCraftQuiz() {
     }
 
     sfxSuccess();
-    maybeClaimCouponBonus(coupon, quiz.id);
+
     const tgt = mineTargetRef.current;
     let levelGoalReached = false;
     if (tgt) {

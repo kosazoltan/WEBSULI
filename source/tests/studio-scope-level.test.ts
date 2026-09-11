@@ -19,7 +19,8 @@ import { inferScope, scopeRequestParams } from "../server/studio/one-step";
  * A javítás után MÉRVE: a valódi forrásszövegből 7, a valódi képekből is 7.
  */
 
-test("a scope-prompt a tartalom legnehezebb fogalmához horgonyoz, nem találgat", () => {
+// 2026-09-11: approved release contract replaces automatic upward bias with reasoned scope/range.
+test("a scope-prompt a fő tanulási célokhoz horgonyoz és indokolja a bizonytalanságot", () => {
   const params = scopeRequestParams("teszt/modell", [{ type: "text", text: "minta" }]);
   const system = String(params.messages[0].content);
 
@@ -28,8 +29,10 @@ test("a scope-prompt a tartalom legnehezebb fogalmához horgonyoz, nem találgat
     /most likely written for/i,
     "a találgatásra hívó megfogalmazás nem térhet vissza",
   );
-  assert.match(system, /HARDEST concept/i, "a legnehezebb fogalomhoz kell horgonyozni");
-  assert.match(system, /HIGHER grade/i, "kétes esetben a magasabb évfolyam a biztonságos default");
+  assert.match(system, /dominant learning goals/i);
+  assert.match(system, /prerequisite knowledge/i);
+  assert.match(system, /grade range and lower confidence/i);
+  assert.match(system, /do not automatically choose the higher grade/i);
   assert.match(
     system,
     /Ignore handwriting quality/i,

@@ -58,9 +58,9 @@ if (reviewOnly) {
 }
 const resumed = process.argv.includes("--verified-teaching");
 const { candidate, review } = resumed
-  ? await finishStructuredImprovement(lesson, lessonSchema.parse(JSON.parse(await readFile(new URL("verified-teaching.json", originalOut), "utf8"))), sourceMap, call, progress)
+  ? await finishStructuredImprovement(lesson, lessonSchema.parse(JSON.parse(await readFile(new URL("verified-teaching.json", out), "utf8"))), sourceMap, call, progress)
   : await buildStructuredImprovement(lesson, sourceMap, call,
-  "A korábbi próbán a lektor forráseltérést talált: az általános területképlet a kurált forrás kiegészítő téglalapjával legyen levezetve. Az a=12 cm, m_a=25 cm, T=150 cm², m_b=15 cm, b=20 cm teljes példaláncot tanítsd meg explain/example blokkban. A többi jól tanított forrástartalom is maradjon.",
+  "A korábbi próbán a lektor forráseltérést talált: az általános területképlet a kurált forrás kiegészítő téglalapjával legyen levezetve. Az a=12 cm, m_a=25 cm, T=150 cm², m_b=15 cm, b=20 cm teljes példaláncot tanítsd meg explain/example blokkban. A teljes számpélda azonban geometriailag ellentmondásos: m_a=25 nagyobb b=20-nál. Ezt hibaelemzésként tanítsd meg, az eredeti számok megőrzésével; ne állítsd, hogy ilyen háromszög létezik. A többi jól tanított forrástartalom is maradjon.",
   progress);
 await writeFile(new URL("candidate.json", out), JSON.stringify(candidate, null, 2));
 await writeFile(new URL("review.json", out), JSON.stringify(review, null, 2));

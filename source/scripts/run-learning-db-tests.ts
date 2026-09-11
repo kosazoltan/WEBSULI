@@ -37,6 +37,14 @@ try {
   const migration = await readFile(new URL("../migrations/0016_lesson_attempts.sql", import.meta.url), "utf8");
   await pool.query(migration);
   await pool.query(migration);
+  await pool.query("ALTER TABLE coupons DROP COLUMN quiz_snapshot, DROP COLUMN quiz_answers");
+  const couponMigration = await readFile(new URL("../migrations/0017_coupon_quiz_answers.sql", import.meta.url), "utf8");
+  await pool.query(couponMigration);
+  await pool.query(couponMigration);
+  await pool.query("ALTER TABLE knowledge_maps DROP COLUMN classification");
+  const sourceMigration = await readFile(new URL("../migrations/0018_source_classification.sql", import.meta.url), "utf8");
+  await pool.query(sourceMigration);
+  await pool.query(sourceMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {

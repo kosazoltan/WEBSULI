@@ -24,4 +24,6 @@ A részletes méretkeretek, pontozás, hibakörök, publikus és tárolási szer
 
 ## Magyar tipográfia — jóváhagyott korrekció (2026-09-10)
 
+A közös módszer 2026-09-11-es kiegészítése is kötelező: tényleges PDF/DOCX szöveg, teljes-forrás összevetés, indokolt gépi besorolás; témához illő közös geometriai labor/döntési történet HTML-ben és Studio-ban; szerveren ellenőrzött első játékbónusz-válasz és visszatérés a leckéhez. A grafika és a szóbeli gyakorlat nem helyettesíti a forráshű tanítást vagy a tanári értékelést.
+
 A korábbi Google Fonts / glyph-warmup előírást felváltja a `source/shared/lesson-typography.ts` szerződés. Kizárólag a repóban ellenőrzött Nunito, Source Sans 3, Source Serif 4 családok használhatók tananyagszöveghez; normál és dőlt fájlok a `source/client/public/fonts/` alatt. HTML-ben `/fonts/lesson-fonts.css`, külső font nélkül. Az ékezethelyességet a tényleges cmap és Chrome által használt font ellenőrzi, nem a fallback neve. A hibás Unicode-szöveget külön vizsgáld; ne állítsd, hogy betűcsere önmagában javítja.

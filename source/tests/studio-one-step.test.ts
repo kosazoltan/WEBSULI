@@ -53,6 +53,7 @@ test("inferScope: a modell JSON-jából tantárgy+osztály, osztály 0-12 közé
     ok: true,
     scope: { subject: "Természetismeret", classroom: 4 },
     title: "Kert és park",
+    classification: { reason: "A besoroláshoz nem érkezett ellenőrizhető indoklás; bizonytalan gépi javaslat.", confidence: "low", gradeRange: [4, 4], mixedContent: false },
   });
   const clamped = await inferScope([], async () => '{"subject":"X","classroom":99}');
   assert.equal(clamped.ok, true);
