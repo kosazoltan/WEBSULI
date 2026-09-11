@@ -6,6 +6,6 @@ Hatókör: step-runner.ts verziókonstansa; lesson-pipeline-runner.test.ts regre
 
 Elfogadás: a jelenlegi konstanssal előbb bukó, majd javítás után zöld szélességteszt; valódi startJobFromMap tranzakciós próba sikeres és visszagörgetett; verify és CI sikeres. Éles kiadás után normál Chrome-indítás ténylegesen létrehozza a munkát, majd a korábbi teljes publikációs ellenőrzés folytatódik.
 
-Visszaállítás: d2fe956 kódpont, meglévő teljes visszaállítással kipróbált adatmentés. Jelenleg nincs futó növényes job, csak lezárt indítási hiba. A kiadás nem szakíthat aktív gyártást.
+Visszaállítás: a korábbi működő `1f123c9` kódpont, vagy olyan verzió, amely már megtartja a rövid promptnevet. A `d2fe956` csak a hibás kiinduló állapot azonosítója: önmagában újra a 33 karakteres név hibáját aktiválná, ezért új gyártáshoz nem használható rollbackként. A meglévő teljes adatmentés visszaállítási próbája sikeres. A javítás előtt nincs futó növényes job, csak lezárt indítási hiba. A kiadás nem szakíthat aktív gyártást.
 
 Bizonyíték: a regresszió előbb 33 > 32 miatt bukott. A javított név 25 karakter; a valódi adatbázison a startJobFromMap INSERT és output-mentés sikeres, a próba ROLLBACK-kel zárult. A célzott pipeline 30/30, a teljes egységteszt 1117/1117 (0 kihagyott) PASS. A vizsgálat nem hívott tananyagot készítő modellt, és nem módosította a régi publikált leckét.
