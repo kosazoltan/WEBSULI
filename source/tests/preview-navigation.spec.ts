@@ -9,7 +9,7 @@ for (const [width,height] of [[390,844],[844,390],[1440,900]]) {
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/config') return route.fulfill({json:{baseUrl:'http://localhost',materialOrigin:''}});
       if(path==='/api/html-files/preview-fixture') return route.fulfill({json:{id:'preview-fixture',title:'Háromszög',contentType:'lesson'}});
-      if(path==='/api/lessons/by-file/preview-fixture') return route.fulfill({json:{lesson:compactFusionFixture()}});
+      if(path==='/api/lessons/by-file/preview-fixture') return route.fulfill({json:{lessonId:'preview-lesson-fixture',version:1,lesson:compactFusionFixture()}});
       return route.fulfill({status:401,json:{message:'Anonymous fixture'}});
     });
     await page.goto('/preview/preview-fixture');
@@ -38,7 +38,7 @@ test('preview reload fetches fresh lesson data and new tab opens the lesson', as
     if(url.pathname==='/api/html-files/preview-fixture') return route.fulfill({json:{id:'preview-fixture',title:'Háromszög',contentType:'lesson'}});
     if(url.pathname==='/api/lessons/by-file/preview-fixture') {
       const lesson=compactFusionFixture();lesson.title=++reads===1?'Eredeti tanítás':'Frissített tanítás';
-      return route.fulfill({json:{lesson}});
+      return route.fulfill({json:{lessonId:'preview-lesson-fixture',version:reads,lesson}});
     }
     return route.fulfill({status:401,json:{message:'Anonymous fixture'}});
   });
