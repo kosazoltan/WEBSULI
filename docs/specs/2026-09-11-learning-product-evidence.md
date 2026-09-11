@@ -26,4 +26,12 @@ A GitHub által igazolt utolsó sikeres Vercel Production commit a kiadás előt
 
 ## Mérés határai
 
+## CI-környezet egyezése
+
+A PR #45 első általános CI-futásában a két mockolt hálózati csomagból négy lista-próba hibázott, a szószedet bizonytalan volt (119 másik sikeres). A riport tényleges seed listát, illetve a lokálisan befogott jelölt helyett 404-et mutatott. A célzott konfigurációkban már alkalmazott `serviceWorkers: block` beállítás a két tesztfájlba került, így az általános konfigurációban sem kerüli meg a service worker a hibaszimulációt. Egyetlen elvárás vagy próbálkozásszám sem csökkent. A [Playwright dokumentáció](https://playwright.dev/docs/network#missing-network-events-and-service-workers) ezt a hálózati mockokhoz írja elő. PASS: mind a 14 érintett böngészőteszt az általános CI-konfigurációval, saját eldobható PostgreSQL 17 adatbázissal, 52,1 másodperc alatt; teszt-típusellenőrzés és lint is sikeres.
+
+A négy betűkészlet-próba ismételt futása is sikeres: valódi Chrome-ban a magyar kettős ékezetek, kis- és nagybetűk, normál/dőlt változatok, a ténylegesen használt font és a különböző képernyőméretek ellenőrzése.
+
+## Mérés határai és kiadás
+
 A telefonméretek asztali Chrome-ban emulált viewportok; fizikai iOS/Android készüléken nem futott próba. A játékok rövid fekvő menüiben egyes másodlagos tartalmak belső görgetést igényelhetnek; a fő vezérlők elérését a tesztek külön ellenőrzik. Gyermekrésztvevős tanulási hatásvizsgálat még nem történt. A hozzá tartozó, mérhető próbaterv külön dokumentum.

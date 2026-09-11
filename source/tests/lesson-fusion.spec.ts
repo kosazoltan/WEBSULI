@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 
+// Keep the candidate JSON interception identical in the focused and general CI runs.
+test.use({ serviceWorkers: "block" });
+
 for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900], [2560, 1440]]) {
   test(`four pages, written tasks and frozen quiz scoring at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });

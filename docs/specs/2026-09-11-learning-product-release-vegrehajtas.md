@@ -9,4 +9,6 @@
 
 ## Állapot
 
+- CI #34559966293: 119 böngészőteszt sikeres, 4 lista-helyreállítás sikertelen, 1 szószedet-próba bizonytalan. A riportban a szimulált 500 helyett a valódi seed lista, a szószedetnél hiányzó jelölt látszik. A célzott konfiguráció tiltja a service workert a hálózati mockok mellett, az általános CI-konfiguráció nem. A tesztfájlokhoz kell kötni ezt a már meglévő izolációt, változatlan elvárásokkal. A produkciós service worker működését ez nem változtatja meg. Ezután az általános konfigurációval és eldobható adatbázison kell futtatni a két érintett csomagot, majd új CI.
+
 - Kezdés: 20 helyi commit az origin/main előtt, nincs távoli eltérés, még nincs PR. Követett worktree tiszta; a korábbi négy ismeretlen untracked bejegyzés megőrizve. Kiadásra explicit tulajdonosi engedély van.

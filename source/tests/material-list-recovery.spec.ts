@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+// These tests inject outages with page.route. Service-worker-owned fetches bypass
+// that fixture and accidentally return the real seed list under the general CI config.
+test.use({ serviceWorkers: "block" });
+
 const material = { id: "recovery-test", userId: null, title: "Kapcsolat után visszatért tananyag", content: "", description: "Geometria", classroom: 7, createdAt: "2026-09-10T10:00:00Z" };
 
 test.beforeEach(async ({ page }) => {
