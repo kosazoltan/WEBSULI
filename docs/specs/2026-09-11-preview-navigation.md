@@ -13,6 +13,7 @@ A strukturált leckénél az előnézeti eszközsáv a dokumentum természetes r
 - Amikor a tanuló a tényleges előnézetben lapot vált, mind a négy lapfül látható és a középpontja egérrel/érintéssel ténylegesen elérhető, nem takarja másik elem.
 - 390×844, 844×390 és 1440×900 méretben nincs vízszintes túlcsordulás. A kvíz lezáró gombja a képernyőn belül marad; álló/fekvő teljes képernyős kép szükséges.
 - A HTML/PDF továbbra is a rögzített eszközsáv alatti iframe-ben nyílik meg.
+- A strukturált lecke Újratöltés gombja valóban újra lekéri a lecke JSON-ját; az Új tab a lecke előnézetét nyitja, nem a HTML-helyőrzőt. Abszolút iframe-origin esetén sem fűzhet két origint egymás mögé.
 - Típusellenőrzés, lint, célzott Chrome-próba, zöld PR CI, merge/deploy és éles visszaellenőrzés.
 
 ## Kiadás

@@ -29,3 +29,26 @@ for (const [width,height] of [[390,844],[844,390],[1440,900]]) {
     await page.screenshot({path:`test-results/preview-tabs-${width}.png`});
   });
 }
+
+test('preview reload fetches fresh lesson data and new tab opens the lesson', async ({page}) => {
+  let reads=0;
+  await page.route('**/api/**', route => {
+    const url=new URL(route.request().url());
+    if(url.pathname==='/api/config') return route.fulfill({json:{baseUrl:url.origin,materialOrigin:'https://material.example'}});
+    if(url.pathname==='/api/html-files/preview-fixture') return route.fulfill({json:{id:'preview-fixture',title:'Háromszög',contentType:'lesson'}});
+    if(url.pathname==='/api/lessons/by-file/preview-fixture') {
+      const lesson=compactFusionFixture();lesson.title=++reads===1?'Eredeti tanítás':'Frissített tanítás';
+      return route.fulfill({json:{lesson}});
+    }
+    return route.fulfill({status:401,json:{message:'Anonymous fixture'}});
+  });
+  await page.goto('/preview/preview-fixture');
+  await expect(page.getByRole('heading',{name:'Eredeti tanítás',exact:true})).toBeVisible();
+  await page.getByTestId('button-reload-iframe').click();
+  await expect(page.getByRole('heading',{name:'Frissített tanítás',exact:true})).toBeVisible();
+  const popupPromise=page.waitForEvent('popup');
+  await page.getByTestId('button-open-new-tab').click();
+  const popup=await popupPromise;
+  await expect(popup).toHaveURL(new URL('/preview/preview-fixture',page.url()).href);
+  await popup.close();
+});

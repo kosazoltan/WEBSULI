@@ -3,7 +3,7 @@ import { ArrowLeft, Share2, Copy, Check, ExternalLink, RotateCw } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HtmlFile } from "@shared/schema";
 import { useConfig } from "@/lib/useConfig";
 import { LessonView } from "@/lesson-runtime/LessonView";
@@ -14,6 +14,7 @@ export default function Preview() {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const queryClient = useQueryClient();
   
   // Get correct base URL from backend (CUSTOM_DOMAIN in prod, localhost in dev)
   const { baseUrl, materialOrigin, isLoading: configLoading } = useConfig();
@@ -42,6 +43,9 @@ export default function Preview() {
   const renderUrl = `${materialOrigin}/dev/${params?.id}`;
   
   const handleReloadIframe = () => {
+    if (isLesson) {
+      void queryClient.invalidateQueries({ queryKey: ["/api/lessons/by-file", material?.id] });
+    }
     if (iframeRef.current) {
       // Force reload iframe by changing src to empty and back
       const currentSrc = iframeRef.current.src;
@@ -159,7 +163,7 @@ export default function Preview() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.open(`${window.location.origin}${renderUrl}`, '_blank')}
+              onClick={() => window.open(isLesson ? fullUrl : renderUrl, '_blank', 'noopener,noreferrer')}
               data-testid="button-open-new-tab"
               className="shrink-0"
             >
