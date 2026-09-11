@@ -5,7 +5,7 @@ import { experienceSchema, experienceTheme } from "../shared/lesson-experience";
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
-import { applyBankPacketRepair, buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
+import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
 import { planLessonBank } from "../shared/lesson-bank-plan";
 
@@ -244,4 +244,81 @@ test("repair regenerates only the changed section and preserves other packet IDs
   assert.equal(calls, 1);
   assert.deepEqual(repaired.quiz.filter(q => q.sectionIndex === 0), first.quiz.filter(q => q.sectionIndex === 0));
   assert.notEqual(repaired.quiz.find(q => q.sectionIndex === 1)!.id, first.quiz.find(q => q.sectionIndex === 1)!.id);
+});
+
+test("reviewed bank indices resolve before rewriting; unknown targets are global and admin-only notes excluded", () => {
+  const lesson = compactFusionFixture();
+  const feedback = resolveBankReview(lesson, [
+    { kind: "language", blockPath: "experience.tasks.0.sample", message: "Javítsd a mondat alanyát." },
+    { kind: "source_conflict", blockPath: "experience.quiz[1]", message: "Téves megoldás." },
+    { kind: "language", blockPath: "experience.tasks.999", message: "Hibás hivatkozás." },
+    { kind: "age", message: "Túl nehéz megfogalmazás." },
+    { kind: "language", blockPath: "sections.0.blocks.1", message: "Tanítási hiba." },
+    { kind: "source_conflict", subkind: "book_probably_wrong", blockPath: "experience.tasks.0", message: "Csak az adminnak." },
+  ]);
+  assert.equal(feedback.length, 4);
+  assert.deepEqual(feedback[0].conceptIds, ["area"]);
+  assert.deepEqual(feedback[1].previousItem, lesson.experience!.quiz[1]);
+  assert.equal(feedback[2].conceptIds, undefined); assert.equal(feedback[3].conceptIds, undefined);
+});
+
+test("short sample repair receives actual and required word counts without lowering the threshold", async () => {
+  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const short = { ...e.tasks[0], sample: "Az alap és a magasság szorzatának fele.", minWords: 10 };
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+    if (++calls === 1) return { methods: e.methods, tasks: [short, e.tasks[1]], quiz: e.quiz, glossary: [] };
+    assert.match(user, /A minta szószáma: 7; minWords: 10/);
+    return { tasks: [{ ...short, sample: "A háromszög területe az alap és a hozzá tartozó magasság szorzatának fele." }] };
+  } });
+  assert.equal(calls, 2); assert.equal(result.tasks[0].minWords, 10);
+  assert.equal(evaluateOpenAnswer(result.tasks[0].sample, result.tasks[0]).score, 1);
+});
+
+test("bank review invalidates only its packet, resumes the repair and never revives the rejected base", async () => {
+  const lesson = compactFusionFixture();
+  const second = structuredClone(lesson.sections[0]); second.heading = "Második összefüggés";
+  second.blocks.forEach(b => { if ("coversConceptIds" in b) b.coversConceptIds = ["height"]; });
+  lesson.sections.push(second);
+  const packets = [0, 1].map(sectionIndex => {
+    const e = structuredClone(compactFusionFixture().experience!);
+    for (const i of [...e.methods, ...e.tasks, ...e.quiz]) { i.sectionIndex = sectionIndex; i.coversConceptIds = [sectionIndex ? "height" : "area"]; }
+    if (sectionIndex) { e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
+    return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+  });
+  let calls = 0, checkpoint: ExperienceCheckpoint | undefined;
+  const save = async (cp: ExperienceCheckpoint) => { checkpoint = structuredClone(cp); };
+  const first = await buildLessonExperience(lesson, [], { call: async () => structuredClone(packets[calls++]), save });
+  lesson.experience = first;
+  const reviewFeedback = resolveBankReview(lesson, [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.2", message: "A kérdés több példát enged, a rubrika csak egyet fogad el." }]);
+  calls = 0;
+  const repaired = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback, save, call: async (system, user) => {
+    calls++; assert.match(system, /rubrika csak egyet fogad el/); assert.match(system, /previousItem/); assert.match(user, /LEKTORI JAVÍTÁS/);
+    return { tasks: [{ ...first.tasks[2], q: "Pontosított második kérdés a területről" }] };
+  } });
+  assert.equal(calls, 1);
+  assert.deepEqual(repaired.quiz.filter(q => q.sectionIndex === 0), first.quiz.filter(q => q.sectionIndex === 0));
+  assert.notEqual(repaired.tasks[2].q, first.tasks[2].q);
+  const neverCall = async () => { throw new Error("A javított csomag már elkészült."); };
+  assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback, call: neverCall }), repaired);
+  assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, call: neverCall }), repaired);
+  const nextFeedback = resolveBankReview({ ...lesson, experience: repaired }, [{ kind: "language", blockPath: "experience.tasks.3", message: "A másik feladat nyelvi javítása." }]);
+  const next = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback: nextFeedback, save, call: async () => ({ tasks: [{ ...repaired.tasks[3], q: "Másik feladat, pontosított megfogalmazással" }] }) });
+  assert.equal(next.tasks[2].q, repaired.tasks[2].q, "korábbi lektori javítás a következő célzott javításban is megmarad");
+  assert.equal(next.tasks[3].q, "Másik feladat, pontosított megfogalmazással");
+  assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, call: neverCall }), next);
+  calls = 0;
+  await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback: [{ ...reviewFeedback[0], conceptIds: ["removed"] }], call: async system => {
+    assert.match(system, /rubrika csak egyet fogad el/); return structuredClone(packets[calls++]);
+  } });
+  assert.equal(calls, 2, "feloldhatatlan fogalomhivatkozás nem veszhet el");
+});
+
+test("content review may fix the criticized rubric but cannot rewrite unrelated items or glossary", () => {
+  const e = compactFusionFixture().experience!;
+  const allowed = new Set([e.tasks[0].id]);
+  const corrected = { ...e.tasks[0], q: "Egyértelmű kérdés", required: [["helyes"]] };
+  assert.deepEqual(applyBankPacketRepair(e, { tasks: [corrected] }, allowed).tasks[0], corrected);
+  assert.throws(() => applyBankPacketRepair(e, { tasks: [{ ...e.tasks[1], q: "Nem kért átírás" }] }, allowed), /nem érintett/);
+  assert.throws(() => applyBankPacketRepair(e, { glossary: [{ word: "a", translation: "egy", partOfSpeech: "névelő", example: "A cat", exampleTranslation: "Egy macska" }] }, allowed), /szószedet/);
 });

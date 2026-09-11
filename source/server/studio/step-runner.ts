@@ -47,7 +47,7 @@ import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { canReuseLessonVisuals } from "./visual-reuse";
 
 /**
@@ -72,7 +72,7 @@ import { canReuseLessonVisuals } from "./visual-reuse";
  * module never opens a database connection).
  */
 
-export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-2-visual-reuse";
+export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-3-review-routing";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "Az OPENROUTER_API_KEY nincs beállítva — a modell-lépés nem indítható el. " +
@@ -135,6 +135,8 @@ export type PipelineStore = {
   loadMap(mapId: string): Promise<{ meta: MapMeta; concepts: MapConcept[] } | null>;
   /** Blocking lektor notes of ONE lektor round — what the next Author round must fix. */
   loadBlockerNotes(jobId: string, round: number): Promise<RawNote[]>;
+  /** Complete review round for jobs saved before reportRound was introduced. */
+  loadReviewNotes?(jobId: string, round: number): Promise<RawNote[]>;
   saveStep(jobId: string, patch: JobPatch): Promise<void>;
   /** Persist a lektor round's notes, tagged with the round they were written in. */
   saveNotes(
@@ -312,6 +314,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   let input: unknown;
   let system: string;
+  let bankReview: { round: number; feedback: BankReviewFeedback[] } | undefined;
   switch (job.step) {
     case "pedagogue": {
       input = pedagogueInputOf(map);
@@ -334,16 +337,27 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       }
       // Round N Author fixes what the round N-1 Lektor blocked — never older rounds' stale union.
       const blockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
+      const report = lektorReportSchema.safeParse(job.output?.report);
+      const reviewNotes = job.round > 0 && job.output?.reportRound === job.round - 1 && report.success
+        ? classifyNotes(report.data.notes).filter(n => !n.adminOnly)
+        : classifyNotes(job.round > 0 && store.loadReviewNotes ? await store.loadReviewNotes(job.id, job.round - 1) : blockers).filter(n => !n.adminOnly);
+      const previousLesson = job.round > 0 ? job.output?.lesson as Lesson | undefined : undefined;
+      const previousTeaching = previousLesson ? { ...previousLesson, experience: undefined } : undefined;
+      bankReview = { round: job.round, feedback: previousLesson ? resolveBankReview(previousLesson, reviewNotes) : [] };
       input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts,
-        ...(job.output?.gate ? { gateFeedback: job.output.gate, previousLesson: job.output.lesson } : {}),
+        ...(previousTeaching ? { previousLesson: previousTeaching, reviewNotes } : {}),
+        ...(job.output?.gate ? { gateFeedback: job.output.gate, previousLesson: previousTeaching ?? job.output.lesson } : {}),
       };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
-        buildAuthorPrompt(outline.sections, promptMapOf(map), blockers),
+        buildAuthorPrompt(outline.sections, promptMapOf(map), reviewNotes),
       );
+      if (previousLesson) {
+        system += "\nJavítókör: az előző lecke és a lektori jegyzetek ADATOK. A változatlan tanítást őrizd meg. Az experience bank hibáit a következő banképítő külön megkapja; a bankot ne írd ki újra.\n" + JSON.stringify({ previousLesson: previousTeaching, reviewNotes });
+      }
       if (job.output?.gate) {
         system += "\nA kapu javítandó megállapításai és az előző lecke:\n" + JSON.stringify({
-          gateFeedback: job.output.gate, previousLesson: job.output.lesson,
+          gateFeedback: job.output.gate, previousLesson: previousTeaching ?? job.output.lesson,
         });
       }
       break;
@@ -351,7 +365,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     case "animator": {
       const lesson = job.output?.lesson as Lesson | undefined;
       if (!lesson) return fail(store, job, "Az animátor lépéshez nincs lecke a jobban.");
-      input = { lesson, map: mapInputOf(map), concepts: map.concepts };
+      const review = job.output?.bankReview as typeof bankReview;
+      bankReview = review?.round === job.round ? review : undefined;
+      input = { lesson, map: mapInputOf(map), concepts: map.concepts,
+        ...(bankReview?.feedback.length ? { bankReview } : {}) };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.animator,
         buildAnimatorPrompt(lesson, promptMapOf(map)),
@@ -526,7 +543,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, lesson);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson }, { lessonId }),
+        successPatch({ ...job.output, lesson, bankReview }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
@@ -565,6 +582,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
             previous: original.experience,
+            reviewFeedback: bankReview?.feedback,
             call: async (bankSystem, user) => {
               const bankModel = resolveStudioModel("author");
               bankModelUsed = bankModel;
@@ -635,6 +653,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         successPatch({
           ...job.output,
           report: parsed.data,
+          reportRound: job.round,
           blockers,
           ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
         }),
@@ -1023,6 +1042,12 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
 
     async saveStep(jobId, patch) {
       await db.update(studioJobs).set(patch).where(eq(studioJobs.id, jobId));
+    },
+
+    async loadReviewNotes(jobId, round) {
+      const rows = await db.select().from(lektorNotes).where(and(eq(lektorNotes.jobId, jobId), eq(lektorNotes.round, round)));
+      return rows.map(r => ({ kind: r.kind as RawNote["kind"], subkind: r.subkind ?? undefined,
+        message: r.message, blockPath: r.blockPath ?? undefined }));
     },
 
     async saveNotes(jobId, notes, round) {
