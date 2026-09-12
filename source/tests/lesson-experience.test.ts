@@ -17,6 +17,12 @@ test("new lesson banks require independently at least 15 text tasks and 15 quizz
   }
   const previous = { ...e, version: "fusion-7.4-2", tasks: e.tasks.slice(0, 2), quiz: e.quiz.slice(0, 2), bankPlan: { ...e.bankPlan!, taskRound: 2, quizRound: 2 } };
   assert.equal(experienceSchema.safeParse(previous).success, true, "existing small lessons remain readable");
+  const old = compactFusionFixture();
+  old.experience = experienceSchema.parse(previous);
+  assert.deepEqual(experienceProblems(old), []);
+  const teaching = old.sections[0].blocks.find(b => b.kind === "explain")!;
+  if (teaching.kind === "explain") teaching.coversConceptIds.push("uncovered");
+  assert.ok(experienceProblems(old).some(p => p.includes("bankterv")), "old bank coverage remains enforced");
 });
 
 test("oral-heavy banks still fill short and complete scored task rounds", () => {
