@@ -6,9 +6,10 @@ import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
-import { fetchedTeachingSources, teachingReviewEvidence, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
+import { fetchedTeachingSources, teachingReviewEvidence, TeachingReviewFailure, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { repairWebLessonBank } from "./web-bank-repair";
 import { reviewAndRepairWebTeaching } from "./web-teaching-repair";
+import { StepModelError } from "./run-step";
 
 export class WebResearchFailure extends Error {}
 export type ResearchArtifact = { html: string; sources: WebSource[]; reviewEvidence?: TeachingReviewEvidence };
@@ -210,6 +211,10 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     }
   } catch (error) {
     if (error instanceof WebResearchFailure) throw error;
+    if (error instanceof TeachingReviewFailure) throw new WebResearchFailure(error.message);
+    if (error instanceof StepModelError && !controller.signal.aborted) throw new WebResearchFailure(error.step === "lektor"
+      ? "A tartalmi lektorálás nem fejeződött be. A jelölt és a források megmaradtak; a mentett futás folytatható."
+      : "A célzott javító modellhívása nem fejeződött be. A jelölt és a források megmaradtak; a mentett futás folytatható.");
     logger.error("[WEB-RESEARCH] provider failure", { name: error instanceof Error ? error.name : "unknown", timedOut });
     throw new WebResearchFailure(timedOut ? "Időtúllépés: a keresés vagy a tananyagkészítés nem fejeződött be az időkeretben."
       : controller.signal.aborted ? "A kérés megszakadt." : "AI hiba történt a webes keresés közben.");

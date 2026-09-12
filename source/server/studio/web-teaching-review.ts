@@ -9,6 +9,7 @@ import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { workflowValidationFailure } from "../workflows/engine";
 
 export type FetchedTeachingSource = { url: string; title: string; text: string };
+export class TeachingReviewFailure extends Error {}
 export const sourceIsErrorPage = (source: FetchedTeachingSource) => /^(the url .* blocked|access denied|just a moment\.*|web page blocked!?|403 forbidden|404 not found)$/i.test(source.title.trim())
   || /^\s*(block\s+)?Web Page Blocked!/i.test(source.text);
 const fetchResult = z.object({ type: z.literal("web_fetch_tool_result"), content: z.object({
@@ -77,9 +78,10 @@ export function assertTeachingReviewEvidence(html: string, sources: { url: strin
 }
 const reviewerCall = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("lektor");
-  const deadline = AbortSignal.timeout(300_000);
+  // Full source sets plus per-issue evidence need more time than the former five booleans.
+  const deadline = AbortSignal.timeout(480_000);
   const options = providerForModel(model) === "xai" ? { apiMode: "responses" as const, reasoningEffort: "medium" as const } : {};
-  return (await callStepModel(createStudioProvider(model, 300_000, 8000, options), { step: "lektor", model, system, user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
+  return (await callStepModel(createStudioProvider(model, 480_000, 12_000, options), { step: "lektor", model, system, user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
 };
 export async function reviewWebTeaching(html: string, sources: FetchedTeachingSource[], call = reviewerCall, signal?: AbortSignal, requestedTopic = ""): Promise<TeachingReview> {
   if (!sources.length) throw new Error("A tartalmi lektorhoz nincs letöltött forrásszöveg; a keresési találat önmagában nem elegendő.");
@@ -104,7 +106,7 @@ Kimenet kizárólag JSON: {"checks":[{"criterion":"${TEACHING_REVIEW_CHECKS.join
       return review;
     } catch (error) {
       await workflowValidationFailure("Lektori bizonyíték: hibás idézet vagy ellentmondó hibajegy.");
-      if (attempt === 1) throw new Error("A lektori bizonyíték korrekció után sem ellenőrizhető.", { cause: error });
+      if (attempt === 1) throw new TeachingReviewFailure("A lektori bizonyíték korrekció után sem ellenőrizhető. A mentett jelölt nem publikálható.", { cause: error });
       correction = { error: error instanceof Error ? error.message : "Hibás lektori séma.", previousReview: raw };
     }
   }
