@@ -1,3 +1,4 @@
+import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { RUNTIME_KNOWLEDGE_VERSION, SKILL_RULES, skillMarkdown, type SkillSnapshot, type SkillLesson } from "./lesson-skill";
 import { WORKFLOW_MODES, workflowDefinition, type WorkflowMode } from "./lesson-workflow";
 
@@ -9,8 +10,8 @@ const chain = (mode: WorkflowMode) => workflowDefinition(mode).steps.map(step =>
 /** Immutable version is pinned in the workflow snapshot; legacy continuations stay unchanged. */
 export function runtimePrompt(snapshot: SkillSnapshot, mode: WorkflowMode): string {
   if (!snapshot.runtimeVersion) return "";
-  if (snapshot.runtimeVersion !== RUNTIME_KNOWLEDGE_VERSION) throw new Error("Ismeretlen futási tudástárverzió; az eredeti módszer nem helyettesíthető.");
-  return `\n\nWEBSULI SAJÁT RUNBOOK (${snapshot.runtimeVersion})\n${soul}\n${iam}\nA teljes folyamat: ${chain(mode)}. Ebben a modellhívásban csak a kért részfeladatot végezd el; a szerver hajtja végre a lépéseket.\n${recovery}\n`;
+  if (!["websuli-runtime-1", RUNTIME_KNOWLEDGE_VERSION].includes(snapshot.runtimeVersion)) throw new Error("Ismeretlen futási tudástárverzió; az eredeti módszer nem helyettesíthető.");
+  return `\n\nWEBSULI SAJÁT RUNBOOK (${snapshot.runtimeVersion})\n${soul}\n${iam}\nA teljes folyamat: ${chain(mode)}. Ebben a modellhívásban csak a kért részfeladatot végezd el; a szerver hajtja végre a lépéseket.\n${recovery}\n${snapshot.runtimeVersion === RUNTIME_KNOWLEDGE_VERSION ? LESSON_QUALITY_CONTRACT + " Legalább 45 szöveges feladat, 75 kvízkérdés; 15/25-ös kör; mind a tíz módszer és két kapukérdés kötelező." : ""}\n`;
 }
 
 /** QMD/Cogni are internal projections, not connections to similarly named external products. */
@@ -34,7 +35,7 @@ export function runtimeKnowledge(snapshot: SkillSnapshot, lessons: SkillLesson[]
     pendingInvestigation: cards.filter(card => card.column === "investigate").length,
     limitation: "A recovered érték hibamegfigyelést tartalmazó sikeres futásokat számol; nem bizonyítja a szabály hatását vagy a hibaarány csökkenését. Nincs automatikusan készre jelölt javítás.",
   };
-  const runbook = modes.map(mode => `## ${workflowDefinition(mode).label}\n\n${chain(mode)}`).join("\n\n") + `\n\n${recovery}`;
+  const runbook = modes.map(mode => `## ${workflowDefinition(mode).label}\n\n${chain(mode)}`).join("\n\n") + `\n\n${recovery}\n${snapshot.runtimeVersion === RUNTIME_KNOWLEDGE_VERSION ? LESSON_QUALITY_CONTRACT : ""}`;
   const memory = cards.length ? cards.map(card => `- ${card.code}: ${card.occurrences} megfigyelés; ${card.recovered} sikeres futás mellett; [bizonyíték](${card.evidence})`).join("\n") : "Még nincs mért futási tapasztalat.";
   const documents = {
     "SOUL.md": `# Websuli identitás\n\n${soul}`,

@@ -1,0 +1,55 @@
+[data-experience="forest"] { --grade-tone: #2a6844; }
+[data-experience="sunset"] { --grade-tone: #a43846; }
+[data-experience="cosmos"] { --grade-tone: #594b8f; }
+[data-experience="paper"] { --grade-tone: #806c44; }
+[data-experience="berry"] { --grade-tone: #854785; }
+/* Grade controls colour intensity; topic artwork remains meaningful at every age. */
+[data-experience][data-learning-age] {
+  --lesson-surface: #fff; --lesson-ink: #233447; --lesson-muted: #45586c;
+  --lesson-accent-ink: #fff; --lesson-check-head: #805719; --lesson-check-head-ink: #fff;
+  --lesson-ok-bg: #e2f3ea; --lesson-ok-bg-ink: #185435;
+  background-color: var(--lesson-bg); background-image: none; color: var(--lesson-ink);
+}
+[data-experience][data-learning-age="1-2"] { --lesson-bg: color-mix(in srgb, var(--grade-tone, #14618a) 14%, white); --fusion-soft: #fff0b5; --lesson-accent: #165cb0; --fusion-secondary: #ab3e16; --lesson-line: #89b6de; --lesson-radius: 26px; --grade-size: 1.2rem; }
+[data-experience][data-learning-age="3-4"] { --lesson-bg: color-mix(in srgb, var(--grade-tone, #14618a) 10%, white); --fusion-soft: #dceee0; --lesson-accent: #226545; --fusion-secondary: #974916; --lesson-line: #a8c6b1; --lesson-radius: 22px; --grade-size: 1.1rem; }
+[data-experience][data-learning-age="5-6"] { --lesson-bg: color-mix(in srgb, var(--grade-tone, #14618a) 6%, white); --fusion-soft: #e6edf5; --lesson-accent: #365b82; --fusion-secondary: #765534; --lesson-line: #c2cedc; --lesson-radius: 16px; --grade-size: 1.05rem; }
+[data-experience][data-learning-age="7-8"] { --lesson-bg: color-mix(in srgb, var(--grade-tone, #14618a) 3%, white); --fusion-soft: #eceff1; --lesson-accent: #405771; --fusion-secondary: #5d665f; --lesson-line: #cdd3d9; --lesson-radius: 12px; --grade-size: 1rem; }
+[data-experience][data-learning-age="9+"] { --lesson-bg: color-mix(in srgb, var(--grade-tone, #14618a) 2%, white); --fusion-soft: #eeefed; --lesson-accent: #3d4d60; --fusion-secondary: #62655e; --lesson-line: #d2d5d4; --lesson-radius: 8px; --grade-size: 1rem; }
+[data-learning-age="1-2"] .lesson-cover-art { filter: saturate(1.25); }
+[data-learning-age="7-8"] .lesson-cover-art, [data-learning-age="9+"] .lesson-cover-art { filter: saturate(.35); }
+[data-learning-age] .lesson-block { font-size: var(--grade-size); line-height: 1.75; }
+[data-learning-age] .lesson-block p { max-width: 72ch; }
+.practice-finish { min-width: 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.practice-finish > p { flex: 1; min-width: 90px; margin: 0; font-size: .75rem; line-height: 1.3; }
+.practice-finish > button { min-height: 44px; padding: 8px 12px; }
+.practice-finish [role="group"] { width: 100%; padding: 12px; border: 2px solid var(--lesson-accent, #405771); border-radius: 12px; background: var(--lesson-surface, white); }
+.practice-finish [role="group"] button { margin: 4px; }
+.fusion-view:has(.practice-finish [role="group"]) { height: auto; min-height: 100dvh; }
+.fusion-panel-quiz:has(.practice-finish [role="group"]) { height: auto!important; min-height: 100dvh; }
+.websuli-html-lesson { margin: 0; padding: clamp(12px, 3vw, 32px); font-family: "Source Sans 3", sans-serif; font-size: var(--grade-size); line-height: 1.75; overflow-wrap: anywhere; }
+.websuli-html-lesson *, .websuli-html-lesson *::before, .websuli-html-lesson *::after { box-sizing: border-box; }
+.websuli-html-lesson [data-lesson-panel] { max-width: 1050px; margin-inline: auto; }
+.websuli-html-lesson [data-teaching-section] { display: block!important; visibility: visible!important; opacity: 1!important; padding: clamp(16px, 3vw, 32px); margin-block: 24px; background: var(--lesson-surface); color: var(--lesson-ink); border: 1px solid var(--lesson-line); border-left: 5px solid var(--lesson-accent); border-radius: var(--lesson-radius); }
+.websuli-html-lesson [data-teaching-section] p { max-width: 72ch; }
+.websuli-html-lesson [data-teaching-example], .websuli-html-lesson [data-teaching-summary], .websuli-html-lesson [data-teaching-visual] { padding: 16px; background: var(--fusion-soft); color: var(--lesson-ink); border-radius: var(--lesson-radius); }
+.websuli-html-lesson [data-teaching-visual] { margin: 18px 0; }
+.websuli-html-lesson img, .websuli-html-lesson svg { max-width: 100%; }
+.websuli-html-lesson button, .websuli-html-lesson summary { min-height: 44px; min-width: 44px; cursor: pointer; white-space: normal; }
+.websuli-html-lesson button { padding: 8px 12px; border: 1px solid var(--lesson-line); border-radius: 10px; background: var(--lesson-surface); color: var(--lesson-ink); }
+.websuli-html-lesson button:focus-visible { outline: 3px solid var(--lesson-accent); outline-offset: 2px; }
+.websuli-html-lesson button:disabled { opacity: .55; cursor: default; }
+.websuli-html-lesson [data-lesson-tab] { margin: 4px; }
+.websuli-html-lesson [data-websuli-tabs] { position: static; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 12px; margin: 16px auto; max-width: 1050px; background: var(--fusion-soft); color: var(--lesson-ink); border-radius: var(--lesson-radius); box-shadow: none; }
+.websuli-html-lesson [data-websuli-tabs] > [data-lesson-tab] { width: 100%; margin: 0; min-width: 0; }
+.websuli-html-lesson > header { background: var(--lesson-accent); color: var(--lesson-accent-ink); }
+.websuli-html-lesson > header h1 { color: inherit; }
+@media (max-width: 600px) { .websuli-html-lesson [data-websuli-tabs] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.websuli-html-lesson [data-lesson-tab][aria-selected="true"] { background: var(--lesson-accent); color: var(--lesson-accent-ink); }
+.websuli-html-lesson .websuli-html-quiz { background: var(--lesson-surface); color: var(--lesson-ink); padding: clamp(12px, 3vw, 28px); border-radius: var(--lesson-radius); }
+.websuli-html-lesson .websuli-html-quiz nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-block: 16px; }
+.websuli-html-lesson .websuli-html-quiz article { border: 1px solid var(--lesson-line); padding: 16px; margin-block: 16px; border-radius: var(--lesson-radius); }
+.websuli-html-lesson .websuli-html-quiz textarea { max-width: 100%; color: var(--lesson-ink); background: var(--lesson-bg); }
+.websuli-html-lesson .websuli-html-quiz [hidden] { display: none!important; }
+.websuli-html-lesson .fusion-sort { padding-left: 0; }
+.websuli-html-lesson .fusion-dialog { padding: 20px; border: 2px solid var(--lesson-accent); }
+@media (max-height: 480px) and (orientation: landscape) { .practice-finish { align-self: end; } .practice-finish > button { padding: 6px 12px; } }

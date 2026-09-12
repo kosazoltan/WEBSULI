@@ -11,14 +11,39 @@ for (const viewport of [{width:320,height:740},{width:844,height:390},{width:136
   const quiz=page.getByRole('region',{name:'Megőrzött gyakorlókvíz'});
   await expect(quiz.locator('article')).toHaveCount(10);
   const titles=await quiz.locator('h3').allTextContents();
+  // Every question must actually be visible in sequence, not merely present in the DOM.
+  for (const [regionName, count] of [['Megőrzött gyakorlókvíz',10],['Pontozott szöveges feladatok',5]] as const) {
+    const region=page.getByRole('region',{name:regionName});
+    const seen=new Set<string>();
+    for (let i=0;i<count;i++) {
+      await expect(region.locator('article:visible')).toHaveCount(1);
+      seen.add(await region.locator('article:visible h3').innerText());
+      if (i<count-1) await region.getByRole('button',{name:'Következő kérdés',exact:true}).click();
+    }
+    expect(seen.size).toBe(count);
+    await expect(region.getByRole('button',{name:'Következő kérdés',exact:true})).toBeDisabled();
+    await region.getByRole('button',{name:'Összes kérdés áttekintése',exact:true}).click();
+    await expect(region.locator('article:visible')).toHaveCount(count);
+    await region.getByRole('button',{name:'Egyenként',exact:true}).click();
+    for(let i=1;i<count;i++) await region.getByRole('button',{name:'Előző kérdés',exact:true}).click();
+  }
   const firstQuestion=titles[0].replace(/^\d+\. /,''); const q=data.experience!.quiz.find(q=>q.question===firstQuestion)!;
   await quiz.locator('article').first().getByRole('button',{name:q.options[q.correctIndex],exact:true}).click();
   await quiz.getByRole('button',{name:'Kiértékelés',exact:true}).click();
+  await expect(quiz.getByRole('status')).toHaveCount(0);
+  await expect(quiz.getByRole('group',{name:'Hiányos kör lezárása'})).toContainText('9 kérdés');
+  await quiz.getByRole('button',{name:'Lezárom a kihagyásokkal',exact:true}).click();
   await expect(quiz.getByRole('status')).toContainText('1 / 10 pont');
   const tasks=page.getByRole('region',{name:'Pontozott szöveges feladatok'});
   const question=await tasks.locator('textarea').first().getAttribute('aria-label');
   await tasks.locator('textarea').first().fill(data.experience!.tasks.find(t=>t.q===question)!.sample);
   await tasks.getByRole('button',{name:'Kiértékelés',exact:true}).click();
+  await expect(tasks.getByRole('status')).toHaveCount(0);
+  await tasks.getByRole('button',{name:'Folytatom a kitöltést',exact:true}).click();
+  await expect(tasks.locator('article:visible')).toHaveCount(1);
+  await tasks.getByRole('button',{name:'Kiértékelés',exact:true}).click();
+  await tasks.getByRole('button',{name:'Lezárom a kihagyásokkal',exact:true}).click();
+  await tasks.getByRole('button',{name:'Előző kérdés',exact:true}).click();
   await expect(tasks.getByRole('status')).toContainText('1 / 5 pont');
   await tasks.locator('article').first().getByText('Mintaválasz',{exact:true}).click();
   const download=page.waitForEvent('download');
@@ -49,6 +74,7 @@ for (const viewport of [{width:320,height:740},{width:844,height:390},{width:136
     await panel.getByRole('button',{name:'Új kör indítása',exact:true}).click();
     await expect(panel.locator('article')).toHaveCount(15);
     await panel.getByRole('button',{name:'Kiértékelés',exact:true}).click();
+    await panel.getByRole('button',{name:'Lezárom a kihagyásokkal',exact:true}).click();
     await expect(panel.getByRole('status')).toContainText('0 / 15 pont');
   }
   await page.reload();

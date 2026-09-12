@@ -9,6 +9,7 @@ import { useExperienceRound } from "./useExperienceRound";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
 import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
+import { FinishPracticeButton } from "./FinishPracticeButton";
 
 const TABS = [{ id: "teaching", label: "Tananyag", icon: BookOpen }, { id: "methods", label: "Módszerek", icon: Brain }, { id: "tasks", label: "Feladatok", icon: PencilLine }, { id: "quiz", label: "Kvíz", icon: Trophy }] as const;
 type Tab = typeof TABS[number]["id"];
@@ -33,7 +34,7 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
   const [samples, setSamples] = useState<string[]>([]);
   const [rate, setRate] = useState(0.85);
   const [teachingSection, setTeachingSection] = useLearningPreference<number>(`${storageKey}:section`, 0, (v): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v < headings.length);
-  const [teachingOverview, setTeachingOverview] = useState(false);
+  const [teachingOverview, setTeachingOverview] = useState(true);
   const [taskIndex, setTaskIndex] = useState(0);
   const [quizIndex, setQuizIndex] = useState(0);
   const [taskOverview, setTaskOverview] = useState(false);
@@ -93,7 +94,7 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
         </section>;
       })}
       {!taskOverview && <LearningPager index={taskIndex} count={tasks.length} label="feladat" onChange={setTaskIndex} />}
-      {!taskState.round.finishedAt ? <button className="fusion-primary" onClick={() => taskState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Feladatok kiértékelése</button> : <Result title="Feladatok" points={taskPoints} total={tasks.length} seconds={seconds(taskState.round)} answers={tasks.map(t => ({ question: t.q, answer: taskState.round.answers[t.id] ?? "", ...evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t), sampleViewed: taskState.round.sampleViewed.includes(t.id) }))} />}
+      {!taskState.round.finishedAt ? <FinishPracticeButton className="fusion-primary" total={tasks.length} unanswered={tasks.filter(t => !taskState.round.answers[t.id]?.trim()).length} onContinue={() => { setTaskOverview(false); setTaskIndex(tasks.findIndex(t => !taskState.round.answers[t.id]?.trim())); }} onFinish={() => taskState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Feladatok kiértékelése</FinishPracticeButton> : <Result title="Feladatok" points={taskPoints} total={tasks.length} seconds={seconds(taskState.round)} answers={tasks.map(t => ({ question: t.q, answer: taskState.round.answers[t.id] ?? "", ...evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t), sampleViewed: taskState.round.sampleViewed.includes(t.id) }))} />}
     </div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-quiz`} aria-labelledby={`${prefix}-fusion-tab-quiz`} hidden={tab !== "quiz"} className="fusion-panel fusion-panel-quiz" data-overview={savedFinished === null && quizOverview} data-finished={savedFinished ?? !!quizState.round.finishedAt}>
       <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>
@@ -106,7 +107,7 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
         </section>;
       })}
       {!quizOverview && <LearningPager index={quizIndex} count={quiz.length} label="kérdés" onChange={setQuizIndex} />}
-      {!quizState.round.finishedAt ? <button className="fusion-primary" onClick={() => quizState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Kvíz kiértékelése</button> : <Result title="Kvíz" points={quizPoints} total={quiz.length} seconds={seconds(quizState.round)} answers={quiz.map(q => ({ question: q.question, pickedIndex: quizState.round.picks[q.id] ?? null, correctIndex: q.correctIndex }))} />}
+      {!quizState.round.finishedAt ? <FinishPracticeButton className="fusion-primary" total={quiz.length} unanswered={quiz.filter(q => quizState.round.picks[q.id] === undefined).length} onContinue={() => { setQuizOverview(false); setQuizIndex(quiz.findIndex(q => quizState.round.picks[q.id] === undefined)); }} onFinish={() => quizState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Kvíz kiértékelése</FinishPracticeButton> : <Result title="Kvíz" points={quizPoints} total={quiz.length} seconds={seconds(quizState.round)} answers={quiz.map(q => ({ question: q.question, pickedIndex: quizState.round.picks[q.id] ?? null, correctIndex: q.correctIndex }))} />}
       </PracticeAccess>
     </div>
     <Dialog open={resetTarget !== null} onOpenChange={open => { if (!open) setResetTarget(null); }}><DialogContent className="fusion-dialog"><DialogTitle>Új gyakorlókör?</DialogTitle><DialogDescription>A mostani válaszokat új feladatsor váltja fel. Ha szeretnéd megőrizni az eredményt, előbb töltsd le.</DialogDescription><div className="flex gap-3 flex-wrap"><button onClick={() => setResetTarget(null)}>Mégse</button><button onClick={() => { if (resetTarget === "tasks") { taskState.reset(); setSamples([]); setTaskIndex(0); } else { quizState.reset(); setQuizIndex(0); } setResetTarget(null); }}>Új kör indítása</button></div></DialogContent></Dialog>

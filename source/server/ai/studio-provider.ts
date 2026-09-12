@@ -1,6 +1,7 @@
 import { OpenAIProvider } from "./OpenAIProvider";
 import { OpenRouterProvider } from "./OpenRouterProvider";
 import { aiKeyStatus, keyNameForModel, providerForModel } from "./models";
+import type { AIProviderConfig } from "./AIProvider";
 
 /** Resolve credentials by model, never by whichever key happens to be available. */
 export function studioConnection(model: string, env: Record<string, string | undefined> = process.env) {
@@ -20,9 +21,9 @@ export function studioModelReady(model: string) {
   return aiKeyStatus()[providerForModel(model)].configured;
 }
 
-export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000) {
+export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort"> = {}) {
   const connection = studioConnection(model);
-  const config = { apiKey: connection.apiKey, model: connection.model, timeout, maxTokens };
+  const config = { apiKey: connection.apiKey, model: connection.model, timeout, maxTokens, ...options };
   return connection.vendor === "openrouter"
     ? new OpenRouterProvider(config)
     : new OpenAIProvider(config, connection.vendor);

@@ -17,10 +17,14 @@ export class OpenAIProvider implements IAIProvider {
   private client: OpenAI;
   private timeout: number;
   private maxTokens?: number;
+  private apiMode?: AIProviderConfig['apiMode'];
+  private reasoningEffort?: AIProviderConfig['reasoningEffort'];
 
   constructor(config: AIProviderConfig, vendor: "openai" | "xai" = "openai") {
     this.name = vendor === "xai" ? "xAI" : "OpenAI";
     this.maxTokens = config.maxTokens;
+    this.apiMode = config.apiMode;
+    this.reasoningEffort = config.reasoningEffort;
     this.model = config.model;
     this.timeout = config.timeout || 60000; // Default 60s
     this.client = new OpenAI({
@@ -32,6 +36,15 @@ export class OpenAIProvider implements IAIProvider {
 
   async chat(messages: AIMessage[], signal?: AbortSignal): Promise<AIResponse> {
     try {
+      if (this.apiMode === 'responses') {
+        const response = await this.client.responses.create({
+          model: this.model, input: messages, store: false,
+          ...(this.maxTokens ? { max_output_tokens: this.maxTokens } : {}),
+          ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
+        }, { signal });
+        return { content: response.output_text ?? '', finishReason: response.status === 'completed' ? 'stop' : 'length',
+          usage: response.usage ? { promptTokens: response.usage.input_tokens, completionTokens: response.usage.output_tokens, totalTokens: response.usage.total_tokens } : undefined };
+      }
       const response = await this.client.chat.completions.create(
         {
           model: this.model,

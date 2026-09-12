@@ -1558,13 +1558,11 @@ export class DatabaseStorage implements IStorage {
       }
       const { hasHtmlLessonData, readHtmlLessonData } = await import('../shared/lesson-html-data');
       const fusionHtml = hasHtmlLessonData(improved.content);
-      let inferredClassroom: number | undefined;
-      if (fusionHtml) {
-        const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
-        const result = verifyLessonMethodHtml(improved.content);
-        if (!result.ok) throw new Error(result.problems.join('; '));
-        inferredClassroom = readHtmlLessonData(improved.content).classroom;
-      }
+      // Removing the bank marker must not bypass the publication contract.
+      const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
+      const result = verifyLessonMethodHtml(improved.content);
+      if (!result.ok) throw new Error(result.problems.join('; '));
+      const inferredClassroom = readHtmlLessonData(improved.content).classroom;
 
       // 4. Validate age (max 30 days)
       const ageInDays = (Date.now() - new Date(improved.createdAt).getTime()) / (1000 * 60 * 60 * 24);

@@ -1,10 +1,12 @@
+import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import type { WebResearchJob } from "../../shared/web-research-job";
 import type { WebResearchChatRequest } from "./web-research-agent";
 import { decideWebResearchResult } from "./web-research-agent";
-import { type ResearchArtifact, type ResearchObserver, WebResearchFailure } from "./web-research-runner";
+import { type ResearchArtifact, type ResearchObserver, WebResearchFailure, hasSavedResearchTurn } from "./web-research-runner";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { logger } from "../lib/logger";
+import { assertTeachingReviewEvidence, type TeachingReviewEvidence } from "./web-teaching-review";
 import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, savedWorkflowResult, type WorkflowStore } from "../workflows/engine";
 
 export type StoredResearchJob = WebResearchJob & {
@@ -12,6 +14,8 @@ export type StoredResearchJob = WebResearchJob & {
   input: WebResearchChatRequest;
   candidate?: string;
   diagnostics: Array<Record<string, unknown>>;
+  updatedAt?: number;
+  reviewEvidence?: TeachingReviewEvidence;
 };
 export interface ResearchJobStore {
   create(job: StoredResearchJob): Promise<boolean>;
@@ -30,6 +34,8 @@ export function checkedResearchArtifact(artifact: ResearchArtifact) {
   const check = decideWebResearchResult({ stopReason: "end_turn", fullContent: artifact.html, repairAttempts: 2, sources: artifact.sources }, verifyLessonMethodHtml);
   if (check.type !== "ready") throw new WebResearchFailure(check.type === "error" ? check.message : check.reason);
   if (!artifact.sources.length) throw new WebResearchFailure("Nincs ellenőrizhető internetes forrás.");
+  try { assertTeachingReviewEvidence(artifact.html, artifact.sources, artifact.reviewEvidence); }
+  catch { throw new WebResearchFailure("A teljes tananyaghoz és forrásaihoz kötött sikeres tartalmi lektorálás hiányzik vagy elavult."); }
   return readHtmlLessonData(artifact.html);
 }
 
@@ -38,6 +44,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
   async function runWork(job: StoredResearchJob) {
     let checkpoint = Promise.resolve();
     const persist = () => {
+      job.updatedAt = Date.now();
       const snapshot = structuredClone(job);
       // Serialize snapshots to keep an old status write from racing completion.
       checkpoint = checkpoint.then(() => store.update(snapshot, "running"));
@@ -46,8 +53,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     };
     try {
       await workflowPhase("generate");
-      const artifact = await workflowCheckpoint("web-result", job.input, () => ["ready", "done"].includes(job.state) && job.html
-        ? Promise.resolve({ html: job.html, sources: job.sources }) : generate(job.input, {
+      const artifact = await workflowCheckpoint("web-result", { input: job.input, method: LESSON_METHOD_VERSION }, () => ["ready", "done"].includes(job.state) && job.html
+        ? Promise.resolve({ html: job.html, sources: job.sources, reviewEvidence: job.reviewEvidence }) : generate(job.input, {
         onEvent(event) {
           if (event.type === "status") { job.stage = event.message; persist(); }
           if (event.type === "sources") { job.sources = [...event.sources]; persist(); }
@@ -67,6 +74,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       await checkpoint;
       job.html = artifact.html;
       job.sources = artifact.sources;
+      job.reviewEvidence = artifact.reviewEvidence;
       job.classroom = data.classroom;
       job.title = job.input.title?.trim() || `${data.subject} — ${data.classroom}. osztály`;
       job.state = "ready";
@@ -101,7 +109,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
   }
   async function read(id: string, userId: string) {
     const job = await store.read(id, userId);
-    if (job?.state === "running" && Date.now() - job.createdAt > 25 * 60_000) {
+    if (job?.state === "running" && Date.now() - (job.updatedAt ?? job.createdAt) > 25 * 60_000) {
       job.state = "error";
       job.error = "A szerverfutás megszakadt vagy túllépte az időkeretet. Új készítést indíthatsz; a régi források és diagnózis megmaradtak.";
       job.stage = job.error;
@@ -109,11 +117,13 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     }
     if (job?.state === "error" && workflows) {
       const tracked = await workflows.read(id, userId);
-      const artifact = tracked && savedWorkflowResult<ResearchArtifact>(tracked, "web-result", job.input);
+      const artifact = tracked && savedWorkflowResult<ResearchArtifact>(tracked, "web-result", { input: job.input, method: LESSON_METHOD_VERSION });
       job.canResume = false;
-      if (artifact && tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
-        try { checkedResearchArtifact(artifact); job.canResume = true; }
-        catch { /* An invalid saved artifact cannot be recovered by republishing it. */ }
+      if (tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
+        if (artifact) {
+          try { checkedResearchArtifact(artifact); job.canResume = true; }
+          catch { /* An invalid saved artifact cannot be recovered by republishing it. */ }
+        } else job.canResume = hasSavedResearchTurn(tracked, job.input);
       }
     }
     return job;

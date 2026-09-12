@@ -41,6 +41,7 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900], 
     const id = await first.getAttribute("data-task-id");
     await first.locator("textarea").fill(String((Number(id!.slice(1)) + 1) * 2));
     await page.getByRole("button", { name: "Feladatok kiértékelése" }).click();
+    await page.getByRole("button", { name: "Lezárom a kihagyásokkal", exact: true }).click();
     await expect(page.getByRole("region", { name: "Feladatok eredmény" })).toContainText("1 / 15 pont");
     await page.getByRole("tab", { name: "Tananyag", exact: true }).click();
     await expect(page.getByRole("tablist")).toBeInViewport();

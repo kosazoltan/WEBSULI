@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { callStepModel, StepModelError } from "../server/studio/run-step";
+
+test("a phase deadline reaches the provider and an aborted response is never accepted", async () => {
+  const controller = new AbortController();
+  const provider = stubProvider('{"ok":true}');
+  provider.chat = async (_messages, signal) => {
+    assert.equal(signal, controller.signal); controller.abort();
+    return { content: '{"ok":true}' };
+  };
+  await assert.rejects(callStepModel(provider, { step: "lektor", model: "test", system: "S", user: "U" }, controller.signal), StepModelError);
+});
 import type { AIResponse, IAIProvider } from "../server/ai/AIProvider";
 
 /**

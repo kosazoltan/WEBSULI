@@ -3,19 +3,29 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { effortFor, resolveLegacyModel } from "../ai/models";
 import { logger } from "../lib/logger";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
-import { workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
-import { decideWebResearchResult, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
+import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
+import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
+import { decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
+import { fetchedTeachingSources, reviewWebTeaching, teachingReviewEvidence, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
+import { repairWebLessonBank } from "./web-bank-repair";
 
 export class WebResearchFailure extends Error {}
-export type ResearchArtifact = { html: string; sources: WebSource[] };
+export type ResearchArtifact = { html: string; sources: WebSource[]; reviewEvidence?: TeachingReviewEvidence };
 export type ResearchObserver = {
   signal?: AbortSignal;
   onEvent: (event: WebResearchEvent) => void;
-  onCandidate?: (content: string, diagnostic: { stopReason?: string | null; inputTokens?: number; outputTokens?: number; elapsedMs?: number; problems?: string }) => Promise<void>;
+  onCandidate?: (content: string, diagnostic: { stopReason?: string | null; inputTokens?: number; outputTokens?: number; elapsedMs?: number; problems?: string; teachingReview?: TeachingReview }) => Promise<void>;
 };
 const MAX_TOKENS = 64_000;
 const MAX_CONTINUATIONS = 5;
 const IDLE_TIMEOUT_MS = 120_000;
+export const webResearchTurnKey = (input: WebResearchChatRequest, repairAttempts = 0, continuations = 0) => ({ input, method: LESSON_METHOD_VERSION, contract: "targeted-bank-1", repairAttempts, continuations });
+type ResearchTurn = { final: Anthropic.Message; content: string; sources: WebSource[] };
+export function hasSavedResearchTurn(record: WorkflowRecord, input: WebResearchChatRequest): boolean {
+  const turn = savedWorkflowResult<ResearchTurn>(record, "web-provider-turn", webResearchTurnKey(input));
+  return !!turn && typeof turn.content === "string" && Array.isArray(turn.sources) && Array.isArray(turn.final?.content)
+    && ["end_turn", "pause_turn"].includes(turn.final.stop_reason ?? "");
+}
 /** Runs independently of HTTP; only the legacy stream supplies a client abort signal. */
 export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: ResearchObserver): Promise<ResearchArtifact> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
@@ -24,7 +34,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
   let timedOut = false;
   let idleTimer: NodeJS.Timeout | undefined;
   const timeout = () => { timedOut = true; controller.abort(); };
-  const hardTimer = setTimeout(timeout, 20 * 60_000);
+  let hardTimer = setTimeout(timeout, 20 * 60_000);
   const touch = () => { if (idleTimer) clearTimeout(idleTimer); idleTimer = setTimeout(timeout, IDLE_TIMEOUT_MS); };
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -46,6 +56,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     let fullContent = "";
     let htmlStarted = false;
     const sources: WebSource[] = [];
+    const fetched = new Map<string, FetchedTeachingSource>();
     const seenUrls = new Set<string>();
     let stopReason: string | null = null;
     let continuations = 0;
@@ -54,6 +65,9 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
 
     touch();
     for (;;) {
+      let providerCalled = false;
+      const turn = await workflowCheckpoint("web-provider-turn", webResearchTurnKey(input, repairAttempts, continuations), async (): Promise<ResearchTurn> => {
+      providerCalled = true;
       const stream = anthropic.messages.stream(
         {
           model: resolveLegacyModel("webResearch"),
@@ -68,7 +82,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
               cache_control: { type: "ephemeral" },
             },
           ],
-          tools: [WEB_SEARCH_TOOL],
+          tools: [WEB_SEARCH_TOOL, WEB_FETCH_TOOL],
           messages,
         },
         { signal: controller.signal },
@@ -110,9 +124,17 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         }
       }
 
-      const final = await stream.finalMessage();
+        const final = await stream.finalMessage();
+        // Includes native fetched documents, so a review outage cannot lose the source evidence.
+        return { final, content: fullContent, sources: [...sources] };
+      });
+      const final = turn.final;
+      fullContent = turn.content;
+      sources.splice(0, sources.length, ...turn.sources);
+      for (const source of sources) seenUrls.add(source.url);
+      for (const source of fetchedTeachingSources(final.content)) fetched.set(source.url, source);
       stopReason = final.stop_reason;
-      await onCandidate?.(fullContent, { stopReason, inputTokens: final.usage.input_tokens, outputTokens: final.usage.output_tokens, elapsedMs: Date.now() - startedAt });
+      await onCandidate?.(fullContent, { stopReason, inputTokens: providerCalled ? final.usage.input_tokens : undefined, outputTokens: providerCalled ? final.usage.output_tokens : undefined, elapsedMs: Date.now() - startedAt });
       logger.info("[WEB-RESEARCH] turn", { stopReason, continuations, repairAttempts, elapsedMs: Date.now() - startedAt,
         outputTokens: final.usage.output_tokens, inputTokens: final.usage.input_tokens, chars: fullContent.length, sourceCount: sources.length });
       if (stopReason === "pause_turn" && continuations < MAX_CONTINUATIONS) {
@@ -123,23 +145,56 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       }
       // max_tokens/refusal/pause_turn exhaustion and htmlLooksComplete are checked
       // before the same strict HTML/bank gate. An end_turn without HTML is NOT success.
-      const result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
+      clearTimeout(hardTimer);
+      if (idleTimer) clearTimeout(idleTimer);
+      const candidate = extractGeneratedHtml(fullContent);
+      if (stopReason === "end_turn" && candidate && htmlLooksComplete(candidate)) {
+        fullContent = await repairWebLessonBank(candidate, {
+          signal: controller.signal,
+          async onProblem(problems) {
+            await workflowValidationFailure(problems);
+            onEvent({ type: "status", message: "Az elkészült tananyag hiányzó vagy hibás feladatainak célzott javítása…" });
+            await onCandidate?.(fullContent, { problems });
+          },
+          onCandidate: html => onCandidate?.(html, {}) ?? Promise.resolve(),
+        });
+      }
+      let result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
+      let reviewEvidence: TeachingReviewEvidence | undefined;
+      if (result.type === "ready") {
+        const downloaded = [...fetched.values()];
+        let problems: string[];
+        if (!downloaded.length) problems = ["Nincs letöltött forrásszöveg. A web_fetch eszközzel olvasd el a forrásokat, majd készíts teljes tananyagot."];
+        else {
+          onEvent({ type: "status", message: "A teljes tananyag összevetése a letöltött forrásokkal…" });
+          // Review has its own bounded provider timeout; streaming idle time is irrelevant here.
+          if (idleTimer) clearTimeout(idleTimer);
+          const review = await reviewWebTeaching(result.html, downloaded, undefined, controller.signal, input.message);
+          if (controller.signal.aborted) throw new WebResearchFailure("A tartalmi ellenőrzés ideje alatt a készítés megszakadt.");
+          await onCandidate?.(result.html, { teachingReview: review });
+          problems = review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`);
+          if (!problems.length) reviewEvidence = teachingReviewEvidence(result.html, downloaded, review);
+        }
+        if (problems.length) result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, () => ({ ok: false, problems }));
+      }
       if (result.type === "retry") {
         await workflowValidationFailure(result.reason);
         await onCandidate?.(fullContent, { problems: result.reason });
         repairAttempts += 1;
-        messages.push({ role: "assistant", content: final.content });
+        messages.push({ role: "assistant", content: [...final.content.filter(block => block.type !== "text"), { type: "text", text: fullContent }] });
         messages.push({ role: "user", content: result.instruction });
         logger.info("[WEB-RESEARCH] artifact-retry", { repairAttempts, reason: result.reason });
         onEvent({ type: "status", message: `A teljes tananyag elkészítése és ellenőrzése (${repairAttempts}/2)…` });
         onEvent({ type: "content_replace", content: "A forráskeresés után a teljes tananyag készítése és ellenőrzése folyamatban van…" });
         fullContent = "";
         htmlStarted = false;
+        hardTimer = setTimeout(timeout, 20 * 60_000);
+        touch();
         continue;
       }
       if (result.type === "error") throw new WebResearchFailure(result.message);
       if (sources.length === 0) throw new WebResearchFailure("Nem érkezett ellenőrizhető internetes forráshivatkozás. A tananyag nem menthető.");
-      return { html: result.html, sources };
+      return { html: result.html, sources: [...fetched.values()].map(({ url, title }) => ({ url, title })), reviewEvidence };
     }
   } catch (error) {
     if (error instanceof WebResearchFailure) throw error;

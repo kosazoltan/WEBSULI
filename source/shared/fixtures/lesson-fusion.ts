@@ -1,4 +1,4 @@
-import { LEGACY_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION, METHOD_KINDS, type LessonExperience } from "../lesson-experience";
+import { LEGACY_LESSON_METHOD_VERSION, COMPACT_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION, METHOD_KINDS, type LessonExperience } from "../lesson-experience";
 import { planLessonBank } from "../lesson-bank-plan";
 import type { Lesson } from "../lesson-schema";
 
@@ -20,6 +20,7 @@ export function fusionFixture(): Lesson {
     ...(["gate", "myth", "popup"].includes(kind) ? { options: ["Az alap és a magasság szorzatának fele", "Az összes oldal összege"], correctIndex: 0 } : {}),
     ...(["sorting", "causeEffect", "timeline"].includes(kind) ? { steps: ["Azonosítom az alapot és a magasságot.", "Összeszorzom az alapot és a magasságot.", "Kettővel osztok és kiírom a cm² egységet."] } : {}),
   }));
+  Object.assign(methods.at(-1)!, { title: "A magasság iránya", prompt: "Miért nem használhatjuk tetszőleges oldal hosszát az alaphoz tartozó magasság helyett?", options: ["A magasságnak merőlegesnek kell lennie az alap egyenesére.", "Mert minden háromszög szabályos."], correctIndex: 0, answer: "A magasság merőleges az alap egyenesére; egy ferde oldal hossza általában más." });
   return {
     title: "Háromszögek: területből tudás", subject: "matematika", classroom: 7, mapId: "fusion-probe", sourceOnly: true, misconceptions: [],
     sections: [{ heading: "Az alap és a magasság együtt számít", probaEnabled: false, blocks: [
@@ -32,12 +33,12 @@ export function fusionFixture(): Lesson {
   };
 }
 
-/** Current small-source contract: real recall/application instead of numeric filler. */
+/** Historical compact contract: real recall/application instead of numeric filler. */
 export function compactFusionFixture(): Lesson {
   const lesson = fusionFixture();
   const old = lesson.experience!;
   lesson.experience = {
-    ...old, version: LESSON_METHOD_VERSION, bankPlan: planLessonBank(lesson), methods: old.methods.slice(0, 2),
+    ...old, version: COMPACT_LESSON_METHOD_VERSION, bankPlan: planLessonBank(lesson, COMPACT_LESSON_METHOD_VERSION), methods: old.methods.slice(0, 2),
     tasks: [
       { ...old.tasks[0], q: "Mondd el, hogyan számolod ki a háromszög területét!", required: [["alap"], ["magasság"], ["fele"]], needsSentence: true, sample: "A terület az alap és a magasság szorzatának fele.", mode: "oral" },
       { ...old.tasks[1], q: "Mekkora a 6 cm alapú, 4 cm magas háromszög területe?", required: [["12"]], sample: "12 cm²", mode: "written" },
@@ -47,10 +48,20 @@ export function compactFusionFixture(): Lesson {
       { ...old.quiz[1], intent: "apply", question: "Az alap marad, a magasság a kétszeresére nő. Hogyan változik a terület?", options: ["Nem változik", "A felére csökken", "Négyszeres lesz", "Kétszeres lesz"], correctIndex: 3, feedbackPerOption: ["A szorzatban a magasság is szerepel.", "A magasság nőtt, ezért a terület sem csökken.", "Csak a magasság változott, az alap maradt.", "Az alap és a magasság szorzata, így a fele is kétszeres lesz."] },
     ],
   };
-  // Synthetic quantity fixtures for the owner-approved 15/15 minimum; never published.
+  // Synthetic historical 15/15 fixtures; never published.
   for (let i = 2; i < 15; i++) {
     lesson.experience!.tasks.push({ ...old.tasks[i], mode: "written" });
     lesson.experience!.quiz.push({ ...old.quiz[i], intent: "recall" });
   }
+  return lesson;
+}
+
+/** Full 7.4 quantity fixture. Synthetic test data, never a pedagogical acceptance sample. */
+export function standardFusionFixture(): Lesson {
+  const lesson = compactFusionFixture(), original = fusionFixture().experience!;
+  const e = lesson.experience!;
+  lesson.experience = { ...e, version: LESSON_METHOD_VERSION, bankPlan: planLessonBank(lesson), methods: original.methods,
+    tasks: [...e.tasks, ...original.tasks.slice(e.tasks.length)],
+    quiz: [...e.quiz, ...original.quiz.slice(e.quiz.length).map(q => ({ ...q, intent: "recall" as const }))] };
   return lesson;
 }

@@ -1,3 +1,4 @@
+import { publicationBankProblems } from "../../shared/lesson-experience";
 import { and, eq, ne } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
@@ -720,7 +721,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
   // Missing experience is a hard failure, including after the autonomous round limit.
   if (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience) {
-    const problems = experienceProblems(parsed.data);
+    const problems = [...experienceProblems(parsed.data), ...(parsed.data.experience ? publicationBankProblems(parsed.data.experience) : [])];
     if (problems.length) return fail(store, job, `A fúziós módszer kapuja elutasította a leckét: ${problems.join("; ")}`);
   }
 

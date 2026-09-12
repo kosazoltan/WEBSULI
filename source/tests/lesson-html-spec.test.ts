@@ -148,7 +148,7 @@ test("a webes ügynök route-ja hibánál visszatartja a HTML-t", () => {
   // Gate result is now handled before the artifact event, including automatic repair.
   assert.match(src, /decideWebResearchResult\(\{ stopReason, fullContent, repairAttempts, sources \}, html => verifyLessonMethodHtml\(html\)\)/);
   assert.match(src, /if \(result\.type === "error"\) throw new WebResearchFailure\(result.message\)/);
-  assert.match(src, /return \{ html: result\.html, sources \}/);
+  assert.match(src, /sources: \[\.\.\.fetched\.values\(\)\]/);
   assert.match(src, /cache_control: \{ type: "ephemeral" \}/);
   const panel = read("client/src/components/studio/WebResearchAgentPanel.tsx");
   assert.match(panel, /web-research-error/);

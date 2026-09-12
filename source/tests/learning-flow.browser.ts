@@ -36,12 +36,14 @@ test("guided chapters and individual exercises preserve answers and provide an o
   await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: lesson }));
   await page.goto("/__lesson-runtime-probe?candidate=1");
   await expect(page.locator('#section-1')).toBeVisible();
+  await expect(page.locator('#section-2')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Fejezet', exact: true }).selectOption('0');
   await expect(page.locator('#section-2')).toBeHidden();
   await page.getByRole("button", { name: "Következő fejezet", exact: true }).click();
   await expect(page.locator('#section-2')).toBeVisible();
   await page.reload();
   await expect(page.locator('#section-2')).toBeVisible();
-  await page.getByRole("button", { name: "Teljes tananyag", exact: true }).click();
+  await expect(page.locator("#section-1")).toBeVisible();
   await expect(page.locator('#section-1')).toBeVisible();
   await expect(page.locator('#section-2')).toBeVisible();
   await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
@@ -63,9 +65,14 @@ test("guided chapters and individual exercises preserve answers and provide an o
 });
 
 for (const [width, height] of [[390, 844], [844, 390]]) {
-  test(`current short bank scores a fourth option and restores its first answer at ${width}x${height}`, async ({ page }) => {
+  test(`legacy two-question bank scores a fourth option and restores its first answer at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
-    await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: compactFusionFixture() }));
+    const legacy = compactFusionFixture();
+    legacy.experience!.version = "fusion-7.4-2";
+    legacy.experience!.tasks = legacy.experience!.tasks.slice(0, 2);
+    legacy.experience!.quiz = legacy.experience!.quiz.slice(0, 2);
+    legacy.experience!.bankPlan!.taskRound = 2; legacy.experience!.bankPlan!.quizRound = 2;
+    await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: legacy }));
     await page.goto("/__lesson-runtime-probe?candidate=1");
     await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
     if (await page.locator("[data-quiz-id]:visible").getAttribute("data-quiz-id") !== "q2") await page.getByRole("button", { name: "Következő kérdés", exact: true }).click();
@@ -83,6 +90,7 @@ for (const [width, height] of [[390, 844], [844, 390]]) {
     await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
     await expect(page.getByRole("tabpanel", { name: "Kvíz", exact: true })).toContainText("1 megválaszolva · 1 pont");
     await page.getByRole("button", { name: "Kvíz kiértékelése", exact: true }).click();
+    await page.getByRole("button", { name: "Lezárom a kihagyásokkal", exact: true }).click();
     await expect(page.getByRole("region", { name: "Kvíz eredmény" })).toContainText("1 / 2 pont");
   });
 }

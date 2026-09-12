@@ -7,6 +7,14 @@ import express from "express";
 import type { AddressInfo } from "node:net";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { teachingHtml } from "./helpers/teaching-html";
+
+function completeHtml() {
+  const data = { classroom: 7, classroomEvidence: "Az alaphoz tartozó magasság és a területképlet.", subject: "matematika", experience: standardFusionFixture().experience };
+  const candidate = `<!DOCTYPE html><html><body>${["teaching", "methods", "tasks", "quiz"].map(name => `<button data-lesson-tab="${name}">${name}</button><section data-lesson-panel="${name}">${name === "teaching" ? teachingHtml : ""}</section>`).join("")}<script id="websuli-lesson-data" type="application/json">${JSON.stringify(data)}</script><script>const data=JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
+  return candidate;
+}
 
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 assert.equal(url.hostname, "127.0.0.1");
@@ -97,7 +105,7 @@ test("lejárt vagy átvett workflow-engedély a domain tranzakció írását is 
 test("új HTML-jelölt nem írhatja felül a készítése után módosított eredetit", async () => {
   const { storage } = await import("../server/storage");
   const { htmlBaselineHash } = await import("../server/improve/html-baseline");
-  const candidate = `<!DOCTYPE html><html><body>${"Javított tananyag. ".repeat(20)}</body></html>`;
+  const candidate = completeHtml();
   await dbPool.query("INSERT INTO html_files(id,title,content,user_id) VALUES ('baseline-material','Eredeti','Original','workflow-owner')");
   const original = await storage.getHtmlFile("baseline-material");
   await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,baseline_hash,created_by) VALUES ('baseline-candidate','baseline-material','Javított',$1,$2,'workflow-owner')", [candidate, htmlBaselineHash(original!)]);
@@ -106,6 +114,11 @@ test("új HTML-jelölt nem írhatja felül a készítése után módosított ere
   assert.equal((await storage.getHtmlFile("baseline-material"))!.content, "Edited after generation");
   assert.equal((await storage.getAllMaterialImprovementBackups("baseline-material")).length, 0);
   await dbPool.query("UPDATE html_files SET content='Original' WHERE id='baseline-material'");
+  await dbPool.query("UPDATE improved_html_files SET content=$1 WHERE id='baseline-candidate'", [candidate.replace(/<script[\s\S]*?<\/script>/g, "")]);
+  await assert.rejects(storage.applyImprovedFileToOriginal("baseline-candidate", "workflow-owner", true), /JSON-bank/);
+  assert.equal((await storage.getAllMaterialImprovementBackups("baseline-material")).length, 0);
+  assert.equal((await storage.getHtmlFile("baseline-material"))!.content, "Original");
+  await dbPool.query("UPDATE improved_html_files SET content=$1 WHERE id='baseline-candidate'", [candidate]);
   await storage.applyImprovedFileToOriginal("baseline-candidate", "workflow-owner", true);
   await storage.applyImprovedFileToOriginal("baseline-candidate", "workflow-owner", true);
   assert.equal((await storage.getAllMaterialImprovementBackups("baseline-material")).length, 1);
@@ -127,7 +140,7 @@ test("felhasználó törlése a saját futásait eltávolítja, más tulajdonos 
 test("valódi HTML-alkalmazás: mentés, teljes visszaolvasás, ismételt kérés és hibás jelölt", async () => {
   const { applyTrackedImprovement } = await import("../server/workflows/apply");
   const original = "<!DOCTYPE html><html><body><p>Korábbi ellenőrzött tartalom.</p></body></html>";
-  const candidate = `<!DOCTYPE html><html><body><h1>Javított lecke</h1><p>${"Forráshű mintamondat. ".repeat(20)}</p></body></html>`;
+  const candidate = completeHtml();
   await dbPool.query("INSERT INTO html_files(id,title,content,user_id) VALUES ('workflow-material','Teszt',$1,'workflow-owner')", [original]);
   await dbPool.query("INSERT INTO improved_html_files(id,original_file_id,title,content,created_by) VALUES ('workflow-candidate','workflow-material','Javított teszt',$1,'workflow-owner')", [candidate]);
   const result = await applyTrackedImprovement("workflow-candidate", "workflow-owner");

@@ -19,7 +19,7 @@ import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import type { LektorNote } from "../server/studio/lektor";
-import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
@@ -40,9 +40,9 @@ for (const missingCall of [1, 2]) {
 }
 
 test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu és visszaolvasott eredmény", async () => {
-  const lesson = compactFusionFixture(); lesson.mapId = "m1";
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
-  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => compactFusionFixture().experience! });
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
   const outline = { sections: [{ heading: lesson.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
   const deps = makeDeps("{}");
   deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
@@ -333,7 +333,7 @@ for (const repair of ["valid", "unknown-id", "invalid-schema", "provider-error"]
 }
 
 test("lektor receives measured inflection scores from the current lesson, including failed samples", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   const base = lesson.experience!.tasks[0];
   lesson.experience!.tasks = [
     { ...base, id: "body", minWords: 1, needsSentence: false, sample: "A virágos növények testét növényi szervek építik fel.", required: [["növényi szervek", "szervek"], ["virágos növények teste", "virágos növény testét"]] },
@@ -362,7 +362,7 @@ test("lektor receives measured inflection scores from the current lesson, includ
 });
 
 test("kész, forrásfogalomhoz kötött ábrák: nulla animátorhívás, utána a lektor ténylegesen fut", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   delete lesson.experience;
   const deps = makeDeps(JSON.stringify({ notes: [] }));
   deps.store.seed({ id: "reuse", mapId: "m1", step: "animator", output: { lesson } });
@@ -381,7 +381,7 @@ test("kész, forrásfogalomhoz kötött ábrák: nulla animátorhívás, utána 
 });
 
 test("a kész bank és ábra változatlan újrafuttatása megtartja a kérdésazonosítókat modellhívás nélkül", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   const packet = lesson.experience!;
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet });
@@ -395,7 +395,7 @@ test("a kész bank és ábra változatlan újrafuttatása megtartja a kérdésaz
 });
 
 test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra nem jogosít újrahasználatra", () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   assert.equal(canReuseLessonVisuals(lesson), true);
   assert.equal(canReuseLessonVisuals({}), false);
   const noData = structuredClone(lesson);
@@ -415,7 +415,7 @@ test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra 
 });
 
 test("lektori bankhiba a szerzőn át a banképítőhöz jut; az előző lecke és nyelvi javítás sem vész el", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
   lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
@@ -540,7 +540,7 @@ test("a lektori javítókör már a még le nem futott fogalmi kapu hibáit is m
 });
 
 test("tiszta lektor utáni kapujavítás megőrzi az előző kör feloldott bankjavítását", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   lesson.mapId = "m1";
   const packet = structuredClone(lesson.experience!);
   const feedback = [{ note: { kind: "source_conflict", subkind: "contradicts_source", message: "KORABBI-PONTOZAS", blockPath: "experience.tasks.0" },
@@ -577,7 +577,7 @@ const CANNED_LEKTOR_BLOCKER = JSON.stringify({
 });
 
 test("végső lektorhiba az aktuális jelentést menti és megnevezi a valódi okot", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   const deps = makeDeps(CANNED_LEKTOR_BLOCKER);
   deps.store.seed({ id: "final-review", mapId: "m1", step: "lektor", round: 2,
     output: { lesson, report: { notes: [] }, reportRound: 1 } });

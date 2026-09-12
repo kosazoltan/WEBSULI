@@ -32,7 +32,7 @@ function SortSteps({ steps, onDone }: { steps: string[]; onDone(): void }) {
   </div>;
 }
 
-function MethodCard({ method: m, onGatePassed }: { method: CognitiveMethod; onGatePassed(id: string): void }) {
+function MethodCard({ method: m, onGatePassed, embedded }: { method: CognitiveMethod; onGatePassed(id: string): void; embedded?: boolean }) {
   const [revealed, setRevealed] = useState(false);
   const [answer, setAnswer] = useState("");
   const [picked, setPicked] = useState<number | null>(null);
@@ -48,13 +48,13 @@ function MethodCard({ method: m, onGatePassed }: { method: CognitiveMethod; onGa
     {(m.kind === "timeline" || m.kind === "causeEffect") && <><ol className="fusion-steps">{m.steps?.slice(0, step).map((s, i) => <li key={i}><span>{i + 1}</span>{s}</li>)}</ol><button className="lesson-outline-btn" disabled={step >= (m.steps?.length ?? 0)} onClick={() => { setStep(step + 1); if (step + 1 >= (m.steps?.length ?? 0)) setRevealed(true); }}>Következő lépés</button></>}
     {m.kind === "selfCheck" && <><label className="fusion-label">Mennyire tudnád elmagyarázni? {confidence} / 5<input type="range" min={1} max={5} value={confidence} onChange={e => { setConfidence(Number(e.target.value)); setRevealed(true); }} /></label><p>{confidence < 3 ? "Olvasd újra a példát, aztán próbáld elmondani." : "Mondd el saját szavaiddal, és ellenőrizd magad."}</p></>}
     {(m.kind === "conflict" || m.kind === "analogy") && <button className="lesson-outline-btn" onClick={() => setRevealed(true)}>Megnézem az összefüggést</button>}
-    {m.kind === "popup" && <><button className="lesson-outline-btn" onClick={() => setPopup(true)}>Kérem a villámkérdést</button><Dialog open={popup} onOpenChange={setPopup}><DialogContent className="fusion-dialog"><DialogTitle>{m.title}</DialogTitle><DialogDescription>{m.prompt}</DialogDescription>{choice}</DialogContent></Dialog></>}
+    {m.kind === "popup" && <><button className="lesson-outline-btn" onClick={() => setPopup(true)}>Kérem a villámkérdést</button>{embedded ? popup && <section role="dialog" aria-label={m.title} className="fusion-dialog"><h4>{m.title}</h4><p>{m.prompt}</p>{choice}<button onClick={() => setPopup(false)}>Bezárom a villámkérdést</button></section> : <Dialog open={popup} onOpenChange={setPopup}><DialogContent className="fusion-dialog"><DialogTitle>{m.title}</DialogTitle><DialogDescription>{m.prompt}</DialogDescription>{choice}</DialogContent></Dialog>}</>}
     {revealed && !["gate", "myth", "popup"].includes(m.kind) && <p className="lesson-answer">{m.answer}</p>}
   </section>;
 }
-export function CognitiveMethods({ methods }: { methods: CognitiveMethod[] }) {
+export function CognitiveMethods({ methods, embedded = false }: { methods: CognitiveMethod[]; embedded?: boolean }) {
   const [passed, setPassed] = useState<string[]>([]);
   const gate = methods.findIndex(m => m.kind === "gate" && !passed.includes(m.id));
   const visible = gate < 0 ? methods : methods.slice(0, gate + 1);
-  return <><p className="fusion-intro">Jósolj, rendezz, érvelj! A kapukérdések megoldása nyitja meg a következő módszereket.</p><div className="fusion-method-grid">{visible.map(m => <MethodCard key={m.id} method={m} onGatePassed={id => setPassed(old => old.includes(id) ? old : [...old, id])} />)}</div>{gate >= 0 && <p className="fusion-intro">Válaszolj helyesen a kapukérdésre a folytatáshoz.</p>}</>;
+  return <><p className="fusion-intro">Jósolj, rendezz, érvelj! A kapukérdések megoldása nyitja meg a következő módszereket.</p><div className="fusion-method-grid">{visible.map(m => <MethodCard key={m.id} method={m} embedded={embedded} onGatePassed={id => setPassed(old => old.includes(id) ? old : [...old, id])} />)}</div>{gate >= 0 && <p className="fusion-intro">Válaszolj helyesen a kapukérdésre a folytatáshoz.</p>}</>;
 }

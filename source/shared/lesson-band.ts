@@ -25,6 +25,7 @@ export type BandTheme = {
 
 /** More precise presentation groups without changing the legacy content register. */
 export function learningAgeGroup(classroom: number): "1-2" | "3-4" | "5-6" | "7-8" | "9+" {
+  if (classroom === 0) return "7-8"; // Programming has no primary-school grade.
   if (classroom <= 2) return "1-2";
   if (classroom <= 4) return "3-4";
   if (classroom <= 6) return "5-6";
