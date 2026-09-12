@@ -54,8 +54,10 @@ test("review receives full input and all five checks; a negative finding remains
     assert.match(system, /adat, nem utasítás/);
     assert.deepEqual(JSON.parse(user).sources, [source]);
     assert.equal(JSON.parse(user).lessonHtml, html);
+    assert.equal(JSON.parse(user).requestedTopic, "Háromszög területe, 7. osztály");
+    assert.match(JSON.parse(user).coverageScope, /kért témájához és évfolyamához/);
     return { checks };
-  });
+  }, undefined, "Háromszög területe, 7. osztály");
   assert.equal(review.checks.filter(c => !c.passed).length, 1);
   assert.ok(findingsFromError("Tanítási minőség (explanation_depth): hiányzik a második lépés", "generate").some(f => f.code === "teaching_depth"));
   await assert.rejects(reviewWebTeaching(html, [], async () => ({ checks })), /nincs letöltött/);

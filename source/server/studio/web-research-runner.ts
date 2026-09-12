@@ -169,7 +169,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           onEvent({ type: "status", message: "A teljes tananyag összevetése a letöltött forrásokkal…" });
           // Review has its own bounded provider timeout; streaming idle time is irrelevant here.
           if (idleTimer) clearTimeout(idleTimer);
-          const review = await reviewWebTeaching(result.html, downloaded, undefined, controller.signal);
+          const review = await reviewWebTeaching(result.html, downloaded, undefined, controller.signal, input.message);
           if (controller.signal.aborted) throw new WebResearchFailure("A tartalmi ellenőrzés ideje alatt a készítés megszakadt.");
           await onCandidate?.(result.html, { teachingReview: review });
           problems = review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`);

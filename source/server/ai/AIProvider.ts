@@ -33,6 +33,8 @@ export interface AIProviderConfig {
   maxTokens?: number;
   temperature?: number;
   timeout?: number; // milliseconds
+  apiMode?: 'chat' | 'responses';
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 /**
