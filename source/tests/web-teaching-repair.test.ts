@@ -12,12 +12,14 @@ const source = { url: "https://example.org/lesson", title: "Szintetikus tesztfor
 const before = "Az alap és a magasság szorzata.";
 const after = "Az alap és a magasság szorzata egy kétszer akkora területű téglalapot ad.";
 const patch = { edits: [{ sectionIndex: 0, before, after }] };
-const review = (passed: boolean) => ({ checks: TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: criterion !== "explanation_depth" || passed, evidence: "A szintetikus javítófolyamat célzott állapotellenőrzése." })), issues: passed ? [] : [{ criterion: "explanation_depth" as const, kind: "missing_explanation" as const, lessonQuote: "A háromszög területe", citations: [], reason: "A területképlet második lépésének indoklása hiányzik.", repair: "Egészítsd ki a képlet magyarázatát a területek összevetésével." }] });
+const review = (passed: boolean) => ({ checks: TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: criterion !== "explanation_depth" || passed, evidence: "A szintetikus javítófolyamat célzott állapotellenőrzése." })), issues: passed ? [] : [{ criterion: "explanation_depth" as const, kind: "missing_explanation" as const, sectionIndex: 0, lessonQuote: "A háromszög területe", citations: [], reason: "A területképlet második lépésének indoklása hiányzik.", repair: "Egészítsd ki a képlet magyarázatát a területek összevetésével." }] });
 
 test("targeted teaching change preserves every other byte and all bank items", () => {
   const updated = applyTeachingPatch(html, patch);
   assert.equal(updated, html.replace(before, after));
   assert.deepEqual(readHtmlLessonData(updated), data);
+  assert.equal(applyTeachingPatch(html, { ...patch, bank: { tasks: [], methods: [], quiz: [] } }), updated);
+  assert.throws(() => applyTeachingPatch(html, { edits: [], bank: {} }), /Üres/);
 });
 
 test("teaching patch cannot escape chapters, add active HTML, rewrite metadata or replan questions", () => {
@@ -35,6 +37,22 @@ test("teaching patch cannot escape chapters, add active HTML, rewrite metadata o
   assert.throws(() => applyTeachingPatch(html.replace(before, before + before), patch), /ismétlődő/);
   assert.throws(() => applyTeachingPatch(html, patch, new Set([1])), /érintett fejezetre/);
   assert.throws(() => applyTeachingPatch(html, { edits: [], bank: { tasks: [{ ...data.experience.tasks[0], sample: "hibás" }] } }), /teljes kaput/);
+});
+
+test("a plain substring in an attribute, script or style cannot be mistaken for visible teaching", () => {
+  for (const node of ['<p title="ORIGINAL_TEXT_VALUE">Tanító kiegészítés.</p>', '<script>const marker = "ORIGINAL_TEXT_VALUE";</script>', '<style>:root { --marker: ORIGINAL_TEXT_VALUE; }</style>']) {
+    const embedded = html.replace('<h2>', `${node}<h2>`);
+    assert.throws(() => applyTeachingPatch(embedded, { edits: [{ sectionIndex: 0, before: "ORIGINAL_TEXT_VALUE", after: "REPLACEMENT_VALUE" }] }), /DOM-szövegcsomóponton/);
+  }
+});
+
+test("bank corrections need an independently named item, not merely the same chapter", () => {
+  const item = data.experience.tasks[0];
+  const bankPatch = { edits: [], bank: { tasks: [{ ...item, q: item.q + ' Indokold is!' }] } };
+  assert.throws(() => applyTeachingPatch(html, bankPatch, new Set([0]), new Set()), /lektor által megnevezett/);
+  const changed = applyTeachingPatch(html, bankPatch, new Set([0]), new Set([`tasks:${item.id}`]));
+  assert.equal(readHtmlLessonData(changed).experience.tasks[0].q, item.q + ' Indokold is!');
+  assert.deepEqual(readHtmlLessonData(changed).experience.tasks.slice(1), data.experience.tasks.slice(1));
 });
 
 test("negative review triggers focused correction then a fresh full review tied to the changed HTML", async () => {

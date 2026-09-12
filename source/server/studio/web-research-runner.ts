@@ -213,8 +213,8 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     if (error instanceof WebResearchFailure) throw error;
     if (error instanceof TeachingReviewFailure) throw new WebResearchFailure(error.message);
     if (error instanceof StepModelError && !controller.signal.aborted) throw new WebResearchFailure(error.step === "lektor"
-      ? "A tartalmi lektorálás nem fejeződött be. A jelölt és a források megmaradtak; a mentett futás folytatható."
-      : "A célzott javító modellhívása nem fejeződött be. A jelölt és a források megmaradtak; a mentett futás folytatható.");
+      ? "A tartalmi lektorálás nem fejeződött be. A jelölt még nem publikálható."
+      : "A célzott javító modellhívása nem fejeződött be. A jelölt még nem publikálható.");
     logger.error("[WEB-RESEARCH] provider failure", { name: error instanceof Error ? error.name : "unknown", timedOut });
     throw new WebResearchFailure(timedOut ? "Időtúllépés: a keresés vagy a tananyagkészítés nem fejeződött be az időkeretben."
       : controller.signal.aborted ? "A kérés megszakadt." : "AI hiba történt a webes keresés közben.");
