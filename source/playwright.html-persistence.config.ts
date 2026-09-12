@@ -1,2 +1,2 @@
 import { defineConfig } from '@playwright/test';
-export default defineConfig({testDir:'./tests',testMatch:'html-lesson-persistence.browser.ts',workers:1,use:{channel:'chrome',baseURL:'http://127.0.0.1:5187'},webServer:{command:'npm run build:client && npx vite preview --host 127.0.0.1 --port 5187 --strictPort',url:'http://127.0.0.1:5187',reuseExistingServer:false,timeout:120000}});
+export default defineConfig({timeout:60000,testDir:'./tests',testMatch:['html-lesson-persistence.browser.ts','html-lesson-quality.browser.ts'],workers:1,use:{channel:'chrome',baseURL:'http://127.0.0.1:5187'},webServer:{command:'npm run build:client && npx vite preview --host 127.0.0.1 --port 5187 --strictPort',url:'http://127.0.0.1:5187',reuseExistingServer:false,timeout:120000}});

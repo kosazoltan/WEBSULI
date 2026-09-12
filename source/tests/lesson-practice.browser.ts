@@ -13,7 +13,8 @@ async function fullyVisible(button: Locator, page: Page) {
 async function fixture(page: Page) {
   const lesson = compactFusionFixture();
   const round: PracticeView = { id: "saved-round", lessonId: "practice-probe", bankVersion: "v1", startedAt: new Date().toISOString(), finishedAt: null, result: null,
-    questions: lesson.experience!.quiz.map((q, i) => ({ id: String(i).repeat(64), questionId: q.id, questionVersion: "v1", prompt: q.question, options: q.options, coversConceptIds: q.coversConceptIds, hintUsed: false })) };
+    // This server-round fixture deliberately has two questions and a 2/2 result.
+    questions: lesson.experience!.quiz.slice(0, 2).map((q, i) => ({ id: String(i).repeat(64), questionId: q.id, questionVersion: "v1", prompt: q.question, options: q.options, coversConceptIds: q.coversConceptIds, hintUsed: false })) };
   let failNext = true;
   await page.route("**/api/auth/user", r => r.fulfill({ json: { id: "synthetic-learner" } }));
   await page.route("**/api/csrf-token", r => r.fulfill({ json: { csrfToken: "synthetic-token" } }));

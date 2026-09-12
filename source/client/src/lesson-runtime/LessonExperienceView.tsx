@@ -34,7 +34,7 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
   const [samples, setSamples] = useState<string[]>([]);
   const [rate, setRate] = useState(0.85);
   const [teachingSection, setTeachingSection] = useLearningPreference<number>(`${storageKey}:section`, 0, (v): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v < headings.length);
-  const [teachingOverview, setTeachingOverview] = useState(false);
+  const [teachingOverview, setTeachingOverview] = useState(true);
   const [taskIndex, setTaskIndex] = useState(0);
   const [quizIndex, setQuizIndex] = useState(0);
   const [taskOverview, setTaskOverview] = useState(false);
