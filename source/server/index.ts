@@ -307,6 +307,7 @@ app.use((req, res, next) => {
   // CRITICAL: Service worker and manifest must always revalidate for updates
   if (
     path === "/service-worker.js" ||
+    path === "/lesson-interactions.js" ||
     path === "/manifest.json" ||
     path === "/offline.html"
   ) {

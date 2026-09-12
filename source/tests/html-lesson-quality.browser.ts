@@ -1,8 +1,33 @@
 import { test, expect } from "@playwright/test";
-import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { standardFusionFixture, compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { withLessonTypography } from "../shared/lesson-typography";
 import { teachingHtml } from "./helpers/teaching-html";
 import { mkdir } from "node:fs/promises";
+
+test("legacy paged teaching is fully readable after tab switches and reload", async ({ page }) => {
+  const data = { classroom: 5, classroomEvidence: "Történeti megjelenítési próba.", subject: "irodalom", experience: compactFusionFixture().experience };
+  const html = withLessonTypography(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+    <nav>${["teaching", "methods", "tasks", "quiz"].map(name => `<button data-lesson-tab="${name}">${name}</button>`).join("")}</nav>
+    <section data-lesson-panel="teaching"><div class="pg-card"><div class="pg-pager"><button id="pg-allch">Teljes áttekintés</button></div></div>
+      <div id="pg-chapters"><div class="pg-card pg-ch"><h2>Első fejezet</h2><p>Az esemény oka.</p></div><div class="pg-card pg-ch" style="display:none"><h2>Második fejezet</h2><p>A cselekvés és a következmény.</p></div></div>
+    </section><section data-lesson-panel="methods"></section><section data-lesson-panel="tasks"></section><section data-lesson-panel="quiz"></section>
+    <aside class="pg-ch" style="display:none">Nem tanítási fejezet</aside>
+    <script id="websuli-lesson-data" type="application/json">${JSON.stringify(data)}</script></body></html>`);
+  await page.route("**/legacy-teaching", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: html }));
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto("/legacy-teaching");
+  const chapters = page.locator('#pg-chapters > .pg-ch:visible');
+  await expect(chapters).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Teljes áttekintés", exact: true })).toHaveCount(0);
+  await expect(page.locator("aside.pg-ch")).toBeHidden();
+  await page.locator('[data-lesson-tab="quiz"]').click();
+  await expect(chapters).toHaveCount(0);
+  await page.locator('[data-lesson-tab="teaching"]').click();
+  await expect(chapters).toHaveCount(2);
+  await page.reload();
+  await expect(chapters).toHaveCount(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
 
 for (const width of [320, 390, 844, 1366]) test(`full 7.4 HTML banks and age presentation ${width}`, async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
