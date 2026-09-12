@@ -18,15 +18,23 @@ export interface WorkflowStore {
 }
 type Context = { record: WorkflowRecord; store: WorkflowStore; token: string; lostLease: boolean; continuation: boolean };
 const context = new AsyncLocalStorage<Context>();
+const preparationSkill = new AsyncLocalStorage<{ snapshot: SkillSnapshot; mode: WorkflowMode }>();
+/** Manual source preparation shares one pinned prompt without inventing a full lesson run. */
+export function withPreparationSkill<T>(snapshot: SkillSnapshot, work: () => Promise<T>): Promise<T> {
+  return preparationSkill.run({ snapshot: structuredClone(snapshot), mode: "upload" }, work);
+}
 export class WorkflowConflict extends Error {}
 export class WorkflowWaiting extends Error {
   constructor(message: string, readonly stepCompleted = false) { super(message); }
 }
 export const workflowMode = () => context.getStore()?.record.view.definition.mode;
-export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version;
+export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version ?? preparationSkill.getStore()?.snapshot.version;
 export const workflowSkillPrompt = () => {
   const view = context.getStore()?.record.view;
-  return view?.skill ? runtimePrompt(view.skill, view.definition.mode) + skillRuleText(view.skill) : "";
+  const preparation = preparationSkill.getStore();
+  const snapshot = view?.skill ?? preparation?.snapshot;
+  const mode = view?.definition.mode ?? preparation?.mode;
+  return snapshot && mode ? runtimePrompt(snapshot, mode) + skillRuleText(snapshot) : "";
 };
 /** Record even a recoverable validation failure, before asking the model to repair it. */
 export async function workflowFinding(code: SkillCode) {

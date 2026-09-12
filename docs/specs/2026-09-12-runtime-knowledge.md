@@ -21,4 +21,6 @@ Nincs modell-súlytanítás, szabad programkód-generálás/telepítés vagy jog
 - PASS célzott tesztek, típusok, teljes verify és izolált DB/HTTP teszt; kiadás előtt visszaállási pont és aktív futások ellenőrzése, utána éles visszaolvasás.
 
 ## Kiadási kockázat
+
+Review alapján szükséges kiegészítés: kézi `studio/routes.ts` kivonatolás explicit, egyszer betöltött skillkontextusa; `step-runner.ts` és `structured-improvement.ts` lektorhibáinak helyes osztályozása; snapshotban módszerverzió, verzió nélküli történeti audit elkülönítése; általános Required sémahiba ne aktiváljon mintaválasz-szabályt. A kézi kivonatolás előkészítő részfeladat, nem kitalált teljes tananyagfutás. Az alap folyamatengedélyek nem változnak.
 Az előző kiadás additív táblákat és auditpótló workert aktivál. Biztonsági mentés és korábbi revision rögzítése szükséges. Nem írunk át meglévő tananyagot. A teljes feltöltési böngészőpróba korábbi fájlátadási akadálya külön fennmaradó elfogadási pont.

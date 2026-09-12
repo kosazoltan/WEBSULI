@@ -7,7 +7,7 @@ const detectors: Array<[SkillCode, RegExp]> = [
   ["prompt_injection", /prompt.?injekció|prompt.?injection|utasítás.?felülírás/i],
   ["concept_reference", /ismeretlen fogalom|fogalom.{0,30}azonosító|unknown.{0,20}(concept|id)|nem szerepel a térképen/i],
   ["bank_cardinality", /Array must contain|bank.{0,30}(méret|hiány|csomag)|methods=|tasks=|quiz=|legalább 15|minimum 15/i],
-  ["sample_score", /mintaválasz|minWords|required|szinonimacsoport/i],
+  ["sample_score", /mintaválasz|minWords|szinonimacsoport/i],
   ["duplicate_question", /ismétlődő kérdés|duplicate/i],
   ["oral_written", /oral|written|szóbeli/i],
   ["coverage", /fedettség|hiányzó fogalom|tanítása hiányos|nem tanított/i],
@@ -45,7 +45,11 @@ export function mergeFindings(...groups: SkillFinding[][]): SkillFinding[] {
 export function skillSnapshot(mode: WorkflowMode, codes: string[]): SkillSnapshot {
   const rules = [...new Set(codes)].filter((c): c is SkillCode => Object.hasOwn(SKILL_RULES, c)).sort();
   const skill = skillForMode(mode);
-  return { skill, version: digest(JSON.stringify([SKILL_METHOD_VERSION, RUNTIME_KNOWLEDGE_VERSION, skill, rules])).slice(0, 20), rules, runtimeVersion: RUNTIME_KNOWLEDGE_VERSION };
+  return { skill, version: digest(JSON.stringify([SKILL_METHOD_VERSION, RUNTIME_KNOWLEDGE_VERSION, skill, rules])).slice(0, 20), rules, runtimeVersion: RUNTIME_KNOWLEDGE_VERSION, methodVersion: SKILL_METHOD_VERSION };
+}
+export function lektorSkillCodes(notes: Array<{ kind: string; blocking: boolean }>): SkillCode[] {
+  return [...new Set(notes.filter(note => note.blocking).flatMap(note =>
+    note.kind === "coverage_gap" ? ["coverage" as const] : note.kind === "source_conflict" ? ["source_fidelity" as const] : []))];
 }
 export function auditWorkflow(view: WorkflowView): SkillAudit {
   const definition = workflowDefinition(view.definition.mode);
@@ -62,7 +66,7 @@ export function auditWorkflow(view: WorkflowView): SkillAudit {
   };
   const errors = view.state === "error" || view.state === "interrupted"
     ? findingsFromError(view.error, view.visits.at(-1)?.step ?? "start") : [];
-  return { version: SKILL_METHOD_VERSION, execution: view.executions ?? 0, at: Date.now(), checks,
+  return { version: view.skill?.methodVersion ?? "legacy-unversioned", execution: view.executions ?? 0, at: Date.now(), checks,
     outcome: complete && Object.values(checks).every(Boolean) ? "passed" : complete ? "incomplete" : "stopped",
     findings: mergeFindings(view.skillFindings ?? [], errors) };
 }

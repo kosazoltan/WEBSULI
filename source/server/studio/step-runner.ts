@@ -50,6 +50,7 @@ import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure } from "../workflows/engine";
+import { lektorSkillCodes } from "../workflows/learning";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -643,7 +644,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const notes = classifyNotes(parsed.data.notes);
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
-      if (blockers > 0) await workflowFinding("source_fidelity");
+      for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
 
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || (job.output?.lesson as Lesson | undefined)?.experience)) {
         return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${notes.filter(n => n.blocking).map(n => n.message).join("; ")}`,

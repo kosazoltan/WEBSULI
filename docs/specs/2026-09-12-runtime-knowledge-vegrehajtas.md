@@ -1,5 +1,7 @@
 # Végrehajtás
 
+Review-kiegészítés: engine külön AsyncLocalStorage skillkontextussal támogatja a kézi kivonatolást; routes a tulajdonos skilljét egyszer betölti és mindkét modellhívásnál ugyanazt használja. A snapshot módszerverziójából készül audit; verzió nélküli történet `legacy-unversioned`, nem az új módszer tanítása. A lektor blokkoló coverage_gap kódját coverage, source_conflict kódját source_fidelity tapasztalatra fordítjuk mindkét hívóban. Célzott regresszió, teljes verify és DB suite ismétlése a megváltozott bemeneteken.
+
 1. `shared/lesson-skill.ts`: opcionális runtime-verzió a snapshotban, rögzített védekező promptinjekció-szabály; régi snapshot kompatibilitás.
 2. `shared/runtime-knowledge.ts`: verziózott identitás, mód szerinti runbook, saját adatból származtatott dokumentumok, kereshető index, mért számlálók és javítási állapotok. Csak kódban karbantartott szöveg kerülhet utasításba.
 3. `workflows/learning.ts`: új snapshot hash tartalmazza a runtime-verziót; injekciós hibajelzés osztályozása nyers szöveg mentése nélkül.

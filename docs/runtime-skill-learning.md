@@ -10,6 +10,8 @@ A QMD itt belső módszerindex, IAM az identitás és jogosultsági határ, Cogn
 
 Az injekciós hibajelzés ismert védekező szabályt aktiválhat; támadó szöveg nem másolódik saját utasításba. Ez a jelzett hibákból tanulás, nem minden bemenetet felismerő biztonsági detektor. A védekező alapelv már az első új futásban érvényes. Az autonómia a karbantartott szabályok aktiválására, tartós megfigyelésére és auditpótlására terjed ki; új ismeretlen eljárás bizonyíték nélkül nem kerül végrehajtásra.
 
+A kézi Studio-forráskivonatolás egyetlen betöltött skillkontextust használ a besoroláshoz és a kivonatoló prompthoz, így az utóbbi gyorsítótára is módszerfüggő. Ez előkészítő részfeladat, nem külön teljes tananyagfutás. Az új snapshot a módszerverziót is rögzíti; az audit ezt használja. A verzió nélkül örökölt történeti futások auditja és megfigyelése `legacy-unversioned` alatt megmarad, de nem tanítja automatikusan az új módszert.
+
 A rendszer a végrehajtás tapasztalatait tanulja meg, nem a nyelvi modell súlyait módosítja. A feltöltés, internetes készítés, Studio, teljes/célzott/HTML-javítás és alkalmazás a közös végrehajtót használja.
 
 ## Egy futás menete

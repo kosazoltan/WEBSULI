@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { executeWorkflow, workflowPhase, workflowFinding, workflowSkillPrompt, workflowValidationFailure } from "../server/workflows/engine";
 import { createWorkflowStore } from "../server/workflows/store";
 import { createSkillStore } from "../server/workflows/learning-store";
-import { knownFinding, auditWorkflow } from "../server/workflows/learning";
+import { knownFinding, auditWorkflow, skillSnapshot } from "../server/workflows/learning";
 import { workflowDefinition } from "../shared/lesson-workflow";
 import { SKILL_METHOD_VERSION } from "../shared/lesson-skill";
 import express from "express";
@@ -52,7 +52,7 @@ test("valódi DB: kijavított hiba, egyszeri tanulás, új folyamat betöltése,
 test("valódi DB: félbeszakadt audit pótlása konkurens ellenőrzéssel, aktív munka érintetlen", async () => {
   const create = async (id: string) => {
     await store.create({ owner: "skill-owner", checkpoints: { complete: "kept" }, view: { id, definition: workflowDefinition("web"), state: "running", executions: 1,
-      createdAt: Date.now(), updatedAt: Date.now(), revision: 0, visits: [{ step: "generate", state: "running", attempt: 1, cacheHits: 0, startedAt: Date.now() }], skillFindings: [knownFinding("concept_reference", "generate")] } });
+      createdAt: Date.now(), updatedAt: Date.now(), revision: 0, skill: skillSnapshot("web", []), visits: [{ step: "generate", state: "running", attempt: 1, cacheHits: 0, startedAt: Date.now() }], skillFindings: [knownFinding("concept_reference", "generate")] } });
     await store.claim(id, "skill-owner", "worker");
   };
   await create("skill-crashed"); await create("skill-active");

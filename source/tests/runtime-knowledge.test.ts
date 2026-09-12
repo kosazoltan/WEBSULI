@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runtimeKnowledge, runtimePrompt } from "../shared/runtime-knowledge";
-import { skillSnapshot, findingsFromError } from "../server/workflows/learning";
-import { executeWorkflow, workflowPhase, workflowSkillPrompt } from "../server/workflows/engine";
+import { skillSnapshot, findingsFromError, auditWorkflow, lektorSkillCodes } from "../server/workflows/learning";
+import { executeWorkflow, workflowPhase, workflowSkillPrompt, withPreparationSkill, workflowSkillVersion } from "../server/workflows/engine";
+import { scopeRequestParams } from "../server/studio/one-step";
 import { skillRuleText, type SkillLesson } from "../shared/lesson-skill";
 import { WORKFLOW_MODES, workflowDefinition } from "../shared/lesson-workflow";
 import { memoryWorkflows } from "./helpers/workflow-store";
@@ -58,4 +59,30 @@ test("ismeretlen és kikapcsolt tapasztalat nem aktív szabály vagy kész javí
   assert.equal(knowledge.cognition.pendingInvestigation, 1);
   assert.equal(knowledge.cognition.activeRules, 0);
   assert.doesNotMatch(knowledge.documents["RUNBOOK.md"], /Internetes készítés/);
+});
+
+test("kézi kivonatolási kontextus izolált és a besoroló tényleges kérését is módosítja", async () => {
+  const snapshots = [skillSnapshot("upload", ["coverage"]), skillSnapshot("upload", ["schema"])];
+  await Promise.all(snapshots.map(snapshot => withPreparationSkill(snapshot, async () => {
+    await Promise.resolve();
+    const params = scopeRequestParams("fixture", []);
+    const system = params.messages[0].content;
+    assert.equal(typeof system, "string");
+    assert.ok(String(system).includes(snapshot.version));
+    assert.match(String(system), /SAJÁT RUNBOOK/);
+    assert.equal(workflowSkillVersion(), snapshot.version);
+  })));
+  assert.equal(workflowSkillPrompt(), "");
+});
+
+test("lektor és sémahiba a megfelelő tanulságot aktiválja", () => {
+  assert.deepEqual(lektorSkillCodes([{ kind: "coverage_gap", blocking: true }, { kind: "source_conflict", blocking: false }]), ["coverage"]);
+  assert.deepEqual(lektorSkillCodes([{ kind: "source_conflict", blocking: true }, { kind: "coverage_gap", blocking: true }]), ["source_fidelity", "coverage"]);
+  assert.deepEqual(findingsFromError("Required: missing JSON field", "author").map(f => f.code), ["schema"]);
+});
+
+test("audit a tényleges módszerhez kötött, régi ismeretlen verzió elkülönített", () => {
+  const view = { id: "old", definition: workflowDefinition("web"), state: "error" as const, createdAt: 1, updatedAt: 1, revision: 1, visits: [] };
+  assert.equal(auditWorkflow(view).version, "legacy-unversioned");
+  assert.equal(auditWorkflow({ ...view, skill: { ...skillSnapshot("web", []), methodVersion: "old-method" } }).version, "old-method");
 });

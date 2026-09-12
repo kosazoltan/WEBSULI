@@ -9,6 +9,7 @@ import type { MapConcept } from "./coverage";
 import { checkCoverageGate } from "./coverage";
 import { buildAuthorPrompt, buildLektorPrompt, canonicalJson, lektorReportSchema } from "./step-io";
 import { classifyNotes } from "./lektor";
+import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 import { callStepModel } from "./run-step";
 import { createStudioProvider } from "../ai/studio-provider";
@@ -107,7 +108,7 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   const review = lektorReportSchema.parse(await call("lektor", buildLektorPrompt(candidate, source), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);
   if (blockers.length) {
-    await workflowFinding("source_fidelity");
+    for (const code of lektorSkillCodes(blockers)) await workflowFinding(code);
     throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
   }
   await workflowPhase("gate");
