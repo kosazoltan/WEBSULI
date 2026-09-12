@@ -31,6 +31,14 @@ for (const viewport of [{width:320,height:740},{width:844,height:390},{width:136
   await expect(tasks.getByRole('status')).toContainText('1 / 5 pont');
   await expect(quiz.locator('article').first().getByRole('button').first()).toBeDisabled();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  for (const control of await quiz.getByRole('button').all()) {
+    if (!(await control.isVisible())) continue;
+    await control.scrollIntoViewIfNeeded();
+    const box=await control.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(await control.evaluate(el=>{ const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })).toBe(true);
+  }
   await quiz.scrollIntoViewIfNeeded(); await mkdir('../tmp/closure-browser',{recursive:true});
   await page.screenshot({path:`../tmp/closure-browser/quiz-${viewport.width}.png`});
   await quiz.getByRole('button',{name:'Új kvízkör',exact:true}).click();
