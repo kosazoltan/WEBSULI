@@ -1,5 +1,7 @@
 # Végrehajtás
 
+Auditfedettség lezárása: `improveAsync.ts` csonka HTML folytatása előtt `html_complete` finding, és a `lesson-pipeline-routes.ts` sikertelen scope-válaszánál az eredeti ok osztályozása szükséges. A kötelező JSON/besorolás hiányát a séma-detektor felismeri. A kiadás migrációs parancsot használ; a régebbi `db:push` nem teljes telepítési eljárás a SQL-workflow táblákhoz.
+
 Review-kiegészítés: engine külön AsyncLocalStorage skillkontextussal támogatja a kézi kivonatolást; routes a tulajdonos skilljét egyszer betölti és mindkét modellhívásnál ugyanazt használja. A snapshot módszerverziójából készül audit; verzió nélküli történet `legacy-unversioned`, nem az új módszer tanítása. A lektor blokkoló coverage_gap kódját coverage, source_conflict kódját source_fidelity tapasztalatra fordítjuk mindkét hívóban. Célzott regresszió, teljes verify és DB suite ismétlése a megváltozott bemeneteken.
 
 1. `shared/lesson-skill.ts`: opcionális runtime-verzió a snapshotban, rögzített védekező promptinjekció-szabály; régi snapshot kompatibilitás.

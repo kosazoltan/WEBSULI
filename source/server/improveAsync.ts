@@ -16,7 +16,7 @@ import { storage } from './storage';
 import { logger } from './lib/logger';
 import type { HtmlFile } from '@shared/schema';
 import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
-import { executeWorkflow, workflowPhase, workflowSkillPrompt } from "./workflows/engine";
+import { executeWorkflow, workflowPhase, workflowSkillPrompt, workflowFinding } from "./workflows/engine";
 import { workflowStore } from "./workflows/store";
 import { htmlBaselineHash } from "./improve/html-baseline";
 
@@ -280,6 +280,7 @@ ${originalFile.content}
         !/<\/html>\s*$/i.test(joined.trim()) && round <= MAX_CONTINUATION_ROUNDS;
         round++
       ) {
+        await workflowFinding("html_complete");
         logger.warn(
           `[IMPROVE] Record ${dbRecordId}: A kimenet csonka (${joined.length} kar, nincs </html>) — folytatás ${round}/${MAX_CONTINUATION_ROUNDS}...`,
         );

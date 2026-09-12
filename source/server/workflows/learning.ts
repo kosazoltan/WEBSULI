@@ -15,7 +15,7 @@ const detectors: Array<[SkillCode, RegExp]> = [
   ["citations", /forrás.{0,80}hivatkozás|kattintható hivatkozás/i],
   ["typography", /ékezet|betűtípus|font|Unicode/i],
   ["repair_scope", /nem érintett tétel|nem módosítható|nem törölhet|javítás csak egyedi/i],
-  ["schema", /érvényes JSON|alakilag hibás|séma|Invalid (type|enum)|Required/i],
+  ["schema", /érvényes JSON|nincs JSON|nem adott tantárgyat|alakilag hibás|séma|Invalid (type|enum)|Required/i],
 ];
 export function knownFinding(code: SkillCode, step: string): SkillFinding {
   return { code, step, fingerprint: digest(`${SKILL_METHOD_VERSION}:${code}`) };

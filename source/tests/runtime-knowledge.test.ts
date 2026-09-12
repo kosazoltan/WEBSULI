@@ -79,6 +79,7 @@ test("lektor és sémahiba a megfelelő tanulságot aktiválja", () => {
   assert.deepEqual(lektorSkillCodes([{ kind: "coverage_gap", blocking: true }, { kind: "source_conflict", blocking: false }]), ["coverage"]);
   assert.deepEqual(lektorSkillCodes([{ kind: "source_conflict", blocking: true }, { kind: "coverage_gap", blocking: true }]), ["source_fidelity", "coverage"]);
   assert.deepEqual(findingsFromError("Required: missing JSON field", "author").map(f => f.code), ["schema"]);
+  assert.deepEqual(findingsFromError("A modell válaszában nincs JSON.", "scope").map(f => f.code), ["schema"]);
 });
 
 test("audit a tényleges módszerhez kötött, régi ismeretlen verzió elkülönített", () => {
