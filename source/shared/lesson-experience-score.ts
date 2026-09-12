@@ -68,6 +68,19 @@ export function sampleIds<T extends { id: string }>(bank: readonly T[], count: n
   return ids.slice(0, count);
 }
 
+/** Stable display order; saved picks and feedback always retain the original bank index. */
+export function quizOptionIndices(question: { id: string; question: string; options: readonly string[] }): number[] {
+  let seed = 2166136261;
+  for (const character of `${question.id}:${question.question}`) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619) >>> 0;
+  const indices = question.options.map((_, index) => index);
+  for (let i = indices.length - 1; i > 0; i--) {
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    const j = (seed >>> 0) % (i + 1);
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices;
+}
+
 /** Keep oral practice present in every round, not only somewhere in the full bank. */
 export function sampleTaskIds(bank: readonly OpenTask[], count = 15, random = Math.random): string[] {
   const oral = new Set(sampleIds(bank.filter(t => t.mode === "oral"), Math.min(2, count), random));

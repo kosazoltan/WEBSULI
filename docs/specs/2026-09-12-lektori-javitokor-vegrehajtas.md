@@ -9,3 +9,6 @@
 7. `npm.cmd run verify`, szükséges böngészőtesztek, külön diff-review. Atomi commit, PR, zöld CI, merge, két éles szolgáltatás revízió- és működési visszamérése. A konkrét tartalom alkalmazását teljes mentés és feltételes csere után olvasd vissza. Az eredményeket és a fennmaradó tényleges korlátot írd a specifikáció végére.
 
 Mért korrekció: `web-teaching-review.ts` a változatlan lektori modell Responses low beállítását használja; pozitív alapellenőrzés után új rendszerprompthoz kötött ellenpélda-keresés kell. Második negatív döntés sem adhat bizonyítékot. Mindkét hívás teljes forrást és tananyagot kap. Teszteld a két pozitív döntést és a pozitív-aztán-negatív eset megmaradó hibáját. A bank idézhetőségét explicit szövegmezőkre szűkítsd; a javító onProblem callbackje kapja meg az aktuális HTML-t a diagnózis mentéséhez, a végső negatív értékelést is rögzítse.
+# A kvíz opciósorrendjének mért javítása
+
+A 75/75 nulladik helyes indexet a megjelenítésben kezeld. Előbb készíts tiszta, determinisztikus indexpermutációt a közös pontozómodulban, utána a HTML-kvíz az eredeti bankindex alapján olvassa az opciót, mentse a választ és keresse a visszajelzést. Ne változtasd meg a mentési kulcsot vagy a régi tárolt válaszokat. Ellenőrizd 3/4 opció, stabilitás, indexmegőrzés, különböző helyes válaszpozíciók esetét, majd valós böngészőben helyes/hibás választ és újratöltést.
