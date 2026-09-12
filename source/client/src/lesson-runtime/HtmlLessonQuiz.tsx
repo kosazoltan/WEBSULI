@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { LessonExperience } from "@shared/lesson-experience";
 import { experienceRoundSizes } from "@shared/lesson-experience";
 import { sampleIds, scoreSummary } from "@shared/lesson-experience-score";
+import { FinishPracticeButton } from "./FinishPracticeButton";
 
 const savedSchema = z.object({ ids: z.array(z.string()), picks: z.record(z.number().int().nonnegative()), started: z.number().nonnegative(), finished: z.number().nonnegative().nullable() });
 type Round = z.infer<typeof savedSchema>;
@@ -48,7 +49,7 @@ export function HtmlLessonQuiz({ experience, material }: { experience: LessonExp
     {confirmReset && <div role="group" aria-label="Új kör megerősítése"><p>Az új, {nextCount} kérdéses kör lecseréli az itt tárolt válaszokat és eredményt.</p><button onClick={() => { save(fresh(nextCount)); setPageIndex(0); setConfirmReset(false); }}>Új kör indítása</button><button onClick={() => setConfirmReset(false)}>Mégsem</button></div>}
     <nav aria-label="Kérdések lapozása"><button disabled={pageIndex === 0} onClick={() => setPageIndex(i => Math.max(0, i - 1))}>Előző kérdés</button><span>{Math.min(pageIndex + 1, questions.length)} / {questions.length}</span><button disabled={pageIndex >= questions.length - 1} onClick={() => setPageIndex(i => Math.min(questions.length - 1, i + 1))}>Következő kérdés</button><button aria-pressed={overview} onClick={() => setOverview(v => !v)}>{overview ? "Egyenként" : "Összes kérdés áttekintése"}</button></nav>
     {questions.map((q, index) => <article key={q.id} hidden={!overview && index !== Math.min(pageIndex, questions.length - 1)}><h3>{index + 1}. {q.question}</h3><div className="quiz-options">{q.options.map((option, pick) => <button key={pick} aria-pressed={round.picks[q.id] === pick} disabled={round.finished !== null || round.picks[q.id] !== undefined} onClick={() => save({ ...round, picks: { ...round.picks, [q.id]: pick } })}>{option}</button>)}</div>{round.picks[q.id] !== undefined && <p>{round.picks[q.id] === q.correctIndex ? "Helyes. " : "Még nem helyes. "}{q.feedbackPerOption[round.picks[q.id]]}</p>}</article>)}
-    <button disabled={round.finished !== null} onClick={() => save({ ...round, finished: Date.now() })}>Kiértékelés</button>
+    <FinishPracticeButton total={questions.length} unanswered={questions.filter(q => round.picks[q.id] === undefined).length} disabled={round.finished !== null} onContinue={() => { setOverview(false); setPageIndex(questions.findIndex(q => round.picks[q.id] === undefined)); }} onFinish={() => save({ ...round, finished: Date.now() })}>Kiértékelés</FinishPracticeButton>
     {round.finished !== null && <div role="status"><strong>{points} / {questions.length} pont · {result.percent}%</strong><p>Gyakorló osztályzat: {result.grade} · idő: {Math.max(0, Math.floor((round.finished - round.started) / 1000))} mp</p><button onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify({ ...round, ...result, assessment: "Helyi gyakorló önellenőrzés" })], { type: "application/json" })); const a = document.createElement("a"); a.href = url; a.download = "kviz-eredmeny.json"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Eredmény letöltése</button></div>}
   </section>;
 }

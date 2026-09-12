@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { PracticeView } from "@shared/lesson-attempt";
 import { scoreSummary } from "@shared/lesson-experience-score";
 import { LearningPager } from "./LearningControls";
+import { FinishPracticeButton } from "./FinishPracticeButton";
 
 export function PracticeAccess({ lessonId, enabled, onFinished, onReview, children }: {
   lessonId?: string; enabled: boolean; onFinished: (finished: boolean | null) => void; onReview: (questionId: string) => void; children: ReactNode;
@@ -89,7 +90,7 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
         {q.answer ? <p className="lesson-feedback" data-state={q.answer.correct ? "right" : "wrong"}>{q.answer.feedback}{q.answer.usedHint ? " · Segítséggel megoldva" : ""}</p> : <button className="lesson-ghost-btn" disabled={busy || !!error} onClick={() => void run(async () => { const saved = await apiRequest<PracticeView>("POST", `/api/lessons/practice/${round.id}/hint`, { questionId: q.id }); onReview(q.questionId); return saved; })}>Segítség: vissza a magyarázathoz</button>}
       </section>
       <LearningPager index={index} count={round.questions.length} label="kérdés" onChange={setIndex} />
-      <button className="fusion-primary" disabled={busy || !!error} onClick={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/finish`, {}))}>Kvíz kiértékelése</button>
+      <FinishPracticeButton className="fusion-primary" total={round.questions.length} unanswered={round.questions.length - answered} disabled={busy || !!error} onContinue={() => setIndex(round.questions.findIndex(q => !q.answer))} onFinish={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/finish`, {}))}>Kvíz kiértékelése</FinishPracticeButton>
     </>}
   </>;
 }
