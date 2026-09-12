@@ -27,11 +27,12 @@ Nyelvi leckénél language és glossary kötelező; minden szóhoz {word,transla
 A négy NAVIGÁCIÓS GOMB attribútuma data-lesson-tab="teaching|methods|tasks|quiz"; a négy tartalomé data-lesson-panel ugyanilyen értékkel. A gombváltó ténylegesen ezek láthatóságát állítja. A methods panel a JSON módszereit, tasks és quiz a bankPlan szerinti rövid kört jeleníti meg. Alapból egyesével lapozva, külön teljes áttekintéssel. Fülváltás nem töröl választ. Üres válasz0; minta1; részválasz0.5; számok előjelét és tizedesjelét ne veszítsd el és ne fogadj el fuzzy számegyezést. Eredmény helyi mentése és JSON-export.
 A módszer szerinti teljes HTML elkészülte után gépi kapu ellenőrzi a JSON-sémát, darabszámokat, mintaválaszokat és a füleket; hiányos anyag nem menthető.`;
 
-export function readRawHtmlLessonData(html: string): unknown {
+export function readRawHtmlLessonData(html: string, requireEscaped = false): unknown {
   const blocks = html.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? [];
   const target = blocks.filter(b => new RegExp(`\\bid\\s*=\\s*["']${HTML_LESSON_DATA_ID}["']`, "i").test(b.slice(0, b.indexOf(">") + 1)));
   if (target.length !== 1) throw new Error("Pontosan egy websuli-lesson-data JSON-bank szükséges.");
   const raw = target[0].replace(/^<script\b[^>]*>/i, "").replace(/<\/script\s*>$/i, "");
+  if (requireEscaped && raw.includes("<")) throw new Error("A JSON-bank < karaktereit Unicode escape formában kell kódolni.");
   return JSON.parse(raw);
 }
 export function readHtmlLessonData(html: string) {

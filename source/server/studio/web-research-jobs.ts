@@ -6,6 +6,7 @@ import { type ResearchArtifact, type ResearchObserver, WebResearchFailure, hasSa
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { logger } from "../lib/logger";
+import { assertTeachingReviewEvidence, type TeachingReviewEvidence } from "./web-teaching-review";
 import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, savedWorkflowResult, type WorkflowStore } from "../workflows/engine";
 
 export type StoredResearchJob = WebResearchJob & {
@@ -14,6 +15,7 @@ export type StoredResearchJob = WebResearchJob & {
   candidate?: string;
   diagnostics: Array<Record<string, unknown>>;
   updatedAt?: number;
+  reviewEvidence?: TeachingReviewEvidence;
 };
 export interface ResearchJobStore {
   create(job: StoredResearchJob): Promise<boolean>;
@@ -32,6 +34,8 @@ export function checkedResearchArtifact(artifact: ResearchArtifact) {
   const check = decideWebResearchResult({ stopReason: "end_turn", fullContent: artifact.html, repairAttempts: 2, sources: artifact.sources }, verifyLessonMethodHtml);
   if (check.type !== "ready") throw new WebResearchFailure(check.type === "error" ? check.message : check.reason);
   if (!artifact.sources.length) throw new WebResearchFailure("Nincs ellenőrizhető internetes forrás.");
+  try { assertTeachingReviewEvidence(artifact.html, artifact.sources, artifact.reviewEvidence); }
+  catch { throw new WebResearchFailure("A teljes tananyaghoz és forrásaihoz kötött sikeres tartalmi lektorálás hiányzik vagy elavult."); }
   return readHtmlLessonData(artifact.html);
 }
 
@@ -50,7 +54,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     try {
       await workflowPhase("generate");
       const artifact = await workflowCheckpoint("web-result", { input: job.input, method: LESSON_METHOD_VERSION }, () => ["ready", "done"].includes(job.state) && job.html
-        ? Promise.resolve({ html: job.html, sources: job.sources }) : generate(job.input, {
+        ? Promise.resolve({ html: job.html, sources: job.sources, reviewEvidence: job.reviewEvidence }) : generate(job.input, {
         onEvent(event) {
           if (event.type === "status") { job.stage = event.message; persist(); }
           if (event.type === "sources") { job.sources = [...event.sources]; persist(); }
@@ -70,6 +74,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       await checkpoint;
       job.html = artifact.html;
       job.sources = artifact.sources;
+      job.reviewEvidence = artifact.reviewEvidence;
       job.classroom = data.classroom;
       job.title = job.input.title?.trim() || `${data.subject} — ${data.classroom}. osztály`;
       job.state = "ready";

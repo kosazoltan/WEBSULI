@@ -10,6 +10,7 @@ export function verifyLessonMethodHtml(html: string): HtmlVerification {
   const problems = [...verifyImprovedHtml(html).problems, ...verifyHtmlNavigation(html)];
   let data;
   try {
+    readRawHtmlLessonData(html, true);
     data = readHtmlLessonData(html);
   } catch (error) {
     if (error instanceof ZodError) {

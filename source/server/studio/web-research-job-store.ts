@@ -40,7 +40,7 @@ export const researchJobStore: ResearchJobStore = {
       if (!job) throw new WebResearchFailure("A futás nem található.");
       if (job.state === "done") return job;
       if (job.state !== "ready" || !job.html) throw new WebResearchFailure("Még nincs ellenőrzött, menthető tananyag.");
-      const data = checkedResearchArtifact({ html: job.html, sources: job.sources });
+      const data = checkedResearchArtifact({ html: job.html, sources: job.sources, reviewEvidence: job.reviewEvidence });
       await tx.insert(htmlFiles).values({ id, userId, title: job.title, content: job.html, classroom: data.classroom, contentType: "html", description: `Internetes forrásokból készült tananyag, ${data.classroom}. osztály.` });
       job.state = "done";
       job.materialId = id;

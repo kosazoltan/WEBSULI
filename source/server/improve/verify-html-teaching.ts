@@ -21,6 +21,8 @@ export function verifyHtmlNavigation(html: string): string[] {
   const nodes = descendants(parse(html));
   const panels = nodes.filter(n => attr(n, "data-lesson-panel") !== undefined);
   const problems: string[] = [];
+  const banks = nodes.filter(n => n.tagName === "script" && attr(n, "id") === "websuli-lesson-data");
+  if (banks.length !== 1 || attr(banks[0], "type") !== "application/json") problems.push("Pontosan egy valódi, inert JSON-bank szükséges.");
   for (const name of ["teaching", "methods", "tasks", "quiz"]) {
     if (panels.filter(n => attr(n, "data-lesson-panel") === name).length !== 1) problems.push(`Pontosan egy data-lesson-panel="${name}" szükséges.`);
     if (nodes.filter(n => n.tagName === "button" && attr(n, "data-lesson-tab") === name).length !== 1) problems.push(`Pontosan egy valódi navigációs gomb szükséges: data-lesson-tab="${name}".`);
@@ -53,10 +55,13 @@ export function verifyHtmlTeaching(html: string, experience: LessonExperience): 
     }
     if (concealed(section, panel)) problems.push(`${i + 1}. fejezet: elrejtett tanítás.`);
   });
-  const visuals = nodes.filter(n => attr(n, "data-teaching-visual") !== undefined && !concealed(n, panel));
   const cardRow = (n: Element) => n.tagName === "figure" && descendants(n).some(c => c.tagName === "figcaption" && text(c).length >= 20)
     && descendants(n).some(row => row.childNodes.filter(element).filter(card => !concealed(card, panel) && text(card).length >= 20
       && descendants(card).some(label => /^(b|strong|h[1-6])$/.test(label.tagName) && text(label).length > 0)).length >= 2);
-  if (!visuals.some(n => text(n).length >= 20 && (descendants(n).some(child => ["svg", "img", "li"].includes(child.tagName)) || cardRow(n)))) problems.push("Hiányzó tanítási szemléltetés: feliratozott ábra vagy lépéses kártyasor szükséges.");
+  for (const [i, section] of sections.entries()) {
+    const visuals = descendants(section).filter(n => attr(n, "data-teaching-visual") !== undefined && !concealed(n, panel));
+    if (!visuals.some(n => text(n).length >= 20 && (descendants(n).some(child => ["svg", "img", "li"].includes(child.tagName)) || cardRow(n)
+      || descendants(n).some(child => child.tagName === "table" && descendants(child).filter(row => row.tagName === "tr").length >= 2)))) problems.push(`${i + 1}. fejezet: hiányzó tanítási szemléltetés; feliratozott ábra vagy lépéses kártyasor szükséges.`);
+  }
   return problems;
 }

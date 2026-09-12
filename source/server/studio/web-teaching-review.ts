@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { LESSON_QUALITY_CONTRACT } from "../../shared/lesson-quality";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { callStepModel } from "./run-step";
@@ -30,6 +31,17 @@ export const teachingReviewSchema = z.object({ checks: z.array(z.object({
   if (new Set(r.checks.map(c => c.criterion)).size !== TEACHING_REVIEW_CHECKS.length) ctx.addIssue({ code: "custom", message: "A tartalmi lektor nem ellenőrizte mind az öt követelményt." });
 });
 export type TeachingReview = z.infer<typeof teachingReviewSchema>;
+const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export type TeachingReviewEvidence = { version: "web-teaching-review-1"; htmlHash: string; sourceListHash: string; fetchedSourcesHash: string; review: TeachingReview };
+export function teachingReviewEvidence(html: string, sources: FetchedTeachingSource[], review: TeachingReview): TeachingReviewEvidence {
+  return { version: "web-teaching-review-1", htmlHash: digest(html), sourceListHash: digest(sources.map(({ url, title }) => ({ url, title }))), fetchedSourcesHash: digest(sources), review: teachingReviewSchema.parse(review) };
+}
+export function assertTeachingReviewEvidence(html: string, sources: { url: string; title: string }[], evidence?: TeachingReviewEvidence) {
+  if (!evidence || evidence.version !== "web-teaching-review-1" || evidence.htmlHash !== digest(html) || evidence.sourceListHash !== digest(sources)
+    || !/^[a-f0-9]{64}$/.test(evidence.fetchedSourcesHash) || !teachingReviewSchema.parse(evidence.review).checks.every(c => c.passed)) {
+    throw new Error("A teljes tananyaghoz és forrásaihoz kötött sikeres tartalmi lektorálás hiányzik vagy elavult.");
+  }
+}
 const reviewerCall = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("lektor");
   const deadline = AbortSignal.timeout(180_000);

@@ -1,4 +1,5 @@
 import { teachingHtml } from "./helpers/teaching-html";
+import { syntheticTeachingReviewEvidence } from "./helpers/teaching-review";
 // Standalone real PostgreSQL contract probe; ONLY a disposable localhost database.
 // DATABASE_URL=postgres://postgres@127.0.0.1:<port>/research_test node --import tsx tests/web-research-database.integration.ts
 import assert from "node:assert/strict";
@@ -19,9 +20,14 @@ try {
   const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és a területképlet.", subject: "matematika", experience: standardFusionFixture().experience };
   const html = `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu/">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}">${t === "teaching" ? teachingHtml : ""}</section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(data)}</script><script>const data=JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
   const job: StoredResearchJob = { id: "probe", userId: "owner", input: { message: "Készíts", classroom: 4 }, state: "ready", stage: "Mentés", createdAt: Date.now(), title: "Teszt", message: "Készíts", content: "", sources: [{ url: "https://www.oktatas.hu/", title: "Forrás" }], diagnostics: [], html };
+  job.reviewEvidence = syntheticTeachingReviewEvidence(html, job.sources);
   assert.deepEqual((await Promise.all([store.create(job), store.create(job)])).sort(), [false, true]);
   assert.equal(await store.read(job.id, "other"), null);
   await assert.rejects(store.publish(job.id, "other"), /nem található/);
+  await store.update({ ...job, reviewEvidence: undefined }, "ready");
+  await assert.rejects(store.publish(job.id, "owner"), /lektorálás/);
+  assert.equal((await setup.query("SELECT count(*)::int AS n FROM html_files")).rows[0].n, 0);
+  await store.update(job, "ready");
   // Force a failure AFTER inserting a material but BEFORE the job becomes done.
   await setup.query(`CREATE FUNCTION reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status = 'web_research_done' THEN RAISE EXCEPTION 'simulated storage failure'; END IF; RETURN NEW; END $$;
 CREATE TRIGGER reject_completion BEFORE UPDATE ON ai_generation_requests FOR EACH ROW EXECUTE FUNCTION reject_completion();`);

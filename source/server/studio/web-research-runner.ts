@@ -6,11 +6,11 @@ import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
-import { fetchedTeachingSources, reviewWebTeaching, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
+import { fetchedTeachingSources, reviewWebTeaching, teachingReviewEvidence, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { repairWebLessonBank } from "./web-bank-repair";
 
 export class WebResearchFailure extends Error {}
-export type ResearchArtifact = { html: string; sources: WebSource[] };
+export type ResearchArtifact = { html: string; sources: WebSource[]; reviewEvidence?: TeachingReviewEvidence };
 export type ResearchObserver = {
   signal?: AbortSignal;
   onEvent: (event: WebResearchEvent) => void;
@@ -160,6 +160,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         });
       }
       let result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
+      let reviewEvidence: TeachingReviewEvidence | undefined;
       if (result.type === "ready") {
         const downloaded = [...fetched.values()];
         let problems: string[];
@@ -172,6 +173,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           if (controller.signal.aborted) throw new WebResearchFailure("A tartalmi ellenőrzés ideje alatt a készítés megszakadt.");
           await onCandidate?.(result.html, { teachingReview: review });
           problems = review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`);
+          if (!problems.length) reviewEvidence = teachingReviewEvidence(result.html, downloaded, review);
         }
         if (problems.length) result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, () => ({ ok: false, problems }));
       }
@@ -192,7 +194,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       }
       if (result.type === "error") throw new WebResearchFailure(result.message);
       if (sources.length === 0) throw new WebResearchFailure("Nem érkezett ellenőrizhető internetes forráshivatkozás. A tananyag nem menthető.");
-      return { html: result.html, sources: [...fetched.values()].map(({ url, title }) => ({ url, title })) };
+      return { html: result.html, sources: [...fetched.values()].map(({ url, title }) => ({ url, title })), reviewEvidence };
     }
   } catch (error) {
     if (error instanceof WebResearchFailure) throw error;

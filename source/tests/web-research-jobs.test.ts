@@ -1,4 +1,5 @@
 import { teachingHtml } from "./helpers/teaching-html";
+import { syntheticTeachingReviewEvidence } from "./helpers/teaching-review";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
@@ -11,8 +12,20 @@ import { memoryWorkflows } from "./helpers/workflow-store";
 
 const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és területképlete.", subject: "Matematika", experience: standardFusionFixture().experience };
 const htmlFor = (value: unknown) => `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}">${t === "teaching" ? teachingHtml : ""}</section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(value)}</script><script>const data = JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
-const artifact = { html: htmlFor(data), sources: [{ url: "https://www.oktatas.hu", title: "Tanterv" }] };
+const baseArtifact = { html: htmlFor(data), sources: [{ url: "https://www.oktatas.hu", title: "Tanterv" }] };
+const artifact = { ...baseArtifact, reviewEvidence: syntheticTeachingReviewEvidence(baseArtifact.html, baseArtifact.sources) };
 const input = { message: "Készíts tananyagot", classroom: 4 };
+
+test("publication requires passing review evidence bound to the exact HTML and source list", () => {
+  assert.doesNotThrow(() => checkedResearchArtifact(artifact));
+  const failedReview = structuredClone(artifact.reviewEvidence); failedReview.review.checks[0].passed = false;
+  for (const invalid of [
+    { ...artifact, reviewEvidence: undefined },
+    { ...artifact, html: artifact.html.replace("</body>", "<p>Megváltoztatott tanítás</p></body>") },
+    { ...artifact, sources: [...artifact.sources, { url: "https://example.org", title: "Nem ellenőrzött" }] },
+    { ...artifact, reviewEvidence: failedReview },
+  ]) assert.throws(() => checkedResearchArtifact(invalid), /lektorálás/);
+});
 function memoryStore() {
   const rows = new Map<string, StoredResearchJob>();
   const materials = new Map<string, string>();
@@ -27,7 +40,7 @@ function memoryStore() {
       assert.equal(job.userId, user);
       if (job.state === "done") return structuredClone(job);
       assert.equal(job.state, "ready");
-      checkedResearchArtifact({ html: job.html!, sources: job.sources });
+      checkedResearchArtifact({ html: job.html!, sources: job.sources, reviewEvidence: job.reviewEvidence });
       materials.set(id, job.html!);
       job.state = "done"; job.materialId = id; job.error = undefined;
       return structuredClone(job);
@@ -109,7 +122,7 @@ test("completed author turn and fetched text survive reviewer failure without a 
     });
     assert.equal(turn.final.content[0].text, sourceText);
     if (reviewBroken) throw new Error("Synthetic reviewer outage");
-    return { html: turn.content, sources: turn.sources };
+    return { html: turn.content, sources: turn.sources, reviewEvidence: artifact.reviewEvidence };
   };
   const jobs = createResearchJobs(m.store, generate, workflows.store);
   await jobs.start("author-checkpoint", "owner", input);

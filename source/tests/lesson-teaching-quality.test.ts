@@ -8,7 +8,7 @@ import { teachingHtml } from "./helpers/teaching-html";
 
 const experience = standardFusionFixture().experience!;
 test("navigation needs actual unique buttons and separate panels, not attributes quoted in script text", () => {
-  const nav = ["teaching", "methods", "tasks", "quiz"].map(name => `<button data-lesson-tab="${name}"></button><section data-lesson-panel="${name}"></section>`).join("");
+  const nav = ["teaching", "methods", "tasks", "quiz"].map(name => `<button data-lesson-tab="${name}"></button><section data-lesson-panel="${name}"></section>`).join("") + '<script id="websuli-lesson-data" type="application/json">{}</script>';
   assert.deepEqual(verifyHtmlNavigation(nav), []);
   assert.ok(verifyHtmlNavigation(`<script type="application/json">${JSON.stringify(nav)}</script>`).length);
   assert.ok(verifyHtmlNavigation(nav + '<section data-lesson-panel="quiz"></section>').length);
@@ -24,6 +24,15 @@ test("teaching gate rejects empty, hidden, disconnected and unexplained teaching
   assert.deepEqual(verifyHtmlTeaching(html.replace('data-lesson-panel="teaching"', 'data-lesson-panel="teaching" hidden'), experience), []);
 });
 const source = { url: "https://example.org/lesson", title: "Forrás", text: "Forrásból származó magyarázat. ".repeat(8) };
+test("one visual cannot stand in for a missing visual in another teaching chapter", () => {
+  const expanded = structuredClone(experience);
+  expanded.bankPlan!.units.push({ ...expanded.bankPlan!.units[0], sectionIndex: 1 });
+  const second = teachingHtml.replace('data-teaching-section="0"', 'data-teaching-section="1"');
+  const both = `<section data-lesson-panel="teaching">${teachingHtml}${second}</section>`;
+  assert.deepEqual(verifyHtmlTeaching(both, expanded), []);
+  const missing = `<section data-lesson-panel="teaching">${teachingHtml}${second.replace(/<figure[^]*?<\/figure>/, '')}</section>`;
+  assert.match(verifyHtmlTeaching(missing, expanded).join("; "), /2. fejezet: hiányzó tanítási szemléltetés/);
+});
 test("captioned multi-card diagrams count as visuals, empty or unlabelled prose does not", () => {
   const cards = '<figure data-teaching-visual><div><div><b>Alap</b>Válaszd ki az alapul szolgáló oldalt.</div><div><b>Magasság</b>Keresd meg az alapra merőleges magasságot.</div></div><figcaption>A területszámítás előkészítésének két összefüggő lépése.</figcaption></figure>';
   const withVisual = (value: string) => html.replace(/<figure[^]*?<\/figure>/, value);

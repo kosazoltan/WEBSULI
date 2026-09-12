@@ -39,6 +39,17 @@ test("patch cannot delete items, rewrite metadata or inject a second executable 
   assert.throws(() => applyWebBankPatch(html, { methods: [update, update] }), /Ismétlődő/);
 });
 
+test("new publication rejects raw angle brackets and commented-out banks, while legacy reading remains compatible", () => {
+  const original = data(); original.experience.methods[0].prompt = "Melyik számra igaz, hogy x < 5?";
+  const html = htmlFor(original);
+  assert.doesNotThrow(() => readHtmlLessonData(html));
+  assert.match(verifyLessonMethodHtml(html).problems.join("; "), /Unicode escape/);
+  const escaped = applyWebBankPatch(html, { methods: [original.experience.methods[0]] });
+  assert.equal(verifyLessonMethodHtml(escaped).ok, true);
+  const commented = escaped.replace(/(<script type="application\/json"[^]*?<\/script>)/, '<!--$1-->');
+  assert.match(verifyLessonMethodHtml(commented).problems.join("; "), /valódi, inert/);
+});
+
 test("invalid repair stays rejected after two attempts and never changes teaching", async () => {
   const original = data(); original.experience.methods = original.experience.methods.filter(m => m.kind !== "gate");
   const html = htmlFor(original); let calls = 0;
