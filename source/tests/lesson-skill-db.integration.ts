@@ -21,12 +21,20 @@ const finish = async () => { for (const step of ["gate", "publish", "readback"])
 
 test("valódi DB: kijavított hiba, egyszeri tanulás, új folyamat betöltése, tiltás megőrzése", async () => {
   const input = { id: "skill-first", owner: "skill-owner", mode: "web" as const };
-  const work = async () => { await workflowPhase("generate"); await workflowFinding("sample_score"); await workflowFinding("sample_score"); return finish(); };
+  const work = async () => {
+    await workflowPhase("generate"); await workflowFinding("sample_score"); await workflowFinding("sample_score");
+    await workflowPhase("gate"); await workflowFinding("sample_score");
+    await workflowPhase("publish"); await workflowPhase("readback");
+    return { kind: "material" as const, id: "skill-material" };
+  };
   await executeWorkflow(store, input, work);
   await executeWorkflow(store, input, work);
   const rows = await skills.list("skill-owner", "tananyag-keszito");
   const sample = rows.find(r => r.code === "sample_score")!;
   assert.equal(sample.occurrences, 1); assert.equal(sample.recovered, 1);
+  assert.equal(sample.step, "gate");
+  const audit = (await dbPool.query("SELECT audit FROM lesson_skill_audits WHERE run_id=$1", [input.id])).rows[0].audit;
+  assert.deepEqual(audit.findings[0].steps, ["generate", "gate"]);
   assert.equal((await dbPool.query("SELECT count(*)::int AS n FROM lesson_skill_audits WHERE run_id=$1", [input.id])).rows[0].n, 1);
   let prompt = "";
   const restored = createWorkflowStore(async () => dbPool);

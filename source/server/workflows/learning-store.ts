@@ -15,7 +15,7 @@ export async function saveSkillAudit(client: PoolClient, record: WorkflowRecord)
     await client.query(`INSERT INTO lesson_skill_lessons(owner_id,skill,method_version,fingerprint,code,step,state,recovered,last_run)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(owner_id,skill,method_version,fingerprint)
       DO UPDATE SET occurrences=lesson_skill_lessons.occurrences+1,recovered=lesson_skill_lessons.recovered+EXCLUDED.recovered,
-      last_run=EXCLUDED.last_run,updated_at=now()`, [record.owner, skillForMode(record.view.definition.mode), audit.version,
+      last_run=EXCLUDED.last_run,step=EXCLUDED.step,updated_at=now()`, [record.owner, skillForMode(record.view.definition.mode), audit.version,
       finding.fingerprint, finding.code, finding.step, state, audit.outcome === "passed" ? 1 : 0, record.view.id]);
   }
 }

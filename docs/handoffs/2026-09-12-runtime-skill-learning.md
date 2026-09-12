@@ -13,6 +13,7 @@ Terv és végrehajtás: `docs/specs/2026-09-12-runtime-skill-learning*.md`. Műk
 - PASS `npx.cmd playwright test --config=playwright.workflow.config.ts`: 9/9, hét mód, 320×740, 390×844, 844×390 és 1440×900; valódi felület, API-fixture. Nyitott tanulási panel, olvasható szöveg, nincs vízszintes túlcsordulás. Teljes képernyőképek vizuálisan ellenőrizve.
 - PASS `git diff --check` és külön önreview: kapuk változatlanok, tényleges promptbekötés, nincs nyers forrásból rendszerutasítás, folytatáskor rögzített verzió, audit és számláló atomikus mentése.
 - Éles kiadás előtti read-only lekérdezés: nincs befejezetlen Studio job vagy aktív webes generálás. Meglévő tananyag nincs átírva.
+- Review-javítás: egy hibafajta több lépésének megőrzése az audit `steps` listájában, a szabály és végrehajtási számláló duplázása nélkül. A valódi DB-teszt ellenőrzi mindkét lépést; újra 20/20 DB-teszt, 14/14 célzott unit és teszt-typecheck sikeres.
 
 ## Korlátok
 

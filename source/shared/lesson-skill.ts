@@ -21,7 +21,7 @@ export type SkillCode = keyof typeof SKILL_RULES;
 export type LessonSkill = "tananyag-keszito" | "tananyag-javito";
 export const skillForMode = (mode: WorkflowMode): LessonSkill => ["repair", "html", "concept", "apply"].includes(mode) ? "tananyag-javito" : "tananyag-keszito";
 export type SkillSnapshot = { skill: LessonSkill; version: string; rules: SkillCode[] };
-export type SkillFinding = { code: SkillCode | "unknown" | "infrastructure"; step: string; fingerprint: string };
+export type SkillFinding = { code: SkillCode | "unknown" | "infrastructure"; step: string; steps?: string[]; fingerprint: string };
 export type SkillAudit = {
   version: string; execution: number; at: number; outcome: "passed" | "stopped" | "incomplete";
   checks: { sequence: boolean; gate: boolean; readback: boolean };

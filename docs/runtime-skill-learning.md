@@ -18,6 +18,8 @@ Ismeretlen hibafajta mindig külön ujjlenyomatos megfigyelés. A skillben megma
 
 Az új futás az addigi tapasztalatokat használja; az éppen futó vagy kifejezetten folytatott munka a már rögzített verzióját őrzi meg. A tapasztalat használata nem garantál hibátlan modellválaszt: a független minőségkapuk minden alkalommal megmaradnak. A kiegészítések növekedése korlátos, nem kerül minden korábbi hibaszöveg a promptba.
 
+Azonos ismert hibafajta végrehajtásonként egyszer növeli a számlálót; az audit `steps` listája minden érintett lépést megőriz. A skill összesítőjében a `step` és `lastRun` együtt az utolsó megfigyelésre utal. Több lépés miatt sem duplázódik a szabályszöveg, és a kikapcsolt szabály sem éled újra.
+
 ## Tárolás, ellenőrzés, visszaállítás
 
 Az alkalmazás futó skilljei a `lesson_skill_lessons`, auditjai a `lesson_skill_audits` táblában élnek; nem a telepítéskor elvesző szerverlemezen. A repó `.agents/skills/` fájljai az alapeljárást adják. A futó SKILL.md letölthető a Futások → Önellenőrzés és tanult tapasztalatok részből.

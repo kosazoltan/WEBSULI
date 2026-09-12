@@ -32,7 +32,14 @@ export function findingsFromError(error: unknown, step: string): SkillFinding[] 
   return [{ code: "unknown", step, fingerprint: digest(`${SKILL_METHOD_VERSION}:${step}:${shape}`) }];
 }
 export function mergeFindings(...groups: SkillFinding[][]): SkillFinding[] {
-  return [...new Map(groups.flat().map(f => [f.fingerprint, f])).values()];
+  const findings = new Map<string, SkillFinding>();
+  for (const finding of groups.flat()) {
+    const previous = findings.get(finding.fingerprint);
+    // One rule/count per execution; the immutable audit retains every observed step.
+    const steps = [...new Set([...(previous?.steps ?? (previous ? [previous.step] : [])), ...(finding.steps ?? [finding.step])])];
+    findings.set(finding.fingerprint, { ...finding, steps });
+  }
+  return [...findings.values()];
 }
 export function skillSnapshot(mode: WorkflowMode, codes: string[]): SkillSnapshot {
   const rules = [...new Set(codes)].filter((c): c is SkillCode => Object.hasOwn(SKILL_RULES, c)).sort();
