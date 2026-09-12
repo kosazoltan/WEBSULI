@@ -22,6 +22,15 @@ test("targeted teaching change preserves every other byte and all bank items", (
   assert.throws(() => applyTeachingPatch(html, { edits: [], bank: {} }), /Üres/);
 });
 
+test("a short correction or deletion retains the chapter gate and an exact text anchor", () => {
+  const text = "Régi bizonyítatlan részlet.";
+  const draft = html.replace('<h2>', `<p>${text}</p><h2>`);
+  for (const replacement of ["Jó.", ""]) {
+    assert.equal(applyTeachingPatch(draft, { edits: [{ sectionIndex: 0, before: text, after: replacement }] }), draft.replace(text, replacement));
+  }
+  assert.throws(() => applyTeachingPatch(draft, { edits: [{ sectionIndex: 0, before: "hiányzó idézet", after: "Jó." }] }), /edits\[0\].before: hiányzó/);
+});
+
 test("teaching patch cannot escape chapters, add active HTML, rewrite metadata or replan questions", () => {
   for (const bad of [
     { ...patch, bank: null }, { ...patch, bank: false },
@@ -80,7 +89,7 @@ test("failed patch has bounded retry with its exact error; no repeated verdict t
   let reviews = 0, repairs = 0; const diagnostics: string[] = [];
   const result = await reviewAndRepairWebTeaching(html, [source], {
     review: async () => { reviews++; return review(false); },
-    repair: async (_system, user) => { repairs++; if (repairs === 2) assert.match(JSON.parse(user).patchFailure, /Üres/); return { edits: [] }; },
+    repair: async (_system, user) => { repairs++; if (repairs === 2) { assert.match(JSON.parse(user).patchFailure, /Üres/); assert.deepEqual(JSON.parse(user).previousPatch, { edits: [] }); } return { edits: [] }; },
     onProblem: async (problem, candidate) => { assert.equal(candidate, html); diagnostics.push(problem); },
   });
   assert.equal(reviews, 1); assert.equal(repairs, 2); assert.equal(result.html, html);
