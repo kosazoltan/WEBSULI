@@ -46,21 +46,24 @@ export type StepCallResult = {
 export async function callStepModel(
   provider: IAIProvider,
   input: StepCallInput,
+  signal?: AbortSignal,
 ): Promise<StepCallResult> {
+  signal?.throwIfAborted();
   input = { ...input, system: input.system + workflowSkillPrompt() };
   return workflowCheckpoint("studio-model", input, async () => {
-    const result = await callUncachedStepModel(provider, input);
+    const result = await callUncachedStepModel(provider, input, signal);
     await workflowUsage(result.usage);
     return result;
   });
 }
-async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput): Promise<StepCallResult> {
+async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput, signal?: AbortSignal): Promise<StepCallResult> {
   let response: AIResponse;
   try {
     response = await provider.chat([
       { role: "system", content: input.system },
       { role: "user", content: input.user },
-    ]);
+    ], signal);
+    signal?.throwIfAborted();
   } catch (error) {
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
     throw new StepModelError(input.step, "a szolgáltató hibát jelzett", { cause: error });

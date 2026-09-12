@@ -24,10 +24,20 @@ test("teaching gate rejects empty, hidden, disconnected and unexplained teaching
   assert.deepEqual(verifyHtmlTeaching(html.replace('data-lesson-panel="teaching"', 'data-lesson-panel="teaching" hidden'), experience), []);
 });
 const source = { url: "https://example.org/lesson", title: "Forrás", text: "Forrásból származó magyarázat. ".repeat(8) };
+test("captioned multi-card diagrams count as visuals, empty or unlabelled prose does not", () => {
+  const cards = '<figure data-teaching-visual><div><div><b>Alap</b>Válaszd ki az alapul szolgáló oldalt.</div><div><b>Magasság</b>Keresd meg az alapra merőleges magasságot.</div></div><figcaption>A területszámítás előkészítésének két összefüggő lépése.</figcaption></figure>';
+  const withVisual = (value: string) => html.replace(/<figure[^]*?<\/figure>/, value);
+  assert.deepEqual(verifyHtmlTeaching(withVisual(cards), experience), []);
+  for (const bad of [cards.replace(/<b>[^]*?<\/b>/g, ""), cards.replace(/<figcaption>[^]*?<\/figcaption>/, ""), '<figure data-teaching-visual>Csak egy hosszabb mondat, szemléltető elemek nélkül.</figure>']) {
+    assert.match(verifyHtmlTeaching(withVisual(bad), experience).join("; "), /szemléltetés/);
+  }
+});
 test("only actual fetched text reaches the independent review, never search snippets or author claims", () => {
   const block = { type: "web_fetch_tool_result", content: { type: "web_fetch_result", url: source.url, content: { type: "document", title: source.title, source: { type: "text", data: source.text } } } };
   assert.deepEqual(fetchedTeachingSources([block, { type: "text", text: JSON.stringify(block) }, { type: "web_search_tool_result", content: [{ title: source.title, url: source.url }] }]), [source]);
   assert.deepEqual(fetchedTeachingSources([{ type: "web_fetch_tool_result", content: { type: "web_fetch_tool_error", error_code: "unavailable" } }]), []);
+  const blocked = structuredClone(block); blocked.content.content.title = "The URL you requested has been blocked";
+  assert.deepEqual(fetchedTeachingSources([blocked]), []);
 });
 test("review receives full input and all five checks; a negative finding remains negative and learnable", async () => {
   const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: criterion !== "explanation_depth", evidence: "A forrás részletes megoldásából a második lépés hiányzik a tanításban." }));

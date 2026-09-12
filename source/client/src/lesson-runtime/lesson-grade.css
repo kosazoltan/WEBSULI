@@ -39,6 +39,11 @@
 .websuli-html-lesson button:focus-visible { outline: 3px solid var(--lesson-accent); outline-offset: 2px; }
 .websuli-html-lesson button:disabled { opacity: .55; cursor: default; }
 .websuli-html-lesson [data-lesson-tab] { margin: 4px; }
+.websuli-html-lesson [data-websuli-tabs] { position: static; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 12px; margin: 16px auto; max-width: 1050px; background: var(--fusion-soft); color: var(--lesson-ink); border-radius: var(--lesson-radius); box-shadow: none; }
+.websuli-html-lesson [data-websuli-tabs] > [data-lesson-tab] { width: 100%; margin: 0; min-width: 0; }
+.websuli-html-lesson > header { background: var(--lesson-accent); color: var(--lesson-accent-ink); }
+.websuli-html-lesson > header h1 { color: inherit; }
+@media (max-width: 600px) { .websuli-html-lesson [data-websuli-tabs] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .websuli-html-lesson [data-lesson-tab][aria-selected="true"] { background: var(--lesson-accent); color: var(--lesson-accent-ink); }
 .websuli-html-lesson .websuli-html-quiz { background: var(--lesson-surface); color: var(--lesson-ink); padding: clamp(12px, 3vw, 28px); border-radius: var(--lesson-radius); }
 .websuli-html-lesson .websuli-html-quiz nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-block: 16px; }

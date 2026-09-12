@@ -14,7 +14,7 @@ export const htmlLessonDataSchema = z.object({
 export const HTML_LESSON_DATA_CONTRACT = `HTML-fúzió adatszerződés (${LESSON_METHOD_VERSION}), a régebbi példakódnál ez az irányadó:
 ${HTML_TEACHING_CONTRACT}
 A data-lesson-panel="quiz" panel kvízét a WebSuli közös futtatója jeleníti meg a JSON-bankból. A kérdéskör, első válaszok, pontozás és újratöltés utáni visszaállítás közös programfeladat; ne generálj hozzá saját pontozó vagy tároló JavaScriptet. A panel helyőrzője jelezze: „A gyakorlókvíz betöltése…”.
-Az összes bankot EGYETLEN <script type="application/json" id="${HTML_LESSON_DATA_ID}"> elembe írd, szigorú JSON-ként. A futó JS JSON.parse(document.getElementById('${HTML_LESSON_DATA_ID}').textContent) útján CSAK ebből olvassa a bankokat; ne másold őket második tömbbe. JSON-szövegben a < karaktert \\u003c alakban kódold.
+Az összes bankot EGYETLEN <script type="application/json" id="${HTML_LESSON_DATA_ID}"> elembe írd, szigorú JSON-ként. A WebSuli közös futtatója CSAK ebből olvassa és jeleníti meg a bankokat; külön szerzői JavaScript vagy második tömb nem szükséges. JSON-szövegben a < karaktert \\u003c alakban kódold.
 Gyökér: {classroom: 0..12, classroomEvidence: "mely tanított fogalmak igazolják ezt az évfolyamot", subject: "tantárgy", experience:{version:"${LESSON_METHOD_VERSION}",theme:"ocean|forest|sunset|cosmos|paper|berry",bankPlan:{units:[{sectionIndex,conceptIds}],taskRound,quizRound},methods:[...],tasks:[...],quiz:[...],glossary:[],language?:"en-GB"}}.
 Az évfolyamot a TANÍTOTT TARTALOM alapján önállóan állapítsd meg, a felhasználói évfolyam legfeljebb keresési támpont. Nem írhatja felül a forrás nehézségét.
 Minden methods/tasks/quiz elem: id (bankon belül egyedi), sectionIndex (0-alapú tananyagfejezet), coversConceptIds (pl. area, altitude – ugyanott tanított fogalmak).
@@ -27,10 +27,13 @@ Nyelvi leckénél language és glossary kötelező; minden szóhoz {word,transla
 A négy NAVIGÁCIÓS GOMB attribútuma data-lesson-tab="teaching|methods|tasks|quiz"; a négy tartalomé data-lesson-panel ugyanilyen értékkel. A gombváltó ténylegesen ezek láthatóságát állítja. A methods panel a JSON módszereit, tasks és quiz a bankPlan szerinti rövid kört jeleníti meg. Alapból egyesével lapozva, külön teljes áttekintéssel. Fülváltás nem töröl választ. Üres válasz0; minta1; részválasz0.5; számok előjelét és tizedesjelét ne veszítsd el és ne fogadj el fuzzy számegyezést. Eredmény helyi mentése és JSON-export.
 A módszer szerinti teljes HTML elkészülte után gépi kapu ellenőrzi a JSON-sémát, darabszámokat, mintaválaszokat és a füleket; hiányos anyag nem menthető.`;
 
-export function readHtmlLessonData(html: string) {
+export function readRawHtmlLessonData(html: string): unknown {
   const blocks = html.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? [];
   const target = blocks.filter(b => new RegExp(`\\bid\\s*=\\s*["']${HTML_LESSON_DATA_ID}["']`, "i").test(b.slice(0, b.indexOf(">") + 1)));
   if (target.length !== 1) throw new Error("Pontosan egy websuli-lesson-data JSON-bank szükséges.");
   const raw = target[0].replace(/^<script\b[^>]*>/i, "").replace(/<\/script\s*>$/i, "");
-  return htmlLessonDataSchema.parse(JSON.parse(raw));
+  return JSON.parse(raw);
+}
+export function readHtmlLessonData(html: string) {
+  return htmlLessonDataSchema.parse(readRawHtmlLessonData(html));
 }

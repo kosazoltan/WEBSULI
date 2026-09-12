@@ -29,6 +29,8 @@ if (quizPanel && bankElement) {
     const tabs = [...document.querySelectorAll<HTMLButtonElement>('button[data-lesson-tab]')];
     const panels = [...document.querySelectorAll<HTMLElement>('[data-lesson-panel]')];
     if (tabs.length === 4 && panels.length === 4) {
+      const navigation = tabs[0].parentElement;
+      if (navigation && tabs.every(tab => tab.parentElement === navigation)) navigation.dataset.websuliTabs = "true";
       const select = (name: string) => {
         for (const tab of tabs) tab.setAttribute("aria-selected", String(tab.dataset.lessonTab === name));
         for (const panel of panels) {

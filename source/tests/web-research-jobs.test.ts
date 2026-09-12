@@ -5,7 +5,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
 import { createResearchJobs, checkedResearchArtifact, publicResearchJob, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
-import { WebResearchFailure } from "../server/studio/web-research-runner";
+import { WebResearchFailure, webResearchTurnKey } from "../server/studio/web-research-runner";
+import { workflowCheckpoint } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
 const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és területképlete.", subject: "Matematika", experience: standardFusionFixture().experience };
@@ -86,6 +87,7 @@ test("checkpoint után, ready előtt megszakadt webes munka új AI nélkül foly
   await until(() => workflows.records.get("checkpoint-gap")?.view.state === "error");
   assert.equal(m.rows.get("checkpoint-gap")!.state, "running");
   m.rows.get("checkpoint-gap")!.createdAt = Date.now() - 26 * 60_000;
+  m.rows.get("checkpoint-gap")!.updatedAt = Date.now() - 26 * 60_000;
   const restarted = createResearchJobs(m.store, generate, workflows.store);
   const recovered = await restarted.read("checkpoint-gap", "owner");
   assert.equal(recovered!.state, "error"); assert.equal(publicResearchJob(recovered!).canResume, true);
@@ -95,6 +97,30 @@ test("checkpoint után, ready előtt megszakadt webes munka új AI nélkül foly
   assert.equal(workflows.records.get("checkpoint-gap")!.view.state, "done");
   assert.equal(workflows.records.get("checkpoint-gap")!.view.visits[0].cacheHits, 1);
   await restarted.publish("checkpoint-gap", "owner"); assert.equal(m.materials.size, 1);
+});
+
+test("completed author turn and fetched text survive reviewer failure without a second author call", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let authorCalls = 0; let reviewBroken = true;
+  const sourceText = "Tényleges tesztforrás teljes szövege, az ellenőrzésig változatlanul őrzendő.";
+  const generate = async () => {
+    const turn = await workflowCheckpoint("web-provider-turn", webResearchTurnKey(input), async () => {
+      authorCalls++; return { content: artifact.html, sources: artifact.sources,
+        final: { stop_reason: "end_turn", content: [{ type: "web_fetch_tool_result", text: sourceText }] } };
+    });
+    assert.equal(turn.final.content[0].text, sourceText);
+    if (reviewBroken) throw new Error("Synthetic reviewer outage");
+    return { html: turn.content, sources: turn.sources };
+  };
+  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  await jobs.start("author-checkpoint", "owner", input);
+  await until(() => workflows.records.get("author-checkpoint")?.view.state === "error");
+  const saved = await jobs.read("author-checkpoint", "owner");
+  assert.equal(saved?.canResume, true); assert.equal(m.materials.size, 0);
+  assert.equal(JSON.stringify(publicResearchJob(saved!)).includes(sourceText), false);
+  reviewBroken = false;
+  await createResearchJobs(m.store, generate, workflows.store).publish("author-checkpoint", "owner");
+  assert.equal(authorCalls, 1); assert.equal(m.materials.size, 1);
+  assert.equal(workflows.records.get("author-checkpoint")!.view.state, "done");
 });
 
 test("commit utáni visszaolvasási hiba nem állítja vissza a done jobot és nem publikál kétszer", async () => {

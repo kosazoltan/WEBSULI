@@ -15,6 +15,9 @@ for (const width of [320, 390, 844, 1366]) test(`full 7.4 HTML banks and age pre
     await page.goto(`/quality-${classroom}`);
     await expect(page.locator("body")).toHaveAttribute("data-learning-age", classroom === 2 ? "1-2" : "9+");
     await expect(page.locator("[data-teaching-example]")).toBeVisible();
+    const nav = page.locator('[data-websuli-tabs]');
+    expect(await nav.evaluate(el => getComputedStyle(el).position)).toBe("static");
+    expect((await nav.boundingBox())!.height).toBeLessThan(160);
     backgrounds.push(await page.locator("body").evaluate(el => getComputedStyle(el).backgroundColor));
     await mkdir("../tmp/quality-browser", { recursive: true });
     await page.screenshot({ path: `../tmp/quality-browser/age-${classroom}-${width}.png` });

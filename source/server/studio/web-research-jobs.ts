@@ -2,7 +2,7 @@ import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import type { WebResearchJob } from "../../shared/web-research-job";
 import type { WebResearchChatRequest } from "./web-research-agent";
 import { decideWebResearchResult } from "./web-research-agent";
-import { type ResearchArtifact, type ResearchObserver, WebResearchFailure } from "./web-research-runner";
+import { type ResearchArtifact, type ResearchObserver, WebResearchFailure, hasSavedResearchTurn } from "./web-research-runner";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { logger } from "../lib/logger";
@@ -13,6 +13,7 @@ export type StoredResearchJob = WebResearchJob & {
   input: WebResearchChatRequest;
   candidate?: string;
   diagnostics: Array<Record<string, unknown>>;
+  updatedAt?: number;
 };
 export interface ResearchJobStore {
   create(job: StoredResearchJob): Promise<boolean>;
@@ -39,6 +40,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
   async function runWork(job: StoredResearchJob) {
     let checkpoint = Promise.resolve();
     const persist = () => {
+      job.updatedAt = Date.now();
       const snapshot = structuredClone(job);
       // Serialize snapshots to keep an old status write from racing completion.
       checkpoint = checkpoint.then(() => store.update(snapshot, "running"));
@@ -102,7 +104,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
   }
   async function read(id: string, userId: string) {
     const job = await store.read(id, userId);
-    if (job?.state === "running" && Date.now() - job.createdAt > 25 * 60_000) {
+    if (job?.state === "running" && Date.now() - (job.updatedAt ?? job.createdAt) > 25 * 60_000) {
       job.state = "error";
       job.error = "A szerverfutás megszakadt vagy túllépte az időkeretet. Új készítést indíthatsz; a régi források és diagnózis megmaradtak.";
       job.stage = job.error;
@@ -112,9 +114,11 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       const tracked = await workflows.read(id, userId);
       const artifact = tracked && savedWorkflowResult<ResearchArtifact>(tracked, "web-result", { input: job.input, method: LESSON_METHOD_VERSION });
       job.canResume = false;
-      if (artifact && tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
-        try { checkedResearchArtifact(artifact); job.canResume = true; }
-        catch { /* An invalid saved artifact cannot be recovered by republishing it. */ }
+      if (tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
+        if (artifact) {
+          try { checkedResearchArtifact(artifact); job.canResume = true; }
+          catch { /* An invalid saved artifact cannot be recovered by republishing it. */ }
+        } else job.canResume = hasSavedResearchTurn(tracked, job.input);
       }
     }
     return job;

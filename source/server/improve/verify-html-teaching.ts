@@ -54,6 +54,9 @@ export function verifyHtmlTeaching(html: string, experience: LessonExperience): 
     if (concealed(section, panel)) problems.push(`${i + 1}. fejezet: elrejtett tanítás.`);
   });
   const visuals = nodes.filter(n => attr(n, "data-teaching-visual") !== undefined && !concealed(n, panel));
-  if (!visuals.some(n => text(n).length >= 20 && descendants(n).some(child => ["svg", "img", "li"].includes(child.tagName)))) problems.push("Hiányzó tanítási szemléltetés: feliratozott ábra vagy lépéses kártyasor szükséges.");
+  const cardRow = (n: Element) => n.tagName === "figure" && descendants(n).some(c => c.tagName === "figcaption" && text(c).length >= 20)
+    && descendants(n).some(row => row.childNodes.filter(element).filter(card => !concealed(card, panel) && text(card).length >= 20
+      && descendants(card).some(label => /^(b|strong|h[1-6])$/.test(label.tagName) && text(label).length > 0)).length >= 2);
+  if (!visuals.some(n => text(n).length >= 20 && (descendants(n).some(child => ["svg", "img", "li"].includes(child.tagName)) || cardRow(n)))) problems.push("Hiányzó tanítási szemléltetés: feliratozott ábra vagy lépéses kártyasor szükséges.");
   return problems;
 }

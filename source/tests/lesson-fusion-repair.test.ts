@@ -75,7 +75,8 @@ test("HTML gate parses inert JSON and catches missing banks, invalid samples and
   assert.equal(readHtmlLessonData(html).classroom, 7);
   assert.deepEqual(verifyLessonMethodHtml(html), { ok: true, problems: [] });
   assert.equal(verifyLessonMethodHtml(html.replace('data-lesson-tab="quiz"', 'data-missing="quiz"')).ok, false);
-  assert.equal(verifyLessonMethodHtml(html.replace('JSON.parse', 'JSON.stringify')).ok, false);
+  // The common module owns reading/rendering; author-written executable JavaScript is optional.
+  assert.equal(verifyLessonMethodHtml(html.replace(/<script>[^]*?<\/script>/, '')).ok, true);
   const bank = readHtmlLessonData(html); bank.experience.tasks[0].sample = "hibás válasz";
   const broken = html.replace(/(<script type="application\/json"[^>]*>)[\s\S]*?(<\/script>)/, `$1${JSON.stringify(bank)}$2`);
   assert.match(verifyLessonMethodHtml(broken).problems.join(" "), /mintaválasz/);
