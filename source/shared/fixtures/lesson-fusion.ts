@@ -47,5 +47,10 @@ export function compactFusionFixture(): Lesson {
       { ...old.quiz[1], intent: "apply", question: "Az alap marad, a magasság a kétszeresére nő. Hogyan változik a terület?", options: ["Nem változik", "A felére csökken", "Négyszeres lesz", "Kétszeres lesz"], correctIndex: 3, feedbackPerOption: ["A szorzatban a magasság is szerepel.", "A magasság nőtt, ezért a terület sem csökken.", "Csak a magasság változott, az alap maradt.", "Az alap és a magasság szorzata, így a fele is kétszeres lesz."] },
     ],
   };
+  // Synthetic quantity fixtures for the owner-approved 15/15 minimum; never published.
+  for (let i = 2; i < 15; i++) {
+    lesson.experience!.tasks.push({ ...old.tasks[i], mode: "written" });
+    lesson.experience!.quiz.push({ ...old.quiz[i], intent: "recall" });
+  }
   return lesson;
 }

@@ -9,6 +9,32 @@ import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type E
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
 import { planLessonBank } from "../shared/lesson-bank-plan";
 
+test("new lesson banks require independently at least 15 text tasks and 15 quizzes", () => {
+  const e = compactFusionFixture().experience!;
+  assert.equal(experienceSchema.safeParse(e).success, true);
+  for (const bank of ["tasks", "quiz"] as const) {
+    assert.equal(experienceSchema.safeParse({ ...e, [bank]: e[bank].slice(0, 14) }).success, false);
+  }
+  const previous = { ...e, version: "fusion-7.4-2", tasks: e.tasks.slice(0, 2), quiz: e.quiz.slice(0, 2), bankPlan: { ...e.bankPlan!, taskRound: 2, quizRound: 2 } };
+  assert.equal(experienceSchema.safeParse(previous).success, true, "existing small lessons remain readable");
+  const old = compactFusionFixture();
+  old.experience = experienceSchema.parse(previous);
+  assert.deepEqual(experienceProblems(old), []);
+  const teaching = old.sections[0].blocks.find(b => b.kind === "explain")!;
+  if (teaching.kind === "explain") teaching.coversConceptIds.push("uncovered");
+  assert.ok(experienceProblems(old).some(p => p.includes("bankterv")), "old bank coverage remains enforced");
+});
+
+test("oral-heavy banks still fill short and complete scored task rounds", () => {
+  const bank = compactFusionFixture().experience!.tasks.map((t, i) => ({ ...t, mode: i === 1 ? "written" as const : "oral" as const }));
+  for (const count of [3, 5, 15]) {
+    const ids = sampleTaskIds(bank, count, () => 0.5);
+    assert.equal(ids.length, count);
+    assert.equal(new Set(ids).size, count);
+  }
+  assert.deepEqual(new Set(sampleTaskIds(bank, 15)), new Set(bank.map(t => t.id)));
+});
+
 test("legacy lessons survive; new banks retain their data and reject incomplete/duplicate content", () => {
   const lesson = fusionFixture();
   assert.ok(lessonSchema.safeParse({ ...lesson, experience: undefined }).success);
@@ -64,8 +90,8 @@ test("builder uses one coverage packet for a small source, retains evidence and 
   const parts = [{ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }];
   const concepts = [{ localId: "area", term: "Terület", definition: "A szorzat fele", quote: "T = a · m / 2", examWeight: "core" as const }];
   const actual = await buildLessonExperience(lesson, concepts, { call: async (system) => { assert.ok(system.includes(concepts[0].quote)); assert.ok(system.includes(concepts[0].definition)); return parts[calls++]; }, save: async cp => { checkpoint = structuredClone(cp); } });
-  assert.equal(calls, 1); assert.equal(actual.tasks.length, 2);
-  assert.equal(actual.quiz.length, 2); assert.equal(actual.quiz[1].options.length, 4);
+  assert.equal(calls, 1); assert.equal(actual.tasks.length, 15);
+  assert.equal(actual.quiz.length, 15); assert.equal(actual.quiz[1].options.length, 4);
   await buildLessonExperience(lesson, concepts, { checkpoint, call: async () => { throw new Error("cache miss"); } });
   const reused = await buildLessonExperience(lesson, concepts, { previous: actual, call: async () => { throw new Error("unchanged packet rewritten"); } });
   assert.deepEqual(reused.quiz, actual.quiz);
@@ -278,7 +304,7 @@ test("short sample repair receives actual and required word counts without lower
   const short = { ...e.tasks[0], sample: "Az alap és a magasság szorzatának fele.", minWords: 10 };
   let calls = 0;
   const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
-    if (++calls === 1) return { methods: e.methods, tasks: [short, e.tasks[1]], quiz: e.quiz, glossary: [] };
+    if (++calls === 1) return { methods: e.methods, tasks: [short, ...e.tasks.slice(1)], quiz: e.quiz, glossary: [] };
     assert.match(user, /A minta szószáma: 7; minWords: 10/);
     return { tasks: [{ ...short, sample: "A háromszög területe az alap és a hozzá tartozó magasság szorzatának fele." }] };
   } });
@@ -301,22 +327,23 @@ test("bank review invalidates only its packet, resumes the repair and never revi
   const save = async (cp: ExperienceCheckpoint) => { checkpoint = structuredClone(cp); };
   const first = await buildLessonExperience(lesson, [], { call: async () => structuredClone(packets[calls++]), save });
   lesson.experience = first;
-  const reviewFeedback = resolveBankReview(lesson, [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.2", message: "A kérdés több példát enged, a rubrika csak egyet fogad el." }]);
+  const target = first.tasks.findIndex(t => t.sectionIndex === 1);
+  const reviewFeedback = resolveBankReview(lesson, [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: `experience.tasks.${target}`, message: "A kérdés több példát enged, a rubrika csak egyet fogad el." }]);
   calls = 0;
   const repaired = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback, save, call: async (system, user) => {
     calls++; assert.match(system, /rubrika csak egyet fogad el/); assert.match(system, /previousItem/); assert.match(user, /LEKTORI JAVÍTÁS/);
-    return { tasks: [{ ...first.tasks[2], q: "Pontosított második kérdés a területről" }] };
+    return { tasks: [{ ...first.tasks[target], q: "Pontosított második kérdés a területről" }] };
   } });
   assert.equal(calls, 1);
   assert.deepEqual(repaired.quiz.filter(q => q.sectionIndex === 0), first.quiz.filter(q => q.sectionIndex === 0));
-  assert.notEqual(repaired.tasks[2].q, first.tasks[2].q);
+  assert.notEqual(repaired.tasks[target].q, first.tasks[target].q);
   const neverCall = async () => { throw new Error("A javított csomag már elkészült."); };
   assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback, call: neverCall }), repaired);
   assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, call: neverCall }), repaired);
-  const nextFeedback = resolveBankReview({ ...lesson, experience: repaired }, [{ kind: "language", blockPath: "experience.tasks.3", message: "A másik feladat nyelvi javítása." }]);
-  const next = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback: nextFeedback, save, call: async () => ({ tasks: [{ ...repaired.tasks[3], q: "Másik feladat, pontosított megfogalmazással" }] }) });
-  assert.equal(next.tasks[2].q, repaired.tasks[2].q, "korábbi lektori javítás a következő célzott javításban is megmarad");
-  assert.equal(next.tasks[3].q, "Másik feladat, pontosított megfogalmazással");
+  const nextFeedback = resolveBankReview({ ...lesson, experience: repaired }, [{ kind: "language", blockPath: `experience.tasks.${target + 1}`, message: "A másik feladat nyelvi javítása." }]);
+  const next = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback: nextFeedback, save, call: async () => ({ tasks: [{ ...repaired.tasks[target + 1], q: "Másik feladat, pontosított megfogalmazással" }] }) });
+  assert.equal(next.tasks[target].q, repaired.tasks[target].q, "korábbi lektori javítás a következő célzott javításban is megmarad");
+  assert.equal(next.tasks[target + 1].q, "Másik feladat, pontosított megfogalmazással");
   assert.deepEqual(await buildLessonExperience(lesson, [], { checkpoint, call: neverCall }), next);
   calls = 0;
   await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback: [{ ...reviewFeedback[0], conceptIds: ["removed"] }], call: async system => {

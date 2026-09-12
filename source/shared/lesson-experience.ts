@@ -2,8 +2,9 @@ import { z } from "zod";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
 export const LEGACY_LESSON_METHOD_VERSION = "fusion-7.4-1" as const;
-export const LESSON_METHOD_VERSION = "fusion-7.4-2" as const;
-export const isFusionMethodVersion = (value: unknown) => value === LESSON_METHOD_VERSION || value === LEGACY_LESSON_METHOD_VERSION;
+export const PREVIOUS_LESSON_METHOD_VERSION = "fusion-7.4-2" as const;
+export const LESSON_METHOD_VERSION = "fusion-7.4-3" as const;
+export const isFusionMethodVersion = (value: unknown) => value === LESSON_METHOD_VERSION || value === PREVIOUS_LESSON_METHOD_VERSION || value === LEGACY_LESSON_METHOD_VERSION;
 export const LESSON_BANK_SIZES = { tasks: 45, taskRound: 15, quiz: 75, quizRound: 25 } as const;
 export const METHOD_KINDS = ["prediction", "gate", "myth", "sorting", "causeEffect", "conflict", "selfCheck", "popup", "timeline", "analogy"] as const;
 export const EXPERIENCE_THEMES = ["ocean", "forest", "sunset", "cosmos", "paper", "berry"] as const;
@@ -49,8 +50,8 @@ export const bankUnitSchema = z.object({
 export const bankPlanSchema = z.object({
   units: z.array(bankUnitSchema).min(1).max(80), taskRound: z.number().int().min(1).max(5), quizRound: z.number().int().min(1).max(10),
 });
-export const experienceSchema = z.object({
-  version: z.enum([LEGACY_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION]), theme: z.enum(EXPERIENCE_THEMES),
+export const experiencePacketSchema = z.object({
+  version: z.enum([LEGACY_LESSON_METHOD_VERSION, PREVIOUS_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION]), theme: z.enum(EXPERIENCE_THEMES),
   methods: z.array(methodSchema).min(1).max(160),
   tasks: z.array(openTaskSchema).min(1).max(480),
   quiz: z.array(experienceQuizSchema).min(2).max(960),
@@ -75,8 +76,9 @@ export const experienceSchema = z.object({
         const belongs = (item: { sectionIndex: number; coversConceptIds: string[] }) => item.sectionIndex === unit.sectionIndex && item.coversConceptIds.every(id => unit.conceptIds.includes(id));
         const methods = e.methods.filter(belongs), tasks = e.tasks.filter(belongs), quiz = e.quiz.filter(belongs);
         if (methods.length !== 2 || new Set(methods.map(m => m.kind)).size < 2) ctx.addIssue({ code: "custom", message: `A ${unit.sectionIndex}. fejezet csomagjához két különböző, releváns módszer kell.` });
-        if (tasks.length !== Math.max(2, unit.conceptIds.length) || !tasks.some(t => t.mode === "oral") || !tasks.some(t => t.mode === "written")) ctx.addIssue({ code: "custom", message: "A nyílt bank mérete, írásos vagy szóbeli változata hiányos." });
-        if (quiz.length !== unit.conceptIds.length * 2) ctx.addIssue({ code: "custom", message: "Fogalmanként két kvízkérdés szükséges." });
+        const taskMinimum = Math.max(2, unit.conceptIds.length), quizMinimum = unit.conceptIds.length * 2;
+        if ((e.version === LESSON_METHOD_VERSION ? tasks.length < taskMinimum : tasks.length !== taskMinimum) || !tasks.some(t => t.mode === "oral") || !tasks.some(t => t.mode === "written")) ctx.addIssue({ code: "custom", message: "A nyílt bank mérete, írásos vagy szóbeli változata hiányos." });
+        if (e.version === LESSON_METHOD_VERSION ? quiz.length < quizMinimum : quiz.length !== quizMinimum) ctx.addIssue({ code: "custom", message: "Fogalmanként legalább két kvízkérdés szükséges." });
         for (const id of unit.conceptIds) {
           if (!tasks.some(t => t.coversConceptIds.includes(id))) ctx.addIssue({ code: "custom", message: `${id}: nincs nyílt feladat.` });
           for (const intent of ["recall", "apply"] as const) if (!quiz.some(q => q.coversConceptIds.length === 1 && q.coversConceptIds[0] === id && q.intent === intent)) ctx.addIssue({ code: "custom", message: `${id}: hiányzó ${intent} kvíz.` });
@@ -95,6 +97,9 @@ export const experienceSchema = z.object({
     if (new Set(keys).size !== keys.length) ctx.addIssue({ code: "custom", path: [bank], message: "Ismétlődő kérdés; valódi változatok szükségesek." });
   }
   if (e.language && !e.glossary.length) ctx.addIssue({ code: "custom", path: ["glossary"], message: "Nyelvi leckéhez szószedet kell." });
+});
+export const experienceSchema = experiencePacketSchema.superRefine((e, ctx) => {
+  if (e.version === LESSON_METHOD_VERSION && (e.tasks.length < 15 || e.quiz.length < 15)) ctx.addIssue({ code: "custom", message: "Legalább 15 szöveges feladat és 15 kvízkérdés szükséges." });
 });
 export type LessonExperience = z.infer<typeof experienceSchema>;
 export type OpenTask = z.infer<typeof openTaskSchema>;
@@ -119,6 +124,7 @@ export function lessonLanguage(subject: string): string | undefined {
 
 export const LESSON_METHOD_CONTRACT = `KÖZÖS TANANYAGMÓDSZER: ${LESSON_METHOD_VERSION}
 Minden készítési és javítási út ugyanazt a pedagógiai élményt adja:
+Minden TELJES tananyagban legalább 15 különböző, pontozott szöveges feladat és 15 kvízkérdés kötelező. Rövid forrásnál ugyanazon tanított tartalom érdemben különböző alkalmazásait kérdezd; új tényt ne találj ki. A lent leírt fogalmi darabszámok minimumok, a 15/15 eléréséig bővítendők. Ez bankminimum, nem az egyszerre mutatott rövid kör mérete.
 1. Tananyag: a teljes forrás mély, érthető feldolgozása látható fejezetkártyákon; definíció, levezetett példa, fejezetenként összefoglalás és legalább egy érdemi ábra.
 2. Bankterv: fejezetenként a ténylegesen tanított fogalmak, ábécé szerint rendezett ID-kkel, legfeljebb hatfogalmas csomagokban. Egy csomaghoz két különböző, releváns módszer választható: prediction, gate, myth, sorting, causeEffect, conflict, selfCheck, popup, timeline, analogy. Nem kell mind a tíz; csak valódi interakcióval, saját kérdéssel és magyarázattal.
 3. Feladatok: csomagonként fogalmanként egy nyílt kérdés, de legalább kettő; az összes fogalmat fedje. Legalább egy szóbeli és egy írásos. required szinonimacsoportok, bonus, minWords, needsSentence, sample. Minden saját mintaválasz teljes pontot érjen; üres válasz nulla, részválasz fél pont. Nem kulcsszóvadászat.

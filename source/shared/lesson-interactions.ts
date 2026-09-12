@@ -1,7 +1,7 @@
 import { DECISION_STORY_CONTRACT } from "./decision-story";
 
 export function withLessonInteractions(html: string, origin = ""): string {
-  if (!/data-lesson-interaction\s*=/i.test(html) || html.includes('id="websuli-interactions"')) return html;
+  if ((!/data-lesson-interaction\s*=/i.test(html) && !/id\s*=\s*["']websuli-lesson-data["']/i.test(html)) || html.includes('id="websuli-interactions"')) return html;
   const tags = `<script id="websuli-interactions" type="module" src="${origin}/lesson-interactions.js"></script>`;
   return /<\/head\s*>/i.test(html) ? html.replace(/<\/head\s*>/i, `${tags}</head>`) : tags + html;
 }

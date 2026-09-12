@@ -1,4 +1,4 @@
-import { experienceSchema, lessonLanguage, LESSON_METHOD_VERSION } from "./lesson-experience";
+import { experienceSchema, lessonLanguage, LEGACY_LESSON_METHOD_VERSION, PREVIOUS_LESSON_METHOD_VERSION } from "./lesson-experience";
 import { planLessonBank } from "./lesson-bank-plan";
 import { evaluateOpenAnswer } from "./lesson-experience-score";
 import type { Lesson } from "./lesson-schema";
@@ -9,8 +9,12 @@ export function experienceProblems(lesson: Lesson, experience: unknown = lesson.
   if (!parsed.success) return parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
   const e = parsed.data;
   const reasons: string[] = [];
-  if (e.version === LESSON_METHOD_VERSION) {
+  if (e.version !== LEGACY_LESSON_METHOD_VERSION) {
     const expected = planLessonBank(lesson);
+    if (e.version === PREVIOUS_LESSON_METHOD_VERSION) {
+      expected.taskRound = Math.min(expected.taskRound, e.tasks.length);
+      expected.quizRound = Math.min(expected.quizRound, e.quiz.length);
+    }
     const actual = e.bankPlan!;
     const key = (units: typeof expected.units) => units.map(u => `${u.sectionIndex}:${[...u.conceptIds].sort().join(",")}`).sort().join(";");
     if (key(expected.units) !== key(actual.units) || expected.taskRound !== actual.taskRound || expected.quizRound !== actual.quizRound) reasons.push("A bankterv nem fedi a ténylegesen tanított összes fogalmat, vagy eltér a korosztály körméretétől.");
