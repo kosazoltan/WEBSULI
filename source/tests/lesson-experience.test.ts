@@ -19,6 +19,16 @@ test("new lesson banks require independently at least 15 text tasks and 15 quizz
   assert.equal(experienceSchema.safeParse(previous).success, true, "existing small lessons remain readable");
 });
 
+test("oral-heavy banks still fill short and complete scored task rounds", () => {
+  const bank = compactFusionFixture().experience!.tasks.map((t, i) => ({ ...t, mode: i === 1 ? "written" as const : "oral" as const }));
+  for (const count of [3, 5, 15]) {
+    const ids = sampleTaskIds(bank, count, () => 0.5);
+    assert.equal(ids.length, count);
+    assert.equal(new Set(ids).size, count);
+  }
+  assert.deepEqual(new Set(sampleTaskIds(bank, 15)), new Set(bank.map(t => t.id)));
+});
+
 test("legacy lessons survive; new banks retain their data and reject incomplete/duplicate content", () => {
   const lesson = fusionFixture();
   assert.ok(lessonSchema.safeParse({ ...lesson, experience: undefined }).success);
