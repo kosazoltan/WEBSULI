@@ -16,7 +16,7 @@ import { storage } from './storage';
 import { logger } from './lib/logger';
 import type { HtmlFile } from '@shared/schema';
 import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
-import { executeWorkflow, workflowPhase } from "./workflows/engine";
+import { executeWorkflow, workflowPhase, workflowSkillPrompt } from "./workflows/engine";
 import { workflowStore } from "./workflows/store";
 import { htmlBaselineHash } from "./improve/html-baseline";
 
@@ -125,7 +125,7 @@ ${specBlock}
 ✓ Értékelés: 90=5, 75=4, 60=3, 40=2, <40=1
 ✓ Reszponzív CSS 320px–2560px (clamp, @media)
 ✓ Helyi, ellenőrzött Nunito / Source Sans 3 / Source Serif 4 és UTF-8; sem Google Fonts, sem külső font nem szükséges
-✓ Sticky tab navigáció`;
+✓ Sticky tab navigáció${workflowSkillPrompt()}`;
 
     const userPrompt = `# Tananyag Modernizálása
 

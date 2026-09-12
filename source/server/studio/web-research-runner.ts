@@ -3,6 +3,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { effortFor, resolveLegacyModel } from "../ai/models";
 import { logger } from "../lib/logger";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
+import { workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 import { decideWebResearchResult, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
 
 export class WebResearchFailure extends Error {}
@@ -63,7 +64,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           system: [
             {
               type: "text",
-              text: webResearchSystemPrompt(input.classroom, input.title, topicSeed),
+              text: webResearchSystemPrompt(input.classroom, input.title, topicSeed) + workflowSkillPrompt(),
               cache_control: { type: "ephemeral" },
             },
           ],
@@ -124,6 +125,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       // before the same strict HTML/bank gate. An end_turn without HTML is NOT success.
       const result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
       if (result.type === "retry") {
+        await workflowValidationFailure(result.reason);
         await onCandidate?.(fullContent, { problems: result.reason });
         repairAttempts += 1;
         messages.push({ role: "assistant", content: final.content });

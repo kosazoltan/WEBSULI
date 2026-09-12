@@ -1,9 +1,11 @@
 import type { Pool } from "pg";
 import type { WorkflowRecord, WorkflowStore } from "./engine";
+import { createSkillStore, saveSkillAudit } from "./learning-store";
 
 /** Lazy pool: importing the engine or running unit tests never connects to production. */
 export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore & { list(owner: string): Promise<WorkflowRecord[]>; related(id: string, owner: string): Promise<string | null>; exists(id: string): Promise<boolean> } {
   return {
+    loadSkill: createSkillStore(getPool).load,
     async related(id, owner) {
       const { rows } = await (await getPool()).query("SELECT id FROM lesson_workflow_runs WHERE owner_id=$1 AND snapshot->>'resourceId'=$2 ORDER BY created_at DESC LIMIT 1", [owner, id]);
       return rows[0]?.id ?? null;
@@ -36,8 +38,15 @@ export function createWorkflowStore(getPool: () => Promise<Pool>): WorkflowStore
     async save(record, token) {
       const pool = await getPool();
       const view = { ...record.view, revision: record.view.revision + 1 };
-      const result = await pool.query("UPDATE lesson_workflow_runs SET snapshot=$4::jsonb,checkpoints=$5::jsonb,state=$6,revision=revision+1,updated_at=now() WHERE id=$1 AND owner_id=$2 AND lease_token=$3 AND revision=$7 AND lease_until>now()", [view.id, record.owner, token, JSON.stringify(view), JSON.stringify(record.checkpoints), view.state, record.view.revision]);
-      return result.rowCount === 1;
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const result = await client.query("UPDATE lesson_workflow_runs SET snapshot=$4::jsonb,checkpoints=$5::jsonb,state=$6,revision=revision+1,updated_at=now() WHERE id=$1 AND owner_id=$2 AND lease_token=$3 AND revision=$7 AND lease_until>clock_timestamp()", [view.id, record.owner, token, JSON.stringify(view), JSON.stringify(record.checkpoints), view.state, record.view.revision]);
+        if (result.rowCount === 1) await saveSkillAudit(client, record);
+        await client.query("COMMIT");
+        return result.rowCount === 1;
+      } catch (error) { await client.query("ROLLBACK"); throw error; }
+      finally { client.release(); }
     },
     async heartbeat(id, token) {
       const pool = await getPool();

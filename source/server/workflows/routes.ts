@@ -1,10 +1,32 @@
 import { Router } from "express";
 import { isAuthenticatedAdmin } from "../auth";
 import { workflowStore } from "./store";
+import { skillStore } from "./learning-store";
+import { skillMarkdown, type LessonSkill } from "../../shared/lesson-skill";
 
 export const workflowRouter = Router();
 workflowRouter.use(isAuthenticatedAdmin);
 workflowRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+const isSkill = (value: string): value is LessonSkill => value === "tananyag-keszito" || value === "tananyag-javito";
+workflowRouter.get("/skills/:skill", async (req, res) => {
+  if (!isSkill(req.params.skill)) return res.status(400).json({ message: "Ismeretlen tananyag-skill." });
+  try {
+    const lessons = await skillStore.list(req.user!.id, req.params.skill);
+    const snapshot = await skillStore.load(req.user!.id, req.params.skill === "tananyag-keszito" ? "upload" : "repair");
+    if (req.query.format === "markdown") {
+      res.setHeader("Content-Disposition", `attachment; filename="${snapshot.skill}-SKILL.md"`);
+      return res.type("text/markdown").send(skillMarkdown(snapshot, lessons));
+    }
+    res.json({ snapshot, lessons });
+  } catch { res.status(503).json({ message: "A tanult tapasztalatok átmenetileg nem olvashatók." }); }
+});
+workflowRouter.post("/skills/:skill/:fingerprint/disable", async (req, res) => {
+  if (!isSkill(req.params.skill) || !/^[a-f0-9]{64}$/.test(req.params.fingerprint)) return res.status(400).json({ message: "Hibás tapasztalatazonosító." });
+  try {
+    if (!await skillStore.disable(req.user!.id, req.params.skill, req.params.fingerprint)) return res.status(404).json({ message: "A saját tapasztalat nem található." });
+    res.json({ disabled: true });
+  } catch { res.status(503).json({ message: "A kikapcsolás nem sikerült; próbáld újra." }); }
+});
 workflowRouter.get("/workflows", async (req, res) => {
   try {
     const records = await workflowStore.list(req.user!.id);

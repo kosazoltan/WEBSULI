@@ -1,5 +1,7 @@
 # Forrásalapú tananyaggyártás és visszaállítható jobbítás
 
+A [futásonkénti önellenőrzés és skill-tanulás](runtime-skill-learning.md) a közös készítési/javítási módszer része. Az ellenőrzött tapasztalatok a következő modellhívásokba kerülnek; az új hibafajták külön megfigyelésként megmaradnak. Az alapkövetelményeket és a forráshűséget a tanulás nem gyengítheti.
+
 A kötelező módszer 2026-09-10-től a **fúzió 7.4**: a v7.4 négy tanulási lapja és gazdag gyakorlása együtt a Studio forráshű, fogalomhoz kötött tanításával. Ez feltöltött forrásra, teljes és célzott javításra, valamint internetes készítésre egyaránt vonatkozik. A HTML és a strukturált JSON technikai formátuma eltér; a pedagógiai követelmények azonosak. A Studio JSON-t a közös runtime jeleníti meg négy lapon. A `contentType=lesson` HTML mezője helyőrző: javítani a tényleges `lessons.json` tartalmát kell.
 
 ## Kötelező közös módszer

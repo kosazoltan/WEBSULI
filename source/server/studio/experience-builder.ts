@@ -8,6 +8,7 @@ import type { Lesson } from "../../shared/lesson-schema";
 import type { MapConcept } from "./coverage";
 import { canonicalJson } from "./step-io";
 import { classifyNotes, type RawNote } from "./lektor";
+import { workflowSkillVersion, workflowValidationFailure } from "../workflows/engine";
 
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string> };
 export type BankReviewFeedback = { note: RawNote; conceptIds?: string[]; previousItem?: unknown };
@@ -113,7 +114,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const taskCount = allocation("tasks"), quizCount = allocation("quiz");
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
     const reviewFeedback = deps.reviewFeedback?.filter(f => !f.conceptIds?.some(id => taughtIds.has(id)) || f.conceptIds.some(id => unit.conceptIds.includes(id))) ?? [];
-    const teaching = { version: LESSON_METHOD_VERSION, taskCount, quizCount, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: lesson.sections[unit.sectionIndex], concepts: source, allowedConceptIds: unit.conceptIds };
+    const teaching = { version: LESSON_METHOD_VERSION, ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: lesson.sections[unit.sectionIndex], concepts: source, allowedConceptIds: unit.conceptIds };
     const evidence = { ...teaching, ...(reviewFeedback.length ? { reviewFeedback } : {}) };
     const baseHash = createHash("sha256").update(canonicalJson(teaching)).digest("hex");
     // Once corrected, later rounds must never revive the rejected base packet.
@@ -182,13 +183,14 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       let candidate = response;
       if (repairBase) {
         try { candidate = applyBankPacketRepair(repairBase, response, allowedReviewIds); }
-        catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; continue; }
+        catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; await workflowValidationFailure(errors); continue; }
       }
       previous = candidate;
       const parsed = packetSchema.safeParse(candidate);
       const issues = parsed.success ? validate(parsed.data) : parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       if (parsed.success && !issues.length) packet = parsed.data;
       else {
+        await workflowValidationFailure(issues.join("; "));
         errors = `${packetCounts(candidate)}; elvárt: methods=2, tasks=${taskCount}, quiz=${quizCount}. ${issues.join("; ")}`;
         repairBase = parsed.success && BANKS.every(bank => new Set(parsed.data[bank].map(item => item.id)).size === parsed.data[bank].length) ? parsed.data : undefined;
       }

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { workflowDefinition, WORKFLOW_MODES, type WorkflowView } from "../shared/lesson-workflow";
+import { SKILL_METHOD_VERSION } from "../shared/lesson-skill";
 
 const runs: WorkflowView[] = WORKFLOW_MODES.map((mode, index) => ({
   id: `workflow-${mode}`, definition: workflowDefinition(mode), state: mode === "html" || mode === "repair" ? "ready" : mode === "web" ? "error" : "done",
@@ -7,6 +8,9 @@ const runs: WorkflowView[] = WORKFLOW_MODES.map((mode, index) => ({
   visits: workflowDefinition(mode).steps.slice(0, mode === "web" ? 2 : undefined).map((step, n) => ({ step: step.id, attempt: 1, startedAt: 1700000000000, finishedAt: 1700000001000, state: mode === "web" && n === 1 ? "error" : "done", cacheHits: 0, tokensOut: n === 1 ? 234 : undefined })),
   error: mode === "web" ? "A kérdésbank nem teljes. A hiányzó megoldásokat javítani kell, a tananyag még nincs közzétéve." : undefined,
   result: mode === "web" ? undefined : { kind: mode === "html" || mode === "repair" ? "candidate" : "material", id: `saved-${mode}` },
+  skill: { skill: ["html", "repair", "concept", "apply"].includes(mode) ? "tananyag-javito" : "tananyag-keszito", version: "fixture-learning-version", rules: ["sample_score"] },
+  skillAudit: { version: SKILL_METHOD_VERSION, execution: 1, at: 1700000001000, outcome: mode === "web" ? "stopped" : "passed",
+    checks: { sequence: mode !== "web", gate: mode !== "web", readback: mode !== "web" }, findings: [{ code: "sample_score", fingerprint: "fixture", step: "author" }, { code: "unknown", fingerprint: "novel", step: "author" }] },
 }));
 test.use({ serviceWorkers: "block" });
 test.beforeEach(async ({ page }) => {
@@ -34,6 +38,13 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900]])
       const second = graph.locator("[data-step]").nth(1);
       await second.click(); await expect(second).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByTestId("workflow-step-details")).toContainText("234");
+      const learning = page.getByTestId("workflow-learning");
+      if (await learning.getAttribute("open") === null) await learning.getByText("Önellenőrzés és tanult tapasztalatok", { exact: true }).click();
+      await expect(learning.getByText("Ez a program ellenőrzése, nem emberi pedagógiai minősítés.", { exact: true })).toBeVisible();
+      await expect(learning).toContainText("Új hibafajta rögzítve");
+      await expect(learning).toContainText("Mintaválasz pontozása");
+      await expect(learning.getByRole("link", { name: "Aktuális skill letöltése" })).toHaveAttribute("href", /\/api\/studio\/skills\/tananyag-(keszito|javito)\?format=markdown/);
+      expect(await learning.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
       const contrast = await page.getByTestId("workflow-step-details").evaluate(el => {
         const color = (css: string) => css.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(v => { const s = v / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
         const luminance = (css: string) => { const [r, g, b] = color(css); return .2126 * r + .7152 * g + .0722 * b; };
@@ -54,6 +65,10 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900]])
       expect(cardBounds.every((a, i) => cardBounds.every((b, j) => i === j || a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top))).toBe(true);
     }
     await page.getByRole("combobox", { name: "Futás kiválasztása" }).selectOption("workflow-web");
+    await expect(page.getByTestId("workflow-graph").getByRole("heading", { name: workflowDefinition("web").label, exact: true })).toBeVisible();
+    const finalLearning = page.getByTestId("workflow-learning");
+    if (await finalLearning.getAttribute("open") === null) await finalLearning.locator("summary").click();
+    await expect(page.getByTestId("workflow-learning").getByText("A teljes befejezés nem igazolt; a futás megállását és tapasztalatait rögzítettük.", { exact: true })).toBeVisible();
     await page.screenshot({ path: `test-results/workflow-${width}.png`, fullPage: true });
     await page.reload();
     await expect(page.getByTestId("workflow-history")).toBeVisible();
