@@ -4,8 +4,20 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { HUNGARIAN_FONT_PROBE, LESSON_FONTS, lessonFontPair, withLessonTypography } from "../shared/lesson-typography";
 import { LESSON_THEMES } from "../server/ai/lesson-html-spec";
+import { withLessonInteractions } from "../shared/lesson-interactions";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+test("rendered lessons replace the formerly immutable runtime URL without changing author scripts", () => {
+  const author = '<script>const example="websuli-interactions";</script>';
+  const old = `<html><head><script src="/lesson-interactions.js" type="module" id="websuli-interactions"></script>${author}</head><body><script id="websuli-lesson-data" type="application/json">{}</script></body></html>`;
+  const rendered = withLessonInteractions(old);
+  assert.match(rendered, /src="\/lesson-interactions\.js\?v=2"/);
+  assert.equal((rendered.match(/id="websuli-interactions"/g) ?? []).length, 1);
+  assert.ok(rendered.includes(author));
+  assert.equal(withLessonInteractions(rendered), rendered);
+  const comment = '<!-- <script id="websuli-interactions" src="/lesson-interactions.js"></script> -->';
+  assert.ok(withLessonInteractions(old.replace(author, comment + author)).includes(comment));
+});
 test("every allowed font has the measured full Hungarian normal and italic artifact, unchanged since cmap verification", () => {
   const manifest = JSON.parse(read("client/public/fonts/manifest.json"));
   for (const family of LESSON_FONTS) for (const style of ["normal", "italic"]) {

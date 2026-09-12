@@ -29,6 +29,9 @@
 .websuli-html-lesson { margin: 0; padding: clamp(12px, 3vw, 32px); font-family: "Source Sans 3", sans-serif; font-size: var(--grade-size); line-height: 1.75; overflow-wrap: anywhere; }
 .websuli-html-lesson *, .websuli-html-lesson *::before, .websuli-html-lesson *::after { box-sizing: border-box; }
 .websuli-html-lesson [data-lesson-panel] { max-width: 1050px; margin-inline: auto; }
+/* Earlier pg lessons hide teaching chapters with inline styles; reading remains complete. */
+.websuli-html-lesson [data-lesson-panel="teaching"] #pg-chapters > .pg-ch { display: block!important; }
+.websuli-html-lesson [data-lesson-panel="teaching"] .pg-card:has(> .pg-pager > #pg-allch) { display: none!important; }
 .websuli-html-lesson [data-teaching-section] { display: block!important; visibility: visible!important; opacity: 1!important; padding: clamp(16px, 3vw, 32px); margin-block: 24px; background: var(--lesson-surface); color: var(--lesson-ink); border: 1px solid var(--lesson-line); border-left: 5px solid var(--lesson-accent); border-radius: var(--lesson-radius); }
 .websuli-html-lesson [data-teaching-section] p { max-width: 72ch; }
 .websuli-html-lesson [data-teaching-example], .websuli-html-lesson [data-teaching-summary], .websuli-html-lesson [data-teaching-visual] { padding: 16px; background: var(--fusion-soft); color: var(--lesson-ink); border-radius: var(--lesson-radius); }

@@ -25,7 +25,7 @@ test("decision story accepts complete branching and rejects cycles, dangling, un
 test("HTML adapter adds only one shared runtime when explicitly requested, preserving author scripts and Unicode", () => {
   const html = '<head></head><body>Árvíztűrő<script>const original=1;</script><div data-lesson-interaction="triangleArea"></div></body>';
   const result = withLessonTypography(html, 4, "Matek", "https://websuli.vip");
-  assert.match(result, /src="https:\/\/websuli.vip\/lesson-interactions.js"/);
+  assert.match(result, /src="https:\/\/websuli.vip\/lesson-interactions\.js\?v=2"/);
   assert.ok(result.includes('Árvíztűrő<script>const original=1;</script>'));
   assert.equal((withLessonTypography(result).match(/id="websuli-interactions"/g) ?? []).length, 1);
   assert.ok(!withLessonTypography('<p>Árvíztűrő</p>').includes('lesson-interactions.js'));
