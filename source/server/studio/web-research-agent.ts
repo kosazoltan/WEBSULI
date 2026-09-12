@@ -114,7 +114,7 @@ export function webResearchSystemPrompt(classroom: number, title?: string, topic
     "",
     "FELADATOD:",
     "1. Ha a felhasználó tananyagot vagy forrást kér, KERESS az interneten (web_search) magyar tantervi, tankönyvi vagy NAT/OFI-hoz illő forrásokat, az adott évfolyamhoz igazítva.",
-    "2. Ez tananyagkészítő felület: a keresés a készítés része. Csak a megtalált, idézhető forrásokból dolgozz. A tanítás végén legyenek a ténylegesen felhasznált keresési források kattintható <a href=\"forrás URL\"> hivatkozásai. A találati cím/snippet nem bizonyítja a teljes dokumentum olvasását. Ha a forrás ezt nem támasztja alá, ne állíts országosan kötelező havi témasort.",
+    "2. A keresés után web_fetch eszközzel töltsd le a felhasznált oldalak teljes szövegét. A találati cím/snippet nem elegendő. A letöltött forrás teljes, témához tartozó tudását dolgozd fel, különösen a hogyan/miért összefüggéseket és konkrét példákat. Csak ebből dolgozz; a független lektor a tényleges letöltött szöveggel veti össze a tananyagot. A tanítás végén a ténylegesen felhasznált források kattintható <a href=\"forrás URL\"> hivatkozásai szerepeljenek. Ha a forrás ezt nem támasztja alá, ne állíts országosan kötelező havi témasort.",
     '3. A feladat akkor kész, ha TELJES, önálló HTML-t adsz, MINDIG így kezdve: <!-- HTML_START -->. Egy összefoglaló, ígéret vagy "Készül a tananyag" mondat nem eredmény. Ne zárd le ezzel a válaszodat és ne kérj újabb engedélyt.',
     "4. A HTML-t a <!-- HTML_START --> után azonnal <!DOCTYPE html>-lel kezdd, és </html>-lel zárd; a HTML után ne írj semmit. NE tedd markdown kódblokkba (```), nyers HTML-t adj.",
     "",
@@ -136,3 +136,4 @@ export const WEB_SEARCH_TOOL = {
   max_uses: 8,
   allowed_callers: ["direct"] as Array<"direct">,
 };
+export const WEB_FETCH_TOOL = { type: "web_fetch_20250910" as const, name: "web_fetch" as const, max_uses: 8, citations: { enabled: true } };

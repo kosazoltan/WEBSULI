@@ -249,7 +249,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 | Tab | Cím | Tartalom |
 |-----|-----|----------|
 | 1 | 📖 Tananyag | Részletes lexikális tudás (+ szószedet idegen nyelvnél) |
-| 2 | 🧠 Módszerek | Bankcsomagonként két releváns, különböző interakció |
+| 2 | 🧠 Módszerek | Mind a tíz módszertípus, legalább két kapukérdés |
 | 3 | ✏️ Feladatok | Fogalomfedő bank, korosztályhoz illő rövid kör |
 | 4 | 🎯 Kvíz | Felidézés és alkalmazás minden fogalomhoz; 3–4 válasz |
 
@@ -257,7 +257,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 - Folyamatos, érthetően tagolt szöveg — NEM vázlat. Teljes anyag fejezetekre bontva; definíciók, példák, felsorolások, összefoglalók.
 - Korosztály: 1–2. évf. egy rövid utasítás egyszerre; 3–4. évf. szemléletes példák és önálló próbálkozás; 5–6. évf. analógiák, hétköznapi alkalmazás; 7–8. évf. ok-okozat, elvont fogalmak. 1–4. évf. Nunito; később Source Sans 3 törzs, irodalmi/történelmi címsorhoz Source Serif 4.
 - Info-boxok (érdekesség, figyelem, összefoglalás). Vizuális kártyák SZÖVEGES tartalommal (NEM emoji állatképek). Legalább 1 ciklus-diagram / folyamatábra / kártyasor CSS-ből vagy inline SVG-ből.
-- Fejezetek KÁRTYÁKON, alapból lapozható könyvként, külön teljes áttekintéssel. A fejezet tanítása látható, a releváns kiegészítő módszer külön megnyitható. Minden fejezet végén mini-összefoglaló box.
+- Fejezetek KÁRTYÁKON, alapból minden tanítási fejezet látható, természetesen görgethető. A fejezet tanítása látható, a releváns kiegészítő módszer külön megnyitható. Minden fejezet végén mini-összefoglaló box.
 - Az 1. oldal végén „Források" blokk a felhasznált URL-ekkel (ha voltak).
 - Idegen nyelvnél SZÓSZEDET: idegen szó + magyar jelentés + szófaj + példamondat (idegen + magyar), MINDEN idegen elem mellett 🔊 TTS gomb.
 
@@ -449,7 +449,7 @@ A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" con
 ## KIMENET-TAKARÉKOSSÁG (a teljes anyag egy válaszban elférjen)
 - A kódban NE írj kommenteket és üres sorokat; a CSS tömör (egy szabály egy sor); a feladat- és kvízbank egy objektum egy sor.
 - Feladat: \`q\` max. 120 karakter, \`required\` fogalmanként 2–4 szinonima, \`sample\` 1 tömör mondat. Kvíz: rövid kérdés, 3 rövid válasz.
-- A forrásfedettség és a bankPlan szerinti méret kötelező; nem készül általános 45/75-ös bank. A témához illő két módszer fontosabb, mint mind a tíz mechanikus használata.
+- A forrásfedettség mellett a 45/75 bankminimum, a 15/25 kör és mind a tíz módszer kötelező. Minden tétel érdemben a tanított tartalomra épüljön.
 
 ## MENNYISÉGEK
 | Típus | Generált | Megjelenített |

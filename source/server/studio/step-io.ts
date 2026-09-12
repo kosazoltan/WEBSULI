@@ -1,3 +1,4 @@
+import { LESSON_QUALITY_CONTRACT } from "../../shared/lesson-quality";
 import { z } from "zod";
 import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
@@ -253,6 +254,7 @@ export function buildAuthorPrompt(
     `Age band: ${band} (classroom ${map.classroom}). ${bandRegisterForPrompt(band)}`,
     "",
     D1_RULE_TEXT,
+    LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
     "",
     "Hard rules:",
@@ -345,6 +347,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
     "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",
     "",
     D1_RULE_TEXT,
+    LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
     "Minden eltéréshez adj konkrét blockPath értéket és ellenőrizhető indokot. A forrásszámok cseréje vagy hibás levezetés source_conflict/contradicts_source; valóban hiányzó tanítás coverage_gap. A látható feladatot és minden válaszhoz tartozó magyarázatot is ellenőrizd.",
     "Az algebrai egyezés mellett az adatok együttes megvalósíthatóságát is vizsgáld. Például a háromszög egyik oldalához tartozó magasság nem lehet nagyobb bármelyik másik oldalnál, és két oldalból T ≤ a·b/2. Ha a lehetetlen adatok már a kurált forrásban is így szerepelnek, konkrét számolással source_conflict/book_probably_wrong adminjegyzetet adj; a forrást és a tanuló leckéjét nem írhatod át. Ha a szerző találta ki az ellentmondást, az contradicts_source hiba.",
@@ -355,6 +358,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
     "- Every block's coversConceptIds must exist in the map below. An id that is not in the map is a source_conflict/not_in_map blocker.",
     "- A recap block has NO coversConceptIds by schema (it restates the lesson) — never report a missing coversConceptIds on a recap.",
     "- source_conflict subkinds are exactly: not_in_map | contradicts_source | book_probably_wrong. Do not invent other subkinds.",
+    "- Missing how/why steps, worked examples, or question prerequisites are coverage_gap/core blockers even when a concept ID is present. Cite the precise section and omitted teaching; word count is not proof.",
     "- A core concept no block teaches is a coverage_gap/core blocker; a missing supporting concept is a coverage_gap warn.",
     "- Register, style and age-band problems are language / age warnings.",
     "- sourceOnly must be true.",
@@ -382,6 +386,7 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "You are the Animator. Add animated visualisations to an already-written lesson.",
     "",
     D1_RULE_TEXT,
+    LESSON_QUALITY_CONTRACT,
     "",
     "Hard rules:",
     "- You may ONLY add new `animate` blocks or replace existing `animate` blocks. Nothing else.",
@@ -542,6 +547,7 @@ export function buildConceptFixPrompt(lesson: Lesson, map: PromptMap, conceptId:
     "You are the Lesson Author, running a SCOPED fix for ONE weak concept.",
     "",
     D1_RULE_TEXT,
+    LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
     "",
     `Target concept id: ${conceptId}`,

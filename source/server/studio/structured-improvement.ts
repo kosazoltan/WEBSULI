@@ -1,3 +1,4 @@
+import { publicationBankProblems } from "../../shared/lesson-experience";
 import { createHash } from "node:crypto";
 import { and, eq, ne, inArray } from "drizzle-orm";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
@@ -35,7 +36,7 @@ export function assertRepairTeaching(original: Lesson, candidate: Lesson, source
 }
 export function assertRepairCandidate(original: Lesson, candidate: Lesson, source: RepairSource) {
   const coverage = assertRepairTeaching(original, candidate, source);
-  const problems = experienceProblems(candidate, candidate.experience);
+  const problems = [...experienceProblems(candidate, candidate.experience), ...(candidate.experience ? publicationBankProblems(candidate.experience) : [])];
   if (problems.length) throw new Error(`A javított lecke nem teljes: ${problems.join("; ")}`);
   return coverage;
 }

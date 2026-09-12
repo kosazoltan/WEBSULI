@@ -1,8 +1,9 @@
+import { teachingHtml } from "./helpers/teaching-html";
 // Standalone real PostgreSQL contract probe; ONLY a disposable localhost database.
 // DATABASE_URL=postgres://postgres@127.0.0.1:<port>/research_test node --import tsx tests/web-research-database.integration.ts
 import assert from "node:assert/strict";
 import pg from "pg";
-import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import type { StoredResearchJob } from "../server/studio/web-research-jobs";
 
 const url = new URL(process.env.DATABASE_URL || "http://invalid");
@@ -15,8 +16,8 @@ INSERT INTO users VALUES ('owner'), ('other');`);
 const { researchJobStore: store } = await import("../server/studio/web-research-job-store");
 const { dbPool } = await import("../server/db");
 try {
-  const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és a területképlet.", subject: "matematika", experience: compactFusionFixture().experience };
-  const html = `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu/">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}"></section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(data)}</script><script>const data=JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
+  const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és a területképlet.", subject: "matematika", experience: standardFusionFixture().experience };
+  const html = `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu/">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}">${t === "teaching" ? teachingHtml : ""}</section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(data)}</script><script>const data=JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
   const job: StoredResearchJob = { id: "probe", userId: "owner", input: { message: "Készíts", classroom: 4 }, state: "ready", stage: "Mentés", createdAt: Date.now(), title: "Teszt", message: "Készíts", content: "", sources: [{ url: "https://www.oktatas.hu/", title: "Forrás" }], diagnostics: [], html };
   assert.deepEqual((await Promise.all([store.create(job), store.create(job)])).sort(), [false, true]);
   assert.equal(await store.read(job.id, "other"), null);

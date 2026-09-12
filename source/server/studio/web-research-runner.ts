@@ -4,14 +4,15 @@ import { effortFor, resolveLegacyModel } from "../ai/models";
 import { logger } from "../lib/logger";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
-import { decideWebResearchResult, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
+import { decideWebResearchResult, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
+import { fetchedTeachingSources, reviewWebTeaching, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 
 export class WebResearchFailure extends Error {}
 export type ResearchArtifact = { html: string; sources: WebSource[] };
 export type ResearchObserver = {
   signal?: AbortSignal;
   onEvent: (event: WebResearchEvent) => void;
-  onCandidate?: (content: string, diagnostic: { stopReason?: string | null; inputTokens?: number; outputTokens?: number; elapsedMs?: number; problems?: string }) => Promise<void>;
+  onCandidate?: (content: string, diagnostic: { stopReason?: string | null; inputTokens?: number; outputTokens?: number; elapsedMs?: number; problems?: string; teachingReview?: TeachingReview }) => Promise<void>;
 };
 const MAX_TOKENS = 64_000;
 const MAX_CONTINUATIONS = 5;
@@ -46,6 +47,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     let fullContent = "";
     let htmlStarted = false;
     const sources: WebSource[] = [];
+    const fetched = new Map<string, FetchedTeachingSource>();
     const seenUrls = new Set<string>();
     let stopReason: string | null = null;
     let continuations = 0;
@@ -68,7 +70,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
               cache_control: { type: "ephemeral" },
             },
           ],
-          tools: [WEB_SEARCH_TOOL],
+          tools: [WEB_SEARCH_TOOL, WEB_FETCH_TOOL],
           messages,
         },
         { signal: controller.signal },
@@ -111,6 +113,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       }
 
       const final = await stream.finalMessage();
+      for (const source of fetchedTeachingSources(final.content)) fetched.set(source.url, source);
       stopReason = final.stop_reason;
       await onCandidate?.(fullContent, { stopReason, inputTokens: final.usage.input_tokens, outputTokens: final.usage.output_tokens, elapsedMs: Date.now() - startedAt });
       logger.info("[WEB-RESEARCH] turn", { stopReason, continuations, repairAttempts, elapsedMs: Date.now() - startedAt,
@@ -123,7 +126,23 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       }
       // max_tokens/refusal/pause_turn exhaustion and htmlLooksComplete are checked
       // before the same strict HTML/bank gate. An end_turn without HTML is NOT success.
-      const result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
+      let result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, html => verifyLessonMethodHtml(html));
+      if (result.type === "ready") {
+        const downloaded = [...fetched.values()];
+        let problems: string[];
+        if (!downloaded.length) problems = ["Nincs letöltött forrásszöveg. A web_fetch eszközzel olvasd el a forrásokat, majd készíts teljes tananyagot."];
+        else {
+          onEvent({ type: "status", message: "A teljes tananyag összevetése a letöltött forrásokkal…" });
+          // Review has its own bounded provider timeout; streaming idle time is irrelevant here.
+          if (idleTimer) clearTimeout(idleTimer);
+          const review = await reviewWebTeaching(result.html, downloaded);
+          if (controller.signal.aborted) throw new WebResearchFailure("A tartalmi ellenőrzés ideje alatt a készítés megszakadt.");
+          await onCandidate?.(result.html, { teachingReview: review });
+          touch();
+          problems = review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`);
+        }
+        if (problems.length) result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, () => ({ ok: false, problems }));
+      }
       if (result.type === "retry") {
         await workflowValidationFailure(result.reason);
         await onCandidate?.(fullContent, { problems: result.reason });
@@ -139,7 +158,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       }
       if (result.type === "error") throw new WebResearchFailure(result.message);
       if (sources.length === 0) throw new WebResearchFailure("Nem érkezett ellenőrizhető internetes forráshivatkozás. A tananyag nem menthető.");
-      return { html: result.html, sources };
+      return { html: result.html, sources: [...fetched.values()].map(({ url, title }) => ({ url, title })) };
     }
   } catch (error) {
     if (error instanceof WebResearchFailure) throw error;

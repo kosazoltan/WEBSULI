@@ -10,7 +10,7 @@ export function experienceProblems(lesson: Lesson, experience: unknown = lesson.
   const e = parsed.data;
   const reasons: string[] = [];
   if (e.version !== LEGACY_LESSON_METHOD_VERSION) {
-    const expected = planLessonBank(lesson);
+    const expected = planLessonBank(lesson, e.version);
     if (e.version === PREVIOUS_LESSON_METHOD_VERSION) {
       expected.taskRound = Math.min(expected.taskRound, e.tasks.length);
       expected.quizRound = Math.min(expected.quizRound, e.quiz.length);

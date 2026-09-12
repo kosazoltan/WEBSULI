@@ -6,10 +6,12 @@ const digest = (text: string) => createHash("sha256").update(text).digest("hex")
 const detectors: Array<[SkillCode, RegExp]> = [
   ["prompt_injection", /prompt.?injekció|prompt.?injection|utasítás.?felülírás/i],
   ["concept_reference", /ismeretlen fogalom|fogalom.{0,30}azonosító|unknown.{0,20}(concept|id)|nem szerepel a térképen/i],
-  ["bank_cardinality", /Array must contain|bank.{0,30}(méret|hiány|csomag)|methods=|tasks=|quiz=|legalább 15|minimum 15/i],
+  ["bank_cardinality", /Array must contain|bank.{0,30}(méret|hiány|csomag)|methods=|tasks=|quiz=|legalább (15|45|75)|minimum (15|45|75)|Hiányzó módszer|kapukérdés/i],
   ["sample_score", /mintaválasz|minWords|szinonimacsoport/i],
   ["duplicate_question", /ismétlődő kérdés|duplicate/i],
   ["oral_written", /oral|written|szóbeli/i],
+  ["teaching_depth", /Tanítási minőség|tanítási fejezet|rejtett tanítás|hiányos vagy rejtett|tanítási szemléltetés/i],
+  ["source_fidelity", /factual_accuracy|source_coverage|nincs letöltött forrásszöveg/i],
   ["coverage", /fedettség|hiányzó fogalom|tanítása hiányos|nem tanított/i],
   ["html_complete", /keresési összefoglaló|HTML dokumentum nincs lezárva|csonka tananyag|négy.{0,5}lap/i],
   ["citations", /forrás.{0,80}hivatkozás|kattintható hivatkozás/i],

@@ -1,15 +1,16 @@
+import { verifyHtmlTeaching, verifyHtmlNavigation } from "./verify-html-teaching";
 import { readHtmlLessonData, HTML_LESSON_DATA_ID } from "../../shared/lesson-html-data";
 import { evaluateOpenAnswer } from "../../shared/lesson-experience-score";
-import { lessonLanguage } from "../../shared/lesson-experience";
+import { lessonLanguage, publicationBankProblems } from "../../shared/lesson-experience";
 import { verifyImprovedHtml, type HtmlVerification } from "./verify-html";
 import { ZodError } from "zod";
 
 /** Shape and sample checks, not a substitute for rendering or source review. */
 export function verifyLessonMethodHtml(html: string): HtmlVerification {
-  const problems = verifyImprovedHtml(html).problems;
+  const problems = [...verifyImprovedHtml(html).problems, ...verifyHtmlNavigation(html)];
   try {
     const data = readHtmlLessonData(html);
-    if (data.experience.tasks.length < 15 || data.experience.quiz.length < 15) problems.push("Közzétételhez legalább 15 szöveges feladat és 15 kvízkérdés szükséges, régebbi verziójelölés mellett is.");
+    problems.push(...publicationBankProblems(data.experience), ...verifyHtmlTeaching(html, data.experience));
     for (const t of data.experience.tasks) if (evaluateOpenAnswer(t.sample, t).score !== 1) problems.push(`${t.id}: a mintaválasz nem kap teljes pontot.`);
     const lang = lessonLanguage(data.subject);
     if (lang && data.experience.language !== lang) problems.push("A nyelvlecke szószedetének/TTS-ének nyelve hiányzik vagy hibás.");

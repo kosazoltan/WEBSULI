@@ -1,14 +1,15 @@
+import { teachingHtml } from "./helpers/teaching-html";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
 import { createResearchJobs, checkedResearchArtifact, publicResearchJob, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
 import { WebResearchFailure } from "../server/studio/web-research-runner";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
-const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és területképlete.", subject: "Matematika", experience: compactFusionFixture().experience };
-const htmlFor = (value: unknown) => `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}"></section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(value)}</script><script>const data = JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
+const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és területképlete.", subject: "Matematika", experience: standardFusionFixture().experience };
+const htmlFor = (value: unknown) => `<!DOCTYPE html><html><body><a href="https://www.oktatas.hu">Forrás</a>${["teaching", "methods", "tasks", "quiz"].map(t => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}">${t === "teaching" ? teachingHtml : ""}</section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(value)}</script><script>const data = JSON.parse(document.getElementById('websuli-lesson-data').textContent);</script></body></html>`;
 const artifact = { html: htmlFor(data), sources: [{ url: "https://www.oktatas.hu", title: "Tanterv" }] };
 const input = { message: "Készíts tananyagot", classroom: 4 };
 function memoryStore() {

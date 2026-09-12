@@ -1,3 +1,4 @@
+import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import type { WebResearchJob } from "../../shared/web-research-job";
 import type { WebResearchChatRequest } from "./web-research-agent";
 import { decideWebResearchResult } from "./web-research-agent";
@@ -46,7 +47,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     };
     try {
       await workflowPhase("generate");
-      const artifact = await workflowCheckpoint("web-result", job.input, () => ["ready", "done"].includes(job.state) && job.html
+      const artifact = await workflowCheckpoint("web-result", { input: job.input, method: LESSON_METHOD_VERSION }, () => ["ready", "done"].includes(job.state) && job.html
         ? Promise.resolve({ html: job.html, sources: job.sources }) : generate(job.input, {
         onEvent(event) {
           if (event.type === "status") { job.stage = event.message; persist(); }
@@ -109,7 +110,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     }
     if (job?.state === "error" && workflows) {
       const tracked = await workflows.read(id, userId);
-      const artifact = tracked && savedWorkflowResult<ResearchArtifact>(tracked, "web-result", job.input);
+      const artifact = tracked && savedWorkflowResult<ResearchArtifact>(tracked, "web-result", { input: job.input, method: LESSON_METHOD_VERSION });
       job.canResume = false;
       if (artifact && tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
         try { checkedResearchArtifact(artifact); job.canResume = true; }

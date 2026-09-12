@@ -1,13 +1,44 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fusionFixture, compactFusionFixture } from "../shared/fixtures/lesson-fusion";
-import { experienceSchema, experienceTheme } from "../shared/lesson-experience";
+import { fusionFixture, compactFusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { experienceSchema, experienceTheme, publicationBankProblems, METHOD_KINDS } from "../shared/lesson-experience";
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
 import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
-import { planLessonBank } from "../shared/lesson-bank-plan";
+import { planLessonBank, bankUnitQuota } from "../shared/lesson-bank-plan";
+
+test("mandatory 7.4 minimum: each independent deficit blocks publication, old readers survive", () => {
+  const e = standardFusionFixture().experience!;
+  assert.deepEqual(publicationBankProblems(e), []);
+  assert.equal(experienceSchema.safeParse(e).success, true);
+  for (const bad of [
+    { ...e, tasks: e.tasks.slice(0, 44) }, { ...e, quiz: e.quiz.slice(0, 74) },
+    ...METHOD_KINDS.map(kind => ({ ...e, methods: e.methods.filter(m => m.kind !== kind) })),
+    { ...e, methods: e.methods.slice(0, -1) },
+    { ...e, bankPlan: { ...e.bankPlan!, taskRound: 5 } },
+    { ...e, bankPlan: { ...e.bankPlan!, quizRound: 10 } },
+  ]) { assert.equal(experienceSchema.safeParse(bad).success, false); assert.ok(publicationBankProblems(bad).length); }
+  assert.equal(experienceSchema.safeParse(compactFusionFixture().experience).success, true);
+  assert.ok(publicationBankProblems(compactFusionFixture().experience!).length);
+  for (const classroom of [0, 1, 2, 4, 6, 8, 12]) {
+    const plan = planLessonBank({ ...standardFusionFixture(), classroom });
+    assert.equal(plan.taskRound, 15); assert.equal(plan.quizRound, 25);
+  }
+});
+
+test("packet quotas collectively meet the complete minimum across small and large sources", () => {
+  for (const size of [1, 2, 3, 6, 11, 40, 80]) {
+    const plan = { units: Array.from({ length: size }, (_, sectionIndex) => ({ sectionIndex, conceptIds: ["one", "two"] })), taskRound: 15, quizRound: 25 };
+    const quotas = plan.units.map((_, i) => bankUnitQuota(plan, i));
+    assert.ok(quotas.reduce((n, q) => n + q.taskCount, 0) >= 45);
+    assert.ok(quotas.reduce((n, q) => n + q.quizCount, 0) >= 75);
+    assert.equal(new Set(quotas.flatMap(q => q.methodKinds)).size, 10);
+    assert.ok(quotas.flatMap(q => q.methodKinds).filter(k => k === "gate").length >= 2);
+    assert.ok(quotas.every(q => new Set(q.methodKinds).size >= 2));
+  }
+});
 
 test("new lesson banks require independently at least 15 text tasks and 15 quizzes", () => {
   const e = compactFusionFixture().experience!;
@@ -85,20 +116,20 @@ test("sampling has no duplicates; half points and grade thresholds are exact; th
   assert.ok(new Set(Array.from({ length: 20 }, (_, i) => experienceTheme(`Téma ${i}`))).size >= 4);
 });
 test("builder uses one coverage packet for a small source, retains evidence and resumes without paid repeats", async () => {
-  const lesson = compactFusionFixture(); const e = lesson.experience!;
+  const lesson = standardFusionFixture(); const e = lesson.experience!;
   let calls = 0; let checkpoint: ExperienceCheckpoint | undefined;
   const parts = [{ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }];
   const concepts = [{ localId: "area", term: "Terület", definition: "A szorzat fele", quote: "T = a · m / 2", examWeight: "core" as const }];
   const actual = await buildLessonExperience(lesson, concepts, { call: async (system) => { assert.ok(system.includes(concepts[0].quote)); assert.ok(system.includes(concepts[0].definition)); return parts[calls++]; }, save: async cp => { checkpoint = structuredClone(cp); } });
-  assert.equal(calls, 1); assert.equal(actual.tasks.length, 15);
-  assert.equal(actual.quiz.length, 15); assert.equal(actual.quiz[1].options.length, 4);
+  assert.equal(calls, 1); assert.equal(actual.tasks.length, 45);
+  assert.equal(actual.quiz.length, 75); assert.equal(actual.quiz[1].options.length, 4);
   await buildLessonExperience(lesson, concepts, { checkpoint, call: async () => { throw new Error("cache miss"); } });
   const reused = await buildLessonExperience(lesson, concepts, { previous: actual, call: async () => { throw new Error("unchanged packet rewritten"); } });
   assert.deepEqual(reused.quiz, actual.quiz);
 });
 
 test("initial bank prompt explains all required groups and freely chosen examples before a lektor repair", async () => {
-  const lesson = compactFusionFixture(); const packet = lesson.experience!;
+  const lesson = standardFusionFixture(); const packet = lesson.experience!;
   let received = "";
   await buildLessonExperience(lesson, [{ localId: "area", examWeight: "core" }], {
     call: async (_system, user) => { received = user; return packet; },
@@ -127,7 +158,7 @@ test("bad bank gets a targeted retry then fails closed", async () => {
 });
 
 test("one repaired task preserves every previously generated method, task and quiz", async () => {
-  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const lesson = standardFusionFixture(), e = lesson.experience!;
   const first = { methods: e.methods, tasks: structuredClone(e.tasks), quiz: e.quiz, glossary: [] };
   // Production failure: one sample needed a rubric repair, the model returned only that task.
   first.tasks[0].sample = "Az alap és a magasság szorzata.";
@@ -159,7 +190,7 @@ test("bank patch rejects unknown/duplicate IDs, keeps absent banks and does not 
 });
 
 test("language task repair preserves the taught glossary when the repair sends an empty list", async () => {
-  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const lesson = standardFusionFixture(), e = lesson.experience!;
   lesson.subject = "angol";
   const glossary = [{ word: "water", translation: "víz", partOfSpeech: "főnév", example: "Plants need water.", exampleTranslation: "A növényeknek vízre van szükségük." }];
   const tasks = structuredClone(e.tasks); tasks[0].sample = "Az alap és a magasság szorzata.";
@@ -202,7 +233,7 @@ test("rubric repair preserves every required group and base form, including reor
 });
 
 test("rubric repair names the exact missing short-word group and preserves the grading rule", async () => {
-  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const lesson = standardFusionFixture(), e = lesson.experience!;
   const task = { ...e.tasks[0], required: [["gyökér"], ["mag"]], bonus: [], minWords: 2, needsSentence: false,
     sample: "A növény gyökérre és magra tagolódik." };
   assert.equal(evaluateOpenAnswer(task.sample, task).score, 0.5);
@@ -240,7 +271,7 @@ test("a partial repair still fails closed on invalid concept, answer or unchange
 });
 
 test("incomplete first packet requires a full replacement with actual counts in retry", async () => {
-  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const lesson = standardFusionFixture(), e = lesson.experience!;
   let calls = 0;
   const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
     if (++calls === 1) return { methods: [], tasks: [], quiz: [], glossary: [] };
@@ -255,19 +286,19 @@ test("programming classroom zero uses the older learner round rather than the fi
   const lesson = compactFusionFixture();
   const explain = lesson.sections[0].blocks.find(b => b.kind === "explain")!;
   if (explain.kind === "explain") explain.coversConceptIds = ["a", "b", "c", "d", "e", "f"];
-  const early = planLessonBank({ ...lesson, classroom: 2 });
-  const programming = planLessonBank({ ...lesson, classroom: 0 });
+  const early = planLessonBank({ ...lesson, classroom: 2 }, lesson.experience!.version);
+  const programming = planLessonBank({ ...lesson, classroom: 0 }, lesson.experience!.version);
   assert.equal(early.taskRound, 3); assert.equal(early.quizRound, 5);
   assert.equal(programming.taskRound, 5); assert.equal(programming.quizRound, 10);
 });
 
 test("repair regenerates only the changed section and preserves other packet IDs", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   const second = structuredClone(lesson.sections[0]); second.heading = "Második összefüggés";
   second.blocks.forEach(b => { if ("coversConceptIds" in b) b.coversConceptIds = ["height"]; });
   lesson.sections.push(second);
   const packets = [0, 1].map(sectionIndex => {
-    const e = structuredClone(compactFusionFixture().experience!);
+    const e = structuredClone(standardFusionFixture().experience!);
     for (const i of [...e.methods, ...e.tasks, ...e.quiz]) { i.sectionIndex = sectionIndex; i.coversConceptIds = [sectionIndex ? "height" : "area"]; }
     if (sectionIndex) { e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
     return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
@@ -300,7 +331,7 @@ test("reviewed bank indices resolve before rewriting; unknown targets are global
 });
 
 test("short sample repair receives actual and required word counts without lowering the threshold", async () => {
-  const lesson = compactFusionFixture(), e = lesson.experience!;
+  const lesson = standardFusionFixture(), e = lesson.experience!;
   const short = { ...e.tasks[0], sample: "Az alap és a magasság szorzatának fele.", minWords: 10 };
   let calls = 0;
   const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
@@ -313,12 +344,12 @@ test("short sample repair receives actual and required word counts without lower
 });
 
 test("bank review invalidates only its packet, resumes the repair and never revives the rejected base", async () => {
-  const lesson = compactFusionFixture();
+  const lesson = standardFusionFixture();
   const second = structuredClone(lesson.sections[0]); second.heading = "Második összefüggés";
   second.blocks.forEach(b => { if ("coversConceptIds" in b) b.coversConceptIds = ["height"]; });
   lesson.sections.push(second);
   const packets = [0, 1].map(sectionIndex => {
-    const e = structuredClone(compactFusionFixture().experience!);
+    const e = structuredClone(standardFusionFixture().experience!);
     for (const i of [...e.methods, ...e.tasks, ...e.quiz]) { i.sectionIndex = sectionIndex; i.coversConceptIds = [sectionIndex ? "height" : "area"]; }
     if (sectionIndex) { e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
     return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
