@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { conceptResults, coupons, lessonAttempts, lessons } from "../../shared/schema";
 import { lessonSchema } from "../../shared/lesson-schema";
-import { experienceRoundSizes } from "../../shared/lesson-experience";
+import { experienceRoundSizes, LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { selectPracticeQuestions, reviewState, type PracticeView, type AttemptResult, type QuestionReview } from "../../shared/lesson-attempt";
 import { canonicalLessonQuiz } from "../studio/canonical-quiz-bank";
 import { computeCoupon } from "../../shared/reward-policy";
@@ -22,11 +22,13 @@ async function bankOf(tx: Tx, lessonId: string) {
   const parsed = lessonSchema.safeParse(row.json);
   const bank = canonicalLessonQuiz(row);
   if (!parsed.success || !parsed.data.experience || !bank?.length) throw new PracticeError(422, "A kérdésbank javítást igényel.");
-  const version = createHash("sha256").update(JSON.stringify(bank.map(q => q.id).sort())).digest("hex");
   const earlyReader = parsed.data.classroom >= 1 && parsed.data.classroom <= 2;
-  // Existing 75-item banks remain readable, but new server-owned rounds use the
-  // current age-appropriate cap too; a legacy format is not a reason for 25 questions.
-  return { bank, version, count: Math.min(bank.length, experienceRoundSizes(parsed.data.experience).quizRound, earlyReader ? 5 : 10) };
+  const fullMethod = parsed.data.experience.version === LESSON_METHOD_VERSION;
+  const count = Math.min(bank.length, experienceRoundSizes(parsed.data.experience).quizRound, fullMethod ? 25 : earlyReader ? 5 : 10);
+  const ids = bank.map(q => q.id).sort();
+  // A format upgrade must also supersede an active short round with unchanged questions.
+  const version = createHash("sha256").update(JSON.stringify(fullMethod ? { ids, count, method: LESSON_METHOD_VERSION } : ids)).digest("hex");
+  return { bank, version, count };
 }
 async function lockLearner(tx: Tx, userId: string, lessonId: string) {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["practice", userId, lessonId])}, 0))`);

@@ -20,6 +20,7 @@ export function fusionFixture(): Lesson {
     ...(["gate", "myth", "popup"].includes(kind) ? { options: ["Az alap és a magasság szorzatának fele", "Az összes oldal összege"], correctIndex: 0 } : {}),
     ...(["sorting", "causeEffect", "timeline"].includes(kind) ? { steps: ["Azonosítom az alapot és a magasságot.", "Összeszorzom az alapot és a magasságot.", "Kettővel osztok és kiírom a cm² egységet."] } : {}),
   }));
+  Object.assign(methods.at(-1)!, { title: "A magasság iránya", prompt: "Miért nem használhatjuk tetszőleges oldal hosszát az alaphoz tartozó magasság helyett?", options: ["A magasságnak merőlegesnek kell lennie az alap egyenesére.", "Mert minden háromszög szabályos."], correctIndex: 0, answer: "A magasság merőleges az alap egyenesére; egy ferde oldal hossza általában más." });
   return {
     title: "Háromszögek: területből tudás", subject: "matematika", classroom: 7, mapId: "fusion-probe", sourceOnly: true, misconceptions: [],
     sections: [{ heading: "Az alap és a magasság együtt számít", probaEnabled: false, blocks: [

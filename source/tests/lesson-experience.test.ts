@@ -40,6 +40,14 @@ test("packet quotas collectively meet the complete minimum across small and larg
   }
 });
 
+test("two gate IDs cannot stand in for two distinct questions", () => {
+  const e = standardFusionFixture().experience!;
+  const gates = e.methods.filter(m => m.kind === "gate");
+  gates[1].prompt = ` ${gates[0].prompt.toLocaleUpperCase("hu")}! `;
+  assert.match(publicationBankProblems(e).join(";"), /Ismétlődő kapukérdés/);
+  assert.equal(experienceSchema.safeParse(e).success, false);
+});
+
 test("new lesson banks require independently at least 15 text tasks and 15 quizzes", () => {
   const e = compactFusionFixture().experience!;
   assert.equal(experienceSchema.safeParse(e).success, true);
@@ -300,7 +308,7 @@ test("repair regenerates only the changed section and preserves other packet IDs
   const packets = [0, 1].map(sectionIndex => {
     const e = structuredClone(standardFusionFixture().experience!);
     for (const i of [...e.methods, ...e.tasks, ...e.quiz]) { i.sectionIndex = sectionIndex; i.coversConceptIds = [sectionIndex ? "height" : "area"]; }
-    if (sectionIndex) { e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
+    if (sectionIndex) { e.methods.forEach(m => { if (m.kind === "gate") m.prompt = `A magasság alkalmazása: ${m.prompt}`; }); e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
     return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
   });
   let calls = 0;
@@ -351,7 +359,7 @@ test("bank review invalidates only its packet, resumes the repair and never revi
   const packets = [0, 1].map(sectionIndex => {
     const e = structuredClone(standardFusionFixture().experience!);
     for (const i of [...e.methods, ...e.tasks, ...e.quiz]) { i.sectionIndex = sectionIndex; i.coversConceptIds = [sectionIndex ? "height" : "area"]; }
-    if (sectionIndex) { e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
+    if (sectionIndex) { e.methods.forEach(m => { if (m.kind === "gate") m.prompt = `A magasság alkalmazása: ${m.prompt}`; }); e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
     return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
   });
   let calls = 0, checkpoint: ExperienceCheckpoint | undefined;

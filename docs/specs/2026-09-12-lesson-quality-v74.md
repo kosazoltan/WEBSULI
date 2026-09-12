@@ -37,4 +37,13 @@ Nincs auth-/adatbázisséma-változás, tömeges tananyagátírás vagy kitalál
 
 ## Kiadás és visszaállás
 
-A korábbi éles Git-revízió, egészségválasz és tananyag-állapot rögzítendő. Kódvisszaállítás az előző kiadásra; a kompatibilis olvasó és additív módszerverzió miatt nincs adatromboló visszaállítás. Éles adat alkalmazásakor külön mentés és feltételes visszaolvasás kell. A nyitott, korábbi untracked munkákat változatlanul megőrizzük.
+A korábbi éles Git-revízió, egészségválasz és tananyag-állapot rögzítendő. Visszaállításkor az új módszerverzió olvasóját meg kell őrizni, ha már készült ilyen tananyag; a régi kód önmagában nem tudja olvasni az új verziót. Éles adat alkalmazásakor külön mentés és feltételes visszaolvasás kell. A nyitott, korábbi untracked munkákat változatlanul megőrizzük.
+
+## Valódi generálási próba alapján szükséges javítás
+
+Az első teljes webes jelölt 1045,674 másodperc alatt, 103001 karakterrel elkészült. Két fejezethez hiányzott a második különböző módszer. Az egész HTML újragenerálása a 20 perces keretben megszakadt. Ez mért működési hiba, a minimum nem csökkenthető.
+
+- Bankhiba esetén legfeljebb két célzott JSON-javítás engedett: elemazonosító szerinti csere vagy hozzáadás, törlés és más gyökérmező átírása nélkül. Az inert bankon kívüli HTML változatlan; a teljes kapu minden javítás után lefut. Szemantikai ellenőrzést a bankjavítás nem helyettesít.
+- A kész szolgáltatói kör és ténylegesen letöltött forrásai szerveroldali workflow-checkpointba kerüljenek a minőségellenőrzés előtt. Folytatáskor a kész kör nem generálódik újra, a kapuk viszont megmaradnak. A nyilvános állapot nem tartalmazhat nyers szolgáltatói választ vagy forrásszöveget.
+- A stream tétlenségi/időkorlátja a szerzői szakaszra vonatkozik; a célzott javító és lektor saját korlátos szolgáltatói időkeretet használ. Félbeszakadt javítás nem publikálható.
+- Érintett: web-research-runner/jobs, új web-bank-repair segéd, célzott bank- és folytatási tesztek. A mentett kvízkör v4 esetén 25 elem; korábbi rövid kör eredménye megmarad, frissítés után új kör indul. A kapukérdések normalizált szövege is különböző legyen.

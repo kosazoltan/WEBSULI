@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { eq, sql } from "drizzle-orm";
-import { compactFusionFixture, fusionFixture } from "../shared/fixtures/lesson-fusion";
+import { compactFusionFixture, fusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { coupons, gameQuizItems, gamesCatalog, htmlFiles, knowledgeMaps, lessons, users } from "../shared/schema";
 import { canonicalLessonQuiz } from "../server/studio/canonical-quiz-bank";
 import { COUPON_GAME_IDS } from "../server/studio/quiz-export";
@@ -72,6 +72,37 @@ before(async () => {
     ...COUPON_GAME_IDS.map(gameId => ({ gameId, tier: "easy", sourceMaterialId: "fusion", lessonId: "old", prompt: "Elavult export", options: ["A", "B", "C"], correctIndex: 0 })),
     { gameId: COUPON_GAME_IDS[0], tier: "easy", lessonId: "draft", prompt: "Nem publikált", options: ["A", "B", "C"], correctIndex: 0, isActive: false },
   ]);
+});
+
+test("real DB: v4 has 25 saved questions at every age and supersedes a short round without losing its answers", async () => {
+  for (const classroom of [1, 7]) {
+    const id = `full-round-${classroom}`;
+    await db.insert(users).values({ id });
+    const full = standardFusionFixture(); full.classroom = classroom;
+    const old = structuredClone(full); old.experience!.version = "fusion-7.4-3";
+    old.experience!.methods = old.experience!.methods.slice(0, 2);
+    old.experience!.bankPlan!.taskRound = classroom === 1 ? 3 : 5;
+    old.experience!.bankPlan!.quizRound = classroom === 1 ? 5 : 10;
+    await db.insert(lessons).values({ id, mapId: "map", json: old, version: 1, publishedAt: new Date() });
+    const short = await beginPractice(id, id);
+    assert.equal(short.questions.length, classroom === 1 ? 5 : 10);
+    await answerPractice(id, short.id, short.questions[0].id, 0, false);
+    await db.update(lessons).set({ json: full }).where(eq(lessons.id, id));
+    const round = await beginPractice(id, id);
+    assert.notEqual(round.id, short.id); assert.notEqual(round.bankVersion, short.bankVersion);
+    assert.equal(round.questions.length, 25);
+    assert.equal(new Set(round.questions.map(q => q.id)).size, 25);
+    for (const q of round.questions) {
+      const original = full.experience!.quiz.find(item => item.id === q.questionId)!;
+      await answerPractice(id, round.id, q.id, original.correctIndex, false);
+    }
+    const restored = await readPractice(id, round.id);
+    assert.equal(restored.questions.filter(q => q.answer).length, 25);
+    const finished = await finishPractice(id, round.id);
+    assert.equal(finished.result?.correctCount, 25); assert.equal(finished.result?.total, 25);
+    const retained = await dbPool.query("SELECT answers,status FROM lesson_attempts WHERE id=$1", [short.id]);
+    assert.equal(Object.keys(retained.rows[0].answers).length, 1); assert.equal(retained.rows[0].status, "superseded");
+  }
 });
 
 test("real DB: concurrent starts resume one round, first answer is immutable and ownership is enforced", async () => {

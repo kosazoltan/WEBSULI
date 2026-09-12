@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { gateQuestionProblems } from "../../shared/lesson-experience";
 import { z } from "zod";
 import { LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../shared/lesson-experience-score";
@@ -126,6 +127,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const validate = (packet: Packet): string[] => {
       const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
+      problems.push(...gateQuestionProblems([...methods, ...packet.methods]));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);
       for (const t of packet.tasks) {
         const score = evaluateOpenAnswer(t.sample, t);

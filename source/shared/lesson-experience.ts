@@ -109,9 +109,14 @@ export type OpenTask = z.infer<typeof openTaskSchema>;
 export type ExperienceQuiz = z.infer<typeof experienceQuizSchema>;
 export type CognitiveMethod = z.infer<typeof methodSchema>;
 export type LessonBankPlan = z.infer<typeof bankPlanSchema>;
+export function gateQuestionProblems(methods: { kind: string; prompt: string }[]): string[] {
+  const gates = methods.filter(m => m.kind === "gate");
+  const keys = gates.map(m => m.prompt.normalize("NFC").toLocaleLowerCase("hu").replace(/[\p{P}\p{Z}]/gu, ""));
+  return new Set(keys).size === gates.length ? [] : ["Ismétlődő kapukérdés: különböző kérdés szükséges, új azonosító nem elég."];
+}
 /** Applied independently of a supplied version at every new publication boundary. */
-export function publicationBankProblems(e: { tasks: unknown[]; quiz: unknown[]; methods: { kind: string }[]; bankPlan?: { taskRound: number; quizRound: number }; version: string }): string[] {
-  const problems: string[] = [];
+export function publicationBankProblems(e: { tasks: unknown[]; quiz: unknown[]; methods: { kind: string; prompt: string }[]; bankPlan?: { taskRound: number; quizRound: number }; version: string }): string[] {
+  const problems: string[] = gateQuestionProblems(e.methods);
   if (e.tasks.length < LESSON_BANK_SIZES.tasks || e.quiz.length < LESSON_BANK_SIZES.quiz) problems.push("Legalább 45 szöveges feladat és 75 kvízkérdés szükséges.");
   for (const kind of METHOD_KINDS) if (!e.methods.some(m => m.kind === kind)) problems.push(`Hiányzó módszer: ${kind}.`);
   if (e.methods.filter(m => m.kind === "gate").length < 2) problems.push("Legalább két kapukérdés szükséges.");
