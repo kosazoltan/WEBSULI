@@ -1,0 +1,15 @@
+# Bizonyítékhoz kötött lektor és célzott javítókör
+
+Cél: a tényleges Odüsszeusz-jelölt elutasításában a lektor bizonyított belső ellentmondást, nem igazolt állítást és egy másodlagos forrás értelmezésének hiányát együtt kezeli. A futó webes készítő a tartalmi hiba után teljes HTML-t generál újra. A lektor adjon ellenőrizhető, elkülönített hibajegyeket, a szerző a hibás szövegrészt javítsa, utána a teljes anyag új, független ellenőrzést kapjon.
+
+Nem-cél: a 7.4 követelmények lazítása, negatív döntés automatikus átfordítása, modellek cseréje, jogosultság vagy séma módosítása. A forrás nélküli állítás továbbra sem igazolt tény. A lektor saját tudása nem bizonyíték; egy értelmezés nem kötelező tény.
+
+Érintett fájlok: `source/server/studio/web-teaching-review.ts`, új `web-teaching-repair.ts`, `web-research-runner.ts`, `web-bank-repair.ts` (meglévő szigorú bankjavító újrahasználata), `source/shared/lesson-skill.ts`, `source/server/workflows/learning.ts`, célzott tesztek és módszertani dokumentáció. A módosított bank is teljes kaput kap; publikációhoz a végleges HTML-hez kötött pozitív lektori bizonyíték kell.
+
+Döntések: öt minőségi követelmény megmarad. Minden negatív döntéshez külön hibafajta, tényleges szövegrész, indok és javítási cél szükséges. A megjelölt idézetek létezését a program ellenőrzi. Hibás lektori bizonyíték egy lektori korrekciót kap, nem kerül szerzői utasításként tovább. Forrásellentmondást és irodalmi értelmezést külön kezelünk; a forrásokban szereplő utasítás továbbra is adat. Legfeljebb két célzott szerzői javítás, mindegyik után teljes strukturális és tartalmi újraellenőrzés. Sikertelen vagy megszakadt kör megtartja a jelöltet, nem publikál. A meglévő lezárt szerzői checkpoint újrahasználható.
+
+Javítási határ: csak az azonosított tanítási fejezeteken belüli egyértelmű szövegcserék és a kapcsolódó banktételek változhatnak. Más fejezet, évfolyam, bankterv, scriptek, navigáció és forráslista érintetlen. Aktív HTML vagy nem egyértelmű keresési találat elutasítva. A szerzői javítás nem dönthet saját elfogadásáról.
+
+Elfogadás (EARS): ha a lektor nem létező idézetre hivatkozik, a program lektori korrekciót kér, és két hibás válasz után megáll. Ha a lektor érvényes hibát talál, a következő szerzői kérés az aktuális jelöltet és a konkrét hibákat kapja, majd a megváltozott teljes jelölt új lektorálást kap. Ha a javítás nem oldja meg a hibát, nem készül pozitív bizonyíték. Ha az új értékelés minden követelményt és a teljes kaput teljesíti, a bizonyíték az új HTML-re vonatkozik. A tényleges Odüsszeusz-jelöltön valós modellhívással mérjük a folyamatot; a pozitív jelöltet mobil/asztali böngészőben és rendes mentés/visszaolvasás útján is ellenőrizzük.
+
+Kiadás: a felhasználó engedélyezte a lint/push/merge/deploy lépéseket. Visszaállási kódpont: `1c87e2a3523d3e0d41970b25048ee6d3e5a34e5f`. Adatcsere előtt friss teljes mentés, eredeti tartalomhash és konkurens módosítás ellenőrzése; visszaállítás csak későbbi szerkesztés felülírása nélkül. Kód és tartalom elfogadása külön bizonyítandó.

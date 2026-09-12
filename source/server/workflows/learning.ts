@@ -12,11 +12,12 @@ const detectors: Array<[SkillCode, RegExp]> = [
   ["oral_written", /oral|written|szóbeli/i],
   ["teaching_depth", /Tanítási minőség|tanítási fejezet|rejtett tanítás|hiányos vagy rejtett|tanítási szemléltetés/i],
   ["source_fidelity", /factual_accuracy|source_coverage|nincs letöltött forrásszöveg|hozzáférési hibát tartalmaz/i],
+  ["review_evidence", /Lektori bizonyíték|lektori hibajegylista|lektori döntés és a hibajegyek/i],
   ["coverage", /fedettség|hiányzó fogalom|tanítása hiányos|nem tanított/i],
   ["html_complete", /keresési összefoglaló|HTML dokumentum nincs lezárva|csonka tananyag|négy.{0,5}lap/i],
   ["citations", /forrás.{0,80}hivatkozás|kattintható hivatkozás/i],
   ["typography", /ékezet|betűtípus|font|Unicode/i],
-  ["repair_scope", /nem érintett tétel|nem módosítható|nem törölhet|javítás csak egyedi/i],
+  ["repair_scope", /nem érintett tétel|nem módosítható|nem törölhet|javítás csak egyedi|Javítás hatóköre|célzott tanításjavítás/i],
   ["schema", /érvényes JSON|nincs JSON|nem adott tantárgyat|alakilag hibás|séma|Invalid (type|enum)|Required/i],
 ];
 export function knownFinding(code: SkillCode, step: string): SkillFinding {
