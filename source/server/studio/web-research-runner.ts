@@ -174,8 +174,9 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           const corrected = await reviewAndRepairWebTeaching(result.html, downloaded, {
             signal: controller.signal, requestedTopic: input.message,
             onReview: (html, review) => onCandidate?.(html, { teachingReview: review }) ?? Promise.resolve(),
-            async onProblem(problem) {
+            async onProblem(problem, html) {
               await workflowValidationFailure(problem);
+              await onCandidate?.(html, { problems: problem });
               onEvent({ type: "status", message: "A lektor által talált tartalmi hibák célzott javítása és újraellenőrzése…" });
             },
             onCandidate: html => onCandidate?.(html, {}) ?? Promise.resolve(),

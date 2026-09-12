@@ -24,6 +24,7 @@ test("targeted teaching change preserves every other byte and all bank items", (
 
 test("teaching patch cannot escape chapters, add active HTML, rewrite metadata or replan questions", () => {
   for (const bad of [
+    { ...patch, bank: null }, { ...patch, bank: false },
     { ...patch, classroom: 1 }, { edits: [{ ...patch.edits[0], sectionIndex: 1 }] },
     { edits: [{ ...patch.edits[0], before: "data-lesson-panel" }] },
     { edits: [{ ...patch.edits[0], after: '<script>alert(1)</script>' }] },
@@ -76,22 +77,26 @@ test("negative review triggers focused correction then a fresh full review tied 
 });
 
 test("failed patch has bounded retry with its exact error; no repeated verdict turns failure into PASS", async () => {
-  let reviews = 0, repairs = 0;
+  let reviews = 0, repairs = 0; const diagnostics: string[] = [];
   const result = await reviewAndRepairWebTeaching(html, [source], {
     review: async () => { reviews++; return review(false); },
     repair: async (_system, user) => { repairs++; if (repairs === 2) assert.match(JSON.parse(user).patchFailure, /Üres/); return { edits: [] }; },
+    onProblem: async (problem, candidate) => { assert.equal(candidate, html); diagnostics.push(problem); },
   });
   assert.equal(reviews, 1); assert.equal(repairs, 2); assert.equal(result.html, html);
   assert.equal(result.review.checks[2].passed, false);
+  assert.equal(diagnostics.filter(d => /Üres/.test(d)).length, 2);
 });
 
 test("two semantic corrections that do not fix the problem remain unpublishable", async () => {
-  let reviews = 0, repairs = 0;
+  let reviews = 0, repairs = 0, problems = 0;
   const result = await reviewAndRepairWebTeaching(html, [source], {
     review: async () => { reviews++; return review(false); },
     repair: async () => { repairs++; return repairs === 1 ? patch : { edits: [{ sectionIndex: 0, before: after, after: after + ' Gondold végig!' }] }; },
+    onProblem: async () => { problems++; },
   });
   assert.equal(reviews, 3); assert.equal(repairs, 2); assert.equal(result.review.checks[2].passed, false);
+  assert.equal(problems, 3);
 });
 
 test("cancellation after the author cannot apply or accept its response", async () => {

@@ -17,7 +17,8 @@ function textRanges(node: Node): Array<{ startOffset: number; endOffset: number 
   if (node.nodeName === "#text" && node.sourceCodeLocation) return [node.sourceCodeLocation];
   return "childNodes" in node ? node.childNodes.flatMap(textRanges) : [];
 }
-const patchSchema = z.object({ edits: z.array(z.object({ sectionIndex: z.number().int().min(0), before: z.string().min(8).max(6000), after: z.string().min(8).max(8000) }).strict()).max(40), bank: z.unknown().optional() }).strict();
+const bankPatchSchema = z.object({ methods: z.array(z.object({ id: z.string() }).passthrough()).optional(), tasks: z.array(z.object({ id: z.string() }).passthrough()).optional(), quiz: z.array(z.object({ id: z.string() }).passthrough()).optional() }).strict();
+const patchSchema = z.object({ edits: z.array(z.object({ sectionIndex: z.number().int().min(0), before: z.string().min(8).max(6000), after: z.string().min(8).max(8000) }).strict()).max(40), bank: bankPatchSchema.optional() }).strict();
 const safeTags = new Set(["p", "b", "strong", "em", "i", "span", "br", "ul", "ol", "li", "small", "sup", "sub"]);
 /** Exact replacements within existing chapter boundaries; other HTML and metadata stay byte-identical. */
 export function applyTeachingPatch(html: string, raw: unknown, allowedSections?: ReadonlySet<number>, allowedBankItems?: ReadonlySet<string>): string {
@@ -44,7 +45,7 @@ export function applyTeachingPatch(html: string, raw: unknown, allowedSections?:
   }
   if (patch.bank) {
     // Existing bank items only: semantics can correct affected questions but cannot grow/replan a bank.
-    const bank = z.object({ methods: z.array(z.object({ id: z.string() }).passthrough()).optional(), tasks: z.array(z.object({ id: z.string() }).passthrough()).optional(), quiz: z.array(z.object({ id: z.string() }).passthrough()).optional() }).strict().parse(patch.bank);
+    const bank = patch.bank;
     for (const key of ["methods", "tasks", "quiz"] as const) for (const item of bank[key] ?? []) {
       const original = originalData.experience[key].find(i => i.id === item.id);
       if (!original || item.sectionIndex !== original.sectionIndex || (allowedBankItems && !allowedBankItems.has(`${key}:${item.id}`))) throw new Error("A bankjavítás csak a lektor által megnevezett meglévő, azonos fejezetű tételt cserélhet.");
@@ -64,7 +65,7 @@ const repairCall = async (system: string, user: string, signal?: AbortSignal) =>
 export async function reviewAndRepairWebTeaching(html: string, sources: FetchedTeachingSource[], options: {
   requestedTopic?: string; signal?: AbortSignal; review?: typeof reviewWebTeaching; repair?: typeof repairCall;
   onReview?: (html: string, review: TeachingReview) => Promise<void>;
-  onProblem?: (problem: string) => Promise<void>;
+  onProblem?: (problem: string, html: string) => Promise<void>;
   onCandidate?: (html: string) => Promise<void>;
 } = {}): Promise<{ html: string; review: TeachingReview }> {
   let patchFailure = "";
@@ -78,11 +79,10 @@ export async function reviewAndRepairWebTeaching(html: string, sources: FetchedT
       review = await (options.review ?? reviewWebTeaching)(html, sources, undefined, options.signal, options.requestedTopic ?? "");
       options.signal?.throwIfAborted();
       await options.onReview?.(html, review);
+      if (review.checks.some(c => !c.passed)) await options.onProblem?.(review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`).join("; "), html);
     }
     if (!review) throw new Error("A lektorálás hiányzik.");
     if (review.checks.every(c => c.passed) || attempt === 2) return { html, review };
-    const problems = review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`).join("; ");
-    await options.onProblem?.(problems);
     const allowedSections = new Set(review.issues?.flatMap(i => i.sectionIndex === undefined ? [] : [i.sectionIndex]));
     const allowedBankItems = new Set(review.issues?.flatMap(i => i.bankItems ?? []).map(i => `${i.bank}:${i.id}`));
     const patch = await (options.repair ?? repairCall)(
@@ -92,7 +92,7 @@ Kimenet JSON: {"edits":[{"sectionIndex":0,"before":"pontos meglévő HTML szöve
     );
     options.signal?.throwIfAborted();
     try { html = applyTeachingPatch(html, patch, allowedSections, allowedBankItems); patchFailure = ""; }
-    catch (error) { patchFailure = error instanceof Error ? error.message : "Hibás javítócsomag."; await options.onProblem?.(`Javítás hatóköre: ${patchFailure}`); }
+    catch (error) { patchFailure = error instanceof Error ? error.message : "Hibás javítócsomag."; await options.onProblem?.(`Javítás hatóköre: ${patchFailure}`, html); }
     await options.onCandidate?.(html);
   }
   throw new Error("A tanításjavítás nem fejeződött be.");
