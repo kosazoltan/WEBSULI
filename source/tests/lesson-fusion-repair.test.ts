@@ -81,3 +81,11 @@ test("HTML gate parses inert JSON and catches missing banks, invalid samples and
   bank.experience.quiz.pop();
   assert.equal(verifyLessonMethodHtml(html.replace(/(<script type="application\/json"[^>]*>)[\s\S]*?(<\/script>)/, `$1${JSON.stringify(bank)}$2`)).ok, false);
 });
+
+test("HTML publication cannot bypass the 15/15 minimum with the old version", () => {
+  const e = compactFusionFixture().experience!;
+  const previous = { ...e, version: "fusion-7.4-2", tasks: e.tasks.slice(0, 2), quiz: e.quiz.slice(0, 2), bankPlan: { ...e.bankPlan!, taskRound: 2, quizRound: 2 } };
+  const html = htmlDocument().replace(/(<script type="application\/json"[^>]*>)[\s\S]*?(<\/script>)/, `$1${JSON.stringify({ classroom: 7, classroomEvidence: "A háromszög alapból és magasságból számolt területe.", subject: "matematika", experience: previous })}$2`);
+  assert.doesNotThrow(() => readHtmlLessonData(html));
+  assert.match(verifyLessonMethodHtml(html).problems.join(" "), /legalább 15/);
+});

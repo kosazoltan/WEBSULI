@@ -9,6 +9,7 @@ export function verifyLessonMethodHtml(html: string): HtmlVerification {
   const problems = verifyImprovedHtml(html).problems;
   try {
     const data = readHtmlLessonData(html);
+    if (data.experience.tasks.length < 15 || data.experience.quiz.length < 15) problems.push("Közzétételhez legalább 15 szöveges feladat és 15 kvízkérdés szükséges, régebbi verziójelölés mellett is.");
     for (const t of data.experience.tasks) if (evaluateOpenAnswer(t.sample, t).score !== 1) problems.push(`${t.id}: a mintaválasz nem kap teljes pontot.`);
     const lang = lessonLanguage(data.subject);
     if (lang && data.experience.language !== lang) problems.push("A nyelvlecke szószedetének/TTS-ének nyelve hiányzik vagy hibás.");
