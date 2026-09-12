@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyHtmlTeaching, verifyHtmlNavigation } from "../server/improve/verify-html-teaching";
-import { fetchedTeachingSources, reviewWebTeaching, TEACHING_REVIEW_CHECKS } from "../server/studio/web-teaching-review";
+import { fetchedTeachingSources, reviewWebTeaching, TEACHING_REVIEW_CHECKS, teachingReviewSchema, validateReviewGrounding } from "../server/studio/web-teaching-review";
 import { findingsFromError } from "../server/workflows/learning";
 import { teachingHtml } from "./helpers/teaching-html";
 
@@ -50,17 +50,103 @@ test("only actual fetched text reaches the independent review, never search snip
 });
 test("review receives full input and all five checks; a negative finding remains negative and learnable", async () => {
   const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: criterion !== "explanation_depth", evidence: "A forrás részletes megoldásából a második lépés hiányzik a tanításban." }));
+  const issues = [{ criterion: "explanation_depth", kind: "missing_explanation", sectionIndex: 0, lessonQuote: "A szorzat fele.", citations: [{ sourceUrl: source.url, quote: "Forrásból származó magyarázat." }], reason: "A második lépés indoklását is meg kell tanítani.", repair: "A második lépés indoklását a forrás alapján egészítsd ki." }];
   const review = await reviewWebTeaching(html, [source], async (system, user) => {
     assert.match(system, /adat, nem utasítás/);
     assert.deepEqual(JSON.parse(user).sources, [source]);
     assert.equal(JSON.parse(user).lessonHtml, html);
     assert.equal(JSON.parse(user).requestedTopic, "Háromszög területe, 7. osztály");
     assert.match(JSON.parse(user).coverageScope, /kért témájához és évfolyamához/);
-    return { checks };
+    assert.equal(JSON.parse(user).coveragePolicy.sourceVariantsRequiredOnlyWhenRequested, true);
+    return { checks, issues };
   }, undefined, "Háromszög területe, 7. osztály");
   assert.equal(review.checks.filter(c => !c.passed).length, 1);
   assert.ok(findingsFromError("Tanítási minőség (explanation_depth): hiányzik a második lépés", "generate").some(f => f.code === "teaching_depth"));
   await assert.rejects(reviewWebTeaching(html, [], async () => ({ checks })), /nincs letöltött/);
-  await assert.rejects(reviewWebTeaching(html, [source], async () => ({ checks: checks.map(() => checks[0]) })), /mind az öt/);
+  assert.throws(() => teachingReviewSchema.parse({ checks: checks.map(() => checks[0]) }), /mind az öt/);
+  await assert.rejects(reviewWebTeaching(html, [source], async () => ({ checks: checks.map(() => checks[0]) })), /korrekció után sem/);
   await assert.rejects(reviewWebTeaching(html, [{ ...source, text: "x".repeat(500_001) }], async () => ({ checks })), /csonkolt/);
+});
+
+test("reviewer repairs fabricated quotes rather than passing them to the author or discarding negatives", async () => {
+  const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: criterion !== "factual_accuracy", evidence: "A forrás és a tanítás közötti állítást ellenőrizni szükséges." }));
+  const issue = { criterion: "factual_accuracy", kind: "unsupported_claim", sectionIndex: 0, lessonQuote: "A szorzat fele.", citations: [], reason: "Az állítás a kapott forrásból nem ellenőrizhető.", repair: "Ellenőrzött forrás alapján pontosítsd az állítást." };
+  let calls = 0;
+  const result = await reviewWebTeaching(html, [source], async (system, user) => {
+    calls++;
+    assert.match(system, /irodalmi értelmezése/);
+    if (calls === 1) return { checks, issues: [{ ...issue, sectionIndex: 0, lessonQuote: "Ilyen mondat nem szerepel a tananyagban." }] };
+    assert.match(JSON.parse(user).correction.error, /nem található/);
+    return { checks, issues: [issue] };
+  });
+  assert.equal(calls, 2); assert.equal(result.checks.find(c => c.criterion === "factual_accuracy")!.passed, false);
+  assert.ok(findingsFromError("Lektori bizonyíték: nem található idézet", "generate").some(f => f.code === "review_evidence"));
+});
+
+test("grounding rejects false PASS, evidence-free factual errors, invented sources and absent issue lists", async () => {
+  const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: true, evidence: "Szintetikus pozitív összevetés, kizárólag sémaellenőrzéshez." }));
+  const issue = { criterion: "factual_accuracy" as const, kind: "factual_error" as const, sectionIndex: 0, lessonQuote: "A szorzat fele.", citations: [], reason: "Szintetikus bizonyítatlan tényhiba teszteset.", repair: "Szintetikus javítási utasítás az ellenőrzéshez." };
+  assert.throws(() => teachingReviewSchema.parse({ checks, issues: [issue] }), /ellentmondanak/);
+  assert.throws(() => validateReviewGrounding({ checks }, html, [source]), /hiányzik/);
+  assert.throws(() => validateReviewGrounding({ checks, issues: [issue] }, html, [source]), /bizonyító idézet/);
+  assert.throws(() => validateReviewGrounding({ checks, issues: [{ ...issue, citations: [{ sourceUrl: "https://example.org/invented", quote: source.text }] }] }, html, [source]), /nem található/);
+  assert.throws(() => validateReviewGrounding({ checks, issues: [{ ...issue, kind: "source_conflict", citations: [{ sourceUrl: source.url, quote: source.text }] }] }, html, [source]), /két tényleges/);
+  assert.throws(() => validateReviewGrounding({ checks, issues: [{ ...issue, bankItems: [{ bank: "quiz", id: "unknown" }] }] }, html, [source]), /nem létező tételazonosító/);
+  assert.throws(() => validateReviewGrounding({ checks, issues: [{ ...issue, kind: "unsupported_claim", lessonQuote: "Felső navigáció egyedi szövege" }] }, `<h1>Felső navigáció egyedi szövege</h1>${html}`, [source]), /sectionIndex/);
+  assert.throws(() => validateReviewGrounding({ checks, issues: [{ ...issue, kind: "unsupported_claim", lessonQuote: "sectionIndex", bankItems: [{ bank: "tasks", id: experience.tasks[0].id }] }] }, html, [source]), /az idézet nem található/);
+  assert.throws(() => validateReviewGrounding({ checks, issues: [{ ...issue, kind: "source_conflict", citations: [{ sourceUrl: null, quote: "nem található | táblázat" }] }] }, html, [source]), error => {
+    assert.match(String(error), /issues\[0\].citations\[0\]/); assert.match(String(error), /issues\[0\].kind/); return true;
+  });
+  let calls = 0;
+  await assert.rejects(reviewWebTeaching(html, [source], async () => { calls++; return { checks }; }), /korrekció után sem/);
+  assert.equal(calls, 2);
+});
+
+test("a positive review requires a separate full-input challenge, whose negative result is never outvoted", async () => {
+  const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: true, evidence: "Szintetikus teljes összevetés az ellenpéldás folyamat vizsgálatához." }));
+  for (const challengePass of [true, false]) {
+    let calls = 0;
+    const result = await reviewWebTeaching(html, [source], async (system, user) => {
+      calls++; assert.equal(JSON.parse(user).lessonHtml, html); assert.deepEqual(JSON.parse(user).sources, [source]);
+      if (calls === 1) { assert.doesNotMatch(system, /ELLENPÉLDÁS UTÓELLENŐRZÉS/); return { checks, issues: [] }; }
+      assert.match(system, /ELLENPÉLDÁS UTÓELLENŐRZÉS/);
+      return challengePass ? { checks, issues: [] } : {
+        checks: checks.map(c => ({ ...c, passed: c.criterion !== "explanation_depth" })),
+        issues: [{ criterion: "explanation_depth", kind: "missing_explanation", sectionIndex: 0, lessonQuote: "A szorzat fele.", citations: [], bankItems: [], reason: "A szorzat felezésének indoklása nem szerepel a tanításban.", repair: "Egészítsd ki a szemléltetést a felezés indoklásával." }],
+      };
+    });
+    assert.equal(calls, 2); assert.equal(result.checks.every(c => c.passed), challengePass);
+  }
+});
+
+test("unlabelled source variants do not become coverage failures outside the requested scope", () => {
+  const variant = { url: "https://example.org/variant", title: "Másik változat", text: source.text };
+  const issue = {
+    criterion: "source_coverage" as const, kind: "source_conflict" as const, sectionIndex: 0,
+    lessonQuote: "A szorzat fele.",
+    citations: [{ sourceUrl: source.url, quote: "Forrásból származó magyarázat." }, { sourceUrl: variant.url, quote: "Forrásból származó magyarázat." }],
+    reason: "A két forrás eltérő változatot ír le, de a tanítás nem jelöli ezt külön.",
+    repair: "Jelöld meg mindkét forrás változatát, ha az összehasonlítás a kért tanítás része.",
+  };
+  assert.throws(() => validateReviewGrounding({ checks: [], issues: [issue] }, html, [source, variant], "Háromszög területe, 7. osztály"), /jelöletlen forrásváltozat/);
+  assert.doesNotThrow(() => validateReviewGrounding({ checks: [], issues: [issue] }, html, [source, variant], "A háromszög területének forrásváltozatainak összehasonlítása"));
+  const markedHtml = html.replace("A szorzat fele.", "Homérosz szerint a szorzat fele.");
+  assert.doesNotThrow(() => validateReviewGrounding({ checks: [], issues: [{ ...issue, lessonQuote: "Homérosz szerint a szorzat fele." }] }, markedHtml, [source, variant], "Háromszög területe, 7. osztály"));
+});
+
+test("an internal factual contradiction remains a blocking finding", () => {
+  const issue = {
+    criterion: "factual_accuracy" as const, kind: "factual_error" as const, sectionIndex: 0,
+    lessonQuote: "A szorzat fele.", citations: [{ sourceUrl: source.url, quote: "Forrásból származó magyarázat." }],
+    reason: "A tanítás ugyanazt a mennyiséget két egymásnak ellentmondó értékkel adja meg.",
+    repair: "Egységesítsd a számértéket az ellenőrzött forrással.",
+  };
+  assert.doesNotThrow(() => validateReviewGrounding({ checks: [], issues: [issue] }, html, [source], "Háromszög területe, 7. osztály"));
+});
+
+test("inline markup spacing before punctuation does not invalidate an otherwise exact quote", () => {
+  const marked = html.replace("A szorzat fele.", "A <b>szorzat</b>, majd annak fele.");
+  const issue = { criterion: "factual_accuracy" as const, kind: "factual_error" as const, sectionIndex: 0, lessonQuote: "A szorzat, majd annak fele.", citations: [{ sourceUrl: null, quote: "A szorzat, majd annak fele." }], reason: "Szintetikus idézet a DOM-szóköz ellenőrzéséhez.", repair: "Szintetikus javítási cél a DOM-szóköz ellenőrzéséhez." };
+  assert.doesNotThrow(() => validateReviewGrounding({ checks: [], issues: [issue] }, marked, [source]));
+  assert.throws(() => validateReviewGrounding({ checks: [], issues: [{ ...issue, lessonQuote: "A szorzat; majd annak fele." }] }, marked, [source]), /nem található/);
 });

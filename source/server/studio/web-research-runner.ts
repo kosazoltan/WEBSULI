@@ -6,8 +6,10 @@ import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchSystemPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
-import { fetchedTeachingSources, reviewWebTeaching, teachingReviewEvidence, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
+import { fetchedTeachingSources, teachingReviewEvidence, TeachingReviewFailure, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { repairWebLessonBank } from "./web-bank-repair";
+import { reviewAndRepairWebTeaching } from "./web-teaching-repair";
+import { StepModelError } from "./run-step";
 
 export class WebResearchFailure extends Error {}
 export type ResearchArtifact = { html: string; sources: WebSource[]; reviewEvidence?: TeachingReviewEvidence };
@@ -169,11 +171,23 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           onEvent({ type: "status", message: "A teljes tananyag összevetése a letöltött forrásokkal…" });
           // Review has its own bounded provider timeout; streaming idle time is irrelevant here.
           if (idleTimer) clearTimeout(idleTimer);
-          const review = await reviewWebTeaching(result.html, downloaded, undefined, controller.signal, input.message);
+          const corrected = await reviewAndRepairWebTeaching(result.html, downloaded, {
+            signal: controller.signal, requestedTopic: input.message,
+            onReview: (html, review) => onCandidate?.(html, { teachingReview: review }) ?? Promise.resolve(),
+            async onProblem(problem, html) {
+              await workflowValidationFailure(problem);
+              await onCandidate?.(html, { problems: problem });
+              onEvent({ type: "status", message: "A lektor által talált tartalmi hibák célzott javítása és újraellenőrzése…" });
+            },
+            onCandidate: html => onCandidate?.(html, {}) ?? Promise.resolve(),
+          });
           if (controller.signal.aborted) throw new WebResearchFailure("A tartalmi ellenőrzés ideje alatt a készítés megszakadt.");
-          await onCandidate?.(result.html, { teachingReview: review });
+          const { review } = corrected;
+          fullContent = corrected.html;
+          result = { type: "ready", html: corrected.html };
           problems = review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`);
           if (!problems.length) reviewEvidence = teachingReviewEvidence(result.html, downloaded, review);
+          else throw new WebResearchFailure(`A célzott tartalmi javítás után további ellenőrzés szükséges: ${problems.join("; ")}`);
         }
         if (problems.length) result = decideWebResearchResult({ stopReason, fullContent, repairAttempts, sources }, () => ({ ok: false, problems }));
       }
@@ -198,6 +212,10 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     }
   } catch (error) {
     if (error instanceof WebResearchFailure) throw error;
+    if (error instanceof TeachingReviewFailure) throw new WebResearchFailure(error.message);
+    if (error instanceof StepModelError && !controller.signal.aborted) throw new WebResearchFailure(error.step === "lektor"
+      ? "A tartalmi lektorálás nem fejeződött be. A jelölt még nem publikálható."
+      : "A célzott javító modellhívása nem fejeződött be. A jelölt még nem publikálható.");
     logger.error("[WEB-RESEARCH] provider failure", { name: error instanceof Error ? error.name : "unknown", timedOut });
     throw new WebResearchFailure(timedOut ? "Időtúllépés: a keresés vagy a tananyagkészítés nem fejeződött be az időkeretben."
       : controller.signal.aborted ? "A kérés megszakadt." : "AI hiba történt a webes keresés közben.");
