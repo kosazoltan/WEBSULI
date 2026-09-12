@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { compactFusionFixture } from '../shared/fixtures/lesson-fusion';
 import { withLessonTypography } from '../shared/lesson-typography';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 for (const viewport of [{width:320,height:740},{width:844,height:390},{width:1366,height:768}]) {
  test(`HTML scored banks survive reload ${viewport.width}`, async ({page})=>{
   const lesson=compactFusionFixture(); const data={classroom:7,classroomEvidence:'A háromszög területének kiszámítása az alap és magasság alapján.',subject:'matematika',experience:lesson.experience};
@@ -20,6 +20,11 @@ for (const viewport of [{width:320,height:740},{width:844,height:390},{width:136
   await tasks.locator('textarea').first().fill(data.experience!.tasks.find(t=>t.q===question)!.sample);
   await tasks.getByRole('button',{name:'Kiértékelés',exact:true}).click();
   await expect(tasks.getByRole('status')).toContainText('1 / 5 pont');
+  await tasks.locator('article').first().getByText('Mintaválasz',{exact:true}).click();
+  const download=page.waitForEvent('download');
+  await tasks.getByRole('button',{name:'Eredmény letöltése',exact:true}).click();
+  const exported=JSON.parse(await readFile((await (await download).path())!,'utf8'));
+  expect(exported.seenSampleIds).toEqual([data.experience!.tasks.find(t=>t.q===question)!.id]);
   await page.reload();
   await expect(quiz.getByRole('status')).toContainText('1 / 10 pont');
   expect(await quiz.locator('h3').allTextContents()).toEqual(titles);
