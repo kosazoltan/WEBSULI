@@ -3,11 +3,28 @@ import { isAuthenticatedAdmin } from "../auth";
 import { workflowStore } from "./store";
 import { skillStore } from "./learning-store";
 import { skillMarkdown, type LessonSkill } from "../../shared/lesson-skill";
+import { runtimeKnowledge } from "../../shared/runtime-knowledge";
 
 export const workflowRouter = Router();
 workflowRouter.use(isAuthenticatedAdmin);
 workflowRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 const isSkill = (value: string): value is LessonSkill => value === "tananyag-keszito" || value === "tananyag-javito";
+workflowRouter.get("/skills/:skill/runtime", async (req, res) => {
+  if (!isSkill(req.params.skill)) return res.status(400).json({ message: "Ismeretlen tananyag-skill." });
+  if (req.query.q !== undefined && (typeof req.query.q !== "string" || req.query.q.length > 200)) return res.status(400).json({ message: "Legfeljebb 200 karakteres keresőkifejezés használható." });
+  try {
+    const lessons = await skillStore.list(req.user!.id, req.params.skill);
+    const snapshot = await skillStore.load(req.user!.id, req.params.skill === "tananyag-keszito" ? "upload" : "repair");
+    const knowledge = runtimeKnowledge(snapshot, lessons, typeof req.query.q === "string" ? req.query.q : "");
+    if (req.query.document !== undefined) {
+      const name = req.query.document;
+      if (typeof name !== "string" || !Object.hasOwn(knowledge.documents, name)) return res.status(400).json({ message: "Ismeretlen futási dokumentum." });
+      res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+      return res.type("text/markdown").send(knowledge.documents[name as keyof typeof knowledge.documents]);
+    }
+    res.json(knowledge);
+  } catch { res.status(503).json({ message: "A saját futási tudástár átmenetileg nem olvasható." }); }
+});
 workflowRouter.get("/skills/:skill", async (req, res) => {
   if (!isSkill(req.params.skill)) return res.status(400).json({ message: "Ismeretlen tananyag-skill." });
   try {

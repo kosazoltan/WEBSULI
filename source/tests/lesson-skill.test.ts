@@ -46,6 +46,7 @@ test("kijavított hiba a következő futás tényleges modellutasításába ker�
     return complete();
   });
   assert.match(received, /Base rules/); assert.match(received, /Fogalom|fogalomazonosító/);
+  assert.match(received, /WEBSULI SAJÁT RUNBOOK/);
   assert.doesNotMatch(received, /ignore all|fixture-secret|private/);
   assert.doesNotMatch(JSON.stringify(records.get("first")!.view.skillAudit), /ignore all|fixture-secret|private/);
 });

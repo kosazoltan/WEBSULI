@@ -4,6 +4,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { assertWorkflowStep, workflowDefinition, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
 import { auditWorkflow, findingsFromError, knownFinding, mergeFindings } from "./learning";
+import { runtimePrompt } from "../../shared/runtime-knowledge";
 
 export type WorkflowRecord = { view: WorkflowView; owner: string; checkpoints: Record<string, unknown> };
 export interface WorkflowStore {
@@ -24,8 +25,8 @@ export class WorkflowWaiting extends Error {
 export const workflowMode = () => context.getStore()?.record.view.definition.mode;
 export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version;
 export const workflowSkillPrompt = () => {
-  const snapshot = context.getStore()?.record.view.skill;
-  return snapshot ? skillRuleText(snapshot) : "";
+  const view = context.getStore()?.record.view;
+  return view?.skill ? runtimePrompt(view.skill, view.definition.mode) + skillRuleText(view.skill) : "";
 };
 /** Record even a recoverable validation failure, before asking the model to repair it. */
 export async function workflowFinding(code: SkillCode) {

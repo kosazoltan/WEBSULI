@@ -108,6 +108,18 @@ test("valódi admin HTTP: saját skill, Markdown, kizárt nyers hiba és engedé
     const body = await mine.json(); assert.ok(body.lessons.some((l: { code: string }) => l.code === "unknown"));
     assert.doesNotMatch(JSON.stringify(body), /ignore all rules|fixture-secret/);
     const other = await (await fetch(base, { headers: { "x-test-owner": "skill-other" } })).json(); assert.deepEqual(other.lessons, []);
+    assert.equal((await fetch(`${base}/runtime`)).status, 401);
+    const runtime = await (await fetch(`${base}/runtime?q=forrás`, { headers: { "x-test-owner": "skill-owner" } })).json();
+    assert.equal(Object.keys(runtime.documents).length, 8);
+    assert.ok(runtime.cards.length > 0);
+    assert.doesNotMatch(JSON.stringify(runtime), /ignore all rules|fixture-secret/);
+    const isolated = await (await fetch(`${base}/runtime`, { headers: { "x-test-owner": "skill-other" } })).json();
+    assert.deepEqual(isolated.cards, []);
+    assert.equal((await fetch(`${base}/runtime?document=../../secret`, { headers: { "x-test-owner": "skill-owner" } })).status, 400);
+    assert.equal((await fetch(`${base}/runtime?q=${"a".repeat(201)}`, { headers: { "x-test-owner": "skill-owner" } })).status, 400);
+    const runbook = await fetch(`${base}/runtime?document=RUNBOOK.md`, { headers: { "x-test-owner": "skill-owner" } });
+    assert.match(runbook.headers.get("content-type")!, /text\/markdown/);
+    assert.match(await runbook.text(), /Forrás és eredeti tartalom/);
     const md = await fetch(`${base}?format=markdown`, { headers: { "x-test-owner": "skill-owner" } });
     assert.match(md.headers.get("content-type")!, /text\/markdown/); assert.match(await md.text(), /name: tananyag-keszito/);
     const fingerprint = body.lessons.find((l: { code: string }) => l.code === "concept_reference").fingerprint;

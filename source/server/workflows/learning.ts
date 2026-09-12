@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { SKILL_METHOD_VERSION, SKILL_RULES, skillForMode, type SkillFinding, type SkillCode, type SkillSnapshot, type SkillAudit } from "../../shared/lesson-skill";
+import { RUNTIME_KNOWLEDGE_VERSION, SKILL_METHOD_VERSION, SKILL_RULES, skillForMode, type SkillFinding, type SkillCode, type SkillSnapshot, type SkillAudit } from "../../shared/lesson-skill";
 import { workflowDefinition, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 const detectors: Array<[SkillCode, RegExp]> = [
+  ["prompt_injection", /prompt.?injekció|prompt.?injection|utasítás.?felülírás/i],
   ["concept_reference", /ismeretlen fogalom|fogalom.{0,30}azonosító|unknown.{0,20}(concept|id)|nem szerepel a térképen/i],
   ["bank_cardinality", /Array must contain|bank.{0,30}(méret|hiány|csomag)|methods=|tasks=|quiz=|legalább 15|minimum 15/i],
   ["sample_score", /mintaválasz|minWords|required|szinonimacsoport/i],
@@ -44,7 +45,7 @@ export function mergeFindings(...groups: SkillFinding[][]): SkillFinding[] {
 export function skillSnapshot(mode: WorkflowMode, codes: string[]): SkillSnapshot {
   const rules = [...new Set(codes)].filter((c): c is SkillCode => Object.hasOwn(SKILL_RULES, c)).sort();
   const skill = skillForMode(mode);
-  return { skill, version: digest(JSON.stringify([SKILL_METHOD_VERSION, skill, rules])).slice(0, 20), rules };
+  return { skill, version: digest(JSON.stringify([SKILL_METHOD_VERSION, RUNTIME_KNOWLEDGE_VERSION, skill, rules])).slice(0, 20), rules, runtimeVersion: RUNTIME_KNOWLEDGE_VERSION };
 }
 export function auditWorkflow(view: WorkflowView): SkillAudit {
   const definition = workflowDefinition(view.definition.mode);
