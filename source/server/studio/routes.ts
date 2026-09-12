@@ -5,6 +5,8 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { knowledgeMaps, kmConcepts } from "../../shared/schema";
 import { isAuthenticatedAdmin } from "../auth";
+import { withPreparationSkill } from "../workflows/engine";
+import { skillStore } from "../workflows/learning-store";
 import { logger } from "../lib/logger";
 import { practiceReport } from "../rewards/lesson-attempts";
 import {
@@ -211,6 +213,9 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Hibás kérés.", issues: parsed.issues });
   }
 
+  try {
+  const snapshot = await skillStore.load(req.user!.id, "upload");
+  return await withPreparationSkill(snapshot, async () => {
   const inferred=await inferOneStepScope(parsed.data,files=>callScopeModel(files,resolveStudioModel("ocr")));
   if(!inferred.ok)return res.status(422).json({message:"A forrásból nem sikerült felismerni a tantárgyat és az osztályt. Próbáld újra olvashatóbb forrással."});
   const { files } = parsed.data;
@@ -231,7 +236,6 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
     return res.json({ mapId: existing.id, cached: true });
   }
 
-  try {
     const mapId = await runExtraction({
       files: files as ExtractorFile[],
       scope,
@@ -241,6 +245,7 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
       userId: (req.user as { id?: string } | undefined)?.id,
     });
     res.status(201).json({ mapId, cached: false });
+  });
   } catch (error) {
     logger.error(
       `[STUDIO] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,

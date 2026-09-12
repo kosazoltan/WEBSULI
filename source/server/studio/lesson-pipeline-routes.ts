@@ -40,7 +40,7 @@ import {
 import { markOrphanedJobs } from "./orphan-jobs";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { executeWorkflow, workflowPhase, workflowResource, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { htmlFiles } from "../../shared/schema";
 
@@ -297,6 +297,7 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
       callScopeModel(f, resolveStudioModel("ocr")),
     );
     if (!inferred.ok) {
+      await workflowValidationFailure(inferred.reason);
       updateRun(runId, {
         phase: "error",
         error: `Nem sikerült felismerni a tantárgyat/osztályt (${inferred.reason}). Próbáld újra olvashatóbb forrással.`,

@@ -49,7 +49,8 @@ import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesso
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase, workflowFence } from "../workflows/engine";
+import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure } from "../workflows/engine";
+import { lektorSkillCodes } from "../workflows/learning";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -258,6 +259,7 @@ function describeStepError(error: unknown): string {
 
 /** Persist the error state and return the failed outcome. */
 async function fail(store: PipelineStore, job: JobView, reason: string, output?: JobView["output"]): Promise<StepOutcome> {
+  await workflowValidationFailure(reason);
   logger.error(`[STUDIO] ${job.step} lépés hiba (job ${job.id}): ${reason}`);
   await store.saveStep(job.id, { status: "error", step: "error", error: reason, finishedAt: new Date(), ...(output ? { output } : {}) });
   return { ok: false, next: { step: "error", round: job.round, reason }, reason };
@@ -407,7 +409,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       return { ok: true, next: { step: job.step, round: job.round }, cached: true };
   }
 
-  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, { input, system }, job.round);
+  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, { input, system, ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}) }, job.round);
 
   // Idempotency: this exact input was already paid for and its output is stored.
   if (job.status === "ok" && job.inputHash === hash && job.output !== null) {
@@ -511,6 +513,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       let parsed = lessonSchema.safeParse(json);
       const initialUnknownIds = parsed.success ? lessonIdsSubsetOfMap(parsed.data, map.concepts) : [];
       if (!parsed.success || initialUnknownIds.length > 0) {
+        await workflowFinding(initialUnknownIds.length ? "concept_reference" : "schema");
         const issues = parsed.success
           ? `A forrásjegyzékben nem szereplő fogalomazonosítók: ${initialUnknownIds.join(", ")}.`
           : zodIssues(parsed.error);
@@ -641,6 +644,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const notes = classifyNotes(parsed.data.notes);
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
+      for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
 
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || (job.output?.lesson as Lesson | undefined)?.experience)) {
         return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${notes.filter(n => n.blocking).map(n => n.message).join("; ")}`,
@@ -743,6 +747,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   let qualityNotes = job.output?.qualityNotes;
 
   if (!gate.ok) {
+    await workflowValidationFailure(gate.reasons.join("; "));
     if (job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience)) return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
     const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
     if (transition.step === "error") {

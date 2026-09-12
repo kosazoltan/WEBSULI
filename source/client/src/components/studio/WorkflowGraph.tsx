@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Circle, Clock3, RefreshCw, TriangleAlert } from "lucide-react";
 import { WORKFLOW_STATE_LABELS, type WorkflowView, type WorkflowVisit } from "@shared/lesson-workflow";
+import { SKILL_RULES, skillForMode } from "@shared/lesson-skill";
 
 const elapsed = (visit: WorkflowVisit) => visit.finishedAt === undefined ? "Folyamatban" : `${((visit.finishedAt - visit.startedAt) / 1000).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} mp`;
 const visitLabel = { done: "Befejezett", running: "Folyamatban", error: "Megállt", waiting: "Döntésre vár" };
@@ -77,5 +78,14 @@ export function WorkflowGraph({ run }: { run: WorkflowView }) {
     {run.history?.map((attempt, i) => <details key={i} className="mt-3 rounded-lg border p-3 text-sm"><summary className="min-h-11 cursor-pointer">Korábbi végrehajtás {i + 1}: {WORKFLOW_STATE_LABELS[attempt.state]}</summary><ol className="space-y-2">{attempt.visits.map((v, n) => <li key={n} className="break-words">{run.definition.steps.find(s => s.id === v.step)?.label} · {visitLabel[v.state]} · {elapsed(v)}{v.error && ` · ${v.error}`}</li>)}</ol></details>)}
     {run.result?.kind === "material" && <a className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white" href={`/preview/${encodeURIComponent(run.result.id)}`}>Tananyag megnyitása<ArrowRight className="h-4 w-4" /></a>}
     {run.result?.kind === "candidate" && <p className="mt-3 text-sm">A jelölt az Okosítás fülön nézhető át és alkalmazható.</p>}
+    <details className="mt-4 min-w-0 rounded-xl border bg-white p-3 text-sm dark:bg-slate-900" data-testid="workflow-learning">
+      <summary className="min-h-11 cursor-pointer font-semibold">Önellenőrzés és tanult tapasztalatok</summary>
+      <p className="mt-2">{run.skillAudit ? run.skillAudit.outcome === "passed" ? "A kötelező folyamatlépések és az eredmény visszaolvasása igazolt." : "A teljes befejezés nem igazolt; a futás megállását és tapasztalatait rögzítettük." : "Ehhez a futáshoz még nincs mentett utóellenőrzés."}</p>
+      <p className="mt-2">Ez a program ellenőrzése, nem emberi pedagógiai minősítés.</p>
+      {run.skill && <><p className="mt-2 break-words">A futásban alkalmazott kiegészítések: {run.skill.rules.length}. Verzió: {run.skill.version}.</p>
+        <ul className="mt-2 list-inside list-disc">{run.skill.rules.map(code => <li key={code}>{SKILL_RULES[code]?.[0] ?? "Korábbi szabály"}</li>)}</ul></>}
+      <a className="mt-2 inline-flex min-h-11 items-center underline" href={`/api/studio/skills/${skillForMode(run.definition.mode)}?format=markdown`}>Aktuális skill letöltése</a>
+      {run.skillAudit?.findings.map(f => <p key={f.fingerprint} className="mt-2 break-words">{f.code === "unknown" ? "Új hibafajta rögzítve; értelmezése még szükséges." : f.code === "infrastructure" ? "Működési hiba rögzítve; nem pedagógiai szabály." : `Rögzített tapasztalat: ${SKILL_RULES[f.code][0]}.`}</p>)}
+    </details>
   </section>;
 }

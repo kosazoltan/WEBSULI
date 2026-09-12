@@ -9,12 +9,13 @@ import type { MapConcept } from "./coverage";
 import { checkCoverageGate } from "./coverage";
 import { buildAuthorPrompt, buildLektorPrompt, canonicalJson, lektorReportSchema } from "./step-io";
 import { classifyNotes } from "./lektor";
+import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 import { callStepModel } from "./run-step";
 import { createStudioProvider } from "../ai/studio-provider";
 import { resolveStudioModel } from "../ai/models";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
-import { workflowPhase, workflowMode, workflowFence } from "../workflows/engine";
+import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
 
 export const repairHash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
@@ -88,6 +89,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
       candidate = parsed;
       break;
     } catch (error) {
+      await workflowValidationFailure(error);
       correction = error instanceof Error ? error.message : "Érvénytelen tanítás.";
       if (attempt === 1) throw new Error(`A javított tanítás ellenőrzése sikertelen; bankgyártás nem indult: ${correction}`, { cause: error });
     }
@@ -105,7 +107,10 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   await workflowPhase("lektor");
   const review = lektorReportSchema.parse(await call("lektor", buildLektorPrompt(candidate, source), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);
-  if (blockers.length) throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+  if (blockers.length) {
+    for (const code of lektorSkillCodes(blockers)) await workflowFinding(code);
+    throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+  }
   await workflowPhase("gate");
   assertRepairCandidate(original, candidate, source);
   return { candidate, review };

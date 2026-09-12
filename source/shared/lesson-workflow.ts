@@ -1,3 +1,4 @@
+import type { SkillSnapshot, SkillFinding, SkillAudit } from "./lesson-skill";
 /** One versioned definition drives execution guards and the administrator's diagram. */
 export const WORKFLOW_VERSION = "lesson-flow-1";
 export type WorkflowMode = "upload" | "studio" | "web" | "repair" | "concept" | "html" | "apply";
@@ -42,6 +43,9 @@ export type WorkflowView = {
   result?: { kind: "candidate" | "material"; id: string }; revision: number;
   executions?: number;
   resourceId?: string;
+  skill?: SkillSnapshot;
+  skillFindings?: SkillFinding[];
+  skillAudit?: SkillAudit;
   history?: Array<{ state: WorkflowView["state"]; visits: WorkflowVisit[]; error?: string }>;
 };
 export const WORKFLOW_STATE_LABELS: Record<WorkflowView["state"], string> = {

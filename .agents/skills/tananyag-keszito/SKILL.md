@@ -9,6 +9,8 @@ Először olvasd el a [közös, forrásalapú módszert](../../../docs/lesson-im
 
 ## Kötelező menet
 
+A [futó skill-tanulási eljárás](../../../docs/runtime-skill-learning.md) is része a készítésnek. A program minden végrehajtás után mentett utóellenőrzést készít, a kijavított hibákat is megőrzi, és a saját aktív módszertani kiegészítéseit a következő modellhívásokhoz betölti. Az aktuális alkalmazás-SKILL.md az admin Futások felületéről tölthető le. Új hibafajta kötelező megfigyelés, nem szabad szöveges utasítás; a kapuk és a 15/15 minimum ettől nem lazulhatnak.
+
 1. Olvasd a repo vezérlőfájljait; terv és külön AI-végrehajtási leírás előzze meg a kódot.
 2. Azonosítsd a tényleges forrást és tartalomtípust. `contentType=lesson` esetén a `lessons.json` a tananyag; HTML-helyőrzőt tilos javítómodellnek küldeni. Feltöltött kép/PDF/szöveg vagy webes forrás azonosítását, bizonytalanságát és idézeteit őrizd meg.
 3. A program a forrás tartalmából állapítja meg a tantárgyat és évfolyamot. A készítőtől ne kérj osztályt; a keresési korosztály csak támpont. Javítás nem írhatja felül a kurált besorolást.

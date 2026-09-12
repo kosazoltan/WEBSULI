@@ -1,4 +1,5 @@
 import { studioConnection } from "../ai/studio-provider";
+import { workflowSkillPrompt, workflowFinding } from "../workflows/engine";
 import { db } from "../db";
 import { knowledgeMaps, kmConcepts, systemPrompts } from "../../shared/schema";
 import { and, eq } from "drizzle-orm";
@@ -91,7 +92,7 @@ export async function loadExtractionConfig(): Promise<ExtractionConfig> {
     model: resolveStudioModel("extract"), ocrModel: resolveStudioModel("ocr"), ocrPrompt: OCR_SYSTEM_PROMPT,
     provider: providerForModel(resolveStudioModel("extract")),
     systemPrompt: (await promptStore.get(EXTRACTOR_PROMPT_NAME, FALLBACK_PROMPT)) +
-      "\nAktuális kivonatolási szerződés: kapcsolati gráfot és relatedIds listát ne készíts. A forrás pontos fogalmai, idézetei és forráshelyei szükségesek. A későbbi tanítás ezeket közvetlenül használja.\n" + TRANSCRIPT_CONTRACT,
+      "\nAktuális kivonatolási szerződés: kapcsolati gráfot és relatedIds listát ne készíts. A forrás pontos fogalmai, idézetei és forráshelyei szükségesek. A későbbi tanítás ezeket közvetlenül használja.\n" + TRANSCRIPT_CONTRACT + workflowSkillPrompt(),
   };
 }
 
@@ -175,14 +176,18 @@ export async function runExtraction(input: RunInput): Promise<string> {
 
   input.onPhase?.("extract", null);
   const raw = await callExtractorModel(files, input.scope, systemPrompt, model);
-  const valid = await completeExtractionConcepts(raw, files, repair =>
-    callExtractorModel(files, input.scope, systemPrompt, model, repair));
+  const valid = await completeExtractionConcepts(raw, files, async repair => {
+    await workflowFinding("schema");
+    return callExtractorModel(files, input.scope, systemPrompt, model, repair);
+  });
   input.onPhase?.("extract", "A teljes forrás és a fogalomjegyzék összevetése…");
   const covered = await completeSourceCoverage(valid, files, existing =>
     callExtractorModel(files, input.scope, systemPrompt, model, undefined, existing));
+  if (covered.length > valid.length) await workflowFinding("coverage");
 
   const searchableText = files.map(file => file.extractedText).join("\n");
   const checked = await repairSourceQuotes(covered, files, async (failed, round) => {
+    await workflowFinding("source_fidelity");
     input.onPhase?.("extract", `Forrásidézetek automatikus javítása: ${failed.length} fogalom, ${round}. kör…`);
     const result = await callExtractorModel(files, input.scope, systemPrompt, model, {
       concepts: failed,

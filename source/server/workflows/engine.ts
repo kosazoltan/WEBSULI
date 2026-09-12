@@ -2,6 +2,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { assertWorkflowStep, workflowDefinition, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
+import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
+import { auditWorkflow, findingsFromError, knownFinding, mergeFindings } from "./learning";
+import { runtimePrompt } from "../../shared/runtime-knowledge";
 
 export type WorkflowRecord = { view: WorkflowView; owner: string; checkpoints: Record<string, unknown> };
 export interface WorkflowStore {
@@ -11,14 +14,41 @@ export interface WorkflowStore {
   save(record: WorkflowRecord, token: string): Promise<boolean>;
   heartbeat(id: string, token: string): Promise<boolean>;
   release(id: string, token: string): Promise<void>;
+  loadSkill?(owner: string, mode: WorkflowMode): Promise<SkillSnapshot>;
 }
 type Context = { record: WorkflowRecord; store: WorkflowStore; token: string; lostLease: boolean; continuation: boolean };
 const context = new AsyncLocalStorage<Context>();
+const preparationSkill = new AsyncLocalStorage<{ snapshot: SkillSnapshot; mode: WorkflowMode }>();
+/** Manual source preparation shares one pinned prompt without inventing a full lesson run. */
+export function withPreparationSkill<T>(snapshot: SkillSnapshot, work: () => Promise<T>): Promise<T> {
+  return preparationSkill.run({ snapshot: structuredClone(snapshot), mode: "upload" }, work);
+}
 export class WorkflowConflict extends Error {}
 export class WorkflowWaiting extends Error {
   constructor(message: string, readonly stepCompleted = false) { super(message); }
 }
 export const workflowMode = () => context.getStore()?.record.view.definition.mode;
+export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version ?? preparationSkill.getStore()?.snapshot.version;
+export const workflowSkillPrompt = () => {
+  const view = context.getStore()?.record.view;
+  const preparation = preparationSkill.getStore();
+  const snapshot = view?.skill ?? preparation?.snapshot;
+  const mode = view?.definition.mode ?? preparation?.mode;
+  return snapshot && mode ? runtimePrompt(snapshot, mode) + skillRuleText(snapshot) : "";
+};
+/** Record even a recoverable validation failure, before asking the model to repair it. */
+export async function workflowFinding(code: SkillCode) {
+  const ctx = context.getStore();
+  if (!ctx) return;
+  ctx.record.view.skillFindings = mergeFindings(ctx.record.view.skillFindings ?? [], [knownFinding(code, ctx.record.view.visits.at(-1)?.step ?? "start")]);
+  await persist(ctx);
+}
+export async function workflowValidationFailure(error: unknown) {
+  const ctx = context.getStore();
+  if (!ctx) return;
+  ctx.record.view.skillFindings = mergeFindings(ctx.record.view.skillFindings ?? [], findingsFromError(error, ctx.record.view.visits.at(-1)?.step ?? "start"));
+  await persist(ctx);
+}
 /** Call before domain writes and immediately before returning from their transaction.
  * The row lock prevents takeover until commit; the final wall-clock check rejects an expired writer.
  * No workflowPhase/persist call may occur between these fences (it uses another connection).
@@ -134,12 +164,15 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
   fresh.view.executions = (fresh.view.executions ?? 0) + 1;
   fresh.view.state = "running";
   fresh.view.error = undefined;
+  fresh.view.skillAudit = undefined;
   const timer = setInterval(() => {
     void store.heartbeat(input.id, token).then(ok => { if (!ok) ctx.lostLease = true; }).catch(() => { ctx.lostLease = true; });
   }, 20_000);
   timer.unref();
   try {
     return await context.run(ctx, async () => {
+      // Pin the exact rule set for the whole run, including explicit continuation.
+      if (!ctx.record.view.skill && store.loadSkill) ctx.record.view.skill = await store.loadSkill(input.owner, input.mode);
       await persist(ctx);
       const result = await work();
       if (!result?.id || ctx.record.view.visits.at(-1)?.step !== "readback") throw new Error("Nincs visszaolvasott eredmény; a futás nem jelölhető késznek.");
@@ -149,6 +182,8 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
       last.state = "done"; last.finishedAt = Date.now();
       ctx.record.view.result = result;
       ctx.record.view.state = result.kind === "candidate" ? "ready" : "done";
+      ctx.record.view.skillAudit = auditWorkflow(ctx.record.view);
+      if (ctx.record.view.skillAudit.outcome !== "passed") throw new Error("A futás utóellenőrzése nem igazolja az összes kötelező lépést.");
       await persist(ctx);
       return structuredClone(ctx.record.view);
     });
@@ -158,6 +193,7 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
       ctx.record.view.error = redactWorkflowError(error);
       const visit = ctx.record.view.visits.at(-1);
       if (visit?.state === "running") { visit.state = error instanceof WorkflowWaiting ? (error.stepCompleted ? "done" : "waiting") : "error"; visit.error = error instanceof WorkflowWaiting ? undefined : ctx.record.view.error; visit.finishedAt = Date.now(); }
+      ctx.record.view.skillAudit = auditWorkflow(ctx.record.view);
       await persist(ctx);
     }
     throw error;

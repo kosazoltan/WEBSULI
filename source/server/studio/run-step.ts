@@ -1,7 +1,7 @@
 import { stripJsonFences } from "../ai/OpenRouterProvider";
 import type { AIResponse, IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
-import { workflowCheckpoint, workflowUsage } from "../workflows/engine";
+import { workflowCheckpoint, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 
 /**
  * LS-2c — the call layer between the pipeline state machine and the provider.
@@ -47,6 +47,7 @@ export async function callStepModel(
   provider: IAIProvider,
   input: StepCallInput,
 ): Promise<StepCallResult> {
+  input = { ...input, system: input.system + workflowSkillPrompt() };
   return workflowCheckpoint("studio-model", input, async () => {
     const result = await callUncachedStepModel(provider, input);
     await workflowUsage(result.usage);
@@ -61,14 +62,17 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
       { role: "user", content: input.user },
     ]);
   } catch (error) {
+    await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
     throw new StepModelError(input.step, "a szolgáltató hibát jelzett", { cause: error });
   }
 
   const text = stripJsonFences(response.content ?? "").trim();
   if (response.finishReason === "length" || response.finishReason === "max_tokens") {
+    await workflowValidationFailure("A szolgáltató válasza elérte a hosszkorlátot.");
     throw new StepModelError(input.step, "a válasz elérte a hosszkorlátot; csonka eredmény nem használható");
   }
   if (text.length === 0) {
+    await workflowValidationFailure("A szolgáltató válasza üres.");
     throw new StepModelError(input.step, "a válasz üres");
   }
 
@@ -77,6 +81,7 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     return { json, usage: response.usage };
   } catch {
     // Length, never content: the raw text may itself be a prompt injection.
+    await workflowValidationFailure("A válasz nem érvényes JSON.");
     throw new StepModelError(
       input.step,
       `a válasz nem érvényes JSON (${text.length} karakter)`,

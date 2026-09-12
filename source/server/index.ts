@@ -14,6 +14,7 @@ import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { setupAuth } from "./auth";
 import { runMigrations } from "./migrate";
+import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
 import errorReportRouter from "./routes/error-report";
 import staticAuditRouter from "./routes/static-audit";
@@ -539,6 +540,7 @@ app.use((req, res, next) => {
     app.use("/api/static-audit", staticAuditRouter);
 
     const server = await registerRoutes(app);
+    const stopSkillLearningAudit = startSkillLearningAudit();
 
     // Phase 8: Start scheduled publishing cron job
     setupScheduledPublishing();
@@ -594,6 +596,7 @@ app.use((req, res, next) => {
 
     // Graceful shutdown handler
     const gracefulShutdown = async (signal: string) => {
+      stopSkillLearningAudit();
       log(`${signal} received. Starting graceful shutdown...`);
 
       // Stop accepting new connections
