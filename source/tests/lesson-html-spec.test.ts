@@ -11,7 +11,7 @@ import {
   lessonThemePrompt,
   pickLessonTheme,
 } from "../server/ai/lesson-html-spec";
-import { LESSON_HTML_REQUIREMENTS, webResearchSystemPrompt } from "../server/studio/web-research-agent";
+import { LESSON_HTML_REQUIREMENTS, webResearchSystemPrompt, webLessonAuthorPrompt } from "../server/studio/web-research-agent";
 
 const read = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
 
@@ -109,12 +109,21 @@ test("lessonHtmlSpecPrompt = téma + teljes spec", () => {
 
 // ---------------------------------------------------------------- bekötés a 4 HTML-gyártó helyre
 
-test("a webes ügynök promptja a v7.4 specet és a témát hordozza", () => {
+test("a webes gyűjtő prompt nem tartalmazza a v7.4 JS-dumpot; a szerzői a fúziós szerződést", () => {
   assert.equal(LESSON_HTML_REQUIREMENTS, LESSON_HTML_SPEC_V74);
-  const p = webResearchSystemPrompt(5, "Törtek — 5. osztály", "Keress törtes tananyagot");
-  assert.ok(p.includes(LESSON_HTML_SPEC_V74));
-  assert.match(p, /## MEGJELENÍTÉSI TÉMA/);
-  assert.match(p, /fonts\/lesson-fonts\.css/);
+  const gather = webResearchSystemPrompt(5, "Törtek — 5. osztály", "Keress törtes tananyagot");
+  assert.ok(!gather.includes(LESSON_HTML_SPEC_V74));
+  assert.doesNotMatch(gather, /function ee_evaluate/);
+  assert.doesNotMatch(gather, /KIMENET-TAKARÉKOSSÁG/);
+  assert.match(gather, /web_fetch/);
+  const author = webLessonAuthorPrompt(5, "Törtek — 5. osztály", "Keress törtes tananyagot");
+  assert.match(author, /HTML-fúzió adatszerződés/);
+  assert.match(author, /websuli-lesson-data/);
+  assert.match(author, /## MEGJELENÍTÉSI TÉMA/);
+  assert.match(author, /fonts\/lesson-fonts\.css/);
+  assert.ok(!author.includes(LESSON_HTML_SPEC_V74));
+  assert.doesNotMatch(author, /function ee_evaluate/);
+  assert.doesNotMatch(author, /KIMENET-TAKARÉKOSSÁG/);
 });
 
 test("routes.ts mindkét készítő promptja és az Okosítás a közös specet fűzi be", () => {

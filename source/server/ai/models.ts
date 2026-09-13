@@ -106,8 +106,9 @@ export const LEGACY_MODELS = {
   /** Quiz item generation from a material (gameQuizGeneratorService.ts) */
   quizGenerator: "claude-opus-5",
   /**
-   * Tananyagkészítés — internetes keresős ügynök (web-research-routes.ts).
-   * Tulajdonosi kérés 2026-09-09: Claude Opus 5, minimum effort, saját Anthropic kulcs.
+   * Internetes tananyag — csak a forrásgyűjtés (web_search + web_fetch).
+   * A szerzői HTML és a 45/75 bank a Studio `author` modellt használja
+   * (`resolveStudioModel("author")`), nem ezt az azonosítót.
    */
   webResearch: "claude-opus-5",
 } as const;
@@ -261,6 +262,11 @@ export function resolveStudioModel(step: StudioStep, env: EnvLike = process.env)
     return override.trim();
   }
   return DEFAULT_MODELS[step];
+}
+
+/** Internetes tananyag szerzői HTML és bank: mindig a Studio author, ne hardcode-olt vendor-id. */
+export function resolveWebResearchAuthorModel(env: EnvLike = process.env): string {
+  return resolveStudioModel("author", env);
 }
 
 /** Vendor prefix of an OpenRouter id (`openai/gpt-5` → `openai`). */

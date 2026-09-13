@@ -31,7 +31,7 @@ test("minden készítési/javítási mód kaput és visszaolvasást auditál", a
 test("kijavított hiba a következő futás tényleges modellutasításába kerül, forrásszöveg nem", async () => {
   const { store, records } = memoryWorkflows();
   store.loadSkill = async (_owner, mode) => skillSnapshot(mode, [...records.values()].flatMap(r => r.view.skillAudit?.findings.map(f => f.code) ?? []));
-  const complete = async () => { await workflowPhase("gate"); await workflowPhase("publish"); await workflowPhase("readback"); return { kind: "material" as const, id: "saved" }; };
+  const complete = async () => { await workflowPhase("knowledge"); await workflowPhase("author"); await workflowPhase("gate"); await workflowPhase("publish"); await workflowPhase("readback"); return { kind: "material" as const, id: "saved" }; };
   await executeWorkflow(store, { id: "first", owner: "a", mode: "web" }, async () => {
     await workflowPhase("generate");
     await workflowFinding("concept_reference"); await workflowFinding("concept_reference");
@@ -58,6 +58,7 @@ test("folytatáskor ugyanaz a skill és checkpoint marad, az új futás már új
   const work = async () => {
     await workflowPhase("generate");
     await callStepModel(captureProvider(() => { calls++; }), { step: "author", model: "fixture", system: "Base", user: "Same" });
+    await workflowPhase("knowledge"); await workflowPhase("author");
     await workflowPhase("gate"); await workflowPhase("publish");
     if (fail) throw new Error("Adatbázis kapcsolat megszakadt");
     await workflowPhase("readback"); return { kind: "material" as const, id: "x" };
@@ -118,6 +119,7 @@ test("sikeres újrapróbálkozás után is megmarad a hibás JSON-válasz tapasz
     const input = { step: "author" as const, model: "fixture", system: "Base", user: "Source" };
     await assert.rejects(callStepModel(provider, input), /JSON/);
     await callStepModel(provider, input);
+    await workflowPhase("knowledge"); await workflowPhase("author");
     await workflowPhase("gate"); await workflowPhase("publish"); await workflowPhase("readback");
     return { kind: "material", id: "saved" };
   });

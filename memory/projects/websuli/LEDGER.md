@@ -268,3 +268,24 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 - Tulajdonosi döntés: animátor elsődleges `openai/gpt-5.6-terra` (OpenRouteren, ~0,07 $/lecke),
   fallback `x-ai/grok-4.6`. Újramérve a javított ellenőrzővel: Terra 56 s, contractOk, fellBack=false.
 - Kapuk: tsc 0, eslint 0, 1043/1043 unit, build OK.
+
+## 2026-09-13 — Internetes tananyag: tudásbázis nélkül készült a 7.4 HTML
+
+**Tünet:** az internetes készítés nem a skill 7.4 fúziós láncát futtatta; gyenge vagy forrás nélküli tananyag készült.
+
+**Mért gyökérok (ellenőrzött):**
+- A webes lépéssor `generate → gate` volt; a feltöltős út `knowledge` lépése hiányzott.
+- `generateWebResearchLesson` egyetlen Opus 5 `effort: low` hívásban keresett, letöltött és HTML-t írt.
+- A rendszerprompt egyszerre adta a teljes `LESSON_HTML_SPEC_V74` `ee_evaluate` dumpot, a fúziós „ne gyárts pontozó JS-t” szerződést és a KIMENET-TAKARÉKOSSÁGOT.
+- A letöltött szöveg csak a tool-eredményben élt; nem lett idézetellenőrzött fogalomjegyzék a szerzői bemenet.
+- Korai baseline: HTML `web_fetch_requests: 0` mellett is készült (`tmp/web-research-diagnosis/baseline-evidence.json`).
+
+**Javítás:** `lesson-flow-2`; gyűjtés (search+fetch) és szerzői HTML külön; kivonat `verbatimOk`; bank `buildLessonExperience` + `writeHtmlLessonData`. Spec: `docs/specs/2026-09-13-web-knowledge-pipeline.md`. Kivonat: Studio extract modell `provider.chat` (a `callStepModel` `StudioStep` uniója nem tartalmaz `"extract"`-ot). A job a `generate()` után jelöli a knowledge/author fázist.
+
+**Verifikáció (ellenőrzött):**
+- `npm.cmd run verify` → exit 0: `tsc --noEmit`, eslint 0 warning, `tsc --noEmit -p tsconfig.test.json`, unit **1225/1225**, `vite`+server build 7.06s.
+- Célzott unit korábban: 102/102 pass a pipeline-fájlokon.
+- Read-only Neon-minta (`html_files`, 2026-05-01…2026-07-01, `length(content) > 20000`): 5 hosszú HTML. Méret 77–155 KB; 5–18 h2; sok gyakorló/kvíz-szöveg; saját CSS-prefix (`tr-`, `ife-`, `cu-`, `bet-`, `tm-`). Egyiken `ee_evaluate` (angol nyelvtan). Egyiken sincs `data-teaching-explanation`, `websuli-lesson-data` vagy `edu-` — a fúziós 7.4 bank/marker későbbi szerződés. Metaadat: `tmp/web-research-diagnosis/may-june-html-samples.json`. HTML-tartalom nem került chatbe.
+
+**Nem futtatott:** éles webes gyártás a deploy után, admin QMD-export (401), böngészős Egervár, Playwright e2e (CI futtatja).
+

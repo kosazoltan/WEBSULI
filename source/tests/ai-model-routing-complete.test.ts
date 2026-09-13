@@ -10,6 +10,8 @@ import {
   providerForModel,
   requiredKeyFor,
   resolveLegacyModel,
+  resolveStudioModel,
+  resolveWebResearchAuthorModel,
   type LegacyTask,
 } from "../server/ai/models";
 
@@ -177,6 +179,8 @@ test("a webes tananyag-ügynök Opus 5 low efforton fut", () => {
   assert.equal(effortFor("webResearch"), "low");
   assert.equal(providerForModel(LEGACY_MODELS.webResearch), "anthropic");
   assert.equal(requiredKeyFor("webResearch"), "AI_INTEGRATIONS_ANTHROPIC_API_KEY");
+  assert.equal(resolveWebResearchAuthorModel({}), resolveStudioModel("author"));
+  assert.equal(resolveWebResearchAuthorModel({ STUDIO_MODEL_AUTHOR: "gpt-5.6-luna" }), "gpt-5.6-luna");
 });
 
 test("providerForModel az azonosító alakjából dönt", () => {

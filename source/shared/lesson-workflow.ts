@@ -1,6 +1,6 @@
 import type { SkillSnapshot, SkillFinding, SkillAudit } from "./lesson-skill";
 /** One versioned definition drives execution guards and the administrator's diagram. */
-export const WORKFLOW_VERSION = "lesson-flow-1";
+export const WORKFLOW_VERSION = "lesson-flow-2";
 export type WorkflowMode = "upload" | "studio" | "web" | "repair" | "concept" | "html" | "apply";
 export type WorkflowStep = { id: string; label: string; after: string[]; maxVisits: number };
 export type WorkflowDefinition = { version: string; mode: WorkflowMode; label: string; steps: WorkflowStep[] };
@@ -8,13 +8,13 @@ const labels: Record<string, string> = {
   source: "Forrás és eredeti tartalom", scope: "Tantárgy és évfolyam", knowledge: "Forrásjegyzék készítése",
   sourceCheck: "Forrásellenőrzés", pedagogue: "Tanulási terv", author: "Tananyag írása",
   animator: "Ábrák és gyakorlóbankok", banks: "Gyakorlóbankok", lektor: "Tartalmi lektorálás",
-  gate: "Kötelező ellenőrzések", generate: "Forráskeresés és tananyagírás", save: "Ellenőrzött jelölt mentése",
+  gate: "Kötelező ellenőrzések", generate: "Forráskeresés és letöltés", save: "Ellenőrzött jelölt mentése",
   publish: "Mentés és közzététel", apply: "Mentés és javítás alkalmazása", readback: "Eredmény visszaolvasása",
 };
 const chains: Record<WorkflowMode, { label: string; ids: string[] }> = {
   upload: { label: "Feltöltött forrás", ids: ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator", "lektor", "gate", "readback"] },
   studio: { label: "Studio készítés", ids: ["pedagogue", "author", "animator", "lektor", "gate", "readback"] },
-  web: { label: "Internetes készítés", ids: ["generate", "gate", "publish", "readback"] },
+  web: { label: "Internetes készítés", ids: ["generate", "knowledge", "author", "gate", "publish", "readback"] },
   repair: { label: "Teljes lecke javítása", ids: ["source", "author", "banks", "lektor", "gate", "save", "readback"] },
   concept: { label: "Célzott fogalomjavítás", ids: ["source", "author", "banks", "lektor", "gate", "save", "apply", "readback"] },
   html: { label: "HTML-okosítás", ids: ["source", "author", "gate", "save", "readback"] },
@@ -29,6 +29,8 @@ export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
     maxVisits: 1,
   })).map(step => step.id === "author" && ["upload", "studio"].includes(mode)
     ? { ...step, after: [...step.after, "lektor", "gate", "pedagogue"], maxVisits: 3 }
+    : mode === "web" && ["knowledge", "author"].includes(step.id)
+      ? { ...step, maxVisits: 3 }
     : ["upload", "studio"].includes(mode) && ["pedagogue", "animator", "lektor", "gate"].includes(step.id)
       ? { ...step, after: step.id === "pedagogue" ? [...step.after, "pedagogue"] : step.after, maxVisits: 3 }
       : step) };

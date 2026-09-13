@@ -1,0 +1,16 @@
+---
+description: WEBSULI lényege, 7.4 tananyagkészítés, webes tudásbázis, stack és tilos titok.
+alwaysApply: true
+---
+
+# WEBSULI
+
+Magyar nyelvű tananyagkészítő: feltöltött forrásból, Studio JSON-ból vagy **internetes keresésből** négylapos, forráshű HTML/fúziós tananyag. A tanuló 6–18 éves. A pedagógiai szerződés a fúzió **7.4** (`fusion-7.4-4`): teljes tanítás, 45/75 bank, 15/25 kör, tíz módszer, két kapukérdés, idézetellenőrzött fogalom, független lektor. A keresési snippet nem forrás.
+
+## Internetes készítés
+
+Lánc: keresés + `web_fetch` → idézetellenőrzött forrásjegyzék → tanítás HTML → `buildLessonExperience` bank → kapu → közzététel → visszaolvasás. A szerző nem kap `web_search` eszközt. Üres jegyzék vagy fetch nélküli HTML nem publikálható. Részletek: `docs/lesson-improvement.md`, `docs/specs/tananyag-keszito-SKILL-v7_4.md`, `.agents/skills/tananyag-keszito/SKILL.md`, `.agents/skills/websuli-internet-pipeline/SKILL.md`.
+
+## Stack
+
+Éles: **Vercel** (SPA) + **Render** (API) + **Neon** (PostgreSQL, Drizzle). Titok csak környezeti változóban. Háromfázisú munka: `docs/agent-haromfazisu-munka.md`.

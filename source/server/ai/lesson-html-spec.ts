@@ -11,7 +11,8 @@ import { HTML_INTERACTION_CONTRACT } from "../../shared/lesson-interactions";
  * Android-biztos magyar ékezetkezelés, ES5/IIFE/prefix — kötelező szövegként szerepel.
  *
  * Használják: routes.ts (Enhanced készítő + material-creator chat), improveAsync.ts
- * (Okosítás), studio/web-research-agent.ts (internetes ügynök). Egy helyen változik.
+ * (Okosítás). A webes ügynök gyűjtő promptja ezt NEM fűzi be; a szerzői HTML a
+ * fúziós szerződést kapja (`webLessonAuthorPrompt`).
  */
 
 export const LESSON_SPEC_VERSION = "7.4";

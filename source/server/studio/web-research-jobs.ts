@@ -69,6 +69,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
           await checkpoint;
         },
       }));
+      await workflowPhase("knowledge");
+      await workflowPhase("author");
       await workflowPhase("gate");
       const data = checkedResearchArtifact(artifact);
       await checkpoint;
