@@ -50,3 +50,7 @@ tmp/
 # gépen újra felhalmozódott volna. A megosztott szabály itt a helye.
 .claude/worktrees/
 .agents/**/__pycache__/
+
+# Helyi Codex-munkamenet és ideiglenes ellenőrzési artefaktumok
+.codex/
+tmp-e2e-*

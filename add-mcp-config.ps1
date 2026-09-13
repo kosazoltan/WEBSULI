@@ -3,6 +3,15 @@
 
 $settingsPath = "$env:APPDATA\Cursor\User\settings.json"
 $backupPath = "$settingsPath.backup"
+$hostingerApiToken = $env:HOSTINGER_API_TOKEN
+
+if ([string]::IsNullOrWhiteSpace($hostingerApiToken)) {
+    Write-Host "ERROR: HOSTINGER_API_TOKEN környezeti változó nincs beállítva." -ForegroundColor Red
+    Write-Host "A tokent ne írd a scriptbe; állítsd be csak a lokális környezetben, majd próbáld újra." -ForegroundColor Yellow
+    exit 1
+}
+
+$tokenJson = ConvertTo-Json -InputObject $hostingerApiToken -Compress
 
 Write-Host "Adding MCP Configuration to Cursor Settings" -ForegroundColor Cyan
 Write-Host ""
@@ -42,7 +51,7 @@ $mcpConfig = @"
         "hostinger-api-mcp@latest"
       ],
       "env": {
-        "API_TOKEN": "s71buGgJnOVyUnMxn9L26ugezYR3DgNYT8L6z2mycc3eecac"
+        "API_TOKEN": $tokenJson
       }
     }
   }
