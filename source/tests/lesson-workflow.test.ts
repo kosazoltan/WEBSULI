@@ -28,12 +28,15 @@ test("párhuzamos kérés nem indít második munkát; elveszett lease nem írha
   const m = memoryWorkflows(); let release!: () => void; let entered!: () => void;
   const ready = new Promise<void>(r => { entered = r; }); const pause = new Promise<void>(r => { release = r; });
   const input = { id: "parallel", owner: "a", mode: "web" as const };
-  const first = executeWorkflow(m.store, input, async () => { await workflowPhase("generate"); entered(); await pause; await workflowPhase("gate"); return undefined; });
+  const first = executeWorkflow(m.store, input, async () => {
+    await workflowPhase("generate"); await workflowPhase("knowledge"); await workflowPhase("author");
+    entered(); await pause; await workflowPhase("gate"); return undefined;
+  });
   await ready;
   await assert.rejects(executeWorkflow(m.store, input, async () => { assert.fail("second worker ran"); }), WorkflowConflict);
   m.leases.set(input.id, "new-owner"); release();
   await assert.rejects(first, WorkflowConflict);
-  assert.equal(m.records.get(input.id)!.view.visits.length, 1);
+  assert.equal(m.records.get(input.id)!.view.visits.length, 3);
   assert.equal(m.leases.get(input.id), "new-owner");
 });
 
@@ -44,6 +47,7 @@ test("mentési hiba után a változatlan AI-részeredmény megmarad, a korábbi 
     await workflowPhase("generate");
     const output = await workflowCheckpoint("model", { model: "fixture", prompt: "same" }, async () => { models++; await workflowUsage({ input_tokens: 20, output_tokens: 50 }); return { text: "verified" }; });
     assert.equal(output.text, "verified");
+    await workflowPhase("knowledge"); await workflowPhase("author");
     await workflowPhase("gate"); await workflowPhase("publish"); if (fail) throw new Error("Mentési hiba");
     await workflowPhase("readback"); return { kind: "material" as const, id: "saved" };
   };

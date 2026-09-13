@@ -6,7 +6,11 @@ import {
   HTML_START,
   webResearchChatSchema,
   webResearchSystemPrompt,
+  webLessonAuthorPrompt,
   WEB_SEARCH_TOOL,
+  WEB_FETCH_TOOL,
+  decideWebResearchGatherResult,
+  LESSON_HTML_REQUIREMENTS,
 } from "../server/studio/web-research-agent";
 
 test("üres üzenet elutasított", () => {
@@ -51,10 +55,39 @@ test("a web_search tool direct hívású és korlátos", () => {
   assert.deepEqual([...WEB_SEARCH_TOOL.allowed_callers], ["direct"]);
 });
 
+test("a web_fetch tool direct hívású, korlátos és teljes oldalt kér", () => {
+  assert.equal(WEB_FETCH_TOOL.type, "web_fetch_20250910");
+  assert.equal(WEB_FETCH_TOOL.name, "web_fetch");
+  assert.equal(WEB_FETCH_TOOL.max_uses, 8);
+  assert.deepEqual([...WEB_FETCH_TOOL.allowed_callers], ["direct"]);
+  assert.equal(WEB_FETCH_TOOL.max_content_tokens, 50_000);
+});
+
+test("a gyűjtés HTML nélkül, letöltött forrással kész; fetch nélkül újrapróbál", () => {
+  const html = `${HTML_START}\n<!DOCTYPE html>\n<html lang="hu"><body><p>${"x".repeat(80)}</p></body></html>`;
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "Letöltöttem a forrást.", repairAttempts: 0, fetchedCount: 1 }).type, "ready");
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: html, repairAttempts: 0, fetchedCount: 1 }).type, "ready");
+  const empty = decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "Összefoglaló.", repairAttempts: 0, fetchedCount: 0 });
+  assert.equal(empty.type, "retry");
+  if (empty.type === "retry") assert.doesNotMatch(empty.instruction, /HTML_START/);
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: html, repairAttempts: 0, fetchedCount: 0 }).type, "retry");
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "nincs forrás", repairAttempts: 2, fetchedCount: 0 }).type, "error");
+});
+
+test("a szerzői prompt a fúziós szerződést hordozza, a JS-dumpot nem", () => {
+  const p = webLessonAuthorPrompt(7, "Törtek — 7. osztály");
+  assert.match(p, /HTML-fúzió adatszerződés/);
+  assert.match(p, /websuli-lesson-data/);
+  assert.match(p, /bankPlan/);
+  assert.doesNotMatch(p, /function ee_evaluate/);
+  assert.doesNotMatch(p, /KIMENET-TAKARÉKOSSÁG/);
+  assert.ok(!p.includes(LESSON_HTML_REQUIREMENTS));
+});
+
 // ---- 2. kör (2026-09-09): csonka HTML, cím a promptban, v7.1 blokk, route-őrök ----
 
 import { readFileSync } from "node:fs";
-import { htmlLooksComplete, LESSON_HTML_REQUIREMENTS } from "../server/studio/web-research-agent";
+import { htmlLooksComplete } from "../server/studio/web-research-agent";
 
 test("htmlLooksComplete: záró </html> nélkül hamis, vele igaz", () => {
   assert.equal(htmlLooksComplete("<!DOCTYPE html><html><body>x</body>"), false);
@@ -62,15 +95,15 @@ test("htmlLooksComplete: záró </html> nélkül hamis, vele igaz", () => {
   assert.equal(htmlLooksComplete("<html></HTML >"), true);
 });
 
-test("a system prompt tartalmazza a kért címet és az elfogadott fogalomfedő bankkövetelményt", () => {
+test("a system prompt a keresési támpontot hordozza, a bankot nem", () => {
   const p = webResearchSystemPrompt(7, "Törtek — 7. osztály");
   assert.match(p, /Törtek — 7\. osztály/);
-  assert.ok(p.includes(LESSON_HTML_REQUIREMENTS));
-  assert.match(p, /bankPlan.taskRound/);
-  assert.match(p, /bankPlan.quizRound/);
-  assert.match(p, /intent=recall/);
-  assert.match(p, /intent=apply/);
-  assert.match(p, /TILOS: alert\(\)/);
+  assert.doesNotMatch(p, /bankPlan/);
+  assert.ok(!p.includes(LESSON_HTML_REQUIREMENTS));
+  assert.doesNotMatch(p, /function ee_evaluate/);
+  assert.doesNotMatch(p, /KIMENET-TAKARÉKOSSÁG/);
+  assert.match(p, /web_fetch/);
+  assert.match(p, /TILOS/);
   assert.doesNotMatch(webResearchSystemPrompt(7), /kért címe/);
 });
 

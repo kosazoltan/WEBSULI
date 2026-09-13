@@ -28,13 +28,30 @@ A négy NAVIGÁCIÓS GOMB attribútuma data-lesson-tab="teaching|methods|tasks|q
 A módszer szerinti teljes HTML elkészülte után gépi kapu ellenőrzi a JSON-sémát, darabszámokat, mintaválaszokat és a füleket; hiányos anyag nem menthető.`;
 
 export function readRawHtmlLessonData(html: string, requireEscaped = false): unknown {
-  const blocks = html.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? [];
-  const target = blocks.filter(b => new RegExp(`\\bid\\s*=\\s*["']${HTML_LESSON_DATA_ID}["']`, "i").test(b.slice(0, b.indexOf(">") + 1)));
-  if (target.length !== 1) throw new Error("Pontosan egy websuli-lesson-data JSON-bank szükséges.");
-  const raw = target[0].replace(/^<script\b[^>]*>/i, "").replace(/<\/script\s*>$/i, "");
+  const block = htmlLessonDataBlock(html);
+  const raw = block.replace(/^<script\b[^>]*>/i, "").replace(/<\/script\s*>$/i, "");
   if (requireEscaped && raw.includes("<")) throw new Error("A JSON-bank < karaktereit Unicode escape formában kell kódolni.");
   return JSON.parse(raw);
 }
 export function readHtmlLessonData(html: string) {
   return htmlLessonDataSchema.parse(readRawHtmlLessonData(html));
+}
+
+function htmlLessonDataBlock(html: string): string {
+  const blocks = html.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? [];
+  const target = blocks.filter(b => new RegExp(`\\bid\\s*=\\s*["']${HTML_LESSON_DATA_ID}["']`, "i").test(b.slice(0, b.indexOf(">") + 1)));
+  if (target.length !== 1) throw new Error("Pontosan egy websuli-lesson-data JSON-bank szükséges.");
+  return target[0];
+}
+
+/** Replaces the inert JSON bank only; every other HTML byte stays unchanged. */
+export function writeHtmlLessonData(html: string, data: unknown): string {
+  const block = htmlLessonDataBlock(html);
+  const open = block.match(/^<script\b[^>]*>/i)?.[0];
+  const close = block.match(/<\/script\s*>$/i)?.[0];
+  if (!open || !close) throw new Error("A JSON-bank nincs lezárva.");
+  const next = `${open}${JSON.stringify(data).replace(/</g, "\\u003c")}${close}`;
+  const at = html.indexOf(block);
+  if (at < 0 || html.indexOf(block, at + 1) >= 0) throw new Error("A JSON-bank nem egyértelműen cserélhető.");
+  return html.slice(0, at) + next + html.slice(at + block.length);
 }

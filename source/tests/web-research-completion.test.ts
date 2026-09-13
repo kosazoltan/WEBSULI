@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decideWebResearchResult, webResearchSystemPrompt } from "../server/studio/web-research-agent";
+import { decideWebResearchResult, webLessonAuthorPrompt } from "../server/studio/web-research-agent";
 import { consumeWebResearchStream } from "../shared/web-research-stream";
 
 const summary = "Röviden: találtam NAT 2020-hoz illő forrásokat. Készül a tananyag:";
@@ -8,10 +8,10 @@ const sources = [{ url: "https://www.oktatas.hu/forras", title: "Tanterv" }];
 const doc = `<!DOCTYPE html><html lang="hu"><body>${"tanítás ".repeat(20)}<a href="${sources[0].url}">Tanterv</a></body></html>`;
 const verify = () => ({ ok: true, problems: [] });
 test("a készítési prompt nem engedélyre vár és a bank látható szövegét nem normalizálja", () => {
-  const prompt = webResearchSystemPrompt(4);
-  assert.match(prompt, /ne kérj újabb engedélyt/);
-  assert.match(prompt, /JSON-bank sample, answer, feedback és classroomEvidence/);
-  assert.match(prompt, /teljes HTML végével záruljon/);
+  const prompt = webLessonAuthorPrompt(4);
+  assert.match(prompt, /ne kérj újabb engedélyt/i);
+  assert.match(prompt, /JSON-bank/);
+  assert.match(prompt, /classroomEvidence/);
 });
 test("a keresési összefoglaló end_turn után tényleges készítést kér", () => {
   const result = decideWebResearchResult({ stopReason: "end_turn", fullContent: summary, repairAttempts: 0, sources }, verify);

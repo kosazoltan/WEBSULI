@@ -53,17 +53,19 @@ node --no-warnings kanban.mjs stats                    # összesítő
 | `REGRESSZIO(#n):` | korábbi jegy visszaesése |
 | `STANDING(binding):` | tartós szabály, nem záródik le |
 
-## Állapot — 2026-09-06
+## Állapot — 2026-09-13
 
-Nyitott elemek:
+Nyitott elemek (a CLI `list` a hiteles forrás; ezt a táblázatot a session frissíti):
 
 | # | Státusz | Tárgy |
 |---|---|---|
-| 185 | doing | Higiéniai söprés: árva worktree, követett bundle, halott memória, RUNBOOK |
+| 560 | doing | BUG(web-research): tudásbázis nélkül készülő internetes HTML |
+| 187 | doing | BUG(autoBackup): minden szerverindulas 16MB mentest ir |
 | 152 | backlog | Gyenge-modell (Qwen/Deepseek/GLM) végrehajtási fegyelem |
 | 127 | backlog | Kliens hibariport HMAC-rétege elérhetetlen a böngészőből |
 
-A Lesson Studio szeletei (LS-0 … LS-6b) és a #159–#183 hibajavítások lezárva.
+A Lesson Studio szeletei (LS-0 … LS-6b) és a #159–#183 hibajavítások lezárva. A 2026-09-13-as webes tudásbázis-pipeline kódja a `lesson-flow-2` folyamatverzió; éles gyártás ebben a szeletben nem indult.
+
 
 ## Kapcsolódás külső követőhöz
 

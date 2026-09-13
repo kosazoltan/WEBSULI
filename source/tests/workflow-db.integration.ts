@@ -66,6 +66,7 @@ test("folyamatleállítás után a kész válasz megmarad, a befejezetlen újraf
       const cached = await workflowCheckpoint("complete", { source: "stable" }, async () => { throw new Error("Completed answer must not be regenerated"); });
       assert.deepEqual(cached, { text: "Persisted first answer" });
       await workflowCheckpoint("incomplete", { source: "stable" }, async () => { incompleteCalls++; return { text: "Restarted answer" }; });
+      await workflowPhase("knowledge"); await workflowPhase("author");
       await workflowPhase("gate"); await workflowPhase("publish");
       completions++;
       await workflowPhase("readback"); return { kind: "material" as const, id: "process-loss-result" };
@@ -88,7 +89,7 @@ test("lejárt vagy átvett workflow-engedély a domain tranzakció írását is 
   for (const scenario of ["taken-over", "expired-in-transaction"]) {
     const id = `fence-${scenario}`;
     await assert.rejects(executeWorkflow(store, { id, owner: "workflow-owner", mode: "web" }, async () => {
-      for (const step of ["generate", "gate", "publish"]) await workflowPhase(step);
+      for (const step of ["generate", "knowledge", "author", "gate", "publish"]) await workflowPhase(step);
       if (scenario === "taken-over") await dbPool.query("UPDATE lesson_workflow_runs SET lease_token='replacement' WHERE id=$1", [id]);
       await db.transaction(async tx => {
         await workflowFence(tx);
@@ -168,6 +169,7 @@ test("PostgreSQL: egyetlen lease, tulajdonosi elkülönítés, megőrzött rész
   const work = async () => {
     await workflowPhase("generate");
     await workflowCheckpoint("answer", { model: "fixture", input: "stable" }, async () => { calls++; entered(); await barrier; return { text: "Synthetic completed response" }; });
+    await workflowPhase("knowledge"); await workflowPhase("author");
     await workflowPhase("gate"); await workflowPhase("publish");
     if (fail) throw new Error("Synthetic publication failure");
     await workflowPhase("readback"); return { kind: "material" as const, id: "fixture-result" };

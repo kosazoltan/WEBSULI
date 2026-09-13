@@ -17,12 +17,13 @@ const store = createWorkflowStore(async () => dbPool);
 const skills = createSkillStore(async () => dbPool);
 before(async () => { await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('skill-owner','skill@test.invalid',true),('skill-other','other-skill@test.invalid',true)"); });
 after(() => dbPool.end());
-const finish = async () => { for (const step of ["gate", "publish", "readback"]) await workflowPhase(step); return { kind: "material" as const, id: "skill-material" }; };
+const finish = async () => { for (const step of ["knowledge", "author", "gate", "publish", "readback"]) await workflowPhase(step); return { kind: "material" as const, id: "skill-material" }; };
 
 test("valódi DB: kijavított hiba, egyszeri tanulás, új folyamat betöltése, tiltás megőrzése", async () => {
   const input = { id: "skill-first", owner: "skill-owner", mode: "web" as const };
   const work = async () => {
     await workflowPhase("generate"); await workflowFinding("sample_score"); await workflowFinding("sample_score");
+    await workflowPhase("knowledge"); await workflowPhase("author");
     await workflowPhase("gate"); await workflowFinding("sample_score");
     await workflowPhase("publish"); await workflowPhase("readback");
     return { kind: "material" as const, id: "skill-material" };

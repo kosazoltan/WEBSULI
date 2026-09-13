@@ -8,7 +8,7 @@ source:
     - tananyag-keszito
     - tananyag-javito
   authentication: admin_required
-  current_session_status: "401 unauthenticated"
+  current_session_status: "401 unauthenticated; a 2026-09-13-as pipeline-javítás kódja a repóban van, élő QMD/Cogni nem exportált"
 documents:
   - SOUL.md
   - IAM.md

@@ -64,7 +64,7 @@ test("valódi webes vezérlő és workflow együtt: hiba, visszatöltés, menté
   await restarted.publish("tracked", "owner");
   assert.equal(calls, 1); assert.equal(m.materials.size, 1);
   const view = workflows.records.get("tracked")!.view;
-  assert.equal(view.state, "done"); assert.deepEqual(view.visits.map(v => v.step), ["generate", "gate", "publish", "readback"]);
+  assert.equal(view.state, "done"); assert.deepEqual(view.visits.map(v => v.step), ["generate", "knowledge", "author", "gate", "publish", "readback"]);
   assert.deepEqual(view.result, { kind: "material", id: "tracked" });
 });
 
