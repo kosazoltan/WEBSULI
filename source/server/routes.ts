@@ -42,6 +42,7 @@ import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
+import { prependWebLessonQualityNotice, webLessonQualityNotice } from "./lib/web-lesson-quality-notice";
 
 // BACKLOG T2: /dev/:id megtekintés-dedup (ip|materialId, 1 óra)
 const materialViewDedup = new ViewDedup();
@@ -4308,7 +4309,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         res.send(pdfViewerHtml);
       } else {
         // HTML material: wrap with responsive container
-        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(file.content), file.classroom, file.title);
+        const notice = webLessonQualityNotice(file.content);
+        const content = notice ? prependWebLessonQualityNotice(file.content, notice) : file.content;
+        const wrappedHtml = withLessonTypography(wrapHtmlWithResponsiveContainer(content), file.classroom, file.title);
 
         // CRITICAL: No-cache headers to prevent Vercel/browser from serving stale content after Apply
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
