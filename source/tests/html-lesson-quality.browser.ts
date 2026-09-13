@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
+import assert from "node:assert/strict";
 import { standardFusionFixture, compactFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { withLessonTypography } from "../shared/lesson-typography";
 import { teachingHtml } from "./helpers/teaching-html";
 import { mkdir } from "node:fs/promises";
+import { prependWebLessonQualityNotice, webLessonQualityNotice } from "../server/lib/web-lesson-quality-notice";
 
 test("legacy paged teaching is fully readable after tab switches and reload", async ({ page }) => {
   const data = { classroom: 5, classroomEvidence: "Történeti megjelenítési próba.", subject: "irodalom", experience: compactFusionFixture().experience };
@@ -26,6 +28,18 @@ test("legacy paged teaching is fully readable after tab switches and reload", as
   await expect(chapters).toHaveCount(2);
   await page.reload();
   await expect(chapters).toHaveCount(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const width of [390, 1440]) test(`régi webes jelölt minőségjelzése nem okoz túlcsordulást ${width}`, async ({ page }) => {
+  const raw = `<!doctype html><html lang="hu"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><h1>Régi előnézet</h1><script id="websuli-lesson-data" type="application/json">${JSON.stringify({ experience: { version: "fusion-7.4-2" } })}</script></body></html>`;
+  const notice = webLessonQualityNotice(raw);
+  assert.ok(notice);
+  const html = withLessonTypography(prependWebLessonQualityNotice(raw, notice), 5, "Régi előnézet");
+  await page.setViewportSize({ width, height: 700 });
+  await page.route("**/quality-warning", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: html }));
+  await page.goto("/quality-warning");
+  await expect(page.getByRole("status")).toContainText("nem minősül új, ellenőrzött");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
