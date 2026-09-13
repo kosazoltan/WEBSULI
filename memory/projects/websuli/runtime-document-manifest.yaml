@@ -1,0 +1,33 @@
+schema_version: "1.0"
+project: websuli
+created: 2026-09-13
+purpose: "A futó WebSuli runtime-tudástár biztonságos repó-szintű exportjegyzéke"
+source:
+  api: "/api/studio/skills/{skill}/runtime"
+  skills:
+    - tananyag-keszito
+    - tananyag-javito
+  authentication: admin_required
+  current_session_status: "401 unauthenticated"
+documents:
+  - SOUL.md
+  - IAM.md
+  - RUNBOOK.md
+  - QMD.md
+  - COGNI.md
+  - MEMORY.md
+  - KANBAN.md
+  - SKILL.md
+storage:
+  implementation: "PostgreSQL-backed runtime knowledge"
+  repository_snapshot: false
+  reason: "Élő admin-exporthoz hitelesített admin munkamenet szükséges"
+safety:
+  raw_session_transcripts: excluded
+  other_projects: excluded
+  secrets_tokens_credentials: excluded
+  raw_model_outputs: excluded
+  synthetic_or_unverified_runtime_content: excluded
+next_export:
+  condition: "hitelesített admin munkamenet"
+  action: "Az alkalmazásból mind a nyolc dokumentum letöltése, hash-elése és újraellenőrzése"
