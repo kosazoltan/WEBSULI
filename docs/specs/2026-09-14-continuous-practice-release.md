@@ -4,7 +4,7 @@
 A jovahagyott gorgetheto Fusion feladat- es kvizlista lint, PR, merge, push es eles telepitese. A felhasznalo 2026-09-14-en kifejezetten kerte a kiadast.
 
 ## Hatokor es nem-cel
-Ket runtime komponens, harom kapcsolodo bongeszoteszt, a continuous-practice tervpar es ez a kiadasi tervpar. Mas dirty backendvaltozas, env, helyi runner es teszteredmeny nem kerul a commitba. Nincs adatbazis-migracio vagy eles tesztadatiras.
+Harom runtime-fajl (LessonExperienceView, SavedLessonQuiz, ExperienceSpeech), ot kapcsolodo bongeszoteszt (learning-flow, lesson-fusion, lesson-practice, lesson-fusion-live, preview-navigation), a continuous-practice tervpar es ez a kiadasi tervpar. Mas dirty backendvaltozas, env, helyi runner es teszteredmeny nem kerul a commitba. Nincs adatbazis-migracio vagy eles tesztadatiras.
 
 ## Eljaras es kockazat
 Kulon feature branch es tiszta worktree; csak a kijelolt fajlok atvitele. Teljes verify es celzott Chrome-proba a kiadasi fan. PR a main agra, CI es review visszaolvasas; merge csak sikeres kapukkal. Main automatikus Vercel/Render deployt indithat, ezt allapotlekerezessel ellenorizni kell. Kulcsok csak process-memoryban, ertek soha nem kimenet.
@@ -22,6 +22,7 @@ Amikor a kiadas kesz, a PR merged, a commit tavoli mainen elerheto, CI sikeres e
 - Tiszta worktree: D:/repo/WEBSULI-continuous-release; branch feat/continuous-practice-20260914. Origin/main es HEAD egyezik a kiindulaskor.
 - Korabbi sikeres Vercel Production deployment: 6426824671, d0624ef9efc378f12295a1a1c4279cda74672195; URL https://websuli-2uw7c7xua-kosa-zoltans-projects.vercel.app.
 - npm ci PASS; npm run verify PASS: app/test typecheck, lint, 1225 unit teszt/0 fail/0 skip, build.
-- Chrome PASS: learning-flow 10 (32.9s), lesson-fusion 9 (20.6s), saved practice 8 (19.1s). Elso terminalos futasok lezarasa elakadt; kozvetlen Node spawnSync, explicit source cwd es CI=1 mellett valodi exit=0. Tesztek nem gyengultek.
+- Chrome PASS: learning-flow 10 (32.9s), lesson-fusion vegso 10 (21.0s, diktalasteszttel), saved practice 8 (19.1s), live-source fusion 3 (15.6s), preview-navigation 10 (7.1s). A korabbi fusion 9 (20.6s) a diktalasteszt elotti meres volt. Elso terminalos futasok lezarasa elakadt; kozvetlen Node spawnSync, explicit source cwd es CI=1 mellett valodi exit=0. Tesztek nem gyengultek.
+- A 0f4bd88 alkalmazasverzio teljes verify PASS; PR CI 34879035708 success (lint/typecheck, unit, teljes Playwright es HTML bank/reload). Friss Copilot review csak dokumentacios hatokor/tesztszam elterest jelzett, ezeket ez a dokumentaciofrissites rendezi. Sourcery kvota es Codex account-connect miatt nem tekintheto jovahagyasnak; emberi review nem tortent.
 - Fuggetlen statikus alugenok-review: nincs uj konkret finding a ket komponens diffjeben. Emberi review nem tortent.
 - Meglevo warningok: deprecated transitive npm csomagok, regi caniuse-lite, pdfjs eval, ures mammoth chunk. Fuggosegfrissites nem resze a UI-kiadasnak.
