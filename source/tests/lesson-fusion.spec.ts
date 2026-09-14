@@ -20,8 +20,8 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900], 
     }
     const quiz = page.locator('[data-quiz-id]');
     await expect(quiz).toHaveCount(25);
-    await expect(page.locator('[data-quiz-id]:visible')).toHaveCount(1);
-    await page.getByRole("button", { name: "Teljes kvíz", exact: true }).click();
+    await expect(page.locator('[data-quiz-id]:visible')).toHaveCount(25);
+    await expect(page.getByRole("tabpanel", { name: "Kvíz", exact: true }).locator(".learning-pager, .learning-mode")).toHaveCount(0);
     await quiz.first().getByRole("button").nth(1).click();
     await expect(quiz.first().getByRole("button").first()).toBeDisabled();
     for (let i = 1; i < 25; i++) await quiz.nth(i).getByRole("button").first().click();
@@ -35,8 +35,8 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900], 
     await expect(page.getByRole("region", { name: "Kvíz eredmény" })).toContainText("24 / 25 pont");
     await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
     await expect(page.locator('[data-task-id]')).toHaveCount(15);
-    await expect(page.locator('[data-task-id]:visible')).toHaveCount(1);
-    await page.getByRole("button", { name: "Teljes feladatsor", exact: true }).click();
+    await expect(page.locator('[data-task-id]:visible textarea:visible')).toHaveCount(15);
+    await expect(page.getByRole("tabpanel", { name: "Feladatok", exact: true }).locator(".learning-pager, .learning-mode")).toHaveCount(0);
     const first = page.locator('[data-task-id]').first();
     const id = await first.getAttribute("data-task-id");
     await first.locator("textarea").fill(String((Number(id!.slice(1)) + 1) * 2));
@@ -121,7 +121,7 @@ test("oral exercises remain usable without a microphone and actual touch drag or
   });
   await page.goto("/__lesson-runtime-probe?fusion=1");
   await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
-  await page.getByRole("button", { name: "Teljes feladatsor", exact: true }).click();
+  await expect(page.locator('[data-task-id]:visible textarea:visible')).toHaveCount(15);
   expect(await page.getByText("Szóbeli gyakorlás", { exact: false }).count()).toBeGreaterThanOrEqual(2);
   await expect(page.getByRole("button", { name: "Válasz diktálása" })).toHaveCount(0);
   const writtenAnswer = page.locator("[data-task-id] textarea").first();

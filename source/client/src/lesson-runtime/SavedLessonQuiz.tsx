@@ -4,7 +4,6 @@ import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import type { PracticeView } from "@shared/lesson-attempt";
 import { scoreSummary } from "@shared/lesson-experience-score";
-import { LearningPager } from "./LearningControls";
 import { FinishPracticeButton } from "./FinishPracticeButton";
 
 export function PracticeAccess({ lessonId, enabled, onFinished, onReview, children }: {
@@ -29,7 +28,7 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
   userId: string; lessonId: string; enabled: boolean; onFinished: (finished: boolean | null) => void; onReview: (questionId: string) => void;
 }) {
   const [round, setRound] = useState<PracticeView | null>(null);
-  const [index, setIndex] = useState(0);
+  const questionElements = useRef(new Map<string, HTMLElement>());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const key = `websuli:practice:${userId}:${lessonId}`;
@@ -62,7 +61,6 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
   }, [enabled, key]);
   const status = error ? <span role="alert">{error.message} <button className="lesson-outline-btn" disabled={busy} onClick={() => void run(error.status === 409 ? begin : retry.current ?? begin)}>{error.status === 409 ? "Új kör indítása" : "Mentés újrapróbálása"}</button></span> : <span role="status">{busy ? "Mentés…" : round ? "A válaszaid mentve" : "A gyakorlókör betöltése…"}</span>;
   if (!round) return <div className="fusion-round-head"><h2>Kvíz</h2>{status}</div>;
-  const q = round.questions[Math.min(index, round.questions.length - 1)];
   const result = round.result;
   const summary = result ? scoreSummary(result.correctCount, result.total) : null;
   const seconds = round.finishedAt ? Math.max(0, Math.round((Date.parse(round.finishedAt) - Date.parse(round.startedAt)) / 1000)) : 0;
@@ -84,13 +82,16 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
         <button className="lesson-outline-btn" onClick={() => onReview(question.questionId)}>Kapcsolódó magyarázat</button>
       </article>)}</details>
       {!!result.weakConceptIds.length && <button className="lesson-outline-btn" onClick={() => onReview(round.questions.find(q => q.coversConceptIds.some(id => result.weakConceptIds.includes(id)))!.questionId)}>Átnézem a magyarázatot</button>}
-      <p>A következő körben a még nem látott, hibás és esedékes kérdések kerülnek előre.</p><button className="lesson-outline-btn" disabled={busy} onClick={() => { setIndex(0); void run(begin); }}>Új kvíz indítása</button>
+      <p>A következő körben a még nem látott, hibás és esedékes kérdések kerülnek előre.</p><button className="lesson-outline-btn" disabled={busy} onClick={() => void run(begin)}>Új kvíz indítása</button>
     </section> : <>
-      <section className="lesson-block fusion-quiz" data-quiz-id={q.questionId}><span className="fusion-eyebrow">{index + 1}. kérdés</span><h3>{q.prompt}</h3><div className="fusion-choices">{q.options.map((option, pickedIndex) => <button key={pickedIndex} className="lesson-option" disabled={busy || !!q.answer || !!error} aria-pressed={q.answer?.pickedIndex === pickedIndex} data-state={q.answer?.pickedIndex === pickedIndex ? q.answer.correct ? "right" : "wrong" : undefined} onClick={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/answer`, { questionId: q.id, pickedIndex, usedHint: q.hintUsed }))}><span className="lesson-option-key">{"ABCD"[pickedIndex]}</span>{option}</button>)}</div>
+      {round.questions.map((q, questionIndex) => <section key={q.id} ref={element => { if (element) questionElements.current.set(q.id, element); else questionElements.current.delete(q.id); }} tabIndex={-1} className="lesson-block fusion-quiz" data-quiz-id={q.questionId}><span className="fusion-eyebrow">{questionIndex + 1}. kérdés</span><h3>{q.prompt}</h3><div className="fusion-choices">{q.options.map((option, pickedIndex) => <button key={pickedIndex} className="lesson-option" disabled={busy || !!q.answer || !!error} aria-pressed={q.answer?.pickedIndex === pickedIndex} data-state={q.answer?.pickedIndex === pickedIndex ? q.answer.correct ? "right" : "wrong" : undefined} onClick={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/answer`, { questionId: q.id, pickedIndex, usedHint: q.hintUsed }))}><span className="lesson-option-key">{"ABCD"[pickedIndex]}</span>{option}</button>)}</div>
         {q.answer ? <p className="lesson-feedback" data-state={q.answer.correct ? "right" : "wrong"}>{q.answer.feedback}{q.answer.usedHint ? " · Segítséggel megoldva" : ""}</p> : <button className="lesson-ghost-btn" disabled={busy || !!error} onClick={() => void run(async () => { const saved = await apiRequest<PracticeView>("POST", `/api/lessons/practice/${round.id}/hint`, { questionId: q.id }); onReview(q.questionId); return saved; })}>Segítség: vissza a magyarázathoz</button>}
-      </section>
-      <LearningPager index={index} count={round.questions.length} label="kérdés" onChange={setIndex} />
-      <FinishPracticeButton className="fusion-primary" total={round.questions.length} unanswered={round.questions.length - answered} disabled={busy || !!error} onContinue={() => setIndex(round.questions.findIndex(q => !q.answer))} onFinish={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/finish`, {}))}>Kvíz kiértékelése</FinishPracticeButton>
+      </section>)}
+      <FinishPracticeButton className="fusion-primary" total={round.questions.length} unanswered={round.questions.length - answered} disabled={busy || !!error} onContinue={() => {
+        const question = round.questions.find(question => !question.answer);
+        const element = question && questionElements.current.get(question.id);
+        element?.scrollIntoView({ block: "center" }); element?.focus({ preventScroll: true });
+      }} onFinish={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/finish`, {}))}>Kvíz kiértékelése</FinishPracticeButton>
     </>}
   </>;
 }
