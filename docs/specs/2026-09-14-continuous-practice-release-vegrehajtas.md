@@ -11,3 +11,4 @@
 
 ## PR review kiegeszites
 9. A source/tests/lesson-fusion-live.browser.ts regi lapozo es Teljes lista kattintasait csereld folyamatos lista/all-items-visible ellenorzesre. A kiertékelo gombhoz scrollozz es ellenorizd a viewporton beluli helyzetet; a teljes pontszam elvaras maradjon. Futtatas: LESSON_LIVE_BROWSER=1, playwright.lesson-fusion.config.ts, a meglevo helyi candidate JSON masolataval; elvart 3 PASS, tavoli iras nelkul.
+10. A source/tests/preview-navigation.spec.ts elso harom tesztjeben a kiertékelo gomb scrollIntoViewIfNeeded utan legyen a viewporton belul, es elementFromPoint hit-test szerint ne fedje mas elem. A lapozo hianya es minden kvizkartya lathatosaga is ellenorizendo. Celzott teljes preview-navigation tesztfajl futtatas helyi Vite-tal; majd uj PR CI, elvart minden E2E PASS.
