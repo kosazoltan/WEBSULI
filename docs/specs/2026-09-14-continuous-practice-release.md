@@ -16,6 +16,7 @@ Kiindulo helyi commit: d0624ef9efc378f12295a1a1c4279cda74672195. Merge elott akt
 Amikor a kiadas kesz, a PR merged, a commit tavoli mainen elerheto, CI sikeres es a production deployment READY. Az eles preview oldalon 15 feladat es 25 kvizkerdes normal gorgetheto listaban lathato, mobilon sincs belso scrollbar vagy vizszintes overflow. Ha hozzaferes vagy gate blokkol, merge/deploy sikert nem szabad allitani.
 
 ## Merge elotti bizonyitek
+- PR #67 Copilot review nyoman a kapcsolodo source/tests/lesson-fusion-live.browser.ts is a dokumentalt listanezetre frissul: nincs pager/teljes-lista kapcsolo, minden aktualis tetel lathato, teljes pontozasi elvaras megmarad. Ez a SPEC-valtozasbol kovetkezo tesztfrissites, nem gate-gyengites.
 - Tiszta worktree: D:/repo/WEBSULI-continuous-release; branch feat/continuous-practice-20260914. Origin/main es HEAD egyezik a kiindulaskor.
 - Korabbi sikeres Vercel Production deployment: 6426824671, d0624ef9efc378f12295a1a1c4279cda74672195; URL https://websuli-2uw7c7xua-kosa-zoltans-projects.vercel.app.
 - npm ci PASS; npm run verify PASS: app/test typecheck, lint, 1225 unit teszt/0 fail/0 skip, build.

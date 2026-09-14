@@ -28,27 +28,30 @@ for (const [width, height] of [[390, 844], [844, 390], [1440, 900]]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: `test-results/real-fusion-${width}-${tab}.png`, fullPage: false });
     }
-    const submit = await page.getByRole("button", { name: "Kvíz kiértékelése" }).boundingBox();
-    const pager = await page.getByRole("navigation", { name: "kérdés lapozása" }).boundingBox();
-    for (const box of [submit, pager]) {
-      expect(box).not.toBeNull();
-      expect(box!.y).toBeGreaterThanOrEqual(0);
-      expect(box!.y + box!.height).toBeLessThanOrEqual(height);
-    }
-    await page.getByRole("button", { name: "Teljes kvíz", exact: true }).click();
-    const quiz = page.locator("[data-quiz-id]");
+    const quizPanel = page.getByRole("tabpanel", { name: "Kvíz", exact: true });
+    await expect(quizPanel.locator(".learning-pager, .learning-mode")).toHaveCount(0);
+    const submitButton = page.getByRole("button", { name: "Kvíz kiértékelése" });
+    await submitButton.scrollIntoViewIfNeeded();
+    const submit = await submitButton.boundingBox();
+    expect(submit).not.toBeNull();
+    expect(submit!.y).toBeGreaterThanOrEqual(0);
+    expect(submit!.y + submit!.height).toBeLessThanOrEqual(height);
+    const quiz = page.locator("[data-quiz-id]:visible");
     await expect(quiz).toHaveCount(quizRound);
-    for (let i = 0; i < quizRound; i++) {
-      const id = await quiz.nth(i).getAttribute("data-quiz-id");
-      const q = lesson.experience!.quiz.find(q => q.id === id)!;
-      await quiz.nth(i).getByRole("button").nth(q.correctIndex).click();
+    expect(await quiz.evaluateAll(elements => elements.every(element => element.scrollHeight <= element.clientHeight + 1 && !/auto|scroll/.test(getComputedStyle(element).overflowY)))).toBe(true);
+    for (let questionIndex = quizRound - 1; questionIndex >= 0; questionIndex--) {
+      const id = await quiz.nth(questionIndex).getAttribute("data-quiz-id");
+      const question = lesson.experience!.quiz.find(question => question.id === id)!;
+      await quiz.nth(questionIndex).getByRole("button").nth(question.correctIndex).click();
     }
     await page.getByRole("button", { name: "Kvíz kiértékelése" }).click();
     await expect(page.getByRole("region", { name: "Kvíz eredmény" })).toContainText(`${quizRound} / ${quizRound} pont`);
     await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
-    await page.getByRole("button", { name: "Teljes feladatsor", exact: true }).click();
-    const tasks = page.locator("[data-task-id]");
+    await expect(page.getByRole("tabpanel", { name: "Feladatok", exact: true }).locator(".learning-pager, .learning-mode")).toHaveCount(0);
+    const tasks = page.locator("[data-task-id]:visible");
     await expect(tasks).toHaveCount(taskRound);
+    await expect(tasks.locator("textarea:visible")).toHaveCount(taskRound);
+    expect(await tasks.evaluateAll(elements => elements.every(element => element.scrollHeight <= element.clientHeight + 1 && !/auto|scroll/.test(getComputedStyle(element).overflowY)))).toBe(true);
     for (let i = 0; i < taskRound; i++) {
       const id = await tasks.nth(i).getAttribute("data-task-id");
       await tasks.nth(i).locator("textarea").fill(lesson.experience!.tasks.find(t => t.id === id)!.sample);

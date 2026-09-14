@@ -8,3 +8,6 @@
 6. Olvasd vissza a PR checkeket, review-kat es kommenteket. Csak sikeres gate utan merge. Ellenorizd main CI es Vercel/Render deployment allapotat; a korabbi production deployment legyen visszaallithato.
 7. Valodi Chrome-ban nyisd meg a felhasznalo eles preview oldalat vendegkent. Feladat es Kviz fulon ellenorizd a lathato teteleket es overflow-t desktop/mobilon, keszits screenshotot; ne kuldj eles pontozott valaszt.
 8. Rogzitsd a commitot, PR-t, ellenorzeseket, telepitesi bizonyitekot es marado kockazatot. A helyi dirty munkafa maradjon meg.
+
+## PR review kiegeszites
+9. A source/tests/lesson-fusion-live.browser.ts regi lapozo es Teljes lista kattintasait csereld folyamatos lista/all-items-visible ellenorzesre. A kiertékelo gombhoz scrollozz es ellenorizd a viewporton beluli helyzetet; a teljes pontszam elvaras maradjon. Futtatas: LESSON_LIVE_BROWSER=1, playwright.lesson-fusion.config.ts, a meglevo helyi candidate JSON masolataval; elvart 3 PASS, tavoli iras nelkul.
