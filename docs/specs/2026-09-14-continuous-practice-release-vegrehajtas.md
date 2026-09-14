@@ -1,5 +1,7 @@
 # Kiadasi vegrehajtas
 
+Diktalas review-kapu: ExperienceSpeech.tsx-ben kozos megszakito callback, inditas elott elozo session torlese, cleanupkor callbackok levalasztasa. lesson-fusion.spec.ts uj tesztje bizonyitsa maximum egy aktiv felismerot, regi callbackbol nulla valaszvaltozast, uj callback helyes celpontjat es fulvaltas utani leallast. Elso kapu celzott diktalasteszt, majd check/lint es teljes fusion teszt.
+
 1. Hozz letre feature branch-et es kulon worktree-t. Az origin/main frissesseget ellenorizd. Mas munkajat ne stash/reverteld.
 2. Vidd at a LessonExperienceView.tsx, SavedLessonQuiz.tsx, learning-flow.browser.ts, lesson-fusion.spec.ts, lesson-practice.browser.ts fajlokat es a ket continuous-practice tervpart. Csak ezeket stage-eld.
 3. A tiszta worktree source konyvtaraban npm ci, majd npm run verify. Elvart: check, lint, check:test, unit tesztek es build PASS; warningok rogzites.

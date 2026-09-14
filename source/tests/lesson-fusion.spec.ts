@@ -113,6 +113,51 @@ test("all six palettes keep readable ink and complete worked examples", async ({
   expect(colors.size).toBe(6);
 });
 
+test("continuous oral tasks keep one dictation session and reject stale results", async ({ page }) => {
+  await page.addInitScript(() => {
+    type Result = { results: { transcript: string }[][] };
+    class FakeRecognition {
+      static instances: FakeRecognition[] = [];
+      onresult: ((event: Result) => void) | null = null;
+      onerror = null;
+      onend: (() => void) | null = null;
+      capturedResult: ((event: Result) => void) | null = null;
+      running = false;
+      constructor() { FakeRecognition.instances.push(this); }
+      start() { this.running = true; this.capturedResult = this.onresult; }
+      stop() { this.running = false; this.onend?.(); }
+      abort() { this.running = false; this.onend?.(); }
+    }
+    Object.defineProperty(window, "SpeechRecognition", { value: FakeRecognition });
+    Object.defineProperty(window, "__dictationProbe", { value: {
+      active: () => FakeRecognition.instances.filter(engine => engine.running).length,
+      emit: (index: number, text: string) => FakeRecognition.instances[index].capturedResult?.({ results: [[{ transcript: text }]] }),
+    } });
+  });
+  await page.goto("/__lesson-runtime-probe?fusion=1");
+  await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
+  const oral = page.locator("[data-task-id]").filter({ has: page.locator(".fusion-speech") });
+  const probe = (index?: number, text?: string) => page.evaluate(({ index, text }) => {
+    const controls = (window as unknown as { __dictationProbe: { active(): number; emit(index: number, text: string): void } }).__dictationProbe;
+    if (index !== undefined && text !== undefined) controls.emit(index, text);
+    return controls.active();
+  }, { index, text });
+  await oral.nth(0).getByRole("button", { name: "Válasz diktálása" }).click();
+  expect(await probe()).toBe(1);
+  await oral.nth(1).getByRole("button", { name: "Válasz diktálása" }).click();
+  expect(await probe()).toBe(1);
+  await expect(page.getByRole("button", { name: "Diktálás leállítása" })).toHaveCount(1);
+  await probe(0, "stale result");
+  await expect(oral.nth(0).locator("textarea")).toHaveValue("");
+  await probe(1, "current result");
+  await expect(oral.nth(1).locator("textarea")).toHaveValue("current result");
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  expect(await probe()).toBe(0);
+  await probe(1, "late result");
+  await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
+  await expect(oral.nth(1).locator("textarea")).toHaveValue("current result");
+});
+
 test("oral exercises remain usable without a microphone and actual touch drag orders steps", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
