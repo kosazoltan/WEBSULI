@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { BookOpen, Brain, PencilLine, Trophy, Download, RotateCcw, Mic, Leaf } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { experienceRoundSizes, type LessonExperience } from "@shared/lesson-experience";
@@ -35,10 +35,8 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
   const [rate, setRate] = useState(0.85);
   const [teachingSection, setTeachingSection] = useLearningPreference<number>(`${storageKey}:section`, 0, (v): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v < headings.length);
   const [teachingOverview, setTeachingOverview] = useState(true);
-  const [taskIndex, setTaskIndex] = useState(0);
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [taskOverview, setTaskOverview] = useState(false);
-  const [quizOverview, setQuizOverview] = useState(false);
+  const taskElements = useRef(new Map<string, HTMLElement>());
+  const quizElements = useRef(new Map<string, HTMLElement>());
   const [savedFinished, setSavedFinished] = useState<boolean | null>(null);
   const [quiet, setQuiet] = useLearningPreference<boolean>("websuli:learning-quiet", false, (v): v is boolean => typeof v === "boolean");
   const jumpToTeaching = (section: number) => { setTeachingSection(section); setTeachingOverview(false); changeTab("teaching"); };
@@ -55,7 +53,7 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
   const quizPoints = quiz.filter(q => quizState.round.picks[q.id] === q.correctIndex).length;
   useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, [tab]);
   const seconds = (round: typeof taskState.round) => Math.max(0, Math.floor(((round.finishedAt ?? Date.now()) - round.startedAt) / 1000));
-  return <div className="fusion-view" data-quiet={quiet} data-quiz-guided={tab === "quiz" && (savedFinished === null ? !quizOverview && !quizState.round.finishedAt : !savedFinished)}>
+  return <div className="fusion-view" data-quiet={quiet} data-quiz-guided={false}>
     <nav className="fusion-tabs" role="tablist" aria-label="A tananyag négy oldala">{TABS.map(({ id, label, icon: Icon }, i) => <button key={id} id={`${prefix}-fusion-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls={`${prefix}-fusion-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => changeTab(id)} onKeyDown={event => {
       if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) {
         event.preventDefault();
@@ -78,38 +76,43 @@ export function LessonExperienceView({ experience: e, storageKey, headings, less
     <div role="tabpanel" id={`${prefix}-fusion-panel-methods`} aria-labelledby={`${prefix}-fusion-tab-methods`} hidden={tab !== "methods"} className="fusion-panel"><CognitiveMethods methods={e.methods} /></div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-tasks`} aria-labelledby={`${prefix}-fusion-tab-tasks`} hidden={tab !== "tasks"} className="fusion-panel">
       <div className="fusion-round-head"><div><span className="fusion-eyebrow">Fogalmazd meg a saját szavaiddal</span><h2>Feladatok</h2><p>{taskRound} feladat a {e.tasks.length}-ből · írásban és szóban</p></div><button className="lesson-outline-btn" onClick={() => setResetTarget("tasks")}><RotateCcw size={17} /> Új feladatsor</button></div>
-      <LearningMode overview={taskOverview} onChange={setTaskOverview} label="feladatsor" />
       <p className="fusion-intro">A szóbeli feladatot először mondd el, majd írd vagy diktáld be a válaszod. Az automatikus ellenőrzés fogalmakat keres; a mintaválasz segít megítélni a jelentést.</p>
       {tasks.map((t, index) => {
         const graded = !!taskState.round.finishedAt;
         const verdict = evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t);
-        return <section className="lesson-block fusion-task" hidden={!taskOverview && index !== taskIndex} key={t.id} data-task-id={t.id}>
+        return <section className="lesson-block fusion-task" key={t.id} data-task-id={t.id} tabIndex={-1} ref={element => { if (element) taskElements.current.set(t.id, element); else taskElements.current.delete(t.id); }}>
           <span className="fusion-eyebrow">{index + 1}. feladat {t.mode === "oral" && <><Mic size={14} /> Szóbeli gyakorlás</>}</span><h3>{t.q}</h3>
           <label className="fusion-label">A válaszod<textarea maxLength={4000} value={taskState.round.answers[t.id] ?? ""} disabled={graded} onChange={ev => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: ev.target.value } }))} /></label>
-          {!graded && <DictationButton active={tab === "tasks" && !resetTarget && (taskOverview || index === taskIndex)} onText={text => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: `${old.answers[t.id] ?? ""} ${text}`.trim().slice(0, 4000) } }))} />}
+          {!graded && <DictationButton active={tab === "tasks" && !resetTarget} onText={text => taskState.setRound(old => ({ ...old, answers: { ...old.answers, [t.id]: `${old.answers[t.id] ?? ""} ${text}`.trim().slice(0, 4000) } }))} />}
           {graded && <div className="fusion-verdict" data-state={verdict.state}><strong>{verdict.state === "ok" ? "Elfogadva" : verdict.state === "partial" ? "Részben jó" : "Hiányos"} · {verdict.score} pont</strong><p>{verdict.reason}</p></div>}
           {(graded || t.mode === "oral") && <button className="lesson-outline-btn" onClick={() => { setSamples(old => old.includes(t.id) ? old.filter(id => id !== t.id) : [...old, t.id]); taskState.setRound(old => ({ ...old, sampleViewed: [...new Set([...old.sampleViewed, t.id])] })); }}>Mintaválasz {samples.includes(t.id) ? "elrejtése" : "megnézése"}</button>}
           {samples.includes(t.id) && <p className="lesson-answer">{t.sample}</p>}
           <button className="lesson-ghost-btn fusion-source-link" onClick={() => jumpToTeaching(t.sectionIndex)}>Vissza a magyarázathoz</button>
         </section>;
       })}
-      {!taskOverview && <LearningPager index={taskIndex} count={tasks.length} label="feladat" onChange={setTaskIndex} />}
-      {!taskState.round.finishedAt ? <FinishPracticeButton className="fusion-primary" total={tasks.length} unanswered={tasks.filter(t => !taskState.round.answers[t.id]?.trim()).length} onContinue={() => { setTaskOverview(false); setTaskIndex(tasks.findIndex(t => !taskState.round.answers[t.id]?.trim())); }} onFinish={() => taskState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Feladatok kiértékelése</FinishPracticeButton> : <Result title="Feladatok" points={taskPoints} total={tasks.length} seconds={seconds(taskState.round)} answers={tasks.map(t => ({ question: t.q, answer: taskState.round.answers[t.id] ?? "", ...evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t), sampleViewed: taskState.round.sampleViewed.includes(t.id) }))} />}
+      {!taskState.round.finishedAt ? <FinishPracticeButton className="fusion-primary" total={tasks.length} unanswered={tasks.filter(t => !taskState.round.answers[t.id]?.trim()).length} onContinue={() => {
+        const task = tasks.find(task => !taskState.round.answers[task.id]?.trim());
+        const element = task && taskElements.current.get(task.id);
+        element?.scrollIntoView({ block: "center" }); element?.querySelector("textarea")?.focus({ preventScroll: true });
+      }} onFinish={() => taskState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Feladatok kiértékelése</FinishPracticeButton> : <Result title="Feladatok" points={taskPoints} total={tasks.length} seconds={seconds(taskState.round)} answers={tasks.map(t => ({ question: t.q, answer: taskState.round.answers[t.id] ?? "", ...evaluateOpenAnswer(taskState.round.answers[t.id] ?? "", t), sampleViewed: taskState.round.sampleViewed.includes(t.id) }))} />}
     </div>
-    <div role="tabpanel" id={`${prefix}-fusion-panel-quiz`} aria-labelledby={`${prefix}-fusion-tab-quiz`} hidden={tab !== "quiz"} className="fusion-panel fusion-panel-quiz" data-overview={savedFinished === null && quizOverview} data-finished={savedFinished ?? !!quizState.round.finishedAt}>
+    <div role="tabpanel" id={`${prefix}-fusion-panel-quiz`} aria-labelledby={`${prefix}-fusion-tab-quiz`} hidden={tab !== "quiz"} className="fusion-panel fusion-panel-quiz" data-overview={true} data-finished={savedFinished ?? !!quizState.round.finishedAt}>
       <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>
-      <div className="fusion-round-head"><div><span className="fusion-eyebrow">Helyi önellenőrzés</span><h2>Kvíz</h2><p>{quizRound} kérdés a {e.quiz.length}-ből · {Object.keys(quizState.round.picks).length} megválaszolva · {quizPoints} pont</p></div><div className="learning-round-actions"><LearningMode overview={quizOverview} onChange={setQuizOverview} label="kvíz" /><button className="lesson-outline-btn" onClick={() => setResetTarget("quiz")}><RotateCcw size={17} /> Új kvíz</button></div></div>
+      <div className="fusion-round-head"><div><span className="fusion-eyebrow">Helyi önellenőrzés</span><h2>Kvíz</h2><p>{quizRound} kérdés a {e.quiz.length}-ből · {Object.keys(quizState.round.picks).length} megválaszolva · {quizPoints} pont</p></div><div className="learning-round-actions"><button className="lesson-outline-btn" onClick={() => setResetTarget("quiz")}><RotateCcw size={17} /> Új kvíz</button></div></div>
       {quiz.map((q, index) => {
         const pick = quizState.round.picks[q.id];
-        return <section className="lesson-block fusion-quiz" hidden={!quizOverview && index !== quizIndex} key={q.id} data-quiz-id={q.id}><span className="fusion-eyebrow">{index + 1}. kérdés</span><h3>{q.question}</h3><div className="fusion-choices">{q.options.map((option, i) => <button className="lesson-option" key={i} disabled={pick !== undefined || !!quizState.round.finishedAt} aria-pressed={pick === i} data-state={pick === i ? i === q.correctIndex ? "right" : "wrong" : undefined} onClick={() => quizState.setRound(old => old.picks[q.id] !== undefined ? old : ({ ...old, picks: { ...old.picks, [q.id]: i } }))}><span className="lesson-option-key">{"ABCD"[i]}</span>{option}</button>)}</div>
+        return <section className="lesson-block fusion-quiz" key={q.id} data-quiz-id={q.id} tabIndex={-1} ref={element => { if (element) quizElements.current.set(q.id, element); else quizElements.current.delete(q.id); }}><span className="fusion-eyebrow">{index + 1}. kérdés</span><h3>{q.question}</h3><div className="fusion-choices">{q.options.map((option, i) => <button className="lesson-option" key={i} disabled={pick !== undefined || !!quizState.round.finishedAt} aria-pressed={pick === i} data-state={pick === i ? i === q.correctIndex ? "right" : "wrong" : undefined} onClick={() => quizState.setRound(old => old.picks[q.id] !== undefined ? old : ({ ...old, picks: { ...old.picks, [q.id]: i } }))}><span className="lesson-option-key">{"ABCD"[i]}</span>{option}</button>)}</div>
           {pick !== undefined && <p className="lesson-feedback" data-state={pick === q.correctIndex ? "right" : "wrong"}>{q.feedbackPerOption[pick]}</p>}
           {quizState.round.finishedAt && pick === undefined && <p>Nem válaszoltál · 0 pont. Helyes válasz: {q.options[q.correctIndex]}. {q.feedbackPerOption[q.correctIndex]}</p>}
         </section>;
       })}
-      {!quizOverview && <LearningPager index={quizIndex} count={quiz.length} label="kérdés" onChange={setQuizIndex} />}
-      {!quizState.round.finishedAt ? <FinishPracticeButton className="fusion-primary" total={quiz.length} unanswered={quiz.filter(q => quizState.round.picks[q.id] === undefined).length} onContinue={() => { setQuizOverview(false); setQuizIndex(quiz.findIndex(q => quizState.round.picks[q.id] === undefined)); }} onFinish={() => quizState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Kvíz kiértékelése</FinishPracticeButton> : <Result title="Kvíz" points={quizPoints} total={quiz.length} seconds={seconds(quizState.round)} answers={quiz.map(q => ({ question: q.question, pickedIndex: quizState.round.picks[q.id] ?? null, correctIndex: q.correctIndex }))} />}
+      {!quizState.round.finishedAt ? <FinishPracticeButton className="fusion-primary" total={quiz.length} unanswered={quiz.filter(q => quizState.round.picks[q.id] === undefined).length} onContinue={() => {
+        const question = quiz.find(question => quizState.round.picks[question.id] === undefined);
+        const element = question && quizElements.current.get(question.id);
+        element?.scrollIntoView({ block: "center" }); element?.focus({ preventScroll: true });
+      }} onFinish={() => quizState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Kvíz kiértékelése</FinishPracticeButton> : <Result title="Kvíz" points={quizPoints} total={quiz.length} seconds={seconds(quizState.round)} answers={quiz.map(q => ({ question: q.question, pickedIndex: quizState.round.picks[q.id] ?? null, correctIndex: q.correctIndex }))} />}
       </PracticeAccess>
     </div>
-    <Dialog open={resetTarget !== null} onOpenChange={open => { if (!open) setResetTarget(null); }}><DialogContent className="fusion-dialog"><DialogTitle>Új gyakorlókör?</DialogTitle><DialogDescription>A mostani válaszokat új feladatsor váltja fel. Ha szeretnéd megőrizni az eredményt, előbb töltsd le.</DialogDescription><div className="flex gap-3 flex-wrap"><button onClick={() => setResetTarget(null)}>Mégse</button><button onClick={() => { if (resetTarget === "tasks") { taskState.reset(); setSamples([]); setTaskIndex(0); } else { quizState.reset(); setQuizIndex(0); } setResetTarget(null); }}>Új kör indítása</button></div></DialogContent></Dialog>
+    <Dialog open={resetTarget !== null} onOpenChange={open => { if (!open) setResetTarget(null); }}><DialogContent className="fusion-dialog"><DialogTitle>Új gyakorlókör?</DialogTitle><DialogDescription>A mostani válaszokat új feladatsor váltja fel. Ha szeretnéd megőrizni az eredményt, előbb töltsd le.</DialogDescription><div className="flex gap-3 flex-wrap"><button onClick={() => setResetTarget(null)}>Mégse</button><button onClick={() => { if (resetTarget === "tasks") { taskState.reset(); setSamples([]); } else { quizState.reset(); } setResetTarget(null); }}>Új kör indítása</button></div></DialogContent></Dialog>
   </div>;
 }

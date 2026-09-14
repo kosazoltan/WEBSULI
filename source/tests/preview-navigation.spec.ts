@@ -38,10 +38,20 @@ for (const [width,height] of [[390,844],[844,390],[1440,900]]) {
       }))).toBe(true);
       expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
     }
-    const submit=await page.getByRole('button',{name:'Kvíz kiértékelése',exact:true}).boundingBox();
+    const quizPanel=page.getByRole('tabpanel',{name:'Kvíz',exact:true});
+    await expect(quizPanel.locator('.learning-pager, .learning-mode')).toHaveCount(0);
+    const questions=quizPanel.locator('[data-quiz-id]');
+    await expect(quizPanel.locator('[data-quiz-id]:visible')).toHaveCount(await questions.count());
+    const submitButton=page.getByRole('button',{name:'Kvíz kiértékelése',exact:true});
+    await submitButton.scrollIntoViewIfNeeded();
+    const submit=await submitButton.boundingBox();
     expect(submit).not.toBeNull();
     expect(submit!.y).toBeGreaterThanOrEqual(0);
     expect(submit!.y+submit!.height).toBeLessThanOrEqual(height);
+    expect(await submitButton.evaluate(button=>{
+      const box=button.getBoundingClientRect();
+      return [0.1,0.5,0.9].every(fraction=>button.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height*fraction)));
+    })).toBe(true);
     await page.screenshot({path:`test-results/preview-tabs-${width}.png`});
   });
 }

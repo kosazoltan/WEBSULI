@@ -1,0 +1,8 @@
+# Vegrehajtas
+
+1. SavedLessonQuiz.tsx: index state es LearningPager eltavolitasa; minden round.questions elem kulcsos sectionben, valtozatlan answer/hint API. Hianyos folytataskor az elso valasz nelkuli section scrollIntoView es focus, React refen keresztul. Uj kor ne hivatkozzon indexre.
+2. Az elso modositas utan npm.cmd --prefix source run check, elvart exit0.
+3. LessonExperienceView.tsx: task/quiz index es overview allapotok, kapcsolok, hidden feltetelek, lapozok eltavolitasa. Teaching LearningMode/Pager marad. Kviz data-overview=true, data-quiz-guided=false. A folytatas kerdes/feladat-refeken gorget es fokuszal. Normal folyamat megorzi pontozast, beszedbevitelt es resetet.
+4. Typecheck utan a source/tests/learning-flow.browser.ts es source/real-learning-tests.local.mts regi lapozasi utasitasait az uj dokumentalt spechez igazitsd. A teszt egyes kartyakat stabil kerdesazonositoval vagy indexszel cimezzen; 25/15 lathato kartya es lapozo0 kotelezo. Ne gyengits mas allitast.
+5. node --import ./source/node_modules/tsx/dist/loader.mjs ./source/real-learning-harness.local.mts --snapshot: valodi izolalt Chrome/Express/PostgreSQL, elvart PASS es cleanup0. A localhost5000 nem futott az elozo korben; nem izolalt szervert nem inditunk.
+6. Mobil/desktop screenshotok, kartya overflow-y es vezerlo hit-test, hianyos folytatas, vendegkviz tetszoleges sorrend. Celzott megl evo Playwright tesztek a repository konfiguraciojaval; npm.cmd --prefix source run lint es build. Eredmenyek, NOT RUN korlatok, sajat diff es memoria rogzitese. Nincs commit/push/deploy.
