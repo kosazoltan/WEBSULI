@@ -340,9 +340,15 @@ export function buildLektorGradingEvidence(lesson: Lesson): string {
     "A program pontozási mérése (adat):\n" + JSON.stringify(evidence);
 }
 
-export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
+export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = []): string {
   return [
     LESSON_METHOD_CONTRACT,
+    ...(previousBlockers.length ? [
+      // Spec 2026-09-19: convergence across author rounds — the reviewer sees what it blocked
+      // last round, verifies the fixes, and does not open a new front on a clean chapter.
+      "KONVERGENCIA-SZABÁLY (javító kör utáni lektorálás): az alábbi previousBlockers az előző kör blokkoló jegyzetei ugyanerre a leckére. Előbb ellenőrizd, hogy javítva vannak-e; a javítottat ne jelezd újra, a javítatlant ugyanazzal a blockPath-tal és kind/subkind értékkel jelezd. ÚJ blokkolót csak tényhibára (source_conflict/contradicts_source, not_in_map) vagy hibás bank-megoldásra adj. Korábban nem kifogásolt fejezetre új coverage_gap/core blokkolót ne vezess be: az ilyen, most észlelt fedettségi hiány coverage_gap/warn (a program egyébként is figyelmeztetéssé minősíti).",
+      `previousBlockers: ${JSON.stringify(previousBlockers)}`,
+    ] : []),
     "Ha a lecke experience mezőt tartalmaz, a methods/tasks/quiz tételeit és a szószedetet is vizsgáld: valóban a Tananyag lapról kérdez-e, helyes-e minden megoldás és mintaválasz, van-e érdemi változatosság. Hiányos vagy hibás bank source_conflict/contradicts_source, a blockPath mezőben experience.tasks.N vagy experience.quiz.N útvonallal.",
     "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",
     "",

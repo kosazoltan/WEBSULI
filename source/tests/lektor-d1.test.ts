@@ -146,3 +146,23 @@ test("applyLektorVerdict never mutates the lesson, whatever the notes say", () =
   assert.equal(JSON.stringify(result.lesson), before, "returned lesson identical");
   assert.equal(result.blockers.length, 2);
 });
+
+/* Spec 2026-09-19 — a late coverage gap on a previously unflagged chapter is a warning; factual findings keep blocking. */
+import { applyLektorConvergence, noteSectionKey } from "../server/studio/lektor";
+
+test("konvergencia: korábban nem jelzett fejezet fedettségi hiánya figyelmeztetés, a tényhiba és az ismételt hiány blokkoló marad", () => {
+  const notes = classifyNotes([
+    { kind: "coverage_gap", subkind: "core", blockPath: "sections.6.blocks.0", message: "A burgonya levelei is mérgezőek." },
+    { kind: "coverage_gap", subkind: "core", blockPath: "sections.8.blocks.0", message: "A vöröshagyma zsenge levelei." },
+    { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.69", message: "A kétnyári növények köre téves." },
+  ]);
+  const previous = [{ kind: "coverage_gap" as const, subkind: "core", blockPath: "sections.8.blocks.0", message: "A vöröshagyma zsenge levelei." }];
+  const result = applyLektorConvergence(notes, previous, 2);
+  assert.deepEqual(result.notes.map(n => n.blocking), [false, true, true]);
+  assert.equal(result.downgraded.length, 1);
+  assert.match(result.downgraded[0].message, /Késői fedettségi jelzés/);
+  assert.equal(result.downgraded[0].severity, "warn");
+  assert.deepEqual(applyLektorConvergence(notes, [], 0).notes, notes, "az első körben nincs konvergencia-szűrés");
+  assert.equal(noteSectionKey("sections.6.blocks.0"), "sections.6");
+  assert.equal(noteSectionKey("experience.quiz.3"), "experience.quiz.3");
+});

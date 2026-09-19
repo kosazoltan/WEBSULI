@@ -8,7 +8,7 @@ import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
-import { classifyNotes, type RawNote } from "./lektor";
+import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
@@ -436,10 +436,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     case "lektor": {
       const lesson = job.output?.lesson as Lesson | undefined;
       if (!lesson) return fail(store, job, "A lektor lépéshez nincs lecke a jobban.");
-      input = { lesson, map: mapInputOf(map), concepts: map.concepts };
+      // Spec 2026-09-19: the previous round's blockers are part of the review input.
+      const previousBlockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
+      input = { lesson, map: mapInputOf(map), concepts: map.concepts, ...(previousBlockers.length ? { previousBlockers } : {}) };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
-        buildLektorPrompt(lesson, promptMapOf(map)),
+        buildLektorPrompt(lesson, promptMapOf(map), previousBlockers),
       );
       break;
     }
@@ -691,7 +693,14 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const parsed = lektorReportSchema.safeParse(json);
       if (!parsed.success) return fail(store, job, `A lektori jelentés alakilag hibás: ${zodIssues(parsed.error)}`);
 
-      const notes = classifyNotes(parsed.data.notes);
+      // Spec 2026-09-19: late coverage gaps on chapters the previous round did not block are
+      // warnings — the reviewer must converge, not open a new front every round.
+      const priorBlockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
+      const convergence = applyLektorConvergence(classifyNotes(parsed.data.notes), priorBlockers, job.round);
+      if (convergence.downgraded.length) {
+        logger.warn(`[STUDIO] Lektor konvergencia (${job.id}, ${job.round}. kör): ${convergence.downgraded.length} késői fedettségi jegyzet figyelmeztetéssé minősítve`);
+      }
+      const notes = convergence.notes;
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
       for (const code of lektorSkillCodes(notes)) await workflowFinding(code);

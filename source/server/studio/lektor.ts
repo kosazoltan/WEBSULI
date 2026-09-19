@@ -113,3 +113,33 @@ export function applyLektorVerdict(lesson: Lesson, raw: RawNote[]): LektorVerdic
     adminNotes: notes.filter((n) => n.adminOnly),
   };
 }
+
+/** `sections.6.blocks.0` → `sections.6`; `section.block`/bank paths stay as written. */
+export function noteSectionKey(blockPath: string | undefined): string {
+  const m = blockPath?.match(/^sections?\.(\d+)/);
+  return m ? `sections.${m[1]}` : (blockPath ?? "");
+}
+
+/**
+ * Spec 2026-09-19 — round-to-round convergence of the Studio lektor.
+ *
+ * Measured on the owner's 49-concept map (jobs b4d94132, 6cb1bc89, 6cc5930d): every round the
+ * lektor accepted the previous fixes and raised a NEW `coverage_gap/core` blocker on a chapter
+ * it had not flagged before, so the run died at the round limit while never converging. From
+ * round 1 on, a coverage gap on a chapter the previous round did not block is recorded as a
+ * warning (visible in the notes, never silently dropped); factual findings (`source_conflict`)
+ * and re-raised gaps on already-blocked chapters keep blocking.
+ */
+export function applyLektorConvergence(notes: LektorNote[], previousBlockers: RawNote[], round: number): { notes: LektorNote[]; downgraded: LektorNote[] } {
+  if (round <= 0) return { notes, downgraded: [] };
+  const flagged = new Set(previousBlockers.map((n) => noteSectionKey(n.blockPath)));
+  const downgraded: LektorNote[] = [];
+  const converged = notes.map((note) => {
+    if (!note.blocking || note.kind !== "coverage_gap") return note;
+    if (flagged.has(noteSectionKey(note.blockPath))) return note;
+    const next: LektorNote = { ...note, severity: "warn", blocking: false, message: `Késői fedettségi jelzés (konvergencia, ${round}. kör): ${note.message}` };
+    downgraded.push(next);
+    return next;
+  });
+  return { notes: converged, downgraded };
+}
