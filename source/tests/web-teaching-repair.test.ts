@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { readHtmlLessonData } from "../shared/lesson-html-data";
-import { applyTeachingPatch, reviewAndRepairWebTeaching } from "../server/studio/web-teaching-repair";
+import { applyTeachingPatch, reviewAndRepairWebTeaching, REVIEW_REPAIR_ATTEMPTS, salvageTeachingEdits } from "../server/studio/web-teaching-repair";
 import { TEACHING_REVIEW_CHECKS, teachingReviewEvidence, assertTeachingReviewEvidence } from "../server/studio/web-teaching-review";
 import { teachingHtml } from "./helpers/teaching-html";
 
@@ -92,9 +92,10 @@ test("failed patch has bounded retry with its exact error; no repeated verdict t
     repair: async (_system, user) => { repairs++; if (repairs === 2) { assert.match(JSON.parse(user).patchFailure, /Üres/); assert.deepEqual(JSON.parse(user).previousPatch, { edits: [] }); } return { edits: [] }; },
     onProblem: async (problem, candidate) => { assert.equal(candidate, html); diagnostics.push(problem); },
   });
-  assert.equal(reviews, 1); assert.equal(repairs, 2); assert.equal(result.html, html);
+  // Spec 2026-09-19: REVIEW_REPAIR_ATTEMPTS bounded repairs, still never a repeated verdict.
+  assert.equal(reviews, 1); assert.equal(repairs, REVIEW_REPAIR_ATTEMPTS); assert.equal(result.html, html);
   assert.equal(result.review.checks[2].passed, false);
-  assert.equal(diagnostics.filter(d => /Üres/.test(d)).length, 2);
+  assert.equal(diagnostics.filter(d => /Üres/.test(d)).length, REVIEW_REPAIR_ATTEMPTS);
 });
 
 test("two semantic corrections that do not fix the problem remain unpublishable", async () => {
@@ -104,8 +105,9 @@ test("two semantic corrections that do not fix the problem remain unpublishable"
     repair: async () => { repairs++; return repairs === 1 ? patch : { edits: [{ sectionIndex: 0, before: after, after: after + ' Gondold végig!' }] }; },
     onProblem: async () => { problems++; },
   });
-  assert.equal(reviews, 3); assert.equal(repairs, 2); assert.equal(result.review.checks[2].passed, false);
-  assert.equal(problems, 3);
+  // Spec 2026-09-19: REVIEW_REPAIR_ATTEMPTS repairs, then still unpublishable.
+  assert.equal(reviews, REVIEW_REPAIR_ATTEMPTS + 1); assert.equal(repairs, REVIEW_REPAIR_ATTEMPTS); assert.equal(result.review.checks[2].passed, false);
+  assert.equal(problems, REVIEW_REPAIR_ATTEMPTS + 1);
 });
 
 test("cancellation after the author cannot apply or accept its response", async () => {
@@ -115,4 +117,24 @@ test("cancellation after the author cannot apply or accept its response", async 
     repair: async () => { controller.abort(); return patch; }, onCandidate: async () => { saved++; },
   }));
   assert.equal(saved, 0);
+});
+
+/* Spec 2026-09-19 — a rejected bank item must not discard the accepted teaching edits. */
+test("bank item failing the gate is dropped, the teaching edits survive, and the rejection reaches the next repair", async () => {
+  const badBank = { tasks: [{ ...data.experience.tasks[0], sample: "hibás" }] };
+  const salvaged = salvageTeachingEdits(html, { ...patch, bank: badBank }, new Set([0]), "teszt-ok");
+  assert.ok(salvaged); assert.equal(salvaged!.html, html.replace(before, after)); assert.match(salvaged!.note, /banktételeit a kapu elutasította/);
+  assert.equal(salvageTeachingEdits(html, patch, new Set([0]), "x"), null, "csak szövegcserés csomagnál nincs mit menteni");
+  assert.equal(salvageTeachingEdits(html, { edits: [], bank: badBank }, new Set([0]), "x"), null);
+
+  let reviews = 0, repairs = 0; const problems: string[] = [];
+  const result = await reviewAndRepairWebTeaching(html, [source], {
+    review: async (candidate) => { reviews++; assert.equal(candidate, reviews === 1 ? html : html.replace(before, after)); return review(reviews === 2); },
+    repair: async (_system, user) => { repairs++; assert.equal(JSON.parse(user).previousBankRejection, ""); return { ...patch, bank: badBank }; },
+    onProblem: async (problem) => { problems.push(problem); },
+  });
+  assert.deepEqual([reviews, repairs], [2, 1]);
+  assert.equal(result.html, html.replace(before, after));
+  assert.ok(result.review.checks.every(c => c.passed));
+  assert.ok(problems.some(p => /Bankjavítás elutasítva, a tanításjavítás alkalmazva/.test(p)));
 });

@@ -48,6 +48,8 @@ valódi PDF-forrású helyi futás `done`-ig ér; a dirty munka teljes egészéb
 | `Invalid PDF structure.` | `document-source.ts:34` nyers pdfjs-hiba, nincs tartalék | `one_step_runs a1707ade` |
 | Webes: `A célzott javító modellhívása nem fejeződött be` | lektor-hívás (`web-teaching-review.ts:122`) ugyanaz a grok időtúllépés, nincs tartalék | `lesson_workflow_runs 0b37a30f` |
 | PDF (valódi próbafutás 2026-09-19, 1645 s): `A fúziós lecke tanítása hiányos: 1 fogalom-címkét a blokk saját szövege nem támaszt alá … talaj-kialakulasa a(z) 6. animate blokkon` | az animációs blokk felirata „talajképződés", a fogalom neve „A talaj kialakulása" (szinonima); a `#196` szóegyezés téves pozitívja egy kozmetikai blokkon, a kapu 3 szerzői kör után buktatott | `studio_jobs 3ed5ca90`, `lesson_workflow_runs be202c1d` (author×3 → gate:error) |
+| Tulajdonosi éles térkép (49 fogalom, kurált futás 2914 s): `A lektor 1 tartalmi javítást kér: A kvíz a föld alatti fogyasztott részt kizárólag gyökérnek adja…` | a lektor körönként új, egyetlen banktételre vonatkozó blokkolót talált; a körlimitnél (round 2) a maradó bank-blokkoló hard-fail, pedig csak célzott bankcsere kellene, nem szerzői újraírás | `studio_jobs b4d94132` (author×3, lektor_notes `experience.quiz.3`) |
+| Webes 2. próbafutás (1194 s): `A célzott tartalmi javítás után további ellenőrzés szükséges…` | a lektori javítócsomag egy banktétele a determinisztikus kapun bukott (`mintaválasz nem kap teljes pontot`), ezért a TELJES csomag — a jó szövegjavításokkal együtt — elveszett, és egy kör elfogyott a 3-ból | `ai_generation_requests 33ed1235` diagnostics #6 |
 | Webes (valódi próbafutás 2026-09-19, 1001 s): `…automatikus javítás után sem készült el: 1. fejezet: hiányzó tanítási szemléltetés…` | a szerzői kör (`web-research-runner.ts` `web-author-html`) csak a szerkezetet ellenőrzi; a szemléltetés-kapu (`verify-html-teaching.ts` kártyasor-szabály: figcaption ≥20 + ≥2 kártya félkövér címkével) csak a bankgyártás UTÁN fut, javítókör nélkül; a szerző címke nélküli nyilas lépéssort írt | `ai_generation_requests 0aa2435b` (candidate: 4 figure, 1 svg, 0 címkés kártya) |
 
 Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
@@ -116,6 +118,19 @@ Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
   (`stripUngroundedAnimateLabels`), a címke nélkül maradó blokkot elhagyja, naplózza; a tanító
   blokkok megalapozottsága változatlanul a kapun mérődik. Érintett: `server/studio/grounding.ts`,
   `server/studio/step-runner.ts`, `tests/studio-grounding.test.ts`.
+- WHEN a Studio-lektor a szerzői körlimitnél (round ≥ `MAX_AUTHOR_ROUNDS`) csak `experience.*`
+  útvonalú (banktételes) blokkolót hagy THEN egyszer (és csak egyszer, `bankOnlyRepairRound`) az
+  animátor bank-javító köre fut a megnevezett tételekre szerzői újraírás nélkül (workflow: animator
+  `after` tartalmazza a lektort; animator/lektor/gate `maxVisits` 4; `MAX_CHAIN_STEPS` +3), utána a
+  lektor dönt: 0 blokkoló → kapu; maradó blokkoló → változatlan hiba. Tanítási blokkoló mellett
+  nincs bank-only kör. Érintett: `server/studio/pipeline.ts`, `server/studio/step-runner.ts`,
+  `shared/lesson-workflow.ts`, `tests/pipeline-state.test.ts`, `tests/lesson-pipeline-runner.test.ts`,
+  `tests/lektor-resume-progress.test.ts` (négy tartalmi review a keret).
+- WHEN a webes lektori javítócsomag banktétele a determinisztikus kapun bukik, de a szövegcserék
+  önmagukban átmennek THEN a szövegcserék érvénybe lépnek (`salvageTeachingEdits`, a kapu fail-closed
+  marad), a bank-elutasítás oka a következő javítókör bemenetébe kerül (`previousBankRejection`);
+  a javítókörök száma `REVIEW_REPAIR_ATTEMPTS` = 3 (négy review). Érintett:
+  `server/studio/web-teaching-repair.ts`, `tests/web-teaching-repair.test.ts`.
 - WHEN a webes szerző HTML-jének valamely fejezetében nincs a kapunak megfelelő szemléltetés THEN a
   szerzői kör (`verifyTeachingVisuals`) MÉG a bankgyártás előtt a fejezet sorszámával kéri a
   javítást (legfeljebb 2 javítókör), és a `HTML_TEACHING_CONTRACT` pontosan a kapu szabályát

@@ -42,7 +42,8 @@ export const MAX_AUTHOR_ROUNDS = 2;
  * terminal transition. A constant below that turned a legitimate second Author round
  * into a fake "lépés-határ" error in production (job fd62b66a, 2026-09-05).
  */
-export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 1;
+// Spec 2026-09-19: + one bank-only repair round after the limit (animator → lektor → gate).
+export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 3 + 1;
 
 export function isTerminal(step: StudioStep): boolean {
   return step === "done" || step === "error";
@@ -58,6 +59,12 @@ export type TransitionInput = {
   blockers?: number;
   /** Result of the deterministic gate (schema + coverage + render). */
   gatePassed?: boolean;
+  /**
+   * Spec 2026-09-19: at the round limit every remaining blocker targets a bank item
+   * (`experience.*`) and the one bank-only repair round is still unused — rebuild the
+   * criticised bank items (animator) instead of rewriting the teaching (author).
+   */
+  bankOnlyRepair?: boolean;
   error?: string;
 };
 
@@ -93,6 +100,8 @@ export function nextStep(input: TransitionInput): Transition {
     case "lektor": {
       if ((input.blockers ?? 0) === 0) return { step: "gate", round };
       if (round >= MAX_AUTHOR_ROUNDS) {
+        // Spec 2026-09-19: bank-only blockers get one targeted bank rebuild (no author).
+        if (input.bankOnlyRepair) return { step: "animator", round: round + 1 };
         // LS-7 (#189): a limit után NEM állunk meg emberi döntésre. A kapu
         // mérése dönt; a blokkoló jelzésként megmarad a lektor-jegyzetekben.
         return { step: "gate", round };

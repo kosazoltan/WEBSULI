@@ -696,11 +696,36 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const blockers = notes.filter((n) => n.blocking).length;
       for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
 
-      if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || (job.output?.lesson as Lesson | undefined)?.experience)) {
-        return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${notes.filter(n => n.blocking).map(n => n.message).join("; ")}`,
+      const fusion = isFusionMethodVersion(job.output?.methodVersion) || !!(job.output?.lesson as Lesson | undefined)?.experience;
+      // Spec 2026-09-19 (measured: the owner's 49-concept map failed at the limit on ONE quiz
+      // item, curate run b4d94132): when every remaining blocker is a bank item, rebuild only
+      // those items once more instead of rewriting the teaching or failing the lesson.
+      const blockingNotes = notes.filter((n) => n.blocking);
+      const bankOnly = blockingNotes.length > 0 && blockingNotes.every((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
+      const bankOnlyRepair = fusion && bankOnly && job.round >= MAX_AUTHOR_ROUNDS && !job.output?.bankOnlyRepairRound
+        && !!(job.output?.lesson as Lesson | undefined)?.experience;
+      if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair) {
+        return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
           { ...job.output, report: parsed.data, reportRound: job.round, blockers });
       }
-      const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers });
+      const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers, bankOnlyRepair });
+      if (bankOnlyRepair && transition.step === "animator") {
+        const feedback = resolveBankReview(job.output!.lesson as Lesson, parsed.data.notes.filter((n) => classifyNotes([n])[0]?.blocking));
+        logger.warn(`[STUDIO] Bank-only lektor javító kör (${job.id}): ${feedback.length} tétel, ${transition.round}. kör`);
+        await store.saveStep(
+          job.id,
+          successPatch({
+            ...job.output,
+            report: parsed.data,
+            reportRound: job.round,
+            reviewInputHash: computeStepHash("lektor", "skill-7.4-review-1", input, job.round),
+            blockers,
+            bankReview: { round: transition.round, feedback },
+            bankOnlyRepairRound: transition.round,
+          }),
+        );
+        return { ok: true, next: transition };
+      }
       if (transition.step === "error") {
         // The run itself was clean, but the pipeline dead-ends: the Author↔Lektor
         // loop hit the round limit and a human has to decide.
