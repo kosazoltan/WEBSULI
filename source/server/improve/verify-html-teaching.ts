@@ -55,6 +55,13 @@ export function verifyHtmlTeaching(html: string, experience: LessonExperience): 
     }
     if (concealed(section, panel)) problems.push(`${i + 1}. fejezet: elrejtett tanítás.`);
   });
+  problems.push(...visualProblems(sections, panel));
+  return problems;
+}
+
+/** Per-chapter teaching visual: SVG/image/list, a captioned row of labelled cards, or a table. */
+function visualProblems(sections: Element[], panel: Element): string[] {
+  const problems: string[] = [];
   const cardRow = (n: Element) => n.tagName === "figure" && descendants(n).some(c => c.tagName === "figcaption" && text(c).length >= 20)
     && descendants(n).some(row => row.childNodes.filter(element).filter(card => !concealed(card, panel) && text(card).length >= 20
       && descendants(card).some(label => /^(b|strong|h[1-6])$/.test(label.tagName) && text(label).length > 0)).length >= 2);
@@ -64,4 +71,20 @@ export function verifyHtmlTeaching(html: string, experience: LessonExperience): 
       || descendants(n).some(child => child.tagName === "table" && descendants(child).filter(row => row.tagName === "tr").length >= 2)))) problems.push(`${i + 1}. fejezet: hiányzó tanítási szemléltetés; feliratozott ábra vagy lépéses kártyasor szükséges.`);
   }
   return problems;
+}
+
+/**
+ * Spec 2026-09-19: the same visual gate, runnable on the author's HTML BEFORE the bank
+ * is built. Measured in production (web run 0aa2435b): the author wrote captioned
+ * arrow-flows of short, unlabelled steps, the final gate rejected every chapter after
+ * ~10 minutes of bank building, and no repair round existed at that point.
+ */
+export function verifyTeachingVisuals(html: string): string[] {
+  const root = parse(html);
+  const all = descendants(root);
+  const panel = all.find(n => attr(n, "data-lesson-panel") === "teaching") ?? (all.find(n => n.tagName === "body") ?? all[0]);
+  if (!panel) return ["A tananyag HTML üres."];
+  const sections = descendants(panel).filter(n => attr(n, "data-teaching-section") !== undefined);
+  if (!sections.length) return ["A Tananyag panelben nincs data-teaching-section fejezet."];
+  return visualProblems(sections, panel);
 }

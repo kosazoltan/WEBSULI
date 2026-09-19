@@ -4,6 +4,7 @@ import { effortFor, resolveLegacyModel, resolveStudioModel, resolveWebResearchAu
 import { createStudioProvider, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
+import { verifyTeachingVisuals } from "../improve/verify-html-teaching";
 import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { hasHtmlLessonData, readRawHtmlLessonData } from "../../shared/lesson-html-data";
@@ -262,6 +263,9 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           } catch (error) {
             problems.push(error instanceof Error ? error.message : "A tanítás nem alakítható Lessonné.");
           }
+          // Spec 2026-09-19: the publication gate's visual rule, checked here so a missing
+          // chapter visual is repaired now and not discovered after the bank is built.
+          problems.push(...verifyTeachingVisuals(produced));
         }
         if (!problems.length) return produced;
         const reason = problems.join("; ");

@@ -150,3 +150,35 @@ test("inline markup spacing before punctuation does not invalidate an otherwise 
   assert.doesNotThrow(() => validateReviewGrounding({ checks: [], issues: [issue] }, marked, [source]));
   assert.throws(() => validateReviewGrounding({ checks: [], issues: [{ ...issue, lessonQuote: "A szorzat; majd annak fele." }] }, marked, [source]), /nem található/);
 });
+
+/* ------------------------------------------------------------------------- *
+ * Spec 2026-09-19 — verifyTeachingVisuals: ugyanaz a szemléltetés-kapu a szerzői
+ * HTML-en, a bankgyártás ELŐTT. Az első eset a valódi éles webes futás
+ * (0aa2435b) fejezete: feliratozott nyilas lépéssor, rövid, címke nélküli
+ * lépésekkel — a kapu joggal utasítja el, a szerző most a bank előtt kapja meg.
+ * ------------------------------------------------------------------------- */
+
+import { verifyTeachingVisuals } from "../server/improve/verify-html-teaching";
+
+const chapter = (visual: string, index = 0) => `<section data-teaching-section="${index}" data-teaching-concepts="humusz"><h2>A humusz</h2>
+<div data-teaching-explanation>A humusz az elhalt élőlények lebomlásából keletkező, tápanyagban gazdag sötét anyag a talajban.</div>
+<div data-teaching-example>Egy avarral borított erdőtalajban évről évre vastagszik a humuszréteg.</div>
+<div data-teaching-summary>A humusz a talaj termékenységének kulcsa.</div>${visual}</section>`;
+const page = (body: string) => `<!doctype html><html><body><main data-lesson-panel="teaching">${body}</main></body></html>`;
+
+const productionFlow = `<figure class="tg-visual" data-teaching-visual><div class="tg-flow"><div>Elhalt növények és kiválasztott anyagok</div><span class="tg-arrow">→</span><div>Mikroorganizmusok közreműködése</div><span class="tg-arrow">→</span><div>Humusz</div></div><figcaption>A humusz kialakulásának leegyszerűsített folyamata a talajban.</figcaption></figure>`;
+const labelledCards = `<figure data-teaching-visual><div><div><b>Lebomlás</b> Az elhalt növényi részeket baktériumok és gombák bontják le.</div><div><b>Humusz</b> A lebomlásból sötét, tápanyagban gazdag anyag keletkezik.</div></div><figcaption>A humuszképződés két lépése a talajban élő szervezetek munkájával.</figcaption></figure>`;
+const svgFigure = `<figure data-teaching-visual><svg viewBox="0 0 100 40"><rect width="100" height="40"/></svg><figcaption>Talajszelvény: az A-szint a humuszban leggazdagabb réteg.</figcaption></figure>`;
+
+test("verifyTeachingVisuals: az éles címke nélküli nyilas lépéssor hibát ad, a címkés kártyasor és az SVG átmegy", () => {
+  assert.match(verifyTeachingVisuals(page(chapter(productionFlow))).join("; "), /1\. fejezet: hiányzó tanítási szemléltetés/);
+  assert.deepEqual(verifyTeachingVisuals(page(chapter(labelledCards))), []);
+  assert.deepEqual(verifyTeachingVisuals(page(chapter(svgFigure))), []);
+  assert.deepEqual(verifyTeachingVisuals(page(chapter(svgFigure, 0) + chapter(labelledCards, 1))), []);
+  assert.match(verifyTeachingVisuals(page(chapter(svgFigure, 0) + chapter(productionFlow, 1))).join("; "), /2\. fejezet/);
+});
+
+test("verifyTeachingVisuals: fejezet nélküli vagy üres HTML nem számít átment szemléltetésnek", () => {
+  assert.ok(verifyTeachingVisuals(page("<p>nincs fejezet</p>")).length);
+  assert.ok(verifyTeachingVisuals("").length);
+});
