@@ -5,7 +5,7 @@ import { experienceSchema, experienceTheme, publicationBankProblems, METHOD_KIND
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
-import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint, PACKET_ATTEMPTS } from "../server/studio/experience-builder";
+import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, RetryableBankCallError } from "../server/studio/experience-builder";
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
 import { planLessonBank, bankUnitQuota } from "../shared/lesson-bank-plan";
 
@@ -161,9 +161,40 @@ test("compact bank enforces every taught concept, intent, oral/written mode and 
 });
 test("bad bank gets a targeted retry then fails closed", async () => {
   let calls = 0;
-  await assert.rejects(buildLessonExperience(fusionFixture(), [], { call: async (_system, user) => { if (++calls === 2) assert.match(user, /előző válasz hibái/); return {}; } }), /javító kör után/);
-  // Spec 2026-09-19: initial + two repairs per packet, then fail closed.
-  assert.equal(calls, PACKET_ATTEMPTS);
+  const attempts: number[] = [];
+  await assert.rejects(buildLessonExperience(fusionFixture(), [], { call: async (_system, user, attempt) => { attempts.push(attempt); if (++calls === 2) assert.match(user, /előző válasz hibái/); return {}; } }), /javító kör után/);
+  // Spec 2026-09-19: initial + two repairs per packet on the cheap model, then ONE rescue attempt
+  // (the caller routes attempt === PACKET_ATTEMPTS to the strong model), then fail closed.
+  assert.equal(calls, PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS);
+  assert.deepEqual(attempts, [0, 1, 2, PACKET_ATTEMPTS]);
+});
+
+test("mért hiba 2026-09-19 (run 45233b4b): a szolgáltatói/hossz-hiba bukott kísérlet, nem a futás vége", async () => {
+  const lesson = standardFusionFixture(), e = lesson.experience!;
+  const attempts: number[] = [];
+  const result = await buildLessonExperience(lesson, [], { call: async (_s, user, attempt) => {
+    attempts.push(attempt);
+    if (attempt === 0) throw new RetryableBankCallError("a válasz elérte a hosszkorlátot; csonka eredmény nem használható");
+    assert.match(user, /A modellhívás hibázott: .*hosszkorlát/);
+    return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+  } });
+  assert.deepEqual(attempts, [0, 1]);
+  assert.equal(result.tasks.length, e.tasks.length);
+  // Every attempt fails on model output → fail closed with the last cause attached.
+  await assert.rejects(buildLessonExperience(lesson, [], { call: async () => { throw new RetryableBankCallError("csonka"); } }),
+    (err: unknown) => err instanceof Error && /javító kör után/.test(err.message) && err.cause instanceof RetryableBankCallError);
+  // A provider outage is NOT retried: it propagates unchanged (explicit bank resume handles it).
+  let calls = 0;
+  await assert.rejects(buildLessonExperience(lesson, [], { call: async () => { calls++; throw new Error("[xAI] Request timed out"); } }), /Request timed out/);
+  assert.equal(calls, 1);
+});
+
+test("spec 2026-09-19: a mentőkör (attempt === PACKET_ATTEMPTS) érvényes csomagja elfogadott", async () => {
+  const lesson = standardFusionFixture(), e = lesson.experience!;
+  const attempts: number[] = [];
+  const result = await buildLessonExperience(lesson, [], { call: async (_s, _u, attempt) => { attempts.push(attempt); return attempt < PACKET_ATTEMPTS ? {} : { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }; } });
+  assert.deepEqual(attempts, [0, 1, 2, 3]);
+  assert.equal(result.tasks.length, e.tasks.length);
 });
 
 test("spec 2026-09-19: a harmadik kísérletre érvényes csomag elkészül, a második bukása nem állítja meg", async () => {
@@ -284,7 +315,8 @@ test("a partial repair still fails closed on invalid concept, answer or unchange
       call: async () => ++calls === 1 ? { methods: e.methods, tasks, quiz: e.quiz, glossary: [] } : repair,
       save: async () => { saves++; },
     }), /javító kör után/);
-    assert.equal(calls, PACKET_ATTEMPTS); assert.equal(saves, 0);
+    // Spec 2026-09-19: cheap-model attempts + one rescue attempt, all failing closed.
+    assert.equal(calls, PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS); assert.equal(saves, 0);
   }
 });
 

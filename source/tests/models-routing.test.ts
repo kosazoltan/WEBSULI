@@ -27,13 +27,25 @@ test("every studio step has a default model", () => {
   for (const step of STUDIO_STEPS) {
     const model = resolveStudioModel(step, {});
     assert.ok(model && model.length > 0, `no default for step ${step}`);
-    assert.equal(providerForModel(model), step === "ocr" ? "openrouter" : ["pedagogue", "lektor"].includes(step) ? "xai" : "openai");
+    // Spec 2026-09-19 (modellmátrix): vendor per step.
+    const expected: Record<string, string> = {
+      extract: "openai", ocr: "openrouter", pedagogue: "anthropic", author: "openai",
+      animator: "openrouter", bank: "openrouter", lektor: "xai", gateHelper: "openrouter", quizPolish: "openrouter",
+    };
+    assert.equal(providerForModel(model), expected[step], step);
   }
 });
 
-test("the animator runs on GPT-5.6 Terra (2026-09-09: qwen3.8-flash 429 on OpenRouter), Grok 4.6 fallback", () => {
-  assert.equal(resolveStudioModel("animator", {}), "gpt-5.6-terra");
-  assert.equal(FALLBACK_MODELS.animator, "grok-4.6");
+test("spec 2026-09-19: bank és ábrák glm-5.3-flash-en, deepseek tartalékkal; a tervkészítő Opus 5 közvetlen Anthropicon", () => {
+  assert.equal(resolveStudioModel("animator", {}), "z-ai/glm-5.3-flash");
+  assert.equal(resolveStudioModel("bank", {}), "z-ai/glm-5.3-flash");
+  assert.equal(FALLBACK_MODELS.animator, "deepseek/deepseek-v4-flash");
+  assert.equal(FALLBACK_MODELS.bank, "deepseek/deepseek-v4-flash");
+  assert.equal(resolveStudioModel("pedagogue", {}), "claude-opus-5");
+  assert.equal(providerForModel("claude-opus-5"), "anthropic");
+  assert.equal(FALLBACK_MODELS.pedagogue, "grok-4.6");
+  assert.equal(resolveStudioModel("gateHelper", {}), "deepseek/deepseek-v4-flash");
+  assert.equal(resolveStudioModel("quizPolish", {}), "deepseek/deepseek-v4-flash");
 });
 
 test("no default model is a local Ollama tag", () => {

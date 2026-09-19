@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
-import { FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { BANK_RESCUE_MODEL, FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -46,13 +46,15 @@ import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
 import { stripUngroundedAnimateLabels } from "./grounding";
-import { ensureSectionVisuals } from "./section-visuals";
+import { ensureSectionVisuals, deterministicSectionVisuals, SECTION_VISUALS_TOOL } from "./section-visuals";
+import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, resolveBankReview, RetryableBankCallError, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { skilledPromptLookup } from "./role-skills";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
@@ -190,11 +192,12 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
     store: deps.store ?? (await createDrizzlePipelineStore()),
     providerFactory: deps.providerFactory ?? defaultProviderFactory,
     keyConfigured: deps.keyConfigured ?? studioModelReady,
-    promptLookup: async (name, fallback) => {
+    // Szerep-skill (2026-09-19): a DB-s felülírás és a beépített prompt is a szerep skilljével indul.
+    promptLookup: skilledPromptLookup(async (name, fallback) => {
       const configured = await lookup(name, fallback);
       if (configured === fallback) return fallback;
       return configured + "\n\nAktuális kötelező szerződés és forrásadatok (eltérésnél ez az irányadó):\n" + fallback;
-    },
+    }),
   };
 }
 
@@ -463,6 +466,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   const primaryModel = resolveStudioModel(job.step);
   let model = primaryModel;
   const reusedVisuals = job.step === "animator" && canReuseLessonVisuals(job.output?.lesson);
+  // Eszköz (2026-09-19): ha minden fejezet a saját példájából kap ábrát, nincs animátor-modellhívás.
+  const toolVisuals = job.step === "animator" && !reusedVisuals ? deterministicSectionVisuals(job.output?.lesson as Lesson | undefined, map.concepts) : null;
   let bankModelUsed: string | null = null;
 
   let json: unknown;
@@ -481,6 +486,11 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     if (reusedVisuals) {
       json = job.output?.lesson;
       usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    } else if (toolVisuals) {
+      json = toolVisuals;
+      usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      model = SECTION_VISUALS_TOOL;
+      logger.info(`[STUDIO] Ábrák eszközből, modellhívás nélkül (${job.id}): minden fejezetnek van ábrája.`);
     } else {
     let result: Awaited<ReturnType<typeof attempt>>;
     try {
@@ -542,6 +552,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   switch (job.step) {
     case "pedagogue": {
+      // Eszköz (2026-09-19): formai tisztítás kódból, hogy ne kelljen új tervkészítő-hívás.
+      const autofix = autofixOutline(json, map.concepts);
+      if (autofix.fixes.length) { logger.info(`[STUDIO] Vázlat eszközzel tisztítva (${job.id}): ${autofix.fixes.join("; ").slice(0, 400)}`); json = autofix.outline; }
       const parsed = outlineSchema.safeParse(json);
       if (!parsed.success) return fail(store, job, `A vázlat alakilag hibás: ${zodIssues(parsed.error)}`);
       const coverage = outlineCoversMap(parsed.data.sections, map.concepts);
@@ -655,7 +668,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // lesson at the gate after the round limit (measured: PDF run 3ed5ca90).
       // Spec 2026-09-19: a chapter without a figure gets its worked example as a process
       // visual before the label check below (the lektor blocks figure-less chapters).
-      const visuals = ensureSectionVisuals(outcome.lesson);
+      const visuals = ensureSectionVisuals(outcome.lesson, map.concepts);
       if (visuals.added.length) {
         logger.info(`[STUDIO] Fejezeti ábra pótolva a példa lépéseiből (${job.id}): fejezet ${visuals.added.map((i) => i + 1).join(", ")}`);
       }
@@ -673,12 +686,30 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             checkpoint,
             previous: original.experience,
             reviewFeedback: bankReview?.feedback,
-            call: async (bankSystem, user) => {
-              const bankModel = resolveStudioModel("author");
+            onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
+            call: async (bankSystem, user, attempt) => {
+              // Spec 2026-09-19: the bank is its own cheap role; after PACKET_ATTEMPTS failed
+              // attempts the packet is rebuilt once on the strong rescue model.
+              // attempt 0..PACKET_ATTEMPTS-2: primary; PACKET_ATTEMPTS-1: FALLBACK_MODELS.bank (other
+              // cheap family — a provider/length failure on the primary must not repeat on it);
+              // attempt PACKET_ATTEMPTS: rescue on the strong model.
+              const bankModel = attempt >= PACKET_ATTEMPTS ? BANK_RESCUE_MODEL
+                : attempt === PACKET_ATTEMPTS - 1 ? (FALLBACK_MODELS.bank ?? resolveStudioModel("bank"))
+                : resolveStudioModel("bank");
               bankModelUsed = bankModel;
+              if (!keyConfigured(bankModel)) throw new Error(`${NO_OPENROUTER_KEY_MESSAGE} Hiányzó kulcs: ${keyNameForModel(bankModel)}.`);
+              if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[STUDIO] Bankcsomag ${attempt >= PACKET_ATTEMPTS ? "mentőkör" : "tartalék modell"}: ${bankModel} (${job.id}), ${attempt} bukott kísérlet után.`);
               // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
               if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
-              const result = await callStepModel(providerFactory(bankModel), { step: "author", model: bankModel, system: bankSystem, user });
+              let result: Awaited<ReturnType<typeof callStepModel>>;
+              try {
+                result = await callStepModel(providerFactory(bankModel, attempt >= PACKET_ATTEMPTS ? "author" : "bank"), { step: "animator", model: bankModel, system: bankSystem, user });
+              } catch (error) {
+                // Model-output failure (length limit / empty / not JSON: no provider cause) → next attempt
+                // on the next model. Provider failure keeps its cause and fails the job once (resume path).
+                if (error instanceof StepModelError && !error.cause) throw new RetryableBankCallError(`${bankModel}: ${error.message}`, { cause: error });
+                throw error;
+              }
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
             },

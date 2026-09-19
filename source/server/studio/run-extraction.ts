@@ -22,6 +22,7 @@ import { attachSourceTranscripts, repairSourceQuotes, TRANSCRIPT_CONTRACT } from
 import { scopeContentParts } from "./one-step";
 import { normalizeDocumentSources } from "./document-source";
 import type { ScopeClassification } from "../../shared/source-classification";
+import { withRoleSkill } from "./role-skills";
 
 /**
  * The paid half of extraction: call the vision model, then persist a reviewable map.
@@ -88,7 +89,8 @@ type RunInput = {
 type ExtractionConfig = { model: string; ocrModel: string; systemPrompt: string; ocrPrompt: string; provider: string; cacheKeyPrompt: string };
 /** Resolve once before cache lookup, then use this exact snapshot for the paid call. */
 export async function loadExtractionConfig(): Promise<ExtractionConfig> {
-  const basePrompt = (await promptStore.get(EXTRACTOR_PROMPT_NAME, FALLBACK_PROMPT)) +
+  // Szerep-skill (2026-09-19) a prompt elején; a cache-kulcs része, mert stabil telepítésenként.
+  const basePrompt = withRoleSkill("extract", await promptStore.get(EXTRACTOR_PROMPT_NAME, FALLBACK_PROMPT)) +
     "\nAktuális kivonatolási szerződés: kapcsolati gráfot és relatedIds listát ne készíts. A forrás pontos fogalmai, idézetei és forráshelyei szükségesek. A későbbi tanítás ezeket közvetlenül használja.\n" + TRANSCRIPT_CONTRACT;
   return {
     model: resolveStudioModel("extract"), ocrModel: resolveStudioModel("ocr"), ocrPrompt: OCR_SYSTEM_PROMPT,

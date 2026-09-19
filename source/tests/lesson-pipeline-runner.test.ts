@@ -18,6 +18,7 @@ import {
 import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
 import { computeStepHash, MAX_AUTHOR_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
+import { withRoleSkill } from "../server/studio/role-skills";
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
@@ -93,6 +94,27 @@ test("bank resume reaches the provider with a new request while keeping teaching
   assert.equal(messages.length, 1);
   assert.match(String(messages[0][1].content), /Explicit bankfolytatás: 2/);
   assert.deepEqual(deps.store.jobs.get("bank-fresh")!.output, saved);
+});
+
+test("mért hiba 2026-09-19 (run 45233b4b): hosszkorlátos bankválasz után a következő kísérlet fut, nem hal meg a lépés", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const e = lesson.experience!;
+  const teaching = { ...lesson, experience: undefined };
+  deps.store.seed({ id: "bank-length", mapId: "m1", step: "animator", status: "pending", output: { lesson: teaching, methodVersion: "fusion-7.4-4" } });
+  const models: string[] = [];
+  deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+    chat: async () => {
+      models.push(model);
+      if (models.length === 1) return { content: '{"methods":[', finishReason: "length", usage: { promptTokens: 1, completionTokens: 24000, totalTokens: 24001 } };
+      return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
+    },
+  } as unknown as IAIProvider);
+  const result = await runPipelineStep("bank-length", deps);
+  assert.equal(result.ok, true, JSON.stringify(deps.store.jobs.get("bank-length")!.error));
+  assert.equal(models.length, 2, "a csonka válasz után egy új kísérlet");
+  assert.equal(models[0], resolveStudioModel("bank"));
+  assert.ok((deps.store.jobs.get("bank-length")!.output as { lesson: { experience?: unknown } }).lesson.experience, "a bank elkészült");
 });
 
 test("bank provider failure preserves its cause and the saved teaching without publication", async () => {
@@ -763,7 +785,8 @@ test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async
   assert.equal(job?.status, "ok");
   assert.equal(job?.inputHash, computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, {
     input: { map: MAP_META, concepts: MAP_CONCEPTS },
-    system: buildPedagoguePrompt({title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom, concepts: MAP_CONCEPTS}),
+    // Szerep-skill (2026-09-19): az effektív prompt a pedagógus skilljével indul, a hash ezt is rögzíti.
+    system: withRoleSkill("pedagogue", buildPedagoguePrompt({title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom, concepts: MAP_CONCEPTS})),
   }, 0), "a vázlat hash-e a bemenetet és az effektív promptot is rögzíti");
   assert.deepEqual(job?.output?.outline, GOOD_OUTLINE);
 
@@ -1209,6 +1232,21 @@ test("(m) modellhiba: az elsődleges modell 429-e után a lépés a FALLBACK_MOD
   const job = await store.loadJob("job-1");
   assert.equal(job?.status, "ok");
   assert.equal((job as { model?: string | null })?.model, fallback, "a job a ténylegesen használt modellt rögzíti");
+});
+
+test("(n2) eszköz 2026-09-19: ha minden fejezet a példájából kap ábrát, az animátor nem hív modellt", async () => {
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({ failModels: new Set(), cannedResponse: "{}" });
+  const withExample = { ...GOOD_LESSON, sections: [{ ...GOOD_LESSON.sections[0], blocks: [...GOOD_LESSON.sections[0].blocks,
+    { kind: "example", problem: "2+3·4", steps: ["3·4=12", "2+12=14"], answer: "14", coversConceptIds: ["c1"] }] }] };
+  store.seed({ id: "job-1", mapId: "m1", step: "animator", status: "running", output: { lesson: withExample } });
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+  assert.equal(outcome.ok, true);
+  assert.deepEqual(calls, [], "nincs modellhívás");
+  const job = await store.loadJob("job-1");
+  assert.equal((job as { model?: string | null })?.model, "tool:section-visuals");
+  const lesson = job?.output?.lesson as typeof withExample;
+  assert.ok(lesson.sections[0].blocks.some(b => b.kind === "animate"), "a példából process ábra készült, és a címke-őr nem dobta el");
+  assert.equal((job as { tokensIn?: number | null } | null)?.tokensIn, 0);
 });
 
 test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az eredeti lecke megy tovább a lektorra", async () => {

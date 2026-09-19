@@ -17,11 +17,14 @@ export class ClaudeProvider implements IAIProvider {
   private client: Anthropic;
   private timeout: number;
   private maxTokens: number;
+  /** Spec 2026-09-19: adaptive thinking + `output_config.effort` (Opus 5 planner runs at medium). */
+  private reasoningEffort?: AIProviderConfig['reasoningEffort'];
 
   constructor(config: AIProviderConfig) {
     this.model = config.model;
     this.timeout = config.timeout || 60000; // Default 60s
     this.maxTokens = config.maxTokens || 4096;
+    this.reasoningEffort = config.reasoningEffort;
     this.client = new Anthropic({
       apiKey: config.apiKey,
       timeout: this.timeout,
@@ -43,11 +46,16 @@ export class ClaudeProvider implements IAIProvider {
             role: msg.role as 'user' | 'assistant',
             content: msg.content,
           })),
+          // Spec 2026-09-19: Claude 4.6+/5 — adaptive thinking, depth via output_config.effort.
+          ...(this.reasoningEffort
+            ? { thinking: { type: 'adaptive' as const }, output_config: { effort: this.reasoningEffort } }
+            : {}),
         },
         { signal }
       );
 
-      const content = response.content[0];
+      // With thinking on, the first block may be a thinking block — take the text block.
+      const content = response.content.find(block => block.type === 'text');
       if (!content || content.type !== 'text') {
         throw new AIProviderError(this.name, 'No text response from API');
       }

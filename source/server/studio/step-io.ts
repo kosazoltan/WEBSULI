@@ -41,8 +41,18 @@ export const outlineSectionSchema = z.object({
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
 
+/** Spec 2026-09-19 §5: the planner's hard ceiling — more chapters means more author/bank rounds, not more learning. */
+export const OUTLINE_MAX_SECTIONS = 12;
+
 export const outlineSchema = z.object({
-  sections: z.array(outlineSectionSchema).min(1),
+  sections: z
+    .array(outlineSectionSchema)
+    .min(1)
+    .max(OUTLINE_MAX_SECTIONS, { message: `Legfeljebb ${OUTLINE_MAX_SECTIONS} fejezet tervezhető.` })
+    .refine(
+      (sections) => new Set(sections.map((s) => s.heading.trim().toLocaleLowerCase("hu"))).size === sections.length,
+      { message: "A fejezetcímek nem ismétlődhetnek." },
+    ),
   misconceptions: z
     .array(z.object({ conceptId: id(), text: z.string().trim().min(1).max(1000) }))
     .default([]),
@@ -160,7 +170,19 @@ function mapJson(map: PromptMap): string {
 /** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
 export function buildPedagoguePrompt(map: PromptMap): string {
   return [
-    "Te vagy a pedagógus. A kurált fogalomtérképből készíts lecke-vázlatot.",
+    "Te vagy a pedagógus (tervkészítő). A kurált fogalomtérképből készíts lecke-vázlatot: ez a terv szabja meg a szerző, az ábrakészítő és a lektor munkáját, ezért pontos, tömör és teljes legyen.",
+    "",
+    // Spec 2026-09-19 §5 — guardrails the code also enforces (outlineSchema, outlineCoversMap).
+    "TILALMAK (a program ellenőrzi, megszegésük a terv elutasítását jelenti):",
+    "- Kizárólag a lenti térképen szereplő fogalom-azonosítókat (localId) használd; nem létező, átírt vagy kitalált azonosító tilos.",
+    `- Legfeljebb ${OUTLINE_MAX_SECTIONS} fejezet. Minden fejezetben legalább egy fogalom (conceptIds nem üres).`,
+    "- A fejezetcímek egyediek; ugyanaz a fogalom ne kapjon két fejezetet.",
+    "- A misconceptions minden eleme létező conceptId-hoz kötődjön, és csak a forrás tartalmából levezethető tévhit legyen.",
+    "- A forrás adatait (számok, definíciók, feladatok) nem találod ki, nem egészíted ki és nem „javítod”; ha valami hiányzik a térképről, azt nem tervezed be.",
+    "- Az animationSuggestions elemei legfeljebb 120 karakteresek, konkrét, a fejezet tanításából rajzolható ábrát neveznek meg.",
+    "- Semmi próza, magyarázat, kódblokk-jelölés vagy bevezető: a válasz kizárólag az előírt JSON.",
+    "",
+    "A körpazarlás elkerülése: fejezetenként add meg a tanítási sorrendet (explain → example lépésekkel → check), az ábra fajtáját és a forrás melyik feladata tartozik oda — így a szerzőnek nem kell szerkezetet kitalálnia, a lektor pedig ehhez a tervhez mér.",
     "",
     "Követelmények:",
     "- Minden `core` fogalom és legalább 90%-a a `supporting` fogalmaknak szerepeljen a vázlat valamelyik szakaszában (conceptIds).",
