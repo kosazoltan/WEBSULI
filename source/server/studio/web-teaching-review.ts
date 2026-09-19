@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { LESSON_QUALITY_CONTRACT } from "../../shared/lesson-quality";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { callStepModel } from "./run-step";
-import { createStudioProvider } from "../ai/studio-provider";
-import { resolveStudioModel, providerForModel } from "../ai/models";
+import { createStudioStepProvider } from "../ai/studio-provider";
+import { resolveStudioModel } from "../ai/models";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { workflowValidationFailure } from "../workflows/engine";
 
@@ -121,10 +121,7 @@ export function assertTeachingReviewEvidence(html: string, sources: { url: strin
 }
 export const callTeachingReviewer = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("lektor");
-  // Full source sets plus per-issue evidence need more time than the former five booleans.
-  const deadline = AbortSignal.timeout(480_000);
-  const options = providerForModel(model) === "xai" ? { apiMode: "responses" as const, reasoningEffort: "low" as const } : {};
-  return (await callStepModel(createStudioProvider(model, 480_000, 12_000, options), { step: "lektor", model, system, user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
+  return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", model, system, user }, signal)).json;
 };
 export async function reviewWebTeaching(html: string, sources: FetchedTeachingSource[], call = callTeachingReviewer, signal?: AbortSignal, requestedTopic = "", challenge = false): Promise<TeachingReview> {
   if (!sources.length) throw new Error("A tartalmi lektorhoz nincs letöltött forrásszöveg; a keresési találat önmagában nem elegendő.");
@@ -148,7 +145,7 @@ Kimenet kizárólag JSON: {"checks":[{"criterion":"${TEACHING_REVIEW_CHECKS.join
     signal?.throwIfAborted();
     try {
       const review = teachingReviewSchema.parse(raw);
-      validateReviewGrounding(review, html, sources);
+      validateReviewGrounding(review, html, sources, requestedTopic);
       if (!challenge && review.checks.every(c => c.passed)) return reviewWebTeaching(html, sources, call, signal, requestedTopic, true);
       return review;
     } catch (error) {

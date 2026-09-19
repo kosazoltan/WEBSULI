@@ -1,10 +1,9 @@
-import { publicationBankProblems } from "../../shared/lesson-experience";
 import { and, eq, ne } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
 import { FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
-import { createStudioProvider, studioModelReady } from "../ai/studio-provider";
+import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
@@ -50,8 +49,9 @@ import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesso
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure } from "../workflows/engine";
+import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
+import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -167,7 +167,7 @@ export type PipelineStore = {
 
 export type PipelineDeps = {
   store?: PipelineStore;
-  providerFactory?: (model: string) => IAIProvider;
+  providerFactory?: (model: string, step?: string) => IAIProvider;
   keyConfigured?: (model: string) => boolean;
   /** Prompt lookup by name with an inline fallback; defaults to studioPromptStore. */
   promptLookup?: (name: string, fallback: string) => Promise<string>;
@@ -193,8 +193,42 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
   };
 }
 
-const defaultProviderFactory = (model: string): IAIProvider =>
-  createStudioProvider(model);
+const defaultProviderFactory = createStudioStepProvider;
+
+/** The caller supplies a fresh owner-scoped visit only after claiming the workflow. */
+export async function retryFailedBankBuild(jobId: string, visit: { step: string; state: string; error?: string } | undefined, deps: PipelineDeps = {}): Promise<void> {
+  const { store } = await resolveDeps(deps);
+  const job = await store.loadJob(jobId);
+  if (!job) throw new Error("A job nem található.");
+  if (job.step !== "error") return;
+  if (visit?.step !== "animator" || visit.state !== "error" || visit.error !== redactWorkflowError(new Error(job.error ?? ""))
+    || job.status !== "error" || !job.lessonId || !job.output?.lesson || job.output.htmlFileId
+    || !(/^A \d+\. fejezet bankcsomagja a javító kör után sem megfelelő:/.test(job.error ?? "")
+      || job.error?.startsWith('A(z) "author" lépés modellhívása hibára futott:'))) {
+    throw new Error("Csak naplóval igazolt, mentett és még nem publikált bankgyártási hiba folytatható.");
+  }
+  const priorAttempt = job.output.bankRecoveryAttempt;
+  if (priorAttempt !== undefined && (typeof priorAttempt !== "number" || !Number.isSafeInteger(priorAttempt) || priorAttempt < 0 || priorAttempt >= Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Érvénytelen bankfolytatási sorszám.");
+  }
+  await store.saveStep(jobId, { step: "animator", status: "pending", error: null, finishedAt: null,
+    output: { ...job.output, previousBankError: job.error, bankRecoveryAttempt: (priorAttempt ?? 0) + 1 } });
+}
+
+/** Called only by explicit resume inside the owner-checked workflow lease. */
+export async function retryTimedOutLektor(jobId: string, deps: PipelineDeps = {}): Promise<void> {
+  const { store } = await resolveDeps(deps);
+  const job = await store.loadJob(jobId);
+  if (!job) throw new Error("A job nem található.");
+  if (job.step !== "error") return;
+  if (job.status !== "error" || !job.output?.lesson || !job.lessonId
+    || !job.error?.startsWith('A(z) "lektor" lépés modellhívása hibára futott:')
+    || !/timed out|timeout/i.test(job.error)) {
+    throw new Error("Csak mentett tananyagos lektor-időtúllépés folytatható újragyártás nélkül.");
+  }
+  await store.saveStep(jobId, { step: "lektor", status: "pending", error: null, finishedAt: null,
+    output: { ...job.output, previousLektorError: job.error } });
+}
 
 function normalizeStep(raw: string): StudioStep {
   return (STUDIO_STEPS as readonly string[]).includes(raw) ? (raw as StudioStep) : "error";
@@ -430,7 +464,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   // az eredeti lecke megy tovább a lektorra — a gyártás nem áll meg.
   let animatorModelFailure: string | null = null;
   const attempt = (m: string) =>
-    callStepModel(providerFactory(m), {
+    callStepModel(providerFactory(m, job.step), {
       step: job.step,
       model: m,
       system,
@@ -615,6 +649,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             call: async (bankSystem, user) => {
               const bankModel = resolveStudioModel("author");
               bankModelUsed = bankModel;
+              // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
+              if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
               const result = await callStepModel(providerFactory(bankModel), { step: "author", model: bankModel, system: bankSystem, user });
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
@@ -626,7 +662,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           });
           completedLesson = { ...completedLesson, experience };
         } catch (error) {
-          return fail(store, job, error instanceof Error ? error.message : "A feladatbank gyártása sikertelen.");
+          return fail(store, job, describeStepError(error));
         }
       }
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, completedLesson);
@@ -685,6 +721,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           ...job.output,
           report: parsed.data,
           reportRound: job.round,
+          reviewInputHash: computeStepHash("lektor", "skill-7.4-review-1", input, job.round),
           blockers,
           ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
         }),
@@ -719,10 +756,12 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
 
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
+  const skill74 = isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience
+    ? verifyLessonSkillBank(parsed.data.experience, parsed.data.subject) : undefined;
   // Missing experience is a hard failure, including after the autonomous round limit.
   if (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience) {
-    const problems = [...experienceProblems(parsed.data), ...(parsed.data.experience ? publicationBankProblems(parsed.data.experience) : [])];
-    if (problems.length) return fail(store, job, `A fúziós módszer kapuja elutasította a leckét: ${problems.join("; ")}`);
+    const problems = [...experienceProblems(parsed.data), ...(skill74?.problems ?? [])];
+    if (problems.length) return fail(store, job, `A fúziós módszer kapuja elutasította a leckét: ${problems.join("; ")}`, { ...job.output, skill74 });
   }
 
   // M-2 (2026-09-07) — a DIDAKTIKAI ÍV kapuja a fedettségi kapu mellé.
@@ -737,6 +776,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   const reasons = [...coverageGate.reasons, ...arc.reasons];
   const gate = { ...coverageGate, ok: coverageGate.ok && arc.ok, reasons };
   const gateOutput = {
+    ...(skill74 ? { skill74 } : {}),
     ok: gate.ok,
     reasons: gate.reasons,
     missingCore: gate.missingCore,
@@ -779,6 +819,17 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
     logger.warn(
       `[STUDIO/GATE] A kapu hiányt mért, de az autonóm futás publikál (job ${job.id}): ${gate.reasons.join(" ")}`,
     );
+  }
+
+  if (skill74) {
+    const report = lektorReportSchema.safeParse(job.output?.report);
+    const expectedReviewHash = computeStepHash("lektor", "skill-7.4-review-1", {
+      lesson: rawLesson, map: mapInputOf(map), concepts: map.concepts,
+    }, job.round);
+    if (!report.success || classifyNotes(report.data.notes).some(note => note.blocking)
+      || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {
+      return fail(store, job, "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges.");
+    }
   }
 
   const published = await store.publishLesson({
@@ -1296,7 +1347,7 @@ export async function fixConceptOnLesson(
     const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");
-    const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel), { step: "lektor", model: lektorModel, system: buildLektorPrompt(candidate, source), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
+    const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel, "lektor"), { step: "lektor", model: lektorModel, system: buildLektorPrompt(candidate, source), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
     if (classifyNotes(report.notes).some(n => n.blocking)) return { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." };
     await workflowPhase("gate");
     assertRepairCandidate(original, candidate, source);

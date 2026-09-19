@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
   const doneFor = useRef<string | null>(null);
   const finished = data ? jobMonitorView(data.job, data.produced).finished : false;
   useEffect(() => {
+    if (!finished) doneFor.current = null;
     if (finished && data && onDone && doneFor.current !== jobId) {
       doneFor.current = jobId;
       onDone(data.job);
@@ -173,6 +174,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
 /** Retry button for a failed job — POST /jobs/:id/resume is input-hash idempotent. */
 function ResumeButton({ jobId }: { jobId: string }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
   // Local mutation state; a full useMutation here would need the toast anyway.
   const onResume = async () => {
@@ -180,6 +182,11 @@ function ResumeButton({ jobId }: { jobId: string }) {
     setPending(true);
     try {
       await apiRequest("POST", `/api/studio/jobs/${jobId}/resume`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/studio/jobs", jobId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/studio/workflows"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/studio/lessons/one-step"] }),
+      ]);
       toast({ title: "Újraindítás", description: "A gépsor tovább fut." });
     } catch (e) {
       toast({

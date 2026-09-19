@@ -1,4 +1,51 @@
 import { expect, test } from "@playwright/test";
+import { workflowDefinition } from "../shared/lesson-workflow";
+
+for (const width of [320, 1440]) {
+  test(`accepted resume refreshes a stopped job and follows its new failure ${width}`, async ({ page }) => {
+    let state = "error", error = "Korábbi bankhiba", posts = 0, reads = 0;
+    const errors: string[] = [];
+    page.on("pageerror", e => errors.push(e.message));
+    await page.addInitScript(() => {
+      sessionStorage.setItem("websuli.studio.jobId", "resume-test");
+      sessionStorage.setItem("websuli.studio.oneStepRunId", "upload-resume-test");
+    });
+    await page.route("**/api/**", route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/studio/lessons/one-step/upload-resume-test") return route.fulfill({ json: { phase: state === "running" ? "animator" : "error", detail: null, error, mapId: null, lessonId: null } });
+      if (path === "/api/studio/jobs/resume-test/resume") {
+        posts++; state = "running"; error = "";
+        return route.fulfill({ status: 202, json: { jobId: "resume-test" } });
+      }
+      if (path === "/api/studio/jobs/resume-test") {
+        reads++;
+        return route.fulfill({ json: { job: { id: "resume-test", step: state === "running" ? "animator" : "error", status: state, round: 1, error }, produced: { approvedOutline: true, lessonId: null } } });
+      }
+      if (path === "/api/studio/workflows/resume-test") return route.fulfill({ json: { run: { id: "resume-test", definition: workflowDefinition("studio"), state, error, revision: 1, createdAt: Date.now(), updatedAt: Date.now(), visits: [] } } });
+      return route.fulfill({ json: {} });
+    });
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/__studio-panel-probe");
+    const monitor = page.getByTestId("job-monitor");
+    await expect(monitor).toContainText("Korábbi bankhiba");
+    const initialReads = reads;
+    await monitor.getByRole("button", { name: "Újra", exact: true }).click();
+    await expect(monitor).toContainText("Dolgozik…");
+    await expect(monitor).not.toContainText("Korábbi bankhiba");
+    const progress = page.getByTestId("creation-progress");
+    await expect(progress).not.toContainText("Korábbi bankhiba");
+    await expect(progress.locator("[aria-current='step']")).toHaveText(/Tananyag készítése/);
+    expect(reads).toBeGreaterThan(initialReads);
+    state = "error"; error = "Új szolgáltatói hiba";
+    await expect(monitor).toContainText(error, { timeout: 8000 });
+    await expect(progress).toContainText(error, { timeout: 8000 });
+    await expect(monitor.getByRole("button", { name: "Újra", exact: true })).toBeEnabled();
+    expect(posts).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/studio-resume-${width}.png`, fullPage: true });
+    expect(errors).toEqual([]);
+  });
+}
 
 // Actual upload UI and polling; mocked transport, no production writes or paid AI.
 for (const [width, height] of [[390, 844], [844, 390], [1440, 900]]) {

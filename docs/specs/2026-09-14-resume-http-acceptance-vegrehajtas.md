@@ -1,0 +1,6 @@
+# Végrehajtás
+1. DB-független HTTP válaszhelper: accepted callback, 202 csak elfogadáskor; headersSent után kizárólag háttérhiba-jelzés.
+2. driveTracked opcionális onAccepted callback: kizárólag lease és beforeDrive után; progress betöltése/frissítése a feltöltött módnál. Route callbackjébe az új helper illeszkedjen. Nem indítunk második drive-ot és nem írjuk át a futó adatokat kézzel.
+3. JobMonitor ResumeButton: queryClient invalidation a tényleges job és WorkflowMonitor kulcsokon; onDone új futó ciklusban újra élesedjen.
+4. HTTP és Chrome regresszió, typecheck/lint/build, külön review. A most futó két gyártást csak olvasással követjük, új POST nélkül. Kód betöltése csak aktív munka nélkül.
+5. Review: DB-független guard a kiszökő drive-hiba mentésére; a valódi PipelineStore adapter a lease-en belül végzi az írást. Új teszt igazolja a pending/running/ok köztes job hibára zárását és a done/error megőrzését. Böngészőtesztbe egyidejű upload-run is kerüljön. Query prefix invalidálás, legacy done korai visszatérés.

@@ -33,6 +33,7 @@ export interface AIProviderConfig {
   maxTokens?: number;
   temperature?: number;
   timeout?: number; // milliseconds
+  maxRetries?: number;
   apiMode?: 'chat' | 'responses';
   reasoningEffort?: 'low' | 'medium' | 'high';
 }

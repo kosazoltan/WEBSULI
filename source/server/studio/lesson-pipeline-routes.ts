@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from "express";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne, notInArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
@@ -17,11 +17,14 @@ import { logger } from "../lib/logger";
 import { aggregateConceptResults } from "../rewards/aggregate";
 import {
   advanceJob,
+  createDrizzlePipelineStore,
   approveOutline,
   forceApproveOutline,
   retryOutlineRound,
   fixConceptOnLesson,
   runPipelineStep,
+  retryTimedOutLektor,
+  retryFailedBankBuild,
   startJobFromMap,
 } from "./step-runner";
 import { COUPON_GAME_IDS, conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
@@ -40,9 +43,10 @@ import {
 import { markOrphanedJobs } from "./orphan-jobs";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { htmlFiles } from "../../shared/schema";
+import { respondToResume, guardResumedDrive } from "./resume-response";
 
 /* ------------------------------------------------------------------ *
  * #168 — a futás-státusz DB-perzisztálása (Render-restart ellen).
@@ -212,6 +216,14 @@ async function drive(jobId: string): Promise<void> {
  * auto-approval goes through approveOutline() (coverage decides), lektor
  * untouched.
  */
+export async function recordOneStepFailure(runId: string, error: unknown): Promise<void> {
+  const current = await getRun(runId);
+  if (!current) return;
+  if (current.phase === "done" || current.phase === "parked" || current.phase === "error") return;
+  logger.error(`[STUDIO/1STEP] Váratlan hiba: ${error instanceof Error ? error.message : String(error)}`);
+  updateRun(runId, { phase: "error", error: "Váratlan hiba történt. Próbáld újra." });
+}
+
 lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Response) => {
   const parsed = parseOneStepRequest(req.body);
   if (!parsed.ok) {
@@ -223,8 +235,7 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
   // Fire-and-forget: the run loop reports through the progress store.
   void runOneStep(runId, parsed.data, userId).catch((error) => {
     if (error instanceof WorkflowWaiting) return;
-    logger.error(`[STUDIO/1STEP] Váratlan hiba: ${error instanceof Error ? error.message : String(error)}`);
-    updateRun(runId, { phase: "error", error: "Váratlan hiba történt. Próbáld újra." });
+    void recordOneStepFailure(runId, error);
   });
   res.status(202).json({ runId });
 });
@@ -530,25 +541,67 @@ export async function driveOneStep(runId: string, jobId: string): Promise<void> 
 }
 
 /** POST /api/studio/lessons/from-map/:mapId — start a new lesson pipeline. */
-async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: () => Promise<void>) {
+async function guardedDrive(jobId: string) {
+  const store = await createDrizzlePipelineStore();
+  return guardResumedDrive(jobId, {
+    loadJob: store.loadJob,
+    saveStep: async (id, patch) => {
+      await db.transaction(async tx => {
+        await workflowFence(tx);
+        await tx.update(studioJobs).set(patch).where(and(eq(studioJobs.id, id),
+          notInArray(studioJobs.step, ["done", "error"]), ne(studioJobs.status, "error")));
+        await workflowFence(tx);
+      });
+    },
+  }, () => drive(jobId));
+}
+
+async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void) {
   const id = (await workflowStore.related(jobId, owner)) ?? jobId;
   const previous = await workflowStore.read(id, owner);
   if (!start && !previous) {
     if (await workflowStore.exists(jobId)) throw new WorkflowConflict("A futás másik készítőhöz tartozik.");
     // Pre-release jobs have no invented workflow history.
     await beforeDrive?.();
-    return drive(jobId);
+    const store = await createDrizzlePipelineStore();
+    if ((await store.loadJob(jobId))?.step === "done") return;
+    onAccepted?.();
+    return guardedDrive(jobId);
   }
+  let drove = false;
   try {
-    await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start }, async () => {
-      await beforeDrive?.();
-      await drive(jobId);
+    const completed = await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start }, async () => {
+      if (beforeDrive) {
+        const current = await workflowStore.read(id, owner);
+        await beforeDrive(current?.view.visits.at(-1));
+      }
+      drove = true;
+      if (onAccepted && previous?.view.definition.mode === "upload") {
+        const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
+        await getRun(id);
+        updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
+      }
+      onAccepted?.();
+      await guardedDrive(jobId);
       const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
       if (job?.step === "done" && job.lessonId) return readPublishedLesson(job.lessonId);
       if (!job || job.step === "error" || job.status === "error") throw new Error(job?.error ?? "A készítés megállt.");
       throw new WorkflowWaiting("A tanulási terv jóváhagyására vár.", true);
     });
-  } catch (error) { if (!(error instanceof WorkflowWaiting)) throw error; }
+    if (completed.state === "done" && previous?.view.definition.mode === "upload") {
+      const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
+      await getRun(id);
+      updateRun(id, { phase: "done", lessonId: job.lessonId, error: null, detail: "A tananyag ellenőrizve, közzétéve és visszaolvasva." });
+    }
+  } catch (error) {
+    if (!(error instanceof WorkflowWaiting)) {
+      if (drove && previous?.view.definition.mode === "upload") {
+        await getRun(id);
+        updateRun(id, { phase: "error", error: error instanceof Error ? error.message : "A folytatás megállt." });
+      }
+      throw error;
+    }
+  }
 }
 
 lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: Response) => {
@@ -655,10 +708,14 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
     .limit(1);
   if (!exists) return res.status(404).json({ message: "A job nem található." });
 
-  try {
-    await driveTracked(req.params.id, req.user!.id);
-    res.json({ jobId: req.params.id });
-  } catch (error) { res.status(409).json({ message: error instanceof Error ? error.message : "A folytatás megállt." }); }
+  await respondToResume(res, req.params.id, accepted =>
+    driveTracked(req.params.id, req.user!.id, false, async visit => {
+      if (visit?.step !== "animator") return retryTimedOutLektor(req.params.id);
+      const [draft] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs)
+        .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, req.params.id));
+      if (!draft || draft.publishedAt) throw new WorkflowConflict("Csak meglévő, még nem publikált bankjelölt folytatható.");
+      await retryFailedBankBuild(req.params.id, visit);
+    }, accepted));
 });
 
 /* ------------------------------------------------------------------ *

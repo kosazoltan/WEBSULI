@@ -14,7 +14,11 @@ export type CspContext = {
   allowedOrigins: string[];
   isDevelopment: boolean;
   customDomain?: string;
+  devScriptNonce?: string;
 };
+
+// Only setupVite uses this placeholder; production HTML must not contain it.
+export const DEV_CSP_NONCE_PLACEHOLDER = "__WEBSULI_DEV_CSP_NONCE__";
 
 export function globalCspDirectives(ctx: CspContext): Record<string, string[]> {
   return {
@@ -45,13 +49,17 @@ export function globalCspDirectives(ctx: CspContext): Record<string, string[]> {
 
 /**
  * The lesson page profile: the runtime bundle is the only script, the lesson is
- * data. Nothing inline, nothing evaluated — this is the machine-checkable half
- * of "a lesson is not a program".
+ * data. Development permits only our nonce-authorized Vite bootstrap inline;
+ * production remains self-only. No event handlers or evaluated lesson code.
  */
 export function lessonCspDirectives(ctx: CspContext): Record<string, string[]> {
+  const nonce = ctx.isDevelopment ? ctx.devScriptNonce : undefined;
+  if (nonce !== undefined && !/^[A-Za-z0-9+/]{32}$/.test(nonce)) {
+    throw new Error("Invalid development CSP nonce");
+  }
   return {
     defaultSrc: ["'self'"],
-    scriptSrc: ["'self'"],
+    scriptSrc: ["'self'", ...(nonce ? [`'nonce-${nonce}'`] : [])],
     scriptSrcAttr: ["'none'"],
     styleSrc: ["'self'", "'unsafe-inline'"],
     fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],

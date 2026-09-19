@@ -755,6 +755,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return enforceOriginAllowlist(req, res, next);
     }
 
+    // Read-only public lookups for material-like status. They are fingerprint-based and
+    // intentionally non-mutating, so they must not be blocked by the synchroniser-token
+    // gate or by a stale/invalid browser token. The page loads these checks on every
+    // material card, and a 403 here breaks the normal list render. The Origin/Referer
+    // allowlist still applies (spec 2026-09-19): a foreign site gets no lookup either.
+    if (path === '/api/materials/likes/batch' || /^\/api\/materials\/[^/]+\/likes\/check$/.test(path)) {
+      return enforceOriginAllowlist(req, res, next);
+    }
+
     // Skip CSRF for AI endpoints (Enhanced Material Creator uses direct API calls)
     // These endpoints have their own authentication checks, but we still enforce Origin/Referer allowlist
     if (path.startsWith('/api/ai/') || path.startsWith('/api/admin/improve-material/') || path.startsWith('/api/admin/improved-files/')) {

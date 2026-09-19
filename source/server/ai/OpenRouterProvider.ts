@@ -77,6 +77,7 @@ export class OpenRouterProvider implements IAIProvider {
       apiKey: this.configured ? config.apiKey : 'not-configured',
       baseURL: OPENROUTER_BASE_URL,
       timeout: this.timeout,
+      ...(config.maxRetries !== undefined ? { maxRetries: config.maxRetries } : {}),
       defaultHeaders: openRouterHeaders(),
     });
   }

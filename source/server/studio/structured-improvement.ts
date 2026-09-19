@@ -1,4 +1,5 @@
 import { publicationBankProblems } from "../../shared/lesson-experience";
+import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { createHash } from "node:crypto";
 import { and, eq, ne, inArray } from "drizzle-orm";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
@@ -13,7 +14,7 @@ import { classifyNotes } from "./lektor";
 import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 import { callStepModel } from "./run-step";
-import { createStudioProvider } from "../ai/studio-provider";
+import { createStudioStepProvider } from "../ai/studio-provider";
 import { resolveStudioModel } from "../ai/models";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
@@ -36,7 +37,7 @@ export function assertRepairTeaching(original: Lesson, candidate: Lesson, source
 }
 export function assertRepairCandidate(original: Lesson, candidate: Lesson, source: RepairSource) {
   const coverage = assertRepairTeaching(original, candidate, source);
-  const problems = [...experienceProblems(candidate, candidate.experience), ...(candidate.experience ? publicationBankProblems(candidate.experience) : [])];
+  const problems = [...experienceProblems(candidate, candidate.experience), ...verifyLessonSkillBank(candidate.experience, candidate.subject).problems, ...(candidate.experience ? publicationBankProblems(candidate.experience) : [])];
   if (problems.length) throw new Error(`A javított lecke nem teljes: ${problems.join("; ")}`);
   return coverage;
 }
@@ -66,7 +67,7 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const source = await loadSource(row.mapId);
   const call = async (step: "author" | "lektor", system: string, user: string) => {
     const model = resolveStudioModel(step);
-    const provider = createStudioProvider(model);
+    const provider = createStudioStepProvider(model, step);
     return (await callStepModel(provider, { step, model, system, user })).json;
   };
   const { candidate, review } = await buildStructuredImprovement(original, source, call, instruction);

@@ -1,4 +1,5 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
+import { LESSON_SKILL_CHECK_RUNBOOK } from "./lesson-skill-checks";
 import { RUNTIME_KNOWLEDGE_VERSION, SKILL_RULES, skillMarkdown, type SkillSnapshot, type SkillLesson } from "./lesson-skill";
 import { WORKFLOW_MODES, workflowDefinition, type WorkflowMode } from "./lesson-workflow";
 
@@ -35,7 +36,7 @@ export function runtimeKnowledge(snapshot: SkillSnapshot, lessons: SkillLesson[]
     pendingInvestigation: cards.filter(card => card.column === "investigate").length,
     limitation: "A recovered érték hibamegfigyelést tartalmazó sikeres futásokat számol; nem bizonyítja a szabály hatását vagy a hibaarány csökkenését. Nincs automatikusan készre jelölt javítás.",
   };
-  const runbook = modes.map(mode => `## ${workflowDefinition(mode).label}\n\n${chain(mode)}`).join("\n\n") + `\n\n${recovery}\n${snapshot.runtimeVersion === RUNTIME_KNOWLEDGE_VERSION ? LESSON_QUALITY_CONTRACT : ""}`;
+  const runbook = modes.map(mode => `## ${workflowDefinition(mode).label}\n\n${chain(mode)}`).join("\n\n") + `\n\n${recovery}\n${snapshot.runtimeVersion === RUNTIME_KNOWLEDGE_VERSION ? LESSON_QUALITY_CONTRACT + "\n\n" + LESSON_SKILL_CHECK_RUNBOOK : ""}`;
   const memory = cards.length ? cards.map(card => `- ${card.code}: ${card.occurrences} megfigyelés; ${card.recovered} sikeres futás mellett; [bizonyíték](${card.evidence})`).join("\n") : "Még nincs mért futási tapasztalat.";
   const documents = {
     "SOUL.md": `# Websuli identitás\n\n${soul}`,

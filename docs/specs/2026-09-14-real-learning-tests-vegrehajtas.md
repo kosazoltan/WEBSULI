@@ -1,0 +1,18 @@
+# Végrehajtás — valódi tesztek
+
+1. Olvasd a társ-specet, auth.ts normál login/logout, practice-router.ts, lesson-attempts.ts, SavedLessonQuiz.tsx és schema.ts érintett tábláit. Titkot ne olvass ki kimenetbe.
+2. Futtasd a source mappában npm.cmd run test:learning-db parancsot. Elvárt: valós PostgreSQL17 tesztek PASS és saját konténer eltávolítva. Bukásnál ne gyengíts tesztet.
+3. Helyi futtatóban explicit DEV guard, read-only forrásmentés, QA-clone és nem admin user seed. Normál HTTP-login és CSRF, Chrome-ban valódi URL; nincs route.fulfill, auth fixture vagy API-mock.
+4. Végezd el a társ-spec 2–7 elfogadását. Minden válasz network200 és SQL-visszaolvasás ellenőrzése. Offline csak a saját böngészőcontextben, végül vissza online.
+5. Ments titokmentes manifestet és eredményösszesítőt, a tanári riportot a meglévő admin böngészősessionből kérd le és vesd össze a DB-méréssel.
+6. Külön cleanup mód csak a manifest saját id-it törölje tranzakciósan; user QA-jelleg, clone alap-hash, eredeti lecke változatlanság ellenőrzés. Hiányos/idegen manifest esetén fail-closed.
+7. Rögzíts pontos PASS/FAIL/NOT RUN kimenetet a társ-specben; valós hálózatkimaradás nem szimulált szerver503, Google OAuth és éles üzem nem tesztelt. Ellenőrizd a diffet és frissítsd a memóriát.
+
+8. A DEV guard megállása után kizárólag eldobható localhost adatbázis engedett. Készíts harness-t: publikus source-readback → PostgreSQL17 saját konténer → schema export → read-only forrás másolat seed → teljes server/index.ts külön porton, whitelist környezet és üres dotenv → valódi tesztfuttató → normál tanári fixture login és report → saját cleanup → szerver és konténer leállítása. A távoli DATABASE_URL-t ne használd írásra.
+
+## Folytatas vegrehajtasa
+9. A source/real-learning-tests.local.mts fajlban uj, bejelentkezes nelkuli browser context: /lesson/<QA-lesson> -> Feladatok -> Teljes feladatsor. A valodi bankbol kepzett ures/teves/reszleges/helyes valaszok utan ellenorizd mind a 15 pontszamot, az osszeget es az ujratoltest. Rögzitsd a practice halozati keresszamot es az SQL korok szamat: elvart 0 vendegkeres, 2 tanuloi kor.
+10. Az elso tesztbovites utan azonnal futtasd a source mappaban: node --import tsx real-learning-harness.local.mts. Elvart PASS es sajat rekordok0, kontener eltavolitva. Bukasnal a bizonyitek alapjan kulonitsd el az uj teszt hibajat az alkalmazas hibajatol; allitast ne gyengits.
+11. A forraskod szerinti belepes: a Studio a websuli.studio.jobId sessionStorage ertekbol allitja vissza a jobot; kulon job-valaszto nincs ebben a komponensben. Saját lezart studio_jobs fixture (done/ok, QA lesson FK) utan normal admin login, /admin?tab=lesson-studio, a QA job sessionStorage ertekenek beallitasa es reload. Ez fixture-helyreallitas, nem UI-n inditott generalas vagy auth-bypass. A LearningReport 20-as lapozasaval minden megjelenitett sort vess ossze a mar SQL-lel ellenorzott riporttal. Mobil es desktop kep, overflow0, pageerror0. QA-lecke torlese FK cascade-del torolje a jobot; SQL count0 kotelezo. Ezutan ugyanaz a teljes harness ujra PASS kell legyen.
+12. A tmp/real-learning-tests screenshotokat nezd meg, a bizonyitekokat es a valtozatlanul NOT RUN teruleteket a tars-specben rogzitsd. A meglevo idegen worktree valtozasokhoz ne nyulj.
+13. Ha localhost:5000 ECONNREFUSED miatt nem elerheto, ne inditsd ujra a nem izolalt alkalmazast. A harness explicit --snapshot opcioja a korabbi tmp/real-learning-tests/public-source.json valodi leckemasolatot olvassa; nincs automatikus fallback. Elotte/utana a helyi snapshot hash-e egyezzen. Ebben a modban az aktualis eles forras valtozatlansaga nem vizsgalt, tavoli HTTP/DB hozzaferes nincs. Futtatas: node --import tsx real-learning-harness.local.mts --snapshot.

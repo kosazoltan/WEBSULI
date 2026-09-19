@@ -1,22 +1,17 @@
 import cron from "node-cron";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
 import { sql as sqlTemplate } from "drizzle-orm";
+import { db } from "./db";
 import { logger } from "./lib/logger";
 
 export function setupScheduledPublishing() {
   // Run every minute to check for scheduled jobs
-  cron.schedule("* * * * *", async () => {
-    try {
-      // Skip if DATABASE_URL is not available (e.g., in certain deployment environments)
-      if (!process.env.DATABASE_URL) {
-        logger.info('[SCHEDULED] DATABASE_URL not available, skipping scheduled publishing check');
-        return;
-      }
-      
-      const sql = neon(process.env.DATABASE_URL);
-      const db = drizzle(sql);
+  cron.schedule("* * * * *", runScheduledPublishingCheck);
+  logger.info("Scheduled publishing cron job started (runs every minute)");
+}
 
+/** Share the application's selected DEV/production database and connection pool. */
+export async function runScheduledPublishingCheck() {
+    try {
       // Get pending scheduled jobs that are ready to execute
       const jobs = await db.execute(sqlTemplate`
         SELECT id, type, payload
@@ -65,7 +60,4 @@ export function setupScheduledPublishing() {
       }
       logger.error("Scheduled publishing cron error:", error);
     }
-  });
-
-  logger.info("Scheduled publishing cron job started (runs every minute)");
 }

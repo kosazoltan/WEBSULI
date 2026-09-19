@@ -1,11 +1,13 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { randomBytes } from "node:crypto";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 import { logger } from "./lib/logger";
+import { DEV_CSP_NONCE_PLACEHOLDER } from "./lib/csp-profiles";
 
 const viteLogger = createLogger();
 
@@ -29,6 +31,7 @@ export async function setupVite(app: Express, server: Server) {
 
   const vite = await createViteServer({
     ...viteConfig,
+    html: { ...viteConfig.html, cspNonce: DEV_CSP_NONCE_PLACEHOLDER },
     configFile: false,
     customLogger: {
       ...viteLogger,
@@ -65,7 +68,9 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
       const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      const nonce = res.locals.lessonCspNonce ?? randomBytes(24).toString("base64");
+      res.status(200).set({ "Content-Type": "text/html", "Cache-Control": "no-store" })
+        .end(page.replaceAll(DEV_CSP_NONCE_PLACEHOLDER, nonce));
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
