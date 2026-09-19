@@ -96,6 +96,27 @@ test("bank resume reaches the provider with a new request while keeping teaching
   assert.deepEqual(deps.store.jobs.get("bank-fresh")!.output, saved);
 });
 
+test("mért hiba 2026-09-19 (run 45233b4b): hosszkorlátos bankválasz után a következő kísérlet fut, nem hal meg a lépés", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const e = lesson.experience!;
+  const teaching = { ...lesson, experience: undefined };
+  deps.store.seed({ id: "bank-length", mapId: "m1", step: "animator", status: "pending", output: { lesson: teaching, methodVersion: "fusion-7.4-4" } });
+  const models: string[] = [];
+  deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+    chat: async () => {
+      models.push(model);
+      if (models.length === 1) return { content: '{"methods":[', finishReason: "length", usage: { promptTokens: 1, completionTokens: 24000, totalTokens: 24001 } };
+      return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
+    },
+  } as unknown as IAIProvider);
+  const result = await runPipelineStep("bank-length", deps);
+  assert.equal(result.ok, true, JSON.stringify(deps.store.jobs.get("bank-length")!.error));
+  assert.equal(models.length, 2, "a csonka válasz után egy új kísérlet");
+  assert.equal(models[0], resolveStudioModel("bank"));
+  assert.ok((deps.store.jobs.get("bank-length")!.output as { lesson: { experience?: unknown } }).lesson.experience, "a bank elkészült");
+});
+
 test("bank provider failure preserves its cause and the saved teaching without publication", async () => {
   const deps = makeDeps("{}");
   const lesson = standardFusionFixture(); lesson.mapId = "m1";

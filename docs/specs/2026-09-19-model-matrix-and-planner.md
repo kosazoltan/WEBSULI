@@ -60,6 +60,17 @@ nincs újraépítés. Ha a lektor fejezet nélkül jelez (általános), a teljes
 - WHEN round ≥ 1 szerzői kör fejezetlistával indul THEN csak a felsorolt fejezetek változnak, a többi fejezet blokkjai bájtra azonosak, a bank checkpoint újrahasznosul (teszt: 1 fejezet javítása után a többi csomag modellhívás nélkül marad).
 - Mérés: a Műveleti sorrend (a5747585) és az UK-földrajz (e8d8c2ba) térképen előtte/utána tokenszám és perc a workflow-naplóból; elvárt bank-költség < 0,2 USD, teljes lecke < 1,2 USD, idő < 20 perc.
 
+## 7c. Mérés 1 (run 45233b4b, Műveleti sorrend, a mátrix a régi kódúton, 2026-09-19 21:13)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 medium | 9 973 | 2 714 | 35 s |
+| author (1 kör) | gpt-5.6-terra | 10 467 | 8 307 | 66 s |
+| animator (ábra + 3 kész bankcsomag + 1 javítás) | z-ai/glm-5.3-flash low | 46 099 | 23 504 | 936 s → hiba |
+Hiba: egy bankcsomag-válasz elérte a 16k kimeneti keretet, és a szolgáltatói hiba kivételként
+kilépett a csomag-ciklusból (3 kész csomag után halt meg a futás). Javítás: a szolgáltatói/hossz-hiba
+bukott kísérlet (újra → `FALLBACK_MODELS.bank` → mentőkör), bank/animator keret 24k. Költség-arány a
+régi (443k/172k Terra) animátorhoz képest: eddig ~1/10 token, ~1/200 ár.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.

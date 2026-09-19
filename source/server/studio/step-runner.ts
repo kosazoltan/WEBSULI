@@ -53,7 +53,7 @@ import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { buildLessonExperience, PACKET_ATTEMPTS, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, resolveBankReview, RetryableBankCallError, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { skilledPromptLookup } from "./role-skills";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
@@ -690,13 +690,26 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             call: async (bankSystem, user, attempt) => {
               // Spec 2026-09-19: the bank is its own cheap role; after PACKET_ATTEMPTS failed
               // attempts the packet is rebuilt once on the strong rescue model.
-              const bankModel = attempt >= PACKET_ATTEMPTS ? BANK_RESCUE_MODEL : resolveStudioModel("bank");
+              // attempt 0..PACKET_ATTEMPTS-2: primary; PACKET_ATTEMPTS-1: FALLBACK_MODELS.bank (other
+              // cheap family — a provider/length failure on the primary must not repeat on it);
+              // attempt PACKET_ATTEMPTS: rescue on the strong model.
+              const bankModel = attempt >= PACKET_ATTEMPTS ? BANK_RESCUE_MODEL
+                : attempt === PACKET_ATTEMPTS - 1 ? (FALLBACK_MODELS.bank ?? resolveStudioModel("bank"))
+                : resolveStudioModel("bank");
               bankModelUsed = bankModel;
               if (!keyConfigured(bankModel)) throw new Error(`${NO_OPENROUTER_KEY_MESSAGE} Hiányzó kulcs: ${keyNameForModel(bankModel)}.`);
-              if (attempt >= PACKET_ATTEMPTS) logger.warn(`[STUDIO] Bankcsomag mentőkör a(z) ${bankModel} modellen (${job.id}), ${attempt} bukott kísérlet után.`);
+              if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[STUDIO] Bankcsomag ${attempt >= PACKET_ATTEMPTS ? "mentőkör" : "tartalék modell"}: ${bankModel} (${job.id}), ${attempt} bukott kísérlet után.`);
               // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
               if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
-              const result = await callStepModel(providerFactory(bankModel, attempt >= PACKET_ATTEMPTS ? "author" : "bank"), { step: "animator", model: bankModel, system: bankSystem, user });
+              let result: Awaited<ReturnType<typeof callStepModel>>;
+              try {
+                result = await callStepModel(providerFactory(bankModel, attempt >= PACKET_ATTEMPTS ? "author" : "bank"), { step: "animator", model: bankModel, system: bankSystem, user });
+              } catch (error) {
+                // Model-output failure (length limit / empty / not JSON: no provider cause) → next attempt
+                // on the next model. Provider failure keeps its cause and fails the job once (resume path).
+                if (error instanceof StepModelError && !error.cause) throw new RetryableBankCallError(`${bankModel}: ${error.message}`, { cause: error });
+                throw error;
+              }
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
             },

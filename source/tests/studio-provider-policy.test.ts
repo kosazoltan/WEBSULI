@@ -60,7 +60,7 @@ test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async
   for (const body of bodies) {
     assert.equal(body.model, "z-ai/glm-5.3-flash");
     assert.deepEqual(body.reasoning, { effort: "low" });
-    assert.equal(body.max_completion_tokens, 16_000);
+    assert.equal(body.max_completion_tokens, 24_000);
   }
 });
 

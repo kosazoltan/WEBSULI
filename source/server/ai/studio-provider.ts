@@ -48,8 +48,10 @@ type StepPolicy = { timeoutMs: number; maxTokens: number; reasoningEffort: NonNu
  */
 export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   pedagogue: { timeoutMs: 300_000, maxTokens: 16_000, reasoningEffort: "medium" },
-  animator: { timeoutMs: 240_000, maxTokens: 16_000, reasoningEffort: "low" },
-  bank: { timeoutMs: 240_000, maxTokens: 16_000, reasoningEffort: "low" },
+  // Mérve (run 45233b4b): a teljes lecke JSON-ja 10 fejezetnél ~10k kimeneti token, egy
+  // bankcsomag 3–6k; a 16k keret egy elfajult csomagválaszon betelt → 24k, mint az alapérték.
+  animator: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low" },
+  bank: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low" },
   gateHelper: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
   quizPolish: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
 };

@@ -52,6 +52,16 @@ const packetPatchSchema = z.object({
 });
 type PacketContent = z.infer<typeof packetPatchSchema> & { glossary: z.infer<typeof glossaryEntrySchema>[] };
 const BANKS = ["methods", "tasks", "quiz"] as const;
+/**
+ * A bank call failure that is the MODEL's output (length limit, empty, not JSON) — worth another
+ * attempt on the next model. Provider outages (timeout, 429, 5xx) are NOT wrapped in this: they
+ * propagate unchanged, the job fails once with its cause and the saved teaching, and the
+ * explicit bank resume path takes over (tests: "bank provider failure preserves its cause").
+ */
+export class RetryableBankCallError extends Error {
+  override readonly name = "RetryableBankCallError";
+}
+
 /** Spec 2026-09-19: model attempts per bank packet on the cheap bank model (initial + repairs). */
 export const PACKET_ATTEMPTS = 3;
 /** One extra attempt after PACKET_ATTEMPTS failures, which the caller may route to the rescue model. */
@@ -181,6 +191,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const allowedReviewIds = reviewBase ? reviewedIds as Set<string> : undefined;
     let previous: unknown = reviewBase, repairBase: Packet | undefined = reviewBase;
     let bindingRepairIds = new Set<string>();
+    let lastError: unknown;
     let errors = reviewBase ? "A lektor konkrét hibáit javítsd az eredeti tételazonosítókon." : "";
     // Spec 2026-09-19: three attempts per packet — on 36–48 concept maps a second miss
     // on one packet killed whole runs (studio_jobs 41a94054, 222202f1, 4f853db8).
@@ -200,7 +211,19 @@ Korábbi kérdések, ne ismételd: ${JSON.stringify({ tasks: tasks.map(t => t.q)
 ${errors ? `Az előző válasz hibái: ${errors}.
 ${repairBase ? "JAVÍTÁSI MÓD: a teljes csomag már megvan. Csak a javítandó tételeket add vissza methods/tasks/quiz tömbökben, eredeti id-val és minden mezőjükkel. A változatlan tömb lehet üres vagy elhagyható: a program megőrzi a korábbi tételeket. Tételt törölni, új id-t megadni tilos. A glossary üresen vagy elhagyva változatlan marad; nem üresen a teljes javított szószedetet tartalmazza. A program ID szerint egyesít, utána a TELJES bankot újra ellenőrzi." : "A korábbi csomag alakja hibás. Add vissza a TELJES csomagot, a fent előírt összes tétellel; részleges javítólista nem elegendő."}
 Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
-      const response = await deps.call(system, prompt, attempt);
+      // Mért éles hiba (2026-09-19, run 45233b4b): a glm-5.3-flash egy csomagválasza elérte a
+      // kimeneti korlátot, és a hiba kivételként kilépett a ciklusból — a futás meghalt 3 kész
+      // csomag után. A modell-kimeneti hiba (hossz, üres, nem JSON) BUKOTT KÍSÉRLET: a következő
+      // kísérlet (tartalék, majd mentőmodell) kapja meg. Szolgáltatói hiba változatlanul kilép.
+      let response: unknown;
+      try { response = await deps.call(system, prompt, attempt); }
+      catch (error) {
+        if (!(error instanceof RetryableBankCallError)) throw error;
+        errors = `A modellhívás hibázott: ${error.message}`;
+        lastError = error;
+        await workflowValidationFailure(errors);
+        continue;
+      }
       let candidate = response;
       if (repairBase) {
         try { candidate = applyBankPacketRepair(repairBase, response, allowedReviewIds, bindingRepairIds); }
@@ -220,7 +243,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         bindingRepairIds = new Set(repairBase?.tasks.filter(t => t.sectionIndex !== unit.sectionIndex || t.coversConceptIds.some(id => !unit.conceptIds.includes(id))).map(t => t.id));
       }
     }
-    if (!packet) throw new Error(`A ${unit.sectionIndex + 1}. fejezet bankcsomagja a javító kör után sem megfelelő: ${errors}`);
+    if (!packet) throw new Error(`A ${unit.sectionIndex + 1}. fejezet bankcsomagja a javító kör után sem megfelelő: ${errors}`, lastError instanceof Error ? { cause: lastError } : undefined);
     // IDs are scoped to the exact source/teaching version; reused packets retain them.
     packet.methods = packet.methods.map((i, n) => ({ ...i, id: `m-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     packet.tasks = packet.tasks.map((i, n) => ({ ...i, id: `t-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
