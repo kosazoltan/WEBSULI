@@ -1,6 +1,7 @@
 import { stripJsonFences } from "../ai/OpenRouterProvider";
-import type { AIResponse, IAIProvider } from "../ai/AIProvider";
+import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
+import { LEKTOR_TIMEOUT_MS } from "../ai/studio-provider";
 import { workflowCheckpoint, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 
 /**
@@ -51,6 +52,10 @@ export async function callStepModel(
   signal?.throwIfAborted();
   input = { ...input, system: input.system + workflowSkillPrompt() };
   return workflowCheckpoint("studio-model", input, async () => {
+    if (input.step === "lektor") {
+      const deadline = AbortSignal.timeout(LEKTOR_TIMEOUT_MS);
+      signal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    }
     const result = await callUncachedStepModel(provider, input, signal);
     await workflowUsage(result.usage);
     return result;
@@ -66,7 +71,9 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     signal?.throwIfAborted();
   } catch (error) {
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
-    throw new StepModelError(input.step, "a szolgáltató hibát jelzett", { cause: error });
+    const cause = input.step === "lektor" && signal?.aborted && signal.reason?.name === "TimeoutError"
+      ? new AIProviderTimeoutError(provider.name, LEKTOR_TIMEOUT_MS) : error;
+    throw new StepModelError(input.step, "a szolgáltató hibát jelzett", { cause });
   }
 
   const text = stripJsonFences(response.content ?? "").trim();

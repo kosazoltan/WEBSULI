@@ -54,3 +54,7 @@ tmp/
 # Helyi Codex-munkamenet és ideiglenes ellenőrzési artefaktumok
 .codex/
 tmp-e2e-*
+
+# Böngésző-MCP naplók és gyökér-szintű Playwright kimenetek (2026-09-19)
+.playwright-mcp/
+test-results/

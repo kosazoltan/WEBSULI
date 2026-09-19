@@ -31,6 +31,7 @@ export class OpenAIProvider implements IAIProvider {
       apiKey: config.apiKey,
       baseURL: vendor === "xai" ? "https://api.x.ai/v1" : "https://api.openai.com/v1",
       timeout: this.timeout,
+      ...(config.maxRetries !== undefined ? { maxRetries: config.maxRetries } : {}),
     });
   }
 
@@ -130,6 +131,9 @@ export class OpenAIProvider implements IAIProvider {
   }
 
   private handleError(error: unknown): AIProviderError {
+    if (error instanceof OpenAI.APIConnectionTimeoutError) {
+      return new AIProviderTimeoutError(this.name, this.timeout);
+    }
     // Handle abort errors
     if (error instanceof Error && error.name === 'AbortError') {
       return new AIProviderTimeoutError(this.name, this.timeout);

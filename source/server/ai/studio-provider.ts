@@ -21,10 +21,20 @@ export function studioModelReady(model: string) {
   return aiKeyStatus()[providerForModel(model)].configured;
 }
 
-export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort"> = {}) {
+export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort" | "maxRetries"> = {}) {
   const connection = studioConnection(model);
   const config = { apiKey: connection.apiKey, model: connection.model, timeout, maxTokens, ...options };
   return connection.vendor === "openrouter"
     ? new OpenRouterProvider(config)
     : new OpenAIProvider(config, connection.vendor);
+}
+
+export const LEKTOR_TIMEOUT_MS = 480_000;
+/** Review gets its own bounded request, not three hidden 180-second attempts. */
+export function createStudioStepProvider(model: string, step?: string) {
+  if (step !== "lektor") return createStudioProvider(model);
+  return createStudioProvider(model, LEKTOR_TIMEOUT_MS, 12_000, {
+    maxRetries: 0,
+    ...(providerForModel(model) === "xai" ? { apiMode: "responses", reasoningEffort: "low" } : {}),
+  });
 }

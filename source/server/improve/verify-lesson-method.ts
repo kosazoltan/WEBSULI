@@ -4,6 +4,7 @@ import { evaluateOpenAnswer } from "../../shared/lesson-experience-score";
 import { lessonLanguage, publicationBankProblems, experiencePacketSchema } from "../../shared/lesson-experience";
 import { verifyImprovedHtml, type HtmlVerification } from "./verify-html";
 import { ZodError } from "zod";
+import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 
 /** Shape and sample checks, not a substitute for rendering or source review. */
 export function verifyLessonMethodHtml(html: string): HtmlVerification {
@@ -21,6 +22,7 @@ export function verifyLessonMethodHtml(html: string): HtmlVerification {
     catch { /* Invalid item shapes cannot be inspected safely; their schema errors are already reported. */ }
   }
   if (data) {
+    problems.push(...verifyLessonSkillBank(data.experience, data.subject).problems);
     problems.push(...publicationBankProblems(data.experience), ...verifyHtmlTeaching(html, data.experience));
     for (const t of data.experience.tasks) if (evaluateOpenAnswer(t.sample, t).score !== 1) problems.push(`${t.id}: a mintaválasz nem kap teljes pontot.`);
     const lang = lessonLanguage(data.subject);

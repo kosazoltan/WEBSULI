@@ -95,7 +95,11 @@ export async function getRun(id: string, load?: LoadRunFn): Promise<OneStepRun |
   if (inMemory) return inMemory;
   if (!load) return null;
   try {
-    return await load(id);
+    const loaded = await load(id);
+    // A concurrent load must not overwrite progress updated since this read began.
+    if (runs.has(id)) return runs.get(id)!;
+    if (loaded) runs.set(id, loaded);
+    return loaded;
   } catch {
     return null;
   }

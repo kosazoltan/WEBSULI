@@ -1,0 +1,11 @@
+# AI-végrehajtás
+
+1. source/server/ai/AIProvider.ts, OpenAIProvider.ts, studio-provider.ts: opcionális maxRetries átadás, külön Studio lépés-provider; a lektornál xAI Responses low / 12000 / 480000 / maxRetries=0.
+2. source/server/studio/run-step.ts: minden lektorhoz összesített AbortSignal határidő. step-runner.ts és structured-improvement.ts valódi lektorhívásai a lépés-provider politikát használják, az injektált tesztprovider megmarad.
+3. source/server/studio/step-io.ts: rövid hibajegyes kimenetet kérj, a teljes forrás és lecke változatlan tartalommal maradjon.
+4. source/shared/lesson-skill-checks.ts: 7.4 közös bank-, pontozás- és nyelvellenőrzés. Kössük be source/server/studio/step-runner.ts, structured-improvement.ts, source/server/improve/verify-lesson-method.ts végellenőrzéseibe. Meglévő séma/fedettség/felépítés ellenőrzés nem törölhető.
+5. source/shared/runtime-knowledge.ts: a közös RUNBOOK tartalmazza a 7.4 ellenőrzési feltételeket; böngészőeredményt nem gyárthat.
+6. Új source/tests/lesson-skill-checks.test.ts és lektor provider regresszió: valódi SDK HTTP-paraméterei, tiltott automatikus ismétlés, minta/üres/minimum hibák.
+7. source munkakönyvtár: node --import tsx --test tests/lesson-skill-checks.test.ts tests/lesson-pipeline-runner.test.ts tests/lesson-teaching-quality.test.ts tests/runtime-knowledge.test.ts; npm.cmd run check; npm.cmd run check:test; npm.cmd run lint; npm.cmd run build:server. Elvárt: 0 hibás teszt és 0 kilépési kód.
+8. Böngészőn olvasd vissza a megállt futást; a mentett leckével végezz szolgáltatói lektorpróbát, ha a hozzáférés biztosított. Eredmény és hiányzó bizonyíték rögzítése a terv végén. Ne állítsd késznek a régi futást állapotátírással.
+9. A bizonyított resume-gyökérokot célzottan javítsd: step-runner timeout-only recovery helper + a meglévő /jobs/:id/resume beforeDrive callbackje. A kész outputot és régi hibát tartsd meg, csak sikeres új lektor és valódi kapu/visszaolvasás után lehet done. Új teszt: timeout helyreállítás, kész/futó/tartalmi hiba elutasítása; nincs tesztgyengítés.

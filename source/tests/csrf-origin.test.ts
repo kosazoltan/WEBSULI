@@ -24,6 +24,9 @@ const ORIGIN_GUARDED_PATHS = [
 function isOriginGuardedPath(path: string): boolean {
   return (
     ORIGIN_GUARDED_PATHS.includes(path) ||
+    // Mirrors routes.ts: read-only like lookups skip the token but keep the allowlist.
+    path === "/api/materials/likes/batch" ||
+    /^\/api\/materials\/[^/]+\/likes\/check$/.test(path) ||
     path.startsWith("/api/ai/") ||
     path.startsWith("/api/admin/improve-material/") ||
     path.startsWith("/api/admin/improved-files/")
@@ -75,6 +78,8 @@ async function withServer(run: (baseUrl: string) => Promise<void>): Promise<void
   app.get("/api/ai/generate", ok);
   app.post("/api/login", ok);
   app.post("/api/logout", ok);
+  app.post("/api/materials/likes/batch", ok);
+  app.post("/api/materials/abc/likes/check", ok);
 
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -190,6 +195,29 @@ test("logout with no Origin/Referer at all is rejected (fail-closed)", async () 
     await withServer(async (baseUrl) => {
       const r = await fetch(`${baseUrl}/api/logout`, { method: "POST" });
       assert.equal(r.status, 403);
+    });
+  });
+});
+
+test("read-only material like POSTs skip the CSRF token but keep the Origin allowlist", async () => {
+  await withEnv({ ALLOWED_ORIGINS: "https://websuli.example", NODE_ENV: "production" }, async () => {
+    await withServer(async (baseUrl) => {
+      for (const path of ["/api/materials/likes/batch", "/api/materials/abc/likes/check"]) {
+        // No CSRF token at all, but an allowed Origin: the lookup must render.
+        const allowed = await fetch(`${baseUrl}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: "https://websuli.example" },
+          body: JSON.stringify({ fingerprint: "fp-1" }),
+        });
+        assert.notEqual(allowed.status, 403, `${path} should be treated as a read-only material lookup and not be blocked by CSRF`);
+        // Spec 2026-09-19: a foreign site still gets no lookup — the allowlist is not bypassed.
+        const foreign = await fetch(`${baseUrl}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+          body: JSON.stringify({ fingerprint: "fp-1" }),
+        });
+        assert.equal(foreign.status, 403, `${path} must keep rejecting a foreign Origin`);
+      }
     });
   });
 });

@@ -7,12 +7,15 @@ import {
   fixConceptOnLesson,
   approveOutline,
   runPipelineStep,
+  retryTimedOutLektor,
+  retryFailedBankBuild,
   startJobFromMap,
   type JobPatch,
   type JobView,
   type MapMeta,
   type PipelineStore,
 } from "../server/studio/step-runner";
+import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
 import { computeStepHash } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { fromMapBody } from "../server/studio/from-map-body";
@@ -23,8 +26,95 @@ import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
-import { executeWorkflow, workflowPhase, WorkflowWaiting } from "../server/workflows/engine";
+import { executeWorkflow, workflowPhase, WorkflowWaiting, redactWorkflowError } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
+
+import { __resetRunsForTest, createRun, getRun, updateRun } from "../server/studio/one-step-progress";
+
+test("bank resume requires the exact failed workflow visit and retains checkpoints and round", async () => {
+  const deps = makeDeps("{}");
+  const error = "A 2. fejezet bankcsomagja a javító kör után sem megfelelő: Bankterven kívüli tétel.";
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { hash: "fusion-7.4-4", parts: { complete: { preserved: true } } } };
+  const seed = () => deps.store.seed({ id: "bank-retry", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  const visit = { step: "animator", state: "error", error };
+  for (const invalid of [undefined, { ...visit, step: "lektor" }, { ...visit, state: "running" }, { ...visit, error: "different" }]) {
+    seed();
+    await assert.rejects(retryFailedBankBuild("bank-retry", invalid, deps), /naplóval igazolt/);
+    assert.equal(deps.store.jobs.get("bank-retry")!.step, "error");
+  }
+  seed();
+  deps.store.jobs.get("bank-retry")!.output!.htmlFileId = "published";
+  await assert.rejects(retryFailedBankBuild("bank-retry", visit, deps), /nem publikált/);
+  seed();
+  const blocked = "A lektor 1 tartalmi javítást kér.";
+  deps.store.jobs.get("bank-retry")!.error = blocked;
+  await assert.rejects(retryFailedBankBuild("bank-retry", { ...visit, error: blocked }, deps), /bankgyártási/);
+  seed();
+  await retryFailedBankBuild("bank-retry", visit, deps);
+  const job = deps.store.jobs.get("bank-retry")!;
+  assert.equal(job.step, "animator"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  assert.deepEqual(job.output, { ...output, previousBankError: error, bankRecoveryAttempt: 1 });
+  job.step = "error"; job.status = "error"; job.error = error;
+  await retryFailedBankBuild("bank-retry", visit, deps);
+  assert.equal(job.output!.bankRecoveryAttempt, 2);
+  assert.equal(deps.calls.length, 0);
+  job.step = "done";
+  await retryFailedBankBuild("bank-retry", visit, deps);
+  assert.equal(job.step, "done");
+});
+
+test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {
+  const deps = makeDeps("{}");
+  const error = 'A(z) "author" lépés modellhívása hibára futott: https://example.invalid/request ' + "provider detail ".repeat(200);
+  deps.store.seed({ id: "bank-redacted", mapId: "m1", lessonId: "draft", step: "error", status: "error", error, output: { lesson: standardFusionFixture() } });
+  const visit = { step: "animator", state: "error", error: redactWorkflowError(new Error(error)) };
+  assert.notEqual(visit.error, error);
+  const job = deps.store.jobs.get("bank-redacted")!;
+  for (const invalid of [-1, 1.5, "1", Number.MAX_SAFE_INTEGER]) {
+    job.output!.bankRecoveryAttempt = invalid;
+    await assert.rejects(retryFailedBankBuild(job.id, visit, deps), /sorszám/);
+    assert.equal(job.step, "error");
+  }
+  delete job.output!.bankRecoveryAttempt;
+  await retryFailedBankBuild(job.id, visit, deps);
+  assert.equal(job.step, "animator");
+});
+
+test("bank resume reaches the provider with a new request while keeping teaching unchanged", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1"; delete lesson.experience;
+  const saved = { lesson, methodVersion: "fusion-7.4-4", bankRecoveryAttempt: 2 };
+  deps.store.seed({ id: "bank-fresh", mapId: "m1", step: "animator", status: "pending", lessonId: "draft", output: saved });
+  const messages: AIMessage[][] = [];
+  deps.providerFactory = () => ({ name: "stub", model: "stub", isAvailable: async () => true,
+    chat: async (input: AIMessage[]) => { messages.push(input); throw new Error("provider unavailable"); },
+  } as unknown as IAIProvider);
+  assert.equal((await runPipelineStep("bank-fresh", deps)).ok, false);
+  assert.equal(messages.length, 1);
+  assert.match(String(messages[0][1].content), /Explicit bankfolytatás: 2/);
+  assert.deepEqual(deps.store.jobs.get("bank-fresh")!.output, saved);
+});
+
+test("bank provider failure preserves its cause and the saved teaching without publication", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  assert.equal(canReuseLessonVisuals(lesson), true);
+  const saved = { lesson, methodVersion: "fusion-7.4-4", experienceCheckpoint: { hash: "fusion-7.4-4", parts: {} } };
+  // No bank is attached to the newly authored teaching, forcing its own provider call.
+  const teaching = { ...lesson, experience: undefined };
+  saved.lesson = teaching;
+  deps.store.seed({ id: "bank-provider-failure", mapId: "m1", step: "animator", status: "pending", lessonId: "draft", output: saved });
+  let publications = 0;
+  deps.store.publishLesson = async () => { publications++; throw new Error("Must not publish"); };
+  deps.providerFactory = () => ({ name: "stub", model: "stub", isAvailable: async () => true,
+    chat: async () => { throw new Error("[xAI] Request timed out after 180000ms"); },
+  } as unknown as IAIProvider);
+  const result = await runPipelineStep("bank-provider-failure", deps);
+  assert.equal(result.ok, false);
+  assert.match(deps.store.jobs.get("bank-provider-failure")!.error!, /Request timed out after 180000ms/);
+  assert.deepEqual(deps.store.jobs.get("bank-provider-failure")!.output, saved);
+  assert.equal(publications, 0);
+});
 
 for (const missingCall of [1, 2]) {
   test(`fogalomjavítás: hiányzó ${missingCall === 1 ? "author" : "lektor"} kulcsnál nem indul modellhívás`, async () => {
@@ -38,6 +128,44 @@ for (const missingCall of [1, 2]) {
     assert.match("error" in result ? result.error : "", /kulcs/i);
   });
 }
+
+test("lektori timeout folytatása megőrzi a bankot és hibát, tartalmi hibát nem kerül meg", async () => {
+  const deps = makeDeps("{}");
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { preserved: true } };
+  const error = 'A(z) "lektor" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([xAI] Request timed out.)';
+  deps.store.seed({ id: "timeout", mapId: "m1", step: "error", status: "error", lessonId: "saved-lesson", output, error });
+  await retryTimedOutLektor("timeout", deps);
+  const job = deps.store.jobs.get("timeout")!;
+  assert.equal(job.step, "lektor");
+  assert.equal(job.status, "pending");
+  assert.deepEqual(job.output!.lesson, output.lesson);
+  assert.deepEqual(job.output!.experienceCheckpoint, output.experienceCheckpoint);
+  assert.equal(job.output!.previousLektorError, error);
+  assert.equal(deps.calls.length, 0);
+  job.step = "error"; job.status = "error"; job.error = "A lektor 1 tartalmi javítást kér.";
+  await assert.rejects(retryTimedOutLektor("timeout", deps), /Csak mentett/);
+  assert.equal(job.step, "error");
+  job.step = "done";
+  await retryTimedOutLektor("timeout", deps);
+  assert.equal(job.step, "done");
+});
+
+test("a terminal one-step állapotot a generikus háttérhiba nem írja felül", async () => {
+  __resetRunsForTest();
+  const doneId = createRun();
+  updateRun(doneId, { phase: "done", detail: "A lecke elkészült.", lessonId: "lesson-1" });
+  recordOneStepFailure(doneId, new Error("readback-failed"));
+  const done = await getRun(doneId);
+  assert.equal(done?.phase, "done");
+  assert.equal(done?.error, null);
+
+  const parkedId = createRun();
+  updateRun(parkedId, { phase: "parked", detail: "Forrásellenőrzés szükséges.", mapId: "map-1" });
+  recordOneStepFailure(parkedId, new Error("readback-failed"));
+  const parked = await getRun(parkedId);
+  assert.equal(parked?.phase, "parked");
+  assert.equal(parked?.error, null);
+});
 
 test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu és visszaolvasott eredmény", async () => {
   const lesson = standardFusionFixture(); lesson.mapId = "m1";
@@ -82,6 +210,30 @@ test("the pipeline prompt version fits the persisted job column", () => {
   assert.ok(PIPELINE_PROMPT_VERSION.length <= Number(width[1]),
     `Prompt version has ${PIPELINE_PROMPT_VERSION.length} characters; database allows ${width[1]}.`);
 });
+
+for (const corruption of ["missing", "changed-lesson", "changed-source", "blocking"] as const) {
+  test(`7.4 végkapu lektor-bizonyíték nélkül nem publikál: ${corruption}`, async () => {
+    const lesson = standardFusionFixture(); lesson.mapId = "m1";
+    const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+    lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
+    const deps = makeDeps(JSON.stringify({ notes: [] }));
+    deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+    deps.store.seed({ id: "proof", mapId: "m1", lessonId: "lesson-proof", step: "lektor", output: { lesson } });
+    const reviewed = await runPipelineStep("proof", deps); assert.ok(reviewed.ok);
+    await advanceJob("proof", reviewed.next, { status: "running" }, deps);
+    const job = deps.store.jobs.get("proof")!;
+    if (corruption === "missing") delete job.output!.reviewInputHash;
+    if (corruption === "changed-lesson") (job.output!.lesson as typeof lesson).title += " módosítva";
+    if (corruption === "changed-source") deps.store.maps.get("m1")!.meta.title += " módosítva";
+    if (corruption === "blocking") job.output!.report = { notes: [{ kind: "coverage_gap", subkind: "core", message: "Hiány" }] };
+    let publications = 0;
+    deps.store.publishLesson = async () => { publications++; throw new Error("Nem publikálhat"); };
+    const gated = await runPipelineStep("proof", deps);
+    assert.equal(gated.ok, false);
+    assert.equal(publications, 0);
+    assert.match("reason" in gated ? gated.reason ?? "" : "", /aktuális tanításhoz/);
+  });
+}
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.

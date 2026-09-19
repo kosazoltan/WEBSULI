@@ -62,6 +62,10 @@ export function assertWorkflowStep(run: WorkflowView, id: string): WorkflowStep 
   if (last && (last.state === "error" || last.state === "waiting")) throw new Error("Befejezetlen lépés után csak annak kifejezett folytatása megengedett.");
   const previous = run.visits.at(-1)?.step ?? "start";
   if (!step || !step.after.includes(previous)) throw new Error(`Nem megengedett folyamatlépés: ${previous} → ${id}.`);
-  if (run.visits.filter(v => v.step === id).length >= step.maxVisits) throw new Error(`Elfogyott a lépés javítási kerete: ${step.label}.`);
+  // Provider timeouts are not completed content reviews. Explicit continuation is
+  // still limited separately by executeWorkflow's four-execution budget.
+  const contentVisits = run.visits.filter(v => v.step === id && !(id === "lektor" && v.state === "error"
+    && v.error?.startsWith('A(z) "lektor" lépés modellhívása hibára futott:') && /timed out|timeout/i.test(v.error)));
+  if (contentVisits.length >= step.maxVisits) throw new Error(`Elfogyott a lépés javítási kerete: ${step.label}.`);
   return step;
 }

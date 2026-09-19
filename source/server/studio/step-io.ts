@@ -363,6 +363,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap): string {
     "- Register, style and age-band problems are language / age warnings.",
     "- sourceOnly must be true.",
     "- Report with JSON ONLY: { \"notes\": [{ \"kind\": \"source_conflict|coverage_gap|language|age\", \"subkind\": string?, \"message\": string, \"blockPath\": \"section.block\"? }] }",
+    "- Csak konkrét eltéréseket jelents, rövid indokkal és javítási céllal. Helyes tételekről ne írj egyenként beszámolót. Ne ismételd meg a leckét, a forrást vagy az ellenőrzési utasítást. Minden valódi hibát őrizz meg; a tömörség nem jelenthet kevesebb ellenőrzést.",
     "",
     "Lesson:",
     JSON.stringify(lesson, null, 2),

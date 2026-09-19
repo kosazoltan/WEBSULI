@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import compression from "compression";
@@ -156,14 +157,15 @@ const helmetMiddleware = helmet({
 app.use((req, res, next) => {
   if (isLessonRoute(req.path)) {
     // LS-4: the lesson page is DATA rendered by our own audited bundle — the
-    // strict profile (no inline script, no eval) enforces "a lesson is not a
-    // program" at the response-header level.
+    // dev bootstrap needs a per-response nonce, never a blanket inline grant.
+    if (isDevelopment) res.locals.lessonCspNonce = randomBytes(24).toString("base64");
     helmet({
       contentSecurityPolicy: {
         directives: lessonCspDirectives({
           allowedOrigins: ALLOWED_ORIGINS,
           isDevelopment,
           customDomain: process.env.CUSTOM_DOMAIN,
+          devScriptNonce: res.locals.lessonCspNonce,
         }),
       },
       hsts: {

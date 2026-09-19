@@ -86,7 +86,13 @@ export const experiencePacketSchema = z.object({
           for (const intent of ["recall", "apply"] as const) if (!quiz.some(q => q.coversConceptIds.length === 1 && q.coversConceptIds[0] === id && q.intent === intent)) ctx.addIssue({ code: "custom", message: `${id}: hiányzó ${intent} kvíz.` });
         }
       }
-      if ([...e.methods, ...e.tasks, ...e.quiz].some(item => !plan.units.some(unit => item.sectionIndex === unit.sectionIndex && item.coversConceptIds.every(id => unit.conceptIds.includes(id))))) ctx.addIssue({ code: "custom", message: "Bankterven kívüli tétel." });
+      for (const bank of ["methods", "tasks", "quiz"] as const) for (const [index, item] of e[bank].entries()) {
+        const sectionUnits = plan.units.filter(unit => item.sectionIndex === unit.sectionIndex);
+        if (!sectionUnits.some(unit => item.coversConceptIds.every(id => unit.conceptIds.includes(id)))) {
+          ctx.addIssue({ code: "custom", path: [bank, index, sectionUnits.length ? "coversConceptIds" : "sectionIndex"],
+            message: `Bankterven kívüli tétel: ${item.id}; sectionIndex=${item.sectionIndex}; coversConceptIds=${JSON.stringify(item.coversConceptIds)}. Egyetlen engedélyezett csomaghoz kell tartoznia: ${JSON.stringify((sectionUnits.length ? sectionUnits : plan.units).map(u => ({ sectionIndex: u.sectionIndex, conceptIds: u.conceptIds })))}.` });
+        }
+      }
       if (plan.taskRound > e.tasks.length || plan.quizRound > e.quiz.length) ctx.addIssue({ code: "custom", message: "A kör nem lehet nagyobb a banknál." });
     }
   }
