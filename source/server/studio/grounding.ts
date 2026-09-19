@@ -91,8 +91,18 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
     return tokens.some((t) => t.includes(stem(word)));
   };
 
-  return words.every(present);
+  if (words.every(present)) return true;
+  // Spec 2026-09-19 (mérve: UK-földrajz futás, angol forrás → magyar lecke): a fogalom NEVE a
+  // forrás nyelvén van („The United Kingdom (UK)"), a tanítás magyarul („Egyesült Királyság").
+  // A kurált magyar DEFINÍCIÓ érdemi szavai ugyanúgy a forrásból jönnek: ha azok legalább fele
+  // (min. 2, vagy mind, ha rövidebb) a blokk saját szövegében áll, a címke megalapozott.
+  const defWords = significantWords(concept.definition ?? "").filter((w) => !STOP_WORDS.has(w));
+  if (defWords.length === 0) return false;
+  const need = defWords.length < 2 ? defWords.length : Math.max(2, Math.ceil(defWords.length / 2));
+  return defWords.filter(present).length >= need;
 }
+
+const STOP_WORDS = new Set(["egy", "hogy", "nem", "van", "vagy", "mint", "ami", "amely", "azt", "ezt", "the", "and", "with", "from", "that", "this", "are", "for", "also", "which", "into", "has", "have", "más", "több", "csak", "még", "már", "pedig", "mert", "után", "előtt", "között", "szerint", "akkor", "olyan", "ilyen", "minden", "való"]);
 
 export type UngroundedClaim = {
   blockIndex: number;
