@@ -85,14 +85,18 @@ type RunInput = {
   onPhase?: (phase: "ocr" | "extract", detail: string | null) => void;
 };
 
-type ExtractionConfig = { model: string; ocrModel: string; systemPrompt: string; ocrPrompt: string; provider: string };
+type ExtractionConfig = { model: string; ocrModel: string; systemPrompt: string; ocrPrompt: string; provider: string; cacheKeyPrompt: string };
 /** Resolve once before cache lookup, then use this exact snapshot for the paid call. */
 export async function loadExtractionConfig(): Promise<ExtractionConfig> {
+  const basePrompt = (await promptStore.get(EXTRACTOR_PROMPT_NAME, FALLBACK_PROMPT)) +
+    "\nAktuális kivonatolási szerződés: kapcsolati gráfot és relatedIds listát ne készíts. A forrás pontos fogalmai, idézetei és forráshelyei szükségesek. A későbbi tanítás ezeket közvetlenül használja.\n" + TRANSCRIPT_CONTRACT;
   return {
     model: resolveStudioModel("extract"), ocrModel: resolveStudioModel("ocr"), ocrPrompt: OCR_SYSTEM_PROMPT,
     provider: providerForModel(resolveStudioModel("extract")),
-    systemPrompt: (await promptStore.get(EXTRACTOR_PROMPT_NAME, FALLBACK_PROMPT)) +
-      "\nAktuális kivonatolási szerződés: kapcsolati gráfot és relatedIds listát ne készíts. A forrás pontos fogalmai, idézetei és forráshelyei szükségesek. A későbbi tanítás ezeket közvetlenül használja.\n" + TRANSCRIPT_CONTRACT + workflowSkillPrompt(),
+    // The learned skill prompt goes to the model, but NOT into the cache key (spec 2026-09-19,
+    // measured: it changed between runs, so the same source never hit its own map again).
+    systemPrompt: basePrompt + workflowSkillPrompt(),
+    cacheKeyPrompt: basePrompt,
   };
 }
 

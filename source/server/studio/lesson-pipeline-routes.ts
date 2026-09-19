@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from "express";
-import { and, asc, eq, ne, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, ne, notInArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
@@ -334,6 +334,23 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   let mapId: string;
   if (existing) {
     mapId = existing.id;
+    // Spec 2026-09-19: the same source uploaded again does not pay for a second lesson —
+    // a published lesson of this map is the result (measured: the owner uploaded the same
+    // photos three times on 2026-09-19 while the first run was parked).
+    const [published] = await db
+      .select({ id: lessons.id })
+      .from(lessons)
+      .innerJoin(htmlFiles, eq(lessons.htmlFileId, htmlFiles.id))
+      .where(and(eq(lessons.mapId, mapId), isNotNull(lessons.publishedAt)))
+      .orderBy(desc(lessons.publishedAt))
+      .limit(1);
+    if (published) {
+      // The workflow ledger still records the skipped phases as visits (no model call).
+      for (const phase of ["sourceCheck", "pedagogue", "author", "animator", "lektor", "gate"]) await workflowPhase(phase);
+      updateRun(runId, { phase: "done", detail: "Ez a forrás már fel volt dolgozva — a belőle készült, közzétett lecke megnyitható.", mapId, lessonId: published.id });
+      logger.info(`[STUDIO/1STEP] Kész lecke újrahasznosítva: térkép ${mapId}, lecke ${published.id}`);
+      return;
+    }
     updateRun(runId, { phase: "extract", detail: "Ez a forrás már fel volt dolgozva — a meglévő tudástárat használjuk.", mapId });
     logger.info(`[STUDIO/1STEP] Térkép gyorsítótárból: ${mapId}`);
   } else {
