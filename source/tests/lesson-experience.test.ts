@@ -189,6 +189,35 @@ test("mért hiba 2026-09-19 (run 45233b4b): a szolgáltatói/hossz-hiba bukott k
   assert.equal(calls, 1);
 });
 
+test("spec 2026-09-19: párhuzamos csomagépítés — egyszerre készülő csomagok, ütköző (ismétlődő) kérdésnél soros újraépítés", async () => {
+  const base = standardFusionFixture(), e = base.experience!;
+  const lesson = lessonSchema.parse({ ...base, experience: undefined, sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] });
+  const units = planLessonBank(lesson).units;
+  assert.equal(units.length, 2, "két egység");
+  let inFlight = 0, maxInFlight = 0; const calls: number[] = [];
+  const packetFor = (sectionIndex: number, suffix: string) => ({
+    methods: e.methods.map(m => ({ ...m, sectionIndex, title: m.title + suffix, prompt: m.prompt + suffix })),
+    tasks: e.tasks.map(t => ({ ...t, sectionIndex, q: t.q + suffix })),
+    quiz: e.quiz.map(q => ({ ...q, sectionIndex, question: q.question + suffix })),
+    glossary: [],
+  });
+  const result = await buildLessonExperience(lesson, [], { concurrency: 3, call: async (_system, user) => {
+    inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise(r => setTimeout(r, 5));
+    const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
+    calls.push(sectionIndex);
+    inFlight--;
+    // First pass: both units answer with the SAME questions (they cannot see each other) → conflict.
+    // The sequential rebuild of unit 1 sees "Korábbi kérdések" and answers with distinct ones.
+    const rebuild = calls.filter(s => s === sectionIndex).length > 1;
+    return packetFor(sectionIndex, rebuild ? " (második változat)" : "");
+  } });
+  assert.equal(maxInFlight, 2, "a két egység egyszerre épült");
+  assert.deepEqual(calls, [0, 1, 1], "az ütköző második csomag sorosan újraépült");
+  assert.equal(result.tasks.length, e.tasks.length * 2);
+  assert.equal(new Set(result.quiz.map(q => q.question)).size, result.quiz.length, "nincs ismétlődő kérdés");
+});
+
 test("spec 2026-09-19: a mentőkör (attempt === PACKET_ATTEMPTS) érvényes csomagja elfogadott", async () => {
   const lesson = standardFusionFixture(), e = lesson.experience!;
   const attempts: number[] = [];
