@@ -1,6 +1,6 @@
 import { withLessonTypography } from "@shared/lesson-typography";
 import { useEffect, useState } from "react";
-import { Globe, Loader2, CheckCircle2, Eye, Link2 } from "lucide-react";
+import { Globe, Loader2, CheckCircle2, Eye, Link2, AlertTriangle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import ChatInterface, { type ChatMessage } from "@/components/ChatInterface";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CLASSROOMS, DEFAULT_CLASSROOM } from "@shared/classrooms";
-import type { WebResearchJob } from "@shared/web-research-job";
+import { webReviewWarningLabel, type WebResearchJob } from "@shared/web-research-job";
 import { type WebSource } from "@shared/web-research-stream";
 import { logger } from "@/lib/logger";
 import { WorkflowMonitor } from "./WorkflowMonitor";
@@ -44,6 +44,7 @@ export function WebResearchAgentPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [sources, setSources] = useState<WebSource[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const [generatedHtml, setGeneratedHtml] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -84,6 +85,7 @@ export function WebResearchAgentPanel() {
           if (disposed) return;
         }
         setSources(job.sources);
+        setWarnings(job.warnings ?? []);
         setStatus(job.stage);
         setFailure(job.error || null);
         setCanResume(job.canResume === true);
@@ -128,7 +130,7 @@ export function WebResearchAgentPanel() {
 
   const handleSend = async (message: string) => {
     if (isLoading || isSaving) return;
-    setFailure(null); setSavedId(null); setGeneratedHtml(""); setSources([]); setCanResume(false);
+    setFailure(null); setSavedId(null); setGeneratedHtml(""); setSources([]); setWarnings([]); setCanResume(false);
     const request: PendingResearch = { id: crypto.randomUUID(), message, classroom, ...(title.trim() ? { title: title.trim() } : {}),
       ...(messages.length ? { conversationHistory: messages.slice(-50) } : {}) };
     rememberResearch(request);
@@ -237,6 +239,20 @@ export function WebResearchAgentPanel() {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+        {warnings.length > 0 && (
+          <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100" data-testid="web-research-warnings">
+            <div className="flex items-center gap-1 font-medium mb-1">
+              <AlertTriangle className="w-3 h-3" />
+              A tananyag elkészült; a lektor pedagógiai megjegyzései ({warnings.length})
+            </div>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {warnings.map((criterion) => (
+                <li key={criterion} data-warning={criterion}>{webReviewWarningLabel(criterion)}</li>
+              ))}
+            </ul>
+            <p className="mt-1 text-muted-foreground">A tényszerűség, a forrásfedettség és a kérdések megalapozása ellenőrizve; ezek a megjegyzések utólagos Okosítással pótolhatók.</p>
           </div>
         )}
         {generatedHtml && !isLoading && (
