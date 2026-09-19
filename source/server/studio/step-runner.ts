@@ -13,7 +13,7 @@ import { appendQualityNote, autonomousDecision } from "./autonomous";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
-import { MAX_AUTHOR_ROUNDS } from "./pipeline";
+import { MAX_AUTHOR_ROUNDS, MAX_BANK_ONLY_ROUNDS } from "./pipeline";
 import { STUDIO_PROMPT_NAMES, studioPromptStore } from "./prompt";
 import {
   computeStepHash,
@@ -758,7 +758,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // tanítást újraírta, és 6 változatlan tartalmú csomag épült újra. Ha MINDEN blokkoló
       // banktétel, a tanítás nem hibás → bármelyik körben a csak-bank javítás jön (jobonként
       // egyszer); a szerzői újraírás csak tanítási blokkolóra jár.
-      const bankOnlyRepair = fusion && bankOnly && !job.output?.bankOnlyRepairRound
+      // Mérve (run 525b2797): a 2. csak-bank blokkoló (más kvíztétel) a körlimiten hibára zárta a
+      // 77 perces leckét, mert a csak-bank kör jobonként egyszer járt. Tétel-szintű bankhibáért nem
+      // dobunk el egy leckét: MAX_BANK_ONLY_ROUNDS csak-bank kör jár (a workflow látogatási
+      // keretén belül), utána a limit dönt.
+      const bankOnlyRoundsUsed = typeof job.output?.bankOnlyRepairRounds === "number" ? job.output.bankOnlyRepairRounds : (job.output?.bankOnlyRepairRound ? 1 : 0);
+      const bankOnlyRepair = fusion && bankOnly && bankOnlyRoundsUsed < MAX_BANK_ONLY_ROUNDS
         && !!(job.output?.lesson as Lesson | undefined)?.experience;
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair) {
         return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
@@ -780,6 +785,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             blockers,
             bankReview: { round: transition.round, feedback },
             bankOnlyRepairRound: transition.round,
+            bankOnlyRepairRounds: bankOnlyRoundsUsed + 1,
           }),
         );
         return { ok: true, next: transition };
