@@ -20,6 +20,23 @@ function textRanges(node: Node): Array<{ startOffset: number; endOffset: number 
 const bankPatchSchema = z.object({ methods: z.array(z.object({ id: z.string() }).passthrough()).optional(), tasks: z.array(z.object({ id: z.string() }).passthrough()).optional(), quiz: z.array(z.object({ id: z.string() }).passthrough()).optional() }).strict();
 const patchSchema = z.object({ edits: z.array(z.object({ sectionIndex: z.number().int().min(0), before: z.string().min(8).max(6000), after: z.string().max(8000) }).strict()).max(40), bank: bankPatchSchema.optional() }).strict();
 const safeTags = new Set(["p", "b", "strong", "em", "i", "span", "br", "ul", "ol", "li", "small", "sup", "sub"]);
+
+/**
+ * Find `before` inside `chapter`: exact first, then with every whitespace run treated as
+ * `\s+` (line wraps and indentation differ between the model's copy and the raw HTML).
+ * Returns the raw offset/length of the match and whether a second match exists.
+ */
+export function locateAnchor(chapter: string, before: string): { at: number; length: number; duplicate: boolean } | null {
+  const exact = chapter.indexOf(before);
+  if (exact >= 0) return { at: exact, length: before.length, duplicate: chapter.indexOf(before, exact + 1) >= 0 };
+  const tokens = before.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return null;
+  const pattern = new RegExp(tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "g");
+  const first = pattern.exec(chapter);
+  if (!first) return null;
+  const second = pattern.exec(chapter);
+  return { at: first.index, length: first[0].length, duplicate: second !== null };
+}
 /** Exact replacements within existing chapter boundaries; other HTML and metadata stay byte-identical. */
 export function applyTeachingPatch(html: string, raw: unknown, allowedSections?: ReadonlySet<number>, allowedBankItems?: ReadonlySet<string>): string {
   const patch = patchSchema.parse(raw);
@@ -33,17 +50,22 @@ export function applyTeachingPatch(html: string, raw: unknown, allowedSections?:
     const location = sections.length === 1 ? sections[0].sourceCodeLocation : undefined;
     if (!location?.startTag || !location.endTag) throw new Error("A javítandó tanítási fejezet nem egyértelmű.");
     const start = location.startTag.endOffset, end = location.endTag.startOffset;
-    const chapter = html.slice(start, end), at = chapter.indexOf(edit.before);
-    if (at < 0) throw new Error(`edits[${index}].before: hiányzó szövegrészlet a megadott fejezetben. Másolj a nyers HTML-ből.`);
-    if (chapter.indexOf(edit.before, at + 1) >= 0) throw new Error(`edits[${index}].before: ismétlődő szövegrészlet; egyedi horgony szükséges.`);
-    if (edit.before === edit.after) throw new Error(`edits[${index}].after: változatlan csere; hagyd ki ezt az editet.`);
-    if (!textRanges(sections[0]).some(r => start + at >= r.startOffset && start + at + edit.before.length <= r.endOffset)) throw new Error("A csere egyetlen DOM-szövegcsomóponton belül lehetséges; attribútum, kód és tag nem módosítható. Válassz rövidebb szövegrészletet.");
+    const chapter = html.slice(start, end);
+    // Spec 2026-09-19: the anchor is matched with whitespace folded (measured: web run
+    // 0d…/web3 lost a repair round to a line-wrap difference), but it must still be
+    // one unique run of text inside a single DOM text node.
+    const anchor = locateAnchor(chapter, edit.before);
+    if (!anchor) throw new Error(`edits[${index}].before: hiányzó szövegrészlet a megadott fejezetben. Másolj a nyers HTML-ből.`);
+    if (anchor.duplicate) throw new Error(`edits[${index}].before: ismétlődő szövegrészlet; egyedi horgony szükséges.`);
+    const at = anchor.at, matched = chapter.slice(at, at + anchor.length);
+    if (matched === edit.after) throw new Error(`edits[${index}].after: változatlan csere; hagyd ki ezt az editet.`);
+    if (!textRanges(sections[0]).some(r => start + at >= r.startOffset && start + at + anchor.length <= r.endOffset)) throw new Error("A csere egyetlen DOM-szövegcsomóponton belül lehetséges; attribútum, kód és tag nem módosítható. Válassz rövidebb szövegrészletet.");
     // Only balanced passive inline/prose fragments. No attributes, scripts or boundary escapes.
     for (const fragment of [edit.before, edit.after]) {
       const parsed = elements(parseFragment(fragment, { sourceCodeLocationInfo: true }));
       if (parsed.some(n => !safeTags.has(n.tagName) || n.attrs.length || !n.sourceCodeLocation?.startTag || (n.tagName !== "br" && !n.sourceCodeLocation.endTag)) || /<!--|<!doctype|<\//i.test(fragment.replace(/<\/?(?:p|b|strong|em|i|span|br|ul|ol|li|small|sup|sub)\s*\/?\s*>/gi, ""))) throw new Error("A szövegcsere csak passzív, lezárt tanító szöveget tartalmazhat.");
     }
-    html = html.slice(0, start + at) + edit.after + html.slice(start + at + edit.before.length);
+    html = html.slice(0, start + at) + edit.after + html.slice(start + at + anchor.length);
   }
   if (patch.bank) {
     // Existing bank items only: semantics can correct affected questions but cannot grow/replan a bank.
@@ -77,6 +99,7 @@ export async function reviewAndRepairWebTeaching(html: string, sources: FetchedT
   // round to one sample answer scoring below full marks). The rejection travels to the
   // next repair prompt instead.
   let previousBankRejection = "";
+  let formatRetries = 0;
   let review: TeachingReview | undefined;
   for (let attempt = 0; attempt <= REVIEW_REPAIR_ATTEMPTS; attempt++) {
     options.signal?.throwIfAborted();
@@ -106,12 +129,21 @@ Kimenet JSON: {"edits":[{"sectionIndex":0,"before":"pontos meglévő HTML szöve
       if (salvaged) {
         html = salvaged.html; patchFailure = ""; previousPatch = undefined; previousBankRejection = salvaged.note;
         await options.onProblem?.(`Bankjavítás elutasítva, a tanításjavítás alkalmazva: ${message}`, html);
-      } else { previousPatch = patch; patchFailure = message; await options.onProblem?.(`Javítás hatóköre: ${patchFailure}`, html); }
+      } else {
+        previousPatch = patch; patchFailure = message; await options.onProblem?.(`Javítás hatóköre: ${patchFailure}`, html);
+        // Spec 2026-09-19: a malformed patch (empty, bad anchor, scope) gets one immediate
+        // retry with its exact error before it costs a review round (measured: web run
+        // 33ed1235/web3 burned two of three rounds on format failures alone).
+        if (formatRetries < FORMAT_RETRIES) { formatRetries += 1; attempt -= 1; }
+      }
     }
     await options.onCandidate?.(html);
   }
   throw new Error("A tanításjavítás nem fejeződött be.");
 }
+
+/** Spec 2026-09-19: immediate re-asks for a malformed patch, per review-and-repair run. */
+export const FORMAT_RETRIES = 2;
 
 /** Spec 2026-09-19: reviews before giving up (initial + repairs); each repair is one author call. */
 export const REVIEW_REPAIR_ATTEMPTS = 3;

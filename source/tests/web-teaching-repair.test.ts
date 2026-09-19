@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { readHtmlLessonData } from "../shared/lesson-html-data";
-import { applyTeachingPatch, reviewAndRepairWebTeaching, REVIEW_REPAIR_ATTEMPTS, salvageTeachingEdits } from "../server/studio/web-teaching-repair";
+import { applyTeachingPatch, reviewAndRepairWebTeaching, REVIEW_REPAIR_ATTEMPTS, FORMAT_RETRIES, salvageTeachingEdits, locateAnchor } from "../server/studio/web-teaching-repair";
 import { TEACHING_REVIEW_CHECKS, teachingReviewEvidence, assertTeachingReviewEvidence } from "../server/studio/web-teaching-review";
 import { teachingHtml } from "./helpers/teaching-html";
 
@@ -92,10 +92,11 @@ test("failed patch has bounded retry with its exact error; no repeated verdict t
     repair: async (_system, user) => { repairs++; if (repairs === 2) { assert.match(JSON.parse(user).patchFailure, /Üres/); assert.deepEqual(JSON.parse(user).previousPatch, { edits: [] }); } return { edits: [] }; },
     onProblem: async (problem, candidate) => { assert.equal(candidate, html); diagnostics.push(problem); },
   });
-  // Spec 2026-09-19: REVIEW_REPAIR_ATTEMPTS bounded repairs, still never a repeated verdict.
-  assert.equal(reviews, 1); assert.equal(repairs, REVIEW_REPAIR_ATTEMPTS); assert.equal(result.html, html);
+  // Spec 2026-09-19: REVIEW_REPAIR_ATTEMPTS review rounds + FORMAT_RETRIES immediate re-asks,
+  // still never a repeated verdict.
+  assert.equal(reviews, 1); assert.equal(repairs, REVIEW_REPAIR_ATTEMPTS + FORMAT_RETRIES); assert.equal(result.html, html);
   assert.equal(result.review.checks[2].passed, false);
-  assert.equal(diagnostics.filter(d => /Üres/.test(d)).length, REVIEW_REPAIR_ATTEMPTS);
+  assert.equal(diagnostics.filter(d => /Üres/.test(d)).length, REVIEW_REPAIR_ATTEMPTS + FORMAT_RETRIES);
 });
 
 test("two semantic corrections that do not fix the problem remain unpublishable", async () => {
@@ -137,4 +138,26 @@ test("bank item failing the gate is dropped, the teaching edits survive, and the
   assert.equal(result.html, html.replace(before, after));
   assert.ok(result.review.checks.every(c => c.passed));
   assert.ok(problems.some(p => /Bankjavítás elutasítva, a tanításjavítás alkalmazva/.test(p)));
+});
+
+/* Spec 2026-09-19 — whitespace-tolerant anchors and immediate re-asks for malformed patches. */
+test("an anchor copied with different line wrapping still matches exactly one text node", () => {
+  assert.deepEqual(locateAnchor("egy   két\n  három négy", "két három"), { at: 6, length: 11, duplicate: false });
+  assert.equal(locateAnchor("egy két három", "nincs itt"), null);
+  assert.equal(locateAnchor("két három két három", "két három")!.duplicate, true);
+  const wrapped = before.replace(" és ", "\n   és ");
+  assert.equal(applyTeachingPatch(html, { edits: [{ sectionIndex: 0, before: wrapped, after }] }), html.replace(before, after));
+  assert.throws(() => applyTeachingPatch(html, { edits: [{ sectionIndex: 0, before: wrapped, after: before }] }), /változatlan csere/);
+});
+
+test("a malformed patch is re-asked at once with its error and does not cost a review round", async () => {
+  let reviews = 0, repairs = 0; const seen: string[] = [];
+  const result = await reviewAndRepairWebTeaching(html, [source], {
+    review: async (candidate) => { reviews++; assert.equal(candidate, reviews === 1 ? html : html.replace(before, after)); return review(reviews === 2); },
+    repair: async (_system, user) => { repairs++; seen.push(JSON.parse(user).patchFailure); return repairs === 1 ? { edits: [] } : repairs === 2 ? { edits: [{ sectionIndex: 0, before: "nem létező horgony szöveg", after }] } : patch; },
+  });
+  assert.deepEqual([reviews, repairs], [2, 3]);
+  assert.match(seen[1], /Üres/); assert.match(seen[2], /hiányzó szövegrészlet/);
+  assert.equal(result.html, html.replace(before, after));
+  assert.ok(result.review.checks.every(c => c.passed));
 });

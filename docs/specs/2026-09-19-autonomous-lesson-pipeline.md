@@ -131,6 +131,12 @@ Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
   marad), a bank-elutasítás oka a következő javítókör bemenetébe kerül (`previousBankRejection`);
   a javítókörök száma `REVIEW_REPAIR_ATTEMPTS` = 3 (négy review). Érintett:
   `server/studio/web-teaching-repair.ts`, `tests/web-teaching-repair.test.ts`.
+- WHEN a webes lektori javítócsomag `before` horgonya csak whitespace-ben (sortörés, behúzás) tér el
+  a nyers HTML-től THEN `locateAnchor` egyetlen egyedi, egy szövegcsomóponton belüli találatként
+  illeszti; WHEN a csomag formailag hibás (üres, hiányzó horgony, hatókör) THEN a pontos hibával
+  azonnal újrakérés jön, legfeljebb `FORMAT_RETRIES` = 2 alkalommal futásonként, review-kör
+  fogyasztása nélkül (mérve: web run 3 két csomagja formai okból bukott, 846 s). Érintett:
+  `server/studio/web-teaching-repair.ts`, `tests/web-teaching-repair.test.ts`.
 - WHEN a webes szerző HTML-jének valamely fejezetében nincs a kapunak megfelelő szemléltetés THEN a
   szerzői kör (`verifyTeachingVisuals`) MÉG a bankgyártás előtt a fejezet sorszámával kéri a
   javítást (legfeljebb 2 javítókör), és a `HTML_TEACHING_CONTRACT` pontosan a kapu szabályát
