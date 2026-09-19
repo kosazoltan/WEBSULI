@@ -88,6 +88,20 @@ kapun bukott (a kapu ugyanazt a bemenetet építi). Token-fegyelem: a lektor és
 eszközleírást; a bank-skill előírja a példa lépéseinek/irányának szó szerinti követését (a
 blokkoló oka: „jobbról balra” a mintában).
 
+## 7e. Mérés 4 (run 525b2797, #78 kóddal, 2026-09-19 21:43–)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 | 11 007 | 2 302 | 32 s |
+| author 1 | gpt-5.6-terra | 10 189 | 7 225 | 56 s |
+| animator 1 (ábrák eszközből; 10 csomag, 1 deepseek-tartalék, 1 terra-mentőkör) | glm/deepseek/terra | 81 245 | 50 452 | **1 795 s** |
+| lektor 1 (1 kvíz-számhiba, experience.quiz.10) | grok-4.6 | 68 189 | 1 123 | 23 s |
+| animator 2 = **csak-bank kör** (nem szerzői újraírás ✅) | glm | 15 454 | 9 447 | 850 s |
+| lektor 2 (0 blokkoló) → **kapu**: 2 címke megalapozatlan (example blokkok) → author 3 | | | | |
+Tanulságok: (a) a csak-bank kör működik; (b) a kapu egyik elutasítása hamis pozitív (a forrás
+kidolgozott példája számokkal) → PR #79 determinisztikus szabály; (c) az idő a spec 20 percét
+messze túllépi: a glm ~100 tok/s, csomagonként 1–4 kísérlet, SOROS csomagépítés — a
+párhuzamos csomagépítés (3 egyidejű egység) a következő lépés (nyitott).
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.
