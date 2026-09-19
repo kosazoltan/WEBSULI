@@ -253,3 +253,44 @@ test("M-5 az összetett-szó lazítás sem enged át idegen témát", () => {
     "a terület szó megvan, a háromszög nem — a fogalom nincs megalapozva",
   );
 });
+
+/* ------------------------------------------------------------------------- *
+ * Spec 2026-09-19 — stripUngroundedAnimateLabels: az animációs blokk címkéje
+ * kozmetika; ami a felirat saját szövegéből nem igazolható, lekerül róla, a
+ * tanító blokkokhoz nem nyúl. Az első eset az éles PDF-futás (3ed5ca90) blokkja.
+ * ------------------------------------------------------------------------- */
+
+import { stripUngroundedAnimateLabels } from "../server/studio/grounding";
+
+test("animációs blokk szinonimás címkéje lekerül, a megalapozott címkék és a tanító blokkok maradnak", () => {
+  const concepts = [
+    { localId: "talaj-kialakulasa", term: "A talaj kialakulása", examWeight: "core" },
+    { localId: "mallas", term: "Mállás", examWeight: "core" },
+    { localId: "humusz", term: "Humusz", examWeight: "core" },
+  ] as MapConcept[];
+  const animate = { kind: "animate", animKind: "process", caption: "A talajképződés egymásra épülő lépései a kőzet feldarabolódásától a termékenyebb talajig.",
+    params: { steps: ["A mállás során a víz és a levegő kémiailag átalakítja a kőzetdarabokat.", "Az elhalt maradványok lebomlanak, és humusz keletkezik."] },
+    coversConceptIds: ["talaj-kialakulasa", "mallas", "humusz"] };
+  const explain = { kind: "explain", text: "A talaj kialakulása hosszú folyamat.", coversConceptIds: ["talaj-kialakulasa"] };
+  const lesson = { sections: [{ title: "1", blocks: [explain, animate] }] };
+  const result = stripUngroundedAnimateLabels(lesson, concepts);
+  assert.deepEqual(result.stripped.map(s => s.conceptId), ["talaj-kialakulasa"]);
+  assert.deepEqual(result.lesson.sections[0].blocks[1].coversConceptIds, ["mallas", "humusz"]);
+  assert.deepEqual(result.lesson.sections[0].blocks[0], explain, "a tanító blokk érintetlen");
+  assert.equal(groundingReport(result.lesson.sections[0].blocks, concepts).ok, true);
+});
+
+test("címke nélkül maradó animációs blokk eltűnik; ismeretlen id és term nélküli fogalom nem itt dől el", () => {
+  const concepts = [{ localId: "kor", term: "Kör kerülete" }, { localId: "nevtelen", term: "" }] as MapConcept[];
+  const lesson = { sections: [{ blocks: [
+    { kind: "explain", text: "A kör kerülete a sugár és a π kétszerese.", coversConceptIds: ["kor"] },
+    { kind: "animate", animKind: "process", caption: "Színes átmenet a lapon.", params: { steps: ["Villan a háttér."] }, coversConceptIds: ["kor"] },
+    { kind: "animate", animKind: "process", caption: "Ismeretlen és névtelen címke marad, mert a kapu méri.", params: { steps: ["x"] }, coversConceptIds: ["ismeretlen", "nevtelen"] },
+  ] }] };
+  const result = stripUngroundedAnimateLabels(lesson, concepts);
+  assert.equal(result.lesson.sections[0].blocks.length, 2);
+  assert.equal(result.lesson.sections[0].blocks[1].coversConceptIds.length, 2);
+  assert.equal(result.stripped.length, 1);
+  const untouched = { sections: [{ blocks: [{ kind: "explain", text: "csak tanítás", coversConceptIds: ["kor"] }] }] };
+  assert.equal(stripUngroundedAnimateLabels(untouched, concepts).lesson, untouched, "változatlan lecke ugyanaz az objektum marad");
+});

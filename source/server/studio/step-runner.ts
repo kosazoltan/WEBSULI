@@ -45,6 +45,7 @@ import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
+import { stripUngroundedAnimateLabels } from "./grounding";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
@@ -641,7 +642,16 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         );
       }
 
-      let completedLesson = outcome.lesson;
+      // Spec 2026-09-19: an animate block's labels are cosmetic — a label its own caption
+      // does not ground is dropped here, deterministically, instead of failing the whole
+      // lesson at the gate after the round limit (measured: PDF run 3ed5ca90).
+      const sanitised = stripUngroundedAnimateLabels(outcome.lesson, map.concepts);
+      if (sanitised.stripped.length) {
+        logger.warn(
+          `[STUDIO] Animációs címkék eltávolítva (${job.id}): ${sanitised.stripped.map((s) => `${s.conceptId}@${s.sectionIndex}/${s.blockIndex}`).join(", ")}`,
+        );
+      }
+      let completedLesson: Lesson = sanitised.lesson;
       let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
       if (isFusionMethodVersion(job.output?.methodVersion) || original.experience) {
         try {

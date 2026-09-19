@@ -1017,7 +1017,9 @@ test("(j) animator: az érvényes kiegészítés elmentődik, a következő lép
             kind: "animate",
             animKind: "numberLine",
             params: { from: 0, to: 10 },
-            caption: "Számegyenes",
+            // Spec 2026-09-19: an animate label must be grounded in the caption, else it is
+            // stripped as cosmetic; the shared fixture's c1 term varies between tests.
+            caption: "A sejt és a háromszög területe a számegyenesen lépésről lépésre",
             coversConceptIds: ["c1"],
           },
         ],
