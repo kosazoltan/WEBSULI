@@ -42,8 +42,14 @@ export const MAX_AUTHOR_ROUNDS = 2;
  * terminal transition. A constant below that turned a legitimate second Author round
  * into a fake "lépés-határ" error in production (job fd62b66a, 2026-09-05).
  */
-// Spec 2026-09-19: + one bank-only repair round after the limit (animator → lektor → gate).
-export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 3 + 1;
+/**
+ * Spec 2026-09-19 (mérve run 525b2797): csak-bank javító körök száma jobonként. Tétel-szintű
+ * bankhibáért nem dobunk el egy 70 perces leckét; a workflow látogatási kerete (animator/lektor
+ * maxVisits 4) ezzel együtt is tart: r0 + bank + author + bank = 4 animátor-látogatás.
+ */
+export const MAX_BANK_ONLY_ROUNDS = 2;
+// + MAX_BANK_ONLY_ROUNDS bank-only repair rounds (animator → lektor → gate each).
+export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 3 * MAX_BANK_ONLY_ROUNDS + 1;
 
 export function isTerminal(step: StudioStep): boolean {
   return step === "done" || step === "error";

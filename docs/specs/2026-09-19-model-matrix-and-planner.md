@@ -97,10 +97,15 @@ blokkoló oka: „jobbról balra” a mintában).
 | lektor 1 (1 kvíz-számhiba, experience.quiz.10) | grok-4.6 | 68 189 | 1 123 | 23 s |
 | animator 2 = **csak-bank kör** (nem szerzői újraírás ✅) | glm | 15 454 | 9 447 | 850 s |
 | lektor 2 (0 blokkoló) → **kapu**: 2 címke megalapozatlan (example blokkok) → author 3 | | | | |
+| author 2 (kapu-visszajelzés) | gpt-5.6-terra | 25 377 | 7 595 | 55 s |
+| animator 3 (teljes bank-újraépítés) | glm | 40 843 | 25 027 | 1 773 s |
+| lektor 3: 1 új kvíztétel-blokkoló (experience.quiz.74), csak-bank kör már elhasználva → **hiba a limiten, 4 627 s** | | | | |
 Tanulságok: (a) a csak-bank kör működik; (b) a kapu egyik elutasítása hamis pozitív (a forrás
-kidolgozott példája számokkal) → PR #79 determinisztikus szabály; (c) az idő a spec 20 percét
-messze túllépi: a glm ~100 tok/s, csomagonként 1–4 kísérlet, SOROS csomagépítés — a
-párhuzamos csomagépítés (3 egyidejű egység) a következő lépés (nyitott).
+kidolgozott példája számokkal) → PR #79 determinisztikus szabály; (c) tétel-szintű bankhibáért
+nem dobható el egy lecke → `MAX_BANK_ONLY_ROUNDS = 2` (PR #80); (d) az idő a spec 20 percét
+messze túllépi: a glm ~15–100 tok/s, csomagonként 1–4 kísérlet, SOROS csomagépítés — a
+párhuzamos csomagépítés (3 egyidejű egység) a következő lépés (nyitott). Költség a 4. futásra
+(≈ 470k be / 140k ki, döntően glm): ≈ 0,15 USD + Opus/terra/grok ≈ 0,6 USD.
 
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.

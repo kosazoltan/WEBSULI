@@ -1345,8 +1345,13 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   assert.equal(bankDeps.calls.length, 1);
   assert.match(bankDeps.calls[0].system, /kizárólag gyökérnek/);
 
-  // A second bank-only verdict at the limit is final.
+  // Spec 2026-09-19 (mérve run 525b2797): a második csak-bank blokkoló (más tétel) még egy csak-bank
+  // kört kap (MAX_BANK_ONLY_ROUNDS = 2); a harmadik verdikt a limiten végleges.
   job.step = "lektor"; job.round = MAX_AUTHOR_ROUNDS + 1; job.status = "ok";
+  const second = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ notes: [bankBlocker] })), store: deps.store });
+  assert.deepEqual(second.ok && second.next, { step: "animator", round: MAX_AUTHOR_ROUNDS + 2 }, `második csak-bank kör: ${JSON.stringify(second)}`);
+  assert.equal(job.output?.bankOnlyRepairRounds, 2);
+  job.step = "lektor"; job.round = MAX_AUTHOR_ROUNDS + 2; job.status = "ok";
   const again = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ notes: [bankBlocker] })), store: deps.store });
   assert.equal(again.ok, false);
   assert.match(deps.store.jobs.get("bank-only")!.error ?? "", /tartalmi javítást kér/);
