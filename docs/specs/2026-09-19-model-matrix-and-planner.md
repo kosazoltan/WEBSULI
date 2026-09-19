@@ -124,6 +124,21 @@ helyett; idő 22 perc a 35–40 helyett (a 20 perces cél a #81 párhuzamos csom
 A quiz.62 hibaosztály (correctIndex ≠ magyarázat) determinisztikus ellenőrzést kapott (#81), így a
 következő futásban a lektor elé sem jut.
 
+## 7g. Mérés 6 — `done` (run 3aafddb1, #81 párhuzamos csomagok, 2026-09-19 23:29–23:55)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 | 11 007 | 2 264 | 33 s |
+| author 1 | gpt-5.6-terra | 10 410 | 8 651 | 75 s |
+| animator 1 (ábrák eszközből; 10 csomag, 3 egyszerre) | glm | 134 034 | 78 628 | **740 s** (soros: 1 052 / 1 795) |
+| lektor 1: 0 blokkoló → kapu: 3 example/try címke (hamis pozitív → #82) → author 2 | grok | 73 818 | 1 703 | 34 s |
+| author 2 + animator 2 (érintett csomagok, párhuzamosan) | terra / glm | 27 766 + 25 131 | 8 729 + 13 195 | 55 + 123 s |
+| lektor 2: 2 kvíztétel (quiz.67 „menet”, quiz.60 opció 990 ≠ indoklás 970) → csak-bank kör | grok | 75 299 | 2 191 | 41 s |
+| animator 3 (csak-bank) | glm | 58 208 | 23 887 | 434 s |
+| lektor 3: 0 → kapu ✅ → readback ✅ | grok | 75 244 | 1 214 | 24 s |
+**Eredmény:** `done` 1 564 s (26 perc), lecke `7ec84713` / html_files `90f53a1a`, 12 fejezet, 45/75 bank.
+A #82 (fejezet-szintű megalapozottság) nélkül a 2. kör elmaradt volna (−3 perc), a quiz.60 osztályt
+a kiterjesztett `quizCorrectIndexProblems` (#83) a lektor előtt fogja meg (−7 perc) → várható ≈ 15 perc.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.

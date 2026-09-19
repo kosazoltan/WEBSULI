@@ -196,6 +196,9 @@ test("mérve run 5 (quiz.62): a correctIndex és a magyarázat számbeli ellentm
   assert.equal(wrong.length, 1); assert.match(wrong[0], /43 opciót jelöli.*45/);
   assert.deepEqual(quizCorrectIndexProblems([{ ...base, options: ["szorzás", "osztás", "összeadás"], correctIndex: 0, feedbackPerOption: ["Helyes, 45.", "Nem", "Nem"] }]), [], "szöveges opcióknál nincs ítélet");
   assert.deepEqual(quizCorrectIndexProblems([{ ...base, correctIndex: 0, feedbackPerOption: ["Helyes: a végeredmény 43, mert 30+18–3 lépésben 45 helyett…", "Nem.", "Nem."] }]), [], "ha a saját számát is említi, nincs ellentmondás");
+  // Mérve run 3aafddb1 (quiz.60): a HIBÁS opció szövege 990, az indoklása 970-ről szól.
+  const wrongOption = quizCorrectIndexProblems([{ ...base, options: ["970", "990", "1000"], correctIndex: 0, feedbackPerOption: ["Helyes: 194·5 = 970.", "Nem: 194·5 = 970, nem ez.", "Nem: 1000 túl sok."] }]);
+  assert.equal(wrongOption.length, 1); assert.match(wrongOption[0], /990 opció indoklása 970/);
 });
 
 test("spec 2026-09-19: párhuzamos csomagépítés — egyszerre készülő csomagok, ütköző (ismétlődő) kérdésnél soros újraépítés", async () => {
