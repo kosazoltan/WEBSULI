@@ -47,6 +47,7 @@ valódi PDF-forrású helyi futás `done`-ig ér; a dirty munka teljes egészéb
 | `A 1. fejezet bankcsomagja a javító kör után sem megfelelő: methods=3, tasks=10, quiz=18` | csomagonként 2 kísérlet (`experience-builder.ts:161`), 36–48 fogalmas térképen sok csomag | `studio_jobs 41a94054, 222202f1, 4f853db8` |
 | `Invalid PDF structure.` | `document-source.ts:34` nyers pdfjs-hiba, nincs tartalék | `one_step_runs a1707ade` |
 | Webes: `A célzott javító modellhívása nem fejeződött be` | lektor-hívás (`web-teaching-review.ts:122`) ugyanaz a grok időtúllépés, nincs tartalék | `lesson_workflow_runs 0b37a30f` |
+| PDF (valódi próbafutás 2026-09-19, 1645 s): `A fúziós lecke tanítása hiányos: 1 fogalom-címkét a blokk saját szövege nem támaszt alá … talaj-kialakulasa a(z) 6. animate blokkon` | az animációs blokk felirata „talajképződés", a fogalom neve „A talaj kialakulása" (szinonima); a `#196` szóegyezés téves pozitívja egy kozmetikai blokkon, a kapu 3 szerzői kör után buktatott | `studio_jobs 3ed5ca90`, `lesson_workflow_runs be202c1d` (author×3 → gate:error) |
 | Webes (valódi próbafutás 2026-09-19, 1001 s): `…automatikus javítás után sem készült el: 1. fejezet: hiányzó tanítási szemléltetés…` | a szerzői kör (`web-research-runner.ts` `web-author-html`) csak a szerkezetet ellenőrzi; a szemléltetés-kapu (`verify-html-teaching.ts` kártyasor-szabály: figcaption ≥20 + ≥2 kártya félkövér címkével) csak a bankgyártás UTÁN fut, javítókör nélkül; a szerző címke nélküli nyilas lépéssort írt | `ai_generation_requests 0aa2435b` (candidate: 4 figure, 1 svg, 0 címkés kártya) |
 
 Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
@@ -110,6 +111,11 @@ Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
 - WHEN a lektor primer modellje `StepModelError`-ral bukik THEN a runner a
   `FALLBACK_MODELS.lektor` modellel egyszer újrapróbál; sikeres válasz esetén a lépés `ok`.
 - WHEN a webes tartalmi lektor primer hívása `StepModelError` THEN a tartalék-modell fut.
+- WHEN egy `animate` blokk `coversConceptIds` címkéjét a blokk saját szövege (felirat + lépések)
+  nem alapozza meg THEN az animátor lépés a címkét determinisztikusan eltávolítja
+  (`stripUngroundedAnimateLabels`), a címke nélkül maradó blokkot elhagyja, naplózza; a tanító
+  blokkok megalapozottsága változatlanul a kapun mérődik. Érintett: `server/studio/grounding.ts`,
+  `server/studio/step-runner.ts`, `tests/studio-grounding.test.ts`.
 - WHEN a webes szerző HTML-jének valamely fejezetében nincs a kapunak megfelelő szemléltetés THEN a
   szerzői kör (`verifyTeachingVisuals`) MÉG a bankgyártás előtt a fejezet sorszámával kéri a
   javítást (legfeljebb 2 javítókör), és a `HTML_TEACHING_CONTRACT` pontosan a kapu szabályát
