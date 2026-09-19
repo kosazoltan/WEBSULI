@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Circle, Clock3, RefreshCw, TriangleAlert } from "lucide-react";
-import { WORKFLOW_STATE_LABELS, type WorkflowView, type WorkflowVisit } from "@shared/lesson-workflow";
+import { WORKFLOW_STATE_LABELS, workflowStepDisplay, type WorkflowView, type WorkflowVisit } from "@shared/lesson-workflow";
 import { SKILL_RULES, skillForMode } from "@shared/lesson-skill";
 
 const elapsed = (visit: WorkflowVisit) => visit.finishedAt === undefined ? "Folyamatban" : `${((visit.finishedAt - visit.startedAt) / 1000).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} mp`;
@@ -54,12 +54,13 @@ export function WorkflowGraph({ run }: { run: WorkflowView }) {
         {connections.map((c, index) => <path key={index} d={c.path} fill="none" stroke="currentColor" strokeWidth="2" />)}
       </svg>
       {run.definition.steps.map((step, index) => {
-        const last = run.visits.filter(v => v.step === step.id).at(-1);
-        const state = last?.state === "running" && run.state === "interrupted" ? "error" : last?.state;
-        const Icon = state === "done" ? Check : state === "error" ? TriangleAlert : state === "running" ? RefreshCw : Circle;
+        // Spec 2026-09-19: round-aware card state — an earlier round's "done" reads "Új kör következik".
+        const display = workflowStepDisplay(run, step.id);
+        const state = display.state === "pending" ? undefined : display.state;
+        const Icon = state === "done" ? Check : state === "error" ? TriangleAlert : state === "running" ? RefreshCw : state === "redo" ? Clock3 : Circle;
         const color = state === "done" ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:bg-emerald-950 dark:text-emerald-100" : state === "error" ? "border-red-300 bg-red-50 text-red-950 dark:bg-red-950 dark:text-red-100" : state === "running" ? "border-sky-400 bg-sky-50 text-sky-950 dark:bg-sky-950 dark:text-sky-100" : "border-slate-300 bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200";
         return <button key={step.id} type="button" data-step={step.id} aria-pressed={selectedId === step.id} onClick={() => setSelected(step.id)} className={`relative z-10 min-h-24 min-w-0 rounded-xl border p-3 text-left shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${color} ${selectedId === step.id ? "ring-2 ring-sky-600 ring-offset-2 dark:ring-offset-slate-950" : ""}`}>
-          <span className="flex items-center gap-2 text-xs font-semibold"><Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${state === "running" ? "motion-safe:animate-spin" : ""}`} />{index + 1}. {state ? visitLabel[state] : "Még nem indult"}{last && last.attempt > 1 ? ` · ${last.attempt}. kör` : ""}</span>
+          <span className="flex items-center gap-2 text-xs font-semibold"><Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${state === "running" ? "motion-safe:animate-spin" : ""}`} />{index + 1}. {display.label}{display.round > 1 ? ` · ${display.round}. kör` : ""}</span>
           <span className="mt-2 block break-words text-sm font-semibold">{step.label}</span>
         </button>;
       })}

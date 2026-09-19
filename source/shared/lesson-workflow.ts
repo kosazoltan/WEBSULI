@@ -73,3 +73,25 @@ export function assertWorkflowStep(run: WorkflowView, id: string): WorkflowStep 
   if (contentVisits.length >= step.maxVisits) throw new Error(`Elfogyott a lépés javítási kerete: ${step.label}.`);
   return step;
 }
+
+export type WorkflowStepDisplay = { state: "done" | "running" | "error" | "waiting" | "redo" | "pending"; label: string; round: number };
+/**
+ * Spec 2026-09-19: what a step card shows. A step whose last visit belongs to an EARLIER
+ * round than the visit currently running (the run looped back to the author) is not
+ * "Befejezett" any more — it will run again (measured on the owner's screen: step 7 in
+ * round 3 while steps 8–9 still read done from round 2).
+ */
+export function workflowStepDisplay(run: WorkflowView, stepId: string): WorkflowStepDisplay {
+  const last = run.visits.filter(v => v.step === stepId).at(-1);
+  if (!last) return { state: "pending", label: "Még nem indult", round: 0 };
+  const round = run.visits.filter(v => v.step === stepId).length;
+  const state = last.state === "running" && run.state === "interrupted" ? "error" : last.state;
+  const current = run.visits.at(-1);
+  const order = run.definition.steps.map(s => s.id);
+  if (run.state === "running" && current && current.state === "running" && current.step !== stepId && last.state === "done"
+    && order.indexOf(stepId) > order.indexOf(current.step) && (last.finishedAt ?? last.startedAt) <= current.startedAt) {
+    return { state: "redo", label: "Új kör következik", round };
+  }
+  const labels = { done: "Befejezett", running: "Folyamatban", error: "Megállt", waiting: "Döntésre vár" } as const;
+  return { state, label: labels[state], round };
+}

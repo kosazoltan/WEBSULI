@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, WorkflowWaiting, WorkflowConflict, redactWorkflowError } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
+import { workflowDefinition, type WorkflowView } from "../shared/lesson-workflow";
 
 test("a visszaolvasás nélküli siker és az átugrott kapu nem hajthat végre írást", async () => {
   const { store, records } = memoryWorkflows(); let writes = 0;
@@ -84,4 +85,23 @@ test("idegen folyamatverzió és túl sok újrapróbálás leáll, hibaszövegbe
   m.records.get(input.id)!.view.definition.version = "other";
   await assert.rejects(executeWorkflow(m.store, input, work), /eltérő programverzió/);
   assert.equal(redactWorkflowError(new Error("https://fixture.test/private?key=secret Bearer fixture-secret sk-fixture")), "[hivatkozás] [titkos érték] [titkos érték]");
+});
+
+/* Spec 2026-09-19 — a completed step of an earlier round reads "Új kör következik" while a later round runs. */
+test("workflowStepDisplay: a korábbi kör befejezett lektor/kapu lépése új kört jelez, amíg az animátor a 3. körben fut", async () => {
+  const { workflowStepDisplay } = await import("../shared/lesson-workflow");
+  const visit = (step: string, state: "done" | "running", startedAt: number, finishedAt?: number) => ({ step, state, attempt: 1, startedAt, finishedAt, cacheHits: 0 });
+  const run: WorkflowView = { id: "r", definition: workflowDefinition("upload"), state: "running", createdAt: 1, updatedAt: 1, revision: 0, visits: [
+    visit("source", "done", 1, 2), visit("scope", "done", 2, 3), visit("knowledge", "done", 3, 4), visit("sourceCheck", "done", 4, 5), visit("pedagogue", "done", 5, 6),
+    visit("author", "done", 6, 7), visit("animator", "done", 7, 8), visit("lektor", "done", 8, 9), visit("gate", "done", 9, 10),
+    visit("author", "done", 10, 11), visit("animator", "running", 11),
+  ] };
+  assert.deepEqual(workflowStepDisplay(run, "animator"), { state: "running", label: "Folyamatban", round: 2 });
+  assert.deepEqual(workflowStepDisplay(run, "lektor"), { state: "redo", label: "Új kör következik", round: 1 });
+  assert.deepEqual(workflowStepDisplay(run, "gate"), { state: "redo", label: "Új kör következik", round: 1 });
+  assert.deepEqual(workflowStepDisplay(run, "author"), { state: "done", label: "Befejezett", round: 2 });
+  assert.deepEqual(workflowStepDisplay(run, "pedagogue"), { state: "done", label: "Befejezett", round: 1 });
+  assert.deepEqual(workflowStepDisplay(run, "readback"), { state: "pending", label: "Még nem indult", round: 0 });
+  const finished = { ...run, state: "done" as const, visits: [...run.visits.slice(0, -1), visit("animator", "done", 11, 12), visit("lektor", "done", 12, 13), visit("gate", "done", 13, 14), visit("readback", "done", 14, 15)] };
+  assert.equal(workflowStepDisplay(finished, "lektor").label, "Befejezett");
 });

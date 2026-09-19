@@ -168,6 +168,15 @@ export function buildPedagoguePrompt(map: PromptMap): string {
     "- Minden szakaszhoz tervezz blokkokat (plannedBlocks) a megengedett típusokból: explain, example, check, recap, animate, try.",
     "- Ahol animáció segítene, írd be az animationSuggestions mezőbe.",
     "",
+    // Spec 2026-09-19 — the target lesson pattern the owner set as the end goal.
+    "CÉL-TANANYAG MINTA (a vázlat ezt kövesse, ahol a forrás tartalma engedi):",
+    "- Nyitó fejezet: miért kell ez a tudás / mi a probléma (motiváció), csak utána a szabályok.",
+    "- Szabályonként vagy fogalomcsoportonként külön fejezet: explain → example (lépésről lépésre) → check.",
+    "- Ha a forrás gyakorlófeladatot tartalmaz: külön fejezet „A feladat megoldva lépésről lépésre” (plannedBlocks: explain, example, example…, recap), a forrás feladataival.",
+    "- Zárás előtt „A leggyakoribb hibák” fejezet: a misconceptions listából (legalább 3, ha a forrás alapján van ennyi), plannedBlocks: explain, check, recap.",
+    "- Utolsó fejezet „Ellenőrzés – hogyan légy biztos magadban?”: a teljes eljárás számozott lépései és önellenőrző kérdések, plannedBlocks: explain, animate, recap.",
+    "- Minden fejezet animationSuggestions mezője legalább egy konkrét, a fejezet tanításából rajzolható ábrát nevezzen meg (folyamat lépései, számegyenes, idővonal, térkép…).",
+    "",
     LESSON_ARC_CONTRACT,
     "A plannedBlocks sorrendje EZT az ívet kövesse — a vázlat sorrendje lesz a lecke sorrendje.",
     LESSON_METHOD_CONTRACT,
@@ -294,8 +303,17 @@ export function buildAuthorPrompt(
   }
 
   parts.push(
+    // Spec 2026-09-19 — the target lesson pattern (cél-tananyag: szabályonként levezetett példa,
+    // a forrás feladatai lépésről lépésre megoldva, „leggyakoribb hibák", „ellenőrzés").
+    "CÉL-TANANYAG MINTA (kötelező, ahol a forrás tartalma engedi):",
+    "- Minden szabályt vagy eljárást tanító fejezetben legyen legalább egy `example` blokk, amelynek `steps` tömbje a megoldás LÉPÉSEIT sorolja (legalább 2 lépés, lépésenként egy művelet/döntés, a végén az eredmény). Ne csak a végeredményt add meg.",
+    "- Ha a forrásban gyakorlófeladat(ok) van(nak), a vázlat szerinti fejezetben oldd meg őket egyenként `example` blokkokban, lépésről lépésre (a forrás adataival, nem más számokkal).",
+    "- Ha a vázlat „gyakori hibák” fejezetet tervez: minden tévhithez egy `explain` (depth „why”: rossz gondolat → helyes → miért) és egy `check` (a rossz megoldás opcióként, minden opcióhoz magyarázat).",
+    "- Ha a vázlat „ellenőrzés” fejezetet tervez: `explain` a teljes eljárás számozott lépéseivel és egy önellenőrző kérdéssorral (miért ez következik?), majd `recap`.",
+    "- A `misconceptions` tömb a vázlat tévhitlistáját tartalmazza változatlanul (conceptId + text); ne hagyd üresen, ha a vázlatban van.",
+    "",
     "A válasz CSAK JSON legyen, a Lesson sémának megfelelően:",
-    '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [], "sourceOnly": true }',
+    '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [{ "conceptId": string, "text": string }], "sourceOnly": true }',
     "",
     "Vázlat:",
     JSON.stringify(sections, null, 2),
@@ -397,6 +415,7 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "",
     "Hard rules:",
     "- You may ONLY add new `animate` blocks or replace existing `animate` blocks. Nothing else.",
+    "- EVERY section must end up with at least one `animate` block that visualises that section's own teaching (spec 2026-09-19: a chapter without a figure is a lektor blocker). Prefer `process` with the section's example steps, `timeline`, `numberLine` or `map` as the content dictates; place it right after the explain/example it illustrates.",
     "- Every non-animate block must remain verbatim — character for character, byte-identical.",
     "- Every coversConceptIds must come from the ids already used by the lesson — never invent new ones.",
     "- The title, subject, classroom, mapId and sourceOnly must stay exactly as they are.",
