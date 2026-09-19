@@ -2,9 +2,9 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 import { LESSON_QUALITY_CONTRACT } from "../../shared/lesson-quality";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
-import { callStepModel } from "./run-step";
+import { callStepModel, StepModelError } from "./run-step";
 import { createStudioStepProvider } from "../ai/studio-provider";
-import { resolveStudioModel } from "../ai/models";
+import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { workflowValidationFailure } from "../workflows/engine";
 
@@ -121,7 +121,19 @@ export function assertTeachingReviewEvidence(html: string, sources: { url: strin
 }
 export const callTeachingReviewer = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("lektor");
-  return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", model, system, user }, signal)).json;
+  try {
+    return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", model, system, user }, signal)).json;
+  } catch (primaryError) {
+    // Spec 2026-09-19: the same lektor fallback as the Studio runner — only on a provider
+    // failure (timeout, 5xx, bad JSON), never on a content verdict, never after an abort.
+    const fallback = FALLBACK_MODELS.lektor;
+    if (!(primaryError instanceof StepModelError) || !fallback || fallback === model || signal?.aborted) throw primaryError;
+    try {
+      return (await callStepModel(createStudioStepProvider(fallback, "lektor"), { step: "lektor", model: fallback, system, user }, signal)).json;
+    } catch {
+      throw primaryError;
+    }
+  }
 };
 export async function reviewWebTeaching(html: string, sources: FetchedTeachingSource[], call = callTeachingReviewer, signal?: AbortSignal, requestedTopic = "", challenge = false): Promise<TeachingReview> {
   if (!sources.length) throw new Error("A tartalmi lektorhoz nincs letöltött forrásszöveg; a keresési találat önmagában nem elegendő.");

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Concept } from "../../shared/knowledge-map-schema";
 import type { ExtractorFile, CheckedConcept } from "./extractor";
 import type { OcrResult } from "./ocr";
-import { checkVerbatim } from "./verbatim";
+import { checkVerbatim, relocateQuote } from "./verbatim";
 
 /** The writer and verifier must see the same transcript, not two independent OCR readings. */
 export function attachSourceTranscripts(files: ExtractorFile[], ocr: OcrResult[]): ExtractorFile[] {
@@ -40,12 +40,26 @@ export function checkSourceQuotes(concepts: Concept[], files: ExtractorFile[]): 
 
 const quoteProposal = z.object({ id: z.string(), quote: z.string().trim().min(1).max(2000) });
 
+/**
+ * Spec 2026-09-19: before any paid repair round, a failed quote is relocated onto the
+ * source passage it was transcribed from (OCR noise only, see `relocateQuote`). The
+ * concept's quote becomes the source's own wording; the concept itself is untouched.
+ */
+export function relocateSourceQuotes(concepts: CheckedConcept[], files: ExtractorFile[]): CheckedConcept[] {
+  return checkSourceQuotes(concepts.map(concept => {
+    if (concept.verbatimOk) return concept;
+    const source = files.find(file => file.name === concept.sourceRef.file);
+    const relocated = relocateQuote(concept.quote, source?.extractedText ?? "");
+    return relocated ? { ...concept, quote: relocated } : concept;
+  }), files);
+}
+
 /** Bounded, quote-only repair. A model cannot change the concept or approve its own evidence. */
 export async function repairSourceQuotes(
   concepts: Concept[], files: ExtractorFile[],
   repair: (failed: CheckedConcept[], round: number) => Promise<unknown[]>,
 ): Promise<CheckedConcept[]> {
-  let checked = checkSourceQuotes(concepts, files);
+  let checked = relocateSourceQuotes(checkSourceQuotes(concepts, files), files);
   for (let round = 1; round <= 2; round++) {
     const failed = checked.filter(concept => !concept.verbatimOk);
     if (!failed.length) break;

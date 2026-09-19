@@ -1244,3 +1244,22 @@ test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   assert.equal((await store.loadJob("job-1"))?.status, "error");
   assert.match(outcome.reason, /Rate limit exceeded/);
 });
+
+test("(p) spec 2026-09-19 — lektor: az elsődleges modell időtúllépése után a FALLBACK_MODELS.lektor modellen fut le", async () => {
+  const primary = resolveStudioModel("lektor");
+  const fallback = FALLBACK_MODELS.lektor!;
+  assert.notEqual(primary, fallback);
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
+    failModels: new Set([primary]),
+    cannedResponse: JSON.stringify({ notes: [] }),
+  });
+  store.seed({ id: "job-1", mapId: "m1", step: "lektor", status: "running", output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON } });
+
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+
+  assert.equal(outcome.ok, true, `a lektor lépés a tartalék-modellen sikeres: ${JSON.stringify(outcome)}`);
+  assert.deepEqual(calls, [primary, fallback], "előbb az elsődleges, majd a tartalék lektor");
+  const job = await store.loadJob("job-1");
+  assert.equal(job?.status, "ok");
+  assert.equal((job as { model?: string | null })?.model, fallback, "a job a ténylegesen használt lektor-modellt rögzíti");
+});

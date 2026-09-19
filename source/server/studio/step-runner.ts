@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
@@ -10,6 +10,9 @@ import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { classifyNotes, type RawNote } from "./lektor";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
+
+/** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
+export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
 import { MAX_AUTHOR_ROUNDS } from "./pipeline";
 import { STUDIO_PROMPT_NAMES, studioPromptStore } from "./prompt";
 import {
@@ -1082,7 +1085,10 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           examWeight: kmConcepts.examWeight,
         })
         .from(kmConcepts)
-        .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
+        // Spec 2026-09-19: only source-verified concepts are taught. A manually approved
+        // map never holds `pending` (canApprove); an autonomously approved one may — those
+        // stay visible in the map but do not reach the pedagogue/author.
+        .where(and(eq(kmConcepts.mapId, mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES)));
 
       return {
         meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom },
@@ -1303,7 +1309,7 @@ export async function fixConceptOnLesson(
       examWeight: kmConcepts.examWeight,
     })
     .from(kmConcepts)
-    .where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
+    .where(and(eq(kmConcepts.mapId, mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES)));
 
   const provider = providerFactory(model);
 

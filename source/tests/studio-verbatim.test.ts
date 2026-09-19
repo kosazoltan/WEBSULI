@@ -105,3 +105,47 @@ test("normalizeForCompare is idempotent", () => {
   const once = normalizeForCompare(SOURCE);
   assert.equal(normalizeForCompare(once), once);
 });
+
+/* ------------------------------------------------------------------------- *
+ * Spec 2026-09-19 — relocateQuote: OCR noise is relocated onto the source's own
+ * sentence; a paraphrase stays rejected. The two positive cases are the real
+ * production concepts that parked three runs on 2026-09-19 (km_concepts of maps
+ * 08af437e…, 84bf9b03…, 01f52aca…).
+ * ------------------------------------------------------------------------- */
+
+import { relocateQuote, RELOCATE_MIN_SIMILARITY } from "../server/studio/verbatim";
+
+const ONION_SOURCE = "A vöröshagyma. Szintén a talajban fejlődik a hagymafej, amelyet kívülről vörösbarna, száraz burokelevelek fednek (2. ábra). A burokelevelek alatt lévő húsos hagymalevelek sok tápanyagot raktároznak. A növény föld alatti szárából, a tönkből fejlődik.";
+const CARROT_SOURCE = "A sárgarépa hidegtűrő növényünk, őse, a vadmurok, hazánkban is őshonos. Kora tavasszal elültetett magjaiból vaskos, sok tápanyagot raktározó főgyökerzete, karógyökér fejlődik. Karógyökerét fogyasztjuk.";
+
+test("relocateQuote: egykarakteres OCR-zaj (buroklevelek/burokelevelek) → a forrás saját mondata", () => {
+  const quote = "Szintén a talajban fejlődik a hagymafej, amelyet kívülről vörösbarna, száraz buroklevelek fednek (2. ábra). A buroklevelek alatt lévő húsos hagymalevelek sok tápanyagot raktároznak.";
+  assert.equal(checkVerbatim(quote, ONION_SOURCE).ok, false);
+  const relocated = relocateQuote(quote, ONION_SOURCE);
+  assert.equal(relocated, "Szintén a talajban fejlődik a hagymafej, amelyet kívülről vörösbarna, száraz burokelevelek fednek (2. ábra). A burokelevelek alatt lévő húsos hagymalevelek sok tápanyagot raktároznak.");
+  assert.equal(checkVerbatim(relocated!, ONION_SOURCE).ok, true, "a relokált idézet a D1-őrön átmegy, mert a forrás saját szövege");
+});
+
+test("relocateQuote: ékezet-zaj (főgyökérzete/főgyökerzete) → a forrás saját mondata, eredeti nagybetűvel", () => {
+  const quote = "Kora tavasszal elültetett magjaiból vaskos, sok tápanyagot raktározó főgyökérzete, karógyökér fejlődik.";
+  const relocated = relocateQuote(quote, CARROT_SOURCE);
+  assert.equal(relocated, "Kora tavasszal elültetett magjaiból vaskos, sok tápanyagot raktározó főgyökerzete, karógyökér fejlődik.");
+});
+
+test("relocateQuote: parafrázis (más mondat a forrás szavaiból) → null, pending marad", () => {
+  // 11 of its 12 words occur in the source — a bag-of-words check would pass it.
+  const quote = "A növény föld alatti hajtása a hagymafej. A hajtás leveles szárat jelent.";
+  assert.equal(relocateQuote(quote, ONION_SOURCE), null);
+});
+
+test("relocateQuote: pontos idézet formázási zajjal → a forrás eredeti írásmódja", () => {
+  const relocated = relocateQuote("kora   tavasszal\nelültetett magjaiból", CARROT_SOURCE);
+  assert.equal(relocated, "Kora tavasszal elültetett magjaiból");
+});
+
+test("relocateQuote: túl rövid (2 szó), üres forrás, forrásnál hosszabb idézet → null", () => {
+  assert.equal(relocateQuote("hagymafej fejlődik", ONION_SOURCE), null);
+  assert.equal(relocateQuote("Szintén a talajban fejlődik a hagymafej", ""), null);
+  assert.equal(relocateQuote("ez egy nagyon hosszú idézet ami nem fér bele", "rövid forrás"), null);
+  assert.ok(RELOCATE_MIN_SIMILARITY >= 0.9, "a küszöb nem lazítható 0,9 alá (spec 2026-09-19)");
+});
