@@ -25,6 +25,18 @@ export interface ResearchJobStore {
   verifyMaterial?(id: string, userId: string, html: string): Promise<boolean>;
 }
 export class ResearchJobConflict extends Error {}
+
+/**
+ * Spec 2026-09-19: the published web lesson is named after its own <title> / first <h1>
+ * when the teacher gave no title — not the generic "tantárgy — N. osztály" fallback.
+ */
+export function webLessonTitleFromHtml(html: string): string | null {
+  const pick = (m: RegExpMatchArray | null) => {
+    const text = m?.[1]?.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim() ?? "";
+    return text.length >= 4 && text.length <= 160 ? text : null;
+  };
+  return pick(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)) ?? pick(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i));
+}
 export function publicResearchJob(job: StoredResearchJob): WebResearchJob {
   const { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume } = job;
   const warnings = job.reviewEvidence?.warnings;
@@ -81,7 +93,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       job.sources = artifact.sources;
       job.reviewEvidence = artifact.reviewEvidence;
       job.classroom = data.classroom;
-      job.title = job.input.title?.trim() || `${data.subject} — ${data.classroom}. osztály`;
+      job.title = job.input.title?.trim() || webLessonTitleFromHtml(artifact.html) || `${data.subject} — ${data.classroom}. osztály`;
       job.state = "ready";
       job.stage = "A kész tananyag mentése…";
       await store.update(job, "running");

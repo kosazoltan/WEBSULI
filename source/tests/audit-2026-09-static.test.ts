@@ -87,3 +87,11 @@ test("WebResearchAgentPanel előnézeti iframe nem kap allow-same-origin-t", () 
     assert.ok(!s.includes("allow-same-origin"), `nincs allow-same-origin: ${s}`);
   }
 });
+
+test("spec 2026-09-19: a WebResearchAgentPanel a job.warnings mezőt figyelmeztető mezőként rendereli", () => {
+  const src = read("client/src/components/studio/WebResearchAgentPanel.tsx");
+  assert.match(src, /setWarnings\(job\.warnings \?\? \[\]\)/);
+  assert.match(src, /data-testid="web-research-warnings"/);
+  assert.match(src, /webReviewWarningLabel\(criterion\)/);
+  assert.match(src, /setWarnings\(\[\]\)/, "új kérésnél törlődik");
+});

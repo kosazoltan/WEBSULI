@@ -238,3 +238,14 @@ test("run-extraction.ts: a térkép és a fogalmak EGY tranzakcióban mentődnek
   assert.match(src, /tx\.insert\(kmConcepts\)/);
   assert.doesNotMatch(src, /\bdb\s*\.insert\(knowledgeMaps\)/, "térkép-insert csak tranzakcióban");
 });
+
+/* Spec 2026-09-19 — the per-run skill suffix goes to the model, never into the cache key. */
+test("a cache-kulcs a stabil promptból számolódik: a tanult skill-utótag nem változtatja, az alapprompt igen", () => {
+  const base = { model: "model-a", systemPrompt: "Alapprompt", ocrModel: "ocr-a", ocrPrompt: "Pontos átirat", provider: "provider-a" };
+  const run1 = { ...base, systemPrompt: base.systemPrompt + "\nTanult skill 1", cacheKeyPrompt: base.systemPrompt };
+  const run2 = { ...base, systemPrompt: base.systemPrompt + "\nTanult skill 2 (más tapasztalat)", cacheKeyPrompt: base.systemPrompt };
+  assert.equal(extractionSignature(run1), extractionSignature(run2), "ugyanaz a forrás ugyanazt a térképet találja meg");
+  assert.equal(computeInputHash(FILES, SCOPE, extractionSignature(run1)), computeInputHash(FILES, SCOPE, extractionSignature(run2)));
+  assert.notEqual(extractionSignature({ ...run1, cacheKeyPrompt: "Módosított alapprompt" }), extractionSignature(run1), "a valódi promptváltozás új kulcs");
+  assert.equal(extractionSignature(base), extractionSignature({ ...base, cacheKeyPrompt: base.systemPrompt }), "cacheKeyPrompt nélkül a régi viselkedés");
+});

@@ -5,7 +5,7 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
-import { createResearchJobs, checkedResearchArtifact, publicResearchJob, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
+import { createResearchJobs, checkedResearchArtifact, publicResearchJob, webLessonTitleFromHtml, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
 import { WebResearchFailure, webResearchTurnKey } from "../server/studio/web-research-runner";
 import { workflowCheckpoint } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
@@ -206,4 +206,10 @@ test("publicResearchJob továbbadja a lektori figyelmeztetéseket, hiányukban n
   const warned = { ...base, reviewEvidence: { version: "web-teaching-review-1", htmlHash: "a", sourceListHash: "b", fetchedSourcesHash: "c", review: { checks: [], issues: [] }, warnings: ["explanation_depth", "age_and_added_value"] } } as unknown as StoredResearchJob;
   assert.deepEqual(publicResearchJob(warned).warnings, ["explanation_depth", "age_and_added_value"]);
   assert.equal("candidate" in publicResearchJob(warned), false);
+});
+
+test("spec 2026-09-19: cím nélküli kérésnél a webes lecke címe a HTML <title>/<h1> szövege, különben a generikus", () => {
+  assert.equal(webLessonTitleFromHtml("<html><head><title> A talaj &nbsp; kialakulása </title></head><body><h1>Más</h1></body></html>"), "A talaj kialakulása");
+  assert.equal(webLessonTitleFromHtml("<html><body><h1>A <b>talaj</b> védelme</h1></body></html>"), "A talaj védelme");
+  assert.equal(webLessonTitleFromHtml("<html><body><title>ab</title><p>nincs cím</p></body></html>"), null);
 });

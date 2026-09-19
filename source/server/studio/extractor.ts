@@ -66,7 +66,10 @@ export type ExtractorDeps = {
  * sourceFiles/sourceRef names together; a new upload must not rename old provenance.
  */
 export const EXTRACTION_VERSION = "source-ledger-6-transcript";
-export function extractionSignature(config: { model: string; systemPrompt: string; ocrModel: string; ocrPrompt: string; provider: string }): string {
+export function extractionSignature(config: { model: string; systemPrompt: string; ocrModel: string; ocrPrompt: string; provider: string; cacheKeyPrompt?: string }): string {
+  // Spec 2026-09-19: the cache key uses the stable prompt; a per-run skill suffix must not
+  // change the input hash, or the same upload never finds its own map/lesson again.
+  config = { ...config, systemPrompt: config.cacheKeyPrompt ?? config.systemPrompt };
   return createHash("sha256").update(JSON.stringify([EXTRACTION_VERSION, config.model, config.systemPrompt, config.ocrModel, config.ocrPrompt, config.provider])).digest("hex");
 }
 export function computeInputHash(
