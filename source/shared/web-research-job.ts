@@ -14,4 +14,16 @@ export type WebResearchJob = {
   materialId?: string;
   error?: string;
   canResume?: boolean;
+  /** Spec 2026-09-19: review criteria left open after the repair rounds (published as warnings). */
+  warnings?: string[];
 };
+
+/** Human labels for the reviewer's criteria shown next to a published web lesson. */
+export const WEB_REVIEW_WARNING_LABELS: Record<string, string> = {
+  explanation_depth: "A lektor szerint egyes fejezetek hogyan/miért magyarázata még kifejthetőbb.",
+  age_and_added_value: "A lektor szerint az évfolyamhoz illő pedagógiai többlet (példa, aktivitás) még bővíthető.",
+};
+
+export function webReviewWarningLabel(criterion: string): string {
+  return WEB_REVIEW_WARNING_LABELS[criterion] ?? `A lektor megjegyzése: ${criterion}.`;
+}

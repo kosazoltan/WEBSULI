@@ -198,3 +198,12 @@ test("árva szerverfutás explicit hibává válik; kész eredményt az időkorl
   m.rows.set("done", { ...old, id: "done", state: "done", materialId: "done" });
   assert.equal((await jobs.read("done", "owner"))?.state, "done");
 });
+
+/* Spec 2026-09-19 — the reviewer's open pedagogical notes reach the Studio panel as warnings. */
+test("publicResearchJob továbbadja a lektori figyelmeztetéseket, hiányukban nincs warnings mező", () => {
+  const base = { id: "w1", userId: "u", input: { message: "talaj", classroom: 5, conversationHistory: [] }, state: "done", stage: "kész", title: "T", message: "talaj", content: "", sources: [], diagnostics: [], createdAt: 1, html: "<html></html>", materialId: "m1" } as unknown as StoredResearchJob;
+  assert.equal("warnings" in publicResearchJob(base), false);
+  const warned = { ...base, reviewEvidence: { version: "web-teaching-review-1", htmlHash: "a", sourceListHash: "b", fetchedSourcesHash: "c", review: { checks: [], issues: [] }, warnings: ["explanation_depth", "age_and_added_value"] } } as unknown as StoredResearchJob;
+  assert.deepEqual(publicResearchJob(warned).warnings, ["explanation_depth", "age_and_added_value"]);
+  assert.equal("candidate" in publicResearchJob(warned), false);
+});

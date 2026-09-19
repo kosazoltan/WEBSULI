@@ -27,8 +27,11 @@ export interface ResearchJobStore {
 export class ResearchJobConflict extends Error {}
 export function publicResearchJob(job: StoredResearchJob): WebResearchJob {
   const { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume } = job;
+  const warnings = job.reviewEvidence?.warnings;
   return { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume,
-    ...(state === "done" || state === "ready" ? { html: job.html } : {}) };
+    ...(state === "done" || state === "ready" ? { html: job.html } : {}),
+    // Spec 2026-09-19: the reviewer's open pedagogical notes travel to the Studio panel.
+    ...(warnings?.length ? { warnings } : {}) };
 }
 export function checkedResearchArtifact(artifact: ResearchArtifact) {
   const check = decideWebResearchResult({ stopReason: "end_turn", fullContent: artifact.html, repairAttempts: 2, sources: artifact.sources }, verifyLessonMethodHtml);
