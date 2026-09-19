@@ -11,6 +11,7 @@ import { canonicalJson } from "./step-io";
 import { classifyNotes, type RawNote } from "./lektor";
 import { workflowSkillVersion, workflowValidationFailure } from "../workflows/engine";
 import { roleSkillBlock, roleSkillVersion } from "./role-skills";
+import { autofixBankPacket } from "./tools/bank-packet-autofix";
 
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string> };
 export type BankReviewFeedback = { note: RawNote; conceptIds?: string[]; previousItem?: unknown };
@@ -37,6 +38,8 @@ export type ExperienceBuildDeps = {
    * attempt (attempt === PACKET_ATTEMPTS) to the strong model.
    */
   call(system: string, user: string, attempt: number): Promise<unknown>;
+  /** Eszköz-javítások naplózása (bank-packet-autofix). */
+  onToolFix?(tool: string, fixes: string[]): void;
   checkpoint?: ExperienceCheckpoint;
   previous?: LessonExperience;
   reviewFeedback?: BankReviewFeedback[];
@@ -203,6 +206,9 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         try { candidate = applyBankPacketRepair(repairBase, response, allowedReviewIds, bindingRepairIds); }
         catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; await workflowValidationFailure(errors); continue; }
       }
+      // Eszköz (2026-09-19): formai hibák kódból, a séma előtt — nem ér modell-kört.
+      const autofix = autofixBankPacket(candidate, { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds });
+      if (autofix.fixes.length) { candidate = autofix.packet; deps.onToolFix?.("bank-packet-autofix", autofix.fixes); }
       previous = candidate;
       const parsed = packetSchema.safeParse(candidate);
       const issues = parsed.success ? validate(parsed.data) : parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);

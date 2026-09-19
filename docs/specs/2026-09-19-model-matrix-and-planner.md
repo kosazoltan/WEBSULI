@@ -83,5 +83,28 @@ teendőiket, így a rögtönzés megszűnik, mindegyik hívja meg a maga szakasz
 - Elfogadás: WHEN bármely fenti szerep modellhívása indul THEN a rendszerutasítás a szerep skill-blokkjával
   kezdődik (teszt: `tests/studio-role-skills.test.ts`, runner hash-teszt (a)).
 
+## 11. Eszközök (determinisztikus szkriptek) és a tervező lelke (tulajdonosi kiegészítés 2026-09-19 este)
+Kérés: „készítsd el a megfelelő szkripteket, hogy azokat toolként tudja használni a rendszer … készíts
+skilleket a szkriptekhez is"; „készíts egy lelket a tervező ügynöknek … tömör, pontos, hatékony, hazugság,
+hallucinációs, lost in the middle hibákat el nem követő, túl nem polírozó".
+- **Eszközök** (`server/studio/tools/`, + `section-visuals.ts`), a pipeline futtatja, modellhívás helyett/előtt:
+  - `outline-autofix`: a pedagógus válaszán a séma előtt — ismeretlen/ismétlődő id, csak-ismeretlen fejezet,
+    ismétlődő cím „(2)", ábra-javaslat ≤120, 12 feletti fejezet az utolsóba olvasztva, idegen tévhit.
+  - `bank-packet-autofix`: minden bankcsomag-válaszon a séma előtt — ismétlődő opció (index/feedback átkötés),
+    a minta TÉNYLEGES szóalakja a hiányzó required-csoportba, needsSentence, hiányzó intent. **Nem** nyúl a
+    kötéshez (sectionIndex/coversConceptIds — tartalmi, `bank-binding-diagnostics`), nem csökkenti a minWords-öt.
+  - `section-visuals`: ha minden fejezet a saját példájából kap ábrát, az animátor **nem hív modellt**
+    (`model = tool:section-visuals`, 0 token). Javított hiba: a képaláírás a térkép szavaival nevezi meg a
+    fogalmat, különben a #196 címke-őr eldobta a determinisztikus ábrát (runner-teszt (n2)).
+- **Eszköz-skillek**: `TOOL_SKILLS` + `ROLE_TOOLS` (`role-skills.ts`) — a szerep-skillek „Eszközök" szakasza
+  kimondja, mit javít a kód és mit nem; repo-skill a futtatáshoz: `.agents/skills/websuli-studio-tools/SKILL.md`;
+  CLI: `npm run studio:tool -- <eszköz> …` (`scripts/studio-tool.ts`).
+- **Lélek**: `ROLE_SOULS.pedagogue` a pedagógus skill-blokk elején (a verzió-hash része). Tartalma: identitás
+  (gyakorlott 5–8. osztályos tervező), munkamód (teljes térkép + a közepe egyenlő figyelemmel, végén
+  újraszámolás; egy menet, nincs alternatíva-sorolás; ami nincs a térképen, nem létezik; csak JSON), tilalmak.
+- Elfogadás: WHEN a bankcsomag formai hibás THEN az eszköz javítja modell-kör nélkül (teszt: `studio-tools`);
+  WHEN minden fejezetnek van példája THEN az animátor lépés 0 tokennel, `tool:section-visuals` modellel zárul
+  (runner (n2)); WHEN a pedagógus fut THEN a rendszerutasítás a lélekkel kezdődik (`studio-role-skills`).
+
 ## 9. Végrehajtás
 `docs/specs/2026-09-19-model-matrix-and-planner-vegrehajtas.md`

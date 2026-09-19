@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  ROLE_SKILLS, ROLE_SKILL_ROLES, ROLE_SKILL_REQUIRED_HEADINGS, roleSkillBlock, roleSkillVersion,
+  ROLE_SKILLS, ROLE_SOULS, ROLE_SKILL_ROLES, ROLE_SKILL_REQUIRED_HEADINGS, roleSkillBlock, roleSkillVersion,
   withRoleSkill, roleForPromptName, skilledPromptLookup,
 } from "../server/studio/role-skills";
 import { OCR_SYSTEM_PROMPT, ocrCacheKeyOf } from "../server/studio/ocr";
@@ -16,7 +16,8 @@ test("minden szerepnek van skillje a kötelező szakaszokkal, tömören", () => 
     const text = ROLE_SKILLS[role];
     assert.match(text, new RegExp(`^# Skill: .*\\(${role}\\)`), role);
     for (const heading of ROLE_SKILL_REQUIRED_HEADINGS) assert.ok(text.includes(heading), `${role}: hiányzik ${heading}`);
-    assert.ok(text.length < 3200, `${role}: a skill legyen tokentakarékos (${text.length} karakter)`);
+    // A skill + a hozzá tartozó eszköz-leírások együtt is tokentakarékosak (≈ 1,5 k token felett nem).
+    assert.ok(text.length < 5200, `${role}: a skill legyen tokentakarékos (${text.length} karakter)`);
     assert.match(text, /Kizárólag JSON|Csak sima szöveg/, `${role}: a kimenet alakja kimondva`);
   }
 });
@@ -45,6 +46,17 @@ test("a DB-s prompt-felülírás sem kerülheti meg a skillt (promptLookup burko
   }
   assert.equal(roleForPromptName("valami.mas"), undefined);
   assert.equal(await lookup("valami.mas", "x"), "x");
+});
+
+test("a tervező lelke a pedagógus skill-blokk elején áll, tömör, és a verzió része", () => {
+  const soul = ROLE_SOULS.pedagogue!;
+  assert.match(soul, /^# Lélek: a tervező/);
+  assert.ok(soul.length < 1800, `tömör legyen (${soul.length})`);
+  for (const must of ["TELJES térképet", "közepén", "Egy menetben", "nem sorolsz alternatívákat", "nincs a térképen, az nem létezik", "kizárólag a kért JSON", "Amit soha"]) assert.ok(soul.includes(must), must);
+  const block = roleSkillBlock("pedagogue");
+  assert.ok(block.indexOf("# Lélek: a tervező") < block.indexOf("# Skill: tervkészítő"), "előbb a lélek, aztán az eljárás");
+  assert.equal(ROLE_SOULS.bank, undefined, "csak a tervezőnek van lelke");
+  assert.ok(!roleSkillBlock("bank").includes("# Lélek"));
 });
 
 test("az OCR prompt a saját skilljével indul, és a cache-kulcs a promptot tartalmazza", () => {

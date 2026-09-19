@@ -46,7 +46,8 @@ import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
 import { stripUngroundedAnimateLabels } from "./grounding";
-import { ensureSectionVisuals } from "./section-visuals";
+import { ensureSectionVisuals, deterministicSectionVisuals, SECTION_VISUALS_TOOL } from "./section-visuals";
+import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
@@ -465,6 +466,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   const primaryModel = resolveStudioModel(job.step);
   let model = primaryModel;
   const reusedVisuals = job.step === "animator" && canReuseLessonVisuals(job.output?.lesson);
+  // Eszköz (2026-09-19): ha minden fejezet a saját példájából kap ábrát, nincs animátor-modellhívás.
+  const toolVisuals = job.step === "animator" && !reusedVisuals ? deterministicSectionVisuals(job.output?.lesson as Lesson | undefined, map.concepts) : null;
   let bankModelUsed: string | null = null;
 
   let json: unknown;
@@ -483,6 +486,11 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     if (reusedVisuals) {
       json = job.output?.lesson;
       usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    } else if (toolVisuals) {
+      json = toolVisuals;
+      usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      model = SECTION_VISUALS_TOOL;
+      logger.info(`[STUDIO] Ábrák eszközből, modellhívás nélkül (${job.id}): minden fejezetnek van ábrája.`);
     } else {
     let result: Awaited<ReturnType<typeof attempt>>;
     try {
@@ -544,6 +552,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   switch (job.step) {
     case "pedagogue": {
+      // Eszköz (2026-09-19): formai tisztítás kódból, hogy ne kelljen új tervkészítő-hívás.
+      const autofix = autofixOutline(json, map.concepts);
+      if (autofix.fixes.length) { logger.info(`[STUDIO] Vázlat eszközzel tisztítva (${job.id}): ${autofix.fixes.join("; ").slice(0, 400)}`); json = autofix.outline; }
       const parsed = outlineSchema.safeParse(json);
       if (!parsed.success) return fail(store, job, `A vázlat alakilag hibás: ${zodIssues(parsed.error)}`);
       const coverage = outlineCoversMap(parsed.data.sections, map.concepts);
@@ -657,7 +668,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // lesson at the gate after the round limit (measured: PDF run 3ed5ca90).
       // Spec 2026-09-19: a chapter without a figure gets its worked example as a process
       // visual before the label check below (the lektor blocks figure-less chapters).
-      const visuals = ensureSectionVisuals(outcome.lesson);
+      const visuals = ensureSectionVisuals(outcome.lesson, map.concepts);
       if (visuals.added.length) {
         logger.info(`[STUDIO] Fejezeti ábra pótolva a példa lépéseiből (${job.id}): fejezet ${visuals.added.map((i) => i + 1).join(", ")}`);
       }
@@ -675,6 +686,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             checkpoint,
             previous: original.experience,
             reviewFeedback: bankReview?.feedback,
+            onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
             call: async (bankSystem, user, attempt) => {
               // Spec 2026-09-19: the bank is its own cheap role; after PACKET_ATTEMPTS failed
               // attempts the packet is rebuilt once on the strong rescue model.

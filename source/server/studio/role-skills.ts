@@ -167,17 +167,72 @@ Kizárólag JSON: { "notes": [{ "kind": "source_conflict"|"coverage_gap"|"langua
 Minden jegyzet kind a négy közül? Minden source_conflict-nak van érvényes subkind-ja és blockPath-ja? Nem ismételsz javított blokkolót? Csak JSON?`,
 };
 
+/**
+ * Eszköz-skillek (tulajdonosi kérés 2026-09-19): determinisztikus szkriptek, amelyeket a
+ * program futtat a modell helyett vagy a modell válasza UTÁN — kevesebb fizetett kör.
+ * A szöveg a szerep-skillek „Eszközök" szakaszába kerül, hogy a modell tudja, mit garantál
+ * a kód, és mire kell neki magának figyelnie.
+ */
+export const TOOL_SKILLS = {
+  "outline-autofix": `### Eszköz: outline-autofix (a tervkészítő válasza után, kódból)
+Mit javít: ismeretlen/ismétlődő fogalom-azonosító elhagyása; csak-ismeretlen fejezet törlése; ismétlődő cím egyértelműsítése „(2)"-vel; ábra-javaslat 120 karakterre vágva; 12 feletti fejezetek az utolsóba olvasztva; ismeretlen fogalmú tévhit elhagyva.
+Mit NEM javít: hiányzó core-fogalom (fedettségi hiba → új terv kell), üres terv, rossz tanítási sorrend.
+Futtatás: automatikus a pedagógus lépésben; kézzel \`npm run studio:tool -- outline-autofix <vazlat.json> <terkep.json>\`.`,
+  "bank-packet-autofix": `### Eszköz: bank-packet-autofix (minden bankcsomag-válasz után, a séma előtt, kódból)
+Mit javít: ismétlődő válaszlehetőség elhagyása correctIndex/feedback átkötéssel (ha ≥3 ill. ≥2 marad); a mintaválasz TÉNYLEGES szóalakja a hiányzó required-csoportba (szótő-egyezés); needsSentence=false, ha a minta e nélkül teljes; hiányzó kvíz-intent (recall/apply felváltva).
+Mit NEM javít: sectionIndex és coversConceptIds (csomagon kívüli címke = a kérdés másról szól, azt neked kell a csomaghoz igazítanod), hiányzó tétel, rossz megoldás, ismétlődő kérdés, üres coversConceptIds, a minWords-nél rövidebb minta (a küszöb nem csökken: hosszabb mintát kell írnod) — ezek javító kört indítanak.
+Futtatás: automatikus az animátor/bank lépésben; kézzel \`npm run studio:tool -- bank-packet-autofix <csomag.json> <sectionIndex> <id1,id2,…>\`.`,
+  "section-visuals": `### Eszköz: section-visuals (az animátor modellhívása HELYETT vagy után, kódból)
+Mit tesz: minden ábra nélküli fejezetbe a saját levezetett példájából (≥2 lépés) \`process\` animate blokkot tesz a példa után, a lépések szó szerint, magyar képaláírással, amely a példa fogalmait a térkép szavaival nevezi meg (így a címke megalapozott marad). Ha ezután minden fejezetnek van ábrája, az animátor MODELLHÍVÁSA kimarad (a job modellje \`tool:section-visuals\`).
+Mit NEM tesz: példa nélküli fejezetbe nem talál ki ábrát → ilyenkor a modell dolgozik.
+Futtatás: automatikus; kézzel \`npm run studio:tool -- section-visuals <lecke.json>\`.`,
+} as const;
+export type ToolSkillName = keyof typeof TOOL_SKILLS;
+
+/** Melyik szerep skillje kapja meg melyik eszköz leírását. */
+export const ROLE_TOOLS: Partial<Record<RoleSkillRole, ToolSkillName[]>> = {
+  pedagogue: ["outline-autofix"],
+  author: ["section-visuals"],
+  animator: ["section-visuals", "bank-packet-autofix"],
+  bank: ["bank-packet-autofix"],
+  lektor: ["section-visuals", "bank-packet-autofix"],
+};
+
+for (const [role, tools] of Object.entries(ROLE_TOOLS) as [RoleSkillRole, ToolSkillName[]][]) {
+  ROLE_SKILLS[role] += `\n## Eszközök (a program futtatja, nem te)\nAmit az alábbi eszköz javít, arra ne pazarolj kört; ami a „NEM javít" listán van, azt neked kell hibátlanul adnod.\n${tools.map(t => TOOL_SKILLS[t]).join("\n")}`;
+}
+
+/**
+ * Lélek (tulajdonosi kérés 2026-09-19): a tervkészítő ügynök identitása és munkamódja.
+ * Rövid, mert a modell viselkedését a kimondott munkamód és a tilalmak alakítják, nem a
+ * dicsérő jelzők. Minden pontja egy mért hibaosztály ellen szól: kitalált fogalom
+ * (hallucináció), a térkép közepének elhanyagolása (lost in the middle), végtelen
+ * csiszolás és alternatíva-sorolás (túlpolírozás, körpazarlás), díszített próza (token).
+ */
+export const ROLE_SOULS: Partial<Record<RoleSkillRole, string>> = {
+  pedagogue: `# Lélek: a tervező
+Ki vagy: gyakorlott magyar tananyag-tervező, sok száz 5–8. osztályos lecke tervével a hátad mögött. A pontosságod abból ered, hogy csak azt tervezed be, amit a forrás ad, és minden döntésedet a tanuló következő lépése indokolja. Alapos vagy, nem bőbeszédű: a terved rövid, teljes és végrehajtható.
+Hogyan dolgozol:
+1. Előbb a TELJES térképet olvasod végig, és fejben listázod az összes core fogalmat; a lista közepén lévők ugyanannyi figyelmet kapnak, mint az eleje és a vége. A terv végén újraszámolod: minden core szerepel-e, egyetlen egyszer.
+2. Egy menetben tervezel. Ha egy fejezet kész és a forrás fedi, nem szépíted tovább, nem sorolsz alternatívákat: döntesz, és a döntés a tervben áll.
+3. Ami nincs a térképen, az nem létezik számodra. Nem egészítesz ki, nem „javítod" a forrást, nem következtetsz tényekre; hiányról nem írsz, hanem egyszerűen nem tervezed be.
+4. A jó tervet a szerző szerkezet-találgatás nélkül meg tudja írni, a lektor pedig hozzá tud mérni: ezért fejezetenként megnevezed a fogalmakat, a blokk-sorrendet és az ábra fajtáját, mást nem.
+5. A válaszod kizárólag a kért JSON. Nincs bevezető, nincs indoklás, nincs udvariasság — a terv beszél.
+Amit soha: kitalált azonosító vagy adat; ugyanaz a fogalom két fejezetben; díszítő jelzők; „opcionális" vagy „választható" elem; a kért alaknál több.`,
+};
+
 const versions = new Map<RoleSkillRole, string>();
 
 /** Rövid tartalom-hash: része a lépés- és bank-hashnek, hogy skill-módosítás után ne legyen cache-találat. */
 export function roleSkillVersion(role: RoleSkillRole): string {
   let v = versions.get(role);
-  if (!v) { v = createHash("sha256").update(ROLE_SKILLS[role]).digest("hex").slice(0, 12); versions.set(role, v); }
+  if (!v) { v = createHash("sha256").update(`${ROLE_SOULS[role] ?? ""}\n${ROLE_SKILLS[role]}`).digest("hex").slice(0, 12); versions.set(role, v); }
   return v;
 }
 
 export function roleSkillBlock(role: RoleSkillRole): string {
-  return `${SKILL_START}: ${role} (v${roleSkillVersion(role)}) — ez a szakasz kötelező eljárása, a lenti utasítás ezt részletezi ===\n${ROLE_SKILLS[role]}\n${SKILL_END}\n`;
+  const soul = ROLE_SOULS[role] ? `${ROLE_SOULS[role]}\n\n` : "";
+  return `${SKILL_START}: ${role} (v${roleSkillVersion(role)}) — ez a szakasz kötelező eljárása, a lenti utasítás ezt részletezi ===\n${soul}${ROLE_SKILLS[role]}\n${SKILL_END}\n`;
 }
 
 /** A skill a rendszerutasítás ELEJÉRE kerül; idempotens (kétszeri alkalmazás nem duplázza). */

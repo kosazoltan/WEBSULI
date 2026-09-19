@@ -43,6 +43,17 @@ test("példa-lépésekből process ábra kerül a figura nélküli fejezetbe, a 
   assert.deepEqual(lesson.sections[2], base.sections[2], "példa nélkül nincs kitalált ábra");
 });
 
+test("a képaláírás a példa fogalmait a térkép szavaival nevezi meg (a címke-őr ezt méri)", () => {
+  const { lesson } = ensureSectionVisuals(base, [{ localId: "sorrend", term: "műveleti sorrend" }, { localId: "zarojel", term: "zárójel" }]);
+  const visual = lesson.sections[0].blocks[2];
+  assert.equal(visual.kind, "animate");
+  if (visual.kind !== "animate") return;
+  assert.match(visual.caption, /\(műveleti sorrend\): 8 \+ 4 · 9/);
+  const { lesson: noTerms } = ensureSectionVisuals(base, [{ localId: "sorrend" }]);
+  const plain = noTerms.sections[0].blocks[2];
+  assert.ok(plain.kind === "animate" && !/\(\)/.test(plain.caption), "term nélkül nincs üres zárójel");
+});
+
 test("ha minden fejezetben van ábra, ugyanaz az objektum jön vissza", () => {
   const withVisuals = { ...base, sections: [base.sections[1]] };
   const result = ensureSectionVisuals(withVisuals);

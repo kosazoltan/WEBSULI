@@ -25,6 +25,12 @@ Munkakönyvtár `D:\repo\WEBSULI\source`. Sorrend kötelező; minden szelet utá
 15. Bekötés: `step-runner.ts` `resolveDeps.promptLookup` burkolása; `experience-builder.ts` bank system + `teaching.roleSkill`; `run-extraction.ts` `basePrompt`; `ocr.ts` `OCR_SYSTEM_PROMPT`.
 16. Teszt `tests/studio-role-skills.test.ts` (szakaszok, idempotencia, DB-felülírás, OCR, bank); runner (a) hash-teszt a skillel burkolt promptra (spec-változás).
 
+## G. Eszközök és lélek (spec §11)
+17. `server/studio/tools/outline-autofix.ts`, `tools/bank-packet-autofix.ts`, `section-visuals.ts` (`deterministicSectionVisuals`, `SECTION_VISUALS_TOOL`, fogalom-nevű képaláírás).
+18. Bekötés: `step-runner.ts` pedagógus ág (autofix a séma előtt), animátor ág (`toolVisuals` → nincs modellhívás), `experience-builder.ts` (`autofixBankPacket` + `onToolFix`).
+19. `role-skills.ts`: `TOOL_SKILLS`, `ROLE_TOOLS` (Eszközök szakasz a szerep-skillekben), `ROLE_SOULS.pedagogue`; `scripts/studio-tool.ts` + `npm run studio:tool`; `.agents/skills/websuli-studio-tools/SKILL.md`.
+20. Tesztek: `tests/studio-tools.test.ts`, `studio-role-skills` (lélek), runner (n2), `section-visuals` (fogalom-nevű caption).
+
 ## E. Mérés és kiadás
 11. Kapuk: `npx tsc --noEmit`, `npm run check:test`, `npm run lint`, `npm test`.
 12. Valódi futás a `a5747585` (Műveleti sorrend) térképen a curate-harness-szel; workflow-naplóból lépésenkénti token és idő; elvárt: bank < 0,2 USD, lecke < 1,2 USD, < 20 perc, `done`.

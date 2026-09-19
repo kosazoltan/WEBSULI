@@ -1213,6 +1213,21 @@ test("(m) modellhiba: az elsődleges modell 429-e után a lépés a FALLBACK_MOD
   assert.equal((job as { model?: string | null })?.model, fallback, "a job a ténylegesen használt modellt rögzíti");
 });
 
+test("(n2) eszköz 2026-09-19: ha minden fejezet a példájából kap ábrát, az animátor nem hív modellt", async () => {
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({ failModels: new Set(), cannedResponse: "{}" });
+  const withExample = { ...GOOD_LESSON, sections: [{ ...GOOD_LESSON.sections[0], blocks: [...GOOD_LESSON.sections[0].blocks,
+    { kind: "example", problem: "2+3·4", steps: ["3·4=12", "2+12=14"], answer: "14", coversConceptIds: ["c1"] }] }] };
+  store.seed({ id: "job-1", mapId: "m1", step: "animator", status: "running", output: { lesson: withExample } });
+  const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
+  assert.equal(outcome.ok, true);
+  assert.deepEqual(calls, [], "nincs modellhívás");
+  const job = await store.loadJob("job-1");
+  assert.equal((job as { model?: string | null })?.model, "tool:section-visuals");
+  const lesson = job?.output?.lesson as typeof withExample;
+  assert.ok(lesson.sections[0].blocks.some(b => b.kind === "animate"), "a példából process ábra készült, és a címke-őr nem dobta el");
+  assert.equal((job as { tokensIn?: number | null } | null)?.tokensIn, 0);
+});
+
 test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az eredeti lecke megy tovább a lektorra", async () => {
   const primary = resolveStudioModel("animator");
   const fallback = FALLBACK_MODELS.animator!;
