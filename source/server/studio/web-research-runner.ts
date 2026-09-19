@@ -9,7 +9,7 @@ import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowS
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { hasHtmlLessonData, readRawHtmlLessonData } from "../../shared/lesson-html-data";
 import { decideWebResearchGatherResult, decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchGatherPrompt, webLessonAuthorPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
-import { fetchedTeachingSources, teachingReviewEvidence, TeachingReviewFailure, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
+import { fetchedTeachingSources, teachingReviewEvidence, subjectiveOnlyFailures, TeachingReviewFailure, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { repairWebLessonBank } from "./web-bank-repair";
 import { reviewAndRepairWebTeaching } from "./web-teaching-repair";
 import { stripJsonFences } from "../ai/OpenRouterProvider";
@@ -336,8 +336,17 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       fullContent = corrected.html;
       result = { type: "ready", html: corrected.html };
       const problems = review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`);
+      const subjective = subjectiveOnlyFailures(review);
       if (!problems.length) reviewEvidence = teachingReviewEvidence(result.html, downloaded, review);
-      else throw new WebResearchFailure(`A célzott tartalmi javítás után további ellenőrzés szükséges: ${problems.join("; ")}`);
+      else if (subjective) {
+        // Spec 2026-09-19: after the bounded repair rounds only the judgement criteria
+        // (explanation_depth, age_and_added_value) remain — published with the reviewer's
+        // notes as warnings; factual/coverage/grounding failures still stop the run.
+        reviewEvidence = teachingReviewEvidence(result.html, downloaded, review);
+        logger.warn("[WEB-RESEARCH] published with pedagogical warnings", { criteria: subjective });
+        await workflowValidationFailure(`Pedagógiai figyelmeztetéssel közzétéve: ${problems.join("; ")}`);
+        onEvent({ type: "status", message: `A tananyag elkészült; a lektor pedagógiai megjegyzései (${subjective.join(", ")}) figyelmeztetésként mellékelve.` });
+      } else throw new WebResearchFailure(`A célzott tartalmi javítás után további ellenőrzés szükséges: ${problems.join("; ")}`);
     }
     if (result.type === "retry") throw new WebResearchFailure(`A tananyag az automatikus javítás után sem készült el: ${result.reason}`);
     if (result.type === "error") throw new WebResearchFailure(result.message);

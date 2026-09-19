@@ -182,3 +182,42 @@ test("verifyTeachingVisuals: fejezet nélküli vagy üres HTML nem számít átm
   assert.ok(verifyTeachingVisuals(page("<p>nincs fejezet</p>")).length);
   assert.ok(verifyTeachingVisuals("").length);
 });
+
+/* Spec 2026-09-19 — subjective criteria become published warnings after the repair rounds; factual ones never. */
+import { subjectiveOnlyFailures, reviewWebTeaching as reviewFn, REVIEW_CONVERGENCE_RULE, teachingReviewEvidence, assertTeachingReviewEvidence, type TeachingReview } from "../server/studio/web-teaching-review";
+type ReviewIssue = NonNullable<TeachingReview["issues"]>[number];
+
+test("pedagógiai figyelmeztetéssel közzétett bizonyíték elfogadott, tényhibás nem", () => {
+  const passing = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: true, evidence: "A szintetikus ellenőrzés minden kritériumot igazoltnak talált." }));
+  const subjective = passing.map(c => c.criterion === "age_and_added_value" || c.criterion === "explanation_depth" ? { ...c, passed: false } : c);
+  const factual = passing.map(c => c.criterion === "factual_accuracy" ? { ...c, passed: false } : c);
+  const issue = (criterion: ReviewIssue["criterion"], kind: ReviewIssue["kind"]): ReviewIssue => ({ criterion, kind, sectionIndex: 0, lessonQuote: "A háromszög területe", citations: [], reason: "A szintetikus lektor a fejezet kifejtését hiányosnak találta.", repair: "Egészítsd ki a fejezetet lépésenkénti magyarázattal és példával." });
+  const subjectiveIssues = [issue("explanation_depth", "missing_explanation"), issue("age_and_added_value", "pedagogical_gap")];
+  const factualIssues = [issue("factual_accuracy", "unsupported_claim")];
+  assert.deepEqual(subjectiveOnlyFailures({ checks: subjective, issues: subjectiveIssues }), ["explanation_depth", "age_and_added_value"]);
+  assert.equal(subjectiveOnlyFailures({ checks: factual, issues: factualIssues }), null);
+  assert.equal(subjectiveOnlyFailures({ checks: passing, issues: [] }), null);
+  const pageHtml = `<!DOCTYPE html><html><body><section data-lesson-panel="teaching">${teachingHtml}</section></body></html>`;
+  const src = [{ url: "https://example.org/a", title: "A", text: "forrás" }];
+  const warned = teachingReviewEvidence(pageHtml, src, { checks: subjective, issues: subjectiveIssues });
+  assert.deepEqual(warned.warnings, ["explanation_depth", "age_and_added_value"]);
+  assert.doesNotThrow(() => assertTeachingReviewEvidence(pageHtml, src.map(({ url, title }) => ({ url, title })), warned));
+  assert.throws(() => assertTeachingReviewEvidence(pageHtml, src.map(({ url, title }) => ({ url, title })), { ...warned, warnings: undefined }), /hiányzik vagy elavult/);
+  const factualEvidence = teachingReviewEvidence(pageHtml, src, { checks: factual, issues: factualIssues });
+  assert.equal(factualEvidence.warnings, undefined);
+  assert.throws(() => assertTeachingReviewEvidence(pageHtml, src.map(({ url, title }) => ({ url, title })), factualEvidence), /hiányzik vagy elavult/);
+});
+
+test("újraellenőrzéskor az előző vélemény és a konvergencia-szabály a bemenet része", async () => {
+  const checks = TEACHING_REVIEW_CHECKS.map(criterion => ({ criterion, passed: true, evidence: "A szintetikus ellenőrzés minden kritériumot igazoltnak talált." }));
+  const previous = { checks: checks.map(c => c.criterion === "explanation_depth" ? { ...c, passed: false } : c), issues: [] };
+  let seenRule = 0;
+  const result = await reviewFn(html, [source], async (system, user) => {
+    if (system.includes("KONVERGENCIA-SZABÁLY")) seenRule++;
+    assert.ok(system.includes(REVIEW_CONVERGENCE_RULE.slice(0, 30)));
+    assert.deepEqual(JSON.parse(user).previousReview, previous);
+    return { checks, issues: [] };
+  }, undefined, "Háromszög területe", false, previous);
+  assert.ok(result.checks.every(c => c.passed));
+  assert.equal(seenRule, 2, "az ellenpéldás utóellenőrzés is megkapja");
+});
