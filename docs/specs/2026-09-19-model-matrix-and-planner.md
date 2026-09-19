@@ -107,6 +107,23 @@ messze túllépi: a glm ~15–100 tok/s, csomagonként 1–4 kísérlet, SOROS c
 párhuzamos csomagépítés (3 egyidejű egység) a következő lépés (nyitott). Költség a 4. futásra
 (≈ 470k be / 140k ki, döntően glm): ≈ 0,15 USD + Opus/terra/grok ≈ 0,6 USD.
 
+## 7f. Mérés 5 — `done` (run 2210c108, #78+#79+#80 kód, 2026-09-19 23:02–23:24)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 medium (lélek + skill) | 11 007 | 2 170 | 31 s |
+| author 1 | gpt-5.6-terra | 10 177 | 6 998 | 61 s |
+| animator 1 (ábrák eszközből, 10 csomag SOROSAN) | glm/deepseek/terra | 146 475 | 57 090 | 1 052 s |
+| lektor 1 (1 kvíz: correctIndex ≠ magyarázat, quiz.62) | grok-4.6 | 68 206 | 891 | 19 s |
+| animator 2 = csak-bank kör (1 csomag) | glm | 40 249 | 13 098 | 149 s |
+| lektor 2: 0 blokkoló → kapu ✅ → readback ✅ | grok-4.6 | 68 891 | 483 | 13 s |
+**Eredmény:** `done` 1 333 s (22 perc), lecke `cfdaca52` / html_files `3084206c` „Műveleti sorrend tanulása”,
+9 fejezet a cél-tananyag mintája szerint (motiváció → szabályonként → „A feladat megoldva lépésről
+lépésre” → „A leggyakoribb hibák” → „Ellenőrzés – hogyan légy biztos magadban?”), 45 feladat, 75 kvíz,
+19 módszer. Költség ≈ 0,6–0,7 USD (glm ≈ 0,04; grok ≈ 0,28; terra ≈ 0,1; Opus ≈ 0,2) a korábbi ≈ 4,1 USD
+helyett; idő 22 perc a 35–40 helyett (a 20 perces cél a #81 párhuzamos csomagépítéssel várható).
+A quiz.62 hibaosztály (correctIndex ≠ magyarázat) determinisztikus ellenőrzést kapott (#81), így a
+következő futásban a lektor elé sem jut.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.
