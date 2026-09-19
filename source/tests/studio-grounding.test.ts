@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { checkGrounding, groundingReport } from "../server/studio/grounding";
+import { checkGrounding, groundingReport, quoteNumbersPresent } from "../server/studio/grounding";
 import type { MapConcept } from "../server/studio/coverage";
 
 test("a pi matematikai jel is mérhető, de idegen szöveg nem igazolja", () => {
@@ -296,6 +296,16 @@ test("címke nélkül maradó animációs blokk eltűnik; ismeretlen id és term
 });
 
 /* Spec 2026-09-19 — a concept named in the source language is grounded by its curated (Hungarian) definition. */
+test("mérve run 525b2797: a forrás kidolgozott példája (számokkal) a blokkban → a címke megalapozott, idegen számokkal nem", () => {
+  const example = { localId: "muveleti-sorrend-zarojel-szorzas-36-osztva", term: "Zárójeles szorzás és osztás példája", definition: "36 ÷ (3 · 2) – 3\n36 ÷ 6 – 3\n6 – 3\n3", quote: "36 ÷ (3 · 2) – 3\n36 ÷ 6 – 3\n6 – 3\n3", examWeight: "core" } as MapConcept;
+  assert.equal(checkGrounding("Gyakorlás: 4. Végezd el a műveleteket! Írd le lépésenként a 36 ÷ (3 · 2) – 3 műveletsor megoldását! 36 ÷ (3 · 2) – 3 = 3", example), true, "a forrás példájának számai a blokkban");
+  assert.equal(checkGrounding("Írd le lépésenként a 48 : (4 · 2) + 5 műveletsor megoldását, figyelj a zárójelre!", example), false, "más számok: nem ez a példa");
+  const rule = { localId: "zarojel-hasznalata", term: "Zárójel használata", definition: "Zárójelet akkor használunk, ha a műveletek sorrendjét meg akarjuk határozni.", quote: "Zárójelet akkor használunk, ha a műveletek sorrendjét meg akarjuk határozni.", examWeight: "core" } as MapConcept;
+  assert.equal(checkGrounding("Hasonlítsd össze a hibás és a helyes megoldást a szorzás és osztás elsőbbsége szabályával: 148 + 6 · 8", rule), false, "szám nélküli idézetnél a szavas szabály dönt");
+  assert.equal(quoteNumbersPresent("36 ÷ 6", "a 36 osztva 6"), true);
+  assert.equal(quoteNumbersPresent("csak 36", "36"), false, "egy szám nem elég");
+});
+
 test("angol nevű fogalom magyar tanításban: a kurált definíció érdemi szavai igazolják a címkét, más témájú szöveget nem", () => {
   const uk = { localId: "united-kingdom", term: "The United Kingdom (UK)", definition: "Az Egyesült Királyság négy országból áll: England, Scotland, Wales és Northern Ireland.", examWeight: "core" } as MapConcept;
   assert.equal(checkGrounding("Az Egyesült Királyság négy országból áll: England, Scotland, Wales és Northern Ireland. Fővárosa London.", uk), true, "magyar szöveg, magyar definíció");
