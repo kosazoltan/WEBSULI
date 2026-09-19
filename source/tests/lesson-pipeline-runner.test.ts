@@ -21,7 +21,7 @@ import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-i
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
-import type { LektorNote } from "../server/studio/lektor";
+import { classifyNotes, type LektorNote } from "../server/studio/lektor";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
@@ -1313,4 +1313,23 @@ test("(r) körlimitnél tanítási blokkoló mellett nincs bank-only kör: azonn
   const outcome = await runPipelineStep("mixed", deps);
   assert.equal(outcome.ok, false);
   assert.match(deps.store.jobs.get("mixed")!.error ?? "", /A lektor 2 tartalmi javítást kér/);
+});
+
+/* Spec 2026-09-19 — Studio lektor convergence across author rounds. */
+test("(s) 1. körben új, korábban nem jelzett fejezet fedettségi hiánya figyelmeztetés → kapu; a tényhiba blokkol", async () => {
+  const notes = [{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Új fejezeti hiány, az előző kör nem jelezte." }];
+  const deps = makeDeps(JSON.stringify({ notes }));
+  deps.store.seed({ id: "converge", mapId: "m1", step: "lektor", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON } });
+  await deps.store.saveNotes("converge", classifyNotes([{ kind: "coverage_gap", subkind: "core", blockPath: "sections.1.blocks.0", message: "Előző kör hiánya." }]), 0);
+  const outcome = await runPipelineStep("converge", deps);
+  assert.ok(outcome.ok && outcome.next.step === "gate", `a késői fedettségi jegyzet nem blokkol: ${JSON.stringify(outcome)}`);
+  assert.match(deps.calls[0].system, /KONVERGENCIA-SZABÁLY/);
+  assert.match(deps.calls[0].system, /Előző kör hiánya/);
+  const saved = await deps.store.loadBlockerNotes("converge", 1);
+  assert.equal(saved.length, 0, "a leminősített jegyzet nem blokkolóként tárolódik");
+
+  const factual = makeDeps(JSON.stringify({ notes: [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba." }] }));
+  factual.store.seed({ id: "factual", mapId: "m1", step: "lektor", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON } });
+  const blocked = await runPipelineStep("factual", factual);
+  assert.ok(blocked.ok && blocked.next.step === "author" && blocked.next.round === 2, `a tényhiba új szerzői kört indít: ${JSON.stringify(blocked)}`);
 });

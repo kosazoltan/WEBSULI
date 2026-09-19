@@ -148,6 +148,14 @@ Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
   el); factual_accuracy / source_coverage / question_grounding hiba továbbra is megállít. A javító
   prompt kéri a hogyan/miért kifejtést mondatbővítéssel. Érintett: `web-teaching-review.ts`,
   `web-research-runner.ts`, `web-teaching-repair.ts`, tesztek.
+- WHEN a Studio-lektor javító kör után (round ≥ 1) fut THEN a bemenete és promptja tartalmazza az
+  előző kör blokkoló jegyzeteit (`previousBlockers`) és a konvergencia-szabályt; WHEN olyan
+  fejezetre ad `coverage_gap` blokkolót, amelyet az előző kör nem blokkolt THEN a runner azt
+  determinisztikusan `warn`-ra minősíti (`applyLektorConvergence`, a jegyzet „Késői fedettségi
+  jelzés" előtaggal megmarad); `source_conflict` és az ismételten jelzett fejezet hiánya blokkoló
+  marad (mérve: tulajdonosi térkép 3 futása, jobs b4d94132/6cb1bc89/6cc5930d — minden körben más
+  fejezetre új core-hiány). Érintett: `server/studio/lektor.ts`, `server/studio/step-io.ts`,
+  `server/studio/step-runner.ts`, `tests/lektor-d1.test.ts`, `tests/lesson-pipeline-runner.test.ts`.
 - WHEN egy nyílt feladat mintaválasza minden kötelező csoportot és a minimális szószámot
   teljesíti, de csak a kötőszó-heurisztika (`needsSentence`) miatt nem teljes pont THEN a
   bankcsomag-ellenőrzés a feladatot `needsSentence: false`-ra állítja (a tanuló és a minta ugyanúgy
