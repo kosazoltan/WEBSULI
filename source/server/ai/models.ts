@@ -69,7 +69,12 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   pedagogue: "gpt-5.6-terra",
   // Author and reviewer have no cross-vendor fallback: retain independent review.
   animator: "grok-4.6",
-
+  // Spec 2026-09-19 (mérve élesben): a grok-4.6 lektor 480 s után időtúllépett és a
+  // gyártás generikus hibával állt meg. A tartalék OpenRouteren futó Anthropic-modell —
+  // az „anthropic" család különbözik a szerző „openai" családjától, így az
+  // `assertDistinctFamilies` őr a tartalékra is teljesül. Létezése és válasza az
+  // OpenRouter /models listán és egy valódi hívással ellenőrizve (2026-09-19).
+  lektor: "anthropic/claude-sonnet-5",
 };
 
 /**

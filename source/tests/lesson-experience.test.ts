@@ -5,7 +5,7 @@ import { experienceSchema, experienceTheme, publicationBankProblems, METHOD_KIND
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
-import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint } from "../server/studio/experience-builder";
+import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint, PACKET_ATTEMPTS } from "../server/studio/experience-builder";
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
 import { planLessonBank, bankUnitQuota } from "../shared/lesson-bank-plan";
 
@@ -162,7 +162,17 @@ test("compact bank enforces every taught concept, intent, oral/written mode and 
 test("bad bank gets a targeted retry then fails closed", async () => {
   let calls = 0;
   await assert.rejects(buildLessonExperience(fusionFixture(), [], { call: async (_system, user) => { if (++calls === 2) assert.match(user, /előző válasz hibái/); return {}; } }), /javító kör után/);
-  assert.equal(calls, 2);
+  // Spec 2026-09-19: initial + two repairs per packet, then fail closed.
+  assert.equal(calls, PACKET_ATTEMPTS);
+});
+
+test("spec 2026-09-19: a harmadik kísérletre érvényes csomag elkészül, a második bukása nem állítja meg", async () => {
+  const lesson = standardFusionFixture(), e = lesson.experience!;
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async () => ++calls < 3 ? {} : { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] } });
+  assert.equal(calls, 3);
+  assert.equal(result.tasks.length, e.tasks.length);
+  assert.equal(result.quiz.length, e.quiz.length);
 });
 
 test("one repaired task preserves every previously generated method, task and quiz", async () => {
@@ -274,7 +284,7 @@ test("a partial repair still fails closed on invalid concept, answer or unchange
       call: async () => ++calls === 1 ? { methods: e.methods, tasks, quiz: e.quiz, glossary: [] } : repair,
       save: async () => { saves++; },
     }), /javító kör után/);
-    assert.equal(calls, 2); assert.equal(saves, 0);
+    assert.equal(calls, PACKET_ATTEMPTS); assert.equal(saves, 0);
   }
 });
 

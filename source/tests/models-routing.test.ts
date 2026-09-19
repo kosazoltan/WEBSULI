@@ -131,3 +131,9 @@ test("assertDistinctFamilies dob, ha az author FALLBACK-ja a lektor primary csal
     /same model family/i,
   );
 });
+
+test("spec 2026-09-19: a lektornak van más családú tartalék-modellje, és az őr a tartalékkal is átmegy", () => {
+  assert.equal(FALLBACK_MODELS.lektor, "anthropic/claude-sonnet-5");
+  assert.notEqual(modelFamily(FALLBACK_MODELS.lektor!), modelFamily(resolveStudioModel("author")));
+  assert.doesNotThrow(() => assertDistinctFamilies({}));
+});

@@ -43,3 +43,43 @@ test("classification preserves reasoning, uncertainty and mixed level evidence",
   assert.equal(result.ok, true);
   if (result.ok) assert.deepEqual(result.classification, classification);
 });
+
+/* ------------------------------------------------------------------------- *
+ * Spec 2026-09-19 — a bájtok döntenek, nem a kiterjesztés; a pdfjs-hiba nem
+ * nyers "Invalid PDF structure." (one_step_runs a1707ade), hanem OCR-átirat vagy
+ * érthető magyar hiba.
+ * ------------------------------------------------------------------------- */
+
+import { sniffImageMime } from "../server/studio/document-source";
+
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+
+test("sniffImageMime felismeri a JPEG/PNG/WebP/GIF fejlécet, a PDF-et nem", () => {
+  assert.equal(sniffImageMime(JPEG_BYTES), "image/jpeg");
+  assert.equal(sniffImageMime(PNG_BYTES), "image/png");
+  assert.equal(sniffImageMime(Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WEBP"), Buffer.alloc(4)])), "image/webp");
+  assert.equal(sniffImageMime(Buffer.from("GIF89a!")), "image/gif");
+  assert.equal(sniffImageMime(Buffer.from("%PDF-1.4\n")), null);
+});
+
+test("fotó .pdf névvel → kép-útvonal, helyes MIME data-URL, a pdfjs nem is fut", async () => {
+  const file = { name: "fuzet.pdf", kind: "pdf" as const, content: `data:application/pdf;base64,${JPEG_BYTES.toString("base64")}` };
+  const [out] = await normalizeDocumentSources([file], async () => { throw new Error("transcribePdf must not run for an image"); });
+  assert.equal(out.kind, "image");
+  assert.equal(out.name, "fuzet.pdf");
+  assert.equal(out.content, `data:image/jpeg;base64,${JPEG_BYTES.toString("base64")}`);
+  assert.equal(out.extractedText, undefined, "a képet a közös OCR-lépés írja át");
+});
+
+test("sérült PDF + vision átíró → az átirat lesz a forrás szövege", async () => {
+  const broken = { name: "serult.pdf", kind: "pdf" as const, content: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\nthis is not a pdf body").toString("base64")}` };
+  const [out] = await normalizeDocumentSources([broken], async (f) => { assert.equal(f.name, "serult.pdf"); return "1. oldal\nA háromszög területe az alap és a magasság szorzatának fele."; });
+  assert.match(out.extractedText ?? "", /háromszög területe/);
+});
+
+test("sérült PDF átíró nélkül vagy üres átirattal → magyar hiba a pdfjs okával", async () => {
+  const broken = { name: "serult.pdf", kind: "pdf" as const, content: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\nthis is not a pdf body").toString("base64")}` };
+  await assert.rejects(normalizeDocumentSources([broken]), /A PDF nem olvasható \(sérült vagy titkosított\)/);
+  await assert.rejects(normalizeDocumentSources([broken], async () => "   "), /A PDF nem olvasható/);
+});

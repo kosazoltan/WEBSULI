@@ -193,3 +193,43 @@ export function groundingReport(
 
   return { ok: ungrounded.length === 0, ungrounded, groundedIds: [...groundedIds], measurable };
 }
+
+export type StrippedAnimateLabel = { sectionIndex: number; blockIndex: number; conceptId: string; term: string };
+
+/**
+ * Spec 2026-09-19 — az animációs blokk kozmetika (#169), a címkéje nem taníthat.
+ *
+ * Mérve élesben (PDF-próbafutás 3ed5ca90, 3 szerzői kör után `gate:error`): a
+ * folyamatábra feliratában „talajképződés" állt, a címkézett fogalom neve
+ * „A talaj kialakulása" — szinonima, a szóegyezés téves pozitívja, és a teljes
+ * lecke elbukott. Az animációs blokk címkéiből ezért determinisztikusan kikerül,
+ * amit a blokk saját szövege nem támaszt alá; a címke nélkül maradó blokk eltűnik.
+ * A tanító blokkok (explain/example/…) megalapozottságát ez NEM érinti — azok
+ * továbbra is a kapun mérődnek.
+ */
+export function stripUngroundedAnimateLabels<L extends { sections: Array<{ blocks: Array<Record<string, unknown>> }> }>(
+  lesson: L,
+  concepts: MapConcept[],
+): { lesson: L; stripped: StrippedAnimateLabel[] } {
+  const byId = new Map(concepts.map((c) => [c.localId, c]));
+  const stripped: StrippedAnimateLabel[] = [];
+  const sections = lesson.sections.map((section, sectionIndex) => {
+    const blocks = section.blocks.flatMap((block, blockIndex) => {
+      if (block.kind !== "animate" || !Array.isArray(block.coversConceptIds)) return [block];
+      const text = blockText(block);
+      const kept = (block.coversConceptIds as unknown[]).filter((id): id is string => {
+        if (typeof id !== "string") return false;
+        const concept = byId.get(id);
+        // Unknown ids and term-less concepts are the coverage gate's business, not ours.
+        if (!concept || !concept.term || concept.term.trim() === "") return true;
+        if (checkGrounding(text, concept)) return true;
+        stripped.push({ sectionIndex, blockIndex, conceptId: id, term: concept.term });
+        return false;
+      });
+      if (kept.length === (block.coversConceptIds as unknown[]).length) return [block];
+      return kept.length ? [{ ...block, coversConceptIds: kept }] : [];
+    });
+    return { ...section, blocks: blocks.length ? blocks : section.blocks };
+  });
+  return { lesson: stripped.length ? { ...lesson, sections } : lesson, stripped };
+}

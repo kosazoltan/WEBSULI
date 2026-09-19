@@ -43,6 +43,8 @@ const packetPatchSchema = z.object({
 });
 type PacketContent = z.infer<typeof packetPatchSchema> & { glossary: z.infer<typeof glossaryEntrySchema>[] };
 const BANKS = ["methods", "tasks", "quiz"] as const;
+/** Spec 2026-09-19: model attempts per bank packet (initial + repairs). */
+export const PACKET_ATTEMPTS = 3;
 
 /** Each old AND-group must survive in a distinct new group, including its alternatives. */
 function retainsRequiredGroups(before: string[][], after: string[][]): boolean {
@@ -163,7 +165,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     let previous: unknown = reviewBase, repairBase: Packet | undefined = reviewBase;
     let bindingRepairIds = new Set<string>();
     let errors = reviewBase ? "A lektor konkrét hibáit javítsd az eredeti tételazonosítókon." : "";
-    for (let attempt = 0; !packet && attempt < 2; attempt++) {
+    // Spec 2026-09-19: three attempts per packet — on 36–48 concept maps a second miss
+    // on one packet killed whole runs (studio_jobs 41a94054, 222202f1, 4f853db8).
+    for (let attempt = 0; !packet && attempt < PACKET_ATTEMPTS; attempt++) {
       const prompt = `${repairBase ? "Kimenet: a lent leírt JAVÍTÁSI MÓD szerinti JSON tételcserék." : "Kimenet: TELJES JSON-csomag methods, tasks, quiz és glossary tömbökkel; a három bank nem lehet üres."}
     A fejezet több külön csomagból állhat. MOST KIZÁRÓLAG sectionIndex=${unit.sectionIndex}, allowedConceptIds=${JSON.stringify(unit.conceptIds)} a megengedett csomag. A fejezet többi fogalma itt nem hivatkozható és nem kérdezhető. Bankterven kívüli tételnél az azonosított kérdés tartalmát, mintáját és rubrikáját is ehhez a csomaghoz igazítsd, eredeti ID-val; puszta fogalomcímke-törlés nem tartalmi javítás.
 A végleges, egyesített csomag legalább ${methodKinds.length}, legfeljebb 20 módszer, legalább ${taskCount} (legfeljebb ${Math.max(taskCount, 45)}) feladat és legalább ${quizCount} (legfeljebb ${Math.max(quizCount, 75)}) kvíz.

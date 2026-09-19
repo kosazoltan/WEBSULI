@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { studioConnection } from "../server/ai/studio-provider";
 import { callOcrModel } from "../server/studio/ocr";
 import { callScopeModel } from "../server/studio/one-step";
-import { aiKeyStatus, studioModelMap, FALLBACK_MODELS, LEGACY_MODELS, assertDistinctFamilies } from "../server/ai/models";
+import { aiKeyStatus, studioModelMap, FALLBACK_MODELS, LEGACY_MODELS, assertDistinctFamilies, modelFamily } from "../server/ai/models";
 
 test("OCR and scope use the selected vendor even when router credentials exist", async (t) => {
   const names = ["AI_INTEGRATIONS_OPENAI_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY"];
@@ -63,6 +63,10 @@ test("no GLM defaults or fallbacks; Terra helpers and independent Grok review", 
   assert.equal(map.quizPolish, "gpt-5.6-terra");
   assert.doesNotMatch(JSON.stringify([map, FALLBACK_MODELS, LEGACY_MODELS]), /glm/i);
   assert.equal(FALLBACK_MODELS.author, undefined);
-  assert.equal(FALLBACK_MODELS.lektor, undefined);
+  // Spec 2026-09-19: the review stays independent — the lektor's fallback exists (the
+  // grok-4.6 timeout killed runs in production) but must live in another family than
+  // the author, so a failover can never collapse writer and reviewer onto one vendor.
+  assert.equal(modelFamily(FALLBACK_MODELS.lektor!), "anthropic");
+  assert.notEqual(modelFamily(FALLBACK_MODELS.lektor!), modelFamily(map.author));
   assert.doesNotThrow(() => assertDistinctFamilies({}));
 });

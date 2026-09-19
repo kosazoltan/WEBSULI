@@ -24,10 +24,22 @@ test("a kivonatoló ugyanazt a képátiratot kapja, mint az idézetellenőr", as
   assert.equal(checked[0].examWeight,"core");
 });
 
+// Spec 2026-09-19: a near-verbatim quote (formatting/OCR noise only) is relocated onto
+// the source's own sentence BEFORE any paid repair round; a real paraphrase is not.
+const invented = "A szár tartja a leveleket, és vizet szállít a gyökértől a virágig.";
+
+test("spec 2026-09-19: OCR-zajos idézet modellhívás nélkül a forrás saját mondatára kerül", async () => {
+  const checked = await repairSourceQuotes([concept], files, async () => { throw new Error("Unexpected paid call"); });
+  assert.equal(checked[0].verbatimOk, true);
+  assert.equal(checked[0].quote, exact, "az idézet a forrás tényleges szövege lett, nem a modell változata");
+  assert.equal(checked[0].definition, exact);
+});
+
 test("nem kap engedélyt másik fájlból vett vagy kitalált idézet; két javítás után pending marad", async () => {
   let attempts=0;
-  const checked=await repairSourceQuotes([concept], [...files,{name:"other.txt",kind:"text",content:paraphrase,extractedText:paraphrase}], async ()=>{
-    attempts++; return [{id:"stem",quote:paraphrase,sourceRef:{file:"other.txt"}}];
+  const inventedConcept = { ...concept, quote: invented };
+  const checked=await repairSourceQuotes([inventedConcept], [...files,{name:"other.txt",kind:"text",content:invented,extractedText:invented}], async ()=>{
+    attempts++; return [{id:"stem",quote:invented,sourceRef:{file:"other.txt"}}];
   });
   assert.equal(attempts,2);
   assert.equal(checked[0].verbatimOk,false);
@@ -38,7 +50,8 @@ test("pontos idézetért nincs új modellhívás; duplikált ID nem javíthat", 
   const good={...concept,quote:exact};
   const result=await repairSourceQuotes([good],files,async()=>{throw new Error("Unexpected paid call");});
   assert.equal(result[0].verbatimOk,true);
-  const duplicate=await repairSourceQuotes([concept],files,async()=>[{id:"stem",quote:exact},{id:"stem",quote:exact}]);
+  // Spec 2026-09-19: a truly invented quote cannot be relocated, so the model round runs.
+  const duplicate=await repairSourceQuotes([{...concept,quote:invented}],files,async()=>[{id:"stem",quote:exact},{id:"stem",quote:exact}]);
   assert.equal(duplicate[0].verbatimOk,false);
 });
 
@@ -49,7 +62,7 @@ test("üres vagy hiányzó képátirat nem indíthat kivonatolást", ()=>{
 });
 
 test("egy modellhiba nem jelent sikeres javítást", async()=>{
-  await assert.rejects(repairSourceQuotes([concept],files,async()=>{throw new Error("provider failed");}),/provider failed/);
+  await assert.rejects(repairSourceQuotes([{...concept,quote:invented}],files,async()=>{throw new Error("provider failed");}),/provider failed/);
 });
 
 test("a tárolt átirat kézi javításkor és újraellenőrzéskor is a hivatkozott fájlhoz tartozik",()=>{

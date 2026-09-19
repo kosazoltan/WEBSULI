@@ -359,6 +359,9 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
     updateRun(runId, { mapId });
   }
 
+  // Spec 2026-09-19: the source gap (excluded, unverifiable concepts) travels to the end.
+  let gapNote: string | null = null;
+
   // 2b) #174 — gépi kurálás + jóváhagyás: az egylépeses útvonal nem hagyhat
   // "Piszkozat" zsákutcát. Az igazolt fogalom kept, a nem igazolható
   // kulcsfogalom pending marad: a hiányzó forrás nem törölhető a teljességért.
@@ -373,72 +376,13 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
 
     if (mapRow && mapRow.status !== "approved") {
       updateRun(runId, { phase: "extract", detail: "Tudástár gépi átnézése és jóváhagyása…" });
-      const { kmConcepts } = await import("../../shared/schema");
-      const { autoReviewDecision, summarizeAutoReview } = await import("./auto-approve");
-      const { canApprove } = await import("./extractor");
-
-      const concepts = await db
-        .select({
-          id: kmConcepts.id,
-          examWeight: kmConcepts.examWeight,
-          verbatimOk: kmConcepts.verbatimOk,
-          reviewState: kmConcepts.reviewState,
-        })
-        .from(kmConcepts)
-        .where(eq(kmConcepts.mapId, mapId));
-
-      // Csak a még átnézetlen (pending) fogalmakról dönt a gép — a kézi
-      // döntéseket (kept/edited/rejected) nem írja felül.
-      for (const c of concepts) {
-        if (c.reviewState !== "pending") continue;
-        const decision = autoReviewDecision({
-          examWeight: c.examWeight as "core" | "supporting",
-          verbatimOk: c.verbatimOk,
-        });
-        await db
-          .update(kmConcepts)
-          .set({ reviewState: decision, updatedAt: new Date() })
-          .where(eq(kmConcepts.id, c.id));
-      }
-      const summary = summarizeAutoReview(
-        concepts
-          .filter((c) => c.reviewState === "pending")
-          .map((c) => ({ examWeight: c.examWeight as "core" | "supporting", verbatimOk: c.verbatimOk })),
-      );
-
-      const fresh = await db
-        .select({
-          id: kmConcepts.id,
-          examWeight: kmConcepts.examWeight,
-          verbatimOk: kmConcepts.verbatimOk,
-          reviewState: kmConcepts.reviewState,
-        })
-        .from(kmConcepts)
-        .where(eq(kmConcepts.mapId, mapId));
-
-      const gate = canApprove(
-        fresh.map((c) => ({
-          id: c.id,
-          examWeight: c.examWeight as "core" | "supporting",
-          verbatimOk: c.verbatimOk,
-          reviewState: c.reviewState as "pending" | "kept" | "edited" | "rejected",
-        })),
-      );
-      if (!gate.ok) {
-        updateRun(runId, {
-          phase: "parked",
-          detail: `Forrásellenőrzés szükséges: ${gate.reason} A bizonytalan kulcsfogalmak megmaradtak; a forrásjegyzékben javíthatók vagy újraellenőrizhetők.`,
-        });
+      const curated = await autoCurateKnowledgeMap(mapId, userId);
+      if (!curated.ok) {
+        // Spec 2026-09-19: an unusable transcript is a real error, not a parked run.
+        updateRun(runId, { phase: "error", error: curated.reason, mapId });
         return;
       }
-
-      await db
-        .update(knowledgeMaps)
-        .set({ status: "approved", approvedBy: userId ?? null, approvedAt: new Date(), updatedAt: new Date() })
-        .where(eq(knowledgeMaps.id, mapId));
-      logger.info(
-        `[STUDIO/1STEP] Térkép gépi kurálással jóváhagyva: ${mapId} (kept=${summary.kept}, pending=${summary.pending})`,
-      );
+      gapNote = curated.note;
     }
   }
 
@@ -448,14 +392,121 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
     updateRun(runId, { phase: "error", error: started.reason, mapId });
     return;
   }
-  updateRun(runId, { phase: "pedagogue", jobId: started.jobId });
+  if (gapNote) await seedSourceGapNote(started.jobId, gapNote);
+  updateRun(runId, { phase: "pedagogue", jobId: started.jobId, detail: gapNote });
   await workflowResource(started.jobId);
 
-  await driveOneStep(runId, started.jobId);
+  await driveOneStep(runId, started.jobId, gapNote);
+}
+
+/**
+ * Spec 2026-09-19 — autonomous source check of a draft map, on its stored rows.
+ *
+ * 1. Every unverified quote is relocated onto the source passage it was transcribed
+ *    from (`relocateQuote`, OCR noise only) and re-checked; a hit updates the row.
+ * 2. Pending concepts get the conservative machine decision (`autoReviewDecision`):
+ *    verified → kept, unverifiable core → stays pending (visible), unverifiable
+ *    supporting → kept. Manual decisions are never overwritten.
+ * 3. `autonomousApprovalDecision` approves the map when a verified core exists and
+ *    the verified ratio holds; pending concepts stay out of the lesson
+ *    (`TAUGHT_REVIEW_STATES`) and are named in the returned note.
+ */
+export async function autoCurateKnowledgeMap(
+  mapId: string,
+  userId: string | undefined,
+): Promise<{ ok: true; note: string | null; relocated: number } | { ok: false; reason: string }> {
+  const { kmConcepts } = await import("../../shared/schema");
+  const { autoReviewDecision, autonomousApprovalDecision, sourceGapNote } = await import("./auto-approve");
+  const { relocateQuote, checkVerbatim } = await import("./verbatim");
+  const { sourceTextForReference } = await import("./source-transcript");
+
+  const [map] = await db
+    .select({ sourceText: knowledgeMaps.sourceText, sourceFiles: knowledgeMaps.sourceFiles })
+    .from(knowledgeMaps)
+    .where(eq(knowledgeMaps.id, mapId))
+    .limit(1);
+  if (!map) return { ok: false, reason: "A térkép nem található." };
+
+  const concepts = await db
+    .select({
+      id: kmConcepts.id,
+      term: kmConcepts.term,
+      quote: kmConcepts.quote,
+      sourceRef: kmConcepts.sourceRef,
+      examWeight: kmConcepts.examWeight,
+      verbatimOk: kmConcepts.verbatimOk,
+      reviewState: kmConcepts.reviewState,
+    })
+    .from(kmConcepts)
+    .where(eq(kmConcepts.mapId, mapId));
+
+  // 1) Deterministic relocation of unverified quotes (no model call, D1 stays exact).
+  let relocated = 0;
+  for (const c of concepts) {
+    if (c.verbatimOk || c.reviewState === "rejected") continue;
+    const source = sourceTextForReference(map.sourceFiles, map.sourceText, c.sourceRef.file);
+    const candidate = relocateQuote(c.quote, source);
+    if (!candidate || !checkVerbatim(candidate, source).ok) continue;
+    c.quote = candidate;
+    c.verbatimOk = true;
+    relocated++;
+    await db
+      .update(kmConcepts)
+      .set({ quote: candidate, verbatimOk: true, verbatimReason: null, updatedAt: new Date() })
+      .where(eq(kmConcepts.id, c.id));
+  }
+
+  // 2) Machine review of what is still pending — manual decisions stay.
+  for (const c of concepts) {
+    if (c.reviewState !== "pending") continue;
+    const decision = autoReviewDecision({
+      examWeight: c.examWeight as "core" | "supporting",
+      verbatimOk: c.verbatimOk,
+    });
+    if (decision === c.reviewState) continue;
+    c.reviewState = decision;
+    await db
+      .update(kmConcepts)
+      .set({ reviewState: decision, updatedAt: new Date() })
+      .where(eq(kmConcepts.id, c.id));
+  }
+
+  // 3) Autonomous approval; the gap is reported, never hidden.
+  const decision = autonomousApprovalDecision(
+    concepts.map((c) => ({
+      id: c.id,
+      term: c.term,
+      examWeight: c.examWeight as "core" | "supporting",
+      verbatimOk: c.verbatimOk,
+      reviewState: c.reviewState as "pending" | "kept" | "edited" | "rejected",
+    })),
+  );
+  if (!decision.ok) return decision;
+
+  await db
+    .update(knowledgeMaps)
+    .set({ status: "approved", approvedBy: userId ?? null, approvedAt: new Date(), updatedAt: new Date() })
+    .where(eq(knowledgeMaps.id, mapId));
+  const note = sourceGapNote(decision.excluded);
+  logger.info(
+    `[STUDIO/1STEP] Térkép gépi kurálással jóváhagyva: ${mapId} (igazolt kulcsfogalom=${decision.verifiedCore}, élő=${decision.liveCount}, relokált=${relocated}, kimaradt=${decision.excluded.length})`,
+  );
+  return { ok: true, note, relocated };
+}
+
+/** The gap note travels with the job so the Studio panel shows it next to the lesson. */
+async function seedSourceGapNote(jobId: string, note: string): Promise<void> {
+  const { appendQualityNote } = await import("./autonomous");
+  const [job] = await db.select({ output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
+  const output = (job?.output ?? {}) as Record<string, unknown>;
+  await db
+    .update(studioJobs)
+    .set({ output: { ...output, qualityNotes: appendQualityNote(output.qualityNotes, { reason: "coverage", note, round: 0 }) } })
+    .where(eq(studioJobs.id, jobId));
 }
 
 /** drive() plus outline auto-approval; approveOutline re-validates coverage. */
-export async function driveOneStep(runId: string, jobId: string): Promise<void> {
+export async function driveOneStep(runId: string, jobId: string, gapNote: string | null = null): Promise<void> {
   for (let i = 0; i < MAX_CHAIN; i++) {
     await drive(jobId);
 
@@ -488,7 +539,11 @@ export async function driveOneStep(runId: string, jobId: string): Promise<void> 
       if (job.step === "error") {
         updateRun(runId, { phase: "error", error: job.error ?? "A gyártás hibára futott." });
       } else if (job.step === "done") {
-        updateRun(runId, { phase: "done", detail: "A lecke elkészült.", lessonId: job.lessonId ?? null });
+        updateRun(runId, {
+          phase: "done",
+          detail: gapNote ? `A lecke elkészült. ${gapNote}` : "A lecke elkészült.",
+          lessonId: job.lessonId ?? null,
+        });
       } else {
         updateRun(runId, { phase: "parked", detail: "A futás kézi döntésre vár a Studio panelen." });
       }
