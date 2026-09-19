@@ -5,7 +5,7 @@ import { experienceSchema, experienceTheme, publicationBankProblems, METHOD_KIND
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
-import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, RetryableBankCallError } from "../server/studio/experience-builder";
+import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, RetryableBankCallError, quizCorrectIndexProblems } from "../server/studio/experience-builder";
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
 import { planLessonBank, bankUnitQuota } from "../shared/lesson-bank-plan";
 
@@ -187,6 +187,15 @@ test("mért hiba 2026-09-19 (run 45233b4b): a szolgáltatói/hossz-hiba bukott k
   let calls = 0;
   await assert.rejects(buildLessonExperience(lesson, [], { call: async () => { calls++; throw new Error("[xAI] Request timed out"); } }), /Request timed out/);
   assert.equal(calls, 1);
+});
+
+test("mérve run 5 (quiz.62): a correctIndex és a magyarázat számbeli ellentmondása kódból bukik, a lektor előtt", () => {
+  const base = { id: "q1", sectionIndex: 0, coversConceptIds: ["c"], question: "Mennyi 30+3·6–12:4?", options: ["43", "45", "48"], feedbackPerOption: ["Nem: előbb szorzás és osztás.", "Helyes: 30+18–3 = 45.", "Nem."] };
+  assert.deepEqual(quizCorrectIndexProblems([{ ...base, correctIndex: 1 }]), [], "helyes jelölés");
+  const wrong = quizCorrectIndexProblems([{ ...base, correctIndex: 0, feedbackPerOption: ["Helyes: 30+18–3 = 45.", "Nem.", "Nem."] }]);
+  assert.equal(wrong.length, 1); assert.match(wrong[0], /43 opciót jelöli.*45/);
+  assert.deepEqual(quizCorrectIndexProblems([{ ...base, options: ["szorzás", "osztás", "összeadás"], correctIndex: 0, feedbackPerOption: ["Helyes, 45.", "Nem", "Nem"] }]), [], "szöveges opcióknál nincs ítélet");
+  assert.deepEqual(quizCorrectIndexProblems([{ ...base, correctIndex: 0, feedbackPerOption: ["Helyes: a végeredmény 43, mert 30+18–3 lépésben 45 helyett…", "Nem.", "Nem."] }]), [], "ha a saját számát is említi, nincs ellentmondás");
 });
 
 test("spec 2026-09-19: párhuzamos csomagépítés — egyszerre készülő csomagok, ütköző (ismétlődő) kérdésnél soros újraépítés", async () => {

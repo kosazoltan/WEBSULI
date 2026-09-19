@@ -116,6 +116,29 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
     quiz: replace(original.quiz, patch.quiz), glossary: patch.glossary?.length ? patch.glossary : original.glossary };
 }
 
+/**
+ * Mérve kétszer (run 525b2797 quiz.74, run 5 quiz.62): az olcsó bankmodell a correctIndex-et
+ * másik opcióra tette, mint amelynek értékét a saját magyarázata helyesnek mondja
+ * („A feedback is 45-öt ír, mégis 43 a correctIndex"). Számos opcióknál ez determinisztikusan
+ * mérhető: ha a helyesnek jelölt opció magyarázata egy MÁSIK opció számát nevezi meg, a jelölt
+ * opció számát pedig nem, a tétel ellentmondásos — javító kört kap a lektor előtt.
+ */
+export function quizCorrectIndexProblems(quiz: ReadonlyArray<{ id: string; options: readonly string[]; correctIndex: number; feedbackPerOption: readonly string[] }>): string[] {
+  const problems: string[] = [];
+  const numbersOf = (text: string) => new Set((normalizeAnswer(text).match(/-?\d+(?:\.\d+)?/g) ?? []));
+  for (const q of quiz) {
+    const values = q.options.map(o => { const n = [...numbersOf(o)]; return n.length === 1 ? n[0] : null; });
+    if (values.some(v => v === null) || new Set(values).size !== values.length) continue;
+    const feedback = q.feedbackPerOption[q.correctIndex];
+    if (!feedback) continue;
+    const mentioned = numbersOf(feedback);
+    const own = values[q.correctIndex]!;
+    const others = values.filter((v, i) => i !== q.correctIndex && mentioned.has(v!));
+    if (!mentioned.has(own) && others.length) problems.push(`${q.id}: a correctIndex a(z) ${own} opciót jelöli, a magyarázata viszont ${others.join("/")} értéket nevez helyesnek — a jelölés és a magyarázat ellentmond.`);
+  }
+  return problems;
+}
+
 function packetCounts(value: unknown): string {
   const data = value as Record<string, unknown> | null;
   return BANKS.map(bank => `${bank}=${Array.isArray(data?.[bank]) ? data[bank].length : "hiányzik"}`).join(", ");
@@ -165,6 +188,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       problems.push(...gateQuestionProblems([...before.methods, ...packet.methods]));
+      problems.push(...quizCorrectIndexProblems(packet.quiz));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);
       for (const t of packet.tasks) {
         // Spec 2026-09-19 (measured: owner's 49-concept map, job 6cb1bc89 — three packet attempts
