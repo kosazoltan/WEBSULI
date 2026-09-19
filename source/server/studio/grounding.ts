@@ -97,9 +97,27 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // A kurált magyar DEFINÍCIÓ érdemi szavai ugyanúgy a forrásból jönnek: ha azok legalább fele
   // (min. 2, vagy mind, ha rövidebb) a blokk saját szövegében áll, a címke megalapozott.
   const defWords = significantWords(concept.definition ?? "").filter((w) => !STOP_WORDS.has(w));
-  if (defWords.length === 0) return false;
-  const need = defWords.length < 2 ? defWords.length : Math.max(2, Math.ceil(defWords.length / 2));
-  return defWords.filter(present).length >= need;
+  if (defWords.length > 0) {
+    const need = defWords.length < 2 ? defWords.length : Math.max(2, Math.ceil(defWords.length / 2));
+    if (defWords.filter(present).length >= need) return true;
+  }
+  // Mérve (run 525b2797, Műveleti sorrend, 2026-09-19): a fogalom maga a forrás KIDOLGOZOTT
+  // PÉLDÁJA („Zárójeles szorzás és osztás példája", idézet: „36 ÷ (3 · 2) – 3 …"), a blokk
+  // ugyanezt a példát tanítja — a címke szavai („zárójeles", „példája") mégsem állnak a
+  // szövegben, és a kapu egy teljes szerzői kört kért érte. Ha a forrás-idézet legalább két
+  // különböző számot tartalmaz, és azok ≥ 75 %-a a blokkban is szerepel, a blokk a forrás
+  // példáját dolgozza ki: megalapozott.
+  return quoteNumbersPresent(concept.quote ?? concept.definition ?? "", haystack);
+}
+
+/** Distinct numeric tokens of the source quote found in the block text (≥2 numbers, ≥75 % present). */
+export function quoteNumbersPresent(quote: string, normalizedBlockText: string): boolean {
+  // Digit runs only: `normalizeText` splits "3,5" into "3 5", so decimals compare part by part.
+  const numbers = [...new Set(quote.match(/\d+/g) ?? [])];
+  if (numbers.length < 2) return false;
+  const tokens = new Set(normalizedBlockText.split(" ").filter(Boolean));
+  const hits = numbers.filter((n) => tokens.has(n)).length;
+  return hits >= Math.ceil(numbers.length * 0.75);
 }
 
 const STOP_WORDS = new Set(["egy", "hogy", "nem", "van", "vagy", "mint", "ami", "amely", "azt", "ezt", "the", "and", "with", "from", "that", "this", "are", "for", "also", "which", "into", "has", "have", "más", "több", "csak", "még", "már", "pedig", "mert", "után", "előtt", "között", "szerint", "akkor", "olyan", "ilyen", "minden", "való"]);
