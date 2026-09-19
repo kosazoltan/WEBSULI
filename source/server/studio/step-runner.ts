@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
-import { FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { BANK_RESCUE_MODEL, FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -52,7 +52,8 @@ import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { buildLessonExperience, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { skilledPromptLookup } from "./role-skills";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
@@ -190,11 +191,12 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
     store: deps.store ?? (await createDrizzlePipelineStore()),
     providerFactory: deps.providerFactory ?? defaultProviderFactory,
     keyConfigured: deps.keyConfigured ?? studioModelReady,
-    promptLookup: async (name, fallback) => {
+    // Szerep-skill (2026-09-19): a DB-s felülírás és a beépített prompt is a szerep skilljével indul.
+    promptLookup: skilledPromptLookup(async (name, fallback) => {
       const configured = await lookup(name, fallback);
       if (configured === fallback) return fallback;
       return configured + "\n\nAktuális kötelező szerződés és forrásadatok (eltérésnél ez az irányadó):\n" + fallback;
-    },
+    }),
   };
 }
 
@@ -673,12 +675,16 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             checkpoint,
             previous: original.experience,
             reviewFeedback: bankReview?.feedback,
-            call: async (bankSystem, user) => {
-              const bankModel = resolveStudioModel("author");
+            call: async (bankSystem, user, attempt) => {
+              // Spec 2026-09-19: the bank is its own cheap role; after PACKET_ATTEMPTS failed
+              // attempts the packet is rebuilt once on the strong rescue model.
+              const bankModel = attempt >= PACKET_ATTEMPTS ? BANK_RESCUE_MODEL : resolveStudioModel("bank");
               bankModelUsed = bankModel;
+              if (!keyConfigured(bankModel)) throw new Error(`${NO_OPENROUTER_KEY_MESSAGE} Hiányzó kulcs: ${keyNameForModel(bankModel)}.`);
+              if (attempt >= PACKET_ATTEMPTS) logger.warn(`[STUDIO] Bankcsomag mentőkör a(z) ${bankModel} modellen (${job.id}), ${attempt} bukott kísérlet után.`);
               // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
               if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
-              const result = await callStepModel(providerFactory(bankModel), { step: "author", model: bankModel, system: bankSystem, user });
+              const result = await callStepModel(providerFactory(bankModel, attempt >= PACKET_ATTEMPTS ? "author" : "bank"), { step: "animator", model: bankModel, system: bankSystem, user });
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
             },

@@ -57,11 +57,13 @@ test("router credentials never substitute for missing own credentials", () => {
   assert.equal(aiKeyStatus({ OPENAI_API_KEY: "test" }).openai.configured, true);
 });
 
-test("no GLM defaults or fallbacks; Terra helpers and independent Grok review", () => {
+test("spec 2026-09-19: cheap OpenRouter helpers, no GLM in the legacy routes, independent Grok review", () => {
   const map = studioModelMap({});
-  assert.equal(map.gateHelper, "gpt-5.6-terra");
-  assert.equal(map.quizPolish, "gpt-5.6-terra");
-  assert.doesNotMatch(JSON.stringify([map, FALLBACK_MODELS, LEGACY_MODELS]), /glm/i);
+  assert.equal(map.gateHelper, "deepseek/deepseek-v4-flash");
+  assert.equal(map.quizPolish, "deepseek/deepseek-v4-flash");
+  // The OCR measurement (#190) still rules GLM out of the legacy/admin routes.
+  assert.doesNotMatch(JSON.stringify(LEGACY_MODELS), /glm/i);
+  assert.equal(map.ocr, "qwen/qwen3-vl-32b-instruct");
   assert.equal(FALLBACK_MODELS.author, undefined);
   // Spec 2026-09-19: the review stays independent — the lektor's fallback exists (the
   // grok-4.6 timeout killed runs in production) but must live in another family than

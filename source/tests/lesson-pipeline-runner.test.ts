@@ -18,6 +18,7 @@ import {
 import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
 import { computeStepHash, MAX_AUTHOR_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
+import { withRoleSkill } from "../server/studio/role-skills";
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
@@ -763,7 +764,8 @@ test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async
   assert.equal(job?.status, "ok");
   assert.equal(job?.inputHash, computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, {
     input: { map: MAP_META, concepts: MAP_CONCEPTS },
-    system: buildPedagoguePrompt({title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom, concepts: MAP_CONCEPTS}),
+    // Szerep-skill (2026-09-19): az effektív prompt a pedagógus skilljével indul, a hash ezt is rögzíti.
+    system: withRoleSkill("pedagogue", buildPedagoguePrompt({title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom, concepts: MAP_CONCEPTS})),
   }, 0), "a vázlat hash-e a bemenetet és az effektív promptot is rögzíti");
   assert.deepEqual(job?.output?.outline, GOOD_OUTLINE);
 

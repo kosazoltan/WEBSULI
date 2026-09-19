@@ -65,10 +65,13 @@ export class OpenRouterProvider implements IAIProvider {
   private timeout: number;
   private configured: boolean;
   private maxTokens?: number;
+  /** Spec 2026-09-19: OpenRouter `reasoning.effort` caps thinking tokens on deepseek/qwen/glm. */
+  private reasoningEffort?: AIProviderConfig['reasoningEffort'];
 
   constructor(config: AIProviderConfig) {
     this.model = config.model;
     this.maxTokens = config.maxTokens;
+    this.reasoningEffort = config.reasoningEffort;
     this.timeout = config.timeout || 60000;
     this.configured = typeof config.apiKey === 'string' && config.apiKey.trim().length > 0;
     this.client = new OpenAI({
@@ -95,6 +98,7 @@ export class OpenRouterProvider implements IAIProvider {
           model: this.model,
           messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
           ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
+          ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
           temperature: 0.7,
         },
         { signal }

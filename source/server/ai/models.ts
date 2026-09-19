@@ -20,6 +20,9 @@ export const STUDIO_STEPS = [
   "pedagogue",
   "author",
   "animator",
+  // Spec 2026-09-19: the 45/75 practice bank is its own role (bulk JSON on a cheap model),
+  // still built inside the animator step but routed and budgeted separately.
+  "bank",
   "lektor",
   "gateHelper",
   "quizPolish",
@@ -49,26 +52,39 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // A glm az `r`-t rendszeresen `m`-nek olvasta (r=4cm -> m=4cm), ami a
   // fogalmak idézet-ellenőrzését is elbuktatta.
   ocr: "qwen/qwen3-vl-32b-instruct",
-  pedagogue: "grok-4.6", // planning, misconceptions
+  // Spec 2026-09-19 (tulajdonosi döntés): a tervkészítő a közvetlen Anthropic API-n futó
+  // Opus 5, medium efforttal — a terv minősége dönti el a további körök számát.
+  pedagogue: "claude-opus-5",
   author: "gpt-5.6-terra", // long structured Hungarian output
-  // 2026-09-09 (tulajdonosi döntés, mérve): a qwen3.8-flash az OpenRouteren 429-et ad; a
-  // Terra 41 s alatt sémahelyes, mértéktartó (5 animáció) kimenetet adott ugyanarra a leckére.
-  animator: "gpt-5.6-terra",
+  // Spec 2026-09-19 (mérve, két 46–49 fogalmas futás): az animátor+bank a lecke költségének
+  // 3/4-e volt Terrán (~3 USD). A glm-5.3-flash 6,3 s alatt, 0 gondolkodó tokennel, érvényes
+  // magyar bankcsomag-JSON-t adott (0,09/0,30 USD/M); a rubrikát determinisztikus kód ellenőrzi.
+  animator: "z-ai/glm-5.3-flash",
+  bank: "z-ai/glm-5.3-flash",
   // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
   // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
   // x-ai és openai külön család; a szerzőnek nincs külső fallbackje.
   lektor: "grok-4.6", // MUST differ in family from author
-  gateHelper: "gpt-5.6-terra", // cheap classification
-  quizPolish: "gpt-5.6-terra",
+  gateHelper: "deepseek/deepseek-v4-flash", // cheap classification (0,04/0,08 USD/M)
+  quizPolish: "deepseek/deepseek-v4-flash",
 };
+
+/**
+ * Spec 2026-09-19: the bank packet's rescue model — after PACKET_ATTEMPTS failed attempts on the
+ * cheap primary/fallback the packet is rebuilt once on the strong author-class model.
+ */
+export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
 
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   extract: "grok-4.6",
   // #190: a mért második helyezett (90.2%), más családból mint az elsődleges.
   ocr: "google/gemini-3.1-flash-lite",
-  pedagogue: "gpt-5.6-terra",
+  pedagogue: "grok-4.6",
   // Author and reviewer have no cross-vendor fallback: retain independent review.
-  animator: "grok-4.6",
+  animator: "deepseek/deepseek-v4-flash",
+  bank: "deepseek/deepseek-v4-flash",
+  gateHelper: "z-ai/glm-5.3-flash",
+  quizPolish: "z-ai/glm-5.3-flash",
   // Spec 2026-09-19 (mérve élesben): a grok-4.6 lektor 480 s után időtúllépett és a
   // gyártás generikus hibával állt meg. A tartalék OpenRouteren futó Anthropic-modell —
   // az „anthropic" család különbözik a szerző „openai" családjától, így az

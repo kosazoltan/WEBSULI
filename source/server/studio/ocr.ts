@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 
 import { logger } from "../lib/logger";
 import type { ExtractorFile } from "./extractor";
+import { withRoleSkill } from "./role-skills";
 
 export type OcrResult = { name: string; text: string };
 
@@ -125,12 +126,13 @@ export function mergeOcrIntoSourceText(baseText: string, ocrResults: OcrResult[]
   return parts.filter((p) => p !== "").join("\n");
 }
 
-export const OCR_SYSTEM_PROMPT = [
+// Szerep-skill (2026-09-19) az elején; az OCR cache-kulcs a promptot tartalmazza, így skill-módosítás új átiratot kér.
+export const OCR_SYSTEM_PROMPT = withRoleSkill("ocr", [
   "You are a verbatim transcriber for Hungarian school material photographed or screenshotted by a teacher.",
   "Transcribe ALL legible text from the image EXACTLY as written — same wording, same accents, same punctuation.",
   "Do not translate, summarize, correct, or reorder anything. Do not describe the image.",
   "Output plain text only.",
-].join(" ");
+].join(" "));
 
 /**
  * Az OCR-kérés paraméterei — a #165 gyökér-okkal azonos hibaosztály ellen
