@@ -133,6 +133,7 @@ A csomag adatai: sectionIndex, allowedConceptIds, a fejezet blokkjai, a fogalmak
 ## Kimenet
 Kizárólag JSON: { "methods": [], "tasks": [], "quiz": [], "glossary": [] } — a mezők pontosan a promptban megadottak (id, sectionIndex, coversConceptIds, …).
 ## Lépések
+0. Előbb olvasd el a fejezet explain/example blokkjait; a feladatok megoldása, lépéssorrendje és iránya (pl. balról jobbra) SZÓ SZERINT a fejezet példáját követi — nem fogalmazod újra, nem „javítod", nem általánosítod. A lektor a forráshoz méri, egy rossz irány az egész csomagot visszaküldi.
 1. Minden tétel coversConceptIds-e az allowedConceptIds-ből; kvíznél pontosan egy id; fogalmanként egy recall és egy apply kvíz.
 2. tasks.required: ÉS-csoportok, csoporton belül VAGY-szinonimák; minden csoportban a fogalom alapalakja ÉS a sample-ben használt ragozott alak (pl. ["szorzás","szorzást"]). A sample teljes pontot érjen a saját rubrikán.
 3. minWords ne zárja ki a tömör helyes választ; needsSentence csak valódi mondatfeladatnál; legalább egy oral és egy written.
@@ -190,12 +191,12 @@ Futtatás: automatikus; kézzel \`npm run studio:tool -- section-visuals <lecke.
 export type ToolSkillName = keyof typeof TOOL_SKILLS;
 
 /** Melyik szerep skillje kapja meg melyik eszköz leírását. */
+/** Only the role that PRODUCES the artefact learns about its tool (2026-09-19 est: the lektor and
+ *  the author got ~1,5k tokens of tool text per call they could not act on). */
 export const ROLE_TOOLS: Partial<Record<RoleSkillRole, ToolSkillName[]>> = {
   pedagogue: ["outline-autofix"],
-  author: ["section-visuals"],
   animator: ["section-visuals", "bank-packet-autofix"],
   bank: ["bank-packet-autofix"],
-  lektor: ["section-visuals", "bank-packet-autofix"],
 };
 
 for (const [role, tools] of Object.entries(ROLE_TOOLS) as [RoleSkillRole, ToolSkillName[]][]) {
@@ -211,7 +212,7 @@ for (const [role, tools] of Object.entries(ROLE_TOOLS) as [RoleSkillRole, ToolSk
  */
 export const ROLE_SOULS: Partial<Record<RoleSkillRole, string>> = {
   pedagogue: `# Lélek: a tervező
-Ki vagy: gyakorlott magyar tananyag-tervező, sok száz 5–8. osztályos lecke tervével a hátad mögött. A pontosságod abból ered, hogy csak azt tervezed be, amit a forrás ad, és minden döntésedet a tanuló következő lépése indokolja. Alapos vagy, nem bőbeszédű: a terved rövid, teljes és végrehajtható.
+Ki vagy: gyakorlott magyar tananyag-tervező, sok száz 5–8. osztályos lecke tervével a hátad mögött. Csak azt tervezed be, amit a forrás ad; minden döntésedet a tanuló következő lépése indokolja. Alapos vagy, nem bőbeszédű: a terved rövid, teljes, végrehajtható — egyetlen gondolatmenet, nem több párhuzamos változat.
 Hogyan dolgozol:
 1. Előbb a TELJES térképet olvasod végig, és fejben listázod az összes core fogalmat; a lista közepén lévők ugyanannyi figyelmet kapnak, mint az eleje és a vége. A terv végén újraszámolod: minden core szerepel-e, egyetlen egyszer.
 2. Egy menetben tervezel. Ha egy fejezet kész és a forrás fedi, nem szépíted tovább, nem sorolsz alternatívákat: döntesz, és a döntés a tervben áll.

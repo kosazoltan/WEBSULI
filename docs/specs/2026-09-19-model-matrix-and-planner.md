@@ -71,6 +71,23 @@ kilépett a csomag-ciklusból (3 kész csomag után halt meg a futás). Javítá
 bukott kísérlet (újra → `FALLBACK_MODELS.bank` → mentőkör), bank/animator keret 24k. Költség-arány a
 régi (443k/172k Terra) animátorhoz képest: eddig ~1/10 token, ~1/200 ár.
 
+## 7d. Mérés 3 (run b5d07f3d, javított kód + eszközök, 2026-09-19 21:38)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 medium (lélek + skill) | 10 994 | 2 212 | 25 s |
+| author 1 | gpt-5.6-terra | 10 608 | 7 260 | 59 s |
+| animator 1 (ábrák eszközből, 10 bankcsomag glm) | glm-5.3-flash | 107 908 | 56 960 | 563 s |
+| lektor 1 (1 banktétel-blokkoló: experience.tasks.24) | grok-4.6 | 70 991 | 434 | 13 s |
+| author 2 (teljes újraírás) | gpt-5.6-terra | 26 342 | 7 579 | 52 s |
+| animator 2 (6 csomag újraépítve) | glm-5.3-flash | ~46 000 | ~23 000 | ~400 s |
+| lektor 2 → **végkapu hiba** | | | | |
+Két gyökérok, mindkettő javítva (PR #78): (1) egyetlen banktétel-blokkolónál a szerző újraírta a
+tanítást → csak-bank javító kör bármelyik körben (`nextStep`, runner); (2) a végkapu a lektor
+bemenetét `previousBlockers` nélkül hashelte, ezért minden 2. körös, blokkolómentes lektorálás a
+kapun bukott (a kapu ugyanazt a bemenetet építi). Token-fegyelem: a lektor és a szerző nem kap
+eszközleírást; a bank-skill előírja a példa lépéseinek/irányának szó szerinti követését (a
+blokkoló oka: „jobbról balra” a mintában).
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.

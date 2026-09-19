@@ -754,7 +754,11 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // those items once more instead of rewriting the teaching or failing the lesson.
       const blockingNotes = notes.filter((n) => n.blocking);
       const bankOnly = blockingNotes.length > 0 && blockingNotes.every((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
-      const bankOnlyRepair = fusion && bankOnly && job.round >= MAX_AUTHOR_ROUNDS && !job.output?.bankOnlyRepairRound
+      // Mérve (run b5d07f3d, 2026-09-19): egyetlen banktétel-blokkolónál a szerzői kör a teljes
+      // tanítást újraírta, és 6 változatlan tartalmú csomag épült újra. Ha MINDEN blokkoló
+      // banktétel, a tanítás nem hibás → bármelyik körben a csak-bank javítás jön (jobonként
+      // egyszer); a szerzői újraírás csak tanítási blokkolóra jár.
+      const bankOnlyRepair = fusion && bankOnly && !job.output?.bankOnlyRepairRound
         && !!(job.output?.lesson as Lesson | undefined)?.experience;
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair) {
         return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
@@ -762,7 +766,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       }
       const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers, bankOnlyRepair });
       if (bankOnlyRepair && transition.step === "animator") {
-        const feedback = resolveBankReview(job.output!.lesson as Lesson, parsed.data.notes.filter((n) => classifyNotes([n])[0]?.blocking));
+        // Same note set the author path forwards (every non-admin note, so a language note on a
+        // sample reaches the bank builder too); resolveBankReview keeps the experience.* ones.
+        const feedback = resolveBankReview(job.output!.lesson as Lesson, notes.filter((n) => !n.adminOnly));
         logger.warn(`[STUDIO] Bank-only lektor javító kör (${job.id}): ${feedback.length} tétel, ${transition.round}. kör`);
         await store.saveStep(
           job.id,
@@ -913,8 +919,14 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
 
   if (skill74) {
     const report = lektorReportSchema.safeParse(job.output?.report);
+    // Mért éles hiba (run b5d07f3d, 2026-09-19): a lektor bemenete az 1. körtől az előző kör
+    // blokkolóit is tartalmazza (previousBlockers), a kapu viszont nélkülük számolta az elvárt
+    // hasht → minden 2. körös, blokkolómentes lecke a kapun halt meg. A kapu UGYANAZT a
+    // bemenetet építi, mint a lektor lépés.
+    const gatePriorBlockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
     const expectedReviewHash = computeStepHash("lektor", "skill-7.4-review-1", {
       lesson: rawLesson, map: mapInputOf(map), concepts: map.concepts,
+      ...(gatePriorBlockers.length ? { previousBlockers: gatePriorBlockers } : {}),
     }, job.round);
     if (!report.success || classifyNotes(report.data.notes).some(note => note.blocking)
       || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {
