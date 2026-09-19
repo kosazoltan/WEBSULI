@@ -16,7 +16,7 @@ import {
   type PipelineStore,
 } from "../server/studio/step-runner";
 import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
-import { computeStepHash } from "../server/studio/pipeline";
+import { computeStepHash, MAX_AUTHOR_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
@@ -1264,4 +1264,53 @@ test("(p) spec 2026-09-19 — lektor: az elsődleges modell időtúllépése ut�
   const job = await store.loadJob("job-1");
   assert.equal(job?.status, "ok");
   assert.equal((job as { model?: string | null })?.model, fallback, "a job a ténylegesen használt lektor-modellt rögzíti");
+});
+
+/* Spec 2026-09-19 — bank-only lektor blockers at the round limit get one targeted bank round. */
+test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjavító kör, utána a lektor dönt", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.3", message: "A kvíz a föld alatti részt kizárólag gyökérnek adja." };
+  const deps = makeDeps(JSON.stringify({ notes: [bankBlocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-only", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+
+  const first = await runPipelineStep("bank-only", deps);
+  assert.ok(first.ok, `a bank-only kör elindul: ${JSON.stringify(first)}`);
+  assert.deepEqual(first.ok && first.next, { step: "animator", round: MAX_AUTHOR_ROUNDS + 1 });
+  const job = deps.store.jobs.get("bank-only")!;
+  assert.equal(job.output?.bankOnlyRepairRound, MAX_AUTHOR_ROUNDS + 1);
+  assert.equal((job.output?.bankReview as { round: number; feedback: unknown[] }).round, MAX_AUTHOR_ROUNDS + 1);
+  assert.equal((job.output?.bankReview as { feedback: unknown[] }).feedback.length, 1);
+
+  // The animator rebuilds only the criticised items; the teaching is untouched.
+  job.step = "animator"; job.round = MAX_AUTHOR_ROUNDS + 1; job.status = "ok";
+  const bankDeps = makeDeps(JSON.stringify({ quiz: [lesson.experience.quiz[3]] }));
+  const rebuilt = await runPipelineStep(job.id, { ...bankDeps, store: deps.store });
+  assert.ok(rebuilt.ok && rebuilt.next.step === "lektor", `animátor után lektor: ${JSON.stringify(rebuilt)}`);
+  assert.equal(bankDeps.calls.length, 1);
+  assert.match(bankDeps.calls[0].system, /kizárólag gyökérnek/);
+
+  // A second bank-only verdict at the limit is final.
+  job.step = "lektor"; job.round = MAX_AUTHOR_ROUNDS + 1; job.status = "ok";
+  const again = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ notes: [bankBlocker] })), store: deps.store });
+  assert.equal(again.ok, false);
+  assert.match(deps.store.jobs.get("bank-only")!.error ?? "", /tartalmi javítást kér/);
+});
+
+test("(r) körlimitnél tanítási blokkoló mellett nincs bank-only kör: azonnali hiba", async () => {
+  const lesson = standardFusionFixture();
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tanítási tényhiba." },
+    { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.1", message: "Bankhiba." }];
+  const deps = makeDeps(JSON.stringify({ notes }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
+  deps.store.seed({ id: "mixed", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience!.version } });
+  const outcome = await runPipelineStep("mixed", deps);
+  assert.equal(outcome.ok, false);
+  assert.match(deps.store.jobs.get("mixed")!.error ?? "", /A lektor 2 tartalmi javítást kér/);
 });

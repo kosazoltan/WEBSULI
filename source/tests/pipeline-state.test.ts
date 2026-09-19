@@ -156,3 +156,25 @@ test("computeStepHash separates the round, so a retry is not served from cache",
     computeStepHash("author", "v1", { mapId: "km-1" }, 2),
   );
 });
+
+/* Spec 2026-09-19 — bank-only repair round after the author limit. */
+test("bank-only lektor blockers at the limit open one animator round; without the flag the gate decides", () => {
+  const repair = nextStep({ step: "lektor", ok: true, round: MAX_AUTHOR_ROUNDS, blockers: 1, bankOnlyRepair: true });
+  assert.deepEqual(repair, { step: "animator", round: MAX_AUTHOR_ROUNDS + 1 });
+  const plain = nextStep({ step: "lektor", ok: true, round: MAX_AUTHOR_ROUNDS, blockers: 1 });
+  assert.equal(plain.step, "gate");
+  const early = nextStep({ step: "lektor", ok: true, round: 0, blockers: 1, bankOnlyRepair: true });
+  assert.deepEqual(early, { step: "author", round: 1 }, "a limit előtt a szerzői kör marad");
+});
+
+test("MAX_CHAIN_STEPS covers the worst walk plus the bank-only repair round", () => {
+  let state: { step: StudioStep; round: number } = { step: "pedagogue", round: 0 };
+  let steps = 1;
+  while (!isTerminal(state.step)) {
+    const bankOnlyRepair = state.step === "lektor" && state.round === MAX_AUTHOR_ROUNDS;
+    state = nextStep({ step: state.step, ok: true, round: state.round, blockers: state.step === "lektor" && state.round <= MAX_AUTHOR_ROUNDS ? 1 : 0, gatePassed: state.step === "gate" ? state.round > MAX_AUTHOR_ROUNDS : false, bankOnlyRepair });
+    steps += 1;
+    assert.ok(steps <= MAX_CHAIN_STEPS, `bank-only walk exceeded MAX_CHAIN_STEPS=${MAX_CHAIN_STEPS} at ${state.step}`);
+  }
+  assert.equal(state.step, "done");
+});

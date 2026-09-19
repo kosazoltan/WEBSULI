@@ -13,11 +13,14 @@ test("újraindítás után visszaolvasott progress frissíthető és perzisztál
   assert.equal(writes, 1);
 });
 
-test("provider-timeout nem fogyaszt tartalmi kört, három sikeres review viszont igen", () => {
+test("provider-timeout nem fogyaszt tartalmi kört, négy sikeres review viszont igen (bank-only kör, spec 2026-09-19)", () => {
   const run: WorkflowView = { id: "run", definition: workflowDefinition("studio"), state: "running", createdAt: 1, updatedAt: 1, revision: 0, visits: [] };
   const visit = (step: string, state: "done" | "error", error?: string) => ({ step, state, error, attempt: 1, startedAt: 1, finishedAt: 2, cacheHits: 0 });
   run.visits = [visit("lektor", "error", 'A(z) "lektor" lépés modellhívása hibára futott: [xAI] Request timed out.'), visit("lektor", "done"), visit("lektor", "done"), visit("animator", "done")];
   assert.doesNotThrow(() => assertWorkflowStep(run, "lektor"));
+  // Spec 2026-09-19: a fourth content review belongs to the bank-only repair round.
   run.visits.splice(3, 0, visit("lektor", "done"));
+  assert.doesNotThrow(() => assertWorkflowStep(run, "lektor"));
+  run.visits.splice(4, 0, visit("lektor", "done"));
   assert.throws(() => assertWorkflowStep(run, "lektor"), /Elfogyott/);
 });

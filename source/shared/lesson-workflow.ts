@@ -31,8 +31,12 @@ export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
     ? { ...step, after: [...step.after, "lektor", "gate", "pedagogue"], maxVisits: 3 }
     : mode === "web" && ["knowledge", "author"].includes(step.id)
       ? { ...step, maxVisits: 3 }
-    : ["upload", "studio"].includes(mode) && ["pedagogue", "animator", "lektor", "gate"].includes(step.id)
-      ? { ...step, after: step.id === "pedagogue" ? [...step.after, "pedagogue"] : step.after, maxVisits: 3 }
+    // Spec 2026-09-19: one bank-only repair round after the author limit — the animator may
+    // follow the lektor directly, so animator/lektor/gate get a fourth visit.
+    : ["upload", "studio"].includes(mode) && ["animator", "lektor", "gate"].includes(step.id)
+      ? { ...step, after: step.id === "animator" ? [...step.after, "lektor"] : step.after, maxVisits: 4 }
+    : ["upload", "studio"].includes(mode) && step.id === "pedagogue"
+      ? { ...step, after: [...step.after, "pedagogue"], maxVisits: 3 }
       : step) };
 }
 export type WorkflowVisit = {
