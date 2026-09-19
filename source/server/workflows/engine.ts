@@ -16,7 +16,7 @@ export interface WorkflowStore {
   release(id: string, token: string): Promise<void>;
   loadSkill?(owner: string, mode: WorkflowMode): Promise<SkillSnapshot>;
 }
-type Context = { record: WorkflowRecord; store: WorkflowStore; token: string; lostLease: boolean; continuation: boolean };
+type Context = { record: WorkflowRecord; store: WorkflowStore; token: string; lostLease: boolean; continuation: boolean; persistQueue: Promise<void> };
 const context = new AsyncLocalStorage<Context>();
 const preparationSkill = new AsyncLocalStorage<{ snapshot: SkillSnapshot; mode: WorkflowMode }>();
 /** Manual source preparation shares one pinned prompt without inventing a full lesson run. */
@@ -73,7 +73,18 @@ export function redactWorkflowError(error: unknown): string {
     .replace(/Minden javítandó címkézés[\s\S]*/i, "A részletes tartalmi eltérés a javítóellenőrzésben található.")
     .replace(/(?:sk-|Bearer\s+)[\w.-]+/gi, "[titkos érték]").slice(0, 1600);
 }
-async function persist(ctx: Context) {
+/**
+ * Spec 2026-09-19 (párhuzamos bankcsomagok): a mentés optimista revíziószámmal fut, ezért két
+ * egyidejű persist a másodiknak hamis „elavult végrehajtó” konfliktust adna. A mentések
+ * kontextusonként sorba állnak; minden hívó a sajátját várja meg.
+ */
+function persist(ctx: Context): Promise<void> {
+  const run = () => persistNow(ctx);
+  const next = ctx.persistQueue.then(run, run);
+  ctx.persistQueue = next.catch(() => undefined);
+  return next;
+}
+async function persistNow(ctx: Context) {
   if (ctx.lostLease) throw new WorkflowConflict("A futást már másik végrehajtó kezeli.");
   ctx.record.view.updatedAt = Date.now();
   if (!await ctx.store.save(ctx.record, ctx.token)) {
@@ -151,7 +162,7 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
   if (!await store.claim(input.id, input.owner, token)) throw new WorkflowConflict("Ez a futás már folyamatban van.");
   const fresh = await store.read(input.id, input.owner);
   if (!fresh) throw new WorkflowConflict("A futás nem található.");
-  const ctx: Context = { record: fresh, store, token, lostLease: false, continuation: input.continuation ?? false };
+  const ctx: Context = { record: fresh, store, token, lostLease: false, continuation: input.continuation ?? false, persistQueue: Promise.resolve() };
   fresh.view.state = record.view.state;
   if (record.view.state === "interrupted") {
     const interrupted = fresh.view.visits.at(-1);

@@ -40,6 +40,8 @@ export type ExperienceBuildDeps = {
   call(system: string, user: string, attempt: number): Promise<unknown>;
   /** Eszköz-javítások naplózása (bank-packet-autofix). */
   onToolFix?(tool: string, fixes: string[]): void;
+  /** Egyszerre épülő csomagok száma (alapból 1 = soros; a runner PACKET_CONCURRENCY-t ad). */
+  concurrency?: number;
   checkpoint?: ExperienceCheckpoint;
   previous?: LessonExperience;
   reviewFeedback?: BankReviewFeedback[];
@@ -66,6 +68,8 @@ export class RetryableBankCallError extends Error {
 export const PACKET_ATTEMPTS = 3;
 /** One extra attempt after PACKET_ATTEMPTS failures, which the caller may route to the rescue model. */
 export const PACKET_RESCUE_ATTEMPTS = 1;
+/** Spec 2026-09-19: packets built at once in production (measured: 10 sequential packets = 1 795 s). */
+export const PACKET_CONCURRENCY = 3;
 
 /** Each old AND-group must survive in a distinct new group, including its alternatives. */
 function retainsRequiredGroups(before: string[][], after: string[][]): boolean {
@@ -112,6 +116,29 @@ export function applyBankPacketRepair(original: PacketContent, response: unknown
     quiz: replace(original.quiz, patch.quiz), glossary: patch.glossary?.length ? patch.glossary : original.glossary };
 }
 
+/**
+ * Mérve kétszer (run 525b2797 quiz.74, run 5 quiz.62): az olcsó bankmodell a correctIndex-et
+ * másik opcióra tette, mint amelynek értékét a saját magyarázata helyesnek mondja
+ * („A feedback is 45-öt ír, mégis 43 a correctIndex"). Számos opcióknál ez determinisztikusan
+ * mérhető: ha a helyesnek jelölt opció magyarázata egy MÁSIK opció számát nevezi meg, a jelölt
+ * opció számát pedig nem, a tétel ellentmondásos — javító kört kap a lektor előtt.
+ */
+export function quizCorrectIndexProblems(quiz: ReadonlyArray<{ id: string; options: readonly string[]; correctIndex: number; feedbackPerOption: readonly string[] }>): string[] {
+  const problems: string[] = [];
+  const numbersOf = (text: string) => new Set((normalizeAnswer(text).match(/-?\d+(?:\.\d+)?/g) ?? []));
+  for (const q of quiz) {
+    const values = q.options.map(o => { const n = [...numbersOf(o)]; return n.length === 1 ? n[0] : null; });
+    if (values.some(v => v === null) || new Set(values).size !== values.length) continue;
+    const feedback = q.feedbackPerOption[q.correctIndex];
+    if (!feedback) continue;
+    const mentioned = numbersOf(feedback);
+    const own = values[q.correctIndex]!;
+    const others = values.filter((v, i) => i !== q.correctIndex && mentioned.has(v!));
+    if (!mentioned.has(own) && others.length) problems.push(`${q.id}: a correctIndex a(z) ${own} opciót jelöli, a magyarázata viszont ${others.join("/")} értéket nevez helyesnek — a jelölés és a magyarázat ellentmond.`);
+  }
+  return problems;
+}
+
 function packetCounts(value: unknown): string {
   const data = value as Record<string, unknown> | null;
   return BANKS.map(bank => `${bank}=${Array.isArray(data?.[bank]) ? data[bank].length : "hiányzik"}`).join(", ");
@@ -129,7 +156,17 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     reviewedHashes: deps.checkpoint?.hash === LESSON_METHOD_VERSION ? { ...deps.checkpoint.reviewedHashes } : {} };
   const taughtIds = new Set(plan.units.flatMap(u => u.conceptIds));
   const methods: LessonExperience["methods"] = [], tasks: LessonExperience["tasks"] = [], quiz: LessonExperience["quiz"] = [], glossary: LessonExperience["glossary"] = [];
-  for (const [unitIndex, unit] of plan.units.entries()) {
+  type Prior = { methods: LessonExperience["methods"]; tasks: LessonExperience["tasks"]; quiz: LessonExperience["quiz"] };
+  /** Questions/methods a packet must not repeat: the packets that were complete before it started. */
+  const crossProblems = (packet: PacketContent, prior: Prior): string[] => {
+    const problems = gateQuestionProblems([...prior.methods, ...packet.methods]);
+    for (const [past, added] of [[prior.tasks.map(t => t.q), packet.tasks.map(t => t.q)], [prior.quiz.map(q => q.question), packet.quiz.map(q => q.question)]]) {
+      const keys = [...past, ...added].map(normalizeAnswer);
+      if (new Set(keys).size !== keys.length) problems.push("Ismétlődő kérdés egy korábbi csomaggal.");
+    }
+    return problems;
+  };
+  const buildUnit = async (unitIndex: number, unit: (typeof plan.units)[number], before: Prior): Promise<{ packet: PacketContent; hash: string }> => {
     const { taskCount, quizCount, methodKinds } = bankUnitQuota(plan, unitIndex);
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
     const reviewFeedback = deps.reviewFeedback?.filter(f => !f.conceptIds?.some(id => taughtIds.has(id)) || f.conceptIds.some(id => unit.conceptIds.includes(id))) ?? [];
@@ -150,7 +187,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const validate = (packet: Packet): string[] => {
       const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
-      problems.push(...gateQuestionProblems([...methods, ...packet.methods]));
+      problems.push(...gateQuestionProblems([...before.methods, ...packet.methods]));
+      problems.push(...quizCorrectIndexProblems(packet.quiz));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);
       for (const t of packet.tasks) {
         // Spec 2026-09-19 (measured: owner's 49-concept map, job 6cb1bc89 — three packet attempts
@@ -163,10 +201,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
         const wordCount = normalizeAnswer(t.sample).split(/\s+/).filter(Boolean).slice(0, 500).length;
         if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A minta szószáma: ${wordCount}; minWords: ${t.minWords}. A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);
       }
-      for (const [past, added] of [[tasks.map(t => t.q), packet.tasks.map(t => t.q)], [quiz.map(q => q.question), packet.quiz.map(q => q.question)]]) {
-        const keys = [...past, ...added].map(normalizeAnswer);
-        if (new Set(keys).size !== keys.length) problems.push("Ismétlődő kérdés egy korábbi csomaggal.");
-      }
+      problems.push(...crossProblems(packet, before).filter(p => p.startsWith("Ismétlődő")));
       return problems;
     };
     const fromPrevious = deps.previous?.version === LESSON_METHOD_VERSION ? {
@@ -252,7 +287,25 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
     checkpoint.parts[hash] = packet;
     if (reviewFeedback.length) checkpoint.reviewedHashes![baseHash] = hash;
     await deps.save?.(checkpoint);
-    methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
+    return { packet, hash };
+  };
+  // Spec 2026-09-19 (mérve run 525b2797: 10 csomag SOROSAN 1 795 s): a csomagok függetlenek, ezért
+  // legfeljebb `concurrency` egyszerre épül. Az egyszerre készülők nem látják egymást, ezért a
+  // csomag után determinisztikus keresztellenőrzés fut (ismétlődő kérdés, kapu-kérdés), és az
+  // ütköző csomag sorosan újraépül a már kész csomagok ismeretében. A sorrend és a hash változatlan.
+  const concurrency = Math.max(1, Math.floor(deps.concurrency ?? 1));
+  for (let start = 0; start < plan.units.length; start += concurrency) {
+    const chunk = plan.units.slice(start, start + concurrency);
+    const snapshot: Prior = { methods: [...methods], tasks: [...tasks], quiz: [...quiz] };
+    const built = await Promise.all(chunk.map((unit, i) => buildUnit(start + i, unit, snapshot)));
+    for (const [i, result] of built.entries()) {
+      let { packet } = result;
+      if (i > 0 && crossProblems(packet, { methods, tasks, quiz }).length) {
+        delete checkpoint.parts[result.hash];
+        ({ packet } = await buildUnit(start + i, chunk[i], { methods: [...methods], tasks: [...tasks], quiz: [...quiz] }));
+      }
+      methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
+    }
   }
   const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, theme: deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
   const problems = experienceProblems(lesson, experience);

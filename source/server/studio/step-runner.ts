@@ -53,7 +53,7 @@ import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { buildLessonExperience, PACKET_ATTEMPTS, resolveBankReview, RetryableBankCallError, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, RetryableBankCallError, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { skilledPromptLookup } from "./role-skills";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
@@ -687,6 +687,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             previous: original.experience,
             reviewFeedback: bankReview?.feedback,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
+            concurrency: PACKET_CONCURRENCY,
             call: async (bankSystem, user, attempt) => {
               // Spec 2026-09-19: the bank is its own cheap role; after PACKET_ATTEMPTS failed
               // attempts the packet is rebuilt once on the strong rescue model.

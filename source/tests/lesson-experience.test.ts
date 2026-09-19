@@ -5,7 +5,7 @@ import { experienceSchema, experienceTheme, publicationBankProblems, METHOD_KIND
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer, sampleIds, sampleTaskIds, scoreSummary } from "../shared/lesson-experience-score";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { lessonSchema } from "../shared/lesson-schema";
-import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, RetryableBankCallError } from "../server/studio/experience-builder";
+import { applyBankPacketRepair, buildLessonExperience, resolveBankReview, type ExperienceCheckpoint, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, RetryableBankCallError, quizCorrectIndexProblems } from "../server/studio/experience-builder";
 import { exportQuizItemsFromChecks } from "../server/studio/quiz-export";
 import { planLessonBank, bankUnitQuota } from "../shared/lesson-bank-plan";
 
@@ -187,6 +187,44 @@ test("mért hiba 2026-09-19 (run 45233b4b): a szolgáltatói/hossz-hiba bukott k
   let calls = 0;
   await assert.rejects(buildLessonExperience(lesson, [], { call: async () => { calls++; throw new Error("[xAI] Request timed out"); } }), /Request timed out/);
   assert.equal(calls, 1);
+});
+
+test("mérve run 5 (quiz.62): a correctIndex és a magyarázat számbeli ellentmondása kódból bukik, a lektor előtt", () => {
+  const base = { id: "q1", sectionIndex: 0, coversConceptIds: ["c"], question: "Mennyi 30+3·6–12:4?", options: ["43", "45", "48"], feedbackPerOption: ["Nem: előbb szorzás és osztás.", "Helyes: 30+18–3 = 45.", "Nem."] };
+  assert.deepEqual(quizCorrectIndexProblems([{ ...base, correctIndex: 1 }]), [], "helyes jelölés");
+  const wrong = quizCorrectIndexProblems([{ ...base, correctIndex: 0, feedbackPerOption: ["Helyes: 30+18–3 = 45.", "Nem.", "Nem."] }]);
+  assert.equal(wrong.length, 1); assert.match(wrong[0], /43 opciót jelöli.*45/);
+  assert.deepEqual(quizCorrectIndexProblems([{ ...base, options: ["szorzás", "osztás", "összeadás"], correctIndex: 0, feedbackPerOption: ["Helyes, 45.", "Nem", "Nem"] }]), [], "szöveges opcióknál nincs ítélet");
+  assert.deepEqual(quizCorrectIndexProblems([{ ...base, correctIndex: 0, feedbackPerOption: ["Helyes: a végeredmény 43, mert 30+18–3 lépésben 45 helyett…", "Nem.", "Nem."] }]), [], "ha a saját számát is említi, nincs ellentmondás");
+});
+
+test("spec 2026-09-19: párhuzamos csomagépítés — egyszerre készülő csomagok, ütköző (ismétlődő) kérdésnél soros újraépítés", async () => {
+  const base = standardFusionFixture(), e = base.experience!;
+  const lesson = lessonSchema.parse({ ...base, experience: undefined, sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] });
+  const units = planLessonBank(lesson).units;
+  assert.equal(units.length, 2, "két egység");
+  let inFlight = 0, maxInFlight = 0; const calls: number[] = [];
+  const packetFor = (sectionIndex: number, suffix: string) => ({
+    methods: e.methods.map(m => ({ ...m, sectionIndex, title: m.title + suffix, prompt: m.prompt + suffix })),
+    tasks: e.tasks.map(t => ({ ...t, sectionIndex, q: t.q + suffix })),
+    quiz: e.quiz.map(q => ({ ...q, sectionIndex, question: q.question + suffix })),
+    glossary: [],
+  });
+  const result = await buildLessonExperience(lesson, [], { concurrency: 3, call: async (_system, user) => {
+    inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise(r => setTimeout(r, 5));
+    const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
+    calls.push(sectionIndex);
+    inFlight--;
+    // First pass: both units answer with the SAME questions (they cannot see each other) → conflict.
+    // The sequential rebuild of unit 1 sees "Korábbi kérdések" and answers with distinct ones.
+    const rebuild = calls.filter(s => s === sectionIndex).length > 1;
+    return packetFor(sectionIndex, rebuild ? " (második változat)" : "");
+  } });
+  assert.equal(maxInFlight, 2, "a két egység egyszerre épült");
+  assert.deepEqual(calls, [0, 1, 1], "az ütköző második csomag sorosan újraépült");
+  assert.equal(result.tasks.length, e.tasks.length * 2);
+  assert.equal(new Set(result.quiz.map(q => q.question)).size, result.quiz.length, "nincs ismétlődő kérdés");
 });
 
 test("spec 2026-09-19: a mentőkör (attempt === PACKET_ATTEMPTS) érvényes csomagja elfogadott", async () => {

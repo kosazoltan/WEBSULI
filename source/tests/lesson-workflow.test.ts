@@ -41,6 +41,22 @@ test("párhuzamos kérés nem indít második munkát; elveszett lease nem írha
   assert.equal(m.leases.get(input.id), "new-owner");
 });
 
+test("spec 2026-09-19: párhuzamos részeredmények mentése sorba áll, nincs hamis revízió-konfliktus", async () => {
+  const m = memoryWorkflows(); const store = m.store;
+  const input = { id: "parallel", owner: "a", mode: "web" as const, request: { prompt: "p" } };
+  const view = await executeWorkflow(store, input, async () => {
+    await workflowPhase("generate");
+    const results = await Promise.all([1, 2, 3, 4, 5].map((n) =>
+      workflowCheckpoint("model", { n }, async () => { await workflowUsage({ input_tokens: n, output_tokens: 1 }); return { n }; })));
+    assert.deepEqual(results.map((r) => r.n), [1, 2, 3, 4, 5]);
+    await workflowPhase("knowledge"); await workflowPhase("author"); await workflowPhase("gate"); await workflowPhase("publish"); await workflowPhase("readback");
+    return { kind: "material" as const, id: "ok" };
+  });
+  assert.equal(view.state, "done");
+  assert.equal(view.visits[0].tokensIn, 15, "minden párhuzamos hívás tokenje megmaradt");
+  assert.equal(Object.keys(m.records.get("parallel")!.checkpoints).filter((k) => k !== "requestHash").length, 5);
+});
+
 test("mentési hiba után a változatlan AI-részeredmény megmarad, a korábbi hiba látható", async () => {
   const { store } = memoryWorkflows(); let models = 0; let fail = true;
   const input = { id: "retry", owner: "a", mode: "web" as const, request: { prompt: "same" } };
