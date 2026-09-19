@@ -99,9 +99,10 @@ export function nextStep(input: TransitionInput): Transition {
 
     case "lektor": {
       if ((input.blockers ?? 0) === 0) return { step: "gate", round };
+      // Spec 2026-09-19 (mérve run b5d07f3d): ha minden blokkoló banktétel, a tanítás nem hibás →
+      // csak-bank újraépítés (nincs szerzői újraírás), bármelyik körben; a runner jobonként egyszer engedi.
+      if (input.bankOnlyRepair) return { step: "animator", round: round + 1 };
       if (round >= MAX_AUTHOR_ROUNDS) {
-        // Spec 2026-09-19: bank-only blockers get one targeted bank rebuild (no author).
-        if (input.bankOnlyRepair) return { step: "animator", round: round + 1 };
         // LS-7 (#189): a limit után NEM állunk meg emberi döntésre. A kapu
         // mérése dönt; a blokkoló jelzésként megmarad a lektor-jegyzetekben.
         return { step: "gate", round };

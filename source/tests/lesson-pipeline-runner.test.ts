@@ -233,6 +233,26 @@ test("the pipeline prompt version fits the persisted job column", () => {
     `Prompt version has ${PIPELINE_PROMPT_VERSION.length} characters; database allows ${width[1]}.`);
 });
 
+test("mért hiba 2026-09-19 (run b5d07f3d): a 2. körös, blokkolómentes lektorálás átmegy a 7.4 végkapun (a kapu az előző kör blokkolóival hashel)", async () => {
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
+  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+  deps.store.seed({ id: "proof-r1", mapId: "m1", lessonId: "lesson-proof", step: "lektor", round: 1, output: { lesson } });
+  // Round 0 blocked one bank item; round 1 reviews with that note as previousBlockers.
+  await deps.store.saveNotes("proof-r1", classifyNotes([{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "A minta rossz irányt ír." }]), 0);
+  const reviewed = await runPipelineStep("proof-r1", deps);
+  assert.ok(reviewed.ok, JSON.stringify(reviewed));
+  assert.equal(reviewed.ok && reviewed.next.step, "gate");
+  await advanceJob("proof-r1", reviewed.next, { status: "running" }, deps);
+  let publications = 0;
+  deps.store.publishLesson = async () => { publications++; return { htmlFileId: "published-r1", exportedQuizItems: lesson.experience!.quiz.length }; };
+  const gated = await runPipelineStep("proof-r1", deps);
+  assert.ok(gated.ok, `a kapu átenged: ${JSON.stringify(gated)}`);
+  assert.equal(publications, 1);
+});
+
 for (const corruption of ["missing", "changed-lesson", "changed-source", "blocking"] as const) {
   test(`7.4 végkapu lektor-bizonyíték nélkül nem publikál: ${corruption}`, async () => {
     const lesson = standardFusionFixture(); lesson.mapId = "m1";
@@ -588,7 +608,7 @@ test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra 
   assert.equal(canReuseLessonVisuals(missing), false);
 });
 
-test("lektori bankhiba a szerzőn át a banképítőhöz jut; az előző lecke és nyelvi javítás sem vész el", async () => {
+test("lektori bankhiba közvetlenül a banképítőhöz jut (csak-bank kör); a nyelvi javítás sem vész el", async () => {
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
@@ -603,22 +623,14 @@ test("lektori bankhiba a szerzőn át a banképítőhöz jut; az előző lecke �
   const deps = makeDeps(JSON.stringify({ notes }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts });
   deps.store.seed({ id: "review-bank", mapId: "m1", step: "lektor", output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  // Spec-változás 2026-09-19 (mérve run b5d07f3d): ha minden blokkoló banktétel, nincs szerzői
+  // kör — a lektor közvetlenül a csak-bank animátor körre küld, a nyelvi jegyzet is a banképítőé.
   const reviewed = await runPipelineStep("review-bank", deps);
-  assert.ok(reviewed.ok && reviewed.next.step === "author" && reviewed.next.round === 1);
+  assert.ok(reviewed.ok && reviewed.next.step === "animator" && reviewed.next.round === 1, JSON.stringify(reviewed));
   const job = deps.store.jobs.get("review-bank")!;
   assert.equal(job.output?.reportRound, 0);
-  delete job.output!.reportRound; // Pre-deploy jobs must retain this round's language warning too.
-  job.step = "author"; job.round = 1;
-  job.output = { ...job.output, approvedOutline: GOOD_OUTLINE };
-  const authored = { ...lesson, experience: undefined };
-  const authorDeps = makeDeps(JSON.stringify(authored));
-  assert.ok((await runPipelineStep(job.id, { ...authorDeps, store: deps.store })).ok);
-  assert.match(authorDeps.calls[0].system, /previousLesson/);
-  assert.match(authorDeps.calls[0].system, /RUBRIKA-HIBA/);
-  assert.match(authorDeps.calls[0].system, /NYELVI-HIBA/);
-  assert.doesNotMatch(authorDeps.calls[0].system + authorDeps.calls[0].user, /ADMIN-ONLY-FORRAS/);
-  assert.equal((job.output?.lesson as typeof lesson).experience, undefined);
-  job.step = "animator";
+  assert.equal(job.output?.bankOnlyRepairRound, 1);
+  job.step = "animator"; job.round = 1; job.status = "ok";
   const bankDeps = makeDeps(JSON.stringify({ tasks: lesson.experience.tasks }));
   assert.ok((await runPipelineStep(job.id, { ...bankDeps, store: deps.store })).ok);
   assert.equal(bankDeps.calls.length, 1);
@@ -1338,6 +1350,25 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   const again = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ notes: [bankBlocker] })), store: deps.store });
   assert.equal(again.ok, false);
   assert.match(deps.store.jobs.get("bank-only")!.error ?? "", /tartalmi javítást kér/);
+});
+
+test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jön, ha minden blokkoló banktétel — nincs szerzői újraírás", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "A mintaválasz jobbról balra halad." };
+  const deps = makeDeps(JSON.stringify({ notes: [bankBlocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-only-early", mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  const first = await runPipelineStep("bank-only-early", deps);
+  assert.ok(first.ok, JSON.stringify(first));
+  assert.deepEqual(first.ok && first.next, { step: "animator", round: 1 }, "animátor bank-kör, nem szerző");
+  const job = deps.store.jobs.get("bank-only-early")!;
+  assert.equal(job.output?.bankOnlyRepairRound, 1);
+  assert.equal((job.output?.bankReview as { feedback: unknown[] }).feedback.length, 1);
 });
 
 test("(r) körlimitnél tanítási blokkoló mellett nincs bank-only kör: azonnali hiba", async () => {

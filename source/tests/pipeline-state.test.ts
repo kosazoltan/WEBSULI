@@ -163,8 +163,11 @@ test("bank-only lektor blockers at the limit open one animator round; without th
   assert.deepEqual(repair, { step: "animator", round: MAX_AUTHOR_ROUNDS + 1 });
   const plain = nextStep({ step: "lektor", ok: true, round: MAX_AUTHOR_ROUNDS, blockers: 1 });
   assert.equal(plain.step, "gate");
+  // Spec-változás 2026-09-19 (mérve run b5d07f3d): csak-bank blokkolónál a limit ELŐTT sincs
+  // szerzői újraírás — a tanítás nem hibás, a bank egy tételét kell újraépíteni.
   const early = nextStep({ step: "lektor", ok: true, round: 0, blockers: 1, bankOnlyRepair: true });
-  assert.deepEqual(early, { step: "author", round: 1 }, "a limit előtt a szerzői kör marad");
+  assert.deepEqual(early, { step: "animator", round: 1 }, "csak-bank javítás a limit előtt is");
+  assert.deepEqual(nextStep({ step: "lektor", ok: true, round: 0, blockers: 1 }), { step: "author", round: 1 }, "tanítási blokkolónál szerzői kör");
 });
 
 test("MAX_CHAIN_STEPS covers the worst walk plus the bank-only repair round", () => {

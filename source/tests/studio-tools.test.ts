@@ -104,5 +104,7 @@ test("az eszköz-skillek a megfelelő szerep-skillekben szerepelnek", () => {
     for (const tool of tools!) assert.ok(text.includes(TOOL_SKILLS[tool].split("\n")[0]), `${role}: ${tool}`);
   }
   for (const text of Object.values(TOOL_SKILLS)) { assert.match(text, /Mit javít|Mit tesz/); assert.match(text, /NEM/); assert.match(text, /npm run studio:tool/); }
-  assert.ok(!ROLE_SKILLS.extract.includes("## Eszközök") && !ROLE_SKILLS.ocr.includes("## Eszközök"));
+  // Only producers get tool text: the lektor/author/extract/ocr calls stay lean (token discipline, 2026-09-19).
+  for (const role of ["extract", "ocr", "author", "lektor"] as const) assert.ok(!ROLE_SKILLS[role].includes("## Eszközök"), role);
+  assert.ok(ROLE_SKILLS.bank.includes("SZÓ SZERINT a fejezet példáját követi"), "a bank az irányt/lépéseket a példából másolja");
 });
