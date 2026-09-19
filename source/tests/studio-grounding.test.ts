@@ -296,6 +296,24 @@ test("címke nélkül maradó animációs blokk eltűnik; ismeretlen id és term
 });
 
 /* Spec 2026-09-19 — a concept named in the source language is grounded by its curated (Hungarian) definition. */
+test("mérve run 03542f43: a fejezet példája a fejezet explain-je által megalapozott fogalmat gyakoroltatja → megalapozott; más fejezet példája nem", () => {
+  const rule = { localId: "elsobbseg", term: "Műveleti sorrend: szorzás és osztás elsőbbsége", definition: "Ha egy műveletsorban összeadás vagy kivonás mellett szorzás vagy osztás is szerepel, akkor először a szorzás vagy az osztás műveleteket végezzük el.", examWeight: "core" } as MapConcept;
+  const explain = { kind: "explain", text: "A műveleti sorrend: szorzás és osztás elsőbbsége azt jelenti, hogy vegyes műveletsorban először a szorzást vagy az osztást végezzük el, csak utána az összeadást és kivonást.", coversConceptIds: ["elsobbseg"] };
+  const example = { kind: "example", problem: "Számítsd ki: 148 + 6 · 8", steps: ["Először a szorzást végezzük el: 6 · 8 = 48.", "Ezután összeadunk: 148 + 48 = 196."], answer: "196", coversConceptIds: ["elsobbseg"] };
+  assert.equal(checkGrounding(`${example.problem} ${example.steps.join(" ")} ${example.answer}`, rule), false, "a példa önmagában nem tartalmazza a fogalom nevét");
+  const same = groundingReport([explain, example], [rule], [0, 0]);
+  assert.equal(same.ok, true, JSON.stringify(same.ungrounded));
+  assert.deepEqual(same.groundedIds, ["elsobbseg"]);
+  const other = groundingReport([explain, example], [rule], [0, 1]);
+  assert.equal(other.ok, false, "más fejezet példája nem örökli a megalapozottságot");
+  assert.equal(other.ungrounded[0].kind, "example");
+  const noSections = groundingReport([explain, example], [rule]);
+  assert.equal(noSections.ok, false, "fejezet-információ nélkül a régi szabály marad");
+  // #196 eredeti esete: az explain sem alapozza meg a címkét (más témát tanít) → a példa sem menekül.
+  const offTopic = { kind: "explain", text: "A helyiérték táblázatban az egyesek, tízesek és százasok helye számít, ezt gyakoroljuk.", coversConceptIds: ["elsobbseg"] };
+  assert.equal(groundingReport([offTopic, example], [rule], [0, 0]).ok, false);
+});
+
 test("mérve run 525b2797: a forrás kidolgozott példája (számokkal) a blokkban → a címke megalapozott, idegen számokkal nem", () => {
   const example = { localId: "muveleti-sorrend-zarojel-szorzas-36-osztva", term: "Zárójeles szorzás és osztás példája", definition: "36 ÷ (3 · 2) – 3\n36 ÷ 6 – 3\n6 – 3\n3", quote: "36 ÷ (3 · 2) – 3\n36 ÷ 6 – 3\n6 – 3\n3", examWeight: "core" } as MapConcept;
   assert.equal(checkGrounding("Gyakorlás: 4. Végezd el a műveleteket! Írd le lépésenként a 36 ÷ (3 · 2) – 3 műveletsor megoldását! 36 ÷ (3 · 2) – 3 = 3", example), true, "a forrás példájának számai a blokkban");

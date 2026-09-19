@@ -182,16 +182,44 @@ export function blockText(block: Record<string, unknown>): string {
 export function groundingReport(
   blocks: Array<Record<string, unknown>>,
   concepts: MapConcept[],
+  /** Section index per block (same order as `blocks`); enables the same-section rule below. */
+  sectionOf?: ReadonlyArray<number>,
 ): GroundingReport {
   const byId = new Map(concepts.map((c) => [c.localId, c]));
   const ungrounded: UngroundedClaim[] = [];
   const groundedIds = new Set<string>();
   let measurable = 0;
 
+  const idsOf = (block: Record<string, unknown>) => Array.isArray(block.coversConceptIds)
+    ? (block.coversConceptIds as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  /*
+   * Mérve (run 525b2797 és 03542f43, Műveleti sorrend, 2026-09-19): a kapu 5 elutasításából 4
+   * `example`/`try` blokk volt — a fejezet `explain` blokkja a fogalmat a saját szavaival tanítja
+   * (megalapozott), a példa ugyanazt a szabályt számokkal gyakoroltatja, de a fogalom nevét
+   * („szorzás és osztás elsőbbsége") nem ismétli. Egy-egy ilyen címke teljes szerzői kört és
+   * bank-újraépítést kért. Szabály: egy nem-explain blokk címkéje megalapozott, ha UGYANABBAN a
+   * fejezetben egy explain blokk ugyanezt a fogalmat megalapozottan tanítja — a fejezet példája
+   * a fejezet szabályát gyakoroltatja. A #196 eredeti esete (más témájú fejezet, más címke)
+   * változatlanul bukik: ott az explain sem alapozza meg a címkét.
+   */
+  const explainedInSection = new Map<number, Set<string>>();
+  if (sectionOf) {
+    blocks.forEach((block, blockIndex) => {
+      if (block.kind !== "explain") return;
+      const text = blockText(block);
+      for (const id of idsOf(block)) {
+        const concept = byId.get(id);
+        if (!concept?.term?.trim() || !checkGrounding(text, concept)) continue;
+        const section = sectionOf[blockIndex];
+        if (!explainedInSection.has(section)) explainedInSection.set(section, new Set());
+        explainedInSection.get(section)!.add(id);
+      }
+    });
+  }
+
   blocks.forEach((block, blockIndex) => {
-    const ids = Array.isArray(block.coversConceptIds)
-      ? (block.coversConceptIds as unknown[]).filter((x): x is string => typeof x === "string")
-      : [];
+    const ids = idsOf(block);
     if (ids.length === 0) return;
 
     const text = blockText(block);
@@ -205,7 +233,8 @@ export function groundingReport(
       // és a régi (term nélküli) sorok migrációval kapnak megnevezést.
       if (!concept.term || concept.term.trim() === "") continue;
       measurable += 1;
-      if (checkGrounding(text, concept)) {
+      const bySection = block.kind !== "explain" && sectionOf !== undefined && explainedInSection.get(sectionOf[blockIndex])?.has(id);
+      if (bySection || checkGrounding(text, concept)) {
         groundedIds.add(id);
       } else {
         ungrounded.push({

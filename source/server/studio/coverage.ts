@@ -121,7 +121,9 @@ export function checkCoverageGate(
   // ráírta a geometriai címkéket, és a kapu `core 7/7`, `supporting 15/15`,
   // `ok: true` értékkel átengedte. A címke állítás; itt igazoljuk.
   const allBlocks = lesson.sections.flatMap((s) => s.blocks as Array<Record<string, unknown>>);
-  const grounding = groundingReport(allBlocks, concepts);
+  // Same-section rule (2026-09-19): a chapter's example/try/check exercises what its explain teaches.
+  const sectionOf = lesson.sections.flatMap((s, i) => s.blocks.map(() => i));
+  const grounding = groundingReport(allBlocks, concepts, sectionOf);
   if (grounding.ungrounded.length > 0) {
     const sample = grounding.ungrounded
       .slice(0, 5)
