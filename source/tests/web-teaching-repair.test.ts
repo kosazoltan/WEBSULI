@@ -161,3 +161,13 @@ test("a malformed patch is re-asked at once with its error and does not cost a r
   assert.equal(result.html, html.replace(before, after));
   assert.ok(result.review.checks.every(c => c.passed));
 });
+
+test("spec 2026-09-19: a második lektorálás megkapja az elsőt előző véleményként", async () => {
+  let reviews = 0; const previous: unknown[] = [];
+  await reviewAndRepairWebTeaching(html, [source], {
+    review: async (_c, _s, _call, _signal, _topic, _challenge, previousReview) => { reviews++; previous.push(previousReview); return review(reviews === 2); },
+    repair: async () => patch,
+  });
+  assert.equal(previous[0], undefined);
+  assert.deepEqual(previous[1], review(false));
+});

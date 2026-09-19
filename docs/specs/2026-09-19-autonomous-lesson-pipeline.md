@@ -137,6 +137,22 @@ Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
   azonnal újrakérés jön, legfeljebb `FORMAT_RETRIES` = 2 alkalommal futásonként, review-kör
   fogyasztása nélkül (mérve: web run 3 két csomagja formai okból bukott, 846 s). Érintett:
   `server/studio/web-teaching-repair.ts`, `tests/web-teaching-repair.test.ts`.
+- WHEN a webes tartalmi lektor javítókör utáni újraellenőrzést végez THEN megkapja az előző
+  véleményt (`previousReview`) és a konvergencia-szabályt: javított hibajegy nem kerül elő újra, új
+  hibajegy csak tényhiba / forrásellentmondás / nem igazolható állítás / hiányzó tanítás /
+  tanítatlan tudásra épülő kérdés lehet; korábban nem kifogásolt fejezetre új explanation_depth
+  vagy age_and_added_value nem vezethető be (mérve: 4 webes futás, mind ezeken bukott a tényszerű
+  kritériumok teljesülése után). WHEN a korlátos javítókörök után KIZÁRÓLAG explanation_depth és/vagy
+  age_and_added_value marad nyitva THEN a tananyag közzétehető, a lektor megjegyzései
+  `reviewEvidence.warnings`-ként mellékelve (`assertTeachingReviewEvidence` ezt és csak ezt fogadja
+  el); factual_accuracy / source_coverage / question_grounding hiba továbbra is megállít. A javító
+  prompt kéri a hogyan/miért kifejtést mondatbővítéssel. Érintett: `web-teaching-review.ts`,
+  `web-research-runner.ts`, `web-teaching-repair.ts`, tesztek.
+- WHEN egy nyílt feladat mintaválasza minden kötelező csoportot és a minimális szószámot
+  teljesíti, de csak a kötőszó-heurisztika (`needsSentence`) miatt nem teljes pont THEN a
+  bankcsomag-ellenőrzés a feladatot `needsSentence: false`-ra állítja (a tanuló és a minta ugyanúgy
+  értékelődik), nem bukik a csomag (mérve: tulajdonosi térkép, job 6cb1bc89, 3 kísérlet egy
+  feladaton). Érintett: `server/studio/experience-builder.ts`, `tests/lesson-experience.test.ts`.
 - WHEN a webes szerző HTML-jének valamely fejezetében nincs a kapunak megfelelő szemléltetés THEN a
   szerzői kör (`verifyTeachingVisuals`) MÉG a bankgyártás előtt a fejezet sorszámával kéri a
   javítást (legfeljebb 2 javítókör), és a `HTML_TEACHING_CONTRACT` pontosan a kapu szabályát

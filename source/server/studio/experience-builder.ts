@@ -132,6 +132,12 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       problems.push(...gateQuestionProblems([...methods, ...packet.methods]));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);
       for (const t of packet.tasks) {
+        // Spec 2026-09-19 (measured: owner's 49-concept map, job 6cb1bc89 — three packet attempts
+        // died on one sample that carried every rubric group and enough words but no word from
+        // the connective list): the connective heuristic is not a fact about the task. When the
+        // sample is otherwise a full-mark answer, the task is graded without the sentence flag —
+        // for the learner exactly as for the sample.
+        if (t.needsSentence && evaluateOpenAnswer(t.sample, t).score !== 1 && evaluateOpenAnswer(t.sample, { ...t, needsSentence: false }).score === 1) t.needsSentence = false;
         const score = evaluateOpenAnswer(t.sample, t);
         const wordCount = normalizeAnswer(t.sample).split(/\s+/).filter(Boolean).slice(0, 500).length;
         if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A minta szószáma: ${wordCount}; minWords: ${t.minWords}. A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);

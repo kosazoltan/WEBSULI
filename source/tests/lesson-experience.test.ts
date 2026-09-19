@@ -409,3 +409,17 @@ test("content review may fix the criticized rubric but cannot rewrite unrelated 
   assert.throws(() => applyBankPacketRepair(e, { tasks: [{ ...e.tasks[1], q: "Nem kért átírás" }] }, allowed), /nem érintett/);
   assert.throws(() => applyBankPacketRepair(e, { glossary: [{ word: "a", translation: "egy", partOfSpeech: "névelő", example: "A cat", exampleTranslation: "Egy macska" }] }, allowed), /szószedet/);
 });
+
+/* Spec 2026-09-19 — the connective heuristic cannot sink a packet whose sample is otherwise a full-mark answer. */
+test("spec 2026-09-19: minden csoportot tartalmazó, kötőszó nélküli mintaválasznál a needsSentence lekerül, a csomag elkészül", async () => {
+  const lesson = standardFusionFixture(), e = lesson.experience!;
+  const tasks = structuredClone(e.tasks);
+  tasks[0] = { ...tasks[0], required: [["magasság", "magassága"], ["merőleges"]], bonus: [], minWords: 2, needsSentence: true, sample: "Magasság merőleges alapra." };
+  assert.notEqual(evaluateOpenAnswer(tasks[0].sample, tasks[0]).score, 1, "kötőszó nélkül a heurisztika részpontot ad");
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async () => { calls++; return { methods: e.methods, tasks, quiz: e.quiz, glossary: [] }; } });
+  assert.equal(calls, 1, "nincs javító kör a heurisztika miatt");
+  assert.equal(result.tasks[0].needsSentence, false);
+  assert.equal(evaluateOpenAnswer(result.tasks[0].sample, result.tasks[0]).score, 1);
+  assert.equal(result.tasks[1].needsSentence, e.tasks[1].needsSentence, "a többi feladat érintetlen");
+});
