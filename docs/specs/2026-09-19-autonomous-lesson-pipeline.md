@@ -175,6 +175,27 @@ Eredmény 30 napra: upload 1 done / 5 error / 3 waiting; web 1 done / 1 error.
   nem 403; WHEN nem engedélyezett Originről THEN 403.
 - `npm run check`, `check:test`, `lint`, `npm test` mind 0 kilépési kód; CI zöld; Vercel+Render deploy READY.
 
+## 7b. Cél-tananyag minta (tulajdonosi példa: `muveleti-sorrend-tananyag-v7.html`, 2026-09-19)
+
+A cél-lecke mintája: motivációs nyitó fejezet → szabályonként explain + lépésről lépésre levezetett
+példa + check → a forrás gyakorlófeladatai egyenként megoldva → „A leggyakoribb hibák" (rossz /
+helyes / miért) → „Ellenőrzés – hogyan légy biztos magadban?" (számozott eljárás + önellenőrzés) →
+négy lap (Tananyag / Módszerek / Feladatok / Kvíz). Visszafelé építve:
+- WHEN a pedagógus vázlatot készít THEN a `buildPedagoguePrompt` a fenti fejezetmintát kéri
+  (nyitó motiváció, szabályfejezetek, megoldott feladatok fejezete, gyakori hibák fejezet a
+  `misconceptions` listából, záró ellenőrzés fejezet, fejezetenként ábrajavaslat).
+- WHEN a szerző leckét ír THEN minden szabály/eljárás-fejezetben `example.steps` ≥ 2 lépés; a forrás
+  feladatai lépésről lépésre; a vázlat tévhitlistája a lecke `misconceptions` mezőjében utazik
+  (a runner üres szerzői lista esetén a vázlatét viszi tovább — `step-runner.ts`).
+- WHEN az animátor után egy fejezetben nincs `animate` blokk és van ≥2 lépéses `example` THEN a
+  runner determinisztikusan `process` ábrát szúr be a példa lépéseiből (`section-visuals.ts`),
+  a címkék megalapozottság-ellenőrzése után; példa nélkül nincs kitalált ábra.
+- WHEN a folyamatábra egy korábbi kör befejezett lépését mutatja, miközben egy korábbi lépés új
+  körben fut THEN a kártya „Új kör következik" (`workflowStepDisplay`), nem „Befejezett"; a
+  one-step futás állapota a körön belüli minden automatikus lépést követ (`drive(onStep)`).
+- Nem cél: a cél-HTML „végtelen gyakorló labor" (procedurális feladatgenerátor) — ezt a közös
+  runtime feladatbankja (45/75) helyettesíti.
+
 ## 8. Kockázatok / visszavonás
 
 - Relokáció túl laza → hamis idézet: küszöb 0,90 + szóhatár + 3 szó; teszt a parafrázisra.

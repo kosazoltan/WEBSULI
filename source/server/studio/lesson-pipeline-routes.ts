@@ -170,7 +170,7 @@ lessonPipelineRouter.use(isAuthenticatedAdmin);
 const MAX_CHAIN = MAX_CHAIN_STEPS;
 
 /** Run the current step and keep going while the transition is automatic. */
-async function drive(jobId: string): Promise<void> {
+async function drive(jobId: string, onStep?: (step: string, round: number) => void): Promise<void> {
   for (let i = 0; i < MAX_CHAIN; i++) {
     const outcome = await runPipelineStep(jobId);
     if (!outcome.ok) return; // failure/park already persisted by the runner
@@ -191,6 +191,9 @@ async function drive(jobId: string): Promise<void> {
       (next.step === "author" && output?.approvedOutline !== undefined);
 
     await advanceJob(jobId, next, { status: auto ? "running" : "ok" });
+    // Spec 2026-09-19: the one-step progress store follows every automatic step, not only
+    // the round boundaries (measured: a 7-minute animator round showed a stale "author").
+    onStep?.(next.step, next.round);
     if (!auto) return;
   }
 
@@ -525,7 +528,11 @@ async function seedSourceGapNote(jobId: string, note: string): Promise<void> {
 /** drive() plus outline auto-approval; approveOutline re-validates coverage. */
 export async function driveOneStep(runId: string, jobId: string, gapNote: string | null = null): Promise<void> {
   for (let i = 0; i < MAX_CHAIN; i++) {
-    await drive(jobId);
+    await drive(jobId, (step, round) => {
+      if (["pedagogue", "author", "animator", "lektor", "gate"].includes(step)) {
+        updateRun(runId, { phase: step as OneStepPhase, detail: round > 0 ? `${round + 1}. kör` : null });
+      }
+    });
 
     const [job] = await db
       .select({

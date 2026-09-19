@@ -294,3 +294,15 @@ test("címke nélkül maradó animációs blokk eltűnik; ismeretlen id és term
   const untouched = { sections: [{ blocks: [{ kind: "explain", text: "csak tanítás", coversConceptIds: ["kor"] }] }] };
   assert.equal(stripUngroundedAnimateLabels(untouched, concepts).lesson, untouched, "változatlan lecke ugyanaz az objektum marad");
 });
+
+/* Spec 2026-09-19 — a concept named in the source language is grounded by its curated (Hungarian) definition. */
+test("angol nevű fogalom magyar tanításban: a kurált definíció érdemi szavai igazolják a címkét, más témájú szöveget nem", () => {
+  const uk = { localId: "united-kingdom", term: "The United Kingdom (UK)", definition: "Az Egyesült Királyság négy országból áll: England, Scotland, Wales és Northern Ireland.", examWeight: "core" } as MapConcept;
+  assert.equal(checkGrounding("Az Egyesült Királyság négy országból áll: England, Scotland, Wales és Northern Ireland. Fővárosa London.", uk), true, "magyar szöveg, magyar definíció");
+  assert.equal(checkGrounding("The United Kingdom has four countries and its capital is London.", uk), true, "angol név közvetlenül");
+  assert.equal(checkGrounding("A háromszög területe az alap és a magasság szorzatának fele, ezt könnyű kiszámolni.", uk), false, "idegen téma nem alapoz meg");
+  const shire = { localId: "shire-county-names", term: "shire county names", definition: "Sok angol megye nevében szerepel a „shire” szó.", examWeight: "core" } as MapConcept;
+  assert.equal(checkGrounding("Yorkshire és Lancashire angol megyék: nevükben szerepel a shire szó, ez a megye régi neve.", shire), true);
+  const bare = { localId: "x", term: "Kör kerülete", examWeight: "core" } as MapConcept;
+  assert.equal(checkGrounding("Ez a mondat semmit sem mond a témáról, csak hosszú.", bare), false, "definíció nélkül a régi szabály marad");
+});

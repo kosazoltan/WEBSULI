@@ -46,6 +46,7 @@ import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
 import { stripUngroundedAnimateLabels } from "./grounding";
+import { ensureSectionVisuals } from "./section-visuals";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
@@ -608,7 +609,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       }
 
       // Scope was inferred from the source before authoring; generated metadata cannot override it.
-      const lesson: Lesson = { ...parsed.data, mapId: job.mapId, subject: map.meta.subject, classroom: map.meta.classroom };
+      // Spec 2026-09-19 (cél-tananyag „A négy leggyakoribb hiba"): a pedagógus tévhitlistája a
+      // leckében utazik tovább, akkor is, ha a szerző üresen hagyta — a runtime ebből épít
+      // „Gyakori hibák" kártyát és fogalmi visszajelzést.
+      const plannedOutline = (job.output?.approvedOutline ?? job.output?.outline) as LessonOutline | undefined;
+      const misconceptions = parsed.data.misconceptions.length ? parsed.data.misconceptions : (plannedOutline?.misconceptions ?? []);
+      const lesson: Lesson = { ...parsed.data, misconceptions, mapId: job.mapId, subject: map.meta.subject, classroom: map.meta.classroom };
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, lesson);
       await store.saveStep(
         job.id,
@@ -647,7 +653,13 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // Spec 2026-09-19: an animate block's labels are cosmetic — a label its own caption
       // does not ground is dropped here, deterministically, instead of failing the whole
       // lesson at the gate after the round limit (measured: PDF run 3ed5ca90).
-      const sanitised = stripUngroundedAnimateLabels(outcome.lesson, map.concepts);
+      // Spec 2026-09-19: a chapter without a figure gets its worked example as a process
+      // visual before the label check below (the lektor blocks figure-less chapters).
+      const visuals = ensureSectionVisuals(outcome.lesson);
+      if (visuals.added.length) {
+        logger.info(`[STUDIO] Fejezeti ábra pótolva a példa lépéseiből (${job.id}): fejezet ${visuals.added.map((i) => i + 1).join(", ")}`);
+      }
+      const sanitised = stripUngroundedAnimateLabels(visuals.lesson, map.concepts);
       if (sanitised.stripped.length) {
         logger.warn(
           `[STUDIO] Animációs címkék eltávolítva (${job.id}): ${sanitised.stripped.map((s) => `${s.conceptId}@${s.sectionIndex}/${s.blockIndex}`).join(", ")}`,
