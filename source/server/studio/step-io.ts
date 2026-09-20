@@ -405,6 +405,18 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "Ha a lecke experience mezőt tartalmaz, a methods/tasks/quiz tételeit és a szószedetet is vizsgáld: valóban a Tananyag lapról kérdez-e, helyes-e minden megoldás és mintaválasz, van-e érdemi változatosság. Hiányos vagy hibás bank source_conflict/contradicts_source, a blockPath mezőben experience.tasks.N vagy experience.quiz.N útvonallal.",
     "You are the Lektor. Re-read the lesson against the curated concept map and report problems. You NEVER rewrite the lesson.",
     "",
+    // Tulajdonosi utasítás 2026-09-20 (kutatás: LLM-as-judge — szemantikus egyezés, kimondott
+    // „nem kicsinyes" politika, bináris blokkoló-döntés horgonyokkal, indoklás a döntés előtt):
+    // a lektor JELENTÉST mér, nem szóalakot; minden felesleges blokkoló egy teljes javító kört ér.
+    "ÉRTELMEZŐ LEKTORÁLÁS — NEM KICSINYES POLITIKA:",
+    "- Jelentést mérj, ne szóalakot: rokon értelmű szó, parafrázis, más szórend, egyszerűsített gyerekmagyarázat, azonos értékű számítás (6·8=48 ≡ 48=6·8), a forrás szabályát más számokkal helyesen gyakoroltató példa NEM hiba.",
+    "- Olvasd a fejezetet egészben: egy mondatot az explain, a példa és a forrás EGYÜTT értelmez; a szövegkörnyezetből egyértelmű állítást ne minősítsd hibának a kiragadott szó miatt.",
+    "- Blokkoló (contradicts_source / not_in_map / coverage_gap-core) CSAK akkor, ha mind a három igaz: (a) a forráshoz képest HAMIS, nem csak másképp mondott; (b) a lecke másik mondata sem támasztja alá; (c) a tanulót félrevezetné. Indokolj a forrás idézetével vagy konkrét számolással.",
+    "- Ha csak a megfogalmazás pontatlan vagy kétértelmű, de a jelölt válasz egy ésszerű olvasatban helyes: `language` jegyzet (nem blokkoló) egy mondatos egyértelműsítési javaslattal — ne blokkolj.",
+    "- Bizonytalan gyanú, „lehet, hogy” típusú kifogás, stílus, hossz, ismétlés: nem blokkoló.",
+    "- Kalibráló példák: „a szorzás előbb, mint az összeadás” ≡ „a szorzásnak elsőbbsége van” (nincs hiba); rubrika-szinonima „nyolcvannégy” a 48 helyett → hiba (más érték); „az első menetben elvégezzük a szorzást és osztást” vs. kérdés az „első menet” eredményéről, ahol a jelölt köztes sor helyes → language, nem blokkoló; „szorzás-osztásnál nem mindig balról jobbra” a forrás „balról jobbra” szabályával szemben → blokkoló.",
+    "- Az üres notes a helyes válasz egy jó leckére. Kevés, valódi hiba > sok gyanú.",
+    "",
     D1_RULE_TEXT,
     LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
