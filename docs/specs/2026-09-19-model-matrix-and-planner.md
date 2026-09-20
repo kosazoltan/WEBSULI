@@ -157,6 +157,19 @@ a kiterjesztett `quizCorrectIndexProblems` (#83) a lektor előtt fogja meg (−7
   rövid kör); párhuzamos két futásnál nem teljesül. Költségcél (< 1,2 USD) a 10 fejezetes leckén teljesül
   (≈ 0,65 USD), a 49 fogalmas térképen ≈ 1,4 USD.
 
+## 7i. Mérés 9 — `done` egyedül, célzott javítás + aritmetikai ellenőrzés (run 128fda1b, 2026-09-20 08:27–08:52)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 | 11 038 | 2 124 | 33 s |
+| author 1 | gpt-5.6-terra | 10 227 | 8 285 | 65 s |
+| animator 1 (ábrák eszközből; 10 csomag 3 egyszerre, aritmetikai ellenőrzéssel) | glm | 131 267 | 58 183 | **1 134 s** |
+| lektor 1: 1 banktétel (rubrika-szinonima „nyolcvannégy”) | grok | 71 359 | 378 | 14 s |
+| animator 2 = csak-bank kör | glm | 38 254 | 8 944 | 225 s |
+| lektor 2: 0 → kapu ✅ → readback ✅ | grok | 71 971 | 133 | 13 s |
+**Eredmény:** `done` 1 487 s (24,8 perc), lecke `2afa67ea`, 10 fejezet, 45/75/21; szerzői újraírás
+nem kellett, mentőkör/tartalék nem futott, aritmetikai hiba a lektorhoz nem jutott. A bank a lecke
+idejének 76 %-a → `PACKET_CONCURRENCY` 3 → 5 (PR #87), várható bank ≈ 600 s, lecke ≈ 15 perc.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.

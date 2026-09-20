@@ -69,8 +69,11 @@ export class RetryableBankCallError extends Error {
 export const PACKET_ATTEMPTS = 3;
 /** One extra attempt after PACKET_ATTEMPTS failures, which the caller may route to the rescue model. */
 export const PACKET_RESCUE_ATTEMPTS = 1;
-/** Spec 2026-09-19: packets built at once in production (measured: 10 sequential packets = 1 795 s). */
-export const PACKET_CONCURRENCY = 3;
+/**
+ * Spec 2026-09-19: packets built at once in production. Measured: sequential 1 795 s; 3-way
+ * 681–1 134 s (run 128fda1b: the bank was 76 % of the lesson); 5-way halves the chunk count.
+ */
+export const PACKET_CONCURRENCY = 5;
 
 /** Each old AND-group must survive in a distinct new group, including its alternatives. */
 function retainsRequiredGroups(before: string[][], after: string[][]): boolean {
