@@ -62,6 +62,9 @@ test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async
     assert.equal(body.model, "z-ai/glm-5.3-flash");
     assert.deepEqual(body.reasoning, { effort: "low" });
     assert.equal(body.max_completion_tokens, 24_000);
+    // Spec §7o (mérve): a glm-válaszok ~1/8-a szintaktikailag törött JSON volt (nem csonka) — a
+    // szolgáltatói JSON-mód ezt a hibaosztályt megszünteti, a tartalmat nem érinti.
+    assert.deepEqual(body.response_format, { type: "json_object" }, "a bank/animátor kérés JSON-módban megy");
   }
 });
 
@@ -110,6 +113,7 @@ test("a lektor szabályzata változatlan; szabályzat nélküli lépés (author)
   await createStudioStepProvider("gpt-5.6-terra", "author").chat([{ role: "user", content: "x" }]);
   assert.equal(body?.reasoning, undefined);
   assert.equal(body?.reasoning_effort, undefined);
+  assert.equal(body?.response_format, undefined, "szabályzat nélküli lépés JSON-módot sem kap");
 });
 
 test("studioConnection: az anthropic vendor a saját kulcsát kéri", () => {
