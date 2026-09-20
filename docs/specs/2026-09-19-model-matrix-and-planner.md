@@ -220,7 +220,8 @@ működő folyamatokat, és a grafikai sokszínűség is érvényesüljön."
 | Internetes készítés | `done` | 1 166 s | — (7.4 HTML ág) | anyag `537ea443` |
 | Térkép (Műveleti) 1. | `error` | — | — | aritmetikai őr a tanulói lépéssort (`40 – 18 + 4 = 22 + 4 = 26`) páronként hamisnak vette → egyenlőség-lánc + biztonsági szelep (#95) |
 | Térkép (Műveleti) 2. (run 8909db64) | `error` | 1 058 s | jungle | a lektor **3 valódi** hibát jelölt (rossz műveleti sorrendű végeredmények: 86↔34, 111↔89, 99↔61); a csak-bank javító válasz quiz-azonosítója négy kísérleten át nem egyezett → `resolvePatchIds` (lent) |
-| Térkép (Műveleti) 3. | _(mérés alatt)_ | | | |
+| Térkép (Műveleti) 3. (run 7aaed852, job 0567b9b3) | `done` | 1 160 s | magic, 8/8 fejezet-emoji a világ készletéből, 8/8 fejezetben `**kiemelés**` | a lektor 2 valódi hibát jelölt (disztraktor-magyarázatok téves számai), 1 csak-bank kör az azonosító-feloldással átment, kapu + readback elsőre; 45/75/16 bank, lecke `1427cd59` |
+Grafikai sokszínűség mérve négy egymást követő futáson: ocean-kids (mérés 13) → meadow (JPG) → jungle (2.) → magic (3.).
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű
