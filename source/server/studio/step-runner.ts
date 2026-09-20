@@ -725,6 +725,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             theme: visualWorld((job.output?.visual as { world?: string } | undefined)?.world)?.id,
             reviewFeedback: bankReview?.feedback,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
+            onAttemptFailure: (sectionIndex, attempt, reason) => logger.warn(`[STUDIO] Bankcsomag bukott kísérlet (${job.id}) ${sectionIndex + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 600)}`),
             concurrency: PACKET_CONCURRENCY,
             call: async (bankSystem, user, attempt) => {
               // Spec 2026-09-19: the bank is its own cheap role; after PACKET_ATTEMPTS failed

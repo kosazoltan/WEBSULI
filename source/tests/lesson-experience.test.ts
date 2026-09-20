@@ -162,7 +162,13 @@ test("compact bank enforces every taught concept, intent, oral/written mode and 
 test("bad bank gets a targeted retry then fails closed", async () => {
   let calls = 0;
   const attempts: number[] = [];
-  await assert.rejects(buildLessonExperience(fusionFixture(), [], { call: async (_system, user, attempt) => { attempts.push(attempt); if (++calls === 2) assert.match(user, /előző válasz hibái/); return {}; } }), /javító kör után/);
+  // Mérve (4. mérés, run a9a4f683): 3 csomag tartalékra/mentőkörre ment, de a bukott kísérletek oka csak
+  // ujjlenyomatként maradt meg — a hívó a szöveges okot is megkapja (a runner WARN-nal naplózza).
+  const failures: Array<{ sectionIndex: number; attempt: number; reason: string }> = [];
+  await assert.rejects(buildLessonExperience(fusionFixture(), [], { call: async (_system, user, attempt) => { attempts.push(attempt); if (++calls === 2) assert.match(user, /előző válasz hibái/); return {}; },
+    onAttemptFailure: (sectionIndex, attempt, reason) => failures.push({ sectionIndex, attempt, reason }) }), /javító kör után/);
+  assert.deepEqual(failures.map(f => [f.sectionIndex, f.attempt]), [[0, 0], [0, 1], [0, 2], [0, PACKET_ATTEMPTS]]);
+  assert.ok(failures.every(f => f.reason.length > 0), "minden bukott kísérletnek van szöveges oka");
   // Spec 2026-09-19: initial + two repairs per packet on the cheap model, then ONE rescue attempt
   // (the caller routes attempt === PACKET_ATTEMPTS to the strong model), then fail closed.
   assert.equal(calls, PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS);

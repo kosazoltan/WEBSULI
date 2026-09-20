@@ -41,6 +41,8 @@ export type ExperienceBuildDeps = {
   call(system: string, user: string, attempt: number): Promise<unknown>;
   /** Eszköz-javítások naplózása (bank-packet-autofix). */
   onToolFix?(tool: string, fixes: string[]): void;
+  /** Mérve (4. mérés): a bukott bankkísérlet oka eddig csak ujjlenyomatként maradt — a hívó naplózza. */
+  onAttemptFailure?(sectionIndex: number, attempt: number, reason: string): void;
   /** Egyszerre épülő csomagok száma (alapból 1 = soros; a runner PACKET_CONCURRENCY-t ad). */
   concurrency?: number;
   /** Spec 2026-09-20: a lecke vizuális világa (a tervező választása) — a bank témája ez, nem hash. */
@@ -295,13 +297,14 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         if (!(error instanceof RetryableBankCallError)) throw error;
         errors = `A modellhívás hibázott: ${error.message}`;
         lastError = error;
+        deps.onAttemptFailure?.(unit.sectionIndex, attempt, errors);
         await workflowValidationFailure(errors);
         continue;
       }
       let candidate = response;
       if (repairBase) {
         try { candidate = applyBankPacketRepair(repairBase, response, allowedReviewIds, bindingRepairIds); }
-        catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; await workflowValidationFailure(errors); continue; }
+        catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; deps.onAttemptFailure?.(unit.sectionIndex, attempt, errors); await workflowValidationFailure(errors); continue; }
       }
       // Eszköz (2026-09-19): formai hibák kódból, a séma előtt — nem ér modell-kört.
       const autofix = autofixBankPacket(candidate, { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds });
@@ -317,6 +320,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       if (parsed.success && lastAttempt && arithmeticOnly) deps.onToolFix?.("arithmetic-claims", issues.map(i => `figyelmeztetés (átengedve): ${i}`));
       if (parsed.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed.data;
       else {
+        deps.onAttemptFailure?.(unit.sectionIndex, attempt, issues.join("; "));
         await workflowValidationFailure(issues.join("; "));
         errors = `${packetCounts(candidate)}; elvárt: methods=${methodKinds.length}, tasks=${taskCount}, quiz=${quizCount}. ${issues.join("; ")}`;
         repairBase = parsed.success && BANKS.every(bank => new Set(parsed.data[bank].map(item => item.id)).size === parsed.data[bank].length) ? parsed.data : undefined;
