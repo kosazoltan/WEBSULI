@@ -50,8 +50,11 @@ test.describe("Tornado Hunter 200", () => {
     await expect(page.getByText(/WIND SPEED:/)).toBeVisible();
     await expect(page.getByText(/STORM:/)).toBeVisible();
     await expect(page.getByTestId("tornado-touch-controls")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Gáz", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Fék", exact: true })).toBeVisible();
+    // Spec-változás 2026-09-20: a kormányzás ÉS a gyorsítás/fékezés a köralakú tárcsára került
+    // (docs/specs/2026-09-20-joystick-minden-jatekban.md); gombon csak a horgony és a kamera maradt.
+    await expect(page.getByTestId("virtual-joystick")).toBeVisible();
+    await expect(page.getByRole("button", { name: "⚓", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cam", exact: true })).toBeVisible();
 
     // The canvas actually has pixels (WebGL initialised).
     const box = await canvas.boundingBox();

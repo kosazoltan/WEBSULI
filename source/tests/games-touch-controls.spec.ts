@@ -51,51 +51,67 @@ async function startFirstLevel(page: Page) {
   await expect(page.locator('[data-testid="tornado-touch-controls"]')).toBeVisible({
     timeout: 15_000,
   });
+
+  // MÉRÉSI TANULSÁG (2026-09-20): a szint indulásakor a tornádó BELÉP a pályára, és a HUD távolsága
+  // 0-ról a valódi értékre ugrik (mérve: 0.00 → 3.58 km egyetlen másodperc alatt). Az első mérés
+  // ezt az ugrást kapta el, nem a sodródást, és a tétlen alapérték százszorosan túlbecsült lett.
+  // Beállás után a tétlen sodródás mérve ~0,02 km/s (8 mintából, egyenletes).
+  await page.waitForTimeout(3000);
 }
 
-async function gasBox(page: Page) {
-  const gas = page.getByRole("button", { name: "Gáz" }).first();
-  const box = await gas.boundingBox();
-  expect(box, "nincs Gáz gomb a képernyőn").not.toBeNull();
+/*
+ * SPEC-VÁLTOZÁS 2026-09-20 (`docs/specs/2026-09-20-joystick-minden-jatekban.md`): a gyorsítás a
+ * külön „Gáz" gombról a köralakú tárcsára került, mert az is IRÁNY. A mérés tárgya változatlan —
+ * lecsúszó ujj, felengedés, gesztus-tiltás —, csak a vezérlő lett más.
+ */
+async function joystickBox(page: Page) {
+  const joystick = page.locator('[data-testid="virtual-joystick"]').first();
+  const box = await joystick.boundingBox();
+  expect(box, "nincs köralakú tárcsa a képernyőn").not.toBeNull();
   return box!;
 }
 
-test("a gáz nem enged el, ha a hüvelykujj lecsúszik a gombról", async ({ page }) => {
-  await startFirstLevel(page);
-  const box = await gasBox(page);
-
-  // 44 px az érintési minimum; ennél kisebb gombot a gyerek nem talál el.
-  expect(box.width).toBeGreaterThanOrEqual(44);
-  expect(box.height).toBeGreaterThanOrEqual(44);
-
-  const idle = await travelled(page, 1200);
-
+/** Lenyomás a tárca közepén, majd ELŐRE (fölfelé) húzás — a `dy` pixelben. */
+async function pushForward(page: Page, box: { x: number; y: number; width: number; height: number }, dy: number) {
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
   await page.mouse.move(cx, cy);
   await page.mouse.down();
-  await page.waitForTimeout(300);
-  // Jóval a gombon kívülre — pontosan az a mozdulat, ami eddig megállította.
-  await page.mouse.move(cx - 140, cy - 90, { steps: 12 });
+  await page.mouse.move(cx, cy - dy, { steps: 8 });
+  return { cx, cy };
+}
 
-  const held = await travelled(page, 1200);
+test("a vezérlés nem szakad meg, ha a hüvelykujj lecsúszik a tárcsáról", async ({ page }) => {
+  await startFirstLevel(page);
+  const box = await joystickBox(page);
+
+  // 44 px az érintési minimum; ennél kisebb tárcsát a gyerek nem talál el.
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+
+  const idle = await travelled(page, 2000);
+
+  const { cx, cy } = await pushForward(page, box, 40);
+  await page.waitForTimeout(400);
+  // Jóval a tárcsán kívülre — pontosan az a mozdulat, ami eddig megállította a járművet.
+  // A pointer capture miatt a vezérlésnek ilyenkor is élnie kell, teljes kitéréssel.
+  await page.mouse.move(cx, cy - 260, { steps: 12 });
+
+  const held = await travelled(page, 2000);
   await page.mouse.up();
 
   expect(
     held,
     `a jármű nem gyorsult a lecsúszott ujj alatt: tétlenül ${idle.toFixed(3)} km, ` +
-      `gázzal ${held.toFixed(3)} km`,
+      `tárcsával ${held.toFixed(3)} km`,
   ).toBeGreaterThan(idle * 1.5);
 });
 
-test("felengedés után a gáz tényleg elenged", async ({ page }) => {
+test("felengedés után a tárcsa tényleg elenged", async ({ page }) => {
   await startFirstLevel(page);
-  const box = await gasBox(page);
+  const box = await joystickBox(page);
 
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  await page.mouse.move(cx, cy);
-  await page.mouse.down();
+  await pushForward(page, box, 120);
   await page.waitForTimeout(400);
   const held = await travelled(page, 1200);
   await page.mouse.up();
@@ -110,24 +126,19 @@ test("felengedés után a gáz tényleg elenged", async ({ page }) => {
   ).toBeLessThan(held);
 });
 
-test("a vezérlőgombok letiltják a böngésző kijelölését és gesztusait", async ({ page }) => {
+test("a vezérlőfelület letiltja a böngésző kijelölését és gesztusait", async ({ page }) => {
   await startFirstLevel(page);
 
   const style = await page.evaluate(() => {
-    const button = [...document.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Gáz"),
-    );
-    if (!button) return null;
-    const cs = getComputedStyle(button);
-    return {
-      touchAction: cs.touchAction,
-      userSelect: cs.userSelect,
-    };
+    const dial = document.querySelector('[data-testid="virtual-joystick"]');
+    if (!dial) return null;
+    const cs = getComputedStyle(dial);
+    return { touchAction: cs.touchAction, userSelect: cs.userSelect };
   });
 
-  expect(style).not.toBeNull();
+  expect(style, "nincs tárcsa a lapon").not.toBeNull();
   expect(style!.touchAction, "a böngésző görgetne és kijelölne").toBe("none");
-  expect(style!.userSelect, "hosszú nyomásra kijelölné a gomb feliratát").toBe("none");
+  expect(style!.userSelect, "hosszú nyomásra kijelölne a tárcsán").toBe("none");
 });
 
 /* ------------------------ G-13: 44 px-es érintési cél ------------------------ */
