@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getFileIcon } from "@/lib/iconUtils";
+import { LIGHT_MOTION_QUERIES, prefersLightMotionNow } from "@/lib/light-motion";
 import LikeButton from "@/components/LikeButton";
 import HeroSection from "@/components/HeroSection";
 import HomePracticeGames from "@/components/HomePracticeGames";
@@ -37,30 +38,17 @@ interface UserFileListProps {
   onToggleView?: () => void;
 }
 
-// Framer Motion animációk
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.1,
-    },
-  },
-};
-
+/**
+ * Framer Motion animációk — CSAK interakció (hover/tap).
+ *
+ * Mérve 2026-09-20 (tulajdonosi képernyőkép + reprodukció): a lista BEÚSZÁSA korábban
+ * `initial="hidden"` → `animate="visible"` volt, ami azonnal `opacity: 0`-t írt a DOM-ba, és két
+ * úton is ott ragadt: (a) mobilon a `lightMotion` az első renderelés UTÁN billent át, amivel eltűnt
+ * az animációs cél; (b) rejtett fülön a rAF szünetel, így az animáció el sem indult. A beúszás
+ * ezért CSS-be került (`.list-enter`, fill-mode NÉLKÜL): a nyugalmi állapot LÁTHATÓ, az animáció
+ * pusztán díszítés — ha el sem indul, a tananyagok akkor is látszanak.
+ */
 const cardVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      type: "spring",
-      damping: 15,
-      stiffness: 200,
-    },
-  },
   hover: {
     scale: 1.03,
     y: -5,
@@ -75,7 +63,9 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
-  const [lightMotion, setLightMotion] = useState(false);
+  // A döntés az ELSŐ renderelésben dől el (lásd lib/light-motion.ts): utólagos átbillenés nem
+  // hagyhat félbehagyott animációs értéket a DOM-ban.
+  const [lightMotion, setLightMotion] = useState(prefersLightMotionNow);
 
   // Load fingerprint once on mount
   useEffect(() => {
@@ -84,12 +74,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
 
   // Mobilon és reduced-motion esetén könnyített animáció (kevesebb scroll lag).
   useEffect(() => {
-    const mediaQueries = [
-      window.matchMedia("(hover: none)"),
-      window.matchMedia("(pointer: coarse)"),
-      window.matchMedia("(max-width: 1023px)"),
-      window.matchMedia("(prefers-reduced-motion: reduce)"),
-    ];
+    const mediaQueries = LIGHT_MOTION_QUERIES.map((query) => window.matchMedia(query));
 
     const updateMotionMode = () => {
       setLightMotion(mediaQueries.some((query) => query.matches));
@@ -320,11 +305,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               Tananyagok
             </h2>
             <motion.div
-              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr"
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 auto-rows-fr list-enter"
               data-testid="list-files"
-              variants={lightMotion ? undefined : containerVariants}
-              initial={lightMotion ? false : "hidden"}
-              animate={lightMotion ? undefined : "visible"}
             >
             {filteredFiles.map((file) => {
               const Icon = getFileIcon(file.title, file.description || undefined);
