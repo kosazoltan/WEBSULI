@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createStudioStepProvider, STUDIO_STEP_POLICY, studioConnection } from "../server/ai/studio-provider";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
-import { callStepModel, stepDeadlineMs } from "../server/studio/run-step";
+import { callStepModel, stepDeadlineMs, jsonFailureShape } from "../server/studio/run-step";
 import { AIProviderTimeoutError } from "../server/ai/AIProvider";
 
 /*
@@ -62,6 +62,9 @@ test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async
     assert.equal(body.model, "z-ai/glm-5.3-flash");
     assert.deepEqual(body.reasoning, { effort: "low" });
     assert.equal(body.max_completion_tokens, 24_000);
+    // Spec §7o (mérve): a glm-válaszok ~1/8-a szintaktikailag törött JSON volt (nem csonka) — a
+    // szolgáltatói JSON-mód ezt a hibaosztályt megszünteti, a tartalmat nem érinti.
+    assert.deepEqual(body.response_format, { type: "json_object" }, "a bank/animátor kérés JSON-módban megy");
   }
 });
 
@@ -76,6 +79,20 @@ test("a bank/animátor kérése egyszer megy el: az SDK nem próbálja újra cse
     await assert.rejects(callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" }));
     assert.equal(fetches, 1, `${step}: egyetlen kérés, rejtett újrapróbálás nélkül`);
   }
+});
+
+// Spec §7o/2 (mérve, 6–7. mérés): a puszta hossz nem mondta meg, csonka válasz vagy hibás sorosítás
+// volt-e — a szerkezeti leírás ezt megkülönbözteti, tartalom kiadása nélkül.
+test("a hibás JSON leírása szerkezeti tény: hossz, lezártság, hibapozíció — tartalom nélkül", () => {
+  const broken = '{"a":"x" "b":2}';
+  let shape = "";
+  try { JSON.parse(broken); } catch (error) { shape = jsonFailureShape(broken, error); }
+  assert.match(shape, /^15 karakter, lezárt, de középen hibás \(a modell sorosítása\), \d+\. pozíció$/);
+  assert.doesNotMatch(shape, /"a"|"b"|x/, "a szöveg tartalma nem kerül a hibaüzenetbe");
+  const truncated = '{"a":"hosszú érték", "b":[1,2,3';
+  try { JSON.parse(truncated); } catch (error) { assert.match(jsonFailureShape(truncated, error), /csonka vagy nem JSON alakú/); }
+  const prose = "Íme a csomag: nincs benne JSON.";
+  try { JSON.parse(prose); } catch (error) { assert.match(jsonFailureShape(prose, error), /csonka vagy nem JSON alakú/); }
 });
 
 // Spec §7o (mérve, 5. mérés): az SDK kliens-timeoutja a fejlécekig él; a törzs olvasását csak a külső
@@ -110,6 +127,7 @@ test("a lektor szabályzata változatlan; szabályzat nélküli lépés (author)
   await createStudioStepProvider("gpt-5.6-terra", "author").chat([{ role: "user", content: "x" }]);
   assert.equal(body?.reasoning, undefined);
   assert.equal(body?.reasoning_effort, undefined);
+  assert.equal(body?.response_format, undefined, "szabályzat nélküli lépés JSON-módot sem kap");
 });
 
 test("studioConnection: az anthropic vendor a saját kulcsát kéri", () => {

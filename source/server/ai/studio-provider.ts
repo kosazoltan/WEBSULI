@@ -24,7 +24,7 @@ export function studioModelReady(model: string) {
   return aiKeyStatus()[providerForModel(model)].configured;
 }
 
-export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort" | "maxRetries"> = {}) {
+export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort" | "maxRetries" | "jsonMode"> = {}) {
   const connection = studioConnection(model);
   const config = { apiKey: connection.apiKey, model: connection.model, timeout, maxTokens, ...options };
   // Spec 2026-09-19: the planner (pedagogue) runs on the direct Anthropic API (Opus 5,
@@ -37,7 +37,7 @@ export function createStudioProvider(model: string, timeout = 180000, maxTokens 
 
 export const LEKTOR_TIMEOUT_MS = 480_000;
 
-type StepPolicy = { timeoutMs: number; maxTokens: number; reasoningEffort: NonNullable<AIProviderConfig["reasoningEffort"]> };
+type StepPolicy = { timeoutMs: number; maxTokens: number; reasoningEffort: NonNullable<AIProviderConfig["reasoningEffort"]>; jsonMode?: boolean };
 
 /**
  * Spec 2026-09-19 (modellmátrix): effort/timeout/maxTokens per pipeline step.
@@ -50,8 +50,12 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   pedagogue: { timeoutMs: 300_000, maxTokens: 16_000, reasoningEffort: "medium" },
   // Mérve (run 45233b4b): a teljes lecke JSON-ja 10 fejezetnél ~10k kimeneti token, egy
   // bankcsomag 3–6k; a 16k keret egy elfajult csomagválaszon betelt → 24k, mint az alapérték.
-  animator: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low" },
-  bank: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low" },
+  // Spec §7o (mérve 2026-09-20): a 6. mérés két bukott bankkísérlete „a válasz nem érvényes JSON" volt,
+  // és szondázva a glm-válaszok ~1/8-a szintaktikailag törik (nem csonka: a hiba a szöveg közepén van).
+  // A `json_object` mód a szolgáltatónál garantálja a sorosítást — a tartalmat nem érinti, a ```json
+  // kerítés is elmarad. Mindkét itt futó modellen ellenőrizve (glm-5.3-flash, deepseek-v4-flash).
+  animator: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low", jsonMode: true },
+  bank: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low", jsonMode: true },
   gateHelper: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
   quizPolish: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
 };
@@ -70,6 +74,7 @@ export function createStudioStepProvider(model: string, step?: string) {
   if (!policy) return createStudioProvider(model);
   return createStudioProvider(model, policy.timeoutMs, policy.maxTokens, {
     reasoningEffort: policy.reasoningEffort,
+    ...(policy.jsonMode ? { jsonMode: true } : {}),
     // Mérve (4. mérés, run a9a4f683 és a regressziós futások): a tartalék bankmodell hívása 364 / 558 / 602 s-ig
     // tartott — az SDK a 240 s-os időtúllépést alapból kétszer csendben újrapróbálta (3 × 240 s). A lépés
     // időkorlátja EGY kérésre vonatkozik; az újrapróbálás a csomag-ciklus dolga (következő modell).

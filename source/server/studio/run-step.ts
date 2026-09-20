@@ -3,6 +3,21 @@ import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../ai
 import type { StudioStep } from "./pipeline";
 import { LEKTOR_TIMEOUT_MS, STUDIO_STEP_POLICY } from "../ai/studio-provider";
 
+/**
+ * Structural description of a JSON parse failure — length, first/last character class and the parse
+ * position, never the text itself. Truncation ends mid-value and fails at the very end; a serialisation
+ * bug ends with the closing brace and fails in the middle (spec §7o/2).
+ */
+export function jsonFailureShape(text: string, error: unknown): string {
+  const first = text[0] ?? "", last = text.at(-1) ?? "";
+  const closed = (first === "{" && last === "}") || (first === "[" && last === "]");
+  const position = Number(/position (\d+)/.exec(error instanceof Error ? error.message : "")?.[1]);
+  const where = Number.isFinite(position) ? `${position}. pozíció` : "ismeretlen pozíció";
+  const kind = !closed ? "csonka vagy nem JSON alakú" : Number.isFinite(position) && position < text.length * 0.9
+    ? "lezárt, de középen hibás (a modell sorosítása)" : "lezárt, a végén hibás";
+  return `${text.length} karakter, ${kind}, ${where}`;
+}
+
 /** Outer, body-inclusive deadline of one model request for a step (spec §7o); undefined = none. */
 export function stepDeadlineMs(step: string): number | undefined {
   return step === "lektor" ? LEKTOR_TIMEOUT_MS : STUDIO_STEP_POLICY[step]?.timeoutMs;
@@ -101,12 +116,12 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
   try {
     const json: unknown = JSON.parse(text);
     return { json, usage: response.usage };
-  } catch {
-    // Length, never content: the raw text may itself be a prompt injection.
+  } catch (error) {
+    // Shape only, never content: the raw text may itself be a prompt injection. Mérve (§7o/2, 6–7.
+    // mérés): a puszta hossz nem mondta meg, csonka válaszról vagy a modell hibás sorosításáról
+    // van-e szó, és emiatt kétszer kellett szondázni. A nyitó/záró karakter és a hibapozíció
+    // szerkezeti tény — ezekből a következő eset magától megkülönböztethető.
     await workflowValidationFailure("A válasz nem érvényes JSON.");
-    throw new StepModelError(
-      input.step,
-      `a válasz nem érvényes JSON (${text.length} karakter)`,
-    );
+    throw new StepModelError(input.step, `a válasz nem érvényes JSON (${jsonFailureShape(text, error)})`);
   }
 }

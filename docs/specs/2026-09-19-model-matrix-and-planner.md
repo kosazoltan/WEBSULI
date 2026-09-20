@@ -286,6 +286,34 @@ THEN nincs ábra-modellhívás.
 | 5. (1–3. javítás, a 4–5. még nem) | 49 fogalmas biológia (08af437e), friss bank, 12 fejezet | `done` 2 415 s, lecke `a82fb9d8`, meadow | 1. kör **480 s** (170→650); 2. kör 820 s (ebből 722 s a felesleges ábra-hívás); 3. kör ≈ 510 s | glm bukások oka a naplóban (érvénytelen JSON, objektum-opció, hiányos minta), tartalék egyből terra ≈ 20–60 s | az 1. kör friss bankja teljesíti a ≤ 600 s célt; a 2. kör mutatta meg a második gyökérokot |
 | 6. (1–5. javítás, run cf69dfdd, egyedül) | JPG-feltöltés „A talaj”, új térkép + friss bank, 11 fejezet | `done` **521 s** a teljes lánc (OCR → közzététel), lecke `5fd2b5ae`, space világ, 11/11 emoji | **249 s** (102k be / 42k ki) | 3 bukott glm-kísérlet (2 érvénytelen JSON, 1 hiányos minta), mind a következő kísérleten átment; 0 tartalék, 0 mentőkör | lektor 0 jegyzet, kapu elsőre; az elfogadás teljesül |
 Összevetés friss bankra: 4. mérés 1 261 s → 6. mérés 249 s (−80 %); a teljes lánc 1 513 s → 521 s.
+
+### 7o/2. A maradék hibaosztály: a modell szintaktikailag törött JSON-ja
+**Mérés:** a 6. mérés három bukott bankkísérletéből **kettő** „a válasz nem érvényes JSON (8 118 / 7 681 karakter)”
+volt. A nyers választ sehol nem tároljuk (a checkpoint csak a sikeres, már értelmezett eredményt menti), ezért
+szondával reprodukáltam a termelési paraméterekkel (glm-5.3-flash, 24k, low effort, 0.7): 8 hívásból 1 törött,
+`Expected ',' or '}' … at position 1602` — a válasz **teljes** (`}`-ra végződik), a hiba a szöveg KÖZEPÉN van,
+tehát nem csonkolás és nem a ```json kerítés (azt a `stripJsonFences` kezeli). Az ok a modell sorosítása
+(tipikusan nem escape-elt idézőjel egy magyar szövegben).
+**Javítás (két elem):**
+6. `response_format: { type: "json_object" }` a bank és animátor lépésre (`STUDIO_STEP_POLICY.jsonMode`
+   → `AIProviderConfig.jsonMode` → OpenRouter kérés). A kért TARTALMAT nem befolyásolja, csak a sorosítást, és a
+   ```json kerítés is elmarad (kevesebb kimeneti token). Szondával mindkét itt futó modellen elfogadva:
+   glm-5.3-flash 4/4, deepseek-v4-flash 1/1, kerítés nélkül, mind érvényes. A mentőkör (terra, „author”
+   szabályzat) és a lektor változatlan.
+   **Mérve, korlátozás:** a 7. mérésben JSON-mód mellett is előfordult egy törött válasz — az OpenRouter
+   `json_object` a glm útvonalon nem bizonyítottan kikényszerített. A hibaosztály tehát **ritkul, de nem szűnik meg**;
+   a maradékot a meglévő kísérlet-lánc (következő modell) kezeli.
+7. `jsonFailureShape`: a „nem érvényes JSON” hibaüzenet szerkezeti tényeket közöl — hossz, lezártság
+   (`{`…`}`), és a hibapozíció —, tartalmat nem. Ebből a következő eset magától megkülönbözteti a CSONKA
+   választ a modell hibás SOROSÍTÁSÁTÓL; a 6–7. mérésnél ez hiányzott, ezért kellett kétszer szondázni.
+**Elfogadás:** WHEN bank/animátor modellhívás indul THEN a kérés `response_format: json_object`-tal megy
+(teszt: `studio-provider-policy`), és szabályzat nélküli lépés nem kap JSON-módot; WHEN egy válasz nem
+értelmezhető JSON-ként THEN a hiba megnevezi a hossz–lezártság–pozíció hármast, tartalom nélkül.
+| Mérés | Eredmény | Animátor | „nem érvényes JSON” bukás |
+| --- | --- | --- | --- |
+| 6. (JSON-mód nélkül) | `done` 521 s | 249 s | 2 (11 csomagból) |
+| 7. (JSON-móddal, run 41b17f6d) | `done` **399 s**, lecke `c10c6ae5`, ocean-kids, 45/75/21, lektor 0 jegyzet, kapu elsőre | **144 s** | 1 (10 csomagból) |
+A teljes lánc a kiindulási 1 513 s-ról 399 s-ra (−74 %), az animátor 1 261 s-ról 144 s-ra (−89 %) csökkent.
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű
