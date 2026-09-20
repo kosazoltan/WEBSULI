@@ -294,16 +294,26 @@ szondával reprodukáltam a termelési paraméterekkel (glm-5.3-flash, 24k, low 
 `Expected ',' or '}' … at position 1602` — a válasz **teljes** (`}`-ra végződik), a hiba a szöveg KÖZEPÉN van,
 tehát nem csonkolás és nem a ```json kerítés (azt a `stripJsonFences` kezeli). Az ok a modell sorosítása
 (tipikusan nem escape-elt idézőjel egy magyar szövegben).
-**Javítás:** `response_format: { type: "json_object" }` a bank és animátor lépésre (`STUDIO_STEP_POLICY.jsonMode`
-→ `AIProviderConfig.jsonMode` → OpenRouter kérés). A szolgáltató garantálja a szintaktikailag érvényes JSON-t;
-a kért TARTALMAT nem befolyásolja, és a ```json kerítés is elmarad (kevesebb kimeneti token). Szondával mindkét
-itt futó modellen ellenőrizve: glm-5.3-flash 4/4 és deepseek-v4-flash 1/1 elfogadta, kerítés nélkül, mind érvényes.
-A mentőkör (terra, „author” szabályzat) és a lektor változatlan.
+**Javítás (két elem):**
+6. `response_format: { type: "json_object" }` a bank és animátor lépésre (`STUDIO_STEP_POLICY.jsonMode`
+   → `AIProviderConfig.jsonMode` → OpenRouter kérés). A kért TARTALMAT nem befolyásolja, csak a sorosítást, és a
+   ```json kerítés is elmarad (kevesebb kimeneti token). Szondával mindkét itt futó modellen elfogadva:
+   glm-5.3-flash 4/4, deepseek-v4-flash 1/1, kerítés nélkül, mind érvényes. A mentőkör (terra, „author”
+   szabályzat) és a lektor változatlan.
+   **Mérve, korlátozás:** a 7. mérésben JSON-mód mellett is előfordult egy törött válasz — az OpenRouter
+   `json_object` a glm útvonalon nem bizonyítottan kikényszerített. A hibaosztály tehát **ritkul, de nem szűnik meg**;
+   a maradékot a meglévő kísérlet-lánc (következő modell) kezeli.
+7. `jsonFailureShape`: a „nem érvényes JSON” hibaüzenet szerkezeti tényeket közöl — hossz, lezártság
+   (`{`…`}`), és a hibapozíció —, tartalmat nem. Ebből a következő eset magától megkülönbözteti a CSONKA
+   választ a modell hibás SOROSÍTÁSÁTÓL; a 6–7. mérésnél ez hiányzott, ezért kellett kétszer szondázni.
 **Elfogadás:** WHEN bank/animátor modellhívás indul THEN a kérés `response_format: json_object`-tal megy
-(teszt: `studio-provider-policy`), és szabályzat nélküli lépés nem kap JSON-módot.
+(teszt: `studio-provider-policy`), és szabályzat nélküli lépés nem kap JSON-módot; WHEN egy válasz nem
+értelmezhető JSON-ként THEN a hiba megnevezi a hossz–lezártság–pozíció hármast, tartalom nélkül.
 | Mérés | Eredmény | Animátor | „nem érvényes JSON” bukás |
 | --- | --- | --- | --- |
-| 7. (JSON-móddal) | _(mérés alatt)_ | | |
+| 6. (JSON-mód nélkül) | `done` 521 s | 249 s | 2 (11 csomagból) |
+| 7. (JSON-móddal, run 41b17f6d) | `done` **399 s**, lecke `c10c6ae5`, ocean-kids, 45/75/21, lektor 0 jegyzet, kapu elsőre | **144 s** | 1 (10 csomagból) |
+A teljes lánc a kiindulási 1 513 s-ról 399 s-ra (−74 %), az animátor 1 261 s-ról 144 s-ra (−89 %) csökkent.
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű

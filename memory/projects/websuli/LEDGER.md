@@ -377,3 +377,15 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Verifikáció (ellenőrzött):** kapuk zöldek (tsc, check:test, lint 0, 1352/1352), CI zöld. 5. mérés (régi kód, 49 fogalmas térkép): `done` 2 415 s, 1. kör friss bank 480 s, a 2. kör 820 s-ából 722 s a felesleges ábra-hívás. **6. mérés (minden javítással, JPG új térkép + friss bank, egyedül): `done` 521 s a teljes lánc, animátor 249 s** (4. mérés: 1 261 s, −80 %), 3 bukott glm-kísérlet oka a naplóban, 0 tartalék/mentőkör, lektor 0 jegyzet, kapu elsőre; élesben space világ, 11/11 emoji.
 
 **Tanulság:** az SDK-alapértelmezések (retry) a lépés-időkorlátot megtöbbszörözik; minden modellhívó kliensnél explicit `maxRetries`. A lelet-ujjlenyomat nem diagnosztika: a bukott kísérlet oka és ideje WARN-nal a naplóba.
+
+## 2026-09-20 (délután, 4.) — Szolgáltatói JSON-mód a bankra, és szerkezeti diagnosztika a törött válaszokra
+
+**Kérés:** „Folytasd a javítást!” — az animátor fázis maradék időrablóinak felszámolása.
+
+**Diagnózis (mérve, reprodukálva):** a 6. mérés három bukott bankkísérletéből kettő „a válasz nem érvényes JSON” volt. A nyers választ sehol nem tároljuk (a checkpoint csak a sikeres eredményt menti), ezért szondával reprodukáltam a termelési paraméterekkel: 8 glm-hívásból 1 törött, `Expected ',' or '}' … at position 1602` — a válasz teljes (`}`-ra végződik), a hiba a szöveg közepén, tehát nem csonkolás és nem a ```json kerítés, hanem a modell sorosítása.
+
+**Javítás (PR #99):** `AIProviderConfig.jsonMode` → OpenRouter `response_format: { type: "json_object" }`, bekötve a bank és animátor lépésre (glm és deepseek is elfogadja, szondával ellenőrizve); a tartalmat nem érinti, a kerítés is elmarad. Mellé `jsonFailureShape`: a hibaüzenet hossz–lezártság–hibapozíció hármast közöl, tartalom nélkül, így a következő eset magától megkülönbözteti a csonka választ a hibás sorosítástól.
+
+**Verifikáció (ellenőrzött):** kapuk zöldek (tsc, check:test, lint 0, 1352/1352). 7. mérés (JPG új térkép + friss bank, egyedül): `done` **399 s**, animátor **144 s**, lecke `c10c6ae5`, lektor 0 jegyzet, kapu elsőre; élesben ocean-kids világ, 10 emoji, 32 kiemelés. A teljes lánc 1 513 → 399 s (−74 %), az animátor 1 261 → 144 s (−89 %).
+
+**Korlátozás (mérve, nem elhallgatva):** JSON-mód mellett is előfordult egy törött válasz (10 csomagból 1) — az OpenRouter `json_object` a glm útvonalon nem bizonyítottan kikényszerített. A hibaosztály ritkul, de nem szűnik meg; a maradékot a kísérlet-lánc kezeli, és a következő eset szerkezeti leírása megmondja a pontos okot.
