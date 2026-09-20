@@ -31,7 +31,7 @@ export function ensureSectionVisuals(lesson: Lesson, concepts: ReadonlyArray<Con
       kind: "animate",
       animKind: "process",
       params: { steps: example.steps.slice(0, 8) },
-      caption: `A megoldás menete lépésről lépésre${terms.length ? ` (${terms.join(", ")})` : ""}: ${example.problem.slice(0, 120)}`,
+      caption: `A megoldás menete lépésről lépésre${terms.length ? ` (${terms.join(", ")})` : ""}: ${clipAtWord(example.problem, 120)}`,
       coversConceptIds: [...example.coversConceptIds],
     };
     added.push(index);
@@ -40,6 +40,19 @@ export function ensureSectionVisuals(lesson: Lesson, concepts: ReadonlyArray<Con
     return { ...section, blocks };
   });
   return { lesson: added.length ? { ...lesson, sections } : lesson, added };
+}
+
+/**
+ * Mérve (run 7, job 1d5ee08b, 2026-09-20): a 120 karakteres vágás egy szám közepén vágott —
+ * „12 · 2 = 24" → „12 · 2 = 2" —, és a lektor forrás-ellentmondásként blokkolta a leckét
+ * (egy teljes szerzői kör). A vágás csak szóhatáron történhet, és jelzi a folytatást.
+ */
+export function clipAtWord(text: string, max: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  const head = trimmed.slice(0, max - 1);
+  const cut = head.lastIndexOf(" ");
+  return `${(cut > max / 2 ? head.slice(0, cut) : head).trimEnd()}…`;
 }
 
 /** Recorded as the animator step's "model" when no model call was needed. */

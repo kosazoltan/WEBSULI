@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ensureSectionVisuals } from "../server/studio/section-visuals";
+import { ensureSectionVisuals, clipAtWord } from "../server/studio/section-visuals";
 import { lessonSchema, type Lesson } from "../shared/lesson-schema";
 
 /* Spec 2026-09-19 — a chapter without a figure gets its worked example as a process visual. */
@@ -52,6 +52,19 @@ test("a képaláírás a példa fogalmait a térkép szavaival nevezi meg (a cí
   const { lesson: noTerms } = ensureSectionVisuals(base, [{ localId: "sorrend" }]);
   const plain = noTerms.sections[0].blocks[2];
   assert.ok(plain.kind === "animate" && !/\(\)/.test(plain.caption), "term nélkül nincs üres zárójel");
+});
+
+test("mérve run 7 (job 1d5ee08b): a képaláírás hosszú feladatszöveget csak szóhatáron vág, számot nem csonkol", () => {
+  assert.equal(clipAtWord("rövid", 120), "rövid");
+  const long = "Számítsd ki lépésről lépésre, és írd le a megoldás menetét részletesen, minden műveletet külön sorban: 9 + 3 · 2 = 15, a hibás út 12 · 2 = 24";
+  const clipped = clipAtWord(long, 120);
+  assert.ok(clipped.length <= 120, `${clipped.length}`);
+  assert.ok(clipped.endsWith("…"));
+  assert.doesNotMatch(clipped, /\d…$/, "nem vág szám közepén");
+  assert.ok(!clipped.includes("12 · 2 = 2") || clipped.includes("12 · 2 = 24"), "csonkolt egyenlőség tilos");
+  const lesson = { ...base, sections: [{ ...base.sections[0], blocks: base.sections[0].blocks.map((b) => (b.kind === "example" ? { ...b, problem: long } : b)) }] };
+  const visual = ensureSectionVisuals(lesson).lesson.sections[0].blocks[2];
+  assert.ok(visual.kind === "animate" && visual.caption.endsWith("…") && !/= 2$/.test(visual.caption));
 });
 
 test("ha minden fejezetben van ábra, ugyanaz az objektum jön vissza", () => {
