@@ -195,7 +195,9 @@ export function buildPedagoguePrompt(map: PromptMap): string {
     "- Nyitó fejezet: miért kell ez a tudás / mi a probléma (motiváció), csak utána a szabályok.",
     "- Szabályonként vagy fogalomcsoportonként külön fejezet: explain → example (lépésről lépésre) → check.",
     "- Ha a forrás gyakorlófeladatot tartalmaz: külön fejezet „A feladat megoldva lépésről lépésre” (plannedBlocks: explain, example, example…, recap), a forrás feladataival.",
-    "- Zárás előtt „A leggyakoribb hibák” fejezet: a misconceptions listából (legalább 3, ha a forrás alapján van ennyi), plannedBlocks: explain, check, recap.",
+    // Mérve (run 8, job c3f5265b): explain→check tervnél a kapu ívszabálya („kérdés előtt mutasd meg,
+    // hogyan kell megoldani") szerzői kört kért — a hibás és a helyes út összevetése példaként előzi meg a kérdést.
+    "- Zárás előtt „A leggyakoribb hibák” fejezet: a misconceptions listából (legalább 3, ha a forrás alapján van ennyi), plannedBlocks: explain, example (a hibás és a helyes megoldási út összevetése a forrás egy feladatán), check, recap.",
     "- Utolsó fejezet „Ellenőrzés – hogyan légy biztos magadban?”: a teljes eljárás számozott lépései és önellenőrző kérdések, plannedBlocks: explain, animate, recap.",
     "- Minden fejezet animationSuggestions mezője legalább egy konkrét, a fejezet tanításából rajzolható ábrát nevezzen meg (folyamat lépései, számegyenes, idővonal, térkép…).",
     "",
