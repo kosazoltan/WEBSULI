@@ -43,14 +43,26 @@ test("TouchControls mindig látszik — nincs sm:hidden, nincs hidden+coarse:fle
   assert.match(block, /(?:^|[\s"'`])flex(?:[\s"'`]|$)/);
 });
 
-test("TouchControls gombok: Gáz, Fék, kormány, horgony, Cam", () => {
+/*
+ * SPEC-VÁLTOZÁS 2026-09-20 (tulajdonosi utasítás, `docs/specs/2026-09-20-joystick-minden-jatekban.md`):
+ * „Mindegyik vezérelhető játék vezérlését állítsd át az Asteroidban kialakított, köralakú,
+ * joystick-szerű vezérlésre." A kormányzás ÉS a gyorsítás/fékezés is IRÁNY, ezért mindkettő a
+ * tárcsára került; gombon csak a nem irányjellegű művelet marad (horgony, kamera). A követelmény
+ * nem lazult: a lenti ellenőrzés a tárcsa MEGLÉTÉT és mind a négy irány bekötését is megköveteli,
+ * ráadásul kizárja a régi irány-gombok visszaszivárgását.
+ */
+test("TouchControls: köralakú tárcsa vezet (mind a négy irány), gombon csak horgony és Cam", () => {
   const block = touchControlsBlock();
-  assert.match(block, /label="Gáz"/);
-  assert.match(block, /label="Fék"/);
-  assert.match(block, /label="◀"/);
-  assert.match(block, /label="▶"/);
-  assert.match(block, /label="⚓"/);
-  assert.match(block, /label="Cam"/);
+  assert.match(block, /<VirtualJoystick\b/, "nincs tárcsa a vezérlésben");
+  assert.match(block, /joystickToDirections\s*\(/, "a tárcsa vektora nincs bekötve");
+  for (const dir of ["left", "right", "fwd", "back"]) {
+    assert.match(block, new RegExp(`touchRef\\.current\\.${dir}\\s*=\\s*dirs\\.`), `${dir} nincs a tárcsára kötve`);
+  }
+  assert.match(block, /label="⚓"/, "a horgony gomb marad");
+  assert.match(block, /label="Cam"/, "a kamera gomb marad");
+  for (const gone of ['label="Gáz"', 'label="Fék"', 'label="◀"', 'label="▶"']) {
+    assert.ok(!block.includes(gone), `${gone} visszaszivárgott a tárcsa mellé`);
+  }
 });
 
 test("TouchControls overlay a vásznon (absolute + z-index), nem flex-testvér ami összenyomódik", () => {

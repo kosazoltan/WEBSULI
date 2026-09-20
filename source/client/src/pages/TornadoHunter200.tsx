@@ -27,6 +27,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { joystickToDirections } from "@/game-engine/joystick";
 import { Card, CardContent } from "@/components/ui/card";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import AudioToggleButton from "@/components/AudioToggleButton";
@@ -1963,24 +1965,26 @@ function TouchControls(props: {
   onAnchor: () => void;
   onCamera: () => void;
 }) {
-  // G-8: az esemény-kezelés (preventDefault, pointer capture) a HoldButton-ba
-  // került, itt már csak az irányjelző állítása marad.
-  const hold = (key: "fwd" | "back" | "left" | "right", value: boolean) => () => {
-    props.touchRef.current[key] = value;
-  };
-
+  // Egységes köralakú vezérlés (spec 2026-09-20): a `◀`/`▶` kormánygombok és a Gáz/Fék pedál
+  // helyett ugyanaz a tárcsa, mint az Aszteroidában — a kormányzás és a gyorsítás is IRÁNY, ezért
+  // mindkettő a tárcsára kerül. A nem irányjellegű gombok (horgony, kamera) maradnak.
   const steer = (
-    <div className="flex gap-2">
-      <TouchBtn onDown={hold("left", true)} onUp={hold("left", false)} label="◀" />
-      <TouchBtn onDown={hold("right", true)} onUp={hold("right", false)} label="▶" />
-    </div>
+    <VirtualJoystick
+      label="Vezetés"
+      radius={52}
+      onChange={(v) => {
+        const dirs = joystickToDirections(v);
+        props.touchRef.current.left = dirs.left;
+        props.touchRef.current.right = dirs.right;
+        props.touchRef.current.fwd = dirs.fwd;
+        props.touchRef.current.back = dirs.back;
+      }}
+    />
   );
   const pedals = (
     <div className="tornado-pedals flex gap-2 items-end">
-      <TouchBtn onDown={hold("back", true)} onUp={hold("back", false)} label="Fék" small />
       <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent />
       <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Cam" small />
-      <TouchBtn onDown={hold("fwd", true)} onUp={hold("fwd", false)} label="Gáz" />
     </div>
   );
 

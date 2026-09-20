@@ -20,8 +20,6 @@ import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import {
   ArrowLeft,
-  ArrowBigLeft,
-  ArrowBigRight,
   Waves,
   Trophy,
   Flame,
@@ -32,6 +30,8 @@ import {
   Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { joystickToDirections } from "@/game-engine/joystick";
 import { Card, CardContent } from "@/components/ui/card";
 import CosmicBackground from "@/components/CosmicBackground";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1546,7 +1546,7 @@ export default function TsunamiEscapeEnglish() {
                 {/* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt
                     és görgetett, a futás pedig megállt. */}
                 <div
-                  className="tsunami-controls grid grid-cols-3 gap-2 mt-1 sm:mt-3"
+                  className="tsunami-controls flex items-center justify-between gap-3 mt-1 sm:mt-3"
                   style={{
                     touchAction: "none",
                     userSelect: "none",
@@ -1554,41 +1554,31 @@ export default function TsunamiEscapeEnglish() {
                     WebkitTapHighlightColor: "transparent",
                   }}
                 >
+                {/*
+                 * Egységes köralakú vezérlés (spec 2026-09-20): a Balra/Jobbra gombok helyett
+                 * ugyanaz a tárcsa, mint az Aszteroidában. A sprint SZÁNDÉKOSAN külön gomb marad:
+                 * ha a tárcsa is állítaná, a felengedése kikapcsolná a gombbal tartott sprintet.
+                 */}
+                <VirtualJoystick
+                  label="Futás iránya"
+                  radius={52}
+                  onChange={(v) => {
+                    const dirs = joystickToDirections(v);
+                    keysRef.current.left = dirs.left;
+                    keysRef.current.right = dirs.right;
+                  }}
+                />
                 <Button
                   type="button"
                   variant="outline"
                   size="lg"
-                  className="h-12 sm:h-14 touch-manipulation border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
-                  onPointerDown={(e) => pressStart(e, "left")}
-                  onPointerUp={(e) => pressEnd(e, "left")}
-                  onPointerCancel={(e) => pressEnd(e, "left")}
-                  aria-label="Balra"
-                >
-                  <ArrowBigLeft className="w-8 h-8" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="h-12 sm:h-14 touch-manipulation border-amber-100/60 bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 active:scale-95 shadow-md shadow-amber-900/60 font-extrabold"
+                  className="h-[104px] w-[104px] rounded-full touch-manipulation border-amber-100/60 bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 active:scale-95 shadow-md shadow-amber-900/60 font-extrabold"
                   onPointerDown={(e) => pressStart(e, "sprint")}
                   onPointerUp={(e) => pressEnd(e, "sprint")}
                   onPointerCancel={(e) => pressEnd(e, "sprint")}
                   aria-label="Sprint"
                 >
-                  <Wind className="w-7 h-7" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="h-12 sm:h-14 touch-manipulation border-cyan-100/60 bg-gradient-to-b from-sky-500 to-cyan-700 text-white hover:brightness-110 active:scale-95 shadow-md shadow-cyan-900/50"
-                  onPointerDown={(e) => pressStart(e, "right")}
-                  onPointerUp={(e) => pressEnd(e, "right")}
-                  onPointerCancel={(e) => pressEnd(e, "right")}
-                  aria-label="Jobbra"
-                >
-                  <ArrowBigRight className="w-8 h-8" />
+                  <Wind className="w-8 h-8" />
                 </Button>
               </div>
               </>

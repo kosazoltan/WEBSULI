@@ -153,17 +153,29 @@ test("a HoldButton a capture-t használja, nem a leave-et", () => {
 
 /* ------------------------------- joystick -------------------------------- */
 
-test("az Aszteroida joystickkal irányít, nem négy nyílgombbal", () => {
-  const code = stripComments(
-    readFileSync(join(root, "client/src/pages/SpaceAsteroidQuiz.tsx"), "utf8"),
-  );
+/*
+ * Tulajdonosi utasítás 2026-09-20: „Mindegyik vezérelhető játék vezérlését állítsd át az
+ * Asteroidban kialakított, köralakú, joystick-szerű vezérlésre." Az ellenőrzés ezért MIND A NÉGY
+ * irányvezérléses játékra vonatkozik, nem csak az Aszteroidára.
+ *
+ * Miért számít: a külön irány-gombokkal az ÁTLÓS irány két gomb EGYIDEJŰ nyomását követelte, ami
+ * egy hüvelykujjal nem megy — a gyerek négy irányra volt korlátozva egy nyolcirányú játékban.
+ */
+/** A régi, gombos irányvezérlés nyomai — egyiknek sem szabad megmaradnia. */
+const DIRECTION_BUTTONS = /aria-label="(Balra|Jobbra)"|⟵ Balra|▲ Előre|▼ Hátra|Jobbra ⟶|label="◀"|label="▶"|label="Gáz"|label="Fék"/;
 
-  // Miért számít: a négy nyílgombbal az ÁTLÓS irány két gomb egyidejű nyomását
-  // követelte, ami egy hüvelykujjal nem megy — a gyerek négy irányra volt
-  // korlátozva egy nyolcirányú játékban.
-  assert.match(code, /<VirtualJoystick\b/, "nincs joystick a lapon");
-  assert.match(code, /joystickToDirections\s*\(/, "a joystick vektora nincs bekötve a vezérlésbe");
-});
+for (const file of ACTION_GAMES) {
+  const code = stripComments(readFileSync(join(root, "client/src/pages", file), "utf8"));
+
+  test(`${file}: köralakú tárcsával irányít, nem irány-gombokkal`, () => {
+    assert.match(code, /<VirtualJoystick\b/, "nincs joystick a lapon");
+    assert.match(code, /joystickToDirections\s*\(/, "a joystick vektora nincs bekötve a vezérlésbe");
+  });
+
+  test(`${file}: a régi irány-gombok eltűntek`, () => {
+    assert.doesNotMatch(code, DIRECTION_BUTTONS, "maradt gombos irányvezérlés a tárcsa mellett");
+  });
+}
 
 test("a joystick felengedéskor nullázza az irányt", () => {
   const joy = stripComments(

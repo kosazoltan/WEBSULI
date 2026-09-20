@@ -407,3 +407,17 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Verifikáció:** 16 válaszos szonda a valódi javító úttal: 5 javult modellkör nélkül, és a maradék egyetlen bukás valódi csonkolás volt (ott a modellkör a helyes válasz) — 16-ból 15 sikerül elsőre. Kapuk zöldek.
 
 **Tanulság:** ha egy modellhiba „középen törött JSON”, a bájtokat KI KELL olvasni — a három ok mind határoló-karakter volt, egyik sem igényelt tartalmi találgatást. A szonda (12–16 párhuzamos hívás termelési paraméterekkel) néhány centért ad bizonyítékot ott, ahol a napló tartalmat nem őrizhet.
+
+## 2026-09-20 (késő délután) — Egységes köralakú joystick minden irányvezérléses játékban
+
+**Kérés:** „Mindegyik vezérelhető játék vezérlését állítsd át az Asteroidban kialakított, köralakú, joystick-szerű vezérlésre.”
+
+**Felderítés:** hét játék van, ebből **négynek** van irányvezérlése: SpaceAsteroidQuiz (már joystickos), TornadoHunter200 (`◀`/`▶` + Gáz/Fék pedál), BlockCraftQuiz (négy irány-gomb), TsunamiEscapeEnglish (Balra/Jobbra gomb). A WordLadder, SpeedQuizMath és BrainRotSteal csak válaszgombos — ezeket nem érinti.
+
+**Javítás (PR #103):** mindhárom játék a közös `VirtualJoystick`-ra állt át, a meglévő `joystickToDirections` adapterrel — a játékok fizikáját nem kellett átírni, csak a meglévő irány-referenciákat (`touchRef`/`keysRef`) állítja a tárcsa. Tornadónál a gáz és a fék is a tárcsára került (azok is irányok), gombon csak a horgony és a kamera maradt. Tsunaminál a sprint szándékosan külön gomb maradt: ha a tárcsa is állítaná, a felengedése kikapcsolná a gombbal tartott sprintet.
+
+**Spec-változás (nem teszt-gyengítés):** a `tornado-mobile-controls` teszt eddig a `Gáz`/`Fék`/`◀`/`▶` gombok meglétét követelte. A tulajdonosi utasítás nyomán az ÚJ szerződésre íródott át, erősebben: a tárcsa meglétét, mind a négy irány bekötését ÉS a régi gombok hiányát is kéri. A `game-touch-controls` joystick-ellenőrzése az Aszteroidáról mind a négy játékra kiterjedt.
+
+**Verifikáció (mérve):** kapuk zöldek (tsc, check:test, lint 0, npm test 1365/1365, vite build). Fejlesztői kiszolgálón 375×812 mobil nézetben, játékot elindítva mindhárom játékban megjelent a tárcsa, a régi irány-gombok száma 0, és a megmaradt akciógombok a helyükön (Sprint / Ugrás-Bányász-Lerak / ⚓-Cam). Képernyőkép igazolja az Aszteroida-elrendezést: bal alul tárcsa, jobb alul kerek gomb.
+
+**Tanulság:** a `joystickToDirections` adapter miatt a tárcsa bekötése játékonként néhány soros; a kockázat nem a fizikában van, hanem az olyan állapot-ütközésekben, ahol ugyanazt a jelzőt gomb és tárcsa is állítaná (sprint).

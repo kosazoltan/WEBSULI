@@ -6,6 +6,8 @@ import { Link } from "wouter";
 import * as THREE from "three";
 import { ArrowLeft, Box, Pickaxe, Star, Flame, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { joystickToDirections } from "@/game-engine/joystick";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -2381,14 +2383,33 @@ export default function BlockCraftQuiz() {
                 )}
                 {/* === KONTROLLGOMBOK (csak coarse pointer — C2: egérnél a vászon kapja a helyet) === */}
                 {coarsePointer ? (
-                <div className="grid grid-cols-4 gap-1.5 w-full" data-testid="bc-touch-controls">
-                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "left")} onPointerUp={(e) => endHold(e, "left")} onPointerCancel={(e) => endHold(e, "left")}>⟵ Balra</Button>
-                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "fwd")} onPointerUp={(e) => endHold(e, "fwd")} onPointerCancel={(e) => endHold(e, "fwd")}>▲ Előre</Button>
-                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "back")} onPointerUp={(e) => endHold(e, "back")} onPointerCancel={(e) => endHold(e, "back")}>▼ Hátra</Button>
-                  <Button type="button" size="sm" className="bg-sky-800 hover:bg-sky-700 text-white border border-sky-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "right")} onPointerUp={(e) => endHold(e, "right")} onPointerCancel={(e) => endHold(e, "right")}>Jobbra ⟶</Button>
-                  <Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")}>Ugrás</Button>
-                  <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs col-span-2" onClick={tryMineLook}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász (E)</Button>
-                  <Button type="button" size="sm" className="bg-amber-700 hover:bg-amber-600 text-white border border-amber-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={tryPlaceLook} disabled={(inventory[selType] ?? 0) <= 0}>Lerak (F)</Button>
+                <div
+                  className="flex w-full items-center justify-between gap-2"
+                  data-testid="bc-touch-controls"
+                  style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }}
+                >
+                  {/*
+                   * Egységes köralakú vezérlés (spec 2026-09-20): a négy irány-gomb helyett ugyanaz a
+                   * tárcsa, mint az Aszteroidában. A négy gombbal az ÁTLÓS mozgás két gomb egyidejű
+                   * nyomását követelte, ami egy hüvelykujjal nem megy. A nézelődés (vászon-húzás) és
+                   * a nem irányjellegű gombok változatlanok.
+                   */}
+                  <VirtualJoystick
+                    label="Mozgás"
+                    radius={52}
+                    onChange={(v) => {
+                      const dirs = joystickToDirections(v);
+                      keysRef.current.left = dirs.left;
+                      keysRef.current.right = dirs.right;
+                      keysRef.current.fwd = dirs.fwd;
+                      keysRef.current.back = dirs.back;
+                    }}
+                  />
+                  <div className="grid grid-cols-2 gap-1.5 flex-1 max-w-[260px]">
+                    <Button type="button" size="sm" className="bg-violet-700 hover:bg-violet-600 text-white border border-violet-200/35 shadow-md py-3 text-xs col-span-2" onPointerDown={(e) => startHold(e, "jump")} onPointerUp={(e) => endHold(e, "jump")} onPointerCancel={(e) => endHold(e, "jump")}>Ugrás</Button>
+                    <Button type="button" size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={tryMineLook}><Pickaxe className="w-3.5 h-3.5 mr-1" />Bányász</Button>
+                    <Button type="button" size="sm" className="bg-amber-700 hover:bg-amber-600 text-white border border-amber-200/35 touch-manipulation shadow-md py-3 text-xs" onClick={tryPlaceLook} disabled={(inventory[selType] ?? 0) <= 0}>Lerak</Button>
+                  </div>
                 </div>
                 ) : (
                   <p className="w-full text-center text-[11px] text-white/55" data-testid="bc-keyboard-hint">
