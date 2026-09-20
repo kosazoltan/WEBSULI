@@ -2,6 +2,50 @@ import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
 import { LEKTOR_TIMEOUT_MS, STUDIO_STEP_POLICY } from "../ai/studio-provider";
+import { logger } from "../lib/logger";
+
+/**
+ * A modell két MÉRT sorosítási hibája, determinisztikus javítással (spec §7o/3). Mindkettőt
+ * szondával reprodukáltam a termelési paraméterekkel (glm-5.3-flash, JSON-mód), és a bájtokat
+ * a hibapozíciónál olvastam ki:
+ *  1. A sztringet magyar záró idézőjel (U+201D) zárja a `"` helyett, ezért a sztring nem ér véget,
+ *     és a következő sorvég vezérlőkarakterként kerül bele („Bad control character in string
+ *     literal”). Csak akkor javítunk, ha a hibapozíció ELŐTTI karakter PONTOSAN ez az idézőjel.
+ *  2. A kész JSON után szemét marad (csonka ```` ``` ```` kerítés) — a JSON a hibapozícióig érvényes.
+ * Minden javítás után ÚJRA elemzünk: amit nem sikerül értelmezni, az az eredeti hibával bukik.
+ * Ez nem heurisztikus „JSON-javító": nem talál ki tartalmat, csak a lezáró karaktert állítja helyre.
+ */
+const MAX_JSON_REPAIRS = 8;
+const CLOSING_QUOTE = "”";
+
+function repairJsonOnce(text: string, error: unknown): { text: string; name: string } | null {
+  const message = error instanceof Error ? error.message : "";
+  const position = Number(/position (\d+)/.exec(message)?.[1]);
+  if (!Number.isFinite(position) || position <= 0 || position > text.length) return null;
+  if (/after JSON/i.test(message)) {
+    const head = text.slice(0, position).trimEnd();
+    return head ? { text: head, name: "JSON utáni szemét eldobva" } : null;
+  }
+  if (text[position - 1] === CLOSING_QUOTE) {
+    return { text: `${text.slice(0, position - 1)}"${text.slice(position)}`, name: "gépelt záró idézőjel lezárásként" };
+  }
+  return null;
+}
+
+/** JSON.parse with the two measured repairs above; the repair names are returned for the log. */
+export function parseModelJson(text: string): { json: unknown; repairs: string[] } {
+  const repairs: string[] = [];
+  let candidate = text;
+  for (;;) {
+    try { return { json: JSON.parse(candidate), repairs }; }
+    catch (error) {
+      const repaired = repairs.length < MAX_JSON_REPAIRS ? repairJsonOnce(candidate, error) : null;
+      if (!repaired) throw error;
+      candidate = repaired.text;
+      repairs.push(repaired.name);
+    }
+  }
+}
 
 /**
  * Structural description of a JSON parse failure — length, first/last character class and the parse
@@ -114,7 +158,9 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
   }
 
   try {
-    const json: unknown = JSON.parse(text);
+    const { json, repairs } = parseModelJson(text);
+    // Names only, never content: the repair itself is a single closing character.
+    if (repairs.length) logger.warn(`[STUDIO] A(z) "${input.step}" válaszának sorosítása javítva: ${repairs.join("; ")}.`);
     return { json, usage: response.usage };
   } catch (error) {
     // Shape only, never content: the raw text may itself be a prompt injection. Mérve (§7o/2, 6–7.

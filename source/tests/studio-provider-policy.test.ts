@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createStudioStepProvider, STUDIO_STEP_POLICY, studioConnection } from "../server/ai/studio-provider";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
-import { callStepModel, stepDeadlineMs, jsonFailureShape } from "../server/studio/run-step";
+import { callStepModel, stepDeadlineMs, jsonFailureShape, parseModelJson } from "../server/studio/run-step";
 import { AIProviderTimeoutError } from "../server/ai/AIProvider";
 
 /*
@@ -79,6 +79,28 @@ test("a bank/animátor kérése egyszer megy el: az SDK nem próbálja újra cse
     await assert.rejects(callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" }));
     assert.equal(fetches, 1, `${step}: egyetlen kérés, rejtett újrapróbálás nélkül`);
   }
+});
+
+// Spec §7o/3 (mérve, szondával reprodukálva JSON-módban, a bájtok a hibapozíciónál kiolvasva):
+// 12 glm-válaszból 2 volt törött, két pontosan azonosított osztályban. Mindkettő a LEZÁRÓ karakter
+// hibája — a tartalmat nem érinti —, ezért determinisztikusan helyreállítható, újraelemzéssel igazolva.
+test("a mért sorosítási hibák javulnak modellkör nélkül; a tartalom változatlan", () => {
+  // 1. osztály: a sztringet magyar záró idézőjel zárja, ezért a sorvég a sztringbe kerül.
+  const curly = '{"feedback":["Sok gyökér behatol.","Természetesen hat, például repedésekben növő fák.”\n]}';
+  assert.throws(() => JSON.parse(curly), /Bad control character/);
+  const fixed = parseModelJson(curly);
+  assert.deepEqual(fixed.json, { feedback: ["Sok gyökér behatol.", "Természetesen hat, például repedésekben növő fák."] });
+  assert.deepEqual(fixed.repairs, ["gépelt záró idézőjel lezárásként"]);
+  // 2. osztály: a kész JSON után csonka kerítés marad.
+  const junk = '{"notes":[]}\n``';
+  assert.deepEqual(parseModelJson(junk), { json: { notes: [] }, repairs: ["JSON utáni szemét eldobva"] });
+  // Érvényes válasz: érintetlen, javítás nélkül — a magyar idézőjel a sztringen BELÜL marad.
+  const legit = '{"a":"Azt mondta: „igen”.","b":"idézet: „kész”"}';
+  assert.deepEqual(parseModelJson(legit), { json: { a: "Azt mondta: „igen”.", b: "idézet: „kész”" }, repairs: [] });
+  // Amit nem lehet biztonságosan helyreállítani, az az EREDETI hibával bukik — nem találunk ki tartalmat.
+  assert.throws(() => parseModelJson('{"a":}'), SyntaxError);
+  assert.throws(() => parseModelJson('{"a":"csonka'), SyntaxError);
+  assert.throws(() => parseModelJson('{"a":1,,"b":2}'), SyntaxError);
 });
 
 // Spec §7o/2 (mérve, 6–7. mérés): a puszta hossz nem mondta meg, csonka válasz vagy hibás sorosítás
