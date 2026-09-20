@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import UserFileList from "@/components/UserFileList";
 import CosmicBackground from "@/components/CosmicBackground";
+import { homeFilesQueryOptions } from "@/lib/home-files-query";
 
 interface HtmlFileApi {
   id: string;
@@ -20,12 +21,14 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { isAdmin } = useAuth();
 
-  const { data: files = [], isLoading, isError, isFetching, refetch } = useQuery<HtmlFileApi[]>({
-    queryKey: ["/api/html-files"],
-    retry: 2,
-    refetchOnReconnect: true,
-    refetchOnWindowFocus: true,
-  });
+  const { data: files = [], isLoading, isError, isFetching, refetch } = useQuery<HtmlFileApi[]>(homeFilesQueryOptions());
+
+  // Spec 2026-09-20: böngésző-visszalépés (bfcache) után is friss listát mutatunk.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) void refetch(); };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [refetch]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -56,6 +59,7 @@ export default function Home() {
           isError={isError}
           isRetrying={isFetching}
           onRetry={() => { void refetch(); }}
+          onRefresh={() => { void refetch(); }}
           onViewFile={handleViewFile}
           onToggleView={isAdmin ? () => setLocation("/admin") : undefined}
         />

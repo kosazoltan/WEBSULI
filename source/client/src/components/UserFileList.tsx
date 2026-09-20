@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, memo } from "react";
-import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2 } from "lucide-react";
+import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,8 @@ interface UserFileListProps {
   isError?: boolean;
   isRetrying?: boolean;
   onRetry?: () => void;
+  /** Spec 2026-09-20: látható „Frissítés” gomb — mobilon nincs megbízható fókusz-esemény. */
+  onRefresh?: () => void;
   onViewFile: (file: HtmlFileApi) => void;
   onToggleView?: () => void;
 }
@@ -69,7 +71,7 @@ const cardVariants = {
   },
 };
 
-function UserFileList({ files, isLoading, isError = false, isRetrying = false, onRetry, onViewFile, onToggleView }: UserFileListProps) {
+function UserFileList({ files, isLoading, isError = false, isRetrying = false, onRetry, onRefresh, onViewFile, onToggleView }: UserFileListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -279,9 +281,9 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
           </div>
         </div>
 
-        {/* Search */}
-        <div className="max-w-md mx-auto mb-4">
-          <div className="relative">
+        {/* Search + Frissítés (spec 2026-09-20) */}
+        <div className="max-w-md mx-auto mb-4 flex items-center gap-2">
+          <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70 z-10" />
             <Input
               placeholder="Keresés…"
@@ -291,6 +293,20 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               data-testid="input-search"
             />
           </div>
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={isRetrying}
+              className="h-8 shrink-0 bg-white/20 border-white/40 text-white hover:bg-white/30 min-w-11"
+              aria-label="Tananyaglista frissítése"
+              title="Tananyaglista frissítése"
+              data-testid="button-refresh-files"
+            >
+              <RefreshCw className={isRetrying ? "w-3.5 h-3.5 animate-spin" : "w-3.5 h-3.5"} />
+            </Button>
+          )}
         </div>
 
         {/* Tananyagok */}

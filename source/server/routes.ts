@@ -2788,8 +2788,9 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       const cachedFiles = cache.get();
       
       if (cachedFiles) {
-        // Set cache headers for client-side caching
-        res.set('Cache-Control', 'public, max-age=60'); // 1 minute client cache
+        // Spec 2026-09-20: nincs max-age — a mobil böngésző 60 mp-ig a saját cache-éből mutatta a régi
+        // listát; a no-cache + ETag (express) 304-gyel olcsó marad, de mindig a friss listát adja.
+        res.set('Cache-Control', 'no-cache, must-revalidate');
         return res.json(cachedFiles);
       }
 
@@ -2799,8 +2800,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       // Store in cache
       cache.set(files);
       
-      // Set cache headers
-      res.set('Cache-Control', 'public, max-age=60'); // 1 minute client cache
+      res.set('Cache-Control', 'no-cache, must-revalidate');
       res.json(files);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
