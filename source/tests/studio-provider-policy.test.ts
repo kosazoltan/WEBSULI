@@ -64,6 +64,19 @@ test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async
   }
 });
 
+// Spec §7o (mérve, 4. mérés): a bank-hívás időtúllépését az SDK kétszer csendben újrapróbálta (3 × 240 s).
+test("a bank/animátor kérése egyszer megy el: az SDK nem próbálja újra csendben (maxRetries 0)", async t => {
+  withEnv(t, { OPENROUTER_API_KEY: "test-placeholder" });
+  let fetches = 0;
+  t.mock.method(globalThis, "fetch", async () => { fetches++; return new Response("upstream error", { status: 500 }); });
+  for (const step of ["bank", "animator"] as const) {
+    fetches = 0;
+    const provider = createStudioStepProvider("z-ai/glm-5.3-flash", step);
+    await assert.rejects(callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" }));
+    assert.equal(fetches, 1, `${step}: egyetlen kérés, rejtett újrapróbálás nélkül`);
+  }
+});
+
 test("a lektor szabályzata változatlan; szabályzat nélküli lépés (author) nem kap effortot", async t => {
   withEnv(t, { OPENROUTER_API_KEY: "test-placeholder", AI_INTEGRATIONS_OPENAI_API_KEY: "test-placeholder" });
   assert.equal(STUDIO_STEP_POLICY.author, undefined);

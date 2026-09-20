@@ -36,11 +36,12 @@ test("every studio step has a default model", () => {
   }
 });
 
-test("spec 2026-09-19: bank és ábrák glm-5.3-flash-en, deepseek tartalékkal; a tervkészítő Opus 5 közvetlen Anthropicon", () => {
+test("spec 2026-09-19: bank és ábrák glm-5.3-flash-en; a bank tartaléka a mentőmodell (spec §7o, mérve 2026-09-20); a tervkészítő Opus 5 közvetlen Anthropicon", () => {
   assert.equal(resolveStudioModel("animator", {}), "z-ai/glm-5.3-flash");
   assert.equal(resolveStudioModel("bank", {}), "z-ai/glm-5.3-flash");
   assert.equal(FALLBACK_MODELS.animator, "deepseek/deepseek-v4-flash");
-  assert.equal(FALLBACK_MODELS.bank, "deepseek/deepseek-v4-flash");
+  // Spec §7o: a deepseek bank-tartalék 4/5-ször a mentőkörbe futott 2–10 perc után → egyből terra.
+  assert.equal(FALLBACK_MODELS.bank, "gpt-5.6-terra");
   assert.equal(resolveStudioModel("pedagogue", {}), "claude-opus-5");
   assert.equal(providerForModel("claude-opus-5"), "anthropic");
   assert.equal(FALLBACK_MODELS.pedagogue, "grok-4.6");

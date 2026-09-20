@@ -21,7 +21,7 @@ import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-i
 import { withRoleSkill } from "../server/studio/role-skills";
 import { visualWorld } from "../shared/lesson-visuals";
 import { fromMapBody } from "../server/studio/from-map-body";
-import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
+import { AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import { lessonSchema } from "../shared/lesson-schema";
 import { classifyNotes, type LektorNote } from "../server/studio/lektor";
@@ -138,6 +138,26 @@ test("bank provider failure preserves its cause and the saved teaching without p
   assert.match(deps.store.jobs.get("bank-provider-failure")!.error!, /Request timed out after 180000ms/);
   assert.deepEqual(deps.store.jobs.get("bank-provider-failure")!.output, saved);
   assert.equal(publications, 0);
+});
+
+// Spec §7o (mérve, 4. mérés): a bank-hívás időtúllépése a modell lassúsága → a következő kísérlet/modell
+// kapja meg (bukott kísérlet), nem a futás vége; a csomag-ciklus végigmegy az összes kísérleten.
+test("bank timeout is a failed attempt that moves on to the next model, not a job-killing provider failure", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const saved = { lesson: { ...lesson, experience: undefined }, methodVersion: "fusion-7.4-4", experienceCheckpoint: { hash: "fusion-7.4-4", parts: {} } };
+  deps.store.seed({ id: "bank-timeout", mapId: "m1", step: "animator", status: "pending", lessonId: "draft", output: saved });
+  const models: string[] = [];
+  deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+    chat: async () => { models.push(model); throw new AIProviderTimeoutError("stub", 240_000); },
+  } as unknown as IAIProvider);
+  const result = await runPipelineStep("bank-timeout", deps);
+  assert.equal(result.ok, false);
+  const error = deps.store.jobs.get("bank-timeout")!.error!;
+  assert.match(error, /javító kör után sem megfelelő/, "a csomag-ciklus futott végig, nem a szolgáltatói hiba lépett ki");
+  assert.match(error, /időtúllépés/);
+  assert.ok(models.length >= 4, `minden kísérlet sorra került (${models.length})`);
+  assert.ok(models.includes("gpt-5.6-terra"), "a tartalék és a mentőkör az erős modellen fut");
 });
 
 for (const missingCall of [1, 2]) {

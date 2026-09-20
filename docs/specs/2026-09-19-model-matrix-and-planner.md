@@ -244,6 +244,32 @@ ezért ugyanebben a PR-ban a banképítő `onAttemptFailure` visszahívást ad, 
 (`Bankcsomag bukott kísérlet … N. fejezet, K. kísérlet: <ok>`). A következő mérés ebből mondja meg, mi bukik.
 Mérleg: 0 csak-bank kör (−4–5 perc), de a frissen épülő bank ára a modell-szórás — az idő nem a skill, hanem a
 tartalék/mentő láncolás (2 glm + deepseek + terra sorban egy csomagra ≈ 5–8 perc).
+
+## 7o. Az animátor fázis hossza — gyökérok és javítás (tulajdonosi utasítás 2026-09-20 délután: „nem megengedett")
+**Mérés (23 futás animátor-adata, `lesson_workflow_runs.snapshot.visits`):** a friss bank kimenete 51–79k token,
+az idő mégis 245–1 261 s között szór. Minden lassú fázisban (936, 1 052, 1 134, 1 261 s) van `infrastructure`
+lelet; a gyorsakban (244–351 s) nincs. A 4. mérés naplója (tartalék → mentőkör időrések): **364 s, 602 s**; a
+regressziós 1. futásé **558 s**; egy sikeres tartalék-hívás (mérés 13) 119 s.
+**Gyökérok:** a bank/animátor OpenRouter-kliens a lépés 240 s-os időkorlátját kapja, de `maxRetries` nélkül — az
+OpenAI SDK az időtúllépést alapból **kétszer csendben újrapróbálja** (a lektornál ez már ki volt kapcsolva: „not
+three hidden 180-second attempts"). A rések pontosan illeszkednek: 364 ≈ 240 + 124; 602 ≈ 240 + 240 + 122;
+558 ≈ 240 + 240 + 78. A lassú hívó a deepseek tartalék, amely a 24k-s kimeneti keretig futó válaszokat ad: a
+5 mért tartalék-hívásból 4 a mentőkörbe futott (2–10 perc múlva), 1 sikerült.
+**Javítás (kód, három elem):**
+1. `STUDIO_STEP_POLICY` lépései (bank, animator, gateHelper, quizPolish): `maxRetries: 0` — egy kérés = egy
+   kísérlet, a lépés időkorlátja tényleg 240 s (teszt: `studio-provider-policy` „egyetlen kérés”).
+2. A bank-hívás időtúllépése (`AIProviderTimeoutError` ok) **bukott kísérlet** → következő modell; más szolgáltatói
+   hiba (429/5xx/kulcs) változatlanul kilép a resume-útra (teszt: `lesson-pipeline-runner` „bank timeout is a
+   failed attempt”; a meglévő „preserves its cause” teszt változatlan).
+3. `FALLBACK_MODELS.bank = BANK_RESCUE_MODEL` (terra): a bukott olcsó kísérletek után nem ér meg egy második
+   olcsó családot 2–10 percig végigvárni (`models-routing` teszt frissítve, dokumentált spec-változás).
+**Várt hatás:** egy rossz csomag ára legfeljebb 2 × glm (≈ 1 perc) + 240 s + terra (≈ 1 perc) ≈ 6 perc a korábbi
+12–15 helyett; a tipikus eset (nincs időtúllépés) változatlanul 4–6 perc a teljes bankra.
+**Elfogadás:** WHEN friss bankot építő lecke fut egyedül THEN az animátor fázis ≤ 600 s, és egyetlen bank-hívás
+sem tart 240 s-nál tovább (a WARN-napló mutatja a bukott kísérlet okát és idejét).
+| Mérés | Térkép | Eredmény | Animátor | Tartalék/mentő | Megjegyzés |
+| --- | --- | --- | --- | --- | --- |
+| 5. | 49 fogalmas biológia (08af437e), friss bank | _(mérés alatt)_ | | | |
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű
