@@ -138,7 +138,7 @@ export default function Preview() {
     <div className={isLesson ? "min-h-screen bg-background" : "h-screen supports-[height:100dvh]:h-dvh flex flex-col overflow-hidden bg-background"}>
       {/* The lesson owns sticky navigation; a fixed preview toolbar would cover its tabs. */}
       <div className="relative shrink-0 z-50 border-b bg-card/95 backdrop-blur">
-        <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 flex items-center justify-between gap-2">
+        <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 flex flex-wrap items-center justify-between gap-2 min-w-0">
           <Button
             variant="ghost"
             size="sm"
@@ -160,7 +160,7 @@ export default function Preview() {
           </div>
           
           {/* URL Display + Action Buttons */}
-          <div className="hidden sm:flex items-center gap-2 flex-1 max-w-xl">
+          <div className="hidden sm:flex items-center gap-2 flex-1 min-w-0 max-w-xl">
             <div className="flex-1 bg-muted/50 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground truncate border">
               {fullUrl}
             </div>
