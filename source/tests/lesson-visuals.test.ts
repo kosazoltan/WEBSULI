@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { VISUAL_WORLDS, VISUAL_WORLD_IDS, pickVisualWorld, visualWorld, splitEmphasis, stripEmphasis } from "../shared/lesson-visuals";
+import { VISUAL_WORLDS, VISUAL_WORLD_IDS, pickVisualWorld, visualWorld, splitEmphasis, stripEmphasis, harmoniseSectionEmojis } from "../shared/lesson-visuals";
 import { EXPERIENCE_THEMES, experienceSchema } from "../shared/lesson-experience";
 import { outlineSchema, buildPedagoguePrompt, buildAuthorPrompt, buildLektorPrompt } from "../server/studio/step-io";
 import { lessonSchema } from "../shared/lesson-schema";
@@ -29,6 +29,15 @@ test("nyolc világ, mind téma is; a paletta a CSS-ben is megvan; véletlen húz
   assert.ok((VISUAL_WORLD_IDS as readonly string[]).includes(pickVisualWorld().id), "seed nélkül is érvényes világ");
   assert.notEqual(pickVisualWorld(3, "candy").id, "candy");
   assert.equal(visualWorld("nincs"), undefined);
+});
+
+test("világváltásnál a javasolt világ emojijai a választott világ készletére cserélődnek, a témához illő saját emoji marad", () => {
+  const dojo = visualWorld("dojo")!, meadow = visualWorld("meadow")!;
+  const sections = [{ emoji: "🥷" }, { emoji: "🌊" }, { emoji: "⚔️" }, {}, { emoji: "🥋" }];
+  const out = harmoniseSectionEmojis(sections, meadow, dojo);
+  assert.deepEqual(out.map((s) => s.emoji), [meadow.emojis[0], "🌊", meadow.emojis[1], undefined, meadow.emojis[2]]);
+  assert.deepEqual(harmoniseSectionEmojis(sections, dojo, dojo).map((s) => s.emoji), sections.map((s) => s.emoji), "azonos világ: változatlan");
+  assert.deepEqual(harmoniseSectionEmojis(sections, meadow).map((s) => s.emoji), sections.map((s) => s.emoji), "javaslat nélkül változatlan");
 });
 
 test("**kiemelés** felbontása és eltávolítása (felolvasás)", () => {

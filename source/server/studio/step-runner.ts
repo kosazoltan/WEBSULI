@@ -42,7 +42,7 @@ import {
   type OutlineCoverage,
 } from "./step-io";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
-import { pickVisualWorld, visualWorld, type VisualWorldId } from "../../shared/lesson-visuals";
+import { pickVisualWorld, visualWorld, harmoniseSectionEmojis, type VisualWorldId } from "../../shared/lesson-visuals";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
@@ -574,8 +574,11 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const coverage = outlineCoversMap(parsed.data.sections, map.concepts);
       if (!coverage.ok) return fail(store, job, coverageReason(coverage));
 
-      const chosenWorld = parsed.data.visual?.world ?? ((input as { visual?: string }).visual as VisualWorldId | undefined) ?? pickVisualWorld().id;
-      await store.saveStep(job.id, successPatch({ ...job.output, outline: parsed.data, coverage, visual: { world: chosenWorld } }));
+      const proposedId = (input as { visual?: string }).visual as VisualWorldId | undefined;
+      const chosenWorld = parsed.data.visual?.world ?? proposedId ?? pickVisualWorld().id;
+      // Mérve (JPG regresszió 29a8b8e6): világváltásnál a javasolt világ emojijai maradtak → harmonizálás.
+      const harmonised = { ...parsed.data, sections: harmoniseSectionEmojis(parsed.data.sections, visualWorld(chosenWorld) ?? pickVisualWorld(), visualWorld(proposedId)) };
+      await store.saveStep(job.id, successPatch({ ...job.output, outline: harmonised, coverage, visual: { world: chosenWorld } }));
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
 
