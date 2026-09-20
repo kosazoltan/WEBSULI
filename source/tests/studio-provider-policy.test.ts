@@ -97,6 +97,17 @@ test("a mért sorosítási hibák javulnak modellkör nélkül; a tartalom vált
   // Érvényes válasz: érintetlen, javítás nélkül — a magyar idézőjel a sztringen BELÜL marad.
   const legit = '{"a":"Azt mondta: „igen”.","b":"idézet: „kész”"}';
   assert.deepEqual(parseModelJson(legit), { json: { a: "Azt mondta: „igen”.", b: "idézet: „kész”" }, repairs: [] });
+  // 3. osztály: a belső idézet „-vel nyílik, de egyenes "-rel zárul → idő előtt lezárja a JSON-sztringet.
+  const inner = '{"q":"Használd a „mállás" és a „talajréteg" szavakat!","r":1}';
+  assert.throws(() => JSON.parse(inner), /Expected ',' or/);
+  const innerFixed = parseModelJson(inner);
+  assert.deepEqual(innerFixed.json, { q: 'Használd a „mállás" és a „talajréteg" szavakat!', r: 1 });
+  assert.deepEqual(innerFixed.repairs, ["sztringen belüli idézőjel escape-elve", "sztringen belüli idézőjel escape-elve"]);
+  const paren = '{"d":"Hiányos állítás (pl. „A szél eróziót okoz") javítása."}';
+  assert.deepEqual(parseModelJson(paren).json, { d: 'Hiányos állítás (pl. „A szél eróziót okoz") javítása.' });
+  // Hiányzó vessző két mező között NEM javul össze egyetlen mezővé: az eredeti hiba bukik.
+  assert.throws(() => parseModelJson('{"a":"x" "b":"y"}'), SyntaxError);
+  assert.throws(() => parseModelJson('{"a":"x"\n"b":"y"}'), SyntaxError);
   // Amit nem lehet biztonságosan helyreállítani, az az EREDETI hibával bukik — nem találunk ki tartalmat.
   assert.throws(() => parseModelJson('{"a":}'), SyntaxError);
   assert.throws(() => parseModelJson('{"a":"csonka'), SyntaxError);

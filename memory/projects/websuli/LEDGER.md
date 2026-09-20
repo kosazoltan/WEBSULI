@@ -391,3 +391,19 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Korlátozás (mérve, nem elhallgatva):** JSON-mód mellett is előfordul törött válasz — az OpenRouter `json_object` a glm útvonalon nem bizonyítottan kikényszerített. A 8. mérés az új diagnosztikával bizonyította az okot: „7 330 karakter, lezárt, de középen hibás (a modell sorosítása), 915. pozíció” — tehát nem csonkolás; egy másik csomag valódi hosszkorlátra futott. Mindkettő egy újrakísérlésbe kerül, és a következő kísérlet átment. Heurisztikus JSON-javítást szándékosan nem építettünk: tanulói tartalmat csendben elronthat, a nyereség egy kísérlet a tízből.
 
 **8. mérés (run 0a262308):** `done` 756 s, 12 fejezetes lecke `bfb43d92` (meadow, 45/75/26); animátor 1. kör 156 s, a csak-bank kör 260 s **ábra-modellhívás nélkül** (a naplóban 0 ilyen hívás; korábban ugyanitt 722 s ment el rá).
+
+
+## 2026-09-20 (délután, 5.) — A 915. pozíció felderítve: három sorosítási hibaosztály, determinisztikus javítással
+
+**Kérés:** „Akkor a 915. pozíciónál javítsd a metódust” — a maradék törött JSON tényleges okát kellett megtalálni és javítani.
+
+**Diagnózis (bájt-szintű bizonyíték):** a nyers választ nem tároljuk, ezért szondával reprodukáltam JSON-módban, termelési paraméterekkel, és a hibapozíciónál kiolvastam a karakterkódokat. Három osztály:
+1. a sztringet **magyar záró idézőjel (U+201D)** zárja a `"` helyett → a sorvég vezérlőkarakterként a sztringbe kerül (`Bad control character`);
+2. a kész JSON után **csonka ``` kerítés** marad (`Unexpected non-whitespace character after JSON`);
+3. a belső idézet **`„`-vel nyílik, de egyenes `"`-rel zárul** → idő előtt lezárja a JSON-sztringet (`Expected ',' or '}'`). Ez volt a 9. mérés két bukásának oka (744. és 5 940. pozíció), és egy válaszban akár hétszer előfordul.
+
+**Javítás (PR #101):** `parseModelJson` — mindhárom a HATÁROLÓ karakter hibája, ezért helyreállítható tartalomvesztés nélkül; minden lépés után újraelemzés (max 8), és ami nem értelmezhető, az az EREDETI hibával bukik. Nem heurisztikus javító: a hiányzó vessző (`{"a":"x" "b":"y"}`) szándékosan NEM javul össze, a helyesen lezárt `„idézet”` érintetlen — tesztek őrzik.
+
+**Verifikáció:** 16 válaszos szonda a valódi javító úttal: 5 javult modellkör nélkül, és a maradék egyetlen bukás valódi csonkolás volt (ott a modellkör a helyes válasz) — 16-ból 15 sikerül elsőre. Kapuk zöldek.
+
+**Tanulság:** ha egy modellhiba „középen törött JSON”, a bájtokat KI KELL olvasni — a három ok mind határoló-karakter volt, egyik sem igényelt tartalmi találgatást. A szonda (12–16 párhuzamos hívás termelési paraméterekkel) néhány centért ad bizonyítékot ott, ahol a napló tartalmat nem őrizhet.

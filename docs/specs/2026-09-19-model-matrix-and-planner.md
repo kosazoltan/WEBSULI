@@ -329,15 +329,25 @@ paraméterekkel, és a hibapozíciónál kiolvastam a bájtokat. **12 válaszbó
    vezérlőkarakterként került bele. Ez ugyanaz az osztály, mint a 8. mérés 915. pozíciója.
 2. `Unexpected non-whitespace character after JSON … position 9750` — a bájtok: `… } \n ``` — a kész JSON után
    **csonka ```` ``` ```` kerítés** maradt (a `stripJsonFences` csak a szöveg ELEJÉN álló kerítést veszi le).
-**Javítás (`parseModelJson`, run-step):** mindkettő a LEZÁRÓ karakter hibája, a tartalmat nem érinti, ezért
+3. (második szonda, 16 válasz) `Expected ',' or '}' after property value … position 1826` — a bájtok:
+   `Használd a „mállás" és a „talajréteg" szavakat!`. A modell a belső idézetet **magyar nyitó idézőjellel
+   (`„`, U+201E) kezdi, de EGYENES `"`-rel zárja**, ami idő előtt lezárja a JSON-sztringet. Egy válaszban
+   akár hétszer is előfordul. Ez volt a 9. mérés két bukásának oka is (744. és 5 940. pozíció).
+**Javítás (`parseModelJson`, run-step):** mindhárom a HATÁROLÓ karakter hibája, a tartalmat nem érinti, ezért
 determinisztikusan helyreállítható — (1) ha a hibapozíció előtti karakter PONTOSAN U+201D, az lesz a záró `"`;
-(2) „after JSON" hibánál a JSON a hibapozícióig érvényes, a szemét lekerül. Minden lépés után ÚJRA elemzünk
-(legfeljebb 8 javítás); amit nem sikerül értelmezni, az az EREDETI hibával bukik. Ez **nem** heurisztikus
-JSON-javító: nem talál ki tartalmat, nem cserél idézőjelet a sztringen belül (teszt őrzi: a helyesen lezárt
-`„idézet”` érintetlen marad), és a `{"a":}`, `{"a":"csonka`, `{"a":1,,"b":2}` továbbra is bukik. A javítás ténye
-WARN-nal a naplóba kerül (csak a javítás NEVE, tartalom nélkül).
-**Elfogadás:** WHEN a modell a sztringet U+201D-dal zárja vagy a JSON után szemetet hagy THEN a lépés
-modellkör nélkül folytatódik a helyes tartalommal; WHEN a hiba más THEN az eredeti hibaüzenet bukik.
+(2) „after JSON" hibánál a JSON a hibapozícióig érvényes, a szemét lekerül; (3) elválasztót váró hibánál a
+hibapozíció előtti `"` a sztring TARTALMA, ezért escape-elődik — de csak akkor, ha a hibapozíción nem újabb
+idézőjel áll (az hiányzó vessző lenne két mező között, és két mezőt vonna össze). Minden lépés után ÚJRA
+elemzünk (legfeljebb 8 javítás); amit nem sikerül értelmezni, az az EREDETI hibával bukik. Ez **nem**
+heurisztikus JSON-javító: nem talál ki és nem töröl tartalmat, a helyesen lezárt `„idézet”` érintetlen marad,
+és a `{"a":}`, `{"a":"csonka`, `{"a":1,,"b":2}`, valamint a hiányzó vessző (`{"a":"x" "b":"y"}`) továbbra is
+bukik — mindezt teszt őrzi. A javítás ténye WARN-nal a naplóba kerül (csak a javítás NEVE, tartalom nélkül).
+**Mérve (16 válaszos szonda a valódi javító úttal):** 5 válasz javult modellkör nélkül (3× belső idézőjel,
+egyikben hétszer, 2× záró szemét), és a maradék EGYETLEN bukás valódi csonkolás volt (`Unterminated string`,
+a hibapozíció = a szöveg vége) — ott a modellkör a helyes válasz. Azaz 16-ból 15 sikerül elsőre.
+**Elfogadás:** WHEN a modell a sztringet U+201D-dal zárja, a JSON után szemetet hagy, vagy a belső idézetet
+egyenes `"`-rel zárja THEN a lépés modellkör nélkül folytatódik a helyes tartalommal; WHEN a válasz csonka
+vagy a hiba más THEN az eredeti hibaüzenet bukik, és a kísérlet-lánc lép.
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű

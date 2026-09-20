@@ -29,6 +29,15 @@ function repairJsonOnce(text: string, error: unknown): { text: string; name: str
   if (text[position - 1] === CLOSING_QUOTE) {
     return { text: `${text.slice(0, position - 1)}"${text.slice(position)}`, name: "gépelt záró idézőjel lezárásként" };
   }
+  // 3. osztály: a belső idézetet a modell magyar nyitó idézőjellel („) kezdi, de EGYENES "-rel zárja,
+  // ami idő előtt lezárja a JSON-sztringet (pl. `Használd a „mállás" és a „talajréteg" szavakat!`).
+  // Ilyenkor a záró idézőjel után elválasztót várna az elemző. A karaktert escape-eljük — tartalmat
+  // nem törlünk és nem találunk ki. Ha a hibapozíción MAGA egy idézőjel áll, az hiányzó vessző lehet
+  // két mező között: ott nem nyúlunk hozzá (különben két mezőt vonnánk össze).
+  if (/Expected ',' or/.test(message) && text[position] !== '"') {
+    const head = text.slice(0, position).replace(/\s+$/, "");
+    if (head.endsWith('"')) return { text: `${head.slice(0, -1)}\\"${text.slice(head.length)}`, name: "sztringen belüli idézőjel escape-elve" };
+  }
   return null;
 }
 
