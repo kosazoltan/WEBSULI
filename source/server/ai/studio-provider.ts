@@ -70,6 +70,10 @@ export function createStudioStepProvider(model: string, step?: string) {
   if (!policy) return createStudioProvider(model);
   return createStudioProvider(model, policy.timeoutMs, policy.maxTokens, {
     reasoningEffort: policy.reasoningEffort,
+    // Mérve (4. mérés, run a9a4f683 és a regressziós futások): a tartalék bankmodell hívása 364 / 558 / 602 s-ig
+    // tartott — az SDK a 240 s-os időtúllépést alapból kétszer csendben újrapróbálta (3 × 240 s). A lépés
+    // időkorlátja EGY kérésre vonatkozik; az újrapróbálás a csomag-ciklus dolga (következő modell).
+    maxRetries: 0,
     // xAI only honours reasoning effort on the Responses API (verified for the lektor).
     ...(providerForModel(model) === "xai" ? { apiMode: "responses" } : {}),
   });

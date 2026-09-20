@@ -82,7 +82,10 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   pedagogue: "grok-4.6",
   // Author and reviewer have no cross-vendor fallback: retain independent review.
   animator: "deepseek/deepseek-v4-flash",
-  bank: "deepseek/deepseek-v4-flash",
+  // Mérve 2026-09-20 (5 tartalék-hívás négy futásban): a deepseek-v4-flash bankcsomagja 4/5-ször a
+  // mentőkörbe futott, 2–10 perc után. A tartalék ezért egyből az erős mentőmodell — a bukott olcsó
+  // kísérletek után nem ér meg egy második olcsó családot végigvárni.
+  bank: BANK_RESCUE_MODEL,
   gateHelper: "z-ai/glm-5.3-flash",
   quizPolish: "z-ai/glm-5.3-flash",
   // Spec 2026-09-19 (mérve élesben): a grok-4.6 lektor 480 s után időtúllépett és a

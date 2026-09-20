@@ -244,6 +244,48 @@ ezért ugyanebben a PR-ban a banképítő `onAttemptFailure` visszahívást ad, 
 (`Bankcsomag bukott kísérlet … N. fejezet, K. kísérlet: <ok>`). A következő mérés ebből mondja meg, mi bukik.
 Mérleg: 0 csak-bank kör (−4–5 perc), de a frissen épülő bank ára a modell-szórás — az idő nem a skill, hanem a
 tartalék/mentő láncolás (2 glm + deepseek + terra sorban egy csomagra ≈ 5–8 perc).
+
+## 7o. Az animátor fázis hossza — gyökérok és javítás (tulajdonosi utasítás 2026-09-20 délután: „nem megengedett")
+**Mérés (23 futás animátor-adata, `lesson_workflow_runs.snapshot.visits`):** a friss bank kimenete 51–79k token,
+az idő mégis 245–1 261 s között szór. Minden lassú fázisban (936, 1 052, 1 134, 1 261 s) van `infrastructure`
+lelet; a gyorsakban (244–351 s) nincs. A 4. mérés naplója (tartalék → mentőkör időrések): **364 s, 602 s**; a
+regressziós 1. futásé **558 s**; egy sikeres tartalék-hívás (mérés 13) 119 s.
+**Gyökérok:** a bank/animátor OpenRouter-kliens a lépés 240 s-os időkorlátját kapja, de `maxRetries` nélkül — az
+OpenAI SDK az időtúllépést alapból **kétszer csendben újrapróbálja** (a lektornál ez már ki volt kapcsolva: „not
+three hidden 180-second attempts"). A rések pontosan illeszkednek: 364 ≈ 240 + 124; 602 ≈ 240 + 240 + 122;
+558 ≈ 240 + 240 + 78. A lassú hívó a deepseek tartalék, amely a 24k-s kimeneti keretig futó válaszokat ad: a
+5 mért tartalék-hívásból 4 a mentőkörbe futott (2–10 perc múlva), 1 sikerült.
+**Javítás (kód, három elem):**
+1. `STUDIO_STEP_POLICY` lépései (bank, animator, gateHelper, quizPolish): `maxRetries: 0` — egy kérés = egy
+   kísérlet, a lépés időkorlátja tényleg 240 s (teszt: `studio-provider-policy` „egyetlen kérés”).
+2. A bank-hívás időtúllépése (`AIProviderTimeoutError` ok) **bukott kísérlet** → következő modell; más szolgáltatói
+   hiba (429/5xx/kulcs) változatlanul kilép a resume-útra (teszt: `lesson-pipeline-runner` „bank timeout is a
+   failed attempt”; a meglévő „preserves its cause” teszt változatlan).
+3. `FALLBACK_MODELS.bank = BANK_RESCUE_MODEL` (terra): a bukott olcsó kísérletek után nem ér meg egy második
+   olcsó családot 2–10 percig végigvárni (`models-routing` teszt frissítve, dokumentált spec-változás).
+**Várt hatás:** egy rossz csomag ára legfeljebb 2 × glm (≈ 1 perc) + 240 s + terra (≈ 1 perc) ≈ 6 perc a korábbi
+12–15 helyett; a tipikus eset (nincs időtúllépés) változatlanul 4–6 perc a teljes bankra.
+**Második gyökérok (5. mérés, run a0eb2bed, a fenti három javítással futott):** a csak-bank körben az ábra-modellhívás
+(glm) **609 s**-ig futott a 240 s-os kliens-timeout és `maxRetries: 0` ellenére, majd „hosszkorlát”-tal bukott; a
+deepseek tartalék 113 s után ugyanígy. A forrásból (`node_modules/openai/client.js`, `fetchWithTimeout`): az SDK az
+időzítőt a `finally`-ban törli, amint a `fetch` feloldódik — vagyis a **fejlécek** érkezésekor; a törzs (a lassú,
+24k tokenig futó generálás) olvasása korlát nélkül fut, az OpenRouter pedig azonnal küld fejlécet. A lektor külső
+`AbortSignal.timeout` határideje ezt már áthidalta (a jelzés a törzs olvasását is megszakítja) — csak a lektoré volt.
+**Javítás (kód, két további elem):**
+4. `run-step.ts` `stepDeadlineMs(step)`: minden szabályzatos lépés (bank/animator 240 s, gateHelper/quizPolish 180 s,
+   pedagogue 300 s, lektor a sajátja) külső, törzsre is érvényes határidőt kap; lejáratkor `AIProviderTimeoutError`
+   ok (teszt: `studio-provider-policy` „külső határidő … törzs olvasását is megszakítja”).
+5. Csak-bank körben (a lektor banktételekre küldött vissza) az ábra-modellhívás kimarad: a szöveg lektorált és
+   változatlan, a hívás a mérésben 722 s-ot vitt és semmit nem adott (teszt: `lesson-pipeline-runner` „csak-bank
+   körben nincs ábra-modellhívás”).
+**Elfogadás:** WHEN friss bankot építő lecke fut egyedül THEN az animátor fázis ≤ 600 s, és egyetlen modellhívás sem
+tart a lépés határidejénél tovább (a WARN-napló mutatja a bukott kísérlet okát és idejét); WHEN csak-bank kör fut
+THEN nincs ábra-modellhívás.
+| Mérés | Térkép | Eredmény | Animátor | Tartalék/mentő | Megjegyzés |
+| --- | --- | --- | --- | --- | --- |
+| 5. (1–3. javítás, a 4–5. még nem) | 49 fogalmas biológia (08af437e), friss bank, 12 fejezet | `done` 2 415 s, lecke `a82fb9d8`, meadow | 1. kör **480 s** (170→650); 2. kör 820 s (ebből 722 s a felesleges ábra-hívás); 3. kör ≈ 510 s | glm bukások oka a naplóban (érvénytelen JSON, objektum-opció, hiányos minta), tartalék egyből terra ≈ 20–60 s | az 1. kör friss bankja teljesíti a ≤ 600 s célt; a 2. kör mutatta meg a második gyökérokot |
+| 6. (1–5. javítás, run cf69dfdd, egyedül) | JPG-feltöltés „A talaj”, új térkép + friss bank, 11 fejezet | `done` **521 s** a teljes lánc (OCR → közzététel), lecke `5fd2b5ae`, space világ, 11/11 emoji | **249 s** (102k be / 42k ki) | 3 bukott glm-kísérlet (2 érvénytelen JSON, 1 hiányos minta), mind a következő kísérleten átment; 0 tartalék, 0 mentőkör | lektor 0 jegyzet, kapu elsőre; az elfogadás teljesül |
+Összevetés friss bankra: 4. mérés 1 261 s → 6. mérés 249 s (−80 %); a teljes lánc 1 513 s → 521 s.
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű

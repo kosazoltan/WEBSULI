@@ -21,7 +21,7 @@ import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-i
 import { withRoleSkill } from "../server/studio/role-skills";
 import { visualWorld } from "../shared/lesson-visuals";
 import { fromMapBody } from "../server/studio/from-map-body";
-import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
+import { AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import { lessonSchema } from "../shared/lesson-schema";
 import { classifyNotes, type LektorNote } from "../server/studio/lektor";
@@ -138,6 +138,26 @@ test("bank provider failure preserves its cause and the saved teaching without p
   assert.match(deps.store.jobs.get("bank-provider-failure")!.error!, /Request timed out after 180000ms/);
   assert.deepEqual(deps.store.jobs.get("bank-provider-failure")!.output, saved);
   assert.equal(publications, 0);
+});
+
+// Spec §7o (mérve, 4. mérés): a bank-hívás időtúllépése a modell lassúsága → a következő kísérlet/modell
+// kapja meg (bukott kísérlet), nem a futás vége; a csomag-ciklus végigmegy az összes kísérleten.
+test("bank timeout is a failed attempt that moves on to the next model, not a job-killing provider failure", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const saved = { lesson: { ...lesson, experience: undefined }, methodVersion: "fusion-7.4-4", experienceCheckpoint: { hash: "fusion-7.4-4", parts: {} } };
+  deps.store.seed({ id: "bank-timeout", mapId: "m1", step: "animator", status: "pending", lessonId: "draft", output: saved });
+  const models: string[] = [];
+  deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+    chat: async () => { models.push(model); throw new AIProviderTimeoutError("stub", 240_000); },
+  } as unknown as IAIProvider);
+  const result = await runPipelineStep("bank-timeout", deps);
+  assert.equal(result.ok, false);
+  const error = deps.store.jobs.get("bank-timeout")!.error!;
+  assert.match(error, /javító kör után sem megfelelő/, "a csomag-ciklus futott végig, nem a szolgáltatói hiba lépett ki");
+  assert.match(error, /időtúllépés/);
+  assert.ok(models.length >= 4, `minden kísérlet sorra került (${models.length})`);
+  assert.ok(models.includes("gpt-5.6-terra"), "a tartalék és a mentőkör az erős modellen fut");
 });
 
 for (const missingCall of [1, 2]) {
@@ -608,6 +628,35 @@ test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra 
   const missing = structuredClone(lesson);
   missing.sections.push({ ...missing.sections[0], blocks: missing.sections[0].blocks.filter(b => b.kind !== "animate") });
   assert.equal(canReuseLessonVisuals(missing), false);
+});
+
+// Spec §7o (mérve, 5. mérés, run a0eb2bed): csak-bank körben az ábra-modellhívás újra lefutott (glm 609 s +
+// deepseek 113 s, mindkettő hosszkorlát) és semmit nem adott — a lektorált szöveg és ábrái változatlanok maradnak.
+test("csak-bank körben nincs ábra-modellhívás akkor sem, ha az ábrák nem újrahasznosíthatók", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  // Nem renderelhető ábra (egylépéses folyamat): az ábra önmagában nem újrahasznosítható, a tanítás változatlan.
+  for (const block of lesson.sections[0].blocks) if (block.kind === "animate") block.params = { steps: ["egyetlen lépés"] };
+  assert.equal(canReuseLessonVisuals(lesson), false);
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "RUBRIKA-HIBA: több helyes példát enged a kérdés." }];
+  const deps = makeDeps(JSON.stringify({ notes }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-only-visuals", mapId: "m1", step: "lektor", output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  const reviewed = await runPipelineStep("bank-only-visuals", deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "animator" && reviewed.next.round === 1, JSON.stringify(reviewed));
+  const job = deps.store.jobs.get("bank-only-visuals")!;
+  job.step = "animator"; job.round = 1; job.status = "ok";
+  const bankDeps = makeDeps(JSON.stringify({ tasks: lesson.experience.tasks }));
+  const repaired = await runPipelineStep(job.id, { ...bankDeps, store: deps.store });
+  assert.ok(repaired.ok, `${JSON.stringify(repaired)} ${job.error ?? ""}`);
+  assert.equal(bankDeps.calls.length, 1, "egyetlen hívás: a bankcsomag — ábra-modellhívás nélkül");
+  assert.match(bankDeps.calls[0].system, /RUBRIKA-HIBA/);
+  const after = (job.output?.lesson as typeof lesson).sections[0].blocks.find(b => b.kind === "animate");
+  assert.deepEqual(after && after.kind === "animate" ? after.params : null, { steps: ["egyetlen lépés"] }, "a szöveg és az ábrák változatlanok");
 });
 
 test("lektori bankhiba közvetlenül a banképítőhöz jut (csak-bank kör); a nyelvi javítás sem vész el", async () => {
