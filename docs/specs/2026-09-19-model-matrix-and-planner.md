@@ -170,6 +170,20 @@ a kiterjesztett `quizCorrectIndexProblems` (#83) a lektor előtt fogja meg (−7
 nem kellett, mentőkör/tartalék nem futott, aritmetikai hiba a lektorhoz nem jutott. A bank a lecke
 idejének 76 %-a → `PACKET_CONCURRENCY` 3 → 5 (PR #87), várható bank ≈ 600 s, lecke ≈ 15 perc.
 
+## 7j. Mérés 10 — `done` 14 perc, a §7 időcél teljesül (run 924dbfaf, #87 kód, 2026-09-20 08:54–09:08)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 | ~11 000 | ~2 200 | 33 s |
+| author 1 | gpt-5.6-terra | ~10 000 | ~8 000 | 60 s |
+| animator 1 (10 csomag, 5 egyszerre) | glm | 133 021 | 58 808 | **602 s** |
+| lektor 1: 0 blokkoló; kapu: 1 lelet a 3. fejezetben → **célzott javítás** | grok | 69 527 | 603 | 15 s |
+| author 2 (csak a 3. fejezet, patch) | gpt-5.6-terra | 25 313 | 897 | **11 s** |
+| animator 2 (csak a változott csomag) | glm | 7 399 | 5 232 | **100 s** |
+| lektor 2: 0 → kapu ✅ → readback ✅ | grok | 68 927 | 586 | 15 s |
+**Eredmény:** `done` **839 s (14 perc)**, lecke `5ece9c8c`, 9 fejezet, 45/75/20. A §7 elfogadás időcélja
+(< 20 perc) és költségcélja (< 1,2 USD; ≈ 0,6 USD) teljesül; a bank-költség (< 0,2 USD) is (glm ≈ 0,03).
+A célzott javítás mérve: szerzői kör 11 s (volt 42–94 s), animátor 2 100 s (volt 480–1 010 s).
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.
