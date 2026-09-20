@@ -42,6 +42,7 @@ import {
   type OutlineCoverage,
 } from "./step-io";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
+import { pickVisualWorld, visualWorld, type VisualWorldId } from "../../shared/lesson-visuals";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
@@ -367,10 +368,13 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   let authorRepair: { targetSections: number[]; previous: Lesson } | undefined;
   switch (job.step) {
     case "pedagogue": {
-      input = pedagogueInputOf(map);
+      // Spec 2026-09-20 (színes tananyag): véletlen vizuális világ javaslata, jobonként egyszer rögzítve.
+      const proposedWorld = ((job.output?.visual as { world?: string } | undefined)?.world as VisualWorldId | undefined) ?? pickVisualWorld().id;
+      const world = visualWorld(proposedWorld) ?? pickVisualWorld();
+      input = { ...pedagogueInputOf(map), visual: world.id };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.pedagogue,
-        buildPedagoguePrompt(promptMapOf(map)),
+        buildPedagoguePrompt(promptMapOf(map), world),
       );
       break;
     }
@@ -570,7 +574,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const coverage = outlineCoversMap(parsed.data.sections, map.concepts);
       if (!coverage.ok) return fail(store, job, coverageReason(coverage));
 
-      await store.saveStep(job.id, successPatch({ ...job.output, outline: parsed.data, coverage }));
+      const chosenWorld = parsed.data.visual?.world ?? ((input as { visual?: string }).visual as VisualWorldId | undefined) ?? pickVisualWorld().id;
+      await store.saveStep(job.id, successPatch({ ...job.output, outline: parsed.data, coverage, visual: { world: chosenWorld } }));
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
 
@@ -651,7 +656,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // „Gyakori hibák" kártyát és fogalmi visszajelzést.
       const plannedOutline = (job.output?.approvedOutline ?? job.output?.outline) as LessonOutline | undefined;
       const misconceptions = parsed.data.misconceptions.length ? parsed.data.misconceptions : (plannedOutline?.misconceptions ?? []);
-      const lesson: Lesson = { ...parsed.data, misconceptions, mapId: job.mapId, subject: map.meta.subject, classroom: map.meta.classroom };
+      const lesson: Lesson = { ...parsed.data, misconceptions, mapId: job.mapId, subject: map.meta.subject, classroom: map.meta.classroom,
+        // Spec 2026-09-20: a fejezet-emoji a tervező döntése — determinisztikusan a vázlatból, index szerint.
+        sections: parsed.data.sections.map((section, i) => {
+          const emoji = section.emoji ?? plannedOutline?.sections[i]?.emoji;
+          return emoji ? { ...section, emoji } : section;
+        }) };
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, lesson);
       await store.saveStep(
         job.id,
@@ -709,6 +719,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
             previous: original.experience,
+            theme: visualWorld((job.output?.visual as { world?: string } | undefined)?.world)?.id,
             reviewFeedback: bankReview?.feedback,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
             concurrency: PACKET_CONCURRENCY,

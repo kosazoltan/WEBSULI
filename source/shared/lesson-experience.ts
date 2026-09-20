@@ -9,7 +9,9 @@ export const LESSON_METHOD_VERSION = "fusion-7.4-4" as const;
 export const isFusionMethodVersion = (value: unknown) => value === LESSON_METHOD_VERSION || value === COMPACT_LESSON_METHOD_VERSION || value === PREVIOUS_LESSON_METHOD_VERSION || value === LEGACY_LESSON_METHOD_VERSION;
 export const LESSON_BANK_SIZES = { tasks: 45, taskRound: 15, quiz: 75, quizRound: 25 } as const;
 export const METHOD_KINDS = ["prediction", "gate", "myth", "sorting", "causeEffect", "conflict", "selfCheck", "popup", "timeline", "analogy"] as const;
-export const EXPERIENCE_THEMES = ["ocean", "forest", "sunset", "cosmos", "paper", "berry"] as const;
+// Spec 2026-09-20 (színes tananyag): a 8 vizuális világ (shared/lesson-visuals.ts) a témák közé
+// került; a régi 6 a már közzétett leckék miatt marad.
+export const EXPERIENCE_THEMES = ["ocean", "forest", "sunset", "cosmos", "paper", "berry", "candy", "space", "jungle", "ocean-kids", "meadow", "dojo", "arena", "magic"] as const;
 const text = (max = 1500) => z.string().trim().min(1).max(max);
 const binding = { id: text(64), sectionIndex: z.number().int().min(0), coversConceptIds: z.array(text(64)).min(1), sourceHash: z.string().regex(/^[a-f0-9]{64}$/).optional() };
 

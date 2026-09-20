@@ -1,0 +1,67 @@
+/**
+ * Vizuális világok (spec 2026-09-20 „színes, figyelemfelkeltő tananyag").
+ *
+ * A gyerekek édesanyjának kérése: a tananyag ne legyen nyers és száraz — színek, figyelemfelkeltő
+ * kiemelések, leckénként változó grafikai hangulat. Ötletforrás a 2026. jan–márc. leckék főlapja
+ * (mérve: élénk többszínű paletták, 135°-os pasztell/űr gradiensek, emoji-val jelölt „világok",
+ * tipp-dobozok). A világ a TERVEZŐ fázisban dől el, és végigmegy a láncon (fejezet-emoji,
+ * kulcskifejezés-kiemelés, a bank témája, a runtime színei).
+ */
+
+export const VISUAL_WORLD_IDS = ["candy", "space", "jungle", "ocean-kids", "meadow", "dojo", "arena", "magic"] as const;
+export type VisualWorldId = (typeof VISUAL_WORLD_IDS)[number];
+
+export type VisualWorld = {
+  id: VisualWorldId;
+  name: string;
+  mood: string;
+  /** Emojis the planner may put before section headings (one per section). */
+  emojis: readonly string[];
+  /** Palette mirrored in client/src/lesson-runtime/lesson-experience.css — keep in sync (test). */
+  palette: { bg: string; bg2: string; surface: string; ink: string; accent: string; accent2: string; key: string; keyInk: string };
+  dark?: boolean;
+};
+
+export const VISUAL_WORLDS: readonly VisualWorld[] = [
+  { id: "candy", name: "Cukorka-birodalom", mood: "vidám, édes, rózsaszín-lila-kék pasztell", emojis: ["🍭", "🍬", "🧁", "🍓", "🎈", "🌈", "🍦", "🎀"],
+    palette: { bg: "#fdf2f8", bg2: "#e0f2fe", surface: "#ffffff", ink: "#3b1f4a", accent: "#ec4899", accent2: "#3b82f6", key: "#fde68a", keyInk: "#3b1f4a" } },
+  { id: "space", name: "Galaktikus küldetés", mood: "sötét űr, neon lila-cián-sárga kiemelés", emojis: ["🚀", "🪐", "🌟", "🌌", "👩‍🚀", "☄️", "🛸", "🌙"], dark: true,
+    palette: { bg: "#0c0a1d", bg2: "#1a1535", surface: "#2d2654", ink: "#f0f4ff", accent: "#8b5cf6", accent2: "#06b6d4", key: "#fbbf24", keyInk: "#1a1535" } },
+  { id: "jungle", name: "Dzsungel-expedíció", mood: "élénk zöld, narancs és sárga, kalandos", emojis: ["🦁", "🐒", "🌴", "🦜", "🐍", "🌺", "🐘", "🗺️"],
+    palette: { bg: "#ecfdf5", bg2: "#fef3c7", surface: "#ffffff", ink: "#14342b", accent: "#16a34a", accent2: "#f97316", key: "#fde047", keyInk: "#14342b" } },
+  { id: "ocean-kids", name: "Vízalatti kaland", mood: "türkiz, kék, korall — hullámos, friss", emojis: ["🌊", "🐸", "🐠", "🐙", "🐚", "🦆", "🏝️", "🐬"],
+    palette: { bg: "#e8f8f5", bg2: "#dff3ff", surface: "#ffffff", ink: "#0f3a44", accent: "#0abde3", accent2: "#fd79a8", key: "#55efc4", keyInk: "#0f3a44" } },
+  { id: "meadow", name: "Mező és rét", mood: "virágos rózsaszín-lila-kék, pillangók, méhek", emojis: ["🦋", "🌸", "🐝", "🌼", "🐰", "🌷", "🌻", "🐞"],
+    palette: { bg: "#fce4ec", bg2: "#e1f5fe", surface: "#ffffff", ink: "#4a148c", accent: "#9c27b0", accent2: "#66bb6a", key: "#ffe082", keyInk: "#4a148c" } },
+  { id: "dojo", name: "Ninja dojo", mood: "sötét kék-fekete, piros és sárga öv-színek, kihívás", emojis: ["🥷", "⚔️", "🔥", "🏆", "🎯", "🥋", "💪", "⚡"], dark: true,
+    palette: { bg: "#0f172a", bg2: "#1e293b", surface: "#334155", ink: "#f1f5f9", accent: "#dc2626", accent2: "#facc15", key: "#22d3ee", keyInk: "#0f172a" } },
+  { id: "arena", name: "Matek-aréna", mood: "játékos sötét háttér, cián-lila-zöld neon", emojis: ["🎮", "🏆", "⚡", "🔢", "💡", "🥇", "🎲", "🕹️"], dark: true,
+    palette: { bg: "#0c1222", bg2: "#1a2744", surface: "#2d3f5f", ink: "#f0f9ff", accent: "#22d3ee", accent2: "#8b5cf6", key: "#fbbf24", keyInk: "#0c1222" } },
+  { id: "magic", name: "Varázslat-iskola", mood: "lila-rózsaszín-arany, csillogó, mesés", emojis: ["✨", "🔮", "🪄", "🧙", "🌟", "🎩", "🦄", "📜"],
+    palette: { bg: "#f3e8ff", bg2: "#fae8ff", surface: "#ffffff", ink: "#3b0764", accent: "#a855f7", accent2: "#f97316", key: "#fef08a", keyInk: "#3b0764" } },
+];
+
+export function visualWorld(id: string | undefined): VisualWorld | undefined {
+  return VISUAL_WORLDS.find((w) => w.id === id);
+}
+
+/** Random world; a `seed` makes it reproducible (tests). Never the same as `avoid` when a choice exists. */
+export function pickVisualWorld(seed?: number, avoid?: VisualWorldId): VisualWorld {
+  const candidates = VISUAL_WORLDS.filter((w) => w.id !== avoid);
+  const r = seed === undefined ? Math.random() : Math.abs(Math.sin(seed * 9973.13)) % 1;
+  return candidates[Math.floor(r * candidates.length)] ?? VISUAL_WORLDS[0];
+}
+
+/** `**kiemelés**` → [{ text, key }] runs; unbalanced markers are rendered as plain text. */
+export function splitEmphasis(text: string): Array<{ text: string; key: boolean }> {
+  const runs: Array<{ text: string; key: boolean }> = [];
+  const parts = text.split("**");
+  if (parts.length % 2 === 0) return [{ text, key: false }];
+  parts.forEach((part, i) => { if (part) runs.push({ text: part, key: i % 2 === 1 }); });
+  return runs.length ? runs : [{ text, key: false }];
+}
+
+/** The same text without markers — for speech and for any plain-text comparison. */
+export function stripEmphasis(text: string): string {
+  return splitEmphasis(text).map((r) => r.text).join("");
+}
