@@ -211,6 +211,25 @@ hogy a leckét eldobná. Mérés 12 igazolja.
 medium efforttal ≈ 13k kimeneti token, ≈ 0,08 USD többlet). Hamis pozitív: 0; szerzői kör: 0; a kapu
 elsőre átengedte. Az összes §7 elfogadási feltétel teljesül, tartalékkal.
 
+## 7m. Regressziós kör a színes-lecke bevezetés után (2026-09-20 délelőtt–dél, párhuzamosan három ág)
+Kérés: „Futtasd le a teljes tananyagkészítés tesztelését, hogy biztosan ne törj el sehol a jelenleg végre
+működő folyamatokat, és a grafikai sokszínűség is érvényesüljön."
+| Ág | Eredmény | Idő | Világ / emoji | Megjegyzés |
+| --- | --- | --- | --- | --- |
+| JPG-feltöltés (talaj, 5. o.) | `done` | 973 s | meadow, 12/12 fejezet-emoji | a tervező dojo-javaslatról váltott, az emojik idegen készletből maradtak → `harmoniseSectionEmojis` (#95) |
+| Internetes készítés | `done` | 1 166 s | — (7.4 HTML ág) | anyag `537ea443` |
+| Térkép (Műveleti) 1. | `error` | — | — | aritmetikai őr a tanulói lépéssort (`40 – 18 + 4 = 22 + 4 = 26`) páronként hamisnak vette → egyenlőség-lánc + biztonsági szelep (#95) |
+| Térkép (Műveleti) 2. (run 8909db64) | `error` | 1 058 s | jungle | a lektor **3 valódi** hibát jelölt (rossz műveleti sorrendű végeredmények: 86↔34, 111↔89, 99↔61); a csak-bank javító válasz quiz-azonosítója négy kísérleten át nem egyezett → `resolvePatchIds` (lent) |
+| Térkép (Műveleti) 3. (run 7aaed852, job 0567b9b3) | `done` | 1 160 s | magic, 8/8 fejezet-emoji a világ készletéből, 8/8 fejezetben `**kiemelés**` | a lektor 2 valódi hibát jelölt (disztraktor-magyarázatok téves számai), 1 csak-bank kör az azonosító-feloldással átment, kapu + readback elsőre; 45/75/16 bank, lecke `1427cd59` |
+Grafikai sokszínűség mérve négy egymást követő futáson: ocean-kids (mérés 13) → meadow (JPG) → jungle (2.) → magic (3.).
+**Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
+— azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
+szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű
+eset továbbra is hiba, de a hibaüzenet nevesíti a kapott azonosítókat (a 2. futás naplója ezt nem mondta meg).
+Elfogadás: WHEN a lektor által kifogásolt tételre a javító válasz torzított azonosítót ad THEN a tétel cserélődik
+az eredeti azonosítón (teszt: `lesson-experience` „mangled ID"); WHEN két ismeretlen javítás jut egy kifogásolt
+tételre THEN elutasítás a kapott azonosítókkal.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.

@@ -93,14 +93,42 @@ function retainsRequiredGroups(before: string[][], after: string[][]): boolean {
   return before.every((_, index) => match(index, new Set()));
 }
 
+/**
+ * Mérve (regressziós futás 8909db64, 9. fejezet): a lektor három valódi hibát jelölt, a javító válasz
+ * quiz-azonosítója négy kísérleten át nem egyezett a csomagéval, és a futás meghalt. Az ismeretlen
+ * azonosító determinisztikusan feloldható: (1) azonos „-N" index-utótag egy ismert azonosítóval
+ * (torzított hash); (2) a bank kifogásolt, a válaszban még nem szereplő tételei egyértelműen
+ * párosíthatók a maradék ismeretlen javításokkal (azonos darabszám, sorrendben). Ami így sem
+ * oldódik fel, azt a hívó elutasítja — a kapott azonosítókkal a hibaüzenetben.
+ */
+function resolvePatchIds<T extends { id: string }>(items: T[], known: ReadonlySet<string>, reviewedIds?: ReadonlySet<string>): T[] {
+  if (items.every(item => known.has(item.id))) return items;
+  const taken = new Set(items.map(item => item.id).filter(id => known.has(id)));
+  const resolved = items.map(item => {
+    if (known.has(item.id)) return item;
+    const suffix = item.id.match(/-(\d+)$/)?.[1];
+    const bySuffix = suffix === undefined ? undefined : [...known].find(id => id.endsWith(`-${suffix}`) && !taken.has(id));
+    if (bySuffix) { taken.add(bySuffix); return { ...item, id: bySuffix }; }
+    return item;
+  });
+  const unresolved = resolved.filter(item => !known.has(item.id));
+  const candidates = [...(reviewedIds ?? [])].filter(id => known.has(id) && !taken.has(id));
+  if (!unresolved.length || unresolved.length !== candidates.length) return resolved;
+  let cursor = 0;
+  return resolved.map(item => known.has(item.id) ? item : { ...item, id: candidates[cursor++] });
+}
+
 /** A repair is a replacement by existing ID, never an incomplete new packet. */
 export function applyBankPacketRepair(original: PacketContent, response: unknown, reviewedIds?: ReadonlySet<string>, bindingRepairIds?: ReadonlySet<string>): PacketContent {
-  const patch = packetPatchSchema.parse(response);
+  const parsedPatch = packetPatchSchema.parse(response);
+  const knownIds = (bank: typeof BANKS[number]) => new Set(original[bank].map(item => item.id));
+  const patch = { ...parsedPatch, methods: resolvePatchIds(parsedPatch.methods, knownIds("methods"), reviewedIds),
+    tasks: resolvePatchIds(parsedPatch.tasks, knownIds("tasks"), reviewedIds), quiz: resolvePatchIds(parsedPatch.quiz, knownIds("quiz"), reviewedIds) };
   for (const bank of BANKS) {
-    const known = new Set(original[bank].map(item => item.id));
+    const known = knownIds(bank);
     const ids = patch[bank].map(item => item.id);
     if (known.size !== original[bank].length || new Set(ids).size !== ids.length || ids.some(id => !known.has(id))) {
-      throw new Error(`${bank}: a javítás csak egyedi, már létező tételazonosítót cserélhet.`);
+      throw new Error(`${bank}: a javítás csak egyedi, már létező tételazonosítót cserélhet (kapott: ${ids.join(", ")}).`);
     }
     for (const item of patch[bank]) {
       if (reviewedIds && !reviewedIds.has(item.id) && canonicalJson(item) !== canonicalJson(original[bank].find(i => i.id === item.id))) {

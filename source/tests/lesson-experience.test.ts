@@ -287,6 +287,31 @@ test("bank patch rejects unknown/duplicate IDs, keeps absent banks and does not 
   assert.deepEqual(merged.glossary, original.glossary); assert.deepEqual(original, before);
   assert.throws(() => applyBankPacketRepair(original, { tasks: [{ ...replacement, id: "unknown" }] }), /létező/);
   assert.throws(() => applyBankPacketRepair(original, { tasks: [replacement, replacement] }), /egyedi/);
+  assert.throws(() => applyBankPacketRepair(original, { tasks: [{ ...replacement, id: "unknown" }] }), /kapott: unknown/, "a hibaüzenet megnevezi a kapott azonosítót");
+});
+
+// Mérve (regressziós futás 8909db64, 9. fejezet): a lektor 3 valódi hibát jelölt, a javító válasz
+// quiz-azonosítója négy kísérleten át nem egyezett — a futás meghalt. A kifogásolt tételre a
+// torzított azonosító is feloldható: index-utótag szerint, vagy ha a bank kifogásolt tételei
+// egyértelműen párosíthatók a nem ismert azonosítójú javításokkal.
+test("bank patch resolves a mangled ID onto the reviewed item; ambiguity still rejects", () => {
+  const e = compactFusionFixture().experience!;
+  const original = { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: e.glossary };
+  const reviewed = new Set([e.quiz[1].id, e.tasks[0].id]);
+  const fixedQuiz = { ...e.quiz[1], question: "Javított kérdés?" };
+  const fixedTask = { ...e.tasks[0], q: "Javított feladat" };
+  // index-utótag: ugyanaz a sorszám, más előtag (a modell a hash-t torzította)
+  const suffix = e.quiz[1].id.slice(e.quiz[1].id.lastIndexOf("-"));
+  let merged = applyBankPacketRepair(original, { quiz: [{ ...fixedQuiz, id: `q-torz${suffix}` }] }, reviewed);
+  assert.equal(merged.quiz[1].question, "Javított kérdés?"); assert.equal(merged.quiz[1].id, e.quiz[1].id);
+  // egyértelmű párosítás: a bank egyetlen kifogásolt tétele ↔ az egyetlen ismeretlen azonosítójú javítás
+  merged = applyBankPacketRepair(original, { quiz: [{ ...fixedQuiz, id: "quiz.69" }], tasks: [{ ...fixedTask, id: "experience.tasks.40" }] }, reviewed);
+  assert.equal(merged.quiz[1].question, "Javított kérdés?"); assert.equal(merged.tasks[0].q, "Javított feladat");
+  assert.deepEqual(merged.quiz.map(q => q.id), e.quiz.map(q => q.id), "az azonosítók a csomag eredeti azonosítói maradnak");
+  // kétértelmű: két ismeretlen javítás egyetlen kifogásolt tételre → elutasítás, a kapott azonosítókkal
+  assert.throws(() => applyBankPacketRepair(original, { quiz: [{ ...fixedQuiz, id: "x1" }, { ...fixedQuiz, id: "x2" }] }, reviewed), /kapott: x1, x2/);
+  // kifogásolt lista nélkül (formai újraépítés) az ismeretlen azonosító továbbra is hiba
+  assert.throws(() => applyBankPacketRepair(original, { quiz: [{ ...fixedQuiz, id: "quiz.69" }] }), /létező/);
 });
 
 test("language task repair preserves the taught glossary when the repair sends an empty list", async () => {
