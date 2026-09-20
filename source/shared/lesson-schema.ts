@@ -239,6 +239,8 @@ export const blockSchema = z
 
 export const sectionSchema = z.object({
   heading: filled(255),
+  /** Spec 2026-09-20: a tervező által választott fejezet-emoji (a cím és a haladásjelző előtt). */
+  emoji: z.string().trim().min(1).max(8).optional(),
   blocks: z.array(blockSchema).min(1),
   /** Whether the section ends with a Próba (the LS-3 coupon trigger). */
   probaEnabled: z.boolean().default(true),

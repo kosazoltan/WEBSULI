@@ -19,6 +19,7 @@ import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
 import { computeStepHash, MAX_AUTHOR_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { withRoleSkill } from "../server/studio/role-skills";
+import { visualWorld } from "../shared/lesson-visuals";
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
@@ -796,10 +797,13 @@ test("(a) pedagogue: a vázlat elmentődik, a következő lépés author", async
 
   const job = await store.loadJob(jobId);
   assert.equal(job?.status, "ok");
+  // Spec 2026-09-20 (színes tananyag): a runner véletlen világot javasol; az input és a prompt is tartalmazza.
+  const world = visualWorld((job?.output?.visual as { world?: string } | undefined)?.world)!;
+  assert.ok(world, "a pedagógus rögzíti a vizuális világot");
   assert.equal(job?.inputHash, computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, {
-    input: { map: MAP_META, concepts: MAP_CONCEPTS },
+    input: { map: MAP_META, concepts: MAP_CONCEPTS, visual: world.id },
     // Szerep-skill (2026-09-19): az effektív prompt a pedagógus skilljével indul, a hash ezt is rögzíti.
-    system: withRoleSkill("pedagogue", buildPedagoguePrompt({title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom, concepts: MAP_CONCEPTS})),
+    system: withRoleSkill("pedagogue", buildPedagoguePrompt({title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom, concepts: MAP_CONCEPTS}, world)),
   }, 0), "a vázlat hash-e a bemenetet és az effektív promptot is rögzíti");
   assert.deepEqual(job?.output?.outline, GOOD_OUTLINE);
 
@@ -1481,4 +1485,33 @@ test("(u) kapu a körlimiten, fejezethez köthető lelettel → egy célzott sze
   const again = await runPipelineStep("gate-limit", deps);
   assert.equal(again.ok, false);
   assert.match("reason" in again ? again.reason ?? "" : "", /tanítása hiányos/);
+});
+
+/* Spec 2026-09-20 — színes tananyag: a világ a tervezőnél dől el, az emoji a vázlatból másolódik, a bank témája a világ. */
+test("(v) vizuális világ: a pedagógus rögzíti, a szerző fejezetei megkapják az emoji-t, a bank témája a világ", async () => {
+  const deps = makeDeps(JSON.stringify({ ...GOOD_OUTLINE, sections: GOOD_OUTLINE.sections.map((s) => ({ ...s, emoji: "🦋", keyPhrases: ["sejt"] })), visual: { world: "meadow" } }));
+  deps.store.seed({ id: "vis", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const planned = await runPipelineStep("vis", deps);
+  assert.ok(planned.ok, JSON.stringify(planned));
+  assert.match(deps.calls[0].system, /Javasolt vizuális világ: /, "a runner világot javasol");
+  const job = deps.store.jobs.get("vis")!;
+  assert.deepEqual(job.output?.visual, { world: "meadow" }, "a tervező által megerősített világ rögzül");
+  assert.equal((job.output?.outline as { sections: Array<{ emoji?: string }> }).sections[0].emoji, "🦋");
+
+  // Szerző: a lecke fejezetei a vázlat emoji-ját kapják, akkor is, ha a modell nem adta vissza.
+  job.step = "author"; job.status = "ok"; job.output = { ...job.output, approvedOutline: job.output!.outline };
+  const authorDeps = makeDeps(JSON.stringify(GOOD_LESSON));
+  assert.ok((await runPipelineStep("vis", { ...authorDeps, store: deps.store })).ok);
+  const lesson = deps.store.jobs.get("vis")!.output?.lesson as { sections: Array<{ emoji?: string }> };
+  assert.equal(lesson.sections[0].emoji, "🦋");
+
+  // Bank: a téma a világ (nem hash).
+  const fusion = standardFusionFixture(); fusion.mapId = "m1";
+  const e = fusion.experience!;
+  const bankJob = { id: "vis-bank", mapId: "m1", step: "animator" as const, status: "pending" as const, output: { lesson: { ...fusion, experience: undefined }, methodVersion: e.version, visual: { world: "meadow" } } };
+  deps.store.seed(bankJob);
+  const bankDeps = makeDeps(JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }));
+  assert.ok((await runPipelineStep("vis-bank", { ...bankDeps, store: deps.store })).ok);
+  const built = deps.store.jobs.get("vis-bank")!.output?.lesson as { experience?: { theme: string } };
+  assert.equal(built.experience?.theme, "meadow");
 });

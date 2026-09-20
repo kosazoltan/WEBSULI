@@ -34,6 +34,7 @@ import {
   type TrySnapshot,
 } from "./useLessonProgress";
 import "./lesson-theme.css";
+import { splitEmphasis, stripEmphasis } from "@shared/lesson-visuals";
 import "./triangle-lab.css";
 import "./decision-story.css";
 import { LessonExperienceView } from "./LessonExperienceView";
@@ -72,6 +73,16 @@ function BlockHead({ icon: Icon, label }: { icon: typeof BookOpen; label: string
   );
 }
 
+/** Spec 2026-09-20: `**kulcskifejezés**` → kiemelés; a jelölés sosem jut a képernyőre nyersen. */
+function RichText({ text }: { text: string }) {
+  const runs = splitEmphasis(text);
+  return (
+    <>
+      {runs.map((r, i) => (r.key ? <mark key={i} className="lesson-key">{r.text}</mark> : <span key={i}>{r.text}</span>))}
+    </>
+  );
+}
+
 function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain" }>; band: AgeBand }) {
   const theme = BAND_THEME[band];
   // The gate is computed once per mount: reduced motion and speech support do not
@@ -86,7 +97,7 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
   );
 
   return (
-    <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain">
+    <div className={cn("lesson-block space-y-1", theme.body)} data-block="explain" data-depth={block.depth}>
       <BlockHead icon={BookOpen} label={theme.labels.explain} />
       {block.depth !== "core" && (
         <span className="lesson-muted inline-flex items-center gap-1 text-xs">
@@ -94,14 +105,14 @@ function ExplainBlock({ block, band }: { block: Extract<Block, { kind: "explain"
           {block.depth === "why" ? "Miért?" : "Mélyebben"}
         </span>
       )}
-      <p>{block.text}</p>
+      <p><RichText text={block.text} /></p>
       {canSpeak && (
         <Button
           variant="ghost"
           size="sm"
           className="lesson-ghost-btn min-h-11"
           data-testid="read-aloud"
-          onClick={() => speak(block.text)}
+          onClick={() => speak(stripEmphasis(block.text))}
         >
           <Volume2 className="w-4 h-4 mr-1" /> Felolvasás
         </Button>
@@ -245,7 +256,7 @@ function RecapBlock({ block, band }: { block: Extract<Block, { kind: "recap" }>;
             <span className="lesson-recap-ico" aria-hidden>
               <Target className="w-4 h-4" />
             </span>
-            <span>{b}</span>
+            <span><RichText text={b} /></span>
           </div>
         ))}
       </div>
@@ -345,6 +356,11 @@ function LessonSection({
         <span className="lesson-section-no" aria-hidden>
           {sectionIdx + 1}
         </span>
+        {section.emoji && (
+          <span className="lesson-section-emoji" aria-hidden>
+            {section.emoji}
+          </span>
+        )}
         {section.heading}
       </h2>
       {section.blocks.map((block, bi) => (
@@ -396,6 +412,7 @@ function LessonProgress({ sections, band, current }: { sections: Section[]; band
             data-state={i < current ? "done" : i === current ? "now" : "todo"}
             title={s.heading}
             aria-label={s.heading}
+            data-emoji={s.emoji}
           />
         ))}
       </div>

@@ -9,6 +9,7 @@ import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
+import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals";
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
 
 /**
@@ -37,6 +38,12 @@ export const outlineSectionSchema = z.object({
   animationSuggestions: z
     .array(z.string().trim().min(1).transform((s) => s.slice(0, 120)))
     .default([]),
+  /** Spec 2026-09-20 (színes tananyag): fejezet-emoji és a kiemelendő kulcskifejezések (advisory, vágva). */
+  emoji: z.string().trim().min(1).transform((s) => s.slice(0, 8)).optional(),
+  keyPhrases: z
+    .array(z.string().trim().min(1).transform((s) => s.slice(0, 40)))
+    .transform((a) => a.slice(0, 4))
+    .optional(),
 });
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
@@ -56,6 +63,8 @@ export const outlineSchema = z.object({
   misconceptions: z
     .array(z.object({ conceptId: id(), text: z.string().trim().min(1).max(1000) }))
     .default([]),
+  /** Spec 2026-09-20: a tervező által elfogadott vizuális világ (a runner javasolja, a modell megerősíti/cseréli). */
+  visual: z.object({ world: z.enum(VISUAL_WORLD_IDS) }).optional(),
 });
 
 export type LessonOutline = z.infer<typeof outlineSchema>;
@@ -167,8 +176,18 @@ function mapJson(map: PromptMap): string {
   );
 }
 
+/** Spec 2026-09-20: a tervező vizuális utasítása egy javasolt világgal. */
+export function visualPlanningLines(world: VisualWorld): string[] {
+  return [
+    "SZÍNES, FIGYELEMFELKELTŐ TANANYAG (kötelező, alsó tagozatos szem):",
+    `- Javasolt vizuális világ: ${world.id} — „${world.name}” (${world.mood}). Ha a tantárgyhoz nem illik, válassz mást ebből a listából: ${VISUAL_WORLD_IDS.join(", ")}. A választást a "visual": { "world": "<id>" } mezőben add vissza.`,
+    `- Minden fejezethez adj egy "emoji" mezőt (egyetlen emoji a világ készletéből: ${world.emojis.join(" ")} — vagy a fejezet tartalmához illő más emoji), ez a cím elé kerül.`,
+    "- Minden fejezethez adj \"keyPhrases\" mezőt: 2–4 kulcskifejezés a térkép szavaiból (a fogalom neve vagy a szabály magja, ≤ 40 karakter), amit a szerző kiemel a magyarázatban. A kiemelés a LÉNYEGET mutatja, nem dekoráció: ne emelj ki egész mondatot.",
+  ];
+}
+
 /** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
-export function buildPedagoguePrompt(map: PromptMap): string {
+export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld): string {
   return [
     "Te vagy a pedagógus (tervkészítő). A kurált fogalomtérképből készíts lecke-vázlatot: ez a terv szabja meg a szerző, az ábrakészítő és a lektor munkáját, ezért pontos, tömör és teljes legyen.",
     "",
@@ -208,8 +227,11 @@ export function buildPedagoguePrompt(map: PromptMap): string {
     "",
     `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
     "",
+    ...(visual ? [...visualPlanningLines(visual), ""] : []),
     "A válasz CSAK JSON legyen, a következő alakban:",
-    '{ "sections": [{ "heading": string, "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[] }], "misconceptions": [{ "conceptId": string, "text": string }] }',
+    visual
+      ? '{ "sections": [{ "heading": string, "emoji": string, "keyPhrases": string[], "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[] }], "misconceptions": [{ "conceptId": string, "text": string }], "visual": { "world": string } }'
+      : '{ "sections": [{ "heading": string, "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[] }], "misconceptions": [{ "conceptId": string, "text": string }] }',
     "",
     "Fogalomtérkép:",
     mapJson(map),
@@ -337,6 +359,13 @@ export function buildAuthorPrompt(
     "- Ha a vázlat „gyakori hibák” fejezetet tervez: minden tévhithez egy `explain` (depth „why”: rossz gondolat → helyes → miért) és egy `check` (a rossz megoldás opcióként, minden opcióhoz magyarázat).",
     "- Ha a vázlat „ellenőrzés” fejezetet tervez: `explain` a teljes eljárás számozott lépéseivel és egy önellenőrző kérdéssorral (miért ez következik?), majd `recap`.",
     "- A `misconceptions` tömb a vázlat tévhitlistáját tartalmazza változatlanul (conceptId + text); ne hagyd üresen, ha a vázlatban van.",
+    // Spec 2026-09-20 (színes tananyag): a tervező kulcskifejezéseit a szerző emeli ki.
+    ...(sections.some((s) => s.keyPhrases?.length)
+      ? [
+          "- KIEMELÉS: a vázlat fejezetenkénti `keyPhrases` kifejezéseit a fejezet explain szövegében és/vagy recap pontjaiban `**kettős csillag**` jelöléssel emeld ki — pontosan a kifejezést, blokkonként legfeljebb 3-at, egész mondatot soha. A jelölés nem része a tartalomnak; máshol (kérdés, opció, példa lépései) ne használd.",
+          `  Kulcskifejezések fejezetenként: ${sections.map((s, i) => `${i + 1}: ${(s.keyPhrases ?? []).join(" | ") || "–"}`).join("; ")}`,
+        ]
+      : []),
     "",
     ...(repair
       ? [
@@ -416,6 +445,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "- Bizonytalan gyanú, „lehet, hogy” típusú kifogás, stílus, hossz, ismétlés: nem blokkoló.",
     "- Kalibráló példák: „a szorzás előbb, mint az összeadás” ≡ „a szorzásnak elsőbbsége van” (nincs hiba); rubrika-szinonima „nyolcvannégy” a 48 helyett → hiba (más érték); „az első menetben elvégezzük a szorzást és osztást” vs. kérdés az „első menet” eredményéről, ahol a jelölt köztes sor helyes → language, nem blokkoló; „szorzás-osztásnál nem mindig balról jobbra” a forrás „balról jobbra” szabályával szemben → blokkoló.",
     "- Az üres notes a helyes válasz egy jó leckére. Kevés, valódi hiba > sok gyanú.",
+    "- A szövegben előforduló `**…**` jelölés kiemelés (vizuális), nem tartalom: ne jelezd hibaként, és a benne lévő szöveget ugyanúgy értékeld, mint a többit.",
     "",
     D1_RULE_TEXT,
     LESSON_QUALITY_CONTRACT,
