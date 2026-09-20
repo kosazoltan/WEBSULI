@@ -206,7 +206,9 @@ export function groundingReport(
   const explainedInSection = new Map<number, Set<string>>();
   if (sectionOf) {
     blocks.forEach((block, blockIndex) => {
-      if (block.kind !== "explain") return;
+      // Kétirányú (run 4a4fb9f2, 2026-09-20): a példa-típusú fogalmat (idézete számsor) a fejezet
+      // PÉLDÁJA alapozza meg, a bevezető explain nem tartalmazza a számokat — a fejezet bármely
+      // megalapozott blokkja igazolja a fejezet többi címkéjét ugyanarra a fogalomra.
       const text = blockText(block);
       for (const id of idsOf(block)) {
         const concept = byId.get(id);
@@ -233,7 +235,7 @@ export function groundingReport(
       // és a régi (term nélküli) sorok migrációval kapnak megnevezést.
       if (!concept.term || concept.term.trim() === "") continue;
       measurable += 1;
-      const bySection = block.kind !== "explain" && sectionOf !== undefined && explainedInSection.get(sectionOf[blockIndex])?.has(id);
+      const bySection = sectionOf !== undefined && explainedInSection.get(sectionOf[blockIndex])?.has(id);
       if (bySection || checkGrounding(text, concept)) {
         groundedIds.add(id);
       } else {

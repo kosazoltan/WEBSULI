@@ -48,6 +48,13 @@ test("a DB-s prompt-felülírás sem kerülheti meg a skillt (promptLookup burko
   assert.equal(await lookup("valami.mas", "x"), "x");
 });
 
+test("tulajdonosi utasítás 2026-09-20: a lektor skillje értelmező, nem szó szerinti — súlyossági horgonyokkal", () => {
+  const text = ROLE_SKILLS.lektor;
+  for (const must of ["JELENTÉSÉHEZ méred, nem a szavaihoz", "Rokon értelmű szó, parafrázis", "NEM hiba", "(a) Ez a forráshoz képest HAMIS", "(c) Egy 5–8. osztályos tanulót ez félrevezetne", "NEM blokkoló", "nyolcvannégy", "language", "Üres notes = a lecke rendben van", "szó szerinti egyezés számonkérése"]) {
+    assert.ok(text.includes(must), must);
+  }
+});
+
 test("a tervező lelke a pedagógus skill-blokk elején áll, tömör, és a verzió része", () => {
   const soul = ROLE_SOULS.pedagogue!;
   assert.match(soul, /^# Lélek: a tervező/);

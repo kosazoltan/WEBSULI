@@ -6,14 +6,14 @@ import { callStepModel } from "../server/studio/run-step";
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
 import { AIProviderTimeoutError } from "../server/ai/AIProvider";
 
-test("a valódi Studio lektorkérés Responses low, teljes bemenet, nincs szerveres tárolás", async t => {
+test("a valódi Studio lektorkérés Responses medium, teljes bemenet, nincs szerveres tárolás", async t => {
   const previous = process.env.XAI_API_KEY;
   process.env.XAI_API_KEY = "test-placeholder";
   t.after(() => { if (previous === undefined) delete process.env.XAI_API_KEY; else process.env.XAI_API_KEY = previous; });
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
     assert.equal(String(url), "https://api.x.ai/v1/responses");
     const body = JSON.parse(String(init?.body));
-    assert.deepEqual(body.reasoning, { effort: "low" });
+    assert.deepEqual(body.reasoning, { effort: "medium" }); // 2026-09-20: értelmező lektorálás — medium
     assert.equal(body.max_output_tokens, 12000);
     assert.equal(body.store, false);
     assert.deepEqual(body.input, [{ role: "system", content: "Teljes lecke és forrás" }, { role: "user", content: "Csak hibajegyek" }]);

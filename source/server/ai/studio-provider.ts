@@ -61,7 +61,9 @@ export function createStudioStepProvider(model: string, step?: string) {
   if (step === "lektor") {
     return createStudioProvider(model, LEKTOR_TIMEOUT_MS, 12_000, {
       maxRetries: 0,
-      ...(providerForModel(model) === "xai" ? { apiMode: "responses", reasoningEffort: "low" } : {}),
+      // 2026-09-20 (tulajdonosi utasítás, LLM-as-judge kutatás): az értelmező lektorálás
+      // gondolkodást igényel — medium; a lektor kimenete kicsi (≈ 0,4–2k token), az ár nem nő érdemben.
+      ...(providerForModel(model) === "xai" ? { apiMode: "responses", reasoningEffort: "medium" } : {}),
     });
   }
   const policy = step ? STUDIO_STEP_POLICY[step] : undefined;

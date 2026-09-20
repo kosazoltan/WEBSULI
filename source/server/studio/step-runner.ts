@@ -916,7 +916,18 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
 
   if (!gate.ok) {
     await workflowValidationFailure(gate.reasons.join("; "));
-    if (job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience)) return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
+    if (job.round >= MAX_AUTHOR_ROUNDS && (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience)) {
+      // Mérve (run 4a4fb9f2, 2026-09-20): a limiten egyetlen fejezethez köthető kapu-lelet 20 perc
+      // munkát dobott el. Ha minden lelet fejezethez köthető, egy CÉLZOTT szerzői javítás (≈ 11 s
+      // + a változott csomag) jár jobonként egyszer; a workflow látogatási kerete tovább véd.
+      const targets = targetedRepairSections(parsed.data, [], gateOutput as GateFeedbackLike);
+      if (targets && !job.output?.targetedGateRepairRound) {
+        logger.warn(`[STUDIO/GATE] Kapu-lelet a limiten, célzott javítás (${job.id}): fejezet ${targets.map((i) => i + 1).join(", ")}`);
+        await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: gateOutput, targetedGateRepairRound: job.round + 1 }, error: null, finishedAt: null });
+        return { ok: true, next: { step: "author", round: job.round + 1 } };
+      }
+      return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
+    }
     const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
     if (transition.step === "error") {
       return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);

@@ -309,6 +309,13 @@ test("mérve run 03542f43: a fejezet példája a fejezet explain-je által megal
   assert.equal(other.ungrounded[0].kind, "example");
   const noSections = groundingReport([explain, example], [rule]);
   assert.equal(noSections.ok, false, "fejezet-információ nélkül a régi szabály marad");
+  // Kétirányú (run 4a4fb9f2): példa-típusú fogalom — a fejezet példája hordozza a forrás számait,
+  // a bevezető explain nem; a fejezet bármely megalapozott blokkja igazolja a fejezet többi címkéjét.
+  const worked = { localId: "osztas-pelda", term: "Zárójeles műveleti sorrend osztással", definition: "36 ÷ (3 · 2) – 3 = 3", quote: "36 ÷ (3 · 2) – 3\n36 ÷ 6 – 3\n6 – 3\n3", examWeight: "core" } as MapConcept;
+  const intro = { kind: "explain", text: "Most egy olyan feladatot nézünk, ahol a zárójelben szorzás van, kívül pedig osztás és kivonás; a zárójel után az osztás következik.", coversConceptIds: ["osztas-pelda"] };
+  const workedExample = { kind: "example", problem: "36 ÷ (3 · 2) – 3", steps: ["3 · 2 = 6", "36 ÷ 6 = 6", "6 – 3 = 3"], answer: "3", coversConceptIds: ["osztas-pelda"] };
+  assert.equal(groundingReport([intro, workedExample], [worked], [0, 0]).ok, true, "az explain címkéjét a fejezet példája igazolja");
+  assert.equal(groundingReport([intro], [worked], [0]).ok, false, "példa nélkül a bevezető önmagában nem igazol");
   // #196 eredeti esete: az explain sem alapozza meg a címkét (más témát tanít) → a példa sem menekül.
   const offTopic = { kind: "explain", text: "A helyiérték táblázatban az egyesek, tízesek és százasok helye számít, ezt gyakoroljuk.", coversConceptIds: ["elsobbseg"] };
   assert.equal(groundingReport([offTopic, example], [rule], [0, 0]).ok, false);

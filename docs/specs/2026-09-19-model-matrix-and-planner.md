@@ -184,6 +184,20 @@ idejének 76 %-a → `PACKET_CONCURRENCY` 3 → 5 (PR #87), várható bank ≈ 6
 (< 20 perc) és költségcélja (< 1,2 USD; ≈ 0,6 USD) teljesül; a bank-költség (< 0,2 USD) is (glm ≈ 0,03).
 A célzott javítás mérve: szerzői kör 11 s (volt 42–94 s), animátor 2 100 s (volt 480–1 010 s).
 
+## 7k. Értelmező lektor (tulajdonosi utasítás 2026-09-20) és mérés 11 (run 4a4fb9f2)
+Kutatás-alapú elvek (Langfuse RAG-faithfulness, DeepEval LLM-as-a-judge, Deepchecks judge-kalibráció,
+FutureAGI judge-prompting, Anthropic evals): szemantikus egyezés a lexikális helyett; kimondott „nem
+kicsinyes” politika; bináris blokkoló-döntés horgonyokkal (hamis ÉS félrevezető); indoklás a döntés előtt;
+kalibráló példák; dimenziók elkülönítése. Beépítve: lektor skill + prompt (3 kérdéses ellenőrzőlista,
+NEM-blokkoló lista, kalibráló példák a mért esetekből), lektor effort low → medium.
+Mérés 11: bank 641 s; a lektor két körben 1–1 valódi, ellenőrizhetően hamis disztraktor-magyarázatot
+blokkolt (egy „154·8 nem 1232” állítás; egy hamis „zárójel nélküli sorrend” állítás), hamis pozitív
+nélkül → 2 csak-bank kör (140 s, 30 s). A végkapu a limiten egy explain-címkén bukott (példa-típusú
+fogalom, a számokat a fejezet PÉLDÁJA hordozza) → két javítás: a fejezet-szintű megalapozottság
+kétirányú (bármely megalapozott blokk igazolja a fejezet többi címkéjét ugyanarra a fogalomra), és a
+kapu a limiten fejezethez köthető lelettel egy célzott szerzői javítást ad (jobonként egyszer) ahelyett,
+hogy a leckét eldobná. Mérés 12 igazolja.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.

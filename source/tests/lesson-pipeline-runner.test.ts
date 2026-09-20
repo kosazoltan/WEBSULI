@@ -1455,3 +1455,30 @@ test("(t) célzott javítás: csak a kifogásolt fejezet cserélődik, a másik 
   assert.equal(bankCalls.length, 1, `csak a változott fejezet csomagját kéri: ${bankCalls.length}`);
   assert.match(bankCalls[0].user, /sectionIndex=1/);
 });
+
+/* Mérve run 4a4fb9f2 (2026-09-20): a kapu a limiten egy fejezethez köthető lelettel ne dobja el a leckét. */
+test("(u) kapu a körlimiten, fejezethez köthető lelettel → egy célzott szerzői javítás, nem hiba", async () => {
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept, { localId: "idegen", term: "Pitagorasz-tétel", examWeight: "supporting" } as MapConcept];
+  lesson.experience = await buildLessonExperience(lesson, [concepts[0]], { call: async () => standardFusionFixture().experience! });
+  // A 0. fejezet egy check blokkja idegen fogalom címkéjét viseli (a szövege nem tanítja) → a kapu
+  // megalapozatlan címkét mér; a bankterv (explain/example alapú) érintetlen.
+  lesson.sections[0].blocks.splice(lesson.sections[0].blocks.length - 1, 0, { kind: "check", question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], correctIndex: 0, feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
+  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+  deps.store.seed({ id: "gate-limit", mapId: "m1", lessonId: "lesson-gl", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version } });
+  const reviewed = await runPipelineStep("gate-limit", deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "gate", JSON.stringify(reviewed));
+  await advanceJob("gate-limit", reviewed.next, { status: "running" }, deps);
+  const gated = await runPipelineStep("gate-limit", deps);
+  assert.ok(gated.ok, `célzott javítás indul, nem hiba: ${JSON.stringify(gated)}`);
+  assert.deepEqual(gated.ok && gated.next, { step: "author", round: MAX_AUTHOR_ROUNDS + 1 });
+  const job = deps.store.jobs.get("gate-limit")!;
+  assert.equal(job.output?.targetedGateRepairRound, MAX_AUTHOR_ROUNDS + 1);
+  assert.ok((job.output?.gate as { ungrounded: unknown[] }).ungrounded.length === 1);
+  // Másodszor ugyanez a kapu-lelet a limiten már végleges.
+  job.step = "gate"; job.round = MAX_AUTHOR_ROUNDS + 1; job.status = "running";
+  const again = await runPipelineStep("gate-limit", deps);
+  assert.equal(again.ok, false);
+  assert.match("reason" in again ? again.reason ?? "" : "", /tanítása hiányos/);
+});
