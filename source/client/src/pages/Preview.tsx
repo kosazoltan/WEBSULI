@@ -1,5 +1,5 @@
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Share2, Copy, Check, ExternalLink, RotateCw } from "lucide-react";
+import { ArrowLeft, Share2, Copy, Check, ExternalLink, RotateCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HtmlFile } from "@shared/schema";
 import { useConfig } from "@/lib/useConfig";
 import { LessonView } from "@/lesson-runtime/LessonView";
+import { homeFilesQueryOptions, lessonNeighbours } from "@/lib/home-files-query";
 
 export default function Preview() {
   const [, params] = useRoute("/preview/:id");
@@ -35,6 +36,10 @@ export default function Preview() {
   const isPdf = material?.contentType === 'pdf';
   // LS-2: a strukturált lecke saját futtatót kap az iframe helyett.
   const isLesson = material?.contentType === 'lesson';
+  // Spec 2026-09-20: előző/következő tananyag a lista sorrendje szerint — könnyű váltás mobilon is.
+  const { data: allFiles = [] } = useQuery<Array<{ id: string; contentType?: string; title?: string }>>(homeFilesQueryOptions());
+  const neighbours = params?.id ? lessonNeighbours(allFiles, params.id) : { prev: null, next: null };
+  const openFile = (file: { id: string; contentType?: string }) => setLocation(file.contentType === "pdf" ? `/materials/pdf/${file.id}` : `/preview/${file.id}`);
   
   // BACKLOG T4 (2026-09-02): a tananyag a saját, elszigetelt originjéről töltődik
   // (prod: a Render szolgáltatás URL-je; dev: same-origin). Így az iframe
@@ -133,7 +138,7 @@ export default function Preview() {
     <div className={isLesson ? "min-h-screen bg-background" : "h-screen supports-[height:100dvh]:h-dvh flex flex-col overflow-hidden bg-background"}>
       {/* The lesson owns sticky navigation; a fixed preview toolbar would cover its tabs. */}
       <div className="relative shrink-0 z-50 border-b bg-card/95 backdrop-blur">
-        <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 flex items-center justify-between gap-2">
+        <div className="max-w-full mx-auto px-2 sm:px-4 tablet:px-6 xl:px-8 py-2 flex flex-wrap items-center justify-between gap-2 min-w-0">
           <Button
             variant="ghost"
             size="sm"
@@ -143,9 +148,19 @@ export default function Preview() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Vissza
           </Button>
+          <div className="flex items-center gap-1 shrink-0" data-testid="lesson-switcher">
+            <Button variant="outline" size="sm" className="min-h-11 sm:min-h-9 px-2" disabled={!neighbours.prev} onClick={() => neighbours.prev && openFile(neighbours.prev)} title={neighbours.prev?.title ? `Előző: ${neighbours.prev.title}` : "Nincs előző tananyag"} aria-label="Előző tananyag" data-testid="button-prev-lesson">
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden md:inline ml-1">Előző</span>
+            </Button>
+            <Button variant="outline" size="sm" className="min-h-11 sm:min-h-9 px-2" disabled={!neighbours.next} onClick={() => neighbours.next && openFile(neighbours.next)} title={neighbours.next?.title ? `Következő: ${neighbours.next.title}` : "Nincs következő tananyag"} aria-label="Következő tananyag" data-testid="button-next-lesson">
+              <span className="hidden md:inline mr-1">Következő</span>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
           
           {/* URL Display + Action Buttons */}
-          <div className="hidden sm:flex items-center gap-2 flex-1 max-w-xl">
+          <div className="hidden sm:flex items-center gap-2 flex-1 min-w-0 max-w-xl">
             <div className="flex-1 bg-muted/50 px-3 py-1.5 rounded-md text-xs font-mono text-muted-foreground truncate border">
               {fullUrl}
             </div>
