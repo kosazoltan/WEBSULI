@@ -5,12 +5,14 @@
  *   npm run studio:tool -- outline-autofix <vazlat.json> <terkep.json>
  *   npm run studio:tool -- bank-packet-autofix <csomag.json> <sectionIndex> <conceptId,conceptId,…>
  *   npm run studio:tool -- section-visuals <lecke.json> [terkep.json]
+ *   npm run studio:tool -- arithmetic-claims <csomag.json>
  *
  * Kimenet: JSON {tool, fixes|added, result}. Kilépési kód 2 = rossz használat.
  */
 import { readFileSync } from "node:fs";
 import { autofixOutline } from "../server/studio/tools/outline-autofix";
 import { autofixBankPacket } from "../server/studio/tools/bank-packet-autofix";
+import { arithmeticClaimProblems } from "../server/studio/tools/arithmetic-claims";
 import { ensureSectionVisuals, deterministicSectionVisuals } from "../server/studio/section-visuals";
 import { lessonSchema } from "../shared/lesson-schema";
 import { TOOL_SKILLS } from "../server/studio/role-skills";
@@ -37,6 +39,12 @@ switch (tool) {
     if (args.length < 3) usage();
     const r = autofixBankPacket(readJson(args[0]), { sectionIndex: Number(args[1]), allowedConceptIds: args[2].split(",").map(s => s.trim()).filter(Boolean) });
     out = { tool, fixes: r.fixes, result: r.packet };
+    break;
+  }
+  case "arithmetic-claims": {
+    if (args.length < 1) usage();
+    const problems = arithmeticClaimProblems(readJson(args[0]) as Parameters<typeof arithmeticClaimProblems>[0]);
+    out = { tool, problems };
     break;
   }
   case "section-visuals": {

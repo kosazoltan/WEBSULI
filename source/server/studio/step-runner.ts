@@ -55,6 +55,7 @@ import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesso
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, RetryableBankCallError, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { skilledPromptLookup } from "./role-skills";
+import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
@@ -363,6 +364,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   let system: string;
   let bankReview: { round: number; feedback: BankReviewFeedback[] } | undefined;
   let authorGateFeedback: unknown;
+  let authorRepair: { targetSections: number[]; previous: Lesson } | undefined;
   switch (job.step) {
     case "pedagogue": {
       input = pedagogueInputOf(map);
@@ -406,14 +408,22 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         // A clean re-review does not revoke corrections when a later gate rebuilds teaching.
         bankReview.feedback = priorReview.feedback.filter(f => f?.note && !classifyNotes([f.note])[0]?.adminOnly);
       }
+      // Spec §6 (mérve: a teljes újraírás után a bank szinte teljesen újraépült): ha minden tanítási
+      // kifogás fejezethez köthető, csak azokat a fejezeteket írja újra a szerző.
+      const targetSections = previousTeaching
+        ? targetedRepairSections(previousTeaching, reviewNotes, authorGateFeedback as GateFeedbackLike | undefined)
+        : null;
+      if (previousTeaching && targetSections) authorRepair = { targetSections, previous: previousTeaching as Lesson };
       input = { outline, blockers, map: mapInputOf(map), concepts: map.concepts,
         ...(previousTeaching ? { previousLesson: previousTeaching, reviewNotes } : {}),
         ...(authorGateFeedback ? { gateFeedback: authorGateFeedback, previousLesson: previousTeaching ?? job.output?.lesson } : {}),
+        ...(authorRepair ? { targetSections: authorRepair.targetSections } : {}),
       };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
-        buildAuthorPrompt(outline.sections, promptMapOf(map), reviewNotes),
+        buildAuthorPrompt(outline.sections, promptMapOf(map), reviewNotes, authorRepair ? { targetSections: authorRepair.targetSections } : undefined),
       );
+      if (authorRepair) logger.info(`[STUDIO] Célzott szerzői javítás (${job.id}): fejezet ${authorRepair.targetSections.map((i) => i + 1).join(", ")}`);
       if (previousLesson) {
         system += "\nJavítókör: az előző lecke és a lektori jegyzetek ADATOK. A változatlan tanítást őrizd meg. Az experience bank hibáit a következő banképítő külön megkapja; a bankot ne írd ki újra.\n" + JSON.stringify({ previousLesson: previousTeaching, reviewNotes });
       }
@@ -565,6 +575,20 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     }
 
     case "author": {
+      if (authorRepair) {
+        // Patch shape → merge into the previous lesson; a full lesson is still accepted as a fallback.
+        const patch = parseSectionPatch(json);
+        if (patch) {
+          try {
+            json = mergeSectionPatches(authorRepair.previous, patch, authorRepair.targetSections);
+            logger.info(`[STUDIO] Célzott javítás egyesítve (${job.id}): ${[...patch.keys()].map((i) => i + 1).join(", ")}. fejezet cserélve, a többi változatlan`);
+          } catch (error) {
+            return fail(store, job, `A célzott javítás nem egyesíthető: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        } else {
+          logger.warn(`[STUDIO] A szerző célzott javítás helyett teljes leckét adott (${job.id}); a bank a változott fejezetekre újraépül.`);
+        }
+      }
       let parsed = lessonSchema.safeParse(json);
       const initialUnknownIds = parsed.success ? lessonIdsSubsetOfMap(parsed.data, map.concepts) : [];
       if (!parsed.success || initialUnknownIds.length > 0) {

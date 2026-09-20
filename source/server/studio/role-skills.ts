@@ -187,6 +187,10 @@ Futtatás: automatikus az animátor/bank lépésben; kézzel \`npm run studio:to
 Mit tesz: minden ábra nélküli fejezetbe a saját levezetett példájából (≥2 lépés) \`process\` animate blokkot tesz a példa után, a lépések szó szerint, magyar képaláírással, amely a példa fogalmait a térkép szavaival nevezi meg (így a címke megalapozott marad). Ha ezután minden fejezetnek van ábrája, az animátor MODELLHÍVÁSA kimarad (a job modellje \`tool:section-visuals\`).
 Mit NEM tesz: példa nélküli fejezetbe nem talál ki ábrát → ilyenkor a modell dolgozik.
 Futtatás: automatikus; kézzel \`npm run studio:tool -- section-visuals <lecke.json>\`.`,
+  "arithmetic-claims": `### Eszköz: arithmetic-claims (minden bankcsomag-válasz után, kódból)
+Mit tesz: a módszerek, feladatok (kérdés + minta) és kvízek (kérdés + magyarázatok) szövegében minden „a · b = c" alakú (+ − · : műveletű, zárójel nélküli) aritmetikai állítást kiszámol; a hamis állítás (pl. „12 · 2 = 48", „154 · 8 = 1238") a csomagot javító körre küldi a lektor előtt.
+Mit NEM tesz: zárójeles kifejezést, szöveges következtetést, mértékegység-átváltást nem ítél meg — ezek a lektoré.
+Futtatás: automatikus; kézzel \`npm run studio:tool -- arithmetic-claims <csomag.json>\`.`,
 } as const;
 export type ToolSkillName = keyof typeof TOOL_SKILLS;
 
@@ -195,8 +199,8 @@ export type ToolSkillName = keyof typeof TOOL_SKILLS;
  *  the author got ~1,5k tokens of tool text per call they could not act on). */
 export const ROLE_TOOLS: Partial<Record<RoleSkillRole, ToolSkillName[]>> = {
   pedagogue: ["outline-autofix"],
-  animator: ["section-visuals", "bank-packet-autofix"],
-  bank: ["bank-packet-autofix"],
+  animator: ["section-visuals", "bank-packet-autofix", "arithmetic-claims"],
+  bank: ["bank-packet-autofix", "arithmetic-claims"],
 };
 
 for (const [role, tools] of Object.entries(ROLE_TOOLS) as [RoleSkillRole, ToolSkillName[]][]) {

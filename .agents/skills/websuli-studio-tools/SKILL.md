@@ -14,6 +14,8 @@ Cél (tulajdonosi döntés 2026-09-19): a formai hibákat és a sablonos munkát
 | outline-autofix | `server/studio/tools/outline-autofix.ts` | pedagógus lépés, `outlineSchema` előtt | `npm run studio:tool -- outline-autofix vazlat.json terkep.json` |
 | bank-packet-autofix | `server/studio/tools/bank-packet-autofix.ts` | minden bankcsomag-válasz után, a séma előtt (`experience-builder`) | `npm run studio:tool -- bank-packet-autofix csomag.json 0 c1,c2` |
 | section-visuals | `server/studio/section-visuals.ts` | animátor lépés: ha minden fejezet kap ábrát, NINCS modellhívás (`model = tool:section-visuals`); különben a modell után pótol | `npm run studio:tool -- section-visuals lecke.json` |
+| arithmetic-claims | `server/studio/tools/arithmetic-claims.ts` | minden bankcsomag-válasz után: a hamis „a · b = c” állítás (magyarázat, minta, kérdés) javító kört kap a lektor előtt | `npm run studio:tool -- arithmetic-claims csomag.json` |
+| section-patch (célzott szerzői javítás) | `server/studio/section-patch.ts` | szerzői javító kör: ha minden tanítási kifogás fejezethez köthető, a szerző csak azokat kapja vissza `{ "sections": { "<index>": … } }` alakban, a runner egyesíti; a többi fejezet bájtra azonos → a bankcsomagja újrahasznosul | nincs CLI (pipeline-belső) |
 
 A `terkep.json` lehet `{ "concepts": [{ "localId": … }] }` vagy egy `localId`-s tömb. A kimenet JSON: `fixes` (mit változtatott) és `result` (a javított objektum); `section-visuals` esetén `modelCallNeeded` mutatja, kellene-e még modell.
 
