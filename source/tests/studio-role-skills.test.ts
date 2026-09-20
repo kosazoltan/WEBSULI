@@ -30,6 +30,10 @@ test("a skill-blokk verziózott, a rendszerutasítás elejére kerül és idempo
   assert.ok(once.includes("=== SKILL VÉGE ==="));
   assert.equal(withRoleSkill("pedagogue", once), once, "kétszer nem duplázódik");
   assert.equal(roleSkillBlock("bank").includes(ROLE_SKILLS.bank), true);
+  // Mérve (regressziós futások 8909db64, 7aaed852): a lektor blokkolói kizárólag a HIBÁS opciók
+  // magyarázatának téves számaiból jöttek (148 · 8 = 1232; 100 : 8 = 12) — csomagonként egy csak-bank kör.
+  assert.match(ROLE_SKILLS.bank, /hibás opció magyarázata/, "a disztraktor-magyarázat számait is újraszámolja");
+  assert.match(ROLE_SKILLS.bank, /Önellenőrzés[\s\S]*minden opció magyarázatában/i, "önellenőrzési kérdés a magyarázatok számaira");
   assert.notEqual(roleSkillVersion("author"), roleSkillVersion("lektor"));
   assert.match(roleSkillVersion("author"), /^[a-f0-9]{12}$/);
 });

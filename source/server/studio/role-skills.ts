@@ -138,7 +138,7 @@ Kizárólag JSON: { "methods": [], "tasks": [], "quiz": [], "glossary": [] } —
 1. Minden tétel coversConceptIds-e az allowedConceptIds-ből; kvíznél pontosan egy id; fogalmanként egy recall és egy apply kvíz.
 2. tasks.required: ÉS-csoportok, csoporton belül VAGY-szinonimák; minden csoportban a fogalom alapalakja ÉS a sample-ben használt ragozott alak (pl. ["szorzás","szorzást"]). A sample teljes pontot érjen a saját rubrikán.
 3. minWords ne zárja ki a tömör helyes választ; needsSentence csak valódi mondatfeladatnál; legalább egy oral és egy written.
-4. Kvíz: 3–4 különböző opció, minden opcióhoz magyarázat; recall és apply ne csak számcserében térjen el. A correctIndex PONTOSAN azt az opciót jelölje, amelynek értékét a magyarázat helyesnek mondja: számolj kétszer, és a helyes opció magyarázatában ugyanaz a szám álljon, mint az opcióban (a program ezt ellenőrzi).
+4. Kvíz: 3–4 különböző opció, minden opcióhoz magyarázat; recall és apply ne csak számcserében térjen el. A correctIndex PONTOSAN azt az opciót jelölje, amelynek értékét a magyarázat helyesnek mondja: számolj kétszer, és a helyes opció magyarázatában ugyanaz a szám álljon, mint az opcióban (a program ezt ellenőrzi). A hibás opció magyarázata is számol: megnevezi a téves lépést, és minden számot, amit leír, újraszámolva ír le (mért hibák: „148 · 8 = 1232" — helyesen 1184; „100 : 8 = 12" — helyesen 12,5). Ha nem biztos a szám, a magyarázat a lépést nevezi meg szám nélkül.
 5. Módszerek: a kért kindek; gate/myth/popup → options+correctIndex; sorting/causeEffect/timeline → steps helyes sorrendben.
 6. Javításnál: csak a megnevezett tételeket add vissza eredeti id-val, minden mezővel; csoportot vagy alakot törölni, csoportokat összevonni tilos.
 ## Tilalmak
@@ -146,7 +146,7 @@ Kizárólag JSON: { "methods": [], "tasks": [], "quiz": [], "glossary": [] } —
 - Önkényes mintafelsorolás „bármely N példa" feladatban; ellentétes jelentések egy szinonimacsoportban; egész mondat szinonimaként.
 - Új id, tétel törlése, próza a JSON körül.
 ## Önellenőrzés a válasz előtt
-Darabszámok elérik a kértet? Minden required csoportban van sample-beli alak? Minden kvíz opciója különböző, feedback ugyanannyi? Minden id egyedi, minden coversConceptIds engedélyezett? Csak JSON?`,
+Darabszámok elérik a kértet? Minden required csoportban van sample-beli alak? Minden kvíz opciója különböző, feedback ugyanannyi? Minden opció magyarázatában (a hibásakéban is) újraszámoltam minden számot? Minden id egyedi, minden coversConceptIds engedélyezett? Csak JSON?`,
 
   lektor: `# Skill: lektor (lektor)
 ## Szerep
