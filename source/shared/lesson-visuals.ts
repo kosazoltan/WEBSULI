@@ -52,6 +52,24 @@ export function pickVisualWorld(seed?: number, avoid?: VisualWorldId): VisualWor
   return candidates[Math.floor(r * candidates.length)] ?? VISUAL_WORLDS[0];
 }
 
+/**
+ * Mérve (JPG regressziós futás 29a8b8e6): a tervező „meadow"-ra váltott a javasolt „dojo"-ról, de a
+ * fejezet-emojikat a dojo készletéből tartotta meg (🥷 ⚔️ 🥋). Ha a világ változott, az idegen
+ * világból származó emojik a választott világ készletére cserélődnek (sorban); a saját, témához illő
+ * emoji (pl. 🌊 a víznél) megmarad.
+ */
+export function harmoniseSectionEmojis<T extends { emoji?: string }>(sections: readonly T[], world: VisualWorld, proposed?: VisualWorld): T[] {
+  if (!proposed || proposed.id === world.id) return [...sections];
+  const foreign = new Set(proposed.emojis);
+  let cursor = 0;
+  return sections.map((section) => {
+    if (!section.emoji || !foreign.has(section.emoji)) return section;
+    const emoji = world.emojis[cursor % world.emojis.length];
+    cursor += 1;
+    return { ...section, emoji };
+  });
+}
+
 /** `**kiemelés**` → [{ text, key }] runs; unbalanced markers are rendered as plain text. */
 export function splitEmphasis(text: string): Array<{ text: string; key: boolean }> {
   const runs: Array<{ text: string; key: boolean }> = [];
