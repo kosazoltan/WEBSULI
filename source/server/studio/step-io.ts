@@ -275,6 +275,8 @@ export function buildAuthorPrompt(
   sections: OutlineSection[],
   map: PromptMap,
   blockerNotes: RawNote[],
+  /** Spec §6: when set, only these section indices are rewritten and returned as a patch. */
+  repair?: { targetSections: ReadonlyArray<number> },
 ): string {
   const authorNotes = blockerNotes.filter((n) => n.subkind !== "book_probably_wrong");
   const conceptIds = [...new Set(sections.flatMap((s) => s.conceptIds))];
@@ -336,8 +338,17 @@ export function buildAuthorPrompt(
     "- Ha a vázlat „ellenőrzés” fejezetet tervez: `explain` a teljes eljárás számozott lépéseivel és egy önellenőrző kérdéssorral (miért ez következik?), majd `recap`.",
     "- A `misconceptions` tömb a vázlat tévhitlistáját tartalmazza változatlanul (conceptId + text); ne hagyd üresen, ha a vázlatban van.",
     "",
-    "A válasz CSAK JSON legyen, a Lesson sémának megfelelően:",
-    '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [{ "conceptId": string, "text": string }], "sourceOnly": true }',
+    ...(repair
+      ? [
+          // Spec 2026-09-19 §6 (mérve: a teljes újraírás után a bank szinte teljesen újraépült).
+          `CÉLZOTT JAVÍTÁS: kizárólag a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet írd újra (0-tól számozott index: ${repair.targetSections.join(", ")}). A többi fejezetet a program változatlanul megőrzi — azokat NE küldd vissza, és a javított fejezetben is csak a kifogásolt részt változtasd.`,
+          "A válasz CSAK JSON legyen, ebben az alakban (a kulcs a fejezet 0-tól számozott indexe):",
+          '{ "sections": { "<index>": { "heading": string, "probaEnabled": true, "blocks": [...] } } }',
+        ]
+      : [
+          "A válasz CSAK JSON legyen, a Lesson sémának megfelelően:",
+          '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [{ "conceptId": string, "text": string }], "sourceOnly": true }',
+        ]),
     "",
     "Vázlat:",
     JSON.stringify(sections, null, 2),

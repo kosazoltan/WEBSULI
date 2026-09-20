@@ -22,6 +22,7 @@ import { withRoleSkill } from "../server/studio/role-skills";
 import { fromMapBody } from "../server/studio/from-map-body";
 import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
+import { lessonSchema } from "../shared/lesson-schema";
 import { classifyNotes, type LektorNote } from "../server/studio/lektor";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
@@ -1406,4 +1407,51 @@ test("(s) 1. körben új, korábban nem jelzett fejezet fedettségi hiánya figy
   factual.store.seed({ id: "factual", mapId: "m1", step: "lektor", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON } });
   const blocked = await runPipelineStep("factual", factual);
   assert.ok(blocked.ok && blocked.next.step === "author" && blocked.next.round === 2, `a tényhiba új szerzői kört indít: ${JSON.stringify(blocked)}`);
+});
+
+/* Spec 2026-09-19 §6 (D10) — célzott szerzői javítás: a nem érintett fejezet bájtra azonos, a bankcsomagja újrahasznosul. */
+test("(t) célzott javítás: csak a kifogásolt fejezet cserélődik, a másik fejezet csomagja modellhívás nélkül marad", async () => {
+  const base = standardFusionFixture(); const e = base.experience!;
+  const lesson = lessonSchema.parse({ ...base, mapId: "m1", subject: MAP_META.subject, classroom: MAP_META.classroom, experience: undefined,
+    sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] });
+  const packetFor = (sectionIndex: number, suffix: string) => ({
+    methods: e.methods.map(m => ({ ...m, sectionIndex, title: m.title + suffix, prompt: m.prompt + suffix })),
+    tasks: e.tasks.map(t => ({ ...t, sectionIndex, q: t.q + suffix })),
+    quiz: e.quiz.map(q => ({ ...q, sectionIndex, question: q.question + suffix })),
+    glossary: [],
+  });
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  let checkpoint: ExperienceCheckpoint | undefined;
+  const experience = await buildLessonExperience(lesson, concepts, {
+    call: async (_s, user) => packetFor(Number(/sectionIndex=(\d+)/.exec(user)![1]), ` (${/sectionIndex=(\d+)/.exec(user)![1]}. fejezet)`),
+    save: async cp => { checkpoint = structuredClone(cp); },
+  });
+  const previous = { ...lesson, experience };
+  // The lektor blocked one teaching block in section 1 (blockPath "1.0").
+  const note = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "1.0", message: "A második fejezet magyarázata ellentmond a forrásnak." };
+  const explain = previous.sections[1].blocks.find(b => b.kind === "explain")!;
+  const patched = { ...previous.sections[1], blocks: previous.sections[1].blocks.map(b => b === explain && b.kind === "explain" ? { ...b, text: b.text + " (javítva a forrás szerint)" } : b) };
+  const deps = makeDeps(JSON.stringify({ sections: { "1": patched } }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "targeted", mapId: "m1", step: "author", round: 1, output: {
+    approvedOutline: { sections: [{ heading: "A", conceptIds: ["area"], plannedBlocks: ["explain"], animationSuggestions: [] }, { heading: "B", conceptIds: ["area"], plannedBlocks: ["explain"], animationSuggestions: [] }], misconceptions: [] },
+    lesson: previous, experienceCheckpoint: checkpoint, methodVersion: e.version, report: { notes: [note] }, reportRound: 0,
+  } });
+  const authored = await runPipelineStep("targeted", deps);
+  assert.ok(authored.ok, JSON.stringify(authored));
+  assert.match(deps.calls[0].system, /CÉLZOTT JAVÍTÁS: kizárólag a\(z\) 2\. fejezetet/);
+  const job = deps.store.jobs.get("targeted")!;
+  const result = job.output?.lesson as typeof previous;
+  assert.equal(JSON.stringify(result.sections[0]), JSON.stringify(previous.sections[0]), "az érintetlen fejezet bájtra azonos");
+  assert.match(JSON.stringify(result.sections[1]), /javítva a forrás szerint/);
+  assert.deepEqual(result.misconceptions, previous.misconceptions);
+
+  // The animator rebuilds only the changed section's packet; section 0 comes from the checkpoint.
+  job.step = "animator"; job.status = "ok";
+  const bankDeps = makeDeps(JSON.stringify(packetFor(1, " (1. fejezet, javított)")));
+  const rebuilt = await runPipelineStep(job.id, { ...bankDeps, store: deps.store });
+  assert.ok(rebuilt.ok, JSON.stringify(rebuilt));
+  const bankCalls = bankDeps.calls.filter(c => /allowedConceptIds=/.test(c.user));
+  assert.equal(bankCalls.length, 1, `csak a változott fejezet csomagját kéri: ${bankCalls.length}`);
+  assert.match(bankCalls[0].user, /sectionIndex=1/);
 });
