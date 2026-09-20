@@ -329,3 +329,13 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Lezárás 2026-09-20 09:10 (PR #87):** mérés 10 (run 924dbfaf, egyedül futó Műveleti-lecke, 5 párhuzamos csomag + célzott javítás): **`done` 839 s = 14 perc**, lecke `5ece9c8c`, 9 fejezet, 45/75/20, ≈ 0,6 USD. A spec §7 elfogadási céljai (idő < 20 perc, lecke < 1,2 USD, bank < 0,2 USD) teljesülnek. Célzott javítás mérve: szerzői kör 11 s, animátor 2. kör 100 s (korábban 480–1 010 s). Kiadva: PR #77–#87, Render-revízió mindnél ellenőrizve.
 
 **Lezárás 2026-09-20 10:05 (PR #89):** értelmező lektor (kutatás-alapú „nem kicsinyes" politika, blokkoló csak ha hamis ÉS félrevezet, kalibráló példák, medium effort), kétirányú fejezet-szintű megalapozottság, kapu a limiten célzott javítást ad. Mérés 12 (run 3d18dbe1, egyedül): **`done` 580 s = 9,7 perc**, lecke `72cac9fe`, 11 fejezet, 45/75/22, ≈ 0,7 USD; hamis pozitív 0, szerzői kör 0, a lektor egyetlen valódi hibát talált (10 s-os tétel-javítás). Kiadva: PR #77–#89.
+
+## 2026-09-20 (dél) — Színes, figyelemfelkeltő tananyag (a gyerekek édesanyjának kérése)
+
+**Kérés:** alsó tagozatosoknak érdekfeszítő színek, kiemelések minden tananyagban, leckénként véletlen grafikai hangulat; ötletforrás a 2026. jan–márc. leckék főlapja.
+
+**Diagnózis:** a Studio-lecke témája eddig determinisztikus hash volt (6 visszafogott téma), a tervező nem foglalkozott a megjelenéssel, a szöveg kiemelés nélkül futott. A régi leckék (mérve): élénk többszínű paletták, 135°-os gradiensek, emoji-világok (🥷 🚀 🍎 🦋 🌊 🎮), tipp-dobozok.
+
+**Javítás (PR #91):** 8 vizuális világ (`shared/lesson-visuals.ts` + CSS, paletta-szinkron teszttel); a runner véletlen világot javasol a tervezőnek (jobonként rögzítve, hash része); a lélek/skill: színes, figyelemfelkeltő, a kiemelés a lényeget mutatja; a vázlat fejezet-emoji-t és kulcskifejezéseket ad; a szerző `**…**`-gal emel ki; a runtime `<mark class="lesson-key">`-ként rendereli, emoji a címek és a haladásjelző előtt, „Miért?" kártya; a bank témája a világ. Spec: docs/specs/2026-09-20-colorful-lessons.md.
+
+**Verifikáció (ellenőrzött):** kapuk (tsc, check:test, lint, npm test 1342/1342, vite build), CI zöld, merge. Mérés 13 (run 8769e7ea, egyedül): `done` 946 s, lecke `9a472399`; a tervező „ocean-kids" világot választott, 8/8 fejezet emoji + 2–3 kulcskifejezés, a szerző 8/8 fejezetben kiemelt, `experience.theme = ocean-kids`.
