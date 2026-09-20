@@ -593,6 +593,26 @@
     animation: fade-in-up 0.6s ease-out;
   }
 
+  /*
+   * Tananyaglista beúszása (spec 2026-09-20, mért hiba).
+   * Két szándékos megkötés, hogy a tananyag SOHA ne tűnhessen el:
+   *  - nincs `animation-fill-mode`: a nyugalmi állapot a látható lista, az animáció csak díszítés;
+   *  - az animáció CSAK mozgást állít, áttetszőséget NEM. Mérve: rejtett fülön a dokumentum
+   *    idővonala megáll, és egy opacity-átmenet félúton (akár 0-nál) befagyhat — pontosan ez volt
+   *    a hiba a korábbi, Framer-alapú `initial="hidden"` megoldásnál is.
+   */
+  @keyframes list-enter {
+    from {
+      transform: translateY(12px);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .list-enter {
+      animation: list-enter 320ms ease-out;
+    }
+  }
+
   /* Geodesic Dome kártya stílusok (oktaéder sátor) - narancs-sárga belső világítás */
   .glass-card {
     background: rgba(30, 20, 15, 0.6);
