@@ -222,6 +222,28 @@ működő folyamatokat, és a grafikai sokszínűség is érvényesüljön."
 | Térkép (Műveleti) 2. (run 8909db64) | `error` | 1 058 s | jungle | a lektor **3 valódi** hibát jelölt (rossz műveleti sorrendű végeredmények: 86↔34, 111↔89, 99↔61); a csak-bank javító válasz quiz-azonosítója négy kísérleten át nem egyezett → `resolvePatchIds` (lent) |
 | Térkép (Műveleti) 3. (run 7aaed852, job 0567b9b3) | `done` | 1 160 s | magic, 8/8 fejezet-emoji a világ készletéből, 8/8 fejezetben `**kiemelés**` | a lektor 2 valódi hibát jelölt (disztraktor-magyarázatok téves számai), 1 csak-bank kör az azonosító-feloldással átment, kapu + readback elsőre; 45/75/16 bank, lecke `1427cd59` |
 Grafikai sokszínűség mérve négy egymást követő futáson: ocean-kids (mérés 13) → meadow (JPG) → jungle (2.) → magic (3.).
+
+## 7n. A disztraktor-magyarázatok számai (tulajdonosi kérés 2026-09-20 délután)
+Mérve (2. és 3. térkép-futás): a lektor blokkolói KIZÁRÓLAG a hibás opciók magyarázatának téves számaiból
+jöttek („148 · 8 = 1232" — 1184; „100 : 8 = 12" — 12,5), csomagonként egy csak-bank kör (≈ 4–5 perc).
+Az `arithmetic-claims` ezeket nem fogja: a magyarázat egyenlőségei önmagukban igazak, a hiba a lépés
+műveleti sorrendje vagy egy nem kiírt osztás.
+- Javítás (skill, nem kód): a bank-skill 4. lépése — a hibás opció magyarázata is számol: megnevezi a téves
+  lépést, minden leírt számot újraszámolva ír; ha bizonytalan, szám nélkül nevezi meg a lépést. Önellenőrzés:
+  „minden opció magyarázatában (a hibásakéban is) újraszámoltam minden számot?" A skill-verzió változik →
+  a bank-checkpointok egyszer újragenerálódnak.
+- Elfogadás: WHEN a Műveleti-lecke egyedül fut az új skillel THEN `done`, és a lektor 0 disztraktor-szám
+  blokkolót ad (csak-bank kör 0) — mérés lent.
+| Mérés | Eredmény | Idő | Csak-bank kör | Lektori blokkoló |
+| --- | --- | --- | --- | --- |
+| 4. (új bank-skill, run a9a4f683, egyedül) | `done`, lecke `73bcdab7`, space világ, 9/9 emoji, 45/75/19 | 1 513 s | **0** | **0** (a lektor üres jegyzettel engedett, kapu elsőre) |
+Az elfogadás teljesül. Az animátor fázis 1 261 s volt (mérés 12: 245 s): minden csomag újraépült a skill-verzió miatt,
+és 3 csomag 2 glm-kísérlet után tartalékra (deepseek), ebből 2 mentőkörre (terra) ment — a glm kimenete
+hosszabb lett (79k ki, mérés 12: 57k). A bukott kísérletek oka a naplóból nem volt olvasható (csak ujjlenyomat):
+ezért ugyanebben a PR-ban a banképítő `onAttemptFailure` visszahívást ad, a runner WARN-nal naplózza
+(`Bankcsomag bukott kísérlet … N. fejezet, K. kísérlet: <ok>`). A következő mérés ebből mondja meg, mi bukik.
+Mérleg: 0 csak-bank kör (−4–5 perc), de a frissen épülő bank ára a modell-szórás — az idő nem a skill, hanem a
+tartalék/mentő láncolás (2 glm + deepseek + terra sorban egy csomagra ≈ 5–8 perc).
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű

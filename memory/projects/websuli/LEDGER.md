@@ -351,3 +351,13 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Verifikáció (ellenőrzött):** kapuk zöldek (tsc, check:test, lint 0, npm test 1348/1348), CI zöld mindhárom PR-on, Render revízió ellenőrizve. Élesben mobil nézetben (375 px): a lecke-oldalon a váltó gombok aktívak („Előző: A talaj", „Következő: Present Simple…"), vízszintes túlcsordulás 0; a főlap `Cache-Control: no-store`, a frissítő gomb a bundle-ben. Regresszió: JPG `done` 973 s (meadow), internetes `done` 1 166 s, térkép `done` 1 160 s (magic, 8/8 emoji + kiemelés, 2 valódi lektori hiba 1 csak-bank körrel javítva, kapu elsőre); négy egymást követő lecke négy különböző világ (ocean-kids → meadow → jungle → magic). Spec §7m.
 
 **Tanulság:** a javító-kör őre ne öljön meg futást formai (azonosító-) eltérés miatt, ha a szándék egyértelmű; a tanulói lépéssorok egyenlőség-láncok; az időmérés csak egyedül futó leckén érvényes.
+
+## 2026-09-20 (délután, 2.) — Disztraktor-magyarázatok számai a bank-skillben; bukott bankkísérlet oka a naplóban
+
+**Kérés:** a lektor rendszeresen elkapta a hibás kvíz-opciók magyarázatának téves számait (csomagonként egy csak-bank kör, ≈ 4–5 perc) — legyen egyszerű, gyors, mért javítás teljes lánccal.
+
+**Javítás (PR #97):** a bank-skill 4. lépése: a hibás opció magyarázata is számol, minden leírt számot újraszámolva; bizonytalanul szám nélkül nevezi meg a téves lépést; önellenőrzési kérdés. Kód nem változott a szabályhoz. Mellé: `onAttemptFailure` a banképítőben, a runner WARN-nal naplózza a bukott kísérlet szöveges okát (eddig csak ujjlenyomat).
+
+**Verifikáció (ellenőrzött):** 4. mérés (run a9a4f683, egyedül): `done` 1 513 s, lecke `73bcdab7` (space világ, 9/9 emoji, 22 kiemelés, élesben megnézve), **0 lektori jegyzet, 0 csak-bank kör**, kapu elsőre. Az animátor 1 261 s: minden csomag újraépült (skill-verzió), 3 csomag tartalék/mentő láncra ment — az ok a következő méréstől olvasható. Kapuk: tsc, check:test, lint 0, 1348/1348; CI zöld.
+
+**Tanulság:** a lektor blokkolóit hibaosztályonként a gyártó skilljébe kell visszaírni (mért példával), nem új kód-őrrel; a frissen épülő bank ideje a tartalék-láncolástól szór, ezért időmérés csak azonos checkpoint-állapotból hasonlítható.
