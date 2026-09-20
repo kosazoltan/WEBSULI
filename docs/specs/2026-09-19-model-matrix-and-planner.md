@@ -139,6 +139,24 @@ következő futásban a lektor elé sem jut.
 A #82 (fejezet-szintű megalapozottság) nélkül a 2. kör elmaradt volna (−3 perc), a quiz.60 osztályt
 a kiterjesztett `quizCorrectIndexProblems` (#83) a lektor előtt fogja meg (−7 perc) → várható ≈ 15 perc.
 
+## 7h. Mérés 7–8 és a tulajdonos 49 fogalmas térképe (2026-09-20 hajnal, két futás párhuzamosan)
+- **Run 7** (a5747585, #83 kód): hiba 1 031 s-nál — a #83 minden-opciós kvíz-ellentmondás szabálya hamis
+  pozitív („27 helyett 10” egy hibás opció indoklásában jogos) → 4 kísérlet után megölte a 11. fejezet
+  csomagját → **#84 hotfix** (csak a helyes opcióra). Tanulság a lektor jegyzeteiből: a szerzői kör oka
+  valódi tanítási hiba volt (recap „nem mindig balról jobbra”), a lektor pontos.
+- **49 fogalmas térkép** (08af437e, biológia „Zöldségek növényi szervei”, run e1b57553): **`done` 2 072 s**,
+  lecke `35a75fbb`, 12 fejezet, 59 feladat / 118 kvíz / 33 módszer. Tokenek: Opus 12k/2,5k; terra 53k/24k;
+  glm ≈ 468k/174k; grok 393k/4k → ≈ 1,4 USD (korábban ≈ 4,1 USD, 2 317 s). A 2. szerzői kör (jogos: a bank
+  tanítatlan tényt kérdezett) után szinte minden csomag újraépült (817 s) — a célzott fejezet-javítás (§6)
+  a maradék nagy tényező.
+- **Run 8** (a5747585, #84 kód): **`done` 2 382 s** (két futás párhuzamosan osztozott a modelleken), lecke
+  `b643e839`, 9 fejezet, 45/75. Kapu-elutasítás: „A leggyakoribb hibák” explain→check terv vs. ív-szabály
+  (kérdés előtt példa) → **#85**: a terv példát ad a kérdés előtt. Nyitott: a csak-bank kör egyszer 482 s /
+  123k tokent evett (több csomag épült újra egyetlen tétel miatt) — kivizsgálandó.
+- **Időcél:** a 20 perc egyedül futó Műveleti-leckére a fenti javításokkal várható (bank 666–740 s + 1–2
+  rövid kör); párhuzamos két futásnál nem teljesül. Költségcél (< 1,2 USD) a 10 fejezetes leckén teljesül
+  (≈ 0,65 USD), a 49 fogalmas térképen ≈ 1,4 USD.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.
