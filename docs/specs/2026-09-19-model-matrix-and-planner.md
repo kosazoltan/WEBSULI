@@ -313,7 +313,13 @@ tehát nem csonkolás és nem a ```json kerítés (azt a `stripJsonFences` kezel
 | --- | --- | --- | --- |
 | 6. (JSON-mód nélkül) | `done` 521 s | 249 s | 2 (11 csomagból) |
 | 7. (JSON-móddal, run 41b17f6d) | `done` **399 s**, lecke `c10c6ae5`, ocean-kids, 45/75/21, lektor 0 jegyzet, kapu elsőre | **144 s** | 1 (10 csomagból) |
-A teljes lánc a kiindulási 1 513 s-ról 399 s-ra (−74 %), az animátor 1 261 s-ról 144 s-ra (−89 %) csökkent.
+| 8. (JSON-mód + szerkezeti diagnosztika, run 0a262308) | `done` 756 s, lecke `bfb43d92`, meadow, 12 fejezet, 45/75/26 | 1. kör **156 s**, csak-bank kör 260 s | 1 (12 csomagból) + 1 valódi hosszkorlát |
+A teljes lánc a kiindulási 1 513 s-ról 399 s-ra (−74 %), az animátor 1 261 s-ról 144–156 s-ra (−88 %) csökkent.
+**A maradék hibaosztály bizonyítva (8. mérés, az új diagnosztikával):** `a válasz nem érvényes JSON (7 330 karakter,
+lezárt, de középen hibás (a modell sorosítása), 915. pozíció)` — tehát **nem csonkolás** és JSON-mód mellett is
+előfordul; egy másik csomag valódi hosszkorlátra futott. Mindkettő egyetlen újrakísérlésbe kerül, és a következő
+kísérlet átment. Heurisztikus JSON-javítást szándékosan NEM építünk: tanulói tartalmat csendben elronthat, a
+nyereség pedig egy kísérlet a tízből. A csak-bank kör ábra-hívás nélkül futott (0 hívás, korábban 722 s).
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű
