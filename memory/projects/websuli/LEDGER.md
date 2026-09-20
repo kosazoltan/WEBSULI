@@ -388,4 +388,6 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 
 **Verifikáció (ellenőrzött):** kapuk zöldek (tsc, check:test, lint 0, 1352/1352). 7. mérés (JPG új térkép + friss bank, egyedül): `done` **399 s**, animátor **144 s**, lecke `c10c6ae5`, lektor 0 jegyzet, kapu elsőre; élesben ocean-kids világ, 10 emoji, 32 kiemelés. A teljes lánc 1 513 → 399 s (−74 %), az animátor 1 261 → 144 s (−89 %).
 
-**Korlátozás (mérve, nem elhallgatva):** JSON-mód mellett is előfordult egy törött válasz (10 csomagból 1) — az OpenRouter `json_object` a glm útvonalon nem bizonyítottan kikényszerített. A hibaosztály ritkul, de nem szűnik meg; a maradékot a kísérlet-lánc kezeli, és a következő eset szerkezeti leírása megmondja a pontos okot.
+**Korlátozás (mérve, nem elhallgatva):** JSON-mód mellett is előfordul törött válasz — az OpenRouter `json_object` a glm útvonalon nem bizonyítottan kikényszerített. A 8. mérés az új diagnosztikával bizonyította az okot: „7 330 karakter, lezárt, de középen hibás (a modell sorosítása), 915. pozíció” — tehát nem csonkolás; egy másik csomag valódi hosszkorlátra futott. Mindkettő egy újrakísérlésbe kerül, és a következő kísérlet átment. Heurisztikus JSON-javítást szándékosan nem építettünk: tanulói tartalmat csendben elronthat, a nyereség egy kísérlet a tízből.
+
+**8. mérés (run 0a262308):** `done` 756 s, 12 fejezetes lecke `bfb43d92` (meadow, 45/75/26); animátor 1. kör 156 s, a csak-bank kör 260 s **ábra-modellhívás nélkül** (a naplóban 0 ilyen hívás; korábban ugyanitt 722 s ment el rá).
