@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createStudioStepProvider, STUDIO_STEP_POLICY, studioConnection } from "../server/ai/studio-provider";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
-import { callStepModel } from "../server/studio/run-step";
+import { callStepModel, stepDeadlineMs } from "../server/studio/run-step";
+import { AIProviderTimeoutError } from "../server/ai/AIProvider";
 
 /*
  * Spec 2026-09-19 (modellmátrix + Opus 5 tervkészítő) — the request SHAPES the Studio
@@ -75,6 +76,27 @@ test("a bank/animátor kérése egyszer megy el: az SDK nem próbálja újra cse
     await assert.rejects(callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" }));
     assert.equal(fetches, 1, `${step}: egyetlen kérés, rejtett újrapróbálás nélkül`);
   }
+});
+
+// Spec §7o (mérve, 5. mérés): az SDK kliens-timeoutja a fejlécekig él; a törzs olvasását csak a külső
+// AbortSignal-határidő szakítja meg — ez minden szabályzatos lépésnek jár, nem csak a lektornak.
+test("a bank/animátor kérés külső határidőt kap, amely a törzs olvasását is megszakítja (időtúllépés okkal)", async t => {
+  withEnv(t, { OPENROUTER_API_KEY: "test-placeholder" });
+  assert.equal(stepDeadlineMs("animator"), STUDIO_STEP_POLICY.animator.timeoutMs);
+  assert.equal(stepDeadlineMs("bank"), STUDIO_STEP_POLICY.bank.timeoutMs);
+  assert.equal(stepDeadlineMs("author"), undefined, "szabályzat nélküli lépésnek nincs külső határideje");
+  const controller = new AbortController();
+  let timeoutMs: number | undefined;
+  t.mock.method(AbortSignal, "timeout", (ms: number) => { timeoutMs = ms; return controller.signal; });
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    controller.abort(new DOMException("A határidő lejárt", "TimeoutError"));
+    assert.ok(init?.signal?.aborted, "a jelzés a kérésre van kötve");
+    throw new DOMException("aborted", "AbortError");
+  });
+  const provider = createStudioStepProvider("z-ai/glm-5.3-flash", "animator");
+  await assert.rejects(callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" }),
+    (error: unknown) => error instanceof Error && error.cause instanceof AIProviderTimeoutError);
+  assert.equal(timeoutMs, 240_000);
 });
 
 test("a lektor szabályzata változatlan; szabályzat nélküli lépés (author) nem kap effortot", async t => {

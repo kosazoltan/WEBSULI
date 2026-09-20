@@ -265,8 +265,22 @@ three hidden 180-second attempts"). A rések pontosan illeszkednek: 364 ≈ 240 
    olcsó családot 2–10 percig végigvárni (`models-routing` teszt frissítve, dokumentált spec-változás).
 **Várt hatás:** egy rossz csomag ára legfeljebb 2 × glm (≈ 1 perc) + 240 s + terra (≈ 1 perc) ≈ 6 perc a korábbi
 12–15 helyett; a tipikus eset (nincs időtúllépés) változatlanul 4–6 perc a teljes bankra.
-**Elfogadás:** WHEN friss bankot építő lecke fut egyedül THEN az animátor fázis ≤ 600 s, és egyetlen bank-hívás
-sem tart 240 s-nál tovább (a WARN-napló mutatja a bukott kísérlet okát és idejét).
+**Második gyökérok (5. mérés, run a0eb2bed, a fenti három javítással futott):** a csak-bank körben az ábra-modellhívás
+(glm) **609 s**-ig futott a 240 s-os kliens-timeout és `maxRetries: 0` ellenére, majd „hosszkorlát”-tal bukott; a
+deepseek tartalék 113 s után ugyanígy. A forrásból (`node_modules/openai/client.js`, `fetchWithTimeout`): az SDK az
+időzítőt a `finally`-ban törli, amint a `fetch` feloldódik — vagyis a **fejlécek** érkezésekor; a törzs (a lassú,
+24k tokenig futó generálás) olvasása korlát nélkül fut, az OpenRouter pedig azonnal küld fejlécet. A lektor külső
+`AbortSignal.timeout` határideje ezt már áthidalta (a jelzés a törzs olvasását is megszakítja) — csak a lektoré volt.
+**Javítás (kód, két további elem):**
+4. `run-step.ts` `stepDeadlineMs(step)`: minden szabályzatos lépés (bank/animator 240 s, gateHelper/quizPolish 180 s,
+   pedagogue 300 s, lektor a sajátja) külső, törzsre is érvényes határidőt kap; lejáratkor `AIProviderTimeoutError`
+   ok (teszt: `studio-provider-policy` „külső határidő … törzs olvasását is megszakítja”).
+5. Csak-bank körben (a lektor banktételekre küldött vissza) az ábra-modellhívás kimarad: a szöveg lektorált és
+   változatlan, a hívás a mérésben 722 s-ot vitt és semmit nem adott (teszt: `lesson-pipeline-runner` „csak-bank
+   körben nincs ábra-modellhívás”).
+**Elfogadás:** WHEN friss bankot építő lecke fut egyedül THEN az animátor fázis ≤ 600 s, és egyetlen modellhívás sem
+tart a lépés határidejénél tovább (a WARN-napló mutatja a bukott kísérlet okát és idejét); WHEN csak-bank kör fut
+THEN nincs ábra-modellhívás.
 | Mérés | Térkép | Eredmény | Animátor | Tartalék/mentő | Megjegyzés |
 | --- | --- | --- | --- | --- | --- |
 | 5. | 49 fogalmas biológia (08af437e), friss bank | _(mérés alatt)_ | | | |

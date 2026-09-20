@@ -479,7 +479,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   const primaryModel = resolveStudioModel(job.step);
   let model = primaryModel;
-  const reusedVisuals = job.step === "animator" && canReuseLessonVisuals(job.output?.lesson);
+  // Mérve (5. mérés, run a0eb2bed): a csak-bank javító körben a szöveg már lektorált és változatlan, az
+  // ábra-modellhívás mégis újra lefutott (glm 609 s + deepseek 113 s, mindkettő hosszkorlát) — semmit nem
+  // adott hozzá. Csak-bank körben (a lektor banktételekre küldött vissza) az ábrák változatlanok maradnak.
+  const reusedVisuals = job.step === "animator" && (canReuseLessonVisuals(job.output?.lesson) || !!bankReview?.feedback.length);
   // Eszköz (2026-09-19): ha minden fejezet a saját példájából kap ábrát, nincs animátor-modellhívás.
   const toolVisuals = job.step === "animator" && !reusedVisuals ? deterministicSectionVisuals(job.output?.lesson as Lesson | undefined, map.concepts) : null;
   let bankModelUsed: string | null = null;

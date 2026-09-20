@@ -1,7 +1,12 @@
 import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
-import { LEKTOR_TIMEOUT_MS } from "../ai/studio-provider";
+import { LEKTOR_TIMEOUT_MS, STUDIO_STEP_POLICY } from "../ai/studio-provider";
+
+/** Outer, body-inclusive deadline of one model request for a step (spec §7o); undefined = none. */
+export function stepDeadlineMs(step: string): number | undefined {
+  return step === "lektor" ? LEKTOR_TIMEOUT_MS : STUDIO_STEP_POLICY[step]?.timeoutMs;
+}
 import { workflowCheckpoint, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 
 /**
@@ -52,8 +57,14 @@ export async function callStepModel(
   signal?.throwIfAborted();
   input = { ...input, system: input.system + workflowSkillPrompt() };
   return workflowCheckpoint("studio-model", input, async () => {
-    if (input.step === "lektor") {
-      const deadline = AbortSignal.timeout(LEKTOR_TIMEOUT_MS);
+    // Mérve (5. mérés, run a0eb2bed): az animátor glm-hívása 609 s-ig futott a 240 s-os kliens-timeout
+    // ellenére. Ok a forrásból: az OpenAI SDK `fetchWithTimeout` a `finally`-ban törli az időzítőt, amint a
+    // fejlécek megérkeztek — a TÖRZS (a lassú, 24k-ig futó generálás) olvasása korlát nélkül fut, az
+    // OpenRouter pedig azonnal küld fejlécet. A lektor külső AbortSignal-határideje ezt már áthidalta;
+    // ugyanez jár minden szabályzatos lépésnek: a jelzés a törzs olvasását is megszakítja.
+    const deadlineMs = stepDeadlineMs(input.step);
+    if (deadlineMs) {
+      const deadline = AbortSignal.timeout(deadlineMs);
       signal = signal ? AbortSignal.any([signal, deadline]) : deadline;
     }
     const result = await callUncachedStepModel(provider, input, signal);
@@ -71,8 +82,9 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     signal?.throwIfAborted();
   } catch (error) {
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
-    const cause = input.step === "lektor" && signal?.aborted && signal.reason?.name === "TimeoutError"
-      ? new AIProviderTimeoutError(provider.name, LEKTOR_TIMEOUT_MS) : error;
+    const deadlineMs = stepDeadlineMs(input.step);
+    const cause = deadlineMs && signal?.aborted && signal.reason?.name === "TimeoutError"
+      ? new AIProviderTimeoutError(provider.name, deadlineMs) : error;
     throw new StepModelError(input.step, "a szolgáltató hibát jelzett", { cause });
   }
 

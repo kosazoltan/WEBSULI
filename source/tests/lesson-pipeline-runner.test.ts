@@ -630,6 +630,35 @@ test("hibás vagy helyőrző ábra, tanítatlan fogalom, hiányzó szakaszábra 
   assert.equal(canReuseLessonVisuals(missing), false);
 });
 
+// Spec §7o (mérve, 5. mérés, run a0eb2bed): csak-bank körben az ábra-modellhívás újra lefutott (glm 609 s +
+// deepseek 113 s, mindkettő hosszkorlát) és semmit nem adott — a lektorált szöveg és ábrái változatlanok maradnak.
+test("csak-bank körben nincs ábra-modellhívás akkor sem, ha az ábrák nem újrahasznosíthatók", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  // Nem renderelhető ábra (egylépéses folyamat): az ábra önmagában nem újrahasznosítható, a tanítás változatlan.
+  for (const block of lesson.sections[0].blocks) if (block.kind === "animate") block.params = { steps: ["egyetlen lépés"] };
+  assert.equal(canReuseLessonVisuals(lesson), false);
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "RUBRIKA-HIBA: több helyes példát enged a kérdés." }];
+  const deps = makeDeps(JSON.stringify({ notes }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  deps.store.seed({ id: "bank-only-visuals", mapId: "m1", step: "lektor", output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
+  const reviewed = await runPipelineStep("bank-only-visuals", deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "animator" && reviewed.next.round === 1, JSON.stringify(reviewed));
+  const job = deps.store.jobs.get("bank-only-visuals")!;
+  job.step = "animator"; job.round = 1; job.status = "ok";
+  const bankDeps = makeDeps(JSON.stringify({ tasks: lesson.experience.tasks }));
+  const repaired = await runPipelineStep(job.id, { ...bankDeps, store: deps.store });
+  assert.ok(repaired.ok, `${JSON.stringify(repaired)} ${job.error ?? ""}`);
+  assert.equal(bankDeps.calls.length, 1, "egyetlen hívás: a bankcsomag — ábra-modellhívás nélkül");
+  assert.match(bankDeps.calls[0].system, /RUBRIKA-HIBA/);
+  const after = (job.output?.lesson as typeof lesson).sections[0].blocks.find(b => b.kind === "animate");
+  assert.deepEqual(after && after.kind === "animate" ? after.params : null, { steps: ["egyetlen lépés"] }, "a szöveg és az ábrák változatlanok");
+});
+
 test("lektori bankhiba közvetlenül a banképítőhöz jut (csak-bank kör); a nyelvi javítás sem vész el", async () => {
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
