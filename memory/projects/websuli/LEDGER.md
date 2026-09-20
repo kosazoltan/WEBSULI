@@ -361,3 +361,19 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Verifikáció (ellenőrzött):** 4. mérés (run a9a4f683, egyedül): `done` 1 513 s, lecke `73bcdab7` (space világ, 9/9 emoji, 22 kiemelés, élesben megnézve), **0 lektori jegyzet, 0 csak-bank kör**, kapu elsőre. Az animátor 1 261 s: minden csomag újraépült (skill-verzió), 3 csomag tartalék/mentő láncra ment — az ok a következő méréstől olvasható. Kapuk: tsc, check:test, lint 0, 1348/1348; CI zöld.
 
 **Tanulság:** a lektor blokkolóit hibaosztályonként a gyártó skilljébe kell visszaírni (mért példával), nem új kód-őrrel; a frissen épülő bank ideje a tartalék-láncolástól szór, ezért időmérés csak azonos checkpoint-állapotból hasonlítható.
+
+## 2026-09-20 (délután, 3.) — Az animátor fázis 20 perces futásának gyökéroka: rejtett SDK-újrapróbálás időtúllépésre
+
+**Kérés:** „Az animátor fázis ilyen hosszú futása nem megengedett. Keresd meg a gyökérokot, és javítsd!”
+
+**Diagnózis (mérve):** 23 futás animátor-adata szerint a friss bank tokenszáma stabil (51–79k), az idő 245–1 261 s között szór; minden lassú fázisban `infrastructure` lelet. A 4. mérés naplójából a tartalék → mentőkör rések 364 és 602 s, a regressziós futásból 558 s = 240 + 124, 240 + 240 + 122, 240 + 240 + 78: a bank/animátor OpenRouter-kliens `maxRetries` nélkül futott, az SDK a 240 s-os időtúllépést kétszer csendben újrapróbálta (a lektornál ez már ki volt kapcsolva). A lassú hívó a deepseek tartalék (24k-ig futó válaszok), 5-ből 4-szer a mentőkörbe futott.
+
+**Javítás (PR #98):** `maxRetries: 0` minden szabályzatos lépésnél; a bank-hívás időtúllépése bukott kísérlet → következő modell (más szolgáltatói hiba változatlanul kilép a resume-útra); a bank tartaléka egyből a terra mentőmodell. Tesztek: egyetlen kérés 500-ra; időtúllépés végigviszi a csomag-ciklust; models-routing frissítve (dokumentált spec-változás §7o).
+
+**Második gyökérok (5. mérés, run a0eb2bed):** az animátor glm-hívása 609 s-ig futott a 240 s-os kliens-timeout és `maxRetries: 0` ellenére. Forrásból bizonyítva (`openai/client.js` `fetchWithTimeout`): az SDK az időzítőt a fejlécek érkezésekor törli, a törzs olvasása korlátlan; az OpenRouter azonnal küld fejlécet. Csak a lektornak volt külső `AbortSignal` határideje. Ráadásul a csak-bank kör feleslegesen újrahívta az ábra-modellt (722 s, eredmény nélkül).
+
+**Javítás 2. (ugyanabban a PR-ban):** `stepDeadlineMs(step)` — külső, törzsre is érvényes határidő minden szabályzatos lépésnek, lejáratkor `AIProviderTimeoutError`; csak-bank körben nincs ábra-modellhívás. Tesztek: a jelzés a kérésre kötve + 240 s; csak-bank kör egyetlen (bank) hívással.
+
+**Verifikáció (ellenőrzött):** kapuk zöldek (tsc, check:test, lint 0, 1352/1352), CI zöld. 5. mérés (régi kód, 49 fogalmas térkép): `done` 2 415 s, 1. kör friss bank 480 s, a 2. kör 820 s-ából 722 s a felesleges ábra-hívás. **6. mérés (minden javítással, JPG új térkép + friss bank, egyedül): `done` 521 s a teljes lánc, animátor 249 s** (4. mérés: 1 261 s, −80 %), 3 bukott glm-kísérlet oka a naplóban, 0 tartalék/mentőkör, lektor 0 jegyzet, kapu elsőre; élesben space világ, 11/11 emoji.
+
+**Tanulság:** az SDK-alapértelmezések (retry) a lépés-időkorlátot megtöbbszörözik; minden modellhívó kliensnél explicit `maxRetries`. A lelet-ujjlenyomat nem diagnosztika: a bukott kísérlet oka és ideje WARN-nal a naplóba.

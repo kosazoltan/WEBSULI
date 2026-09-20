@@ -283,7 +283,9 @@ tart a lépés határidejénél tovább (a WARN-napló mutatja a bukott kísérl
 THEN nincs ábra-modellhívás.
 | Mérés | Térkép | Eredmény | Animátor | Tartalék/mentő | Megjegyzés |
 | --- | --- | --- | --- | --- | --- |
-| 5. | 49 fogalmas biológia (08af437e), friss bank | _(mérés alatt)_ | | | |
+| 5. (1–3. javítás, a 4–5. még nem) | 49 fogalmas biológia (08af437e), friss bank, 12 fejezet | `done` 2 415 s, lecke `a82fb9d8`, meadow | 1. kör **480 s** (170→650); 2. kör 820 s (ebből 722 s a felesleges ábra-hívás); 3. kör ≈ 510 s | glm bukások oka a naplóban (érvénytelen JSON, objektum-opció, hiányos minta), tartalék egyből terra ≈ 20–60 s | az 1. kör friss bankja teljesíti a ≤ 600 s célt; a 2. kör mutatta meg a második gyökérokot |
+| 6. (1–5. javítás, run cf69dfdd, egyedül) | JPG-feltöltés „A talaj”, új térkép + friss bank, 11 fejezet | `done` **521 s** a teljes lánc (OCR → közzététel), lecke `5fd2b5ae`, space világ, 11/11 emoji | **249 s** (102k be / 42k ki) | 3 bukott glm-kísérlet (2 érvénytelen JSON, 1 hiányos minta), mind a következő kísérleten átment; 0 tartalék, 0 mentőkör | lektor 0 jegyzet, kapu elsőre; az elfogadás teljesül |
+Összevetés friss bankra: 4. mérés 1 261 s → 6. mérés 249 s (−80 %); a teljes lánc 1 513 s → 521 s.
 **Javítás (azonosító-feloldás):** `applyBankPacketRepair` az ismeretlen azonosítót determinisztikusan feloldja
 — azonos `-N` index-utótag egy ismert azonosítóval (torzított hash), vagy a bank kifogásolt, válaszban még nem
 szereplő tételei egyértelműen párosíthatók a maradék ismeretlen javításokkal (azonos darabszám). Kétértelmű
