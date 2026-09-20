@@ -201,6 +201,16 @@ test("mérve run 5 (quiz.62): a correctIndex és a magyarázat számbeli ellentm
   assert.deepEqual(quizCorrectIndexProblems([{ ...base, options: ["27", "10", "45"], correctIndex: 1, feedbackPerOption: ["Nem: 27 helyett a helyes 10, mert előbb osztunk.", "Helyes: 10.", "Nem: 45 túl sok, a helyes 10."] }]), []);
 });
 
+test("biztonsági szelep (regresszió 94a5ccf9): aritmetikai gyanú egyedül nem ölheti meg a csomagot — az utolsó kísérletnél figyelmeztetéssel átmegy", async () => {
+  const lesson = standardFusionFixture(), e = lesson.experience!;
+  const suspicious = { methods: e.methods, tasks: e.tasks.map((t, i) => (i === 0 ? { ...t, q: t.q + " Egy tanuló ezt írta: 5 + 5 = 11." } : t)), quiz: e.quiz, glossary: [] };
+  const attempts: number[] = []; const warnings: string[] = [];
+  const result = await buildLessonExperience(lesson, [], { call: async (_s, user, attempt) => { attempts.push(attempt); if (attempt > 0) assert.match(user, /hibás számítás/); return suspicious; }, onToolFix: (tool, fixes) => { if (tool === "arithmetic-claims") warnings.push(...fixes); } });
+  assert.deepEqual(attempts, [0, 1, 2, 3], "javító körök után az utolsó kísérlet átengedi");
+  assert.equal(result.tasks.length, e.tasks.length);
+  assert.ok(warnings.some(w => /átengedve.*5 \+ 5 = 11/.test(w)), warnings.join(" | "));
+});
+
 test("spec 2026-09-19: párhuzamos csomagépítés — egyszerre készülő csomagok, ütköző (ismétlődő) kérdésnél soros újraépítés", async () => {
   const base = standardFusionFixture(), e = base.experience!;
   const lesson = lessonSchema.parse({ ...base, experience: undefined, sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] });

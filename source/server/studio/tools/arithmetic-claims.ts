@@ -12,17 +12,18 @@
 
 const OPS = "+\\-−–·×*:÷/";
 const NUM = "\\d+(?:[.,]\\d+)?";
-/** `a op b (op c …) = d` — a felsorolás végén a jobb oldal egy szám. */
-// A mondatvégi pont nem tizedesjel: csak számjegy vagy „,5"/„.5" folytatás zárja ki a találatot.
-const CLAIM = new RegExp(`(${NUM}(?:\\s*[${OPS}]\\s*${NUM})+)\\s*=\\s*(${NUM})(?!\\d|[.,]\\d)`, "g");
+const EXPR = `${NUM}(?:\\s*[${OPS}]\\s*${NUM})*`;
+/** Egyenlőség-LÁNC: `a op b = c op d = e` — a tanulói lépéssor („40 – 18 + 4 = 22 + 4 = 26") is ilyen. */
+const CHAIN = new RegExp(`(${EXPR})((?:\\s*=\\s*${EXPR})+)(?!\\d|[.,]\\d)`, "g");
 
 function toNumber(s: string): number { return Number(s.replace(",", ".")); }
 
-/** Evaluate `a op b op c …` with · : before + −; null when a division is inexact or unparsable. */
+/** Evaluate `a op b op c …` with · : before + −; a lone number is itself; null when inexact/unparsable. */
 export function evaluateExpression(expr: string): number | null {
   if (/[()[\]]/.test(expr)) return null;
   const tokens = expr.match(new RegExp(`${NUM}|[${OPS}]`, "g"));
-  if (!tokens || tokens.length < 3 || tokens.length % 2 === 0) return null;
+  if (!tokens || tokens.length % 2 === 0) return null;
+  if (tokens.length === 1) { const n = toNumber(tokens[0]); return Number.isNaN(n) ? null : n; }
   const values: number[] = [toNumber(tokens[0])];
   const ops: string[] = [];
   for (let i = 1; i < tokens.length; i += 2) {
@@ -44,18 +45,24 @@ export function evaluateExpression(expr: string): number | null {
   return Math.round(result * 1e6) / 1e6;
 }
 
-/** Every false `a op b = c` claim in the text, as "a op b = c (helyesen: x)". */
+/**
+ * Every false equality in the text, as "bal = jobb (helyesen: x)". Mérve (regressziós futás
+ * 94a5ccf9): a „40 – 2 · 9 + 4 = 40 – 18 + 4 = 22 + 4 = 26" tanulói lépéssort a páronkénti
+ * olvasat („40 – 18 + 4 = 22") hamisnak vette és négy kísérlet után megölte a csomagot. A lánc
+ * minden tagját kiértékeljük; csak akkor hiba, ha két SZOMSZÉDOS, kiértékelhető tag értéke eltér.
+ */
 export function falseArithmeticClaims(text: string): string[] {
   const problems: string[] = [];
-  for (const m of text.matchAll(CLAIM)) {
-    // A zárójeles rész előtti/utáni tag nem tartozik ide: ha a találat előtt közvetlenül „(" vagy
-    // utána „)" áll, a kifejezés része lehet egy nagyobbnak — kihagyjuk.
+  for (const m of text.matchAll(CHAIN)) {
     const before = text.slice(Math.max(0, m.index! - 1), m.index!);
     if (before === "(" || before === ")") continue;
-    const expected = evaluateExpression(m[1]);
-    if (expected === null) continue;
-    const stated = toNumber(m[2]);
-    if (Math.abs(expected - stated) > 1e-6) problems.push(`${m[1].replace(/\s+/g, " ")} = ${m[2]} (helyesen: ${expected})`);
+    const segments = `${m[1]}${m[2]}`.split("=").map((seg) => seg.trim());
+    const values = segments.map((seg) => evaluateExpression(seg));
+    for (let i = 1; i < segments.length; i++) {
+      const a = values[i - 1], b = values[i];
+      if (a === null || b === null) continue;
+      if (Math.abs(a - b) > 1e-6) { problems.push(`${segments[i - 1].replace(/\s+/g, " ")} = ${segments[i].replace(/\s+/g, " ")} (helyesen: ${a})`); break; }
+    }
   }
   return problems;
 }
