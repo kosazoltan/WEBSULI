@@ -129,18 +129,16 @@ export function quizCorrectIndexProblems(quiz: ReadonlyArray<{ id: string; optio
   for (const q of quiz) {
     const values = q.options.map(o => { const n = [...numbersOf(o)]; return n.length === 1 ? n[0] : null; });
     if (values.some(v => v === null) || new Set(values).size !== values.length) continue;
-    // Mérve harmadszor (run 3aafddb1 quiz.60): egy HIBÁS opció szövege 990, a hozzá írt indoklás
-    // 194·5 = 970 — minden opció indoklása a saját számáról szóljon, ne egy másik opcióéról.
-    q.feedbackPerOption.forEach((feedback, i) => {
-      if (!feedback || values[i] === null) return;
-      const mentioned = numbersOf(feedback);
-      const own = values[i]!;
-      const others = values.filter((v, j) => j !== i && mentioned.has(v!));
-      if (mentioned.has(own) || !others.length) return;
-      problems.push(i === q.correctIndex
-        ? `${q.id}: a correctIndex a(z) ${own} opciót jelöli, a magyarázata viszont ${others.join("/")} értéket nevez helyesnek — a jelölés és a magyarázat ellentmond.`
-        : `${q.id}: a(z) ${own} opció indoklása ${others.join("/")} értékről szól, nem a sajátjáról — az opció és az indoklása ellentmond.`);
-    });
+    // CSAK a helyes opció: egy hibás opció indoklása jogosan nevezi meg a helyes értéket
+    // („27 helyett 10") — a minden-opciós változat (run 7, job 1d5ee08b) hamis pozitívval négy
+    // kísérlet után megölte a 11. fejezet csomagját. A hibás opció önellentmondása (run 3aafddb1
+    // quiz.60) a lektoré marad.
+    const feedback = q.feedbackPerOption[q.correctIndex];
+    if (!feedback) continue;
+    const mentioned = numbersOf(feedback);
+    const own = values[q.correctIndex]!;
+    const others = values.filter((v, i) => i !== q.correctIndex && mentioned.has(v!));
+    if (!mentioned.has(own) && others.length) problems.push(`${q.id}: a correctIndex a(z) ${own} opciót jelöli, a magyarázata viszont ${others.join("/")} értéket nevez helyesnek — a jelölés és a magyarázat ellentmond.`);
   }
   return problems;
 }
