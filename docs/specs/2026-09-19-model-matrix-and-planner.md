@@ -198,6 +198,19 @@ kétirányú (bármely megalapozott blokk igazolja a fejezet többi címkéjét 
 kapu a limiten fejezethez köthető lelettel egy célzott szerzői javítást ad (jobonként egyszer) ahelyett,
 hogy a leckét eldobná. Mérés 12 igazolja.
 
+## 7l. Mérés 12 — `done` 9,7 perc (run 3d18dbe1, #89 kód, 2026-09-20 09:52–10:02)
+| Lépés | Modell | Be | Ki | Idő |
+| --- | --- | --- | --- | --- |
+| pedagogue | claude-opus-5 | 11 038 | 2 389 | 34 s |
+| author 1 | gpt-5.6-terra | 10 278 | 8 249 | 64 s |
+| animator 1 (10 csomag, 5 egyszerre) | glm | 137 607 | 56 822 | 245 s |
+| lektor 1 (értelmező, medium): 1 valódi hiba (quiz.28 disztraktor-magyarázat hamis) | grok | 70 928 | 9 673 | 158 s |
+| animator 2 = csak-bank tétel-javítás | glm | 13 019 | 505 | 12 s |
+| lektor 2: 0 → kapu ✅ → readback ✅ | grok | 71 136 | 3 833 | 64 s |
+**Eredmény:** `done` **580 s (9,7 perc)**, lecke `72cac9fe`, 11 fejezet, 45/75/22, ≈ 0,7 USD (a lektor
+medium efforttal ≈ 13k kimeneti token, ≈ 0,08 USD többlet). Hamis pozitív: 0; szerzői kör: 0; a kapu
+elsőre átengedte. Az összes §7 elfogadási feltétel teljesül, tartalékkal.
+
 ## 8. Kockázatok
 - Olcsó modell gyengébb bank → a determinisztikus ellenőrzés több kísérletet indít; a 3. bukás után terra.
 - Opus 5 közvetlen hívás új provider-útvonal a Studio-ban (ClaudeProvider effort-paraméterrel) — teszt a kérés alakjára.
