@@ -57,7 +57,7 @@ test("EARS 1 + 4: a kérés és a helyesbítés-lista a tervkészítő, a szerz�
   const instruction = normalizeOwnerInstruction("  Rövidebb magyarázatokat kérek, 5. osztályos szinten.  ")!;
   const corrections = [{ localId: "c25", term: "kódex", basis: "transcription" as const, reason: "betűhiba", from: { term: "bódex" } }];
   const map = { subject: "Történelem", classroom: 5, concepts };
-  const outline = [{ heading: "Kódexek", conceptIds: ["c25"], plannedBlocks: ["explain"], animationSuggestions: [] }];
+  const outline = [{ heading: "Kódexek", conceptIds: ["c25"], plannedBlocks: ["explain" as const], animationSuggestions: [] as string[] }];
   const owner = { instruction, corrections };
   for (const prompt of [buildPedagoguePrompt(map, undefined, owner), buildAuthorPrompt(outline, map, [], undefined, owner), buildLektorPrompt(fusionFixture(), map, [], owner)]) {
     assert.match(prompt, /A TANÁR KÉRÉSE/);
