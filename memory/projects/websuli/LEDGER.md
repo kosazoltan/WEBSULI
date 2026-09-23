@@ -421,3 +421,15 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Verifikáció (mérve):** kapuk zöldek (tsc, check:test, lint 0, npm test 1365/1365, vite build). Fejlesztői kiszolgálón 375×812 mobil nézetben, játékot elindítva mindhárom játékban megjelent a tárcsa, a régi irány-gombok száma 0, és a megmaradt akciógombok a helyükön (Sprint / Ugrás-Bányász-Lerak / ⚓-Cam). Képernyőkép igazolja az Aszteroida-elrendezést: bal alul tárcsa, jobb alul kerek gomb.
 
 **Tanulság:** a `joystickToDirections` adapter miatt a tárcsa bekötése játékonként néhány soros; a kockázat nem a fizikában van, hanem az olyan állapot-ütközésekben, ahol ugyanazt a jelzőt gomb és tárcsa is állítaná (sprint).
+
+## 2026-09-23 (este) — tanári kérés, Tananyagjavító, kettős OCR, skill minden szerepkörnek (PR #104, merge 28d9001)
+
+**Kérés:** a készítés indításakor pársoros kérés az ügynöknek; javító modul a kész lecke alatt és külön „Tananyagjavító” menü; a lektorálás hibáinak (hazugság, hallucináció, pontatlanság, lost-in-the-middle) megszüntetése; OCR-ellenőrzés kézírásra; minden szerepkörnek runbook-skill.
+
+**Mért gyökérokok (éles DB, csak olvasás):** a javító futás 4756f8c2 lektora a kézírás-OCR „föld-változása” hibáját követelte vissza a helyes „Hold” ellen; e3348439 a füzet önellentmondó c7 sorát („10 év = 1 évszázad”) követelte. A javító út szerzői/lektori hívása skill nélkül futott; a kód-audit 17 skill nélküli modellhívást talált.
+
+**Megoldás:** support-skills.ts (11 támogató skill), repair-skill.ts, lektor-runbook (mérce-sorrend, bejárás, cáfolás, egy gyökérok = egy jegyzet, átírási hiba, önellentmondó forrás), source-corrections.ts (determinisztikus szűrő, a quote sosem változik), OCR kettős olvasás (qwen + glm-5.3-flash, Gemini nélkül) döntő olvasással és őrrel, magyar kézírás-skill. Statikus teszt tiltja a skill nélküli modellhívást.
+
+**Verifikáció (mérve):** lektor A/B visszajátszás a két valódi jelöltön, 3-3 hívás: hamis blokkoló 6/6 → 0/6. Éles E2E javító futás (mentés nélkül): kész 594 s, 0 blokkoló, évfolyam 7→5, bódex 0 / kódex 16, Stonehenge, Hold, tanítás −23 %. OCR 3 valódi kézírásos lapon: qwen 95,4 / glm 89,1 / luna 87,3 / deepseek-v4.1-flash 0 (csonkol). Kapuk: tsc (+tsconfig.test.json), eslint, 1379 teszt, build, CI minden check zöld. Deploy: Render revision 28d9001, Vercel asset main-DZyXbpek.js = helyi build.
+
+**Nyitott:** tulajdonosi döntés a D1-ről önellentmondó forrásállításnál (a lecke most a hibás c7 sort tanítja, a lektor infóként jelzi). Admin-felületi böngészős próba nem futott (bejelentkezés kell).
