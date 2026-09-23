@@ -21,7 +21,7 @@ Minden modellhívás a saját szerepkörének skilljével (működési leírás 
 A régi felületek (HTML-okosító, AI készítő) funkcionális átalakítása; modellcsere.
 
 ## Elfogadás
-1. Minden skill tartalmazza a 6 kötelező szakaszt, ≤ 2600 karakter (a lektor ≤ 4600). (unit)
+1. Minden skill tartalmazza a 6 kötelező szakaszt; méretkorlát: támogató ≤ 2800, lektor ≤ 4800, javító ≤ 4000, többi gyártó ≤ 6000 karakter. (unit)
 2. A statikus teszt a mai kódon zöld, és egy skill nélküli új hívás bukást okozna. (unit)
 3. A lektor-skill: mérce-sorrend, bejárás, cáfolás, egy gyökérok = egy jegyzet, jegyzet-alak; a régi horgonyok megmaradnak. (unit)
 4. A fogalomjavítás utáni lektor, a besoroló, a helyesbítő, a webes és a régi hívások system promptja a skill-fejléccel indul. (unit, ahol a prompt tiszta függvényből jön; kód-ellenőrzés a routes.ts-ben)
@@ -36,3 +36,7 @@ Visszajátszás: a két valódi, lektoron bukott javító futás (4756f8c2, e334
 | B | 1,1,1 — hamis: c7 „10 év = 1 évszázad” tanításának követelése | 0,0,0 | 2,2,2 — jogos, mint fent |
 
 A mérés közben talált második hibaosztály (önellentmondó forrásállítás: c7 ↔ c8) az első ÚJ-skill mérésen még 3/3 blokkolót adott; a lektor-skill 8. pontja (önellentmondó forrás → book_probably_wrong info) után 0/3. Hamis blokkoló: 6/6 → 0/6.
+
+### Teljes javító futás élesben (E2E, termelési kódút, jelölt mentése nélkül)
+„Az időszámítás és az emberiség kezdetei” (html_files 739ec478), a tanár eredeti utasításával: kész 594 s alatt, 0 lektor-blokkoló (a két korábbi futás a lektoron bukott); évfolyam 7 → 5; bódex 0 / kódex 16, Storhenge 0 / Stonehenge 5, föld-változás 0 / Hold változása 5; tanítás 24 112 → 18 517 karakter, 12 fejezet; bank 45 feladat / 75 kvíz.
+Nyitott (tulajdonosi döntés): a lecke a füzet önellentmondó c7 sorát („10 év = 1 évszázad = 10 évtized”) tanítja, mert a D1 („a leckében a forrás állítása marad”) ezt írja elő; a lektor book_probably_wrong infóként jelzi.
