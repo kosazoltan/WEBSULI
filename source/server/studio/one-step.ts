@@ -31,6 +31,8 @@ const scopeSchema = z.object({
 
 export const oneStepRequestSchema = z.object({
   title: z.string().trim().min(1).max(255).optional(),
+  // Spec 2026-09-23: the teacher's free-text request to the agent (normalised by normalizeOwnerInstruction).
+  instructions: z.string().max(4000).optional(),
   scope: scopeSchema.optional(), // legacy metadata accepted; never used to select grade
   files: z
     .array(

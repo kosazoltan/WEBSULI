@@ -40,7 +40,9 @@ import {
   outlineSchema,
   type LessonOutline,
   type OutlineCoverage,
+  type OwnerContext,
 } from "./step-io";
+import type { SourceCorrection } from "./source-corrections";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
 import { pickVisualWorld, visualWorld, harmoniseSectionEmojis, type VisualWorldId } from "../../shared/lesson-visuals";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
@@ -260,6 +262,13 @@ function pedagogueInputOf(map: StepMap) {
   return { map: mapInputOf(map), concepts: map.concepts };
 }
 
+/** Spec 2026-09-23: the teacher's request and the documented source corrections travel in job.output. */
+function ownerOf(job: JobView): OwnerContext | undefined {
+  const instruction = typeof job.output?.ownerInstruction === "string" ? job.output.ownerInstruction : undefined;
+  const corrections = Array.isArray(job.output?.sourceCorrections) ? job.output.sourceCorrections as SourceCorrection[] : undefined;
+  return instruction || corrections?.length ? { instruction, corrections } : undefined;
+}
+
 function promptMapOf(map: StepMap) {
   return {
     title: map.meta.title,
@@ -371,10 +380,11 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // Spec 2026-09-20 (színes tananyag): véletlen vizuális világ javaslata, jobonként egyszer rögzítve.
       const proposedWorld = ((job.output?.visual as { world?: string } | undefined)?.world as VisualWorldId | undefined) ?? pickVisualWorld().id;
       const world = visualWorld(proposedWorld) ?? pickVisualWorld();
-      input = { ...pedagogueInputOf(map), visual: world.id };
+      const owner = ownerOf(job);
+      input = { ...pedagogueInputOf(map), visual: world.id, ...(owner ? { owner } : {}) };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.pedagogue,
-        buildPedagoguePrompt(promptMapOf(map), world),
+        buildPedagoguePrompt(promptMapOf(map), world, owner),
       );
       break;
     }
@@ -425,7 +435,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.author,
-        buildAuthorPrompt(outline.sections, promptMapOf(map), reviewNotes, authorRepair ? { targetSections: authorRepair.targetSections } : undefined),
+        buildAuthorPrompt(outline.sections, promptMapOf(map), reviewNotes, authorRepair ? { targetSections: authorRepair.targetSections } : undefined, ownerOf(job)),
       );
       if (authorRepair) logger.info(`[STUDIO] Célzott szerzői javítás (${job.id}): fejezet ${authorRepair.targetSections.map((i) => i + 1).join(", ")}`);
       if (previousLesson) {
@@ -459,7 +469,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       input = { lesson, map: mapInputOf(map), concepts: map.concepts, ...(previousBlockers.length ? { previousBlockers } : {}) };
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
-        buildLektorPrompt(lesson, promptMapOf(map), previousBlockers),
+        buildLektorPrompt(lesson, promptMapOf(map), previousBlockers, ownerOf(job)),
       );
       break;
     }
@@ -1167,6 +1177,7 @@ export async function startJobFromMap(
   mapId: string,
   input: { subject: string; classroom: number } | undefined,
   deps: PipelineDeps = {},
+  owner?: { instruction?: string; corrections?: SourceCorrection[] },
 ): Promise<{ ok: true; jobId: string } | { ok: false; reason: string }> {
   const { store } = await resolveDeps(deps);
   const map = await store.loadMap(mapId);
@@ -1182,7 +1193,11 @@ export async function startJobFromMap(
     };
   }
 
-  const hash = computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, pedagogueInputOf(map), 0);
+  const ownerOutput = {
+    ...(owner?.instruction ? { ownerInstruction: owner.instruction } : {}),
+    ...(owner?.corrections?.length ? { sourceCorrections: owner.corrections } : {}),
+  };
+  const hash = computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, { ...pedagogueInputOf(map), ...ownerOutput }, 0);
   const jobId = await store.createJob({
     mapId,
     step: "pedagogue",
@@ -1191,7 +1206,7 @@ export async function startJobFromMap(
     promptVersion: PIPELINE_PROMPT_VERSION,
     inputHash: hash,
   });
-  await store.saveStep(jobId, { output: { methodVersion: LESSON_METHOD_VERSION } });
+  await store.saveStep(jobId, { output: { methodVersion: LESSON_METHOD_VERSION, ...ownerOutput } });
   return { ok: true, jobId };
 }
 

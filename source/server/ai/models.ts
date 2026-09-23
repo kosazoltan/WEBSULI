@@ -51,6 +51,13 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // ez a cél a mezőnyben NINCS elérve, a legjobb elérhető opciót választjuk.
   // A glm az `r`-t rendszeresen `m`-nek olvasta (r=4cm -> m=4cm), ami a
   // fogalmak idézet-ellenőrzését is elbuktatta.
+  // Újramérve 2026-09-23 ugyanezen a 3 valódi lapon, a „Magyar kézírás” OCR-skillel (tulajdonosi döntés
+  // a mérés után: qwen marad, GLM az ellenőrző):
+  //   qwen3-vl-32b-instruct  95.4%  <- ez (nem gondolkodó modell)
+  //   glm-5.3-flash          89.1%  (a kettős olvasás második olvasója, FALLBACK_MODELS.ocr)
+  //   gpt-5.6-luna           87.3%  (átfogalmaz: „ezerév” -> „évezred” — verbatim OCR-re alkalmatlan)
+  //   deepseek-v4.1-flash     0.0%  (hibrid gondolkodás: az effort=low-t figyelmen kívül hagyja, a 6000
+  //                                  tokenes keretből 5998 gondolkodás, minden válasz csonkolt)
   ocr: "qwen/qwen3-vl-32b-instruct",
   // Spec 2026-09-19 (tulajdonosi döntés): a tervkészítő a közvetlen Anthropic API-n futó
   // Opus 5, medium efforttal — a terv minősége dönti el a további körök számát.
@@ -77,8 +84,9 @@ export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
 
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   extract: "grok-4.6",
-  // #190: a mért második helyezett (90.2%), más családból mint az elsődleges.
-  ocr: "google/gemini-3.1-flash-lite",
+  // Tulajdonosi döntés 2026-09-23: Gemini nem használható. Az OCR tartaléka és a kettős olvasás második,
+  // független olvasója a GLM 5.3 Flash (mért 89.1%, más család; a Luna átfogalmazott, 87.3%).
+  ocr: "z-ai/glm-5.3-flash",
   pedagogue: "grok-4.6",
   // Author and reviewer have no cross-vendor fallback: retain independent review.
   animator: "deepseek/deepseek-v4-flash",

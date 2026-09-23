@@ -47,6 +47,11 @@ import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFai
 import { workflowStore } from "../workflows/store";
 import { htmlFiles } from "../../shared/schema";
 import { respondToResume, guardResumedDrive } from "./resume-response";
+import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
+import { correctionAuditText, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
+import { callStepModel } from "./run-step";
+import { createStudioStepProvider } from "../ai/studio-provider";
+import type { MapConcept } from "./coverage";
 
 /* ------------------------------------------------------------------ *
  * #168 — a futás-státusz DB-perzisztálása (Render-restart ellen).
@@ -296,6 +301,7 @@ async function readPublishedLesson(lessonId: string) {
 async function runOneStepCore(runId: string, data: OneStepRequest, userId: string) {
   await workflowPhase("source");
   const { title } = data;
+  const instruction = normalizeOwnerInstruction(data.instructions);
   const { normalizeDocumentSources } = await import("./document-source");
   const { createCachedSourceOcr } = await import("./run-extraction");
   const files = await normalizeDocumentSources(data.files, await createCachedSourceOcr(resolveStudioModel("ocr")));
@@ -321,6 +327,13 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
     scope = inferred.scope;
     inferredTitle = inferred.title;
     classification = inferred.classification;
+    // Spec 2026-09-23: a grade the teacher states explicitly wins over the model's guess.
+    const asked = explicitClassroomOf(instruction);
+    if (asked !== undefined && asked !== scope.classroom) {
+      logger.info(`[STUDIO/1STEP] A tanár kérése szerint ${asked}. osztály (a forrásból becsült: ${scope.classroom}).`);
+      scope = { ...scope, classroom: asked };
+      classification = { ...classification, reason: `A tanár kérése szerint ${asked}. osztály. ${classification.reason}`.slice(0, 1000), confidence: "high", gradeRange: [asked, asked] };
+    }
   }
 
   // 2) Map: reuse by content hash or extract now (same as /maps/extract).
@@ -347,7 +360,8 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
       .where(and(eq(lessons.mapId, mapId), isNotNull(lessons.publishedAt)))
       .orderBy(desc(lessons.publishedAt))
       .limit(1);
-    if (published) {
+    // Spec 2026-09-23: with a teacher's request the old lesson is not the answer — a new one is made from the map.
+    if (published && !instruction) {
       // The workflow ledger still records the skipped phases as visits (no model call).
       for (const phase of ["sourceCheck", "pedagogue", "author", "animator", "lektor", "gate"]) await workflowPhase(phase);
       updateRun(runId, { phase: "done", detail: "Ez a forrás már fel volt dolgozva — a belőle készült, közzétett lecke megnyitható.", mapId, lessonId: published.id });
@@ -406,8 +420,12 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
     }
   }
 
+  // 2c) Spec 2026-09-23: documented source corrections (teacher's request / photo misreads) before planning.
+  const corrections = await correctMapFromOwner(mapId, instruction, files.some((f) => f.kind === "image"));
+  if (corrections.length) updateRun(runId, { phase: "extract", detail: `Forrás-helyesbítés: ${corrections.length} fogalom (${corrections.map((c) => c.term ?? c.localId).join(", ").slice(0, 200)})` });
+
   // 3) Lesson job on the freshly built map, driven with outline auto-approval.
-  const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom });
+  const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom }, {}, { instruction, corrections });
   if (!started.ok) {
     updateRun(runId, { phase: "error", error: started.reason, mapId });
     return;
@@ -417,6 +435,34 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   await workflowResource(started.jobId);
 
   await driveOneStep(runId, started.jobId, gapNote);
+}
+
+/**
+ * Spec 2026-09-23 — the teacher's request and photo misreads become DOCUMENTED curation on the map rows
+ * (term/definition only; the quote stays the transcript evidence). Never throws: no correction on failure.
+ */
+export async function correctMapFromOwner(mapId: string, instruction: string | undefined, transcript: boolean): Promise<SourceCorrection[]> {
+  if (!instruction && !transcript) return [];
+  const rows = await db.select().from(kmConcepts).where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
+  const concepts = rows.map((c) => ({ id: c.id, localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight as MapConcept["examWeight"] }));
+  const model = resolveStudioModel("pedagogue");
+  const result = await proposeSourceCorrections(async (system, user) =>
+    (await callStepModel(createStudioStepProvider(model, "pedagogue"), { step: "pedagogue", model, system, user })).json,
+  concepts, { instruction, transcript });
+  if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
+  if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
+  for (const fix of result.corrections) {
+    const row = rows.find((r) => r.localId === fix.localId);
+    if (!row) continue;
+    await db.update(kmConcepts).set({
+      ...(fix.term !== undefined ? { term: fix.term } : {}),
+      ...(fix.definition !== undefined ? { definition: fix.definition } : {}),
+      ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}),
+      verbatimReason: correctionAuditText(fix),
+      updatedAt: new Date(),
+    }).where(eq(kmConcepts.id, row.id));
+  }
+  return result.corrections;
 }
 
 /**

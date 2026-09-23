@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -95,6 +96,8 @@ export function SourceUploadForm({
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
+  // Spec 2026-09-23: a pársoros kérés az ügynöknek (évfolyam, terjedelem, hangsúly, elírások).
+  const [instructions, setInstructions] = useState("");
   const [files, setFiles] = useState<SourceFile[]>([]);
 
   const addFiles = async (list: FileList | null) => {
@@ -161,8 +164,9 @@ export function SourceUploadForm({
       apiRequest<{ runId: string }>(
         "POST",
         "/api/studio/lessons/one-step",
-        // The source determines subject and grade; the author supplies only files/title.
-        { ...(title.trim() !== "" ? { title: title.trim() } : {}), files },
+        // The source determines subject and grade; the author supplies files/title and an optional request
+        // (spec 2026-09-23: an explicit grade in the request wins over the source estimate).
+        { ...(title.trim() !== "" ? { title: title.trim() } : {}), ...(instructions.trim() !== "" ? { instructions: instructions.trim() } : {}), files },
       ),
     onSuccess: (r) => {
       prevFinished.current = false;
@@ -205,6 +209,7 @@ export function SourceUploadForm({
         void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
         setFiles([]);
         setTitle("");
+        setInstructions("");
         if (run.data.mapId) onCreated?.(run.data.mapId);
       } else {
         toast({ title: "Az új tananyag még nem készült el", description: run.data?.error ?? run.data?.detail ?? "A gyártás megállt.", variant: "destructive" });
@@ -246,6 +251,16 @@ export function SourceUploadForm({
             onChange={(e) => setTitle(e.target.value)}
             className="min-h-11"
             data-testid="extract-title"
+          />
+          <Textarea
+            placeholder={"Kérés az ügynöknek (nem kötelező) — pl.: 5. osztályos szinten, röviden. Kézzel írt jegyzet: az elírásokat (pl. bódex → kódex) javítsd."}
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value.slice(0, 2000))}
+            rows={3}
+            maxLength={2000}
+            className="min-h-20 text-sm"
+            aria-label="Kérés az ügynöknek"
+            data-testid="extract-instructions"
           />
         </div>
         {!headerless && <p className="text-sm text-muted-foreground">A tantárgyat és az osztályt a program a feltöltött tananyagból határozza meg.</p>}

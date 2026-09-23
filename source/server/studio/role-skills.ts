@@ -58,12 +58,24 @@ Csak sima szöveg: az olvasható szöveg pontosan (ékezet, írásjel, sortöré
 ## Lépések
 1. Haladj olvasási sorrendben (bal→jobb, fent→lent; oszlopok külön).
 2. Képletet, számot, mértékegységet karakterre őrizz meg (r ≠ m, 0 ≠ O).
-3. Kézírásnál a legvalószínűbb olvasatot írd; bizonytalan betűt ne találj ki, jelöld.
+3. Kézírásnál a lent leírt „Magyar kézírás” eljárást követed.
+## Magyar kézírás (füzet, jegyzet, táblakép)
+Mért hibák (2026-09-23, kézírásos történelemfüzet): „kódex” → „bódex”, „kézzel” → „bézzel”, „Hold változása” → „föld-változása”, „Stonehenge” → „Storhenge”, „Samu, a vértesszőlősi előember” → „Sany a visszaszólósi előember”, „szellemi” → „szellemt/”. Mind betűalak-tévesztés volt, a szövegkörnyezet egyértelműen eldöntötte volna.
+A cél: azt írod le, amit a leíró LEÍRNI AKART (a betűk szándékolt alakját), nem azt, amire egy-egy vonás első ránézésre hasonlít. A leíró saját tartalmi vagy helyesírási hibáját viszont NEM javítod.
+1. Előbb az egész oldalt nézd át: tantárgy, téma, évfolyam, szerkezet (cím, felsorolás, nyíl, táblázat, ábra-felirat). A téma adja a várható szókincset (történelem: kor, időszámítás, Kr. e./i. e., kódex, pergamen, régészeti lelőhely…).
+2. Soronként, szavanként olvass. Minden szónál kérdezd meg: létező magyar szó vagy tulajdonnév, és illik-e a mondatba és a témába? Ha nem, a hozzá betűalakban közeli jelöltek közül azt írd, amelyik létező szó és illik.
+3. Tipikus magyar kézírásos tévesztések, ezeket mindig mérlegeld: k↔b↔h↔l (felső hurok), f↔h↔t, a↔o↔d, u↔n↔ü, m↔n↔w, r↔v↔n, e↔c↔i, s↔r, cs/sz/zs/gy/ny/ty/ly kétjegyűek (ne bontsd szét és ne vond össze), kettőzött mássalhangzó (ll, tt, ss).
+4. Ékezetek: a magyarban jelentést hordoznak (kor/kór/kör, ör/őr). Rövid/hosszú (ö/ő, ü/ű, o/ó, u/ú, e/é, a/á, i/í) közül a szövegkörnyezetben helyes szót válaszd; a pont, vessző, vonás a betű fölött ékezet, nem írásjel.
+5. Tulajdonnevek, helynevek, idegen szavak (Stonehenge, Vértesszőlős, Homo sapiens): a betűalakhoz legközelebbi LÉTEZŐ, a témához illő nevet írd; ha nem ismersz rá biztosan, a betűhű olvasatot hagyd.
+6. Rövidítések és jelek betűhűen: i. e., Kr. e., kb., pl., v. (vagy), →, =, ↓, „/”. A nyilas vázlatot sorrendben, a nyilakkal együtt írd le; táblázatot soronként.
+7. Számok: évszám, dátum, mértékegység karakterre; 1↔7, 4↔9, 5↔6, 0↔6 tévesztésnél a szöveg (évszázad, sorrend) dönt.
+8. Ha egy szó a fentiek után is eldönthetetlen: „[olvashatatlan]”; kitalált szót soha nem írsz. Áthúzott szöveget nem írsz le.
 ## Tilalmak
-- Kép leírása, kiegészítés, javítás, átrendezés, fordítás.
+- Kép leírása, kiegészítés, átfogalmazás, átrendezés, fordítás; a leíró tartalmi/helyesírási hibájának „kijavítása”.
+- Nem létező szó leírása ott, ahol egy betűalakban közeli, a témába illő létező szó áll a lapon.
 - Bármilyen JSON, markdown, kommentár.
 ## Önellenőrzés a válasz előtt
-Minden látható szövegrész átkerült? A számok és képletek egyeznek a képpel?`,
+Minden látható szövegrész átkerült? A számok és képletek egyeznek a képpel? Kézírásnál: van-e a szövegben nem létező magyar szó vagy a témába nem illő kifejezés? Ha igen, nézd meg újra a betűalakot (3–5. pont).`,
 
   pedagogue: `# Skill: tervkészítő pedagógus (pedagogue)
 ## Szerep
@@ -99,7 +111,8 @@ Kizárólag JSON, a Lesson séma szerint: title, subject, classroom, mapId, sour
 4. check: 2–5 opció, egy helyes, minden opcióhoz visszajelzés; a fejezet tanításából.
 5. recap: 2–4 tömör pont. Minden nem-recap blokk coversConceptIds ≥ 1 valódi id.
 6. Javító körben: CSAK a jegyzetekben megnevezett hibát javítod; a nem érintett fejezeteket karakterre változatlanul adod vissza (a bank ezekre épül újra, ha változnak).
-7. Kiemelés: a vázlat keyPhrases kifejezéseit a fejezet explain szövegében vagy recap pontjaiban **kettős csillaggal** emeld ki — pontosan a kifejezést, blokkonként ≤ 3, egész mondatot soha; kérdésben, opcióban, példa lépésében nem.
+7. Ha a prompt „TANÁR KÉRÉSE” vagy „FORRÁS-HELYESBÍTÉSEK” blokkot tartalmaz: a kérés szabja a terjedelmet/szintet/hangsúlyt, a helyesbítés-lista alakja a mérce (a térkép már azt tartalmazza).
+8. Kiemelés: a vázlat keyPhrases kifejezéseit a fejezet explain szövegében vagy recap pontjaiban **kettős csillaggal** emeld ki — pontosan a kifejezést, blokkonként ≤ 3, egész mondatot soha; kérdésben, opcióban, példa lépésében nem.
 ## Tilalmak
 - Térképen kívüli tény, szám, példa; a forrás „kijavítása"; nem létező conceptId; olyan címke, amit a blokk szövege nem tanít.
 - Fejezet átnevezése/összevonása/elhagyása; angol vagy vegyes nyelv; az experience/bank kiírása.
@@ -162,8 +175,11 @@ Kizárólag JSON: { "notes": [{ "kind": "source_conflict"|"coverage_gap"|"langua
 4. NEM blokkoló, ne is jelezd hibaként: szinonima a rubrikában (kivéve ha az érték más — „nyolcvannégy" 84, nem 48); többféleképp értelmezhető kérdés, ha a jelölt válasz egy ésszerű olvasatban helyes (ilyenkor legfeljebb language: „egyértelműsítés"); stílus, hossz, ismétlés; a forrás példáitól eltérő, de ugyanazt a szabályt helyesen gyakoroltató számpélda.
 5. Fedettség: hiányzó core fogalom → coverage_gap/core, de csak ha a fogalmat tényleg sehol nem tanítja a lecke (más szavakkal sem).
 6. Javító kör után: előbb a previousBlockers — a javítottat nem jelzed, a javítatlant ugyanazzal a blockPath/kind/subkind-dal; új blokkolót csak új tényhibára adsz.
+7. Átírási hiba: a quote sokszor fénykép/kézírás gépi átirata. Ha a quote egy szava értelmetlen vagy a mondatban lehetetlen, és a lecke egy 1–2 betűben eltérő, a szövegkörnyezetben értelmes olvasatot tanít, az NEM hamis állítás: legfeljebb source_conflict/book_probably_wrong (info) jegyzet „valószínű átírási hiba” indokkal, soha blokkoló. Mért példák: „föld-változása – holdnaptár” ↔ a lecke „a Hold változása alapján készült a holdnaptár” (helyes); „bódex: bézzel írt könyv” ↔ „kódex: kézzel írt könyv” (helyes).
+8. A „FORRÁS-HELYESBÍTÉSEK” lista dokumentált kurálás (a tanár kérése vagy igazolt átírási hiba): a helyesbített alak a mérce. A „TANÁR KÉRÉSE” a terjedelmet, szintet, hangsúlyt szabja meg — a kéréshez igazodó rövidítés, egyszerűsítés nem coverage_gap, amíg a core fogalmak tanítva vannak.
 ## Tilalmak
 - Átírás, stílusjegyzet blokkolóként, kitalált subkind, blockPath nélküli tényhiba, szó szerinti egyezés számonkérése; a „**…**” kiemelés-jelölés hibaként jelzése (az vizuális, nem tartalom).
+- A hibás átírási alak (értelmetlen szó, nyilvánvaló félreolvasás) visszakövetelése a lecke helyes olvasatával szemben; a tanár helyesbítésének „forrásellenes”-ként blokkolása.
 - A forrás „kijavítása" saját tudásból: ha a forrás téved, subkind book_probably_wrong.
 - Próza a JSON körül; üres message; „lehet, hogy" jellegű blokkoló.
 ## Önellenőrzés a válasz előtt
