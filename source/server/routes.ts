@@ -50,6 +50,7 @@ import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { hasHtmlLessonData } from "../shared/lesson-html-data";
 import { extractClassroomFromTitle } from "@shared/classrooms";
+import { withSupportSkill } from "./studio/support-skills";
 
 // ========== AI Configuration Validation ==========
 function validateAIConfig() {
@@ -1256,6 +1257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]
 }`;
 
+      systemPrompt = withSupportSkill("html-fix", systemPrompt);
       const message = await withAIProvider((signal) => anthropic.messages.create({
         model: resolveLegacyModel("htmlFix"),
         output_config: { effort: effortFor("htmlFix") },
@@ -1347,6 +1349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]
 }`;
 
+      systemPrompt = withSupportSkill("html-fix", systemPrompt);
       const message = await withAIProvider((signal) => anthropic.messages.create({
         model: resolveLegacyModel("htmlTheme"),
         output_config: { effort: effortFor("htmlTheme") },
@@ -1497,6 +1500,7 @@ LÉPÉSEK:
 2. STRUKTURÁLT KIMENET (JSON): A végső eredmény automatikusan generálódik - NE próbáld manuálisan beágyazni!
 
 Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
+      systemPrompt = withSupportSkill("html-fix", systemPrompt);
 
       // Send initial message
       res.write(`data: ${JSON.stringify({
@@ -1722,6 +1726,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       let systemPrompt = customPrompt?.prompt
         ? `${customPrompt.prompt}\n\n${specBlock}`
         : defaultSystemPrompt;
+      // Spec 2026-09-23: the DB-overridable prompt cannot bypass the role skill.
+      systemPrompt = withSupportSkill("creator-chat", systemPrompt);
 
       // Append metadata to system prompt
       systemPrompt += `\n\nMETADATA:
@@ -1902,7 +1908,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         messages: [
           {
             role: "system",
-            content: `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumokat és adj vissza strukturált információt JSON formátumban.`
+            content: withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumokat és adj vissza strukturált információt JSON formátumban.`)
           },
           {
             role: "user",
@@ -2016,7 +2022,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         messages: [
           {
             role: "system",
-            content: `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumot és adj vissza strukturált információt JSON formátumban.`
+            content: withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumot és adj vissza strukturált információt JSON formátumban.`)
           },
           {
             role: "user",
@@ -2141,7 +2147,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 - MINDIG hivatkozz a forrásanyagra, ha bizonytalan vagy`;
 
       // Use custom prompt if provided, otherwise default
-      const finalPrompt = systemPrompt || defaultPrompt;
+      const finalPrompt = withSupportSkill("creator-chat", systemPrompt || defaultPrompt);
 
       // Build conversation messages with document context
       const contextInfo = context?.extractedText
@@ -2333,7 +2339,7 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
         model: resolveLegacyModel("claudeHtml"),
         output_config: { effort: effortFor("claudeHtml") },
         max_tokens: 64000, // v7.4: a teljes spec szerinti anyag 32K-nál is csonkult (mért, 2026-09-09); streamelve 64K
-        system: systemPrompt,
+        system: withSupportSkill("creator-chat", systemPrompt),
         messages,
       }, {
         signal: controller.signal

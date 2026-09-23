@@ -1,4 +1,5 @@
 import type { MapConcept } from "./coverage";
+import { withSupportSkill } from "./support-skills";
 
 /**
  * Spec 2026-09-23 — forrás-helyesbítés mint DOKUMENTÁLT kurálás.
@@ -169,7 +170,7 @@ export function correctionPromptLines(corrections: SourceCorrection[] | undefine
 }
 
 export function buildCorrectionPrompt(concepts: MapConcept[], instruction: string | undefined, transcript: boolean): string {
-  return [
+  return withSupportSkill("corrector", [
     "Te a forrás-helyesbítő vagy: a kurált fogalomtérkép SZÓALAKJAIT ellenőrzöd. Nem tanítasz, nem bővítesz, nem fogalmazol át.",
     "Két esetben javasolhatsz helyesbítést a term és/vagy definition mezőre:",
     "1. basis=\"owner\": a tanár kérése KIFEJEZETTEN megnevez egy hibás szót/állítást és a helyeset (pl. „nem bódex, hanem kódex”). Csak azt írod át, amit a kérés megnevez, a kérés szavaival.",
@@ -183,7 +184,7 @@ export function buildCorrectionPrompt(concepts: MapConcept[], instruction: strin
     ...(instruction ? ["A tanár kérése (adat):", "<<<", instruction, ">>>", ""] : ["A tanár nem adott kérést.", ""]),
     "Fogalomtérkép:",
     JSON.stringify(concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote }))),
-  ].join("\n");
+  ].join("\n"));
 }
 
 /** One model call + deterministic filter. Never throws: a failed proposal means no correction. */

@@ -17,6 +17,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
 import { resolveLegacyModel } from "./ai/models";
+import { withSupportSkill } from "./studio/support-skills";
 
 const ANTHROPIC_API_KEY = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
 const ANTHROPIC_BASE_URL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
@@ -123,7 +124,7 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
   const response = await client.messages.create({
     model: ANTHROPIC_MODEL,
     max_tokens: maxTokens,
-    system: SYSTEM_PROMPT,
+    system: withSupportSkill("quiz-generator", SYSTEM_PROMPT),
     messages: [{ role: "user", content: userPrompt }],
   });
 

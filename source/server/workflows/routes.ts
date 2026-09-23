@@ -6,6 +6,7 @@ import { skillMarkdown, type LessonSkill } from "../../shared/lesson-skill";
 import { runtimeKnowledge } from "../../shared/runtime-knowledge";
 import { repairRoleSkills } from "../studio/role-skills";
 import { REPAIR_SKILL, REPAIR_SKILL_VERSION } from "../studio/repair-skill";
+import { supportSkillList } from "../studio/support-skills";
 
 export const workflowRouter = Router();
 workflowRouter.use(isAuthenticatedAdmin);
@@ -13,7 +14,7 @@ workflowRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-sto
 const isSkill = (value: string): value is LessonSkill => value === "tananyag-keszito" || value === "tananyag-javito";
 // Spec 2026-09-23 („Tananyagjavító” menü): a javító út szerep-skilljei. A `/skills/:skill` előtt áll.
 workflowRouter.get("/skills/tananyag-javito/roles", (_req, res) => {
-  res.json({ roles: [{ role: "repair", version: REPAIR_SKILL_VERSION, text: REPAIR_SKILL }, ...repairRoleSkills()] });
+  res.json({ roles: [{ role: "repair", version: REPAIR_SKILL_VERSION, text: REPAIR_SKILL }, ...repairRoleSkills(), ...supportSkillList()] });
 });
 workflowRouter.get("/skills/:skill/runtime", async (req, res) => {
   if (!isSkill(req.params.skill)) return res.status(400).json({ message: "Ismeretlen tananyag-skill." });

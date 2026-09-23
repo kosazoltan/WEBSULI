@@ -17,7 +17,11 @@ import { LessonRepairPanel, type RepairPreset } from "./LessonRepairPanel";
 type RoleSkill = { role: string; version: string; text: string };
 type FileRow = { id: string; title?: string; contentType?: string; classroom?: number | null };
 
-const ROLE_LABEL: Record<string, string> = { repair: "Tananyagjavító (minden javításnál)", author: "Szerző", lektor: "Lektor", bank: "Gyakorlóbank-készítő", ocr: "Átíró (OCR, kézírás)" };
+const ROLE_LABEL: Record<string, string> = {
+  repair: "Tananyagjavító (minden javításnál)", author: "Szerző", lektor: "Lektor", bank: "Gyakorlóbank-készítő", ocr: "Átíró (OCR, kézírás)",
+  scope: "Besoroló (tantárgy, évfolyam)", corrector: "Forrás-helyesbítő", "web-research": "Webes forrásgyűjtő", "web-author": "Webes szerző", "web-lektor": "Webes lektor",
+  "web-repair": "Webes javító", "html-improve": "HTML-okosító", "html-fix": "HTML-hibajavító", "creator-analyze": "Fájlelemző", "creator-chat": "Készítő chat", "quiz-generator": "Kvízgenerátor",
+};
 
 /** Szempont-gombok: a gyakori javítási irányok, a skill-szabályok szavaival. */
 const PRESETS: RepairPreset[] = [

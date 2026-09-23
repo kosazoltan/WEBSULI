@@ -1,4 +1,5 @@
 import { studioConnection } from "../ai/studio-provider";
+import { withSupportSkill } from "./support-skills";
 import { workflowSkillPrompt } from "../workflows/engine";
 /**
  * LS-6 (#164) — one-step lesson manufacturing (owner decision, 2026-09-05).
@@ -181,7 +182,7 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
   return {
     model,
     messages: [
-      { role: "system" as const, content: SCOPE_PROMPT + workflowSkillPrompt() },
+      { role: "system" as const, content: withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt() },
       { role: "user" as const, content: parts },
     ],
     max_completion_tokens: 2000,

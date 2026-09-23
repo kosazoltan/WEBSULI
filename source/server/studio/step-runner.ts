@@ -57,7 +57,7 @@ import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, RetryableBankCallError, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
-import { skilledPromptLookup } from "./role-skills";
+import { skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
@@ -1531,7 +1531,7 @@ export async function fixConceptOnLesson(
     const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");
-    const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel, "lektor"), { step: "lektor", model: lektorModel, system: buildLektorPrompt(candidate, source), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
+    const report = lektorReportSchema.parse((await callStepModel(providerFactory(lektorModel, "lektor"), { step: "lektor", model: lektorModel, system: withRoleSkill("lektor", buildLektorPrompt(candidate, source)), user: "A javított tanítást és bankokat ellenőrizd, csak JSON." })).json);
     if (classifyNotes(report.notes).some(n => n.blocking)) return { ok: false, error: "A lektor még hibát talált, az eredeti lecke érintetlen." };
     await workflowPhase("gate");
     assertRepairCandidate(original, candidate, source);

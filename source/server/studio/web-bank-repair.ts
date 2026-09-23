@@ -6,6 +6,7 @@ import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { resolveStudioModel } from "../ai/models";
 import { createStudioProvider } from "../ai/studio-provider";
 import { callStepModel } from "./run-step";
+import { withSupportSkill } from "./support-skills";
 
 const item = z.object({ id: z.string().min(1) }).passthrough();
 const rawBank = z.object({ experience: z.object({
@@ -52,7 +53,7 @@ export function applyWebBankPatch(html: string, patch: unknown): string {
 const repairCall = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("author");
   const deadline = AbortSignal.timeout(180_000);
-  return (await callStepModel(createStudioProvider(model, 180_000, 12_000), { step: "author", model, system, user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
+  return (await callStepModel(createStudioProvider(model, 180_000, 12_000), { step: "author", model, system: withSupportSkill("web-repair", system), user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
 };
 export async function repairWebLessonBank(html: string, options: {
   call?: typeof repairCall; signal?: AbortSignal;

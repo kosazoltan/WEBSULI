@@ -7,6 +7,7 @@ import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { resolveStudioModel } from "../ai/models";
 import { createStudioProvider } from "../ai/studio-provider";
 import { callStepModel } from "./run-step";
+import { withSupportSkill } from "./support-skills";
 
 type Node = DefaultTreeAdapterMap["node"];
 type Element = DefaultTreeAdapterMap["element"];
@@ -84,7 +85,7 @@ export function applyTeachingPatch(html: string, raw: unknown, allowedSections?:
 
 export const callTeachingRepair = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("author"), deadline = AbortSignal.timeout(240_000);
-  return (await callStepModel(createStudioProvider(model, 240_000, 16_000), { step: "author", model, system, user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
+  return (await callStepModel(createStudioProvider(model, 240_000, 16_000), { step: "author", model, system: withSupportSkill("web-repair", system), user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
 };
 export async function reviewAndRepairWebTeaching(html: string, sources: FetchedTeachingSource[], options: {
   requestedTopic?: string; signal?: AbortSignal; review?: typeof reviewWebTeaching; repair?: typeof callTeachingRepair;

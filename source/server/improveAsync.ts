@@ -19,6 +19,7 @@ import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
 import { executeWorkflow, workflowPhase, workflowSkillPrompt, workflowFinding } from "./workflows/engine";
 import { workflowStore } from "./workflows/store";
 import { htmlBaselineHash } from "./improve/html-baseline";
+import { withSupportSkill } from "./studio/support-skills";
 
 /**
  * Run the AI improvement in background and update the DATABASE record
@@ -61,7 +62,7 @@ async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile
       seed: originalFile.title,
       subjectHint: `${originalFile.title} ${originalFile.description ?? ''}`,
     });
-    const systemPrompt = `Te egy professzionális HTML tananyag javító és modernizáló szakértő vagy (Tananyag Javító v2.1 – szinkronizálva Tananyag Készítő v7.4-gyel).
+    const systemPromptBase = `Te egy professzionális HTML tananyag javító és modernizáló szakértő vagy (Tananyag Javító v2.1 – szinkronizálva Tananyag Készítő v7.4-gyel).
 
 ## FELADATOD
 Régi, csonkolt vagy hibás HTML tananyagokat javítasz és bővítesz a Tananyag Készítő v7.4 specifikáció szerint (lent).
@@ -126,6 +127,9 @@ ${specBlock}
 ✓ Reszponzív CSS 320px–2560px (clamp, @media)
 ✓ Helyi, ellenőrzött Nunito / Source Sans 3 / Source Serif 4 és UTF-8; sem Google Fonts, sem külső font nem szükséges
 ✓ Sticky tab navigáció${workflowSkillPrompt()}`;
+
+    // Spec 2026-09-23: every model call starts with its role skill.
+    const systemPrompt = withSupportSkill("html-improve", systemPromptBase);
 
     const userPrompt = `# Tananyag Modernizálása
 

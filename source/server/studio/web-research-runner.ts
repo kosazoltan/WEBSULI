@@ -15,6 +15,7 @@ import { reviewAndRepairWebTeaching } from "./web-teaching-repair";
 import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { callStepModel, StepModelError } from "./run-step";
 import { buildLessonExperience } from "./experience-builder";
+import { withSupportSkill } from "./support-skills";
 import {
   assembledWebLessonData,
   extractWebConcepts,
@@ -127,7 +128,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           system: [
             {
               type: "text",
-              text: webResearchGatherPrompt(input.classroom, input.title, topicSeed) + workflowSkillPrompt(),
+              text: withSupportSkill("web-research", webResearchGatherPrompt(input.classroom, input.title, topicSeed)) + workflowSkillPrompt(),
               cache_control: { type: "ephemeral" },
             },
           ],
@@ -217,7 +218,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     const extraction = await workflowCheckpoint("web-extract", { input, method: LESSON_METHOD_VERSION, contract: "web-extract-1", urls: downloaded.map(s => s.url) }, () => extractWebConcepts(files, { subject: input.title?.trim() || "tananyag", classroom: input.classroom }, async (system, user) => {
       const provider = createStudioProvider(extractModel, 180_000, 12_000);
       const response = await provider.chat([
-        { role: "system", content: system + workflowSkillPrompt() },
+        { role: "system", content: withSupportSkill("web-research", system) + workflowSkillPrompt() },
         { role: "user", content: user },
       ], controller.signal);
       await workflowUsage({ promptTokens: response.usage?.promptTokens, completionTokens: response.usage?.completionTokens });
@@ -236,7 +237,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     restartPhaseTimer();
     stopIdle();
     onEvent({ type: "status", message: "Tananyag írása a forrásjegyzékből…" });
-    const authorSystem = webLessonAuthorPrompt(input.classroom, input.title, topicSeed) + workflowSkillPrompt();
+    const authorSystem = withSupportSkill("web-author", webLessonAuthorPrompt(input.classroom, input.title, topicSeed)) + workflowSkillPrompt();
     const authorUser = `${knowledgeAuthorData(brief)}\nKért téma: ${input.message}`;
     let html = "";
     const authorMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [

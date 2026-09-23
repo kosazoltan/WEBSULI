@@ -7,6 +7,7 @@ import { createStudioStepProvider } from "../ai/studio-provider";
 import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { workflowValidationFailure } from "../workflows/engine";
+import { withSupportSkill } from "./support-skills";
 
 export type FetchedTeachingSource = { url: string; title: string; text: string };
 export class TeachingReviewFailure extends Error {}
@@ -138,14 +139,14 @@ export function assertTeachingReviewEvidence(html: string, sources: { url: strin
 export const callTeachingReviewer = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("lektor");
   try {
-    return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", model, system, user }, signal)).json;
+    return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", model, system: withSupportSkill("web-lektor", system), user }, signal)).json;
   } catch (primaryError) {
     // Spec 2026-09-19: the same lektor fallback as the Studio runner — only on a provider
     // failure (timeout, 5xx, bad JSON), never on a content verdict, never after an abort.
     const fallback = FALLBACK_MODELS.lektor;
     if (!(primaryError instanceof StepModelError) || !fallback || fallback === model || signal?.aborted) throw primaryError;
     try {
-      return (await callStepModel(createStudioStepProvider(fallback, "lektor"), { step: "lektor", model: fallback, system, user }, signal)).json;
+      return (await callStepModel(createStudioStepProvider(fallback, "lektor"), { step: "lektor", model: fallback, system: withSupportSkill("web-lektor", system), user }, signal)).json;
     } catch {
       throw primaryError;
     }
