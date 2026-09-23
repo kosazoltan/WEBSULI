@@ -26,3 +26,13 @@ A régi felületek (HTML-okosító, AI készítő) funkcionális átalakítása;
 3. A lektor-skill: mérce-sorrend, bejárás, cáfolás, egy gyökérok = egy jegyzet, jegyzet-alak; a régi horgonyok megmaradnak. (unit)
 4. A fogalomjavítás utáni lektor, a besoroló, a helyesbítő, a webes és a régi hívások system promptja a skill-fejléccel indul. (unit, ahol a prompt tiszta függvényből jön; kód-ellenőrzés a routes.ts-ben)
 5. tsc, eslint, teljes teszt, build zöld.
+
+## Mérés (2026-09-23, éles adatból, csak olvasás; `.measure-lektor` harness, lektor = grok-4.6)
+Visszajátszás: a két valódi, lektoron bukott javító futás (4756f8c2, e3348439) jelöltje a futásnapló ellenőrzőpontjaiból újraépítve (szerzői kimenet + tárolt bankcsomagok, modellhívás nélkül), feltételenként 3 lektorhívás.
+
+| Jelölt | RÉGI (dac806a prompt, skill nélkül — élesben ez futott) | ÚJ skill | ÚJ skill + tanári kérés/helyesbítés |
+|---|---|---|---|
+| A | 1,1,1 — hamis: „föld-változása” visszakövetelése | 0,0,0 | 2,2,2 — jogos: Stonehenge, kódex (a régi jelölt a helyesbítés előtti alakot tanítja) |
+| B | 1,1,1 — hamis: c7 „10 év = 1 évszázad” tanításának követelése | 0,0,0 | 2,2,2 — jogos, mint fent |
+
+A mérés közben talált második hibaosztály (önellentmondó forrásállítás: c7 ↔ c8) az első ÚJ-skill mérésen még 3/3 blokkolót adott; a lektor-skill 8. pontja (önellentmondó forrás → book_probably_wrong info) után 0/3. Hamis blokkoló: 6/6 → 0/6.
