@@ -433,3 +433,11 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Verifikáció (mérve):** lektor A/B visszajátszás a két valódi jelöltön, 3-3 hívás: hamis blokkoló 6/6 → 0/6. Éles E2E javító futás (mentés nélkül): kész 594 s, 0 blokkoló, évfolyam 7→5, bódex 0 / kódex 16, Stonehenge, Hold, tanítás −23 %. OCR 3 valódi kézírásos lapon: qwen 95,4 / glm 89,1 / luna 87,3 / deepseek-v4.1-flash 0 (csonkol). Kapuk: tsc (+tsconfig.test.json), eslint, 1379 teszt, build, CI minden check zöld. Deploy: Render revision 28d9001, Vercel asset main-DZyXbpek.js = helyi build.
 
 **Nyitott:** tulajdonosi döntés a D1-ről önellentmondó forrásállításnál (a lecke most a hibás c7 sort tanítja, a lektor infóként jelzi). Admin-felületi böngészős próba nem futott (bejelentkezés kell).
+
+## 2026-09-23 (késő este) — „Az időszámítás…” lecke újraírva élesben + hotfix (PR #105, merge ef05159)
+
+**Kérés:** a lektor miatt bukott leckét újra elkészíteni, tömörebben, 5. osztályos szinten, a történelmi alapfogalmakra fókuszálva; a régi hibásat eltávolítani. Tulajdonosi döntés: az időegységeknél a helyes „1 évszázad = 100 év = 10 évtized” (tanári helyesbítésként, a D1 általánosan változatlan).
+
+**Végrehajtás:** a termelési javító úton (javítási rekord bb6c1413, jelölt 579 s alatt, 0 lektori jegyzet), majd `applyTrackedImprovement`. Az első alkalmazás elbukott: `km_concepts.verbatim_reason` varchar(32), a helyesbítés audit-szöveget írt bele → tranzakció visszagördült, a lecke érintetlen. Hotfix: okkód (`corrected:owner`), regressziós teszt; ugyanez a hiba az egylépéses készítést is megakasztotta volna.
+
+**Visszaolvasás (éles DB + élő API):** lecke v2, 5. osztály (lecke, anyag, térkép), 12 fejezet, tanítás 24 112 → 18 901 kar., bank 45/75; bódex 0 / kódex 19, Stonehenge, Hold változása, „100 év” 18, „10 év = 1 évszázad” 0; c1, c2, c7, c25–c27 `edited`/`corrected:owner`. A régi változat csak visszaállítható mentésként él (material_improvement_backups 97b1323c).
