@@ -48,7 +48,7 @@ import { workflowStore } from "../workflows/store";
 import { htmlFiles } from "../../shared/schema";
 import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
-import { correctionAuditText, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
+import { correctionAuditText, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 import { callStepModel } from "./run-step";
 import { createStudioStepProvider } from "../ai/studio-provider";
 import type { MapConcept } from "./coverage";
@@ -451,6 +451,8 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
   concepts, { instruction, transcript });
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
+  // The full audit goes to the log and the job output (sourceCorrections); the column holds only a code.
+  for (const fix of result.corrections) logger.info(`[STUDIO/1STEP] ${fix.localId}: ${correctionAuditText(fix)}`);
   for (const fix of result.corrections) {
     const row = rows.find((r) => r.localId === fix.localId);
     if (!row) continue;
@@ -458,7 +460,7 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
       ...(fix.term !== undefined ? { term: fix.term } : {}),
       ...(fix.definition !== undefined ? { definition: fix.definition } : {}),
       ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}),
-      verbatimReason: correctionAuditText(fix),
+      verbatimReason: correctionReasonCode(fix),
       updatedAt: new Date(),
     }).where(eq(kmConcepts.id, row.id));
   }

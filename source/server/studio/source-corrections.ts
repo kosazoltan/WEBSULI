@@ -152,6 +152,16 @@ export function applySourceCorrections<T extends MapConcept>(concepts: T[], corr
   });
 }
 
+/**
+ * The km_concepts.verbatim_reason column is varchar(32) — a reason CODE, not prose (measured 2026-09-23:
+ * writing the audit text there failed the apply transaction with "value too long for type character
+ * varying(32)"). The full old → new audit lives in the repair candidate / job output.
+ */
+export const CORRECTION_REASON_MAX = 32;
+export function correctionReasonCode(fix: Pick<SourceCorrection, "basis">): string {
+  return `corrected:${fix.basis}`;
+}
+
 export function correctionAuditText(fix: SourceCorrection): string {
   const label = fix.basis === "owner" ? "tanár" : "átírás";
   const parts = [fix.term !== undefined ? `„${fix.from.term}” → „${fix.term}”` : "", fix.definition !== undefined ? `definíció: „${fix.from.definition}” → „${fix.definition}”` : ""].filter(Boolean);
