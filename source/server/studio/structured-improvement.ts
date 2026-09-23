@@ -21,7 +21,7 @@ import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, 
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { repairChecklistTail, staleFormProblems, withRepairSkill } from "./repair-skill";
 import { withRoleSkill } from "./role-skills";
-import { applySourceCorrections, correctionAuditText, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
+import { applySourceCorrections, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 
 export const repairHash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
@@ -183,7 +183,7 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     for (const fix of corrections) {
       const row = concepts.find(c => c.localId === fix.localId);
       if (!row) throw new Error(`A helyesbítendő fogalom nem található: ${fix.localId}.`);
-      await tx.update(kmConcepts).set({ ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}), verbatimReason: correctionAuditText(fix), updatedAt: new Date() }).where(eq(kmConcepts.id, row.id));
+      await tx.update(kmConcepts).set({ ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}), verbatimReason: correctionReasonCode(fix), updatedAt: new Date() }).where(eq(kmConcepts.id, row.id));
     }
     if (repair.classroom !== undefined) await tx.update(knowledgeMaps).set({ classroom: repair.classroom, updatedAt: new Date() }).where(eq(knowledgeMaps.id, current.mapId));
     const [written] = await tx.update(lessons).set({ json: repair.candidate, coverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();

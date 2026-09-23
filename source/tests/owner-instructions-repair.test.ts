@@ -154,3 +154,18 @@ test("Tananyagjavító menü: a javító út szerep-skilljei verzióval", async 
   assert.deepEqual(roles.map(r => r.role), ["author", "lektor", "bank", "ocr"]);
   for (const r of roles) { assert.match(r.version, /^[a-f0-9]{12}$/); assert.match(r.text, /## Tilalmak/); }
 });
+
+test("a km_concepts.verbatim_reason (varchar 32) csak rövid okkódot kap — az audit szöveg máshol él", async () => {
+  // Mérve 2026-09-23: az audit-szöveg a varchar(32) oszlopba írva az alkalmazó tranzakciót buktatta.
+  const { correctionReasonCode, CORRECTION_REASON_MAX } = await import("../server/studio/source-corrections");
+  const { kmConcepts } = await import("../shared/schema");
+  assert.equal((kmConcepts.verbatimReason as unknown as { length: number }).length, CORRECTION_REASON_MAX);
+  for (const basis of ["owner", "transcription"] as const) {
+    const code = correctionReasonCode({ basis });
+    assert.ok(code.length <= CORRECTION_REASON_MAX, `${code} (${code.length})`);
+  }
+  const { readFileSync } = await import("node:fs");
+  for (const file of ["server/studio/lesson-pipeline-routes.ts", "server/studio/structured-improvement.ts"]) {
+    assert.doesNotMatch(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), /verbatimReason:\s*correctionAuditText/, file);
+  }
+});
