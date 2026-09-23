@@ -36,7 +36,7 @@ let checkpoint: ExperienceCheckpoint | undefined;
 try { checkpoint = JSON.parse(await readFile(new URL("checkpoint.json", out), "utf8")); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 let calls = 0, tokensIn = 0, tokensOut = 0;
 const started = Date.now();
-const call = async (step: "author" | "lektor", system: string, user: string) => {
+const call = async (step: "author" | "lektor" | "pedagogue", system: string, user: string) => {
   const model = resolveStudioModel(step);
   process.stdout.write(`${++calls}. modellhívás: ${step}, bemenet ${system.length + user.length} karakter\n`);
   const provider = new OpenRouterProvider({ apiKey: process.env.OPENROUTER_API_KEY ?? "", model, timeout: 180000, maxTokens: 24000 });

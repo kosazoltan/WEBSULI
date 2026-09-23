@@ -1,10 +1,11 @@
-import { studioConnection } from "../ai/studio-provider";
+import { studioConnection, studioModelReady } from "../ai/studio-provider";
+import { createHash } from "node:crypto";
 import { workflowSkillPrompt, workflowFinding } from "../workflows/engine";
 import { db } from "../db";
 import { knowledgeMaps, kmConcepts, systemPrompts } from "../../shared/schema";
 import { and, eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
-import { providerForModel, resolveStudioModel } from "../ai/models";
+import { FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../ai/models";
 import { createPromptStore } from "../lib/prompt-store";
 import {
   emptyExtractionReason,
@@ -17,7 +18,7 @@ import {
   type RawExtraction,
   type ExtractionRepair,
 } from "./extractor";
-import { callOcrModel, ocrTextsOf, withOcrCache, OCR_SYSTEM_PROMPT } from "./ocr";
+import { callOcrAdjudicator, callOcrModel, dualReadOcr, ocrTextsOf, withOcrCache, OCR_ADJUDICATION_PROMPT, OCR_SYSTEM_PROMPT } from "./ocr";
 import { attachSourceTranscripts, repairSourceQuotes, TRANSCRIPT_CONTRACT } from "./source-transcript";
 import { scopeContentParts } from "./one-step";
 import { normalizeDocumentSources } from "./document-source";
@@ -260,8 +261,8 @@ export async function runExtraction(input: RunInput): Promise<string> {
 export async function createCachedSourceOcr(ocrModel: string) {
   const { ocrTranscripts } = await import("../../shared/schema");
   const { eq } = await import("drizzle-orm");
-  return withOcrCache((file) => callOcrModel(file, ocrModel), ocrModel, {
-    get: async (key) => {
+  const store = {
+    get: async (key: string) => {
       const [row] = await db
         .select({ text: ocrTranscripts.text })
         .from(ocrTranscripts)
@@ -269,8 +270,16 @@ export async function createCachedSourceOcr(ocrModel: string) {
         .limit(1);
       return row?.text ?? null;
     },
-    put: async (key, text) => {
+    put: async (key: string, text: string) => {
       await db.insert(ocrTranscripts).values({ cacheKey: key, text }).onConflictDoNothing();
     },
-  });
+  };
+  const first = withOcrCache((file) => callOcrModel(file, ocrModel), ocrModel, store);
+  // Spec 2026-09-23: a second, independent model family reads every image; disputes are adjudicated by the
+  // PRIMARY — the measured best reader (qwen 95.4% vs glm 89.1% on the #190 pages, 2026-09-23).
+  const secondModel = FALLBACK_MODELS.ocr;
+  if (!secondModel || secondModel === ocrModel || !studioModelReady(secondModel)) return first;
+  const second = withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store);
+  const dual = dualReadOcr(first, second, (file, text, disputes) => callOcrAdjudicator(file, ocrModel, text, disputes));
+  return withOcrCache(dual, `${ocrModel}|${secondModel}|dual-1|${createHash("sha256").update(OCR_ADJUDICATION_PROMPT).digest("hex").slice(0, 12)}`, store);
 }

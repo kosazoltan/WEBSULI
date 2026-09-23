@@ -11,6 +11,8 @@ import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals";
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
+import { ownerInstructionPromptBlock } from "../../shared/owner-instruction";
+import { correctionPromptLines, type SourceCorrection } from "./source-corrections";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -158,6 +160,21 @@ export const D1_RULE_TEXT =
   "A forrás a mérce. Ha a forrás szerinted téved, azt csak `book_probably_wrong` " +
   "jegyzetként jelezd; a leckében a forrás állítása marad.";
 
+/**
+ * Spec 2026-09-23 (mérve: map 2c43327f) — a D1 pontosítása, a D1 szövege változatlan: a fénykép/kézírás
+ * gépi átiratának betűhibája nem a forrás ÁLLÍTÁSA. A lektor ezt a „föld-változása” olvasaton blokkolta.
+ */
+export const TRANSCRIPTION_RULE_TEXT =
+  "Átírási hiba ≠ forrásállítás: ha a quote egy fénykép/kézírás gépi átiratában értelmetlen vagy a mondatban " +
+  "lehetetlen szó áll, és a lecke egy 1–2 betűben eltérő, a szövegkörnyezetben értelmes olvasatot használ, az a forrás " +
+  "helyes olvasata, nem eltérés tőle. Ilyenkor legfeljebb book_probably_wrong (info) jegyzet jár, a hibás alakot " +
+  "visszakövetelni tilos. Tényt, számot, dátumot ez a szabály nem ír felül.";
+
+export type OwnerContext = { instruction?: string; corrections?: SourceCorrection[] };
+function ownerLines(owner?: OwnerContext): string[] {
+  return [...ownerInstructionPromptBlock(owner?.instruction), ...correctionPromptLines(owner?.corrections)];
+}
+
 type PromptMap = {
   title?: string;
   subject: string;
@@ -187,7 +204,7 @@ export function visualPlanningLines(world: VisualWorld): string[] {
 }
 
 /** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
-export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld): string {
+export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner?: OwnerContext): string {
   return [
     "Te vagy a pedagógus (tervkészítő). A kurált fogalomtérképből készíts lecke-vázlatot: ez a terv szabja meg a szerző, az ábrakészítő és a lektor munkáját, ezért pontos, tömör és teljes legyen.",
     "",
@@ -228,6 +245,7 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld): stri
     `Tanuló: ${map.classroom}. osztály, tantárgy: ${map.subject}.`,
     "",
     ...(visual ? [...visualPlanningLines(visual), ""] : []),
+    ...ownerLines(owner),
     "A válasz CSAK JSON legyen, a következő alakban:",
     visual
       ? '{ "sections": [{ "heading": string, "emoji": string, "keyPhrases": string[], "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[] }], "misconceptions": [{ "conceptId": string, "text": string }], "visual": { "world": string } }'
@@ -299,6 +317,7 @@ export function buildAuthorPrompt(
   blockerNotes: RawNote[],
   /** Spec §6: when set, only these section indices are rewritten and returned as a patch. */
   repair?: { targetSections: ReadonlyArray<number> },
+  owner?: OwnerContext,
 ): string {
   const authorNotes = blockerNotes.filter((n) => n.subkind !== "book_probably_wrong");
   const conceptIds = [...new Set(sections.flatMap((s) => s.conceptIds))];
@@ -311,9 +330,11 @@ export function buildAuthorPrompt(
     `Age band: ${band} (classroom ${map.classroom}). ${bandRegisterForPrompt(band)}`,
     "",
     D1_RULE_TEXT,
+    TRANSCRIPTION_RULE_TEXT,
     LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
     "",
+    ...ownerLines(owner),
     "Hard rules:",
     "- Every block's coversConceptIds may use ONLY the ids below — never invent new ones:",
     conceptIds.join(", "),
@@ -422,7 +443,7 @@ export function buildLektorGradingEvidence(lesson: Lesson): string {
     "A program pontozási mérése (adat):\n" + JSON.stringify(evidence);
 }
 
-export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = []): string {
+export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext): string {
   return [
     LESSON_METHOD_CONTRACT,
     ...(previousBlockers.length ? [
@@ -443,13 +464,15 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "- Blokkoló (contradicts_source / not_in_map / coverage_gap-core) CSAK akkor, ha mind a három igaz: (a) a forráshoz képest HAMIS, nem csak másképp mondott; (b) a lecke másik mondata sem támasztja alá; (c) a tanulót félrevezetné. Indokolj a forrás idézetével vagy konkrét számolással.",
     "- Ha csak a megfogalmazás pontatlan vagy kétértelmű, de a jelölt válasz egy ésszerű olvasatban helyes: `language` jegyzet (nem blokkoló) egy mondatos egyértelműsítési javaslattal — ne blokkolj.",
     "- Bizonytalan gyanú, „lehet, hogy” típusú kifogás, stílus, hossz, ismétlés: nem blokkoló.",
-    "- Kalibráló példák: „a szorzás előbb, mint az összeadás” ≡ „a szorzásnak elsőbbsége van” (nincs hiba); rubrika-szinonima „nyolcvannégy” a 48 helyett → hiba (más érték); „az első menetben elvégezzük a szorzást és osztást” vs. kérdés az „első menet” eredményéről, ahol a jelölt köztes sor helyes → language, nem blokkoló; „szorzás-osztásnál nem mindig balról jobbra” a forrás „balról jobbra” szabályával szemben → blokkoló.",
+    "- Kalibráló példák: „a szorzás előbb, mint az összeadás” ≡ „a szorzásnak elsőbbsége van” (nincs hiba); rubrika-szinonima „nyolcvannégy” a 48 helyett → hiba (más érték); „az első menetben elvégezzük a szorzást és osztást” vs. kérdés az „első menet” eredményéről, ahol a jelölt köztes sor helyes → language, nem blokkoló; „szorzás-osztásnál nem mindig balról jobbra” a forrás „balról jobbra” szabályával szemben → blokkoló; quote „föld-változása – holdnaptár készítése” (kézírás-átirat) vs. lecke „a Hold változásait figyelve készítettek holdnaptárt” → NEM hiba (átírási hiba, legfeljebb book_probably_wrong info); quote „bódex: bézzel írt könyv” vs. lecke „kódex: kézzel írt könyv” → NEM hiba.",
     "- Az üres notes a helyes válasz egy jó leckére. Kevés, valódi hiba > sok gyanú.",
     "- A szövegben előforduló `**…**` jelölés kiemelés (vizuális), nem tartalom: ne jelezd hibaként, és a benne lévő szöveget ugyanúgy értékeld, mint a többit.",
     "",
     D1_RULE_TEXT,
+    TRANSCRIPTION_RULE_TEXT,
     LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
+    ...ownerLines(owner),
     "Minden eltéréshez adj konkrét blockPath értéket és ellenőrizhető indokot. A forrásszámok cseréje vagy hibás levezetés source_conflict/contradicts_source; valóban hiányzó tanítás coverage_gap. A látható feladatot és minden válaszhoz tartozó magyarázatot is ellenőrizd.",
     "Az algebrai egyezés mellett az adatok együttes megvalósíthatóságát is vizsgáld. Például a háromszög egyik oldalához tartozó magasság nem lehet nagyobb bármelyik másik oldalnál, és két oldalból T ≤ a·b/2. Ha a lehetetlen adatok már a kurált forrásban is így szerepelnek, konkrét számolással source_conflict/book_probably_wrong adminjegyzetet adj; a forrást és a tanuló leckéjét nem írhatod át. Ha a szerző találta ki az ellentmondást, az contradicts_source hiba.",
     "",

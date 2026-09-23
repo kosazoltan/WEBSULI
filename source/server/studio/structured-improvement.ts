@@ -18,15 +18,21 @@ import { createStudioStepProvider } from "../ai/studio-provider";
 import { resolveStudioModel } from "../ai/models";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
+import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
+import { repairChecklistTail, staleFormProblems, withRepairSkill } from "./repair-skill";
+import { withRoleSkill } from "./role-skills";
+import { applySourceCorrections, correctionAuditText, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 
 export const repairHash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
 export const materialHash = (row: Pick<typeof htmlFiles.$inferSelect, "title" | "content" | "description" | "classroom" | "contentType">) => repairHash({ title: row.title, content: row.content, description: row.description, classroom: row.classroom, contentType: row.contentType });
 type RepairSource = { subject: string; classroom: number; concepts: MapConcept[] };
-export function assertRepairTeaching(original: Lesson, candidate: Lesson, source: RepairSource) {
-  for (const field of ["mapId", "classroom", "subject", "sourceOnly"] as const) {
+/** `classroom`: the grade the teacher explicitly asked for (spec 2026-09-23); otherwise the original's. */
+export function assertRepairTeaching(original: Lesson, candidate: Lesson, source: RepairSource, classroom = original.classroom) {
+  for (const field of ["mapId", "subject", "sourceOnly"] as const) {
     if (candidate[field] !== original[field]) throw new Error(`A javítás nem változtathatja meg: ${field}.`);
   }
+  if (candidate.classroom !== classroom) throw new Error("A javítás nem változtathatja meg: classroom.");
   const coverage = checkCoverageGate(candidate, source.concepts);
   const arc = checkLessonArc(candidate);
   const blocks = candidate.sections.flatMap(s => s.blocks);
@@ -35,8 +41,8 @@ export function assertRepairTeaching(original: Lesson, candidate: Lesson, source
   if (problems.length) throw new Error(`A javított lecke nem teljes: ${problems.join("; ")}`);
   return coverage.coverage;
 }
-export function assertRepairCandidate(original: Lesson, candidate: Lesson, source: RepairSource) {
-  const coverage = assertRepairTeaching(original, candidate, source);
+export function assertRepairCandidate(original: Lesson, candidate: Lesson, source: RepairSource, classroom = original.classroom) {
+  const coverage = assertRepairTeaching(original, candidate, source, classroom);
   const problems = [...experienceProblems(candidate, candidate.experience), ...verifyLessonSkillBank(candidate.experience, candidate.subject).problems, ...(candidate.experience ? publicationBankProblems(candidate.experience) : [])];
   if (problems.length) throw new Error(`A javított lecke nem teljes: ${problems.join("; ")}`);
   return coverage;
@@ -49,10 +55,10 @@ export function assertRepairFresh(repair: LessonRepair, current: { id: string; v
 
 async function loadSource(mapId: string) {
   const { db } = await import("../db");
-  const [map] = await db.select({ subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom }).from(knowledgeMaps).where(eq(knowledgeMaps.id, mapId));
+  const [map] = await db.select({ subject: knowledgeMaps.subject, classroom: knowledgeMaps.classroom, sourceFiles: knowledgeMaps.sourceFiles }).from(knowledgeMaps).where(eq(knowledgeMaps.id, mapId));
   if (!map) throw new Error("A lecke kurált forrása nem található.");
   const concepts = await db.select().from(kmConcepts).where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
-  return { ...map, concepts: concepts.map(c => ({ id: c.id, localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight as MapConcept["examWeight"] })).sort((a, b) => a.localId.localeCompare(b.localId)) };
+  return { ...map, sourceFiles: map.sourceFiles as unknown[] | null, concepts: concepts.map(c => ({ id: c.id, localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight as MapConcept["examWeight"] })).sort((a, b) => a.localId.localeCompare(b.localId)) };
 }
 
 /** Read-only original/source; paid generation writes only the separate candidate. */
@@ -65,29 +71,54 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const [material] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, fileId));
   if (!material) throw new Error("Az eredeti tananyag metaadatai nem találhatók.");
   const source = await loadSource(row.mapId);
-  const call = async (step: "author" | "lektor", system: string, user: string) => {
+  const call = async (step: RepairStep, system: string, user: string) => {
     const model = resolveStudioModel(step);
     const provider = createStudioStepProvider(model, step);
     return (await callStepModel(provider, { step, model, system, user })).json;
   };
-  const { candidate, review } = await buildStructuredImprovement(original, source, call, instruction);
-  return lessonRepairSchema.parse({ kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(source), previousLesson: original, candidate, reviewNotes: review.notes });
+  const ownerInstruction = normalizeOwnerInstruction(instruction);
+  const { sourceFiles, ...hashedSource } = source;
+  const transcript = Array.isArray(sourceFiles) && sourceFiles.some((f) => (f as { kind?: string } | null)?.kind === "image");
+  const { candidate, review, owner } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
+  return lessonRepairSchema.parse({
+    kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
+    ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
+  });
 }
 
 /** Shared generation path: also executable against read-only source with local artifacts. */
-export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: (step: "author" | "lektor", system: string, user: string) => Promise<unknown>, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }) {
+type RepairStep = "author" | "lektor" | "pedagogue";
+type RepairCall = (step: RepairStep, system: string, user: string) => Promise<unknown>;
+export type RepairOwner = { instruction?: string; corrections: SourceCorrection[]; classroom?: number };
+
+export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } = {}) {
   await workflowPhase("author");
+  // Spec 2026-09-23: the teacher's request may carry documented source corrections and an explicit grade.
+  const proposal = instruction || opts.transcript
+    ? await proposeSourceCorrections((system, user) => call("pedagogue", system, user), source.concepts, { instruction, transcript: !!opts.transcript })
+    : { corrections: [] as SourceCorrection[] };
+  const asked = explicitClassroomOf(instruction);
+  const owner: RepairOwner = { instruction, corrections: proposal.corrections, ...(asked !== undefined && asked !== original.classroom ? { classroom: asked } : {}) };
+  const corrected: RepairSource = { ...source, ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}), concepts: applySourceCorrections(source.concepts, owner.corrections) };
+  const classroom = owner.classroom ?? original.classroom;
   const outline = original.sections.map(s => ({ heading: s.heading, conceptIds: [...new Set(s.blocks.flatMap(b => "coversConceptIds" in b ? b.coversConceptIds : []))], plannedBlocks: s.blocks.map(b => b.kind), animationSuggestions: [] }));
-  const prompt = buildAuthorPrompt(outline, source, []);
-  const request = `A korábbi lecke forrással egyező tanítását, kidolgozott példáit és jó ábráit őrizd meg, a hiányokat és forráseltéréseket javítsd. A teljes forráspélda számait és levezetését tanítsd meg, ne csak kérdésben jelenjen meg! Ne rövidítsd vázlattá! mapId=${original.mapId}. Az évfolyamot a program már a forrásból állapította meg, ne változtasd. Minden szakasz explain blokkal induljon. A Próba csak legalább 5 check blokk mellett kapcsolható be; máskülönben probaEnabled=false. A külön experience bankokat ne írd ki.\nKérés: ${instruction ?? "Négyoldalas fúziós módszer, teljes tanítás és változatos gyakorlás."}\nKorábbi lecke (adat):\n${JSON.stringify({ ...original, experience: undefined })}`;
+  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined);
+  const gradeLine = owner.classroom !== undefined
+    ? `Az évfolyam a tanár kifejezett kérésére ${owner.classroom}. osztály: a classroom mező ${owner.classroom} legyen, a nyelvezet és a mélység ehhez igazodjon.`
+    : "Az évfolyamot a program már a forrásból állapította meg, ne változtasd.";
+  const lengthLine = instruction ? "A forrás tanítását ne hagyd ki; a terjedelmet a tanár kérése szabja meg." : "Ne rövidítsd vázlattá!";
+  const request = `${instruction ? `A TANÁR KÉRÉSE (ez a javítás célja, elsőbbséget élvez):\n${instruction}\n\n` : ""}A korábbi lecke forrással egyező tanítását, kidolgozott példáit és jó ábráit őrizd meg, a hiányokat és forráseltéréseket javítsd. A teljes forráspélda számait és levezetését tanítsd meg, ne csak kérdésben jelenjen meg! ${lengthLine} mapId=${original.mapId}. ${gradeLine} Minden szakasz explain blokkal induljon. A Próba csak legalább 5 check blokk mellett kapcsolható be; máskülönben probaEnabled=false. A külön experience bankokat ne írd ki.\nKérés: ${instruction ?? "Négyoldalas fúziós módszer, teljes tanítás és változatos gyakorlás."}\nKorábbi lecke (adat):\n${JSON.stringify({ ...original, experience: undefined })}`;
   let candidate: Lesson | undefined;
   let previous: unknown;
   let correction = "";
   for (let attempt = 0; attempt < 2; attempt++) {
-    previous = await call("author", prompt, correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request);
+    // Spec 2026-09-23: the repair skill at the start of the system prompt, its checklist at the end of the user message.
+    previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections));
     try {
       const parsed = lessonSchema.parse(previous);
-      assertRepairTeaching(original, parsed, source);
+      assertRepairTeaching(original, parsed, corrected, classroom);
+      const stale = staleFormProblems(parsed, owner.corrections);
+      if (stale.length) throw new Error(stale.join("; "));
       candidate = parsed;
       break;
     } catch (error) {
@@ -97,24 +128,26 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
     }
   }
   if (!candidate) throw new Error("A javított tanítás hiányzik.");
-  return finishStructuredImprovement(original, candidate, source, call, progress);
+  return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner), owner };
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
-export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: (step: "author" | "lektor", system: string, user: string) => Promise<unknown>, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }) {
-  assertRepairTeaching(original, candidate, source);
+export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner) {
+  const classroom = owner?.classroom ?? original.classroom;
+  assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
   candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user) => call("author", system, user) });
-  assertRepairCandidate(original, candidate, source);
+  assertRepairCandidate(original, candidate, source, classroom);
   await workflowPhase("lektor");
-  const review = lektorReportSchema.parse(await call("lektor", buildLektorPrompt(candidate, source), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
+  const lektorOwner = owner && (owner.instruction || owner.corrections.length) ? { instruction: owner.instruction, corrections: owner.corrections } : undefined;
+  const review = lektorReportSchema.parse(await call("lektor", withRoleSkill("lektor", buildLektorPrompt(candidate, source, [], lektorOwner)), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);
   if (blockers.length) {
     for (const code of lektorSkillCodes(blockers)) await workflowFinding(code);
     throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
   }
   await workflowPhase("gate");
-  assertRepairCandidate(original, candidate, source);
+  assertRepairCandidate(original, candidate, source, classroom);
   return { candidate, review };
 }
 
@@ -138,19 +171,28 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     if (!map) throw new Error("A forrás nem található.");
     const source = { ...map, concepts: concepts.map(c => ({ id: c.id, localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight as MapConcept["examWeight"] })).sort((a, b) => a.localId.localeCompare(b.localId)) };
     assertRepairFresh(repair, current, source, materialHash(original));
-    const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, source);
+    const corrections = repair.sourceCorrections ?? [];
+    const reviewed = { ...source, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}), concepts: applySourceCorrections(source.concepts, corrections) };
+    const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, reviewed, repair.classroom ?? lessonSchema.parse(current.json).classroom);
     if (workflowMode() === "apply") await workflowPhase("apply");
     await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
     const backupData = { ...original, structuredLesson: current, quizItems: quiz, expectedCurrentHash: repairHash(repair.candidate), expectedCurrentVersion: current.version + 1 };
     const [backup] = await tx.insert(materialImprovementBackups).values({ originalFileId: original.id, improvedFileId: improved.id, createdBy: userId, notes: notes ?? "Fúziós lecke alkalmazása előtti teljes mentés", backupData }).returning();
+    // Spec 2026-09-23: documented curation reaches the map only with the reviewed candidate (quote untouched).
+    for (const fix of corrections) {
+      const row = concepts.find(c => c.localId === fix.localId);
+      if (!row) throw new Error(`A helyesbítendő fogalom nem található: ${fix.localId}.`);
+      await tx.update(kmConcepts).set({ ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}), verbatimReason: correctionAuditText(fix), updatedAt: new Date() }).where(eq(kmConcepts.id, row.id));
+    }
+    if (repair.classroom !== undefined) await tx.update(knowledgeMaps).set({ classroom: repair.classroom, updatedAt: new Date() }).where(eq(knowledgeMaps.id, current.mapId));
     const [written] = await tx.update(lessons).set({ json: repair.candidate, coverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
     if (repairHash(written.json) !== repairHash(repair.candidate)) throw new Error("A lecke visszaolvasása eltérést mutat.");
     await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
     const exports = exportQuizItemsForPublish(repair.candidate, current.id, conceptIdResolver(source.concepts));
     const inserted = exports.length ? await tx.insert(gameQuizItems).values(exports.map(item => ({ ...item, sourceMaterialId: original.id }))).returning() : [];
     if (inserted.length !== exports.length) throw new Error("Hiányos kvízexport; a művelet visszaáll.");
-    const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title }).where(eq(htmlFiles.id, original.id)).returning();
+    const [updated] = await tx.update(htmlFiles).set({ title: repair.candidate.title, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}) }).where(eq(htmlFiles.id, original.id)).returning();
     await tx.update(materialImprovementBackups).set({ backupData: { ...backupData, expectedQuizHash: quizHash(inserted), expectedMaterialHash: materialHash(updated) } }).where(eq(materialImprovementBackups.id, backup.id));
     await tx.update(improvedHtmlFiles).set({ status: "applied", appliedAt: new Date(), appliedBy: userId, improvementNotes: notes ?? improved.improvementNotes }).where(eq(improvedHtmlFiles.id, improved.id));
     await workflowFence(tx);

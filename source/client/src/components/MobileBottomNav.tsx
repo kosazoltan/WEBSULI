@@ -1,4 +1,4 @@
-import { FileText, Wand2, Settings, Database, Sparkles } from "lucide-react";
+import { FileText, Wand2, Settings, Database, Sparkles, Wrench } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import {
@@ -39,6 +39,7 @@ export function MobileBottomNav({ onTabChange, activeTab }: MobileBottomNavProps
         { value: "workflows", label: "Tananyagkészítési futások", icon: Activity },
         { value: "pdf-upload", label: "PDF feltöltés", icon: FileText },
         { value: "improve-materials", label: "Okosítás", icon: Sparkles },
+        { value: "lesson-repair", label: "Tananyagjavító", icon: Wrench },
       ]
     },
     { 

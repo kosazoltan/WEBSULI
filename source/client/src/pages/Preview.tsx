@@ -8,6 +8,8 @@ import type { HtmlFile } from "@shared/schema";
 import { useConfig } from "@/lib/useConfig";
 import { LessonView } from "@/lesson-runtime/LessonView";
 import { homeFilesQueryOptions, lessonNeighbours } from "@/lib/home-files-query";
+import { useAuth } from "@/hooks/useAuth";
+import { LessonRepairPanel } from "@/components/LessonRepairPanel";
 
 export default function Preview() {
   const [, params] = useRoute("/preview/:id");
@@ -16,6 +18,7 @@ export default function Preview() {
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const queryClient = useQueryClient();
+  const { isAdmin } = useAuth();
   
   // Get correct base URL from backend (CUSTOM_DOMAIN in prod, localhost in dev)
   const { baseUrl, materialOrigin, isLoading: configLoading } = useConfig();
@@ -228,7 +231,11 @@ export default function Preview() {
           // LS-2: a strukturált lecke NEM iframe-ben fut. A tartalom a saját sémánk
           // szerinti JSON, amit a saját futtatónk renderel — így nincs idegen script,
           // egységes a mobil/érintés-viselkedés, és a /dev CSP-lazítás sem kell ide.
-          <LessonView material={material} />
+          <>
+            <LessonView material={material} />
+            {/* Spec 2026-09-23: a kész lecke alatt az admin javítási utasítást adhat a készítő ügynöknek. */}
+            {isAdmin && material?.id && <LessonRepairPanel fileId={material.id} isLesson />}
+          </>
         ) : (
           // Unified iframe rendering for both HTML and PDF
           // Sandbox: allow-scripts (JS runs), allow-forms (forms work), allow-same-origin (Web APIs)

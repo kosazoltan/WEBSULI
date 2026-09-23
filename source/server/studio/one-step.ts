@@ -1,4 +1,5 @@
 import { studioConnection } from "../ai/studio-provider";
+import { withSupportSkill } from "./support-skills";
 import { workflowSkillPrompt } from "../workflows/engine";
 /**
  * LS-6 (#164) — one-step lesson manufacturing (owner decision, 2026-09-05).
@@ -31,6 +32,8 @@ const scopeSchema = z.object({
 
 export const oneStepRequestSchema = z.object({
   title: z.string().trim().min(1).max(255).optional(),
+  // Spec 2026-09-23: the teacher's free-text request to the agent (normalised by normalizeOwnerInstruction).
+  instructions: z.string().max(4000).optional(),
   scope: scopeSchema.optional(), // legacy metadata accepted; never used to select grade
   files: z
     .array(
@@ -179,7 +182,7 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
   return {
     model,
     messages: [
-      { role: "system" as const, content: SCOPE_PROMPT + workflowSkillPrompt() },
+      { role: "system" as const, content: withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt() },
       { role: "user" as const, content: parts },
     ],
     max_completion_tokens: 2000,
