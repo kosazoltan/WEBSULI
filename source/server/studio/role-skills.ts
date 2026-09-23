@@ -282,3 +282,9 @@ export function skilledPromptLookup<T extends (name: string, fallback: string) =
     return role ? withRoleSkill(role, prompt) : prompt;
   };
 }
+
+/** Spec 2026-09-23 („Tananyagjavító” menü): a javító út szerep-skilljei az admin felületnek, verzióval. */
+export const REPAIR_ROLES = ["author", "lektor", "bank", "ocr"] as const satisfies readonly RoleSkillRole[];
+export function repairRoleSkills(): Array<{ role: RoleSkillRole; version: string; text: string }> {
+  return REPAIR_ROLES.map((role) => ({ role, version: roleSkillVersion(role), text: ROLE_SKILLS[role] }));
+}

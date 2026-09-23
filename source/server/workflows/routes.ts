@@ -4,11 +4,17 @@ import { workflowStore } from "./store";
 import { skillStore } from "./learning-store";
 import { skillMarkdown, type LessonSkill } from "../../shared/lesson-skill";
 import { runtimeKnowledge } from "../../shared/runtime-knowledge";
+import { repairRoleSkills } from "../studio/role-skills";
+import { REPAIR_SKILL, REPAIR_SKILL_VERSION } from "../studio/repair-skill";
 
 export const workflowRouter = Router();
 workflowRouter.use(isAuthenticatedAdmin);
 workflowRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 const isSkill = (value: string): value is LessonSkill => value === "tananyag-keszito" || value === "tananyag-javito";
+// Spec 2026-09-23 („Tananyagjavító” menü): a javító út szerep-skilljei. A `/skills/:skill` előtt áll.
+workflowRouter.get("/skills/tananyag-javito/roles", (_req, res) => {
+  res.json({ roles: [{ role: "repair", version: REPAIR_SKILL_VERSION, text: REPAIR_SKILL }, ...repairRoleSkills()] });
+});
 workflowRouter.get("/skills/:skill/runtime", async (req, res) => {
   if (!isSkill(req.params.skill)) return res.status(400).json({ message: "Ismeretlen tananyag-skill." });
   if (req.query.q !== undefined && (typeof req.query.q !== "string" || req.query.q.length > 200)) return res.status(400).json({ message: "Legfeljebb 200 karakteres keresőkifejezés használható." });

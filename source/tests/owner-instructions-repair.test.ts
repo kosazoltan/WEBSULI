@@ -116,3 +116,41 @@ test("kettős OCR: szószintű eltérés, a döntés csak a vitatott helyen vál
   const secondDown = dualReadOcr(async () => first, async () => { throw new Error("429"); }, async () => second);
   assert.equal(await secondDown(image), first, "a második olvasó hibája nem állítja meg az OCR-t");
 });
+
+test("tananyagjavító skill: elöl a skill, a kérés végén az ellenőrzés, a bennmaradt régi alak javító kört vált ki", async () => {
+  const { REPAIR_SKILL, staleFormProblems, staleForms, withRepairSkill } = await import("../server/studio/repair-skill");
+  const { ROLE_SKILL_REQUIRED_HEADINGS } = await import("../server/studio/role-skills");
+  for (const heading of ROLE_SKILL_REQUIRED_HEADINGS) assert.ok(REPAIR_SKILL.includes(heading), heading);
+  for (const guard of [/Teljes bejárás/, /Tényforrás/, /Minimális beavatkozás/, /Belső igazság/]) assert.match(REPAIR_SKILL, guard);
+  assert.equal(withRepairSkill(withRepairSkill("x")), withRepairSkill("x"), "idempotens");
+  const fix = [{ localId: "area", term: "terület", basis: "owner" as const, reason: "", from: { term: "terlet" } }];
+  assert.deepEqual(staleForms(fix), ["terlet"]);
+  const lesson = fusionFixture();
+  const dirty = structuredClone(lesson);
+  dirty.sections.at(-1)!.blocks.push({ kind: "recap", bullets: ["A terlet képlete."] });
+  assert.equal(staleFormProblems(lesson, fix).length, 0);
+  assert.match(staleFormProblems(dirty, fix)[0], /régi alak/);
+
+  const e = standardFusionFixture().experience!;
+  const source = { subject: lesson.subject, classroom: lesson.classroom, concepts: [{ localId: "area", term: "terlet", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] };
+  const systems: string[] = []; const users: string[] = []; let authorCalls = 0;
+  await buildStructuredImprovement(lesson, source, async (step, system, user) => {
+    if (step === "pedagogue") return { corrections: [{ localId: "area", term: "terület", basis: "owner", reason: "elírás" }] };
+    if (step === "lektor") { assert.match(system, /SZAKASZ-SKILL: lektor/); return { notes: [] }; }
+    if (!system.includes("TANANYAGJAVÍTÓ SKILL")) return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+    systems.push(system); users.push(user);
+    return authorCalls++ === 0 ? dirty : lesson;
+  }, "A terlet szó elírás, helyesen terület.");
+  assert.equal(systems.length, 2, "a bennmaradt régi alak miatt egy javító kör futott");
+  assert.ok(systems[0].startsWith("=== TANANYAGJAVÍTÓ SKILL"), "a skill a rendszerutasítás elején");
+  assert.match(systems[0], /SZAKASZ-SKILL: author/);
+  assert.match(users[0].slice(-600), /ZÁRÓ ELLENŐRZÉS[\s\S]*„terlet”/, "az ellenőrző lista a kérés végén");
+  assert.match(users[1], /régi alak/);
+});
+
+test("Tananyagjavító menü: a javító út szerep-skilljei verzióval", async () => {
+  const { repairRoleSkills } = await import("../server/studio/role-skills");
+  const roles = repairRoleSkills();
+  assert.deepEqual(roles.map(r => r.role), ["author", "lektor", "bank", "ocr"]);
+  for (const r of roles) { assert.match(r.version, /^[a-f0-9]{12}$/); assert.match(r.text, /## Tilalmak/); }
+});

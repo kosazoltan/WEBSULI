@@ -33,7 +33,8 @@ import {
   FolderOpen,
   Sparkles,
   Activity,
-  GraduationCap
+  GraduationCap,
+  Wrench
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -87,6 +88,7 @@ const PdfUpload = lazy(() => import("@/components/PdfUpload"));
 const AdminFileDashboard = lazy(() => import("@/components/AdminFileDashboard"));
 const SimpleHtmlUpload = lazy(() => import("@/components/SimpleHtmlUpload"));
 const MaterialImprover = lazy(() => import("@/components/MaterialImprover"));
+const LessonRepairWorkbench = lazy(() => import("@/components/LessonRepairWorkbench"));
 const MaterialImprovementBackups = lazy(() => import("@/components/MaterialImprovementBackups"));
 
 // Admin Files Tab Component - handles file management
@@ -356,7 +358,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab");
-    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "improvement-backups", "email-debug", "parent-dashboard", "lesson-studio", "knowledge-maps", "workflows"];
+    const validTabs = ["files", "users", "enhanced", "pdf-upload", "tags", "backup", "material-views", "emails", "database", "improve-materials", "lesson-repair", "improvement-backups", "email-debug", "parent-dashboard", "lesson-studio", "knowledge-maps", "workflows"];
     if (!tabParam || !validTabs.includes(tabParam)) return "files";
     // LS-8 (#191): a tudás-térkép megszűnt önálló menüpontként — a tananyagkészítés
     // fülön belüli „haladó" blokkba került. A régi deep link nem törhet el, ezért
@@ -778,6 +780,10 @@ export default function Admin() {
               <Sparkles className="h-3 w-3" />
               Okosítás
             </TabsTrigger>
+            <TabsTrigger value="lesson-repair" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-lesson-repair">
+              <Wrench className="h-3 w-3" />
+              Tananyagjavító
+            </TabsTrigger>
             <TabsTrigger value="improvement-backups" className="flex items-center gap-1 text-[11px] h-6 px-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white text-amber-700 dark:text-amber-400" data-testid="tab-improvement-backups">
               <Database className="h-3 w-3" />
               Okos mentések
@@ -987,6 +993,14 @@ export default function Admin() {
             </Card>
           }>
             <DatabaseManager />
+          </Suspense>
+        )}
+      </TabsContent>
+
+      <TabsContent value="lesson-repair" className="space-y-2">
+        {activeTab === "lesson-repair" && (
+          <Suspense fallback={<Skeleton className="h-48 w-full" />}>
+            <LessonRepairWorkbench />
           </Suspense>
         )}
       </TabsContent>

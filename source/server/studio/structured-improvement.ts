@@ -19,6 +19,8 @@ import { resolveStudioModel } from "../ai/models";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
+import { repairChecklistTail, staleFormProblems, withRepairSkill } from "./repair-skill";
+import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, correctionAuditText, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 
 export const repairHash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
@@ -110,10 +112,13 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   let previous: unknown;
   let correction = "";
   for (let attempt = 0; attempt < 2; attempt++) {
-    previous = await call("author", prompt, correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request);
+    // Spec 2026-09-23: the repair skill at the start of the system prompt, its checklist at the end of the user message.
+    previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections));
     try {
       const parsed = lessonSchema.parse(previous);
       assertRepairTeaching(original, parsed, corrected, classroom);
+      const stale = staleFormProblems(parsed, owner.corrections);
+      if (stale.length) throw new Error(stale.join("; "));
       candidate = parsed;
       break;
     } catch (error) {
@@ -135,7 +140,7 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   assertRepairCandidate(original, candidate, source, classroom);
   await workflowPhase("lektor");
   const lektorOwner = owner && (owner.instruction || owner.corrections.length) ? { instruction: owner.instruction, corrections: owner.corrections } : undefined;
-  const review = lektorReportSchema.parse(await call("lektor", buildLektorPrompt(candidate, source, [], lektorOwner), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
+  const review = lektorReportSchema.parse(await call("lektor", withRoleSkill("lektor", buildLektorPrompt(candidate, source, [], lektorOwner)), "Ellenőrizd a teljes tanítást és mindkét bank megoldásait. Csak a konkrét eltéréseket jelentsd JSON-ban."));
   const blockers = classifyNotes(review.notes).filter(n => n.blocking);
   if (blockers.length) {
     for (const code of lektorSkillCodes(blockers)) await workflowFinding(code);
