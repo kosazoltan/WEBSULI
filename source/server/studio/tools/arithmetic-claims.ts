@@ -11,7 +11,8 @@
  */
 
 const OPS = "+\\-−–·×*:÷/";
-const NUM = "\\d+(?:[.,]\\d+)?";
+/** Élő futás 68a5b500: a szóközös ezres tagolás („12 000”) egy szám — különben „000 : 4 = 3000” téves riasztás. */
+const NUM = "(?:\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)";
 /**
  * Élő futás 351e14cc (2026-09-24): a „–6 + 11 = 5” és az „1 1/2 = 3/2” helyes állítást a minta „6 + 11 = 5”-nek
  * és „1/2 = 3/2”-nek olvasta — a 10. fejezet (egész számok) javító körét két kísérletben CSAK ez buktatta. Ezért:
@@ -24,7 +25,7 @@ const EXPR = `(?:${SIGN}(?=\\d))?(?:${ATOM})(?:\\s*[${OPS}]\\s*(?:${ATOM}))*`;
 /** Egyenlőség-LÁNC: `a op b = c op d = e` — a tanulói lépéssor („40 – 18 + 4 = 22 + 4 = 26") is ilyen. */
 const CHAIN = new RegExp(`(${EXPR})((?:\\s*=\\s*${EXPR})+)(?!\\d|[.,]\\d)`, "g");
 
-function toNumber(s: string): number { return Number(s.replace(",", ".")); }
+function toNumber(s: string): number { return Number(s.replace(/[ \u00a0\u202f]/g, "").replace(",", ".")); }
 
 /** Egy szám értéke: egész/tizedes, tört („3/4”) vagy vegyes tört („1 5/12”); NaN, ha nem értelmezhető. */
 function atomValue(atom: string): number {
@@ -91,7 +92,8 @@ export function falseArithmeticClaims(text: string): string[] {
     // minta a „2 = 490”-től indult. Szám + mértékegység + műveleti jel előtt: ha az a szám maga nem
     // egy hosszabb kifejezés része, mértékegység nélkül értékeljük („980 : 2 = 490”); különben kihagyjuk.
     const unitLead = prefix.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*[\\p{L}%°²³/]{1,8}\\.?\\s*([${OPS}])$`, "u"));
-    if (unitLead) {
+    // Élő futás 68a5b500: „15 nap: 60 : 15 = 4” — a szóhoz tapadó kettőspont címke, nem osztás.
+    if (unitLead && !(unitLead[2] === ":" && !/\s:$/.test(prefix))) {
       const head = prefix.slice(0, prefix.length - unitLead[0].length).trimEnd();
       const headLast = head.slice(-1);
       const headMid = /[()]/.test(headLast) || (new RegExp(`[${OPS}=]`).test(headLast)
