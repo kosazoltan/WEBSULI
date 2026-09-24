@@ -49,3 +49,19 @@ test("workflow-keret: a hátralévő tartalmi látogatás mérhető (a csak-bank
   assert.equal(workflowVisitsLeft(run, "banks"), Infinity, "a módban nem létező lépés nem korlát");
   assert.equal(workflowStepVisitsLeft("animator"), Infinity, "workflow-kontextuson kívül nincs keret");
 });
+
+test("élő futás 351e14cc (2026-09-24): előjeles szám és vegyes tört — helyes állítás nem hiba, a valódi hiba megmarad", () => {
+  // Mérve: a 10. fejezet (egész számok) javító körét két kísérletben CSAK ez a téves riasztás buktatta.
+  assert.deepEqual(falseArithmeticClaims("–6 + 11 = 5"), []);
+  assert.deepEqual(falseArithmeticClaims("Reggel –6 °C volt, délig 11 fokot emelkedett: –6 + 11 = 5, tehát 5 °C."), []);
+  assert.deepEqual(falseArithmeticClaims("Este: 5 – 8 = –3 °C."), []);
+  assert.deepEqual(falseArithmeticClaims("−4 + 9 = 5"), []);
+  assert.deepEqual(falseArithmeticClaims("A különbség 5 – (–6) = 11 fok."), [], "zárójeles előjelet nem ítél meg");
+  assert.deepEqual(falseArithmeticClaims("–6 + 11 = 17"), ["–6 + 11 = 17 (helyesen: 5)"]);
+  assert.deepEqual(falseArithmeticClaims("5 – 8 = 3"), ["5 – 8 = 3 (helyesen: -3)"]);
+  // Vegyes tört: az egészrész a szám része.
+  assert.deepEqual(falseArithmeticClaims("1 1/2 = 3/2"), []);
+  assert.deepEqual(falseArithmeticClaims("2/3 + 3/4 = 17/12 = 1 5/12"), []);
+  assert.deepEqual(falseArithmeticClaims("1 1/2 : 3/4 = 3/2 · 4/3 = 2"), []);
+  assert.equal(falseArithmeticClaims("1 1/2 = 5/2").length, 1);
+});
