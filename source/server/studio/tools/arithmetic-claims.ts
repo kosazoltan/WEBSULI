@@ -54,9 +54,19 @@ export function evaluateExpression(expr: string): number | null {
 export function falseArithmeticClaims(text: string): string[] {
   const problems: string[] = [];
   for (const m of text.matchAll(CHAIN)) {
-    const before = text.slice(Math.max(0, m.index! - 1), m.index!);
-    if (before === "(" || before === ")") continue;
+    // Mérve élesben (2026-09-24, felvételi-feladatlap lecke): „(500 + 480) : 2 = 490” — a minta a zárójel
+    // UTÁNI „2 = 490”-nél is elindult (szóköz választotta el), és hamis állításnak vette. Ha a lánc előtt
+    // (szóközt átugorva) művelet vagy zárójel áll, a kifejezés közepéről indult: nem ítéljük meg.
+    const prefix = text.slice(0, m.index!).trimEnd();
+    const lead = prefix.slice(-1);
+    // Egy műveleti jel csak akkor jelent kifejezés-közepet, ha előtte szám vagy zárójel áll — a „Nem:”
+    // címke kettőspontja nem osztás (a section-patch teszt „Nem: 12 · 2 = 48 téves” esete).
+    const beforeLead = prefix.slice(0, -1).trimEnd().slice(-1);
+    if (lead === "(" || lead === ")" || (new RegExp(`[${OPS}=]`).test(lead) && /[\d)]/.test(beforeLead))) continue;
     const segments = `${m[1]}${m[2]}`.split("=").map((seg) => seg.trim());
+    // „1/15 = 4 km” (a teljes út 1/15-e 4 km): hányad = mennyiség jelölés, nem számolási állítás.
+    const after = text.slice(m.index! + m[0].length);
+    if (segments.length === 2 && /^\d+\s*\/\s*\d+$/.test(segments[0]) && /^\d+(?:[.,]\d+)?$/.test(segments[1]) && /^\s*[a-záéíóöőúüű%]/i.test(after)) continue;
     const values = segments.map((seg) => evaluateExpression(seg));
     for (let i = 1; i < segments.length; i++) {
       const a = values[i - 1], b = values[i];

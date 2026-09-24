@@ -44,8 +44,8 @@ export const MAX_AUTHOR_ROUNDS = 2;
  */
 /**
  * Spec 2026-09-19 (mérve run 525b2797): csak-bank javító körök száma jobonként. Tétel-szintű
- * bankhibáért nem dobunk el egy 70 perces leckét; a workflow látogatási kerete (animator/lektor
- * maxVisits 4) ezzel együtt is tart: r0 + bank + author + bank = 4 animátor-látogatás.
+ * bankhibáért nem dobunk el egy 70 perces leckét — de csak a workflow látogatási keretén belül (animator/lektor
+ * maxVisits 4): három szerzői kör után a keret elfogy, ott a lektor dönt (élő mérés 2026-09-24, run 29a13b45).
  */
 export const MAX_BANK_ONLY_ROUNDS = 2;
 // + MAX_BANK_ONLY_ROUNDS bank-only repair rounds (animator → lektor → gate each).

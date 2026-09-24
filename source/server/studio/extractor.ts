@@ -162,7 +162,18 @@ export class ExtractionShapeError extends Error {
 }
 
 /** Original order and every valid concept survive a targeted repair unchanged. */
+/**
+ * Mérve élesben (2026-09-24, felvételi-feladatlap térkép 887b015c, c15): a kivonatoló modell egy grúz szót
+ * („რომლის”) írt egy magyar definíció közepére. Idegen írásrendszerű betű (a matematikában bevett görög
+ * betűk kivételével), amely a forrásban nem fordul elő, modell-kimeneti hiba — célzott javító körre megy.
+ */
+export function foreignScriptLetters(text: string, sourceText: string): string[] {
+  const letters = text.match(/[^\P{L}\p{Script=Latin}\p{Script=Greek}]/gu) ?? [];
+  return [...new Set(letters)].filter((ch) => !sourceText.includes(ch));
+}
+
 export async function completeExtractionConcepts(raw: RawExtraction, files: ExtractorFile[], repair: (input: ExtractionRepair) => Promise<RawExtraction>): Promise<Concept[]> {
+  const sourceText = files.map((f) => f.extractedText ?? (f.kind === "text" ? f.content : "")).join("\n");
   const inspect = (items: unknown[]) => {
     const seen = new Set<string>();
     const issues: ExtractionIssue[] = [];
@@ -173,6 +184,10 @@ export async function completeExtractionConcepts(raw: RawExtraction, files: Extr
       const fields = [];
       if (seen.has(parsed.data.id)) fields.push("id: ismétlődés");
       if (!files.some(f => f.name === parsed.data.sourceRef.file)) fields.push("sourceRef.file: ismeretlen forrás");
+      for (const field of ["term", "definition"] as const) {
+        const foreign = foreignScriptLetters(String(parsed.data[field] ?? ""), sourceText);
+        if (foreign.length) fields.push(`${field}: idegen írásrendszerű betű (${foreign.slice(0, 5).join("")}) — magyarul, a forrás szavaival írd`);
+      }
       if (fields.length) { issues.push({ index, fields }); return; }
       seen.add(parsed.data.id);
       concepts.push(parsed.data);
