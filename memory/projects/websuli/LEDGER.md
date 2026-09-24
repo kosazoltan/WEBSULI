@@ -441,3 +441,11 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Végrehajtás:** a termelési javító úton (javítási rekord bb6c1413, jelölt 579 s alatt, 0 lektori jegyzet), majd `applyTrackedImprovement`. Az első alkalmazás elbukott: `km_concepts.verbatim_reason` varchar(32), a helyesbítés audit-szöveget írt bele → tranzakció visszagördült, a lecke érintetlen. Hotfix: okkód (`corrected:owner`), regressziós teszt; ugyanez a hiba az egylépéses készítést is megakasztotta volna.
 
 **Visszaolvasás (éles DB + élő API):** lecke v2, 5. osztály (lecke, anyag, térkép), 12 fejezet, tanítás 24 112 → 18 901 kar., bank 45/75; bódex 0 / kódex 19, Stonehenge, Hold változása, „100 év” 18, „10 év = 1 évszázad” 0; c1, c2, c7, c25–c27 `edited`/`corrected:owner`. A régi változat csak visszaállítható mentésként él (material_improvement_backups 97b1323c).
+
+## 2026-09-24 — „Az időszámítás…” lecke rövidítése szülői kérésre (adatművelet, kódváltozás nélkül)
+
+**Kérés (Léna anyukája):** ne legyen terjedelmes; a gyermek csak a lényeget és a történelmi kifejezéseket tanulja meg.
+
+**Végrehajtás:** a térképen négy nem-történelmi kiegészítő fogalom `extra` súlyt kapott (c10 100 év emberöltőkben, c18 teremtéstörténet, c20 az evolúció bizonyítékai, c23 a rasszok felsorolása; előtte supporting/supporting/core/supporting — visszaállítható). Utána a termelési javító út (javítási rekord 00cbfc38, 428 s) a tömörítési kéréssel, majd `applyTrackedImprovement` (mentés cb0b0d30).
+
+**Visszaolvasás (éles DB + élő API):** lecke v3, 5. o., 12 → 6 fejezet (időszámítás, időegységek, korok, az ember kialakulása röviden, kódex/iniciálé/pergamen/antik, források), látható tanítási szöveg ~650 szó (tanítás JSON 18 901 → 9 688 kar.), bank 45/75; bódex 0, Sany 0 / Samu, a vértesszőlősi előember; 1 évszázad = 100 év.
