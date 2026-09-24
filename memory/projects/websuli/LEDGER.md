@@ -495,3 +495,10 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Élő mérés (Opus 5.5):** 1. hívás 11,1 px-es illusztráció-betű telefonon → szerződés + ellenőrzés; 2. hívás 3 illusztráció (kódexlap, Homo sapiens csoportok, források), 0 elutasítás, ≥ 12,7 px. Számegyenes ugrásfeliratai összecsúsztak → javítva.
 **Tanulság:** a böngésző getBoundingClientRect-átfedése kétsoros SVG-feliratnál a betűdoboz mellékhatása lehet — képpel kell ellenőrizni; a skill-hossz két teszt is rögzíti (role-skills-everywhere 4800/6000, studio-role-skills < 5200).
 **Nyitott:** teljes élő leckegyártás az új ábrákkal még nem futott; a régi leckék ábrái csak újrageneráláskor frissülnek.
+
+## 2026-09-24 — címke-őr javítás, „időszámítás” lecke ábrái frissítve, 5. élő PDF-futás (PR #117, merge dd81324)
+
+**Hiba (élő mérésből):** a címke-őr (grounding.blockText) az új ábrák kirajzolt szövegét nem látta → 8 fogalomcímke lekerült, egy idővonal kiesett. Javítva: `renderedVisualTexts`. Rajzolók: körforgás oldalsó felirata, számegyenes jelölésfeliratai ütközésmentesek (360/375 px mérve).
+**„Az időszámítás…” lecke (01638ae9, html 739ec478):** csak az ábrák cserélődtek (szöveg bájtra azonos, szerződés OK): 10 ábra, mind a 6 fejezetben (holdfázis-ciklus, idővonalak, számegyenesek, 3 illusztráció: embercsoportok, kódexlap, források). Mentés: scratchpad `lesson-01638ae9.backup.json`. Élesben ellenőrizve: 10 ábra, 3 kirajzolt illusztráció, 0 konzolhiba.
+**5. élő PDF-futás (1294 s):** az ábrakészítő 16 ábrát adott (oszlopdiagram, halmazábra, téglalap, téglatest, illusztráció, számegyenes), 1 elutasított → célzott újrakérés 10 s alatt pótolta. A lecke a lektornál állt meg bankhibákon („2021-rejtély” mintaválasz-lista, egy kerekítési opció) — 3 körben javítatlan. A szerző ismét 7×11×5-öt számolt, a lektor nem jelezte.
+**Döntés:** stuck-state — a PDF-en további vak iteráció helyett opciók a tulajdonosnak (javítókulcs feltöltése / bank-javítás erős modellen / kézi javítás).
