@@ -70,7 +70,11 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // tervezi (a glm-flash rajzi/téri feladatra gyenge volt — „csak egy kört rajzolt”). A kimenet csak ábra-folt,
   // nem a teljes lecke, így a kimeneti tokenszám kicsi. Élő próbahívás: HTTP 200 (2026-09-24).
   animator: "claude-opus-5-5",
-  bank: "z-ai/glm-5.3-flash",
+  // Spec 2026-09-24 (docs/specs/2026-09-24-bankmodell-valasztas.md, tulajdonosi utasítás): ugyanazon a leckén,
+  // a termelési banképítő úton, a kész bankot a bank-ellenőr mérte: glm-5.3-flash 653 s, 9 bukott kísérlet,
+  // 22/146 hiba; gpt-5.6-luna 130/143 s, 5/4 bukott, 9/144 hiba (két futás), 0,09 USD; terra 8/144, 0,71 USD;
+  // sonnet-5 17/146; glm-5.3 építési hiba. A glm javító köre nem konvergált (újraépítve 16/106 hiba).
+  bank: "gpt-5.6-luna",
   // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
   // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
   // x-ai és openai külön család; a szerzőnek nincs külső fallbackje.
