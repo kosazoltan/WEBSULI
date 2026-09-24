@@ -58,3 +58,8 @@ tmp-e2e-*
 # Böngésző-MCP naplók és gyökér-szintű Playwright kimenetek (2026-09-19)
 .playwright-mcp/
 test-results/
+
+# Ideiglenes diagnosztikai/mérő szkriptek (audit 2026-09-24: egy ilyen véletlenül commitba került)
+*.tmp.mjs
+*.tmp.mts
+*.tmp.ts
