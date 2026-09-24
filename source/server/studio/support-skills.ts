@@ -212,6 +212,28 @@ Kizárólag a prompt szerinti JSON tömb (prompt, options[4], correctIndex, topi
 - Kivonaton kívüli tény; két vagy nulla helyes opció; az explanation más opciót igazol, mint a correctIndex; ellenőrizetlen számítás; bármi a tömbön kívül.
 ## Önellenőrzés a válasz előtt
 Minden tény a kivonatban van? Egy helyes opció, egyező magyarázattal? Újraszámoltam? Több szakaszból? Csak JSON tömb?`,
+
+  "bank-verifier": `# Skill: bank-ellenőr (bank-verifier)
+## Szerep
+Egy tananyag egy fejezetének gyakorlóbankját (módszerek, nyitott feladatok, kvíz) ellenőrzöd, tételenként. Mért ok: a lektor a teljes leckében a banktételek hibáit nem vette észre; a te hibalistád alapján a bank célzottan újraépül.
+## Bemenet
+A fejezet tételei útvonallal (path), a lecke címe és évfolyama, és a forrás feladatainak FÜGGETLEN VAK MEGOLDÁSAI (kulcs).
+## Kimenet
+Kizárólag JSON: { "errors": [{ "path", "message" }] }. Hibátlan fejezet: üres lista.
+## Lépések
+1. Minden tételt az elsőtől az utolsóig önállóan megoldasz, a tétel szövegéből; a tétel saját megoldását csak utána nézed.
+2. Ha a tétel a forrás feladatára épül, a vak megoldás a kulcs; eltérésnél újraszámolod, és a helyes értéket fogadod el.
+3. Kvíz: a feladat adatai lehetségesek és egyértelműek; pontosan a correctIndex opció igaz, minden más hamis; minden visszajelzés igaz és a saját opciójához illik.
+4. Minden disztraktort átszámolsz: más szavakkal is lehet igaz (mért: „a teljes út felét” = „a maradék kétharmadát”) — az hiba.
+5. Minden opcióban és visszajelzésben KIÍRT műveletet kiszámolsz, a hibás opciókban is: a disztraktor téves gondolatmenet lehet, de hamis egyenlőség nem (mért: „3/4 – 2/3 = 1/6”, „3 és 5 szorzata 8”, „–8, amiből 6 lesz”).
+6. Nyitott feladat: a sample helyes; egyik csoport sem fogad el hibás értéket; számolásnál a helyes végeredmény (a szám) KÜLÖN kötelező csoport — ha a számot egy szöveges szinonima is kiváltja ugyanabban a csoportban (mért: [„harmadik napi olvasás”, „18 oldal”]), az hiba.
+7. Módszer: az answer helyes és teljes; a hibás opciókra a 4–5. pont érvényes.
+8. message (≤ 300 kar.): „Mi hamis: … | Bizonyíték: számolás | Javítás iránya: a TELJES helyes érték/szerkezet”.
+## Tilalmak
+- Stílus-, nehézség- vagy ízlésbeli jegyzet; számolással nem igazolt gyanú; a bemenetben nem szereplő path.
+- Egy tételre több jegyzet; próza a JSON körül.
+## Önellenőrzés a válasz előtt
+Minden tételt megoldottam? Minden jegyzet számolással igazolt, létező path-szal? A Javítás iránya a teljes helyes érték? Csak JSON?`,
 } as const;
 
 export type SupportSkillKey = keyof typeof SUPPORT_SKILLS;
