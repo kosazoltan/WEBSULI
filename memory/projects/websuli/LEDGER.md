@@ -472,3 +472,10 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Javítva (11):** főoldal like N+1 (98 → 13 kérés, 86 × 779 ms → 2 × 133 ms, élesben mérve); lecke-betöltés zsákutca (retry + gomb); évfolyam- és design-felismerés hamis találatai; számcsere a betűhiba-szűrőn; leromlott OCR cache-elése; nem-tranzakciós térképírás; term ≤ 200; AI-kliensek timeout + maxRetries; javító panel hibaállapot és 44 px; 3 elavult „waiting” workflow-futás lezárva (DB).
 **Nem javítva (indokolt):** /api/pdf és /dev IP-korlát — Vercel-proxy mögött megosztott IP, osztályokat zárna ki; előbb a valós kliens-IP-t kell mérni.
 **Kapuk:** tsc (+test), eslint, 1393 teszt, build, CI zöld. Egy ideiglenes diag-szkript véletlenül commitba került (titok nélkül) → eltávolítva, `*.tmp.*` a .gitignore-ban.
+
+## 2026-09-24 — élő próba: felvételi feladatlap PDF → gyakorló lecke (PR #110, #111, #112)
+
+**Próba:** M6_2021_1_fl_1.pdf cím és utasítás nélkül, egylépéses útvonal, 3 élő futás (29a13b45, 9c0169b7, e79ab9da). Felismerés ✅: matematika, 6. osztály, feladatlap; a törtek a sérült PDF-szövegrétegből is helyesek; 54 fogalom.
+**Javítva (7 mért lelet):** grúz szó a definícióban → idegen írás-őr; aritmetikai őr hamis riasztásai (zárójel utáni „2 = 490”, „1/15 = 4 km”, „980 Ft : 2 = 490 Ft”) a valódi hibák elkapása mellett; a csak-bank kör túllépte a workflow keretét → 43 perc után „Váratlan hiba” + árva „running” job (most tiszta lektori hiba); a lektor újraoldja a forrásfeladatot, ellentmondásnál a tanítást jelöli; az ismétlődő kérdés hibája megnevezi a tételt.
+**Nyitott (modell-képesség):** a 9. feladat (kiskockás téglatest: 7×11×6 = 462, Réka 70, Janka 280) rész-kérdéseit a bank és a lektor nem vezette le; a lektor az ellentmondást jelzi, így hibás megoldás nem kerül ki, de a lecke megáll.
+**Tanulság:** a helyi élő futás az éles DB-t használja — egy Render-deploy induláskori takarítása lezárja a helyben futó jobot; élő próba alatt ne deployolj.
