@@ -11,6 +11,7 @@ import { canonicalJson } from "./step-io";
 import { classifyNotes, type RawNote } from "./lektor";
 import { workflowSkillVersion, workflowValidationFailure } from "../workflows/engine";
 import { roleSkillBlock, roleSkillVersion } from "./role-skills";
+import { pickLessonFlair } from "../../shared/lesson-visuals";
 import { autofixBankPacket } from "./tools/bank-packet-autofix";
 import { arithmeticClaimProblems } from "./tools/arithmetic-claims";
 
@@ -47,6 +48,8 @@ export type ExperienceBuildDeps = {
   concurrency?: number;
   /** Spec 2026-09-20: a lecke vizuális világa (a tervező választása) — a bank témája ez, nem hash. */
   theme?: LessonExperience["theme"];
+  /** Spec 2026-09-24: lecke-szintű különlegességek; alapból a korábbi, különben leckénként választott. */
+  flair?: LessonExperience["flair"];
   checkpoint?: ExperienceCheckpoint;
   previous?: LessonExperience;
   reviewFeedback?: BankReviewFeedback[];
@@ -356,7 +359,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
     }
   }
-  const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, theme: deps.theme ?? deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
+  const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, theme: deps.theme ?? deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), flair: deps.flair ?? deps.previous?.flair ?? pickLessonFlair(`${lesson.subject}:${lesson.title}:${lesson.mapId}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
   const problems = experienceProblems(lesson, experience);
   if (problems.length) throw new Error(`A fúziós lecke nem teljes: ${problems.join("; ")}`);
   return experience;

@@ -44,7 +44,7 @@ import {
 } from "./step-io";
 import type { SourceCorrection } from "./source-corrections";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
-import { pickVisualWorld, visualWorld, harmoniseSectionEmojis, type VisualWorldId } from "../../shared/lesson-visuals";
+import { pickVisualWorld, visualWorld, harmoniseSectionEmojis, type VisualWorldId, designFromInstruction } from "../../shared/lesson-visuals";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
@@ -378,7 +378,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   switch (job.step) {
     case "pedagogue": {
       // Spec 2026-09-20 (színes tananyag): véletlen vizuális világ javaslata, jobonként egyszer rögzítve.
-      const proposedWorld = ((job.output?.visual as { world?: string } | undefined)?.world as VisualWorldId | undefined) ?? pickVisualWorld().id;
+      const proposedWorld = ((job.output?.visual as { world?: string } | undefined)?.world as VisualWorldId | undefined)
+        ?? designFromInstruction(ownerOf(job)?.instruction)?.world ?? pickVisualWorld().id;
       const world = visualWorld(proposedWorld) ?? pickVisualWorld();
       const owner = ownerOf(job);
       input = { ...pedagogueInputOf(map), visual: world.id, ...(owner ? { owner } : {}) };

@@ -34,7 +34,7 @@ import {
   type TrySnapshot,
 } from "./useLessonProgress";
 import "./lesson-theme.css";
-import { splitEmphasis, stripEmphasis } from "@shared/lesson-visuals";
+import { splitEmphasis, stripEmphasis, visualWorld } from "@shared/lesson-visuals";
 import "./triangle-lab.css";
 import "./decision-story.css";
 import { LessonExperienceView } from "./LessonExperienceView";
@@ -488,9 +488,13 @@ export function LessonRuntime({
     // (lesson-theme.css). Measured live before #197: inheriting the app foreground gave
     // 67/115 text elements a 1.00–1.05 contrast in both app modes. The band root pairs
     // every background with its ink, so the app theme cannot break it.
-    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience={lesson.experience?.theme} style={typography}>
+    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience={lesson.experience?.theme} data-flair={lesson.experience?.flair?.join(" ") || undefined} style={typography}>
       <article className="max-w-3xl mx-auto px-4 py-6 space-y-6" data-testid="lesson-runtime">
         <header className="lesson-hero">
+          {/* Spec 2026-09-24: díszítő csillogás a lecke világának emojijaiból (csak a „sparkles” különlegességnél). */}
+          {lesson.experience?.flair?.includes("sparkles") && <div className="lesson-sparkles" aria-hidden>
+            {(visualWorld(lesson.experience.theme)?.emojis ?? ["✨", "⭐", "✨", "💫", "⭐"]).slice(0, 5).map((e, i) => <span key={i}>{e}</span>)}
+          </div>}
           <div className="lesson-emblem" aria-hidden>
             <Leaf className="w-7 h-7" />
           </div>

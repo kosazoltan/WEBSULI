@@ -10,8 +10,8 @@ import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /* Spec 2026-09-20 — színes, figyelemfelkeltő tananyag: vizuális világ a tervező fázisból. */
 
-test("nyolc világ, mind téma is; a paletta a CSS-ben is megvan; véletlen húzás változatos", () => {
-  assert.equal(VISUAL_WORLDS.length, 8);
+test("kilenc világ (spec 2026-09-24: + princess), mind téma is; a paletta a CSS-ben is megvan; véletlen húzás változatos", () => {
+  assert.equal(VISUAL_WORLDS.length, 9);
   for (const w of VISUAL_WORLDS) {
     assert.ok((EXPERIENCE_THEMES as readonly string[]).includes(w.id), `${w.id} téma is`);
     assert.ok(w.emojis.length >= 6 && w.name && w.mood);
