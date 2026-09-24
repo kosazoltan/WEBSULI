@@ -4,7 +4,8 @@ import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
-import { ageBandForClassroom, conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
+import { ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
+import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
@@ -274,7 +275,8 @@ export const AUTHOR_BLOCK_CATALOG = [
   "Minden nem-recap blokk coversConceptIds tömbje LEGALÁBB EGY valódi fogalomazonosítót tartalmazzon, amelyet a látható szövege ténylegesen tanít. Üres tömb tilos.",
   '- { "kind": "explain", "text": string, "depth": "core"|"deeper"|"why", "readAloud": boolean, "coversConceptIds": string[] }',
   '- { "kind": "example", "problem": string, "steps": string[], "answer": string, "coversConceptIds": string[] }',
-  '- { "kind": "animate", "animKind": "numberLine"|"fraction"|"timeline"|"geometry"|"process"|"map"|"wordBuilder"|"sentenceParts"|"triangleArea"|"decisionStory", "params": object, "caption": string, "coversConceptIds": string[] }',
+  `- { "kind": "animate", "animKind": ${ANIM_KINDS.map((k) => JSON.stringify(k)).join("|")}, "params": object, "caption": string, "coversConceptIds": string[] }`,
+  VISUAL_PARAMS_CONTRACT,
   'Geometriai körvonalhoz animKind="geometry". Ne találj ki új animKind értéket (például triangleHeightCases).',
   '- { "kind": "check", "question": string, "options": string[2..5], "correctIndex": number, "feedbackPerOption": string[ugyanannyi mint options], "hint"?: string, "coversConceptIds": string[] }',
   '- { "kind": "try", "tryKind": "dragSort"|"fillBlank"|"match", "spec": object, "coversConceptIds": string[] }',
@@ -519,7 +521,8 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "- Every non-animate block must remain verbatim — character for character, byte-identical.",
     "- Every coversConceptIds must come from the ids already used by the lesson — never invent new ones.",
     "- The title, subject, classroom, mapId and sourceOnly must stay exactly as they are.",
-    "- Choose animKind from: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts, triangleArea, decisionStory; give a params object the runtime can draw and a short Hungarian caption.",
+    `- Choose animKind from: ${ANIM_KINDS.join(", ")}; give a params object the runtime can draw and a short Hungarian caption.`,
+    VISUAL_PARAMS_CONTRACT,
     'Geometry params: {"shape":"triangle"|"circle"|"square", "label":"short label"}. Only an outline is drawn: do not promise heights, sector shading, marked angles or controls in the caption.',
     'triangleArea params: {"base":6,"height":4,"unit":"cm"}; numeric dimensions 0.1–1000, unit cm or m. Use ONLY for triangle area already taught in that section, with base/height from its source example. The lab includes prediction, horizontal apex movement, perpendicular height and area, and explanation. Experimental changes illustrate the formula; never substitute them for the original worked source example.',
   DECISION_STORY_CONTRACT,

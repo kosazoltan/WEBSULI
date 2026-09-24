@@ -4,8 +4,27 @@
     {
       "name": "websuli-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "source"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "source"
+      ],
       "port": 5000
+    },
+    {
+      "name": "websuli-visual-probe",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "cross-env",
+        "VITE_ENABLE_RUNTIME_PROBE=1",
+        "vite",
+        "--port",
+        "5188",
+        "--strictPort"
+      ],
+      "port": 5188,
+      "cwd": "source"
     }
   ]
 }

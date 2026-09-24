@@ -1,7 +1,7 @@
 import { LessonRuntime } from "./LessonRuntime";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import type { CouponSession } from "@/game-engine/useCouponSession";
-import { lessonSchema, type Lesson } from "@shared/lesson-schema";
+import { lessonSchema, type AnimKind, type Lesson } from "@shared/lesson-schema";
 import { useEffect, useState } from "react";
 import { fusionFixture } from "@shared/fixtures/lesson-fusion";
 import { EXPERIENCE_THEMES } from "@shared/lesson-experience";
@@ -108,8 +108,49 @@ const PROBE_LESSON: Lesson = {
  * Non-numeric or out-of-range values fall back to the defaults — the probe must never
  * crash on a typo in a test URL.
  */
+/**
+ * Spec 2026-09-24 (magyarázó ábrák): `?visuals=1` — az új ábrafajták a mért esetekkel (holdciklus,
+ * kiskockás téglatest, átlagár, halmazok, kerekítés), valódi böngészős render-ellenőrzéshez.
+ */
+const visualSection = (heading: string, text: string, animKind: AnimKind, params: Record<string, unknown>, caption: string): Lesson["sections"][number] => ({
+  heading, probaEnabled: false,
+  blocks: [
+    { kind: "explain", text, depth: "core", readAloud: false, coversConceptIds: ["c1"] },
+    { kind: "animate", animKind, params, caption, coversConceptIds: ["c1"] },
+  ],
+});
+const VISUALS_LESSON: Lesson = {
+  ...PROBE_LESSON,
+  title: "Ábrák próbája",
+  misconceptions: [],
+  sections: [
+    visualSection("A Hold fázisai", "A Hold nem világít, a Nap fényét veri vissza. Ahogy a Föld körül kering, a megvilágított oldalából mindig más részt látunk.", "cycle", {
+      center: "Föld",
+      phases: [
+        { label: "Újhold", moon: 0, note: "a Hold a Nap és a Föld között van, nem látszik" },
+        { label: "Növő sarló", moon: 0.2, waxing: true },
+        { label: "Első negyed", moon: 0.5, waxing: true, note: "jobb oldali fele világos" },
+        { label: "Növő hold", moon: 0.8, waxing: true },
+        { label: "Telihold", moon: 1, note: "a teljes korong világos" },
+        { label: "Fogyó hold", moon: 0.8, waxing: false },
+        { label: "Utolsó negyed", moon: 0.5, waxing: false, note: "bal oldali fele világos" },
+        { label: "Fogyó sarló", moon: 0.2, waxing: false },
+      ],
+    }, "A holdfázisok körforgása: kb. 29,5 nap alatt ér körbe."),
+    visualSection("Téglatest kiskockákból", "Az alsó réteg 77 = 7 · 11 kiskocka. Az oldallap a réteg fölé épül: 7 · 5 = 35 kocka, így a magasság 6 egység.", "labeledShape",
+      { shape: "cuboid", width: 11, depth: 7, height: 6, unit: "egység", layers: 6, note: "7 · 11 · 6 = 462 kiskocka" }, "A téglatest élei: 11, 7 és 6 egység, hat réteggel."),
+    visualSection("Átlagár", "Két bolt ára 500 Ft és 480 Ft; az átlag (500 + 480) : 2 = 490 Ft.", "barChart",
+      { bars: [{ label: "1. bolt", value: 500 }, { label: "2. bolt", value: 480 }], unit: "Ft/kg", average: true }, "A két ár és az átlaguk."),
+    visualSection("Halmazok", "A 30 fős osztályból 22 gyereknek kék a kabátja, 23-nak kék a sapkája; legalább 15 gyereknél mindkettő kék.", "venn",
+      { sets: ["kék kabát", "kék sapka"], regions: { A: "≤ 7", AB: "≥ 15", B: "≤ 8" }, universe: "30 fős osztály" }, "Kék kabát és kék sapka: a közös rész legalább 15."),
+    visualSection("Kerekítés", "Százasokra kerekítve 1452 → 1500, mert 1450 és 1549 között minden szám 1500-ra kerekül.", "numberLine",
+      { from: 1400, to: 1600, step: 50, marks: [{ value: 1452, label: "1452" }], jumps: [{ from: 1452, to: 1500, label: "→ 1500" }] }, "1452 százasokra kerekítve 1500."),
+  ],
+};
+
 function probeLesson(search: string): Lesson {
   const q = new URLSearchParams(search);
+  if (q.has("visuals")) return VISUALS_LESSON;
   if (q.has("fusion")) {
     const lesson = fusionFixture();
     const theme = EXPERIENCE_THEMES.find(t => t === q.get("theme"));

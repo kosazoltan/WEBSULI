@@ -33,6 +33,11 @@ export const ANIM_KINDS = [
   "sentenceParts",
   "triangleArea",
   "decisionStory",
+  // Spec 2026-09-24 (magyarázó ábrák): paramétereiket a shared/lesson-visual-params.ts méri.
+  "cycle",
+  "labeledShape",
+  "barChart",
+  "venn",
 ] as const;
 
 /** Hands-on interactions (LS-4 implements them). */
@@ -46,6 +51,24 @@ export const EXPLAIN_DEPTHS = ["core", "deeper", "why"] as const;
 export const AGE_BANDS = ["kid", "teen", "senior"] as const;
 
 export type AnimKind = (typeof ANIM_KINDS)[number];
+
+/**
+ * Spec 2026-09-24 (magyarázó ábrák): olvasáskor az ismeretlen (újabb programverzióból származó)
+ * ábrafajtájú animate blokk kimarad, a lecke többi része megjelenik — a régi kliens így nem mutatja
+ * „sérültnek” az új ábrás leckét (lásd a 2026-09-24-es `princess`-téma esetet). Íráskor a séma szigorú.
+ */
+export function dropUnknownAnimateBlocks(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || !Array.isArray((raw as { sections?: unknown }).sections)) return raw;
+  const lesson = raw as { sections: Array<{ blocks?: unknown }> };
+  return {
+    ...lesson,
+    sections: lesson.sections.map((section) => !section || !Array.isArray(section.blocks) ? section : {
+      ...section,
+      blocks: section.blocks.filter((b) => !(b && typeof b === "object" && (b as { kind?: unknown }).kind === "animate"
+        && !(ANIM_KINDS as readonly unknown[]).includes((b as { animKind?: unknown }).animKind))),
+    }),
+  };
+}
 export type TryKind = (typeof TRY_KINDS)[number];
 export type ExplainDepth = (typeof EXPLAIN_DEPTHS)[number];
 export type AgeBand = (typeof AGE_BANDS)[number];
