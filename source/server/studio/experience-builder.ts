@@ -220,13 +220,30 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     }
     return problems;
   };
-  const buildUnit = async (unitIndex: number, unit: (typeof plan.units)[number], before: Prior): Promise<{ packet: PacketContent; hash: string }> => {
+  const unitTeaching = (unitIndex: number, unit: (typeof plan.units)[number]) => {
     const { taskCount, quizCount, methodKinds } = bankUnitQuota(plan, unitIndex);
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
-    const reviewFeedback = deps.reviewFeedback?.filter(f => !f.conceptIds?.some(id => taughtIds.has(id)) || f.conceptIds.some(id => unit.conceptIds.includes(id))) ?? [];
     const teaching = { version: LESSON_METHOD_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: lesson.sections[unit.sectionIndex], concepts: source, allowedConceptIds: unit.conceptIds };
+    return { taskCount, quizCount, methodKinds, teaching, baseHash: createHash("sha256").update(canonicalJson(teaching)).digest("hex") };
+  };
+  // Élő futás 67a05970 (2026-09-24): a kifogás fogalom szerint minden olyan csomaghoz eljutott, amely ugyanazt a
+  // fogalmat tanítja; ott a tétel ismeretlen, a célzott javítómód kiesett, és 9 kifogásból 91 tétel épült újra (új
+  // hibákkal — a hurok nem konvergált). A kifogás ezért ahhoz a csomaghoz megy, amelyben a tétel TÉNYLEG van; a
+  // fogalom szerinti szétosztás csak akkor marad, ha a tétel egyik csomagban sem található.
+  const itemOwner = new Map<string, number>();
+  if (deps.reviewFeedback?.length) plan.units.forEach((unit, unitIndex) => {
+    const { baseHash } = unitTeaching(unitIndex, unit);
+    const prior = checkpoint.parts[checkpoint.reviewedHashes?.[baseHash] ?? baseHash] as Partial<Record<typeof BANKS[number], Array<{ id?: unknown }>>> | undefined;
+    for (const bank of BANKS) for (const item of Array.isArray(prior?.[bank]) ? prior[bank] : []) if (typeof item?.id === "string") itemOwner.set(item.id, unitIndex);
+  });
+  const buildUnit = async (unitIndex: number, unit: (typeof plan.units)[number], before: Prior): Promise<{ packet: PacketContent; hash: string }> => {
+    const { taskCount, quizCount, methodKinds, teaching, baseHash } = unitTeaching(unitIndex, unit);
+    const reviewFeedback = deps.reviewFeedback?.filter(f => {
+      if (!f.conceptIds?.some(id => taughtIds.has(id))) return true;
+      const owner = itemOwner.get((f.previousItem as { id?: string } | undefined)?.id ?? "");
+      return owner !== undefined ? owner === unitIndex : f.conceptIds.some(id => unit.conceptIds.includes(id));
+    }) ?? [];
     const evidence = { ...teaching, ...(reviewFeedback.length ? { reviewFeedback } : {}) };
-    const baseHash = createHash("sha256").update(canonicalJson(teaching)).digest("hex");
     // Once corrected, later rounds must never revive the rejected base packet.
     const hash = reviewFeedback.length ? createHash("sha256").update(canonicalJson(evidence)).digest("hex") : checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
     unit.sourceHash = hash;
