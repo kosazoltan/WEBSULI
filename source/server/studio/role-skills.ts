@@ -127,22 +127,31 @@ Minden fejezet a vázlatból, egyenként megszámolva? Minden explain tartalmazz
 
   animator: `# Skill: ábrakészítő (animator)
 ## Szerep
-Kész leckéhez rajzolható ábrákat (animate blokk) adsz: minden fejezet kap legalább egyet a SAJÁT tanításából. Semmi mást nem változtatsz.
+Magyarázó ábrákat tervezel egy kész leckéhez. Az ábra a fogalmat MUTATJA — tárgyat, viszonyt, változást, arányt, alakot —, amit a szöveg csak elmond. A tanításhoz nem nyúlsz: csak ábra-foltot adsz, a program illeszti be. (Mért hiba, 2026-09-24: a holdciklushoz egy címke nélküli kör készült, máshol a példa lépései dobozokban — ez nem ábra.)
 ## Bemenet
-A teljes lecke JSON és a térkép.
+A lecke fejezetei sorszámozott blokkokkal (i), a fogalomtérkép, a tantárgy és az évfolyam.
 ## Kimenet
-Kizárólag JSON: a TELJES lecke, ahol csak animate blokk került be vagy cserélődött; minden más blokk bájtra azonos.
+Kizárólag JSON: { "sections": [{ "index", "visuals": [{ "after" | "replace", "animKind", "params", "caption", "coversConceptIds" }] }] }. Fejezetenként 1, legfeljebb 2 ábra.
 ## Lépések
-1. Fejezetenként nézd meg, van-e animate; ha nincs, az example lépéseiből process ábrát készíts (params.steps = a látható lépések), vagy a tartalom szerint numberLine/timeline/map/geometry/fraction.
-2. Az ábrát az illusztrált explain/example UTÁN helyezd el; caption magyar, rövid, csak azt ígérje, amit a runtime rajzol.
-3. coversConceptIds: csak a leckében már használt id-k, és csak az, amit az ábra tényleg mutat.
-4. animKind kizárólag: numberLine, fraction, timeline, geometry, process, map, wordBuilder, sentenceParts, triangleArea, decisionStory.
+1. Fejezetenként olvasd végig a tanítást (a középsőket is), és döntsd el: MI az, amit látni kell a megértéshez?
+2. Válaszd a legmagyarázóbb fajtát:
+   - ismétlődő fázisok, körforgás (a Hold változása / holdnaptár, víz körforgása, évszakok) → cycle; holdfázisnál "moon" 0–1 és "waxing";
+   - hosszúság, terület, test, kiskockás építés → labeledShape (méretek, csúcsok, rétegek);
+   - mennyiségek összevetése, átlag → barChart; halmazok, „mindkettő / egyik sem / legalább” → venn;
+   - kerekítés, sorrend, intervallum, negatív szám → numberLine (jelölés, ugrás-ív);
+   - évszámok, korszakok → timeline; tört → fraction; szóépítés → wordBuilder; mondatrészek → sentenceParts;
+   - valódi, többlépéses eljárás (nem a példa lépéseinek másolata) → process.
+3. Adatot (szám, dátum, név, állítás) csak a leckéből vagy a térképből veszel, és újraszámolod (pl. 7 · 11 · 6 = 462). A fogalom megmutatásához szükséges, általánosan ismert elnevezés megengedett (pl. „a Hold változása” → holdfázisok: újhold, első negyed, telihold, utolsó negyed); új szám vagy állítás nem. Magyar, rövid feliratok; a caption csak azt ígéri, amit a rajz mutat.
+4. "after" = annak az explain/example blokknak az i-je, amelyet az ábra illusztrál; gyenge meglévő ábrát (szövegdobozos process, puszta körvonal) "replace"-szel cserélsz.
+5. coversConceptIds: csak az adott fejezetben már tanított id-k, és csak amit az ábra ténylegesen mutat.
+6. A params pontosan a megadott szerződés szerint; ha egy fajta adatai nincsenek meg a leckében, másik fajtát választasz vagy kihagyod.
 ## Tilalmak
-- Szöveg, példa, check módosítása; fejezet átrendezése; identitásmezők (title, subject, classroom, mapId, sourceOnly) változtatása.
-- Új conceptId; kitalált animKind; a captionban nem rajzolt részlet (magasságvonal, szög, vezérlő).
-- Ha nincs rajzolható tartalom: ne tegyél be félrevezető helyettesítőt.
+- Szöveg, példa, feladat, fejezet módosítása; teljes lecke visszaadása; új conceptId; kitalált animKind vagy mező.
+- A példa lépéseinek szó szerinti process-ábrája; puszta körvonal (geometry) ott, ahol labeledShape vagy cycle mutatná a lényeget.
+- Kitalált adat: a leckében nem szereplő szám, dátum, tulajdonnév vagy állítás; a caption-ben nem rajzolt részlet.
+- Töltelékábra rajzolhatatlan fejezethez (tiszta definíciólista): inkább nincs ábra.
 ## Önellenőrzés a válasz előtt
-Minden fejezetben van animate? A nem-animate blokkok sorrendje és szövege változatlan? Minden animKind a listából? Csak JSON?`,
+Minden rajzolható fejezetnek van ábrája? Mindegyik a fogalmat mutatja, nem a szöveget ismétli? Minden szám újraszámolva, minden felirat a leckéből? A params a szerződés szerinti? Csak a folt-JSON?`,
 
   bank: `# Skill: gyakorlóbank-készítő (bank)
 ## Szerep

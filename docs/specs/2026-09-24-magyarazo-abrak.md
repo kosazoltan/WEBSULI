@@ -43,3 +43,11 @@ Fotó/képgenerálás (pixeles AI-kép); a meglévő leckék tömeges újragener
 - Az 1. szelet rajzolói: unit-teszt + valódi böngészős render (375 px és asztali), átfedés/levágás/görgetősáv nélkül, képernyőképpel.
 - Tisztító: ismert támadó SVG-k (script, onload, foreignObject, külső href) mind kiesnek — teszt.
 - Élő futás: a felvételi PDF és egy holdciklusos anyag leckéjének ábráiról képernyőkép a jelentésben.
+
+## Döntések és mérések (3. szelet)
+- **Tulajdonosi döntés (2026-09-24):** ábra-modell `claude-opus-5-5` (közvetlen Anthropic, élő próbahívás HTTP 200), tartalék `gpt-5.6-terra`. Render: nincs `STUDIO_MODEL_ANIMATOR` felülírás, az Anthropic-kulcs megvan.
+- **Folt-kimenet:** a modell csak ábrákat ad (`server/studio/visual-patch.ts`), nem a teljes leckét → kicsi kimenet, a tanítás szerkezetileg érintetlen.
+- **Külön „visuals” szabály** (300 s, 16k, medium): az „animator” szabály a bankhívásokra is érvényes, azt nem változtatjuk.
+- **Élő mérés az „időszámítás” leckén (5 hívás):** 20–27 s, ~13,7k be / 2,3–3,1k ki token; 4/5 hibátlan folt (0 elutasított ábra), 1/5 nem folt-alakú JSON → egyszeri célzott újrakérés ugyanazon a modellen. Minden ábraadat a lecke szövegéből (ellenőrizve). A skill pontosítása után a holdnaptárhoz holdfázis-ciklus készült.
+- **Böngészős mérés a valódi kimeneten:** levágott „1 évszázad” jelölés → a feliratok a rajzterületen belül; a sorszám-jelvény `var(--card)` shadcn-formátum miatt fekete volt → témától független színek; feliratok a téma szövegszínével (kontraszt ≥ 14:1 mindkét témában).
+- **Spec-változás tesztekben (dokumentált):** `models-routing` (ábra-modell) és a (n2) runner-teszt (a 09-19-es eszköz-kiváltás megszűnt; most a modell foltját illesztjük be).

@@ -1300,19 +1300,54 @@ test("(m) modellhiba: az elsődleges modell 429-e után a lépés a FALLBACK_MOD
   assert.equal((job as { model?: string | null })?.model, fallback, "a job a ténylegesen használt modellt rögzíti");
 });
 
-test("(n2) eszköz 2026-09-19: ha minden fejezet a példájából kap ábrát, az animátor nem hív modellt", async () => {
-  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({ failModels: new Set(), cannedResponse: "{}" });
+// Spec-változás 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): a 2026-09-19-es eszköz-kiváltás („példa
+// mellett nincs animátor-modellhívás”) okozta a szövegdobozos ábrákat — mindhárom élő futásban. Most példa
+// mellett is az ábra-modell dolgozik, a foltját a program illeszti be; a példa-process csak tartalék.
+test("(n2) spec 2026-09-24: példa mellett is az ábra-modell tervez, a folt beillesztve, a tanítás érintetlen", async () => {
   const withExample = { ...GOOD_LESSON, sections: [{ ...GOOD_LESSON.sections[0], blocks: [...GOOD_LESSON.sections[0].blocks,
     { kind: "example", problem: "2+3·4", steps: ["3·4=12", "2+12=14"], answer: "14", coversConceptIds: ["c1"] }] }] };
+  const exampleIndex = withExample.sections[0].blocks.length - 1;
+  const patch = { sections: [{ index: 0, visuals: [{ after: exampleIndex, animKind: "numberLine",
+    params: { from: 0, to: 14, step: 1, jumps: [{ from: 2, to: 14, label: "+12" }] }, caption: "A műveleti sorrend a számegyenesen: 2 + 12 = 14", coversConceptIds: ["c1"] }] }] };
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({ failModels: new Set(), cannedResponse: JSON.stringify(patch) });
+  // Saját térkép: a közös MAP c1-nevét egy korábbi teszt átírja (sorrendfüggés); a felirat-őr a nevet méri.
+  store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "c1", examWeight: "core", term: "műveleti sorrend" }] });
   store.seed({ id: "job-1", mapId: "m1", step: "animator", status: "running", output: { lesson: withExample } });
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
   assert.equal(outcome.ok, true);
-  assert.deepEqual(calls, [], "nincs modellhívás");
+  assert.deepEqual(calls, [resolveStudioModel("animator")], "az ábra-modell egyszer hívva");
   const job = await store.loadJob("job-1");
-  assert.equal((job as { model?: string | null })?.model, "tool:section-visuals");
   const lesson = job?.output?.lesson as typeof withExample;
-  assert.ok(lesson.sections[0].blocks.some(b => b.kind === "animate"), "a példából process ábra készült, és a címke-őr nem dobta el");
-  assert.equal((job as { tokensIn?: number | null } | null)?.tokensIn, 0);
+  const blocks = lesson.sections[0].blocks;
+  assert.equal(blocks[exampleIndex + 1]?.kind, "animate", "az ábra a példa után");
+  assert.equal((blocks[exampleIndex + 1] as { animKind?: string }).animKind, "numberLine", "a modell ábrája, nem a példa lépéseinek szövegdoboza");
+  assert.deepEqual(blocks.filter(b => b.kind !== "animate"), withExample.sections[0].blocks.filter(b => b.kind !== "animate"), "a tanítás érintetlen");
+});
+
+test("(n3) élő mérés 2026-09-24: hibás alakú ábra-válasz után egy célzott újrakérés ugyanazon a modellen", async () => {
+  const withExample = { ...GOOD_LESSON, sections: [{ ...GOOD_LESSON.sections[0], blocks: [...GOOD_LESSON.sections[0].blocks,
+    { kind: "example", problem: "2+3·4", steps: ["3·4=12", "2+12=14"], answer: "14", coversConceptIds: ["c1"] }] }] };
+  const patch = { sections: [{ index: 0, visuals: [{ after: 0, animKind: "numberLine", params: { from: 0, to: 14, step: 1, marks: [{ value: 14, label: "14" }] },
+    caption: "A műveleti sorrend eredménye a számegyenesen", coversConceptIds: ["c1"] }] }] };
+  const base = makeDeps("{}");
+  const calls: Array<{ model: string; user: string }> = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub", model,
+    chat: async (messages: Array<{ role: string; content: string }>) => {
+      calls.push({ model, user: messages.at(-1)?.content ?? "" });
+      return { content: calls.length === 1 ? '{"figures":"nem folt"}' : JSON.stringify(patch), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  base.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "c1", examWeight: "core", term: "műveleti sorrend" }] });
+  base.store.seed({ id: "job-r", mapId: "m1", step: "animator", status: "running", output: { lesson: withExample } });
+  const outcome = await runPipelineStep("job-r", { ...base, providerFactory });
+  assert.equal(outcome.ok, true);
+  assert.equal(calls.length, 2, "egy újrakérés");
+  assert.equal(calls[1].model, calls[0].model, "ugyanazon a modellen");
+  assert.match(calls[1].user, /nem a kért alakú JSON/);
+  const lesson = (await base.store.loadJob("job-r"))?.output?.lesson as typeof withExample;
+  assert.equal((lesson.sections[0].blocks[1] as { animKind?: string }).animKind, "numberLine", "az újrakért folt bekerült");
 });
 
 test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az eredeti lecke megy tovább a lektorra", async () => {

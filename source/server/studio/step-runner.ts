@@ -49,7 +49,8 @@ import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import type { InsertGameQuizItem } from "../../shared/schema";
 import { checkCoverageGate, type Coverage } from "./coverage";
 import { stripUngroundedAnimateLabels } from "./grounding";
-import { ensureSectionVisuals, deterministicSectionVisuals, SECTION_VISUALS_TOOL } from "./section-visuals";
+import { ensureSectionVisuals } from "./section-visuals";
+import { applyVisualPatch } from "./visual-patch";
 import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
@@ -494,8 +495,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   // ábra-modellhívás mégis újra lefutott (glm 609 s + deepseek 113 s, mindkettő hosszkorlát) — semmit nem
   // adott hozzá. Csak-bank körben (a lektor banktételekre küldött vissza) az ábrák változatlanok maradnak.
   const reusedVisuals = job.step === "animator" && (canReuseLessonVisuals(job.output?.lesson) || !!bankReview?.feedback.length);
-  // Eszköz (2026-09-19): ha minden fejezet a saját példájából kap ábrát, nincs animátor-modellhívás.
-  const toolVisuals = job.step === "animator" && !reusedVisuals ? deterministicSectionVisuals(job.output?.lesson as Lesson | undefined, map.concepts) : null;
+  // Spec 2026-09-24 (magyarázó ábrák): a 2026-09-19-es eszköz-kiváltás („ha minden fejezetnek van példája,
+  // nincs animátor-modellhívás”) megszűnt — mindhárom 09-24-es élő futásban emiatt lett minden ábra a példa
+  // lépéseinek szövegdoboza. A determinisztikus pótlás (ensureSectionVisuals) csak TARTALÉK, lent.
   let bankModelUsed: string | null = null;
 
   let json: unknown;
@@ -504,8 +506,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   // az eredeti lecke megy tovább a lektorra — a gyártás nem áll meg.
   let animatorModelFailure: string | null = null;
   const attempt = (m: string) =>
-    callStepModel(providerFactory(m, job.step), {
+    callStepModel(providerFactory(m, job.step === "animator" ? "visuals" : job.step), {
       step: job.step,
+      ...(job.step === "animator" ? { policy: "visuals" } : {}),
       model: m,
       system,
       user: "Válaszolj kizárólag a kért JSON-nal.",
@@ -514,11 +517,6 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     if (reusedVisuals) {
       json = job.output?.lesson;
       usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-    } else if (toolVisuals) {
-      json = toolVisuals;
-      usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-      model = SECTION_VISUALS_TOOL;
-      logger.info(`[STUDIO] Ábrák eszközből, modellhívás nélkül (${job.id}): minden fejezetnek van ábrája.`);
     } else {
     let result: Awaited<ReturnType<typeof attempt>>;
     try {
@@ -546,6 +544,19 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     }
     json = result.json;
     usage = result.usage ?? null;
+    // Spec 2026-09-24 (élő mérés: 4 Opus 5.5-hívásból 1 nem folt-alakú JSON-t adott): egyszeri, célzott
+    // újrakérés ugyanazon a modellen, mielőtt a tartalék (példa-process) lépne életbe.
+    const animatorLesson = job.step === "animator" ? job.output?.lesson as Lesson | undefined : undefined;
+    if (animatorLesson && !applyVisualPatch(animatorLesson, json) && !lessonSchema.safeParse(json).success) {
+      logger.warn(`[STUDIO] Az ábra-folt alakja hibás (${job.id}), egy célzott újrakérés: ${model}`);
+      const retry = await callStepModel(providerFactory(model, "visuals"), {
+        step: job.step, policy: "visuals", model, system,
+        user: "Az előző válaszod nem a kért alakú JSON volt. Kizárólag ezt add vissza, a sztringekben escape-elt idézőjelekkel: " +
+          '{ "sections": [ { "index": 0, "visuals": [ { "after": 1, "animKind": "…", "params": { }, "caption": "…", "coversConceptIds": ["…"] } ] } ] }',
+      });
+      json = retry.json;
+      if (retry.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + retry.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + retry.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + retry.usage.totalTokens };
+    }
     }
   } catch (error) {
     const reason =
@@ -693,7 +704,13 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
       // #169 — az animáció kozmetika: sértésnél/hibás alaknál az EREDETI lecke
       // megy tovább a lektorra, a gyártás nem hal meg.
-      const parsed = animatorModelFailure ? null : lessonSchema.safeParse(json);
+      // Spec 2026-09-24: a modell ábra-foltot ad; a program illeszti be (a tanítás szerkezetileg érintetlen).
+      // Régi alakú teljes lecke is elfogadott (a checkAnimatorResult méri).
+      const patched = animatorModelFailure ? null : applyVisualPatch(original, json);
+      if (patched) {
+        logger.info(`[STUDIO] Ábrafolt beillesztve (${job.id}): ${patched.added} új, ${patched.replaced} csere${patched.rejected.length ? `; elutasítva: ${patched.rejected.join(" | ").slice(0, 600)}` : ""}`);
+      }
+      const parsed = animatorModelFailure ? null : patched ? lessonSchema.safeParse(patched.lesson) : lessonSchema.safeParse(json);
       const check = parsed?.success ? checkAnimatorResult(original, parsed.data) : null;
       const outcome = animatorOutcome(
         original,

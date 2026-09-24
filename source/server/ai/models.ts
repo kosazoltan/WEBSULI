@@ -66,7 +66,10 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // Spec 2026-09-19 (mérve, két 46–49 fogalmas futás): az animátor+bank a lecke költségének
   // 3/4-e volt Terrán (~3 USD). A glm-5.3-flash 6,3 s alatt, 0 gondolkodó tokennel, érvényes
   // magyar bankcsomag-JSON-t adott (0,09/0,30 USD/M); a rubrikát determinisztikus kód ellenőrzi.
-  animator: "z-ai/glm-5.3-flash",
+  // Tulajdonosi döntés 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): az ábrákat Claude Opus 5.5
+  // tervezi (a glm-flash rajzi/téri feladatra gyenge volt — „csak egy kört rajzolt”). A kimenet csak ábra-folt,
+  // nem a teljes lecke, így a kimeneti tokenszám kicsi. Élő próbahívás: HTTP 200 (2026-09-24).
+  animator: "claude-opus-5-5",
   bank: "z-ai/glm-5.3-flash",
   // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
   // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
@@ -89,7 +92,8 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   ocr: "z-ai/glm-5.3-flash",
   pedagogue: "grok-4.6",
   // Author and reviewer have no cross-vendor fallback: retain independent review.
-  animator: "deepseek/deepseek-v4-flash",
+  // Spec 2026-09-24: más család, erős modell (a szerzőé) — nem olcsó szövegmodellre esik vissza.
+  animator: "gpt-5.6-terra",
   // Mérve 2026-09-20 (5 tartalék-hívás négy futásban): a deepseek-v4-flash bankcsomagja 4/5-ször a
   // mentőkörbe futott, 2–10 perc után. A tartalék ezért egyből az erős mentőmodell — a bukott olcsó
   // kísérletek után nem ér meg egy második olcsó családot végigvárni.
