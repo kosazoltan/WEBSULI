@@ -1350,6 +1350,33 @@ test("(n3) élő mérés 2026-09-24: hibás alakú ábra-válasz után egy célz
   assert.equal((lesson.sections[0].blocks[1] as { animKind?: string }).animKind, "numberLine", "az újrakért folt bekerült");
 });
 
+test("(n4) spec 2026-09-24 (4. szelet): a példa lépéseit ismétlő ábra után célzott újrakérés, a csere beillesztve", async () => {
+  const withExample = { ...GOOD_LESSON, sections: [{ ...GOOD_LESSON.sections[0], blocks: [...GOOD_LESSON.sections[0].blocks,
+    { kind: "example", problem: "2+3·4", steps: ["3·4=12", "2+12=14"], answer: "14", coversConceptIds: ["c1"] }] }] };
+  const n = withExample.sections[0].blocks.length;
+  const echo = { sections: [{ index: 0, visuals: [{ after: n - 1, animKind: "process", params: { steps: ["3·4=12", "2+12=14"] }, caption: "A műveleti sorrend lépései", coversConceptIds: ["c1"] }] }] };
+  const fixed = { sections: [{ index: 0, visuals: [{ replace: n, animKind: "numberLine", params: { from: 0, to: 14, step: 1, jumps: [{ from: 2, to: 14, label: "+12" }] }, caption: "A műveleti sorrend a számegyenesen", coversConceptIds: ["c1"] }] }] };
+  const base = makeDeps("{}");
+  const users: string[] = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub", model,
+    chat: async (messages: Array<{ role: string; content: string }>) => {
+      users.push(messages.at(-1)?.content ?? "");
+      return { content: JSON.stringify(users.length === 1 ? echo : fixed), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  base.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "c1", examWeight: "core", term: "műveleti sorrend" }] });
+  base.store.seed({ id: "job-w", mapId: "m1", step: "animator", status: "running", output: { lesson: withExample } });
+  const outcome = await runPipelineStep("job-w", { ...base, providerFactory });
+  assert.equal(outcome.ok, true);
+  assert.equal(users.length, 2, "egy célzott újrakérés");
+  assert.match(users[1], /a példa lépéseit ismétli/);
+  const blocks = ((await base.store.loadJob("job-w"))?.output?.lesson as typeof withExample).sections[0].blocks;
+  assert.equal((blocks[n] as { animKind?: string }).animKind, "numberLine", "a szövegdoboz helyére valódi ábra került");
+  assert.equal(blocks.filter((b) => b.kind === "animate").length, 1);
+});
+
 test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az eredeti lecke megy tovább a lektorra", async () => {
   const primary = resolveStudioModel("animator");
   const fallback = FALLBACK_MODELS.animator!;

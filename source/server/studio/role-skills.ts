@@ -191,7 +191,7 @@ message alakja (≤ 300 karakter): „Mi hamis: … | Bizonyíték: „idézet�
 3. Cáfolás a jelentés előtt: minden blokkolót próbáld megdönteni (helyesbítés, átírási hiba, a lecke másik mondata, újraszámolás); amit megdöntöttél, nem jelented.
 4. Átírási hiba: a quote sokszor fénykép/kézírás gépi átirata. Ha a quote szava értelmetlen vagy a mondatban lehetetlen, és a lecke egy 1–2 betűben eltérő, értelmes olvasatot tanít, az NEM hamis állítás: legfeljebb book_probably_wrong (info), „valószínű átírási hiba” indokkal. Mért példa: „bódex: bézzel írt könyv” ↔ „kódex: kézzel írt könyv” (helyes).
 5. Blokkoló (contradicts_source / not_in_map): a forrás szabályával ellentétes állítás; hibás végeredmény vagy részszámítás; a helyesnek jelölt opció valóban rossz; hamis mintaválasz; olyan tény tanítása vagy kérdezése, ami sem a forrásban, sem a leckében nincs. Mindig blockPath-tal, idézettel vagy számolással. Forrásfeladatot minden adattal magad oldj meg; ellentmondó részválasznál a tanítás alapadata hibás → tanítás blockPath (7.).
-6. NEM blokkoló, ne is jelezd: szinonima a rubrikában (kivéve, ha az érték más — „nyolcvannégy" 84, nem 48); többféleképp érthető kérdés, ha a jelölt válasz egy ésszerű olvasatban helyes (legfeljebb language); stílus, hossz, ismétlés; más, de helyes számpélda; a tanár kérése szerinti rövidítés.
+6. A szöveget ismétlő, a fogalmat nem mutató ábra: language (nem blokkoló). NEM blokkoló, ne is jelezd: szinonima a rubrikában (kivéve, ha az érték más — „nyolcvannégy" 84, nem 48); többféleképp érthető kérdés, ha a jelölt válasz egy ésszerű olvasatban helyes (legfeljebb language); stílus, hossz, ismétlés; más, de helyes számpélda; a tanár kérése szerinti rövidítés.
 7. Egy gyökérok = egy jegyzet: hibás tanításnál egy jegyzet a tanítás blockPath-jára, az érintett banktételek ugyanabban a message-ben („érintett: experience.quiz.3”). Külön bank-jegyzet csak helyes tanítás mellett hibás tételre.
 8. Fedettség: hiányzó core fogalom → coverage_gap/core, csak ha a lecke sehol, más szavakkal sem tanítja. Önellentmondó forrás: ha egy fogalom a térkép másik fogalmával vagy a számtannal ütközik (mért: c7 „10 év = 1 évszázad = 10 évtized” ↔ c8 „1000 év = 10 évszázad”), az book_probably_wrong (info), számolással indokolva; a hibás állítás tanítását SOHA nem követeled coverage_gap-ként, a lecke helyes változata nem hiba.
 9. Javító kör után: előbb a previousBlockers — a javítottat nem jelzed, a javítatlant ugyanazzal a blockPath/kind/subkind-dal; új blokkolót csak új tényhibára adsz.
@@ -201,7 +201,7 @@ message alakja (≤ 300 karakter): „Mi hamis: … | Bizonyíték: „idézet�
 - A forrás „kijavítása" saját tudásból (erre a book_probably_wrong info való); „lehet, hogy" jellegű blokkoló.
 - Egy gyökérokra több blokkoló; helyes tételekről beszámoló; próza a JSON körül; üres message.
 ## Önellenőrzés a válasz előtt
-Minden fejezetet és bank-tételt bejártam, a középsőket is? Minden blokkolóra: idéztem vagy számoltam, és megpróbáltam megcáfolni? Hamis, nem csak más? Félrevezetné a tanulót? Egy gyökérok — egy jegyzet? Ha bármelyik nem: language-re minősítem vagy törlöm. Csak JSON?`,
+Bejártam mindent, a középsőket is? Minden blokkoló idézett vagy számolt, cáfolni próbált, valóban hamis és félrevezető? Egy gyökérok — egy jegyzet? Ha nem: language vagy törlés. Csak JSON?`,
 };
 
 /**

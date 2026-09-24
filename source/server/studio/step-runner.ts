@@ -51,6 +51,7 @@ import { checkCoverageGate, type Coverage } from "./coverage";
 import { stripUngroundedAnimateLabels } from "./grounding";
 import { ensureSectionVisuals } from "./section-visuals";
 import { applyVisualPatch } from "./visual-patch";
+import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
 import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
@@ -736,7 +737,31 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // lesson at the gate after the round limit (measured: PDF run 3ed5ca90).
       // Spec 2026-09-19: a chapter without a figure gets its worked example as a process
       // visual before the label check below (the lektor blocks figure-less chapters).
-      const visuals = ensureSectionVisuals(outcome.lesson, map.concepts);
+      // Spec 2026-09-24 (4. szelet): gyenge ábra (a példa lépéseinek szövegdoboza, puszta körvonal, hiányos
+      // adat) után egy célzott újrakérés az ábrakészítőnek — a friss sorszámokkal, mert a folt eltolta őket.
+      let animated = outcome.lesson;
+      const weak = !animatorModelFailure && !reusedVisuals ? weakVisuals(animated) : [];
+      if (weak.length) {
+        logger.warn(`[STUDIO] Gyenge ábra (${job.id}): ${weak.map((w) => `${w.sectionIndex + 1}/${w.blockIndex} ${w.kind}`).join(", ")} → célzott újrakérés`);
+        try {
+          const repairSystem = await promptLookup(STUDIO_PROMPT_NAMES.animator, buildAnimatorPrompt(animated, promptMapOf(map)));
+          const repair = await callStepModel(providerFactory(model, "visuals"), {
+            step: job.step, policy: "visuals", model, system: repairSystem,
+            user: `${weakVisualsInstruction(weak)}
+Válaszolj kizárólag a kért folt-JSON-nal.`,
+          });
+          if (repair.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + repair.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + repair.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + repair.usage.totalTokens };
+          const repaired = applyVisualPatch(animated, repair.json);
+          const checked = repaired ? lessonSchema.safeParse(repaired.lesson) : null;
+          if (repaired && checked?.success && checkAnimatorResult(original, checked.data).ok) {
+            animated = checked.data;
+            logger.info(`[STUDIO] Ábrajavítás beillesztve (${job.id}): ${repaired.replaced} csere, ${repaired.added} új${repaired.rejected.length ? `; elutasítva: ${repaired.rejected.join(" | ").slice(0, 400)}` : ""}`);
+          }
+        } catch (error) {
+          logger.warn(`[STUDIO] Az ábrajavítás elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+        }
+      }
+      const visuals = ensureSectionVisuals(animated, map.concepts);
       if (visuals.added.length) {
         logger.info(`[STUDIO] Fejezeti ábra pótolva a példa lépéseiből (${job.id}): fejezet ${visuals.added.map((i) => i + 1).join(", ")}`);
       }
