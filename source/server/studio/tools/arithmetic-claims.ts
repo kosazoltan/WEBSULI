@@ -12,23 +12,46 @@
 
 const OPS = "+\\-−–·×*:÷/";
 const NUM = "\\d+(?:[.,]\\d+)?";
-const EXPR = `${NUM}(?:\\s*[${OPS}]\\s*${NUM})*`;
+/**
+ * Élő futás 351e14cc (2026-09-24): a „–6 + 11 = 5” és az „1 1/2 = 3/2” helyes állítást a minta „6 + 11 = 5”-nek
+ * és „1/2 = 3/2”-nek olvasta — a 10. fejezet (egész számok) javító körét két kísérletben CSAK ez buktatta. Ezért:
+ * a kifejezés elején előjel állhat (közvetlenül szám előtt), a vegyes tört („1 5/12”) és a tört („3/4”) EGY szám,
+ * a törtvonal erősebben köt, mint a · és a : („3/2 : 3/4 = 2”).
+ */
+const SIGN = "[\\-−–]";
+const ATOM = `\\d+\\s+\\d+\\s*/\\s*\\d+|${NUM}(?:\\s*/\\s*${NUM})?`;
+const EXPR = `(?:${SIGN}(?=\\d))?(?:${ATOM})(?:\\s*[${OPS}]\\s*(?:${ATOM}))*`;
 /** Egyenlőség-LÁNC: `a op b = c op d = e` — a tanulói lépéssor („40 – 18 + 4 = 22 + 4 = 26") is ilyen. */
 const CHAIN = new RegExp(`(${EXPR})((?:\\s*=\\s*${EXPR})+)(?!\\d|[.,]\\d)`, "g");
 
 function toNumber(s: string): number { return Number(s.replace(",", ".")); }
 
+/** Egy szám értéke: egész/tizedes, tört („3/4”) vagy vegyes tört („1 5/12”); NaN, ha nem értelmezhető. */
+function atomValue(atom: string): number {
+  const mixed = atom.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (mixed) return Number(mixed[3]) === 0 ? NaN : Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
+  const [a, b] = atom.split("/").map((s) => toNumber(s.trim()));
+  if (b === undefined) return a;
+  return b === 0 ? NaN : a / b;
+}
+
 /** Evaluate `a op b op c …` with · : before + −; a lone number is itself; null when inexact/unparsable. */
 export function evaluateExpression(expr: string): number | null {
   if (/[()[\]]/.test(expr)) return null;
-  const tokens = expr.match(new RegExp(`${NUM}|[${OPS}]`, "g"));
-  if (!tokens || tokens.length % 2 === 0) return null;
-  if (tokens.length === 1) { const n = toNumber(tokens[0]); return Number.isNaN(n) ? null : n; }
-  const values: number[] = [toNumber(tokens[0])];
+  const matched = expr.match(new RegExp(`${ATOM}|[${OPS}]`, "g"));
+  if (!matched) return null;
+  let tokens: string[] = [...matched];
+  const negative = tokens.length > 1 && new RegExp(`^${SIGN}$`).test(tokens[0]) && /\d/.test(tokens[1]);
+  if (negative) tokens = tokens.slice(1);
+  if (tokens.length % 2 === 0) return null;
+  const first = (negative ? -1 : 1) * atomValue(tokens[0]);
+  if (Number.isNaN(first)) return null;
+  if (tokens.length === 1) return first;
+  const values: number[] = [first];
   const ops: string[] = [];
   for (let i = 1; i < tokens.length; i += 2) {
     const op = tokens[i];
-    const value = toNumber(tokens[i + 1]);
+    const value = atomValue(tokens[i + 1]);
     if (Number.isNaN(value)) return null;
     if (/[·×*:÷/]/.test(op)) {
       const left = values.pop()!;
