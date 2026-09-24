@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import type { AnimKind } from "@shared/lesson-schema";
 import { TriangleAreaLab } from "./TriangleAreaLab";
 import { DecisionStory } from "./DecisionStory";
+import { BarChartAnim, CycleAnim, LabeledShapeAnim, RichNumberLineAnim, VennAnim } from "./explanatory-visuals";
 
 /**
  * LS-4 — the eight planned animation kinds (master plan §4).
@@ -32,33 +33,6 @@ function strArray(v: unknown, fallback: string[]): string[] {
 const FRAME = "motion-safe:animate-draw border rounded-lg bg-card p-4 motion-reduce:animate-none";
 
 /* ------------------------------------------------------------------ */
-
-function NumberLineAnim({ params, caption }: AnimProps) {
-  const from = num(params.from, 0);
-  const to = num(params.to, 10);
-  const highlight = num(params.highlightTo, to);
-  const width = 300;
-  const pad = 24;
-  const x = (v: number) => pad + ((v - from) / (to - from || 1)) * (width - 2 * pad);
-  return (
-    <figure className={FRAME} data-anim="numberLine">
-      <svg viewBox={`0 0 ${width} 64`} className="w-full h-auto" role="img" aria-label={caption}>
-        <line x1={pad} y1={40} x2={width - pad} y2={40} stroke="currentColor" strokeWidth="2" />
-        <line x1={x(from)} y1={40} x2={x(highlight)} y2={40} className="lesson-anim-stroke" stroke="#10b981" strokeWidth="5" strokeLinecap="round" />
-        {Array.from({ length: 11 }, (_, i) => {
-          const v = from + ((to - from) / 10) * i;
-          return (
-            <g key={i}>
-              <line x1={x(v)} y1={35} x2={x(v)} y2={45} stroke="currentColor" strokeWidth="2" />
-              <text x={x(v)} y={58} textAnchor="middle" fontSize="9">{Math.round(v * 10) / 10}</text>
-            </g>
-          );
-        })}
-      </svg>
-      <figcaption className="text-sm text-muted-foreground mt-1">{str(caption, "Számegyenes")}</figcaption>
-    </figure>
-  );
-}
 
 function FractionAnim({ params, caption }: AnimProps) {
   const numerator = num(params.numerator, 1);
@@ -93,7 +67,9 @@ function FractionAnim({ params, caption }: AnimProps) {
 }
 
 function TimelineAnim({ params, caption }: AnimProps) {
-  const events = strArray(params.events, ["Kezdet", "Következő esemény", "Vég"]);
+  // Spec 2026-09-24: kitalált alapesemény („Kezdet”) helyett nincs ábra.
+  const events = strArray(params.events, []);
+  if (events.length < 2) return null;
   return (
     <figure className={FRAME} data-anim="timeline">
       <div className="flex items-center gap-1">
@@ -130,7 +106,9 @@ function GeometryAnim({ params, caption }: AnimProps) {
 }
 
 function ProcessAnim({ params, caption }: AnimProps) {
-  const steps = strArray(params.steps, ["1. lépés", "2. lépés", "3. lépés"]);
+  // Spec 2026-09-24: kitalált alaplépés („1. lépés”) helyett nincs ábra.
+  const steps = strArray(params.steps, []);
+  if (steps.length < 2) return null;
   return (
     <figure className={FRAME} data-anim="process">
       <div className="flex flex-wrap items-center gap-2">
@@ -207,7 +185,7 @@ function SentencePartsAnim({ params, caption }: AnimProps) {
 
 /** Every planned animate kind mapped to its renderer — the LS-4 guard test pins this. */
 export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
-  numberLine: NumberLineAnim,
+  numberLine: RichNumberLineAnim,
   fraction: FractionAnim,
   timeline: TimelineAnim,
   geometry: GeometryAnim,
@@ -217,4 +195,8 @@ export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
   sentenceParts: SentencePartsAnim,
   triangleArea: TriangleAreaLab,
   decisionStory: DecisionStory,
+  cycle: CycleAnim,
+  labeledShape: LabeledShapeAnim,
+  barChart: BarChartAnim,
+  venn: VennAnim,
 };

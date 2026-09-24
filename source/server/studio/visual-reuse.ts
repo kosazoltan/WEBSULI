@@ -2,6 +2,7 @@ import { checkLessonArc } from "../../shared/lesson-arc";
 import { lessonSchema, type Block } from "../../shared/lesson-schema";
 import { triangleAreaLabParamsSchema } from "../../shared/triangle-area-lab";
 import { decisionStoryParamsSchema } from "../../shared/decision-story";
+import { visualParamProblems } from "../../shared/lesson-visual-params";
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const texts = (v: unknown): boolean => Array.isArray(v) && v.length >= 2 && v.every(s => typeof s === "string" && s.trim().length > 0);
@@ -28,6 +29,10 @@ function hasRenderableData(block: Extract<Block, { kind: "animate" }>): boolean 
     case "map": return Array.isArray(p.spots) && p.spots.length > 0 && p.spots.length <= 8 && p.spots.every(s =>
       s && typeof s === "object" && typeof s.label === "string" && s.label.trim() && finite(s.x) && finite(s.y)
       && s.x >= 0 && s.x <= 100 && s.y >= 0 && s.y <= 100);
+    case "cycle":
+    case "labeledShape":
+    case "barChart":
+    case "venn": return visualParamProblems(block.animKind, p).length === 0;
   }
 }
 

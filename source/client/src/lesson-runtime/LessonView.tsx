@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2, RotateCw } from "lucide-react";
 
 import { apiRequest } from "@/lib/queryClient";
-import { lessonSchema } from "@shared/lesson-schema";
+import { dropUnknownAnimateBlocks, lessonSchema } from "@shared/lesson-schema";
 import { tolerantLessonInput } from "@shared/lesson-experience";
 import { reloadIfNewerBuild } from "@/lib/app-version";
 import { LessonRuntime } from "./LessonRuntime";
@@ -48,7 +48,7 @@ export function LessonView({ material }: { material: { id: string; title?: strin
     );
   }
 
-  const parsed = lessonSchema.safeParse(tolerantLessonInput(data?.lesson));
+  const parsed = lessonSchema.safeParse(dropUnknownAnimateBlocks(tolerantLessonInput(data?.lesson)));
 
   if (!parsed.success) {
     return (

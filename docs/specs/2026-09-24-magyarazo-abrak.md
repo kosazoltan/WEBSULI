@@ -1,0 +1,45 @@
+# Magyarázó ábrák — a primitív ábragenerátor lecserélése (2026-09-24)
+
+Tulajdonosi kérés: „A magyarázó ábra generátor nagyon primitív… a holdciklusokhoz csak egy kört rajzolt… nézd át a skilljeit, a lélekfájlokat, a modelljét.”
+
+## Diagnózis (bizonyított)
+| # | Ok | Bizonyíték |
+|---|---|---|
+| 1 | A rajzolók primitívek: a `geometry` egyetlen címke nélküli kör/háromszög/négyzet; a `map` pöttyök egy keretben; a `timeline` pöttysor; a `process` szövegdobozok nyilakkal | `client/src/lesson-runtime/blocks/animate-blocks.tsx:115-130` (kör = `<circle r=32>`), `:132`, `:149`, `:95` |
+| 2 | Nincs szabad illusztráció, ciklus/fázis, címkézett ábra, diagram, halmazábra, térbeli test | `shared/lesson-schema.ts:25-36` ANIM_KINDS (10 fajta); `params: z.record(z.unknown())` |
+| 3 | A modell legtöbbször NEM is fut: ha minden fejezetben van kidolgozott példa, az „ábra” a példa lépéseinek szövege `process`-ként | `server/studio/section-visuals.ts:21-48`, `step-runner.ts:495-521`; mindhárom 2026-09-24-es élő futásban „Ábrák eszközből, modellhívás nélkül” |
+| 4 | A skill maga is a `process`-t ajánlja elsőként („az example lépéseiből process ábrát készíts”) | `server/studio/role-skills.ts:137` |
+| 5 | Az ábra-modell a legolcsóbb szöveges modell (glm-5.3-flash, tartalék deepseek-v4-flash) — rajzi/téri feladatra nem ez a jó választás | `server/ai/models.ts:69`, `:92` |
+| 6 | A „lélek” (runtime-knowledge SOUL) az ábrákról semmit nem mond; a lektor nem méri, hogy az ábra magyaráz-e | `shared/runtime-knowledge.ts:6` |
+| — | Mért eset: „Az időszámítás…” lecke (01638ae9): az egész leckében 1 ábra, `process`, 3 szöveges lépés („Hold változása → holdnaptár”…) | DB `lessons.json` |
+
+## Cél
+Minden fejezet ábrája a fogalmat MUTASSA (tárgy, viszony, változás, arány, térbeli alak), ne a szöveget ismételje. Pontos, forráshű, olvasható, telefonon is.
+
+## Nem-cél
+Fotó/képgenerálás (pixeles AI-kép); a meglévő leckék tömeges újragenerálása (külön döntés); Gemini (tulajdonosi tiltás).
+
+## Megoldás — 4 szelet (mindegyik külön PR, ≤ ~400 sor)
+1. **Gazdag, paraméteres rajzolók** (determinisztikus, mindig pontos):
+   - `cycle` — körbe rendezett fázisok nyilakkal, címkével, rövid magyarázattal; opcionális `moon` fázisrajz (megvilágított rész a fázis szerint, növő/fogyó) → holdciklus, víz körforgása, évszakok.
+   - `labeledShape` — sík- és térbeli alakzat oldal/él-/csúcscímkékkel, méretekkel (téglalap, háromszög, kör sugárral, téglatest a×b×c élekkel, rétegekkel).
+   - `barChart` — összehasonlító oszlopdiagram értékekkel, átlagvonallal.
+   - `venn` — 2–3 halmaz címkékkel és darabszámokkal.
+   - `numberLine` bővítése: tetszőleges tartomány, jelölt pontok, ugrás-ívek.
+   - A régi fajták paramétereinek zod-sémája; ismeretlen/hibás paraméternél NEM rajzol kitalált alapértéket („1. lépés”), hanem kihagyja az ábrát.
+2. **Szabad illusztráció (`illustration`)**: az ábra-modell SVG-t ír (pl. a Hold fázisai a Föld körül, sejt részei, Magyarország folyói). Szerveroldali szigorú tisztítás (csak alap SVG-elemek; nincs script, `foreignObject`, külső hivatkozás, eseménykezelő; ≤ 30 KB; kötelező `viewBox`; minden `<text>` a lecke szövegéből), kliensen újratisztítás (isomorphic-dompurify SVG-profil).
+3. **Folyamat**: a determinisztikus `process`-ábra csak TARTALÉK (modellhiba esetén), nem helyettesíti a modellt. Az ábra-modell erős modell (döntés: lent). Skill újraírása: fejezetenként a legmagyarázóbb fajta; `process` csak valódi eljárásra; tilos a példa szövegét dobozba tenni.
+4. **Minőségkapu**: gépi ellenőrzés (a `process` lépései nem lehetnek a példa szó szerinti lépései; illusztráció-címkék forráshűsége; minimális tartalom fajtánként); a lektor skill méri: „mutatja-e az ábra a fogalmat”.
+
+## Edge case-ek
+- Nincs rajzolható tartalom (pl. definíció-fejezet) → nincs ábra (nem töltelék); a kapu ezt elfogadja, ha a fejezet nem core-számolás/folyamat/tér.
+- Hibás SVG vagy tiltott elem → az illusztráció kimarad, a naplóba kerül; nem blokkolja a leckét.
+- Régi leckék: a régi fajták ugyanúgy rajzolódnak (visszafelé kompatibilis olvasás).
+- Kis képernyő: minden ábra `viewBox`-szal skálázódik, szöveg ≥ 12 px a 375 px széles nézetben.
+
+## Elfogadás (EARS, mérhető)
+- HA a lecke holdfázisokat tanít, AKKOR a fejezet ábrája `cycle` (moon) vagy `illustration`, legalább 4 megnevezett fázissal — élő futáson mérve.
+- HA minden fejezetnek van példája, AKKOR is lefut az ábra-modell (a „modellhívás nélkül” napló csak modellhibánál jelenik meg).
+- Az 1. szelet rajzolói: unit-teszt + valódi böngészős render (375 px és asztali), átfedés/levágás/görgetősáv nélkül, képernyőképpel.
+- Tisztító: ismert támadó SVG-k (script, onload, foreignObject, külső href) mind kiesnek — teszt.
+- Élő futás: a felvételi PDF és egy holdciklusos anyag leckéjének ábráiról képernyőkép a jelentésben.
