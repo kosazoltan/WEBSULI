@@ -53,6 +53,7 @@ import { ensureSectionVisuals } from "./section-visuals";
 import { applyVisualPatch } from "./visual-patch";
 import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
 import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolutions, sourceHashOf, type BlindSolutions } from "./blind-solver";
+import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, runBankVerifier, type BankVerifierResult } from "./bank-verifier";
 import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
@@ -383,6 +384,29 @@ ${sourceText.slice(0, 60_000)}`,
   }
 }
 
+/**
+ * Spec 2026-09-24 (bank-ellenőr): fejezetenként párhuzamos Opus-ellenőrzés a vak megoldásokkal mint kulccsal,
+ * a lektor-hívással egy időben. Csak akkor fut, ha van bank és vak megoldás; soha nem dob.
+ */
+function startBankVerifier(
+  job: JobView,
+  blind: BlindSolutions | undefined,
+  providerFactory: (model: string, step?: string) => IAIProvider,
+  keyConfigured: (model: string) => boolean,
+): Promise<BankVerifierResult | undefined> | undefined {
+  const lesson = job.output?.lesson as Lesson | undefined;
+  if (!lesson?.experience || !blind?.solutions.length || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
+  const cleared = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
+  return runBankVerifier({
+    lesson, blind, cleared,
+    call: async (system) => (await callStepModel(providerFactory(BANK_VERIFIER_MODEL, "visuals"), {
+      step: "lektor", policy: "visuals", model: BANK_VERIFIER_MODEL, system, user: "Válaszolj kizárólag a kért JSON-nal.",
+    })).json,
+    onChunkError: (sectionIndex, reason) =>
+      logger.warn(`[STUDIO] Bank-ellenőr darab elmaradt (${job.id}) ${sectionIndex + 1}. fejezet: ${reason.slice(0, 300)}`),
+  }).catch(() => undefined);
+}
+
 export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): Promise<StepOutcome> {
   const { store, providerFactory, keyConfigured, promptLookup } = await resolveDeps(deps);
 
@@ -410,6 +434,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   let input: unknown;
   let system: string;
   let bankReview: { round: number; feedback: BankReviewFeedback[] } | undefined;
+  let lektorBlind: BlindSolutions | undefined;
   let authorGateFeedback: unknown;
   let authorRepair: { targetSections: number[]; previous: Lesson } | undefined;
   switch (job.step) {
@@ -508,6 +533,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // Spec 2026-09-24 (lektor-tanítás): a forrás feladatainak VAK megoldása a lecke ismerete nélkül, jobonként
       // egyszer (a forrás hash-éhez kötve); a lektor független bizonyítékként kapja. Hiba esetén a lektor nélküle fut.
       const blind = await ensureBlindSolutions(job, map.meta.sourceText, store, providerFactory, keyConfigured);
+      lektorBlind = blind;
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
         buildLektorPrompt(lesson, promptMapOf(map), previousBlockers, ownerOf(job), blind),
@@ -552,6 +578,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       system,
       user: "Válaszolj kizárólag a kért JSON-nal.",
     });
+  // Spec 2026-09-24 (bank-ellenőr): a lektor-hívással párhuzamosan indul, az eredményágban várjuk be.
+  const bankCheck = job.step === "lektor" ? startBankVerifier(job, lektorBlind, providerFactory, keyConfigured) : undefined;
   try {
     if (reusedVisuals) {
       json = job.output?.lesson;
@@ -884,28 +912,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         logger.warn(`[STUDIO] A lektor eltérést talált a saját megoldásában, de nem adott blokkolót (${job.id}) — önellentmondó jelentés.`);
       }
 
-      // Spec 2026-09-19: late coverage gaps on chapters the previous round did not block are
-      // warnings — the reviewer must converge, not open a new front every round.
-      const priorBlockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
-      const convergence = applyLektorConvergence(classifyNotes(parsed.data.notes), priorBlockers, job.round);
-      if (convergence.downgraded.length) {
-        logger.warn(`[STUDIO] Lektor konvergencia (${job.id}, ${job.round}. kör): ${convergence.downgraded.length} késői fedettségi jegyzet figyelmeztetéssé minősítve`);
-      }
-      const notes = convergence.notes;
-      await store.saveNotes(job.id, notes, job.round);
-      const blockers = notes.filter((n) => n.blocking).length;
-      for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
-
       const fusion = isFusionMethodVersion(job.output?.methodVersion) || !!(job.output?.lesson as Lesson | undefined)?.experience;
-      // Spec 2026-09-19 (measured: the owner's 49-concept map failed at the limit on ONE quiz
-      // item, curate run b4d94132): when every remaining blocker is a bank item, rebuild only
-      // those items once more instead of rewriting the teaching or failing the lesson.
-      const blockingNotes = notes.filter((n) => n.blocking);
-      const bankOnly = blockingNotes.length > 0 && blockingNotes.every((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
-      // Mérve (run b5d07f3d, 2026-09-19): egyetlen banktétel-blokkolónál a szerzői kör a teljes
-      // tanítást újraírta, és 6 változatlan tartalmú csomag épült újra. Ha MINDEN blokkoló
-      // banktétel, a tanítás nem hibás → bármelyik körben a csak-bank javítás jön (jobonként
-      // egyszer); a szerzői újraírás csak tanítási blokkolóra jár.
       // Mérve (run 525b2797): a 2. csak-bank blokkoló (más kvíztétel) a körlimiten hibára zárta a
       // 77 perces leckét, mert a csak-bank kör jobonként egyszer járt. Tétel-szintű bankhibáért nem
       // dobunk el egy leckét: MAX_BANK_ONLY_ROUNDS csak-bank kör jár (a workflow látogatási
@@ -915,9 +922,50 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // animátor-látogatást kérte; a workflow-őr kivételt dobott, 43 perc munka „Váratlan hiba”
       // lett és a job „running”-ban maradt. A csak-bank kör csak a futó workflow keretén belül jár;
       // ha elfogyott, a lektor az alábbi ágon tiszta, okot megnevező hibával zár.
-      const bankOnlyRepair = fusion && bankOnly && bankOnlyRoundsUsed < MAX_BANK_ONLY_ROUNDS
+      const bankRepairPossible = fusion && bankOnlyRoundsUsed < MAX_BANK_ONLY_ROUNDS
         && workflowStepVisitsLeft("animator") > 0 && workflowStepVisitsLeft("lektor") > 0
         && !!(job.output?.lesson as Lesson | undefined)?.experience;
+
+      // Spec 2026-09-24 (bank-ellenőr): a hibák experience.* jegyzetként a csak-bank körbe mennek; ha az már
+      // nem jár, figyelmeztetésként tárolódnak (tétel-szintű bankhibáért a leckét nem buktatjuk).
+      const bankChecked = bankCheck ? await bankCheck : undefined;
+      let rawNotes: RawNote[] = parsed.data.notes;
+      if (bankChecked) {
+        rawNotes = mergeBankVerifierNotes(parsed.data.notes, bankChecked.notes, bankRepairPossible);
+        const previouslyCleared = Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : [];
+        job.output = {
+          ...job.output,
+          bankVerifierCleared: [...new Set([...previouslyCleared, ...bankChecked.cleared])].slice(-3000),
+          bankVerifier: { round: job.round, checked: bankChecked.checked, errors: bankChecked.notes.length, failedChunks: bankChecked.failedChunks },
+        };
+        logger.info(`[STUDIO] Bank-ellenőr (${job.id}, ${job.round}. kör): ${bankChecked.checked} tétel, ${bankChecked.notes.length} hiba`
+          + (bankChecked.notes.length && !bankRepairPossible ? " (figyelmeztetésként: csak-bank kör már nem jár)" : "")
+          + (bankChecked.failedChunks ? `, ${bankChecked.failedChunks} darab elmaradt` : "")
+          + (bankChecked.rejectedPaths.length ? `, ${bankChecked.rejectedPaths.length} ismeretlen útvonal eldobva` : ""));
+      }
+
+      // Spec 2026-09-19: late coverage gaps on chapters the previous round did not block are
+      // warnings — the reviewer must converge, not open a new front every round.
+      const priorBlockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
+      const convergence = applyLektorConvergence(classifyNotes(rawNotes), priorBlockers, job.round);
+      if (convergence.downgraded.length) {
+        logger.warn(`[STUDIO] Lektor konvergencia (${job.id}, ${job.round}. kör): ${convergence.downgraded.length} késői fedettségi jegyzet figyelmeztetéssé minősítve`);
+      }
+      const notes = convergence.notes;
+      await store.saveNotes(job.id, notes, job.round);
+      const blockers = notes.filter((n) => n.blocking).length;
+      for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
+
+      // Spec 2026-09-19 (measured: the owner's 49-concept map failed at the limit on ONE quiz
+      // item, curate run b4d94132): when every remaining blocker is a bank item, rebuild only
+      // those items once more instead of rewriting the teaching or failing the lesson.
+      const blockingNotes = notes.filter((n) => n.blocking);
+      const bankOnly = blockingNotes.length > 0 && blockingNotes.every((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
+      // Mérve (run b5d07f3d, 2026-09-19): egyetlen banktétel-blokkolónál a szerzői kör a teljes
+      // tanítást újraírta, és 6 változatlan tartalmú csomag épült újra. Ha MINDEN blokkoló
+      // banktétel, a tanítás nem hibás → bármelyik körben a csak-bank javítás jön (jobonként
+      // egyszer); a szerzői újraírás csak tanítási blokkolóra jár.
+      const bankOnlyRepair = bankRepairPossible && bankOnly;
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair) {
         return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
           { ...job.output, report: parsed.data, reportRound: job.round, blockers });

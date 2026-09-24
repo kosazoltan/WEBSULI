@@ -16,7 +16,7 @@ import {
   type PipelineStore,
 } from "../server/studio/step-runner";
 import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
-import { computeStepHash, MAX_AUTHOR_ROUNDS } from "../server/studio/pipeline";
+import { computeStepHash, MAX_AUTHOR_ROUNDS, MAX_BANK_ONLY_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { withRoleSkill } from "../server/studio/role-skills";
 import { visualWorld } from "../shared/lesson-visuals";
@@ -30,7 +30,7 @@ import { buildLessonExperience, type ExperienceCheckpoint } from "../server/stud
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
 import { executeWorkflow, workflowPhase, WorkflowWaiting, redactWorkflowError } from "../server/workflows/engine";
-import { BLIND_SOLVER_MODEL } from "../server/studio/blind-solver";
+import { BLIND_SOLVER_MODEL, sourceHashOf } from "../server/studio/blind-solver";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
 import { __resetRunsForTest, createRun, getRun, updateRun } from "../server/studio/one-step-progress";
@@ -1701,4 +1701,77 @@ test("(v) vizuális világ: a pedagógus rögzíti, a szerző fejezetei megkapj�
   assert.ok((await runPipelineStep("vis-bank", { ...bankDeps, store: deps.store })).ok);
   const built = deps.store.jobs.get("vis-bank")!.output?.lesson as { experience?: { theme: string } };
   assert.equal(built.experience?.theme, "meadow");
+});
+
+/* Spec 2026-09-24 (docs/specs/2026-09-24-bank-ellenor.md): a bank-ellenőr a lektor-lépésben. */
+async function bankVerifierSetup(id: string, extraOutput: Record<string, unknown>, verifierErrors: unknown[]) {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const sourceText = "1. Számold ki: 24 + 15!";
+  const base = makeDeps("");
+  base.store.maps.set("m1", { meta: { ...MAP_META, sourceText }, concepts });
+  const calls: Array<{ model: string; system: string }> = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub", model,
+    chat: async (messages: AIMessage[]) => {
+      const system = messages[0]?.content ?? "";
+      calls.push({ model, system });
+      const content = system.includes("TÁMOGATÓ SKILL: bank-verifier") ? JSON.stringify({ errors: verifierErrors }) : JSON.stringify({ notes: [] });
+      return { content, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  const blindSolutions = { sourceHash: sourceHashOf(sourceText), model: BLIND_SOLVER_MODEL, solutions: [{ task: "1.", answer: "39" }] };
+  base.store.seed({ id, mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version, blindSolutions, ...extraOutput } });
+  return { deps: { ...base, providerFactory }, store: base.store, calls, lesson };
+}
+
+const verifierCallsOf = (calls: Array<{ system: string }>) => calls.filter((c) => c.system.includes("TÁMOGATÓ SKILL: bank-verifier"));
+const QUIZ_ERROR = { path: "experience.quiz[3]", message: "Mi hamis: két igaz opció | Bizonyíték: 12 + 9 − 17 = 4 | Javítás iránya: 4" };
+
+test("bank-ellenőr: a lektor mellett fut; a talált banktétel-hiba csak-bank javító kört indít, kitalált útvonal nélkül", async () => {
+  const { deps, store, calls, lesson } = await bankVerifierSetup("bv-repair", {}, [QUIZ_ERROR, { path: "experience.quiz[9999]", message: "kitalált" }]);
+  const result = await runPipelineStep("bv-repair", deps);
+  assert.deepEqual(result.ok && result.next, { step: "animator", round: 1 }, JSON.stringify(result));
+  assert.equal(verifierCallsOf(calls).length, 1, "egy fejezet = egy bank-ellenőr hívás");
+  assert.equal(calls.filter((c) => !c.system.includes("TÁMOGATÓ SKILL: bank-verifier")).length, 1, "a lektor is fut");
+  const job = store.jobs.get("bv-repair")!;
+  const feedback = (job.output?.bankReview as { feedback: Array<{ note: { blockPath?: string; message: string } }> }).feedback;
+  assert.deepEqual(feedback.map((f) => f.note.blockPath), ["experience.quiz[3]"]);
+  assert.match(feedback[0].note.message, /^Bank-ellenőr: .*Javítás iránya: 4/);
+  const e = lesson.experience!;
+  assert.equal((job.output?.bankVerifierCleared as string[]).length, e.methods.length + e.tasks.length + e.quiz.length - 1);
+  assert.deepEqual(job.output?.bankVerifier, { round: 0, checked: e.methods.length + e.tasks.length + e.quiz.length, errors: 1, failedChunks: 0 });
+});
+
+test("bank-ellenőr: elfogyott csak-bank keretnél a hiba figyelmeztetés — a lecke nem bukik miatta", async () => {
+  const { deps, store } = await bankVerifierSetup("bv-late", { bankOnlyRepairRounds: MAX_BANK_ONLY_ROUNDS }, [QUIZ_ERROR]);
+  const job = store.jobs.get("bv-late")!;
+  job.round = MAX_AUTHOR_ROUNDS;
+  const result = await runPipelineStep("bv-late", deps);
+  assert.deepEqual(result.ok && result.next, { step: "gate", round: MAX_AUTHOR_ROUNDS }, JSON.stringify(result));
+  assert.equal(job.output?.blockers, 0);
+  const saved = store.notes.get("bv-late") ?? [];
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].subkind, "bank_check_late");
+  assert.equal(saved[0].blocking, false);
+});
+
+test("bank-ellenőr: vak megoldás nélkül nem fut; a korábban hibátlannak talált tételeket nem ellenőrzi újra", async () => {
+  const none = await bankVerifierSetup("bv-none", { blindSolutions: undefined }, [QUIZ_ERROR]);
+  none.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
+  await runPipelineStep("bv-none", none.deps);
+  assert.equal(verifierCallsOf(none.calls).length, 0);
+
+  const first = await bankVerifierSetup("bv-cache", {}, []);
+  await runPipelineStep("bv-cache", first.deps);
+  assert.equal(verifierCallsOf(first.calls).length, 1);
+  const job = first.store.jobs.get("bv-cache")!;
+  job.step = "lektor"; job.round = 1; job.status = "running";
+  await runPipelineStep("bv-cache", first.deps);
+  assert.equal(verifierCallsOf(first.calls).length, 1, "változatlan bank: nincs újabb bank-ellenőr hívás");
 });
