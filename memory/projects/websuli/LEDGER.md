@@ -479,3 +479,11 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Javítva (7 mért lelet):** grúz szó a definícióban → idegen írás-őr; aritmetikai őr hamis riasztásai (zárójel utáni „2 = 490”, „1/15 = 4 km”, „980 Ft : 2 = 490 Ft”) a valódi hibák elkapása mellett; a csak-bank kör túllépte a workflow keretét → 43 perc után „Váratlan hiba” + árva „running” job (most tiszta lektori hiba); a lektor újraoldja a forrásfeladatot, ellentmondásnál a tanítást jelöli; az ismétlődő kérdés hibája megnevezi a tételt.
 **Nyitott (modell-képesség):** a 9. feladat (kiskockás téglatest: 7×11×6 = 462, Réka 70, Janka 280) rész-kérdéseit a bank és a lektor nem vezette le; a lektor az ellentmondást jelzi, így hibás megoldás nem kerül ki, de a lecke megáll.
 **Tanulság:** a helyi élő futás az éles DB-t használja — egy Render-deploy induláskori takarítása lezárja a helyben futó jobot; élő próba alatt ne deployolj.
+
+## 2026-09-24 — magyarázó ábrák (PR #113, #114, merge e3a4b59)
+
+**Tulajdonosi jelzés:** „a holdciklushoz csak egy kört rajzolt, nem magyarázó ábrák készülnek”.
+**Gyökérok (bizonyított):** a `geometry` rajzoló egyetlen címke nélküli kör; a 09-19-es eszköz-kiváltás miatt példa mellett az ábra-modell nem futott (minden ábra a példa lépéseinek szövegdoboza); az ábra-modell a glm-flash volt.
+**Javítás:** új rajzolók (cycle valós holdfázissal, labeledShape téglatesttel, barChart, venn, bővített numberLine); ábra-modell Claude Opus 5.5 (tulajdonosi döntés), csak ábra-foltot ad, a program illeszti be; skill + SOUL; hibás foltnál egy újrakérés.
+**Mérés:** böngészőben 360/375/1280 px 0 átfedés/levágás, kontraszt ≥ 14:1; élő Opus-hívás 20–27 s, ~3k kimeneti token, 4/5 hibátlan. Spec: `docs/specs/2026-09-24-magyarazo-abrak.md`.
+**Nyitott:** 2. szelet (szabad SVG-illusztráció) és 4. szelet (ábra-minőségkapu, lektor-szempont) még nincs kész; teljes élő leckegyártás az új ábrákkal még nem futott.
