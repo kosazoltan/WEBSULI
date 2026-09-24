@@ -28,3 +28,10 @@ A lektormodell cseréje (grok-4.6 marad; a vak megoldó oldja fel a horgonyt). G
 ## Elfogadás
 - A hibás téglatest-leckén az új lektor blokkolót ad a tanításra a helyes értékkel — élőben mérve ✅.
 - Tesztek: `tests/blind-solver.test.ts`, runner: a vak megoldó egyszer fut, nem látja a leckét, a lektor megkapja, körönként gyorsítótár.
+
+## Élő mérés: új lecke teljes gyártása a vak megoldóval (saját, ismert megoldású feladatlap, 8 feladat / 23 részfeladat)
+- **Hiba 1 (javítva):** a `loadMap` a `meta`-t mezőnként rakta össze, a `sourceText` kimaradt → a vak megoldó élesben nem futott (az egységteszt a memóriatárolóval nem fogta meg; valódi DB-vel ellenőrizve).
+- **Futás (609 s, 1 kör):** vak megoldó 23 részfeladat, 22 helyes, 1 hibás (8b: „8. nap”, helyesen 7.) — a lektor ezt NEM vette át (23 saját megoldás, 0 eltérés); a tanítás hibátlan (kézzel ellenőrizve).
+- **Maradt a bankban (2 független Opus-ellenőrző a megoldókulcshoz):** ~9 tételhiba (lehetetlen adatú kvíz, hamis törtkivonás egy opcióban, fordított magyarázatok, igaz „rossz” opció) és rendszerszintű rubrikahiány: ~19 számolásos feladat nem követelte meg a végeredményt. → bank- és lektor-skill: a végeredmény külön kötelező csoport; a lecke kézzel javítva.
+- **Ábrák (javítva):** 16 karakteres ugrásfelirat-korlát → 24; a címke-őr a fogalmat szó szerint meg nem nevező ábrákat eldobta, 5 fejezet ábra nélkül maradt → a foltbeillesztő okkal elutasít (célzott újrakérés), a prompt kéri a szó szerinti megnevezést, a tartalék a címke-őr UTÁN fut. Ugyanezen a leckén utána: 0 elutasítás, 0 levett címke, 12/12 fejezetben ábra.
+- **Nyitott (javaslat):** a bank tételhibáit a lektor alacsony felidézéssel fogja; a két Opus-ellenőrző (a vak megoldással mint kulccsal) mindet megtalálta → külön „bank-ellenőr” lépés javasolt (költség- és időigény: ~1–2 perc, Opus).
