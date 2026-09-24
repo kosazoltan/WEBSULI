@@ -107,13 +107,19 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   const world = visualWorld(design?.world);
   owner.design = design;
   const outline = original.sections.map(s => ({ heading: s.heading, conceptIds: [...new Set(s.blocks.flatMap(b => "coversConceptIds" in b ? b.coversConceptIds : []))], plannedBlocks: s.blocks.map(b => b.kind), animationSuggestions: [] }));
+  // Mérve 2026-09-24: a térképre KÖZBEN felvett vagy visszakapcsolt kötelező fogalmat (tanári kiegészítés) a szerző nem
+  // címkézhette, mert csak a régi lecke azonosítói voltak engedélyezettek — a fedettségi kapu joggal buktatta.
+  const taught = new Set(outline.flatMap(s => s.conceptIds));
+  const added = corrected.concepts.filter(c => c.examWeight !== "extra" && !taught.has(c.localId));
+  if (added.length && outline.length) outline[outline.length - 1].conceptIds.push(...added.map(c => c.localId));
+  const addedLine = added.length ? ` Új fogalmak a térképen — tanítsd őket a témájuk szerinti fejezetben, a fogalom szavaival: ${added.map(c => `${c.localId} „${c.term}”`).join(", ")}.` : "";
   const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined);
   const gradeLine = owner.classroom !== undefined
     ? `Az évfolyam a tanár kifejezett kérésére ${owner.classroom}. osztály: a classroom mező ${owner.classroom} legyen, a nyelvezet és a mélység ehhez igazodjon.`
     : "Az évfolyamot a program már a forrásból állapította meg, ne változtasd.";
   const designLine = world ? ` Vizuális világ: ${world.name} (${world.mood}). Minden fejezet kapjon egy "emoji" mezőt ebből a készletből, fejezetenként mást: ${world.emojis.join(" ")}; a kulcskifejezéseket **…**-kal emeld ki.` : "";
   const lengthLine = instruction ? "A forrás tanítását ne hagyd ki; a terjedelmet a tanár kérése szabja meg." : "Ne rövidítsd vázlattá!";
-  const request = `${instruction ? `A TANÁR KÉRÉSE (ez a javítás célja, elsőbbséget élvez):\n${instruction}\n\n` : ""}A korábbi lecke forrással egyező tanítását, kidolgozott példáit és jó ábráit őrizd meg, a hiányokat és forráseltéréseket javítsd. A teljes forráspélda számait és levezetését tanítsd meg, ne csak kérdésben jelenjen meg! ${lengthLine} mapId=${original.mapId}. ${gradeLine}${designLine} Minden szakasz explain blokkal induljon. A Próba csak legalább 5 check blokk mellett kapcsolható be; máskülönben probaEnabled=false. A külön experience bankokat ne írd ki.\nKérés: ${instruction ?? "Négyoldalas fúziós módszer, teljes tanítás és változatos gyakorlás."}\nKorábbi lecke (adat):\n${JSON.stringify({ ...original, experience: undefined })}`;
+  const request = `${instruction ? `A TANÁR KÉRÉSE (ez a javítás célja, elsőbbséget élvez):\n${instruction}\n\n` : ""}A korábbi lecke forrással egyező tanítását, kidolgozott példáit és jó ábráit őrizd meg, a hiányokat és forráseltéréseket javítsd. A teljes forráspélda számait és levezetését tanítsd meg, ne csak kérdésben jelenjen meg! ${lengthLine} mapId=${original.mapId}. ${gradeLine}${designLine}${addedLine} Minden szakasz explain blokkal induljon. A Próba csak legalább 5 check blokk mellett kapcsolható be; máskülönben probaEnabled=false. A külön experience bankokat ne írd ki.\nKérés: ${instruction ?? "Négyoldalas fúziós módszer, teljes tanítás és változatos gyakorlás."}\nKorábbi lecke (adat):\n${JSON.stringify({ ...original, experience: undefined })}`;
   let candidate: Lesson | undefined;
   let previous: unknown;
   let correction = "";

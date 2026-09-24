@@ -53,3 +53,23 @@ test("EARS 4: a javító út a kért világot és különlegességeket adja a je
   assert.doesNotThrow(() => experienceSchema.parse(result.candidate.experience));
   assert.throws(() => experienceSchema.parse({ ...result.candidate.experience, flair: ["kitalált"] }), "a modell nem írhat kitalált effektet");
 });
+
+test("javítás: a térképre közben felvett kötelező fogalom engedélyezett és néven nevezett (mért 2026-09-24)", async () => {
+  const original = fusionFixture(); const e = standardFusionFixture().experience!;
+  const source = { subject: original.subject, classroom: original.classroom, concepts: [
+    { localId: "area", term: "terület", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const },
+    { localId: "c29", term: "írott emlékek", definition: "Írásban fennmaradt források.", examWeight: "core" as const },
+    { localId: "cx", term: "mellékes", definition: "Nem kötelező.", examWeight: "extra" as const },
+  ] };
+  let system = ""; let user = "";
+  await assert.rejects(buildStructuredImprovement(original, source, async (step, s, u) => {
+    if (step === "pedagogue") return { corrections: [] };
+    if (step === "lektor") return { notes: [] };
+    if (!system) { system = s; user = u; }
+    return original;
+  }, "Egészítsd ki az írott emlékekkel."));
+  assert.match(system, /c29/, "a szerző engedélyezett azonosítói között az új fogalom");
+  assert.match(user, /Új fogalmak a térképen[^\n]*c29 „írott emlékek”/);
+  assert.doesNotMatch(user, /cx „mellékes”/, "az extra fogalom nem kötelező");
+  void e;
+});
