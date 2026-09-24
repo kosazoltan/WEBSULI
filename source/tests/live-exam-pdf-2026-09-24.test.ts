@@ -65,3 +65,13 @@ test("élő futás 351e14cc (2026-09-24): előjeles szám és vegyes tört — h
   assert.deepEqual(falseArithmeticClaims("1 1/2 : 3/4 = 3/2 · 4/3 = 2"), []);
   assert.equal(falseArithmeticClaims("1 1/2 = 5/2").length, 1);
 });
+
+test("élő futás 68a5b500 (2026-09-24): címke-kettőspont és szóközös ezres tagolás — helyes állítás nem hiba", () => {
+  // Mérve: „15 nap: 60 : 15 = 4”-et „15 : 60 : 15”-nek, „12 000 : 4 = 3000”-et „000 : 4”-nek olvasta.
+  assert.deepEqual(falseArithmeticClaims("4 munkás 15 nap: 60 : 15 = 4"), []);
+  assert.deepEqual(falseArithmeticClaims("Egy munkásnak 5 nap: 60 : 5 = 12 munkás kell."), []);
+  assert.deepEqual(falseArithmeticClaims("A négy rész: 12 000 : 4 = 3000 Ft."), []);
+  assert.deepEqual(falseArithmeticClaims("8 000 – 2 000 = 6 000"), []);
+  assert.deepEqual(falseArithmeticClaims("12 000 : 4 = 300"), ["12 000 : 4 = 300 (helyesen: 3000)"]);
+  assert.deepEqual(falseArithmeticClaims("Két ár szerepel, ezért osztunk 2-vel: 980 Ft : 2 = 480 Ft."), ["980 : 2 = 480 (helyesen: 490)"], "a szóközös osztás mértékegység után továbbra is ellenőrzött");
+});
