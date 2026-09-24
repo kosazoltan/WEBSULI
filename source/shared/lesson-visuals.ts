@@ -8,7 +8,7 @@
  * kulcskifejezés-kiemelés, a bank témája, a runtime színei).
  */
 
-export const VISUAL_WORLD_IDS = ["candy", "space", "jungle", "ocean-kids", "meadow", "dojo", "arena", "magic"] as const;
+export const VISUAL_WORLD_IDS = ["candy", "space", "jungle", "ocean-kids", "meadow", "dojo", "arena", "magic", "princess"] as const;
 export type VisualWorldId = (typeof VISUAL_WORLD_IDS)[number];
 
 export type VisualWorld = {
@@ -39,7 +39,48 @@ export const VISUAL_WORLDS: readonly VisualWorld[] = [
     palette: { bg: "#0c1222", bg2: "#1a2744", surface: "#2d3f5f", ink: "#f0f9ff", accent: "#22d3ee", accent2: "#8b5cf6", key: "#fbbf24", keyInk: "#0c1222" } },
   { id: "magic", name: "Varázslat-iskola", mood: "lila-rózsaszín-arany, csillogó, mesés", emojis: ["✨", "🔮", "🪄", "🧙", "🌟", "🎩", "🦄", "📜"],
     palette: { bg: "#f3e8ff", bg2: "#fae8ff", surface: "#ffffff", ink: "#3b0764", accent: "#a855f7", accent2: "#f97316", key: "#fef08a", keyInk: "#3b0764" } },
+  // Spec 2026-09-24: egy 5. osztályos kislány édesanyjának kérése — fiatalos, rózsaszín, csillogó.
+  { id: "princess", name: "Hercegnő-kastély", mood: "rózsaszín, lila és arany, csillogó, vidám", emojis: ["👑", "💖", "🦄", "🌸", "✨", "🎀", "🏰", "💎"],
+    palette: { bg: "#fff0f7", bg2: "#f5e8ff", surface: "#ffffff", ink: "#4a1238", accent: "#db2777", accent2: "#a855f7", key: "#fbcfe8", keyInk: "#4a1238" } },
 ];
+
+/**
+ * Spec 2026-09-24 — lecke-szintű „különlegességek”: minden lecke 3 effektet kap a listából, hogy a
+ * tananyagok ne legyenek egyformák. Tisztán CSS (lesson-experience.css), mozgáscsökkentésnél és
+ * csendes módban kikapcsol. A modell nem írja: a kód választja (a séma enum), így nem hallucinálható.
+ */
+export const LESSON_FLAIRS = ["sparkles", "shimmer-keys", "float-emoji", "sticker-headings", "glow-cards", "pop-correct"] as const;
+export type LessonFlair = (typeof LESSON_FLAIRS)[number];
+
+/** Deterministic per seed (the lesson), different across lessons; no repeats. */
+export function pickLessonFlair(seed: string, count = 3): LessonFlair[] {
+  let hash = 2166136261;
+  for (const c of seed) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+  const pool = [...LESSON_FLAIRS];
+  const out: LessonFlair[] = [];
+  while (out.length < Math.min(count, LESSON_FLAIRS.length)) {
+    hash = Math.imul(hash ^ (hash >>> 13), 1274126177) >>> 0;
+    out.push(pool.splice(hash % pool.length, 1)[0]);
+  }
+  return out;
+}
+
+/**
+ * The teacher's request may ask for a look („rózsaszín, kislánynak, effektekkel”). Deterministic keyword
+ * match; undefined when the request says nothing about the look (the lesson keeps its own design).
+ */
+export function designFromInstruction(text: string | undefined, seed = ""): { world?: VisualWorldId; flair?: LessonFlair[] } | undefined {
+  if (!text) return undefined;
+  const t = text.toLocaleLowerCase("hu");
+  const world: VisualWorldId | undefined = /rózsaszín|pink|kislány|lányos|hercegnő|királylány/.test(t) ? "princess"
+    : /varázs|mesés/.test(t) ? "magic" : /űr|galaxis|bolygó/.test(t) ? "space" : /dzsungel|állat/.test(t) ? "jungle"
+    : /tenger|víz alatt|óceán/.test(t) ? "ocean-kids" : undefined;
+  const wantsEffects = /effekt|csillog|animáci|mozgó|figyelemfelkelt|változatos|látványos/.test(t);
+  if (!world && !wantsEffects) return undefined;
+  const base = pickLessonFlair(seed || text);
+  const flair = wantsEffects ? [...new Set<LessonFlair>(["sparkles", "shimmer-keys", "pop-correct", ...base])].slice(0, 4) : undefined;
+  return { ...(world ? { world } : {}), ...(flair ? { flair } : {}) };
+}
 
 export function visualWorld(id: string | undefined): VisualWorld | undefined {
   return VISUAL_WORLDS.find((w) => w.id === id);

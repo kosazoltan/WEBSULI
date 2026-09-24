@@ -1,5 +1,6 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { z } from "zod";
+import { LESSON_FLAIRS } from "./lesson-visuals";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
 export const LEGACY_LESSON_METHOD_VERSION = "fusion-7.4-1" as const;
@@ -11,7 +12,7 @@ export const LESSON_BANK_SIZES = { tasks: 45, taskRound: 15, quiz: 75, quizRound
 export const METHOD_KINDS = ["prediction", "gate", "myth", "sorting", "causeEffect", "conflict", "selfCheck", "popup", "timeline", "analogy"] as const;
 // Spec 2026-09-20 (színes tananyag): a 8 vizuális világ (shared/lesson-visuals.ts) a témák közé
 // került; a régi 6 a már közzétett leckék miatt marad.
-export const EXPERIENCE_THEMES = ["ocean", "forest", "sunset", "cosmos", "paper", "berry", "candy", "space", "jungle", "ocean-kids", "meadow", "dojo", "arena", "magic"] as const;
+export const EXPERIENCE_THEMES = ["ocean", "forest", "sunset", "cosmos", "paper", "berry", "candy", "space", "jungle", "ocean-kids", "meadow", "dojo", "arena", "magic", "princess"] as const;
 const text = (max = 1500) => z.string().trim().min(1).max(max);
 const binding = { id: text(64), sectionIndex: z.number().int().min(0), coversConceptIds: z.array(text(64)).min(1), sourceHash: z.string().regex(/^[a-f0-9]{64}$/).optional() };
 
@@ -56,6 +57,8 @@ export const bankPlanSchema = z.object({
 });
 export const experiencePacketSchema = z.object({
   version: z.enum([LEGACY_LESSON_METHOD_VERSION, PREVIOUS_LESSON_METHOD_VERSION, COMPACT_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION]), theme: z.enum(EXPERIENCE_THEMES),
+  // Spec 2026-09-24: lecke-szintű különlegességek (kód választja, a modell nem írja).
+  flair: z.array(z.enum(LESSON_FLAIRS)).max(4).optional(),
   methods: z.array(methodSchema).min(1).max(160),
   tasks: z.array(openTaskSchema).min(1).max(480),
   quiz: z.array(experienceQuizSchema).min(2).max(960),

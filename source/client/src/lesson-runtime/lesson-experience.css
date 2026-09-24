@@ -173,8 +173,37 @@
 [data-band][data-experience="dojo"][data-learning-age], [data-band][data-experience="dojo"] { --lesson-bg: #0f172a; --lesson-surface: #334155; --lesson-ink: #f1f5f9; --lesson-muted: #cbd5e1; --lesson-accent: #dc2626; --lesson-accent-ink: #fff; --lesson-line: #475569; --fusion-secondary: #facc15; --fusion-soft: #1e293b; --lesson-radius: 14px; --lesson-key: #22d3ee; --lesson-key-ink: #0f172a; --lesson-check-head: #facc15; --lesson-check-head-ink: #0f172a; background-image: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
 [data-band][data-experience="arena"][data-learning-age], [data-band][data-experience="arena"] { --lesson-bg: #0c1222; --lesson-surface: #2d3f5f; --lesson-ink: #f0f9ff; --lesson-muted: #94a3b8; --lesson-accent: #22d3ee; --lesson-accent-ink: #0c1222; --lesson-line: #3b4d6e; --fusion-secondary: #8b5cf6; --fusion-soft: #1a2744; --lesson-radius: 16px; --lesson-key: #fbbf24; --lesson-key-ink: #0c1222; --lesson-check-head: #34d399; --lesson-check-head-ink: #0c1222; background-image: linear-gradient(135deg, #0c1222 0%, #1a2744 100%); }
 [data-band][data-experience="magic"][data-learning-age], [data-band][data-experience="magic"] { --lesson-bg: #f3e8ff; --lesson-surface: #ffffff; --lesson-ink: #3b0764; --lesson-muted: #6b21a8; --lesson-accent: #a855f7; --lesson-accent-ink: #fff; --lesson-line: #e9d5ff; --fusion-secondary: #f97316; --fusion-soft: #fae8ff; --lesson-radius: 24px; --lesson-key: #fef08a; --lesson-key-ink: #3b0764; background-image: linear-gradient(135deg, #f3e8ff 0%, #fae8ff 50%, #fff7ed 100%); }
+[data-band][data-experience="princess"][data-learning-age], [data-band][data-experience="princess"] { --lesson-bg: #fff0f7; --lesson-surface: #ffffff; --lesson-ink: #4a1238; --lesson-muted: #86285e; --lesson-accent: #db2777; --lesson-accent-ink: #fff; --lesson-line: #fbcfe8; --fusion-secondary: #a855f7; --fusion-soft: #fce7f3; --lesson-radius: 26px; --lesson-key: #fbcfe8; --lesson-key-ink: #4a1238; background-image: radial-gradient(circle at 12% 8%, #fbcfe8 0, transparent 28%), radial-gradient(circle at 88% 18%, #e9d5ff 0, transparent 30%), linear-gradient(135deg, #fff0f7 0%, #f5e8ff 55%, #fff7e6 100%); }
 /* Kiemelt kulcskifejezés (**…**) és a „Miért?" kártya, fejezet-emoji. */
 [data-experience] .lesson-key { background: var(--lesson-key, #fde68a); color: var(--lesson-key-ink, inherit); padding: 0 .35em; border-radius: .45em; font-weight: 800; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 [data-experience] .lesson-block[data-depth="why"] { background: var(--fusion-soft); border-left-color: var(--fusion-secondary); border-radius: var(--lesson-radius); padding: 14px 16px; }
 [data-experience] .lesson-section-emoji { font-size: 1.35em; line-height: 1; margin-right: .15em; }
 [data-experience] .lesson-progress-step[data-emoji]::after { content: attr(data-emoji); font-size: .8em; }
+
+/* Spec 2026-09-24 — lecke-szintű különlegességek ([data-flair], shared/lesson-visuals.ts LESSON_FLAIRS).
+   Leckénként 3 választódik, így a tananyagok nem egyformák. Tisztán díszítő: mozgáscsökkentésnél és
+   csendes módban (a fenti :has(.fusion-view[data-quiet]) szabály) nincs animáció. */
+.lesson-sparkles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.lesson-sparkles span { position: absolute; font-size: clamp(14px, 2.4vw, 24px); opacity: 0; }
+.lesson-sparkles span:nth-child(1) { left: 6%; top: 18%; } .lesson-sparkles span:nth-child(2) { left: 46%; top: 8%; }
+.lesson-sparkles span:nth-child(3) { left: 78%; top: 62%; } .lesson-sparkles span:nth-child(4) { left: 22%; top: 74%; }
+.lesson-sparkles span:nth-child(5) { left: 62%; top: 30%; }
+[data-experience] .lesson-hero > :not(.lesson-sparkles) { position: relative; z-index: 1; }
+[data-flair~="sticker-headings"] .lesson-hero .lesson-heading { display: inline-block; background: var(--lesson-key, #fde68a); color: var(--lesson-key-ink, inherit); padding: .1em .45em; border-radius: .5em; transform: rotate(-1.2deg); box-shadow: 3px 3px 0 var(--lesson-accent); }
+[data-flair~="sticker-headings"] section[id^="section-"] > h2.lesson-heading { background-image: linear-gradient(transparent 62%, var(--lesson-key, #fde68a) 62%); background-repeat: no-repeat; background-size: 100% 100%; }
+[data-flair~="glow-cards"] .lesson-block { box-shadow: 0 0 0 2px var(--lesson-line), 0 8px 28px color-mix(in srgb, var(--lesson-accent) 22%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-flair~="sparkles"] .lesson-sparkles span { animation: lesson-twinkle 3.6s ease-in-out infinite; }
+  [data-flair~="sparkles"] .lesson-sparkles span:nth-child(2) { animation-delay: .7s; } [data-flair~="sparkles"] .lesson-sparkles span:nth-child(3) { animation-delay: 1.4s; }
+  [data-flair~="sparkles"] .lesson-sparkles span:nth-child(4) { animation-delay: 2.1s; } [data-flair~="sparkles"] .lesson-sparkles span:nth-child(5) { animation-delay: 2.8s; }
+  [data-flair~="shimmer-keys"] .lesson-key { background-image: linear-gradient(110deg, var(--lesson-key, #fde68a) 35%, #ffffffcc 50%, var(--lesson-key, #fde68a) 65%); background-size: 250% 100%; animation: lesson-shimmer 3.2s linear infinite; }
+  [data-flair~="float-emoji"] .lesson-section-emoji { display: inline-block; animation: lesson-float 2.8s ease-in-out infinite; }
+  [data-flair~="glow-cards"] .lesson-block { transition: transform .2s ease, box-shadow .2s ease; }
+  [data-flair~="glow-cards"] .lesson-block:hover { transform: translateY(-2px); }
+  [data-flair~="pop-correct"] .lesson-option[data-state="right"] { animation: lesson-pop .45s ease-out; }
+}
+[data-flair~="pop-correct"] .lesson-option[data-state="right"]::after { content: " 🎉"; }
+@keyframes lesson-twinkle { 0%, 100% { opacity: 0; transform: scale(.6) rotate(0); } 50% { opacity: .9; transform: scale(1.15) rotate(20deg); } }
+@keyframes lesson-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes lesson-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px) rotate(-6deg); } }
+@keyframes lesson-pop { 0% { transform: scale(1); } 45% { transform: scale(1.06); } 100% { transform: scale(1); } }

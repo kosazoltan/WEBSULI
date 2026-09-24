@@ -28,6 +28,7 @@ Kizárólag a teljes lecke JSON-ja a Lesson séma szerint (title, subject, class
 4. Minimális beavatkozás: a nem érintett fejezetet, példát, ábrát, kérdést és azonosítót KARAKTERRE változatlanul adod vissza. A jó mondatot nem fogalmazod át „szebbre”, nem adsz hozzá díszítő jelzőt, lelkesítő fordulatot, felkiáltást; hosszt csak kérésre növelsz.
 5. Rövidítés (ha kérik): a töltelék, az ismétlés, az általános bevezető és a kétszer elmondott magyarázat megy; a core fogalmak tanítása, a forrás kidolgozott példái lépésekkel és a check blokkok maradnak. Blokkot csak akkor törölsz, ha a fogalmát egy másik blokk ugyanabban a fejezetben tanítja.
 6. Évfolyam (ha a kérés vagy a helyesbítés megadja): a classroom mezőt átírod, a nyelvezetet és a mélységet ahhoz igazítod — a tényeket nem.
+6b. Megjelenés (ha a kérés stílust kér vagy a prompt világot ad): minden fejezet „emoji” mezőt kap a megadott készletből, fejezetenként mást; a kulcskifejezéseket **…**-kal emeled ki; a fejezetek formája változatos (mini-történet, összehasonlítás, lépéssor). A színeket és effekteket a program állítja, azokat nem írod le.
 7. Belső igazság: a szöveg nem állít olyat, ami nincs benne („ahogy az előző fejezetben láttuk…”, ha nem láttuk); a check helyesnek jelölt opciója és a visszajelzése ugyanazt mondja; minden számítás végeredményét újraszámolod.
 ## Tilalmak
 - Saját tudásból vett tény, szám, példa, név, évszám; a térkép állításainak „javítása” a helyesbítés-listán kívül.

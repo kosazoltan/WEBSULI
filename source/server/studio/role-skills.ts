@@ -91,6 +91,7 @@ Kizárólag JSON: { "sections": [{ "heading", "conceptIds": string[], "plannedBl
 2. Fejezetezz a cél-minta szerint: motiváló nyitás → szabályonként/fogalomcsoportonként explain → example (lépésekkel) → check → a forrás feladatai megoldva → leggyakoribb hibák → önellenőrzés. Legfeljebb 12 fejezet; egy fogalom egy fejezetbe.
 3. Minden fejezethez: legalább 1 fogalom; plannedBlocks a fenti ívben; 1–2 animationSuggestions (≤120 karakter, konkrét: „folyamatábra: 8+4·9−15:3 három lépése"); egy fejezet-emoji a javasolt világ készletéből; 2–4 keyPhrases (a fogalom neve vagy a szabály magja a térkép szavaival), amit a szerző kiemel. A visual.world mezőben a javasolt világot erősítsd meg, vagy válassz a listából a tantárgyhoz illőt.
 4. Tévhitek: csak a forrásból levezethető, létező conceptId-hoz kötve, tömören.
+4b. Megjelenés és változatosság: ha a TANÁR KÉRÉSE stílust vagy közönséget nevez meg (pl. „rózsaszín, kislánynak”), a világot ahhoz választod; különben a tantárgyhoz és a korosztályhoz. A fejezet-emoji fejezetenként más. Az effekteket (különlegességeket) a program választja leckénként — azokat nem tervezed.
 5. Lefedettség: minden core és a supporting ≥ 90 %-a szerepeljen valamelyik fejezet conceptIds listájában.
 ## Tilalmak
 - Nem létező, átírt vagy összevont fogalom-azonosító; üres conceptIds; ismétlődő fejezetcím; 13+ fejezet.
@@ -114,6 +115,7 @@ Kizárólag JSON, a Lesson séma szerint: title, subject, classroom, mapId, sour
 5. recap: 2–4 tömör pont. Minden nem-recap blokk coversConceptIds ≥ 1 valódi id.
 6. Javító körben: CSAK a jegyzetekben megnevezett hibát javítod; a nem érintett fejezeteket karakterre változatlanul adod vissza (a bank ezekre épül újra, ha változnak).
 7. Ha a prompt „TANÁR KÉRÉSE” vagy „FORRÁS-HELYESBÍTÉSEK” blokkot tartalmaz: a kérés szabja a terjedelmet/szintet/hangsúlyt, a helyesbítés-lista alakja a mérce (a térkép már azt tartalmazza).
+7b. Változatosság: a fejezetek ne egy kaptafára készüljenek — a példa lehet mini-történet, összehasonlítás, „tudtad?” érdekesség vagy lépéssor, a check kérdésformája is váltakozzon; a tény, a szám és a fogalom szavai nem változnak.
 8. Bejárás és belső igazság: a vázlat MINDEN fejezetét megírod, a középsőket is ugyanolyan mélységben; a szöveg nem hivatkozik olyanra, ami nincs a leckében („ahogy láttuk…”), a check helyes opciója és visszajelzése egyezik, minden végeredményt újraszámolsz.
 9. Kiemelés: a vázlat keyPhrases kifejezéseit a fejezet explain szövegében vagy recap pontjaiban **kettős csillaggal** emeld ki — pontosan a kifejezést, blokkonként ≤ 3, egész mondatot soha; kérdésben, opcióban, példa lépésében nem.
 ## Tilalmak
