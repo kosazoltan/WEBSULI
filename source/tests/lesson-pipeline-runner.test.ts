@@ -30,6 +30,7 @@ import { buildLessonExperience, type ExperienceCheckpoint } from "../server/stud
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
 import { executeWorkflow, workflowPhase, WorkflowWaiting, redactWorkflowError } from "../server/workflows/engine";
+import { BLIND_SOLVER_MODEL } from "../server/studio/blind-solver";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
 import { __resetRunsForTest, createRun, getRun, updateRun } from "../server/studio/one-step-progress";
@@ -575,6 +576,38 @@ test("lektor receives measured inflection scores from the current lesson, includ
   legacy.store.seed({ id: "legacy", mapId: "m1", step: "lektor", output: { lesson: GOOD_LESSON } });
   await runPipelineStep("legacy", legacy);
   assert.equal(legacy.calls[0].system.includes("A program pontozási mérése (adat):"), false);
+});
+
+test("lektor-tanítás 2026-09-24: a vak megoldó jobonként egyszer fut, a lektor független bizonyítékként kapja", async () => {
+  const base = makeDeps("");
+  base.store.maps.set("m1", { meta: { ...MAP_META, sourceText: "9. Marci, Gergő, Réka és Janka tömör téglatestet épített…" }, concepts: MAP_CONCEPTS });
+  const calls: Array<{ model: string; system: string; user: string }> = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub", model,
+    chat: async (messages: AIMessage[]) => {
+      calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
+      const content = model === BLIND_SOLVER_MODEL
+        ? JSON.stringify({ solutions: [{ task: "Téglatest: élek", answer: "7, 11, 6" }, { task: "Réka", answer: "NINCS ELÉG ADAT" }] })
+        : JSON.stringify({ solutions: [{ task: "Téglatest: élek", own: "7, 11, 6", lesson: "7, 11, 6", match: true }], notes: [] });
+      return { content, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  base.store.seed({ id: "blind", mapId: "m1", step: "lektor", output: { lesson: GOOD_LESSON } });
+  await runPipelineStep("blind", { ...base, providerFactory });
+  const solver = calls.filter((c) => c.model === BLIND_SOLVER_MODEL);
+  assert.equal(solver.length, 1, "a vak megoldó egyszer fut");
+  assert.doesNotMatch(solver[0].user + solver[0].system, /A sejt az élőlények/, "a vak megoldó NEM látja a leckét");
+  const lektor = calls.find((c) => c.model !== BLIND_SOLVER_MODEL)!;
+  assert.match(lektor.system, /FÜGGETLEN VAK MEGOLDÁSOK[^]*7, 11, 6/);
+  assert.doesNotMatch(lektor.system, /NINCS ELÉG ADAT"/, "a bizonytalan tétel kimarad");
+  const job = base.store.jobs.get("blind")!;
+  assert.equal((job.output?.blindSolutions as { solutions: unknown[] }).solutions.length, 1, "a vak megoldás a jobban tárolódik");
+  assert.equal((job.output?.report as { solutions?: unknown[] }).solutions?.length, 1, "a lektor önálló megoldása tárolódik");
+  // Második lektorkör: a gyorsítótár szolgál, nincs újabb vak megoldó hívás.
+  job.step = "lektor"; job.round = 1; job.status = "running";
+  await runPipelineStep("blind", { ...base, providerFactory });
+  assert.equal(calls.filter((c) => c.model === BLIND_SOLVER_MODEL).length, 1, "körönként nem fut újra");
 });
 
 test("kész, forrásfogalomhoz kötött ábrák: nulla animátorhívás, utána a lektor ténylegesen fut", async () => {

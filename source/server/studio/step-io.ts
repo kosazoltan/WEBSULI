@@ -14,6 +14,7 @@ import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals"
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
 import { ownerInstructionPromptBlock } from "../../shared/owner-instruction";
 import { correctionPromptLines, type SourceCorrection } from "./source-corrections";
+import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -73,6 +74,20 @@ export const outlineSchema = z.object({
 export type LessonOutline = z.infer<typeof outlineSchema>;
 
 export const lektorReportSchema = z.object({
+  /**
+   * Spec 2026-09-24 (lektor-tanítás a felvételi feladatlap öt futásából): a lektor a jegyzetek ELŐTT a lecke
+   * kidolgozott forrásfeladatait önállóan megoldja. Mérve: a 7×11×5 = 385-ös hibás tanítást öt futásban sem
+   * jelezte, mert a lecke részeredményéből indult. A lista tárolódik, így utólag ellenőrizhető.
+   */
+  solutions: z
+    .array(z.object({
+      task: z.string().trim().min(1).max(200),
+      own: z.string().trim().min(1).max(400),
+      lesson: z.string().trim().max(400).default(""),
+      match: z.boolean(),
+    }))
+    .max(40)
+    .optional(),
   notes: z
     .array(
       z.object({
@@ -445,9 +460,10 @@ export function buildLektorGradingEvidence(lesson: Lesson): string {
     "A program pontozási mérése (adat):\n" + JSON.stringify(evidence);
 }
 
-export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext): string {
+export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext, blind?: BlindSolutions): string {
   return [
     LESSON_METHOD_CONTRACT,
+    ...blindSolutionsPromptBlock(blind),
     ...(previousBlockers.length ? [
       // Spec 2026-09-19: convergence across author rounds — the reviewer sees what it blocked
       // last round, verifies the fixes, and does not open a new front on a clean chapter.
@@ -488,7 +504,9 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "- A core concept no block teaches is a coverage_gap/core blocker; a missing supporting concept is a coverage_gap warn.",
     "- Register, style and age-band problems are language / age warnings.",
     "- sourceOnly must be true.",
-    "- Report with JSON ONLY: { \"notes\": [{ \"kind\": \"source_conflict|coverage_gap|language|age\", \"subkind\": string?, \"message\": string, \"blockPath\": \"section.block\"? }] }",
+    "- ÖNÁLLÓ MEGOLDÁS ELŐSZÖR: mielőtt a lecke megoldását elolvasnád, a lecke minden kidolgozott forrásfeladatát (example blokk) a térkép quote-jaiból, minden adatot felhasználva MAGAD oldd meg; térbeli/szöveges feladatnál kövesd végig, ki mit hová tesz, mi a közös rész. A solutions tömbbe írd: task, own (a te végeredményed), lesson (a lecke végeredménye), match. match: false → kötelező blokkoló a tanítás blockPath-jával.",
+    "- Javítás iránya: mindig a kiszámolt, TELJES helyes válasz — listánál minden elem, rubrikánál a pontos required-szerkezet (minden kötelező elem külön csoport), opciónál a helyes érték. „Ne add mindkettőnek”, „bontsd szét”, „pl. …” hiányos lista nem elég.",
+    "- Report with JSON ONLY: { \"solutions\": [{ \"task\": string, \"own\": string, \"lesson\": string, \"match\": boolean }], \"notes\": [{ \"kind\": \"source_conflict|coverage_gap|language|age\", \"subkind\": string?, \"message\": string, \"blockPath\": \"section.block\"? }] }",
     "- Csak konkrét eltéréseket jelents, rövid indokkal és javítási céllal. Helyes tételekről ne írj egyenként beszámolót. Ne ismételd meg a leckét, a forrást vagy az ellenőrzési utasítást. Minden valódi hibát őrizz meg; a tömörség nem jelenthet kevesebb ellenőrzést.",
     "",
     "Lesson:",
