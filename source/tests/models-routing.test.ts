@@ -31,18 +31,21 @@ test("every studio step has a default model", () => {
     const expected: Record<string, string> = {
       extract: "openai", ocr: "openrouter", pedagogue: "anthropic", author: "openai",
       // Spec-változás 2026-09-24 (tulajdonosi döntés, docs/specs/2026-09-24-magyarazo-abrak.md): ábrák Claude Opus 5.5-ön.
-      animator: "anthropic", bank: "openrouter", lektor: "xai", gateHelper: "openrouter", quizPolish: "openrouter",
+      // Spec-változás 2026-09-24 (docs/specs/2026-09-24-bankmodell-valasztas.md): a bank gpt-5.6-luna → openai.
+      animator: "anthropic", bank: "openai", lektor: "xai", gateHelper: "openrouter", quizPolish: "openrouter",
     };
     assert.equal(providerForModel(model), expected[step], step);
   }
 });
 
-test("spec 2026-09-19: bank és ábrák glm-5.3-flash-en; a bank tartaléka a mentőmodell (spec §7o, mérve 2026-09-20); a tervkészítő Opus 5 közvetlen Anthropicon", () => {
-  // Spec-változás 2026-09-24 (tulajdonosi döntés): az ábrákat Claude Opus 5.5 tervezi, tartaléka a gpt-5.6-terra;
-  // a bank változatlanul glm-5.3-flash.
+test("spec 2026-09-24: bank gpt-5.6-luna-n (mért bankmodell-választás), ábrák Opus 5.5-ön; a bank tartaléka a mentőmodell (spec §7o, mérve 2026-09-20); a tervkészítő Opus 5 közvetlen Anthropicon", () => {
+  // Spec-változás 2026-09-24 (tulajdonosi döntés): az ábrákat Claude Opus 5.5 tervezi, tartaléka a gpt-5.6-terra.
+  // Spec-változás 2026-09-24 (docs/specs/2026-09-24-bankmodell-valasztas.md, tulajdonosi utasítás): a bank
+  // gpt-5.6-luna — mérve 9/144 bank-ellenőr hiba két futásban (glm-5.3-flash: 22/146, a javító kör nem konvergált).
   assert.equal(resolveStudioModel("animator", {}), "claude-opus-5-5");
   assert.equal(providerForModel("claude-opus-5-5"), "anthropic");
-  assert.equal(resolveStudioModel("bank", {}), "z-ai/glm-5.3-flash");
+  assert.equal(resolveStudioModel("bank", {}), "gpt-5.6-luna");
+  assert.equal(providerForModel("gpt-5.6-luna"), "openai");
   assert.equal(FALLBACK_MODELS.animator, "gpt-5.6-terra");
   // Spec §7o: a deepseek bank-tartalék 4/5-ször a mentőkörbe futott 2–10 perc után → egyből terra.
   assert.equal(FALLBACK_MODELS.bank, "gpt-5.6-terra");

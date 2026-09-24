@@ -49,3 +49,19 @@ Elsődleges: a legkisebb bank-ellenőr hibaarány, ha a fejezetek 100%-a elkész
 2. Mérő szkript (gitignored `*.tmp.mts`) a fenti módszerrel; eredmény a specbe.
 3. `server/ai/models.ts` bank + tartalék csere a mért győztesre; routing-tesztek; kapu; PR; merge; deploy.
 4. Teljes éles gyártás ugyanazzal a feladatlappal; `done` + bank-ellenőr hibaarány a naplóból.
+
+## Mérési eredmény (2026-09-24, lecke 68a5b500, 12 fejezet, jelöltek párhuzamosan)
+
+| Modell | Bank ideje | Hívás / bukott kísérlet | Bank-ellenőr hiba | Költség / bank |
+|---|---|---|---|---|
+| z-ai/glm-5.3-flash (eddigi) | 653 s | 21 / 9 | 22/146 (15%) | 0,05 USD |
+| **gpt-5.6-luna** (2 futás) | 130 / 143 s | 17 / 5, 16 / 4 | **9/144 (6%)** mindkétszer | **0,09 USD** |
+| gpt-5.6-terra | 176 s | 13 / 0 | 8/144 (6%) | 0,71 USD |
+| claude-sonnet-5 | 425 s | 18 / 4 | 17/146 (12%) | 1,16 USD |
+| z-ai/glm-5.3 | – | 26 / 15 | építési hiba (sémahiány) | 0,54 USD |
+| claude-haiku-4-5 | – | – | nem mérhető: „adaptive thinking is not supported on this model” (400) | – |
+
+Döntés (a döntési szabály szerint): **bank = gpt-5.6-luna** (a terrával azonos hibaarány, 8-szor olcsóbb,
+gyorsabb). A tartalék és a mentőkör változatlanul gpt-5.6-terra (0 bukott kísérlet — a legmegbízhatóbb; a
+korábbi mérés szerint olcsó második tartalék csak időt veszít). A luna bukásai főleg a mintaválasz-rubrika
+belső ellenőrzéséből jöttek (a következő kísérlet javítja), sémahiány egyszer.
