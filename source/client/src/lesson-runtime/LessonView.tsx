@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, Loader2, RotateCw } from "lucide-react";
 
 import { apiRequest } from "@/lib/queryClient";
 import { lessonSchema } from "@shared/lesson-schema";
+import { tolerantLessonInput } from "@shared/lesson-experience";
+import { reloadIfNewerBuild } from "@/lib/app-version";
 import { LessonRuntime } from "./LessonRuntime";
 
 /**
@@ -39,7 +42,7 @@ export function LessonView({ material }: { material: { id: string; title?: strin
     );
   }
 
-  const parsed = lessonSchema.safeParse(data?.lesson);
+  const parsed = lessonSchema.safeParse(tolerantLessonInput(data?.lesson));
 
   if (!parsed.success) {
     return (
@@ -53,10 +56,23 @@ export function LessonView({ material }: { material: { id: string; title?: strin
           {parsed.error.issues.length} hibás mező (pl.{" "}
           {parsed.error.issues[0]?.path.join(".") || "ismeretlen"}).
         </p>
+        <VersionSkewRecovery />
       </div>
     );
   }
 
   // The lesson id (not the html_files id) is what the Próba endpoint keys on.
   return <LessonRuntime lesson={parsed.data} lessonId={data?.lessonId} />;
+}
+
+/** Spec 2026-09-24: egy olvashatatlan lecke gyakran csak régi, memóriában maradt alkalmazáskód — egyszer frissítünk. */
+function VersionSkewRecovery() {
+  const [checking, setChecking] = useState(true);
+  useEffect(() => { let alive = true; void reloadIfNewerBuild().then((started) => { if (alive && !started) setChecking(false); }); return () => { alive = false; }; }, []);
+  if (checking) return <p className="text-xs text-muted-foreground">Új verzió keresése…</p>;
+  return (
+    <button type="button" onClick={() => window.location.reload()} className="inline-flex items-center gap-2 min-h-11 px-4 rounded-lg border text-sm font-semibold" data-testid="lesson-refresh">
+      <RotateCw className="w-4 h-4" /> Frissítés
+    </button>
+  );
 }
