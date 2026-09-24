@@ -487,3 +487,11 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Javítás:** új rajzolók (cycle valós holdfázissal, labeledShape téglatesttel, barChart, venn, bővített numberLine); ábra-modell Claude Opus 5.5 (tulajdonosi döntés), csak ábra-foltot ad, a program illeszti be; skill + SOUL; hibás foltnál egy újrakérés.
 **Mérés:** böngészőben 360/375/1280 px 0 átfedés/levágás, kontraszt ≥ 14:1; élő Opus-hívás 20–27 s, ~3k kimeneti token, 4/5 hibátlan. Spec: `docs/specs/2026-09-24-magyarazo-abrak.md`.
 **Nyitott:** 2. szelet (szabad SVG-illusztráció) és 4. szelet (ábra-minőségkapu, lektor-szempont) még nincs kész; teljes élő leckegyártás az új ábrákkal még nem futott.
+
+## 2026-09-24 — magyarázó ábrák 2. és 4. szelet (PR #115, #116, merge abc58ef)
+
+**4. szelet (#115):** gyenge ábra gépi felismerése (a példa lépéseit ismétlő szövegdoboz, puszta körvonal, ki nem rajzolódó ábra) → egy célzott újrakérés az ábrakészítőnek; lektor-szempont: a szöveget ismétlő ábra language-jegyzet.
+**2. szelet (#116):** szabad SVG-illusztráció (`shared/illustration-svg.ts`): allowlistes tisztítás, felirat a lecke szavaival, becsült elrendezés-ellenőrzés (telefonos betűméret, átfedés, kilógás); kliens újratisztít; elutasítás oka a célzott újrakérésbe.
+**Élő mérés (Opus 5.5):** 1. hívás 11,1 px-es illusztráció-betű telefonon → szerződés + ellenőrzés; 2. hívás 3 illusztráció (kódexlap, Homo sapiens csoportok, források), 0 elutasítás, ≥ 12,7 px. Számegyenes ugrásfeliratai összecsúsztak → javítva.
+**Tanulság:** a böngésző getBoundingClientRect-átfedése kétsoros SVG-feliratnál a betűdoboz mellékhatása lehet — képpel kell ellenőrizni; a skill-hossz két teszt is rögzíti (role-skills-everywhere 4800/6000, studio-role-skills < 5200).
+**Nyitott:** teljes élő leckegyártás az új ábrákkal még nem futott; a régi leckék ábrái csak újrageneráláskor frissülnek.
