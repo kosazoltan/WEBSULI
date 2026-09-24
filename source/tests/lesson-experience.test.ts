@@ -561,3 +561,37 @@ test("spec 2026-09-19: minden csoportot tartalmazó, kötőszó nélküli mintav
   assert.equal(evaluateOpenAnswer(result.tasks[0].sample, result.tasks[0]).score, 1);
   assert.equal(result.tasks[1].needsSentence, e.tasks[1].needsSentence, "a többi feladat érintetlen");
 });
+
+test("élő futás 67a05970 (2026-09-24): közös fogalmú fejezeteknél a kifogás csak a tételt tartalmazó csomaghoz megy — célzott javítás, nincs teljes újraépítés", async () => {
+  // Mérve: 9 kifogás után 91 tétel épült újra, mert a kifogás fogalom szerint minden olyan csomaghoz eljutott,
+  // amely ugyanazt a fogalmat tanítja; ott a tétel ismeretlen, a célzott mód kiesett, a csomag teljesen újraépült.
+  const lesson = standardFusionFixture();
+  const second = structuredClone(lesson.sections[0]); second.heading = "Második összefüggés ugyanarról";
+  lesson.sections.push(second);
+  const packets = [0, 1].map(sectionIndex => {
+    const e = structuredClone(standardFusionFixture().experience!);
+    for (const i of [...e.methods, ...e.tasks, ...e.quiz]) { i.sectionIndex = sectionIndex; i.coversConceptIds = ["area"]; }
+    if (sectionIndex) { e.methods.forEach(m => { if (m.kind === "gate") m.prompt = `Második fejezet: ${m.prompt}`; }); e.tasks.forEach(t => { t.q = `Második fejezet: ${t.q}`; }); e.quiz.forEach(q => { q.question = `Második fejezet: ${q.question}`; }); }
+    return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+  });
+  let calls = 0, checkpoint: ExperienceCheckpoint | undefined;
+  const save = async (cp: ExperienceCheckpoint) => { checkpoint = structuredClone(cp); };
+  const first = await buildLessonExperience(lesson, [], { call: async () => structuredClone(packets[calls++]), save });
+  assert.equal(calls, 2);
+  lesson.experience = first;
+  const target = first.quiz.findIndex(q => q.sectionIndex === 1);
+  const reviewFeedback = resolveBankReview(lesson, [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: `experience.quiz[${target}]`, message: "Bank-ellenőr: két igaz opció." }]);
+  assert.deepEqual(reviewFeedback[0].conceptIds, ["area"], "a kifogás fogalma mindkét fejezetben tanított");
+  calls = 0;
+  const users: string[] = [];
+  const repaired = await buildLessonExperience(lesson, [], { checkpoint, reviewFeedback, save, call: async (_system, user) => {
+    calls++; users.push(user);
+    return { quiz: [{ ...first.quiz[target], question: "Második fejezet: pontosított kérdés" }] };
+  } });
+  assert.equal(calls, 1, "csak a tételt tartalmazó csomag kap modellhívást");
+  assert.match(users[0], /TARTALMI LEKTORI JAVÍTÁS: csak ezek az ID-k módosíthatók/, "célzott javítómód, nem teljes csomag");
+  const strip = (items: Array<{ id: string; sourceHash?: string }>) => items.map(({ id: _id, sourceHash: _h, ...rest }) => rest);
+  assert.deepEqual(strip(repaired.quiz.filter(q => q.sectionIndex === 0)), strip(first.quiz.filter(q => q.sectionIndex === 0)), "a másik fejezet tételei változatlanok");
+  assert.deepEqual(strip(repaired.tasks), strip(first.tasks), "a nem kifogásolt feladatok változatlanok");
+  assert.equal(repaired.quiz.filter(q => q.question !== first.quiz[repaired.quiz.indexOf(q)]?.question).length, 1, "pontosan egy tétel változott");
+});
