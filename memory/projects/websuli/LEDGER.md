@@ -515,3 +515,10 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Ábrák:** a címke-őr eldobta a fogalmat körülíró feliratú ábrákat, a tartalék előtte futott → 5/12 fejezet ábra nélkül. Most: foltbeillesztő okkal elutasít + célzott újrakérés, prompt-szabály, tartalék a címke-őr után; ugrásfelirat 16 → 24. Eredmény: 12/12 fejezet ábrás, 375 px-en nincs levágás/átfedés/hScroll.
 **Bank:** 2 Opus-ellenőrző: lehetetlen adatú kvíz, hamis visszajelzések, igaz disztraktor, ~19 rubrika végeredmény nélkül — kézzel javítva; bank- és lektor-skill: végeredmény külön kötelező csoport.
 **Nyitott javaslat:** külön Opus „bank-ellenőr” lépés a vak megoldásokkal mint kulccsal (a lektor bank-recallja alacsony). Harness-csapda: `createRun` nélkül a wrapper „nem adott vissza teljes leckét” hibát dob sikeres jobra is.
+
+## 2026-09-24 — bank-ellenőr (PR #120, merge f9f48b2)
+
+**Mit:** a lektor-lépéssel párhuzamosan fejezetenként Opus 5.5 (`bank-verifier` támogató skill) ellenőrzi a bankot a vak megoldásokkal mint kulccsal; hibák → `experience.*` blokkoló → meglévő csak-bank kör; elfogyott keretnél `bank_check_late` figyelmeztetés; hibátlan tételek hash-e a jobban (`bankVerifierCleared`). Csak vak megoldás + bank esetén fut.
+**Élő mérés (38b1238d, 144 tétel):** lektor 0 → bank-ellenőr 29/31 ismert hiba + 8 új valódi hiba, 0 hamis riasztás, 27–43 s. A skill v2-t a mérés hozta: disztraktor-átszámolás (más szavakkal igaz), minden KIÍRT művelet ellenőrzése a hibás opciókban is, szinonimával kiváltható végeredmény-csoport. A 8 új hiba (kvíz 10, 30, 46, 53, 55, 67, 71, 74) a közzétett leckében javítva, élő API-n ellenőrizve (mentés: scratchpad `lesson-38b1238d.pre-bankcheck.backup.json`).
+**Tanulság:** a találati arány futásonként ingadozik — egy futás nem teljes lefedés; a pontosság stabil.
+**Mellék:** a GitLab/Supabase/Sentry pluginek kikapcsolva a globális settings.json-ban (tulajdonosi kérés).
