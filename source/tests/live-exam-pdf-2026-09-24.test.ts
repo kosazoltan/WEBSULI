@@ -10,6 +10,10 @@ test("aritmetikai őr: a kifejezés közepéről induló olvasat és a hányad =
   assert.deepEqual(falseArithmeticClaims("Az átlag: (500 + 480) : 2 = 490 Ft."), []);
   assert.deepEqual(falseArithmeticClaims("(10 + 5) : 2 = 7,5"), []);
   assert.deepEqual(falseArithmeticClaims("A teljes út 1/15 = 4 km, tehát 15 · 4 = 60 km."), []);
+  assert.deepEqual(falseArithmeticClaims("Két ár szerepel, ezért osztunk 2-vel: 980 Ft : 2 = 490 Ft."), [], "mért: run e79ab9da");
+  assert.deepEqual(falseArithmeticClaims("Az út 90 km / 2 = 45 km."), []);
+  assert.deepEqual(falseArithmeticClaims("Ezért 980 Ft : 2 = 480 Ft."), ["980 : 2 = 480 (helyesen: 490)"], "mértékegységgel is elkapja a valódi hibát");
+  assert.deepEqual(falseArithmeticClaims("500 Ft + 480 Ft : 2 = 490 Ft"), [], "hosszabb, mértékegységes láncot nem ítél meg");
   // A valódi hibát továbbra is elkapja.
   assert.deepEqual(falseArithmeticClaims("3 · 410 = 1320 Ft"), ["3 · 410 = 1320 (helyesen: 1230)"]);
   assert.deepEqual(falseArithmeticClaims("12 · 2 = 48"), ["12 · 2 = 48 (helyesen: 24)"]);
