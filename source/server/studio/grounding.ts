@@ -1,4 +1,5 @@
 import type { MapConcept } from "./coverage";
+import { renderedVisualTexts } from "../../shared/lesson-visual-params";
 
 /**
  * #196 — MEGALAPOZOTTSÁG: a `coversConceptIds` címke állítás, nem bizonyíték.
@@ -154,11 +155,9 @@ export function blockText(block: Record<string, unknown>): string {
     const v = block[key];
     if (Array.isArray(v)) parts.push(...v.filter((x): x is string => typeof x === "string"));
   }
-  // ProcessAnim renders its steps; arbitrary hidden animation metadata is not evidence.
-  if (block.kind === "animate" && block.animKind === "process" && block.params && typeof block.params === "object") {
-    const steps = (block.params as Record<string, unknown>).steps;
-    if (Array.isArray(steps)) parts.push(...steps.filter((x): x is string => typeof x === "string"));
-  }
+  // The renderer's visible text is evidence (process steps, timeline events, phase names, illustration
+  // labels…); arbitrary hidden animation metadata is not. Spec 2026-09-24: every kind, not only process.
+  if (block.kind === "animate" && typeof block.animKind === "string") parts.push(...renderedVisualTexts(block.animKind, block.params));
   // The runtime displays these fields inside try.spec; ids/hidden answers are not evidence.
   if (block.kind === "try" && block.spec && typeof block.spec === "object") {
     const spec = block.spec as Record<string, unknown>;

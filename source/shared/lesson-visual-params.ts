@@ -132,3 +132,30 @@ export const VISUAL_PARAMS_CONTRACT = [
   'illustration — szabad SVG-rajz, CSAK ha a fenti fajták nem mutatják a lényeget (pl. Stonehenge kőkörei, egy sejt részei, a Nap–Föld–Hold helyzete): {"svg":"<svg viewBox=\\"0 0 400 260\\" xmlns=\\"http://www.w3.org/2000/svg\\">…</svg>"}. Csak alap alakzatok (path, circle, ellipse, rect, line, polyline, polygon), text/tspan, g, defs, linearGradient/radialGradient, marker; nincs style, script, kép, link. Szöveg és vonal: fill/stroke="currentColor"; kitöltés közepes telítettségű szín. Minden felirat szava szerepeljen a leckében; font-size ≥ 16 a viewBox 400 szélességénél (arányosan: szélesség/25); a feliratok ne fedjék egymást (sortávolság ≥ 1,3 × betűméret, becsült szélesség ≈ 0,55 × betűméret × betűszám), ne lógjanak ki a viewBoxból; transform nélkül; ≤ 30 000 karakter.',
   'timeline — {"events":["i. e. 776: első olimpia","1000: István koronázása"]} (≥ 2 esemény, időrendben). process — {"steps":["…","…"]} CSAK valódi eljárásra (2–8 lépés), SOHA nem a példa lépéseinek szó szerinti ismétlésére.',
 ].join("\n");
+
+/**
+ * Spec 2026-09-24 (élő mérés, „időszámítás” lecke): a címke-őr (grounding.blockText) animate blokknál csak
+ * a captiont és a process lépéseit látta — az új fajták KIRAJZOLT szövegét (idővonal-események, fázisnevek,
+ * halmaznevek, illusztráció-feliratok) nem, ezért 8 fogalomcímkét levett és egy ábra kiesett. Ez a függvény
+ * pontosan azt a szöveget adja vissza, amit a rajzoló megjelenít — a rejtett metaadat továbbra sem bizonyíték.
+ */
+export function renderedVisualTexts(animKind: string, params: unknown): string[] {
+  const p = (params && typeof params === "object" ? params : {}) as Record<string, unknown>;
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const str = (v: unknown) => (typeof v === "string" ? [v] : []);
+  const field = (v: unknown, key: string) => (Array.isArray(v) ? v.flatMap((x) => (x && typeof x === "object" ? str((x as Record<string, unknown>)[key]) : [])) : []);
+  switch (animKind) {
+    case "process": return strings(p.steps);
+    case "timeline": return strings(p.events);
+    case "wordBuilder":
+    case "sentenceParts": return strings(p.parts);
+    case "map": return field(p.spots, "label");
+    case "cycle": return [...str(p.center), ...field(p.phases, "label"), ...field(p.phases, "note")];
+    case "barChart": return [...field(p.bars, "label"), ...str(p.unit)];
+    case "venn": return [...strings(p.sets), ...str(p.universe), ...Object.values((p.regions ?? {}) as Record<string, unknown>).filter((v): v is string => typeof v === "string")];
+    case "numberLine": return [...field(p.marks, "label"), ...field(p.jumps, "label")];
+    case "labeledShape": return [...["width", "height", "depth", "radius"].flatMap((k) => str(p[k])), ...str(p.note)];
+    case "illustration": { const check = sanitizeIllustration(p.svg); return check.ok ? check.labels : []; }
+    default: return [];
+  }
+}

@@ -62,3 +62,9 @@ Fotó/képgenerálás (pixeles AI-kép); a meglévő leckék tömeges újragener
 - Az elutasított ábrák oka a célzott újrakérésbe kerül.
 - Élő mérés (Opus 5.5, „időszámítás”): 1. hívás 3 illusztráció, 11,1 px-es betű telefonon (böngészőben mérve) → szerződés: font-size ≥ 16 / 400 szélesség + elrendezés-ellenőrzés; 2. hívás: 3 illusztráció, 0 elutasítás, telefonon min. 12,7 px, nincs levágás. A böngésző „átfedése” a kétsoros feliratoknál a betűdoboz mellékhatása volt (képen ellenőrizve: nincs valódi átfedés).
 - Számegyenes: tíz azonos „1 évszázad” ugrásfelirat egymásra csúszott → ütközéskor egy sorral feljebb, ≥ 3 azonos felirat csak egyszer; 375 px-en 0 átfedés.
+
+## Utójavítás — címke-őr és feliratelrendezés (élő mérés, „időszámítás” lecke frissítése)
+- **Címke-őr:** `grounding.blockText` animate blokknál csak a captiont és a process lépéseit tekintette bizonyítéknak → az új fajták kirajzolt szövege (idővonal-esemény, fázisnév, halmaznév, illusztráció-felirat) nem számított, 8 fogalomcímke lekerült, egy idővonal kiesett. Javítás: `renderedVisualTexts` — pontosan a megjelenített szöveg bizonyíték, rejtett metaadat továbbra sem. Utána: 0 levett címke, 10 ábra, minden fejezetben van.
+- **Körforgás:** a 45°-os „Növő hold” 375 px-en kilógott → oldalt rövidebb sorok, becsült szélességgel beljebb húzva.
+- **Számegyenes:** két szomszédos jelölés felirata összeért → ütközéskor új sor, a rajz magassága igazodik.
+- Mérés 360 és 375 px-en: mindkét próbaleckén 0 levágás, 0 átfedés, legkisebb betű 11,8 px (360) / ≥ 12 px (375).
