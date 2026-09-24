@@ -73,3 +73,18 @@ test("régi kliens: az ismeretlen ábrafajtájú blokk kimarad, a lecke többi r
   assert.deepEqual(out.sections[0].blocks.map((b) => (b as { animKind?: string }).animKind ?? b.kind), ["explain", ANIM_KINDS[0]]);
   assert.equal(dropUnknownAnimateBlocks(null), null);
 });
+
+test("címke-őr (élő mérés: 8 levett címke, egy kiesett idővonal): az ábra KIRAJZOLT szövege bizonyíték, a rejtett metaadat nem", async () => {
+  const { stripUngroundedAnimateLabels } = await import("../server/studio/grounding");
+  const { renderedVisualTexts } = await import("../shared/lesson-visual-params");
+  const concepts = [{ localId: "c12", term: "őskor", examWeight: "core" as const }, { localId: "c13", term: "középkor", examWeight: "core" as const }];
+  const lesson = { sections: [{ blocks: [
+    { kind: "animate", animKind: "timeline", params: { events: ["kb. Kr. e. 5000: az őskor vége", "1492: Amerika felfedezése – a középkor vége"] }, caption: "A történelmi korok határai időrendben.", coversConceptIds: ["c12", "c13"] },
+    { kind: "animate", animKind: "geometry", params: { shape: "circle", label: "őskor középkor" }, caption: "Egy kör a rajzon, ennyi.", coversConceptIds: ["c12"] },
+  ] }] };
+  const out = stripUngroundedAnimateLabels(lesson, concepts);
+  assert.deepEqual((out.lesson.sections[0].blocks[0] as { coversConceptIds: string[] }).coversConceptIds, ["c12", "c13"], "az idővonal eseményei megalapozzák a címkét");
+  assert.equal(out.lesson.sections[0].blocks.length, 1, "a geometry rejtett label-je nem bizonyíték — a címkétlen ábra kiesik");
+  assert.deepEqual(renderedVisualTexts("cycle", { center: "Föld", phases: [{ label: "Újhold", note: "nem látszik" }] }), ["Föld", "Újhold", "nem látszik"]);
+  assert.deepEqual(renderedVisualTexts("illustration", { svg: '<svg viewBox="0 0 10 10"><text x="1" y="5">kódex</text></svg>' }), ["kódex"]);
+});

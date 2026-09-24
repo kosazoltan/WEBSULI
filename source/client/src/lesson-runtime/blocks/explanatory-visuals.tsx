@@ -104,9 +104,16 @@ export function CycleAnim({ params, caption }: AnimProps) {
         )}
         {p.phases.map((phase, i) => {
           const { x, y, a } = at(i);
-          const lx = cx + (R + node + 14) * Math.cos(a), ly = c + (R + node + 16) * Math.sin(a);
+          const ly = c + (R + node + 16) * Math.sin(a);
           const anchor = Math.abs(Math.cos(a)) < 0.3 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
-          const lines = twoLines(phase.label, 9);
+          // Élő mérés (375 px, 8 fázis): a 45°-os „Növő hold” kilógott. Oldalt rövidebb sorok, és ha a becsült
+          // szélesség (félkövér ≈ 0,62 em/betű) így sem fér ki, a felirat beljebb csúszik.
+          const lines = twoLines(phase.label, anchor === "middle" ? 9 : 6);
+          const widest = Math.max(...lines.map((line) => line.length * 16 * 0.62));
+          let lx = cx + (R + node + 14) * Math.cos(a);
+          if (anchor === "start") lx = Math.min(lx, W - 4 - widest);
+          else if (anchor === "end") lx = Math.max(lx, 4 + widest);
+          else lx = Math.min(W - 4 - widest / 2, Math.max(4 + widest / 2, lx));
           const color = PALETTE[i % PALETTE.length];
           return (
             <g key={i}>
@@ -347,9 +354,20 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
     }
     return { j, i, x0, x1, h, label: null };
   });
+  // Élő mérés (375 px): a 10-es és 30-as jelölés felirata („1 évtized”, „1 emberöltő”) összeért. Ütközéskor
+  // a jelölés felirata egy sorral lejjebb kerül, a rajz magassága ehhez igazodik.
+  const markRows: Array<{ x0: number; x1: number; row: number }> = [];
+  const markLabels = (p.marks ?? []).map((m) => {
+    if (!m.label) return { m, label: null };
+    const cx = inside(x(m.value), m.label, 14), half = (m.label.length * 14 * 0.6) / 2;
+    const row = [0, 1, 2].find((r) => !markRows.some((b) => b.row === r && Math.min(b.x1, cx + half) - Math.max(b.x0, cx - half) > -4)) ?? 2;
+    markRows.push({ x0: cx - half, x1: cx + half, row });
+    return { m, label: { x: cx, y: base + 46 + row * 21 } };
+  });
+  const height = 124 + Math.max(0, ...markRows.map((b) => b.row)) * 21;
   return (
     <figure className={FRAME} data-anim="numberLine">
-      <svg viewBox={`0 0 ${W} 124`} className="w-full h-auto max-w-lg mx-auto block" role="img" aria-label={caption}>
+      <svg viewBox={`0 0 ${W} ${height}`} className="w-full h-auto max-w-lg mx-auto block" role="img" aria-label={caption}>
         <line x1={pad - 8} y1={base} x2={W - pad + 10} y2={base} stroke="currentColor" strokeWidth="2" />
         <path d={`M${W - pad + 10} ${base} l-8 -5 v10 z`} fill="currentColor" />
         {p.highlightTo !== undefined && (
@@ -367,10 +385,10 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
             {label && <text x={label.x} y={label.y} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">{j.label}</text>}
           </g>
         ))}
-        {(p.marks ?? []).map((m, i) => (
+        {markLabels.map(({ m, label }, i) => (
           <g key={`m${i}`}>
             <circle cx={x(m.value)} cy={base} r={5.5} fill={ACCENT} stroke="#ffffff" strokeWidth="1.5" />
-            {m.label && <text x={inside(x(m.value), m.label, 14)} y={base + 46} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">{m.label}</text>}
+            {label && <text x={label.x} y={label.y} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">{m.label}</text>}
           </g>
         ))}
       </svg>
