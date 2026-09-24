@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { assertWorkflowStep, workflowDefinition, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
+import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
 import { auditWorkflow, findingsFromError, knownFinding, mergeFindings } from "./learning";
 import { runtimePrompt } from "../../shared/runtime-knowledge";
@@ -28,6 +28,11 @@ export class WorkflowWaiting extends Error {
   constructor(message: string, readonly stepCompleted = false) { super(message); }
 }
 export const workflowMode = () => context.getStore()?.record.view.definition.mode;
+/** Remaining content visits of a step in the running workflow; Infinity outside a production run. */
+export const workflowStepVisitsLeft = (id: string) => {
+  const view = context.getStore()?.record.view;
+  return view ? workflowVisitsLeft(view, id) : Infinity;
+};
 export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version ?? preparationSkill.getStore()?.snapshot.version;
 export const workflowSkillPrompt = () => {
   const view = context.getStore()?.record.view;

@@ -33,3 +33,15 @@ test("kivonatoló: forrásban nem szereplő idegen írásrendszerű betű célzo
   assert.match(JSON.stringify(repairInput), /idegen írásrendszerű betű/);
   assert.equal(concepts[0].definition, "Olyan számot kell keresni, amelynek harmada kétjegyű.");
 });
+
+test("workflow-keret: a hátralévő tartalmi látogatás mérhető (a csak-bank döntés ehhez igazodik)", async () => {
+  const { workflowDefinition, workflowVisitsLeft } = await import("../shared/lesson-workflow");
+  const { workflowStepVisitsLeft } = await import("../server/workflows/engine");
+  const visit = (step: string) => ({ step, attempt: 1, startedAt: 0, finishedAt: 0, state: "done" as const, cacheHits: 0 });
+  const run = { id: "r", definition: workflowDefinition("upload"), state: "running" as const, createdAt: 0, updatedAt: 0, revision: 0,
+    visits: ["author", "animator", "lektor", "author", "animator", "lektor", "author", "animator", "lektor", "animator"].map(visit) };
+  assert.equal(workflowVisitsLeft(run, "animator"), 0, "4 animátor-látogatás után nincs több");
+  assert.equal(workflowVisitsLeft(run, "author"), 0);
+  assert.equal(workflowVisitsLeft(run, "banks"), Infinity, "a módban nem létező lépés nem korlát");
+  assert.equal(workflowStepVisitsLeft("animator"), Infinity, "workflow-kontextuson kívül nincs keret");
+});

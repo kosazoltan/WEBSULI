@@ -1411,6 +1411,31 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   assert.match(deps.store.jobs.get("bank-only")!.error ?? "", /tartalmi javítást kér/);
 });
 
+test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél nincs csak-bank kör — tiszta lektori hiba, nem kivétel", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.3", message: "Réka és Janka is 273 kiskockát épített." };
+  const deps = makeDeps(JSON.stringify({ notes: [bankBlocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  // Three author rounds (r0–r2) and one bank-only round (r3) already used 4 animator visits.
+  deps.store.seed({ id: "budget", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS + 1, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version, bankOnlyRepairRounds: 1 } });
+  const { store } = memoryWorkflows();
+  // The work ends with a marker error: anything else (e.g. „Elfogyott a lépés javítási kerete”) fails the test.
+  await assert.rejects(executeWorkflow(store, { id: "budget-run", owner: "test", mode: "studio" }, async () => {
+    for (const step of ["pedagogue", "author", "animator", "lektor", "author", "animator", "lektor", "author", "animator", "lektor", "animator"]) await workflowPhase(step);
+    const result = await runPipelineStep("budget", deps);
+    assert.equal(result.ok, false, `nincs 5. animátor-látogatás: ${JSON.stringify(result)}`);
+    throw new Error("teszt-vég: a lektor döntött");
+  }), /teszt-vég: a lektor döntött/);
+  const job = deps.store.jobs.get("budget")!;
+  assert.equal(job.status, "error");
+  assert.match(job.error ?? "", /tartalmi javítást kér: .*273/);
+});
+
 test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jön, ha minden blokkoló banktétel — nincs szerzői újraírás", async () => {
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);

@@ -60,7 +60,7 @@ import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBank
 import { skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
+import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 
@@ -821,7 +821,12 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // dobunk el egy leckét: MAX_BANK_ONLY_ROUNDS csak-bank kör jár (a workflow látogatási
       // keretén belül), utána a limit dönt.
       const bankOnlyRoundsUsed = typeof job.output?.bankOnlyRepairRounds === "number" ? job.output.bankOnlyRepairRounds : (job.output?.bankOnlyRepairRound ? 1 : 0);
+      // Élő mérés 2026-09-24 (run 29a13b45): három szerzői kör után a 2. csak-bank kör az 5.
+      // animátor-látogatást kérte; a workflow-őr kivételt dobott, 43 perc munka „Váratlan hiba”
+      // lett és a job „running”-ban maradt. A csak-bank kör csak a futó workflow keretén belül jár;
+      // ha elfogyott, a lektor az alábbi ágon tiszta, okot megnevező hibával zár.
       const bankOnlyRepair = fusion && bankOnly && bankOnlyRoundsUsed < MAX_BANK_ONLY_ROUNDS
+        && workflowStepVisitsLeft("animator") > 0 && workflowStepVisitsLeft("lektor") > 0
         && !!(job.output?.lesson as Lesson | undefined)?.experience;
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair) {
         return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
