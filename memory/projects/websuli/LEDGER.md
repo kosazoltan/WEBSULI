@@ -449,3 +449,13 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Végrehajtás:** a térképen négy nem-történelmi kiegészítő fogalom `extra` súlyt kapott (c10 100 év emberöltőkben, c18 teremtéstörténet, c20 az evolúció bizonyítékai, c23 a rasszok felsorolása; előtte supporting/supporting/core/supporting — visszaállítható). Utána a termelési javító út (javítási rekord 00cbfc38, 428 s) a tömörítési kéréssel, majd `applyTrackedImprovement` (mentés cb0b0d30).
 
 **Visszaolvasás (éles DB + élő API):** lecke v3, 5. o., 12 → 6 fejezet (időszámítás, időegységek, korok, az ember kialakulása röviden, kódex/iniciálé/pergamen/antik, források), látható tanítási szöveg ~650 szó (tanítás JSON 18 901 → 9 688 kar.), bank 45/75; bódex 0, Sany 0 / Samu, a vértesszőlősi előember; 1 évszázad = 100 év.
+
+## 2026-09-24 — rózsaszín Hercegnő-kastély világ, leckénként változó különlegességek; a lecke kiegészítése (PR #106, #107)
+
+**Kérés:** a Homo sapiens alfajai és az írott/szóbeli emlékek (fajták, rögzülés) a leckébe; fiatalos, rózsaszín, figyelemfelkeltő design effektekkel egy 5. osztályos kislánynak; a változatosság a skillekbe; újragenerálás.
+
+**Kód:** `princess` világ, `LESSON_FLAIRS` (6 CSS-effekt, leckénként 3, determinisztikus; mozgáscsökkentésnél/csendes módban ki), `designFromInstruction`, `experience.flair` (séma-enum, a modell nem írhatja), skillek (tervkészítő, szerző, tananyagjavító). Mért hiba a javító úton: a térképre közben felvett fogalmat a szerző nem címkézhette → most engedélyezett és néven nevezett (d1894a8). Élő mérés: a csillogás a címre lógott (375/800 px) → #107.
+
+**Adat:** térkép 2c43327f: c23 (Homo sapiens sapiens csoportjai) extra → supporting; új tanári kiegészítés c29 „írott emlékek”, c30 „szóbeli emlékek” (source_ref „Tanári kiegészítés 2026-09-24”, verbatim_reason `owner:addition`). Lecke: javítási rekord f04dbc06 (418 s, 0 blokkoló), alkalmazva (mentés 6f2f6fbe).
+
+**Verifikáció:** élő API: theme princess, flair sparkles/shimmer-keys/pop-correct/float-emoji; képernyőkép websuli.vip/preview/739ec478 (800 és 375 px): rózsaszín háttér, csillogás a fejlécben, fejezet-emojik 👑💖🦄🌸✨🎀, kiemelt kulcsszavak. Kapuk: tsc (+test), eslint, 1385 teszt, build, CI zöld (#106, #107).
