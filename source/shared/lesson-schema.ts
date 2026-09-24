@@ -38,6 +38,8 @@ export const ANIM_KINDS = [
   "labeledShape",
   "barChart",
   "venn",
+  // Spec 2026-09-24 (2. szelet): szabad SVG-illusztráció, szigorú tisztítással (shared/illustration-svg.ts).
+  "illustration",
 ] as const;
 
 /** Hands-on interactions (LS-4 implements them). */

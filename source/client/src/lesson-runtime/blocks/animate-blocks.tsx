@@ -3,7 +3,7 @@ import type { ComponentType } from "react";
 import type { AnimKind } from "@shared/lesson-schema";
 import { TriangleAreaLab } from "./TriangleAreaLab";
 import { DecisionStory } from "./DecisionStory";
-import { BarChartAnim, CycleAnim, LabeledShapeAnim, RichNumberLineAnim, VennAnim } from "./explanatory-visuals";
+import { BarChartAnim, CycleAnim, IllustrationAnim, LabeledShapeAnim, RichNumberLineAnim, VennAnim } from "./explanatory-visuals";
 
 /**
  * LS-4 — the eight planned animation kinds (master plan §4).
@@ -199,4 +199,5 @@ export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
   labeledShape: LabeledShapeAnim,
   barChart: BarChartAnim,
   venn: VennAnim,
+  illustration: IllustrationAnim,
 };

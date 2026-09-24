@@ -32,7 +32,8 @@ function hasRenderableData(block: Extract<Block, { kind: "animate" }>): boolean 
     case "cycle":
     case "labeledShape":
     case "barChart":
-    case "venn": return visualParamProblems(block.animKind, p).length === 0;
+    case "venn":
+    case "illustration": return visualParamProblems(block.animKind, p).length === 0;
   }
 }
 

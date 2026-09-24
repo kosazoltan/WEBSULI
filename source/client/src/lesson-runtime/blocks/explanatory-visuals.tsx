@@ -9,6 +9,7 @@ import {
   type NumberLineParams,
   type VennParams,
 } from "@shared/lesson-visual-params";
+import { sanitizeIllustration } from "@shared/illustration-svg";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 1. szelet): magyarázó ábrák.
@@ -325,6 +326,27 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
     const half = (text.length * size * 0.56) / 2;
     return Math.min(W - 4 - half, Math.max(4 + half, cx));
   };
+  // Élő mérés (Opus 5.5, 2026-09-24): tíz szomszédos „1 évszázad” ugrás felirata egymásra csúszott. A felirat
+  // előbb a saját helyére, ütközéskor egy sorral feljebb kerül; ha ott is ütközne, csak az ív marad.
+  const placed: Array<{ x0: number; x1: number; y: number }> = [];
+  // Ugyanaz a felirat ≥ 3 ugráson (pl. tízszer „1 évszázad”): elég egyszer kiírni, az ívek mutatják az ismétlést.
+  const labelCount = new Map<string, number>();
+  for (const j of p.jumps ?? []) if (j.label) labelCount.set(j.label, (labelCount.get(j.label) ?? 0) + 1);
+  const shown = new Set<string>();
+  const jumpLabels = (p.jumps ?? []).map((j, i) => {
+    const x0 = x(j.from), x1 = x(j.to), h = Math.min(40, Math.abs(x1 - x0) / 2 + 10);
+    if (!j.label || ((labelCount.get(j.label) ?? 0) >= 3 && shown.has(j.label))) return { j, i, x0, x1, h, label: null };
+    const cx = inside((x0 + x1) / 2, j.label, 14), half = (j.label.length * 14 * 0.56) / 2;
+    for (const y of [base - 8 - h * 0.8, base - 8 - h * 0.8 - 20]) {
+      if (y < 14) continue;
+      if (!placed.some((b) => Math.abs(b.y - y) < 20 && Math.min(b.x1, cx + half) - Math.max(b.x0, cx - half) > 0)) {
+        placed.push({ x0: cx - half, x1: cx + half, y });
+        shown.add(j.label);
+        return { j, i, x0, x1, h, label: { x: cx, y } };
+      }
+    }
+    return { j, i, x0, x1, h, label: null };
+  });
   return (
     <figure className={FRAME} data-anim="numberLine">
       <svg viewBox={`0 0 ${W} 124`} className="w-full h-auto max-w-lg mx-auto block" role="img" aria-label={caption}>
@@ -339,15 +361,12 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
             {i % labelEvery === 0 && <text x={inside(x(v), fmt(v), 14)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">{fmt(v)}</text>}
           </g>
         ))}
-        {(p.jumps ?? []).map((j, i) => {
-          const x0 = x(j.from), x1 = x(j.to), h = Math.min(40, Math.abs(x1 - x0) / 2 + 10);
-          return (
-            <g key={`j${i}`}>
-              <path d={`M${x0} ${base - 4} Q${(x0 + x1) / 2} ${base - 4 - h * 1.6} ${x1} ${base - 4}`} fill="none" stroke={PALETTE[i % PALETTE.length]} strokeWidth="2" />
-              {j.label && <text x={inside((x0 + x1) / 2, j.label, 14)} y={base - 8 - h * 0.8} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">{j.label}</text>}
-            </g>
-          );
-        })}
+        {jumpLabels.map(({ j, i, x0, x1, h, label }) => (
+          <g key={`j${i}`}>
+            <path d={`M${x0} ${base - 4} Q${(x0 + x1) / 2} ${base - 4 - h * 1.6} ${x1} ${base - 4}`} fill="none" stroke={PALETTE[i % PALETTE.length]} strokeWidth="2" />
+            {label && <text x={label.x} y={label.y} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">{j.label}</text>}
+          </g>
+        ))}
         {(p.marks ?? []).map((m, i) => (
           <g key={`m${i}`}>
             <circle cx={x(m.value)} cy={base} r={5.5} fill={ACCENT} stroke="#ffffff" strokeWidth="1.5" />
@@ -355,6 +374,29 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
           </g>
         ))}
       </svg>
+      <Caption caption={caption} />
+    </figure>
+  );
+}
+
+/* ------------------------------------------------------------ illustration */
+
+/**
+ * Spec 2026-09-24 (2. szelet): a modell SVG-rajza. A szerver beillesztéskor már megtisztította; a kliens
+ * a megjelenítés előtt UGYANAZZAL a tisztítóval újra lefuttatja (mélységi védelem) — ami nem megy át,
+ * az nem jelenik meg.
+ */
+export function IllustrationAnim({ params, caption }: AnimProps) {
+  const check = sanitizeIllustration(params.svg);
+  if (!check.ok) return null;
+  return (
+    <figure className={FRAME} data-anim="illustration">
+      <div
+        className="mx-auto max-w-lg [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
+        aria-label={caption}
+        // A tartalom a shared/illustration-svg.ts allowlistjén átment SVG (nincs script, esemény, link, stílus).
+        dangerouslySetInnerHTML={{ __html: check.svg }}
+      />
       <Caption caption={caption} />
     </figure>
   );
