@@ -51,3 +51,8 @@ Fotó/képgenerálás (pixeles AI-kép); a meglévő leckék tömeges újragener
 - **Élő mérés az „időszámítás” leckén (5 hívás):** 20–27 s, ~13,7k be / 2,3–3,1k ki token; 4/5 hibátlan folt (0 elutasított ábra), 1/5 nem folt-alakú JSON → egyszeri célzott újrakérés ugyanazon a modellen. Minden ábraadat a lecke szövegéből (ellenőrizve). A skill pontosítása után a holdnaptárhoz holdfázis-ciklus készült.
 - **Böngészős mérés a valódi kimeneten:** levágott „1 évszázad” jelölés → a feliratok a rajzterületen belül; a sorszám-jelvény `var(--card)` shadcn-formátum miatt fekete volt → témától független színek; feliratok a téma szövegszínével (kontraszt ≥ 14:1 mindkét témában).
 - **Spec-változás tesztekben (dokumentált):** `models-routing` (ábra-modell) és a (n2) runner-teszt (a 09-19-es eszköz-kiváltás megszűnt; most a modell foltját illesztjük be).
+
+## 4. szelet — megvalósítás
+- `server/studio/visual-quality.ts`: gyenge ábra = `echo` (a fejezet példájának lépései ≥ 50 %-ban), `outline` (geometry), `broken` (a rajzoló nem rajzolná ki). Nem blokkol.
+- Futtató: gyenge ábra után EGY célzott újrakérés az ábrakészítőnek (a friss blokkszámokkal, `replace`), a csere csak érvényes, szerződéshű folt esetén kerül be; hiba esetén a lecke megy tovább.
+- Lektor skill 6. pont: a szöveget ismétlő, a fogalmat nem mutató ábra `language` jegyzet (nem blokkoló); a skill 4800 karakteren belül.
