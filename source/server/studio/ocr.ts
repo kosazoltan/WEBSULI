@@ -96,7 +96,7 @@ export function ocrCacheKeyOf(imageContent: string, model: string, prompt = OCR_
  * és a NEM ÜRES átirat mentése (a bukott/üres OCR nincs cache-elve, hogy a
  * következő futás újrapróbálhassa). A cache-hiba sosem dönti be a hívást.
  */
-export function withOcrCache(ocr: OcrFn, model: string, store: OcrCacheStore): OcrFn {
+export function withOcrCache(ocr: OcrFn, model: string, store: OcrCacheStore, shouldStore: (file: ExtractorFile) => boolean = () => true): OcrFn {
   return async (file: ExtractorFile) => {
     const key = ocrCacheKeyOf(file.content, model);
     try {
@@ -109,7 +109,7 @@ export function withOcrCache(ocr: OcrFn, model: string, store: OcrCacheStore): O
       /* cache-olvasási hiba: megyünk a modellre */
     }
     const text = await ocr(file);
-    if (text.trim() !== "") {
+    if (text.trim() !== "" && shouldStore(file)) {
       try {
         await store.put(key, text);
       } catch {
@@ -193,15 +193,23 @@ export function adjudicationStaysInDispute(first: string, adjudicated: string, d
 export type OcrAdjudicator = (file: ExtractorFile, first: string, disputes: OcrDisagreement[]) => Promise<string>;
 
 /** Dual-read OCR for images; PDFs and failures fall back to the first read (fail-open, as before). */
-export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator): OcrFn {
-  return async (file: ExtractorFile) => {
+/**
+ * Audit 2026-09-24: a leromlott eredményt (egyik olvasó vagy a döntés hibázott) a cache NEM tárolhatja —
+ * különben egy átmeneti 429/időtúllépés után az adott képre soha többé nem futna kettős olvasás.
+ */
+export type DualReadOcr = OcrFn & { degraded(file: ExtractorFile): boolean };
+
+export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator): DualReadOcr {
+  const degradedFiles = new WeakSet<ExtractorFile>();
+  const read = async (file: ExtractorFile): Promise<string> => {
+    degradedFiles.delete(file);
     if (file.kind !== "image") return first(file);
     const [a, b] = await Promise.allSettled([first(file), second(file)]);
     if (a.status === "rejected") {
-      if (b.status === "fulfilled" && b.value.trim()) return b.value;
+      if (b.status === "fulfilled" && b.value.trim()) { degradedFiles.add(file); return b.value; }
       throw a.reason;
     }
-    if (b.status === "rejected" || !b.value.trim()) return a.value;
+    if (b.status === "rejected" || !b.value.trim()) { degradedFiles.add(file); return a.value; }
     const disputes = ocrDisagreements(a.value, b.value);
     if (disputes.length === 0) return a.value;
     logger.info(`[STUDIO/OCR] ${file.name}: a két olvasat ${disputes.length} helyen eltér — döntő olvasás a képpel.`);
@@ -212,8 +220,10 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     } catch (error) {
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasás hibázott (${error instanceof Error ? error.message : String(error)}) — az első olvasat marad.`);
     }
+    degradedFiles.add(file);
     return a.value;
   };
+  return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
 }
 
 export const OCR_ADJUDICATION_PROMPT = withRoleSkill("ocr", [
@@ -292,7 +302,7 @@ export function ocrVendorRequest<T extends { reasoning?: unknown }>(vendor: stri
 export async function callOcrModel(file: ExtractorFile, model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
   const connection = studioConnection(model);
-  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000 });
+  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
 
   const imageParams = ocrRequestParams(connection.model, file.content);
   const params = file.kind === "pdf" ? { ...imageParams, max_completion_tokens: 24000,

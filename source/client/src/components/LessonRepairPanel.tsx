@@ -103,7 +103,7 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
             {presets.length > 0 && (
               <div className="flex flex-wrap gap-1.5" aria-label="Javítási szempontok" data-testid="lesson-repair-presets">
                 {presets.map((p) => (
-                  <Button key={p.label} type="button" variant="outline" size="sm" className="min-h-9 text-xs" title={p.text}
+                  <Button key={p.label} type="button" variant="outline" size="sm" className="min-h-11 text-xs" title={p.text}
                     onClick={() => setInstruction((prev) => [prev.trim(), p.text].filter(Boolean).join("\n").slice(0, 2000))}>
                     + {p.label}
                   </Button>
@@ -136,7 +136,13 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
             <Button variant="outline" onClick={() => setJobId(null)} className="min-h-11">Új utasítás</Button>
           </div>
         )}
-        {done && !applied && (
+        {done && candidate.isError && (
+          <div className="space-y-2" role="alert" data-testid="lesson-repair-candidate-error">
+            <p className="flex items-start gap-2 text-sm text-destructive"><XCircle className="w-4 h-4 mt-0.5 shrink-0" />A kész javítás nem tölthető be. Az eredeti tananyag érintetlen.</p>
+            <Button variant="outline" onClick={() => void candidate.refetch()} className="min-h-11">Újrapróbálás</Button>
+          </div>
+        )}
+        {done && !applied && !candidate.isError && (
           <div className="space-y-2" data-testid="lesson-repair-ready">
             <p className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="w-4 h-4 text-green-600" /> Az ellenőrzött javítás elkészült.</p>
             {repair && (
@@ -149,7 +155,7 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
               </ul>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={apply} disabled={busy} className="min-h-11" data-testid="lesson-repair-apply">
+              <Button onClick={apply} disabled={busy || !repair} className="min-h-11" data-testid="lesson-repair-apply">
                 {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}Alkalmazás
               </Button>
               <Button variant="outline" onClick={discard} disabled={busy} className="min-h-11" data-testid="lesson-repair-discard">Elvetés</Button>

@@ -18,9 +18,12 @@ import { LessonRuntime } from "./LessonRuntime";
  * that a section is absent, and a teacher can.
  */
 export function LessonView({ material }: { material: { id: string; title?: string } }) {
-  const { data, isLoading, error } = useQuery<{ lesson: unknown; lessonId?: string }>({
+  const { data, isLoading, error, refetch, isFetching } = useQuery<{ lesson: unknown; lessonId?: string }>({
     queryKey: ["/api/lessons/by-file", material.id],
     queryFn: () => apiRequest("GET", `/api/lessons/by-file/${material.id}`),
+    // Audit 2026-09-24: mobilon egy pillanatnyi hálózati hiba eddig zsákutca volt (az alapbeállítás retry:false).
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
   });
 
   if (isLoading) {
@@ -36,8 +39,11 @@ export function LessonView({ material }: { material: { id: string; title?: strin
       <div className="max-w-2xl mx-auto p-6">
         <p className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          A lecke nem tölthető be.
+          A lecke nem tölthető be. Lehet, hogy most gyenge a hálózat.
         </p>
+        <button type="button" onClick={() => void refetch()} disabled={isFetching} className="mt-3 inline-flex items-center gap-2 min-h-11 px-4 rounded-lg border text-sm font-semibold" data-testid="lesson-retry">
+          <RotateCw className={isFetching ? "w-4 h-4 animate-spin" : "w-4 h-4"} /> Újrapróbálás
+        </button>
       </div>
     );
   }

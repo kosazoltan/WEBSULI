@@ -16,6 +16,8 @@ import { withSupportSkill } from "./support-skills";
  * Az idézet (`quote`) SOHA nem változik: az marad a bizonyíték arra, mit olvasott az átíró.
  */
 export type CorrectionBasis = "owner" | "transcription";
+/** km_concepts.term is varchar(200). */
+export const TERM_MAX = 200;
 export type SourceCorrection = {
   localId: string;
   term?: string;
@@ -68,6 +70,9 @@ export function isLetterLevelMisread(before: string, after: string): boolean {
   let changed = 0;
   for (let i = 0; i < a.length; i++) {
     if (a[i] === b[i]) continue;
+    // Audit 2026-09-24 (mérve: „1848” → „1849” átment): szám, évszám, dátum SOHA nem betűhiba — azt a
+    // determinisztikus őr nem engedheti, akármilyen közel van.
+    if (/\d/.test(a[i]) || /\d/.test(b[i])) return false;
     if (Math.min(a[i].length, b[i].length) < 4 || levenshtein(a[i], b[i]) > 2) return false;
     changed++;
   }
@@ -85,16 +90,20 @@ export function explicitClassroomOf(instruction: string | undefined): number | u
   if (!instruction) return undefined;
   const text = fold(instruction);
   const found: Array<{ at: number; grade: number }> = [];
-  for (const m of text.matchAll(/(?:^|[^0-9])(1[0-2]|[1-9])\s*\.?\s*(?:-?\s*(?:os|es|as|ik|s))?\s*(?:osztaly|evfolyam)/g)) {
+  // Audit 2026-09-24 (mért téves találatok): „3 osztály közül” (darabszám), „5 osztályzat” (jegy),
+  // „8 osztályos gimnázium” (iskolatípus). A szám csak sorszámként (pont vagy -os/-es/-as képző) vagy
+  // toldalékolt „osztályos/osztálynak…” alakban évfolyam; a „zat” folytatás és a gimnázium kizárva.
+  const noun = "(?:osztaly(?!zat)|evfolyam)";
+  for (const m of text.matchAll(new RegExp(`(?:^|[^0-9])(1[0-2]|[1-9])(?:\\s*\\.\\s*(?:-?\\s*(?:os|es|as|s)\\s*)?|\\s*-\\s*(?:os|es|as|s)\\s+|\\s+(?=osztaly(?:os|nak|ban|ba|ra|nal)))${noun}(?![a-z]*\\s+gimn)`, "g"))) {
     found.push({ at: m.index ?? 0, grade: Number(m[1]) });
   }
   ORDINALS.forEach((word, grade) => {
     if (!grade) return;
-    for (const m of text.matchAll(new RegExp(`(?:^|[^a-z])${word}\\w*\\s+(?:osztaly|evfolyam)`, "g"))) found.push({ at: m.index ?? 0, grade });
+    for (const m of text.matchAll(new RegExp(`(?:^|[^a-z])${word}\\w*\\s+${noun}(?![a-z]*\\s+gimn)`, "g"))) found.push({ at: m.index ?? 0, grade });
   });
-  const valid = found
-    .filter((f) => !/(^|[^a-z])nem\s*$/.test(text.slice(Math.max(0, f.at - 12), f.at + 1)))
-    .sort((a, b) => a.at - b.at);
+  // Tagadás: „nem 5.”, „nem az 5.”, „nem a 7.” — a „hanem” nem tagadás (betű előzi meg).
+  const negated = (at: number) => /(^|[^a-z])nem(\s+az?)?\s*$/.test(text.slice(Math.max(0, at - 16), at + 1));
+  const valid = found.filter((f) => !negated(f.at)).sort((a, b) => a.at - b.at);
   return valid.at(-1)?.grade;
 }
 
@@ -123,6 +132,8 @@ export function filterSourceCorrections(
       const next = typeof item[field] === "string" ? (item[field] as string).trim() : "";
       const before = concept[field] ?? "";
       if (!next || next === before) return undefined;
+      // Audit 2026-09-24: km_concepts.term varchar(200) — a hosszabb érték az alkalmazó tranzakciót buktatná.
+      if (field === "term" && next.length > TERM_MAX) { rejected.push(`${localId}.term: túl hosszú (${next.length} > ${TERM_MAX})`); return undefined; }
       const ok = basis === "owner"
         ? !!opts.instruction && (ownerSupports(before, next, opts.instruction) || (opts.transcript && isLetterLevelMisread(before, next)))
         : opts.transcript && isLetterLevelMisread(before, next);

@@ -16,6 +16,9 @@ import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { motion } from "framer-motion";
 
+/** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
+export const LIKES_BATCH_LIMIT = 100;
+
 interface HtmlFileApi {
   id: string;
   userId: string | null;
@@ -121,10 +124,12 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
     queryKey: ["/api/materials/likes/batch", [...materialIds].sort().join(","), fingerprint],
     queryFn: async () => {
       if (!fingerprint || materialIds.length === 0) return {};
-      return await apiRequest("POST", "/api/materials/likes/batch", {
-        materialIds,
-        fingerprint,
-      });
+      // Mérve élesben (2026-09-24): 186 tananyagnál a szerver 100-as kötegkorlátja miatt 86 kártya külön
+      // /likes/check kérést küldött (átlag ~780 ms). A korláton belüli kötegekben, párhuzamosan kérdezünk.
+      const chunks: string[][] = [];
+      for (let i = 0; i < materialIds.length; i += LIKES_BATCH_LIMIT) chunks.push(materialIds.slice(i, i + LIKES_BATCH_LIMIT));
+      const parts = await Promise.all(chunks.map((ids) => apiRequest<Record<string, { liked: boolean; totalLikes: number }>>("POST", "/api/materials/likes/batch", { materialIds: ids, fingerprint })));
+      return Object.assign({}, ...parts.map((part) => (part && !Array.isArray(part) ? part : {})));
     },
     enabled: !!fingerprint && materialIds.length > 0,
     staleTime: 30000,

@@ -114,7 +114,7 @@ async function callExtractorModel(
 ): Promise<RawExtraction> {
   const OpenAI = (await import("openai")).default;
   const connection = studioConnection(model);
-  const client = new OpenAI({ apiKey: connection.apiKey, baseURL: connection.baseURL, timeout: 180000 });
+  const client = new OpenAI({ apiKey: connection.apiKey, baseURL: connection.baseURL, timeout: 180000, maxRetries: 1 });
 
   const content: Awaited<ReturnType<typeof scopeContentParts>> = [
     {
@@ -281,5 +281,5 @@ export async function createCachedSourceOcr(ocrModel: string) {
   if (!secondModel || secondModel === ocrModel || !studioModelReady(secondModel)) return first;
   const second = withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store);
   const dual = dualReadOcr(first, second, (file, text, disputes) => callOcrAdjudicator(file, ocrModel, text, disputes));
-  return withOcrCache(dual, `${ocrModel}|${secondModel}|dual-1|${createHash("sha256").update(OCR_ADJUDICATION_PROMPT).digest("hex").slice(0, 12)}`, store);
+  return withOcrCache(dual, `${ocrModel}|${secondModel}|dual-1|${createHash("sha256").update(OCR_ADJUDICATION_PROMPT).digest("hex").slice(0, 12)}`, store, (file) => !dual.degraded(file));
 }
