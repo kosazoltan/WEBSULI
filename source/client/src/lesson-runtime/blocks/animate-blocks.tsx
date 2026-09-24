@@ -55,7 +55,7 @@ function FractionAnim({ params, caption }: AnimProps) {
               />
             );
           })}
-          <circle cx="32" cy="32" r="6" fill="var(--background)" />
+          <circle cx="32" cy="32" r="6" style={{ fill: "hsl(var(--background))" }} />
         </svg>
         <div className="text-3xl font-bold">
           {numerator}<span className="block text-sm font-normal text-muted-foreground">/ {denominator}</span>

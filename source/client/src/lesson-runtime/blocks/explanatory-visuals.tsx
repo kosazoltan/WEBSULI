@@ -112,8 +112,9 @@ export function CycleAnim({ params, caption }: AnimProps) {
               {phase.moon !== undefined
                 ? <Moon cx={x} cy={y} r={node} lit={phase.moon} waxing={phase.waxing ?? true} />
                 : <circle cx={x} cy={y} r={node} fill={color} fillOpacity="0.9" />}
-              <circle cx={x + node * 0.72} cy={y - node * 0.72} r={13} fill="var(--card, #fff)" stroke={color} strokeWidth="2" />
-              <text x={x + node * 0.72} y={y - node * 0.72 + 5.5} textAnchor="middle" fontSize="16" fontWeight="700" fill="currentColor">{i + 1}</text>
+              {/* Témától független jelvény (mérve: a --card a lecke témájától eltérhet, 1,2:1 kontraszt). */}
+              <circle cx={x + node * 0.72} cy={y - node * 0.72} r={13} fill="#ffffff" stroke={color} strokeWidth="2.5" />
+              <text x={x + node * 0.72} y={y - node * 0.72 + 5.5} textAnchor="middle" fontSize="16" fontWeight="700" fill="#1e293b">{i + 1}</text>
               {lines.map((line, k) => (
                 <text key={k} x={lx} y={ly + 5 + (k - (lines.length - 1) / 2) * 24} textAnchor={anchor} fontSize="16" fontWeight="600" fill="currentColor">{line}</text>
               ))}
@@ -155,7 +156,7 @@ export function LabeledShapeAnim({ params, caption }: AnimProps) {
   if (!p) return null;
   const stroke = "currentColor";
   const tag = (x: number, y: number, text: string, anchor: "start" | "middle" | "end" = "middle") =>
-    text ? <text x={x} y={y} textAnchor={anchor} fontSize="14" fontWeight="600" fill={ACCENT}>{text}</text> : null;
+    text ? <text x={x} y={y} textAnchor={anchor} fontSize="14" fontWeight="700" fill="currentColor">{text}</text> : null;
   let body: ReactNode;
   let view = "0 0 320 240";
   if (p.shape === "circle") {
@@ -296,7 +297,7 @@ export function VennAnim({ params, caption }: AnimProps) {
           <circle key={i} cx={ci.x} cy={ci.y} r={r} fill={PALETTE[i]} fillOpacity="0.22" stroke={PALETTE[i]} strokeWidth="2.5" />
         ))}
         {p.sets.map((name, i) => (
-          <text key={i} x={labelPos[i].x} y={labelPos[i].y} textAnchor="middle" fontSize="15" fontWeight="700" fill={PALETTE[i]}>{name}</text>
+          <text key={i} x={labelPos[i].x} y={labelPos[i].y} textAnchor="middle" fontSize="15" fontWeight="700" fill="currentColor">{name}</text>
         ))}
         {Object.entries(p.regions ?? {}).filter(([key]) => spots[key]).map(([key, v]) => (
           <text key={key} x={spots[key].x} y={spots[key].y} textAnchor={key === "none" ? "end" : "middle"} fontSize="16" fontWeight="700" fill="currentColor">{String(v)}</text>
@@ -318,6 +319,12 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
   const ticks = Array.from({ length: Math.floor((p.to - p.from) / step + 1e-9) + 1 }, (_, i) => p.from + i * step);
   const labelEvery = Math.ceil(ticks.length / 7);
   const fmt = (v: number) => `${Math.round(v * 100) / 100}`.replace(".", ",");
+  // Élő mérés (Opus 5.5-ábra, 2026-09-24): a jobb szélső jelölés felirata („1 évszázad”) levágódott.
+  // A felirat középpontját a becsült szélesség felével a rajzterületen belül tartjuk.
+  const inside = (cx: number, text: string, size: number) => {
+    const half = (text.length * size * 0.56) / 2;
+    return Math.min(W - 4 - half, Math.max(4 + half, cx));
+  };
   return (
     <figure className={FRAME} data-anim="numberLine">
       <svg viewBox={`0 0 ${W} 124`} className="w-full h-auto max-w-lg mx-auto block" role="img" aria-label={caption}>
@@ -329,7 +336,7 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
         {ticks.map((v, i) => (
           <g key={i}>
             <line x1={x(v)} y1={base - 6} x2={x(v)} y2={base + 6} stroke="currentColor" strokeWidth="1.6" />
-            {i % labelEvery === 0 && <text x={x(v)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">{fmt(v)}</text>}
+            {i % labelEvery === 0 && <text x={inside(x(v), fmt(v), 14)} y={base + 24} textAnchor="middle" fontSize="14" fill="currentColor">{fmt(v)}</text>}
           </g>
         ))}
         {(p.jumps ?? []).map((j, i) => {
@@ -337,14 +344,14 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
           return (
             <g key={`j${i}`}>
               <path d={`M${x0} ${base - 4} Q${(x0 + x1) / 2} ${base - 4 - h * 1.6} ${x1} ${base - 4}`} fill="none" stroke={PALETTE[i % PALETTE.length]} strokeWidth="2" />
-              {j.label && <text x={(x0 + x1) / 2} y={base - 8 - h * 0.8} textAnchor="middle" fontSize="14" fontWeight="700" fill={PALETTE[i % PALETTE.length]}>{j.label}</text>}
+              {j.label && <text x={inside((x0 + x1) / 2, j.label, 14)} y={base - 8 - h * 0.8} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">{j.label}</text>}
             </g>
           );
         })}
         {(p.marks ?? []).map((m, i) => (
           <g key={`m${i}`}>
-            <circle cx={x(m.value)} cy={base} r={5.5} fill={ACCENT} stroke="var(--card, #fff)" strokeWidth="1.5" />
-            {m.label && <text x={x(m.value)} y={base + 46} textAnchor="middle" fontSize="14" fontWeight="700" fill={ACCENT}>{m.label}</text>}
+            <circle cx={x(m.value)} cy={base} r={5.5} fill={ACCENT} stroke="#ffffff" strokeWidth="1.5" />
+            {m.label && <text x={inside(x(m.value), m.label, 14)} y={base + 46} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">{m.label}</text>}
           </g>
         ))}
       </svg>

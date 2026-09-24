@@ -30,16 +30,20 @@ test("every studio step has a default model", () => {
     // Spec 2026-09-19 (modellmátrix): vendor per step.
     const expected: Record<string, string> = {
       extract: "openai", ocr: "openrouter", pedagogue: "anthropic", author: "openai",
-      animator: "openrouter", bank: "openrouter", lektor: "xai", gateHelper: "openrouter", quizPolish: "openrouter",
+      // Spec-változás 2026-09-24 (tulajdonosi döntés, docs/specs/2026-09-24-magyarazo-abrak.md): ábrák Claude Opus 5.5-ön.
+      animator: "anthropic", bank: "openrouter", lektor: "xai", gateHelper: "openrouter", quizPolish: "openrouter",
     };
     assert.equal(providerForModel(model), expected[step], step);
   }
 });
 
 test("spec 2026-09-19: bank és ábrák glm-5.3-flash-en; a bank tartaléka a mentőmodell (spec §7o, mérve 2026-09-20); a tervkészítő Opus 5 közvetlen Anthropicon", () => {
-  assert.equal(resolveStudioModel("animator", {}), "z-ai/glm-5.3-flash");
+  // Spec-változás 2026-09-24 (tulajdonosi döntés): az ábrákat Claude Opus 5.5 tervezi, tartaléka a gpt-5.6-terra;
+  // a bank változatlanul glm-5.3-flash.
+  assert.equal(resolveStudioModel("animator", {}), "claude-opus-5-5");
+  assert.equal(providerForModel("claude-opus-5-5"), "anthropic");
   assert.equal(resolveStudioModel("bank", {}), "z-ai/glm-5.3-flash");
-  assert.equal(FALLBACK_MODELS.animator, "deepseek/deepseek-v4-flash");
+  assert.equal(FALLBACK_MODELS.animator, "gpt-5.6-terra");
   // Spec §7o: a deepseek bank-tartalék 4/5-ször a mentőkörbe futott 2–10 perc után → egyből terra.
   assert.equal(FALLBACK_MODELS.bank, "gpt-5.6-terra");
   assert.equal(resolveStudioModel("pedagogue", {}), "claude-opus-5");

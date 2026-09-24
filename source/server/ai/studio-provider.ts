@@ -56,6 +56,10 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   // kerítés is elmarad. Mindkét itt futó modellen ellenőrizve (glm-5.3-flash, deepseek-v4-flash).
   animator: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low", jsonMode: true },
   bank: { timeoutMs: 240_000, maxTokens: 24_000, reasoningEffort: "low", jsonMode: true },
+  // Spec 2026-09-24 (magyarázó ábrák): az ábra-folt tervezése (Claude Opus 5.5) térlátás + újraszámolás →
+  // medium effort. Külön kulcs: az "animator" szabály a bankhívásokra is érvényes (step: "animator"), azt nem
+  // változtatjuk. A kimenet csak a folt (néhány ezer token), a 16k keret a gondolkodással együtt is elég.
+  visuals: { timeoutMs: 300_000, maxTokens: 16_000, reasoningEffort: "medium" },
   gateHelper: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
   quizPolish: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
 };

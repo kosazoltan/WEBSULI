@@ -102,6 +102,8 @@ export type StepCallInput = {
   model: string;
   system: string;
   user: string;
+  /** A határidő szabálya, ha eltér a lépésétől (spec 2026-09-24: az ábra-hívás "visuals"). */
+  policy?: string;
 };
 
 export type StepCallResult = {
@@ -130,7 +132,7 @@ export async function callStepModel(
     // fejlécek megérkeztek — a TÖRZS (a lassú, 24k-ig futó generálás) olvasása korlát nélkül fut, az
     // OpenRouter pedig azonnal küld fejlécet. A lektor külső AbortSignal-határideje ezt már áthidalta;
     // ugyanez jár minden szabályzatos lépésnek: a jelzés a törzs olvasását is megszakítja.
-    const deadlineMs = stepDeadlineMs(input.step);
+    const deadlineMs = stepDeadlineMs(input.policy ?? input.step);
     if (deadlineMs) {
       const deadline = AbortSignal.timeout(deadlineMs);
       signal = signal ? AbortSignal.any([signal, deadline]) : deadline;
