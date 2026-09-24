@@ -138,6 +138,21 @@ export function experienceRoundSizes(e: LessonExperience) {
   return e.version === LEGACY_LESSON_METHOD_VERSION ? { taskRound: 15, quizRound: 25 } : { taskRound: e.bankPlan!.taskRound, quizRound: e.bankPlan!.quizRound };
 }
 
+/**
+ * Spec 2026-09-24 (mérve élesben): a telepítés előtt megnyitott fül régi kódja az új `princess` témát nem
+ * ismerte, és az egész leckét „sérültnek” mutatta. Olvasáskor az ismeretlen (újabb) téma az alapértelmezett,
+ * az ismeretlen különlegesség kimarad — a tanítás így is megjelenik. Íráskor a séma szigorú marad.
+ */
+export function tolerantLessonInput(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const lesson = raw as { experience?: { theme?: unknown; flair?: unknown } };
+  const experience = lesson.experience;
+  if (!experience || typeof experience !== "object") return raw;
+  const theme = (EXPERIENCE_THEMES as readonly unknown[]).includes(experience.theme) ? experience.theme : "ocean";
+  const flair = Array.isArray(experience.flair) ? experience.flair.filter((f) => (LESSON_FLAIRS as readonly unknown[]).includes(f)) : undefined;
+  return { ...lesson, experience: { ...experience, theme, ...(flair ? { flair } : {}) } };
+}
+
 export function experienceTheme(seed: string): LessonExperience["theme"] {
   let hash = 2166136261;
   for (const c of seed) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
