@@ -465,3 +465,10 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Mérve élesben (tulajdonosi képernyőkép):** a telepítés előtt megnyitott fül régi kódja a `princess` témát nem ismerte → „Ez a lecke sérült” (experience.theme); frissítés után hibátlan (a tulajdonos megerősítette). A szerviz-worker átengedő; a régi kód a memóriában maradt.
 **Javítás:** `tolerantLessonInput` (olvasáskor ismeretlen téma → alapértelmezett, ismeretlen különlegesség kimarad; íráskor szigorú), olvashatatlan leckénél egyszeri automatikus újratöltés újabb buildnél, különben „Frissítés” gomb. Élő ellenőrzés: main-BZ24UWWF.js, princess, 6 fejezet, nincs „sérült”.
 **Tanulság:** új enum-értéket (téma, blokk, mező) az adatba csak úgy szabad írni, hogy a régi kliens olvasása ne bukjon — előbb a kliens tolerancia menjen ki, utána az új érték.
+
+## 2026-09-24 — teljes rendszer-audit és javítás (PR #109, merge 08e2e77)
+
+**Módszer:** kapuk (main CI zöld), éles állapot csak olvasva (Render-napló 24 h: csak a két ismert lektor-bukás; DB: nincs elakadt futás, error_logs 7 napon üres), 3 csak-olvasó alügynök cáfolási körrel, élő böngészős mérés.
+**Javítva (11):** főoldal like N+1 (98 → 13 kérés, 86 × 779 ms → 2 × 133 ms, élesben mérve); lecke-betöltés zsákutca (retry + gomb); évfolyam- és design-felismerés hamis találatai; számcsere a betűhiba-szűrőn; leromlott OCR cache-elése; nem-tranzakciós térképírás; term ≤ 200; AI-kliensek timeout + maxRetries; javító panel hibaállapot és 44 px; 3 elavult „waiting” workflow-futás lezárva (DB).
+**Nem javítva (indokolt):** /api/pdf és /dev IP-korlát — Vercel-proxy mögött megosztott IP, osztályokat zárna ki; előbb a valós kliens-IP-t kell mérni.
+**Kapuk:** tsc (+test), eslint, 1393 teszt, build, CI zöld. Egy ideiglenes diag-szkript véletlenül commitba került (titok nélkül) → eltávolítva, `*.tmp.*` a .gitignore-ban.
