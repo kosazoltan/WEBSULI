@@ -64,6 +64,18 @@ export function falseArithmeticClaims(text: string): string[] {
     const beforeLead = prefix.slice(0, -1).trimEnd().slice(-1);
     if (lead === "(" || lead === ")" || (new RegExp(`[${OPS}=]`).test(lead) && /[\d)]/.test(beforeLead))) continue;
     const segments = `${m[1]}${m[2]}`.split("=").map((seg) => seg.trim());
+    // 3. élő futás (run e79ab9da): „980 Ft : 2 = 490 Ft” — a mértékegység töri meg a kifejezést, a
+    // minta a „2 = 490”-től indult. Szám + mértékegység + műveleti jel előtt: ha az a szám maga nem
+    // egy hosszabb kifejezés része, mértékegység nélkül értékeljük („980 : 2 = 490”); különben kihagyjuk.
+    const unitLead = prefix.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*[\\p{L}%°²³/]{1,8}\\.?\\s*([${OPS}])$`, "u"));
+    if (unitLead) {
+      const head = prefix.slice(0, prefix.length - unitLead[0].length).trimEnd();
+      const headLast = head.slice(-1);
+      const headMid = /[()]/.test(headLast) || (new RegExp(`[${OPS}=]`).test(headLast)
+        && new RegExp(`(?:[\\d)]|\\d\\s*[\\p{L}%°²³/]{1,8}\\.?)$`, "u").test(head.slice(0, -1).trimEnd()));
+      if (headMid) continue;
+      segments[0] = `${unitLead[1]} ${unitLead[2]} ${segments[0]}`;
+    }
     // „1/15 = 4 km” (a teljes út 1/15-e 4 km): hányad = mennyiség jelölés, nem számolási állítás.
     const after = text.slice(m.index! + m[0].length);
     if (segments.length === 2 && /^\d+\s*\/\s*\d+$/.test(segments[0]) && /^\d+(?:[.,]\d+)?$/.test(segments[1]) && /^\s*[a-záéíóöőúüű%]/i.test(after)) continue;

@@ -19,6 +19,7 @@ Tulajdonosi kérés: vadonatúj tananyag élesben a `M6_2021_1_fl_1.pdf` (2021-e
 | 4 | A futás 2607 s után: „Elfogyott a lépés javítási kerete: Ábrák és gyakorlóbankok” → felhasználónak „Váratlan hiba”, a job „running”-ban árván | 3 szerzői kör (r0–r2) után a futtató még 2 csak-bank kört engedett (`MAX_BANK_ONLY_ROUNDS`), a workflow animátor-kerete 4 → 5. látogatás kivétel. A `pipeline.ts` komment („r0 + bank + author + bank = 4”) invariánsa ezen az úton nem tartott | a csak-bank kör a FUTÓ workflow hátralévő keretét nézi (`workflowStepVisitsLeft`); elfogyott keretnél a lektor tiszta, okot megnevező hibával zár. A keret (4) és a (q) teszt 2 csak-bank köre változatlan |
 | 5 | Lektor r2–r3: „Réka és Janka is 273 kiskockát épített” — csak a bankot jelölte | a SZERZŐ oldotta meg rosszul a 9. feladatot (7×11×5 = 385; helyesen 7·(h−1) = 35 → 7×11×6 = 462, Réka 70, Janka 280); a lektor a lecke részeredményéből indult, így csak-bank javítás jött, ami nem konvergálhatott | lektor skill 5. pont: forrásfeladatot minden adattal önállóan megoldani; ellentmondó részválasznál a tanítás blockPath-ját jelölni (7. pont) |
 | 6 | Ellenőrző újrafuttatás (run 9c0169b7, 2197 s): a 12. fejezet csomagja 4 kísérleten át „Ismétlődő kérdés egy korábbi csomaggal.” — a job tisztán hibára zárt (#4 javítás működik) | a hibaüzenet nem nevezte meg az ismétlődő tételt, a javító kör nem tudta, mit cseréljen | az üzenet tételenként megnevezi az id-t és a kérdés szövegét („ehhez a tételhez új, más kérdést írj”) |
+| 7 | 3. élő futás (run e79ab9da): ismét „2 = 490” — a szöveg „980 Ft : 2 = 490 Ft” | a mértékegység megtöri a kifejezést; a #2 feltétel (a jel előtt szám vagy zárójel) nem fedte | szám + mértékegység + jel előtt: ha az a szám nem hosszabb lánc része, mértékegység nélkül értékel („980 : 2 = 490”), így a „980 Ft : 2 = 480 Ft” hibát továbbra is elkapja; hosszabb láncnál kihagy |
 | — | Valódi hibák, amelyeket a rendszer helyesen fogott: „60 : 5 = 6”, a lektor r0 a négyjegyű számlistán (2324, 2423 hiányzott) | — | — |
 
 A #2–#3 hamis riasztások jó csomagokat buktattak: tartalék modell + mentőkör (gpt-5.6-terra) → lassabb, drágább futás.
@@ -27,6 +28,7 @@ A #2–#3 hamis riasztások jó csomagokat buktattak: tartalék modell + mentők
 - `Nem: 12 · 2 = 48 téves.` → továbbra is hiba (meglévő `section-patch` teszt).
 - `(500 + 480) : 2 = 490, és 3 · 410 = 1320` → csak a második hiba.
 - `9/30 = 1/3 rész` → hiba marad.
+- `980 Ft : 2 = 490 Ft` → nem hiba; `980 Ft : 2 = 480 Ft` → hiba; `500 Ft + 480 Ft : 2 = 490 Ft` → nem ítéli meg.
 - `K = 2·r·π, α` → görög betű nem idegen írás; cirill a forrásban → engedett.
 
 ## Elfogadás (EARS)
