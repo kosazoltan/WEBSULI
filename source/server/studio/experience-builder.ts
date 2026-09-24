@@ -203,9 +203,20 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
   /** Questions/methods a packet must not repeat: the packets that were complete before it started. */
   const crossProblems = (packet: PacketContent, prior: Prior): string[] => {
     const problems = gateQuestionProblems([...prior.methods, ...packet.methods]);
-    for (const [past, added] of [[prior.tasks.map(t => t.q), packet.tasks.map(t => t.q)], [prior.quiz.map(q => q.question), packet.quiz.map(q => q.question)]]) {
-      const keys = [...past, ...added].map(normalizeAnswer);
-      if (new Set(keys).size !== keys.length) problems.push("Ismétlődő kérdés egy korábbi csomaggal.");
+    // Élő mérés 2026-09-24 (run 9c0169b7): a névtelen „Ismétlődő kérdés” hibát a javító kör nem
+    // tudta tételhez kötni — 4 kísérlet ugyanazzal a hibával, a futás elhalt. A hiba megnevezi a
+    // csomag ismétlődő tételét és a kérdés szövegét, hogy a javítás célzott legyen.
+    const pairs: Array<[string[], Array<{ id: string; text: string }>]> = [
+      [prior.tasks.map(t => t.q), packet.tasks.map(t => ({ id: t.id, text: t.q }))],
+      [prior.quiz.map(q => q.question), packet.quiz.map(q => ({ id: q.id, text: q.question }))],
+    ];
+    for (const [past, added] of pairs) {
+      const seen = new Set(past.map(normalizeAnswer));
+      for (const item of added) {
+        const key = normalizeAnswer(item.text);
+        if (seen.has(key)) problems.push(`Ismétlődő kérdés egy korábbi csomaggal: ${item.id} („${item.text.slice(0, 120)}”) — ehhez a tételhez új, más kérdést írj.`);
+        seen.add(key);
+      }
     }
     return problems;
   };

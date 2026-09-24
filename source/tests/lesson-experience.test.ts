@@ -246,6 +246,30 @@ test("spec 2026-09-19: párhuzamos csomagépítés — egyszerre készülő csom
   assert.equal(new Set(result.quiz.map(q => q.question)).size, result.quiz.length, "nincs ismétlődő kérdés");
 });
 
+test("élő mérés 2026-09-24 (run 9c0169b7): az ismétlődő kérdés hibája megnevezi a tételt, így a javító kör célzottan cserél", async () => {
+  const base = standardFusionFixture(), e = base.experience!;
+  const lesson = lessonSchema.parse({ ...base, experience: undefined, sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] });
+  const packetFor = (sectionIndex: number, suffix: string) => ({
+    methods: e.methods.map(m => ({ ...m, sectionIndex, title: m.title + suffix, prompt: m.prompt + suffix })),
+    tasks: e.tasks.map(t => ({ ...t, sectionIndex, q: t.q + suffix })),
+    quiz: e.quiz.map((q, n) => ({ ...q, sectionIndex, question: n === 0 ? q.question : q.question + suffix })),
+    glossary: [],
+  });
+  const prompts: string[] = [];
+  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+    const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
+    if (sectionIndex === 0) return packetFor(0, "");
+    prompts.push(user);
+    // The second packet repeats the first packet's quiz[0] question; once told WHICH item, it replaces only that one.
+    if (prompts.length === 1) return packetFor(1, " (B)");
+    const named = user.includes(`Ismétlődő kérdés egy korábbi csomaggal: ${e.quiz[0].id} („`);
+    return named ? { quiz: [{ ...packetFor(1, " (B)").quiz[0], question: e.quiz[0].question + " (új változat)" }] } : packetFor(1, " (B)");
+  } });
+  assert.ok(prompts[1].includes(`Ismétlődő kérdés egy korábbi csomaggal: ${e.quiz[0].id} („`), "a hiba megnevezi az ismétlődő tételt");
+  assert.equal(prompts.length, 2, "egy célzott javítás elég");
+  assert.equal(new Set(result.quiz.map(q => q.question)).size, result.quiz.length, "nincs ismétlődő kérdés");
+});
+
 test("spec 2026-09-19: a mentőkör (attempt === PACKET_ATTEMPTS) érvényes csomagja elfogadott", async () => {
   const lesson = standardFusionFixture(), e = lesson.experience!;
   const attempts: number[] = [];
