@@ -459,3 +459,9 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Adat:** térkép 2c43327f: c23 (Homo sapiens sapiens csoportjai) extra → supporting; új tanári kiegészítés c29 „írott emlékek”, c30 „szóbeli emlékek” (source_ref „Tanári kiegészítés 2026-09-24”, verbatim_reason `owner:addition`). Lecke: javítási rekord f04dbc06 (418 s, 0 blokkoló), alkalmazva (mentés 6f2f6fbe).
 
 **Verifikáció:** élő API: theme princess, flair sparkles/shimmer-keys/pop-correct/float-emoji; képernyőkép websuli.vip/preview/739ec478 (800 és 375 px): rózsaszín háttér, csillogás a fejlécben, fejezet-emojik 👑💖🦄🌸✨🎀, kiemelt kulcsszavak. Kapuk: tsc (+test), eslint, 1385 teszt, build, CI zöld (#106, #107).
+
+## 2026-09-24 — régi kliens + új lecke: „sérült” helyett megjelenés (PR #108, merge 7182508)
+
+**Mérve élesben (tulajdonosi képernyőkép):** a telepítés előtt megnyitott fül régi kódja a `princess` témát nem ismerte → „Ez a lecke sérült” (experience.theme); frissítés után hibátlan (a tulajdonos megerősítette). A szerviz-worker átengedő; a régi kód a memóriában maradt.
+**Javítás:** `tolerantLessonInput` (olvasáskor ismeretlen téma → alapértelmezett, ismeretlen különlegesség kimarad; íráskor szigorú), olvashatatlan leckénél egyszeri automatikus újratöltés újabb buildnél, különben „Frissítés” gomb. Élő ellenőrzés: main-BZ24UWWF.js, princess, 6 fejezet, nincs „sérült”.
+**Tanulság:** új enum-értéket (téma, blokk, mező) az adatba csak úgy szabad írni, hogy a régi kliens olvasása ne bukjon — előbb a kliens tolerancia menjen ki, utána az új érték.
