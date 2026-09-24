@@ -72,10 +72,23 @@ export function pickLessonFlair(seed: string, count = 3): LessonFlair[] {
 export function designFromInstruction(text: string | undefined, seed = ""): { world?: VisualWorldId; flair?: LessonFlair[] } | undefined {
   if (!text) return undefined;
   const t = text.toLocaleLowerCase("hu");
-  const world: VisualWorldId | undefined = /rózsaszín|pink|kislány|lányos|hercegnő|királylány/.test(t) ? "princess"
-    : /varázs|mesés/.test(t) ? "magic" : /űr|galaxis|bolygó/.test(t) ? "space" : /dzsungel|állat/.test(t) ? "jungle"
-    : /tenger|víz alatt|óceán/.test(t) ? "ocean-kids" : undefined;
-  const wantsEffects = /effekt|csillog|animáci|mozgó|figyelemfelkelt|változatos|látványos/.test(t);
+  // Audit 2026-09-24 (mért hamis találatok): „sűrűség”/„szűrd” → űr, „állatok testfelépítése” → dzsungel,
+  // „ne legyen rózsaszín” → rózsaszín, „változatos feladatok”/„effektívebb” → effektek. Ezért csak a
+  // SZÓ ELEJÉN illesztünk, a tartalmi témaszavak (állat, űr, víz) nem választanak világot, és a közvetlenül
+  // tagadott említés („ne legyen”, „nem kell”, „nélkül”) nem számít.
+  const B = "(?:^|[^a-záéíóöőúüű])";
+  const said = (re: string) => {
+    for (const m of t.matchAll(new RegExp(`${B}(${re})`, "g"))) {
+      const before = t.slice(Math.max(0, (m.index ?? 0) - 18), (m.index ?? 0) + 1);
+      const after = t.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 14);
+      if (/(?:^|[^a-záéíóöőúüű])(ne|nem|se|sem)(\s+\S+)?\s*$/.test(before) || /^\S*\s+nélkül/.test(after)) continue;
+      return true;
+    }
+    return false;
+  };
+  const world: VisualWorldId | undefined = said("rózsaszín|pink|kislány|lányos|hercegnő|királylány") ? "princess"
+    : said("varázsvilág|varázslatos világ|varázs témá") ? "magic" : undefined;
+  const wantsEffects = said("effekt(?!ív)|csillog|animáci|figyelemfelkelt|figyelemfelhív|látványos");
   if (!world && !wantsEffects) return undefined;
   const base = pickLessonFlair(seed || text);
   const flair = wantsEffects ? [...new Set<LessonFlair>(["sparkles", "shimmer-keys", "pop-correct", ...base])].slice(0, 4) : undefined;

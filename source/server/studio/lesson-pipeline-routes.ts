@@ -453,16 +453,26 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
   // The full audit goes to the log and the job output (sourceCorrections); the column holds only a code.
   for (const fix of result.corrections) logger.info(`[STUDIO/1STEP] ${fix.localId}: ${correctionAuditText(fix)}`);
-  for (const fix of result.corrections) {
-    const row = rows.find((r) => r.localId === fix.localId);
-    if (!row) continue;
-    await db.update(kmConcepts).set({
-      ...(fix.term !== undefined ? { term: fix.term } : {}),
-      ...(fix.definition !== undefined ? { definition: fix.definition } : {}),
-      ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}),
-      verbatimReason: correctionReasonCode(fix),
-      updatedAt: new Date(),
-    }).where(eq(kmConcepts.id, row.id));
+  if (!result.corrections.length) return [];
+  // Audit 2026-09-24: all rows commit together or none; a failed write never stops the run (the lesson is
+  // then made from the uncorrected map, exactly as before corrections existed) — the docstring's promise.
+  try {
+    await db.transaction(async (tx) => {
+      for (const fix of result.corrections) {
+        const row = rows.find((r) => r.localId === fix.localId);
+        if (!row) continue;
+        await tx.update(kmConcepts).set({
+          ...(fix.term !== undefined ? { term: fix.term } : {}),
+          ...(fix.definition !== undefined ? { definition: fix.definition } : {}),
+          ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}),
+          verbatimReason: correctionReasonCode(fix),
+          updatedAt: new Date(),
+        }).where(eq(kmConcepts.id, row.id));
+      }
+    });
+  } catch (error) {
+    logger.warn(`[STUDIO/1STEP] A forrás-helyesbítés mentése elmaradt (${error instanceof Error ? error.message : String(error)}) — helyesbítés nélkül folytatjuk.`);
+    return [];
   }
   return result.corrections;
 }

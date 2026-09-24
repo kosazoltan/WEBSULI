@@ -194,7 +194,7 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
 export async function callScopeModel(files: ExtractorFile[], model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
   const connection = studioConnection(model);
-  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000 });
+  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
 
   const parts = await scopeContentParts(files);
 

@@ -16,7 +16,7 @@ export const lessonRepairSchema = z.object({
   // to the map rows only when the reviewed candidate is applied (the quote never changes).
   ownerInstruction: z.string().max(4000).optional(),
   sourceCorrections: z.array(z.object({
-    localId: z.string().min(1), term: z.string().min(1).optional(), definition: z.string().min(1).optional(),
+    localId: z.string().min(1), term: z.string().min(1).max(200).optional(), definition: z.string().min(1).optional(),
     basis: z.enum(["owner", "transcription"]), reason: z.string(),
     from: z.object({ term: z.string().optional(), definition: z.string().optional() }),
   })).optional(),

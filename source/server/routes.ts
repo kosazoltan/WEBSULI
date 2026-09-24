@@ -1232,6 +1232,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        // Audit 2026-09-24: explicit bound — SDK defaults allowed ~30 min worker holds (10 min × 3 attempts).
+        timeout: 300000, maxRetries: 1,
       });
 
       // Build system prompt with optional custom instructions
@@ -1314,6 +1316,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        // Audit 2026-09-24: explicit bound — SDK defaults allowed ~30 min worker holds (10 min × 3 attempts).
+        timeout: 300000, maxRetries: 1,
       });
 
       // Build system prompt with optional custom instructions
@@ -1416,7 +1420,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const openai = new OpenAI({
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        // Audit 2026-09-24: explicit bound — SDK defaults allowed ~30 min worker holds.
+        timeout: 300000, maxRetries: 1,
       });
 
       // ✨ Load system prompt from database
@@ -1669,6 +1675,8 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        // Audit 2026-09-24: explicit bound — SDK defaults allowed ~30 min worker holds (10 min × 3 attempts).
+        timeout: 300000, maxRetries: 1,
       });
 
       // Build conversation history for Claude
@@ -1850,7 +1858,8 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
       const openai = new OpenAI({
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        timeout: 180000 // 180 seconds (3 minutes) for multiple file processing
+        timeout: 180000, // 180 seconds (3 minutes) for multiple file processing
+        maxRetries: 1,
       });
 
       logger.info(`[FILE ANALYSIS] Analyzing ${files.length} files`);
@@ -1993,7 +2002,9 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 
       const openai = new OpenAI({
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        // Audit 2026-09-24: explicit bound — SDK defaults allowed ~30 min worker holds.
+        timeout: 300000, maxRetries: 1,
       });
 
       logger.info(`[FILE ANALYSIS] Analyzing ${fileType} file: ${fileName || 'unknown'}`);
@@ -2110,7 +2121,9 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       const OpenAI = (await import('openai')).default;
       const openai = new OpenAI({
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        // Audit 2026-09-24: explicit bound — SDK defaults allowed ~30 min worker holds.
+        timeout: 300000, maxRetries: 1,
       });
 
       // Default detailed system prompt
@@ -2291,6 +2304,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       const anthropic = new Anthropic({
         apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+        // Audit 2026-09-24: explicit bound — SDK defaults allowed ~30 min worker holds (10 min × 3 attempts).
+        timeout: 300000, maxRetries: 1,
       });
 
       // Build conversation
