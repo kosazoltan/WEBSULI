@@ -57,3 +57,14 @@ test("nem folt (régi alakú teljes lecke) → null, a régi út méri; after = 
   const first = applyVisualPatch(lesson, { sections: [{ index: 1, visuals: [{ after: -1, animKind: "numberLine", params: { from: 0, to: 300, step: 100, marks: [{ value: 100, label: "1 évszázad" }] }, caption: "Évszázad a számegyenesen", coversConceptIds: ["c2"] }] }] });
   assert.equal(first?.lesson.sections[1].blocks[0].kind, "animate");
 });
+
+test("élő mérés 2026-09-24 (új lecke): a jelölt fogalmat meg nem nevező ábra okkal elutasítva — nem néma kiesés", () => {
+  const concepts = [{ localId: "c1", term: "holdnaptár", examWeight: "core" as const }];
+  const visual = (caption: string) => ({ sections: [{ index: 0, visuals: [{ ...moon, caption }] }] });
+  const unnamed = applyVisualPatch(lesson, visual("A Hold fázisai egymás után a Föld körül."), concepts);
+  assert.equal(unnamed?.added, 0);
+  assert.match(unnamed!.rejected.join(" "), /egyik jelölt fogalmat sem nevezi meg szó szerint — írd bele: „holdnaptár”/);
+  const named = applyVisualPatch(lesson, visual("A Hold fázisai: erre a körforgásra épült a holdnaptár."), concepts);
+  assert.equal(named?.added, 1);
+  assert.equal(applyVisualPatch(lesson, visual("A Hold fázisai egymás után a Föld körül."))?.added, 1, "fogalomlista nélkül nem ítél");
+});

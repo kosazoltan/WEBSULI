@@ -1410,6 +1410,24 @@ test("(n4) spec 2026-09-24 (4. szelet): a példa lépéseit ismétlő ábra utá
   assert.equal(blocks.filter((b) => b.kind === "animate").length, 1);
 });
 
+test("(n5) élő mérés 2026-09-24: a fogalmat meg nem nevező ábra elutasítva; a fejezet a tartalékkal sem marad ábra nélkül", async () => {
+  const withExample = { ...GOOD_LESSON, sections: [{ ...GOOD_LESSON.sections[0], blocks: [...GOOD_LESSON.sections[0].blocks,
+    { kind: "example", problem: "Mennyi 2 + 3 · 4 a műveleti sorrend szerint?", steps: ["A műveleti sorrend szerint előbb szorzunk: 3 · 4 = 12.", "Utána összeadunk: 2 + 12 = 14."], answer: "14", coversConceptIds: ["c1"] }] }] };
+  // A modell mindkétszer olyan ábrát ad, amelynek felirata nem nevezi meg a fogalmat („műveleti sorrend”).
+  const unnamed = { sections: [{ index: 0, visuals: [{ after: 0, animKind: "numberLine", params: { from: 0, to: 14, step: 1, marks: [{ value: 14, label: "14" }] }, caption: "Egy szám a számegyenesen, jól látható helyen", coversConceptIds: ["c1"] }] }] };
+  const base = makeDeps(JSON.stringify(unnamed));
+  base.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "c1", examWeight: "core", term: "műveleti sorrend" }] });
+  base.store.seed({ id: "job-g", mapId: "m1", step: "animator", status: "running", output: { lesson: withExample } });
+  const outcome = await runPipelineStep("job-g", base);
+  assert.equal(outcome.ok, true);
+  assert.ok(base.calls.length >= 2, "az elutasítás okával célzott újrakérés ment");
+  assert.match(base.calls[1].user, /egyik jelölt fogalmat sem nevezi meg szó szerint — írd bele: „műveleti sorrend”/);
+  const blocks = ((await base.store.loadJob("job-g"))?.output?.lesson as typeof withExample).sections[0].blocks;
+  const visual = blocks.find((b) => b.kind === "animate") as { animKind?: string } | undefined;
+  assert.ok(visual, "a fejezet nem maradt ábra nélkül");
+  assert.equal(visual!.animKind, "process", "a tartalék a példa lépéseiből pótolt");
+});
+
 test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az eredeti lecke megy tovább a lektorra", async () => {
   const primary = resolveStudioModel("animator");
   const fallback = FALLBACK_MODELS.animator!;

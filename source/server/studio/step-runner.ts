@@ -745,7 +745,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // megy tovább a lektorra, a gyártás nem hal meg.
       // Spec 2026-09-24: a modell ábra-foltot ad; a program illeszti be (a tanítás szerkezetileg érintetlen).
       // Régi alakú teljes lecke is elfogadott (a checkAnimatorResult méri).
-      const patched = animatorModelFailure ? null : applyVisualPatch(original, json);
+      const patched = animatorModelFailure ? null : applyVisualPatch(original, json, map.concepts);
       if (patched) {
         logger.info(`[STUDIO] Ábrafolt beillesztve (${job.id}): ${patched.added} új, ${patched.replaced} csere${patched.rejected.length ? `; elutasítva: ${patched.rejected.join(" | ").slice(0, 600)}` : ""}`);
       }
@@ -790,7 +790,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 Válaszolj kizárólag a kért folt-JSON-nal.`,
           });
           if (repair.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + repair.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + repair.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + repair.usage.totalTokens };
-          const repaired = applyVisualPatch(animated, repair.json);
+          const repaired = applyVisualPatch(animated, repair.json, map.concepts);
           const checked = repaired ? lessonSchema.safeParse(repaired.lesson) : null;
           if (repaired && checked?.success && checkAnimatorResult(original, checked.data).ok) {
             animated = checked.data;
@@ -800,17 +800,19 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           logger.warn(`[STUDIO] Az ábrajavítás elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
         }
       }
-      const visuals = ensureSectionVisuals(animated, map.concepts);
-      if (visuals.added.length) {
-        logger.info(`[STUDIO] Fejezeti ábra pótolva a példa lépéseiből (${job.id}): fejezet ${visuals.added.map((i) => i + 1).join(", ")}`);
-      }
-      const sanitised = stripUngroundedAnimateLabels(visuals.lesson, map.concepts);
+      // Élő mérés (2026-09-24): a tartalék ábra a címke-őr ELŐTT futott, így a címkétlenné vált ábra kiesése után
+      // 4 fejezet ábra nélkül maradt. Sorrend: címke-őr, utána tartalék a még ábra nélküli fejezetekre.
+      const sanitised = stripUngroundedAnimateLabels(animated, map.concepts);
       if (sanitised.stripped.length) {
         logger.warn(
           `[STUDIO] Animációs címkék eltávolítva (${job.id}): ${sanitised.stripped.map((s) => `${s.conceptId}@${s.sectionIndex}/${s.blockIndex}`).join(", ")}`,
         );
       }
-      let completedLesson: Lesson = sanitised.lesson;
+      const visuals = ensureSectionVisuals(sanitised.lesson, map.concepts);
+      if (visuals.added.length) {
+        logger.info(`[STUDIO] Fejezeti ábra pótolva a példa lépéseiből (${job.id}): fejezet ${visuals.added.map((i) => i + 1).join(", ")}`);
+      }
+      let completedLesson: Lesson = visuals.lesson;
       let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
       if (isFusionMethodVersion(job.output?.methodVersion) || original.experience) {
         try {
@@ -1364,7 +1366,8 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
         .where(and(eq(kmConcepts.mapId, mapId), inArray(kmConcepts.reviewState, TAUGHT_REVIEW_STATES)));
 
       return {
-        meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom },
+        // Spec 2026-09-24: a forrásszöveg a vak megoldóhoz kell (élő mérés: nélküle a vak megoldó nem futott).
+        meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom, sourceText: map.sourceText },
         concepts: concepts.map((c) => ({
           id: c.id,
           localId: c.localId,

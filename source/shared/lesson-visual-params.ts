@@ -63,7 +63,9 @@ export const numberLineParamsSchema = z.object({
   step: z.number().positive().finite().optional(),
   highlightTo: z.number().finite().optional(),
   marks: z.array(z.object({ value: z.number().finite(), label: label(20).optional() })).max(12).optional(),
-  jumps: z.array(z.object({ from: z.number().finite(), to: z.number().finite(), label: label(16).optional() })).max(10).optional(),
+  // Élő mérés (2 futás, 2026-09-24): a 16 karakteres korlát helyes ábrákat utasított el („+ 3 oldal naponta”); a
+  // rajzoló a feliratot a rajzterületen belül tartja és ütközéskor új sorba teszi.
+  jumps: z.array(z.object({ from: z.number().finite(), to: z.number().finite(), label: label(24).optional() })).max(10).optional(),
 }).refine((p) => p.to > p.from, { message: "to > from" })
   .refine((p) => !p.step || (p.to - p.from) / p.step <= 40, { message: "legfeljebb 40 osztás" });
 

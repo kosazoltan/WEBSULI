@@ -2,6 +2,8 @@ import { z } from "zod";
 import { ANIM_KINDS, blockSchema, type Block, type Lesson } from "../../shared/lesson-schema";
 import { visualParamProblems } from "../../shared/lesson-visual-params";
 import { sanitizeIllustration, ungroundedLabels } from "../../shared/illustration-svg";
+import { blockText, checkGrounding } from "./grounding";
+import type { MapConcept } from "./coverage";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 3. szelet): az ábrakészítő CSAK az
@@ -30,7 +32,8 @@ export const visualPatchSchema = z.object({
 export type VisualPatchResult = { lesson: Lesson; added: number; replaced: number; rejected: string[] };
 
 /** A folt a leckébe illesztve, vagy `null`, ha a válasz nem folt (pl. régi alakú teljes lecke). */
-export function applyVisualPatch(original: Lesson, json: unknown): VisualPatchResult | null {
+export function applyVisualPatch(original: Lesson, json: unknown, concepts: ReadonlyArray<MapConcept> = []): VisualPatchResult | null {
+  const conceptById = new Map(concepts.map((c) => [c.localId, c] as const));
   const patch = visualPatchSchema.safeParse(json);
   if (!patch.success) return null;
   const rejected: string[] = [];
@@ -65,6 +68,16 @@ export function applyVisualPatch(original: Lesson, json: unknown): VisualPatchRe
       const foreign = v.coversConceptIds.filter((id) => !taught.has(id));
       if (foreign.length) problems.push(`a fejezetben nem tanított fogalom: ${foreign.join(", ")}`);
       if (v.replace !== undefined && section.blocks[v.replace]?.kind !== "animate") problems.push(`a ${v.replace}. blokk nem ábra, nem cserélhető`);
+      // Élő mérés (2026-09-24, új lecke): a címke-őr 20 címkét levett, 4 fejezet ábra nélkül maradt, mert a felirat
+      // átfogalmazva, nem szó szerint nevezte meg a fogalmat. Ha EGYIK jelölt fogalmat sem nevezi meg az ábra
+      // látható szövege, itt utasítjuk el — okkal, amit a célzott újrakérés visszakap.
+      if (block.success && conceptById.size) {
+        const text = blockText(block.data as unknown as Record<string, unknown>);
+        const labelled = v.coversConceptIds.map((id) => conceptById.get(id)).filter((c): c is MapConcept => !!c?.term);
+        if (labelled.length && !labelled.some((c) => checkGrounding(text, c))) {
+          problems.push(`a felirat egyik jelölt fogalmat sem nevezi meg szó szerint — írd bele: ${labelled.map((c) => `„${c.term}”`).join(", ")}`);
+        }
+      }
       if (problems.length || !block.success) { rejected.push(`${where} (${v.animKind}): ${problems.join("; ")}`); continue; }
       valid.push({ block: block.data, after: Math.min(v.after ?? section.blocks.length - 1, section.blocks.length - 1), replace: v.replace });
     }
