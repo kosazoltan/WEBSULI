@@ -741,13 +741,14 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // adat) után egy célzott újrakérés az ábrakészítőnek — a friss sorszámokkal, mert a folt eltolta őket.
       let animated = outcome.lesson;
       const weak = !animatorModelFailure && !reusedVisuals ? weakVisuals(animated) : [];
-      if (weak.length) {
-        logger.warn(`[STUDIO] Gyenge ábra (${job.id}): ${weak.map((w) => `${w.sectionIndex + 1}/${w.blockIndex} ${w.kind}`).join(", ")} → célzott újrakérés`);
+      const rejectedVisuals = !animatorModelFailure && !outcome.fellBack ? patched?.rejected ?? [] : [];
+      if (weak.length || rejectedVisuals.length) {
+        logger.warn(`[STUDIO] Gyenge/elutasított ábra (${job.id}): ${weak.map((w) => `${w.sectionIndex + 1}/${w.blockIndex} ${w.kind}`).join(", ")}${rejectedVisuals.length ? ` + ${rejectedVisuals.length} elutasított` : ""} → célzott újrakérés`);
         try {
           const repairSystem = await promptLookup(STUDIO_PROMPT_NAMES.animator, buildAnimatorPrompt(animated, promptMapOf(map)));
           const repair = await callStepModel(providerFactory(model, "visuals"), {
             step: job.step, policy: "visuals", model, system: repairSystem,
-            user: `${weakVisualsInstruction(weak)}
+            user: `${weakVisualsInstruction(weak, rejectedVisuals)}
 Válaszolj kizárólag a kért folt-JSON-nal.`,
           });
           if (repair.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + repair.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + repair.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + repair.usage.totalTokens };

@@ -56,3 +56,9 @@ Fotó/képgenerálás (pixeles AI-kép); a meglévő leckék tömeges újragener
 - `server/studio/visual-quality.ts`: gyenge ábra = `echo` (a fejezet példájának lépései ≥ 50 %-ban), `outline` (geometry), `broken` (a rajzoló nem rajzolná ki). Nem blokkol.
 - Futtató: gyenge ábra után EGY célzott újrakérés az ábrakészítőnek (a friss blokkszámokkal, `replace`), a csere csak érvényes, szerződéshű folt esetén kerül be; hiba esetén a lecke megy tovább.
 - Lektor skill 6. pont: a szöveget ismétlő, a fogalmat nem mutató ábra `language` jegyzet (nem blokkoló); a skill 4800 karakteren belül.
+
+## 2. szelet — megvalósítás és mérés
+- `shared/illustration-svg.ts`: allowlistes tisztítás (isomorphic-dompurify), csak belső `url(#…)`, kötelező `viewBox`, ≤ 30 000 karakter, ≤ 400 elem, legalább egy felirat; a feliratok szavai (4 betűs tő, számok pontosan) a lecke szövegéből; becsült elrendezés-ellenőrzés: telefonos betűméret (317 px tartalomszélesség, ≥ 11,5 px), egymásra csúszó és kilógó felirat. A kliens megjelenítés előtt ugyanazzal újratisztít.
+- Az elutasított ábrák oka a célzott újrakérésbe kerül.
+- Élő mérés (Opus 5.5, „időszámítás”): 1. hívás 3 illusztráció, 11,1 px-es betű telefonon (böngészőben mérve) → szerződés: font-size ≥ 16 / 400 szélesség + elrendezés-ellenőrzés; 2. hívás: 3 illusztráció, 0 elutasítás, telefonon min. 12,7 px, nincs levágás. A böngésző „átfedése” a kétsoros feliratoknál a betűdoboz mellékhatása volt (képen ellenőrizve: nincs valódi átfedés).
+- Számegyenes: tíz azonos „1 évszázad” ugrásfelirat egymásra csúszott → ütközéskor egy sorral feljebb, ≥ 3 azonos felirat csak egyszer; 375 px-en 0 átfedés.

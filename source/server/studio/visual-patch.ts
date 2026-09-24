@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ANIM_KINDS, blockSchema, type Block, type Lesson } from "../../shared/lesson-schema";
 import { visualParamProblems } from "../../shared/lesson-visual-params";
+import { sanitizeIllustration, ungroundedLabels } from "../../shared/illustration-svg";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 3. szelet): az ábrakészítő CSAK az
@@ -34,6 +35,8 @@ export function applyVisualPatch(original: Lesson, json: unknown): VisualPatchRe
   if (!patch.success) return null;
   const rejected: string[] = [];
   let added = 0, replaced = 0;
+  // Az illusztráció feliratainak forrása: a lecke látható tanítása (ábrák nélkül).
+  const corpus = [original.title, ...original.sections.flatMap((s) => [s.heading, ...s.blocks.filter((b) => b.kind !== "animate").map((b) => JSON.stringify(b))])].join("\n");
   const sections = original.sections.map((section) => ({ ...section, blocks: [...section.blocks] }));
   for (const entry of patch.data.sections) {
     const section = sections[entry.index];
@@ -47,7 +50,17 @@ export function applyVisualPatch(original: Lesson, json: unknown): VisualPatchRe
       if (!parsed.success) { rejected.push(`${where}: ${parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`); continue; }
       const v = parsed.data;
       const problems = visualParamProblems(v.animKind, v.params);
-      const block = blockSchema.safeParse({ kind: "animate", animKind: v.animKind, params: v.params, caption: v.caption, coversConceptIds: v.coversConceptIds });
+      let params = v.params;
+      if (v.animKind === "illustration" && !problems.length) {
+        // Spec 2026-09-24 (2. szelet): a tisztított SVG kerül tárolásra; minden felirat a lecke szövegéből.
+        const check = sanitizeIllustration(v.params.svg);
+        if (check.ok) {
+          const ungrounded = ungroundedLabels(check.labels, corpus);
+          if (ungrounded.length) problems.push(`a leckében nem szereplő felirat: ${ungrounded.join(", ").slice(0, 160)}`);
+          params = { svg: check.svg };
+        }
+      }
+      const block = blockSchema.safeParse({ kind: "animate", animKind: v.animKind, params, caption: v.caption, coversConceptIds: v.coversConceptIds });
       if (!block.success) problems.push(...block.error.issues.map((i) => `${i.path.join(".")} ${i.message}`));
       const foreign = v.coversConceptIds.filter((id) => !taught.has(id));
       if (foreign.length) problems.push(`a fejezetben nem tanított fogalom: ${foreign.join(", ")}`);

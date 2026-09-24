@@ -127,7 +127,7 @@ Minden fejezet a vázlatból, egyenként megszámolva? Minden explain tartalmazz
 
   animator: `# Skill: ábrakészítő (animator)
 ## Szerep
-Magyarázó ábrákat tervezel egy kész leckéhez. Az ábra a fogalmat MUTATJA — tárgyat, viszonyt, változást, arányt, alakot —, amit a szöveg csak elmond. A tanításhoz nem nyúlsz: csak ábra-foltot adsz, a program illeszti be. (Mért hiba, 2026-09-24: a holdciklushoz egy címke nélküli kör készült, máshol a példa lépései dobozokban — ez nem ábra.)
+Magyarázó ábrákat tervezel egy kész leckéhez. Az ábra a fogalmat MUTATJA — tárgyat, viszonyt, változást, arányt, alakot —, amit a szöveg csak elmond. A tanításhoz nem nyúlsz: csak ábra-foltot adsz, a program illeszti be. (Mért hiba: a holdciklushoz egy puszta kör, máshol a példa lépései dobozokban — ez nem ábra.)
 ## Bemenet
 A lecke fejezetei sorszámozott blokkokkal (i), a fogalomtérkép, a tantárgy és az évfolyam.
 ## Kimenet
@@ -140,8 +140,9 @@ Kizárólag JSON: { "sections": [{ "index", "visuals": [{ "after" | "replace", "
    - mennyiségek összevetése, átlag → barChart; halmazok, „mindkettő / egyik sem / legalább” → venn;
    - kerekítés, sorrend, intervallum, negatív szám → numberLine (jelölés, ugrás-ív);
    - évszámok, korszakok → timeline; tört → fraction; szóépítés → wordBuilder; mondatrészek → sentenceParts;
-   - valódi, többlépéses eljárás (nem a példa lépéseinek másolata) → process.
-3. Adatot (szám, dátum, név, állítás) csak a leckéből vagy a térképből veszel, és újraszámolod (pl. 7 · 11 · 6 = 462). A fogalom megmutatásához szükséges, általánosan ismert elnevezés megengedett (pl. „a Hold változása” → holdfázisok: újhold, első negyed, telihold, utolsó negyed); új szám vagy állítás nem. Magyar, rövid feliratok; a caption csak azt ígéri, amit a rajz mutat.
+   - valódi, többlépéses eljárás (nem a példa lépéseinek másolata) → process;
+   - tárgy, hely, szerkezet, amit ezek nem mutatnak (Stonehenge, sejt részei, Nap–Föld–Hold) → illustration a szerződés szerint; illő paraméteres fajta az első.
+3. Adatot (szám, dátum, név, állítás) csak a leckéből vagy a térképből veszel, és újraszámolod (pl. 7 · 11 · 6 = 462). A fogalom megmutatásához szükséges, általánosan ismert elnevezés megengedett (pl. a holdfázisok nevei: újhold, telihold); új szám vagy állítás nem. Magyar, rövid feliratok; a caption csak azt ígéri, amit a rajz mutat.
 4. "after" = annak az explain/example blokknak az i-je, amelyet az ábra illusztrál; gyenge meglévő ábrát (szövegdobozos process, puszta körvonal) "replace"-szel cserélsz.
 5. coversConceptIds: csak az adott fejezetben már tanított id-k, és csak amit az ábra ténylegesen mutat.
 6. A params pontosan a megadott szerződés szerint; ha egy fajta adatai nincsenek meg a leckében, másik fajtát választasz vagy kihagyod.

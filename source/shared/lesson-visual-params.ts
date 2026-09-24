@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { illustrationLayoutProblems, sanitizeIllustration } from "./illustration-svg";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): a magyarázó ábrák paraméterei.
@@ -88,6 +89,10 @@ export type NumberLineParams = z.infer<typeof numberLineParamsSchema>;
 
 /** Validated params, or the reasons they cannot be drawn. Kinds without a schema pass through. */
 export function visualParamProblems(kind: string, params: unknown): string[] {
+  if (kind === "illustration") {
+    const check = sanitizeIllustration((params as { svg?: unknown } | null)?.svg);
+    return (check.ok ? illustrationLayoutProblems(check.svg) : check.problems).map((p) => `illustration.svg: ${p}`);
+  }
   const schema = (VISUAL_PARAM_SCHEMAS as Record<string, z.ZodTypeAny>)[kind];
   if (!schema) return [];
   const parsed = schema.safeParse(params);
@@ -124,5 +129,6 @@ export const VISUAL_PARAMS_CONTRACT = [
   'barChart — mennyiségek összehasonlítása: {"bars":[{"label":"1. bolt","value":500}],"unit"?:"Ft/kg","average"?:true} 2–10 oszlop; average true = átlagvonal.',
   'venn — halmazok: {"sets":["kék kabát","kék sapka"],"regions"?:{"A":7,"B":8,"AB":15,"none":0},"universe"?:"30 fős osztály"} 2–3 halmaz; tartomány: A, B, C, AB, AC, BC, ABC, none.',
   'numberLine — számegyenes: {"from":1400,"to":1600,"step"?:50,"highlightTo"?,"marks"?:[{"value":1452,"label":"1452"}],"jumps"?:[{"from":1452,"to":1500,"label":"kerekítés"}]} legfeljebb 40 osztás.',
+  'illustration — szabad SVG-rajz, CSAK ha a fenti fajták nem mutatják a lényeget (pl. Stonehenge kőkörei, egy sejt részei, a Nap–Föld–Hold helyzete): {"svg":"<svg viewBox=\\"0 0 400 260\\" xmlns=\\"http://www.w3.org/2000/svg\\">…</svg>"}. Csak alap alakzatok (path, circle, ellipse, rect, line, polyline, polygon), text/tspan, g, defs, linearGradient/radialGradient, marker; nincs style, script, kép, link. Szöveg és vonal: fill/stroke="currentColor"; kitöltés közepes telítettségű szín. Minden felirat szava szerepeljen a leckében; font-size ≥ 16 a viewBox 400 szélességénél (arányosan: szélesség/25); a feliratok ne fedjék egymást (sortávolság ≥ 1,3 × betűméret, becsült szélesség ≈ 0,55 × betűméret × betűszám), ne lógjanak ki a viewBoxból; transform nélkül; ≤ 30 000 karakter.',
   'timeline — {"events":["i. e. 776: első olimpia","1000: István koronázása"]} (≥ 2 esemény, időrendben). process — {"steps":["…","…"]} CSAK valódi eljárásra (2–8 lépés), SOHA nem a példa lépéseinek szó szerinti ismétlésére.',
 ].join("\n");

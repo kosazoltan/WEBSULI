@@ -42,9 +42,16 @@ export function weakVisuals(lesson: Lesson): WeakVisual[] {
 }
 
 /** Az ábrakészítő célzott újrakéréséhez: melyik blokkot és miért cserélje. */
-export function weakVisualsInstruction(weak: WeakVisual[]): string {
+export function weakVisualsInstruction(weak: WeakVisual[], rejected: string[] = []): string {
   return [
-    "Az alábbi ábrák gyengék. Mindegyiket CSERÉLD (\"replace\": a blokk i-je) a fogalmat valóban megmutató ábrára, ugyanebben a folt-alakban; ha a fejezetben nincs rajzolható tartalom, hagyd ki a fejezetet.",
-    ...weak.map((w) => `- ${w.sectionIndex}. fejezet (index), ${w.blockIndex}. blokk (i): ${w.reason}`),
+    ...(weak.length ? [
+      "Az alábbi ábrák gyengék. Mindegyiket CSERÉLD (\"replace\": a blokk i-je) a fogalmat valóban megmutató ábrára, ugyanebben a folt-alakban; ha a fejezetben nincs rajzolható tartalom, hagyd ki a fejezetet.",
+      ...weak.map((w) => `- ${w.sectionIndex}. fejezet (index), ${w.blockIndex}. blokk (i): ${w.reason}`),
+    ] : []),
+    // Spec 2026-09-24 (2. szelet): az elutasított ábra (pl. illusztráció kicsi betűvel) okkal visszamegy.
+    ...(rejected.length ? [
+      "Az alábbi ábrákat a program ELUTASÍTOTTA; a megadott okot javítva add újra őket (\"after\"), a fenti blokkszámokkal:",
+      ...rejected.map((r) => `- ${r}`),
+    ] : []),
   ].join("\n");
 }
