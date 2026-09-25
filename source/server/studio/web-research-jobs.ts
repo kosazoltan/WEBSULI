@@ -9,6 +9,7 @@ import { logger } from "../lib/logger";
 import { assertTeachingReviewEvidence, type TeachingReviewEvidence } from "./web-teaching-review";
 import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, savedWorkflowResult, type WorkflowStore } from "../workflows/engine";
 import type { ExperienceCheckpoint } from "./experience-builder";
+import { isStudioArtifact, type StudioResearchArtifact } from "./web-studio-handoff";
 
 export type StoredResearchJob = WebResearchJob & {
   userId: string;
@@ -19,6 +20,9 @@ export type StoredResearchJob = WebResearchJob & {
   reviewEvidence?: TeachingReviewEvidence;
   /** Spec 2026-09-25: bank packets already built; a resumed run reuses them without a model call. Never public. */
   bankCheckpoint?: ExperienceCheckpoint;
+  /** Spec 2026-09-25 (webes Studio-átadás): the one-step run the downloaded sources were handed to. */
+  studioRunId?: string;
+  lessonId?: string;
 };
 export interface ResearchJobStore {
   create(job: StoredResearchJob): Promise<boolean>;
@@ -26,6 +30,8 @@ export interface ResearchJobStore {
   update(job: StoredResearchJob, expectedState: StoredResearchJob["state"]): Promise<void>;
   publish(id: string, userId: string): Promise<StoredResearchJob>;
   verifyMaterial?(id: string, userId: string, html: string): Promise<boolean>;
+  /** Spec 2026-09-25: the Studio lesson is published and points at this material; its title and grade. */
+  readStudioLesson?(htmlFileId: string, lessonId: string): Promise<{ title: string; classroom: number } | null>;
 }
 export class ResearchJobConflict extends Error {}
 
@@ -41,9 +47,9 @@ export function webLessonTitleFromHtml(html: string): string | null {
   return pick(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)) ?? pick(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i));
 }
 export function publicResearchJob(job: StoredResearchJob): WebResearchJob {
-  const { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume } = job;
+  const { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume, output } = job;
   const warnings = job.reviewEvidence?.warnings;
-  return { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume,
+  return { id, state, stage, title, message, content, sources, createdAt, classroom, materialId, error, canResume, ...(output ? { output } : {}),
     ...(state === "done" || state === "ready" ? { html: job.html } : {}),
     // Spec 2026-09-19: the reviewer's open pedagogical notes travel to the Studio panel.
     ...(warnings?.length ? { warnings } : {}) };
@@ -58,7 +64,7 @@ export function checkedResearchArtifact(artifact: ResearchArtifact) {
 }
 
 /** DB owns idempotency, so multiple requests/processes cannot start the same AI call. */
-export function createResearchJobs(store: ResearchJobStore, generate: (input: WebResearchChatRequest, observer: ResearchObserver) => Promise<ResearchArtifact>, workflows?: WorkflowStore) {
+export function createResearchJobs(store: ResearchJobStore, generate: (input: WebResearchChatRequest, observer: ResearchObserver) => Promise<ResearchArtifact | StudioResearchArtifact>, workflows?: WorkflowStore) {
   async function runWork(job: StoredResearchJob, onStarted?: () => void) {
     let checkpoint = Promise.resolve();
     onStarted?.();
@@ -75,6 +81,9 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       await workflowPhase("generate");
       const artifact = await workflowCheckpoint("web-result", { input: job.input, method: LESSON_METHOD_VERSION }, () => ["ready", "done"].includes(job.state) && job.html
         ? Promise.resolve({ html: job.html, sources: job.sources, reviewEvidence: job.reviewEvidence }) : generate(job.input, {
+        userId: job.userId,
+        studioRunId: job.studioRunId,
+        async onStudioRun(runId) { job.studioRunId = runId; job.output = "studio"; persist(); await checkpoint; },
         bankCheckpoint: job.bankCheckpoint,
         async onBankCheckpoint(next) { job.bankCheckpoint = structuredClone(next); persist(); },
         onEvent(event) {
@@ -94,6 +103,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       await workflowPhase("knowledge");
       await workflowPhase("author");
       await workflowPhase("gate");
+      if (isStudioArtifact(artifact)) return await finishStudioLesson(job, artifact, () => checkpoint);
       const data = checkedResearchArtifact(artifact);
       await checkpoint;
       job.html = artifact.html;
@@ -124,6 +134,29 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       if (workflows) throw error;
     }
   }
+  /**
+   * Spec 2026-09-25 (webes Studio-átadás): the one-step run already passed its own gate and published the
+   * lesson — no html_files write here; the readback proves the published lesson behind the material.
+   */
+  async function finishStudioLesson(job: StoredResearchJob, artifact: StudioResearchArtifact, pending: () => Promise<void>) {
+    await pending();
+    job.sources = artifact.sources;
+    job.studioRunId = artifact.runId;
+    job.lessonId = artifact.lessonId;
+    job.output = "studio";
+    await workflowPhase("publish");
+    await workflowPhase("readback");
+    const lesson = store.readStudioLesson ? await store.readStudioLesson(artifact.htmlFileId, artifact.lessonId) : null;
+    if (!lesson) throw new WebResearchFailure("A Studio-lecke közzététele nem igazolható vissza.");
+    job.title = job.input.title?.trim() || lesson.title;
+    job.classroom = lesson.classroom;
+    job.materialId = artifact.htmlFileId;
+    job.state = "done";
+    job.error = undefined;
+    job.stage = "A tananyag elkészült és közzétéve (Studio-lecke).";
+    await store.update(job, "running");
+    return { kind: "material" as const, id: artifact.htmlFileId };
+  }
   async function run(job: StoredResearchJob, retry = false, onStarted?: () => void) {
     return workflows ? executeWorkflow(workflows, { id: job.id, owner: job.userId, mode: "web", retry, request: job.input }, async () => {
       // Change the domain state only after acquiring the workflow's exclusive lease.
@@ -148,13 +181,14 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     }
     if (job?.state === "error" && workflows) {
       const tracked = await workflows.read(id, userId);
-      const artifact = tracked && savedWorkflowResult<ResearchArtifact>(tracked, "web-result", { input: job.input, method: LESSON_METHOD_VERSION });
+      const artifact = tracked && savedWorkflowResult<ResearchArtifact | StudioResearchArtifact>(tracked, "web-result", { input: job.input, method: LESSON_METHOD_VERSION });
       job.canResume = false;
       if (tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
-        if (artifact) {
+        if (isStudioArtifact(artifact)) job.canResume = true;
+        else if (artifact) {
           try { checkedResearchArtifact(artifact); job.canResume = true; }
           catch { /* An invalid saved artifact cannot be recovered by republishing it. */ }
-        } else job.canResume = hasSavedResearchTurn(tracked, job.input);
+        } else job.canResume = hasSavedResearchTurn(tracked, job.input) || !!job.studioRunId;
       }
     }
     return job;

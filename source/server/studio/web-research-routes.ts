@@ -2,7 +2,9 @@ import express, { type Request, type Response } from "express";
 import { z } from "zod";
 import { isAuthenticatedAdmin } from "../auth";
 import { webResearchChatSchema, type WebResearchEvent } from "./web-research-agent";
-import { generateWebResearchLesson, WebResearchFailure } from "./web-research-runner";
+import { gatherWebSources, generateWebResearchLesson, WebResearchFailure } from "./web-research-runner";
+import { generateWebStudioLesson } from "./web-studio-handoff";
+import { oneStepRunView, startOneStepRun } from "./lesson-pipeline-routes";
 import { createResearchJobs, publicResearchJob, ResearchJobConflict } from "./web-research-jobs";
 import { researchJobStore } from "./web-research-job-store";
 import { workflowStore } from "../workflows/store";
@@ -10,7 +12,12 @@ import { WorkflowConflict } from "../workflows/engine";
 
 export const webResearchRouter = express.Router();
 webResearchRouter.use(isAuthenticatedAdmin);
-const jobs = createResearchJobs(researchJobStore, generateWebResearchLesson, workflowStore);
+// Spec 2026-09-25 (webes Studio-átadás, tulajdonosi döntés): the downloaded pages go to the one-step Studio
+// manufacture. WEB_RESEARCH_PIPELINE=html restores the standalone HTML path (rollback without a deploy of code).
+const generate = process.env.WEB_RESEARCH_PIPELINE === "html" ? generateWebResearchLesson
+  : (input: Parameters<typeof generateWebResearchLesson>[0], observer: Parameters<typeof generateWebResearchLesson>[1]) =>
+    generateWebStudioLesson(input, observer, { gather: gatherWebSources, start: startOneStepRun, read: oneStepRunView });
+const jobs = createResearchJobs(researchJobStore, generate, workflowStore);
 const startSchema = webResearchChatSchema.extend({ id: z.string().uuid() });
 const idSchema = z.string().uuid();
 const routeError = (res: Response, error: unknown) => res.status(error instanceof ResearchJobConflict || error instanceof WorkflowConflict ? 409 : 500).json({ message:
@@ -67,8 +74,9 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
       if (!job) throw new Error("A futás nem olvasható vissza.");
       send({ type: "status", message: job.stage });
       if (job.state === "error" || job.error) throw new Error(job.error || "A készítés megállt.");
-      if (job.state === "done" && job.html && job.materialId) {
-        send({ type: "html_generated", html: job.html, sources: job.sources });
+      if (job.state === "done" && job.materialId) {
+        // A Studio lesson (spec 2026-09-25) has no inline HTML; the material id is the result.
+        if (job.html) send({ type: "html_generated", html: job.html, sources: job.sources });
         send({ type: "complete" });
         break;
       }

@@ -90,6 +90,16 @@ export function WebResearchAgentPanel() {
         setFailure(job.error || null);
         setCanResume(job.canResume === true);
         setMessages([{ role: "user", content: job.message }, { role: "assistant", content: job.state === "done" ? "A tananyag elkészült és elmentve. A Megnyitás gombbal elérhető." : job.content || job.stage }]);
+        // Spec 2026-09-25: a Studio lesson made from the downloaded pages has no inline HTML — the saved material is the result.
+        if (job.state === "done" && job.materialId && !job.html) {
+          setGeneratedHtml("");
+          setTitle(job.title);
+          setClassroom(job.classroom ?? pending.classroom);
+          setSavedId(job.materialId);
+          setIsLoading(false);
+          void queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }).catch(error => logger.error("[WebResearchAgent] list refresh", error));
+          return;
+        }
         if (job.state === "done" || job.state === "ready") {
           if (!job.html || (job.state === "done" && !job.materialId)) {
             setFailure("A szerver nem igazolta vissza a teljes tananyagot és a mentését.");

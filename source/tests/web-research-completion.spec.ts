@@ -121,3 +121,21 @@ test("spec 2026-09-25: a folytatás a háttérben fut, a panel újra követi és
   // egy serviceWorker-hibát adja a tesztböngészőben; minden más oldalhiba bukás.
   expect(errors.filter(e => !/Service worker is disabled because the context is sandboxed/.test(e))).toEqual([]);
 });
+test("spec 2026-09-25: a Studio-gyártással kész internetes lecke megnyitható, iframe-előnézet és hibajelzés nélkül", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
+  let reads = 0;
+  const studioDone = { ...job, state: "done", output: "studio", materialId: "studio-lesson-html", classroom: 5, title: "Eger ostroma 1552", stage: "A tananyag elkészült és közzétéve (Studio-lecke)." };
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: job }));
+  await page.route("**/api/studio/web-research/jobs/*", r => r.fulfill({ json: ++reads < 2 ? { ...job, stage: "Studio-gyártás: tanulási terv" } : studioDone }));
+  await open(page); await send(page, "Készíts tananyagot Eger 1552-es ostromáról");
+  await expect(page.getByTestId("web-research-open-saved")).toHaveAttribute("href", "/preview/studio-lesson-html");
+  await expect(page.getByTestId("web-research-error")).toHaveCount(0);
+  await expect(page.getByTestId("web-research-preview")).toHaveCount(0);
+  await expect(page.getByTestId("web-research-save")).toBeDisabled();
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `tests/screenshots/web-research-studio-${viewport.width}.png`, fullPage: true });
+  }
+  expect(errors).toEqual([]);
+});

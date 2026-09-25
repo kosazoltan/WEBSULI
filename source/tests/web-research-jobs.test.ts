@@ -7,7 +7,8 @@ import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
 import { createResearchJobs, checkedResearchArtifact, publicResearchJob, webLessonTitleFromHtml, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
 import { WebResearchFailure, webResearchTurnKey } from "../server/studio/web-research-runner";
-import { workflowCheckpoint } from "../server/workflows/engine";
+import { workflowCheckpoint, workflowMode } from "../server/workflows/engine";
+import { generateWebStudioLesson } from "../server/studio/web-studio-handoff";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
 const data = { classroom: 7, classroomEvidence: "A háromszög alaphoz tartozó magassága és területképlete.", subject: "Matematika", experience: standardFusionFixture().experience };
@@ -277,4 +278,63 @@ test("spec 2026-09-25: a háttér-folytatás a bérlet után azonnal visszatér,
   assert.equal(resumed.state, "running"); assert.equal(m.materials.size, 0);
   finish(); await until(() => m.rows.get("resume-bg")?.state === "done");
   assert.deepEqual(resumedWith, saved); assert.equal(calls, 2); assert.equal(m.materials.size, 1);
+});
+
+/* Spec 2026-09-25 (docs/specs/2026-09-25-webes-studio-atadas.md) — a webes út a letöltött forrásokat a Studio-gyártásnak adja át. */
+test("spec 2026-09-25: Studio-átadás — kész lecke html_files-írás nélkül, visszaolvasva; a futás a webes workflow-n kívül indul", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows();
+  const lessonsRead: string[] = []; let startedInside: string | undefined = "not-called";
+  m.store.readStudioLesson = async (htmlFileId, lessonId) => { lessonsRead.push(`${htmlFileId}/${lessonId}`); return { title: "Eger ostroma 1552", classroom: 5 }; };
+  const views = [{ phase: "author", detail: null, error: null, lessonId: null, htmlFileId: null }, { phase: "done", detail: null, error: null, lessonId: "lesson-9", htmlFileId: "html-9" }];
+  const generate = (i: typeof input, observer: Parameters<Parameters<typeof createResearchJobs>[1]>[1]) => generateWebStudioLesson(i, observer, {
+    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
+    start: () => { startedInside = workflowMode(); return "run-9"; },
+    read: async () => views.length > 1 ? views.shift()! : views[0],
+    sleep: async () => undefined,
+  });
+  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  await jobs.start("studio-web", "owner", input);
+  await until(() => ["done", "error"].includes(m.rows.get("studio-web")?.state ?? ""));
+  const job = m.rows.get("studio-web")!;
+  assert.equal(job.state, "done", job.error);
+  assert.equal(job.materialId, "html-9"); assert.equal(job.lessonId, "lesson-9"); assert.equal(job.studioRunId, "run-9");
+  assert.equal(job.title, "Eger ostroma 1552"); assert.equal(job.classroom, 5);
+  assert.equal(m.materials.size, 0, "a Studio már közzétette — nincs html_files-írás");
+  assert.deepEqual(lessonsRead, ["html-9/lesson-9"]);
+  assert.equal(startedInside, undefined, "a Studio-futás saját workflow-ként, a webes környezeten kívül indul");
+  assert.equal(publicResearchJob(job).output, "studio");
+  const view = workflows.records.get("studio-web")!.view;
+  assert.equal(view.state, "done"); assert.deepEqual(view.result, { kind: "material", id: "html-9" });
+  assert.deepEqual(view.visits.map(v => v.step), ["generate", "knowledge", "author", "gate", "publish", "readback"]);
+});
+test("spec 2026-09-25: Studio-átadás — megszakadt követés folytatható, és a mentett Studio-futást követi, újat nem indít", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let starts = 0; let broken = true;
+  m.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
+  const generate = (i: typeof input, observer: Parameters<Parameters<typeof createResearchJobs>[1]>[1]) => generateWebStudioLesson(i, observer, {
+    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
+    start: () => { starts++; return "run-7"; },
+    read: async () => { if (broken) throw new Error("Synthetic DB outage while following"); return { phase: "done", detail: null, error: null, lessonId: "lesson-7", htmlFileId: "html-7" }; },
+    sleep: async () => undefined,
+  });
+  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  await jobs.start("studio-resume", "owner", input);
+  await until(() => workflows.records.get("studio-resume")?.view.state === "error");
+  const failed = await jobs.read("studio-resume", "owner");
+  assert.equal(failed!.studioRunId, "run-7"); assert.equal(failed!.canResume, true);
+  broken = false;
+  await jobs.publish("studio-resume", "owner");
+  assert.equal(m.rows.get("studio-resume")!.state, "done"); assert.equal(m.rows.get("studio-resume")!.materialId, "html-7");
+  assert.equal(starts, 1, "a folytatás a mentett futást követte");
+});
+test("spec 2026-09-25: Studio-átadás — a közzététel visszaolvasásának hibája nem ad kész jelzést", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows();
+  m.store.readStudioLesson = async () => null;
+  const generate = (i: typeof input, observer: Parameters<Parameters<typeof createResearchJobs>[1]>[1]) => generateWebStudioLesson(i, observer, {
+    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
+    start: () => "run-5", read: async () => ({ phase: "done", detail: null, error: null, lessonId: "lesson-5", htmlFileId: "html-5" }), sleep: async () => undefined,
+  });
+  await createResearchJobs(m.store, generate, workflows.store).start("studio-unverified", "owner", input);
+  await until(() => workflows.records.get("studio-unverified")?.view.state === "error");
+  assert.equal(m.rows.get("studio-unverified")!.state, "error");
+  assert.match(m.rows.get("studio-unverified")!.error!, /nem igazolható vissza/);
 });

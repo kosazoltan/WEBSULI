@@ -238,20 +238,32 @@ lessonPipelineRouter.post("/lessons/one-step", async (req: Request, res: Respons
     return res.status(400).json({ message: "Hibás kérés.", issues: parsed.issues });
   }
 
-  const runId = createRun();
   const userId = (req.user as { id?: string } | undefined)?.id;
-  // Fire-and-forget: the run loop reports through the progress store.
-  void runOneStep(runId, parsed.data, userId).catch((error) => {
+  res.status(202).json({ runId: startOneStepRun(parsed.data, userId) });
+});
+
+/**
+ * Starts a one-step run in the background; the run loop reports through the progress store.
+ * Spec 2026-09-25: the internet path hands its downloaded sources to this same manufacture.
+ */
+export function startOneStepRun(data: OneStepRequest, userId: string | undefined): string {
+  const runId = createRun();
+  void runOneStep(runId, data, userId).catch((error) => {
     if (error instanceof WorkflowWaiting) return;
     void recordOneStepFailure(runId, error);
   });
-  res.status(202).json({ runId });
-});
+  return runId;
+}
 
-/** GET /api/studio/lessons/one-step/:runId — the progress poll. */
-lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: Response) => {
-  const run = await getRun(req.params.runId);
-  if (!run) return res.status(404).json({ message: "Ismeretlen vagy lejárt futás." });
+export type OneStepRunView = {
+  phase: OneStepPhase; detail: string | null; error: string | null;
+  mapId: string | null; jobId: string | null; lessonId: string | null; htmlFileId: string | null;
+};
+
+/** The progress poll's view of a run, or null when it is unknown or expired. */
+export async function oneStepRunView(runId: string): Promise<OneStepRunView | null> {
+  const run = await getRun(runId);
+  if (!run) return null;
   // Audit 2026-09-05 (A): a finished run points at the published material so the teacher
   // (and the child) can open it — the html_files id lives on the lessons row.
   let htmlFileId: string | null = null;
@@ -263,15 +275,14 @@ lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: R
       .limit(1);
     htmlFileId = lesson?.htmlFileId ?? null;
   }
-  res.json({
-    phase: run.phase,
-    detail: run.detail,
-    error: run.error,
-    mapId: run.mapId,
-    jobId: run.jobId,
-    lessonId: run.lessonId,
-    htmlFileId,
-  });
+  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId };
+}
+
+/** GET /api/studio/lessons/one-step/:runId — the progress poll. */
+lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: Response) => {
+  const view = await oneStepRunView(req.params.runId);
+  if (!view) return res.status(404).json({ message: "Ismeretlen vagy lejárt futás." });
+  res.json(view);
 });
 
 /** The whole one-step chain, reporting each phase into the progress store. */

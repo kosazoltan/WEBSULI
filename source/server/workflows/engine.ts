@@ -29,6 +29,11 @@ export class WorkflowWaiting extends Error {
   constructor(message: string, readonly stepCompleted = false) { super(message); }
 }
 export const workflowMode = () => context.getStore()?.record.view.definition.mode;
+/**
+ * Spec 2026-09-25 (webes Studio-átadás): work started from inside one workflow that must run as its
+ * own, independent workflow (the internet path hands its sources to a one-step upload run).
+ */
+export function outsideWorkflow<T>(work: () => T): T { return context.exit(work); }
 /** Remaining content visits of a step in the running workflow; Infinity outside a production run. */
 export const workflowStepVisitsLeft = (id: string) => {
   const view = context.getStore()?.record.view;
