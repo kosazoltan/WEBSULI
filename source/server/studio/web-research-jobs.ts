@@ -175,7 +175,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
         let started!: () => void;
         const began = new Promise<void>(resolve => { started = resolve; });
         const work = run(job, true, started);
-        work.catch(() => logger.error("[WEB-RESEARCH] resumed background job failed"));
+        work.catch((error: unknown) => logger.error("[WEB-RESEARCH] resumed background job failed", { id, message: error instanceof Error ? error.message.slice(0, 400) : String(error) }));
         await Promise.race([began, work]);
         return (await store.read(id, userId))!;
       }
