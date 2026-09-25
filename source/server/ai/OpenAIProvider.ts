@@ -9,6 +9,8 @@ import {
   AIProviderTimeoutError,
   AIProviderRateLimitError,
   AIProviderAuthError,
+  AIProviderQuotaError,
+  isQuotaExhausted,
 } from './AIProvider';
 
 export class OpenAIProvider implements IAIProvider {
@@ -141,6 +143,8 @@ export class OpenAIProvider implements IAIProvider {
 
     // Handle OpenAI specific errors
     if (error instanceof OpenAI.APIError) {
+      // Spec 2026-09-25: a kimerült keret nem sebességkorlát — saját, nem újrapróbálható hiba.
+      if (isQuotaExhausted(error)) return new AIProviderQuotaError(this.name, String(error.code ?? error.type ?? "insufficient_quota"));
       if (error.status === 429) {
         return new AIProviderRateLimitError(this.name);
       }

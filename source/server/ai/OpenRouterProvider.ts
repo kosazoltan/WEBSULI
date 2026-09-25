@@ -9,6 +9,8 @@ import {
   AIProviderTimeoutError,
   AIProviderRateLimitError,
   AIProviderAuthError,
+  AIProviderQuotaError,
+  isQuotaExhausted,
 } from './AIProvider';
 
 /**
@@ -185,6 +187,7 @@ export class OpenRouterProvider implements IAIProvider {
     }
 
     if (error instanceof OpenAI.APIError) {
+      if (isQuotaExhausted(error)) return new AIProviderQuotaError(this.name, String(error.code ?? error.status));
       if (error.status === 429) return new AIProviderRateLimitError(this.name);
       if (error.status === 401 || error.status === 403) return new AIProviderAuthError(this.name);
       return new AIProviderError(
