@@ -213,3 +213,68 @@ test("spec 2026-09-19: cím nélküli kérésnél a webes lecke címe a HTML <ti
   assert.equal(webLessonTitleFromHtml("<html><body><h1>A <b>talaj</b> védelme</h1></body></html>"), "A talaj védelme");
   assert.equal(webLessonTitleFromHtml("<html><body><title>ab</title><p>nincs cím</p></body></html>"), null);
 });
+
+/* Spec 2026-09-25 — webes gyártás elakadása: élő munkás, halott munkás, mérgezett mentési lánc, háttér-folytatás, mentett bankcsomagok. */
+test("spec 2026-09-25: élő workflow mellett a régi állapotírás nem nyilvánítja halottnak a futást", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let finish!: () => void;
+  const paused = new Promise<void>(resolve => { finish = resolve; });
+  const jobs = createResearchJobs(m.store, async () => { await paused; return artifact; }, workflows.store);
+  await jobs.start("alive", "owner", input);
+  await until(() => workflows.records.get("alive")?.view.state === "running");
+  m.rows.get("alive")!.updatedAt = Date.now() - 40 * 60_000;
+  assert.equal((await jobs.read("alive", "owner"))!.state, "running");
+  finish(); await until(() => m.rows.get("alive")?.state === "done");
+  assert.equal(m.materials.size, 1);
+});
+test("spec 2026-09-25: megszakadt workflow (újraindulás) azonnal hibát és folytatást mutat, nem 25 perc múlva", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows();
+  const jobs = createResearchJobs(m.store, async () => { throw new Error("Synthetic crash"); }, workflows.store);
+  await jobs.start("gone", "owner", input);
+  await until(() => workflows.records.get("gone")?.view.state === "error");
+  // The worker died before it could record the error on the job row (process restart).
+  const row = m.rows.get("gone")!; row.state = "running"; row.error = undefined; row.updatedAt = Date.now();
+  workflows.records.get("gone")!.view.state = "interrupted";
+  const seen = await jobs.read("gone", "owner");
+  assert.equal(seen!.state, "error"); assert.match(seen!.error!, /folytatható/);
+});
+test("spec 2026-09-25: egy sikertelen állapotírás nem mérgezi meg a mentési láncot", async () => {
+  const m = memoryStore(); const update = m.store.update; let failOnce = true;
+  m.store.update = async (job, expected) => {
+    if (failOnce && job.stage === "Első státusz") { failOnce = false; throw new Error("Synthetic transient DB error"); }
+    return update(job, expected);
+  };
+  const jobs = createResearchJobs(m.store, async (_input, observer) => {
+    observer.onEvent({ type: "status", message: "Első státusz" });
+    observer.onEvent({ type: "status", message: "Második státusz" });
+    await observer.onCandidate?.(artifact.html, {});
+    return artifact;
+  });
+  await jobs.start("poison", "owner", input);
+  await until(() => ["done", "error"].includes(m.rows.get("poison")?.state ?? ""));
+  assert.equal(m.rows.get("poison")!.state, "done"); assert.equal(m.materials.size, 1);
+});
+test("spec 2026-09-25: a háttér-folytatás a bérlet után azonnal visszatér, a kész bankcsomagokat modellhívás nélkül kapja", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows(); let calls = 0; let broken = true;
+  const saved = { hash: "fusion-test", parts: { packet: { methods: [], tasks: [], quiz: [], glossary: [] } } };
+  let resumedWith: unknown; let finish!: () => void;
+  const paused = new Promise<void>(resolve => { finish = resolve; });
+  const generate = async (_input: typeof input, observer: Parameters<Parameters<typeof createResearchJobs>[1]>[1]) => {
+    calls++;
+    await workflowCheckpoint("web-provider-turn", webResearchTurnKey(input), async () => ({ content: "", sources: artifact.sources, final: { stop_reason: "end_turn", content: [] } }));
+    if (broken) { await observer.onBankCheckpoint?.(saved); throw new Error("Synthetic bank provider outage"); }
+    resumedWith = observer.bankCheckpoint;
+    await paused;
+    return artifact;
+  };
+  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  await jobs.start("resume-bg", "owner", input);
+  await until(() => workflows.records.get("resume-bg")?.view.state === "error");
+  const failed = await jobs.read("resume-bg", "owner");
+  assert.equal(failed!.canResume, true); assert.deepEqual(failed!.bankCheckpoint, saved);
+  assert.equal("bankCheckpoint" in publicResearchJob(failed!), false);
+  broken = false;
+  const resumed = await jobs.publish("resume-bg", "owner", { background: true });
+  assert.equal(resumed.state, "running"); assert.equal(m.materials.size, 0);
+  finish(); await until(() => m.rows.get("resume-bg")?.state === "done");
+  assert.deepEqual(resumedWith, saved); assert.equal(calls, 2); assert.equal(m.materials.size, 1);
+});

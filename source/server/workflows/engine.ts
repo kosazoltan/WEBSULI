@@ -5,6 +5,7 @@ import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_VE
 import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
 import { auditWorkflow, findingsFromError, knownFinding, mergeFindings } from "./learning";
 import { runtimePrompt } from "../../shared/runtime-knowledge";
+import { logger } from "../lib/logger";
 
 export type WorkflowRecord = { view: WorkflowView; owner: string; checkpoints: Record<string, unknown> };
 export interface WorkflowStore {
@@ -182,7 +183,11 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
   fresh.view.error = undefined;
   fresh.view.skillAudit = undefined;
   const timer = setInterval(() => {
-    void store.heartbeat(input.id, token).then(ok => { if (!ok) ctx.lostLease = true; }).catch(() => { ctx.lostLease = true; });
+    // Spec 2026-09-25: only the DB's answer ("lease not extended") loses the lease. A thrown query (a transient
+    // network/DB error) is not proof: the 90 s lease still holds, the next beat retries, and every snapshot
+    // write re-checks the lease in SQL anyway — a lost lease is caught there.
+    void store.heartbeat(input.id, token).then(ok => { if (!ok) ctx.lostLease = true; })
+      .catch(error => logger.warn(`[WORKFLOW] Szívverés átmeneti hibája (${input.id}): ${error instanceof Error ? error.message : String(error)}`));
   }, 20_000);
   timer.unref();
   try {

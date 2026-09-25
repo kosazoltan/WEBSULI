@@ -16,6 +16,8 @@ const SKILL_HELPER = /withRoleSkill\(|roleSkillBlock\(|withSupportSkill\(|withRe
 /** Files whose call receives a system prompt that another module already skilled (checked below). */
 const DELEGATED: Record<string, { file: string; helper: RegExp }> = {
   "server/studio/lesson-pipeline-routes.ts": { file: "server/studio/source-corrections.ts", helper: /withSupportSkill\("corrector"/ },
+  // Spec 2026-09-25: the shared bank call receives the packet system prompt built by the experience builder.
+  "server/studio/bank-call.ts": { file: "server/studio/experience-builder.ts", helper: /roleSkillBlock\("bank"\)/ },
 };
 /** Provider plumbing, not a role: the prompt arrives already built by the caller. */
 const PLUMBING = new Set(["server/studio/run-step.ts"]);

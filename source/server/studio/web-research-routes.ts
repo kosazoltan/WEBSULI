@@ -42,7 +42,8 @@ webResearchRouter.get("/web-research/jobs/:id/diagnostics", async (req, res) => 
 });
 webResearchRouter.post("/web-research/jobs/:id/publish", async (req, res) => {
   if (!idSchema.safeParse(req.params.id).success) return res.status(400).json({ message: "Hibás futásazonosító." });
-  try { return res.json(publicResearchJob(await jobs.publish(req.params.id, req.user!.id))); }
+  // Spec 2026-09-25: a resumed run continues in the background; the client follows it by polling.
+  try { return res.json(publicResearchJob(await jobs.publish(req.params.id, req.user!.id, { background: true }))); }
   catch (error) { return routeError(res, error); }
 });
 
