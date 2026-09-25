@@ -1,8 +1,9 @@
 import { OpenAIProvider } from "./OpenAIProvider";
 import { OpenRouterProvider } from "./OpenRouterProvider";
 import { ClaudeProvider } from "./ClaudeProvider";
-import { aiKeyStatus, keyNameForModel, providerForModel } from "./models";
-import type { AIProviderConfig } from "./AIProvider";
+import { AI_KEY_NAMES, aiKeyStatus, keyNameForModel, providerForModel } from "./models";
+import { AIProviderQuotaError, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type IAIProvider } from "./AIProvider";
+import { logger } from "../lib/logger";
 
 /** Resolve credentials by model, never by whichever key happens to be available. */
 export function studioConnection(model: string, env: Record<string, string | undefined> = process.env) {
@@ -24,15 +25,52 @@ export function studioModelReady(model: string) {
   return aiKeyStatus()[providerForModel(model)].configured;
 }
 
-export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort" | "maxRetries" | "jsonMode"> = {}) {
-  const connection = studioConnection(model);
+export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort" | "maxRetries" | "jsonMode"> = {}, env: Record<string, string | undefined> = process.env): IAIProvider {
+  const connection = studioConnection(model, env);
   const config = { apiKey: connection.apiKey, model: connection.model, timeout, maxTokens, ...options };
   // Spec 2026-09-19: the planner (pedagogue) runs on the direct Anthropic API (Opus 5,
   // adaptive thinking, effort from the step policy) — own key, no OpenRouter hop.
   if (connection.vendor === "anthropic") return new ClaudeProvider(config);
-  return connection.vendor === "openrouter"
-    ? new OpenRouterProvider(config)
-    : new OpenAIProvider(config, connection.vendor);
+  if (connection.vendor === "openrouter") return new OpenRouterProvider(config);
+  const direct = new OpenAIProvider(config, connection.vendor);
+  // Spec 2026-09-25 (docs/specs/2026-09-25-openai-keret-atallas.md): kimerült OpenAI-keretnél ugyanaz a modell az
+  // OpenRouteren át. Mérve: a webes job 22a38c0a bankfázisa „insufficient_quota” miatt állt le, miközben az
+  // `openai/gpt-5.6-terra` és `openai/gpt-5.6-luna` az OpenRouteren működött.
+  const routerKey = env[AI_KEY_NAMES.openrouter]?.trim();
+  if (connection.vendor !== "openai" || !routerKey) return direct;
+  return new QuotaFailoverProvider(direct, () => new OpenRouterProvider({ ...config, apiKey: routerKey, model: `openai/${connection.model}` }));
+}
+
+/** Kimerült keret után ennyi ideig a közvetlen hívás kimarad (nem ér minden hívás egy biztosan bukó kérést). */
+export const QUOTA_FAILOVER_MEMORY_MS = 10 * 60_000;
+let quotaExhaustedUntil = 0;
+export function resetQuotaFailoverForTest() { quotaExhaustedUntil = 0; }
+
+/** Ugyanaz a kérés ugyanazzal a modellel a tartalék útvonalon, ha az elsődleges fiók kerete elfogyott. */
+export class QuotaFailoverProvider implements IAIProvider {
+  readonly name: string;
+  readonly model: string;
+  private fallback?: IAIProvider;
+  constructor(private readonly primary: IAIProvider, private readonly makeFallback: () => IAIProvider, private readonly now = () => Date.now()) {
+    this.name = primary.name;
+    this.model = primary.model;
+  }
+  private route(): IAIProvider { return (this.fallback ??= this.makeFallback()); }
+  async chat(messages: AIMessage[], signal?: AbortSignal): Promise<AIResponse> {
+    if (this.now() < quotaExhaustedUntil) return this.route().chat(messages, signal);
+    try {
+      return await this.primary.chat(messages, signal);
+    } catch (error) {
+      if (!(error instanceof AIProviderQuotaError)) throw error;
+      quotaExhaustedUntil = this.now() + QUOTA_FAILOVER_MEMORY_MS;
+      logger.warn(`[AI] ${this.primary.name} kerete elfogyott (${this.model}) — ugyanaz a modell az OpenRouteren át, ${QUOTA_FAILOVER_MEMORY_MS / 60_000} percig.`);
+      return this.route().chat(messages, signal);
+    }
+  }
+  async *streamChat(messages: AIMessage[], signal?: AbortSignal): AsyncGenerator<AIStreamChunk, void, unknown> {
+    yield* (this.now() < quotaExhaustedUntil ? this.route() : this.primary).streamChat(messages, signal);
+  }
+  isAvailable(): Promise<boolean> { return this.primary.isAvailable(); }
 }
 
 export const LEKTOR_TIMEOUT_MS = 480_000;

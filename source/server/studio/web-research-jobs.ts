@@ -189,7 +189,7 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     async start(id: string, userId: string, input: WebResearchChatRequest) {
       const job: StoredResearchJob = { id, userId, input, state: "running", stage: "Forráskeresés indul…", title: input.title || "", message: input.message, content: "", sources: [], diagnostics: [], createdAt: Date.now() };
       if (await store.create(job)) {
-        void run(job).catch(() => logger.error("[WEB-RESEARCH] background job failed"));
+        void run(job).catch((error: unknown) => logger.error("[WEB-RESEARCH] background job failed", { id: job.id, message: error instanceof Error ? error.message.slice(0, 400) : String(error) }));
         return job;
       }
       const existing = await read(id, userId);

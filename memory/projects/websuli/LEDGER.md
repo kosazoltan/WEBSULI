@@ -532,6 +532,13 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Maradék:** független újraellenőrzés a kész bankon 4/134 jelzés (3 valódi hamis disztraktor-egyenlőség + 1 szabály-túlzás); a 3-at + egy tanítási check-blokkot kézzel javítottam, élő API-n ellenőrizve. A bank-ellenőr recallja futásonként ingadozik (egyszeri „hibátlan” ítélet nem garancia).
 **Nyitott:** a 67a05970 próbalecke (html 45af1165) 7 ismert bankhibával közzétéve — tulajdonosi döntés: javítás vagy eltávolítás.
 
+## 2026-09-25 — internetes tananyag-készítés: kimerült OpenAI-keret (PR #126, merge ba7786f)
+
+**Hiba:** webes job 22a38c0a („Első károly magyar király”) a bankfázisban „nem fejeződött be” hibával állt le; Render-napló: csak „background job failed”.
+**Gyökérok (bizonyítva):** reprodukció a job workflow-rekordjának MEMÓRIA-másolatával (a checkpointok miatt csak a bankfázis fut élőben) → `StepModelError` cause „[OpenAI] Rate limit exceeded”; próbahívás az éles kulccsal (Render-lenyomat egyezik) → 429 `insufficient_quota` / `credit_balance_exhausted`: **az OpenAI-fiók kreditje elfogyott** (terra és luna is). A kód a 429-et sebességkorlátnak fordította, az okot a webes futtató és a háttérjob naplója eldobta.
+**Javítás:** `AIProviderQuotaError`; `QuotaFailoverProvider` — kvótahibánál ugyanaz a kérés `openai/<modell>` néven az OpenRouteren (10 perc memória); a webes ág naplózza az okot. **Élő bizonyíték:** a tulajdonos jobja a termelési folytatási úton 1158 s alatt `done`, közzétéve (html 22a38c0a), 6 fejezet + 15 feladat + 25 kvíz; 375/1440 px: hScroll 0, konzolhiba 0.
+**Nyitott:** az OpenAI-kredit feltöltése (tulajdonos); addig minden OpenAI-hívás az OpenRouter-egyenleget terheli (~245 USD volt). Párhuzamos felhős munkamenet PR #125-je (webes bank: tartalék/mentőkör, párhuzamosság, árva-szabály) ugyanazokat a fájlokat érinti — élesben nem futott, rebase kell.
+
 ## 2026-09-25 — internetes tananyagkészítés: hol és miért akadt el (1. szelet: működés)
 
 **Kérés:** ellenőrizni, hol és miért akadt el az internetes tananyagkészítés, és javítani a működését és a módszerét.
