@@ -8,6 +8,7 @@ import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { logger } from "../lib/logger";
 import { assertTeachingReviewEvidence, type TeachingReviewEvidence } from "./web-teaching-review";
 import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, savedWorkflowResult, type WorkflowStore } from "../workflows/engine";
+import type { ExperienceCheckpoint } from "./experience-builder";
 
 export type StoredResearchJob = WebResearchJob & {
   userId: string;
@@ -16,6 +17,8 @@ export type StoredResearchJob = WebResearchJob & {
   diagnostics: Array<Record<string, unknown>>;
   updatedAt?: number;
   reviewEvidence?: TeachingReviewEvidence;
+  /** Spec 2026-09-25: bank packets already built; a resumed run reuses them without a model call. Never public. */
+  bankCheckpoint?: ExperienceCheckpoint;
 };
 export interface ResearchJobStore {
   create(job: StoredResearchJob): Promise<boolean>;
@@ -56,13 +59,15 @@ export function checkedResearchArtifact(artifact: ResearchArtifact) {
 
 /** DB owns idempotency, so multiple requests/processes cannot start the same AI call. */
 export function createResearchJobs(store: ResearchJobStore, generate: (input: WebResearchChatRequest, observer: ResearchObserver) => Promise<ResearchArtifact>, workflows?: WorkflowStore) {
-  async function runWork(job: StoredResearchJob) {
+  async function runWork(job: StoredResearchJob, onStarted?: () => void) {
     let checkpoint = Promise.resolve();
+    onStarted?.();
     const persist = () => {
       job.updatedAt = Date.now();
       const snapshot = structuredClone(job);
-      // Serialize snapshots to keep an old status write from racing completion.
-      checkpoint = checkpoint.then(() => store.update(snapshot, "running"));
+      // Serialize snapshots to keep an old status write from racing completion. Spec 2026-09-25: one
+      // failed write must not poison the chain — the next snapshot still runs; only the last result counts.
+      checkpoint = checkpoint.catch(() => undefined).then(() => store.update(snapshot, "running"));
       // The final await still reports failure; avoid an unhandled rejection mid-stream.
       void checkpoint.catch(() => undefined);
     };
@@ -70,6 +75,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       await workflowPhase("generate");
       const artifact = await workflowCheckpoint("web-result", { input: job.input, method: LESSON_METHOD_VERSION }, () => ["ready", "done"].includes(job.state) && job.html
         ? Promise.resolve({ html: job.html, sources: job.sources, reviewEvidence: job.reviewEvidence }) : generate(job.input, {
+        bankCheckpoint: job.bankCheckpoint,
+        async onBankCheckpoint(next) { job.bankCheckpoint = structuredClone(next); persist(); },
         onEvent(event) {
           if (event.type === "status") { job.stage = event.message; persist(); }
           if (event.type === "sources") { job.sources = [...event.sources]; persist(); }
@@ -117,20 +124,27 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       if (workflows) throw error;
     }
   }
-  async function run(job: StoredResearchJob, retry = false) {
+  async function run(job: StoredResearchJob, retry = false, onStarted?: () => void) {
     return workflows ? executeWorkflow(workflows, { id: job.id, owner: job.userId, mode: "web", retry, request: job.input }, async () => {
       // Change the domain state only after acquiring the workflow's exclusive lease.
-      if (job.state === "error") { job.state = "running"; job.error = undefined; job.canResume = false; await store.update(job, "error"); }
-      return runWork(job);
-    }) : runWork(job);
+      if (job.state === "error") { job.state = "running"; job.error = undefined; job.canResume = false; job.stage = "Folytatás a mentett részeredményekből…"; await store.update(job, "error"); }
+      return runWork(job, onStarted);
+    }) : runWork(job, onStarted);
   }
   async function read(id: string, userId: string) {
     const job = await store.read(id, userId);
-    if (job?.state === "running" && Date.now() - (job.updatedAt ?? job.createdAt) > 25 * 60_000) {
-      job.state = "error";
-      job.error = "A szerverfutás megszakadt vagy túllépte az időkeretet. Új készítést indíthatsz; a régi források és diagnózis megmaradtak.";
-      job.stage = job.error;
-      await store.update(job, "running");
+    if (job?.state === "running") {
+      // Spec 2026-09-25: the workflow lease, not the age of the last status write, tells whether a worker
+      // is alive. A live worker (long bank/review phase without status) is never declared dead — its later
+      // writes would be silently lost; a dead one (restart, crash) is reported at once, not after 25 min.
+      const tracked = workflows ? await workflows.read(id, userId) : null;
+      const workerGone = tracked ? ["error", "interrupted"].includes(tracked.view.state) : Date.now() - (job.updatedAt ?? job.createdAt) > 25 * 60_000;
+      if (workerGone) {
+        job.state = "error";
+        job.error = "A szerverfutás megszakadt vagy túllépte az időkeretet. A mentett részeredményekből folytatható, vagy új készítést indíthatsz; a források és a diagnózis megmaradtak.";
+        job.stage = job.error;
+        await store.update(job, "running");
+      }
     }
     if (job?.state === "error" && workflows) {
       const tracked = await workflows.read(id, userId);
@@ -145,13 +159,26 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     }
     return job;
   }
-  async function publish(id: string, userId: string) {
+  /**
+   * Spec 2026-09-25: `background` resumes a stopped run without holding the HTTP request for the whole
+   * remaining pipeline (tens of minutes; the client gave up after 20 s and stopped following). It returns
+   * once the lease is held and the job row says `running`; failures before that still reach the caller.
+   */
+  async function publish(id: string, userId: string, options: { background?: boolean } = {}) {
     const tracked = workflows ? await workflows.read(id, userId) : null;
     if (tracked) {
       const job = await read(id, userId);
       if (!job) throw new WebResearchFailure("A futás nem található.");
       if (job.state === "done" && tracked.view.state === "done") return job;
       if (!["ready", "done"].includes(job.state) && !job.canResume) throw new WebResearchFailure("Még nincs ellenőrzött, menthető tananyag.");
+      if (options.background && !["ready", "done"].includes(job.state)) {
+        let started!: () => void;
+        const began = new Promise<void>(resolve => { started = resolve; });
+        const work = run(job, true, started);
+        work.catch(() => logger.error("[WEB-RESEARCH] resumed background job failed"));
+        await Promise.race([began, work]);
+        return (await store.read(id, userId))!;
+      }
       await run(job, true);
       return (await store.read(id, userId))!;
     }

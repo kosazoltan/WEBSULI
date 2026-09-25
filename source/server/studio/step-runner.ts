@@ -1,8 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
-import { AIProviderTimeoutError, type IAIProvider } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import type { IAIProvider } from "../ai/AIProvider";
+import { FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -24,6 +24,7 @@ import {
   type Transition,
 } from "./pipeline";
 import { callStepModel, StepModelError } from "./run-step";
+import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import {
   buildAnimatorPrompt,
   buildAuthorPrompt,
@@ -60,7 +61,7 @@ import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, RetryableBankCallError, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
@@ -853,32 +854,15 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             onAttemptFailure: (sectionIndex, attempt, reason) => logger.warn(`[STUDIO] Bankcsomag bukott kísérlet (${job.id}) ${sectionIndex + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 600)}`),
             concurrency: PACKET_CONCURRENCY,
             call: async (bankSystem, user, attempt) => {
-              // Spec 2026-09-19: the bank is its own cheap role; after PACKET_ATTEMPTS failed
-              // attempts the packet is rebuilt once on the strong rescue model.
-              // attempt 0..PACKET_ATTEMPTS-2: primary; PACKET_ATTEMPTS-1: FALLBACK_MODELS.bank (other
-              // cheap family — a provider/length failure on the primary must not repeat on it);
-              // attempt PACKET_ATTEMPTS: rescue on the strong model.
-              const bankModel = attempt >= PACKET_ATTEMPTS ? BANK_RESCUE_MODEL
-                : attempt === PACKET_ATTEMPTS - 1 ? (FALLBACK_MODELS.bank ?? resolveStudioModel("bank"))
-                : resolveStudioModel("bank");
+              // Spec 2026-09-19 / 2026-09-25: bank model per attempt (primary → fallback → rescue), shared with the web path.
+              const bankModel = bankModelForAttempt(attempt);
               bankModelUsed = bankModel;
               if (!keyConfigured(bankModel)) throw new Error(`${NO_OPENROUTER_KEY_MESSAGE} Hiányzó kulcs: ${keyNameForModel(bankModel)}.`);
               if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[STUDIO] Bankcsomag ${attempt >= PACKET_ATTEMPTS ? "mentőkör" : "tartalék modell"}: ${bankModel} (${job.id}), ${attempt} bukott kísérlet után.`);
               // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
               if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
-              let result: Awaited<ReturnType<typeof callStepModel>>;
-              try {
-                result = await callStepModel(providerFactory(bankModel, attempt >= PACKET_ATTEMPTS ? "author" : "bank"), { step: "animator", model: bankModel, system: bankSystem, user });
-              } catch (error) {
-                // Model-output failure (length limit / empty / not JSON: no provider cause) → next attempt
-                // on the next model. Provider failure keeps its cause and fails the job once (resume path).
-                // Mérve (4. mérés): az időtúllépés a modell lassúsága (elfajult, 24k-ig futó válasz) — a
-                // következő kísérlet/modell kapja meg, nem a futás vége. Más szolgáltatói hiba (429/5xx/kulcs)
-                // változatlanul kilép a resume-útra.
-                const timedOut = error instanceof StepModelError && error.cause instanceof AIProviderTimeoutError;
-                if (error instanceof StepModelError && (!error.cause || timedOut)) throw new RetryableBankCallError(`${bankModel}: ${error.message}${timedOut ? " (időtúllépés)" : ""}`, { cause: error });
-                throw error;
-              }
+              // Model-output failure / timeout → RetryableBankCallError (next attempt); other provider failures → resume path.
+              const result = await callBankPacketModel(providerFactory(bankModel, bankProviderStep(attempt)), bankModel, bankSystem, user);
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
             },

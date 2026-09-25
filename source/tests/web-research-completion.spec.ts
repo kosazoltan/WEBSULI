@@ -96,3 +96,28 @@ test("a futás közben a mentési cím nem változhat, az indítás bemenete rö
   await expect(page.getByTestId("web-research-open-saved")).toBeVisible();
   await expect(page.getByTestId("web-research-title")).toBeEnabled();
 });
+test("spec 2026-09-25: a folytatás a háttérben fut, a panel újra követi és a kész anyagot mutatja", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
+  let resumed = false; let readsAfterResume = 0; let publications = 0;
+  await page.route("**/api/studio/web-research/jobs", r => r.fulfill({ status: 202, json: job }));
+  await page.route("**/api/studio/web-research/jobs/*", r => {
+    if (!resumed) return r.fulfill({ json: { ...job, state: "error", error: "A szerverfutás megszakadt vagy túllépte az időkeretet. A mentett részeredményekből folytatható.", canResume: true } });
+    readsAfterResume++;
+    return r.fulfill({ json: readsAfterResume < 2 ? { ...job, stage: "Gyakorlóbank készítése: 3. csomag kész…" } : done });
+  });
+  await page.route("**/api/studio/web-research/jobs/*/publish", r => { publications++; resumed = true; return r.fulfill({ json: { ...job, stage: "Folytatás a mentett részeredményekből…" } }); });
+  await open(page); await send(page);
+  await expect(page.getByTestId("web-research-save")).toHaveText(/Folytatás a mentett eredményből/);
+  await page.getByTestId("web-research-save").click();
+  await expect(page.getByTestId("web-research-error")).toHaveCount(0);
+  await expect(page.getByTestId("web-research-open-saved")).toHaveAttribute("href", "/preview/saved-web-lesson");
+  expect(publications).toBe(1); expect(readsAfterResume).toBeGreaterThanOrEqual(2);
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `tests/screenshots/web-research-resume-${viewport.width}.png`, fullPage: true });
+  }
+  // Mérve 2026-09-25 a módosítatlan kódon is: a kész előnézet sandbox-iframe-je (allow-same-origin nélkül) ezt az
+  // egy serviceWorker-hibát adja a tesztböngészőben; minden más oldalhiba bukás.
+  expect(errors.filter(e => !/Service worker is disabled because the context is sandboxed/.test(e))).toEqual([]);
+});

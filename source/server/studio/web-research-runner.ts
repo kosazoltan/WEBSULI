@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
-import { createStudioProvider, studioModelReady } from "../ai/studio-provider";
+import { effortFor, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { createStudioProvider, createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { verifyTeachingVisuals } from "../improve/verify-html-teaching";
@@ -13,8 +13,9 @@ import { fetchedTeachingSources, teachingReviewEvidence, subjectiveOnlyFailures,
 import { repairWebLessonBank } from "./web-bank-repair";
 import { reviewAndRepairWebTeaching } from "./web-teaching-repair";
 import { stripJsonFences } from "../ai/OpenRouterProvider";
-import { callStepModel, StepModelError } from "./run-step";
-import { buildLessonExperience } from "./experience-builder";
+import { StepModelError } from "./run-step";
+import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, type ExperienceCheckpoint } from "./experience-builder";
+import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import { withSupportSkill } from "./support-skills";
 import {
   assembledWebLessonData,
@@ -35,6 +36,9 @@ export type ResearchObserver = {
   signal?: AbortSignal;
   onEvent: (event: WebResearchEvent) => void;
   onCandidate?: (content: string, diagnostic: { stopReason?: string | null; inputTokens?: number; outputTokens?: number; elapsedMs?: number; problems?: string; teachingReview?: TeachingReview }) => Promise<void>;
+  /** Spec 2026-09-25: packets already built by an earlier execution of the same run (no model call on resume). */
+  bankCheckpoint?: ExperienceCheckpoint;
+  onBankCheckpoint?: (checkpoint: ExperienceCheckpoint) => Promise<void>;
 };
 const MAX_TOKENS = 64_000;
 const MAX_CONTINUATIONS = 5;
@@ -69,7 +73,7 @@ function lessonMetaFromHtml(html: string, fallback: { title: string; subject: st
 }
 
 /** Runs independently of HTTP; only the legacy stream supplies a client abort signal. */
-export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: ResearchObserver): Promise<ResearchArtifact> {
+export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate, bankCheckpoint, onBankCheckpoint }: ResearchObserver): Promise<ResearchArtifact> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
   const extractModel = resolveStudioModel("extract");
@@ -77,6 +81,9 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
   if (!studioModelReady(extractModel) || !studioModelReady(authorModel)) {
     throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva.");
   }
+  // Spec 2026-09-25: the bank runs on the bank role — a missing key is reported before any paid call.
+  const bankModel = resolveStudioModel("bank");
+  if (!studioModelReady(bankModel)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(bankModel)}).`);
   const controller = new AbortController();
   let timedOut = false;
   let idleTimer: NodeJS.Timeout | undefined;
@@ -296,10 +303,29 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     };
     const meta = lessonMetaFromHtml(html, fallbackMeta);
     const lesson = lessonFromTeachingHtml(html, meta, conceptIds);
+    // Spec 2026-09-25 (mért elakadás): a webes bank eddig sorosan, a szerzőmodellen, újrapróbálás nélkül készült —
+    // 10 csomag sorosan 1 795 s (run 525b2797) > a 20 perces fáziskeret, és az első rossz válasz a futás vége volt.
+    // Most a feltöltős úttal azonos: bankmodell → tartalék → mentőkör, párhuzamos csomagok, mentett részeredmény.
+    let packetsDone = 0;
     const experience = await buildLessonExperience(lesson, mapConceptsFromBrief(brief), {
-      async call(system, user) {
-        return (await callStepModel(createStudioProvider(authorModel, 240_000, 16_000), { step: "author", model: authorModel, system, user }, controller.signal)).json;
+      concurrency: PACKET_CONCURRENCY,
+      checkpoint: bankCheckpoint,
+      onAttemptFailure: (sectionIndex, attempt, reason) => logger.warn(`[WEB-RESEARCH] Bankcsomag bukott kísérlet ${sectionIndex + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 600)}`),
+      async save(checkpoint) {
+        packetsDone += 1;
+        onEvent({ type: "status", message: `Gyakorlóbank készítése: ${packetsDone}. csomag kész…` });
+        await onBankCheckpoint?.(checkpoint);
       },
+      async call(system, user, attempt) {
+        const model = bankModelForAttempt(attempt);
+        if (!studioModelReady(model)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(model)}).`);
+        if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[WEB-RESEARCH] Bankcsomag ${bankProviderStep(attempt) === "author" ? "mentőkör" : "tartalék modell"}: ${model}, ${attempt} bukott kísérlet után.`);
+        return (await callBankPacketModel(createStudioStepProvider(model, bankProviderStep(attempt)), model, system, user, controller.signal)).json;
+      },
+    }).catch((error: unknown) => {
+      // An exhausted packet is a plain Error with the validator's reason — name it instead of "AI hiba".
+      if (controller.signal.aborted || error instanceof WebResearchFailure || error instanceof StepModelError) throw error;
+      throw new WebResearchFailure(`A gyakorlóbank nem készült el: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1500));
     });
     html = injectWebExperience(html, assembledWebLessonData(brief, meta, experience));
     fullContent = html;

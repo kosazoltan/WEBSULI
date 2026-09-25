@@ -143,6 +143,12 @@ export function WebResearchAgentPanel() {
     setIsSaving(true); setFailure(null);
     try {
       const job = await apiRequest<WebResearchJob>("POST", `/api/studio/web-research/jobs/${pending.id}/publish`, {}, { timeout: 20_000 });
+      // Spec 2026-09-25: a resumed run continues on the server in the background — follow it again by polling.
+      if (job.state === "running") {
+        setCanResume(false); setStatus(job.stage); setIsLoading(true);
+        setPending({ ...pending });
+        return;
+      }
       if (job.state !== "done" || !job.materialId) throw new Error("A szerver nem igazolta vissza a mentést.");
       setSavedId(job.materialId);
       setGeneratedHtml(job.html || ""); setCanResume(false);
