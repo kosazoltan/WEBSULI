@@ -548,3 +548,9 @@ javítások UTÁN (2026-07-20 este): `npx tsc --noEmit` → **0 hiba (exit 0)**;
 **Verifikáció:** tsc, check:test, eslint 0, npm test 1438/1438, build; új unit tesztek (bank-call 2, web-research-jobs +4) — a 4 job-teszt a régi kódon bukik; Playwright webes spec 6/6 (új folytatási teszt a régi kliensen bukik), 390/1440 px túlcsordulás 0.
 **NOT RUN:** éles internetes gyártás (nincs éles hálózat/kulcs); Render-deploy.
 **Nyitott (2. szelet, tulajdonosi döntés):** a webes út módszer-lemaradása (vak megoldó, bank-ellenőr, Opus-ábrák, forrás-helyesbítés, forrásalapú évfolyam, Studio-lecke) — javaslat: a letöltött oldalak `text` forrásként az egylépéses Studio-gyártásba (spec 9. pont).
+
+## 2026-09-25 este — internetes gyártás: #125 összefésülve, élesben igazolva (PR #127, merge c3e1a35)
+
+A párhuzamos felhős munkamenet PR #125-je (webes bank = feltöltős bankhívás: bankmodell → tartalék → mentőkör, párhuzamos csomagok, mentett részeredmény; árva-szabály a bérletből; háttér-folytatás; szívverés-hiba ≠ bérletvesztés) átnézve (tesztet nem töröl/gyengít), a #126 kvóta-átállással összefésülve, #125 lezárva mint beolvasztott. Hozzáadva: a webes „animator” lépés = bankhívás → „a gyakorlóbank készítése nem fejeződött be” + ok; a tartalék lektor hibája naplózva és az üzenetben (eddig `catch { throw primaryError }` elnyelte).
+**Élő mérés (memória-tár, valódi modellek):** Hunyadi Mátyás 1. futás — bank ≈160 s, utána a grok-4.6 lektor 480 s időtúllépés, a tartalék hibája elveszett; 2. futás — **done 710 s**, bank ≈90 s, lektor + javítókör rendben, HTML 108 KB. A tartalék lektor önmagában (valódi bemenet 161+105 s; 470k karakter 6 s) működik — az 1. futásbeli azonnali bukása nem reprodukálható, most naplózott.
+**Nyitott:** OpenAI-kredit feltöltése; a grok-4.6 webes lektor nagy bemenetnél a 480 s-os kerethez közel fut.
