@@ -3,6 +3,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { effortFor, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
+import { AIProviderQuotaError } from "../ai/AIProvider";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { verifyTeachingVisuals } from "../improve/verify-html-teaching";
 import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
@@ -356,6 +357,10 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
   } catch (error) {
     if (error instanceof WebResearchFailure) throw error;
     if (error instanceof TeachingReviewFailure) throw new WebResearchFailure(error.message);
+    // Spec 2026-09-25: az ok eddig elveszett (job 22a38c0a: „nem fejeződött be”, a valóság: kimerült OpenAI-keret).
+    const cause = error instanceof StepModelError ? error.cause : error;
+    logger.error("[WEB-RESEARCH] generation failed", { step: error instanceof StepModelError ? error.step : undefined, message: error instanceof Error ? error.message.slice(0, 400) : String(error), cause: cause instanceof Error ? cause.message.slice(0, 400) : undefined });
+    if (cause instanceof AIProviderQuotaError) throw new WebResearchFailure("Az AI-szolgáltató fiókjában elfogyott a keret (kredit), és a tartalék útvonal sem volt elérhető. A jelölt még nem publikálható; a keret feltöltése után a készítés folytatható.");
     if (error instanceof StepModelError && !controller.signal.aborted) throw new WebResearchFailure(error.step === "lektor"
       ? "A tartalmi lektorálás nem fejeződött be. A jelölt még nem publikálható."
       : error.step === "author" ? "A tananyagírás vagy a gyakorlóbank készítése nem fejeződött be. A jelölt még nem publikálható."
