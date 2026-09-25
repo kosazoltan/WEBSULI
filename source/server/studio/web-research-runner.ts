@@ -387,10 +387,11 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     const cause = error instanceof StepModelError ? error.cause : error;
     logger.error("[WEB-RESEARCH] generation failed", { step: error instanceof StepModelError ? error.step : undefined, message: error instanceof Error ? error.message.slice(0, 400) : String(error), cause: cause instanceof Error ? cause.message.slice(0, 400) : undefined });
     if (cause instanceof AIProviderQuotaError) throw new WebResearchFailure("Az AI-szolgáltató fiókjában elfogyott a keret (kredit), és a tartalék útvonal sem volt elérhető. A jelölt még nem publikálható; a keret feltöltése után a készítés folytatható.");
-    if (error instanceof StepModelError && !controller.signal.aborted) throw new WebResearchFailure(error.step === "lektor"
-      ? "A tartalmi lektorálás nem fejeződött be. A jelölt még nem publikálható."
-      : error.step === "author" ? "A tananyagírás vagy a gyakorlóbank készítése nem fejeződött be. A jelölt még nem publikálható."
-      : "A célzott javító modellhívása nem fejeződött be. A jelölt még nem publikálható.");
+    // A webes úton: "animator" = bankcsomag-hívás (bank-call.ts), "author" = célzott bank-/tanításjavító, "lektor" = tartalmi ellenőrzés.
+    if (error instanceof StepModelError && !controller.signal.aborted) throw new WebResearchFailure(`${error.step === "lektor"
+      ? "A tartalmi lektorálás nem fejeződött be."
+      : error.step === "animator" ? "A gyakorlóbank készítése nem fejeződött be."
+      : "A célzott javító modellhívása nem fejeződött be."} A jelölt még nem publikálható.${cause instanceof Error ? ` (Ok: ${cause.message.slice(0, 200)})` : ""}`);
     logger.error("[WEB-RESEARCH] provider failure", { name: error instanceof Error ? error.name : "unknown", timedOut });
     throw new WebResearchFailure(timedOut ? "Időtúllépés: a keresés vagy a tananyagkészítés nem fejeződött be az időkeretben."
       : controller.signal.aborted ? "A kérés megszakadt." : "AI hiba történt a webes keresés közben.");

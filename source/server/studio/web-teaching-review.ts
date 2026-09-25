@@ -8,6 +8,7 @@ import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { workflowValidationFailure } from "../workflows/engine";
 import { withSupportSkill } from "./support-skills";
+import { logger } from "../lib/logger";
 
 export type FetchedTeachingSource = { url: string; title: string; text: string };
 export class TeachingReviewFailure extends Error {}
@@ -145,10 +146,17 @@ export const callTeachingReviewer = async (system: string, user: string, signal?
     // failure (timeout, 5xx, bad JSON), never on a content verdict, never after an abort.
     const fallback = FALLBACK_MODELS.lektor;
     if (!(primaryError instanceof StepModelError) || !fallback || fallback === model || signal?.aborted) throw primaryError;
+    const reason = (error: unknown) => {
+      const cause = error instanceof StepModelError ? error.cause : error;
+      return (cause instanceof Error ? cause.message : String(cause)).slice(0, 300);
+    };
+    logger.warn(`[WEB-RESEARCH] A lektor (${model}) hibázott: ${reason(primaryError)} → tartalék: ${fallback}`);
     try {
       return (await callStepModel(createStudioStepProvider(fallback, "lektor"), { step: "lektor", model: fallback, system: withSupportSkill("web-lektor", system), user }, signal)).json;
-    } catch {
-      throw primaryError;
+    } catch (fallbackError) {
+      // Spec 2026-09-25 (élő futás f8c62334): a tartalék hibája eddig elveszett, csak az elsődlegesé látszott.
+      logger.error(`[WEB-RESEARCH] A tartalék lektor (${fallback}) is hibázott: ${reason(fallbackError)}`);
+      throw new StepModelError("lektor", "a szolgáltató hibát jelzett", { cause: new Error(`${model}: ${reason(primaryError)}; tartalék ${fallback}: ${reason(fallbackError)}`) });
     }
   }
 };
