@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../server/ai/AIProvider";
+import { AIProviderQuotaError, AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../server/ai/AIProvider";
 import { BANK_RESCUE_MODEL, FALLBACK_MODELS, resolveStudioModel } from "../server/ai/models";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "../server/studio/bank-call";
 import { PACKET_ATTEMPTS, RetryableBankCallError } from "../server/studio/experience-builder";
@@ -35,6 +35,10 @@ test("spec 2026-09-25: modell-kimeneti hiba újrapróbálható, szolgáltatói h
   const slow = provider(async () => { throw new AIProviderTimeoutError("fake", 240_000); });
   await assert.rejects(callBankPacketModel(slow, "m", "sys-slow", "user-slow"), (error: unknown) =>
     error instanceof RetryableBankCallError && /időtúllépés/.test(error.message));
+  // PR #126: an exhausted account is not a bad answer — no retry burn, the cause reaches the run's message.
+  const quota = provider(async () => { throw new AIProviderQuotaError("OpenAI", "insufficient_quota"); });
+  await assert.rejects(callBankPacketModel(quota, "m", "sys-quota", "user-quota"), (error: unknown) =>
+    error instanceof StepModelError && error.cause instanceof AIProviderQuotaError);
   const outage = provider(async () => { throw new Error("503 Service Unavailable"); });
   await assert.rejects(callBankPacketModel(outage, "m", "sys-outage", "user-outage"), (error: unknown) =>
     error instanceof StepModelError && !(error instanceof RetryableBankCallError));
