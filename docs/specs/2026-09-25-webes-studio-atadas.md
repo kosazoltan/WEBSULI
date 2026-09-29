@@ -79,6 +79,7 @@ feltöltős út adja a teljes módszert:
 - `tests/web-research-jobs.test.ts`: Studio-eredmény → done `html_files` írás nélkül, visszaolvasás-hiba → error; folytatás a mentett `studioRunId`-vel.
 - `tests/web-research-completion.spec.ts`: kész Studio-job a panelen (390/1440 px).
 - Teljes kapu: check, check:test, lint, test, build.
+- `tests/web-research-completion.test.ts` („SSE: ékezetes…”): az eredménytípus a `material_saved` eseménnyel unió lett; az állítás a `html_generated` típusra szűkít (erősebb, mint előtte). Új teszt: a `material_saved` + `complete` érvényes végállapot, üres azonosítóval nem.
 - `tests/lesson-html-spec.test.ts` („a webes ügynök route-ja…”): a forrásszöveg-minta a kiemelés miatt a `gatherWebSources` → `downloaded` → `sources` láncra változik (ugyanaz az invariáns: a visszaadott forrás a letöltött oldal, nem a keresési találat).
 - NOT RUN: éles internetes gyártás, mert nincs éles hálózat és kulcs a munkamenetben. Élő próbát a tulajdonos vagy egy helyi munkamenet futtathat.
 

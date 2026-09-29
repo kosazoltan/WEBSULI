@@ -14,6 +14,7 @@ import { outsideWorkflow } from "../workflows/engine";
 /** The scope classifier receives every source at once — the web pages are capped to fit its window. */
 export const MAX_SOURCE_CHARS = 60_000;
 export const MAX_TOTAL_CHARS = 200_000;
+/** A page cut to fit the remaining budget must keep at least this much; a page that fits whole always goes. */
 const MIN_TAIL_CHARS = 2_000;
 export const STUDIO_POLL_MS = 3_000;
 export const STUDIO_MAX_WAIT_MS = 120 * 60_000;
@@ -44,8 +45,12 @@ export function webSourcesToOneStepFiles(downloaded: FetchedTeachingSource[]): {
   let budget = MAX_TOTAL_CHARS;
   downloaded.forEach((source, index) => {
     const text = source.text.trim();
-    if (!text || budget < MIN_TAIL_CHARS) return;
-    const content = `Forrás: ${source.url}\nCím: ${source.title}\n\n${text}`.slice(0, Math.min(MAX_SOURCE_CHARS, budget));
+    if (!text) return;
+    const whole = `Forrás: ${source.url}\nCím: ${source.title}\n\n${text}`.slice(0, MAX_SOURCE_CHARS);
+    // Copilot (PR #128): a short page that fits the remaining budget whole is never dropped; only a
+    // page that would have to be cut to a sliver is skipped — later, shorter pages still get their turn.
+    if (whole.length > budget && budget < MIN_TAIL_CHARS) return;
+    const content = whole.slice(0, budget);
     budget -= content.length;
     files.push({ name: names[index], kind: "text", content });
     sources.push({ url: source.url, title: source.title });

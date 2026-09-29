@@ -42,6 +42,18 @@ test("a letöltött oldalak URL-fejléccel, mérethatáron belül, szöveges for
   assert.ok(many.files.reduce((sum, f) => sum + f.content.length, 0) <= MAX_TOTAL_CHARS);
   assert.ok(many.files.length < 8, "az összkeret a további oldalakat levágja");
   assert.equal(many.sources.length, many.files.length, "a levágott oldal nem felhasznált forrás");
+  // Copilot (PR #128): with a small budget left, a short page that fits whole still goes; a sliver cut does not.
+  const header = (n: number) => `Forrás: ${page(n).url}\nCím: ${page(n).title}\n\n`.length;
+  const leftover = 1_500; // below the 2000-char minimum for a cut page
+  const tight = webSourcesToOneStepFiles([
+    ...Array.from({ length: 3 }, (_, i) => page(10 + i, "z".repeat(MAX_SOURCE_CHARS))),
+    page(20, "w".repeat(MAX_TOTAL_CHARS - 3 * MAX_SOURCE_CHARS - leftover - header(20))),
+    page(21, "v".repeat(MAX_SOURCE_CHARS)),
+    page(22, "Rövid, de teljes forrásoldal."),
+  ]);
+  assert.ok(tight.files.reduce((sum, f) => sum + f.content.length, 0) <= MAX_TOTAL_CHARS);
+  assert.ok(!tight.sources.some(s => s.url === page(21).url), "szilánkra vágott oldal kimarad");
+  assert.ok(tight.sources.some(s => s.url === page(22).url), "a keretbe teljesen beleférő rövid oldal bekerül");
 });
 
 test("új futás: a tanár kérése és a források a Studio-gyártáshoz kerülnek; a kész lecke az eredmény", async () => {

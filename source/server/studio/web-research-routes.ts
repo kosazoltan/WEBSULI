@@ -75,8 +75,8 @@ webResearchRouter.post("/web-research/chat", async (req: Request, res: Response)
       send({ type: "status", message: job.stage });
       if (job.state === "error" || job.error) throw new Error(job.error || "A készítés megállt.");
       if (job.state === "done" && job.materialId) {
-        // A Studio lesson (spec 2026-09-25) has no inline HTML; the material id is the result.
-        if (job.html) send({ type: "html_generated", html: job.html, sources: job.sources });
+        // A Studio lesson (spec 2026-09-25) has no inline HTML; the saved material id is the result.
+        send(job.html ? { type: "html_generated", html: job.html, sources: job.sources } : { type: "material_saved", materialId: job.materialId, sources: job.sources });
         send({ type: "complete" });
         break;
       }
