@@ -74,6 +74,11 @@ export class QuotaFailoverProvider implements IAIProvider {
 }
 
 export const LEKTOR_TIMEOUT_MS = 480_000;
+/**
+ * Spec 2026-09-29-lektor-tokenkeret: a lektor kimenete ma önálló megoldásokat és sok jegyzetet is tartalmaz, a grok-nál
+ * a gondolkodás is ebből fogy — a 12 000-es keret a 4 forrásos leckénél csonkult (élő job 1ebf7a88).
+ */
+export const LEKTOR_MAX_TOKENS = 32_000;
 
 type StepPolicy = { timeoutMs: number; maxTokens: number; reasoningEffort: NonNullable<AIProviderConfig["reasoningEffort"]>; jsonMode?: boolean };
 
@@ -109,7 +114,7 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
 /** Review gets its own bounded request, not three hidden 180-second attempts. */
 export function createStudioStepProvider(model: string, step?: string) {
   if (step === "lektor") {
-    return createStudioProvider(model, LEKTOR_TIMEOUT_MS, 12_000, {
+    return createStudioProvider(model, LEKTOR_TIMEOUT_MS, LEKTOR_MAX_TOKENS, {
       maxRetries: 0,
       // 2026-09-20 (tulajdonosi utasítás, LLM-as-judge kutatás): az értelmező lektorálás
       // gondolkodást igényel — medium; a lektor kimenete kicsi (≈ 0,4–2k token), az ár nem nő érdemben.

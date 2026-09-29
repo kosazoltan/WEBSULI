@@ -14,7 +14,8 @@ test("a valódi Studio lektorkérés Responses medium, teljes bemenet, nincs sze
     assert.equal(String(url), "https://api.x.ai/v1/responses");
     const body = JSON.parse(String(init?.body));
     assert.deepEqual(body.reasoning, { effort: "medium" }); // 2026-09-20: értelmező lektorálás — medium
-    assert.equal(body.max_output_tokens, 12000);
+    // Spec 2026-09-29-lektor-tokenkeret (dokumentált változás): 12 000 → 32 000 (élesben a 4 forrásos leckénél csonkult).
+    assert.equal(body.max_output_tokens, 32000);
     assert.equal(body.store, false);
     assert.deepEqual(body.input, [{ role: "system", content: "Teljes lecke és forrás" }, { role: "user", content: "Csak hibajegyek" }]);
     assert.ok(init?.signal);
