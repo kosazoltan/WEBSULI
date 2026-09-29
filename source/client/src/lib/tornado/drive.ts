@@ -87,6 +87,11 @@ export function accelUnits(accelerationStat: number, speedKmh: number): number {
 const STEER_MIN_SPEED = fromKm(2 / 3600);
 /** Below this, the HUD/anchor treats the vehicle as stopped. ~8 km/h. */
 export const STOPPED_SPEED = fromKm(8 / 3600);
+/**
+ * Spec 2026-09-29-tornado-motorfek: gáz nélkül az autó rövid úton álljon meg („felengedtem, mégis megy” — a 1,6× végsebesség
+ * óta 2,5 s múlva is ≈ 38%-kal gurult). Exponenciális, így dt-független; gázzal nincs hatása.
+ */
+export const ENGINE_BRAKE_PER_S = 1.2;
 
 export function stepVehicle(
   p: VehicleBody,
@@ -105,6 +110,7 @@ export function stepVehicle(
 
   let speed = p.speed + throttle * accel * dt;
   if (input.brake) speed *= 1 - Math.min(1, dt * 4);
+  else if (Math.abs(throttle) < 0.05) speed *= Math.exp(-ENGINE_BRAKE_PER_S * dt);
   speed *= 1 - Math.min(1, dt * (0.15 + (1 - grip) * 1.2));
   speed = Math.max(-max * 0.4, Math.min(max, speed));
 
