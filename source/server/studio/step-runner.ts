@@ -1187,10 +1187,11 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     logger.warn(`[STUDIO/GATE] Hibás banktétel kivéve (egyválasztós vagy a körlimiten maradt; ${job.id}): ${choiceGate.removed.join(", ")}`);
   }
 
-  // Spec 2026-09-29-kapu-proba-keret (1. döntés): az elérhetetlen Próba (kevesebb kérdés, mint a jutalom küszöbe)
-  // determinisztikusan kikapcsol — a lelet saját javaslata, modellkör nélkül.
+  // Spec 2026-09-29-kapu-proba-keret (1. döntés + utómérés): az elérhetetlen Próba (kevesebb kérdés, mint a jutalom
+  // küszöbe) CSAK a körlimiten kapcsol ki determinisztikusan. Előtte a meglévő kapu→szerző javítókör fut, és a szerző
+  // pótolja a kérdéseket — így a gyerek megkapja a jutalmazható Próbát (élő job 9ef52e4f: mind a 10 szakasz 1 kérdést hozott).
   const arcOptions = { minChecksForProba: policy.minCorrectForCoupon };
-  const proba = disableUnreachableProba(parsed.data, arcOptions);
+  const proba = job.round >= MAX_AUTHOR_ROUNDS ? disableUnreachableProba(parsed.data, arcOptions) : { lesson: parsed.data, disabled: [] as number[] };
   if (proba.disabled.length) {
     parsed.data = proba.lesson;
     await store.upsertLesson(job.lessonId, job.mapId, parsed.data);

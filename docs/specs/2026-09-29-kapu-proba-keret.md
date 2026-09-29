@@ -41,3 +41,10 @@
   lecke a `lessons` táblába és a publikációba megy. Így a megszakadt léptetés utáni újrafutás ugyanabból számol, és
   a lektor-bizonyíték hash-e érvényes marad. A régi viselkedés az index-alapú kivételnél újrafuttatáskor rossz tételt
   is kivehetett volna. Teszt: újrafuttatva ugyanaz, a job leckéje az eredeti.
+
+## Utómérés (élő job 9ef52e4f, 2026-09-29 este)
+A #141 a kikapcsolást MINDEN kapu-futáson alkalmazta. Élesben mind a 10 szakasz 1 kérdéssel és bekapcsolt Próbával
+jött, és mind kikapcsolt. A limit ELŐTT ez visszalépés: korábban a kapu→szerző javítókör pótolta a kérdéseket, így
+a gyerek jutalmazható Próbát kapott. **Javítás:** a determinisztikus kikapcsolás csak `round >= MAX_AUTHOR_ROUNDS`
+esetén fut; előtte a meglévő javítókör. Teszt: „utómérés … a limit ELŐTT … nem kapcsol ki”, a javítás előtt bukott;
+a limitkori E1 teszt változatlan.
