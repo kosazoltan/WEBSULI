@@ -127,3 +127,17 @@ ez nem hibás, csak a TouchControls ref-jét is nullázni kell `blur`/`visibilit
 - `source/client/src/pages/TornadoHunter200.tsx` (bekötés)
 - Új tesztek: `source/tests/tornado-bridge.test.ts`, `tornado-collision.test.ts`,
   `tornado-wind-drift.test.ts`, `tornado-input-release.test.ts`
+
+## Review-javítás (PR #137)
+- R1 — `gamepad.ts` `createGamepadRestGate`: a NaN ébredési minta élesítette a kaput
+  (`applyDeadzone(NaN) === 0`), az utána jövő nyugalmi `[0, 1]` teljes hátramenetet adott. Döntés: csak
+  VÉGES nyers tengelyérték lehet semleges minta. Teszt: NaN → `[0, 1]` sorozat 0 gázt ad.
+- R2 — A `touchRef` nullázása nem engedte el a futó `VirtualJoystick`-ot (saját húzásközép és gomb
+  maradt; a későbbi mozgás új érintés nélkül vezetett). Döntés: a húzás-állapot a tiszta
+  `createJoystickDrag`-be került (`joystick.ts`), a komponens opcionális `resetSignal` propot kap;
+  változásakor megszakítja a húzást, elengedi a pointer capture-t, a gombot visszaállítja, és nulla
+  vektort küld. A Tornado `blur`/`visibilitychange`-kor növeli. A többi hívó (Asteroid, BlockCraft,
+  Tsunami) nem adja meg → változatlan viselkedés.
+- R3 — A játékhurok a `resolveVehicleCollisions`-t `dt` nélkül hívta (alapértelmezés 1/60). A régi
+  hívási úton 1 s falmenti súrlódás után: 30 Hz 4,16 · 60 Hz 2,51 · 144 Hz 0,61 egység/s. Döntés: a
+  képkocka `dt`-je átadva; teszt: 30/60/144 Hz ±5%-on belül azonos.

@@ -1030,6 +1030,8 @@ function PlayScreen(props: {
   const answerLockedRef = useRef(false);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   const touchRef = useRef({ fwd: false, back: false, left: false, right: false });
+  /** Bumped on blur / hidden tab: the VirtualJoystick drops a drag that is still in progress. */
+  const [touchReset, setTouchReset] = useState(0);
   const padAnchorPrevRef = useRef(false);
   const padGateRef = useRef(createGamepadRestGate());
   const finishedRef = useRef(false);
@@ -1342,6 +1344,8 @@ function PlayScreen(props: {
       releaseDriveKeys(keysRef.current);
       const t = touchRef.current;
       t.fwd = t.back = t.left = t.right = false;
+      // The joystick keeps its own drag origin and knob; tell it to let go too (review PR #137).
+      setTouchReset((n) => n + 1);
     };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") releaseAll();
@@ -1630,7 +1634,8 @@ function PlayScreen(props: {
           },
         );
         // Spec 2026-09-29-tornado-fizika H2: houses, trees, poles and bridge railings are solid.
-        const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z));
+        // The frame's dt: the scrape friction is per second (30/60/144 Hz must slow alike).
+        const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z), dt);
         const nx = clampToWorld(solid.x);
         const nz = clampToWorld(solid.z);
         const moved = Math.hypot(nx - p.x, nz - p.z);
@@ -1959,6 +1964,7 @@ function PlayScreen(props: {
           <TouchControls
             leftHanded={props.progress.settings.leftHanded}
             touchRef={touchRef}
+            resetSignal={touchReset}
             onAnchor={() => tryAnchorRef.current()}
             onCamera={() => {
               const next = toggleCamera(settingsRef.current.cameraMode);
@@ -2133,6 +2139,7 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
 function TouchControls(props: {
   leftHanded: boolean;
   touchRef: React.MutableRefObject<{ fwd: boolean; back: boolean; left: boolean; right: boolean }>;
+  resetSignal: number;
   onAnchor: () => void;
   onCamera: () => void;
 }) {
@@ -2142,6 +2149,7 @@ function TouchControls(props: {
   const steer = (
     <VirtualJoystick
       label="Vezetés"
+      resetSignal={props.resetSignal}
       radius={52}
       onChange={(v) => {
         const dirs = joystickToDirections(v);

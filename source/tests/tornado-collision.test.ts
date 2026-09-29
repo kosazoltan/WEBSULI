@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { stepVehicle, maxSpeedUnits } from "../client/src/lib/tornado/drive.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   collidersForProp,
   collidersNear,
@@ -155,4 +159,40 @@ test("a hídon végighajtva a korlát nem akaszt meg", () => {
     p = { ...p, x: r.x, z: r.z, speed: r.speed };
   }
   assert.ok(p.x > rc + 40, `crossed the bridge (x=${p.x.toFixed(1)}, river at ${rc.toFixed(1)})`);
+});
+
+// Review PR #137 (3): the play loop called resolveVehicleCollisions without the frame dt, so the scrape
+// friction assumed 60 Hz — at 144 Hz a car grinding along a wall slowed much faster than at 60 Hz.
+test("falmenti súrlódás 30, 60 és 144 Hz-en 1 s alatt közel azonos lassulást ad", () => {
+  const wall: Collider[] = [{ kind: "box", x: 0, z: 0, hx: 400, hz: 0.5, rotation: 0 }];
+  const heading = Math.PI / 2 - Math.PI / 6;
+  const halfW = DIMS.width / 2;
+  const off = DIMS.length / 2 - halfW;
+  // Front circle touching the wall face (z = 0.5).
+  const startZ = 0.5 + halfW + Math.cos(heading) * off;
+  const end: number[] = [];
+  for (const hz of [30, 60, 144]) {
+    const dt = 1 / hz;
+    let p: Body = { x: -100, z: startZ, heading, speed: 8, anchored: false };
+    for (let i = 0; i < hz; i++) {
+      // Exactly the play loop's frame: stepVehicle, then the collision pass with the same dt.
+      const next = stepVehicle(p, { throttle: 0, steer: 0, brake: false }, dt, SCOUT);
+      const r = resolveVehicleCollisions(next, DIMS, wall, dt);
+      p = { ...next, x: r.x, z: r.z, speed: r.speed };
+    }
+    end.push(p.speed);
+  }
+  const [s30, s60, s144] = end as [number, number, number];
+  assert.ok(s60 > 1 && s60 < 7.9, `the scrape really slows the car at 60 Hz: ${s60}`);
+  for (const [label, s] of [["30 Hz", s30], ["144 Hz", s144]] as const) {
+    assert.ok(Math.abs(s - s60) / s60 < 0.05, `${label}: ${s.toFixed(3)} vs 60 Hz ${s60.toFixed(3)}`);
+  }
+});
+
+test("a játékhurok a képkocka dt-jével hívja az ütközésfeloldást", () => {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const page = readFileSync(join(root, "client/src/pages/TornadoHunter200.tsx"), "utf8");
+  const calls = page.match(/resolveVehicleCollisions\([^;]*\)/g) ?? [];
+  assert.ok(calls.length >= 1, "the play loop resolves collisions");
+  for (const call of calls) assert.match(call, /,\s*dt\s*\)$/, `collision pass without the frame dt: ${call}`);
 });

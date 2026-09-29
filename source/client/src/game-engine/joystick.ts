@@ -89,6 +89,50 @@ export function knobOffset(input: JoystickInput): Point {
 }
 
 /**
+ * Egy tárcsa-húzás állapota (lenyomás → mozgás → felengedés), React nélkül.
+ *
+ * A `reset` a futó húzást is megszakítja: fókuszvesztéskor (blur, háttérbe kerülő lap) a hívó
+ * elengedi a vezérlést, és az ezután érkező, még a régi ujjhoz tartozó mozgás már nem vezet
+ * (review PR #137). A késve érkező `up` ilyenkor nem csinál semmit.
+ */
+export type JoystickDrag = {
+  readonly active: boolean;
+  down(point: Point): void;
+  /** Null, ha nincs futó húzás — ilyenkor a mozgás nem vezet. */
+  move(point: Point): { vector: JoystickVector; knob: Point } | null;
+  /** Igaz, ha volt mit elengedni. */
+  up(): boolean;
+  /** Mint az `up`, de kívülről (fókuszvesztés); igaz, ha húzást szakított meg. */
+  reset(): boolean;
+};
+
+export function createJoystickDrag(radius: number): JoystickDrag {
+  let origin: Point | null = null;
+  const release = () => {
+    const was = origin !== null;
+    origin = null;
+    return was;
+  };
+  return {
+    get active() {
+      return origin !== null;
+    },
+    down(point) {
+      origin = { x: point.x, y: point.y };
+    },
+    move(point) {
+      if (!origin) return null;
+      return {
+        vector: joystickVector({ origin, point, radius }),
+        knob: knobOffset({ origin, point, radius }),
+      };
+    },
+    up: release,
+    reset: release,
+  };
+}
+
+/**
  * Négyirányú lebontás a joystickból.
  *
  * A meglévő játékok logikája négy logikai gombot vár (`fwd/back/left/right`),

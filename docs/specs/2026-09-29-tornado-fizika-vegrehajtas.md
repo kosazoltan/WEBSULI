@@ -75,3 +75,19 @@ megadott parancs; a „régi kódon bukik” lépésnél a kimenetet el kell men
 
 ## T8 — Lezárás
 - `git merge origin/main`, kapuk újra, sentinel külön hívásban, push, `gh pr create --base main`.
+
+## Review-javítás (PR #137)
+1. Tesztek ELŐBB (a javítás előtti kódon buknak):
+   `tests/tornado-input-release.test.ts` (NaN → `[0,1]`: a régin −1 gáz),
+   `tests/virtual-joystick-reset.test.ts` (új: `createJoystickDrag` + a `resetSignal` bekötése),
+   `tests/tornado-collision.test.ts` (30/60/144 Hz súrlódás; a lap `dt`-vel hívja a feloldást).
+   Parancs: `node --import tsx --test tests/tornado-input-release.test.ts tests/virtual-joystick-reset.test.ts tests/tornado-collision.test.ts`.
+2. `client/src/lib/tornado/gamepad.ts`: a kapu csak `Number.isFinite` nyers tengelyt fogad semlegesnek.
+3. `client/src/game-engine/joystick.ts`: `createJoystickDrag(radius)` (`down/move/up/reset/active`).
+   `client/src/game-engine/VirtualJoystick.tsx`: ezt használja; `resetSignal?: number` → effekt, amely
+   `reset()` után elengedi a capture-t, `setKnob(null)`, `onChange(0)`.
+   `client/src/pages/TornadoHunter200.tsx`: `touchReset` state, `releaseAll` → `setTouchReset((n) => n + 1)`,
+   `TouchControls` → `VirtualJoystick resetSignal`.
+4. `TornadoHunter200.tsx`: `resolveVehicleCollisions(..., dt)`.
+5. Kapuk: `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.test.json`, `npm run lint`,
+   `node --import tsx --test tests/*.test.ts`, `npm run build`.
