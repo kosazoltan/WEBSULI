@@ -1,5 +1,7 @@
 import { experienceSchema, lessonLanguage, publicationBankProblems } from "./lesson-experience";
 import { evaluateOpenAnswer } from "./lesson-experience-score";
+import { lessonSingleChoiceProblems } from "./single-choice-check";
+import type { Lesson } from "./lesson-schema";
 
 export const LESSON_SKILL_CHECK_VERSION = "tananyag-keszito-7.4-check-1";
 /** Shared by runtime documentation and the publication validators; not learned/optional rules. */
@@ -14,8 +16,12 @@ export const LESSON_SKILL_CHECK_RUNBOOK = `KÖTELEZŐ TANANYAGKÉSZÍTŐ 7.4 ELL
 export type LessonSkillCheck = { code: string; passed: boolean; problems: string[] };
 export type LessonSkillCheckResult = { version: string; ok: boolean; checks: LessonSkillCheck[]; problems: string[] };
 
-/** Executable data checks only. Source semantics and rendered behavior are separate mandatory gates. */
-export function verifyLessonSkillBank(experience: unknown, subject: string): LessonSkillCheckResult {
+/**
+ * Executable data checks only. Source semantics and rendered behavior are separate mandatory gates.
+ * Spec 2026-09-29 (egy-helyes-valasz): `single_correct` — a bank egyválasztós tételei és (ha megadva) a lecke
+ * `check` blokkjai bizonyíthatóan pontosan egy helyes opciót tartalmaznak.
+ */
+export function verifyLessonSkillBank(experience: unknown, subject: string, sections?: Lesson["sections"]): LessonSkillCheckResult {
   const checks: LessonSkillCheck[] = [];
   const add = (code: string, problems: string[]) => checks.push({ code, passed: problems.length === 0, problems });
   const parsed = experienceSchema.safeParse(experience);
@@ -28,6 +34,8 @@ export function verifyLessonSkillBank(experience: unknown, subject: string): Les
     const language = lessonLanguage(subject);
     add("language_glossary_tts", language && (bank.language !== language || !bank.glossary.length) ? ["A nyelvlecke szószedete vagy TTS-nyelve hiányzik/eltér."] : []);
   }
+  add("single_correct", lessonSingleChoiceProblems({ sections, experience: parsed.success ? parsed.data : undefined })
+    .flatMap(f => f.problems.map(p => `${f.id ?? f.path}: ${p}`)));
   const problems = [...new Set(checks.flatMap(c => c.problems))];
   return { version: LESSON_SKILL_CHECK_VERSION, ok: problems.length === 0, checks, problems };
 }

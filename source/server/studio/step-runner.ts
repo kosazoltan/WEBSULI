@@ -55,7 +55,8 @@ import { ensureSectionVisuals } from "./section-visuals";
 import { applyVisualPatch } from "./visual-patch";
 import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
 import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolutions, sourceHashOf, type BlindSolutions } from "./blind-solver";
-import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, runBankVerifier, type BankVerifierResult } from "./bank-verifier";
+import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag } from "./bank-verifier";
+import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
@@ -394,7 +395,9 @@ ${sourceText.slice(0, 60_000)}`,
 
 /**
  * Spec 2026-09-24 (bank-ellenőr): fejezetenként párhuzamos Opus-ellenőrzés a vak megoldásokkal mint kulccsal,
- * a lektor-hívással egy időben. Csak akkor fut, ha van bank és vak megoldás; soha nem dob.
+ * a lektor-hívással egy időben. Csak akkor fut, ha van bank; soha nem dob.
+ * Spec 2026-09-29 (egy-helyes-valasz, döntés 3): vak megoldás NÉLKÜL is fut (üres kulcslistával) — a tiszta
+ * magyarázó forrásnál (pl. az oszthatóság-lecke) is kell az egyválasztós tételek opciónkénti ítélete.
  */
 function startBankVerifier(
   job: JobView,
@@ -403,7 +406,7 @@ function startBankVerifier(
   keyConfigured: (model: string) => boolean,
 ): Promise<BankVerifierResult | undefined> | undefined {
   const lesson = job.output?.lesson as Lesson | undefined;
-  if (!lesson?.experience || !blind?.solutions.length || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
+  if (!lesson?.experience || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
   const cleared = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
   return runBankVerifier({
     lesson, blind, cleared,
@@ -922,14 +925,21 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // nem jár, figyelmeztetésként tárolódnak (tétel-szintű bankhibáért a leckét nem buktatjuk).
       const bankChecked = bankCheck ? await bankCheck : undefined;
       let rawNotes: RawNote[] = parsed.data.notes;
+      // Spec 2026-09-29 (egy-helyes-valasz, döntés 4): a kör nyitott egyválasztós jelzései a kapuhoz mennek; a
+      // korábbi kör jelzései nem öröklődnek (a kapu az utolsó lektor-kör után fut).
+      const { choiceFlags: _staleChoiceFlags, ...outputWithoutFlags } = job.output ?? {};
+      job.output = outputWithoutFlags;
       if (bankChecked) {
         rawNotes = mergeBankVerifierNotes(parsed.data.notes, bankChecked.notes, bankRepairPossible);
+        const choiceFlags = openChoiceFlags(bankChecked, bankRepairPossible);
         const previouslyCleared = Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : [];
         job.output = {
           ...job.output,
           bankVerifierCleared: [...new Set([...previouslyCleared, ...bankChecked.cleared])].slice(-3000),
           bankVerifier: { round: job.round, checked: bankChecked.checked, errors: bankChecked.notes.length, failedChunks: bankChecked.failedChunks },
+          ...(choiceFlags.length ? { choiceFlags } : {}),
         };
+        if (choiceFlags.length) logger.warn(`[STUDIO] Bank-ellenőr (${job.id}, ${job.round}. kör): ${choiceFlags.length} nyitott egyválasztós jelzés a kapunak: ${choiceFlags.map((f) => f.path).join(", ").slice(0, 400)}`);
         logger.info(`[STUDIO] Bank-ellenőr (${job.id}, ${job.round}. kör): ${bankChecked.checked} tétel, ${bankChecked.notes.length} hiba`
           + (bankChecked.notes.length && !bankRepairPossible ? " (figyelmeztetésként: csak-bank kör már nem jár)" : "")
           + (bankChecked.failedChunks ? `, ${bankChecked.failedChunks} darab elmaradt` : "")
@@ -1037,14 +1047,55 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
  * sends the Author another round or dead-ends at the round limit; a failing lesson is
  * NEVER published. Measured before this existed: every prod lesson had publishedAt=NULL.
  */
+/**
+ * Spec 2026-09-29 (egy-helyes-valasz, döntés 4) — fail-closed egyválasztós kapu. Nyitott jelzés = a determinisztikus
+ * őr leletei ∪ a bank-ellenőr utolsó körének `choiceFlags`-e. Bank-tétel → kivétel, ha a bank utána is megfelel;
+ * különben, és a lecke check blokkjánál, a lecke nem publikálható.
+ */
+export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[] } | { error: string } {
+  const flags = new Map<string, string>();
+  for (const f of lessonSingleChoiceProblems(lesson)) flags.set(f.path, `${f.path}: ${f.problems.join(" ")}`);
+  for (const f of Array.isArray(rawFlags) ? rawFlags as ChoiceFlag[] : []) {
+    if (typeof f?.path === "string" && !flags.has(f.path)) flags.set(f.path, `${f.path}: ${String(f.message ?? "")}`);
+  }
+  if (!flags.size) return { lesson, removed: [] };
+  const byBank: Record<"quiz" | "methods", Set<number>> = { quiz: new Set(), methods: new Set() };
+  const blocking: string[] = [];
+  for (const [path, message] of flags) {
+    const m = path.match(/^experience\.(quiz|methods)\[(\d+)\]$/);
+    if (m && lesson.experience) byBank[m[1] as "quiz" | "methods"].add(Number(m[2]));
+    else blocking.push(message);
+  }
+  const all = [...flags.values()].join("; ");
+  if (blocking.length) return { error: `Egyválasztós hiba maradt a leckében, nem publikálható (pontosan egy helyes opció kell): ${blocking.join("; ")}` };
+  const experience = lesson.experience!;
+  const reduced: Lesson = { ...lesson, experience: {
+    ...experience,
+    quiz: experience.quiz.filter((_, i) => !byBank.quiz.has(i)),
+    methods: experience.methods.filter((_, i) => !byBank.methods.has(i)),
+  } };
+  const after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
+  if (after.length) return { error: `Egyválasztós hiba maradt a bankban, és a tételek kivétele után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})` };
+  return { lesson: reduced, removed: [...flags.keys()] };
+}
+
 async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome> {
   const rawLesson = job.output?.lesson;
   if (!rawLesson || !job.lessonId) {
     return fail(store, job, "A kapuhoz nincs lecke a jobban — a szerző lépés nem futott le.");
   }
-  const parsed = lessonSchema.safeParse(rawLesson);
-  if (!parsed.success) {
-    return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(parsed.error)}`);
+  const reviewed = lessonSchema.safeParse(rawLesson);
+  if (!reviewed.success) {
+    return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(reviewed.error)}`);
+  }
+  const choiceGate = resolveChoiceGate(reviewed.data, job.output?.choiceFlags);
+  if ("error" in choiceGate) return fail(store, job, choiceGate.error);
+  // A lektor-bizonyíték (lent) az EREDETI, lektorált leckéhez kötött; a kivétel csak elvesz belőle.
+  const parsed = { data: choiceGate.lesson };
+  if (choiceGate.removed.length) {
+    await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+    job.output = { ...job.output, lesson: parsed.data, choiceGate: { removed: choiceGate.removed } };
+    logger.warn(`[STUDIO/GATE] Egyválasztós hibás banktétel kivéve (${job.id}): ${choiceGate.removed.join(", ")}`);
   }
 
   const map = focusedMapOf(await store.loadMap(job.mapId), job);
@@ -1052,7 +1103,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
 
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
   const skill74 = isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience
-    ? verifyLessonSkillBank(parsed.data.experience, parsed.data.subject) : undefined;
+    ? verifyLessonSkillBank(parsed.data.experience, parsed.data.subject, parsed.data.sections) : undefined;
   // Missing experience is a hard failure, including after the autonomous round limit.
   if (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience) {
     const problems = [...experienceProblems(parsed.data), ...(skill74?.problems ?? [])];

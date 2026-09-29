@@ -45,3 +45,8 @@ test("old numeric difficulty aliases remain usable without losing explanations",
     assert.equal(pools[tier][0].explanation, row.explanation);
   }
 });
+test("spec 2026-09-29 (E5): a több helyes opciós régi sor nem jut játékba; az egy helyes opciós igen", () => {
+  const legacy = { ...row, prompt: "Melyik szám osztható 9-cel?", options: ["234", "567", "891", "648"], correctIndex: 0 };
+  assert.equal(isPlayableQuestion(legacy), false, "mind a négy opció osztható 9-cel");
+  assert.equal(isPlayableQuestion({ ...row, prompt: "Melyik szám NEM osztható 3-mal?", options: ["315", "472", "813", "126"], correctIndex: 1 }), true);
+});
