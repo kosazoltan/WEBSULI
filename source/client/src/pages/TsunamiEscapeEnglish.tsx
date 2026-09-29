@@ -1,5 +1,6 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
-import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
+import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
+import { QUIZ_TIMEOUT_SEC, tsunamiQuizSeconds } from "@/game-engine/tsunamiTiming";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -496,11 +497,6 @@ const WIN_QUIZ_COUNT: Record<GameDifficulty, number> = {
 
 const WIN_BONUS_XP = 150;
 const SAFE_ZONE_BONUS_XP = 6;
-const QUIZ_TIMEOUT_SEC: Record<GameDifficulty, number> = {
-  easy: 14,
-  normal: 11,
-  hard: 9,
-};
 const QUIZ_WRONG_WATER_PENALTY: Record<GameDifficulty, number> = {
   easy: 4,
   normal: 6,
@@ -839,7 +835,7 @@ export default function TsunamiEscapeEnglish() {
     setSessionXp(0);
     setCorrectQuizzesInRun(0);
     setSafeZoneX(50);
-    setQuizTimeLeft(QUIZ_TIMEOUT_SEC[difficulty]);
+    setQuizTimeLeft(tsunamiQuizSeconds(difficulty, adaptiveRef.current.band));
     setStormFlash(false);
     setDriftDir(0);
     driftDirRef.current = 0;
@@ -1033,7 +1029,7 @@ export default function TsunamiEscapeEnglish() {
       if (quizTimerRef.current >= quizEveryDyn) {
         quizTimerRef.current = 0;
         setQuiz(pickQuiz());
-        setQuizTimeLeft(adaptiveTimeBudget(QUIZ_TIMEOUT_SEC[runDifficultyRef.current], adaptiveRef.current.band));
+        setQuizTimeLeft(tsunamiQuizSeconds(runDifficultyRef.current, adaptiveRef.current.band));
         setPhase("quiz");
         return;
       }
