@@ -19,6 +19,9 @@ import { scoreCorrectAnswer } from "@/game-engine/retry-policy";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import { pickFreshTask } from "@/game-engine/no-repeat";
+import { useGradeLevel } from "@/game-engine/useGradeLevel";
+import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
+import { digitComplexity, levelAdaptBand, levelStartBand, pickByBand } from "@/game-engine/levelTuning";
 import { QUESTION_SECONDS, ROUND_SECONDS, TARGET_CORRECT, questionSecondsForBand } from "@/game-engine/speedQuizTiming";
 
 type GradeLevel = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
@@ -1305,7 +1308,7 @@ function isMathTask(task: MathTask): boolean {
  * A futás egy még nem látott feladata (spec 2026-09-29): 68%-ban a tanári bankból, különben a generátorból
  * (legfeljebb 30 próba egy új promptért, utána nem látott tanári feladat).
  */
-function pickTask(level: GradeLevel, seenPrompts: readonly string[]): MathTask {
+function pickOneTask(level: GradeLevel, seenPrompts: readonly string[]): MathTask {
   const teacherPool = TEACHER_BANK[level].filter(isMathTask);
   return pickFreshTask({
     teacher: teacherPool,
@@ -1318,8 +1321,29 @@ function pickTask(level: GradeLevel, seenPrompts: readonly string[]): MathTask {
   });
 }
 
+/** Ennyi nem látott jelöltből választ a pálya sávja (spec 2026-09-29-palyak-szoletra-nyelvek, E szelet, D7). */
+const BAND_TASK_CANDIDATES = 3;
+
+/**
+ * Pálya nélkül a régi választás. Pályán 3 különböző, nem látott jelölt (tanári bank vagy sablon, a régi arányban),
+ * és a sáv dönt: alacsony sávon a legkevesebb számjeggyel dolgozó, magas sávon a legtöbb számjeggyel dolgozó feladat.
+ */
+function pickTask(level: GradeLevel, seenPrompts: readonly string[], band?: number): MathTask {
+  if (band == null) return pickOneTask(level, seenPrompts);
+  const candidates: MathTask[] = [];
+  let seen = [...seenPrompts];
+  for (let i = 0; i < BAND_TASK_CANDIDATES; i += 1) {
+    const candidate = pickOneTask(level, seen);
+    candidates.push(candidate);
+    seen = [...seen, candidate.prompt];
+  }
+  return pickByBand(candidates, band, (t) => digitComplexity(t.prompt));
+}
+
 export default function SpeedQuizMath() {
   const [grade, setGrade] = useState<GradeLevel>(4);
+  const gradeRef = useRef<GradeLevel>(grade);
+  gradeRef.current = grade;
   const [phase, setPhase] = useState<Phase>("menu");
   const [task, setTask] = useState<MathTask>(() => pickTask(4, []));
   const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS[4]);
@@ -1343,6 +1367,11 @@ export default function SpeedQuizMath() {
 
   useEffect(() => {
     return installGameTestApi({
+      probe: () => ({
+        level: runLevelRef.current,
+        band: difficultyRef.current,
+        questionSeconds: questionSecondsForBand(gradeRef.current, difficultyRef.current),
+      }),
       forceState: (patch) => {
         if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
           setPhase(patch.phase);
@@ -1362,14 +1391,22 @@ export default function SpeedQuizMath() {
    */
   const difficultyRef = useRef(startingDifficulty(4));
   const answerHistoryRef = useRef<boolean[]>([]);
+  // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként; a futás pályája a startkor rögzül.
+  // A célszám és a kör ideje évfolyamonként változatlan; a pálya a sávon át a feladat-nehézséget és a kérdésidőt hangolja.
+  const levels = useGradeLevel("speedmath", grade);
+  const runLevelRef = useRef<number | null>(null);
+  const levelClearedRef = useRef(false);
 
   const recordDifficultyAnswer = useCallback((correct: boolean) => {
     const history = [...answerHistoryRef.current, correct].slice(-6);
     answerHistoryRef.current = history;
-    difficultyRef.current = nextDifficulty({
-      recentCorrect: history,
-      current: difficultyRef.current,
-    });
+    difficultyRef.current = levelAdaptBand(
+      nextDifficulty({
+        recentCorrect: history,
+        current: difficultyRef.current,
+      }),
+      runLevelRef.current,
+    );
   }, []);
 
   /** A kérdésre adott idő a nehézség-sávból: padlón +50%, tetején az alapidő (legalább 20 s). */
@@ -1396,7 +1433,7 @@ export default function SpeedQuizMath() {
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
 
   const nextTask = useCallback(() => {
-    const next = pickTask(grade, runPromptsRef.current);
+    const next = pickTask(grade, runPromptsRef.current, runLevelRef.current == null ? undefined : difficultyRef.current);
     runPromptsRef.current = [...runPromptsRef.current, next.prompt];
     setTask(next);
     setQuestionTimeLeft(questionSecondsFor(grade));
@@ -1477,14 +1514,24 @@ export default function SpeedQuizMath() {
     setWrongFlash(false);
     setAnswerState("idle");
     setTimeLeft(ROUND_SECONDS[grade]);
-    difficultyRef.current = startingDifficulty(grade);
+    runLevelRef.current = levels.level;
+    levelClearedRef.current = false;
+    difficultyRef.current = levelStartBand(runLevelRef.current, startingDifficulty(grade));
     answerHistoryRef.current = [];
     setQuestionTimeLeft(questionSecondsFor(grade));
-    const first = pickTask(grade, []);
+    const first = pickTask(grade, [], runLevelRef.current == null ? undefined : difficultyRef.current);
     runPromptsRef.current = [first.prompt];
     setTask(first);
     setPhase("play");
-  }, [grade, questionSecondsFor]);
+  }, [grade, questionSecondsFor, levels.level]);
+
+  // A győzelem (a célszám elérése a torony tetejéig) a következő pályát oldja fel; a menü azt ajánlja.
+  useEffect(() => {
+    if (phase === "won" && runLevelRef.current != null && !levelClearedRef.current) {
+      levelClearedRef.current = true;
+      levels.complete(runLevelRef.current);
+    }
+  }, [phase]);
 
   const endAsLose = useCallback(() => setPhase("over"), []);
   const endAsWin = useCallback(() => {
@@ -1753,8 +1800,16 @@ export default function SpeedQuizMath() {
                   data-testid="sq-start"
                 >
                   <Gauge className="w-4 h-4 mr-2" />
-                  Indul a torony — rajta!
+                  Indul a torony — rajta!{levels.level != null ? ` · ${levels.level}. pálya` : ""}
                 </Button>
+                {levels.active && levels.level != null ? (
+                  <GradeLevelPicker
+                    value={levels.level}
+                    unlocked={levels.unlocked}
+                    onChange={levels.select}
+                    label={`Pálya — ${grade}. osztály`}
+                  />
+                ) : null}
               </div>
             )}
 
