@@ -1,4 +1,12 @@
-import { createAdaptiveSession, pickAdaptiveTier } from "@/game-engine/adaptiveSession";
+import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
+import {
+  dedupeTiersByContent,
+  ladderBaseTier,
+  ladderTierIndex,
+  LADDER_TIER_LABELS,
+  pickUnseen,
+  type SeenItem,
+} from "@/game-engine/no-repeat";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -19,6 +27,8 @@ import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
 import {
+  wordLadderB1,
+  wordLadderB2,
   wordLadderEasyMore,
   wordLadderHardMore,
   wordLadderMedMore,
@@ -92,7 +102,7 @@ const QUIZ_MED: Quiz[] = [
   { id: "m7", prompt: "„Eszik” (ige, ő eszik) — helyes alak:", options: ["He eat.", "He eats.", "He eating.", "He eated."], correctIndex: 1, explanation: "Egyes szám harmadik személyben az ige -s végződést kap: He eats. Az eated nem létező alak." },
   { id: "m8", prompt: "„Iszik” (ige, ő iszik) — helyes alak:", options: ["She drink.", "She drinks.", "She drinking.", "She drinked."], correctIndex: 1, explanation: "A she mellett az ige -s végződést kap: She drinks. A drink múlt ideje drank, nem drinked." },
   { id: "m9", prompt: "Mit jelent: I like music.", options: ["Szeretem a zenét.", "Nem szeretek zenét.", "Zenelek.", "Hallgatom a rádiót."], correctIndex: 0, explanation: "Az I like music jelentése: Szeretem a zenét. A like kedvelést fejez ki, jelen időben." },
-  { id: "m10", prompt: "„Esernyő” angolul:", options: ["uniform", "umbrella", "under", "uncle"], correctIndex: 1, explanation: "Az esernyő angolul umbrella. Az uncle a nagybácsi, az under alatt — mind u-val kezdődik." },
+  { id: "m10", prompt: "„Nagymama” angolul:", options: ["grandfather", "grandmother", "granddaughter", "godmother"], correctIndex: 1, explanation: "A nagymama angolul grandmother: benne van a mother (anya). A grandfather a nagypapa, a granddaughter az unoka (lány)." },
   { id: "m11", prompt: "„Orvos” angolul:", options: ["driver", "doctor", "daughter", "dictionary"], correctIndex: 1, explanation: "Az orvos angolul doctor. A driver a sofőr, a daughter a lánya: a doctor -or-ra végződik." },
   { id: "m12", prompt: "„Repülőgép” angolul:", options: ["airport", "airplane", "island", "animal"], correctIndex: 1, explanation: "A repülőgép angolul airplane. Az airport a repülőtér — a gép a plane, a tér a port." },
   { id: "m13", prompt: "„Zebra” angolul:", options: ["zero", "zebra", "zipper", "zone"], correctIndex: 1, explanation: "A zebra angolul zebra — szinte ugyanaz, csak „zíbrö”-nek ejtjük. A zero a nulla." },
@@ -117,6 +127,17 @@ const QUIZ_HARD: Quiz[] = [
   { id: "h14", prompt: "Melyik helyes: „Ő tegnap írt egy levelet.”", options: ["She writes a letter yesterday.", "She wrote a letter yesterday.", "She write a letter yesterday.", "She writing a letter yesterday."], correctIndex: 1, explanation: "A write múlt ideje wrote — rendhagyó ige, nem kap -ed végződést. She wrote a letter yesterday." },
   ...wordLadderHardMore,
 ];
+
+/** 9–10. évfolyam (B1) és 11–12. évfolyam (B2) — a középiskolai szintek. */
+const QUIZ_B1: Quiz[] = [...wordLadderB1];
+const QUIZ_B2: Quiz[] = [...wordLadderB2];
+
+/** A Szólétra évfolyam-választója: 3–12. */
+const LADDER_GRADES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+
+function clampLadderGrade(grade: number): number {
+  return Math.min(12, Math.max(3, Math.round(grade)));
+}
 
 function buildWordLadderQueue(pools: { easy: Quiz[]; med: Quiz[]; hard: Quiz[] }): Quiz[] {
   const e = shuffle(pools.easy).slice(0, RUNGS_EASY);
@@ -329,7 +350,8 @@ export default function WordLadderHuEn() {
   // A válasz-lock szinkron ref: két gyors kattintás ne dolgozódjon fel duplán.
   const answerLockedRef = useRef(false);
   const adaptiveRef = useRef(createAdaptiveSession(4));
-  const recentAdaptiveRef = useRef<string[]>([]);
+  /** A futás ÖSSZES eddigi kérdése (azonosító + prompt) — ezek a futás végéig nem jönnek újra. */
+  const seenRef = useRef<SeenItem[]>([]);
   // Az ad-hoc setTimeout-ok gyűjtve, unmountkor törölve.
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scoreSubmittedRef = useRef(false);
@@ -394,6 +416,23 @@ export default function WordLadderHuEn() {
     };
   }, [quizBankResponse, materialItems]);
 
+  /**
+   * A választó öt szintje (3–4., 5–6., 7–8., 9–10., 11–12. évfolyam). A statikus és a szerver-bank azonos
+   * tartalmú (prompt + helyes válasz) tételei egyszer szerepelnek.
+   */
+  const tiers = useMemo(
+    () => dedupeTiersByContent([mergedPools.easy, mergedPools.med, mergedPools.hard, QUIZ_B1, QUIZ_B2]),
+    [mergedPools],
+  );
+  const tiersRef = useRef(tiers);
+  tiersRef.current = tiers;
+
+  /** A játszott évfolyam (3–12): a menüben választható, alapértéke az osztály. */
+  const [pickedGrade, setPickedGrade] = useState<number | null>(null);
+  const ladderGrade = pickedGrade ?? clampLadderGrade(userGrade ?? 4);
+  const ladderGradeRef = useRef(ladderGrade);
+  ladderGradeRef.current = ladderGrade;
+
   const mergedPoolsRef = useRef(mergedPools);
   mergedPoolsRef.current = mergedPools;
 
@@ -434,10 +473,10 @@ export default function WordLadderHuEn() {
     runBestStreakRef.current = 0;
     correctCountRef.current = 0;
     wrongCountRef.current = 0;
-    adaptiveRef.current.reset(userGrade ?? 4);
-    recentAdaptiveRef.current = [];
+    adaptiveRef.current.reset(ladderGradeRef.current);
+    seenRef.current = [];
     const q = buildLongRunQueue(mergedPoolsRef.current);
-    const first = pickAdaptiveTier(mergedPoolsRef.current, adaptiveRef.current.band, []);
+    const first = pickUnseen(tiersRef.current, ladderTierIndex(ladderGradeRef.current, adaptiveRef.current.band), []);
     if (first) q[0] = first;
     setQueue(q);
     setCursor(0);
@@ -466,7 +505,7 @@ export default function WordLadderHuEn() {
       if (explainOpenRef.current) return;
       setRunSeconds((s) => s + 1);
     }, 1000);
-  }, [userGrade]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -562,7 +601,7 @@ export default function WordLadderHuEn() {
     answerLockedRef.current = true;
     const isCorrect = i === current.correctIndex;
     adaptiveRef.current.answer(isCorrect);
-    recentAdaptiveRef.current = [...recentAdaptiveRef.current.slice(-7), current.id];
+    seenRef.current = [...seenRef.current, { id: current.id, prompt: current.prompt }];
 
     // 1) FELFEDÉS: a gyerek látja a zöld (helyes) és piros (hibás) választ.
     setChosenIdx(i);
@@ -617,7 +656,9 @@ export default function WordLadderHuEn() {
       nextQuestion = expanded[nextCursor] ?? expanded[0] ?? null;
     }
 
-    nextQuestion = pickAdaptiveTier(mergedPoolsRef.current, adaptiveRef.current.band, recentAdaptiveRef.current) ?? nextQuestion;
+    nextQuestion =
+      pickUnseen(tiersRef.current, ladderTierIndex(ladderGradeRef.current, adaptiveRef.current.band), seenRef.current) ??
+      nextQuestion;
 
     const fromRung = rung;
     const startStep = () => runStepChain(target, nextCursor, nextQuestion, isCorrect, fromRung);
@@ -794,6 +835,30 @@ export default function WordLadderHuEn() {
                 <p className="text-sm text-white/75 text-center max-w-xs">
                   Legjobb sorozat: <strong className="text-orange-300">{bestStreak}</strong>
                 </p>
+                <div className="w-full max-w-sm px-1" data-testid="wl-grade-picker">
+                  <p className="text-xs text-white/80 text-center mb-1.5">
+                    Évfolyam: <strong className="text-amber-200">{ladderGrade}.</strong> · szint:{" "}
+                    <strong className="text-amber-200">{LADDER_TIER_LABELS[ladderBaseTier(ladderGrade)]}</strong>
+                  </p>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {LADDER_GRADES.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        aria-pressed={ladderGrade === g}
+                        aria-label={`${g}. évfolyam`}
+                        onClick={() => setPickedGrade(g)}
+                        className={`min-h-[44px] rounded-lg border px-1 py-1.5 text-sm font-bold transition-colors ${
+                          ladderGrade === g
+                            ? "bg-amber-500 border-amber-200 text-slate-950"
+                            : "bg-black/30 border-white/25 text-white hover:bg-white/10"
+                        }`}
+                      >
+                        {g}.
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <Button
                   size="lg"
                   className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold rounded-full px-8 shadow-lg text-base"
