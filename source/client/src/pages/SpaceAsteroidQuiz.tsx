@@ -274,89 +274,94 @@ function saveGrade(grade: number): void {
  */
 function buildPlayerShip(): THREE.Group {
   const group = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: "#00f0ff",
-    emissive: "#0a4a55",
-    emissiveIntensity: 0.55,
-    roughness: 0.35,
-    metalness: 0.55,
-  });
-  const accentMat = new THREE.MeshStandardMaterial({
-    color: "#ff00ff",
-    emissive: "#5e1f5e",
-    emissiveIntensity: 0.6,
-    roughness: 0.4,
-    metalness: 0.45,
-  });
-  const cockpitMat = new THREE.MeshStandardMaterial({
-    color: "#9fe8ff",
-    emissive: "#2aa9d8",
-    emissiveIntensity: 0.6,
-    roughness: 0.05,
-    metalness: 0.6,
-  });
+  // Gyöngyházfehér, fémes törzs: a sötét űrben ez a legjobban olvasható sziluett, a színes részek erre ülnek.
+  const hullMat = new THREE.MeshStandardMaterial({ color: "#dfe9f7", metalness: 0.62, roughness: 0.3, emissive: "#0d2233", emissiveIntensity: 0.18 });
+  const wingMat = new THREE.MeshStandardMaterial({ color: "#5a3dff", metalness: 0.6, roughness: 0.3, emissive: "#1d0f66", emissiveIntensity: 0.55 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: "#ff4fd8", emissive: "#ff2bd0", emissiveIntensity: 1.6, roughness: 0.4 });
+  const glowCyan = new THREE.MeshStandardMaterial({ color: "#7df9ff", emissive: "#39f3ff", emissiveIntensity: 2.2, roughness: 0.3 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: "#8fe9ff", emissive: "#1aa3d6", emissiveIntensity: 0.55, metalness: 0.9, roughness: 0.05 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: "#1c2340", metalness: 0.7, roughness: 0.45 });
 
   // Áramvonalas törzs forgástestként (orr → farok), a Y tengely mentén.
   const hullProfile = [
-    new THREE.Vector2(0.0, -0.72),
-    new THREE.Vector2(0.24, -0.66),
-    new THREE.Vector2(0.36, -0.35),
-    new THREE.Vector2(0.4, 0.05),
-    new THREE.Vector2(0.33, 0.45),
-    new THREE.Vector2(0.18, 0.82),
-    new THREE.Vector2(0.0, 1.08),
+    new THREE.Vector2(0.0, -0.74),
+    new THREE.Vector2(0.2, -0.7),
+    new THREE.Vector2(0.33, -0.44),
+    new THREE.Vector2(0.38, -0.05),
+    new THREE.Vector2(0.33, 0.38),
+    new THREE.Vector2(0.2, 0.78),
+    new THREE.Vector2(0.07, 1.02),
+    new THREE.Vector2(0.0, 1.1),
   ];
-  const hull = new THREE.Mesh(new THREE.LatheGeometry(hullProfile, 20), bodyMat);
-  hull.scale.set(1, 1, 0.62);
+  const hull = new THREE.Mesh(new THREE.LatheGeometry(hullProfile, 28), hullMat);
+  hull.scale.set(1, 1, 0.6);
   group.add(hull);
 
-  // Hátrahajló, lekerekített szárnyak kihúzott síkidomból.
+  // Világító gerinccsík a törzs tetején és egy orrfény — a bloom ezekből rajzol neon kontúrt.
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.2, 0.03), glowCyan);
+  spine.position.set(0, 0.05, 0.235);
+  group.add(spine);
+  const noseLight = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), glowCyan);
+  noseLight.position.set(0, 1.08, 0.02);
+  group.add(noseLight);
+
+  // Hátrahajló, lekerekített szárnyak kihúzott síkidomból, rózsaszín világító élléccel.
   const wingShape = new THREE.Shape();
-  wingShape.moveTo(0, 0.25);
-  wingShape.lineTo(0.78, -0.12);
-  wingShape.quadraticCurveTo(0.9, -0.2, 0.84, -0.34);
-  wingShape.lineTo(0.12, -0.42);
+  // PR #133 review: the outermost point stays inside PLAYER_HALF_WIDTH (0.24 + 0.84 ≈ 1.08 < 1.125).
+  wingShape.moveTo(0, 0.28);
+  wingShape.lineTo(0.76, -0.1);
+  wingShape.quadraticCurveTo(0.86, -0.18, 0.8, -0.33);
+  wingShape.lineTo(0.14, -0.44);
   wingShape.lineTo(0, -0.3);
   wingShape.closePath();
-  const wingGeo = new THREE.ExtrudeGeometry(wingShape, {
-    depth: 0.1,
-    bevelEnabled: true,
-    bevelThickness: 0.04,
-    bevelSize: 0.04,
-    bevelSegments: 2,
-  });
-  wingGeo.translate(0, 0, -0.05);
-  const wingR = new THREE.Mesh(wingGeo, accentMat);
-  wingR.position.set(0.28, -0.1, 0);
-  group.add(wingR);
-  const wingL = new THREE.Mesh(wingGeo, accentMat);
-  wingL.position.set(-0.28, -0.1, 0);
-  wingL.scale.x = -1;
-  group.add(wingL);
+  const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.08, bevelEnabled: true, bevelThickness: 0.035, bevelSize: 0.035, bevelSegments: 3 });
+  wingGeo.translate(0, 0, -0.04);
+  const edge = new THREE.BoxGeometry(0.62, 0.035, 0.05);
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Mesh(wingGeo, wingMat);
+    wing.position.set(side * 0.24, -0.1, 0);
+    wing.scale.x = side;
+    group.add(wing);
+    const lead = new THREE.Mesh(edge, trimMat);
+    lead.position.set(side * 0.6, 0.04, 0.07);
+    lead.rotation.z = side * -0.44;
+    group.add(lead);
+    // Két hajtómű-gondola, a végükön világító gyűrűvel.
+    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.62, 16), hullMat);
+    pod.position.set(side * 0.34, -0.5, -0.02);
+    group.add(pod);
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.11, 0.1, 16), darkMat);
+    nozzle.position.set(side * 0.34, -0.85, -0.02);
+    group.add(nozzle);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.028, 8, 24), glowCyan);
+    ring.position.set(side * 0.34, -0.9, -0.02);
+    ring.rotation.x = Math.PI / 2;
+    group.add(ring);
+    // Ferde farokúszó.
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.3), wingMat);
+    fin.position.set(side * 0.16, -0.52, 0.2);
+    fin.rotation.z = side * 0.35;
+    group.add(fin);
+  }
 
   // Szárnyvégi jelzőfények (bal piros, jobb zöld — mint a repülőkön).
   const tipL = createGlowSprite("#ff4d6d", 0.42, 0.9);
-  tipL.position.set(-1.1, -0.42, 0.1);
+  tipL.position.set(-1.02, -0.42, 0.1);
   group.add(tipL);
   const tipR = createGlowSprite("#4dffb0", 0.42, 0.9);
-  tipR.position.set(1.1, -0.42, 0.1);
+  tipR.position.set(1.02, -0.42, 0.1);
   group.add(tipR);
 
-  // Üvegkupola a pilótafülke fölött.
-  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 14), cockpitMat);
-  cockpit.position.set(0, 0.32, 0.2);
-  cockpit.scale.set(1, 1.55, 0.75);
-  group.add(cockpit);
-
-  // Kis függőleges vezérsík és két hajtómű-gondola.
-  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 0.34), accentMat);
-  fin.position.set(0, -0.48, 0.2);
-  group.add(fin);
-  for (const side of [-1, 1]) {
-    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.5, 12), bodyMat);
-    pod.position.set(side * 0.3, -0.6, -0.02);
-    group.add(pod);
-  }
+  // Üvegkupola a pilótafülke fölött, sötét kerettel.
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), glassMat);
+  canopy.position.set(0, 0.36, 0.2);
+  canopy.scale.set(0.95, 1.7, 0.7);
+  group.add(canopy);
+  const frame = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.022, 8, 28), darkMat);
+  // PR #133 review: in front of the glass's surface (the glass reaches z ≈ 0.244 along the rim), so it is visible.
+  frame.position.set(0, 0.36, 0.25);
+  frame.scale.set(0.95, 1.7, 1);
+  group.add(frame);
 
   group.traverse((obj) => {
     if (obj instanceof THREE.Mesh) {
