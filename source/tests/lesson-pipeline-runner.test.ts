@@ -1541,8 +1541,10 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   assert.equal(job.output?.bankOnlyRepairRounds, 2);
   job.step = "lektor"; job.round = MAX_AUTHOR_ROUNDS + 2; job.status = "ok";
   const again = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ notes: [bankBlocker] })), store: deps.store });
-  assert.equal(again.ok, false);
-  assert.match(deps.store.jobs.get("bank-only")!.error ?? "", /tartalmi javítást kér/);
+  // Spec 2026-09-29-limit-banktetel-kivetel (4. döntés, dokumentált változás): a harmadik verdikt a limiten nem buktatja
+  // a leckét — a hibás banktétel kapu-jelzés lesz; a kapu kiveszi, ha a bank így is megfelel, különben nem publikál.
+  assert.deepEqual(again.ok && again.next, { step: "gate", round: MAX_AUTHOR_ROUNDS + 2 }, JSON.stringify(again));
+  assert.deepEqual((deps.store.jobs.get("bank-only")!.output?.choiceFlags as Array<{ path: string }>).map((f) => f.path), ["experience.quiz[3]"]);
 });
 
 test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél nincs csak-bank kör — tiszta lektori hiba, nem kivétel", async () => {
@@ -1562,12 +1564,15 @@ test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél
   await assert.rejects(executeWorkflow(store, { id: "budget-run", owner: "test", mode: "studio" }, async () => {
     for (const step of ["pedagogue", "author", "animator", "lektor", "author", "animator", "lektor", "author", "animator", "lektor", "animator"]) await workflowPhase(step);
     const result = await runPipelineStep("budget", deps);
-    assert.equal(result.ok, false, `nincs 5. animátor-látogatás: ${JSON.stringify(result)}`);
+    // Spec 2026-09-29-limit-banktetel-kivetel (4. döntés, dokumentált változás): nincs 5. animátor-látogatás és nincs
+    // workflow-kivétel (a teszt fő szándéka) — a hibás banktétel a kapuhoz megy kivételre, nem a lektor buktat.
+    assert.deepEqual(result.ok && result.next, { step: "gate", round: MAX_AUTHOR_ROUNDS + 1 }, `nincs 5. animátor-látogatás: ${JSON.stringify(result)}`);
     throw new Error("teszt-vég: a lektor döntött");
   }), /teszt-vég: a lektor döntött/);
   const job = deps.store.jobs.get("budget")!;
-  assert.equal(job.status, "error");
-  assert.match(job.error ?? "", /tartalmi javítást kér: .*273/);
+  assert.notEqual(job.status, "error");
+  assert.deepEqual((job.output?.choiceFlags as Array<{ path: string; message: string }>).map((f) => f.path), ["experience.quiz[3]"]);
+  assert.match((job.output?.choiceFlags as Array<{ message: string }>)[0].message, /273/);
 });
 
 test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jön, ha minden blokkoló banktétel — nincs szerzői újraírás", async () => {
@@ -1998,4 +2003,76 @@ test("spec 2026-09-29: témafókusz — a fókuszon kívüli fogalom hiánya nem
   plain.store.seed({ id: "focus-2", mapId: "m1", step: "author", status: "ok", output: { outline: GOOD_OUTLINE } });
   const rejected = await approveOutline("focus-2", onlyCore, plain);
   assert.equal(rejected.ok, false, "fókusz nélkül a kihagyott supporting fogalom a 90%-os küszöb alá viszi a vázlatot");
+});
+
+
+/* Spec 2026-09-29-limit-banktetel-kivetel: a körlimiten maradt banktétel-hiba a tételt veszi ki, nem a leckét. */
+async function limitSetup(id: string, lektorNotes: unknown[], spare = 0) {
+  const setup = await bankVerifierSetup(id, { bankOnlyRepairRounds: MAX_BANK_ONLY_ROUNDS }, []);
+  const e = setup.lesson.experience!;
+  for (let i = 0; i < spare; i++) {
+    e.quiz.push({ ...e.quiz[10 + i], id: `spare-q${i}`, question: `${e.quiz[10 + i].question} (tartalék ${i + 1})` });
+    e.tasks.push({ ...e.tasks[10 + i], id: `spare-t${i}`, q: `${e.tasks[10 + i].q} (tartalék ${i + 1})` });
+  }
+  const inner = setup.deps.providerFactory;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
+      return { content: JSON.stringify({ notes: lektorNotes }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    } } as IAIProvider;
+  };
+  const job = setup.store.jobs.get(id)!;
+  job.round = MAX_AUTHOR_ROUNDS; job.lessonId = `lesson-${id}`;
+  setup.store.lessons.set(job.lessonId, { id: job.lessonId, mapId: "m1", json: setup.lesson });
+  return { ...setup, deps: { ...setup.deps, providerFactory }, job };
+}
+const LIMIT_NOTES = [
+  { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.4", message: "Mi hamis: a 418-at jelöli 4-gyel oszthatónak." },
+  { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.2", message: "Mi hamis: a required a hibás 52-t is elfogadja." },
+];
+
+test("spec limit-banktetel (E2): körlimiten csak banktétel-blokkoló (pontozott útvonal, tasks is) → kapu-jelzés, nem hiba", async () => {
+  const { deps, job } = await limitSetup("lim-e2", LIMIT_NOTES);
+  const reviewed = await runPipelineStep("lim-e2", deps);
+  assert.deepEqual(reviewed.ok && reviewed.next, { step: "gate", round: MAX_AUTHOR_ROUNDS }, JSON.stringify(reviewed));
+  assert.notEqual(job.status, "error");
+  assert.deepEqual((job.output?.choiceFlags as Array<{ path: string }>).map((f) => f.path).sort(), ["experience.quiz[4]", "experience.tasks[2]"]);
+});
+
+test("spec limit-banktetel (E3): a kapu a kvíz- ÉS a feladattételt is kiveszi, a 7.4 bizonyítékot elfogadja, és publikál", async () => {
+  const { deps, store, job, lesson } = await limitSetup("lim-e3", LIMIT_NOTES, 3);
+  const flaggedQuiz = lesson.experience!.quiz[4].question;
+  const flaggedTask = lesson.experience!.tasks[2].q;
+  const before = { quiz: lesson.experience!.quiz.length, tasks: lesson.experience!.tasks.length };
+  assert.ok((await runPipelineStep("lim-e3", deps)).ok);
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  const gated = await runPipelineStep("lim-e3", deps);
+  assert.ok(gated.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  const saved = store.lessons.get(job.lessonId!)!.json as Lesson;
+  assert.equal(saved.experience!.quiz.length, before.quiz - 1);
+  assert.equal(saved.experience!.tasks.length, before.tasks - 1);
+  assert.equal(saved.experience!.quiz.some((q) => q.question === flaggedQuiz), false, "a hibás kvíztétel nem jut a gyerekhez");
+  assert.equal(saved.experience!.tasks.some((t) => t.q === flaggedTask), false, "a hibás feladat nem jut a gyerekhez");
+  assert.deepEqual([...(job.output?.choiceGate as { removed: string[] }).removed].sort(), ["experience.quiz[4]", "experience.tasks[2]"]);
+});
+
+test("spec limit-banktetel (E4): tartalék nélkül a kivétel után a bank nem felelne meg → a kapu NEM publikál", async () => {
+  const { deps, store, job } = await limitSetup("lim-e4", LIMIT_NOTES, 0);
+  assert.ok((await runPipelineStep("lim-e4", deps)).ok);
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  const gated = await runPipelineStep("lim-e4", deps);
+  assert.equal(gated.ok, false);
+  assert.equal(log.length, 0);
+  assert.match(job.error ?? "", /Hibás banktétel maradt a limiten.*nem felelne meg/);
+});
+
+test("spec limit-banktetel (E4): a banknál hosszabb indexre mutató blokkoló nem kivehető → a lektor a limiten buktat", async () => {
+  const { deps, job } = await limitSetup("lim-oob", [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.9999", message: "Kitalált tétel." }], 3);
+  const reviewed = await runPipelineStep("lim-oob", deps);
+  assert.equal(reviewed.ok, false);
+  assert.match(job.error ?? "", /tartalmi javítást kér/);
 });
