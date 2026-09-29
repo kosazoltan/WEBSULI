@@ -62,7 +62,10 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // Spec 2026-09-19 (tulajdonosi döntés): a tervkészítő a közvetlen Anthropic API-n futó
   // Opus 5, medium efforttal — a terv minősége dönti el a további körök számát.
   pedagogue: "claude-opus-5",
-  author: "gpt-5.6-terra", // long structured Hungarian output
+  // Tulajdonosi döntés 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md): GPT-6 Luna, tartaléka
+  // GPT-5.6 Terra. Mérve ugyanazon a webes jobon: Luna 2/2 érvényes, sémát teljesítő lecke (84 s, 96 s);
+  // a Terra élesben egyszer érvénytelen JSON-t adott, és tartalék híján az egész gyártás leállt.
+  author: "gpt-6-luna", // long structured Hungarian output
   // Spec 2026-09-19 (mérve, két 46–49 fogalmas futás): az animátor+bank a lecke költségének
   // 3/4-e volt Terrán (~3 USD). A glm-5.3-flash 6,3 s alatt, 0 gondolkodó tokennel, érvényes
   // magyar bankcsomag-JSON-t adott (0,09/0,30 USD/M); a rubrikát determinisztikus kód ellenőrzi.
@@ -77,7 +80,7 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   bank: "gpt-5.6-luna",
   // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
   // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
-  // x-ai és openai külön család; a szerzőnek nincs külső fallbackje.
+  // x-ai és openai külön család; a szerző tartaléka is openai (spec 2026-09-29), így a lektor független marad.
   lektor: "grok-4.6", // MUST differ in family from author
   gateHelper: "deepseek/deepseek-v4-flash", // cheap classification (0,04/0,08 USD/M)
   quizPolish: "deepseek/deepseek-v4-flash",
@@ -95,7 +98,9 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   // független olvasója a GLM 5.3 Flash (mért 89.1%, más család; a Luna átfogalmazott, 87.3%).
   ocr: "z-ai/glm-5.3-flash",
   pedagogue: "grok-4.6",
-  // Author and reviewer have no cross-vendor fallback: retain independent review.
+  // The author's fallback stays in the author's own (openai) family, so the reviewer remains independent
+  // (lektor: xai, its fallback: anthropic) — spec 2026-09-29: one invalid author JSON no longer ends the run.
+  author: "gpt-5.6-terra",
   // Spec 2026-09-24: más család, erős modell (a szerzőé) — nem olcsó szövegmodellre esik vissza.
   animator: "gpt-5.6-terra",
   // Mérve 2026-09-20 (5 tartalék-hívás négy futásban): a deepseek-v4-flash bankcsomagja 4/5-ször a
