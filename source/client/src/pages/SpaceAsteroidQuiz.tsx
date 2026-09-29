@@ -111,6 +111,8 @@ type Quiz = {
   topic?: string | null;
   /** `grade`: a közös évfolyam-bankból (3–12. évfolyam, spec 2026-09-29). */
   source?: "material" | "fallback" | "grade";
+  /** A közös bank tételének tényleges évfolyama (kimerüléskor a szomszédos évfolyamé is lehet). */
+  grade?: number;
 };
 
 type EnemyState = {
@@ -930,6 +932,7 @@ export default function SpaceAsteroidQuiz() {
           explanation: item.explanation,
           topic: item.subject === "science" ? "nature" : item.subject,
           source: "grade",
+          grade: item.grade,
         };
       }
     }
@@ -2647,7 +2650,7 @@ export default function SpaceAsteroidQuiz() {
                   {quizReason === "wave" ? `Hullám ${wave} kvíz` : "Vészhelyzet — kvíz!"}
                 </span>
                 <span className="text-xs font-bold text-cyan-300 uppercase">
-                  {activeQuiz.source === "material" ? "Tananyagodból" : activeQuiz.source === "grade" ? `${grade}. osztály` : "Általános"}
+                  {activeQuiz.source === "material" ? "Tananyagodból" : activeQuiz.source === "grade" ? `${activeQuiz.grade ?? grade}. osztály` : "Általános"}
                 </span>
               </div>
               <p className="text-[11px] text-white/65 mb-2">

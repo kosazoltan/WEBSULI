@@ -1166,7 +1166,7 @@ export default function BrainRotSteal() {
                     Vadászat vége!
                   </h2>
                   <p className="text-sm text-white/70 max-w-sm">
-                    Minden jó kvíz angol szavakat, matekot és magyart erősített!
+                    Minden jó kvíz a tudásodat erősítette: angol, matek, magyar, természettudomány és történelem!
                   </p>
                 </div>
 

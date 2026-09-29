@@ -2787,6 +2787,8 @@ export default function BlockCraftQuiz() {
                 <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-cyan-600/70 text-cyan-50 border-cyan-300/60">Angol-matek: {subjectStats["english-math"]}</span>
                 <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-amber-600/70 text-amber-50 border-amber-300/60">Matek: {subjectStats.math}</span>
                 <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-600/70 text-emerald-50 border-emerald-300/60">Környezet: {subjectStats.nature}</span>
+                {subjectStats.science > 0 && <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-sky-600/70 text-sky-50 border-sky-300/60">Természettudomány: {subjectStats.science}</span>}
+                {subjectStats.history > 0 && <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-600/70 text-rose-50 border-rose-300/60">Történelem: {subjectStats.history}</span>}
               </div>
               {syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}
               <div className="flex gap-2">
