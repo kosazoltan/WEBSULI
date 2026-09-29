@@ -1,5 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
-import { enforceIllustrationContrast, ILLUSTRATION_PAPER, themeDependentTexts } from "./svg-contrast";
+import { enforceIllustrationContrast, illustrationTextProblems, ILLUSTRATION_PAPER, themeDependentTexts } from "./svg-contrast";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 2. szelet): szabad SVG-illusztráció.
@@ -20,12 +20,20 @@ const ATTRS = ["viewBox", "xmlns", "width", "height", "x", "y", "x1", "y1", "x2"
   "marker-mid", "refX", "refY", "markerWidth", "markerHeight", "orient", "markerUnits", "role", "aria-label", "preserveAspectRatio"];
 
 export const ILLUSTRATION_MAX_CHARS = 30_000;
+/**
+ * Review #138: a tisztító kimenete nagyobb a bemenetnél (papír-háttér, role, kontraszt-színek, `<rect></rect>`
+ * szerializálás). A saját kimenetét (a papír-jelölővel) ezért a papír nélkül, a kimeneti korláttal méri —
+ * így `sanitize(sanitize(x)) === sanitize(x)` a határ közelében is. A modell bemenete a 30 000-es korlát alatt marad.
+ */
+export const ILLUSTRATION_OUTPUT_MAX_CHARS = 2 * ILLUSTRATION_MAX_CHARS;
 const MAX_ELEMENTS = 400;
 
 export type IllustrationCheck = { ok: true; svg: string; labels: string[]; contrastFixes: string[] } | { ok: false; problems: string[] };
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PAPER_ID = "websuli-paper";
+const PAPER_MARKUP = /<path\b[^>]*\bid="websuli-paper"[^>]*>(?:\s*<\/path>)?/g;
+const withoutPaper = (svg: string) => svg.replace(PAPER_MARKUP, "");
 
 /**
  * Spec 2026-09-29 (docs/specs/2026-09-29-lecke-dizajn.md, 1. pont): témafüggetlen illusztráció.
@@ -55,7 +63,10 @@ function makeThemeIndependent(root: Element, viewBox: number[]): string[] {
 /** Tisztított SVG és feliratai, vagy az elutasítás okai. */
 export function sanitizeIllustration(raw: unknown): IllustrationCheck {
   if (typeof raw !== "string" || !raw.trim()) return { ok: false, problems: ["hiányzó svg"] };
-  if (raw.length > ILLUSTRATION_MAX_CHARS) return { ok: false, problems: [`túl nagy svg (${raw.length} > ${ILLUSTRATION_MAX_CHARS} karakter)`] };
+  if (raw.length > ILLUSTRATION_OUTPUT_MAX_CHARS + 1000) return { ok: false, problems: [`túl nagy svg (${raw.length} > ${ILLUSTRATION_MAX_CHARS} karakter)`] };
+  const content = withoutPaper(raw);
+  const limit = content.length !== raw.length ? ILLUSTRATION_OUTPUT_MAX_CHARS : ILLUSTRATION_MAX_CHARS;
+  if (content.length > limit) return { ok: false, problems: [`túl nagy svg (${content.length} > ${limit} karakter)`] };
   const fragment = DOMPurify.sanitize(raw.trim(), {
     USE_PROFILES: { svg: true },
     ALLOWED_TAGS: TAGS,
@@ -68,7 +79,12 @@ export function sanitizeIllustration(raw: unknown): IllustrationCheck {
   const problems: string[] = [];
   if (!root || root.tagName.toLowerCase() !== "svg" || fragment.children.length !== 1) return { ok: false, problems: ["a gyökér nem egyetlen <svg> elem"] };
   const viewBox = root.getAttribute("viewBox");
-  if (!viewBox || !/^\s*-?[\d.]+(?:[\s,]+-?[\d.]+){3}\s*$/.test(viewBox)) problems.push("hiányzó vagy hibás viewBox");
+  // Review #138: négy véges szám, pozitív szélesség és magasság (a „. . . .” és a 0/negatív méret NaN-os papírt adott).
+  const vbTokens = (viewBox ?? "").trim().split(/[\s,]+/).filter(Boolean);
+  const vb = vbTokens.map(Number);
+  if (vbTokens.length !== 4 || !vbTokens.every((n) => /^[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?$/i.test(n)) || !vb.every(Number.isFinite) || vb[2] <= 0 || vb[3] <= 0) {
+    problems.push("hiányzó vagy hibás viewBox (négy véges szám, pozitív szélesség és magasság)");
+  }
   // A saját papír-háttér nem a modell eleme: a kliens újratisztításakor sem számít bele a korlátba.
   const elements = Array.from(root.querySelectorAll("*")).filter((el) => el.getAttribute("id") !== PAPER_ID);
   if (elements.length > MAX_ELEMENTS) problems.push(`túl sok elem (${elements.length} > ${MAX_ELEMENTS})`);
@@ -86,8 +102,13 @@ export function sanitizeIllustration(raw: unknown): IllustrationCheck {
   root.removeAttribute("width");
   root.removeAttribute("height");
   root.setAttribute("role", "img");
-  const contrastFixes = makeThemeIndependent(root, viewBox!.trim().split(/[\s,]+/).map(Number));
-  return { ok: true, svg: root.outerHTML, labels, contrastFixes };
+  const contrastFixes = makeThemeIndependent(root, vb);
+  // Utómérés: csak akkor ok, ha a javítás után MINDEN felirat ≥ 4,5:1 és a helye számolható.
+  const after = illustrationTextProblems(root, ILLUSTRATION_PAPER);
+  if (after.length) return { ok: false, problems: after };
+  const svg = root.outerHTML;
+  if (withoutPaper(svg).length > ILLUSTRATION_OUTPUT_MAX_CHARS) return { ok: false, problems: [`túl nagy svg a tisztítás után (${withoutPaper(svg).length} > ${ILLUSTRATION_OUTPUT_MAX_CHARS} karakter)`] };
+  return { ok: true, svg, labels, contrastFixes };
 }
 
 const words = (text: string) => text.toLocaleLowerCase("hu").split(/[^\p{L}\p{N}]+/u).filter(Boolean);

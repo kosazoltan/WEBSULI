@@ -98,3 +98,77 @@ test("Studio-folt: a kontraszt-javítás jegyzetként jelzett, az ábra bekerül
   assert.equal(out?.added, 1, out?.rejected.join(" | "));
   assert.match(out!.notes.join(" "), /kontraszt[^]*Keresztény sereg/);
 });
+
+/* ---------------------------------------------------------------------------------------------
+   Review-javítás (PR #138): valós leletek; ezek a tesztek a javítás ELŐTTI kódon buktak.
+   Elv: a tisztító csak akkor ad ok-t, ha az utómérés minden feliratra ≥ 4,5:1-et ad.
+   --------------------------------------------------------------------------------------------- */
+
+const allReadable = (svg: string) => {
+  for (const surface of [DARK, LIGHT]) for (const t of measureIllustrationText(svg, surface)) {
+    assert.ok(t.ratio >= 4.5, `${t.text}: ${t.ratio.toFixed(2)}:1 (${t.color} a ${t.background}-on)`);
+  }
+};
+
+test("review 1: az ős <g opacity> halványítása után is ≥ 4,5:1 — különben nincs ok", () => {
+  const faded = clean(svgOf('<g opacity="0.3"><text x="30" y="70" font-size="20" fill="#0f172a">Halvány felirat</text></g>'));
+  allReadable(faded.svg);
+  assert.equal(measureIllustrationText(faded.svg, DARK).length, 1, "a felirat megmaradt");
+  // Transzformált, halványított csoport: a felirat a helyén marad (a sötét téglalap fölött mérődik, nem a papíron).
+  const moved = clean(svgOf('<g opacity="0.6" transform="translate(200 0)"><rect x="10" y="10" width="180" height="120" fill="#111827"/><text x="30" y="70" font-size="20" fill="#1f2937">Szeged</text></g>'));
+  allReadable(moved.svg);
+  const [t] = measureIllustrationText(moved.svg, DARK);
+  assert.notEqual(t.background, ILLUSTRATION_PAPER.background, "a felirat továbbra is a téglalapon áll");
+  // Ha semmilyen szín nem éri el a 4,5-öt (középszürke háttér), az ábra elutasítva — nem hamis ok.
+  const hopeless = sanitizeIllustration(svgOf('<rect x="0" y="0" width="400" height="220" fill="#7a7a7a"/><text x="30" y="70" font-size="20" fill="#7a7a7a">Szürke</text>'));
+  assert.ok(!hopeless.ok, "középszürkén sem a fehér, sem a sötét tinta nem éri el a 4,5:1-et");
+  assert.match(hopeless.problems.join(" "), /olvashatatlan felirat/);
+});
+
+test("review 3: a viewBox négy véges szám, pozitív szélességgel és magassággal", () => {
+  for (const vb of [". . . .", "0 0 0 100", "0 0 -10 100", "0 0 400 0", "1e999 0 400 220"]) {
+    const r = sanitizeIllustration(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}"><text x="10" y="20">Duna</text></svg>`);
+    assert.ok(!r.ok && /viewBox/.test(r.problems.join(" ")), `elutasítva: ${vb}`);
+  }
+  assert.ok(sanitizeIllustration('<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -5 400 220"><text x="10" y="20">Duna</text></svg>').ok);
+});
+
+test("review 4: az rgb-csatorna 0–255, az alfa 0–1 közé vágva (CSS)", async () => {
+  const { parseColor } = await import("../shared/svg-contrast");
+  assert.deepEqual(parseColor("rgb(999, 999, 999)"), { r: 255, g: 255, b: 255, a: 1 });
+  assert.deepEqual(parseColor("rgb(-20, 300, 128)"), { r: 0, g: 255, b: 128, a: 1 });
+  assert.equal(parseColor("rgba(0, 0, 0, 5)")!.a, 1);
+  assert.equal(parseColor("rgba(0, 0, 0, -1)")!.a, 0);
+  assert.equal(parseColor("hsla(0, 150%, 50%, 2)")!.a, 1);
+  assert.equal(Math.round(contrastRatio("rgb(999,999,999)", "#000000") * 100) / 100, 21);
+});
+
+test("review 5: a tspan dx/dy (em is) a szövegkurzort követi — a második sor a saját helyén mérődik", () => {
+  const dark = '<rect x="0" y="0" width="400" height="100" fill="#111827"/>';
+  for (const dy of ["100", "5em"]) {
+    const r = clean(svgOf(`${dark}<text x="20" y="40" font-size="20" fill="#ffffff"><tspan>Felső sor</tspan><tspan x="20" dy="${dy}">Alsó sor</tspan></text>`));
+    allReadable(r.svg);
+    // Az alsó sor (y = 140) a papíron van: nem maradhat fehér; a felső a sötét téglalapon fehér marad.
+    assert.match(r.svg, /<tspan x="20" dy="[^"]+" fill="#0f172a">Alsó sor/, `dy=${dy}`);
+    assert.match(r.svg, /<text[^>]*fill="#ffffff"/);
+  }
+  // dx: a vízszintesen eltolt rész a jobb oldali sötét téglalapra kerül.
+  const shifted = clean(svgOf('<rect x="200" y="0" width="200" height="220" fill="#111827"/><text x="20" y="60" font-size="20" fill="#0f172a">Bal<tspan dx="230">Jobb</tspan></text>'));
+  allReadable(shifted.svg);
+  assert.match(shifted.svg, /<tspan[^>]*fill="#ffffff"[^>]*>Jobb/);
+  // Nem támogatott pozíció (százalék) → elutasítás, nem találgatás.
+  const pct = sanitizeIllustration(svgOf('<text x="20" y="40" font-size="20"><tspan dy="10%">Százalék</tspan></text>'));
+  assert.ok(!pct.ok && /nem támogatott feliratpozíció/.test(pct.problems.join(" ")));
+});
+
+test("review 6: határ közeli bemenet — a tisztító a saját kimenetét elfogadja, és azonos marad", async () => {
+  const { ILLUSTRATION_MAX_CHARS } = await import("../shared/illustration-svg");
+  const shell = (pad: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220"><desc>${pad}</desc><rect x="10" y="10" width="380" height="120" fill="#1e3a8a"></rect><text x="30" y="70" font-size="20" fill="#ffffff">Nándorfehérvár</text></svg>`;
+  const x = shell("a".repeat(ILLUSTRATION_MAX_CHARS - 20 - shell("").length));
+  assert.ok(x.length <= ILLUSTRATION_MAX_CHARS && x.length > ILLUSTRATION_MAX_CHARS - 40);
+  const once = clean(x);
+  assert.ok(once.svg.length > ILLUSTRATION_MAX_CHARS, "a papírral együtt a korlát fölé nő (ez a határeset)");
+  const twice = clean(once.svg);
+  assert.equal(twice.svg, once.svg);
+  assert.equal(twice.svg.match(/websuli-paper/g)?.length, 1);
+});

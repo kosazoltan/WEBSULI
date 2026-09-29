@@ -153,3 +153,31 @@ Teljesítmény: a legrosszabb esetű, 360 elemes illusztráció tisztítása + k
 
 ## Spec-változás a meglévő tesztekben
 Nincs tervezett meglévőteszt-módosítás. (Ha a végrehajtás közben mégis jogosan kellene, itt dokumentálom.)
+
+## Review-javítás (PR #138, 2026-09-29)
+
+Elv: a tisztító csak akkor ad `ok`-t, ha az utómérés minden feliratra ≥ 4,5:1-et ad. Minden pontra előbb új
+teszt készült, és a javítás ELŐTTI kódon mind bukott (`tests/svg-contrast.test.ts` „review 1/3/4/5/6”,
+`tests/lesson-theme-contrast.test.ts`: arena 3,93:1, dojo 3,85:1). Meglévő teszt nem változott.
+
+1. **Ős `<g opacity>`** (`shared/svg-contrast.ts` `enforceIllustrationContrast`, `liftOutOfFadedGroup`):
+   színcsere után újramérés; ha egy halványított csoport miatt még mindig 4,5 alatti, a felirat a teljes
+   transzformációjával (`matrix(…)`) és az örökölt attribútumaival kikerül a csoportból a gyökér végére, majd
+   második mérés. Utómérés: `illustrationTextProblems`; ha bármi 4,5 alatt marad (pl. középszürke háttér),
+   akkor elutasítás: „olvashatatlan felirat a javítás után is”.
+2. **Az átlagfelirat hibaszíne** (`lesson-experience.css`, sötét világok): `--lesson-error: #fda4af`
+   (arena 5,59, dojo 5,48, space 7,32:1). Új, a világokat és a korcsoport-rétegeket bejáró tokenteszt:
+   `tests/lesson-theme-contrast.test.ts` (szöveg, halvány, hiba, akcent, siker, figyelmeztetés, kérdés- és
+   kiemelő-címke párok).
+3. **viewBox** (`shared/illustration-svg.ts`): pontosan négy véges szám, a szélesség és a magasság pozitív;
+   különben elutasítás. A papír a már ellenőrzött számokból készül.
+4. **Színvágás** (`svg-contrast.ts` `parseColor`): az rgb-csatorna 0–255, az alfa, a telítettség és a
+   világosság 0–1 közé vágva (CSS szerint).
+5. **Szövegkurzor** (`svg-contrast.ts` `textParts`): x/y abszolút (új szövegdarab, `text-anchor`), dx/dy
+   relatív, szám, px, em, ex; a szöveg a becsült szélességgel lépteti a kurzort. Nem támogatott egység
+   (pl. %) esetén elutasítás: „nem támogatott feliratpozíció”.
+6. **Idempotencia a határon** (`illustration-svg.ts`): a saját kimenet (papír-jelölővel) papír nélkül, a
+   kimeneti korláttal mérődik (`ILLUSTRATION_OUTPUT_MAX_CHARS` = 2 × 30 000). A modell bemenete továbbra is
+   ≤ 30 000. Így `sanitize(sanitize(x)) === sanitize(x)` a határ közeli bemenetre is.
+
+Ellenőrzés a valódi Hunyadi-lecke 4 illusztrációján: mind `ok`, idempotens, a legkisebb kontraszt 11,05:1.

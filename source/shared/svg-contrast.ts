@@ -42,6 +42,9 @@ const NAMED: Record<string, string> = {
 
 /* ------------------------------------------------------------------ colour */
 
+/** CSS szerinti vágás: csatorna 0–255, alfa/telítettség/világosság 0–1 (review #138: rgb(999,999,999) = fehér). */
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
 /** CSS/SVG szín → RGBA (0–255, a: 0–1), vagy null, ha nem szín (none, url(), ismeretlen). */
 export function parseColor(value: string | null | undefined): Rgba | null {
   if (!value) return null;
@@ -62,16 +65,17 @@ export function parseColor(value: string | null | undefined): Rgba | null {
     if (parts.length < 3) return null;
     const ch = (s: string) => (s.endsWith("%") ? (parseFloat(s) * 255) / 100 : parseFloat(s));
     const alpha = parts[3] === undefined ? 1 : parts[3].endsWith("%") ? parseFloat(parts[3]) / 100 : parseFloat(parts[3]);
-    const out = { r: ch(parts[0]), g: ch(parts[1]), b: ch(parts[2]), a: alpha };
-    return Object.values(out).every(Number.isFinite) ? out : null;
+    const out = { r: clamp(ch(parts[0]), 0, 255), g: clamp(ch(parts[1]), 0, 255), b: clamp(ch(parts[2]), 0, 255), a: clamp(alpha, 0, 1) };
+    return [ch(parts[0]), ch(parts[1]), ch(parts[2]), alpha].every(Number.isFinite) ? out : null;
   }
   m = /^hsla?\(([^)]*)\)$/.exec(v);
   if (m) {
     const parts = m[1].split(/[\s,/]+/).filter(Boolean);
     if (parts.length < 3) return null;
-    const h = (((parseFloat(parts[0]) % 360) + 360) % 360) / 360, s = parseFloat(parts[1]) / 100, l = parseFloat(parts[2]) / 100;
-    const alpha = parts[3] === undefined ? 1 : parts[3].endsWith("%") ? parseFloat(parts[3]) / 100 : parseFloat(parts[3]);
-    if (![h, s, l, alpha].every(Number.isFinite)) return null;
+    const h = (((parseFloat(parts[0]) % 360) + 360) % 360) / 360, s = clamp(parseFloat(parts[1]) / 100, 0, 1), l = clamp(parseFloat(parts[2]) / 100, 0, 1);
+    const rawAlpha = parts[3] === undefined ? 1 : parts[3].endsWith("%") ? parseFloat(parts[3]) / 100 : parseFloat(parts[3]);
+    if (![h, s, l, rawAlpha].every(Number.isFinite)) return null;
+    const alpha = clamp(rawAlpha, 0, 1);
     const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
     const hue = (t: number) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
     return { r: hue(h + 1 / 3) * 255, g: hue(h) * 255, b: hue(h - 1 / 3) * 255, a: alpha };
@@ -374,52 +378,75 @@ function backgroundAt(root: Element, point: Point, before: Element, surface: Sur
 
 type TextPart = { el: Element; text: string; point: Point };
 
-/** A felirat (és a saját színű/helyű tspan-ok) becsült középpontja gyökér-koordinátában. */
-function textParts(text: Element, root: Element): TextPart[] {
+/**
+ * Hossz felhasználói egységben: szám, px, em (× betűméret), ex (× fél betűméret). `undefined` = nincs megadva,
+ * `null` = nem támogatott (pl. %) — ilyenkor a felirat helye nem számolható, a tisztító elutasít.
+ */
+function lengthOf(value: string | null, fontSize: number): number | null | undefined {
+  if (value === null || !value.trim()) return undefined;
+  const m = /^([-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?)(px|em|ex)?$/i.exec(value.trim().split(/[\s,]+/)[0]);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  const unit = (m[2] ?? "").toLowerCase();
+  return unit === "em" ? n * fontSize : unit === "ex" ? n * fontSize * 0.5 : n;
+}
+
+/**
+ * A felirat szövegszakaszai és becsült középpontjuk gyökér-koordinátában. Review #138: az SVG szövegkurzort
+ * követjük — x/y abszolút (új szövegdarab, a `text-anchor` erre hat), dx/dy relatív eltolás, a szöveg a
+ * becsült szélességgel (~0,55 em/betű) lépteti a kurzort. Így a többsoros (`tspan x dy`) felirat soronként mérődik.
+ */
+function textParts(text: Element, root: Element, unsupported?: string[]): TextPart[] {
   const m = ctm(text, root);
   if (!m) return [];
-  const fontSize = (el: Element) => { const v = parseFloat(inherited(el, "font-size", root) ?? "16"); return Number.isFinite(v) ? v : 16; };
-  const first = (el: Element, name: string) => { const v = el.getAttribute(name); if (v === null) return null; const n = parseFloat(v.trim().split(/[\s,]+/)[0]); return Number.isFinite(n) ? n : null; };
+  const fontSize = (el: Element) => { const v = parseFloat(inherited(el, "font-size", root) ?? "16"); return Number.isFinite(v) && v > 0 ? v : 16; };
   const clean = (s: string | null) => (s ?? "").replace(/\s+/g, " ").trim();
-  const tspans: Element[] = Array.from(text.querySelectorAll("tspan"));
-  const positioned = (t: Element) => t.getAttribute("x") !== null || t.getAttribute("y") !== null;
-  // Hol kezdődik egy rész: a saját x/y, különben a legközelebbi előző helyezett tspan, különben a text x/y.
-  const origin = (el: Element): [number, number] => {
-    let x = first(el, "x"), y = first(el, "y");
-    const idx = tspans.indexOf(el);
-    for (let k = idx - 1; k >= 0 && (x === null || y === null); k--) { x ??= first(tspans[k], "x"); y ??= first(tspans[k], "y"); }
-    return [x ?? first(text, "x") ?? 0, y ?? first(text, "y") ?? 0];
-  };
-  const centre = (el: Element, content: string): Point => {
+  const cursor = { x: 0, y: 0 };
+  let bad = false;
+  const position = (el: Element): boolean => {
     const fs = fontSize(el);
-    const [x, y] = origin(el);
-    const w = content.length * fs * 0.55;
-    const anchor = inherited(el, "text-anchor", root) ?? "start";
-    const cx = anchor === "middle" ? x : anchor === "end" ? x - w / 2 : x + w / 2;
-    return apply(m, [cx, y - fs * 0.35]);
+    const [x, y, dx, dy] = ["x", "y", "dx", "dy"].map((name) => lengthOf(el.getAttribute(name), fs));
+    if ([x, y, dx, dy].some((v) => v === null)) bad = true;
+    if (typeof x === "number") cursor.x = x;
+    if (typeof y === "number") cursor.y = y;
+    if (typeof dx === "number") cursor.x += dx;
+    if (typeof dy === "number") cursor.y += dy;
+    return typeof x === "number" || typeof y === "number";
   };
   const parts: TextPart[] = [];
-  if (tspans.some(positioned)) {
-    // Többsoros felirat: soronként (tspan-onként) mérünk; a közvetlen szövegcsomópont a text helyén.
-    const direct = clean(Array.from(text.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" "));
-    if (direct) parts.push({ el: text, text: direct, point: centre(text, direct) });
-    for (const t of tspans) { const c = clean(t.textContent); if (c) parts.push({ el: t, text: c, point: centre(t, c) }); }
-    return parts;
-  }
-  const whole = clean(text.textContent);
-  if (whole) parts.push({ el: text, text: whole, point: centre(text, whole) });
-  for (const t of tspans) {
-    const c = clean(t.textContent);
-    if (c && t.getAttribute("fill") !== null) parts.push({ el: t, text: c, point: centre(text, whole) });
-  }
+  const walk = (el: Element, chunkStart: boolean) => {
+    let startsChunk = chunkStart;
+    for (const node of Array.from(el.childNodes)) {
+      if (node.nodeType === 3) {
+        const content = clean(node.textContent);
+        if (!content) continue;
+        const fs = fontSize(el);
+        const w = content.length * fs * 0.55;
+        const anchor = inherited(el, "text-anchor", root) ?? "start";
+        const x0 = startsChunk ? (anchor === "middle" ? cursor.x - w / 2 : anchor === "end" ? cursor.x - w : cursor.x) : cursor.x;
+        startsChunk = false;
+        parts.push({ el, text: content, point: apply(m, [x0 + w / 2, cursor.y - fs * 0.35]) });
+        cursor.x = x0 + w;
+      } else if (node.nodeType === 1 && (node as Element).tagName.toLowerCase() === "tspan") {
+        const child = node as Element;
+        const absolute = position(child);
+        walk(child, absolute || startsChunk);
+        startsChunk = false;
+      }
+    }
+  };
+  position(text);
+  walk(text, true);
+  if (bad) unsupported?.push(clean(text.textContent));
   return parts;
 }
 
-function measureRoot(root: Element, surface: Surface): Array<TextContrast & { el: Element; bg: Rgb }> {
+function measureRoot(root: Element, surface: Surface, unsupported?: string[]): Array<TextContrast & { el: Element; bg: Rgb }> {
   const out: Array<TextContrast & { el: Element; bg: Rgb }> = [];
   for (const text of Array.from(root.querySelectorAll("text"))) {
     if (inNonPainted(text, root)) continue;
-    for (const part of textParts(text, root)) {
+    for (const part of textParts(text, root, unsupported)) {
       const paint = paintOf(part.el, root, "fill", surface.ink);
       if (!paint) continue;
       const bg = backgroundAt(root, part.point, text, surface);
@@ -460,20 +487,47 @@ export function themeDependentTexts(root: Element): string[] {
   return [...bad];
 }
 
+const PRESENTATION = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-opacity", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline"];
+
+/**
+ * Review #138: az ős `<g opacity>` a felirat színétől függetlenül halványít — a szín cseréje ott nem elég.
+ * A feliratot kivesszük a halványított csoportból: a gyökér végére kerül a teljes transzformációjával
+ * (`matrix(…)`) és az örökölt megjelenítési attribútumaival, így ugyanott, ugyanúgy, de teljes fedéssel látszik.
+ */
+function liftOutOfFadedGroup(text: Element, root: Element): void {
+  const m = ctm(text, root);
+  if (!m || !text.parentElement || text.parentElement === root) return;
+  for (const name of PRESENTATION) {
+    if (text.getAttribute(name) !== null) continue;
+    const value = inherited(text.parentElement, name, root);
+    if (value !== null) text.setAttribute(name, value);
+  }
+  const identity = m.every((v, i) => Math.abs(v - IDENTITY[i]) < 1e-9);
+  if (identity) text.removeAttribute("transform");
+  else text.setAttribute("transform", `matrix(${m.map((v) => +v.toFixed(6)).join(" ")})`);
+  text.removeAttribute("opacity");
+  root.appendChild(text);
+}
+
 /**
  * A feliratok színe a mögöttük lévő színhez (≥ 4,5:1), a csak-körvonalas elemeké a háttérhez (≥ 3:1).
- * Ami megfelel, változatlan; ami nem, sötét tintát vagy fehéret kap — amelyik jobban olvasható.
- * Visszaadja a javított feliratok szövegét.
+ * Ami megfelel, változatlan; ami nem, sötét tintát vagy fehéret kap — amelyik jobban olvasható; ha egy
+ * halványított csoport miatt így sem elég, a felirat kikerül a csoportból. Visszaadja a javított feliratokat.
+ * Az eredményt a hívó az `illustrationTextProblems`-szel UTÓMÉRI — csak az számít sikernek.
  */
 export function enforceIllustrationContrast(root: Element, paper: Surface = ILLUSTRATION_PAPER): string[] {
   const fixed: string[] = [];
-  for (const t of measureRoot(root, paper)) {
-    if (t.ratio >= MIN_TEXT_CONTRAST) continue;
-    t.el.setAttribute("fill", readableOn(t.bg));
-    const partial = parseFloat(inherited(t.el, "fill-opacity", root) ?? "1");
-    if (partial < 1) t.el.setAttribute("fill-opacity", "1");
-    t.el.removeAttribute("opacity");
-    fixed.push(t.text);
+  // Két kör: a kiemelt felirat a festési sorrend végére kerül, ott más lehet a háttere — újramérjük.
+  for (let round = 0; round < 2; round++) {
+    for (const t of measureRoot(root, paper)) {
+      if (t.ratio >= MIN_TEXT_CONTRAST) continue;
+      t.el.setAttribute("fill", readableOn(t.bg));
+      if (parseFloat(inherited(t.el, "fill-opacity", root) ?? "1") < 1) t.el.setAttribute("fill-opacity", "1");
+      const text = t.el.closest("text");
+      for (let e: Element | null = t.el; e && e !== text?.parentElement; e = e.parentElement) e.removeAttribute("opacity");
+      if (text && text.parentElement && opacityChain(text.parentElement, root) < 1) liftOutOfFadedGroup(text, root);
+      if (!fixed.includes(t.text)) fixed.push(t.text);
+    }
   }
   for (const el of Array.from(root.querySelectorAll("line, polyline, path, rect, circle, ellipse, polygon"))) {
     if (inNonPainted(el, root)) continue;
@@ -489,4 +543,17 @@ export function enforceIllustrationContrast(root: Element, paper: Surface = ILLU
     if (parseFloat(inherited(el, "stroke-opacity", root) ?? "1") < 1) el.setAttribute("stroke-opacity", "1");
   }
   return fixed;
+}
+
+/**
+ * Utómérés (review #138): a tisztító csak akkor ad `ok`-t, ha ez üres. Nem támogatott feliratpozíció
+ * (pl. %-os dy) vagy a javítás után is 4,5:1 alatti felirat → az ábra elutasítva, okkal.
+ */
+export function illustrationTextProblems(root: Element, paper: Surface = ILLUSTRATION_PAPER): string[] {
+  const unsupported: string[] = [];
+  const low = measureRoot(root, paper, unsupported).filter((t) => t.ratio < MIN_TEXT_CONTRAST);
+  const problems: string[] = [];
+  if (unsupported.length) problems.push(`nem támogatott feliratpozíció (csak szám, px, em, ex): ${[...new Set(unsupported)].slice(0, 4).join(", ")}`);
+  if (low.length) problems.push(`olvashatatlan felirat a javítás után is: ${low.slice(0, 4).map((t) => `${t.text} (${t.ratio.toFixed(2)}:1)`).join(", ")}`);
+  return problems;
 }

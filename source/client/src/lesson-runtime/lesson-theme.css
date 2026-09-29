@@ -522,7 +522,9 @@ section[id^="section-"] > h2.lesson-heading {
   background: var(--lesson-line);
 }
 /* Spec 2026-09-29: the bar chart's average label is text-red-600 (dark:… follows the APP theme, not the
-   lesson's): measured 3.56:1 on the dark teen stage. The lesson's own error token is paired with its surface. */
+   lesson's): measured 3.56:1 on the dark teen stage. The lesson's own error token is paired with its surface;
+   every world's error/surface pair is ≥ 4.5:1 (tests/lesson-theme-contrast.test.ts — review #138: the dark
+   worlds' #fb7185 was only 3.9:1 on the arena/dojo surface, now #fda4af). */
 [data-band] figure[data-anim] .text-red-600 {
   color: var(--lesson-error);
 }
