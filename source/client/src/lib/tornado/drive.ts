@@ -37,9 +37,42 @@ export type DriveStats = {
   windAngle: number;
 };
 
+/**
+ * Spec 2026-09-29-tornado-ut-kormanyzas D4. The map's km scale (1 unit ≈ 3.85 m) is ~4× compressed next
+ * to the 5.2-unit car, so the rated 172 km/h (12.4 u/s, 2.4 car lengths/s) looked like a crawl. Vehicles
+ * cover the map at 1.6× the km-scale speed; acceleration scales with it (0 → 90% still ~0.9 s).
+ */
+export const DRIVE_PACE = 1.6;
+
 /** World units / second at the vehicle's rated km/h. */
 export function maxSpeedUnits(speedKmh: number): number {
-  return fromKm(speedKmh / 3600);
+  return fromKm(speedKmh / 3600) * DRIVE_PACE;
+}
+
+/** Longest vehicle step, seconds: at 60 Hz one step per frame, as before. */
+const MAX_SUBSTEP = 1 / 60;
+
+/**
+ * How many equal parts a frame's vehicle step (drive + collision) is split into (spec D5). A 20 fps frame
+ * (dt 0.05) moved a 260 km/h car 1.8 units in one go — past a fence's 1.3-unit catch distance.
+ */
+export function driveSubsteps(dt: number): number {
+  if (!(dt > 0)) return 1;
+  return Math.max(1, Math.ceil(dt / MAX_SUBSTEP - 1e-9));
+}
+
+/** Snap instead of smoothing past this height difference (restart, teleport). */
+const FOLLOW_SNAP = 8;
+
+/**
+ * Exponential follow for the camera height (spec D6), frame-rate independent. The camera rode every
+ * change of the ground — the V-shaped road cutting (0.36 height per unit sideways) and the 0.35 bridge-deck
+ * lift — so every wobble of the car shook the whole view.
+ */
+export function followHeight(prev: number, target: number, dt: number, tau = 0.15): number {
+  if (!Number.isFinite(prev) || Math.abs(target - prev) > FOLLOW_SNAP) return target;
+  if (!(dt > 0)) return prev;
+  return prev + (target - prev) * (1 - Math.exp(-dt / tau));
 }
 
 /**

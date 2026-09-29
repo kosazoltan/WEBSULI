@@ -29,7 +29,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
-import { joystickToDirections } from "@/game-engine/joystick";
 import { Card, CardContent } from "@/components/ui/card";
 import { correctDataAttrs, installGameTestApi, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
 import AudioToggleButton from "@/components/AudioToggleButton";
@@ -96,7 +95,14 @@ import {
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
 import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
-import { stepVehicle, STOPPED_SPEED, maxSpeedUnits, windDriftUnits } from "@/lib/tornado/drive";
+import {
+  stepVehicle,
+  STOPPED_SPEED,
+  maxSpeedUnits,
+  windDriftUnits,
+  driveSubsteps,
+  followHeight,
+} from "@/lib/tornado/drive";
 import { createGamepadRestGate, readStandardGamepad } from "@/lib/tornado/gamepad";
 import { collidersNear, resolveVehicleCollisions, vehicleDimensions } from "@/lib/tornado/collision";
 import {
@@ -104,6 +110,8 @@ import {
   escAction,
   driveKeyFor,
   releaseDriveKeys,
+  touchDriveInput,
+  type TouchDrive,
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import {
@@ -1039,7 +1047,10 @@ function PlayScreen(props: {
   const adaptiveRef = useRef(createAdaptiveSession(primaryGrade));
   const answerLockedRef = useRef(false);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
-  const touchRef = useRef({ fwd: false, back: false, left: false, right: false });
+  /** Analog stick input (spec 2026-09-29-tornado-ut-kormanyzas D3). */
+  const touchRef = useRef<TouchDrive>({ throttle: 0, steer: 0 });
+  /** Smoothed ground height under the camera (spec D6); NaN = snap on the next frame. */
+  const camGroundRef = useRef(Number.NaN);
   /** Bumped on blur / hidden tab: the VirtualJoystick drops a drag that is still in progress. */
   const [touchReset, setTouchReset] = useState(0);
   const padAnchorPrevRef = useRef(false);
@@ -1117,6 +1128,8 @@ function PlayScreen(props: {
     // Player starts a few km from the funnel; tornado near the map centre.
     tornadoPosRef.current = { x: 0, z: 0, angle: drawRng() * Math.PI * 2, born: 0, alive: true };
     playerRef.current = { x: 0, z: fromKm(3.4), heading: Math.PI, speed: 0, anchored: false };
+    // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
+    camGroundRef.current = Number.NaN;
     windRef.current = initialWind(spec);
     timeLeftRef.current = spec.timeLimit;
     scoreRef.current = 0;
@@ -1290,6 +1303,8 @@ function PlayScreen(props: {
     if (!GAME_TEST_HOOKS_ENABLED) return;
     const api = {
       getPlayer: () => ({ ...playerRef.current }),
+      /** The rendered camera height (spec 2026-09-29-tornado-ut-kormanyzas: vertical shake measurement). */
+      getCamera: () => ({ y: sceneRef.current?.camera.position.y ?? Number.NaN }),
       setPlayer: (patch: Partial<PlayerState>) => {
         Object.assign(playerRef.current, patch);
       },
@@ -1356,7 +1371,7 @@ function PlayScreen(props: {
     const releaseAll = () => {
       releaseDriveKeys(keysRef.current);
       const t = touchRef.current;
-      t.fwd = t.back = t.left = t.right = false;
+      t.throttle = t.steer = 0;
       // The joystick keeps its own drag origin and knob; tell it to let go too (review PR #137).
       setTouchReset((n) => n + 1);
     };
@@ -1574,6 +1589,8 @@ function PlayScreen(props: {
     rngRef.current.next = (props.level * 2654435761 + Math.floor(Math.random() * 9973)) >>> 0;
     tornadoPosRef.current = { x: 0, z: 0, angle: drawRng() * Math.PI * 2, born: 0, alive: true };
     playerRef.current = { x: 0, z: fromKm(3.4), heading: Math.PI, speed: 0, anchored: false };
+    // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
+    camGroundRef.current = Number.NaN;
     windRef.current = initialWind(spec);
     timeLeftRef.current = spec.timeLimit;
     scoreRef.current = 0;
@@ -1614,7 +1631,6 @@ function PlayScreen(props: {
       const p = playerRef.current;
       const upg = upgradesFor(props.progress, props.vehicle.id);
       const vehicleDims = vehicleDimensions(props.vehicle.silhouette);
-      const grip = gripAt(p.x, p.z);
 
       const k = keysRef.current;
       const t = touchRef.current;
@@ -1624,40 +1640,45 @@ function PlayScreen(props: {
       if (pad.anchor && !padAnchorPrevRef.current) tryAnchorRef.current();
       padAnchorPrevRef.current = pad.anchor;
 
-      const throttle = clampStick(
-        (k.fwd || t.fwd ? 1 : 0) - (k.back || t.back ? 1 : 0) + pad.throttle,
-      );
-      const steer = clampStick(
-        (k.right || t.right ? 1 : 0) - (k.left || t.left ? 1 : 0) + pad.steer,
-      );
+      // Keyboard stays digital; the touch stick and the gamepad are analog.
+      const throttle = clampStick((k.fwd ? 1 : 0) - (k.back ? 1 : 0) + t.throttle + pad.throttle);
+      const steer = clampStick((k.right ? 1 : 0) - (k.left ? 1 : 0) + t.steer + pad.steer);
 
       if (!p.anchored) {
         const windPush = windDriftUnits(windForceOn(windRef.current, props.vehicle.windResistance));
         const windAngle = (windRef.current.windDirection * Math.PI) / 180;
-        const next = stepVehicle(
-          p,
-          { throttle, steer, brake: k.brake || pad.brake },
-          dt,
-          {
-            speedKmh: props.vehicle.speed,
-            acceleration: props.vehicle.acceleration * statMultiplier(upg, "engine"),
-            handling: props.vehicle.handling * statMultiplier(upg, "suspension"),
-            grip,
-            windPush,
-            windAngle,
-          },
-        );
-        // Spec 2026-09-29-tornado-fizika H2: houses, trees, poles and bridge railings are solid.
-        // The frame's dt: the scrape friction is per second (30/60/144 Hz must slow alike).
-        const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z), dt);
-        const nx = clampToWorld(solid.x);
-        const nz = clampToWorld(solid.z);
-        const moved = Math.hypot(nx - p.x, nz - p.z);
-        distanceTravelledRef.current += toKm(moved);
-        p.x = nx;
-        p.z = nz;
-        p.heading = next.heading;
-        p.speed = solid.speed;
+        const brake = k.brake || pad.brake;
+        // One vehicle step of `dt` seconds: drive, then the collision pass with that same dt.
+        const driveStep = (dt: number) => {
+          const next = stepVehicle(
+            p,
+            { throttle, steer, brake },
+            dt,
+            {
+              speedKmh: props.vehicle.speed,
+              acceleration: props.vehicle.acceleration * statMultiplier(upg, "engine"),
+              handling: props.vehicle.handling * statMultiplier(upg, "suspension"),
+              grip: gripAt(p.x, p.z),
+              windPush,
+              windAngle,
+            },
+          );
+          // Spec 2026-09-29-tornado-fizika H2: houses, trees, poles and bridge railings are solid.
+          // The step's dt: the scrape friction is per second (30/60/144 Hz must slow alike).
+          const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z), dt);
+          const nx = clampToWorld(solid.x);
+          const nz = clampToWorld(solid.z);
+          const moved = Math.hypot(nx - p.x, nz - p.z);
+          distanceTravelledRef.current += toKm(moved);
+          p.x = nx;
+          p.z = nz;
+          p.heading = next.heading;
+          p.speed = solid.speed;
+        };
+        // Spec 2026-09-29-tornado-ut-kormanyzas D5: a slow frame is split into ≤ 1/60 s steps, so a fast
+        // car cannot jump through a fence in one go.
+        const steps = driveSubsteps(dt);
+        for (let i = 0; i < steps; i++) driveStep(dt / steps);
       } else {
         p.speed = 0;
       }
@@ -1751,7 +1772,10 @@ function PlayScreen(props: {
 
     // --- camera ---
     const p = playerRef.current;
-    const ground = groundHeight(p.x, p.z);
+    // Spec 2026-09-29-tornado-ut-kormanyzas D6: the camera follows a smoothed ground height — the car's
+    // own wobble over the V-shaped road cutting and the bridge-deck lift used to shake the whole view.
+    camGroundRef.current = followHeight(camGroundRef.current, groundHeight(p.x, p.z), dt);
+    const ground = camGroundRef.current;
     if (settingsRef.current.cameraMode === "cockpit") {
       camera.position.set(p.x - Math.sin(p.heading) * 1, ground + 3.2, p.z + Math.cos(p.heading) * 1);
       camera.lookAt(p.x + Math.sin(p.heading) * 30, ground + 2, p.z - Math.cos(p.heading) * 30);
@@ -2152,7 +2176,7 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
 /* ------- touch controls ------- */
 function TouchControls(props: {
   leftHanded: boolean;
-  touchRef: React.MutableRefObject<{ fwd: boolean; back: boolean; left: boolean; right: boolean }>;
+  touchRef: React.MutableRefObject<TouchDrive>;
   resetSignal: number;
   onAnchor: () => void;
   onCamera: () => void;
@@ -2166,11 +2190,11 @@ function TouchControls(props: {
       resetSignal={props.resetSignal}
       radius={52}
       onChange={(v) => {
-        const dirs = joystickToDirections(v);
-        props.touchRef.current.left = dirs.left;
-        props.touchRef.current.right = dirs.right;
-        props.touchRef.current.fwd = dirs.fwd;
-        props.touchRef.current.back = dirs.back;
+        // Spec 2026-09-29-tornado-ut-kormanyzas D3: analog, not four booleans — a small thumb angle is
+        // a small correction, not nothing-or-full-lock.
+        const drive = touchDriveInput(v);
+        props.touchRef.current.throttle = drive.throttle;
+        props.touchRef.current.steer = drive.steer;
       }}
     />
   );
