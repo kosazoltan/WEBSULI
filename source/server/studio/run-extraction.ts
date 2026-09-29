@@ -188,9 +188,16 @@ export async function runExtraction(input: RunInput): Promise<string> {
     return callExtractorModel(files, input.scope, systemPrompt, model, repair);
   });
   input.onPhase?.("extract", "A teljes forrás és a fogalomjegyzék összevetése…");
+  let targetedCoverage = false;
   const covered = await completeSourceCoverage(valid, files, existing =>
-    callExtractorModel(files, input.scope, systemPrompt, model, undefined, existing));
-  if (covered.length > valid.length) await workflowFinding("coverage");
+    callExtractorModel(files, input.scope, systemPrompt, model, undefined, existing),
+  // Spec 2026-09-29-forrasonkenti-fedettseg: a fogalom nélkül maradt fájl saját, egyfájlos pótlást kap.
+  (file, existing) => {
+    targetedCoverage = true;
+    return callExtractorModel([file], input.scope, systemPrompt, model, undefined, existing);
+  });
+  // Review #147: a lefutott célzott kör üres eredménnyel is megfigyelés (a fájl fogalom nélkül maradt).
+  if (covered.length > valid.length || targetedCoverage) await workflowFinding("coverage");
 
   const searchableText = files.map(file => file.extractedText).join("\n");
   const checked = await repairSourceQuotes(covered, files, async (failed, round) => {
