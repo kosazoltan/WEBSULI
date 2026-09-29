@@ -21,10 +21,16 @@ Fájl: `client/src/lib/tornado/world.ts`, `roadFactor` (95-103. sor).
 2. `roadFactor`: `near = Math.min(distToGridLine(x), distToGridLine(z))`; `halfWidth = 9`; `near >= halfWidth` → `0`; különben `1 - near / halfWidth`.
 Parancs: `node --import tsx --test tests/tornado-road-factor.test.ts` → minden `ok`.
 
-## T3 — Színezés-komment
+## T3 — A terep-shader ikerpéldánya (a #129 utáni mainen)
 
-Fájl: `client/src/tornado/buildMeshes.ts`, `buildTerrainChunk` színező ága (`const road = roadFactor(wx, wz);`).
-Komment a `const road` sor fölé: `roadFactor` 1 a középvonalon, 0 a 9 egységes félszélességen túl; `> 0.55` aszfalt mag (±4 egység), `> 0.15` földút-padka (±7,6 egység) — ugyanaz a küszöb, mint a `surfaceAt`-ban. Logika változatlan.
+Fájl: `client/src/tornado/buildMeshes.ts`, `terrainMaterial` → `onBeforeCompile` GLSL-blokk. A #129 óta az utat
+PIXELENKÉNT a shader színezi; a `roadFactor` képletének GLSL-ikre a régi, fordított alakot tartalmazta.
+1. `float road = 1.0 - clamp(nearLine / 9.0, 0.0, 1.0);` (a `nearLine` a legközelebbi úttengely távolsága;
+   GLSL-ben `mod(x, y) = x − y·floor(x/y)`, pozitív osztóra nemnegatív, így nyugaton is helyes).
+2. Shader-cache kulcs: `tornado-terrain-v2` → `tornado-terrain-v3`.
+3. Új teszt: `tests/tornado-terrain-shader-road.test.ts` — a shader saját útblokkját (szigorú azonosító- és
+   karakter-engedélylista után) kiértékeli, és 400+ ponton a `roadFactor`-ral veti össze; a régi képleten bukik.
+Parancs: `node --import tsx --test tests/tornado-terrain-shader-road.test.ts tests/tornado-road-factor.test.ts` → minden `ok`.
 
 ## T4 — Verifikáció
 

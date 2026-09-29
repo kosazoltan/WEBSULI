@@ -29,11 +29,19 @@ function shaderRoadLines(): string {
   return src.slice(start, end);
 }
 
+/** Identifiers the road block may contain — anything else fails the test before it is evaluated. */
+const ALLOWED_IDENTIFIERS = new Set(["let", "halfSpacing", "dx", "dz", "nearLine", "road", "abs", "mod", "min", "max", "clamp", "w", "x", "y"]);
+
 /** Evaluate the GLSL road block for a world position (w.x, w.y = world x, z). */
 function makeShaderRoad(block: string): (x: number, z: number) => number {
   const js = block.replace(/\bfloat\s+/g, "let ");
-  // The block is our own shader source (not user input); evaluating it is the only way to test the exact
-  // formula the GPU runs. The GLSL built-ins it uses are provided below.
+  // Review (PR #130): the block is evaluated, so it is first held to a strict allowlist — only arithmetic,
+  // numbers and the known names. A future shader refactor that adds anything else (a call, a property path,
+  // a string) makes this test fail loudly instead of executing it.
+  assert.match(js, /^[\s\w.+\-*/(),=;]*$/, "a shader útblokkja csak számtani kifejezést tartalmazhat");
+  for (const id of js.match(/[A-Za-z_]\w*/g) ?? []) {
+    assert.ok(ALLOWED_IDENTIFIERS.has(id), `ismeretlen azonosító a shader útblokkjában: ${id}`);
+  }
   const body = `
     const mod = (a, b) => a - b * Math.floor(a / b);
     const abs = Math.abs, min = Math.min, max = Math.max;

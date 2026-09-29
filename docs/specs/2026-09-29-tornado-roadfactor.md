@@ -79,7 +79,7 @@ A `roadFactor(x, z)` a dokumentációnak megfelelően az út középvonalán **1
 - Kellékek a teljes térképen: 206 → 4 434 (egyik sem aszfalton). Látókörben a (0,0) körül: low 332, medium 600, high 1 243.
 - Headless Chromium (SwiftShader), 1. szint, kezdőpont (0, 884): HUD „Mező” → **„Aszfalt”**; FPS 40,6 → 37,5–38,3; konzolhiba 0.
 - `npx tsc --noEmit` 0 · `npx eslint client/src/lib/tornado client/src/tornado --max-warnings 0` 0 · `node --import tsx --test tests/tornado-*.test.ts` 109/109.
-- Maradó kockázat: a terep-mesh csúcstávolsága 12,5–25 egység (`terrainSegments` 8–4), így a 9 egység félszélességű út a színezésben elmosódott sávként jelenik meg; a sűrűbb kellékek gyenge gépen (low: ~330 kellék, ~1,8 mesh/kellék) mérhetően több rajzolási hívást jelentenek — valós iskolai laptopon NOT RUN.
+- Maradó kockázat: a #129 óta az utat a terep-shader pixelenként színezi, így a mesh csúcstávolsága (`terrainSegments` 5/8/12 → 20/12,5/8,3 egység) nem mossa el az útsávot; a sűrűbb kellékek gyenge gépen (low: ~330 kellék, ~1,8 mesh/kellék) mérhetően több rajzolási hívást jelentenek — valós iskolai laptopon NOT RUN.
 
 ## Kiegészítés a beolvasztáskor (2026-09-29, PR #129 utáni main)
 A #129 (3D látvány) a terepet PIXELENKÉNT színezi egy GLSL-shaderrel (`tornado/buildMeshes.ts`,
