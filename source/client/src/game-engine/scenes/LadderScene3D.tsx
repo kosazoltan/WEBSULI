@@ -91,7 +91,7 @@ const PALETTES: Record<string, Palette> = {
   stars: pal("#040825", "#2a2470", "#171445", "#6f7bd6", "#1c1740", "#b9c6ff", 1.1, 1, 26, 80),
 };
 
-/** The rung wood per zone (mirrors `wordLadderLogic` rungColor). */
+/** The rung wood per zone on the 16-rung base scale (mirrors `wordLadderLogic` rungColor). */
 function rungWoodColor(i: number): string {
   if (i >= 15) return "#c9b7f5";
   if (i >= 10) return "#8fa7c9";
@@ -545,7 +545,8 @@ function setupLadderScene(
   const rungs: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshStandardMaterial>[] = [];
   const rungBase: THREE.Color[] = [];
   for (let i = 1; i <= total; i++) {
-    const base = new THREE.Color(rungWoodColor(i));
+    // The zones scale with the ladder length (pálya: 8–20 fok), like `zoneForProgress`.
+    const base = new THREE.Color(rungWoodColor(Math.round((i * 16) / total)));
     const mat = new THREE.MeshStandardMaterial({ color: base.clone(), roughness: 0.6, metalness: 0.05 });
     const m = new THREE.Mesh(rungGeo, mat);
     m.position.set(0, i * RUNG_GAP, 0.01);

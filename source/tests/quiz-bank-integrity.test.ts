@@ -25,6 +25,8 @@ const FILES = [
   "client/src/pages/WordLadderHuEn.tsx",
   "client/src/data/englishGameQuizExtras.ts",
   "client/src/data/tsunamiSubjectQuizBanks.ts",
+  // Spec 2026-09-29-palyak-szoletra-nyelvek (5. döntés): a Szólétra bankja a lapról ide költözött.
+  "client/src/data/wordLadder/en.ts",
 ];
 
 type Item = { file: string; line: number; prompt: string; options: string[]; correctIndex: number };
