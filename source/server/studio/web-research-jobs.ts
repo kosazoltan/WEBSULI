@@ -140,7 +140,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
    */
   async function finishStudioLesson(job: StoredResearchJob, artifact: StudioResearchArtifact, pending: () => Promise<void>) {
     await pending();
-    job.sources = artifact.sources;
+    // A resumed hand-off follows its saved run without a new search: its artifact carries no sources then.
+    if (artifact.sources.length) job.sources = artifact.sources;
     job.studioRunId = artifact.runId;
     job.lessonId = artifact.lessonId;
     job.output = "studio";

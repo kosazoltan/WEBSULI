@@ -57,17 +57,19 @@ const PHASE_LABELS: Record<string, string> = {
 /** Search + download, then hand the pages to a one-step Studio run and follow it to the published lesson. */
 export async function generateWebStudioLesson(input: WebResearchChatRequest, observer: ResearchObserver, deps: WebStudioDeps): Promise<StudioResearchArtifact> {
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
-  const { downloaded } = await deps.gather(input, observer);
-  const sources = downloaded.map(({ url, title }) => ({ url, title }));
-  observer.onEvent({ type: "sources", sources });
-
-  // A resumed job follows its saved run while that is alive or finished; a failed one is replaced.
+  // A resumed job follows its saved run while that is alive or finished — before any new search, so a
+  // failing web gather cannot block following a run that already has its sources; a failed one is replaced.
+  // Empty `sources` here means "keep the job's saved list" (web-research-jobs.finishStudioLesson).
+  let sources: WebSource[] = [];
   let runId = observer.studioRunId;
   if (runId) {
     const saved = await deps.read(runId);
     if (!saved || saved.phase === "error" || saved.phase === "parked") runId = undefined;
   }
   if (!runId) {
+    const { downloaded } = await deps.gather(input, observer);
+    sources = downloaded.map(({ url, title }) => ({ url, title }));
+    observer.onEvent({ type: "sources", sources });
     if (!observer.userId) throw new WebResearchFailure("A Studio-gyártáshoz hitelesített készítő szükséges.");
     const files = webSourcesToOneStepFiles(downloaded);
     if (!files.length) throw new WebResearchFailure("A letöltött oldalakból nem maradt feldolgozható szöveg. Új keresés szükséges.");

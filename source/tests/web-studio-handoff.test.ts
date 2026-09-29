@@ -68,9 +68,14 @@ test("a Studio hibája és parkolása a webes futás érthető hibája", async (
 });
 
 test("folytatás: élő vagy kész mentett futást követ, újat nem indít; hibás helyett újat indít", async () => {
-  const alive = harness([running("animator"), done]);
+  // Sourcery (PR #128): following a saved run must not depend on a new web gather succeeding.
+  let gathers = 0;
+  const alive = harness([running("animator"), done], { gather: async () => { gathers++; throw new Error("Synthetic search outage"); } });
   alive.observer.studioRunId = "run-0";
-  assert.equal((await generateWebStudioLesson(input, alive.observer, alive.deps)).runId, "run-0");
+  const followed = await generateWebStudioLesson(input, alive.observer, alive.deps);
+  assert.equal(followed.runId, "run-0");
+  assert.deepEqual(followed.sources, [], "a mentett forráslista a job-sorban marad");
+  assert.equal(gathers, 0, "mentett élő futásnál nincs új keresés");
   assert.equal(alive.started.length, 0);
   assert.ok(alive.reads.every(id => id === "run-0"));
   const failedBefore = harness([{ phase: "error", detail: null, error: "régi hiba", lessonId: null, htmlFileId: null }, done]);
