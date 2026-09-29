@@ -207,23 +207,20 @@ function drawCard(card: Card, spec: DrawSpec): { fontPx: number; tight: boolean 
   roundRectPath(ctx, 1.5, 1.5, w - 3, h - 3, RADIUS - 1);
   ctx.stroke();
 
-  let fontPx = isPrompt ? QUIZ3D_PROMPT_FONT_PX : QUIZ3D_OPTION_FONT_PX;
+  const fontPx = isPrompt ? QUIZ3D_PROMPT_FONT_PX : QUIZ3D_OPTION_FONT_PX;
   let lineH = isPrompt ? PROMPT_LINE : OPTION_LINE;
   const weight = isPrompt ? 800 : 700;
   const left = isPrompt ? 17 : TEXT_LEFT;
   const maxWidth = isPrompt ? w - 34 : w - TEXT_LEFT - TEXT_RIGHT;
   ctx.font = `${weight} ${fontPx}px ${spec.font}`;
-  let lines = wrapLines(spec.text, maxWidth, (s) => ctx.measureText(s).width);
+  const lines = wrapLines(spec.text, maxWidth, (s) => ctx.measureText(s).width);
   // The DOM decides the height with the same font; if the canvas wraps one more line (sub-pixel metric
   // differences), tighten the line spacing — never the font below the spec minimum.
   const room = h - 8;
   const naturalLineH = lineH;
-  if (lines.length * lineH > room) lineH = Math.max(fontPx + 1, Math.floor(room / lines.length));
-  if (lines.length * lineH > room && fontPx > QUIZ3D_OPTION_FONT_PX) {
-    fontPx = QUIZ3D_OPTION_FONT_PX;
-    ctx.font = `${weight} ${fontPx}px ${spec.font}`;
-    lines = wrapLines(spec.text, maxWidth, (s) => ctx.measureText(s).width);
-  }
+  // Review #145: a betű sosem megy a vállalt minimum (kérdés 22 px, válasz 20 px) alá — helyhiánynál csak a sorköz
+  // szorul (legfeljebb a betűmagasságig); a DOM-kártya magassága ugyanazzal a betűvel mér, így a szöveg elfér.
+  if (lines.length * lineH > room) lineH = Math.max(fontPx, Math.floor(room / lines.length));
   ctx.fillStyle = text;
   ctx.textBaseline = "middle";
   ctx.textAlign = isPrompt ? "center" : "left";

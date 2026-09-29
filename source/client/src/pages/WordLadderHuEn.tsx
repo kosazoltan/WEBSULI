@@ -1141,6 +1141,10 @@ export default function WordLadderHuEn() {
           box-shadow: none !important;
           --tw-ring-shadow: 0 0 #0000 !important;
         }
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button:focus-visible {
+          outline: 4px solid #fbbf24 !important;
+          outline-offset: 3px;
+        }
         .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button .wl-badge {
           opacity: 0;
         }

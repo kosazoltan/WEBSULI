@@ -95,3 +95,14 @@ A pontozás és a jutalom-szabály, a szerveroldali bankok, a tananyag-kvízek l
 - **E4** Nyelvenként SHALL teljesülnie a szint- és kategória-minimumoknak; pontosan egy helyes opció; a vak ellenőrzés 0 nyitott jelzéssel zárul (teszt + napló).
 - **E5** A Szólétra kérdései SHALL 3D-ben jelenjenek meg olvashatóan (kontraszt ≥ 4,5, betűméret-mérés böngészőben), a DOM-os hozzáférés és az E2E-k megmaradnak.
 - **E6** Kapuk zöldek; valós böngészős ellenőrzés 390 és 1280 px-en, képekkel.
+
+## Review-kör (PR #145)
+- **A kérdéstábla betűje helyhiánynál (Copilot): javítva.** A rajzoló a betűt sosem viszi a vállalt minimum (kérdés
+  22 px, válasz 20 px) alá; helyhiánynál csak a sorköz szorul. Őrteszt: `word-ladder-3d-review.test.ts`, a javítás
+  előtt bukott.
+- **Billentyűzetes fókusz 3D módban (Copilot): javítva.** Az átlátszó DOM-gomb `:focus-visible` állapotban 4 px-es
+  sárga, nem árnyék-alapú körvonalat kap. Őrteszt ugyanott.
+- **„Kimerülés után ismétlés” (Copilot): cáfolva.** A `pickUnseen` viselkedése a #135 spec 1. döntése: a legrégebben
+  látott tétel csak akkor jöhet vissza, ha a nyelv MINDEN tétele elfogyott (478–627 tétel nyelvenként). Egy futás ezt
+  gyakorlatilag nem éri el, és elfogyáskor a folytatás jobb élmény, mint egy leálló játék. A 7. döntésben a
+  „futáson belül nincs ismétlés” ezt a szemantikát jelenti.
