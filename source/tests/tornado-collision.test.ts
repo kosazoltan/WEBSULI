@@ -183,7 +183,13 @@ test("falmenti súrlódás 30, 60 és 144 Hz-en 1 s alatt közel azonos lassulá
     end.push(p.speed);
   }
   const [s30, s60, s144] = end as [number, number, number];
-  assert.ok(s60 > 1 && s60 < 7.9, `the scrape really slows the car at 60 Hz: ${s60}`);
+  // Spec 2026-09-29-tornado-motorfek (dokumentált változás): a gáz nélküli kigurulás motorfékkel erősebb, ezért az
+  // abszolút „> 1” alsó határ helyett a falat egy fal NÉLKÜLI kigurulási alapvonalhoz mérjük (szigorúbb: a súrlódás
+  // hatását különíti el); a „nem áll meg azonnal” feltétel megmarad (> a kezdősebesség 5%-a).
+  let free: Body = { x: -100, z: startZ, heading, speed: 8, anchored: false };
+  for (let i = 0; i < 60; i++) free = stepVehicle(free, { throttle: 0, steer: 0, brake: false }, 1 / 60, SCOUT);
+  assert.ok(s60 < free.speed * 0.99, `the scrape really slows the car at 60 Hz beyond coasting: ${s60} vs ${free.speed}`);
+  assert.ok(s60 > 8 * 0.05, `the scrape does not stop the car at once: ${s60}`);
   for (const [label, s] of [["30 Hz", s30], ["144 Hz", s144]] as const) {
     assert.ok(Math.abs(s - s60) / s60 < 0.05, `${label}: ${s.toFixed(3)} vs 60 Hz ${s60.toFixed(3)}`);
   }
