@@ -63,8 +63,14 @@ test("SSE: EOF complete nélkül látható hálózati hiba még jelölt HTML ut�
 test("SSE: ékezetes, tördelt adatból csak teljes végállapot ad menthető jelöltet", async () => {
   const got: unknown[] = [];
   const result = await consumeWebResearchStream(stream([": heartbeat\n\n", event({ type: "content_delta", content: "Árvíztűrő tükörfúrógép" }), event({ type: "html_generated", html: doc, sources: [] }), event({ type: "complete" }), "data: [DONE]\n\n"]), e => got.push(e));
-  assert.equal(result.html, doc);
+  assert.equal(result.type === "html_generated" && result.html, doc);
   assert.deepEqual(got[0], { type: "content_delta", content: "Árvíztűrő tükörfúrógép" });
+});
+test("Copilot (PR #128): SSE — a Studio-lecke mentett anyagként érvényes végállapot; üres azonosító nem", async () => {
+  const result = await consumeWebResearchStream(stream([event({ type: "material_saved", materialId: "studio-html-1", sources: [] }), event({ type: "complete" })]), () => {});
+  assert.equal(result.type, "material_saved");
+  assert.equal(result.type === "material_saved" && result.materialId, "studio-html-1");
+  await assert.rejects(consumeWebResearchStream(stream([event({ type: "material_saved", materialId: " ", sources: [] }), event({ type: "complete" })]), () => {}), /nem készült tananyag/);
 });
 test("SSE: szolgáltatói hiba és hibás JSON nem tűnik el", async () => {
   await assert.rejects(consumeWebResearchStream(stream([event({ type: "error", message: "Kereső nem elérhető" }), event({ type: "complete" })]), () => {}), /Kereső nem elérhető/);
