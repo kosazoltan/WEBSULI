@@ -8,7 +8,7 @@ Terv: `docs/specs/2026-09-29-lecke-dizajn.md`. Minden parancs a `source/` könyv
    - `contrastRatio("#ffffff", "#000000") === 21`, `contrastRatio("#f0f9ff", "#d8e9f2")` < 1,3 (a mért 1,17).
    - `measureIllustrationText(HUNYADI, { background: "#2d3f5f", ink: "#f0f9ff" })` a NYERS SVG-n: van < 4,5 (a hiba reprodukálva).
    - `sanitizeIllustration(HUNYADI)` kimenete a sötét (`#2d3f5f`/`#f0f9ff`) ÉS a világos (`#ffffff`/`#172c45`) felületen:
-     minden felirat ≥ 4,5; a feliratszám 8.
+     minden felirat ≥ 4,5; a feliratszám 7.
    - Pozitív: `<rect fill="#1e3a8a"/>` + `<text fill="#ffffff">` → a kimenetben a szöveg `fill="#ffffff"` marad, `contrastFixes` üres.
    - `fill-opacity`: `<rect fill="#0f172a" fill-opacity="0.15"/>` + `#ffffff` szöveg → a papírral kompozitált világos
      háttéren a szöveg sötétre vált.

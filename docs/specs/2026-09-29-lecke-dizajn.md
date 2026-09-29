@@ -73,8 +73,9 @@ kérdés → összefoglaló), egységes térköz-ritmus, a világ színe a hangs
   1,75; példa-lépés 0,95 em; ábra-aláírás 0,92 em (korábban `text-sm` = 14 px).
 - **Ritmus/térköz:** 8 px-es alapegység; kártyák közt 16 px; fejezetek közt 56 px (`section + section`); kártya belső
   térköz `clamp(18px, 2.6vw, 28px)`.
-- **Olvasóoszlop:** a Tananyag, Feladatok és Kvíz panel legfeljebb 780 px széles, középen (a fülsor és a fejléc 1050 px
-  marad; a Módszerek kétoszlopos rácsa széles marad).
+- **Olvasóoszlop:** az egész lecke (fejléc, fülsor, panelek) legfeljebb 840 px széles, középen (korábban 1050 px, a
+  bekezdés 72ch-ra vágva → jobb oldalt üres sáv). A végrehajtáskor mérve: a 780 px-es panel a 960 px-es fülsor alatt
+  elcsúszott a fejléctől, ezért egyetlen közös oszlop lett; a kártyán belül a bekezdés kitölti a szélességet.
 - **Kártya-hierarchia:** minden blokk: felület + 1 px vonal + 4 px bal oldali színsáv (magyarázat: akcent, példa:
   másodlagos, ábra: másodlagos, összefoglaló: lágy háttér) + finom árnyék világos témában.
 - **Fejezetfej:** 40 px-es lekerekített négyzet sorszám-jelvény (akcent/akcent-tinta), mellette az emoji és a cím; a cím
@@ -97,6 +98,9 @@ kérdés → összefoglaló), egységes térköz-ritmus, a világ színe a hangs
     candy `#be185d`, jungle `#15803d`, ocean-kids `#0e7490`, magic `#7e22ce`, princess `#a21caf`,
     space `#a78bfa` + tinta `#1a1535`, dojo `#ff9b9b` + tinta `#0f172a`. A `shared/lesson-visuals.ts` palettája
     ugyanígy (a `lesson-visuals.test.ts` az egyezést őrzi — a teszt nem változik, a két oldal együtt).
+- **Idővonal és oszlopdiagram (mért apróságok):** az idővonal 12 px-es eseményfelirata 0,8rem, az összekötő vonal a
+  téma vonalszínét kapja (a `bg-muted` alig látszott); az oszlopdiagram „átlag” felirata (`text-red-600`, az alkalmazás
+  témáját követő `dark:` változattal) a lecke `--lesson-error` tokenjét kapja — mérve 3,56:1 volt a sötét színpadon.
 - **Kvíz:** a kvízkártya a közös kártyaszabályt követi; a helyes/hibás válasz a sötét világokban sötét siker/figyelmeztetés
   tokent kap (nem világító világoszöld tábla).
 
@@ -120,6 +124,26 @@ kérdés → összefoglaló), egységes térköz-ritmus, a világ színe a hangs
   vízszintes görgetés 0; levágott szöveg 0; a `?visuals=1` mérőlecke ábráin 0 átfedés, 0 levágás, betű ≥ 11,5 px.
 - Mind a 15 téma (`EXPERIENCE_THEMES`) 390 px-en: a lecke HTML-szövegeinek legkisebb kontrasztja ≥ 4,5:1.
 - Kapuk zöldek: `tsc` (app és teszt), `lint`, `node --test tests/*.test.ts`, `build`.
+
+## Mérés utána (2026-09-29, helyi Vite-próba, Chrome, a valódi Hunyadi-lecke)
+
+| Mérés | Előtte | Utána |
+|---|---|---|
+| Illusztráció-feliratok, sötét (arena), 1280 és 390 px | 16/29 felirat < 4,5; legkisebb **1,17:1** | 0/29; legkisebb **11,05:1** |
+| Illusztráció-feliratok, világos (ocean) | legkisebb 7,86:1 | legkisebb 11,05:1 |
+| Minden ábrafelirat (64 db, paraméteres is), sötét | legkisebb 1,17:1 | legkisebb 9,91:1 |
+| „Eredmény:” sor, sötét | 1,62:1 | ≥ 5,26:1 (a lap legkisebb HTML-kontrasztja) |
+| HTML-szöveg legkisebb kontrasztja, sötét / világos | 1,62 / 6,21 (28 elem < 4,5 sötétben) | 5,26 / 6,21 (0 elem < 4,5) |
+| Kvíz (megválaszolt kérdésekkel), sötét | 7,36 | 9,14 |
+| Mind a 15 téma × 3 évfolyam (2., 6., 10.), 390 px | — | HTML legkisebb 5,02, kvíz legkisebb 5,02, ábra legkisebb 9,45; görgetés 0, levágás 0 |
+| `?visuals=1` mérőlecke | „átlag” felirat 3,56:1 | 6,39:1; a repó `tests/explanatory-visuals.spec.ts` 3/3 zöld (360/390/1280) |
+| Vízszintes görgetés, levágott szöveg | 0 / 0 | 0 / 0 |
+
+A mérő 8 „átfedést” jelez a Hunyadi-lecke oszlopdiagramjain előtte és utána is: ezek UGYANANNAK a kétsoros
+feliratnak a sorai (18 px-es sorköz, a betűdoboz ~19 px) — képen ellenőrizve nincs valódi átfedés (a 09-24-es spec is ezt rögzítette).
+
+Teljesítmény: a legrosszabb esetű, 360 elemes illusztráció tisztítása + kontraszt-őre jsdom alatt 260 ms; a kliens
+`useMemo`-val csak az SVG változásakor futtatja.
 
 ## Érintett fájlok
 `shared/svg-contrast.ts` (új), `shared/illustration-svg.ts`, `shared/lesson-visual-params.ts`, `shared/lesson-visuals.ts`,
