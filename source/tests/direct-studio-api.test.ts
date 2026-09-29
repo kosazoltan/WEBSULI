@@ -64,7 +64,11 @@ test("spec 2026-09-19: cheap OpenRouter helpers, no GLM in the legacy routes, in
   // The OCR measurement (#190) still rules GLM out of the legacy/admin routes.
   assert.doesNotMatch(JSON.stringify(LEGACY_MODELS), /glm/i);
   assert.equal(map.ocr, "qwen/qwen3-vl-32b-instruct");
-  assert.equal(FALLBACK_MODELS.author, undefined);
+  // Spec-változás 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md): a szerzőnek van tartaléka, de
+  // az a saját családjában marad, és a lektor egyik modelljével sem eshet egy családba.
+  assert.equal(modelFamily(FALLBACK_MODELS.author!), modelFamily(map.author));
+  assert.notEqual(modelFamily(FALLBACK_MODELS.author!), modelFamily(map.lektor));
+  assert.notEqual(modelFamily(FALLBACK_MODELS.author!), modelFamily(FALLBACK_MODELS.lektor!));
   // Spec 2026-09-19: the review stays independent — the lektor's fallback exists (the
   // grok-4.6 timeout killed runs in production) but must live in another family than
   // the author, so a failover can never collapse writer and reviewer onto one vendor.
