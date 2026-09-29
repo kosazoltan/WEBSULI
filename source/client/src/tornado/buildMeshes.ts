@@ -620,12 +620,13 @@ uniform vec3 lineColor;`,
         `#include <color_fragment>
 {
   vec2 w = vTerrainWorld.xz;
-  // roadFactor(): distance to the nearest grid line, 1 at >= 9 units.
+  // roadFactor(): 1 on a road centreline, fading to 0 at the 9-unit half-width
+  // (nearLine = distance to the nearest grid line, the GLSL twin of distToGridLine).
   float halfSpacing = ${glf(ROAD_SPACING / 2)};
   float dx = abs(mod(w.x + ${glf(HALF_WORLD)}, ${glf(ROAD_SPACING)}) - halfSpacing);
   float dz = abs(mod(w.y + ${glf(HALF_WORLD)}, ${glf(ROAD_SPACING)}) - halfSpacing);
   float nearLine = min(halfSpacing - dx, halfSpacing - dz);
-  float road = clamp(nearLine / 9.0, 0.0, 1.0);
+  float road = 1.0 - clamp(nearLine / 9.0, 0.0, 1.0);
   float aa = max(fwidth(road), 0.002);
   float asphalt = smoothstep(0.55 - aa, 0.55 + aa, road);
   float dirt = smoothstep(0.15 - aa, 0.15 + aa, road) * (1.0 - asphalt);
@@ -647,7 +648,7 @@ uniform vec3 lineColor;`,
 }`,
       );
   };
-  made.customProgramCacheKey = () => "tornado-terrain-v2";
+  made.customProgramCacheKey = () => "tornado-terrain-v3";
   materialCache.set("terrain", made);
   return made;
 }

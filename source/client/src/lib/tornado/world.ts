@@ -93,13 +93,17 @@ export function isWater(x: number, z: number): boolean {
 
 /** 0 = off-road, 1 = on the centreline of a road. */
 export function roadFactor(x: number, z: number): number {
-  const dx = Math.abs(((x + HALF_WORLD) % ROAD_SPACING) - ROAD_SPACING / 2);
-  const dz = Math.abs(((z + HALF_WORLD) % ROAD_SPACING) - ROAD_SPACING / 2);
-  const near = Math.min(ROAD_SPACING / 2 - dx, ROAD_SPACING / 2 - dz);
+  const near = Math.min(distToGridLine(x), distToGridLine(z));
   const halfWidth = 9;
-  if (near >= halfWidth) return 1;
-  if (near <= 0) return 0;
-  return near / halfWidth;
+  if (near >= halfWidth) return 0;
+  return 1 - near / halfWidth;
+}
+
+/** Distance from a coordinate to the nearest road line (lines at -HALF_WORLD + k·ROAD_SPACING). */
+function distToGridLine(v: number): number {
+  // Positive modulo, so coordinates west/north of the map edge stay in range too.
+  const m = (((v + HALF_WORLD) % ROAD_SPACING) + ROAD_SPACING) % ROAD_SPACING;
+  return Math.min(m, ROAD_SPACING - m);
 }
 
 /**
