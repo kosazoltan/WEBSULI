@@ -70,6 +70,7 @@ import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
+import { bankItemPath, bankItemRef, type BankItemRef } from "../../shared/bank-item-ref";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -984,8 +985,23 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // egyszer); a szerzői újraírás csak tanítási blokkolóra jár.
       const bankOnlyRepair = bankRepairPossible && bankOnly;
       if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair) {
-        return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
-          { ...job.output, report: parsed.data, reportRound: job.round, blockers });
+        // Spec 2026-09-29-limit-banktetel-kivetel (2. döntés; élő mérés job 44b5afa1): ha MINDEN maradék blokkoló egy
+        // létező banktételre mutat, a tétel esik ki a kapun (ha a bank így is megfelel), nem a lecke. Tanítási
+        // blokkoló vagy nem létező tétel továbbra is buktat.
+        const limitFlags = limitBankFlags(job.output?.lesson as Lesson | undefined, blockingNotes);
+        if (!limitFlags) {
+          return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
+            { ...job.output, report: parsed.data, reportRound: job.round, blockers });
+        }
+        const existing = Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : [];
+        // Ugyanarra a tételre a bank-ellenőr is jelezhetett: a jelzés egyszer marad, de limit-eredetű (a kapu üzenete miatt).
+        const limitPaths = new Set(limitFlags.map((f) => f.path));
+        const merged = [
+          ...existing.map((e) => (limitPaths.has(e.path) ? { ...e, origin: "limit" as const } : e)),
+          ...limitFlags.filter((f) => !existing.some((e) => e.path === f.path)),
+        ];
+        job.output = { ...job.output, choiceFlags: merged };
+        logger.warn(`[STUDIO] Körlimiten maradt banktétel-hiba a kapunak kivételre (${job.id}, ${job.round}. kör): ${limitFlags.map((f) => f.path).join(", ")}`);
       }
       const transition = nextStep({ step: job.step, ok: true, round: job.round, blockers, bankOnlyRepair });
       if (bankOnlyRepair && transition.step === "animator") {
@@ -1067,19 +1083,39 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
  * őr leletei ∪ a bank-ellenőr utolsó körének `choiceFlags`-e. Bank-tétel → kivétel, ha a bank utána is megfelel;
  * különben, és a lecke check blokkjánál, a lecke nem publikálható.
  */
+/** A limiten maradt blokkolók kapu-jelzésként, ha MIND egy létező banktételre mutat; különben null. */
+export function limitBankFlags(lesson: Lesson | undefined, blockingNotes: Array<{ blockPath?: string | null; message: string }>): ChoiceFlag[] | null {
+  const e = lesson?.experience;
+  if (!e || !blockingNotes.length) return null;
+  const flags: ChoiceFlag[] = [];
+  for (const note of blockingNotes) {
+    const ref = bankItemRef(note.blockPath);
+    if (!ref || ref.index >= e[ref.bank].length) return null;
+    const path = bankItemPath(ref);
+    if (!flags.some((f) => f.path === path)) flags.push({ path, message: note.message, origin: "limit" });
+  }
+  return flags;
+}
+
 export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[] } | { error: string } {
   const flags = new Map<string, string>();
   for (const f of lessonSingleChoiceProblems(lesson)) flags.set(f.path, `${f.path}: ${f.problems.join(" ")}`);
+  const limitOrigin = new Set<string>();
   for (const f of Array.isArray(rawFlags) ? rawFlags as ChoiceFlag[] : []) {
     if (typeof f?.path === "string" && !flags.has(f.path)) flags.set(f.path, `${f.path}: ${String(f.message ?? "")}`);
+    if (typeof f?.path === "string" && f.origin === "limit") limitOrigin.add(f.path);
   }
   if (!flags.size) return { lesson, removed: [] };
-  const byBank: Record<"quiz" | "methods", Set<number>> = { quiz: new Set(), methods: new Set() };
+  // Spec 2026-09-29-limit-banktetel-kivetel: normalizált hivatkozás (zárójeles, pontozott, al-útvonal), a tasks bank is.
+  const byBank: Record<BankItemRef["bank"], Set<number>> = { quiz: new Set(), methods: new Set(), tasks: new Set() };
+  const removed = new Map<string, string>();
   const blocking: string[] = [];
   for (const [path, message] of flags) {
-    const m = path.match(/^experience\.(quiz|methods)\[(\d+)\]$/);
-    if (m && lesson.experience) byBank[m[1] as "quiz" | "methods"].add(Number(m[2]));
-    else blocking.push(message);
+    const ref = bankItemRef(path);
+    if (ref && lesson.experience && ref.index < lesson.experience[ref.bank].length) {
+      byBank[ref.bank].add(ref.index);
+      removed.set(bankItemPath(ref), message);
+    } else blocking.push(message);
   }
   const all = [...flags.values()].join("; ");
   if (blocking.length) return { error: `Egyválasztós hiba maradt a leckében, nem publikálható (pontosan egy helyes opció kell): ${blocking.join("; ")}` };
@@ -1088,10 +1124,16 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
     ...experience,
     quiz: experience.quiz.filter((_, i) => !byBank.quiz.has(i)),
     methods: experience.methods.filter((_, i) => !byBank.methods.has(i)),
+    tasks: experience.tasks.filter((_, i) => !byBank.tasks.has(i)),
   } };
   const after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
-  if (after.length) return { error: `Egyválasztós hiba maradt a bankban, és a tételek kivétele után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})` };
-  return { lesson: reduced, removed: [...flags.keys()] };
+  if (after.length) {
+    const fromLimit = limitOrigin.size > 0;
+    return { error: fromLimit
+      ? `Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})`
+      : `Egyválasztós hiba maradt a bankban, és a tételek kivétele után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})` };
+  }
+  return { lesson: reduced, removed: [...removed.keys()] };
 }
 
 async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome> {
@@ -1204,7 +1246,15 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
       lesson: rawLesson, map: mapInputOf(map), concepts: map.concepts,
       ...(gatePriorBlockers.length ? { previousBlockers: gatePriorBlockers } : {}),
     }, job.round);
-    if (!report.success || classifyNotes(report.data.notes).some(note => note.blocking)
+    // Spec 2026-09-29-limit-banktetel-kivetel (3. döntés): a blokkoló lektor-jegyzet csak akkor megengedett, ha egy
+    // ténylegesen kivett banktételre mutat — minden más blokkoló továbbra is buktat.
+    const removedItems = new Set(choiceGate.removed);
+    const unresolvedBlocker = (note: { blocking: boolean; blockPath?: string | null }) => {
+      if (!note.blocking) return false;
+      const ref = bankItemRef(note.blockPath);
+      return !ref || !removedItems.has(bankItemPath(ref));
+    };
+    if (!report.success || classifyNotes(report.data.notes).some(unresolvedBlocker)
       || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {
       return fail(store, job, "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges.");
     }

@@ -9,6 +9,8 @@ export const COMPACT_LESSON_METHOD_VERSION = "fusion-7.4-3" as const;
 export const LESSON_METHOD_VERSION = "fusion-7.4-4" as const;
 export const isFusionMethodVersion = (value: unknown) => value === LESSON_METHOD_VERSION || value === COMPACT_LESSON_METHOD_VERSION || value === PREVIOUS_LESSON_METHOD_VERSION || value === LEGACY_LESSON_METHOD_VERSION;
 export const LESSON_BANK_SIZES = { tasks: 45, taskRound: 15, quiz: 75, quizRound: 25 } as const;
+/** Spec 2026-09-29-limit-banktetel-kivetel (5. döntés): tartalék, hogy a kapu a hibás tételt a minimum megsértése nélkül kivehesse. */
+export const LESSON_BANK_RESERVE = { tasks: 3, quiz: 5 } as const;
 export const METHOD_KINDS = ["prediction", "gate", "myth", "sorting", "causeEffect", "conflict", "selfCheck", "popup", "timeline", "analogy"] as const;
 // Spec 2026-09-20 (színes tananyag): a 8 vizuális világ (shared/lesson-visuals.ts) a témák közé
 // került; a régi 6 a már közzétett leckék miatt marad.
