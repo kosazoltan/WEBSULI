@@ -22,26 +22,28 @@ export type VisualWorld = {
   dark?: boolean;
 };
 
+// Spec 2026-09-29 (lecke-dizájn): az akcentek WCAG AA-ra hangolva (fehér/sötét tinta az akcenten és
+// akcent-szöveg a felületen ≥ 4,5:1); mérve előtte pl. ocean-kids 2,23, jungle 3,30, candy 3,53.
 export const VISUAL_WORLDS: readonly VisualWorld[] = [
   { id: "candy", name: "Cukorka-birodalom", mood: "vidám, édes, rózsaszín-lila-kék pasztell", emojis: ["🍭", "🍬", "🧁", "🍓", "🎈", "🌈", "🍦", "🎀"],
-    palette: { bg: "#fdf2f8", bg2: "#e0f2fe", surface: "#ffffff", ink: "#3b1f4a", accent: "#ec4899", accent2: "#3b82f6", key: "#fde68a", keyInk: "#3b1f4a" } },
+    palette: { bg: "#fdf2f8", bg2: "#e0f2fe", surface: "#ffffff", ink: "#3b1f4a", accent: "#be185d", accent2: "#3b82f6", key: "#fde68a", keyInk: "#3b1f4a" } },
   { id: "space", name: "Galaktikus küldetés", mood: "sötét űr, neon lila-cián-sárga kiemelés", emojis: ["🚀", "🪐", "🌟", "🌌", "👩‍🚀", "☄️", "🛸", "🌙"], dark: true,
-    palette: { bg: "#0c0a1d", bg2: "#1a1535", surface: "#2d2654", ink: "#f0f4ff", accent: "#8b5cf6", accent2: "#06b6d4", key: "#fbbf24", keyInk: "#1a1535" } },
+    palette: { bg: "#0c0a1d", bg2: "#1a1535", surface: "#2d2654", ink: "#f0f4ff", accent: "#a78bfa", accent2: "#06b6d4", key: "#fbbf24", keyInk: "#1a1535" } },
   { id: "jungle", name: "Dzsungel-expedíció", mood: "élénk zöld, narancs és sárga, kalandos", emojis: ["🦁", "🐒", "🌴", "🦜", "🐍", "🌺", "🐘", "🗺️"],
-    palette: { bg: "#ecfdf5", bg2: "#fef3c7", surface: "#ffffff", ink: "#14342b", accent: "#16a34a", accent2: "#f97316", key: "#fde047", keyInk: "#14342b" } },
+    palette: { bg: "#ecfdf5", bg2: "#fef3c7", surface: "#ffffff", ink: "#14342b", accent: "#15803d", accent2: "#f97316", key: "#fde047", keyInk: "#14342b" } },
   { id: "ocean-kids", name: "Vízalatti kaland", mood: "türkiz, kék, korall — hullámos, friss", emojis: ["🌊", "🐸", "🐠", "🐙", "🐚", "🦆", "🏝️", "🐬"],
-    palette: { bg: "#e8f8f5", bg2: "#dff3ff", surface: "#ffffff", ink: "#0f3a44", accent: "#0abde3", accent2: "#fd79a8", key: "#55efc4", keyInk: "#0f3a44" } },
+    palette: { bg: "#e8f8f5", bg2: "#dff3ff", surface: "#ffffff", ink: "#0f3a44", accent: "#0e7490", accent2: "#fd79a8", key: "#55efc4", keyInk: "#0f3a44" } },
   { id: "meadow", name: "Mező és rét", mood: "virágos rózsaszín-lila-kék, pillangók, méhek", emojis: ["🦋", "🌸", "🐝", "🌼", "🐰", "🌷", "🌻", "🐞"],
     palette: { bg: "#fce4ec", bg2: "#e1f5fe", surface: "#ffffff", ink: "#4a148c", accent: "#9c27b0", accent2: "#66bb6a", key: "#ffe082", keyInk: "#4a148c" } },
   { id: "dojo", name: "Ninja dojo", mood: "sötét kék-fekete, piros és sárga öv-színek, kihívás", emojis: ["🥷", "⚔️", "🔥", "🏆", "🎯", "🥋", "💪", "⚡"], dark: true,
-    palette: { bg: "#0f172a", bg2: "#1e293b", surface: "#334155", ink: "#f1f5f9", accent: "#dc2626", accent2: "#facc15", key: "#22d3ee", keyInk: "#0f172a" } },
+    palette: { bg: "#0f172a", bg2: "#1e293b", surface: "#334155", ink: "#f1f5f9", accent: "#ff9b9b", accent2: "#facc15", key: "#22d3ee", keyInk: "#0f172a" } },
   { id: "arena", name: "Matek-aréna", mood: "játékos sötét háttér, cián-lila-zöld neon", emojis: ["🎮", "🏆", "⚡", "🔢", "💡", "🥇", "🎲", "🕹️"], dark: true,
     palette: { bg: "#0c1222", bg2: "#1a2744", surface: "#2d3f5f", ink: "#f0f9ff", accent: "#22d3ee", accent2: "#8b5cf6", key: "#fbbf24", keyInk: "#0c1222" } },
   { id: "magic", name: "Varázslat-iskola", mood: "lila-rózsaszín-arany, csillogó, mesés", emojis: ["✨", "🔮", "🪄", "🧙", "🌟", "🎩", "🦄", "📜"],
-    palette: { bg: "#f3e8ff", bg2: "#fae8ff", surface: "#ffffff", ink: "#3b0764", accent: "#a855f7", accent2: "#f97316", key: "#fef08a", keyInk: "#3b0764" } },
+    palette: { bg: "#f3e8ff", bg2: "#fae8ff", surface: "#ffffff", ink: "#3b0764", accent: "#7e22ce", accent2: "#f97316", key: "#fef08a", keyInk: "#3b0764" } },
   // Spec 2026-09-24: egy 5. osztályos kislány édesanyjának kérése — fiatalos, rózsaszín, csillogó.
   { id: "princess", name: "Hercegnő-kastély", mood: "rózsaszín, lila és arany, csillogó, vidám", emojis: ["👑", "💖", "🦄", "🌸", "✨", "🎀", "🏰", "💎"],
-    palette: { bg: "#fff0f7", bg2: "#f5e8ff", surface: "#ffffff", ink: "#4a1238", accent: "#db2777", accent2: "#a855f7", key: "#fbcfe8", keyInk: "#4a1238" } },
+    palette: { bg: "#fff0f7", bg2: "#f5e8ff", surface: "#ffffff", ink: "#4a1238", accent: "#a21caf", accent2: "#a855f7", key: "#fbcfe8", keyInk: "#4a1238" } },
 ];
 
 /**

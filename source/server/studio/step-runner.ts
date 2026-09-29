@@ -802,7 +802,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // Régi alakú teljes lecke is elfogadott (a checkAnimatorResult méri).
       const patched = animatorModelFailure ? null : applyVisualPatch(original, json, map.concepts);
       if (patched) {
-        logger.info(`[STUDIO] Ábrafolt beillesztve (${job.id}): ${patched.added} új, ${patched.replaced} csere${patched.rejected.length ? `; elutasítva: ${patched.rejected.join(" | ").slice(0, 600)}` : ""}`);
+        logger.info(`[STUDIO] Ábrafolt beillesztve (${job.id}): ${patched.added} új, ${patched.replaced} csere${patched.rejected.length ? `; elutasítva: ${patched.rejected.join(" | ").slice(0, 600)}` : ""}${patched.notes.length ? `; jelzés: ${patched.notes.join(" | ").slice(0, 400)}` : ""}`);
       }
       const parsed = animatorModelFailure ? null : patched ? lessonSchema.safeParse(patched.lesson) : lessonSchema.safeParse(json);
       const check = parsed?.success ? checkAnimatorResult(original, parsed.data) : null;
@@ -849,7 +849,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           const checked = repaired ? lessonSchema.safeParse(repaired.lesson) : null;
           if (repaired && checked?.success && checkAnimatorResult(original, checked.data).ok) {
             animated = checked.data;
-            logger.info(`[STUDIO] Ábrajavítás beillesztve (${job.id}): ${repaired.replaced} csere, ${repaired.added} új${repaired.rejected.length ? `; elutasítva: ${repaired.rejected.join(" | ").slice(0, 400)}` : ""}`);
+            logger.info(`[STUDIO] Ábrajavítás beillesztve (${job.id}): ${repaired.replaced} csere, ${repaired.added} új${repaired.rejected.length ? `; elutasítva: ${repaired.rejected.join(" | ").slice(0, 400)}` : ""}${repaired.notes.length ? `; jelzés: ${repaired.notes.join(" | ").slice(0, 400)}` : ""}`);
           }
         } catch (error) {
           logger.warn(`[STUDIO] Az ábrajavítás elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);

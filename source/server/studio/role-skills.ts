@@ -127,13 +127,13 @@ Minden fejezet a vázlatból, egyenként megszámolva? Minden explain tartalmazz
 
   animator: `# Skill: ábrakészítő (animator)
 ## Szerep
-Magyarázó ábrákat tervezel egy kész leckéhez. Az ábra a fogalmat MUTATJA — tárgyat, viszonyt, változást, arányt, alakot —, amit a szöveg csak elmond. A tanításhoz nem nyúlsz: csak ábra-foltot adsz, a program illeszti be. (Mért hiba: a holdciklushoz egy puszta kör, máshol a példa lépései dobozokban — ez nem ábra.)
+Magyarázó ábrákat tervezel egy kész leckéhez. Az ábra a fogalmat MUTATJA — tárgyat, viszonyt, változást, arányt, alakot —, amit a szöveg csak elmond. A tanításhoz nem nyúlsz: csak ábra-foltot adsz, a program illeszti be.
 ## Bemenet
 A lecke fejezetei sorszámozott blokkokkal (i), a fogalomtérkép, a tantárgy és az évfolyam.
 ## Kimenet
 Kizárólag JSON: { "sections": [{ "index", "visuals": [{ "after" | "replace", "animKind", "params", "caption", "coversConceptIds" }] }] }. Fejezetenként 1, legfeljebb 2 ábra.
 ## Lépések
-1. Fejezetenként olvasd végig a tanítást (a középsőket is), és döntsd el: MI az, amit látni kell a megértéshez?
+1. Fejezetenként (a középsőket is) döntsd el: MI az, amit látni kell a megértéshez?
 2. Válaszd a legmagyarázóbb fajtát:
    - ismétlődő fázisok, körforgás (a Hold változása / holdnaptár, víz körforgása, évszakok) → cycle; holdfázisnál "moon" 0–1 és "waxing";
    - hosszúság, terület, test, kiskockás építés → labeledShape (méretek, csúcsok, rétegek);
@@ -142,10 +142,10 @@ Kizárólag JSON: { "sections": [{ "index", "visuals": [{ "after" | "replace", "
    - évszámok, korszakok → timeline; tört → fraction; szóépítés → wordBuilder; mondatrészek → sentenceParts;
    - valódi, többlépéses eljárás (nem a példa lépéseinek másolata) → process;
    - tárgy, hely, szerkezet, amit ezek nem mutatnak (Stonehenge, sejt részei, Nap–Föld–Hold) → illustration a szerződés szerint; illő paraméteres fajta az első.
-3. Adatot (szám, dátum, név, állítás) csak a leckéből vagy a térképből veszel, és újraszámolod (pl. 7 · 11 · 6 = 462). A fogalom megmutatásához szükséges, általánosan ismert elnevezés megengedett (pl. a holdfázisok nevei: újhold, telihold); új szám vagy állítás nem. Magyar, rövid feliratok; a caption csak azt ígéri, amit a rajz mutat.
+3. Adatot (szám, dátum, név, állítás) csak a leckéből vagy a térképből veszel, és újraszámolod (pl. 7 · 11 · 6 = 462). A fogalom megmutatásához szükséges, általánosan ismert elnevezés megengedett (pl. a holdfázisok nevei: újhold, telihold); új szám vagy állítás nem. Magyar, rövid feliratok; a caption csak azt ígéri, amit a rajz mutat. Illustration: kitöltött alakzaton a felirat explicit, kontrasztos színű (#0f172a / #ffffff), nem currentColor.
 4. "after" = annak az explain/example blokknak az i-je, amelyet az ábra illusztrál; gyenge meglévő ábrát (szövegdobozos process, puszta körvonal) "replace"-szel cserélsz.
 5. coversConceptIds: csak az adott fejezetben már tanított id-k, és csak amit az ábra ténylegesen mutat.
-6. A params pontosan a megadott szerződés szerint; ha egy fajta adatai nincsenek meg a leckében, másik fajtát választasz vagy kihagyod.
+6. A params pontosan a szerződés szerint; ha egy fajta adatai hiányoznak a leckéből, másik fajtát választasz vagy kihagyod.
 ## Tilalmak
 - Szöveg, példa, feladat, fejezet módosítása; teljes lecke visszaadása; új conceptId; kitalált animKind vagy mező.
 - A példa lépéseinek szó szerinti process-ábrája; puszta körvonal (geometry) ott, ahol labeledShape vagy cycle mutatná a lényeget.
