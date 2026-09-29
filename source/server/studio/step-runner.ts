@@ -72,7 +72,7 @@ import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
-import { bankItemPath, bankItemRef, type BankItemRef } from "../../shared/bank-item-ref";
+import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, type BankItemRef } from "../../shared/bank-item-ref";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -1097,12 +1097,23 @@ export function limitBankFlags(lesson: Lesson | undefined, blockingNotes: Array<
   if (!e || !blockingNotes.length) return null;
   const flags: ChoiceFlag[] = [];
   for (const note of blockingNotes) {
-    const ref = bankItemRef(note.blockPath);
-    if (!ref || ref.index >= e[ref.bank].length) return null;
-    const path = bankItemPath(ref);
+    const path = removableItemPath(lesson!, note.blockPath);
+    if (!path) return null;
     if (!flags.some((f) => f.path === path)) flags.push({ path, message: note.message, origin: "limit" });
   }
   return flags;
+}
+
+/**
+ * Egy limitkori blokkoló által kivehető tétel normalizált útvonala: létező banktétel, vagy (spec
+ * 2026-09-29-limit-check-kivetel) létező `check` blokk; minden más (tanító blokk, nem létező elem) → null.
+ */
+function removableItemPath(lesson: Lesson, blockPath: string | null | undefined): string | null {
+  const bank = bankItemRef(blockPath);
+  if (bank) return lesson.experience && bank.index < lesson.experience[bank.bank].length ? bankItemPath(bank) : null;
+  const check = checkBlockRef(blockPath);
+  if (check && lesson.sections[check.section]?.blocks[check.block]?.kind === "check") return checkBlockPath(check);
+  return null;
 }
 
 export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[] } | { error: string } {
@@ -1116,19 +1127,31 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
   if (!flags.size) return { lesson, removed: [] };
   // Spec 2026-09-29-limit-banktetel-kivetel: normalizált hivatkozás (zárójeles, pontozott, al-útvonal), a tasks bank is.
   const byBank: Record<BankItemRef["bank"], Set<number>> = { quiz: new Set(), methods: new Set(), tasks: new Set() };
+  const checkBlocks = new Map<number, Set<number>>();
   const removed = new Map<string, string>();
   const blocking: string[] = [];
   for (const [path, message] of flags) {
     const ref = bankItemRef(path);
+    const check = checkBlockRef(path);
     if (ref && lesson.experience && ref.index < lesson.experience[ref.bank].length) {
       byBank[ref.bank].add(ref.index);
       removed.set(bankItemPath(ref), message);
+    } else if (check && limitOrigin.has(path) && lesson.sections[check.section]?.blocks[check.block]?.kind === "check") {
+      // Spec 2026-09-29-limit-check-kivetel: a körlimiten lektor által blokkolt ellenőrző kérdés kivehető; a limit-jelzés
+      // nélküli (determinisztikus őr által talált) check-hiba továbbra is buktat (#134, E4).
+      if (!checkBlocks.has(check.section)) checkBlocks.set(check.section, new Set());
+      checkBlocks.get(check.section)!.add(check.block);
+      removed.set(checkBlockPath(check), message);
     } else blocking.push(message);
   }
   const all = [...flags.values()].join("; ");
   if (blocking.length) return { error: `Egyválasztós hiba maradt a leckében, nem publikálható (pontosan egy helyes opció kell): ${blocking.join("; ")}` };
   const experience = lesson.experience!;
-  const reduced: Lesson = { ...lesson, experience: {
+  const reduced: Lesson = { ...lesson,
+    sections: checkBlocks.size
+      ? lesson.sections.map((section, i) => (checkBlocks.has(i) ? { ...section, blocks: section.blocks.filter((_, j) => !checkBlocks.get(i)!.has(j)) } : section))
+      : lesson.sections,
+    experience: {
     ...experience,
     quiz: experience.quiz.filter((_, i) => !byBank.quiz.has(i)),
     methods: experience.methods.filter((_, i) => !byBank.methods.has(i)),
@@ -1278,7 +1301,9 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     const unresolvedBlocker = (note: { blocking: boolean; blockPath?: string | null }) => {
       if (!note.blocking) return false;
       const ref = bankItemRef(note.blockPath);
-      return !ref || !removedItems.has(bankItemPath(ref));
+      if (ref) return !removedItems.has(bankItemPath(ref));
+      const check = checkBlockRef(note.blockPath);
+      return !check || !removedItems.has(checkBlockPath(check));
     };
     if (!report.success || classifyNotes(report.data.notes).some(unresolvedBlocker)
       || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {

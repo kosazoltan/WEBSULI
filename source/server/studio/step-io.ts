@@ -1,4 +1,5 @@
 import { LESSON_QUALITY_CONTRACT } from "../../shared/lesson-quality";
+import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef } from "../../shared/bank-item-ref";
 import { z } from "zod";
 import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
@@ -73,6 +74,15 @@ export const outlineSchema = z.object({
 
 export type LessonOutline = z.infer<typeof outlineSchema>;
 
+/** Banktételre vagy lecke-blokkra mutató útvonal a tétel szintjén (al-útvonal nélkül); más érték változatlan. */
+function normalizeItemPath(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const bank = bankItemRef(value.trim());
+  if (bank) return bankItemPath(bank);
+  const block = checkBlockRef(value.trim());
+  return block ? checkBlockPath(block) : value;
+}
+
 export const lektorReportSchema = z.object({
   /**
    * Spec 2026-09-24 (lektor-tanítás a felvételi feladatlap öt futásából): a lektor a jegyzetek ELŐTT a lecke
@@ -94,7 +104,9 @@ export const lektorReportSchema = z.object({
         kind: z.enum(NOTE_KINDS),
         subkind: z.string().trim().min(1).max(32).optional(),
         message: z.string().trim().min(1).max(2000),
-        blockPath: z.string().trim().min(1).max(32).optional(),
+        // Review PR #142: a pontos al-útvonal (pl. `sections[10].blocks[3].options[1]`) a tétel szintjére normalizálva, hogy
+        // a 32 karakteres korlát (DB `varchar(32)`) ne buktassa a teljes jelentést; a kivétel a tételt úgyis egészben kezeli.
+        blockPath: z.preprocess(normalizeItemPath, z.string().trim().min(1).max(32).optional()),
       }),
     )
     .default([]),

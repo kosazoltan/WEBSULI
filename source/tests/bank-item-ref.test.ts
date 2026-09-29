@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bankItemPath, bankItemRef } from "../shared/bank-item-ref";
+import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef } from "../shared/bank-item-ref";
 import { bankUnitQuota } from "../shared/lesson-bank-plan";
 
 // Spec 2026-09-29-limit-banktetel-kivetel.
@@ -36,4 +36,24 @@ test("E6 célkvóta: a tartalékkal együtt ≥ 48 feladat és ≥ 80 kvíz, a m
     assert.ok(sum("taskCount") >= 45 && sum("quizCount") >= 75);
     assert.ok(quotas.every((q) => q.taskTarget >= q.taskCount && q.quizTarget >= q.quizCount));
   }
+});
+
+test("spec limit-check (E1): checkBlockRef — zárójeles, pontozott, al-útvonalas alak ugyanarra a blokkra", () => {
+  for (const path of ["sections[10].blocks[3]", "sections.10.blocks.3", "sections[10].blocks[3].options[1]", "sections.10.blocks.3.correctIndex"]) {
+    assert.deepEqual(checkBlockRef(path), { section: 10, block: 3 }, path);
+  }
+  for (const path of ["experience.quiz[1]", "sections[1]", "sections.1.heading", "", null, undefined]) {
+    assert.equal(checkBlockRef(path as string), null, String(path));
+  }
+  assert.equal(checkBlockPath({ section: 10, block: 3 }), "sections[10].blocks[3]");
+});
+
+test("spec limit-check (review): a lektor-jelentés a 32 karakternél hosszabb al-útvonalat a tétel szintjére normalizálja", async () => {
+  const { lektorReportSchema } = await import("../server/studio/step-io");
+  const parsed = lektorReportSchema.parse({ notes: [
+    { kind: "source_conflict", message: "két helyes opció", blockPath: "sections[10].blocks[3].options[1]" },
+    { kind: "source_conflict", message: "hibás kulcs", blockPath: "experience.quiz[65].correctIndex" },
+    { kind: "source_conflict", message: "rövid", blockPath: "sections.2.blocks.1" },
+  ] });
+  assert.deepEqual(parsed.notes.map((n) => n.blockPath), ["sections[10].blocks[3]", "experience.quiz[65]", "sections[2].blocks[1]"]);
 });
