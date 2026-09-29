@@ -27,3 +27,19 @@ test("E2 teljes gázzal a végsebesség nem változik", () => {
   for (let i = 0; i < 600; i++) p = stepVehicle(p, { throttle: 1, steer: 0, brake: false }, dt, { ...STATS, grip: 1 });
   assert.ok(Math.abs(p.speed - vmax) / vmax < 0.2, `teljes gázzal ${p.speed} vs ${vmax}`);
 });
+
+test("review #146 (P2): a motorfék folytonos a gázban — nincs ugrás a kis gázértékeknél (analóg tárcsa)", () => {
+  const after = (throttle: number) => {
+    const dt = 1 / 60;
+    let p = { x: 0, z: 0, heading: 0, speed: vmax * 0.5, anchored: false };
+    for (let i = 0; i < 60; i++) p = stepVehicle(p, { throttle, steer: 0, brake: false }, dt, { ...STATS, grip: 1 });
+    return p.speed;
+  };
+  let prev = after(0);
+  for (let t = 0.01; t <= 0.3001; t += 0.01) {
+    const v = after(t);
+    assert.ok(v >= prev - 1e-9, `nem monoton: ${t.toFixed(2)} gáznál ${v} < ${prev}`);
+    assert.ok(v - prev < vmax * 0.05, `ugrás ${t.toFixed(2)} gáznál: ${((v - prev) / vmax * 100).toFixed(1)}% vmax`);
+    prev = v;
+  }
+});

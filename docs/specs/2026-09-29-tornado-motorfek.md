@@ -26,6 +26,13 @@ A menet közbeni gyorsulás, a végsebesség és a kormányzás ne változzon.
 ## Dokumentált tesztváltozás
 `tests/tornado-collision.test.ts` „falmenti súrlódás 30, 60 és 144 Hz-en …”: a fő állítás, hogy a súrlódás
 frekvenciafüggetlen (±5%), változatlan. A mellékes, abszolút alsó határ (`s60 > 1`) motorfék nélküli kigurulásra volt
-kalibrálva; motorfékkel maga a kigurulás is erősebb (8 → 0,76 az 1 s alatt). Helyette a fal hatását egy fal
+kalibrálva; motorfékkel maga a kigurulás is erősebb (fal nélkül 8 → ≈ 2,07, fallal 8 → ≈ 0,76 az 1 s alatt). Helyette a fal hatását egy fal
 NÉLKÜLI kigurulási alapvonalhoz mérjük (`s60 < free · 0,99`: a súrlódás tényleg lassít), a „nem áll meg azonnal”
 feltétel megmarad (`> 5%`). Ez a súrlódás hatását különíti el, tehát szigorúbb. A konstanst nem a teszthez hangoltuk.
+
+## Review-kör (PR #146)
+- **A kigurulási alapvonal száma (Copilot): javítva.** A fal nélküli kigurulás 1 s alatt 8 → ≈ 2,07. A korábban leírt
+  0,76 a fallal együtt mért érték volt.
+- **Folytonosság az analóg gázban (Codex P2): javítva.** A motorfék nem kapcsol ugrásszerűen 0,05-nél: az
+  `ENGINE_BRAKE_PER_S · max(0, 1 − |gáz| / 0,25)` lineárisan fogy, 0,25-ös gáztól nulla. Teszt: 0–0,3 gáz között a
+  sebesség monoton, és nincs 5% vmax-nál nagyobb ugrás; a javítás előtt bukott.

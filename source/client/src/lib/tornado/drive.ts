@@ -92,6 +92,8 @@ export const STOPPED_SPEED = fromKm(8 / 3600);
  * óta 2,5 s múlva is ≈ 38%-kal gurult). Exponenciális, így dt-független; gázzal nincs hatása.
  */
 export const ENGINE_BRAKE_PER_S = 1.2;
+/** Review #146: e gázérték fölött nincs motorfék; alatta lineárisan erősödik (folytonos az analóg tárcsával). */
+export const ENGINE_BRAKE_FADE_THROTTLE = 0.25;
 
 export function stepVehicle(
   p: VehicleBody,
@@ -110,7 +112,10 @@ export function stepVehicle(
 
   let speed = p.speed + throttle * accel * dt;
   if (input.brake) speed *= 1 - Math.min(1, dt * 4);
-  else if (Math.abs(throttle) < 0.05) speed *= Math.exp(-ENGINE_BRAKE_PER_S * dt);
+  else {
+    const engineBrake = ENGINE_BRAKE_PER_S * Math.max(0, 1 - Math.abs(throttle) / ENGINE_BRAKE_FADE_THROTTLE);
+    if (engineBrake > 0) speed *= Math.exp(-engineBrake * dt);
+  }
   speed *= 1 - Math.min(1, dt * (0.15 + (1 - grip) * 1.2));
   speed = Math.max(-max * 0.4, Math.min(max, speed));
 
