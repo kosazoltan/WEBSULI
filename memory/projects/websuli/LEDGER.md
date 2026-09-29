@@ -584,3 +584,41 @@ Tulajdonosi kérés: „mindegyik játéknak javítsd a 3D grafikáját … hogy
 **#132 (tanári témafókusz)**: a kérés a jobban szűkíti a kötelező lefedettséget (a közös térkép érintetlen); saját 60 s-os szabály + tartalék modell (az élő 2. futásban a fókusz-hívás 180 s-ig akadt); csak kifejezett résztéma-kérés szűkít (`narrow`). Mérés: 5/5 döntés helyes. Merge `847a55d`.
 **Verifikáció:** minden PR előtt tsc, check:test, eslint 0, teljes node test (1481/1481 a végén), build; CI zöld (egy E2E-ingadozás újrafuttatva zöld); review-megjegyzések fájl:sor alapján feldolgozva, egy-egy cáfolva indoklással.
 **Nyitott:** a korábbi, fókusz nélküli próbalecke (anyag `096823e0…`, 14:46) törlése a tulajdonos döntése az admin felületen (az adatmodellben nincs „közzététel visszavonása”); a tanár konkrét számai (246, 459, 7341) nem kerülnek a tananyag szövegébe — a szerző a forrásban igazolt példákat használja; a tulajdonos feladatlapjának 8. kérdésében mind a négy válasz osztható 9-cel.
+
+## 2026-09-29 este — játékbankok, egy-helyes-válasz őr, Tornádó-fizika, lecke-dizájn, körlimit-kivétel (PR #133–#139)
+
+**#133 Aszteroida-grafika** (merge `277fedd`): részletes vadászhajó; a nebula „négyzetrácsos” felosztása mobilon
+a sin-hash mediump pontatlansága volt → periodikus zaj-textúra + dither. A tulajdonos mobilon visszaigazolta.
+**#134 Egyválasztós tétel: pontosan egy helyes válasz** (merge `1aa4713`): determinisztikus őr
+(`shared/single-choice-check.ts`: oszthatóság, számtan, egyenértékű opciók), opciónkénti bank-ellenőri ítélet a kulcs
+nélkül, fail-closed kapu (`choiceFlags`). Review: 4 valós lelet javítva (fail-open ítélet-hiánynál, dedup, kötött
+tagadás, lektor review-2). A tulajdonos PDF-feladatlapja nem a WebSuli terméke.
+**#135 Szólétra + Villám matek** (merge `e521ed9`): `pickUnseen` (futáson belül nincs ismétlés), Szólétra 96 → 468 tétel,
+3–12. évfolyam; Villám matek 41 tanári feladat/évfolyam, × és ÷ mindenhol; több gondolkodási idő (kérdés 30–45 s,
+kör 210–300 s). 954 tétel vak ellenőrzése (GPT-5.6 Terra + Grok 4.6).
+**#136 3–12. évfolyam az öt 3D játékban** (merge `d2b0f1d`): közös 900 tételes évfolyam-bank + `pickGradeQuiz`;
+vak ellenőrzés: 6 jelzés, mind a megoldó tévedése (kézzel újraszámolva). Szökőár-kvízidő 32/28/28 s, min. 24 s.
+Böngészőben mind az öt játék az évfolyam kérdését adta.
+**#137 Tornádó** (merge `f7eb197`): híd az út–folyó metszetekben (meder, rámpa), ütközés a tereptárgyakkal, a „magától
+hátrainduló autó” két oka (90°-kal elforgatott, túlerős szél; beragadó billentyű) + review (gamepad NaN-kapu, joystick
+reset, dt az ütközésnek).
+**#138 Lecke-dizájn + ábra-kontrasztőr** (merge `3840eb5`): a modell-SVG `currentColor` szövege sötét témában világos
+kártyára került (1,17:1) → `shared/svg-contrast.ts` mérő és javító, saját papír; a közzétett leckék is azonnal
+javulnak. Élesben igazolva a Hunyadi-leckén (felirat `#0f172a`, kontraszt ≥ 11:1). Review: 6 lelet javítva.
+**#139 Körlimit-kivétel** (merge `48d83f3`): élő próba (job `44b5afa1`, „Oszthatóság 4-gyel és 25-tel”) 1327 s után
+`error` — a 3. lektorkör két blokkolója csak banktétel volt. Most a tétel esik ki (kapu), nem a lecke; célkvóta
+tartalékkal (48/80), minimum 45/75 változatlan. Két meglévő teszt elvárása dokumentált spec-változással igazítva.
+**Egyéb:** a `.git/hooks/pre-push` a PowerShell `$?` → „True” másolás miatt SOHA nem blokkolt; javítva, bizonyítva.
+**#139–#144, #146 élő mérésekből (4/25 próbák 1–4.):** #139 körlimit-kivétel + 48/80 tartalék; #141 elérhetetlen Próba
+determinisztikusan (csak limiten / keret nélkül, #143) + célzott javítás csak kerettel (nem „Váratlan hiba”) + aktív
+jutalomküszöb + idempotens kapu; #142 a limiten blokkolt check blokk kivehető + blockPath-normalizálás (32 kar.);
+#144 lektor kimeneti keret 12k → 32k (négyforrásos leckénél csonkult); #140 Tornádó: tárgyak az úton kívül (325 átfedés),
+analóg érintéses kormány, 1,6× sebesség, simított kamera; #146 motorfék (2,5 s után 38% → < 5%; a „felengedés” E2E
+határeset volt). **Eredmény:** „Oszthatóság 4-gyel és 25-tel” a 4. futásra élesben (anyag 785d0677).
+**#145 (10 pálya + Szólétra 3D + német/francia):** közös `gradeLevels` + `GradeLevelPicker` mind a 7 játékban; Szólétra
+3D kérdéstábla (kontraszt ≥ 13,6), angol 627 / német 478 / francia 490 tétel, két modellcsalád vak ellenőrzésével.
+Élesben igazolva: 7/7 játékban pályaválasztó, a német és a francia választható, konzolhiba 0.
+**Mezopotámia (5. o., füzetfotó):** három gyártás — feltöltős (5d31dd69: teljes, de gépies „füzetlap szerint”),
+webes (d9ce054f: jól magyaráz, de hiányos), kombinált (8ed51fa9: jól magyaráz, de a társadalom rétegei és
+Ázsia/Közel-Kelet hiányoznak, Istár-kapu/Bábel tornya többlet). Nyitott: tulajdonosi döntés a kívánt változatról.
+**Nyitott:** a témafókusz első modellje (deepseek) élesben kétszer időtúllépett (≈ 150 s késés, a tartalék dönt).
