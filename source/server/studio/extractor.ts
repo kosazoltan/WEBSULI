@@ -65,7 +65,7 @@ export type ExtractorDeps = {
  * scope and extraction version remain significant. Cached maps keep their original
  * sourceFiles/sourceRef names together; a new upload must not rename old provenance.
  */
-export const EXTRACTION_VERSION = "source-ledger-6-transcript";
+export const EXTRACTION_VERSION = "source-ledger-7-file-coverage";
 export function extractionSignature(config: { model: string; systemPrompt: string; ocrModel: string; ocrPrompt: string; provider: string; cacheKeyPrompt?: string }): string {
   // Spec 2026-09-19: the cache key uses the stable prompt; a per-run skill suffix must not
   // change the input hash, or the same upload never finds its own map/lesson again.
@@ -205,22 +205,37 @@ export async function completeExtractionConcepts(raw: RawExtraction, files: Extr
   return result.concepts;
 }
 
-/** One independent source pass supplements omissions; it cannot replace valid originals. */
-export async function completeSourceCoverage(concepts: Concept[], files: ExtractorFile[], audit: (existing: Concept[]) => Promise<RawExtraction>): Promise<Concept[]> {
-  const missing = await audit(concepts);
+/**
+ * One independent source pass supplements omissions; it cannot replace valid originals.
+ * Spec 2026-09-29-forrasonkenti-fedettseg: after it, every source file without a single concept gets its own targeted
+ * pass (`perFile`, only that file, its own output budget) — one shared extraction call let long web texts crowd a short
+ * handwritten notebook out of the map entirely (live map 9c02a5bb: 49/49 concepts from the web pages).
+ */
+export async function completeSourceCoverage(
+  concepts: Concept[],
+  files: ExtractorFile[],
+  audit: (existing: Concept[]) => Promise<RawExtraction>,
+  perFile?: (file: ExtractorFile, existing: Concept[]) => Promise<RawExtraction>,
+): Promise<Concept[]> {
   const ids = new Set(concepts.map(c => c.id));
-  const additions = missing.concepts.map((item, index) => {
+  const adopt = (raw: RawExtraction, allowed: ExtractorFile[], prefix: string) => raw.concepts.map((item, index) => {
     const parsed = parseExtractorConcept(item, files);
-    if (!parsed.success || !files.some(f => f.name === parsed.data.sourceRef.file)) {
+    if (!parsed.success || !allowed.some(f => f.name === parsed.data.sourceRef.file)) {
       throw new Error("A forrásfedettség ellenőrzése hibás pótlást adott. Hiányos jegyzék nem menthető.");
     }
     let id = parsed.data.id;
     let suffix = 0;
-    while (ids.has(id)) id = `coverage-${index + 1}-${++suffix}`;
+    while (ids.has(id)) id = `${prefix}-${index + 1}-${++suffix}`;
     ids.add(id);
     return { ...parsed.data, id };
   });
-  return [...concepts, ...additions];
+  let all = [...concepts, ...adopt(await audit(concepts), files, "coverage")];
+  if (!perFile) return all;
+  for (const file of files) {
+    if (all.some(c => c.sourceRef.file === file.name)) continue;
+    all = [...all, ...adopt(await perFile(file, all), [file], "file-coverage")];
+  }
+  return all;
 }
 
 export async function extractKnowledgeMap(

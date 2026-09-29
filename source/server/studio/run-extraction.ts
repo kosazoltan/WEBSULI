@@ -189,7 +189,9 @@ export async function runExtraction(input: RunInput): Promise<string> {
   });
   input.onPhase?.("extract", "A teljes forrás és a fogalomjegyzék összevetése…");
   const covered = await completeSourceCoverage(valid, files, existing =>
-    callExtractorModel(files, input.scope, systemPrompt, model, undefined, existing));
+    callExtractorModel(files, input.scope, systemPrompt, model, undefined, existing),
+  // Spec 2026-09-29-forrasonkenti-fedettseg: a fogalom nélkül maradt fájl saját, egyfájlos pótlást kap.
+  (file, existing) => callExtractorModel([file], input.scope, systemPrompt, model, undefined, existing));
   if (covered.length > valid.length) await workflowFinding("coverage");
 
   const searchableText = files.map(file => file.extractedText).join("\n");
