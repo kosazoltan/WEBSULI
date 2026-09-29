@@ -24,7 +24,10 @@ export function disposeObjectTree(root: THREE.Object3D): void {
   const materials = new Set<THREE.Material>();
   root.traverse((obj) => {
     const withGeometry = obj as THREE.Object3D & { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
-    if (withGeometry.geometry instanceof THREE.BufferGeometry) geometries.add(withGeometry.geometry);
+    // Sprites share one module-level quad in three.js; it is not ours to free.
+    if (withGeometry.geometry instanceof THREE.BufferGeometry && !(obj instanceof THREE.Sprite)) {
+      geometries.add(withGeometry.geometry);
+    }
     const m = withGeometry.material;
     if (Array.isArray(m)) m.forEach((x) => materials.add(x));
     else if (m instanceof THREE.Material) materials.add(m);

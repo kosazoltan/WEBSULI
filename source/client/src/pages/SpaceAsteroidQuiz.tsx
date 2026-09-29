@@ -44,6 +44,18 @@ import { joystickToDirections } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { useCoarsePointer } from "@/hooks/useCoarsePointer";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import {
+  LOOK_BUDGET,
+  SparkleField,
+  applyRendererLook,
+  createGlowSprite,
+  createPostFx,
+  createRoomEnvironment,
+  detectLookTier,
+  glowTexture,
+  type PostFx,
+} from "@/game-engine/three-look";
+import { buildNebula, buildPlanet, buildStarLayer, type Nebula } from "@/game-engine/scenes/spaceBackdrop";
 
 /* =====================================================================
  * Galaktikus Aszteroida Kvíz Vadász – Three.js 3D űrharc
@@ -71,6 +83,15 @@ import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-ho
  * ===================================================================== */
 
 type EnemyKind = "rock" | "crystal" | "alien" | "fighter" | "boss";
+
+/** Szikra-robbanás színe ellenféltípusonként (a test fő színéhez igazítva). */
+const EXPLOSION_COLORS: Record<EnemyKind, string> = {
+  rock: "#ffb347",
+  crystal: "#6af2ff",
+  alien: "#b6ff6a",
+  fighter: "#ff5a4f",
+  boss: "#ffe66d",
+};
 
 type Quiz = {
   id?: string;
@@ -312,27 +333,47 @@ function buildPlayerShip(): THREE.Group {
   return group;
 }
 
-/** Kőszikla aszteroida — szabálytalan icosahedron-deformációval, kráteres. */
+/**
+ * Kőszikla aszteroida — sűrűbb icosahedron, többoktávos deformáció és
+ * csúcsonkénti színezés: a gerincek világosabbak, a kráterek sötétebbek, így
+ * a lapos árnyalás mellett is „kőnek" látszik, nem színes golyónak.
+ */
 function buildRockMesh(size: 1 | 2 | 3): THREE.Mesh {
   const radius = size === 3 ? 1.25 : size === 2 ? 0.78 : 0.46;
-  const geo = new THREE.IcosahedronGeometry(radius, 1);
-  // Deformáció — minden vertex sugarát kissé módosítjuk, így nem perfectly gömb.
+  const geo = new THREE.IcosahedronGeometry(radius, size === 1 ? 1 : 2);
   const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const base = new THREE.Color(size === 3 ? "#c56cf0" : size === 2 ? "#ff9f43" : "#ff6b6b");
+  const dark = base.clone().multiplyScalar(0.42);
+  const light = base.clone().lerp(new THREE.Color("#fff4e0"), 0.35);
+  const seed = Math.random() * 10;
+  const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
     const z = pos.getZ(i);
-    const n = 1 + (Math.sin(x * 4.7 + y * 3.1) + Math.cos(z * 2.4)) * 0.10;
+    const n1 = Math.sin(x * 3.1 + seed) * Math.cos(y * 2.7 - seed) * Math.sin(z * 3.3 + seed * 0.5);
+    const n2 = Math.sin(x * 7.9 + y * 5.3 + seed) * Math.cos(z * 6.1 - seed);
+    // Egy-két tompa kráter: a sugár bemélyed ott, ahol a zaj erősen negatív.
+    const crater = Math.min(0, n1 + 0.35) * 0.35;
+    const n = 1 + n1 * 0.14 + n2 * 0.05 + crater;
     pos.setXYZ(i, x * n, y * n, z * n);
+    const t = THREE.MathUtils.clamp(0.5 + (n - 1) * 3.2, 0, 1);
+    tmp.copy(dark).lerp(light, t);
+    colors[i * 3] = tmp.r;
+    colors[i * 3 + 1] = tmp.g;
+    colors[i * 3 + 2] = tmp.b;
   }
+  geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({
-    color: size === 3 ? "#ff44ff" : size === 2 ? "#ff9933" : "#ff5555",
-    roughness: 0.85,
-    metalness: 0.18,
+    color: "#ffffff",
+    vertexColors: true,
+    roughness: 0.78,
+    metalness: 0.12,
     flatShading: true,
-    emissive: size === 3 ? "#420942" : size === 2 ? "#3a1f0a" : "#3a0a0a",
-    emissiveIntensity: 0.35,
+    emissive: size === 3 ? "#2a0838" : size === 2 ? "#2e1606" : "#300808",
+    emissiveIntensity: 0.45,
   });
   return new THREE.Mesh(geo, mat);
 }
@@ -760,7 +801,14 @@ export default function SpaceAsteroidQuiz() {
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
     starfield: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
-    nebula: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+    nebula: Nebula;
+    brightStars: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+    planet: THREE.Group;
+    postFx: PostFx;
+    sparkles: SparkleField;
+    thrusterGlow: THREE.Sprite;
+    bulletGlow: { player: THREE.SpriteMaterial; enemy: THREE.SpriteMaterial };
+    reducedParticles: number;
     playerGroup: THREE.Group;
     thrusterMesh: THREE.Mesh<THREE.ConeGeometry, THREE.MeshStandardMaterial>;
     shieldMesh: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
@@ -1031,13 +1079,20 @@ export default function SpaceAsteroidQuiz() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const tier = detectLookTier();
+    const budget = LOOK_BUDGET[tier];
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: tier !== "low", alpha: false });
+    applyRendererLook(renderer, tier, { exposure: 0.95, shadows: false });
     renderer.setClearColor("#02041a");
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2("#03061f", 0.022);
+    scene.fog = new THREE.FogExp2("#050a2a", 0.012);
+    // Studio reflections make the metal hulls and crystals read as toys, not flat paint.
+    const environment = budget.environment ? createRoomEnvironment(renderer) : null;
+    if (environment) {
+      scene.environment = environment.texture;
+      scene.environmentIntensity = 0.3;
+    }
 
     // G-12: a kameraállás a fizika-modulból jön, mert teszt őrzi, hogy a
     // játékos teljes mozgássávja a képen belül maradjon. A korábbi értékekkel
@@ -1046,16 +1101,24 @@ export default function SpaceAsteroidQuiz() {
     camera.position.set(0, CAMERA_Y, CAMERA_Z);
     camera.lookAt(0, CAMERA_LOOK_Y, 0);
 
-    // Fények: enyhe ambient + erős keyfény fent + színes accentek
-    const ambient = new THREE.AmbientLight("#a4d4ff", 0.55);
-    scene.add(ambient);
-    const key = new THREE.DirectionalLight("#ffffff", 1.6);
-    key.position.set(4, 8, 9);
+    // Fények: hideg-meleg ég/talaj félgömb, erős kulcsfény elölről-fentről,
+    // és két színes peremfény HÁTULRÓL — ettől kap minden test neon kontúrt
+    // a sötét háttér előtt (a gyerekszem ezt olvassa „3D"-nek).
+    scene.add(new THREE.AmbientLight("#8fb8ff", 0.18));
+    scene.add(new THREE.HemisphereLight("#a9e4ff", "#3b1052", 0.55));
+    const key = new THREE.DirectionalLight("#fff6e8", 1.35);
+    key.position.set(5, 9, 12);
     scene.add(key);
-    const accentL = new THREE.PointLight("#ff00ff", 1.2, 28);
+    const rimL = new THREE.DirectionalLight("#ff4fd8", 1.6);
+    rimL.position.set(-10, 6, -8);
+    scene.add(rimL);
+    const rimR = new THREE.DirectionalLight("#27e6ff", 1.5);
+    rimR.position.set(10, -4, -8);
+    scene.add(rimR);
+    const accentL = new THREE.PointLight("#ff00ff", 14, 28, 1.6);
     accentL.position.set(-9, 4, 6);
     scene.add(accentL);
-    const accentR = new THREE.PointLight("#00f0ff", 1.2, 28);
+    const accentR = new THREE.PointLight("#00f0ff", 14, 28, 1.6);
     accentR.position.set(9, -4, 6);
     scene.add(accentR);
     // Lokális flash light, amit ütközéskor felvillantunk
@@ -1063,64 +1126,30 @@ export default function SpaceAsteroidQuiz() {
     flashLight.position.set(0, 0, 4);
     scene.add(flashLight);
 
-    // Csillagmező — több ezer pont, három rétegben (parallax dept).
-    const starCount = 1500;
-    const starPositions = new Float32Array(starCount * 3);
-    const starColors = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount; i++) {
-      starPositions[i * 3] = (Math.random() - 0.5) * GAME_W * 2.2;
-      starPositions[i * 3 + 1] = (Math.random() - 0.5) * GAME_H * 2.2;
-      starPositions[i * 3 + 2] = -randRange(2, 16);
-      const c = 0.5 + Math.random() * 0.5;
-      const tint = Math.random();
-      // Vegyes színek: fehér, halvány kék, halvány lila
-      if (tint < 0.7) {
-        starColors[i * 3] = c; starColors[i * 3 + 1] = c; starColors[i * 3 + 2] = c;
-      } else if (tint < 0.85) {
-        starColors[i * 3] = c * 0.6; starColors[i * 3 + 1] = c * 0.85; starColors[i * 3 + 2] = c;
-      } else {
-        starColors[i * 3] = c; starColors[i * 3 + 1] = c * 0.6; starColors[i * 3 + 2] = c;
-      }
-    }
-    const starGeo = new THREE.BufferGeometry();
-    starGeo.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
-    starGeo.setAttribute("color", new THREE.BufferAttribute(starColors, 3));
-    const starMat = new THREE.PointsMaterial({
-      size: 0.08,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.95,
-      sizeAttenuation: true,
-    });
-    const starfield = new THREE.Points(starGeo, starMat);
+    // Csillagmező — apró, sűrű réteg (ezt görgeti a starScrollY) + kevés,
+    // nagy fényes csillag lassabban: a két sebesség adja a mélységet.
+    const starCount = Math.round(1500 * Math.max(0.6, budget.particleScale));
+    const starfield = buildStarLayer(starCount, GAME_W * 2.2, GAME_H * 2.2, 2, 16, 0.16);
     scene.add(starfield);
+    const brightStars = buildStarLayer(Math.round(90 * Math.max(0.6, budget.particleScale)), GAME_W * 2.6, GAME_H * 2.6, 6, 14, 0.55);
+    scene.add(brightStars);
 
-    // Hatalmas távoli nebula plane (radial gradient texture procedural canvasszal)
-    const nebulaCanvas = document.createElement("canvas");
-    nebulaCanvas.width = 512; nebulaCanvas.height = 512;
-    const nebCtx = nebulaCanvas.getContext("2d");
-    if (nebCtx) {
-      const grad = nebCtx.createRadialGradient(256, 256, 30, 256, 256, 256);
-      grad.addColorStop(0, "rgba(120,40,180,0.55)");
-      grad.addColorStop(0.4, "rgba(40,80,200,0.30)");
-      grad.addColorStop(0.7, "rgba(0,40,90,0.15)");
-      grad.addColorStop(1, "rgba(0,0,0,0)");
-      nebCtx.fillStyle = grad;
-      nebCtx.fillRect(0, 0, 512, 512);
-      // Csillag-szem-szórás
-      for (let k = 0; k < 80; k++) {
-        nebCtx.fillStyle = "rgba(255,255,255," + (Math.random() * 0.5 + 0.3) + ")";
-        nebCtx.fillRect(Math.random() * 512, Math.random() * 512, 1.4, 1.4);
-      }
-    }
-    const nebulaTex = new THREE.CanvasTexture(nebulaCanvas);
-    nebulaTex.colorSpace = THREE.SRGBColorSpace;
-    const nebula = new THREE.Mesh(
-      new THREE.PlaneGeometry(GAME_W * 2.4, GAME_H * 2.4),
-      new THREE.MeshBasicMaterial({ map: nebulaTex, transparent: true, opacity: 0.85, depthWrite: false }),
-    );
-    nebula.position.set(0, 0, -10);
+    // Élő, gomolygó nebula (fbm-shader) a teljes háttérben.
+    const nebula = buildNebula(GAME_W * 4.2, GAME_H * 3.4, tier);
+    nebula.position.set(0, CAMERA_LOOK_Y, -18);
     scene.add(nebula);
+
+    // Távoli gyűrűs gázóriás a jobb felső sarokban — a játéktér szélén, hogy ne zavarjon.
+    const planet = buildPlanet(2.3);
+    planet.position.set(GAME_W * 0.5, GAME_H * 0.42, -14);
+    scene.add(planet);
+
+    // Szikrák: hajtómű-csóva, robbanás, találat — egyetlen rajzhívás.
+    const sparkles = new SparkleField(scene, Math.round(900 * budget.particleScale) + 120);
+    const bulletGlow = {
+      player: new THREE.SpriteMaterial({ map: glowTexture(), color: "#fff36b", transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }),
+      enemy: new THREE.SpriteMaterial({ map: glowTexture(), color: "#ff4d7a", transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }),
+    };
 
     // Játékos hajó
     const playerGroup = buildPlayerShip();
@@ -1134,6 +1163,10 @@ export default function SpaceAsteroidQuiz() {
     thrusterMesh.rotation.x = Math.PI;
     thrusterMesh.position.set(0, -1.0, 0.06);
     playerGroup.add(thrusterMesh);
+    // Izzó udvar a hajtómű körül — bloom nélkül (low/medium) is ragyog.
+    const thrusterGlow = createGlowSprite("#ffb43f", 1.5, 0.55);
+    thrusterGlow.position.set(0, -1.05, 0.1);
+    playerGroup.add(thrusterGlow);
 
     // Pajzs gyűrű (csak power esetén látható)
     const shieldMesh = new THREE.Mesh(
@@ -1162,8 +1195,12 @@ export default function SpaceAsteroidQuiz() {
     const pickupsGroup = new THREE.Group();
     scene.add(pickupsGroup);
 
+    const postFx = createPostFx(renderer, scene, camera, tier, { strength: 0.7, radius: 0.45, threshold: 0.86 });
+
     sceneRefs.current = {
       scene, camera, renderer, starfield, nebula, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh,
+      brightStars, planet, postFx, sparkles, thrusterGlow, bulletGlow,
+      reducedParticles: budget.particleScale,
       enemiesGroup, bulletsGroup, pickupsGroup,
       enemyMeshById: new Map(),
       bulletMeshById: new Map(),
@@ -1178,6 +1215,8 @@ export default function SpaceAsteroidQuiz() {
       const w = Math.max(1, Math.floor(rect.width));
       const h = Math.max(1, Math.floor(rect.height));
       renderer.setSize(w, h, false);
+      postFx.setSize(w, h);
+      sparkles.setViewportHeight(h * renderer.getPixelRatio(), CAMERA_FOV_DEG);
       camera.aspect = w / h;
       // A játéksík a z=0 körül van, a kamera z=22-nél áll.
       playerXLimitRef.current = playerXLimit(
@@ -1212,17 +1251,23 @@ export default function SpaceAsteroidQuiz() {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", handleResize);
       ro.disconnect();
-      // Dispose minden mesh / material / texture
-      starGeo.dispose();
-      starMat.dispose();
-      nebulaTex.dispose();
+      // Dispose minden mesh / material / texture (a közös glow-textúra kivételével)
+      sparkles.dispose();
+      const shared = glowTexture();
       scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Points || obj instanceof THREE.Sprite) {
+          if (!(obj instanceof THREE.Sprite)) obj.geometry.dispose();
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((m) => { m.map?.dispose(); m.dispose(); });
+          mats.forEach((m) => {
+            if (m.map && m.map !== shared) m.map.dispose();
+            m.dispose();
+          });
         }
       });
+      bulletGlow.player.dispose();
+      bulletGlow.enemy.dispose();
+      environment?.dispose();
+      postFx.dispose();
       renderer.dispose();
       sceneRefs.current = null;
     };
@@ -1632,6 +1677,9 @@ export default function SpaceAsteroidQuiz() {
       const refs = sceneRefs.current;
       if (refs) {
         refs.flashLight.intensity = 8.0;
+        burstAt.set(e.x, e.y, 0.3);
+        refs.sparkles.emit(burstAt, { count: 220, color: EXPLOSION_COLORS.boss, speed: 10, life: 1.5, size: 0.45 });
+        refs.sparkles.emit(burstAt, { count: 120, color: "#ff7af5", speed: 6, life: 1.2, size: 0.38 });
       }
       // Hatalmas pickup-shower jutalmul (3 life + 2 power + 1 shield)
       const showerKinds: PickupState["kind"][] = ["life", "life", "life", "power", "power", "shield"];
@@ -1734,11 +1782,20 @@ export default function SpaceAsteroidQuiz() {
         }
       }
     }
-    // Flash light pulzálás
+    // Flash light pulzálás + szikra-robbanás a test színében
     const refs = sceneRefs.current;
     if (refs) {
       refs.flashLight.position.set(e.x, e.y, 3);
       refs.flashLight.intensity = 3.5;
+      burstAt.set(e.x, e.y, 0.3);
+      refs.sparkles.emit(burstAt, {
+        count: Math.round(42 * Math.max(0.5, refs.reducedParticles)),
+        color: EXPLOSION_COLORS[e.kind],
+        speed: 6,
+        life: 0.85,
+        size: 0.3,
+      });
+      refs.sparkles.emit(burstAt, { count: 14, color: "#ffffff", speed: 3, life: 0.35, size: 0.5 });
     }
     shakeRef.current = 0.4;
   };
@@ -1749,7 +1806,11 @@ export default function SpaceAsteroidQuiz() {
       e.dead = true;
       shakeRef.current = 1.0;
       const refs = sceneRefs.current;
-      if (refs) refs.flashLight.intensity = 5.5;
+      if (refs) {
+        refs.flashLight.intensity = 5.5;
+        burstAt.set(playerRef.current.x, playerRef.current.y, 0.3);
+        refs.sparkles.emit(burstAt, { count: 36, color: "#ff4d6d", speed: 5, life: 0.7, size: 0.3 });
+      }
     }
     // AZONNALI takarítás: a tick a kvíz-fázisban korán kilép, a halott
     // ellenfél egyébként a kvíz-overlay alatt a pályán maradna (mesh + state).
@@ -1829,7 +1890,13 @@ export default function SpaceAsteroidQuiz() {
     sfxExplode();
     shakeRef.current = 1.5;
     const refs = sceneRefs.current;
-    if (refs) refs.flashLight.intensity = 7.0;
+    if (refs) {
+      refs.flashLight.intensity = 7.0;
+      // Bomba: táguló fénygyűrű a hajó körül.
+      burstAt.set(playerRef.current.x, playerRef.current.y, 0.2);
+      refs.sparkles.emit(burstAt, { count: 180, color: "#7df9ff", speed: 14, life: 0.9, size: 0.34 });
+      refs.sparkles.emit(burstAt, { count: 90, color: "#ff7af5", speed: 9, life: 1.1, size: 0.3 });
+    }
     // Combo-snapshot: a handleEnemyDestroyed kill-enként növelné — a bomba
     // után visszaállítjuk snapshot+1-re (1 akció = 1 combo-lépés).
     const comboBefore = comboRef.current;
@@ -1860,10 +1927,14 @@ export default function SpaceAsteroidQuiz() {
   };
 
   /* ===================== Render (Three.js) ===================== */
+  const exhaustOrigin = useMemo(() => new THREE.Vector3(), []);
+  const exhaustDir = useMemo(() => new THREE.Vector3(0, -1, 0), []);
+  const burstAt = useMemo(() => new THREE.Vector3(), []);
   const render = (now: number) => {
     const refs = sceneRefs.current;
     if (!refs) return;
-    const { scene, camera, renderer, starfield, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh, flashLight } = refs;
+    const { camera, starfield, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh, flashLight } = refs;
+    const frameDt = lastDtRef.current;
 
     // Csillagok pásztázása (lassú lefelé Y-mozgás), játék közben gyorsabb
     const moving = phaseRef.current === "play" && !pausedRef.current;
@@ -1873,6 +1944,17 @@ export default function SpaceAsteroidQuiz() {
       pos.setY(i, starScrollY(pos.getY(i), starDt, moving));
     }
     pos.needsUpdate = true;
+    // A fényes csillagok fele sebességgel sodródnak — parallaxis.
+    const bright = refs.brightStars.geometry.attributes.position;
+    for (let i = 0; i < bright.count; i++) {
+      bright.setY(i, starScrollY(bright.getY(i), starDt * 0.5, moving));
+    }
+    bright.needsUpdate = true;
+    if (!reducedMotionRef.current) {
+      refs.nebula.material.uniforms.time.value = now;
+      const spinner = refs.planet.userData.spin as THREE.Object3D | undefined;
+      if (spinner) spinner.rotation.y += frameDt * 0.05;
+    }
 
     // Játékos
     const p = playerRef.current;
@@ -1887,6 +1969,26 @@ export default function SpaceAsteroidQuiz() {
     const moving2 = phaseRef.current === "play";
     thrusterMesh.scale.set(1 + Math.random() * 0.2, moving2 ? 1.4 + Math.random() * 0.5 : 0.5, 1);
     thrusterMesh.material.opacity = moving2 ? 0.85 : 0.4;
+    refs.thrusterGlow.material.opacity = moving2 ? 0.6 + Math.random() * 0.25 : 0.3;
+    // Hajtómű-csóva: meleg szikrák a hajó mögött (mozgáscsökkentésnél ritkábban).
+    if (moving2 && playerGroup.visible && frameDt > 0) {
+      const rate = (reducedMotionRef.current ? 18 : 70) * refs.reducedParticles;
+      const count = Math.floor(rate * frameDt + Math.random());
+      if (count > 0) {
+        exhaustOrigin.set(p.x, p.y - 1.15, 0.1);
+        refs.sparkles.emit(exhaustOrigin, {
+          count,
+          color: Math.random() < 0.5 ? "#ffcf4a" : "#ff7a3d",
+          speed: 2.6,
+          life: 0.45,
+          size: 0.22,
+          direction: exhaustDir,
+          directionality: 0.85,
+          spread: 0.25,
+        });
+      }
+    }
+    refs.sparkles.update(frameDt);
     // Pajzs (sárga — power-up)
     shieldMesh.visible = powerLevelRef.current > 0;
     shieldMesh.rotation.z += 0.04;
@@ -1957,6 +2059,10 @@ export default function SpaceAsteroidQuiz() {
           new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8),
           new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }),
         );
+        // Lézer-udvar: közös anyag, ezért a lövedék törlése nem szabadítja fel.
+        const halo = new THREE.Sprite(b.fromEnemy ? refs.bulletGlow.enemy : refs.bulletGlow.player);
+        halo.scale.set(0.6, 1.1, 1);
+        mesh.add(halo);
         refs.bulletsGroup.add(mesh);
         refs.bulletMeshById.set(b.id, mesh);
       }
@@ -2020,7 +2126,7 @@ export default function SpaceAsteroidQuiz() {
     }
     camera.lookAt(0, CAMERA_LOOK_Y, 0);
 
-    renderer.render(scene, camera);
+    refs.postFx.render();
   };
 
   // Friss closure-ök publikálása a mount-olt RAF loop felé (stale closure fix):
