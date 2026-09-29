@@ -87,7 +87,8 @@ export function dedupeTiersByContent<T extends ContentItem>(tiers: readonly (rea
 /** A Szólétra öt szintje: 3–4., 5–6., 7–8., 9–10., 11–12. évfolyam. */
 export const LADDER_TIER_LABELS = ["Könnyű (A1)", "Közepes (A1–A2)", "Nehéz (A2)", "B1", "B2"] as const;
 
-function gradeBaseTier(grade: number): number {
+/** Az évfolyam kezdő szintje (sáv-eltolás nélkül). */
+export function ladderBaseTier(grade: number): number {
   const g = Number.isFinite(grade) ? Math.round(grade) : 3;
   if (g <= 4) return 0;
   if (g <= 6) return 1;
@@ -100,9 +101,9 @@ function gradeBaseTier(grade: number): number {
  * Évfolyam + közös sáv → szint. A sáv a `startingDifficulty(évfolyam)`-ból indul; egy nehezítés (+0,10) egy
  * szinttel feljebb, egy könnyítés (−0,15) egy szinttel lejjebb visz.
  */
-export function ladderTierIndex(grade: number, band: number, tierCount = LADDER_TIER_LABELS.length): number {
+export function ladderTierIndex(grade: number, band: number, tierCount: number = LADDER_TIER_LABELS.length): number {
   const offset = Math.round((band - startingDifficulty(grade)) / 0.15);
-  return Math.min(tierCount - 1, Math.max(0, gradeBaseTier(grade) + offset));
+  return Math.min(tierCount - 1, Math.max(0, ladderBaseTier(grade) + offset));
 }
 
 /**
