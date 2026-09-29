@@ -31,3 +31,11 @@ Ellenőrzés: `node --import tsx --test tests/topic-focus.test.ts tests/lesson-p
 2. Az új tesztek a régi kódon buknak (a két kódfájl ideiglenes visszaállításával igazolva).
 3. Élő próbagyártás a termelési kódúton (GPT-6 Luna szerzővel, #131 + e szelet együtt, helyben az éles DB-n) →
    vázlat-fejezetek vizsgálata, `done`, visszaolvasás, böngészős ellenőrzés; közben NINCS merge/deploy.
+
+## T5 — 2. kör (élő mérés után)
+1. Tesztek (saját, e PR-ban új fájl): `decideTopicFocus` hívólistával — az első dob → a második dönt; az első
+   használhatatlan (core nélküli) választ ad → a második dönt; mindkettő hibás → `null`, a naplóban az ok.
+2. `server/ai/studio-provider.ts`: `STUDIO_STEP_POLICY.topicFocus = { timeoutMs: 60_000, maxTokens: 8_000, reasoningEffort: "low", jsonMode: true }`.
+3. `server/studio/topic-focus.ts`: hívólista, cause-naplózás, pontosított prompt.
+4. `server/studio/lesson-pipeline-routes.ts` `focusForInstruction`: `[gateHelper, FALLBACK_MODELS.gateHelper]`, `policy: "topicFocus"`.
+5. Mérés: 5 valódi döntés a `94842a1c` térképén (E7); utána élő újragyártás (E8).

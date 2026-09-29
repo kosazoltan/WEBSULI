@@ -152,7 +152,7 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
 }
 import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
-import { resolveStudioModel } from "../ai/models";
+import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 
 /**
  * LS-2c — the admin endpoints that drive the lesson pipeline.
@@ -286,13 +286,16 @@ lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: R
   res.json(view);
 });
 
-/** Spec 2026-09-29 (tanári témafókusz): one cheap classification on the gateHelper model; failures keep the full map. */
+/**
+ * Spec 2026-09-29 (tanári témafókusz): one cheap classification on the gateHelper model, then its fallback (another
+ * provider) if the first stalls or answers unusably; if both fail the full map stays.
+ */
 async function focusForInstruction(mapId: string, instruction: string): Promise<TopicFocus | null> {
   const map = await (await createDrizzlePipelineStore()).loadMap(mapId);
   if (!map) return null;
-  const model = resolveStudioModel("gateHelper");
-  return decideTopicFocus(instruction, map.concepts, async (system, user) =>
-    (await callStepModel(createStudioStepProvider(model, "gateHelper"), { step: "pedagogue", policy: "gateHelper", model, system, user })).json);
+  const models = [...new Set([resolveStudioModel("gateHelper"), FALLBACK_MODELS.gateHelper].filter((m): m is string => !!m))];
+  return decideTopicFocus(instruction, map.concepts, models.map((model) => async (system: string, user: string) =>
+    (await callStepModel(createStudioStepProvider(model, "topicFocus"), { step: "pedagogue", policy: "topicFocus", model, system, user })).json));
 }
 
 /** The whole one-step chain, reporting each phase into the progress store. */

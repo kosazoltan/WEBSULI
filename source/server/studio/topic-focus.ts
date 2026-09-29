@@ -44,9 +44,10 @@ export function applyTopicFocus<T extends FocusableMap>(map: T, focus: TopicFocu
 
 export const TOPIC_FOCUS_SYSTEM = [
   "Tananyag-tervező segítő vagy. A tanár egy konkrét témát kért; a tudástár ennél bővebb forrásból készült.",
-  "Válaszd ki a fogalmak közül azokat, amelyek a KÉRT TÉMA tanításához szükségesek: a téma saját fogalmait,",
-  "és azokat az előfeltételeket, amelyek nélkül a téma nem érthető meg (például egy szabályhoz szükséges",
-  "alapfogalmakat). Ami a forrásban szerepel, de a kért témához nem kell, maradjon ki.",
+  "Válaszd ki a fogalmak közül MINDAZT, ami a KÉRT TÉMA tanításához kell: a téma szabályait, azok magyarázatát",
+  "(miért működnek), a témához tartozó kidolgozott példa-fogalmakat, a témán belüli összefüggéseket, és azokat az",
+  "előfeltételeket, amelyek nélkül a téma nem érthető meg. Kétes esetben, ha a fogalom a kért témáról szól,",
+  "vedd be. Ami a forrásban szerepel, de más témához tartozik (például más számra vonatkozó szabály), maradjon ki.",
   'Válaszolj kizárólag ilyen JSON-nal: { "focusIds": ["<localId>", "…"] }',
 ].join(" ");
 
@@ -56,20 +57,35 @@ export function topicFocusUserMessage(instruction: string, concepts: MapConcept[
   return `A tanár kérése:\n${instruction.trim()}\n\nFogalmak (soronként egy JSON):\n${lines.join("\n")}`;
 }
 
+export type FocusCaller = (system: string, user: string) => Promise<unknown>;
+
+function describe(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error && error.cause instanceof Error ? ` (ok: ${error.cause.message})` : "";
+  return `${message}${cause}`.slice(0, 300);
+}
+
 /**
- * One cheap classification call. Any failure keeps the full map (the pre-2026-09-29 behaviour) — a missing
- * focus makes a broader lesson, never a broken one.
+ * Classification with a fallback chain (spec 2026-09-29, 2. kör: live, the only call stalled for 180 s). Each caller
+ * is tried in order; a failure OR an unusable answer (no core, everything, bad shape) moves to the next one. If none
+ * gives a usable focus, the full map stays (the pre-2026-09-29 behaviour) — a broader lesson, never a broken one.
  */
 export async function decideTopicFocus(
   instruction: string | undefined,
   concepts: MapConcept[],
-  call: (system: string, user: string) => Promise<unknown>,
+  callers: FocusCaller[],
 ): Promise<TopicFocus | null> {
   if (!instruction?.trim() || concepts.length === 0) return null;
-  try {
-    return validateTopicFocus(concepts, await call(TOPIC_FOCUS_SYSTEM, topicFocusUserMessage(instruction, concepts)));
-  } catch (error) {
-    logger.warn(`[STUDIO] Témafókusz nem készült, a teljes térképpel megy tovább: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
-    return null;
+  const user = topicFocusUserMessage(instruction, concepts);
+  for (const [index, call] of callers.entries()) {
+    try {
+      const focus = validateTopicFocus(concepts, await call(TOPIC_FOCUS_SYSTEM, user));
+      if (focus) return focus;
+      logger.warn(`[STUDIO] Témafókusz: a(z) ${index + 1}. modell válasza nem használható (nincs kulcsfogalom vagy mindent kijelölt).`);
+    } catch (error) {
+      logger.warn(`[STUDIO] Témafókusz: a(z) ${index + 1}. modell hívása hibázott: ${describe(error)}`);
+    }
   }
+  logger.warn("[STUDIO] Témafókusz nem készült, a teljes térképpel megy tovább.");
+  return null;
 }

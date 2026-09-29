@@ -36,12 +36,32 @@ test("applyTopicFocus: a fókuszon kívüli core/supporting extra lesz — máso
 
 test("decideTopicFocus: üres kérésnél nincs hívás; hibánál nincs fókusz; érvényes válasznál van", async () => {
   let calls = 0;
-  assert.equal(await decideTopicFocus("   ", concepts, async () => { calls++; return {}; }), null);
+  assert.equal(await decideTopicFocus("   ", concepts, [async () => { calls++; return {}; }]), null);
   assert.equal(calls, 0);
-  assert.equal(await decideTopicFocus("Oszthatóság 3-mal és 9-cel", concepts, async () => { throw new Error("modell nem elérhető"); }), null);
+  assert.equal(await decideTopicFocus("Oszthatóság 3-mal és 9-cel", concepts, [async () => { throw new Error("modell nem elérhető"); }]), null);
   let prompt = "";
-  const focus = await decideTopicFocus("Oszthatóság 3-mal és 9-cel", concepts, async (_system, user) => { prompt = user; return { focusIds: ["c3", "c9", "s1"] }; });
+  const focus = await decideTopicFocus("Oszthatóság 3-mal és 9-cel", concepts, [async (_system, user) => { prompt = user; return { focusIds: ["c3", "c9", "s1"] }; }]);
   assert.deepEqual(focus, { localIds: ["c3", "c9", "s1"], demoted: 2 });
   assert.match(prompt, /Oszthatóság 3-mal és 9-cel/);
   assert.match(prompt, /c3/);
+});
+
+/* Spec 2026-09-29, 2. kör (élő mérés): a fókusz-hívás egyszer 180 s-ig akadt, és nem volt tartalék. */
+test("decideTopicFocus: az első hívó hibája vagy használhatatlan válasza után a következő dönt", async () => {
+  const good = async () => ({ focusIds: ["c3", "c9", "s1"] });
+  assert.deepEqual(await decideTopicFocus("3 és 9", concepts, [async () => { throw new Error("időtúllépés"); }, good]), { localIds: ["c3", "c9", "s1"], demoted: 2 });
+  assert.deepEqual(await decideTopicFocus("3 és 9", concepts, [async () => ({ focusIds: ["s1"] }), good]), { localIds: ["c3", "c9", "s1"], demoted: 2 }, "core nélküli válasz után a tartalék");
+  const order: string[] = [];
+  assert.equal(await decideTopicFocus("3 és 9", concepts, [
+    async () => { order.push("a"); throw new Error("első", { cause: new Error("ETIMEDOUT") }); },
+    async () => { order.push("b"); throw new Error("második"); },
+  ]), null);
+  assert.deepEqual(order, ["a", "b"]);
+});
+
+test("a fókusz-prompt a szabályokat, példákat és előfeltételeket is kéri, kétes esetben bevételt", async () => {
+  const { TOPIC_FOCUS_SYSTEM } = await import("../server/studio/topic-focus");
+  assert.match(TOPIC_FOCUS_SYSTEM, /előfeltétel/);
+  assert.match(TOPIC_FOCUS_SYSTEM, /példa/);
+  assert.match(TOPIC_FOCUS_SYSTEM, /kétes/i);
 });

@@ -99,6 +99,10 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   // változtatjuk. A kimenet csak a folt (néhány ezer token), a 16k keret a gondolkodással együtt is elég.
   visuals: { timeoutMs: 300_000, maxTokens: 16_000, reasoningEffort: "medium" },
   gateHelper: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
+  // Spec 2026-09-29 (tanári témafókusz, 2. kör): mérve 13–18 s egy döntés; élesben egyszer 180 s-ig akadt.
+  // Rövid saját határidő, hogy akadásnál a tartalék modell még időben dönthessen; JSON-mód (deepseek-v4-flash-en a
+  // bank óta használt). A kimenet néhány azonosító, a gondolkodással együtt 8k bőven elég.
+  topicFocus: { timeoutMs: 60_000, maxTokens: 8_000, reasoningEffort: "low", jsonMode: true },
   quizPolish: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
 };
 

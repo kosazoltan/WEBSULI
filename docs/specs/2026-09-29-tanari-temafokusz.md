@@ -62,3 +62,18 @@ lefedettség nem követeli őket. A tanári kérés (feladattípusok, példák) 
 - **E5** Kapuk zöldek; az új tesztek a javítás előtti kódon buknak.
 - **E6** Élő próbagyártás („Oszthatóság 3-mal és 9-cel”): a vázlat fejezeteinek többsége a 3-mal/9-cel való
   oszthatóságról szól, és a lecke `done`, visszaolvasva, böngészőben ellenőrizve.
+
+## Élő mérés és 2. kör (2026-09-29)
+Élő próbagyártás a #131 + e szelet integrációjával (job `aa0e61d7…`, Studio-futás `94842a1c…`): `done`, 804 s, a
+lecke közzétéve — DE a fókusz nem jött létre: „Témafókusz nem készült … a szolgáltató hibát jelzett”, 183 s-mal a
+tudástár-újrahasznosítás után (a `gateHelper`-szabály 180 s-os határideje; `maxRetries: 0`; az ok nem naplózódott).
+Közvetlen mérés ugyanazzal a térképpel és kéréssel (3 hívás, deepseek-v4-flash): 13,4 / 13,6 / 18,4 s, mind sikeres,
+de ingadozó választás: {c22,c23,c21,c27,c28}, {c23,c22,c1}, {c1,c21,c22,c23,c27}.
+Döntések:
+1. Saját szabály `topicFocus`: 60 s határidő, 8k token, `low` effort, JSON-mód (`studio-provider.ts`).
+2. `decideTopicFocus(instruction, concepts, callers[])`: a hívók sorban — a `gateHelper` elsődleges és tartalék modellje
+   (`FALLBACK_MODELS.gateHelper`, más szolgáltató); hiba VAGY használhatatlan (validálás után `null`) válasz esetén a
+   következő; a hiba oka (cause) a naplóba kerül.
+3. Prompt: a téma szabályai, magyarázatai, kidolgozott példái és előfeltételei mind kellenek; kétes esetben be kell venni.
+Elfogadás kiegészítés: **E7** 5 egymás utáni valódi döntésből mind tartalmazza a `c22`, `c23` fogalmat és legalább egy
+számjegyösszeg/maradék-fogalmat (`c21`, `c27` vagy `c28`); **E8** az élő újragyártásban `topicFocus` létrejön.
