@@ -15,8 +15,8 @@ A spec és ez a fájl mindkét ágon azonos tartalommal szerepel.
    A `SpeedQuizMath.tsx` innen importál; a `questionSecondsFor` ezt hívja.
 2. **Szólétra** `source/client/src/pages/WordLadderHuEn.tsx`: az évfolyam-választó gombjain `min-h-[44px]`.
 3. **Szökőár** `source/client/src/pages/TsunamiEscapeEnglish.tsx`:
-   - `QUIZ_TIMEOUT_SEC` 30/26/24;
-   - új tiszta modul `source/client/src/game-engine/tsunamiTiming.ts`: `QUIZ_TIMEOUT_SEC`, `QUIZ_MIN_SEC = 20`,
+   - `QUIZ_TIMEOUT_SEC` 32/28/28;
+   - új tiszta modul `source/client/src/game-engine/tsunamiTiming.ts`: `QUIZ_TIMEOUT_SEC`, `QUIZ_MIN_SEC = 24`,
      `tsunamiQuizSeconds(difficulty, band)` = `Math.max(QUIZ_MIN_SEC, adaptiveTimeBudget(QUIZ_TIMEOUT_SEC[d], band))`;
    - minden `setQuizTimeLeft(...)` hívás ezt használja.
 4. **Tesztek (új):**
