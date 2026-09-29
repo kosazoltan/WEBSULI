@@ -50,6 +50,7 @@ import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { correctionAuditText, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 import { callStepModel } from "./run-step";
+import { decideTopicFocus, type TopicFocus } from "./topic-focus";
 import { createStudioStepProvider } from "../ai/studio-provider";
 import type { MapConcept } from "./coverage";
 
@@ -285,6 +286,15 @@ lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: R
   res.json(view);
 });
 
+/** Spec 2026-09-29 (tanári témafókusz): one cheap classification on the gateHelper model; failures keep the full map. */
+async function focusForInstruction(mapId: string, instruction: string): Promise<TopicFocus | null> {
+  const map = await (await createDrizzlePipelineStore()).loadMap(mapId);
+  if (!map) return null;
+  const model = resolveStudioModel("gateHelper");
+  return decideTopicFocus(instruction, map.concepts, async (system, user) =>
+    (await callStepModel(createStudioStepProvider(model, "gateHelper"), { step: "pedagogue", policy: "gateHelper", model, system, user })).json);
+}
+
 /** The whole one-step chain, reporting each phase into the progress store. */
 export async function runOneStep(
   runId: string,
@@ -435,8 +445,13 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   const corrections = await correctMapFromOwner(mapId, instruction, files.some((f) => f.kind === "image"));
   if (corrections.length) updateRun(runId, { phase: "extract", detail: `Forrás-helyesbítés: ${corrections.length} fogalom (${corrections.map((c) => c.term ?? c.localId).join(", ").slice(0, 200)})` });
 
+  // 2d) Spec 2026-09-29 (tanári témafókusz): with a teacher request, the concepts outside the requested topic
+  // are `extra` in THIS job (the shared map stays untouched — other runs reuse it by source hash).
+  const topicFocus = instruction ? await focusForInstruction(mapId, instruction) : null;
+  if (topicFocus) updateRun(runId, { phase: "extract", detail: `Témafókusz: a kért témához ${topicFocus.localIds.length} fogalom kötelező, ${topicFocus.demoted} kiegészítő lett.` });
+
   // 3) Lesson job on the freshly built map, driven with outline auto-approval.
-  const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom }, {}, { instruction, corrections });
+  const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom }, {}, { instruction, corrections, topicFocus });
   if (!started.ok) {
     updateRun(runId, { phase: "error", error: started.reason, mapId });
     return;
