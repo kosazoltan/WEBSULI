@@ -117,7 +117,9 @@ export function createStudioStepProvider(model: string, step?: string) {
     return createStudioProvider(model, LEKTOR_TIMEOUT_MS, LEKTOR_MAX_TOKENS, {
       maxRetries: 0,
       // 2026-09-20 (tulajdonosi utasítás, LLM-as-judge kutatás): az értelmező lektorálás
-      // gondolkodást igényel — medium; a lektor kimenete kicsi (≈ 0,4–2k token), az ár nem nő érdemben.
+      // gondolkodást igényel — medium. A kimenet (önálló megoldások + jegyzetek) és a gondolkodás ugyanabból a
+      // LEKTOR_MAX_TOKENS keretből fogy; a 12k élesben csonkult (spec 2026-09-29-lektor-tokenkeret). Csak a ténylegesen
+      // használt token kerül pénzbe, így a nagyobb keret a kis leckéknél nem drágít.
       ...(providerForModel(model) === "xai" ? { apiMode: "responses", reasoningEffort: "medium" } : {}),
     });
   }
