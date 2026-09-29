@@ -154,6 +154,23 @@ export type ArcOptions = {
   minChecksForProba?: number;
 };
 
+/**
+ * Spec 2026-09-29-kapu-proba-keret (1. döntés): a `proba_unreachable` lelet saját második javaslata — „kapcsold ki a
+ * Próbát” — determinisztikusan, modellkör nélkül. Csak a 0 < kérdés < küszöb szakasz Próbája kapcsol ki; az eredeti
+ * lecke nem mutálódik.
+ */
+export function disableUnreachableProba(lesson: Lesson, options: ArcOptions = {}): { lesson: Lesson; disabled: number[] } {
+  const min = options.minChecksForProba ?? DEFAULT_REWARD_POLICY.minCorrectForCoupon;
+  const disabled: number[] = [];
+  const sections = lesson.sections.map((section, idx) => {
+    const checks = section.blocks.filter((b) => b.kind === "check").length;
+    if (!section.probaEnabled || checks === 0 || checks >= min) return section;
+    disabled.push(idx);
+    return { ...section, probaEnabled: false };
+  });
+  return { lesson: disabled.length ? { ...lesson, sections } : lesson, disabled };
+}
+
 export function checkLessonArc(lesson: Lesson, options: ArcOptions = {}): ArcReport {
   const minChecksForProba =
     options.minChecksForProba ?? DEFAULT_REWARD_POLICY.minCorrectForCoupon;

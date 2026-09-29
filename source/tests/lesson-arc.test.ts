@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   MAX_DRILL_RATIO,
   checkLessonArc,
+  disableUnreachableProba,
   type ArcCode,
 } from "../shared/lesson-arc";
 import type { Block, Lesson, Section } from "../shared/lesson-schema";
@@ -398,4 +399,21 @@ test("M-6 a küszöb átadható, hogy a hangolt jutalom-táblát kövesse", () =
 
   const laza = checkLessonArc(l, { minChecksForProba: 2 }).findings.map((f) => f.code);
   assert.ok(!laza.includes("proba_unreachable"), "2-es küszöbnél a 2 kérdés elég");
+});
+
+
+/* Spec 2026-09-29-kapu-proba-keret (1. döntés): az elérhetetlen Próba determinisztikusan kikapcsol. */
+test("disableUnreachableProba: csak a 0 < kérdés < küszöb szakasz Próbája kapcsol ki; a lelet eltűnik", () => {
+  const egy = section([explain(), animate(), example(), check(), recap()], "Egy kérdés");
+  const nulla = section([explain(), animate(), example(), recap()], "Nincs kérdés");
+  const sok = section([explain(), animate(), example(), check(), check(), check(), check(), check(), recap()], "Öt kérdés");
+  const l = lesson([egy, nulla, sok]);
+  const { lesson: fixed, disabled } = disableUnreachableProba(l);
+  assert.deepEqual(disabled, [0]);
+  assert.equal(fixed.sections[0].probaEnabled, false);
+  assert.equal(fixed.sections[1].probaEnabled, l.sections[1].probaEnabled, "kérdés nélküli szakasz érintetlen");
+  assert.equal(fixed.sections[2].probaEnabled, l.sections[2].probaEnabled, "elég kérdésnél érintetlen");
+  assert.equal(l.sections[0].probaEnabled, true, "az eredeti lecke nem mutálódik");
+  assert.equal(checkLessonArc(fixed).findings.some((f) => f.code === "proba_unreachable"), false);
+  assert.deepEqual(disableUnreachableProba(fixed).disabled, [], "idempotens");
 });

@@ -23,13 +23,13 @@ import { visualWorld } from "../shared/lesson-visuals";
 import { fromMapBody } from "../server/studio/from-map-body";
 import { AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
-import { lessonSchema, type Lesson } from "../shared/lesson-schema";
+import { lessonSchema, type Block, type Lesson } from "../shared/lesson-schema";
 import { classifyNotes, type LektorNote } from "../server/studio/lektor";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
-import { executeWorkflow, workflowPhase, WorkflowWaiting, redactWorkflowError } from "../server/workflows/engine";
+import { executeWorkflow, workflowPhase, workflowStepVisitsLeft, WorkflowWaiting, redactWorkflowError } from "../server/workflows/engine";
 import { BLIND_SOLVER_MODEL, sourceHashOf } from "../server/studio/blind-solver";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
@@ -2098,4 +2098,58 @@ test("spec limit-banktetel (review): ha a bank-ellenőr ugyanarra a tételre má
   assert.equal((await runPipelineStep("lim-dup", dupDeps)).ok, false);
   assert.equal(log.length, 0);
   assert.match(job.error ?? "", /Hibás banktétel maradt a limiten/);
+});
+
+
+/* Spec 2026-09-29-kapu-proba-keret (élő újramérés, job 697296d4 / e880571c). */
+async function gateAtLimitSetup(id: string, mutate: (lesson: Lesson) => void) {
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept];
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
+  mutate(lesson);
+  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+  deps.store.seed({ id, mapId: "m1", lessonId: `lesson-${id}`, step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version } });
+  deps.store.lessons.set(`lesson-${id}`, { id: `lesson-${id}`, mapId: "m1", json: lesson });
+  const reviewed = await runPipelineStep(id, deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "gate", JSON.stringify(reviewed));
+  await advanceJob(id, reviewed.next, { status: "running" }, deps);
+  return { deps, lesson };
+}
+const oneAreaCheck: Block = { kind: "check", question: "Melyik képlet adja a háromszög területét?", options: ["alap · magasság : 2", "alap + magasság"], correctIndex: 0, feedbackPerOption: ["Igen, a szorzat fele.", "Nem, a területhez szorozni kell."], coversConceptIds: ["area"] };
+
+test("spec kapu-proba (E1): a limiten egyetlen elérhetetlen Próba → a kapu kikapcsolja és publikál, nincs szerzői kör", async () => {
+  const { deps } = await gateAtLimitSetup("proba-limit", (l) => {
+    l.sections[0].probaEnabled = true;
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, oneAreaCheck);
+  });
+  const log = published(deps.store);
+  const gated = await runPipelineStep("proba-limit", deps);
+  assert.ok(gated.ok, `publikál, nem szerzői kör: ${JSON.stringify(gated)}`);
+  assert.notEqual(gated.ok && gated.next.step, "author");
+  assert.equal(log.length, 1);
+  const saved = deps.store.lessons.get("lesson-proba-limit")!.json as Lesson;
+  assert.equal(saved.sections[0].probaEnabled, false);
+  assert.deepEqual(deps.store.jobs.get("proba-limit")!.output?.probaDisabled, [0]);
+});
+
+test("spec kapu-proba (E2): elfogyott szerzői keretnél a kapu célzott javítás helyett tiszta hibával áll meg (nincs kivétel)", async () => {
+  // A (u) teszt kapu-lelete: egy check blokk idegen fogalom címkéjével (megalapozatlan).
+  const { deps } = await gateAtLimitSetup("gate-budget", (l) => {
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, { ...oneAreaCheck, question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
+  });
+  deps.store.maps.get("m1")!.concepts.push({ localId: "idegen", term: "Pitagorasz-tétel", examWeight: "supporting" } as MapConcept);
+  const { store } = memoryWorkflows();
+  let outcome: Awaited<ReturnType<typeof runPipelineStep>> | undefined;
+  await assert.rejects(executeWorkflow(store, { id: "gate-budget-run", owner: "test", mode: "studio" }, async () => {
+    await workflowPhase("pedagogue");
+    for (let guard = 0; workflowStepVisitsLeft("author") > 0 && guard < 20; guard++) {
+      for (const step of ["author", "animator", "lektor"]) await workflowPhase(step);
+    }
+    assert.equal(workflowStepVisitsLeft("author"), 0);
+    outcome = await runPipelineStep("gate-budget", deps);
+    throw new Error("teszt-vég: a kapu döntött");
+  }), /teszt-vég: a kapu döntött/);
+  assert.equal(outcome?.ok, false, `nincs szerzői kör kerett nélkül: ${JSON.stringify(outcome)}`);
+  assert.match(deps.store.jobs.get("gate-budget")!.error ?? "", /tanítása hiányos \(a célzott javításhoz nincs több lépéskeret\)/);
 });

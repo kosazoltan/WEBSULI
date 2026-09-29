@@ -58,7 +58,7 @@ import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolutions, sourceHas
 import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, mergeVerifierRetry, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag } from "./bank-verifier";
 import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 import { autofixOutline } from "./tools/outline-autofix";
-import { checkLessonArc } from "../../shared/lesson-arc";
+import { checkLessonArc, disableUnreachableProba } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import type { ZodError } from "zod";
 import { LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
@@ -1152,7 +1152,17 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
   if (choiceGate.removed.length) {
     await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
     job.output = { ...job.output, lesson: parsed.data, choiceGate: { removed: choiceGate.removed } };
-    logger.warn(`[STUDIO/GATE] Egyválasztós hibás banktétel kivéve (${job.id}): ${choiceGate.removed.join(", ")}`);
+    logger.warn(`[STUDIO/GATE] Hibás banktétel kivéve (egyválasztós vagy a körlimiten maradt; ${job.id}): ${choiceGate.removed.join(", ")}`);
+  }
+
+  // Spec 2026-09-29-kapu-proba-keret (1. döntés): az elérhetetlen Próba (kevesebb kérdés, mint a jutalom küszöbe)
+  // determinisztikusan kikapcsol — a lelet saját javaslata, modellkör nélkül.
+  const proba = disableUnreachableProba(parsed.data);
+  if (proba.disabled.length) {
+    parsed.data = proba.lesson;
+    await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+    job.output = { ...job.output, lesson: parsed.data, probaDisabled: proba.disabled };
+    logger.warn(`[STUDIO/GATE] Elérhetetlen Próba kikapcsolva (${job.id}): szakasz ${proba.disabled.map((i) => i + 1).join(", ")}`);
   }
 
   const map = focusedMapOf(await store.loadMap(job.mapId), job);
@@ -1197,6 +1207,12 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
       // munkát dobott el. Ha minden lelet fejezethez köthető, egy CÉLZOTT szerzői javítás (≈ 11 s
       // + a változott csomag) jár jobonként egyszer; a workflow látogatási kerete tovább véd.
       const targets = targetedRepairSections(parsed.data, [], gateOutput as GateFeedbackLike);
+      // Spec 2026-09-29-kapu-proba-keret (2. döntés; élő újramérés e880571c): célzott javítás csak akkor, ha a javítási
+      // út minden lépésére van még látogatási keret — különben a motor kivételt dob („Váratlan hiba”).
+      const repairBudget = ["author", "animator", "lektor", "gate"].every((s) => workflowStepVisitsLeft(s) > 0);
+      if (targets && !job.output?.targetedGateRepairRound && !repairBudget) {
+        return fail(store, job, `A fúziós lecke tanítása hiányos (a célzott javításhoz nincs több lépéskeret): ${gate.reasons.join("; ")}`);
+      }
       if (targets && !job.output?.targetedGateRepairRound) {
         logger.warn(`[STUDIO/GATE] Kapu-lelet a limiten, célzott javítás (${job.id}): fejezet ${targets.map((i) => i + 1).join(", ")}`);
         await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: gateOutput, targetedGateRepairRound: job.round + 1 }, error: null, finishedAt: null });
