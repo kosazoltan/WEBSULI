@@ -96,6 +96,35 @@ test("a chunkhatáron átnyúló híd varrat nélkül folytatódik a szomszéd c
   assert.ok(seams > 0, "the long river-side bridges cross chunk edges");
 });
 
+test("a hídpálya keresztben sík, és mellette a meder mindenhol a pálya alatt van", () => {
+  // Browser check 2026-09-29: the road's V-shaped cutting (up to ~6 units on a hill) made the first
+  // deck a trough, with the river banks beside it standing ABOVE the deck.
+  const r = HALF_WORLD / CHUNK_SIZE;
+  let samples = 0;
+  for (let cx = -r; cx <= r; cx++) {
+    for (let cz = -r; cz <= r; cz++) {
+      for (const s of bridgeSpansInChunk(cx, cz)) {
+        for (let t = s.from; t <= s.to; t += 3) {
+          const at = (across: number) => (s.axis === "x" ? { x: t, z: s.line + across } : { x: s.line + across, z: t });
+          const c = at(0);
+          const centre = deckSurfaceHeight(c.x, c.z);
+          for (const across of [-9, -4.5, 4.5, 9]) {
+            const e = at(across);
+            assert.ok(Math.abs(deckSurfaceHeight(e.x, e.z) - centre) < 1, `deck not flat at ${JSON.stringify(e)}`);
+          }
+          for (const beside of [-14, 14]) {
+            const b = at(beside);
+            if (!isWater(b.x, b.z)) continue;
+            samples++;
+            assert.ok(terrainHeight(b.x, b.z) < centre - 1.5, `river bed beside the deck at ${JSON.stringify(b)} is not below it`);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(samples > 50, `checked ${samples} river samples beside decks`);
+});
+
 test("kellék nem áll hídon", () => {
   const r = HALF_WORLD / CHUNK_SIZE;
   for (let cx = -r; cx < r; cx++) {

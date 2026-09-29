@@ -65,6 +65,11 @@ ez nem hibás, csak a TouchControls ref-jét is nullázni kell `blur`/`visibilit
   ez pontos (`max(0, |rc − xL| − 9)`), vízszintesnél 5 mintából (−9, −4,5, 0, 4,5, 9) számolt.
 - D3 (hídmagasság): `deckSurfaceHeight = alapmagasság (meder nélkül) + 0,35`; `groundHeight` = híd-zónában
   ez, máshol `terrainHeight`. A jármű, a kamera és a porfelhő `groundHeight`-ot használ.
+- D3b (rámpa, a böngészős próba után): az útbevágás V-alakú (a sáv közepén az alapmagasság 45%-a,
+  dombon ~6 egység mély), így az első hídpálya vályú lett, és mellette a meder a pálya FÖLÉ került. A
+  híd-zónában és utána 22 egységig (a terephálózat legnagyobb rácstávolsága 20) az út nincs bevágva,
+  majd 30 egységes smoothstep-rámpán tér vissza a bevágásba (`bridgeInfluence`). Teszt: a pálya
+  keresztben sík (±1), mellette a meder ≥ 1,5 egységgel alatta.
 - D4 (felület): hídon `surfaceAt` = `asphalt` (a víz-vizsgálat ELŐTT). Kellék nem kerül hídra.
 - D5 (hídháló): chunkonként `bridgeSpansInChunk` → aszfalt pálya-szalag + két beton szegélygerenda +
   két korlát + pillérek a mederig. A vonal abba a chunkba tartozik, ahol `floor(line/100)`; a hossz

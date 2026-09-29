@@ -82,9 +82,13 @@ export function baseTerrainHeight(x: number, z: number): number {
   const rolls = valueNoise(x, z, 150, 29) - 0.5;
   const ripple = valueNoise(x, z, 48, 71) - 0.5;
   const base = hills * 26 + rolls * 8 + ripple * 2.2;
-  // Roads sit in shallow cuttings so a driver can find them from a distance.
+  // Roads sit in shallow cuttings so a driver can find them from a distance. The cutting is a V
+  // across the 18-unit band (up to ~6 units deep on a hill); a bridge cannot follow a V and a
+  // V-shaped road would sit below its own river bed, so near a bridge the road climbs out of the
+  // cutting onto the field level (`bridgeInfluence`, a smooth ramp).
   const onRoad = roadFactor(x, z);
-  return base * (1 - onRoad * 0.55);
+  if (onRoad === 0) return base;
+  return base * (1 - onRoad * 0.55 * (1 - bridgeInfluence(x, z)));
 }
 
 /* ============================ river & bridges ============================ */
@@ -144,6 +148,38 @@ export function bridgedAlongX(x: number, line: number): boolean {
 /** Is the road along z at x = `line` bridged at `z`? Exact: the band [line−9, line+9] vs the river. */
 function bridgedAlongZ(line: number, z: number): boolean {
   return Math.max(0, Math.abs(riverCenterX(z) - line) - ROAD_HALF_WIDTH) < DECK_REACH;
+}
+
+/** Length of the ramp that lifts a road out of its cutting before a bridge. */
+const BRIDGE_RAMP = 30;
+/**
+ * Uncut road kept before the ramp starts. The terrain mesh samples every 8–20 units, so the last
+ * vertex before a deck must already be uncut, or the interpolated road dips under the deck's end.
+ */
+const RAMP_FLAT = 22;
+
+function rampWeight(riverDist: number): number {
+  const t = Math.max(0, Math.min(1, (riverDist - DECK_REACH - RAMP_FLAT) / BRIDGE_RAMP));
+  return 1 - smooth(t);
+}
+
+/**
+ * 1 on and next to a bridge deck, easing to 0 over `BRIDGE_RAMP` along the road. Inside the deck zone
+ * the road is not cut, so deck, field and river bed keep their order: bed < deck, deck ≈ field.
+ */
+export function bridgeInfluence(x: number, z: number): number {
+  let best = 0;
+  if (distToGridLine(z) < ROAD_HALF_WIDTH) {
+    const line = nearestLine(z);
+    let minD = Infinity;
+    for (const off of ACROSS) minD = Math.min(minD, Math.abs(x - riverCenterX(line + off)));
+    best = Math.max(best, rampWeight(minD));
+  }
+  if (distToGridLine(x) < ROAD_HALF_WIDTH) {
+    const line = nearestLine(x);
+    best = Math.max(best, rampWeight(Math.max(0, Math.abs(riverCenterX(z) - line) - ROAD_HALF_WIDTH)));
+  }
+  return best;
 }
 
 /** True where the wheels are on a bridge deck. */
