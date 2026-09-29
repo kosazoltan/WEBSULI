@@ -19,6 +19,7 @@
 import type { InsertGameQuizItem } from "../../shared/schema";
 import type { Lesson } from "../../shared/lesson-schema";
 import type { MapConcept } from "./coverage";
+import { singleChoiceProblems } from "../../shared/single-choice-check";
 
 /** A játékok, amelyek a kupon-motoron futnak (useCouponSession) — a lecke kvízei ide mennek publikáláskor. */
 export const COUPON_GAME_IDS = [
@@ -67,6 +68,8 @@ export function exportQuizItemsFromChecks(
       if (block.kind !== "check") continue;
       const primaryLocalId = block.coversConceptIds[0];
       if (!primaryLocalId) continue;
+      // Spec 2026-09-29 (egy-helyes-valasz): bizonyíthatóan nem pontosan-egy helyes opciós tétel nem megy játékba.
+      if (singleChoiceProblems({ prompt: block.question, options: block.options, correctIndex: block.correctIndex }).length) continue;
       rows.push({
         gameId,
         tier: "1",

@@ -55,7 +55,8 @@ import { ensureSectionVisuals } from "./section-visuals";
 import { applyVisualPatch } from "./visual-patch";
 import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
 import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolutions, sourceHashOf, type BlindSolutions } from "./blind-solver";
-import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, runBankVerifier, type BankVerifierResult } from "./bank-verifier";
+import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, mergeVerifierRetry, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag } from "./bank-verifier";
+import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
@@ -93,6 +94,12 @@ import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
  */
 
 export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-6-direct";
+/**
+ * A lektor-bizonyíték (reviewInputHash) és a lektor-lépés gyorsítótárának verziója. Review R4 (2026-09-29,
+ * egy-helyes-valasz): review-1 → review-2, mert a review-1 bizonyíték az opciónkénti egyválasztós ellenőrzés nélkül
+ * készült — a mentett lektor-lépés újrafut, a régi bizonyítékkal a kapu nem publikál.
+ */
+export const LEKTOR_REVIEW_VERSION = "skill-7.4-review-2";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "A modell saját API-kulcsa nincs beállítva — a modell-lépés nem indítható el. " +
@@ -394,7 +401,9 @@ ${sourceText.slice(0, 60_000)}`,
 
 /**
  * Spec 2026-09-24 (bank-ellenőr): fejezetenként párhuzamos Opus-ellenőrzés a vak megoldásokkal mint kulccsal,
- * a lektor-hívással egy időben. Csak akkor fut, ha van bank és vak megoldás; soha nem dob.
+ * a lektor-hívással egy időben. Csak akkor fut, ha van bank; soha nem dob.
+ * Spec 2026-09-29 (egy-helyes-valasz, döntés 3): vak megoldás NÉLKÜL is fut (üres kulcslistával) — a tiszta
+ * magyarázó forrásnál (pl. az oszthatóság-lecke) is kell az egyválasztós tételek opciónkénti ítélete.
  */
 function startBankVerifier(
   job: JobView,
@@ -403,15 +412,22 @@ function startBankVerifier(
   keyConfigured: (model: string) => boolean,
 ): Promise<BankVerifierResult | undefined> | undefined {
   const lesson = job.output?.lesson as Lesson | undefined;
-  if (!lesson?.experience || !blind?.solutions.length || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
+  if (!lesson?.experience || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
   const cleared = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
-  return runBankVerifier({
-    lesson, blind, cleared,
+  const run = (onlyPaths?: ReadonlySet<string>) => runBankVerifier({
+    lesson, blind, cleared, onlyPaths,
     call: async (system) => (await callStepModel(providerFactory(BANK_VERIFIER_MODEL, "visuals"), {
       step: "lektor", policy: "visuals", model: BANK_VERIFIER_MODEL, system, user: "Válaszolj kizárólag a kért JSON-nal.",
     })).json,
     onChunkError: (sectionIndex, reason) =>
       logger.warn(`[STUDIO] Bank-ellenőr darab elmaradt (${job.id}) ${sectionIndex + 1}. fejezet: ${reason.slice(0, 300)}`),
+  });
+  // Review R1(b): az ítélet nélkül maradt egyválasztós tételek (hiányzó `choices`, elbukott darab) egyszer azonnal
+  // újraellenőrzöttek, CSAK ezek az útvonalak; ami ezután is ítélet nélküli, az kapu-jelzés (openChoiceFlags).
+  return run().then(async (first) => {
+    if (!first.unverifiedChoices.length) return first;
+    logger.warn(`[STUDIO] Bank-ellenőr (${job.id}): ${first.unverifiedChoices.length} egyválasztós tétel ítélet nélkül — egy újraellenőrzés`);
+    return mergeVerifierRetry(first, await run(new Set(first.unverifiedChoices.map((u) => u.path))));
   }).catch(() => undefined);
 }
 
@@ -554,7 +570,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       return { ok: true, next: { step: job.step, round: job.round }, cached: true };
   }
 
-  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, { input, system, ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}) }, job.round);
+  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, { input, system, ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}),
+    // Review R4: a telepítés előtt `ok`-ként mentett lektor-lépés nem használható újra az új ellenőrzés nélkül.
+    ...(job.step === "lektor" ? { review: LEKTOR_REVIEW_VERSION } : {}) }, job.round);
 
   // Idempotency: this exact input was already paid for and its output is stored.
   if (job.status === "ok" && job.inputHash === hash && job.output !== null) {
@@ -922,14 +940,21 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // nem jár, figyelmeztetésként tárolódnak (tétel-szintű bankhibáért a leckét nem buktatjuk).
       const bankChecked = bankCheck ? await bankCheck : undefined;
       let rawNotes: RawNote[] = parsed.data.notes;
+      // Spec 2026-09-29 (egy-helyes-valasz, döntés 4): a kör nyitott egyválasztós jelzései a kapuhoz mennek; a
+      // korábbi kör jelzései nem öröklődnek (a kapu az utolsó lektor-kör után fut).
+      const { choiceFlags: _staleChoiceFlags, ...outputWithoutFlags } = job.output ?? {};
+      job.output = outputWithoutFlags;
       if (bankChecked) {
         rawNotes = mergeBankVerifierNotes(parsed.data.notes, bankChecked.notes, bankRepairPossible);
+        const choiceFlags = openChoiceFlags(bankChecked, bankRepairPossible);
         const previouslyCleared = Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : [];
         job.output = {
           ...job.output,
           bankVerifierCleared: [...new Set([...previouslyCleared, ...bankChecked.cleared])].slice(-3000),
           bankVerifier: { round: job.round, checked: bankChecked.checked, errors: bankChecked.notes.length, failedChunks: bankChecked.failedChunks },
+          ...(choiceFlags.length ? { choiceFlags } : {}),
         };
+        if (choiceFlags.length) logger.warn(`[STUDIO] Bank-ellenőr (${job.id}, ${job.round}. kör): ${choiceFlags.length} nyitott egyválasztós jelzés a kapunak: ${choiceFlags.map((f) => f.path).join(", ").slice(0, 400)}`);
         logger.info(`[STUDIO] Bank-ellenőr (${job.id}, ${job.round}. kör): ${bankChecked.checked} tétel, ${bankChecked.notes.length} hiba`
           + (bankChecked.notes.length && !bankRepairPossible ? " (figyelmeztetésként: csak-bank kör már nem jár)" : "")
           + (bankChecked.failedChunks ? `, ${bankChecked.failedChunks} darab elmaradt` : "")
@@ -974,7 +999,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             ...job.output,
             report: parsed.data,
             reportRound: job.round,
-            reviewInputHash: computeStepHash("lektor", "skill-7.4-review-1", input, job.round),
+            reviewInputHash: computeStepHash("lektor", LEKTOR_REVIEW_VERSION, input, job.round),
             blockers,
             bankReview: { round: transition.round, feedback },
             bankOnlyRepairRound: transition.round,
@@ -1016,7 +1041,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           ...job.output,
           report: parsed.data,
           reportRound: job.round,
-          reviewInputHash: computeStepHash("lektor", "skill-7.4-review-1", input, job.round),
+          reviewInputHash: computeStepHash("lektor", LEKTOR_REVIEW_VERSION, input, job.round),
           blockers,
           ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
         }),
@@ -1037,14 +1062,55 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
  * sends the Author another round or dead-ends at the round limit; a failing lesson is
  * NEVER published. Measured before this existed: every prod lesson had publishedAt=NULL.
  */
+/**
+ * Spec 2026-09-29 (egy-helyes-valasz, döntés 4) — fail-closed egyválasztós kapu. Nyitott jelzés = a determinisztikus
+ * őr leletei ∪ a bank-ellenőr utolsó körének `choiceFlags`-e. Bank-tétel → kivétel, ha a bank utána is megfelel;
+ * különben, és a lecke check blokkjánál, a lecke nem publikálható.
+ */
+export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[] } | { error: string } {
+  const flags = new Map<string, string>();
+  for (const f of lessonSingleChoiceProblems(lesson)) flags.set(f.path, `${f.path}: ${f.problems.join(" ")}`);
+  for (const f of Array.isArray(rawFlags) ? rawFlags as ChoiceFlag[] : []) {
+    if (typeof f?.path === "string" && !flags.has(f.path)) flags.set(f.path, `${f.path}: ${String(f.message ?? "")}`);
+  }
+  if (!flags.size) return { lesson, removed: [] };
+  const byBank: Record<"quiz" | "methods", Set<number>> = { quiz: new Set(), methods: new Set() };
+  const blocking: string[] = [];
+  for (const [path, message] of flags) {
+    const m = path.match(/^experience\.(quiz|methods)\[(\d+)\]$/);
+    if (m && lesson.experience) byBank[m[1] as "quiz" | "methods"].add(Number(m[2]));
+    else blocking.push(message);
+  }
+  const all = [...flags.values()].join("; ");
+  if (blocking.length) return { error: `Egyválasztós hiba maradt a leckében, nem publikálható (pontosan egy helyes opció kell): ${blocking.join("; ")}` };
+  const experience = lesson.experience!;
+  const reduced: Lesson = { ...lesson, experience: {
+    ...experience,
+    quiz: experience.quiz.filter((_, i) => !byBank.quiz.has(i)),
+    methods: experience.methods.filter((_, i) => !byBank.methods.has(i)),
+  } };
+  const after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
+  if (after.length) return { error: `Egyválasztós hiba maradt a bankban, és a tételek kivétele után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})` };
+  return { lesson: reduced, removed: [...flags.keys()] };
+}
+
 async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome> {
   const rawLesson = job.output?.lesson;
   if (!rawLesson || !job.lessonId) {
     return fail(store, job, "A kapuhoz nincs lecke a jobban — a szerző lépés nem futott le.");
   }
-  const parsed = lessonSchema.safeParse(rawLesson);
-  if (!parsed.success) {
-    return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(parsed.error)}`);
+  const reviewed = lessonSchema.safeParse(rawLesson);
+  if (!reviewed.success) {
+    return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(reviewed.error)}`);
+  }
+  const choiceGate = resolveChoiceGate(reviewed.data, job.output?.choiceFlags);
+  if ("error" in choiceGate) return fail(store, job, choiceGate.error);
+  // A lektor-bizonyíték (lent) az EREDETI, lektorált leckéhez kötött; a kivétel csak elvesz belőle.
+  const parsed = { data: choiceGate.lesson };
+  if (choiceGate.removed.length) {
+    await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+    job.output = { ...job.output, lesson: parsed.data, choiceGate: { removed: choiceGate.removed } };
+    logger.warn(`[STUDIO/GATE] Egyválasztós hibás banktétel kivéve (${job.id}): ${choiceGate.removed.join(", ")}`);
   }
 
   const map = focusedMapOf(await store.loadMap(job.mapId), job);
@@ -1052,7 +1118,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
 
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
   const skill74 = isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience
-    ? verifyLessonSkillBank(parsed.data.experience, parsed.data.subject) : undefined;
+    ? verifyLessonSkillBank(parsed.data.experience, parsed.data.subject, parsed.data.sections) : undefined;
   // Missing experience is a hard failure, including after the autonomous round limit.
   if (isFusionMethodVersion(job.output?.methodVersion) || parsed.data.experience) {
     const problems = [...experienceProblems(parsed.data), ...(skill74?.problems ?? [])];
@@ -1134,7 +1200,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
     // hasht → minden 2. körös, blokkolómentes lecke a kapun halt meg. A kapu UGYANAZT a
     // bemenetet építi, mint a lektor lépés.
     const gatePriorBlockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
-    const expectedReviewHash = computeStepHash("lektor", "skill-7.4-review-1", {
+    const expectedReviewHash = computeStepHash("lektor", LEKTOR_REVIEW_VERSION, {
       lesson: rawLesson, map: mapInputOf(map), concepts: map.concepts,
       ...(gatePriorBlockers.length ? { previousBlockers: gatePriorBlockers } : {}),
     }, job.round);

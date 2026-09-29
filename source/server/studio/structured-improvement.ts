@@ -44,7 +44,7 @@ export function assertRepairTeaching(original: Lesson, candidate: Lesson, source
 }
 export function assertRepairCandidate(original: Lesson, candidate: Lesson, source: RepairSource, classroom = original.classroom) {
   const coverage = assertRepairTeaching(original, candidate, source, classroom);
-  const problems = [...experienceProblems(candidate, candidate.experience), ...verifyLessonSkillBank(candidate.experience, candidate.subject).problems, ...(candidate.experience ? publicationBankProblems(candidate.experience) : [])];
+  const problems = [...experienceProblems(candidate, candidate.experience), ...verifyLessonSkillBank(candidate.experience, candidate.subject, candidate.sections).problems, ...(candidate.experience ? publicationBankProblems(candidate.experience) : [])];
   if (problems.length) throw new Error(`A javított lecke nem teljes: ${problems.join("; ")}`);
   return coverage;
 }

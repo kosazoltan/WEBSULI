@@ -14,6 +14,7 @@ import { roleSkillBlock, roleSkillVersion } from "./role-skills";
 import { pickLessonFlair } from "../../shared/lesson-visuals";
 import { autofixBankPacket } from "./tools/bank-packet-autofix";
 import { arithmeticClaimProblems } from "./tools/arithmetic-claims";
+import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string> };
 export type BankReviewFeedback = { note: RawNote; conceptIds?: string[]; previousItem?: unknown };
@@ -261,6 +262,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       problems.push(...gateQuestionProblems([...before.methods, ...packet.methods]));
       problems.push(...quizCorrectIndexProblems(packet.quiz));
       problems.push(...arithmeticClaimProblems(packet));
+      // Spec 2026-09-29 (egy-helyes-valasz): pontosan egy helyes opció — a kvízben és a választós módszerben is.
+      problems.push(...lessonSingleChoiceProblems({ experience: packet }).flatMap(f => f.problems.map(p => `${f.id ?? f.path}: ${p}`)));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);
       for (const t of packet.tasks) {
         // Spec 2026-09-19 (measured: owner's 49-concept map, job 6cb1bc89 — three packet attempts

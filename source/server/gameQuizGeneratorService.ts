@@ -18,6 +18,7 @@ import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
 import { resolveLegacyModel } from "./ai/models";
 import { withSupportSkill } from "./studio/support-skills";
+import { validateGeneratedQuizItems } from "./gameQuizValidation";
 
 const ANTHROPIC_API_KEY = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
 const ANTHROPIC_BASE_URL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
@@ -25,20 +26,7 @@ const ANTHROPIC_BASE_URL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
 const ANTHROPIC_MODEL = resolveLegacyModel("quizGenerator");
 const ALIBI_GAME_ID = "space-asteroid-quiz";
 
-export type GeneratedQuizItem = {
-  prompt: string;
-  options: string[];
-  correctIndex: number;
-  topic: "english" | "math" | "nature" | "hungarian";
-  /**
-   * T-1: a MIÉRT, amit a játék rossz válasznál megmutat.
-   *
-   * Enélkül a játék csak büntetett (élet, idő, XP), és a téves fogalom
-   * érintetlenül maradt a gyerekben — ez a legdrágább hiba egy tanuló-
-   * programban.
-   */
-  explanation: string;
-};
+export type { GeneratedQuizItem } from "./gameQuizValidation";
 
 export type QuizGenerationResult = {
   materialId: string;
@@ -164,41 +152,12 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
     skipped: 0,
     errors: [],
   };
-  const ALLOWED_TOPICS = new Set(["english", "math", "nature", "hungarian"]);
   const capped = (parsed as unknown[]).slice(0, safeCount);
 
   // Validálás a tranzakción kívül — így a skipped számlálás nem zavarja az atomicitást.
-  const validItems: GeneratedQuizItem[] = [];
-  for (const raw of capped) {
-    if (!raw || typeof raw !== "object") {
-      result.skipped++;
-      continue;
-    }
-    const item = raw as Partial<GeneratedQuizItem>;
-    if (
-      typeof item.prompt !== "string" ||
-      item.prompt.length < 3 ||
-      item.prompt.length > 200 ||
-      !Array.isArray(item.options) ||
-      item.options.length !== 4 ||
-      !item.options.every((o): o is string => typeof o === "string" && o.length > 0 && o.length < 60) ||
-      typeof item.correctIndex !== "number" ||
-      !Number.isInteger(item.correctIndex) ||
-      item.correctIndex < 0 ||
-      item.correctIndex > 3 ||
-      // T-1: magyarázat nélküli tétel nem kerül a bankba — a néma büntetés
-      // pont az, amit meg akarunk szüntetni.
-      typeof item.explanation !== "string" ||
-      item.explanation.trim().length < 5 ||
-      item.explanation.length > 300 ||
-      typeof item.topic !== "string" ||
-      !ALLOWED_TOPICS.has(item.topic)
-    ) {
-      result.skipped++;
-      continue;
-    }
-    validItems.push(item as GeneratedQuizItem);
-  }
+  // Spec 2026-09-29 (egy-helyes-valasz): a tiszta validátor a több helyes opciós tételt is eldobja.
+  const { valid: validItems, skipped } = validateGeneratedQuizItems(capped);
+  result.skipped += skipped;
 
   // AUDIT 2026-09-01: ha egyetlen generált tétel sem érvényes, NEM deaktiváljuk a régi
   // kvízeket — különben a tananyag teljes kérdéskészlete hiba nélkül eltűnne.
