@@ -21,3 +21,24 @@ export function bankItemRef(path: string | null | undefined): BankItemRef | null
 export function bankItemPath(ref: BankItemRef): string {
   return `experience.${ref.bank}[${ref.index}]`;
 }
+
+/**
+ * Spec 2026-09-29-limit-check-kivetel (1. döntés): a lecke egy blokkjára mutató útvonal (`sections[10].blocks[3]`,
+ * `sections.10.blocks.3`, al-útvonallal is). Hogy a blokk `check`-e, a hívó dönti el a leckéből.
+ */
+export type CheckBlockRef = { section: number; block: number };
+
+const SECTION_BLOCK_PATH = /^sections(?:\[(\d+)\]|\.(\d+))\.blocks(?:\[(\d+)\]|\.(\d+))(?:[.[].*)?$/;
+
+export function checkBlockRef(path: string | null | undefined): CheckBlockRef | null {
+  if (typeof path !== "string") return null;
+  const m = path.match(SECTION_BLOCK_PATH);
+  if (!m) return null;
+  const section = Number(m[1] ?? m[2]);
+  const block = Number(m[3] ?? m[4]);
+  return Number.isSafeInteger(section) && Number.isSafeInteger(block) ? { section, block } : null;
+}
+
+export function checkBlockPath(ref: CheckBlockRef): string {
+  return `sections[${ref.section}].blocks[${ref.block}]`;
+}

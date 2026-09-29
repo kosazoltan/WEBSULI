@@ -2007,8 +2007,9 @@ test("spec 2026-09-29: témafókusz — a fókuszon kívüli fogalom hiánya nem
 
 
 /* Spec 2026-09-29-limit-banktetel-kivetel: a körlimiten maradt banktétel-hiba a tételt veszi ki, nem a leckét. */
-async function limitSetup(id: string, lektorNotes: unknown[], spare = 0) {
+async function limitSetup(id: string, lektorNotes: unknown[], spare = 0, mutate?: (lesson: Lesson) => void) {
   const setup = await bankVerifierSetup(id, { bankOnlyRepairRounds: MAX_BANK_ONLY_ROUNDS }, []);
+  mutate?.(setup.lesson);
   const e = setup.lesson.experience!;
   for (let i = 0; i < spare; i++) {
     e.quiz.push({ ...e.quiz[10 + i], id: `spare-q${i}`, question: `${e.quiz[10 + i].question} (tartalék ${i + 1})` });
@@ -2186,4 +2187,26 @@ test("spec kapu-proba (review P2): a kapu nem írja felül a job lektorált leck
   assert.ok(again.ok, `újrafuttatható: ${JSON.stringify(again)}`);
   assert.equal(log.length, 2);
   assert.equal((deps.store.lessons.get("lesson-proba-rerun")!.json as Lesson).sections[0].probaEnabled, false);
+});
+
+
+/* Spec 2026-09-29-limit-check-kivetel (3. élő újramérés, Studio-job 06f5e6ae). */
+test("spec limit-check (E2): a limiten banktétel + check blokk blokkoló → a kapu mindkettőt kiveszi és publikál", async () => {
+  const faulty: Block = { kind: "check", question: "Melyik képlet adja a háromszög területét?", options: ["alap · magasság : 2", "alap + magasság", "alap · magasság"], correctIndex: 0, feedbackPerOption: ["Igen.", "Nem.", "Nem, még felezni kell."], coversConceptIds: ["area"] };
+  const notes = [LIMIT_NOTES[0], { kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.2", message: "Mi hamis: a 2. opció is igaz." }];
+  const { deps, store, job, lesson } = await limitSetup("lim-check", notes, 3, (l) => { l.sections[0].blocks.splice(2, 0, faulty); });
+  assert.equal(lesson.sections[0].blocks[2].kind, "check");
+  const blocksBefore = lesson.sections[0].blocks.length;
+  const reviewed = await runPipelineStep("lim-check", deps);
+  assert.deepEqual(reviewed.ok && reviewed.next, { step: "gate", round: MAX_AUTHOR_ROUNDS }, JSON.stringify(reviewed));
+  assert.deepEqual((job.output?.choiceFlags as Array<{ path: string }>).map((f) => f.path).sort(), ["experience.quiz[4]", "sections[0].blocks[2]"]);
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  const gated = await runPipelineStep("lim-check", deps);
+  assert.ok(gated.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  const saved = store.lessons.get(job.lessonId!)!.json as Lesson;
+  assert.equal(saved.sections[0].blocks.length, blocksBefore - 1);
+  assert.equal(saved.sections[0].blocks.some((b) => b.kind === "check" && b.question === faulty.question), false, "a hibás ellenőrző kérdés nem jut a gyerekhez");
+  assert.deepEqual([...(job.output?.choiceGate as { removed: string[] }).removed].sort(), ["experience.quiz[4]", "sections[0].blocks[2]"]);
 });
