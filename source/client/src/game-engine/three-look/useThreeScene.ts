@@ -62,8 +62,11 @@ export function useThreeScene(
     try {
       controller = setupRef.current({ renderer, scene, tier, reducedMotion });
     } catch {
-      // A broken scene must never break the game: fall back to the DOM visuals.
+      // A broken scene must never break the game: fall back to the DOM visuals,
+      // and free whatever the setup had already built plus the GL context.
+      disposeObjectTree(scene);
       renderer.dispose();
+      renderer.forceContextLoss();
       setSupported(false);
       return;
     }

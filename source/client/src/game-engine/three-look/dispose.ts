@@ -3,7 +3,11 @@ import * as THREE from "three";
 import { isSharedLookTexture } from "./sprites";
 
 function disposeMaterial(material: THREE.Material): void {
-  for (const value of Object.values(material)) {
+  for (const [key, value] of Object.entries(material)) {
+    // Environment maps are borrowed (PMREM from createRoomEnvironment, whose
+    // owner disposes it); freeing them here would break every material that
+    // still shares the same map, e.g. after a layout rebuild.
+    if (key === "envMap") continue;
     if (value instanceof THREE.Texture && !isSharedLookTexture(value)) value.dispose();
   }
   if (material instanceof THREE.ShaderMaterial) {
@@ -17,7 +21,8 @@ function disposeMaterial(material: THREE.Material): void {
 
 /**
  * Free every geometry, material and texture under `root` (each once).
- * The shared glow texture is skipped: it outlives any single scene.
+ * The shared glow texture and borrowed environment maps are skipped: they
+ * outlive the subtree being freed.
  */
 export function disposeObjectTree(root: THREE.Object3D): void {
   const geometries = new Set<THREE.BufferGeometry>();
