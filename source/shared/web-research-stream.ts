@@ -4,9 +4,11 @@ export type WebResearchEvent =
   | { type: "status"; message: string }
   | { type: "sources"; sources: WebSource[] }
   | { type: "html_generated"; html: string; sources: WebSource[]; warnings?: string[] }
+  /** Spec 2026-09-25: a Studio lesson made from the downloaded pages — saved already, no inline HTML. */
+  | { type: "material_saved"; materialId: string; sources: WebSource[] }
   | { type: "error"; message: string }
   | { type: "complete" };
-export type WebResearchArtifact = Extract<WebResearchEvent, { type: "html_generated" }>;
+export type WebResearchArtifact = Extract<WebResearchEvent, { type: "html_generated" | "material_saved" }>;
 
 /** Require both the artifact and explicit server completion. EOF alone is not success. */
 export async function consumeWebResearchStream(
@@ -27,6 +29,7 @@ export async function consumeWebResearchStream(
     if (!event || typeof event.type !== "string") throw new Error("A szerver hibás eseményt küldött.");
     if (event.type === "error") throw new Error(event.message || "A tananyagkészítés hibával megállt.");
     if (event.type === "html_generated" && typeof event.html === "string" && event.html.trim()) artifact = event;
+    if (event.type === "material_saved" && typeof event.materialId === "string" && event.materialId.trim()) artifact = event;
     if (event.type === "complete") completed = true;
     onEvent(event);
   };

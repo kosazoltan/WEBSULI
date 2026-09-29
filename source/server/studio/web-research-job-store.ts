@@ -1,5 +1,5 @@
-import { and, eq } from "drizzle-orm";
-import { aiGenerationRequests, htmlFiles } from "../../shared/schema";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { aiGenerationRequests, htmlFiles, lessons } from "../../shared/schema";
 import type { ResearchJobStore, StoredResearchJob } from "./web-research-jobs";
 import { checkedResearchArtifact } from "./web-research-jobs";
 import { WebResearchFailure } from "./web-research-runner";
@@ -12,6 +12,25 @@ const decode = (row: typeof aiGenerationRequests.$inferSelect): StoredResearchJo
 
 /** Uses the existing request table; publishing + done state commit together. */
 export const researchJobStore: ResearchJobStore = {
+  async completeStudioLesson(job) {
+    const { db } = await import("../db");
+    await db.transaction(async tx => {
+      await workflowFence(tx);
+      const done = await tx.update(aiGenerationRequests).set({ status: status("done"), generatedContent: JSON.stringify(job), error: null })
+        .where(and(eq(aiGenerationRequests.id, job.id), eq(aiGenerationRequests.userId, job.userId), eq(aiGenerationRequests.status, status("running"))))
+        .returning({ id: aiGenerationRequests.id });
+      if (done.length !== 1) throw new WebResearchFailure("A futás állapota közben megváltozott; a kész jelzés nem menthető.");
+      await workflowFence(tx);
+    });
+    getHtmlFilesCache().invalidate();
+  },
+  async readStudioLesson(htmlFileId, lessonId) {
+    const { db } = await import("../db");
+    const [row] = await db.select({ title: htmlFiles.title, classroom: htmlFiles.classroom }).from(lessons)
+      .innerJoin(htmlFiles, eq(lessons.htmlFileId, htmlFiles.id))
+      .where(and(eq(lessons.id, lessonId), eq(htmlFiles.id, htmlFileId), isNotNull(lessons.publishedAt)));
+    return row ?? null;
+  },
   async verifyMaterial(id, userId, html) {
     const { db } = await import("../db");
     const [row] = await db.select({ content: htmlFiles.content }).from(htmlFiles).where(and(eq(htmlFiles.id, id), eq(htmlFiles.userId, userId)));
