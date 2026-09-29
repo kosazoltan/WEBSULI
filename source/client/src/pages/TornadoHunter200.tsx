@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { joystickToDirections } from "@/game-engine/joystick";
 import { Card, CardContent } from "@/components/ui/card";
-import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { correctDataAttrs, installGameTestApi, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import AchievementToast from "@/components/AchievementToast";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -96,11 +96,14 @@ import {
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
 import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
-import { stepVehicle, STOPPED_SPEED, maxSpeedUnits } from "@/lib/tornado/drive";
-import { readStandardGamepad } from "@/lib/tornado/gamepad";
+import { stepVehicle, STOPPED_SPEED, maxSpeedUnits, windDriftUnits } from "@/lib/tornado/drive";
+import { createGamepadRestGate, readStandardGamepad } from "@/lib/tornado/gamepad";
+import { collidersNear, resolveVehicleCollisions, vehicleDimensions } from "@/lib/tornado/collision";
 import {
   toggleCamera,
   escAction,
+  driveKeyFor,
+  releaseDriveKeys,
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import {
@@ -124,6 +127,7 @@ import {
   buildTornado,
   animateTornado,
   buildTerrainChunk,
+  buildBridgeChunk,
   buildProp,
   buildRain,
   animateRain,
@@ -154,7 +158,7 @@ import {
   gripAt,
   surfaceAt,
   SURFACE_LABEL,
-  terrainHeight,
+  groundHeight,
   clampToWorld,
   toKm,
   fromKm,
@@ -1036,7 +1040,10 @@ function PlayScreen(props: {
   const answerLockedRef = useRef(false);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   const touchRef = useRef({ fwd: false, back: false, left: false, right: false });
+  /** Bumped on blur / hidden tab: the VirtualJoystick drops a drag that is still in progress. */
+  const [touchReset, setTouchReset] = useState(0);
   const padAnchorPrevRef = useRef(false);
+  const padGateRef = useRef(createGamepadRestGate());
   const finishedRef = useRef(false);
   const materialRef = useRef<Question[]>(materialQuestions);
   materialRef.current = materialQuestions;
@@ -1277,31 +1284,41 @@ function PlayScreen(props: {
     timeoutsRef.current = [];
   }, []);
 
+  // Böngészős próbakampó (spec 2026-09-29-tornado-fizika D12): csak VITE_ENABLE_GAME_TEST_HOOKS=1
+  // mellett létezik, élesben a konstans feltétel miatt kiesik a buildből.
+  useEffect(() => {
+    if (!GAME_TEST_HOOKS_ENABLED) return;
+    const api = {
+      getPlayer: () => ({ ...playerRef.current }),
+      setPlayer: (patch: Partial<PlayerState>) => {
+        Object.assign(playerRef.current, patch);
+      },
+      getTornado: () => ({ ...tornadoPosRef.current }),
+      setTornado: (patch: { x?: number; z?: number }) => {
+        Object.assign(tornadoPosRef.current, patch);
+      },
+      getPhase: () => phaseRef.current,
+      suppressQuiz: () => {
+        lastQuizAtRef.current = elapsedRef.current;
+      },
+    };
+    const w = window as unknown as { __websuliTornado?: typeof api };
+    w.__websuliTornado = api;
+    return () => {
+      if (w.__websuliTornado === api) delete w.__websuliTornado;
+    };
+  }, []);
+
   /* ------- keyboard ------- */
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      const k = keysRef.current;
+      const driveKey = driveKeyFor(e.key);
+      if (driveKey) {
+        keysRef.current[driveKey] = true;
+        if (driveKey === "brake") e.preventDefault();
+        return;
+      }
       switch (e.key.toLowerCase()) {
-        case "w":
-        case "arrowup":
-          k.fwd = true;
-          break;
-        case "s":
-        case "arrowdown":
-          k.back = true;
-          break;
-        case "a":
-        case "arrowleft":
-          k.left = true;
-          break;
-        case "d":
-        case "arrowright":
-          k.right = true;
-          break;
-        case " ":
-          k.brake = true;
-          e.preventDefault();
-          break;
         case "f":
           tryAnchorRef.current();
           break;
@@ -1331,36 +1348,30 @@ function PlayScreen(props: {
       }
     };
     const up = (e: KeyboardEvent) => {
-      const k = keysRef.current;
-      switch (e.key.toLowerCase()) {
-        case "w":
-        case "arrowup":
-          k.fwd = false;
-          break;
-        case "s":
-        case "arrowdown":
-          k.back = false;
-          break;
-        case "a":
-        case "arrowleft":
-          k.left = false;
-          break;
-        case "d":
-        case "arrowright":
-          k.right = false;
-          break;
-        case " ":
-          k.brake = false;
-          break;
-        default:
-          break;
-      }
+      const driveKey = driveKeyFor(e.key);
+      if (driveKey) keysRef.current[driveKey] = false;
+    };
+    // Spec 2026-09-29-tornado-fizika D11: a keyup (or pointerup) that lands in another window never
+    // reaches us — without this a key held during alt-tab kept the car reversing on its own.
+    const releaseAll = () => {
+      releaseDriveKeys(keysRef.current);
+      const t = touchRef.current;
+      t.fwd = t.back = t.left = t.right = false;
+      // The joystick keeps its own drag origin and knob; tell it to let go too (review PR #137).
+      setTouchReset((n) => n + 1);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") releaseAll();
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    window.addEventListener("blur", releaseAll);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", releaseAll);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
@@ -1602,12 +1613,14 @@ function PlayScreen(props: {
       // --- vehicle control ---
       const p = playerRef.current;
       const upg = upgradesFor(props.progress, props.vehicle.id);
+      const vehicleDims = vehicleDimensions(props.vehicle.silhouette);
       const grip = gripAt(p.x, p.z);
 
       const k = keysRef.current;
       const t = touchRef.current;
       const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
-      const pad = readStandardGamepad(pads[0] ?? pads[1] ?? null);
+      const rawPad = pads[0] ?? pads[1] ?? null;
+      const pad = readStandardGamepad(padGateRef.current(rawPad) ? rawPad : null);
       if (pad.anchor && !padAnchorPrevRef.current) tryAnchorRef.current();
       padAnchorPrevRef.current = pad.anchor;
 
@@ -1619,7 +1632,7 @@ function PlayScreen(props: {
       );
 
       if (!p.anchored) {
-        const windPush = windForceOn(windRef.current, props.vehicle.windResistance) * dt * 30;
+        const windPush = windDriftUnits(windForceOn(windRef.current, props.vehicle.windResistance));
         const windAngle = (windRef.current.windDirection * Math.PI) / 180;
         const next = stepVehicle(
           p,
@@ -1634,12 +1647,17 @@ function PlayScreen(props: {
             windAngle,
           },
         );
-        const moved = Math.hypot(next.x - p.x, next.z - p.z);
+        // Spec 2026-09-29-tornado-fizika H2: houses, trees, poles and bridge railings are solid.
+        // The frame's dt: the scrape friction is per second (30/60/144 Hz must slow alike).
+        const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z), dt);
+        const nx = clampToWorld(solid.x);
+        const nz = clampToWorld(solid.z);
+        const moved = Math.hypot(nx - p.x, nz - p.z);
         distanceTravelledRef.current += toKm(moved);
-        p.x = next.x;
-        p.z = next.z;
+        p.x = nx;
+        p.z = nz;
         p.heading = next.heading;
-        p.speed = next.speed;
+        p.speed = solid.speed;
       } else {
         p.speed = 0;
       }
@@ -1698,7 +1716,7 @@ function PlayScreen(props: {
       }
 
       // --- vehicle transform ---
-      vehicle.position.set(p.x, terrainHeight(p.x, p.z), p.z);
+      vehicle.position.set(p.x, groundHeight(p.x, p.z), p.z);
       // A mozgás iránya (sin h, −cos h); a modell orra a +z tengely. Az Y körüli
       // θ forgatás a +z-t (sin θ, cos θ)-ba viszi, tehát θ = π − h. (A korábbi
       // θ = h tükrözött: a jármű tolatva haladt és fordítva kanyarodott.)
@@ -1733,7 +1751,7 @@ function PlayScreen(props: {
 
     // --- camera ---
     const p = playerRef.current;
-    const ground = terrainHeight(p.x, p.z);
+    const ground = groundHeight(p.x, p.z);
     if (settingsRef.current.cameraMode === "cockpit") {
       camera.position.set(p.x - Math.sin(p.heading) * 1, ground + 3.2, p.z + Math.cos(p.heading) * 1);
       camera.lookAt(p.x + Math.sin(p.heading) * 30, ground + 2, p.z - Math.cos(p.heading) * 30);
@@ -1960,6 +1978,7 @@ function PlayScreen(props: {
           <TouchControls
             leftHanded={props.progress.settings.leftHanded}
             touchRef={touchRef}
+            resetSignal={touchReset}
             onAnchor={() => tryAnchorRef.current()}
             onCamera={() => {
               const next = toggleCamera(settingsRef.current.cameraMode);
@@ -2087,6 +2106,17 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
       terrain.userData.perScene = true;
       sc.scene.add(terrain);
       objects.push(terrain);
+      const bridge = buildBridgeChunk(cx, cz);
+      if (bridge) {
+        bridge.userData.perScene = true;
+        if (quality === "high") {
+          bridge.traverse((child) => {
+            if (child instanceof THREE.Mesh) child.castShadow = child.receiveShadow = true;
+          });
+        }
+        sc.scene.add(bridge);
+        objects.push(bridge);
+      }
       for (const prop of propsInChunk(cx, cz)) {
         const mesh = buildProp(prop);
         mesh.userData.perScene = true;
@@ -2123,6 +2153,7 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
 function TouchControls(props: {
   leftHanded: boolean;
   touchRef: React.MutableRefObject<{ fwd: boolean; back: boolean; left: boolean; right: boolean }>;
+  resetSignal: number;
   onAnchor: () => void;
   onCamera: () => void;
 }) {
@@ -2132,6 +2163,7 @@ function TouchControls(props: {
   const steer = (
     <VirtualJoystick
       label="Vezetés"
+      resetSignal={props.resetSignal}
       radius={52}
       onChange={(v) => {
         const dirs = joystickToDirections(v);

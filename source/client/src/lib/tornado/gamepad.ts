@@ -24,6 +24,9 @@ export type GamepadDrive = {
 const NEUTRAL: GamepadDrive = { throttle: 0, steer: 0, brake: false, anchor: false };
 
 export function applyDeadzone(v: number, zone = GAMEPAD_DEADZONE): number {
+  // A NaN / Infinity axis (seen on some drivers while a pad wakes up) must read as centred; NaN
+  // used to flow through to the throttle and from there into the vehicle position.
+  if (!Number.isFinite(v)) return 0;
   const mag = Math.abs(v);
   if (mag < zone) return 0;
   const sign = v < 0 ? -1 : 1;
@@ -49,6 +52,31 @@ export function readStandardGamepad(gp: GamepadLike | null | undefined): Gamepad
     steer: clamp(steer, -1, 1),
     brake,
     anchor,
+  };
+}
+
+/**
+ * Spec 2026-09-29-tornado-fizika D11 — a pad drives only after it has been seen at rest once.
+ *
+ * Browsers expose a pad as soon as any of its inputs changes. A device whose axis rests off-centre
+ * (non-standard mapping, a throttle lever, a drifting stick) then read as full reverse the moment it
+ * appeared — the car set off backwards with nobody touching anything. A real stick is centred when
+ * picked up, so waiting for one neutral reading costs a player nothing.
+ */
+export function createGamepadRestGate(): (gp: GamepadLike | null | undefined) => boolean {
+  let armed = false;
+  return (gp) => {
+    if (!gp || gp.axes.length < 2) {
+      armed = false;
+      return false;
+    }
+    if (!armed) {
+      // Only a FINITE raw reading proves the stick is centred: applyDeadzone maps NaN to 0, and a
+      // NaN wake-up sample used to arm the gate right before the resting [0, 1] (review PR #137).
+      const centred = (v: number | undefined) => Number.isFinite(v) && applyDeadzone(v as number) === 0;
+      if (centred(gp.axes[0]) && centred(gp.axes[1])) armed = true;
+    }
+    return armed;
   };
 }
 

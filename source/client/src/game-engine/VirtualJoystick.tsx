@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
-import { joystickVector, knobOffset, type JoystickVector } from "./joystick";
+import { createJoystickDrag, type JoystickVector } from "./joystick";
 import { useReducedMotion } from "./useReducedMotion";
 
 /**
@@ -30,61 +30,89 @@ export type VirtualJoystickProps = {
   radius?: number;
   className?: string;
   label?: string;
+  /**
+   * Opcionális reset-jel: minden VÁLTOZÁSA megszakítja a futó húzást (a gomb visszaáll, az
+   * `onChange` nulla vektort kap, a pointer capture elenged). A hívó fókuszvesztéskor (blur,
+   * visibilitychange) növeli. Aki nem adja meg, annál a viselkedés változatlan.
+   */
+  resetSignal?: number;
 };
+
+const ZERO_VECTOR: JoystickVector = { x: 0, y: 0, magnitude: 0 };
 
 export default function VirtualJoystick({
   onChange,
   radius = 56,
   className = "",
   label = "Irányítás",
+  resetSignal,
 }: VirtualJoystickProps) {
   const reduced = useReducedMotion();
-  const originRef = useRef<{ x: number; y: number } | null>(null);
+  const drag = useMemo(() => createJoystickDrag(radius), [radius]);
   const [knob, setKnob] = useState<{ x: number; y: number } | null>(null);
+  const elementRef = useRef<HTMLDivElement>(null);
+  const pointerIdRef = useRef<number | null>(null);
+  // A reset-effekt a legfrissebb onChange-et hívja, de csak a jelre fut le.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const handleDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.currentTarget.setPointerCapture?.(e.pointerId);
+      pointerIdRef.current = e.pointerId;
       // Dinamikus tárca: ahol a hüvelykujj leér, ott a közép.
-      originRef.current = { x: e.clientX, y: e.clientY };
+      drag.down({ x: e.clientX, y: e.clientY });
       setKnob({ x: 0, y: 0 });
     },
-    [],
+    [drag],
   );
 
   const handleMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      const origin = originRef.current;
-      if (!origin) return;
+      const moved = drag.move({ x: e.clientX, y: e.clientY });
+      if (!moved) return;
       e.preventDefault();
-
-      const point = { x: e.clientX, y: e.clientY };
-      onChange(joystickVector({ origin, point, radius }));
-      setKnob(knobOffset({ origin, point, radius }));
+      onChange(moved.vector);
+      setKnob(moved.knob);
     },
-    [onChange, radius],
+    [drag, onChange],
   );
 
   const handleUp = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      if (!originRef.current) return;
+      if (!drag.up()) return;
       if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
         e.currentTarget.releasePointerCapture?.(e.pointerId);
       }
-      originRef.current = null;
+      pointerIdRef.current = null;
       setKnob(null);
       // Felengedéskor MINDIG nullázunk: enélkül a hajó a legutolsó irányba
       // sodródna tovább, és a gyerek azt hinné, elromlott a vezérlés.
-      onChange({ x: 0, y: 0, magnitude: 0 });
+      onChange(ZERO_VECTOR);
     },
-    [onChange],
+    [drag, onChange],
   );
+
+  // Review PR #137: fókuszvesztéskor a hívó nullázta a saját irányait, de a tárcsa megtartotta a
+  // húzás közepét és a gombot — egy későbbi mozgás új érintés nélkül újra vezetett.
+  useEffect(() => {
+    if (resetSignal === undefined) return;
+    if (!drag.reset()) return;
+    const el = elementRef.current;
+    const id = pointerIdRef.current;
+    if (el && id !== null && el.hasPointerCapture?.(id)) el.releasePointerCapture?.(id);
+    pointerIdRef.current = null;
+    setKnob(null);
+    onChangeRef.current(ZERO_VECTOR);
+    // A `drag` csak sugárváltáskor új; egy friss húzás-objektumon a reset nem csinál semmit.
+  }, [resetSignal, drag]);
 
   const active = knob !== null;
 
   return (
     <div
+      ref={elementRef}
       role="application"
       aria-label={label}
       data-testid="virtual-joystick"
