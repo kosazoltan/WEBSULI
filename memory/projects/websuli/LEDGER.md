@@ -622,3 +622,17 @@ határeset volt). **Eredmény:** „Oszthatóság 4-gyel és 25-tel” a 4. fut�
 webes (d9ce054f: jól magyaráz, de hiányos), kombinált (8ed51fa9: jól magyaráz, de a társadalom rétegei és
 Ázsia/Közel-Kelet hiányoznak, Istár-kapu/Bábel tornya többlet). Nyitott: tulajdonosi döntés a kívánt változatról.
 **Nyitott:** a témafókusz első modellje (deepseek) élesben kétszer időtúllépett (≈ 150 s késés, a tartalék dönt).
+
+## 2026-09-30 éjjel — forrásonkénti fedettség a kivonatolásban (PR #147) + Mezopotámia kész
+
+**Gyökérok (a kombinált Mezopotámia-lecke hiányai):** a kivonatolás egyetlen közös, 8192 tokenes hívás minden
+forrásra, fájlonkénti kvóta nélkül (`run-extraction.ts:185`) — a hosszú webes szövegek teljesen kiszorították a
+füzetfotót (map `9c02a5bb`: 49/49 fogalom a webről). **Javítás:** a `completeSourceCoverage` a fogalom nélküli fájlra
+egyfájlos, saját keretes pótlást kér (legfeljebb 6, kép és rövid forrás előre); `EXTRACTION_VERSION` 7. Review: fan-out
+korlát, üres célzott kör is megfigyelés. Merge `0e86705`.
+**Élő újramérés:** a füzetfotó most fogalmat ad; a témafókusz a füzetlap pontjaira szűkít (38 többlet háttérbe).
+Mezopotámia, 5. o., anyag `86dfc04d`: a füzetlap minden pontja (folyóköz, Ázsia/Közel-Kelet, öntözés, csatornák/gátak,
+sumerok, Babilon, lépcsős zikkurat, társadalom: király-főpap, előkelők: papok és katonák, parasztok és kézművesek),
+„füzetlap szerint” meta nélkül, Istár-kapu/Bábel nélkül. Maradék eltérés: a „papkirály” szó helyett a jelentése áll;
+Babilonnál egy mondatban Hammurapi. A korábbi Mezopotámia-változatok (5d31dd69, d9ce054f, 8ed51fa9) törlése a
+tulajdonos döntése.
