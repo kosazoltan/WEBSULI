@@ -51,12 +51,18 @@ test("TouchControls mindig látszik — nincs sm:hidden, nincs hidden+coarse:fle
  * nem lazult: a lenti ellenőrzés a tárcsa MEGLÉTÉT és mind a négy irány bekötését is megköveteli,
  * ráadásul kizárja a régi irány-gombok visszaszivárgását.
  */
-test("TouchControls: köralakú tárcsa vezet (mind a négy irány), gombon csak horgony és Cam", () => {
+/*
+ * SPEC-VÁLTOZÁS 2026-09-29 (`docs/specs/2026-09-29-tornado-ut-kormanyzas.md` D3): a négy logikai gombra
+ * bontás (`joystickToDirections`, küszöb 0,35) volt a mobilos kóválygás gyökéroka — ~23°-ig semmi, fölötte
+ * teljes kormány. A tárcsa most analóg `touchDriveInput`-on át vezet; mindkét tengely (gáz ÉS kormány)
+ * bekötése kötelező, így mind a négy irány továbbra is a tárcsán van.
+ */
+test("TouchControls: köralakú tárcsa vezet (mind a négy irány, analóg), gombon csak horgony és Cam", () => {
   const block = touchControlsBlock();
   assert.match(block, /<VirtualJoystick\b/, "nincs tárcsa a vezérlésben");
-  assert.match(block, /joystickToDirections\s*\(/, "a tárcsa vektora nincs bekötve");
-  for (const dir of ["left", "right", "fwd", "back"]) {
-    assert.match(block, new RegExp(`touchRef\\.current\\.${dir}\\s*=\\s*dirs\\.`), `${dir} nincs a tárcsára kötve`);
+  assert.match(block, /touchDriveInput\s*\(/, "a tárcsa vektora nincs bekötve");
+  for (const axis of ["throttle", "steer"]) {
+    assert.match(block, new RegExp(`touchRef\\.current\\.${axis}\\s*=\\s*drive\\.${axis}`), `${axis} nincs a tárcsára kötve`);
   }
   assert.match(block, /label="⚓"/, "a horgony gomb marad");
   assert.match(block, /label="Cam"/, "a kamera gomb marad");

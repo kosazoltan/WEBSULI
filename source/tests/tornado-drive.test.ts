@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { fromKm, toKm, UNITS_PER_KM } from "../client/src/lib/tornado/world.ts";
-import { stepVehicle, maxSpeedUnits, accelUnits } from "../client/src/lib/tornado/drive.ts";
+import { stepVehicle, maxSpeedUnits, accelUnits, DRIVE_PACE } from "../client/src/lib/tornado/drive.ts";
 
 const SCOUT = { speedKmh: 168, acceleration: 68, handling: 76 };
 
@@ -10,10 +10,16 @@ function body(over: Partial<{ x: number; z: number; heading: number; speed: numb
   return { x: 0, z: 0, heading: 0, speed: 0, anchored: false, ...over };
 }
 
-test("maxSpeedUnits: 168 km/h ≈ 12.13 world-units/s, NEM *60-szoros", () => {
+/*
+ * SPEC-VÁLTOZÁS 2026-09-29 (tulajdonosi kérés, `docs/specs/2026-09-29-tornado-ut-kormanyzas.md` D4):
+ * „a végsebesség érezhetően nagyobb legyen”. A jármű a térkép km-skálájának `DRIVE_PACE` (1,6) -szeresével
+ * halad. A *60-as hiba elleni őr nem lazult: a szorzó a km-skálához képest < 2 (a régi hiba 60 volt).
+ */
+test("maxSpeedUnits: 168 km/h = a km-skála DRIVE_PACE-szerese (≈ 19.41 u/s), NEM *60-szoros", () => {
   const u = maxSpeedUnits(168);
-  almost(u, fromKm(168 / 3600), 1e-9);
-  almost(toKm(u) * 3600, 168, 0.01);
+  almost(u, fromKm(168 / 3600) * DRIVE_PACE, 1e-9);
+  almost(toKm(u / DRIVE_PACE) * 3600, 168, 0.01);
+  assert.ok(u / fromKm(168 / 3600) < 2, `168 km/h must not be ${u} u/s (the old *60 bug)`);
   assert.ok(u < 20, `168 km/h must not be ${u} u/s (the old *60 bug)`);
 });
 
@@ -26,7 +32,8 @@ test("1 s full throttle on a 168 km/h scout covers tens of metres, not kilometre
   const km = toKm(Math.hypot(p.x, p.z));
   assert.ok(km > 0.02 && km < 0.25, `1s distance ${km} km (want ~0.02–0.25)`);
   const kmh = toKm(Math.abs(p.speed)) * 3600;
-  assert.ok(kmh > 20 && kmh < 180, `speed after 1s ${kmh} km/h`);
+  // Spec 2026-09-29-tornado-ut-kormanyzas D4: the km-scale speed is DRIVE_PACE × the rated one.
+  assert.ok(kmh > 20 && kmh < 180 * DRIVE_PACE, `speed after 1s ${kmh} km/h`);
 });
 
 test("steer works from ~2 km/h, not from 72 km/h", () => {
