@@ -22,7 +22,8 @@ tanításához SZÜKSÉGES fogalmak (a téma fogalmai + a megértésükhöz köz
 1. `step-runner.ts`: `startJobFromMap` `owner.topicFocus` → `output.topicFocus`; pedagógus-hash a fókuszált térképből;
    a `:427`, `:1042`, `:1214` betöltés `applyTopicFocus(map, job.output?.topicFocus)`.
 2. `lesson-pipeline-routes.ts` `runOneStepCore`: kérés esetén `decideTopicFocus` a `gateHelper` modellel
-   (`callStepModel(createStudioStepProvider(model, "gateHelper"), { step: "gateHelper", … })`), a térkép a
+   (`callStepModel(createStudioStepProvider(model, "topicFocus"), { step: "pedagogue", policy: "topicFocus", … })` —
+   a `StudioStep` nem tartalmaz `gateHelper`-t; a fókusz a tervezés része, a határidő a saját szabályából jön), a térkép a
    `createDrizzlePipelineStore().loadMap(mapId)`-ből; `updateRun` részlet a fókusz méretéről.
 Ellenőrzés: `node --import tsx --test tests/topic-focus.test.ts tests/lesson-pipeline-runner.test.ts` → pass.
 
@@ -39,3 +40,12 @@ Ellenőrzés: `node --import tsx --test tests/topic-focus.test.ts tests/lesson-p
 3. `server/studio/topic-focus.ts`: hívólista, cause-naplózás, pontosított prompt.
 4. `server/studio/lesson-pipeline-routes.ts` `focusForInstruction`: `[gateHelper, FALLBACK_MODELS.gateHelper]`, `policy: "topicFocus"`.
 5. Mérés: 5 valódi döntés a `94842a1c` térképén (E7); utána élő újragyártás (E8).
+
+## T6 — Review-kör (PR #132)
+1. (Codex P1) Csak kifejezett résztéma-kérés szűkít: a válasz `{ narrow, focusIds }`; `narrow !== true` → nincs fókusz;
+   a kifejezett `narrow: false` döntés, nem hiba (tartalékot nem kérdez). A prompt előbb ezt dönteti el.
+2. (Copilot) `WorkflowConflict` / `WorkflowWaiting` továbbdobva, nem nyeli el a `catch`.
+3. (Copilot) A runner-teszt fixture-je élesben is előállítható fókusz (van benne core).
+4. (Copilot) Ez a dokumentum a valós hívást írja le (`step: "pedagogue"`, `policy: "topicFocus"`).
+5. (Copilot) A fókusz csak kötelezővé tehető (nem `extra`) fogalmakat tartalmaz, így a „kötelező” szám pontos.
+Ellenőrzés: `node --import tsx --test tests/topic-focus.test.ts tests/lesson-pipeline-runner.test.ts` → pass.

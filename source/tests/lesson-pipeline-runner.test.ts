@@ -1778,18 +1778,20 @@ test("bank-ellenőr: vak megoldás nélkül nem fut; a korábban hibátlannak ta
 
 /* Spec 2026-09-29 (docs/specs/2026-09-29-tanari-temafokusz.md): a fókuszált job a kéréshez nem tartozó
  * fogalmak lefedését nem követeli; fókusz nélkül ugyanaz a vázlat elutasítva. */
-test("spec 2026-09-29: témafókusz — a fókuszon kívüli core fogalom hiánya nem buktatja a vázlatot", async () => {
-  const onlySupporting = {
-    sections: [{ heading: "A kért téma", conceptIds: ["s1"], plannedBlocks: ["explain", "check", "recap"], animationSuggestions: [] }],
+test("spec 2026-09-29: témafókusz — a fókuszon kívüli fogalom hiánya nem buktatja a vázlatot", async () => {
+  // PR #132 review (Copilot): a fixture az élesben is előállítható fókusz (van benne core): c1 kötelező,
+  // az s1 a fókuszon kívül esik, így a jobban extra — a vázlat nélküle is elfogadható.
+  const onlyCore = {
+    sections: [{ heading: "A kért téma", conceptIds: ["c1"], plannedBlocks: ["explain", "check", "recap"], animationSuggestions: [] }],
     misconceptions: [],
   };
   const focused = makeDeps(CANNED_AUTHOR);
-  focused.store.seed({ id: "focus-1", mapId: "m1", step: "author", status: "ok", output: { outline: GOOD_OUTLINE, topicFocus: { localIds: ["s1"], demoted: 1 } } });
-  const ok = await approveOutline("focus-1", onlySupporting, focused);
+  focused.store.seed({ id: "focus-1", mapId: "m1", step: "author", status: "ok", output: { outline: GOOD_OUTLINE, topicFocus: { localIds: ["c1"], demoted: 1 } } });
+  const ok = await approveOutline("focus-1", onlyCore, focused);
   assert.equal(ok.ok, true, JSON.stringify(ok));
 
   const plain = makeDeps(CANNED_AUTHOR);
   plain.store.seed({ id: "focus-2", mapId: "m1", step: "author", status: "ok", output: { outline: GOOD_OUTLINE } });
-  const rejected = await approveOutline("focus-2", onlySupporting, plain);
-  assert.equal(rejected.ok, false, "fókusz nélkül a hiányzó core fogalom elutasítást ad");
+  const rejected = await approveOutline("focus-2", onlyCore, plain);
+  assert.equal(rejected.ok, false, "fókusz nélkül a kihagyott supporting fogalom a 90%-os küszöb alá viszi a vázlatot");
 });

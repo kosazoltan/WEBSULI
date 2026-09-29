@@ -77,3 +77,18 @@ Döntések:
 3. Prompt: a téma szabályai, magyarázatai, kidolgozott példái és előfeltételei mind kellenek; kétes esetben be kell venni.
 Elfogadás kiegészítés: **E7** 5 egymás utáni valódi döntésből mind tartalmazza a `c22`, `c23` fogalmat és legalább egy
 számjegyösszeg/maradék-fogalmat (`c21`, `c27` vagy `c28`); **E8** az élő újragyártásban `topicFocus` létrejön.
+
+## Élő igazolás (2026-09-29, 2. kör után)
+Studio-futás `d0b03438…` (job `bddbbebd…`): a fókusz létrejött — 26 fogalomból 9 kötelező (a 3-mal és 9-cel való
+oszthatóság szabálya, maradéka, magyarázata, két példa és két ellenpélda), 17 kiegészítő; a vázlat 12 fejezetéből 9
+a kért témáról szól (korábban 4); `done` 782 s, közzétéve (lecke `716fd49c…`, anyag `de1333a2…`), élesben megnyitva
+(websuli.vip/preview), konzolhiba 0. Nyitott: a tanár konkrét számai (246, 459, 7341) nem kerülnek a szövegbe — a
+szerző a forrásban igazolt példákat (3975, 8232, 6975, 7495, 8495) használja.
+
+## Review-kör (PR #132)
+1. **Codex P1 — a kérés nem mindig témakérés** (terjedelem, évfolyam, elírás): a modell előbb `narrow`-t dönt;
+   csak `narrow: true` szűkít; a kifejezett `false` döntés (nincs tartalék-hívás).
+2. **Copilot — a széles `catch` elnyelte a bérletvesztést**: `WorkflowConflict`/`WorkflowWaiting` továbbdobva.
+3. **Copilot — irreális teszt-fixture**: élesben is előállítható fókuszra cserélve.
+4. **Copilot — a végrehajtási dokumentum hívása**: javítva.
+5. **Copilot — a „kötelező” szám az extra fogalmakat is számolta**: a fókusz csak nem-`extra` fogalmakat tartalmaz.

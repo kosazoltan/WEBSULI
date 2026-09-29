@@ -1,4 +1,5 @@
 import type { MapConcept } from "./coverage";
+import { WorkflowConflict, WorkflowWaiting } from "../workflows/engine";
 import { logger } from "../lib/logger";
 
 /**
@@ -17,17 +18,20 @@ export type TopicFocus = { localIds: string[]; demoted: number };
 
 type FocusableMap = { concepts: MapConcept[] };
 
-/** The model's `{ focusIds }` → a usable focus, or null when it would not narrow anything safely. */
+/**
+ * The model's `{ narrow, focusIds }` → a usable focus, or null when it would not narrow anything safely.
+ * PR #132 review: a request is not always a topic (length, grade, a typo fix) — only an explicit `narrow: true`
+ * narrows. Only concepts coverage could require (not `extra`) count as the focus.
+ */
 export function validateTopicFocus(concepts: MapConcept[], raw: unknown): TopicFocus | null {
-  const ids = (raw as { focusIds?: unknown } | null)?.focusIds;
-  if (!Array.isArray(ids)) return null;
-  const known = new Set(concepts.map((c) => c.localId));
-  const localIds = [...new Set(ids.filter((id): id is string => typeof id === "string" && known.has(id)))];
+  const answer = raw as { narrow?: unknown; focusIds?: unknown } | null;
+  if (answer?.narrow !== true || !Array.isArray(answer.focusIds)) return null;
+  const requirable = new Set(concepts.filter((c) => c.examWeight !== "extra").map((c) => c.localId));
+  const localIds = [...new Set(answer.focusIds.filter((id): id is string => typeof id === "string" && requirable.has(id)))];
   const chosen = new Set(localIds);
   // Without a core concept the lesson would have no backbone; choosing everything narrows nothing.
   if (!concepts.some((c) => chosen.has(c.localId) && c.examWeight === "core")) return null;
-  if (localIds.length === concepts.length) return null;
-  const demoted = concepts.filter((c) => !chosen.has(c.localId) && c.examWeight !== "extra").length;
+  const demoted = requirable.size - localIds.length;
   if (demoted === 0) return null;
   return { localIds, demoted };
 }
@@ -43,12 +47,16 @@ export function applyTopicFocus<T extends FocusableMap>(map: T, focus: TopicFocu
 }
 
 export const TOPIC_FOCUS_SYSTEM = [
-  "Tananyag-tervező segítő vagy. A tanár egy konkrét témát kért; a tudástár ennél bővebb forrásból készült.",
+  "Tananyag-tervező segítő vagy. A tudástár a tanár által adott forrásból készült; a tanár kérést is írt.",
+  "ELŐSZÖR döntsd el, hogy a kérés a forrás egy RÉSZTÉMÁJÁT kéri-e (például: csak a 3-mal és 9-cel való",
+  "oszthatóságot a sok szabályból). Ha a kérés a terjedelemről, évfolyamról, nehézségről, stílusról, egy elírás",
+  "javításáról szól, vagy a forrás egészét kéri, akkor NEM résztéma: ilyenkor narrow=false és üres lista.",
+  "Ha résztémát kér:",
   "Válaszd ki a fogalmak közül MINDAZT, ami a KÉRT TÉMA tanításához kell: a téma szabályait, azok magyarázatát",
   "(miért működnek), a témához tartozó kidolgozott példa-fogalmakat, a témán belüli összefüggéseket, és azokat az",
   "előfeltételeket, amelyek nélkül a téma nem érthető meg. Kétes esetben, ha a fogalom a kért témáról szól,",
   "vedd be. Ami a forrásban szerepel, de más témához tartozik (például más számra vonatkozó szabály), maradjon ki.",
-  'Válaszolj kizárólag ilyen JSON-nal: { "focusIds": ["<localId>", "…"] }',
+  'Válaszolj kizárólag ilyen JSON-nal: { "narrow": true|false, "focusIds": ["<localId>", "…"] }',
 ].join(" ");
 
 /** The user message: the teacher's request and the concept list (ids, terms, short definitions, weights). */
@@ -79,10 +87,18 @@ export async function decideTopicFocus(
   const user = topicFocusUserMessage(instruction, concepts);
   for (const [index, call] of callers.entries()) {
     try {
-      const focus = validateTopicFocus(concepts, await call(TOPIC_FOCUS_SYSTEM, user));
+      const raw = await call(TOPIC_FOCUS_SYSTEM, user);
+      // An explicit "not a subtopic request" is a decision, not a failure: no fallback is asked.
+      if ((raw as { narrow?: unknown } | null)?.narrow === false) {
+        logger.info("[STUDIO] Témafókusz: a kérés nem résztéma-kérés, a teljes térkép marad.");
+        return null;
+      }
+      const focus = validateTopicFocus(concepts, raw);
       if (focus) return focus;
       logger.warn(`[STUDIO] Témafókusz: a(z) ${index + 1}. modell válasza nem használható (nincs kulcsfogalom vagy mindent kijelölt).`);
     } catch (error) {
+      // PR #132 review: a lost lease or a waiting workflow is not a model failure — it must reach the engine.
+      if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
       logger.warn(`[STUDIO] Témafókusz: a(z) ${index + 1}. modell hívása hibázott: ${describe(error)}`);
     }
   }
