@@ -2225,3 +2225,41 @@ test("spec kapu-proba (utómérés, élő job 9ef52e4f): a limit ELŐTT az elér
   assert.equal(deps.store.jobs.get("proba-early")!.output?.probaDisabled, undefined);
   assert.equal((deps.store.lessons.get("lesson-proba-early")!.json as Lesson).sections[0].probaEnabled, true);
 });
+
+
+/* Review PR #143 (P2): a limit előtt elfogyott szerzői keret is limitnek számít — nincs „Váratlan hiba”. */
+async function withExhaustedAuthor<T>(id: string, work: () => Promise<T>): Promise<T | undefined> {
+  const { store } = memoryWorkflows();
+  let out: T | undefined;
+  await assert.rejects(executeWorkflow(store, { id: `${id}-run`, owner: "test", mode: "studio" }, async () => {
+    await workflowPhase("pedagogue");
+    for (let guard = 0; workflowStepVisitsLeft("author") > 0 && guard < 20; guard++) {
+      for (const step of ["author", "animator", "lektor"]) await workflowPhase(step);
+    }
+    out = await work();
+    throw new Error("teszt-vég");
+  }), /teszt-vég/);
+  return out;
+}
+
+test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel az elérhetetlen Próba kikapcsol és a lecke publikál", async () => {
+  const { deps } = await gateAtLimitSetup("proba-budget", (l) => {
+    l.sections[0].probaEnabled = true;
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, oneAreaCheck);
+  }, 0);
+  const log = published(deps.store);
+  const gated = await withExhaustedAuthor("proba-budget", () => runPipelineStep("proba-budget", deps));
+  assert.ok(gated?.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  assert.deepEqual(deps.store.jobs.get("proba-budget")!.output?.probaDisabled, [0]);
+});
+
+test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel más kapu-lelet → tiszta hiba, nem szerzői kör", async () => {
+  const { deps } = await gateAtLimitSetup("gate-early-budget", (l) => {
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, { ...oneAreaCheck, question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
+  }, 0);
+  deps.store.maps.get("m1")!.concepts.push({ localId: "idegen", term: "Pitagorasz-tétel", examWeight: "supporting" } as MapConcept);
+  const gated = await withExhaustedAuthor("gate-early-budget", () => runPipelineStep("gate-early-budget", deps));
+  assert.equal(gated?.ok, false, `nincs szerzői kör keret nélkül: ${JSON.stringify(gated)}`);
+  assert.match(deps.store.jobs.get("gate-early-budget")!.error ?? "", /nincs több lépéskeret/);
+});

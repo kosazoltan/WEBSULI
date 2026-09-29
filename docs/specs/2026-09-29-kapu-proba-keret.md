@@ -48,3 +48,11 @@ jött, és mind kikapcsolt. A limit ELŐTT ez visszalépés: korábban a kapu→
 a gyerek jutalmazható Próbát kapott. **Javítás:** a determinisztikus kikapcsolás csak `round >= MAX_AUTHOR_ROUNDS`
 esetén fut; előtte a meglévő javítókör. Teszt: „utómérés … a limit ELŐTT … nem kapcsol ki”, a javítás előtt bukott;
 a limitkori E1 teszt változatlan.
+
+## Review-kör (PR #143)
+- **Végrehajtási fájl (Copilot + Codex P1): pótolva.** A kódot megelőző, AI-olvasható végrehajtás bekerült a
+  „Utómérés és review (#143)” szakaszba.
+- **A limit előtt elfogyott szerzői keret (Codex P2): javítva.** A kapu elején mért `repairBudget` alapján a
+  „nincs több szerzői kör” állapot (`round >= MAX` VAGY elfogyott keret) kapcsolja ki az elérhetetlen Próbát. A limit
+  előtti kapu→szerző átmenet keret nélkül tiszta hibával áll meg, nem „Váratlan hibával”. Két új teszt, a javítás
+  előtt buktak.
