@@ -125,6 +125,7 @@ import {
   buildTornado,
   animateTornado,
   buildTerrainChunk,
+  buildBridgeChunk,
   buildProp,
   buildRain,
   animateRain,
@@ -155,7 +156,7 @@ import {
   gripAt,
   surfaceAt,
   SURFACE_LABEL,
-  terrainHeight,
+  groundHeight,
   clampToWorld,
   toKm,
   fromKm,
@@ -1690,7 +1691,7 @@ function PlayScreen(props: {
       }
 
       // --- vehicle transform ---
-      vehicle.position.set(p.x, terrainHeight(p.x, p.z), p.z);
+      vehicle.position.set(p.x, groundHeight(p.x, p.z), p.z);
       // A mozgás iránya (sin h, −cos h); a modell orra a +z tengely. Az Y körüli
       // θ forgatás a +z-t (sin θ, cos θ)-ba viszi, tehát θ = π − h. (A korábbi
       // θ = h tükrözött: a jármű tolatva haladt és fordítva kanyarodott.)
@@ -1725,7 +1726,7 @@ function PlayScreen(props: {
 
     // --- camera ---
     const p = playerRef.current;
-    const ground = terrainHeight(p.x, p.z);
+    const ground = groundHeight(p.x, p.z);
     if (settingsRef.current.cameraMode === "cockpit") {
       camera.position.set(p.x - Math.sin(p.heading) * 1, ground + 3.2, p.z + Math.cos(p.heading) * 1);
       camera.lookAt(p.x + Math.sin(p.heading) * 30, ground + 2, p.z - Math.cos(p.heading) * 30);
@@ -2079,6 +2080,17 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
       terrain.userData.perScene = true;
       sc.scene.add(terrain);
       objects.push(terrain);
+      const bridge = buildBridgeChunk(cx, cz);
+      if (bridge) {
+        bridge.userData.perScene = true;
+        if (quality === "high") {
+          bridge.traverse((child) => {
+            if (child instanceof THREE.Mesh) child.castShadow = child.receiveShadow = true;
+          });
+        }
+        sc.scene.add(bridge);
+        objects.push(bridge);
+      }
       for (const prop of propsInChunk(cx, cz)) {
         const mesh = buildProp(prop);
         mesh.userData.perScene = true;

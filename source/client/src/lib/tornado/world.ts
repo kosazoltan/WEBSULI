@@ -73,6 +73,11 @@ function valueNoise(x: number, z: number, cell: number, salt: number): number {
  * never a billiard table — the brief explicitly rules out a flat map.
  */
 export function terrainHeight(x: number, z: number): number {
+  return baseTerrainHeight(x, z) - riverCarve(x, z);
+}
+
+/** The field and the road cuttings, without the river bed. Bridge decks follow this height. */
+export function baseTerrainHeight(x: number, z: number): number {
   const hills = valueNoise(x, z, 420, 11) - 0.5;
   const rolls = valueNoise(x, z, 150, 29) - 0.5;
   const ripple = valueNoise(x, z, 48, 71) - 0.5;
@@ -82,13 +87,147 @@ export function terrainHeight(x: number, z: number): number {
   return base * (1 - onRoad * 0.55);
 }
 
+/* ============================ river & bridges ============================ */
+/*
+ * Spec 2026-09-29-tornado-fizika H1. The river used to be paint on a flat field, painted over the
+ * asphalt, and `surfaceAt` reported water on the road: the car forded every crossing. Now the river
+ * has a bed and every road over it is a bridge deck at the road's own (uncarved) height.
+ */
+
+/** Half-width of the water band (the terrain shader uses the same 22). */
+export const RIVER_HALF_WIDTH = 22;
+/** Where the bank has climbed back to the field. */
+export const RIVER_BANK = 30;
+/** Depth of the river bed below the field. */
+export const RIVER_DEPTH = 2.6;
+/** Half-width of a road band (`roadFactor` reaches 0 here). */
+export const ROAD_HALF_WIDTH = 9;
+/** A deck reaches this far past the bank, so no carved slope is left open on the road. */
+const BRIDGE_MARGIN = 4;
+/** The deck sits this much above the uncarved road, clear of the coarse terrain triangles. */
+export const DECK_LIFT = 0.35;
+
 /** River: a sine-shaped band running north-south through the map. */
 export function riverCenterX(z: number): number {
   return Math.sin(z / 340) * 260 + Math.sin(z / 90) * 40;
 }
 
 export function isWater(x: number, z: number): boolean {
-  return Math.abs(x - riverCenterX(z)) < 22;
+  return Math.abs(x - riverCenterX(z)) < RIVER_HALF_WIDTH;
+}
+
+/** How deep the river bed is cut at a point: full depth in the water, a smooth bank to the field. */
+export function riverCarve(x: number, z: number): number {
+  const d = Math.abs(x - riverCenterX(z));
+  if (d >= RIVER_BANK) return 0;
+  if (d <= RIVER_HALF_WIDTH) return RIVER_DEPTH;
+  return RIVER_DEPTH * smooth((RIVER_BANK - d) / (RIVER_BANK - RIVER_HALF_WIDTH));
+}
+
+/** The nearest road line to a coordinate. */
+export function nearestLine(v: number): number {
+  return Math.round((v + HALF_WORLD) / ROAD_SPACING) * ROAD_SPACING - HALF_WORLD;
+}
+
+/** Across-road offsets sampled for a road running along x (the river's x changes with z). */
+const ACROSS = [-ROAD_HALF_WIDTH, -ROAD_HALF_WIDTH / 2, 0, ROAD_HALF_WIDTH / 2, ROAD_HALF_WIDTH];
+const DECK_REACH = RIVER_BANK + BRIDGE_MARGIN;
+
+/** Is the road along x at z = `line` bridged at `x`? (Any part of its width over the carved bed.) */
+export function bridgedAlongX(x: number, line: number): boolean {
+  for (const off of ACROSS) {
+    if (Math.abs(x - riverCenterX(line + off)) < DECK_REACH) return true;
+  }
+  return false;
+}
+
+/** Is the road along z at x = `line` bridged at `z`? Exact: the band [line−9, line+9] vs the river. */
+function bridgedAlongZ(line: number, z: number): boolean {
+  return Math.max(0, Math.abs(riverCenterX(z) - line) - ROAD_HALF_WIDTH) < DECK_REACH;
+}
+
+/** True where the wheels are on a bridge deck. */
+export function onBridge(x: number, z: number): boolean {
+  if (Math.abs(x) > HALF_WORLD + ROAD_HALF_WIDTH || Math.abs(z) > HALF_WORLD + ROAD_HALF_WIDTH) return false;
+  if (distToGridLine(z) < ROAD_HALF_WIDTH && bridgedAlongX(x, nearestLine(z))) return true;
+  if (distToGridLine(x) < ROAD_HALF_WIDTH && bridgedAlongZ(nearestLine(x), z)) return true;
+  return false;
+}
+
+/** Height of the deck surface (only meaningful where `onBridge`). */
+export function deckSurfaceHeight(x: number, z: number): number {
+  return baseTerrainHeight(x, z) + DECK_LIFT;
+}
+
+/** What the wheels stand on: the deck on a bridge, the ground (or river bed) elsewhere. */
+export function groundHeight(x: number, z: number): number {
+  return onBridge(x, z) ? deckSurfaceHeight(x, z) : terrainHeight(x, z);
+}
+
+/**
+ * One stretch of bridge deck inside a chunk.
+ * `axis: "x"` — the road runs along x at z = `line`; `from..to` are x values.
+ * `axis: "z"` — the road runs along z at x = `line`; `from..to` are z values.
+ */
+export type BridgeSpan = { axis: "x" | "z"; line: number; from: number; to: number };
+
+/** Along-road sampling step for spans, world units. */
+const SPAN_STEP = 1;
+
+/**
+ * Every bridge stretch whose road line belongs to this chunk (`floor(line / CHUNK_SIZE)`), clipped to
+ * the chunk's [base, base + CHUNK_SIZE] along the road — neighbouring chunks meet exactly at the edge.
+ * Deterministic in (cx, cz), like `propsInChunk`.
+ */
+export function bridgeSpansInChunk(cx: number, cz: number): BridgeSpan[] {
+  const spans: BridgeSpan[] = [];
+  const baseX = cx * CHUNK_SIZE;
+  const baseZ = cz * CHUNK_SIZE;
+  if (Math.abs(baseX) > HALF_WORLD || Math.abs(baseZ) > HALF_WORLD) return spans;
+
+  const collect = (axis: "x" | "z", line: number, start: number, test: (s: number) => boolean) => {
+    let from: number | null = null;
+    // The mesh errs on the long side by one step, so the deck always covers where `onBridge` is true.
+    for (let s = start; s <= start + CHUNK_SIZE; s += SPAN_STEP) {
+      const on = test(s);
+      if (on && from === null) from = Math.max(start, s - SPAN_STEP);
+      if (!on && from !== null) {
+        spans.push({ axis, line, from, to: s });
+        from = null;
+      }
+    }
+    if (from !== null) spans.push({ axis, line, from, to: start + CHUNK_SIZE });
+  };
+
+  for (let line = -HALF_WORLD; line <= HALF_WORLD; line += ROAD_SPACING) {
+    if (Math.floor(line / CHUNK_SIZE) === cz) collect("x", line, baseX, (x) => bridgedAlongX(x, line));
+    if (Math.floor(line / CHUNK_SIZE) === cx) collect("z", line, baseZ, (z) => bridgedAlongZ(line, z));
+  }
+  return spans;
+}
+
+/** Map a point along a span (`s` along the road, `across` from its centreline) to world x, z. */
+export function spanPoint(span: BridgeSpan, s: number, across: number): { x: number; z: number } {
+  return span.axis === "x" ? { x: s, z: span.line + across } : { x: span.line + across, z: s };
+}
+
+/**
+ * The railing pieces of a span: the whole span, minus a gap wherever a crossing road passes through
+ * (the (0,0), (−300,−600), (300,600) junctions sit in the river zone). Meshes and colliders share it.
+ */
+export function bridgeRailSegments(span: BridgeSpan): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  let from: number | null = null;
+  for (let s = span.from; s <= span.to; s += SPAN_STEP) {
+    const open = distToGridLine(s) < ROAD_HALF_WIDTH;
+    if (!open && from === null) from = s;
+    if (open && from !== null) {
+      if (s - SPAN_STEP > from) out.push({ from, to: s - SPAN_STEP });
+      from = null;
+    }
+  }
+  if (from !== null && span.to > from) out.push({ from, to: span.to });
+  return out;
 }
 
 /** 0 = off-road, 1 = on the centreline of a road. */
@@ -114,6 +253,8 @@ function distToGridLine(v: number): number {
  * helyet a horgonyzáshoz" turned into a rule.
  */
 export function surfaceAt(x: number, z: number): SurfaceKind {
+  // A bridge deck is tarmac even though the river runs beneath it.
+  if (onBridge(x, z)) return "asphalt";
   if (isWater(x, z)) return "water";
   if (roadFactor(x, z) > 0.55) return "asphalt";
   const dirt = valueNoise(x, z, 190, 5);
@@ -186,6 +327,7 @@ export function propsInChunk(cx: number, cz: number): WorldProp[] {
     // Nothing sits in the river or on the tarmac.
     if (isWater(x, z)) continue;
     if (roadFactor(x, z) > 0.35) continue;
+    if (onBridge(x, z)) continue;
 
     const pick = hash2(i * 7 + cx, i * 13 + cz, 53);
     let kind: PropKind;

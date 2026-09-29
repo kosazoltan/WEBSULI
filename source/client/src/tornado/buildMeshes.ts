@@ -21,9 +21,17 @@ import type { GraphicsQuality } from "@/lib/tornado/progress";
 import {
   terrainHeight,
   surfaceAt,
+  bridgeSpansInChunk,
+  bridgeRailSegments,
+  bridgedAlongX,
+  deckSurfaceHeight,
+  nearestLine,
+  spanPoint,
   CHUNK_SIZE,
   HALF_WORLD,
   ROAD_SPACING,
+  ROAD_HALF_WIDTH,
+  type BridgeSpan,
   type WorldProp,
 } from "@/lib/tornado/world";
 import { glowTexture } from "@/game-engine/three-look/sprites";
@@ -707,6 +715,115 @@ export function buildTerrainChunk(cx: number, cz: number, quality: GraphicsQuali
   // Only the HIGH profile renders a shadow map; elsewhere this flag is inert.
   mesh.receiveShadow = quality === "high";
   return mesh;
+}
+
+/* ============================ bridges ============================ */
+
+const DECK_STEP = 2;
+const FASCIA_DEPTH = 1.1;
+const RAIL_HEIGHT = 0.95;
+const RAIL_INSET = 0.2;
+const PILLAR_EVERY = 12;
+const PILLAR_HALF = 0.6;
+
+/**
+ * The bridge decks of one chunk (spec 2026-09-29-tornado-fizika D5): an asphalt deck at the road's own
+ * height, concrete fascia beams, railings and pillars down to the river bed — so the road visibly runs
+ * OVER the water. Geometry is unique per chunk (disposed with the chunk); materials are shared.
+ * Returns null when the chunk has no bridge.
+ */
+export function buildBridgeChunk(cx: number, cz: number): THREE.Group | null {
+  const spans = bridgeSpansInChunk(cx, cz);
+  if (spans.length === 0) return null;
+
+  const deck: number[] = [];
+  const concrete: number[] = [];
+  const quad = (out: number[], a: THREE.Vector3Like, b: THREE.Vector3Like, c: THREE.Vector3Like, d: THREE.Vector3Like) => {
+    out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+  };
+  const at = (span: BridgeSpan, s: number, across: number, dy = 0) => {
+    const p = spanPoint(span, s, across);
+    return { x: p.x, y: deckSurfaceHeight(p.x, p.z) + dy, z: p.z };
+  };
+  const steps = (from: number, to: number) => {
+    const out: number[] = [];
+    for (let s = from; s < to; s += DECK_STEP) out.push(s);
+    out.push(to);
+    return out;
+  };
+
+  for (const span of spans) {
+    // Deck. Where a bridged road along x crosses this road, that deck owns the junction (no z-fight).
+    const ss = steps(span.from, span.to);
+    for (let i = 0; i < ss.length - 1; i++) {
+      const s0 = ss[i]!;
+      const s1 = ss[i + 1]!;
+      if (span.axis === "z") {
+        const mid = (s0 + s1) / 2;
+        const lineZ = nearestLine(mid);
+        if (Math.abs(mid - lineZ) < ROAD_HALF_WIDTH && bridgedAlongX(span.line, lineZ)) continue;
+      }
+      for (const [a0, a1] of [[-ROAD_HALF_WIDTH, 0], [0, ROAD_HALF_WIDTH]] as const) {
+        quad(deck, at(span, s0, a0), at(span, s1, a0), at(span, s1, a1), at(span, s0, a1));
+      }
+    }
+
+    // Fascia beams and railings, with gaps where a crossing road passes.
+    for (const seg of bridgeRailSegments(span)) {
+      const rs = steps(seg.from, seg.to);
+      for (let i = 0; i < rs.length - 1; i++) {
+        const s0 = rs[i]!;
+        const s1 = rs[i + 1]!;
+        for (const side of [-1, 1]) {
+          const edge = side * ROAD_HALF_WIDTH;
+          quad(concrete, at(span, s0, edge), at(span, s1, edge), at(span, s1, edge, -FASCIA_DEPTH), at(span, s0, edge, -FASCIA_DEPTH));
+          const rail = side * (ROAD_HALF_WIDTH - RAIL_INSET);
+          quad(concrete, at(span, s0, rail, RAIL_HEIGHT), at(span, s1, rail, RAIL_HEIGHT), at(span, s1, rail), at(span, s0, rail));
+        }
+      }
+    }
+
+    // Pillars down to the bed, where the bed is deep enough to see them.
+    for (let s = Math.ceil(span.from / PILLAR_EVERY) * PILLAR_EVERY; s <= span.to; s += PILLAR_EVERY) {
+      for (const across of [-ROAD_HALF_WIDTH * 0.6, ROAD_HALF_WIDTH * 0.6]) {
+        const p = spanPoint(span, s, across);
+        const top = deckSurfaceHeight(p.x, p.z) - FASCIA_DEPTH;
+        const bottom = terrainHeight(p.x, p.z) - 0.4;
+        if (top - bottom < 1.2) continue;
+        const h = PILLAR_HALF;
+        const corners = [
+          [-h, -h],
+          [h, -h],
+          [h, h],
+          [-h, h],
+        ] as const;
+        for (let k = 0; k < 4; k++) {
+          const [ax, az] = corners[k]!;
+          const [bx, bz] = corners[(k + 1) % 4]!;
+          quad(
+            concrete,
+            { x: p.x + ax, y: top, z: p.z + az },
+            { x: p.x + bx, y: top, z: p.z + bz },
+            { x: p.x + bx, y: bottom, z: p.z + bz },
+            { x: p.x + ax, y: bottom, z: p.z + az },
+          );
+        }
+      }
+    }
+  }
+
+  const group = new THREE.Group();
+  group.name = `bridge-${cx}:${cz}`;
+  const make = (positions: number[], material: THREE.Material) => {
+    if (positions.length === 0) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    g.computeVertexNormals();
+    group.add(new THREE.Mesh(g, material));
+  };
+  make(deck, mat("bridge-deck", "#6f737b", { side: THREE.DoubleSide }));
+  make(concrete, mat("bridge-concrete", "#d6d1c4", { side: THREE.DoubleSide }));
+  return group;
 }
 
 /** One prop. Geometry and material are shared per kind. */
