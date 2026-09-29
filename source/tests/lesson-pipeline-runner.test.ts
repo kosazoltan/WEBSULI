@@ -2076,3 +2076,26 @@ test("spec limit-banktetel (E4): a banknál hosszabb indexre mutató blokkoló n
   assert.equal(reviewed.ok, false);
   assert.match(job.error ?? "", /tartalmi javítást kér/);
 });
+
+test("spec limit-banktetel (review): ha a bank-ellenőr ugyanarra a tételre már jelzett, a jelzés limit-eredetű lesz — a kapu a limit-üzenettel bukik", async () => {
+  const { deps, store, job } = await limitSetup("lim-dup", [LIMIT_NOTES[0]], 0);
+  // A bank-ellenőr ugyanazt a kvíztételt két igaz opcióval ítéli meg.
+  const inner = deps.providerFactory;
+  const lesson = job.output!.lesson as Lesson;
+  const dupDeps = { ...deps, providerFactory: (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if (!(args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
+      return { content: JSON.stringify({ errors: [], choices: keyedChoices(lesson, { "experience.quiz[4]": [true, true, true] }) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    } } as IAIProvider;
+  } };
+  assert.ok((await runPipelineStep("lim-dup", dupDeps)).ok);
+  const flags = job.output?.choiceFlags as Array<{ path: string; origin?: string }>;
+  assert.deepEqual(flags.map((f) => f.path), ["experience.quiz[4]"], "egyszer");
+  assert.equal(flags[0].origin, "limit");
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  assert.equal((await runPipelineStep("lim-dup", dupDeps)).ok, false);
+  assert.equal(log.length, 0);
+  assert.match(job.error ?? "", /Hibás banktétel maradt a limiten/);
+});

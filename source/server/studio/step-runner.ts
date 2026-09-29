@@ -994,7 +994,12 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             { ...job.output, report: parsed.data, reportRound: job.round, blockers });
         }
         const existing = Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : [];
-        const merged = [...existing, ...limitFlags.filter((f) => !existing.some((e) => e.path === f.path))];
+        // Ugyanarra a tételre a bank-ellenőr is jelezhetett: a jelzés egyszer marad, de limit-eredetű (a kapu üzenete miatt).
+        const limitPaths = new Set(limitFlags.map((f) => f.path));
+        const merged = [
+          ...existing.map((e) => (limitPaths.has(e.path) ? { ...e, origin: "limit" as const } : e)),
+          ...limitFlags.filter((f) => !existing.some((e) => e.path === f.path)),
+        ];
         job.output = { ...job.output, choiceFlags: merged };
         logger.warn(`[STUDIO] Körlimiten maradt banktétel-hiba a kapunak kivételre (${job.id}, ${job.round}. kör): ${limitFlags.map((f) => f.path).join(", ")}`);
       }

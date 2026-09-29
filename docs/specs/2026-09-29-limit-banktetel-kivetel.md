@@ -66,3 +66,12 @@ A körlimiten maradt, KIZÁRÓLAG banktételre mutató blokkolók esetén:
 - **E4** A kapu SHALL NOT publikálni, ha a kivétel után a bank nem felel meg, vagy ha bármely blokkoló nem kivett banktételre mutat (teszt).
 - **E6** A `bankUnitQuota` összege a tartalékkal SHALL ≥ 48 feladat és ≥ 80 kvíz legyen (teszt).
 - **E5** Kapuk zöldek; élő újramérés ugyanazzal a témával: `done`, publikált lecke, a kivett tételek a naplóban.
+
+## Review-kör (PR #139)
+- **Codex P1 („a célkvótát a sémában is kényszerítsd ki”): tudatosan nem.** A célkvóta minimumként való kikényszerítése
+  minden 45/75-ös csomagra újrapróbát kérne (többletköltség, és a bankgyártás gyakrabban bukna), és a meglévő 45/75-ös
+  tesztcsomagokat is érvénytelenítené. A tartalék ezért best-effort: a modell a promptban a célkvótát kapja, a séma
+  a minimumot és a célkvótás felső korlátot ellenőrzi. Ha a modell csak a minimumot adja, a viselkedés azonos a
+  változás előttivel (a kapu nem publikál), tehát semmi nem romlik.
+- **Copilot (az ugyanarra a tételre mutató bank-ellenőri és lektori jelzés): javítva.** A jelzés egyszer marad, de
+  limit-eredetű lesz, így a kapu a limit-üzenettel bukik. Új teszt: „spec limit-banktetel (review)”, a javítás előtt bukott.
