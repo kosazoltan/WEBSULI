@@ -364,7 +364,8 @@ export function parseProgress(raw: string | null | undefined): TornadoProgress {
   const school: SchoolLevel =
     settingsSrc.school === "auto"
       ? "auto"
-      : typeof settingsSrc.school === "number" && settingsSrc.school >= 1 && settingsSrc.school <= 6
+      : // Spec 2026-09-29: 1..12 (the shared grade bank covers 7..12).
+        typeof settingsSrc.school === "number" && settingsSrc.school >= 1 && settingsSrc.school <= 12
         ? (Math.round(settingsSrc.school) as SchoolLevel)
         : base.settings.school;
   const quizMode: QuizMode =

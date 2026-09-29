@@ -1,4 +1,5 @@
 import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
+import { createGradeQuizSeen, markGradeQuizSeen } from "@/game-engine/gradeQuiz";
 import {
   useCallback,
   useEffect,
@@ -720,7 +721,8 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
   const s = progress.settings;
   const set = (patch: Partial<TornadoProgress["settings"]>) => commit(updateSettings(progress, patch));
 
-  const schoolOptions: SchoolLevel[] = [1, 2, 3, 4, 5, 6, "auto"];
+  // Spec 2026-09-29: a teljes általános és középiskola (7–12: közös évfolyam-bank).
+  const schoolOptions: SchoolLevel[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, "auto"];
   const quizModes: QuizMode[] = ["math", "english", "mixed"];
   const qualities: GraphicsQuality[] = ["low", "medium", "high"];
 
@@ -731,15 +733,20 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
 
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-white/60 mb-1.5">School Level — iskolai szint</p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5" data-testid="tornado-school-levels">
             {schoolOptions.map((opt) => (
-              <ToggleChip key={String(opt)} active={s.school === opt} onClick={() => set({ school: opt })}>
+              <ToggleChip
+                key={String(opt)}
+                active={s.school === opt}
+                onClick={() => set({ school: opt })}
+                className="min-h-[44px] w-full px-1 whitespace-nowrap"
+              >
                 {schoolLevelLabel(opt)}
               </ToggleChip>
             ))}
           </div>
           <p className="text-[11px] text-white/45 mt-1">
-            AUTO: a szint alapján választja az osztályt (1–30 → 1–2. o. … 181–200 → 6. o.).
+            AUTO: a szint alapján választja az osztályt (1–16 → 1. o. … 184–200 → 12. o.).
           </p>
         </div>
 
@@ -801,16 +808,17 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
   );
 }
 
-function ToggleChip(props: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function ToggleChip(props: { active: boolean; onClick: () => void; children: React.ReactNode; className?: string }) {
   return (
     <button
       onClick={() => {
         sfxClick();
         props.onClick();
       }}
+      aria-pressed={props.active}
       className={`text-sm px-3 py-1.5 rounded-lg border font-semibold ${
         props.active ? "border-sky-400/70 bg-sky-900/40 text-sky-100" : "border-white/15 bg-slate-900/50 text-white/70"
-      }`}
+      } ${props.className ?? ""}`}
     >
       {props.children}
     </button>
@@ -1022,6 +1030,8 @@ function PlayScreen(props: {
     return id;
   };
   const recentQuizRef = useRef<string[]>([]);
+  /** Spec 2026-09-29: a futásban feltett kérdések — a 7–12. évfolyamos közös bank nem ismétel. */
+  const gradeSeenRef = useRef(createGradeQuizSeen());
   const adaptiveRef = useRef(createAdaptiveSession(primaryGrade));
   const answerLockedRef = useRef(false);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
@@ -1079,10 +1089,12 @@ function PlayScreen(props: {
         mode: props.coupon.active ? "mixed" : settingsRef.current.quizMode,
         material: materialRef.current,
         recent: recentQuizRef.current,
+        gradeSeen: gradeSeenRef.current,
         rng: drawRng,
       });
       const shuffled = shuffleOptions(q, drawRng);
       recentQuizRef.current = [...recentQuizRef.current.slice(-8), q.id];
+      markGradeQuizSeen(gradeSeenRef.current, q);
       lastQuizAtRef.current = elapsedRef.current;
       setQuizReason(reason);
       setActiveQuiz(shuffled);
@@ -1109,6 +1121,7 @@ function PlayScreen(props: {
     elapsedRef.current = 0;
     distanceTravelledRef.current = 0;
     recentQuizRef.current = [];
+    gradeSeenRef.current = createGradeQuizSeen();
     setResult(null);
     setAnchorMsg(null);
     setActiveQuiz(null);
@@ -1561,6 +1574,7 @@ function PlayScreen(props: {
     elapsedRef.current = 0;
     distanceTravelledRef.current = 0;
     recentQuizRef.current = [];
+    gradeSeenRef.current = createGradeQuizSeen();
     const sc = sceneRef.current;
     if (sc) setAnchorsVisible(sc.vehicle, false);
     setResult(null);
