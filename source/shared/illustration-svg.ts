@@ -1,4 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
+import { enforceIllustrationContrast, ILLUSTRATION_PAPER, themeDependentTexts } from "./svg-contrast";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 2. szelet): szabad SVG-illusztráció.
@@ -21,7 +22,35 @@ const ATTRS = ["viewBox", "xmlns", "width", "height", "x", "y", "x1", "y1", "x2"
 export const ILLUSTRATION_MAX_CHARS = 30_000;
 const MAX_ELEMENTS = 400;
 
-export type IllustrationCheck = { ok: true; svg: string; labels: string[] } | { ok: false; problems: string[] };
+export type IllustrationCheck = { ok: true; svg: string; labels: string[]; contrastFixes: string[] } | { ok: false; problems: string[] };
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const PAPER_ID = "websuli-paper";
+
+/**
+ * Spec 2026-09-29 (docs/specs/2026-09-29-lecke-dizajn.md, 1. pont): témafüggetlen illusztráció.
+ * Élesben mérve: a `currentColor` felirat a sötét témában világos lett a modell világos kártyáján (1,17:1).
+ * Ezért az SVG saját papírt kap (idempotensen), minden `currentColor` a papír tintája lesz, és a
+ * kontraszt-őr a feliratokat a ténylegesen mögöttük lévő színhez igazítja.
+ */
+function makeThemeIndependent(root: Element, viewBox: number[]): string[] {
+  const dependent = themeDependentTexts(root);
+  for (const old of Array.from(root.querySelectorAll(`#${PAPER_ID}`))) old.remove();
+  for (const el of [root, ...Array.from(root.querySelectorAll("*"))]) {
+    for (const name of ["fill", "stroke", "stop-color"]) {
+      if (/^\s*currentcolor\s*$/i.test(el.getAttribute(name) ?? "")) el.setAttribute(name, ILLUSTRATION_PAPER.ink);
+    }
+  }
+  const [vx, vy, vw, vh] = viewBox;
+  const paper = root.ownerDocument.createElementNS(SVG_NS, "path");
+  paper.setAttribute("id", PAPER_ID);
+  // `path`, nem `rect`: a tisztított kimenetben nincs width/height attribútum (a befoglaló elem méretez).
+  paper.setAttribute("d", `M${vx} ${vy}h${vw}v${vh}h${-vw}z`);
+  paper.setAttribute("fill", ILLUSTRATION_PAPER.background);
+  root.insertBefore(paper, root.firstChild);
+  const fixed = enforceIllustrationContrast(root, ILLUSTRATION_PAPER);
+  return [...new Set([...dependent, ...fixed])];
+}
 
 /** Tisztított SVG és feliratai, vagy az elutasítás okai. */
 export function sanitizeIllustration(raw: unknown): IllustrationCheck {
@@ -40,9 +69,10 @@ export function sanitizeIllustration(raw: unknown): IllustrationCheck {
   if (!root || root.tagName.toLowerCase() !== "svg" || fragment.children.length !== 1) return { ok: false, problems: ["a gyökér nem egyetlen <svg> elem"] };
   const viewBox = root.getAttribute("viewBox");
   if (!viewBox || !/^\s*-?[\d.]+(?:[\s,]+-?[\d.]+){3}\s*$/.test(viewBox)) problems.push("hiányzó vagy hibás viewBox");
-  const elements = root.querySelectorAll("*");
+  // A saját papír-háttér nem a modell eleme: a kliens újratisztításakor sem számít bele a korlátba.
+  const elements = Array.from(root.querySelectorAll("*")).filter((el) => el.getAttribute("id") !== PAPER_ID);
   if (elements.length > MAX_ELEMENTS) problems.push(`túl sok elem (${elements.length} > ${MAX_ELEMENTS})`);
-  for (const el of [root, ...Array.from(elements)]) {
+  for (const el of [root, ...elements]) {
     for (const attr of Array.from(el.attributes)) {
       const value = attr.value;
       if (/url\(/i.test(value) && !/^\s*url\(\s*#[\w-]+\s*\)\s*$/i.test(value)) problems.push(`külső hivatkozás: ${attr.name}`);
@@ -56,7 +86,8 @@ export function sanitizeIllustration(raw: unknown): IllustrationCheck {
   root.removeAttribute("width");
   root.removeAttribute("height");
   root.setAttribute("role", "img");
-  return { ok: true, svg: root.outerHTML, labels };
+  const contrastFixes = makeThemeIndependent(root, viewBox!.trim().split(/[\s,]+/).map(Number));
+  return { ok: true, svg: root.outerHTML, labels, contrastFixes };
 }
 
 const words = (text: string) => text.toLocaleLowerCase("hu").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
