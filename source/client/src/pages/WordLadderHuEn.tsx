@@ -848,7 +848,7 @@ export default function WordLadderHuEn() {
                         aria-pressed={ladderGrade === g}
                         aria-label={`${g}. évfolyam`}
                         onClick={() => setPickedGrade(g)}
-                        className={`rounded-lg border px-1 py-1.5 text-sm font-bold transition-colors ${
+                        className={`min-h-[44px] rounded-lg border px-1 py-1.5 text-sm font-bold transition-colors ${
                           ladderGrade === g
                             ? "bg-amber-500 border-amber-200 text-slate-950"
                             : "bg-black/30 border-white/25 text-white hover:bg-white/10"

@@ -19,6 +19,7 @@ import { scoreCorrectAnswer } from "@/game-engine/retry-policy";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import { pickFreshTask } from "@/game-engine/no-repeat";
+import { QUESTION_SECONDS, ROUND_SECONDS, TARGET_CORRECT, questionSecondsForBand } from "@/game-engine/speedQuizTiming";
 
 type GradeLevel = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
@@ -45,45 +46,6 @@ type MathTask = {
   source: "teacher" | "generated";
 };
 type AnswerState = "idle" | "correct" | "wrong";
-
-const ROUND_SECONDS: Record<GradeLevel, number> = {
-  3: 120,
-  4: 110,
-  5: 100,
-  6: 100,
-  7: 110,
-  8: 110,
-  9: 120,
-  10: 120,
-  11: 120,
-  12: 120,
-};
-
-const QUESTION_SECONDS: Record<GradeLevel, number> = {
-  3: 18,
-  4: 16,
-  5: 14,
-  6: 16,
-  7: 18,
-  8: 18,
-  9: 20,
-  10: 20,
-  11: 22,
-  12: 22,
-};
-
-const TARGET_CORRECT: Record<GradeLevel, number> = {
-  3: 15,
-  4: 18,
-  5: 21,
-  6: 20,
-  7: 18,
-  8: 18,
-  9: 16,
-  10: 16,
-  11: 15,
-  12: 15,
-};
 
 const LEVEL_LABEL: Record<GradeLevel, string> = {
   3: "3. osztály",
@@ -1410,10 +1372,10 @@ export default function SpeedQuizMath() {
     });
   }, []);
 
-  /** A kérdésre adott idő a nehézség-sávból: padlón +50%, tetején -25%. */
+  /** A kérdésre adott idő a nehézség-sávból: padlón +50%, tetején az alapidő (legalább 20 s). */
   const questionSecondsFor = useCallback(
     (level: GradeLevel) =>
-      Math.max(6, Math.round(QUESTION_SECONDS[level] * (1.5 - difficultyRef.current * 0.75))),
+      questionSecondsForBand(level, difficultyRef.current),
     [],
   );
   // A magyarázatot a game over ELŐTT mutatjuk meg: az utolsó hibából is tanulni kell.
@@ -1699,7 +1661,7 @@ export default function SpeedQuizMath() {
   }, [phase, score, correct, answered, bestStreak]);
 
   const runProgress = Math.max(0, Math.min(100, (timeLeft / ROUND_SECONDS[grade]) * 100));
-  const qProgress = Math.max(0, Math.min(100, (questionTimeLeft / QUESTION_SECONDS[grade]) * 100));
+  const qProgress = Math.max(0, Math.min(100, (questionTimeLeft / questionSecondsFor(grade)) * 100));
 
   return (
     <div
