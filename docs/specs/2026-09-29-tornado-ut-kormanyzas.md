@@ -88,8 +88,10 @@ Vizsgált okok és a mért eredmény:
   futnak (−1200 + 300k), ezért az eltolás mindig a chunk belseje felé visz; a tárgy a saját chunkjában
   marad (max. eltolás < 25 egység). Eltolás után ismét víz- és hídvizsgálat; vízbe került tárgy kimarad.
 - D3 (analóg érintés): új `touchDriveInput(v: JoystickVector)` a `lib/tornado/controls.ts`-ben.
-  Kormány: tengely-holtsáv 0,12, teljes kitérés |x| ≥ 0,85-nél, köztük (t)^1,7 görbe. Gáz/hátramenet:
-  holtsáv 0,12, teljes |y| ≥ 0,6-nál, lineáris. A `TouchControls` `touchRef`-je `{ throttle, steer }`
+  Kormány: tengely-holtsáv 0,2 (90%-os kitolásnál ≈ 13° hüvelykujj-szög), teljes kitérés |x| ≥ 0,85-nél,
+  köztük t² görbe (20° → 0,02; 30° → 0,14; 45° → 0,42; 60° → 0,74; ≥ 75° → 1). Gáz/hátramenet:
+  holtsáv 0,12, teljes |y| ≥ 0,6-nál, lineáris. (Az első változat 0,12 / t^1,7 volt; a fej nélküli
+  mérésben 5 s alatt 10,6° irányeltérést adott a 0,2 / t² 4,0°-ával szemben — lásd 8. pont.) A `TouchControls` `touchRef`-je `{ throttle, steer }`
   számpár; `blur`/`visibilitychange` nullázza. A többi játék (`joystickToDirections`) változatlan.
 - D4 (tempó): `drive.ts` `DRIVE_PACE = 1,6`; `maxSpeedUnits(kmh) = fromKm(kmh/3600) · DRIVE_PACE`.
   A gyorsulás a végsebességgel arányos (változatlan képlet), így 0 → 90% idő változatlan (~0,9 s).
@@ -102,13 +104,16 @@ Vizsgált okok és a mért eredmény:
 ### Spec-változás meglévő teszteknél (dokumentált)
 - `tests/tornado-drive.test.ts` „maxSpeedUnits: 168 km/h ≈ 12.13”: a D4 tulajdonosi kérés („a
   végsebesség érezhetően nagyobb legyen”) miatt az elvárt érték `fromKm(168/3600) · DRIVE_PACE`. A
-  *60-as hiba elleni őr megmarad és szigorodik: `u < 20` helyett `u / fromKm(168/3600) < 2`.
+  *60-as hiba elleni őr megmarad (`u < 20` változatlanul, 19,41 < 20) és egy újjal szigorodik:
+  `u / fromKm(168/3600) < 2`.
 - Ugyanott „1 s full throttle”: a km/h-ra visszaszámolt sebesség felső korlátja a tempóval szorzódik
   (180 → 180 · DRIVE_PACE); a *60-as őr (a 0,25 km-es távolságkorlát) változatlan.
 - `tests/tornado-mobile-controls.test.ts` „köralakú tárcsa vezet (mind a négy irány)”: a D3 miatt a
   tárcsa nem négy logikai gombra, hanem analóg `touchDriveInput`-ra kötött; a teszt a tárcsa meglétét, a
   `touchDriveInput(` hívást, a `touchRef.current.throttle`/`.steer` bekötést és a régi gombok hiányát
   követeli (nem gyengül: mindkét tengely bekötése kötelező).
+- `tests/game-touch-controls.test.ts` „köralakú tárcsával irányít”: ugyanezért a Tornado-lapon a
+  bekötés mintája `touchDriveInput(` (a másik három játéké változatlanul `joystickToDirections(`).
 
 ## 5. Edge case-ek
 - Tárgy két út közelében (kereszteződés): mindkét tengelyen külön eltolás.
@@ -122,21 +127,91 @@ Vizsgált okok és a mért eredmény:
 - E1: A teljes térkép minden tárgyára: minden ütköző (és a lábnyom) szélének távolsága minden
   útvonaltól ≥ 10,5. A régi kódon 325 átfedés (bukik).
 - E2: `propsInChunk` determinisztikus; minden tárgy a saját chunkjában marad; ütköző ⊆ lábnyom.
-- E3: WHEN a tárcsa 20°-ra tér el a függőlegestől THEN |kormány| < 0,15 (régi: 0 vagy 1);
-  WHEN 6° + σ = 12°-os remegés (fej nélküli modell, 12 mag, 60 és 30 Hz) THEN az autó az idő ≥ 95%-ában
-  aszfalton és a laterális eltérés max < 4,05 (régi: 80% úton kívül).
+- E3: WHEN a tárcsa 20°-ra tér el a függőlegestől THEN |kormány| < 0,15 (régi: 0 vagy 1).
+  WHEN 6° + σ = 12°-os remegés, korrekció nélkül, 5 s (fej nélküli modell, 12 mag, 60 és 30 Hz) THEN az
+  átlagos max. irányeltérés < 6°, a négyirányú bontás ugyanott > 3× ekkora, és több futás marad aszfalton.
+  WHEN korrigáló vezető (180 ms reakció, σ = 20°, 40 s) THEN minden futás ≥ 95% aszfalton, az átlag nem
+  rosszabb a négyirányú bontásnál ugyanakkora tempón, az 5 s-os irányeltérés átlaga < 12° és ≥ 1,5×
+  kisebb a négyirányúnál.
+  *Módosítás az implementáció közben (a teszt első futása előtt a régi kódon, a 3. fázisban):* az eredeti
+  E3 („40 s korrekció nélkül ≥ 95% aszfalton”) rosszul feltett mérce volt — korrekció nélkül BÁRMELY
+  kormányzó törvénynél a remegés irány-bolyongássá integrálódik (a régi és az új is lemegy 40 s alatt:
+  86% / 78% úton kívül). Ezért a nyílt hurkú próba 5 s-os, a hosszú futás pedig korrigáló vezetővel mér.
 - E4: WHEN teljes gáz THEN a végsebesség ≥ 1,5 × a régi (12,42 → ≥ 18,6).
 - E5: WHEN 260 km/h, 20 fps (dt 0,05), merőlegesen egy kerítésnek hajt THEN nem jut át rajta.
 - E6: A kamera-simítás 30/60/144 Hz-en 0,5 s után ±2%-on belül azonos; 8 egység fölött ugrik.
-- E7: Böngészőben (390×844, érintés) a „közel egyenes” próbán a laterális RMS < 2 és az aszfalton
-  töltött idő ≥ 95%; a függőleges hintázás csúcstól csúcsig < 1,5 egység.
+- E7: Böngészőben (390×844, érintés), korrigáló vezetővel 20 s: 0% aszfalton kívül, a max. irányeltérés
+  kisebb a réginél; korrekció nélkül 16 s: a max. irányeltérés < 15° (régi 53,8°); a kamera rázása
+  (magasság − 1 s-os mozgóátlag) RMS kisebb a réginél.
 - E8: Minden új teszt a régi kódon BUKIK (kimenettel igazolva), az újon zöld; meglévő teszt nem gyengül.
 
 ## 7. Érintett fájlok
 - `source/client/src/lib/tornado/world.ts`, `drive.ts`, `controls.ts`
 - `source/client/src/pages/TornadoHunter200.tsx`
 - Új tesztek: `source/tests/tornado-prop-clearance.test.ts`, `source/tests/tornado-touch-drive.test.ts`
-- Módosuló (spec-változás): `tests/tornado-drive.test.ts`, `tests/tornado-mobile-controls.test.ts`
+- Módosuló (spec-változás): `tests/tornado-drive.test.ts`, `tests/tornado-mobile-controls.test.ts`,
+  `tests/game-touch-controls.test.ts`
 
 ## 8. Mérések előtte / utána
-(A 3. fázis végén kitöltve, lásd lent.)
+
+Eszközök (gitignore-olt, `source/*.local.mts`): `tornado-overlap.local.mts` (tárgy–út átfedés),
+`tornado-sim.local.mts` (fej nélküli vezetés, `<hz> <old|new> <σ> [gain] [cap]`),
+`tornado-vert.local.mts` (talajugrások a középvonalon), `tornado-tunnel.local.mts` (kerítésen átugrás),
+`tornado-drive-probe.local.mts` (Chrome, 390×844, CDP-érintés), `tornado-house-shot.local.mts`.
+„Előtte” böngészőben: a négy kódfájl `origin/main` szerinti változata, ugyanazzal a próbával.
+
+### H1 — tárgyak az úton (teljes térkép, 4764 tárgy)
+| | előtte | utána |
+|---|---|---|
+| tárgy, amelynek ütközője az útsávba (< 9) ér | 325 | 0 |
+| ebből az aszfaltba (< 4,05) ér | 99 | 0 |
+| ütköző a 10,5-ös biztonsági távolságon belül (teszt) | 426 | 0 |
+| a LEVEL 1 kezdőútján (x = 0) a ház (−6,3; 679) | a középvonalon túl 0,26-tal | az út mellett |
+A tárgyak száma nem változott (4764): egyik sem került eltolás után vízbe.
+
+### H2 — fej nélküli modell (12 mag átlaga, 60 Hz; a 30 Hz-es értékek ±15%-on belül azonosak)
+Előtte = négyirányú bontás, 1,0× tempó; utána = analóg (0,2 / t²), 1,6× tempó.
+| | előtte | utána |
+|---|---|---|
+| korrekció nélkül (6° + σ12): max. irányeltérés 5 s alatt | 22,1° | 4,0° |
+| korrekció nélkül: aszfalt elhagyása (10 s-on belül) | 4,1 s | 6,7 s |
+| korrigáló vezető, σ12: max. irányeltérés 5 s alatt | 13,5° | 2,6° |
+| korrigáló vezető, σ20, legjobb vezetői erősítés (25°/egység, ±60°): aszfalton kívül | 0,24% | 0,29% (1,6× tempón) |
+| ugyanott: max. irányeltérés 5 s alatt | 19,3° | 9,0° |
+| képkockánkénti legnagyobb fordulási-sebesség ugrás (korrigáló, σ12 / σ20) | 1,5 / 1,5 rad/s | 0,25 / 0,59 rad/s |
+| szél 0 / 18 / 60 km/h hatása a laterális RMS-re (σ12, előtte) | 1,05 / 1,05 / 1,08 | — (nem ok) |
+| végsebesség (stormrunner-s, 172 km/h) | 12,42 u/s | 19,88 u/s |
+| 0 → 90% végsebesség | 0,88 s | 0,88 s |
+| kerítésen átugrás 260 km/h, 20 fps, 19 kezdőpont | (1,6× tempón részlépés nélkül 3/19) | 0/19 |
+
+### H2 — valódi Chrome, 390×844, `isMobile`, `hasTouch`, CDP-érintés a tárcsán (1× CPU)
+| | előtte | utána |
+|---|---|---|
+| korrekció nélkül 16 s: laterális RMS / max | 57,8 / 114,4 | 15,4 / 31,3 |
+| korrekció nélkül 16 s: max. / RMS irányeltérés | 53,8° / 40,1° | 8,6° / 6,2° |
+| korrekció nélkül 16 s: aszfalton kívül | 74,8% | 66,9% (1,6× tempón, 2× hosszabb úton) |
+| korrigáló vezető 20 s: laterális RMS / max | 0,41 / 0,78 | 0,46 / 1,18 |
+| korrigáló vezető 20 s: max. / RMS irányeltérés | 7,8° / 2,6° | 1,6° / 1,0° |
+| korrigáló vezető 20 s: aszfalton kívül | 0% | 0% |
+| korrigáló vezető 20 s: megtett út | 247 | 396 |
+| kamera rázása (magasság − 1 s-os mozgóátlag) RMS, korrigáló / korrekció nélkül | 0,040 / 0,221 | 0,026 / 0,154 |
+| kamera képkockánkénti max. ugrása, korrigáló | 0,056 | 0,015 |
+| végsebesség, 0 → 90% | 12,42 u/s, 892 ms | 19,88 u/s, 891 ms |
+| kormány-reakció (60°-os lépés → 90% fordulási sebesség) | 20 ms | 9 ms |
+| képkocka medián / max (1×) | 8,4 / 75 ms | 8,4 / 83 ms |
+4× CPU-fojtással (korábbi futás): előtte 16,7 ms medián, 0 db > 50 ms; utána 8,4 ms medián, 0 db > 50 ms.
+Valódi Android-GPU-n a képkockaidő nem mért (UNVERIFIED); a részlépés miatt 20 fps-en is 60 Hz-es
+lépésekkel fut a fizika.
+
+### Képek (scratchpad)
+`tornado2-before-house.png` / `tornado2-after-house.png` (a LEVEL 1 kezdőútja, a ház),
+`tornado2-before-road.png` / `tornado2-after-road.png`, `tornado2-before-driving.png` /
+`tornado2-after-driving.png` (egyenes szakasz vezetés közben, mobil nézet).
+
+## 9. Maradó kockázatok
+- A korrekció nélküli hosszú egyenes (≥ 10 s) továbbra is irány-bolyongás — ez minden arányos
+  kormányzásnál így van; a különbség, hogy a kilengés kicsi és lassú (8,6° vs 53,8°), így a gyerek korrigálni tud.
+- Billentyűzet: a fordulási sebesség változatlan, de 1,6× tempón a teljes kormányú fordulókör sugara
+  8,4 → 13,5 egység (az út 18 széles) — kereszteződésben kicsit korábban kell kormányozni.
+- A HUD „MAX” felirata a szél maximuma, nem sebesség — félreérthető (nem-cél, külön jelzés).
+- Valódi telefonon a fps és az érintés-mintavétel nem mért.

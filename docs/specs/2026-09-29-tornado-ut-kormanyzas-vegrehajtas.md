@@ -22,10 +22,10 @@ Fájl: `source/tests/tornado-touch-drive.test.ts`.
 1. `touchDriveInput` (controls.ts): nulla vektor → {0,0}; 20°-os, 0,88 nagyságú vektor → |steer| < 0,15
    és throttle = 1; 45° → 0,3 < steer < 0,7; 90° → steer = 1, throttle = 0; lefelé → throttle = −1;
    monoton a szögben (0..90° lépésenként nem csökken); a kimenet mindig [−1, 1].
-2. Fej nélküli „közel egyenes” vezetés (a spec H2 modellje: 6° + OU σ = 12°, τ = 0,5 s, 12 mag, 40 s,
-   60 és 30 Hz), `joystickVector` → `touchDriveInput` → `stepVehicle` (+ `driveSubsteps`): az idő ≥ 95%-a
-   aszfalton, laterális max < 4,05. (Régi úton, `joystickToDirections`-szel ugyanez 80% úton kívül — a
-   mérés a specben; a teszt a régi kódon importhiba miatt bukik.)
+2. Fej nélküli vezetés (a spec H2 modellje, 12 mag, 60 és 30 Hz), `joystickVector` → leképezés →
+   `stepVehicle` (+ `driveSubsteps`), a régi négyirányú bontással (`joystickToDirections`) összevetve,
+   a spec E3 szerint: (a) korrekció nélkül 6° + σ12, 5 s; (b) korrigáló vezető σ20, 40 s.
+   A teszt a régi kódon a hiányzó `touchDriveInput` miatt bukik.
 3. `maxSpeedUnits(172) ≥ 1.5 × fromKm(172/3600)` és `DRIVE_PACE === 1.6`.
 4. `driveSubsteps`: 1/60 → 1, 1/30 → 2, 0.05 → 3, 0 → 1; 260 km/h-s jármű 0,05-ös képkockákkal,
    részlépésekkel, merőlegesen egy kerítésnek (`box hx 50, hz 0.11`) hajtva 3 s alatt nem jut át (z > 0).

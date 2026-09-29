@@ -164,12 +164,22 @@ test("a HoldButton a capture-t használja, nem a leave-et", () => {
 /** A régi, gombos irányvezérlés nyomai — egyiknek sem szabad megmaradnia. */
 const DIRECTION_BUTTONS = /aria-label="(Balra|Jobbra)"|⟵ Balra|▲ Előre|▼ Hátra|Jobbra ⟶|label="◀"|label="▶"|label="Gáz"|label="Fék"/;
 
+/*
+ * SPEC-VÁLTOZÁS 2026-09-29 (`docs/specs/2026-09-29-tornado-ut-kormanyzas.md` D3): a Tornado a tárcsa
+ * vektorát nem négy logikai gombra bontja (`joystickToDirections`), hanem analóg gázra és kormányra
+ * (`touchDriveInput`) — a négyirányú bontás volt a mobilos kóválygás mért gyökéroka. A követelmény
+ * (a vektor be van kötve a vezérlésbe) nem lazult; a többi játék változatlanul a négyirányú bontást használja.
+ */
+const JOYSTICK_WIRING: Record<string, RegExp> = {
+  "TornadoHunter200.tsx": /touchDriveInput\s*\(/,
+};
+
 for (const file of ACTION_GAMES) {
   const code = stripComments(readFileSync(join(root, "client/src/pages", file), "utf8"));
 
   test(`${file}: köralakú tárcsával irányít, nem irány-gombokkal`, () => {
     assert.match(code, /<VirtualJoystick\b/, "nincs joystick a lapon");
-    assert.match(code, /joystickToDirections\s*\(/, "a joystick vektora nincs bekötve a vezérlésbe");
+    assert.match(code, JOYSTICK_WIRING[file] ?? /joystickToDirections\s*\(/, "a joystick vektora nincs bekötve a vezérlésbe");
   });
 
   test(`${file}: a régi irány-gombok eltűntek`, () => {
