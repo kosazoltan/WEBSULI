@@ -1,17 +1,28 @@
 import { nextDifficulty, startingDifficulty } from './difficulty';
+import { levelAdaptBand, levelStartBand } from './levelTuning';
 
-/** Run-local history. The existing common rule owns every difficulty change. */
-export function createAdaptiveSession(classroom: number) {
-  let band = startingDifficulty(classroom);
+/**
+ * Run-local history. The existing common rule owns every difficulty change.
+ *
+ * `level` (1–10, spec 2026-09-29-palyak-szoletra-nyelvek): the run starts from the level's band and the common rule's
+ * result is kept within the level's spread. Without a level the behaviour is exactly the old one.
+ */
+export function createAdaptiveSession(classroom: number, level: number | null = null) {
+  let runLevel = level;
+  let band = levelStartBand(runLevel, startingDifficulty(classroom));
   let history: boolean[] = [];
   return {
     get band() { return band; },
     answer(correct: boolean) {
       history = [...history.slice(-2), correct];
-      band = nextDifficulty({ current: band, recentCorrect: history });
+      band = levelAdaptBand(nextDifficulty({ current: band, recentCorrect: history }), runLevel);
       return band;
     },
-    reset(grade: number) { band = startingDifficulty(grade); history = []; },
+    reset(grade: number, nextLevel: number | null = null) {
+      runLevel = nextLevel;
+      band = levelStartBand(runLevel, startingDifficulty(grade));
+      history = [];
+    },
   };
 }
 

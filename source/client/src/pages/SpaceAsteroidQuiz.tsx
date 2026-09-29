@@ -8,6 +8,8 @@ import {
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
 import { saveClassroomGrade } from "@/lib/classroomStore";
+import { useGradeLevel } from "@/game-engine/useGradeLevel";
+import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -762,9 +764,17 @@ export default function SpaceAsteroidQuiz() {
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const [paused, setPaused] = useState(false);
   const [gameWon, setGameWon] = useState(false);
+  // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként (3–12.); a futás pályája a startkor rögzül.
+  const levels = useGradeLevel("asteroid", grade);
+  const runLevelRef = useRef<number | null>(null);
+  const levelClearedRef = useRef(false);
 
   useEffect(() => {
     return installGameTestApi({
+      probe: () => {
+        const band = adaptiveRef.current.band;
+        return { level: runLevelRef.current, band, spawnFactor: 1.4 - band * 0.6 };
+      },
       forceState: (patch) => {
         if (patch.phase === "intro" || patch.phase === "grade" || patch.phase === "play" || patch.phase === "over") {
           setPhase(patch.phase);
@@ -1042,7 +1052,9 @@ export default function SpaceAsteroidQuiz() {
   }, []);
 
   const startNewRun = useCallback(() => {
-    adaptiveRef.current.reset(grade ?? 4);
+    runLevelRef.current = levels.level;
+    levelClearedRef.current = false;
+    adaptiveRef.current.reset(grade ?? 4, runLevelRef.current);
     gradeSeenRef.current = createGradeQuizSeen();
     answerLockedRef.current = false;
     scoreSubmittedRef.current = false;
@@ -1087,7 +1099,7 @@ export default function SpaceAsteroidQuiz() {
     gameElapsedRef.current = 0;
     lastSpawnAtRef.current = 0;
     enqueueQuiz("wave");
-  }, [enqueueQuiz, grade]);
+  }, [enqueueQuiz, grade, levels.level]);
 
   /** G-1: magyarázó kártya rossz válaszra. */
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
@@ -2351,6 +2363,14 @@ export default function SpaceAsteroidQuiz() {
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, gameWon]);
 
+  // A győzelem (12 hullám / boss) a következő pályát oldja fel; a menü azt ajánlja.
+  useEffect(() => {
+    if (phase === "over" && gameWon && runLevelRef.current != null && !levelClearedRef.current) {
+      levelClearedRef.current = true;
+      levels.complete(runLevelRef.current);
+    }
+  }, [phase, gameWon]);
+
   /* ===================== Render JSX ===================== */
   const onPickGrade = (g: number) => {
     setGrade(g);
@@ -2470,8 +2490,16 @@ export default function SpaceAsteroidQuiz() {
                     onClick={startNewRun}
                     data-testid="sa-start"
                   >
-                    <Rocket className="w-4 h-4 mr-2" />Indulhat — {grade}. osztály
+                    <Rocket className="w-4 h-4 mr-2" />Indulhat — {grade}. osztály{levels.level != null ? ` · ${levels.level}. pálya` : ""}
                   </Button>
+                  {levels.active && levels.level != null ? (
+                    <GradeLevelPicker
+                      value={levels.level}
+                      unlocked={levels.unlocked}
+                      onChange={levels.select}
+                      label={`Pálya — ${grade}. osztály`}
+                    />
+                  ) : null}
                   <button
                     type="button"
                     className="text-[11px] text-white/50 hover:text-cyan-200 underline-offset-4 hover:underline"

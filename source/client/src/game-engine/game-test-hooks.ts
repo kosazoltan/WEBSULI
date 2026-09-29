@@ -20,6 +20,8 @@ export type GameForcePatch = {
 
 export type WebsuliGameTestApi = {
   forceState: (patch: GameForcePatch) => void;
+  /** Mérés: a futó pálya, a sáv és a játék sávfüggő tempó-értékei (spec 2026-09-29, E szelet). */
+  probe?: () => Record<string, number | string | null>;
 };
 
 declare global {

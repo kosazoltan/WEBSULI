@@ -21,6 +21,8 @@ import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
+import { useGradeLevel } from "@/game-engine/useGradeLevel";
+import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
@@ -1145,6 +1147,9 @@ export default function BlockCraftQuiz() {
   // ne ölje meg a renderert minden szintátmenetnél.
   const activeLevelRef = useRef<LevelConfig>(LEVELS[0]!);
   const adaptiveRef = useRef(createAdaptiveSession(4));
+  // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként (3–12.); a futás pályája a startkor rögzül.
+  const runLevelRef = useRef<number | null>(null);
+  const levelClearedRef = useRef(false);
   const answerLockedRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("menu");
@@ -1177,6 +1182,10 @@ export default function BlockCraftQuiz() {
 
   useEffect(() => {
     return installGameTestApi({
+      probe: () => {
+        const band = adaptiveRef.current.band;
+        return { level: runLevelRef.current, band, timeBudget: adaptiveTimeBudget(LEVELS[0]!.timeLimit, band) };
+      },
       forceState: (patch) => {
         if (patch.phase === "menu" || patch.phase === "play" || patch.phase === "levelComplete" || patch.phase === "over") {
           setPhase(patch.phase);
@@ -1251,6 +1260,7 @@ export default function BlockCraftQuiz() {
   // Az osztály-szintű tananyag-bázis: a játékos legutóbbi 3 anyagából AI-vel
   // generált kvíz-tételek (Claude). Ha még nincs kapcsolt kérdés, üres marad.
   const { grade: userGrade } = useClassroomGrade();
+  const levels = useGradeLevel("blockcraft", userGrade);
   const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
   const bank = useMemo<Quiz[]>(() => {
@@ -1463,7 +1473,7 @@ export default function BlockCraftQuiz() {
     setXpFloat(null);
     setAchievement(null);
     if (options.resetSession) {
-      adaptiveRef.current.reset(userGrade ?? 4);
+      adaptiveRef.current.reset(userGrade ?? 4, runLevelRef.current);
       gradeSeenRef.current = createGradeQuizSeen();
       setSessionXp(0);
       setStreak(0);
@@ -1488,6 +1498,8 @@ export default function BlockCraftQuiz() {
   }, [rebuildSubjectPools, userGrade]);
 
   const startGame = useCallback(() => {
+    runLevelRef.current = levels.level;
+    levelClearedRef.current = false;
     scoreSubmittedRef.current = false;
     bestStreakRef.current = 0;     // D2: reset run-level best streak on new game
     totalDiamondsRef.current = 0; // D3: reset run-level diamond count on new game
@@ -1495,7 +1507,7 @@ export default function BlockCraftQuiz() {
     setGameWon(false);
     streakProtector.resetProtector();
     beginLevel(0, { resetSession: true, carryXpFrom: 0 });
-  }, [beginLevel, streakProtector]);
+  }, [beginLevel, streakProtector, levels.level]);
 
   /** Következő szint: az XP/streak/rare továbbvitt, a pálya friss. */
   const startNextLevel = useCallback(() => {
@@ -2401,6 +2413,14 @@ export default function BlockCraftQuiz() {
     // újra triggerelje.
   }, [phase]);
 
+  // A győzelem (mind az 5 bánya) a következő pályát oldja fel; a menü azt ajánlja.
+  useEffect(() => {
+    if (phase === "over" && gameWon && runLevelRef.current != null && !levelClearedRef.current) {
+      levelClearedRef.current = true;
+      levels.complete(runLevelRef.current);
+    }
+  }, [phase, gameWon]);
+
   /** Mobil irány-gombok: lenyomásra/felengedésre a keysRef-et írják. */
   const hold = (k: "fwd" | "back" | "left" | "right" | "jump", v: boolean) => {
     keysRef.current[k] = v;
@@ -2573,8 +2593,16 @@ export default function BlockCraftQuiz() {
           {phase === "menu" && (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 py-2 min-h-0">
               <Button size="lg" className="bg-gradient-to-r from-lime-600 to-emerald-800 hover:from-lime-500 hover:to-emerald-700 border border-lime-200/35 font-bold text-white shadow-lg text-base min-h-[44px]" onClick={startGame} data-testid="bc-start">
-                <Pickaxe className="w-4 h-4 mr-2" />Indulhat a bányászat!
+                <Pickaxe className="w-4 h-4 mr-2" />Indulhat a bányászat!{levels.level != null ? ` · ${levels.level}. pálya` : ""}
               </Button>
+              {levels.active && levels.level != null ? (
+                <GradeLevelPicker
+                  value={levels.level}
+                  unlocked={levels.unlocked}
+                  onChange={levels.select}
+                  label={`Nehézségi pálya — ${userGrade}. osztály`}
+                />
+              ) : null}
               <div className="grid grid-cols-5 gap-2 p-2 rounded-xl bg-black/45 border border-lime-700/45">
                 {[GRASS, DIRT, SAND, STONE, WATER, LOG, LEAVES, COAL, IRON, DIAMOND].map((t) => <MenuBlock key={t} t={t} />)}
               </div>
