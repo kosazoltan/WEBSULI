@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import ts from "typescript";
 
-import * as extras from "../client/src/data/englishGameQuizExtras";
+import { ladderTiersFromBank } from "../client/src/data/wordLadder/banks";
+import { WORD_LADDER_EN } from "../client/src/data/wordLadder/en";
 import type { FourChoiceQuiz } from "../client/src/types/gameQuiz";
 import { normalizePrompt } from "../client/src/game-engine/no-repeat";
 import { evaluateCalc, promptExpression, sameNumber } from "./support/math-calc";
@@ -22,35 +23,22 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../${rel}`, im
 
 /* ------------------------------------ Szólétra ------------------------------------ */
 
+/*
+ * Spec-változás (docs/specs/2026-09-29-palyak-szoletra-nyelvek.md, 5. döntés; végrehajtás: …-szoletra-3d-nyelvek-
+ * vegrehajtas.md): a Szólétra bankja a lapról és az extras-tömbökből a `wordLadder/en.ts`-be költözött, minden tétel
+ * `tier` mezőt és `en<tier>-<nnn>` azonosítót kapott. A mérés szándéka (szintenkénti minimum, nincs ismétlődő prompt,
+ * egyedi azonosító, négy különböző opció) változatlan, csak a forrás helye és az azonosító-formátum új.
+ */
 const ladderPage = read("client/src/pages/WordLadderHuEn.tsx");
 
-function pageBlock(startMarker: string, endMarker: string): FourChoiceQuiz[] {
-  const start = ladderPage.indexOf(startMarker);
-  const end = ladderPage.indexOf(endMarker, start);
-  assert.ok(start >= 0 && end > start, `nem találom: ${startMarker} … ${endMarker}`);
-  return ladderPage
-    .slice(start, end)
-    .split(/\r?\n/)
-    .filter((line) => /^\s*\{ id: "/.test(line))
-    .map((line) => vm.runInNewContext(`(${line.trim().replace(/,$/, "")})`) as FourChoiceQuiz);
-}
-
-const LADDER_TIERS: Record<string, FourChoiceQuiz[]> = {
-  easy: [...pageBlock("const QUIZ_BANK", "const QUIZ_MED"), ...extras.wordLadderEasyMore],
-  med: [...pageBlock("const QUIZ_MED", "const QUIZ_HARD"), ...extras.wordLadderMedMore],
-  hard: [...pageBlock("const QUIZ_HARD", "const QUIZ_B1"), ...extras.wordLadderHardMore],
-  b1: [...extras.wordLadderB1],
-  b2: [...extras.wordLadderB2],
-};
+const [easy, med, hard, b1, b2] = ladderTiersFromBank(WORD_LADDER_EN);
+const LADDER_TIERS: Record<string, FourChoiceQuiz[]> = { easy: easy!, med: med!, hard: hard!, b1: b1!, b2: b2! };
 const ALL_LADDER = Object.values(LADDER_TIERS).flat();
 
-test("Szólétra: a lap a kiegészítő tömböket a megfelelő szintbe teszi", () => {
-  const between = (a: string, b: string) => ladderPage.slice(ladderPage.indexOf(a), ladderPage.indexOf(b, ladderPage.indexOf(a)));
-  assert.match(between("const QUIZ_BANK", "const QUIZ_MED"), /\.\.\.wordLadderEasyMore/);
-  assert.match(between("const QUIZ_MED", "const QUIZ_HARD"), /\.\.\.wordLadderMedMore/);
-  assert.match(between("const QUIZ_HARD", "const QUIZ_B1"), /\.\.\.wordLadderHardMore/);
-  assert.match(ladderPage, /const QUIZ_B1: Quiz\[\] = \[\.\.\.wordLadderB1\]/);
-  assert.match(ladderPage, /const QUIZ_B2: Quiz\[\] = \[\.\.\.wordLadderB2\]/);
+test("Szólétra: a lap a nyelvi bankot a tier mező szerint bontja szintekre", () => {
+  assert.match(ladderPage, /ladderTiersFromBank\s*\(/);
+  assert.doesNotMatch(ladderPage, /const QUIZ_BANK: Quiz\[\]/, "a lapba égetett régi bank visszatért");
+  assert.equal(ALL_LADDER.length, WORD_LADDER_EN.length);
 });
 
 test("E2/E7 Szólétra: a szintek mérete eléri a minimumot", () => {
@@ -71,12 +59,11 @@ test("Szólétra: nincs két azonos (normalizált) prompt a teljes statikus kés
   assert.deepEqual(dupes, []);
 });
 
-test("Szólétra: az azonosítók egyediek, az új azonosítók [a-z]\\d+ alakúak", () => {
+test("Szólétra: az azonosítók egyediek és en<szint>-<sorszám> alakúak (legalább a régi 468)", () => {
   const ids = ALL_LADDER.map((q) => q.id);
   assert.equal(new Set(ids).size, ids.length, "ismétlődő azonosító");
-  const fresh = ids.filter((id) => /^[abcdf]\d{3}$/.test(id));
-  assert.ok(fresh.length >= 300, `csak ${fresh.length} új azonosító`);
-  for (const id of fresh) assert.match(id, /^[a-z]?\d+$/);
+  assert.ok(ids.length >= 468, `csak ${ids.length} tétel`);
+  for (const id of ids) assert.match(id, /^en[0-4]-\d{3}$/);
 });
 
 test("Szólétra: minden tétel négy különböző opcióval és érvényes helyes indexszel", () => {

@@ -43,6 +43,11 @@ import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import HoldButton from "@/game-engine/HoldButton";
 import { targetMarker } from "@/lib/tornado/targetMarker";
+import { tornadoLevelTimeScale, tornadoWorldLevel } from "@/lib/tornado/gradeWorld";
+import { useClassroomGrade } from "@/lib/classroomStore";
+import { levelBand } from "@/game-engine/gradeLevels";
+import { useGradeLevel, type GradeLevelState } from "@/game-engine/useGradeLevel";
+import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
@@ -210,6 +215,14 @@ export default function TornadoHunter200() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const [forceResult, setForceResult] = useState<boolean | null>(null);
+  // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet, D6): 10 pálya az évfolyam AUTO-tartományában. Évfolyam: a
+  // Beállítások számmal megadott iskolai szintje, AUTO esetén a közös évfolyam. A „Szintek” képernyő változatlan.
+  const { grade: classroomGrade } = useClassroomGrade();
+  const levelGrade = typeof progress.settings.school === "number" ? progress.settings.school : classroomGrade;
+  const levels = useGradeLevel("tornado", levelGrade);
+  /** A futó pálya (1–10), ha a menü pályaválasztójából indult; a „Szintek”-ből indított futásnál `null`. */
+  const [runGradeLevel, setRunGradeLevel] = useState<number | null>(null);
+  const levelWorld = levelGrade != null && levels.level != null ? tornadoWorldLevel(levelGrade, levels.level) : null;
 
   const coupon = useCouponSession();
   const { data: syncEligibility } = useSyncEligibilityQuery();
@@ -274,6 +287,15 @@ export default function TornadoHunter200() {
             selectedVehicle={selectedVehicle}
             syncBanner={syncBanner}
             onPlay={() => setScreen("levels")}
+            levels={levels}
+            levelGrade={levelGrade}
+            levelWorld={levelWorld}
+            onPlayLevel={() => {
+              if (levelWorld == null || levels.level == null) return;
+              setSelectedLevelRef(levelWorld);
+              setRunGradeLevel(levels.level);
+              setScreen("play");
+            }}
             onGarage={() => setScreen("garage")}
             onLevels={() => setScreen("levels")}
             onHighscore={() => setScreen("highscore")}
@@ -292,6 +314,7 @@ export default function TornadoHunter200() {
             onBack={() => setScreen("menu")}
             onPick={(level) => {
               setSelectedLevelRef(level);
+              setRunGradeLevel(null);
               setScreen("play");
             }}
           />
@@ -315,7 +338,11 @@ export default function TornadoHunter200() {
             coupon={coupon}
             syncEligible={Boolean(syncEligibility?.eligible)}
             forceResult={forceResult}
-            onExit={() => setScreen("levels")}
+            gradeLevel={runGradeLevel}
+            onGradeLevelWin={() => {
+              if (runGradeLevel != null) levels.complete(runGradeLevel);
+            }}
+            onExit={() => setScreen(runGradeLevel != null ? "menu" : "levels")}
             onComplete={(next, unlocked) => {
               setProgress(next);
               if (unlocked.length > 0) setNewlyUnlocked(unlocked);
@@ -345,6 +372,10 @@ function MenuScreen(props: {
   selectedVehicle: Vehicle;
   syncBanner: string;
   onPlay: () => void;
+  levels: GradeLevelState;
+  levelGrade: number | null;
+  levelWorld: number | null;
+  onPlayLevel: () => void;
   onGarage: () => void;
   onLevels: () => void;
   onHighscore: () => void;
@@ -403,6 +434,24 @@ function MenuScreen(props: {
           <MenuButton icon={<BarChart3 className="w-4 h-4" />} label="Statisztika" onClick={props.onStats} />
           <MenuButton icon={<SettingsIcon className="w-4 h-4" />} label="Beállítások (iskolai szint)" onClick={props.onSettings} className="col-span-2" />
         </div>
+
+        {props.levels.active && props.levels.level != null && props.levelWorld != null ? (
+          <div className="rounded-lg border border-sky-400/30 bg-slate-900/60 p-3 flex flex-col gap-2" data-testid="tornado-grade-levels">
+            <GradeLevelPicker
+              value={props.levels.level}
+              unlocked={props.levels.unlocked}
+              onChange={props.levels.select}
+              label={`Pálya — ${props.levelGrade}. osztály`}
+            />
+            <Button
+              className="h-12 text-sm font-bold bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400"
+              onClick={props.onPlayLevel}
+              data-testid="tornado-level-start"
+            >
+              <Play className="w-4 h-4 mr-1" /> {props.levels.level}. pálya indítása · {props.levelWorld}. szint
+            </Button>
+          </div>
+        ) : null}
 
         <p className="text-[11px] text-cyan-100/80 border border-cyan-700/40 rounded px-2 py-1.5 bg-slate-900/80">
           {props.syncBanner}
@@ -951,11 +1000,22 @@ function PlayScreen(props: {
   coupon: CouponSession;
   syncEligible: boolean;
   forceResult?: boolean | null;
+  /** A menü pályaválasztójából indított futás pályája (1–10), különben `null`. */
+  gradeLevel: number | null;
+  onGradeLevelWin: () => void;
   onExit: () => void;
   onComplete: (next: TornadoProgress, unlocked: Achievement[]) => void;
   onProgress: (next: TornadoProgress) => void;
 }) {
   const spec = useMemo<LevelSpec>(() => levelSpec(props.level), [props.level]);
+  /** Pályás futásban a sáv mérsékelten szűkíti/bővíti az időkeretet (E szelet, D6); a „Szintek”-ből indítva a régi. */
+  const runTimeLimit = useMemo(
+    () =>
+      props.gradeLevel == null
+        ? spec.timeLimit
+        : Math.round(spec.timeLimit * tornadoLevelTimeScale(levelBand(props.gradeLevel))),
+    [spec, props.gradeLevel],
+  );
   const quality = props.progress.settings.quality;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -970,7 +1030,7 @@ function PlayScreen(props: {
     targetRelDeg: 0,
     anchorReady: false,
     surface: "grass" as ReturnType<typeof surfaceAt>,
-    timeLeft: spec.timeLimit,
+    timeLeft: runTimeLimit,
     stormPct: 0,
     score: 0,
   });
@@ -1015,7 +1075,7 @@ function PlayScreen(props: {
   const playerRef = useRef<PlayerState>({ x: fromKm(0.02) * 0, z: HALF_WORLD * 0, heading: 0, speed: 0, anchored: false });
   const tornadoPosRef = useRef({ x: 0, z: 0, angle: 0, born: 0, alive: true });
   const windRef = useRef<WindState>(initialWind(spec));
-  const timeLeftRef = useRef(spec.timeLimit);
+  const timeLeftRef = useRef(runTimeLimit);
   const scoreRef = useRef(0);
   const correctRef = useRef(0);
   const wrongRef = useRef(0);
@@ -1044,7 +1104,7 @@ function PlayScreen(props: {
   const recentQuizRef = useRef<string[]>([]);
   /** Spec 2026-09-29: a futásban feltett kérdések — a 7–12. évfolyamos közös bank nem ismétel. */
   const gradeSeenRef = useRef(createGradeQuizSeen());
-  const adaptiveRef = useRef(createAdaptiveSession(primaryGrade));
+  const adaptiveRef = useRef(createAdaptiveSession(primaryGrade, props.gradeLevel));
   const answerLockedRef = useRef(false);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   /** Analog stick input (spec 2026-09-29-tornado-ut-kormanyzas D3). */
@@ -1131,7 +1191,7 @@ function PlayScreen(props: {
     // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
     camGroundRef.current = Number.NaN;
     windRef.current = initialWind(spec);
-    timeLeftRef.current = spec.timeLimit;
+    timeLeftRef.current = runTimeLimit;
     scoreRef.current = 0;
     correctRef.current = 0;
     wrongRef.current = 0;
@@ -1313,6 +1373,14 @@ function PlayScreen(props: {
         Object.assign(tornadoPosRef.current, patch);
       },
       getPhase: () => phaseRef.current,
+      /** Pálya-mérés (E szelet): pálya, világszint, sáv és a futás időkerete. */
+      getLevelTuning: () => ({
+        gradeLevel: props.gradeLevel,
+        worldLevel: props.level,
+        band: adaptiveRef.current.band,
+        timeLimit: runTimeLimit,
+        tornadoSpeed: spec.tornadoSpeed,
+      }),
       suppressQuiz: () => {
         lastQuizAtRef.current = elapsedRef.current;
       },
@@ -1463,6 +1531,7 @@ function PlayScreen(props: {
         if (daily.achievements.length > 0) unlocked.push(...daily.achievements);
       }
       props.onComplete(next, unlocked);
+      if (won && props.gradeLevel != null) props.onGradeLevelWin();
 
       // Cloud leaderboard (best-effort; a missing catalogue row just fails silently).
       if (props.syncEligible && won) {
@@ -1583,7 +1652,7 @@ function PlayScreen(props: {
 
   const restartRef = useRef<() => void>(() => {});
   restartRef.current = () => {
-    adaptiveRef.current.reset(primaryGrade);
+    adaptiveRef.current.reset(primaryGrade, props.gradeLevel);
     answerLockedRef.current = false;
     finishedRef.current = false;
     rngRef.current.next = (props.level * 2654435761 + Math.floor(Math.random() * 9973)) >>> 0;
@@ -1592,7 +1661,7 @@ function PlayScreen(props: {
     // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
     camGroundRef.current = Number.NaN;
     windRef.current = initialWind(spec);
-    timeLeftRef.current = spec.timeLimit;
+    timeLeftRef.current = runTimeLimit;
     scoreRef.current = 0;
     correctRef.current = 0;
     wrongRef.current = 0;
@@ -1625,7 +1694,7 @@ function PlayScreen(props: {
 
     if (playing) {
       elapsedRef.current += dt;
-      timeLeftRef.current = Math.max(0, spec.timeLimit - elapsedRef.current);
+      timeLeftRef.current = Math.max(0, runTimeLimit - elapsedRef.current);
 
       // --- vehicle control ---
       const p = playerRef.current;

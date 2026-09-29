@@ -1,6 +1,8 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
-import { QUIZ_TIMEOUT_SEC, tsunamiQuizSeconds } from "@/game-engine/tsunamiTiming";
+import { QUIZ_TIMEOUT_SEC, tsunamiQuizSeconds, tsunamiWaterPace } from "@/game-engine/tsunamiTiming";
+import { useGradeLevel } from "@/game-engine/useGradeLevel";
+import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -606,6 +608,9 @@ export default function TsunamiEscapeEnglish() {
   const [correctQuizzesInRun, setCorrectQuizzesInRun] = useState(0);
   const [safeZoneX, setSafeZoneX] = useState(50);
   const adaptiveRef = useRef(createAdaptiveSession(4));
+  // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként (3–12.); a futás pályája a startkor rögzül.
+  const runLevelRef = useRef<number | null>(null);
+  const levelClearedRef = useRef(false);
   const [quizTimeLeft, setQuizTimeLeft] = useState(QUIZ_TIMEOUT_SEC.normal);
   const [stormFlash, setStormFlash] = useState(false);
   const [driftDir, setDriftDir] = useState(0);
@@ -616,6 +621,15 @@ export default function TsunamiEscapeEnglish() {
 
   useEffect(() => {
     return installGameTestApi({
+      probe: () => {
+        const band = adaptiveRef.current.band;
+        return {
+          level: runLevelRef.current,
+          band,
+          waterPace: runLevelRef.current == null ? 1 : tsunamiWaterPace(band),
+          quizSeconds: tsunamiQuizSeconds(runDifficultyRef.current, band),
+        };
+      },
       forceState: (patch) => {
         if (patch.phase === "won" || patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
           setPhase(patch.phase);
@@ -670,6 +684,7 @@ export default function TsunamiEscapeEnglish() {
   // material-tétel az `english` subject `med` (medium) tier-jébe kerül, függetlenül
   // a topic-tól, így az alap "english" mode-ban (ami a leggyakoribb) elérhető.
   const { grade: userGrade } = useClassroomGrade();
+  const levels = useGradeLevel("tsunami", userGrade);
   const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
   // Évfolyam-váltáskor (pl. a ClassroomGateModal után) az alapérték követi az évfolyamot,
@@ -819,7 +834,9 @@ export default function TsunamiEscapeEnglish() {
   }, []);
 
   const startGame = useCallback(() => {
-    adaptiveRef.current.reset(userGrade ?? 4);
+    runLevelRef.current = levels.level;
+    levelClearedRef.current = false;
+    adaptiveRef.current.reset(userGrade ?? 4, runLevelRef.current);
     paramsRef.current = PRESETS[difficulty];
     runDifficultyRef.current = difficulty;
     runSubjectRef.current = subject;
@@ -854,7 +871,15 @@ export default function TsunamiEscapeEnglish() {
     lastRef.current = null;
     setQuiz(null);
     setPhase("play");
-  }, [difficulty, subject, userGrade]);
+  }, [difficulty, subject, userGrade, levels.level]);
+
+  // A győzelem (a nehézség célszámú jó válasza) a következő pályát oldja fel; a menü azt ajánlja.
+  useEffect(() => {
+    if (phase === "won" && runLevelRef.current != null && !levelClearedRef.current) {
+      levelClearedRef.current = true;
+      levels.complete(runLevelRef.current);
+    }
+  }, [phase]);
 
   // R = quick-restart az "over" / "won" / "menu" képernyőn.
   useEffect(() => {
@@ -989,7 +1014,9 @@ export default function TsunamiEscapeEnglish() {
       const quizEveryDyn = Math.max(floorQuizSec, P.quizEverySec * (1.34 - quizCurve * 0.8));
       const inSafeZone = Math.abs(playerXRef.current - safeZoneXRef.current) <= 9;
       const safeZoneFactor = inSafeZone ? 0.74 : 1.04;
-      const waterRise = P.waterRisePerSec * (0.62 + waterStress * 1.18) * safeZoneFactor;
+      // Pályán a sáv mérsékelten gyorsítja/lassítja a vizet (E szelet, D8); pálya nélkül a régi tempó.
+      const levelPace = runLevelRef.current == null ? 1 : tsunamiWaterPace(adaptiveRef.current.band);
+      const waterRise = P.waterRisePerSec * (0.62 + waterStress * 1.18) * safeZoneFactor * levelPace;
 
       let nextWater = waterRef.current + waterRise * dt;
       const maxPct = 88;
@@ -1404,6 +1431,14 @@ export default function TsunamiEscapeEnglish() {
                     </Button>
                   </div>
                 </div>
+                {levels.active && levels.level != null ? (
+                  <GradeLevelPicker
+                    value={levels.level}
+                    unlocked={levels.unlocked}
+                    onChange={levels.select}
+                    label={`Pálya — ${userGrade}. osztály`}
+                  />
+                ) : null}
               </div>
             )}
 
