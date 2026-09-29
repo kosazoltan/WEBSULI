@@ -70,3 +70,10 @@ kérdések tartalmát és nehézségét; a teljes általános és középiskolá
 - **E3** Egy futásban SHALL NOT ismétlődni tétel, amíg van nem látott (szimulációs teszt).
 - **E4** A vak megoldós ellenőrzés minden új tételre: pontosan egy igaz opció, és az a kulcs.
 - **E5** Kapuk zöldek; a módosított tesztek csak a dokumentált darabszám/tartomány-változást követik.
+
+## Tesztváltozás a CI-ben (2026-09-29 délután)
+- `tests/remaining-learning.spec.ts` („asteroid wrong-answer explanation…”) 7. évfolyamot állít be, és a várt kérdést
+  eddig csak az Aszteroida saját bankjából kereste. A 3. döntés szerint 3–12. évfolyamon a kérdés a közös bankból jön,
+  ezért a teszt a közös bank fájljait (`gradeQuizBank/grade-*.ts`) is beolvassa. A teszt szándéka változatlan: a rossz
+  válaszra a tétel saját magyarázata jelenik meg, olvasható, és bezárás után új kérdés jön. Új ellenőrzés: a beolvasott
+  bank > 900 tétel.

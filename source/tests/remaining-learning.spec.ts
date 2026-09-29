@@ -40,9 +40,13 @@ test('asteroid wrong-answer explanation remains readable and dismisses to a new 
  await page.goto('/games/space-asteroid-quiz');
  await page.getByRole('button',{name:/Indulhat —/}).click();
  const quiz=page.getByRole('dialog',{name:'Mini-teszt',exact:true});
- const source=fs.readFileSync(new URL('../client/src/pages/SpaceAsteroidQuiz.tsx',import.meta.url),'utf8');
- const ast=ts.createSourceFile('bank.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ // Spec 2026-09-29-jatekok-3-12-evfolyam, 3–4. döntés: 3–12. évfolyamon (itt 7.) a kérdés a közös évfolyam-bankból jön,
+ // ezért a várt tételek a játék saját bankja ÉS a közös bank fájljai.
+ const bankDir=new URL('../client/src/data/gradeQuizBank/',import.meta.url);
+ const sources=[new URL('../client/src/pages/SpaceAsteroidQuiz.tsx',import.meta.url),...fs.readdirSync(bankDir).filter(f=>/^grade-\d+\.ts$/.test(f)).map(f=>new URL(f,bankDir))];
  const bank:{prompt:string;wrong:string;explanation:string}[]=[];
+ for(const file of sources){
+ const ast=ts.createSourceFile('bank.tsx',fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
  function walk(n:ts.Node){
   if(ts.isObjectLiteralExpression(n)){
    const props=new Map(n.properties.filter(ts.isPropertyAssignment).map(p=>[p.name.getText(ast),p.initializer]));
@@ -54,6 +58,8 @@ test('asteroid wrong-answer explanation remains readable and dismisses to a new 
   ts.forEachChild(n,walk);
  }
  walk(ast);
+ }
+ expect(bank.length).toBeGreaterThan(900);
  const text=await quiz.innerText();const entry=bank.find(q=>text.includes(q.prompt));expect(entry).toBeDefined();
  await quiz.getByRole('button',{name:entry!.wrong,exact:true}).click();
  await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
