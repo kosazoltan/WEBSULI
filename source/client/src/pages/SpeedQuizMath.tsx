@@ -1,4 +1,4 @@
-import MathTowerScene from "@/components/MathTowerScene";
+import MathTowerScene3D from "@/components/MathTowerScene3D";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, Flame, Gauge, Heart, Rocket, RotateCcw, Star, Trophy } from "lucide-react";
@@ -756,7 +756,7 @@ export default function SpeedQuizMath() {
                   <div className="h-full bg-gradient-to-r from-fuchsia-400 to-pink-500" style={{ width: `${qProgress}%` }} />
                 </div>
 
-                <MathTowerScene current={correct} target={TARGET_CORRECT[grade]} />
+                <MathTowerScene3D current={correct} target={TARGET_CORRECT[grade]} />
 
                 <div
                   className={`math-question rounded-xl border ${

@@ -52,6 +52,7 @@ import {
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import TsunamiScene3D from "@/game-engine/scenes/TsunamiScene3D";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 const LS_XP = "websuli-tsunami-en-xp";
@@ -577,6 +578,9 @@ export default function TsunamiEscapeEnglish() {
   const [stormFlash, setStormFlash] = useState(false);
   const [driftDir, setDriftDir] = useState(0);
   const [lightGraphics, setLightGraphics] = useState(false);
+  /** 3D scene layer: null until probed; false → the DOM scene below is drawn instead (spec E7). */
+  const [scene3d, setScene3d] = useState<boolean | null>(null);
+  const domScene = scene3d === false;
 
   useEffect(() => {
     return installGameTestApi({
@@ -1326,6 +1330,18 @@ export default function TsunamiEscapeEnglish() {
                   className="mb-2"
                 />
                 <div className="relative flex-1 game-scene min-h-0 rounded-2xl overflow-hidden border border-cyan-200/45 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
+                <TsunamiScene3D
+                  water={surfacePct}
+                  playerX={playerX}
+                  safeZoneX={safeZoneX}
+                  stormFlash={stormFlash}
+                  sprinting={keysRef.current.sprint}
+                  phase={phase}
+                  light={lightGraphics}
+                  onSupportedChange={setScene3d}
+                />
+                {domScene && (
+                <>
                 {/* Ég + nap */}
                 <div
                   className="absolute inset-0"
@@ -1374,6 +1390,8 @@ export default function TsunamiEscapeEnglish() {
                       "repeating-linear-gradient(90deg, transparent, transparent 26px, rgba(255,255,255,0.06) 26px, rgba(255,255,255,0.06) 27px)",
                   }}
                 />
+                </>
+                )}
                 <div className="absolute top-3 left-0 right-0 flex justify-center z-10">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-slate-900/90 font-black drop-shadow-sm rounded-full border border-white/45 bg-white/50 px-3 py-1">
                     Maradj szárazon — kvíz = esély a víz ellen
@@ -1401,6 +1419,8 @@ export default function TsunamiEscapeEnglish() {
                   </span>
                 </div>
 
+                {domScene && (
+                <>
                 {/* Erkélyek / platformok - eltérő anyagokkal */}
                 {[
                   { top: 18, type: "ice" },
@@ -1519,6 +1539,8 @@ export default function TsunamiEscapeEnglish() {
                   />
                 ))}
                 {stormFlash && <div className="absolute inset-0 z-[25] bg-white/35 pointer-events-none" />}
+                </>
+                )}
 
                 {rewardBurst && (
                   <motion.div

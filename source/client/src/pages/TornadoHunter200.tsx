@@ -95,7 +95,7 @@ import {
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
 import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
-import { stepVehicle, STOPPED_SPEED } from "@/lib/tornado/drive";
+import { stepVehicle, STOPPED_SPEED, maxSpeedUnits } from "@/lib/tornado/drive";
 import { readStandardGamepad } from "@/lib/tornado/gamepad";
 import {
   toggleCamera,
@@ -126,8 +126,10 @@ import {
   buildProp,
   buildRain,
   animateRain,
-  skyColorFor,
+  skyPaletteFor,
+  SUN_DIRECTION,
   buildSkyDome,
+  animateSkyDome,
   buildStormCloud,
   animateStormCloud,
   skyDomeRadiusFor,
@@ -136,6 +138,14 @@ import {
   disposeMeshCaches,
   type TornadoMesh,
 } from "@/tornado/buildMeshes";
+import {
+  applyRendererLook,
+  createPostFx,
+  disposeObjectTree,
+  SparkleField,
+  LOOK_BUDGET,
+  type PostFx,
+} from "@/game-engine/three-look";
 import {
   chunksAround,
   chunkKey,
@@ -1034,6 +1044,10 @@ function PlayScreen(props: {
     lightning: THREE.PointLight;
     skyDome: THREE.Mesh;
     stormCloud: StormCloud;
+    sun: THREE.DirectionalLight;
+    postFx: PostFx;
+    dust: SparkleField;
+    dustCarry: number;
   } | null>(null);
 
   const rafRef = useRef(0);
@@ -1108,8 +1122,11 @@ function PlayScreen(props: {
     const profile = QUALITY_PROFILES[quality];
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality !== "low", alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, profile.maxPixelRatio));
-    const sky = skyColorFor(spec.tornadoIntensity);
+    // Közös látvány: ACES tónus, sRGB, pixelarány-plafon. A játékos saját
+    // grafikai választása a szint; valódi árnyék csak HIGH-on.
+    applyRendererLook(renderer, quality, { exposure: 1.08, shadows: quality === "high" });
+    const palette = skyPaletteFor(spec.tornadoIntensity);
+    const sky = palette.horizon;
     renderer.setClearColor(sky);
 
     const scene = new THREE.Scene();
@@ -1117,20 +1134,46 @@ function PlayScreen(props: {
 
     const camera = new THREE.PerspectiveCamera(62, 1, 0.5, cameraFarFor(profile));
 
-    scene.add(new THREE.HemisphereLight("#cfe4ff", "#2b2f24", 0.9));
-    const sun = new THREE.DirectionalLight("#fff4d6", 0.9);
-    sun.position.set(60, 120, 40);
+    scene.add(new THREE.HemisphereLight("#e2efff", "#5f6b3c", 1.55));
+    const sun = new THREE.DirectionalLight("#fff0d4", 2.5);
+    sun.position.copy(SUN_DIRECTION).multiplyScalar(150);
     scene.add(sun);
+    scene.add(sun.target);
+    if (quality === "high") {
+      // A nap árnyékkamerája csak a jármű környékét fedi, és vele együtt mozog:
+      // így a 2048-as térkép is éles árnyékot ad.
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(LOOK_BUDGET.high.shadowMapSize, LOOK_BUDGET.high.shadowMapSize);
+      const shadowCam = sun.shadow.camera;
+      shadowCam.left = -34;
+      shadowCam.right = 34;
+      shadowCam.top = 34;
+      shadowCam.bottom = -34;
+      shadowCam.near = 10;
+      shadowCam.far = 320;
+      sun.shadow.bias = -0.0006;
+      sun.shadow.normalBias = 0.35;
+    }
     const lightning = new THREE.PointLight("#dfefff", 0, 1400);
     lightning.position.set(0, 200, 0);
     scene.add(lightning);
 
     const vehicleGroup = buildVehicle(props.vehicle);
+    if (quality === "high") {
+      vehicleGroup.traverse((o) => {
+        if (o instanceof THREE.Mesh && !o.userData.blobShadow) o.castShadow = true;
+      });
+    }
     scene.add(vehicleGroup);
 
     // G-9: színátmenetes égbolt a sík háttérszín helyett. A `setClearColor`
     // egyetlen színt ad, amitől a horizont papírkivágás-hatású volt.
-    const skyDome = buildSkyDome(sky, sky.clone().multiplyScalar(0.45), skyDomeRadiusFor(profile));
+    const skyDome = buildSkyDome(palette.horizon, palette.zenith, skyDomeRadiusFor(profile), {
+      ground: palette.ground,
+      sunDirection: SUN_DIRECTION,
+      sunColor: palette.sun,
+      clouds: quality === "low" ? 0 : palette.clouds,
+    });
     scene.add(skyDome);
 
     const tornado = buildTornado(quality);
@@ -1147,13 +1190,35 @@ function PlayScreen(props: {
     rain.visible = false;
     scene.add(rain);
 
-    sceneRef.current = { renderer, scene, camera, vehicle: vehicleGroup, tornado, rain, chunks: new Map(), lightning, skyDome, stormCloud };
+    // Por a kerekek mögött: egyetlen pontfelhő, normál (nem additív) keveréssel.
+    const dust = new SparkleField(scene, Math.round(320 * LOOK_BUDGET[quality].particleScale), THREE.NormalBlending);
+    // HIGH: enyhe ragyogás (fényszórók, napfény); más szinten sima render.
+    const postFx = createPostFx(renderer, scene, camera, quality, { strength: 0.35, radius: 0.5, threshold: 0.85 });
+
+    sceneRef.current = {
+      renderer,
+      scene,
+      camera,
+      vehicle: vehicleGroup,
+      tornado,
+      rain,
+      chunks: new Map(),
+      lightning,
+      skyDome,
+      stormCloud,
+      sun,
+      postFx,
+      dust,
+      dustCarry: 0,
+    };
 
     const handleResize = () => {
       const rect = canvas.parentElement?.getBoundingClientRect();
       const w = Math.max(1, Math.floor(rect?.width ?? 640));
       const h = Math.max(1, Math.floor(rect?.height ?? 480));
       renderer.setSize(w, h, false);
+      postFx.setSize(w, h);
+      dust.setViewportHeight(h * renderer.getPixelRatio(), camera.fov);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     };
@@ -1177,17 +1242,15 @@ function PlayScreen(props: {
       ro.disconnect();
       const sc = sceneRef.current;
       if (sc) {
+        sc.dust.dispose();
+        sc.postFx.dispose();
+        // A HIGH szint árnyéktérképét a fény birtokolja, nem a renderer.
+        sc.sun.dispose();
+        // Minden, ami a jelenetben van (tereprészek, jármű, tölcsér, ég, eső),
+        // itt szabadul fel; a megosztott gyorsítótárat a disposeMeshCaches üríti.
+        disposeObjectTree(sc.scene);
         sc.chunks.forEach((objs) => objs.forEach((o) => sc.scene.remove(o)));
-        sc.scene.traverse((obj) => {
-          if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
-            const anyObj = obj as THREE.Mesh;
-            if (!QUALITY_PROFILES[quality]) return;
-            // Only dispose per-scene throwaways; shared cache is freed below.
-            if (obj.userData.perScene && shouldDisposeGeometry(anyObj.geometry)) {
-              anyObj.geometry.dispose();
-            }
-          }
-        });
+        sc.chunks.clear();
       }
       disposeMeshCaches();
       renderer.dispose();
@@ -1511,12 +1574,12 @@ function PlayScreen(props: {
   stepRef.current = (dt: number) => {
     const sc = sceneRef.current;
     if (!sc) return;
-    const { renderer, scene, camera, vehicle, tornado, rain, lightning } = sc;
+    const { camera, vehicle, tornado, rain, lightning } = sc;
     const ph = phaseRef.current;
     const playing = (ph === "seeking" || ph === "approach") && !pausedRef.current;
 
     // Always spin the funnel and rain so paused screens still feel alive.
-    animateTornado(tornado, dt, spec.tornadoIntensity);
+    animateTornado(tornado, dt, spec.tornadoIntensity, reducedMotionRef.current ? 0.35 : 1);
 
     if (playing) {
       elapsedRef.current += dt;
@@ -1622,9 +1685,15 @@ function PlayScreen(props: {
 
       // --- vehicle transform ---
       vehicle.position.set(p.x, terrainHeight(p.x, p.z), p.z);
-      vehicle.rotation.y = p.heading;
+      // A mozgás iránya (sin h, −cos h); a modell orra a +z tengely. Az Y körüli
+      // θ forgatás a +z-t (sin θ, cos θ)-ba viszi, tehát θ = π − h. (A korábbi
+      // θ = h tükrözött: a jármű tolatva haladt és fordítva kanyarodott.)
+      vehicle.rotation.y = Math.PI - p.heading;
       const wheels = vehicle.userData.wheels as THREE.Mesh[] | undefined;
       wheels?.forEach((w) => (w.rotation.x += p.speed * dt * 0.2));
+
+      // --- dust behind the wheels, scaled by speed ---
+      emitWheelDust(sc, p, props.vehicle.speed, dt, reducedMotionRef.current);
 
       // --- streaming world chunks ---
       streamChunks(sc, p.x, p.z, quality);
@@ -1639,6 +1708,14 @@ function PlayScreen(props: {
         lightning.intensity *= 1 - Math.min(1, dt * 6);
       }
     }
+    // Villámláskor az égbolt is felvillan (mozgáscsökkentésnél csak halványan).
+    animateSkyDome(
+      sc.skyDome,
+      dt,
+      (lightning.intensity / 6) * (reducedMotionRef.current ? 0.25 : 1),
+      reducedMotionRef.current ? 0 : 1,
+    );
+    sc.dust.update(dt);
 
     // --- camera ---
     const p = playerRef.current;
@@ -1654,7 +1731,11 @@ function PlayScreen(props: {
       camera.lookAt(p.x + Math.sin(p.heading) * 8, ground + 2.5, p.z - Math.cos(p.heading) * 8);
     }
 
-    renderer.render(scene, camera);
+    // A nap (és az árnyékkamerája) a járművet követi.
+    sc.sun.target.position.set(p.x, ground, p.z);
+    sc.sun.position.set(p.x, ground, p.z).addScaledVector(SUN_DIRECTION, 150);
+
+    sc.postFx.render();
 
     // --- push HUD (throttled to ~10 fps to avoid re-render storms) ---
     hudTickRef.current += dt;
@@ -1913,6 +1994,67 @@ function PlayScreen(props: {
   );
 }
 
+/* ------- wheel dust (imperative, no React) ------- */
+const DUST_COLORS: Record<string, string> = {
+  grass: "#c9b489",
+  dirt: "#c79a63",
+  mud: "#7c5c3c",
+  water: "#e6f6ff",
+};
+const dustOrigin = new THREE.Vector3();
+const dustDirection = new THREE.Vector3();
+
+function emitWheelDust(
+  sc: { vehicle: THREE.Group; dust: SparkleField; dustCarry: number },
+  p: { x: number; z: number; heading: number; speed: number; anchored: boolean },
+  vehicleSpeedKmh: number,
+  dt: number,
+  reducedMotion: boolean,
+) {
+  const ratio = p.anchored ? 0 : Math.min(1, Math.abs(p.speed) / Math.max(0.001, maxSpeedUnits(vehicleSpeedKmh)));
+  if (ratio < 0.08) {
+    sc.dustCarry = 0;
+    return;
+  }
+  const surface = surfaceAt(p.x, p.z);
+  // Aszfalton nem porzik a kerék.
+  if (surface === "asphalt") {
+    sc.dustCarry = 0;
+    return;
+  }
+  const perSecond = 26 * ratio * (reducedMotion ? 0.25 : 1);
+  sc.dustCarry += perSecond * dt;
+  const count = Math.floor(sc.dustCarry);
+  if (count <= 0) return;
+  sc.dustCarry -= count;
+  const size = sc.vehicle.userData.size as { width: number; length: number } | undefined;
+  const halfW = (size?.width ?? 2.4) / 2;
+  const back = (size?.length ?? 5.2) / 2 - 0.6;
+  // Előre mutató egységvektor a mozgás irányában; a por ezzel ellentétesen száll.
+  const dirSign = p.speed < 0 ? -1 : 1;
+  const fx = Math.sin(p.heading) * dirSign;
+  const fz = -Math.cos(p.heading) * dirSign;
+  const ground = sc.vehicle.position.y;
+  const water = surface === "water";
+  const n = Math.ceil(count / 2);
+  for (const side of [-1, 1]) {
+    // Oldalirány: (−fz, fx) merőleges az előre-vektorra.
+    dustOrigin.set(p.x - fx * back - fz * side * halfW, ground + 0.5, p.z - fz * back + fx * side * halfW);
+    dustDirection.set(-fx, water ? 1.6 : 0.55, -fz);
+    sc.dust.emit(dustOrigin, {
+      count: n,
+      color: DUST_COLORS[surface] ?? "#c9b489",
+      speed: 2 + ratio * 3,
+      life: water ? 0.7 : 1.5,
+      gravity: water ? 7 : surface === "mud" ? 4 : -0.4,
+      size: water ? 0.45 : 0.7 + ratio * 0.6,
+      direction: dustDirection,
+      directionality: 0.6,
+      spread: 0.6,
+    });
+  }
+}
+
 /* ------- world chunk streaming (imperative, no React) ------- */
 type StreamScene = {
   scene: THREE.Scene;
@@ -1934,6 +2076,11 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
       for (const prop of propsInChunk(cx, cz)) {
         const mesh = buildProp(prop);
         mesh.userData.perScene = true;
+        if (quality === "high") {
+          mesh.traverse((child) => {
+            if (child instanceof THREE.Mesh) child.castShadow = child.receiveShadow = true;
+          });
+        }
         sc.scene.add(mesh);
         objects.push(mesh);
       }

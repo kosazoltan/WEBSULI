@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import * as THREE from "three";
+import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
+import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Box, Pickaxe, Star, Flame, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
@@ -628,7 +630,11 @@ function makeBlockMaterials() {
   map.set(BEDROCK, stdMat(buildTex(BEDROCK)));
   map.set(CREEPER, stdMat(buildTex(CREEPER), { emissive: new THREE.Color("#145214"), emissiveIntensity: 0.32 }));
   map.set(SAND, stdMat(buildTex(SAND)));
-  map.set(WATER, stdMat(buildTex(WATER), { transparent: true, opacity: 0.62, roughness: 0.18, metalness: 0.06 }));
+  // Áttetsző, csillogó víz: alacsony érdesség → napfény-csillanás a felszínen.
+  const waterTex = buildTex(WATER);
+  waterTex.wrapS = THREE.RepeatWrapping;
+  waterTex.wrapT = THREE.RepeatWrapping;
+  map.set(WATER, stdMat(waterTex, { transparent: true, opacity: 0.78, roughness: 0.15, metalness: 0.1 }));
   map.set(ZOMBIE, stdMat(buildTex(ZOMBIE), { emissive: new THREE.Color("#1a3a1f"), emissiveIntensity: 0.28 }));
   map.set(SKELETON, stdMat(buildTex(SKELETON), { emissive: new THREE.Color("#7a7870"), emissiveIntensity: 0.18 }));
   map.set(SPIDER, stdMat(buildTex(SPIDER), { emissive: new THREE.Color("#3a0a06"), emissiveIntensity: 0.24 }));
@@ -1189,9 +1195,13 @@ export default function BlockCraftQuiz() {
   const phaseRef = useRef<Phase>("menu");
   // D1: ref-guard — a Three.js scene csak egyszer épül fel ugyanazon play-session-ban
   const sceneBuiltRef = useRef(false);
+  // Dekoratív mozgás (felhő-sodródás, időjárás, víz-csillanás) a rendszer-beállítás szerint.
+  const reducedMotion = useReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
   // Keep refs in sync for the canvas loop / global key handlers (avoids stale closure)
   streakRef.current = streak;
   phaseRef.current = phase;
+  reducedMotionRef.current = reducedMotion;
   inventoryRef.current = inventory;
   selTypeRef.current = selType;
 
@@ -1545,25 +1555,74 @@ export default function BlockCraftQuiz() {
     sceneBuiltRef.current = true;
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // Közös látvány: ACES tónus, sRGB, szint szerinti pixelarány-plafon és árnyék-térkép.
+    const tier = detectLookTier();
+    const budget = LOOK_BUDGET[tier];
+    applyRendererLook(renderer, tier, { exposure: 1.0 });
+    const shadowsOn = renderer.shadowMap.enabled;
+    // A világ statikus (csak bányászáskor/lerakáskor változik) → az árnyék-térképet
+    // csak újraépítéskor rajzoljuk újra, nem minden frame-ben.
+    renderer.shadowMap.autoUpdate = false;
 
-    const cfg = activeLevelRef.current;
+    const cfg0 = activeLevelRef.current;
     const scene = new THREE.Scene();
-    const skyColor = new THREE.Color(cfg.skyTint.day);
+    const skyColor = new THREE.Color(cfg0.skyTint.day);
     scene.background = skyColor;
-    scene.fog = new THREE.FogExp2(skyColor, cfg.weather === "sandstorm" ? 0.035 : 0.022);
+    scene.fog = new THREE.FogExp2(skyColor, cfg0.weather === "sandstorm" ? 0.035 : 0.022);
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x4a4038, 0.95);
+    // Meleg, barátságos fénymérleg: égbolt-kék felülről, meleg föld-visszaverődés alulról,
+    // plusz oldalról-felülről érkező napfény — a kocka oldalai így jól elkülönülnek.
+    const hemi = new THREE.HemisphereLight(0xdcecff, 0x7a6848, 0.95);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff3d6, 1.1);
-    sun.position.set(WX * 0.7, WY * 4.5, WZ * 0.3);
+    // ≈45° magas nap, a kezdő nézési irányhoz képest elöl-oldalt → a fák és kockák
+    // árnyéka jól láthatóan a játékos felé, a fűre vetül.
+    const sunDir = new THREE.Vector3(0.06, 0.72, -0.7).normalize();
+    const worldCenter = new THREE.Vector3(WX / 2, 4, WZ / 2);
+    const sun = new THREE.DirectionalLight(0xfff0d2, 2.7);
+    sun.position.copy(worldCenter).addScaledVector(sunDir, 60);
+    sun.target.position.copy(worldCenter);
     scene.add(sun);
+    scene.add(sun.target);
+    if (shadowsOn) {
+      // Szoros ortografikus árnyék-kamera a teljes WX×WZ világ fölött.
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(budget.shadowMapSize, budget.shadowMapSize);
+      const half = Math.hypot(WX, WZ) / 2 + 2;
+      const sc = sun.shadow.camera;
+      sc.left = -half;
+      sc.right = half;
+      sc.top = half;
+      sc.bottom = -half;
+      sc.near = 20;
+      sc.far = 60 + half + WY;
+      sc.updateProjectionMatrix();
+      // Kockás világ: kis negatív bias + normál-irányú eltolás → nincs csíkos „acne”,
+      // és a vetett árnyék nem válik le a kocka aljáról (peter-panning).
+      sun.shadow.bias = -0.0004;
+      sun.shadow.normalBias = budget.shadowMapSize >= 2048 ? 0.035 : 0.06;
+    }
+
+    // Gradiens égbolt napkoronggal; a pálya égszínéből számolva (applyLevelLook).
+    const sky = createGradientSky({
+      top: skyColor,
+      horizon: skyColor,
+      sunDirection: sunDir,
+      sunColor: "#fff1c9",
+      sunSize: 0.016,
+      radius: 120,
+    });
+    // Az égbolt NEM kap ACES-tónusleképezést: az kifakítaná a telített rajzfilm-kéket.
+    sky.material.toneMapped = false;
+    scene.add(sky);
 
     const camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 140);
     camera.rotation.order = "YXZ";
     cameraRef.current = camera;
 
+    // Szikra-részecskék (bányászás + víz-csillanás) — egyetlen draw call.
+    const sparkles = new SparkleField(scene, Math.round(260 * budget.particleScale) + 40);
+
+    const bufferSize = new THREE.Vector2();
     let appliedW = 0;
     let appliedH = 0;
     const syncSize = () => {
@@ -1574,14 +1633,54 @@ export default function BlockCraftQuiz() {
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      sparkles.setViewportHeight(renderer.getDrawingBufferSize(bufferSize).y, camera.fov);
     };
     syncSize();
 
     const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
     const blockMaterials = makeBlockMaterials();
+    // Éles közeli pixelek (Nearest nagyítás), de a távoli kockák ne „zajosodjanak”:
+    // mipmap + anizotróp szűrés kicsinyítéskor (a képpont-rajzolat olvasható marad).
+    const maxAniso = tier === "low" ? 1 : Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    const waterMats: THREE.MeshStandardMaterial[] = [];
+    blockMaterials.forEach((mat, t) => {
+      for (const m of Array.isArray(mat) ? mat : [mat]) {
+        if (m.map) {
+          m.map.generateMipmaps = true;
+          m.map.minFilter = THREE.NearestMipmapLinearFilter;
+          m.map.anisotropy = maxAniso;
+          m.map.needsUpdate = true;
+        }
+        if (t === WATER) {
+          waterMats.push(m);
+          continue;
+        }
+        // Olcsó „ambient occlusion”: a kocka oldallapjai alul enyhén sötétebbek,
+        // a felső élük felé világosodnak → a kockák kiemelkednek, a textúra olvasható marad.
+        m.onBeforeCompile = (shader) => {
+          const decl = "#include <common>\nvarying vec3 vBcLocal;\nvarying vec3 vBcNormal;";
+          shader.vertexShader = shader.vertexShader
+            .replace("#include <common>", decl)
+            .replace("#include <begin_vertex>", "#include <begin_vertex>\nvBcLocal = position;\nvBcNormal = normal;");
+          shader.fragmentShader = shader.fragmentShader.replace("#include <common>", decl).replace(
+            "#include <map_fragment>",
+            [
+              "#include <map_fragment>",
+              "float bcSide = 1.0 - abs(vBcNormal.y);",
+              "float bcShade = mix(0.8, 1.04, smoothstep(-0.5, 0.45, vBcLocal.y));",
+              "float bcUnder = vBcNormal.y < -0.5 ? 0.78 : 1.0;",
+              "diffuseColor.rgb *= mix(1.0, bcShade, bcSide) * bcUnder;",
+            ].join("\n"),
+          );
+        };
+        m.customProgramCacheKey = () => "bc-block-ao";
+      }
+    });
 
     // --- Instanced voxel-renderelés (exposed-culling) ---
     let instMeshes: THREE.InstancedMesh[] = [];
+    /** Szabad ég alatti vízfelszín-cellák (x, y, z hármasok) a csillanásokhoz. */
+    const waterTops: number[] = [];
     const tmpMat = new THREE.Matrix4();
     const rebuildWorld = () => {
       for (const m of instMeshes) {
@@ -1589,6 +1688,7 @@ export default function BlockCraftQuiz() {
         m.dispose();
       }
       instMeshes = [];
+      waterTops.length = 0;
       const w = worldRef.current;
       const byType = new Map<number, number[]>();
       for (let y = 0; y < WY; y++) {
@@ -1622,9 +1722,23 @@ export default function BlockCraftQuiz() {
         }
         mesh.instanceMatrix.needsUpdate = true;
         if (t === WATER || t === LEAVES) mesh.renderOrder = 1;
+        if (shadowsOn) {
+          // A víz fogad árnyékot, de nem vet (áttetsző felszín).
+          mesh.castShadow = t !== WATER;
+          mesh.receiveShadow = true;
+        }
+        if (t === WATER) {
+          for (let i = 0; i < n; i++) {
+            const wx = coords[i * 3]!;
+            const wy = coords[i * 3 + 1]!;
+            const wz = coords[i * 3 + 2]!;
+            if (vGet(w, wx, wy + 1, wz) === AIR) waterTops.push(wx, wy + 1, wz);
+          }
+        }
         scene.add(mesh);
         instMeshes.push(mesh);
       });
+      renderer.shadowMap.needsUpdate = true;
     };
     let builtVersion = -1;
 
@@ -1635,23 +1749,74 @@ export default function BlockCraftQuiz() {
     highlight.visible = false;
     scene.add(highlight);
 
-    // --- Felhők (lassan sodródó fehér lapok a világ felett) ---
-    const cloudGeo = new THREE.BoxGeometry(8, 0.6, 5);
-    const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.66, fog: false });
-    const clouds: THREE.Mesh[] = [];
-    for (let i = 0; i < 8; i++) {
-      const c = new THREE.Mesh(cloudGeo, cloudMat);
-      c.position.set(Math.random() * WX, WY + 7 + Math.random() * 5, Math.random() * WZ);
-      scene.add(c);
-      clouds.push(c);
+    // --- Bolyhos felhők: 3–5 dobozból álló csoportok, lágy árnyalással, lassan sodródnak ---
+    const cloudGeo = new THREE.BoxGeometry(1, 1, 1);
+    const cloudMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      emissive: 0xdde7f4,
+      emissiveIntensity: 0.62,
+      transparent: true,
+      opacity: 0.95,
+      fog: false,
+    });
+    const cloudRoot = new THREE.Group();
+    scene.add(cloudRoot);
+    const CLOUD_MARGIN = 34;
+    const clouds: THREE.Group[] = [];
+    const cloudCount = tier === "low" ? 8 : 13;
+    for (let i = 0; i < cloudCount; i++) {
+      const g = new THREE.Group();
+      const baseW = 7 + Math.random() * 7;
+      const baseD = 4.5 + Math.random() * 3.5;
+      const base = new THREE.Mesh(cloudGeo, cloudMat);
+      base.scale.set(baseW, 1.3, baseD);
+      g.add(base);
+      // Keskenyebb „has” alul → alulról nézve is lépcsős, puha forma.
+      const belly = new THREE.Mesh(cloudGeo, cloudMat);
+      belly.scale.set(baseW * 0.72, 0.7, baseD * 0.7);
+      belly.position.set((Math.random() - 0.5) * baseW * 0.15, -0.95, (Math.random() - 0.5) * baseD * 0.15);
+      g.add(belly);
+      const puffs = 1 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < puffs; k++) {
+        const puff = new THREE.Mesh(cloudGeo, cloudMat);
+        const pw = baseW * (0.3 + Math.random() * 0.3);
+        const pd = baseD * (0.45 + Math.random() * 0.35);
+        const ph = 1.1 + Math.random() * 1.1;
+        puff.scale.set(pw, ph, pd);
+        puff.position.set(
+          (Math.random() - 0.5) * (baseW - pw) * 0.9,
+          0.3 + ph * 0.5,
+          (Math.random() - 0.5) * (baseD - pd) * 0.8,
+        );
+        g.add(puff);
+      }
+      g.position.set(
+        -CLOUD_MARGIN + Math.random() * (WX + CLOUD_MARGIN * 2),
+        WY + 10 + Math.random() * 6,
+        -CLOUD_MARGIN + Math.random() * (WZ + CLOUD_MARGIN * 2),
+      );
+      cloudRoot.add(g);
+      clouds.push(g);
     }
 
-    // --- Időjárás-részecskék a játékos körül ---
+    // --- Időjárás-részecskék a játékos körül (a pálya időjárása szerint újraépül) ---
     const WEATHER_N = 340;
+    let weatherKind: LevelWeather = "clear";
     let weatherPts: THREE.Points | null = null;
     let weatherGeo: THREE.BufferGeometry | null = null;
     let weatherMat: THREE.PointsMaterial | null = null;
-    if (cfg.weather !== "clear") {
+    const clearWeather = () => {
+      if (weatherPts) scene.remove(weatherPts);
+      weatherGeo?.dispose();
+      weatherMat?.dispose();
+      weatherPts = null;
+      weatherGeo = null;
+      weatherMat = null;
+    };
+    const buildWeather = (kind: LevelWeather) => {
+      clearWeather();
+      weatherKind = kind;
+      if (kind === "clear") return;
       weatherGeo = new THREE.BufferGeometry();
       const pos = new Float32Array(WEATHER_N * 3);
       const p0 = playerRef.current;
@@ -1662,15 +1827,49 @@ export default function BlockCraftQuiz() {
       }
       weatherGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
       weatherMat = new THREE.PointsMaterial({
-        color: cfg.weather === "rain" ? 0x9ec7ff : cfg.weather === "snow" ? 0xffffff : 0xe7c878,
-        size: cfg.weather === "snow" ? 0.13 : 0.08,
+        color: kind === "rain" ? 0x9ec7ff : kind === "snow" ? 0xffffff : 0xe7c878,
+        size: kind === "snow" ? 0.13 : 0.08,
         transparent: true,
-        opacity: cfg.weather === "sandstorm" ? 0.55 : 0.8,
+        opacity: kind === "sandstorm" ? 0.55 : 0.8,
         sizeAttenuation: true,
       });
       weatherPts = new THREE.Points(weatherGeo, weatherMat);
       scene.add(weatherPts);
-    }
+    };
+
+    // --- Pályánkénti hangulat: égbolt-gradiens, köd = horizont, felhő- és fényárnyalat ---
+    const white = new THREE.Color(0xffffff);
+    const hsl = { h: 0, s: 0, l: 0 };
+    let lookLevel: LevelConfig | null = null;
+    const applyLevelLook = (cfg: LevelConfig) => {
+      lookLevel = cfg;
+      const day = new THREE.Color(cfg.skyTint.day);
+      day.getHSL(hsl);
+      // Zenit: mélyebb, telítettebb; horizont: világos, párás.
+      // Élénk rajzfilm-ég: a pálya árnyalatából telített, sötétebb zenit és világos,
+      // de színes horizont (erdei pálya: ≈ #2f8cff → #bfe9ff).
+      const warm = cfg.weather === "sandstorm";
+      const top = new THREE.Color().setHSL(
+        warm ? hsl.h : Math.min(0.64, hsl.h + 0.035),
+        1,
+        warm ? 0.62 : Math.max(0.42, hsl.l * 0.76),
+      );
+      const horizon = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s + 0.35), Math.min(0.88, hsl.l + 0.1));
+      const u = sky.material.uniforms;
+      (u.topColor.value as THREE.Color).copy(top);
+      (u.horizonColor.value as THREE.Color).copy(horizon);
+      (u.bottomColor.value as THREE.Color).copy(horizon).multiplyScalar(0.85);
+      skyColor.copy(horizon);
+      const fog = scene.fog as THREE.FogExp2;
+      fog.color.copy(horizon);
+      fog.density = cfg.weather === "sandstorm" ? 0.035 : 0.022;
+      hemi.color.copy(horizon).lerp(white, 0.35);
+      cloudMat.color.set(cfg.weather === "rain" ? 0xd9e0e8 : cfg.weather === "sandstorm" ? 0xf6e7c6 : 0xffffff);
+      cloudMat.emissive.set(cfg.weather === "sandstorm" ? 0xe3d2ad : cfg.weather === "rain" ? 0xa9b3c2 : 0xdde7f4);
+      sun.intensity = cfg.weather === "rain" ? 2.1 : 2.7;
+      if (cfg.weather !== weatherKind || !weatherPts) buildWeather(cfg.weather);
+    };
+    applyLevelLook(cfg0);
 
     // --- Bányász-por burst-ök ---
     type Burst = {
@@ -1704,9 +1903,36 @@ export default function BlockCraftQuiz() {
       const pts = new THREE.Points(geo, mat);
       scene.add(pts);
       bursts.push({ pts, geo, mat, vel, life: 0.7 });
+      // Csillogó szikrák a por mellé: a blokk világos árnyalatában, ritka ércnél arany-fehér extra.
+      const center = new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5);
+      const calm = reducedMotionRef.current;
+      const pal = MC_PAL[t];
+      sparkles.emit(center, {
+        count: Math.max(6, Math.round(26 * budget.particleScale * (calm ? 0.5 : 1))),
+        color: pal?.light ?? "#ffffff",
+        speed: calm ? 1.2 : 3.6,
+        life: 0.85,
+        gravity: calm ? 0 : 5,
+        size: 0.13,
+        spread: 0.7,
+        direction: new THREE.Vector3(0, 1, 0),
+        directionality: 0.35,
+      });
+      if (t === DIAMOND || t === IRON || t === COAL) {
+        sparkles.emit(center, {
+          count: Math.max(5, Math.round(16 * budget.particleScale)),
+          color: t === DIAMOND ? "#b8f6ff" : "#ffe7a3",
+          speed: calm ? 0.8 : 2.4,
+          life: 1.1,
+          size: 0.2,
+          spread: 0.5,
+        });
+      }
     };
 
     const dirVec = new THREE.Vector3();
+    const glintPos = new THREE.Vector3();
+    let glintAcc = 0;
     let disposed = false;
 
     const step = (now: number) => {
@@ -1719,6 +1945,9 @@ export default function BlockCraftQuiz() {
       lastTRef.current = now;
       syncSize();
 
+      // Új pálya → új égbolt/köd/időjárás (a scene egyszer épül, a pálya viszont váltakozik).
+      if (lookLevel !== activeLevelRef.current) applyLevelLook(activeLevelRef.current);
+      const calm = reducedMotionRef.current;
       // Világ-mesh frissítés bányászás/lerakás után
       if (builtVersion !== worldVersionRef.current) {
         rebuildWorld();
@@ -1778,26 +2007,46 @@ export default function BlockCraftQuiz() {
       if (hit && vMineable(hit.t)) {
         highlight.visible = true;
         highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
-        const pulse = 1 + Math.sin(now / 160) * 0.012;
+        const pulse = calm ? 1 : 1 + Math.sin(now / 160) * 0.012;
         highlight.scale.setScalar(pulse);
       } else {
         highlight.visible = false;
       }
 
-      // --- Felhők sodródása ---
-      for (const c of clouds) {
-        c.position.x += dt * 0.7;
-        if (c.position.x > WX + 14) c.position.x = -14;
+      // Az égbolt-kupola a kamerával mozog (mindig a vágósíkon belül marad).
+      sky.position.copy(camera.position);
+
+      // --- Felhők sodródása, víz-áramlás és csillanás (reduced motion alatt áll) ---
+      if (!calm) {
+        for (const c of clouds) {
+          c.position.x += dt * 0.7;
+          if (c.position.x > WX + CLOUD_MARGIN) c.position.x = -CLOUD_MARGIN;
+        }
+        for (const m of waterMats) {
+          if (m.map) m.map.offset.x = (m.map.offset.x + dt * 0.035) % 1;
+        }
+        glintAcc += dt * 7 * budget.particleScale;
+        while (glintAcc >= 1 && waterTops.length > 0) {
+          glintAcc -= 1;
+          const i = Math.floor(Math.random() * (waterTops.length / 3)) * 3;
+          const gx = waterTops[i]! + 0.15 + Math.random() * 0.7;
+          const gz = waterTops[i + 2]! + 0.15 + Math.random() * 0.7;
+          if (Math.hypot(gx - p.x, gz - p.z) > 24) continue;
+          glintPos.set(gx, waterTops[i + 1]! + 0.02, gz);
+          sparkles.emit(glintPos, { count: 1, color: "#f4fbff", speed: 0.12, life: 0.7, size: 0.16 });
+        }
+        if (waterTops.length === 0) glintAcc = 0;
       }
+      sparkles.update(dt);
 
       // --- Időjárás ---
-      if (weatherPts && weatherGeo) {
+      if (weatherPts && weatherGeo && !calm) {
         const attr = weatherGeo.getAttribute("position") as THREE.BufferAttribute;
         const arr = attr.array as Float32Array;
-        const fallSpeed = cfg.weather === "rain" ? 13 : cfg.weather === "snow" ? 2.4 : 5;
-        const driftX = cfg.weather === "sandstorm" ? 9 : cfg.weather === "snow" ? 0.5 : 0;
+        const fallSpeed = weatherKind === "rain" ? 13 : weatherKind === "snow" ? 2.4 : 5;
+        const driftX = weatherKind === "sandstorm" ? 9 : weatherKind === "snow" ? 0.5 : 0;
         for (let i = 0; i < WEATHER_N; i++) {
-          arr[i * 3] += driftX * dt + (cfg.weather === "snow" ? Math.sin(now / 700 + i) * dt : 0);
+          arr[i * 3] += driftX * dt + (weatherKind === "snow" ? Math.sin(now / 700 + i) * dt : 0);
           arr[i * 3 + 1] -= fallSpeed * dt;
           if (arr[i * 3 + 1]! < p.y - 4 || Math.abs(arr[i * 3]! - p.x) > 16) {
             arr[i * 3] = p.x + (Math.random() - 0.5) * 28;
@@ -1854,12 +2103,14 @@ export default function BlockCraftQuiz() {
         b.geo.dispose();
         b.mat.dispose();
       }
-      if (weatherPts) scene.remove(weatherPts);
-      weatherGeo?.dispose();
-      weatherMat?.dispose();
-      for (const c of clouds) scene.remove(c);
-      cloudGeo.dispose();
-      cloudMat.dispose();
+      clearWeather();
+      scene.remove(cloudRoot);
+      disposeObjectTree(cloudRoot);
+      scene.remove(sky);
+      disposeObjectTree(sky);
+      sparkles.dispose();
+      scene.remove(sun.target);
+      sun.dispose();
       hlGeo.dispose();
       hlMat.dispose();
       blockGeometry.dispose();
