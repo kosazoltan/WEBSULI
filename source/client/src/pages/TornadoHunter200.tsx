@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { joystickToDirections } from "@/game-engine/joystick";
 import { Card, CardContent } from "@/components/ui/card";
-import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { correctDataAttrs, installGameTestApi, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import AchievementToast from "@/components/AchievementToast";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -1262,6 +1262,31 @@ function PlayScreen(props: {
   useEffect(() => () => {
     timeoutsRef.current.forEach((id) => window.clearTimeout(id));
     timeoutsRef.current = [];
+  }, []);
+
+  // Böngészős próbakampó (spec 2026-09-29-tornado-fizika D12): csak VITE_ENABLE_GAME_TEST_HOOKS=1
+  // mellett létezik, élesben a konstans feltétel miatt kiesik a buildből.
+  useEffect(() => {
+    if (!GAME_TEST_HOOKS_ENABLED) return;
+    const api = {
+      getPlayer: () => ({ ...playerRef.current }),
+      setPlayer: (patch: Partial<PlayerState>) => {
+        Object.assign(playerRef.current, patch);
+      },
+      getTornado: () => ({ ...tornadoPosRef.current }),
+      setTornado: (patch: { x?: number; z?: number }) => {
+        Object.assign(tornadoPosRef.current, patch);
+      },
+      getPhase: () => phaseRef.current,
+      suppressQuiz: () => {
+        lastQuizAtRef.current = elapsedRef.current;
+      },
+    };
+    const w = window as unknown as { __websuliTornado?: typeof api };
+    w.__websuliTornado = api;
+    return () => {
+      if (w.__websuliTornado === api) delete w.__websuliTornado;
+    };
   }, []);
 
   /* ------- keyboard ------- */
