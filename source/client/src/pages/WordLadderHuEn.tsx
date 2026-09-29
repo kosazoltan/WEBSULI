@@ -1,7 +1,5 @@
-import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import {
   dedupeTiersByContent,
-  ladderBaseTier,
   ladderTierIndex,
   LADDER_TIER_LABELS,
   pickUnseen,
@@ -26,32 +24,44 @@ import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
+import { WORD_LADDER_BANKS } from "@/data/wordLadder/registry";
 import {
-  wordLadderB1,
-  wordLadderB2,
-  wordLadderEasyMore,
-  wordLadderHardMore,
-  wordLadderMedMore,
-} from "@/data/englishGameQuizExtras";
+  availableLadderLanguages,
+  ladderTiersFromBank,
+  loadLadderLanguage,
+  saveLadderLanguage,
+} from "@/data/wordLadder/banks";
+import {
+  WORD_LADDER_LANGUAGES,
+  WORD_LADDER_LANGUAGE_LABELS,
+  type WordLadderLanguage,
+} from "@/data/wordLadder/types";
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import {
-  LADDER_RUNGS,
-  LADDER_EASY,
-  LADDER_MED,
-  LADDER_HARD,
   LADDER_ZONES,
-  zoneForRung,
-  milestoneFor,
   xpForCorrect,
   nextRung as computeNextRung,
   streakMessage,
   encouragement,
   confettiParticles,
 } from "@/lib/wordLadderLogic";
+import {
+  createLadderLevelSession,
+  ladderRungsForLevel,
+  ladderTierForLevel,
+  milestoneForProgress,
+  wordLadderGameId,
+  zoneForProgress,
+} from "@/lib/wordLadderLevels";
+import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
+import { loadUnlockedLevel, unlockNextLevel } from "@/game-engine/gradeLevels";
+import { detectLookTier } from "@/game-engine/three-look/tier";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import LadderScene3D from "@/game-engine/scenes/LadderScene3D";
+import QuizBoard3D from "@/game-engine/scenes/QuizBoard3D";
+import { quiz3dEnabled, type TileState } from "@/game-engine/scenes/quizBoardLayout";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 const LS_XP = "websuli-wordladder-xp";
@@ -59,97 +69,19 @@ const LS_BEST = "websuli-wordladder-streak";
 
 type Quiz = FourChoiceQuiz;
 
-// A létra hossza és a nehézségi felosztás a tiszta logikai modulban (tesztelt).
-const RUNGS = LADDER_RUNGS;
-const RUNGS_EASY = LADDER_EASY;
-const RUNGS_MED = LADDER_MED;
-const RUNGS_HARD = LADDER_HARD;
-
 /** A válasz-felfedés ideje (a helyes zölden, a hibás pirosan látszik). */
 const REVEAL_MS = 900;
 /** A lépés-animáció ideje (a figura ugrik / megcsúszik). */
 const STEP_MS = 620;
 
-const QUIZ_BANK: Quiz[] = [
-  { id: "1", prompt: "„Ház” szó angolul:", options: ["house", "horse", "hat", "hand"], correctIndex: 0, explanation: "A ház angolul house. A horse a ló — egyetlen r a különbség, de a house-t „hausz”-nak ejtjük." },
-  { id: "2", prompt: "„Kutya” angolul:", options: ["duck", "door", "dog", "desk"], correctIndex: 2, explanation: "A kutya angolul dog. A duck a kacsa, a door az ajtó: a dog rövid o hanggal szól." },
-  { id: "3", prompt: "„Macska” angolul:", options: ["cow", "cat", "car", "cup"], correctIndex: 1, explanation: "A macska angolul cat. A car az autó, a cup a bögre — mind c-vel, a cat végén viszont t áll." },
-  { id: "4", prompt: "„Piros” angolul:", options: ["blue", "red", "run", "rain"], correctIndex: 1, explanation: "A piros angolul red. A run futni, a rain eső: a red három betű, és e-vel a közepén." },
-  { id: "5", prompt: "„Zöld” angolul:", options: ["gray", "gold", "green", "girl"], correctIndex: 2, explanation: "A zöld angolul green, két e-vel. A gray a szürke, a gold az arany — mind g-vel kezdődik." },
-  { id: "6", prompt: "„Iskola” angolul:", options: ["shop", "school", "ship", "shoe"], correctIndex: 1, explanation: "Az iskola angolul school. A ch-t itt k-nak ejtjük („szkúl”), a shop pedig bolt." },
-  { id: "7", prompt: "„Alma” angolul:", options: ["animal", "apple", "April", "arm"], correctIndex: 1, explanation: "Az alma angolul apple, két p-vel. Az April az április — mindkettő ap-pal kezdődik." },
-  { id: "8", prompt: "Mit jelent: Goodbye?", options: ["Helló", "Viszlát", "Köszönöm", "Kérem"], correctIndex: 1, explanation: "A Goodbye jelentése: Viszlát. Elköszönéskor mondjuk; a Hello a köszönés a találkozáskor." },
-  { id: "9", prompt: "„Könyv” angolul:", options: ["ball", "bed", "book", "bird"], correctIndex: 2, explanation: "A könyv angolul book, két o-val. A ball a labda, a bird a madár — a book-ot rövid u-val ejtjük." },
-  { id: "10", prompt: "„Víz” angolul:", options: ["wind", "water", "wall", "week"], correctIndex: 1, explanation: "A víz angolul water. A wind a szél, a week a hét — mind w-vel, de a water-t „vótör”-nek ejtjük." },
-  { id: "11", prompt: "„Nap” (égbolt) angolul:", options: ["snow", "sun", "sea", "sing"], correctIndex: 1, explanation: "A nap (az égen) angolul sun. A son a fiú, ugyanígy hangzik — a sea pedig a tenger." },
-  { id: "12", prompt: "„Hold” angolul:", options: ["mouse", "moon", "milk", "map"], correctIndex: 1, explanation: "A hold angolul moon, két o-val. A mouse az egér, a milk a tej: a moon hosszú ú hanggal szól." },
-  { id: "13", prompt: "„Fa” (növény) angolul:", options: ["fish", "fox", "tree", "train"], correctIndex: 2, explanation: "A fa (a növény) angolul tree. A three a három — nagyon hasonlít, de a three th-val kezdődik." },
-  { id: "14", prompt: "„Virág” angolul:", options: ["flower", "floor", "food", "four"], correctIndex: 0, explanation: "A virág angolul flower. A floor a padló: mindkettő fl-lel kezdődik, a flower végén -er áll." },
-  { id: "15", prompt: "„Szék” angolul:", options: ["ship", "chair", "cheese", "child"], correctIndex: 1, explanation: "A szék angolul chair. A cheese a sajt, a child a gyerek — mind ch-val, a chair-t „cser”-nek ejtjük." },
-  { id: "16", prompt: "„Ablak” angolul:", options: ["wind", "winter", "window", "wolf"], correctIndex: 2, explanation: "Az ablak angolul window: benne van a wind (szél) — az ablakon jön be a szél, ez segít megjegyezni." },
-  { id: "17", prompt: "„Ajándék” angolul:", options: ["game", "gift", "girl", "goat"], correctIndex: 1, explanation: "Az ajándék angolul gift. A game a játék, a girl a lány: a gift végén ft áll." },
-  { id: "18", prompt: "„Barát” angolul:", options: ["bread", "friend", "frog", "fruit"], correctIndex: 1, explanation: "A barát angolul friend. A benne lévő -ie- a csapda: „frend”-nek ejtjük, de ie-vel írjuk." },
-  ...wordLadderEasyMore,
-];
-
-const QUIZ_MED: Quiz[] = [
-  { id: "m1", prompt: "Hogy mondjuk angolul: kedd?", options: ["Tuesday", "Thursday", "Wednesday", "Sunday"], correctIndex: 0, explanation: "A kedd angolul Tuesday. A Thursday a csütörtök — mindkettő T-vel, de a Tuesday rövidebb." },
-  { id: "m2", prompt: "„Május” angolul:", options: ["March", "May", "June", "April"], correctIndex: 1, explanation: "A május angolul May. Ez a legrövidebb hónapnév; a March a március, a June a június." },
-  { id: "m3", prompt: "„Tél” angolul:", options: ["spring", "summer", "winter", "wind"], correctIndex: 2, explanation: "A tél angolul winter. A wind a szél: mindkettő w-vel, de a winter -ter-re végződik." },
-  { id: "m4", prompt: "Mit jelent: Excuse me?", options: ["Köszönöm", "Elnézést / Elnézést, szabad?", "Viszlát", "Helló"], correctIndex: 1, explanation: "Az Excuse me jelentése: Elnézést. Megszólításkor vagy furakodáskor mondjuk, nem köszönéskor." },
-  { id: "m5", prompt: "„Szoba” angolul:", options: ["road", "room", "river", "rain"], correctIndex: 1, explanation: "A szoba angolul room, két o-val. A road az út, a river a folyó — a room hosszú ú hanggal szól." },
-  { id: "m6", prompt: "„Kert” angolul:", options: ["game", "garden", "gate", "goat"], correctIndex: 1, explanation: "A kert angolul garden. A gate a kapu — a kerthez tartozik, de nem ugyanaz." },
-  { id: "m7", prompt: "„Eszik” (ige, ő eszik) — helyes alak:", options: ["He eat.", "He eats.", "He eating.", "He eated."], correctIndex: 1, explanation: "Egyes szám harmadik személyben az ige -s végződést kap: He eats. Az eated nem létező alak." },
-  { id: "m8", prompt: "„Iszik” (ige, ő iszik) — helyes alak:", options: ["She drink.", "She drinks.", "She drinking.", "She drinked."], correctIndex: 1, explanation: "A she mellett az ige -s végződést kap: She drinks. A drink múlt ideje drank, nem drinked." },
-  { id: "m9", prompt: "Mit jelent: I like music.", options: ["Szeretem a zenét.", "Nem szeretek zenét.", "Zenelek.", "Hallgatom a rádiót."], correctIndex: 0, explanation: "Az I like music jelentése: Szeretem a zenét. A like kedvelést fejez ki, jelen időben." },
-  { id: "m10", prompt: "„Nagymama” angolul:", options: ["grandfather", "grandmother", "granddaughter", "godmother"], correctIndex: 1, explanation: "A nagymama angolul grandmother: benne van a mother (anya). A grandfather a nagypapa, a granddaughter az unoka (lány)." },
-  { id: "m11", prompt: "„Orvos” angolul:", options: ["driver", "doctor", "daughter", "dictionary"], correctIndex: 1, explanation: "Az orvos angolul doctor. A driver a sofőr, a daughter a lánya: a doctor -or-ra végződik." },
-  { id: "m12", prompt: "„Repülőgép” angolul:", options: ["airport", "airplane", "island", "animal"], correctIndex: 1, explanation: "A repülőgép angolul airplane. Az airport a repülőtér — a gép a plane, a tér a port." },
-  { id: "m13", prompt: "„Zebra” angolul:", options: ["zero", "zebra", "zipper", "zone"], correctIndex: 1, explanation: "A zebra angolul zebra — szinte ugyanaz, csak „zíbrö”-nek ejtjük. A zero a nulla." },
-  { id: "m14", prompt: "„Erdő” angolul:", options: ["flower", "forest", "fork", "fourth"], correctIndex: 1, explanation: "Az erdő angolul forest. A flower a virág, a fork a villa — a forest -est-re végződik." },
-  ...wordLadderMedMore,
-];
-
-const QUIZ_HARD: Quiz[] = [
-  { id: "h1", prompt: "Melyik helyes: „Nem szeretem a spenótot.”", options: ["I don't like spinach.", "I doesn't like spinach.", "I not like spinach.", "I no like spinach."], correctIndex: 0, explanation: "Az I mellé don't jár: I don't like spinach. A doesn't csak he, she, it mellett áll." },
-  { id: "h2", prompt: "Melyik ige illik: They ___ football on Saturdays.", options: ["plays", "play", "playing", "is play"], correctIndex: 1, explanation: "A they mellett az ige alapalakban marad: They play football. Az -s csak egyes szám harmadik személyben kell." },
-  { id: "h3", prompt: "Mit jelent: We must be quiet in the library.", options: ["A könyvtárban csendben kell lennünk.", "A könyvtárban zajosnak kell lennünk.", "A könyvtár zárva van.", "Nem mehetünk könyvtárba."], correctIndex: 0, explanation: "A We must be quiet in the library jelentése: A könyvtárban csendben kell lennünk. A must kötelezettség." },
-  { id: "h4", prompt: "Melyik helyes többes szám: one foot → two ___", options: ["foots", "feet", "feets", "foot"], correctIndex: 1, explanation: "A foot többes száma feet — rendhagyó alak, nem kap -s-t. Ugyanígy: tooth → teeth." },
-  { id: "h5", prompt: "„Jobb” (összehasonlítás: nagy → nagyobb) angolul:", options: ["gooder", "better", "more good", "best"], correctIndex: 1, explanation: "A good középfoka better, felsőfoka best. Rendhagyó: nincs gooder és nincs more good." },
-  { id: "h6", prompt: "Melyik elöljáró: The keys are ___ the table.", options: ["in", "on", "at", "to"], correctIndex: 1, explanation: "Felületen on áll: The keys are on the table. Az in a valamin BELÜL, az on a valamin RAJTA." },
-  { id: "h7", prompt: "Válaszd ki: „Holnap lesz angol óránk.”", options: ["We will have English tomorrow.", "We have English yesterday.", "We having English tomorrow.", "We are English tomorrow."], correctIndex: 0, explanation: "A jövő idő: We will have English tomorrow. A will után az ige alapalakja áll." },
-  { id: "h8", prompt: "Mit jelent: Could you repeat that, please?", options: ["Kérlek, ismételd meg.", "Kérlek, ne beszélj.", "Kérlek, menj el.", "Kérlek, siess."], correctIndex: 0, explanation: "A Could you repeat that, please? jelentése: Kérlek, ismételd meg. Udvarias kérés a could-dal." },
-  { id: "h9", prompt: "Melyik mondat helyes?", options: ["She can sings well.", "She can sing well.", "She cans sing well.", "She can to sing well."], correctIndex: 1, explanation: "A can után az ige alapalakja áll: She can sing well. A can sosem kap -s-t, és nem jár mellé to." },
-  { id: "h10", prompt: "„Fél (óra)” — idő kifejezés angolul:", options: ["quarter", "half past", "o'clock", "minute"], correctIndex: 1, explanation: "A fél óra angolul half past — például half past three: fél négy. A quarter a negyedóra." },
-  { id: "h11", prompt: "Melyik illik: There ___ a pencil in my bag.", options: ["are", "is", "be", "were"], correctIndex: 1, explanation: "Egyetlen ceruza egyes szám: There is a pencil. A There are csak több dolognál helyes." },
-  { id: "h12", prompt: "Mit jelent: I am going to visit my grandparents.", options: ["Meglátogatom a nagyszüleimet (szándék).", "Már meglátogattam őket.", "Nem megyek sehova.", "A nagyszüleim jönnek hozzám."], correctIndex: 0, explanation: "Az I am going to visit jelentése: Meglátogatom (szándék). A going to a tervezett jövőt fejezi ki." },
-  { id: "h13", prompt: "„Szótár” angolul:", options: ["diary", "dictionary", "delivery", "dinosaur"], correctIndex: 1, explanation: "A szótár angolul dictionary. A diary a napló — mindkettő di-vel kezdődik, ezért keverednek." },
-  { id: "h14", prompt: "Melyik helyes: „Ő tegnap írt egy levelet.”", options: ["She writes a letter yesterday.", "She wrote a letter yesterday.", "She write a letter yesterday.", "She writing a letter yesterday."], correctIndex: 1, explanation: "A write múlt ideje wrote — rendhagyó ige, nem kap -ed végződést. She wrote a letter yesterday." },
-  ...wordLadderHardMore,
-];
-
-/** 9–10. évfolyam (B1) és 11–12. évfolyam (B2) — a középiskolai szintek. */
-const QUIZ_B1: Quiz[] = [...wordLadderB1];
-const QUIZ_B2: Quiz[] = [...wordLadderB2];
-
 /** A Szólétra évfolyam-választója: 3–12. */
 const LADDER_GRADES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
+/** Billentyűzet: az 1–4 szám a négy választ jelöli (a lapokon is ez a jelvény). */
+const ANSWER_KEYS = ["1", "2", "3", "4"];
+
 function clampLadderGrade(grade: number): number {
   return Math.min(12, Math.max(3, Math.round(grade)));
-}
-
-function buildWordLadderQueue(pools: { easy: Quiz[]; med: Quiz[]; hard: Quiz[] }): Quiz[] {
-  const e = shuffle(pools.easy).slice(0, RUNGS_EASY);
-  const m = shuffle(pools.med).slice(0, RUNGS_MED);
-  const h = shuffle(pools.hard).slice(0, Math.max(0, RUNGS_HARD));
-  return [...e, ...m, ...h];
-}
-
-function buildLongRunQueue(pools: { easy: Quiz[]; med: Quiz[]; hard: Quiz[] }, chunks = 8): Quiz[] {
-  const q: Quiz[] = [];
-  for (let i = 0; i < chunks; i++) q.push(...buildWordLadderQueue(pools));
-  return q;
 }
 
 /**
@@ -157,15 +89,6 @@ function buildLongRunQueue(pools: { easy: Quiz[]; med: Quiz[]; hard: Quiz[] }, c
  * ugrik/csúszik) → quiz … → won.
  */
 type Phase = "menu" | "quiz" | "reveal" | "step" | "won";
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j]!, a[i]!];
-  }
-  return a;
-}
 
 function loadNum(key: string, d: number) {
   try {
@@ -287,7 +210,7 @@ function Ladder({ rung, total }: { rung: number; total: number }) {
       <rect x={W - 19} y="8" width="9" height={H - 10} rx="4" fill="url(#wl-rail)" />
       {Array.from({ length: total }).map((_, i) => {
         const y = rungY(i + 1);
-        const zone = zoneForRung(i + 1);
+        const zone = zoneForProgress(i + 1, total);
         const climbed = i + 1 <= rung;
         const isNext = i + 1 === rung + 1;
         return (
@@ -313,11 +236,14 @@ function Ladder({ rung, total }: { rung: number; total: number }) {
   );
 }
 
+/** A választható nyelvek (csak a tételt exportáló bankok) — oldalbetöltésenként egyszer. */
+const AVAILABLE_LANGUAGES = availableLadderLanguages(WORD_LADDER_BANKS);
+
 export default function WordLadderHuEn() {
   const reducedMotion = useReducedMotion() ?? false;
   const [phase, setPhase] = useState<Phase>("menu");
   const [rung, setRung] = useState(0);
-  const [queue, setQueue] = useState<Quiz[]>([]);
+  /** A futás kérdés-sorszáma (az XP-felirat kulcsa). */
   const [cursor, setCursor] = useState(0);
   const [current, setCurrent] = useState<Quiz | null>(null);
   const [streak, setStreak] = useState(0);
@@ -345,11 +271,20 @@ export default function WordLadderHuEn() {
   const onClimberScreenPct = useCallback((pct: number) => {
     ladderColumnRef.current?.style.setProperty("--wl-climber-pct", `${pct}%`);
   }, []);
+  /**
+   * 3D kérdések (spec 7. döntés): csak valódi WebGL-lel és nem low szinten; különben a DOM-kártya.
+   * A szint oldalbetöltésenként egyszer dől el (`detectLookTier` gyorsítótáraz).
+   */
+  const [quiz3dWanted] = useState(() => quiz3dEnabled(detectLookTier(), null));
+  const [quiz3dSupported, setQuiz3dSupported] = useState<boolean | null>(null);
+  const quiz3dOn = quiz3dWanted && quiz3dSupported === true;
+  const quizPanelRef = useRef<HTMLDivElement | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A válasz-lock szinkron ref: két gyors kattintás ne dolgozódjon fel duplán.
   const answerLockedRef = useRef(false);
-  const adaptiveRef = useRef(createAdaptiveSession(4));
+  /** A futás sávja: a pálya sávjából indul, a pálya ±0,15-én belül mozog (spec 6. döntés). */
+  const levelSessionRef = useRef(createLadderLevelSession(1));
   /** A futás ÖSSZES eddigi kérdése (azonosító + prompt) — ezek a futás végéig nem jönnek újra. */
   const seenRef = useRef<SeenItem[]>([]);
   // Az ad-hoc setTimeout-ok gyűjtve, unmountkor törölve.
@@ -383,6 +318,15 @@ export default function WordLadderHuEn() {
     });
   }, []);
 
+  /** Nyelv (spec 4. döntés): a menüben választható, tárolva `websuli.wordladder.lang`. */
+  const [lang, setLang] = useState<WordLadderLanguage>(() => loadLadderLanguage(AVAILABLE_LANGUAGES));
+  const langLabel = WORD_LADDER_LANGUAGE_LABELS[lang];
+  const pickLanguage = useCallback((next: WordLadderLanguage) => {
+    if (!AVAILABLE_LANGUAGES.includes(next)) return;
+    setLang(next);
+    saveLadderLanguage(next);
+  }, []);
+
   const { data: quizBankResponse } = useQuery<GameQuizBankResponse>({
     queryKey: ["/api/games/quiz-bank/word-ladder-hu-en"],
     queryFn: async () => {
@@ -397,7 +341,13 @@ export default function WordLadderHuEn() {
   const { grade: userGrade } = useClassroomGrade();
   const { items: materialItems } = useMaterialQuizzes(userGrade, "english");
 
-  const mergedPools = useMemo(() => {
+  /**
+   * A nyelv bankjának öt szintje (A1 … B2, a `tier` mező szerint). Az angolhoz a szerver-bank és a tananyag-kvízek
+   * (mind angolok) is hozzájönnek; a statikus és a szerver-bank azonos tartalmú tételei egyszer szerepelnek.
+   */
+  const tiers = useMemo(() => {
+    const base: Quiz[][] = ladderTiersFromBank(WORD_LADDER_BANKS[lang] ?? []);
+    if (lang !== "en") return dedupeTiersByContent(base);
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
     const matMed = materialItems
       .filter((q) => Array.isArray(q.options) && q.options.length === 4)
@@ -409,21 +359,14 @@ export default function WordLadderHuEn() {
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
       }));
-    return {
-      easy: [...QUIZ_BANK, ...easy],
-      med: [...QUIZ_MED, ...medium, ...matMed],
-      hard: [...QUIZ_HARD, ...hard],
-    };
-  }, [quizBankResponse, materialItems]);
-
-  /**
-   * A választó öt szintje (3–4., 5–6., 7–8., 9–10., 11–12. évfolyam). A statikus és a szerver-bank azonos
-   * tartalmú (prompt + helyes válasz) tételei egyszer szerepelnek.
-   */
-  const tiers = useMemo(
-    () => dedupeTiersByContent([mergedPools.easy, mergedPools.med, mergedPools.hard, QUIZ_B1, QUIZ_B2]),
-    [mergedPools],
-  );
+    return dedupeTiersByContent([
+      [...base[0]!, ...easy],
+      [...base[1]!, ...medium, ...matMed],
+      [...base[2]!, ...hard],
+      base[3]!,
+      base[4]!,
+    ]);
+  }, [lang, quizBankResponse, materialItems]);
   const tiersRef = useRef(tiers);
   tiersRef.current = tiers;
 
@@ -433,8 +376,19 @@ export default function WordLadderHuEn() {
   const ladderGradeRef = useRef(ladderGrade);
   ladderGradeRef.current = ladderGrade;
 
-  const mergedPoolsRef = useRef(mergedPools);
-  mergedPoolsRef.current = mergedPools;
+  /** Pálya (spec 6. döntés): nyelvenként és évfolyamonként külön haladás; alapból a legmagasabb nyitott pálya. */
+  const [unlocked, setUnlocked] = useState(() => loadUnlockedLevel(wordLadderGameId(lang), ladderGrade));
+  const [level, setLevel] = useState(unlocked);
+  useEffect(() => {
+    const u = loadUnlockedLevel(wordLadderGameId(lang), ladderGrade);
+    setUnlocked(u);
+    setLevel(u);
+  }, [lang, ladderGrade]);
+  const runRef = useRef({ lang, grade: ladderGrade, level, rungs: ladderRungsForLevel(level) });
+  /** A futás létrájának hossza: a pályából, a futás elején rögzítve. */
+  const [runRungs, setRunRungs] = useState(() => ladderRungsForLevel(level));
+  const menuRungs = ladderRungsForLevel(level);
+  const RUNGS = phase === "menu" ? menuRungs : runRungs;
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
@@ -467,24 +421,29 @@ export default function WordLadderHuEn() {
     [pushTimeout],
   );
 
+  /** A következő, a futásban még nem látott kérdés a futás sávjának szintjéről. */
+  const nextUnseen = useCallback(
+    () => pickUnseen(tiersRef.current, ladderTierIndex(runRef.current.grade, levelSessionRef.current.band), seenRef.current),
+    [],
+  );
+
   const startGame = useCallback(() => {
     scoreSubmittedRef.current = false;
     answerLockedRef.current = false;
     runBestStreakRef.current = 0;
     correctCountRef.current = 0;
     wrongCountRef.current = 0;
-    adaptiveRef.current.reset(ladderGradeRef.current);
+    runRef.current = { lang, grade: ladderGradeRef.current, level, rungs: ladderRungsForLevel(level) };
+    levelSessionRef.current.reset(level);
     seenRef.current = [];
-    const q = buildLongRunQueue(mergedPoolsRef.current);
-    const first = pickUnseen(tiersRef.current, ladderTierIndex(ladderGradeRef.current, adaptiveRef.current.band), []);
-    if (first) q[0] = first;
-    setQueue(q);
+    const total = runRef.current.rungs;
+    setRunRungs(total);
     setCursor(0);
     // Csak fejlesztői módban: ?rung=N kezdőfok a zónaváltások/cél gyors ellenőrzéséhez.
     let startRung = 0;
     if (import.meta.env.DEV) {
       const p = parseInt(new URLSearchParams(window.location.search).get("rung") ?? "", 10);
-      if (Number.isFinite(p)) startRung = Math.max(0, Math.min(RUNGS - 1, p));
+      if (Number.isFinite(p)) startRung = Math.max(0, Math.min(total - 1, p));
     }
     setRung(startRung);
     setStreak(0);
@@ -494,7 +453,7 @@ export default function WordLadderHuEn() {
     setFeedback(null);
     setBanner(null);
     setLastXpGain(null);
-    setCurrent(q[0] ?? null);
+    setCurrent(nextUnseen());
     setPhase("quiz");
     setExplainCard(null);
     pendingStepRef.current = null;
@@ -505,7 +464,7 @@ export default function WordLadderHuEn() {
       if (explainOpenRef.current) return;
       setRunSeconds((s) => s + 1);
     }, 1000);
-  }, []);
+  }, [lang, level, nextUnseen]);
 
   useEffect(() => {
     return () => {
@@ -523,6 +482,11 @@ export default function WordLadderHuEn() {
       tickRef.current = null;
     }
     sfxLevelUp();
+    // A pálya teljesítése a következő pályát nyitja (nyelvenként és évfolyamonként).
+    const run = runRef.current;
+    const next = unlockNextLevel(wordLadderGameId(run.lang), run.grade, run.level);
+    setUnlocked(next);
+    setLevel(Math.min(next, run.level + 1));
     setPhase("won");
     setCelebrate(true);
     pushTimeout(() => setCelebrate(false), 3000);
@@ -556,9 +520,10 @@ export default function WordLadderHuEn() {
       fromRung: number,
     ) => {
       if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+      const total = runRef.current.rungs;
       // 2) LÉPÉS: a felfedés után a figura ugrik/csúszik.
       stepTimerRef.current = setTimeout(() => {
-        const ms = milestoneFor(fromRung, target);
+        const ms = milestoneForProgress(fromRung, target, total);
         setRung(target);
         setStepDelta(isCorrect ? 1 : -1);
         setPhase("step");
@@ -568,7 +533,7 @@ export default function WordLadderHuEn() {
         // előző kérdés látszik a zöld/piros jelöléssel (különben a következő kérdés helyes
         // válasza szivárogna ki a felfedő színezéssel).
         stepTimerRef.current = setTimeout(() => {
-          if (target >= RUNGS) {
+          if (target >= total) {
             finishWon();
             setCurrent(null);
             return;
@@ -598,9 +563,10 @@ export default function WordLadderHuEn() {
     if (!current) return;
     if (phase !== "quiz") return;
     if (answerLockedRef.current) return;
+    if (i < 0 || i >= current.options.length) return;
     answerLockedRef.current = true;
     const isCorrect = i === current.correctIndex;
-    adaptiveRef.current.answer(isCorrect);
+    levelSessionRef.current.answer(isCorrect);
     seenRef.current = [...seenRef.current, { id: current.id, prompt: current.prompt }];
 
     // 1) FELFEDÉS: a gyerek látja a zöld (helyes) és piros (hibás) választ.
@@ -646,19 +612,10 @@ export default function WordLadderHuEn() {
       if (sm) showBanner(sm, 1400);
     }
 
-    const target = computeNextRung(rung, isCorrect, RUNGS);
+    const target = computeNextRung(rung, isCorrect, runRef.current.rungs);
     const nextCursor = cursor + 1;
-    let nextQuestion = queue[nextCursor] ?? null;
-    if (!nextQuestion) {
-      const more = buildLongRunQueue(mergedPoolsRef.current, 4);
-      const expanded = [...queue, ...more];
-      setQueue(expanded);
-      nextQuestion = expanded[nextCursor] ?? expanded[0] ?? null;
-    }
-
-    nextQuestion =
-      pickUnseen(tiersRef.current, ladderTierIndex(ladderGradeRef.current, adaptiveRef.current.band), seenRef.current) ??
-      nextQuestion;
+    // Futáson belül nincs ismétlés (#135): a következő kérdés a futás sávjának szintjéről, még nem látott.
+    const nextQuestion = nextUnseen();
 
     const fromRung = rung;
     const startStep = () => runStepChain(target, nextCursor, nextQuestion, isCorrect, fromRung);
@@ -671,6 +628,25 @@ export default function WordLadderHuEn() {
       startStep();
     }
   };
+  const onAnswerRef = useRef(onAnswer);
+  onAnswerRef.current = onAnswer;
+  const answerFromBoard = useCallback((i: number) => onAnswerRef.current(i), []);
+
+  // Billentyűzet: 1–4 = a négy válasz (a lapok jelvénye), csak kérdés közben.
+  useEffect(() => {
+    if (phase !== "quiz") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const idx = ANSWER_KEYS.indexOf(e.key);
+      if (idx < 0) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      onAnswerRef.current(idx);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "won") return;
@@ -719,12 +695,17 @@ export default function WordLadderHuEn() {
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, sessionXp, streak]);
 
-  const zone = zoneForRung(rung);
+  const zone = zoneForProgress(rung, RUNGS);
   const inRun = phase === "quiz" || phase === "reveal" || phase === "step";
+  const revealing = phase === "reveal" || phase === "step";
   const climberMood: "happy" | "oops" | "idle" =
     phase === "reveal" || phase === "step" ? (stepDelta > 0 && phase === "step" ? "happy" : chosenIdx !== null && current && chosenIdx !== current.correctIndex ? "oops" : "happy") : "idle";
   // A figura függőleges helye a létrán (%): 0. fok = alul, RUNGS = a zászlónál.
   const climberBottomPct = 3 + (rung / RUNGS) * 88;
+  const tileStates: TileState[] = (current?.options ?? []).map((_, idx) =>
+    !revealing ? "idle" : idx === current!.correctIndex ? "correct" : idx === chosenIdx ? "wrong" : "dim",
+  );
+  const levelTierLabel = LADDER_TIER_LABELS[ladderTierForLevel(ladderGrade, level)];
 
   return (
     <div
@@ -736,6 +717,7 @@ export default function WordLadderHuEn() {
       }}
       data-testid="wordladder-root"
       data-zone={zone.id}
+      data-lang={lang}
     >
       <ClassroomGateModal accent="violet" />
       <AchievementToast achievements={newlyUnlocked} />
@@ -785,15 +767,15 @@ export default function WordLadderHuEn() {
           <CardContent data-game-card-content className="p-3 sm:p-4 flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-2 mb-2">
               <BookOpen className="w-5 h-5 text-amber-200" />
-              <h1 className="text-base sm:text-lg font-extrabold leading-tight">Szólétra — HU ↔ EN</h1>
+              <h1 className="text-base sm:text-lg font-extrabold leading-tight">Szólétra — HU ↔ {lang.toUpperCase()}</h1>
             </div>
             <GamePedagogyPanel
               accent="amber"
               className="mb-2"
-              kidMission={`Mássz fel a létra tetejére a 🏁 zászlóig! Minden jó válasz egy fokkal feljebb visz és XP-t ad. Ha tévedsz, megcsúszol egy fokot — de a zöld gomb megmutatja a jó választ, és jön a következő kérdés. ${RUNGS} fok, 4 táj: rét, erdő, felhők, csillagok.`}
+              kidMission={`Mássz fel a létra tetejére a 🏁 zászlóig! Minden jó válasz egy fokkal feljebb visz és XP-t ad. Ha tévedsz, megcsúszol egy fokot — de a zöld lap megmutatja a jó választ, és jön a következő kérdés. Minden évfolyamon 10 pálya vár: a pálya teljesítése nyitja a következőt. Válaszolhatsz az 1–4 gombbal is.`}
               parentBody={
                 <>
-                  <strong className="text-amber-100/90">Tananyag:</strong> magyar–angol szópárok, szókincs és jelentésfelismerés; a kérdések egyre nehezebb „létrafokokra” vannak osztva (progresszív gyakorlás).
+                  <strong className="text-amber-100/90">Tananyag:</strong> magyar–{langLabel.name.toLowerCase()} szavak, témakör-szószedetek, kifejezések, rendhagyó és szabályos alakok, hétköznapi helyzetek, mindkét fordítási irányban; évfolyamonként 10, fokozatosan nehezedő pálya (progresszív gyakorlás).
                   <br />
                   <strong className="text-amber-100/90">Fejleszt:</strong> memória, kontextusból következtetés, kitartás a hiba után is.
                   <br />
@@ -808,8 +790,8 @@ export default function WordLadderHuEn() {
             </p>
 
             {phase === "menu" && (
-              <div data-game-menu="ladder" className="flex flex-col items-center justify-center flex-1 gap-4 py-6" data-testid="wl-menu">
-                <div className="relative w-28 h-32 min-h-0 rounded-2xl overflow-hidden">
+              <div data-game-menu="ladder" className="wl-menu flex flex-col items-center justify-center flex-1 gap-3 py-3" data-testid="wl-menu">
+                <div className="wl-menu-preview relative w-24 h-28 min-h-0 rounded-2xl overflow-hidden">
                   <LadderScene3D
                     variant="preview"
                     rung={0}
@@ -829,18 +811,44 @@ export default function WordLadderHuEn() {
                     }
                   />
                 </div>
-                <p className="text-sm text-white/90 text-center max-w-sm font-semibold px-1">
-                  {RUNGS} fok a zászlóig · 4 táj · minden jó válasz egy lépés felfelé
+                <p className="text-sm text-white/90 text-center max-w-sm font-semibold px-1" data-testid="wl-menu-info">
+                  {RUNGS} fok a zászlóig · szint: <span className="text-amber-200">{levelTierLabel}</span> · legjobb sorozat:{" "}
+                  <strong className="text-orange-300">{bestStreak}</strong>
                 </p>
-                <p className="text-sm text-white/75 text-center max-w-xs">
-                  Legjobb sorozat: <strong className="text-orange-300">{bestStreak}</strong>
-                </p>
+                <div className="w-full max-w-sm px-1" data-testid="wl-lang-picker">
+                  <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Nyelv választása">
+                    {WORD_LADDER_LANGUAGES.map((l) => {
+                      const available = AVAILABLE_LANGUAGES.includes(l);
+                      const selected = l === lang;
+                      return (
+                        <button
+                          key={l}
+                          type="button"
+                          data-testid={`wl-lang-${l}`}
+                          aria-pressed={selected}
+                          aria-label={`${WORD_LADDER_LANGUAGE_LABELS[l].name}${available ? "" : " (hamarosan)"}`}
+                          disabled={!available}
+                          onClick={() => pickLanguage(l)}
+                          className={`min-h-[44px] rounded-lg border px-2 py-1.5 text-sm font-bold leading-tight transition-colors ${
+                            selected
+                              ? "bg-sky-500 border-sky-200 text-slate-950"
+                              : available
+                                ? "bg-black/30 border-white/25 text-white hover:bg-white/10"
+                                : "cursor-not-allowed bg-black/40 border-white/10 text-white/50"
+                          }`}
+                        >
+                          {WORD_LADDER_LANGUAGE_LABELS[l].name}
+                          {available ? null : <span className="block text-[10px] font-semibold">hamarosan</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="w-full max-w-sm px-1" data-testid="wl-grade-picker">
                   <p className="text-xs text-white/80 text-center mb-1.5">
-                    Évfolyam: <strong className="text-amber-200">{ladderGrade}.</strong> · szint:{" "}
-                    <strong className="text-amber-200">{LADDER_TIER_LABELS[ladderBaseTier(ladderGrade)]}</strong>
+                    Évfolyam: <strong className="text-amber-200">{ladderGrade}.</strong>
                   </p>
-                  <div className="grid grid-cols-5 gap-1.5">
+                  <div className="wl-grade-grid grid grid-cols-5 gap-1.5">
                     {LADDER_GRADES.map((g) => (
                       <button
                         key={g}
@@ -859,13 +867,21 @@ export default function WordLadderHuEn() {
                     ))}
                   </div>
                 </div>
+                <div className="w-full max-w-sm px-1 flex justify-center">
+                  <GradeLevelPicker
+                    value={level}
+                    unlocked={unlocked}
+                    onChange={setLevel}
+                    label={`Pálya — ${ladderGrade}. évfolyam, ${langLabel.name.toLowerCase()}`}
+                  />
+                </div>
                 <Button
                   size="lg"
                   className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold rounded-full px-8 shadow-lg text-base"
                   onClick={startGame}
                   data-testid="wl-start"
                 >
-                  Kezdjük a létrát!
+                  Kezdjük a létrát! ({level}. pálya)
                 </Button>
               </div>
             )}
@@ -879,7 +895,7 @@ export default function WordLadderHuEn() {
                       ? "Már majdnem a 🏁 zászló — még egy jó válasz!"
                       : `${zone.name}: a ${rung + 1}. fok következik (${RUNGS} fok a célig)`
                   }
-                  subtitle={`${runSeconds} mp · sorozat: ${streak}`}
+                  subtitle={`${runSeconds} mp · sorozat: ${streak} · ${runRef.current.level}. pálya`}
                   current={rung}
                   target={RUNGS}
                   className="mb-2"
@@ -936,23 +952,48 @@ export default function WordLadderHuEn() {
                     </AnimatePresence>
                   </div>
 
-                  {/* KVÍZ — a létra mellett, mindig látszik a mászás */}
-                  <div className="flex-1 flex flex-col rounded-2xl border border-white/15 bg-black/35 p-3 sm:p-4 min-w-0" data-testid="wl-quiz">
-                    <p className="text-[10px] uppercase tracking-widest text-amber-200/80 mb-1">
+                  {/* KVÍZ — a létra mellett, mindig látszik a mászás. 3D módban a DOM átlátszó érintési réteg. */}
+                  <div
+                    ref={quizPanelRef}
+                    className="relative flex-1 flex flex-col rounded-2xl border border-white/15 bg-black/35 p-3 sm:p-4 min-w-0"
+                    data-testid="wl-quiz"
+                    data-quiz3d={quiz3dOn ? "true" : "false"}
+                  >
+                    {quiz3dWanted && current ? (
+                      <QuizBoard3D
+                        questionKey={`${cursor}:${current.id}`}
+                        prompt={current.prompt}
+                        options={current.options}
+                        states={tileStates}
+                        interactive={phase === "quiz"}
+                        layoutRef={quizPanelRef}
+                        onAnswer={answerFromBoard}
+                        onSupportedChange={setQuiz3dSupported}
+                      />
+                    ) : null}
+                    <p className="relative text-[10px] uppercase tracking-widest text-amber-200/80 mb-1">
                       {zone.name} · {rung}/{RUNGS} fok · {runSeconds}s
                     </p>
                     {current ? (
                       <>
-                        <p className="text-base sm:text-lg font-bold mb-3 leading-snug" data-testid="wl-prompt">
+                        <p
+                          className={`relative mb-3 ${
+                            quiz3dOn
+                              ? "wl-prompt3d px-4 py-3 text-center text-[22px] leading-[29px] font-extrabold opacity-0"
+                              : "text-base sm:text-lg font-bold leading-snug"
+                          }`}
+                          data-testid="wl-prompt"
+                          data-quiz3d-prompt
+                        >
                           {current.prompt}
                         </p>
-                        <div className="wl-answers grid gap-2">
+                        <div className="wl-answers relative grid gap-2">
                           {current.options.map((opt, idx) => {
-                            const revealing = phase === "reveal" || phase === "step";
                             const isCorrectOpt = idx === current.correctIndex;
                             const isChosen = chosenIdx === idx;
-                            let cls =
-                              "h-auto min-h-[44px] py-2.5 px-3 text-left justify-start whitespace-normal text-sm sm:text-base font-semibold border transition-colors ";
+                            let cls = quiz3dOn
+                              ? "wl-opt3d relative h-auto min-h-[44px] py-2.5 pl-[50px] pr-3 text-left justify-start whitespace-normal text-[20px] leading-[25px] font-bold border "
+                              : "h-auto min-h-[44px] py-2.5 px-3 text-left justify-start whitespace-normal text-sm sm:text-base font-semibold border transition-colors ";
                             if (revealing && isCorrectOpt) cls += "bg-emerald-500 hover:bg-emerald-500 text-white border-emerald-200 ring-2 ring-emerald-200";
                             else if (revealing && isChosen) cls += "bg-rose-500 hover:bg-rose-500 text-white border-rose-200";
                             else if (revealing) cls += "bg-white/5 text-white/45 border-white/10";
@@ -965,13 +1006,19 @@ export default function WordLadderHuEn() {
                                 disabled={phase !== "quiz"}
                                 onClick={() => onAnswer(idx)}
                                 data-testid={`wl-option-${idx}`}
+                                data-quiz3d-option={idx}
                                 data-state={revealing ? (isCorrectOpt ? "correct" : isChosen ? "wrong" : "idle") : "idle"}
+                                aria-keyshortcuts={ANSWER_KEYS[idx]}
                                 {...correctDataAttrs(idx === current.correctIndex)}
                               >
-                                <span className="mr-2 inline-flex w-6 h-6 items-center justify-center rounded-full bg-black/25 text-xs shrink-0">
-                                  {revealing && isCorrectOpt ? <Check className="w-4 h-4" /> : revealing && isChosen ? <X className="w-4 h-4" /> : String.fromCharCode(65 + idx)}
+                                <span
+                                  className={`wl-badge inline-flex w-6 h-6 items-center justify-center rounded-full bg-black/25 text-xs shrink-0 ${
+                                    quiz3dOn ? "absolute left-3 top-1/2 -translate-y-1/2" : "mr-2"
+                                  }`}
+                                >
+                                  {revealing && isCorrectOpt ? <Check className="w-4 h-4" /> : revealing && isChosen ? <X className="w-4 h-4" /> : ANSWER_KEYS[idx]}
                                 </span>
-                                {opt}
+                                <span>{opt}</span>
                               </Button>
                             );
                           })}
@@ -980,7 +1027,7 @@ export default function WordLadderHuEn() {
                     ) : (
                       <p className="text-sm text-white/70">Egy pillanat…</p>
                     )}
-                    <div className="mt-auto pt-3 min-h-[2.5rem]">
+                    <div className="relative mt-auto pt-3 min-h-[2.5rem]">
                       <AnimatePresence mode="wait">
                         {feedback && (
                           <motion.p
@@ -1021,7 +1068,7 @@ export default function WordLadderHuEn() {
                 <div className="flex gap-2 mt-2">
                   <Button className="gap-1 bg-gradient-to-r from-amber-500 to-orange-600" onClick={startGame} data-testid="wl-restart">
                     <RotateCcw className="w-4 h-4" />
-                    Újra
+                    {level > runRef.current.level ? `${level}. pálya` : "Újra"}
                   </Button>
                   <Link href="/games">
                     <Button variant="outline" className="border-white/40 text-white hover:bg-white/10">
@@ -1070,6 +1117,35 @@ export default function WordLadderHuEn() {
         .wl-rung-next { animation: wl-pulse 1.1s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) {
           .wl-rung-next { animation: none; opacity: 0.85; }
+        }
+        /* Menü: kis magasságon a létra-előkép elmarad, hogy az indítógomb görgetés nélkül látsszon. */
+        @media (max-height: 760px) {
+          .wl-menu .wl-menu-preview { display: none; }
+        }
+        @media (min-width: 520px) {
+          .wl-menu .wl-grade-grid { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+        }
+        /* Alacsony fekvő képernyő: az infósor elmarad (a pálya és a szint a gombokon látszik). */
+        @media (max-height: 500px) {
+          .wl-menu [data-testid="wl-menu-info"] { display: none; }
+        }
+        /* 3D kérdés (spec 7. döntés): a DOM-gomb átlátszó érintési réteg a 3D lap fölött; a fókuszkeret látszik. */
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] {
+          background: #071b2d;
+        }
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button,
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button[data-state] {
+          background: transparent !important;
+          border-color: transparent !important;
+          color: transparent !important;
+          box-shadow: none !important;
+          --tw-ring-shadow: 0 0 #0000 !important;
+        }
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button .wl-badge {
+          opacity: 0;
+        }
+        .game-shell-fixed[data-game="WordLadderHuEn"] [data-testid="wl-quiz"][data-quiz3d="true"] .wl-answers button:disabled {
+          opacity: 1;
         }
       `}</style>
       {explainCard && <QuizFeedbackCard card={explainCard} onDismiss={dismissExplain} />}

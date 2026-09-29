@@ -96,15 +96,20 @@ for (const [name, bank] of Object.entries(BANKS)) {
  * lapon — élesben pontosan ez történt (a „Víz angolul" tétel a semleges
  * tartalékot mutatta, miközben a szomszédos kérdések már tanítottak).
  */
+/*
+ * Spec-változás (2026-09-29-palyak-szoletra-nyelvek, 5. döntés): a Szólétra lapba égetett bankja a
+ * `data/wordLadder/en.ts`-be költözött (`en<szint>-<sorszám>` azonosítóval, tier/category mezővel). A mérés szándéka
+ * ugyanaz: a Szólétra forrásba égetett minden tételének legyen magyarázata.
+ */
 test("WordLadderHuEn: a lapba égetett kvíz-tételeknek is van magyarázata", async () => {
   const { readFileSync } = await import("node:fs");
   const { fileURLToPath } = await import("node:url");
   const src = readFileSync(
-    fileURLToPath(new URL("../client/src/pages/WordLadderHuEn.tsx", import.meta.url)),
+    fileURLToPath(new URL("../client/src/data/wordLadder/en.ts", import.meta.url)),
     "utf8",
   );
 
-  const items = [...src.matchAll(/\{ id: "([a-z]?\d+)", prompt:[\s\S]*?\},/g)];
+  const items = [...src.matchAll(/\{ id: "([a-z]?\d+|en[0-4]-\d{3})", (?:tier: \d, category: "\w+", )?prompt:[\s\S]*?\},/g)];
   assert.ok(items.length >= 40, `csak ${items.length} tételt találtam — a minta elavult`);
 
   const missing = items.filter(([whole]) => !/explanation:\s*"/.test(whole)).map((m) => m[1]);
