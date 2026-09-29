@@ -274,9 +274,30 @@ function shapeContains(el: Element, p: Point): boolean | null {
     }
     case "polygon":
     case "polyline": return insidePolygons([pointsOf(el.getAttribute("points"))], p);
-    case "path": return insidePolygons(pathPolygons(el.getAttribute("d")), p);
+    case "path": return insidePolygons(cachedPath(el.getAttribute("d") ?? ""), p);
     default: return null;
   }
+}
+
+/* Feliratonként minden előtte lévő alakzatot vizsgálunk (≤ 400 elem): a path-sokszöget és az inverz
+   transzformációt egyszer számoljuk. A geometria a javítás közben nem változik (csak szín). */
+const PATH_CACHE = new Map<string, Point[][]>();
+function cachedPath(d: string): Point[][] {
+  let hit = PATH_CACHE.get(d);
+  if (!hit) {
+    if (PATH_CACHE.size > 2000) PATH_CACHE.clear();
+    hit = pathPolygons(d);
+    PATH_CACHE.set(d, hit);
+  }
+  return hit;
+}
+const INVERSE_CACHE = new WeakMap<Element, Matrix | null>();
+function inverseCtm(el: Element, root: Element): Matrix | null {
+  if (INVERSE_CACHE.has(el)) return INVERSE_CACHE.get(el)!;
+  const m = ctm(el, root);
+  const inv = m && invert(m);
+  INVERSE_CACHE.set(el, inv);
+  return inv;
 }
 
 /** A körvonal egy pontja (saját koordinátákban), amely alatt a hátteret mérjük. */
@@ -344,8 +365,7 @@ function backgroundAt(root: Element, point: Point, before: Element, surface: Sur
     if (el === skip || !SHAPES.has(el.tagName.toLowerCase()) || inNonPainted(el, root)) continue;
     const fill = paintOf(el, root, "fill", surface.ink);
     if (!fill || fill.a <= 0) continue;
-    const m = ctm(el, root);
-    const inv = m && invert(m);
+    const inv = inverseCtm(el, root);
     if (!inv) continue;
     if (shapeContains(el, apply(inv, point))) bg = over(fill, bg);
   }
