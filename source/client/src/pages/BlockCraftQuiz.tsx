@@ -39,7 +39,15 @@ import {
 } from "@/lib/voxelcraft";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
-import { blockCraftSubjectFromTopic, type BlockCraftSubject } from "@/lib/blockCraftSubjects";
+import { blockCraftSubjectFromGradeSubject, blockCraftSubjectFromTopic, type BlockCraftSubject } from "@/lib/blockCraftSubjects";
+import { GRADE_SUBJECTS } from "@/data/gradeQuizBank";
+import {
+  createGradeQuizSeen,
+  gradeForGame,
+  markGradeQuizSeen,
+  pickGradeQuiz,
+  pickUnseenMaterial,
+} from "@/game-engine/gradeQuiz";
 import { useCoarsePointer } from "@/hooks/useCoarsePointer";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 
@@ -55,6 +63,8 @@ type Quiz = {
   /** T-1: a MIÉRT rossz válasznál — a lecke exportjából vagy a generátorból. */
   explanation?: string | null;
   subject?: QuizSubject;
+  /** A játékos tananyagából jött (a 3–12. évfolyamos választásban elsőbbséget élvez). */
+  fromMaterial?: boolean;
 };
 type QuizBankApi = {
   items: {
@@ -1183,6 +1193,8 @@ export default function BlockCraftQuiz() {
     math: 0,
     nature: 0,
     hungarian: 0,
+    science: 0,
+    history: 0,
   });
   const [timeLeft, setTimeLeft] = useState(LEVELS[0]!.timeLimit);
   const [achievement, setAchievement] = useState<string | null>(null);
@@ -1256,6 +1268,7 @@ export default function BlockCraftQuiz() {
         // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
         explanation: q.explanation ?? undefined,
           subject,
+          fromMaterial: true,
         };
       });
     // 2) Régi quiz-bank (block-craft-quiz gameId-vel mentett tételek)
@@ -1289,6 +1302,9 @@ export default function BlockCraftQuiz() {
   const subjectRoundRef = useRef(0);
   const recentPromptsRef = useRef<string[]>([]);
   const RECENT_WINDOW = 16; // Ennyi kérdést nem ismétlünk vissza egymás után.
+  /** Spec 2026-09-29: a futásban már feltett kérdések (azonosító + prompt) és a közös tárgy-körforgás. */
+  const gradeSeenRef = useRef(createGradeQuizSeen());
+  const gradeSubjectRoundRef = useRef(0);
 
   /** Keveri a bank-et subject szerint és Fisher–Yates shuffle-lal */
   const rebuildSubjectPools = useCallback(() => {
@@ -1345,6 +1361,32 @@ export default function BlockCraftQuiz() {
    */
   const pickQuiz = useCallback((): Quiz => {
     answerLockedRef.current = false;
+    // Spec 2026-09-29: 3–12. évfolyamon nem látott tananyag-kvíz → közös évfolyam-bank a közös
+    // tárgyak körforgásával (üres tárgy kimarad) → a saját bank kiegészítésként (alább).
+    const sharedGrade = gradeForGame(userGrade);
+    const couponMaterialOnly = coupon.active && bank.some((q) => q.fromMaterial);
+    if (sharedGrade != null && !couponMaterialOnly) {
+      const seen = gradeSeenRef.current;
+      const material = pickUnseenMaterial(bank.filter((q) => q.fromMaterial), seen);
+      if (material) {
+        markGradeQuizSeen(seen, material);
+        return material;
+      }
+      for (let i = 0; i < GRADE_SUBJECTS.length; i++) {
+        const subject = GRADE_SUBJECTS[gradeSubjectRoundRef.current++ % GRADE_SUBJECTS.length]!;
+        const item = pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, subjects: [subject], seen });
+        if (!item) continue;
+        markGradeQuizSeen(seen, item);
+        return {
+          id: item.id,
+          prompt: item.prompt,
+          options: [...item.options],
+          correctIndex: item.correctIndex,
+          explanation: item.explanation,
+          subject: blockCraftSubjectFromGradeSubject(item.subject),
+        };
+      }
+    }
     const pools = subjectPoolsRef.current;
     if (pools.size === 0) {
       rebuildSubjectPools();
@@ -1382,7 +1424,7 @@ export default function BlockCraftQuiz() {
     }
     // Végső fallback — sose kellene idejutnunk.
     return bank[Math.floor(Math.random() * bank.length)] ?? QUIZ_FALLBACK[0]!;
-  }, [bank, rebuildSubjectPools, subjectOrder]);
+  }, [bank, rebuildSubjectPools, subjectOrder, userGrade, coupon.active]);
 
   /** Bányász-kvíz indítása egy konkrét voxelre (a crosshair-cél). */
   const tryMineAt = useCallback(
@@ -1422,12 +1464,13 @@ export default function BlockCraftQuiz() {
     setAchievement(null);
     if (options.resetSession) {
       adaptiveRef.current.reset(userGrade ?? 4);
+      gradeSeenRef.current = createGradeQuizSeen();
       setSessionXp(0);
       setStreak(0);
       setRunSeconds(0);
       setBlocksMined(0);
       setRareBlocks(0);
-      setSubjectStats({ english: 0, "english-math": 0, math: 0, nature: 0, hungarian: 0 });
+      setSubjectStats({ english: 0, "english-math": 0, math: 0, nature: 0, hungarian: 0, science: 0, history: 0 });
     } else {
       // Új pálya kezdetén streak frissítés (kezdjük újra), de XP marad.
       setStreak(0);
@@ -2744,6 +2787,8 @@ export default function BlockCraftQuiz() {
                 <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-cyan-600/70 text-cyan-50 border-cyan-300/60">Angol-matek: {subjectStats["english-math"]}</span>
                 <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-amber-600/70 text-amber-50 border-amber-300/60">Matek: {subjectStats.math}</span>
                 <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-600/70 text-emerald-50 border-emerald-300/60">Környezet: {subjectStats.nature}</span>
+                {subjectStats.science > 0 && <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-sky-600/70 text-sky-50 border-sky-300/60">Természettudomány: {subjectStats.science}</span>}
+                {subjectStats.history > 0 && <span className="text-[11px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-600/70 text-rose-50 border-rose-300/60">Történelem: {subjectStats.history}</span>}
               </div>
               {syncEligibility?.eligible ? <p className="text-xs text-emerald-300/90">Eredmény elküldve.</p> : <p className="text-xs text-white/50 max-w-xs">{syncBanner}</p>}
               <div className="flex gap-2">
@@ -2755,7 +2800,7 @@ export default function BlockCraftQuiz() {
         </CardContent></Card>
       </main>
 
-      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div ref={quizDialogRef} role="dialog" aria-modal="true" aria-label="Mini-teszt" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`game-quiz w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="game-quiz-answers grid gap-2">{quiz.options.map((o, i) => {
+      <AnimatePresence>{phase === "quiz" && quiz && <motion.div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-3 bg-black/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div ref={quizDialogRef} role="dialog" aria-modal="true" aria-label="Mini-teszt" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`game-quiz w-full max-w-md rounded-2xl border-2 border-lime-500/50 bg-slate-950/95 p-4 shadow-2xl ${wrongShake ? "animate-shake" : ""}`}><div className="flex items-center gap-2 mb-1">{(() => { const s = quiz.subject; const label = s === "english" ? "Angol szókincs" : s === "english-math" ? "Angol matek" : s === "math" ? "Matematika" : s === "nature" ? "Környezet" : s === "science" ? "Természettudomány" : s === "history" ? "Történelem" : "Kvíz"; const chipClass = s === "english" ? "bg-lime-600/70 text-lime-50 border-lime-300/60" : s === "english-math" ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60" : s === "math" ? "bg-amber-600/70 text-amber-50 border-amber-300/60" : s === "nature" ? "bg-emerald-600/70 text-emerald-50 border-emerald-300/60" : "bg-slate-600/70 text-slate-50 border-slate-300/60"; return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${chipClass}`}>{label}</span>; })()}<span className="text-xs font-bold text-lime-300 uppercase">Mini-teszt</span></div><p className="text-[11px] text-white/65 mb-2">Ha eltalálod, a blokk eltűnik és jön az XP. Rossz válasz: próbáld újra ugyanazt a blokkot — nincs büntető víz, csak gyakorolsz tovább.</p><p className="text-base font-semibold mb-4">{quiz.prompt}</p><div className="game-quiz-answers grid gap-2">{quiz.options.map((o, i) => {
         const isCorrect = revealCorrectIdx === i;
         const isWrong = wrongIdx === i;
         const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;

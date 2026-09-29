@@ -1,4 +1,6 @@
 import { isPlayableQuestion } from "../../../../shared/game-quiz-contract";
+import type { GradeQuizItem } from "../../data/gradeQuizBank/types";
+import { createGradeQuizSeen, gradeForGame, pickGradeQuiz, type GradeQuizSeen } from "../../game-engine/gradeQuiz";
 /**
  * Tornado Hunter 200 — the question engine.
  *
@@ -14,14 +16,20 @@ import { isPlayableQuestion } from "../../../../shared/game-quiz-contract";
 
 export type Subject = "math" | "english";
 export type QuizMode = "math" | "english" | "mixed";
-/** Menu selection: a fixed school grade, or AUTO (derived from the level). */
-export type SchoolLevel = 1 | 2 | 3 | 4 | 5 | 6 | "auto";
+/**
+ * Menu selection: a fixed school grade, or AUTO (derived from the level).
+ * Spec 2026-09-29: 1..12 — grades 7..12 ask from the shared grade bank (`gradeQuiz.ts`).
+ */
+export type SchoolLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | "auto";
+
+/** The highest grade the built-in Tornado bank covers; above it the shared grade bank answers. */
+export const OWN_BANK_MAX_GRADE = 6;
 
 export type Question = {
   id: string;
   subject: Subject;
   topic?: string | null;
-  /** School grade, 1..6. */
+  /** School grade, 1..12 (the built-in bank covers 1..6). */
   grade: number;
   prompt: string;
   options: string[];
@@ -47,15 +55,25 @@ export function makeRng(seed: number): Rng {
   };
 }
 
-/* ===================== AUTO grade mapping (from the brief) ===================== */
+/* ===================== AUTO grade mapping ===================== */
 
+/**
+ * Spec 2026-09-29 (4. döntés): the 200 levels split evenly over grades 1..12
+ * (grade g covers levels ⌊(g−1)·200/12⌋+1 … ⌊g·200/12⌋).
+ */
 export const AUTO_GRADE_TABLE: readonly { from: number; to: number; grades: number[] }[] = [
-  { from: 1, to: 30, grades: [1, 2] },
-  { from: 31, to: 70, grades: [2, 3] },
-  { from: 71, to: 110, grades: [3, 4] },
-  { from: 111, to: 150, grades: [4, 5] },
-  { from: 151, to: 180, grades: [5] },
-  { from: 181, to: 200, grades: [6] },
+  { from: 1, to: 16, grades: [1] },
+  { from: 17, to: 33, grades: [2] },
+  { from: 34, to: 50, grades: [3] },
+  { from: 51, to: 66, grades: [4] },
+  { from: 67, to: 83, grades: [5] },
+  { from: 84, to: 100, grades: [6] },
+  { from: 101, to: 116, grades: [7] },
+  { from: 117, to: 133, grades: [8] },
+  { from: 134, to: 150, grades: [9] },
+  { from: 151, to: 166, grades: [10] },
+  { from: 167, to: 183, grades: [11] },
+  { from: 184, to: 200, grades: [12] },
 ] as const;
 
 export function autoGradesForLevel(level: number): number[] {
@@ -366,7 +384,27 @@ export type PickArgs = {
   rng?: Rng;
   /** Mastery band within the selected school grade. */
   adaptiveBand?: number;
+  /** Shared grade bank for grades 7..12; defaults to `GRADE_QUIZ_ITEMS` (injectable for tests). */
+  gradeBank?: readonly GradeQuizItem[];
+  /** Questions asked in this run (ids + prompts) — the shared bank never repeats within a run. */
+  gradeSeen?: GradeQuizSeen;
 };
+
+const TIER_DIFFICULTY: Record<1 | 2 | 3, number> = { 1: 2, 2: 3, 3: 4 };
+
+function fromGradeItem(item: GradeQuizItem, subject: Subject): Question {
+  return {
+    id: item.id,
+    subject,
+    grade: item.grade,
+    prompt: item.prompt,
+    options: [...item.options],
+    correctIndex: item.correctIndex,
+    explanation: item.explanation,
+    difficulty: TIER_DIFFICULTY[item.tier],
+    source: "bank",
+  };
+}
 
 function subjectFor(mode: QuizMode, rng: Rng): Subject {
   if (mode === "math") return "math";
@@ -378,16 +416,36 @@ function subjectFor(mode: QuizMode, rng: Rng): Subject {
  * Draw the next question.
  *
  * Order of preference: unseen material question → any material question →
- * unseen bank question → any bank question. Material rows carry no reliable
- * grade of their own, so the grade filter only applies to the built-in bank.
+ * (grades 7..12) the shared grade bank → unseen bank question → any bank question.
+ * Material rows carry no reliable grade of their own, so the grade filter only
+ * applies to the banks. When the shared bank has nothing for the grade (empty or
+ * exhausted), the built-in bank's top grade stands in.
  */
 export function pickQuestion(args: PickArgs): Question {
   const rng = args.rng ?? Math.random;
   const subject = subjectFor(args.mode, rng);
-  const grades = new Set(resolveGrades(args.school, args.level));
+  const resolved = resolveGrades(args.school, args.level);
+  const grades = new Set(resolved.map((g) => Math.min(g, OWN_BANK_MAX_GRADE)));
   const recent = new Set(args.recent ?? []);
 
   const material = (args.material ?? []).filter((q) => args.mode === "mixed" || q.subject === subject);
+
+  // Spec 2026-09-29: 7..12 → the shared grade bank, after the lesson material.
+  const sharedGrade = gradeForGame(Math.max(...resolved));
+  if (material.length === 0 && sharedGrade != null && sharedGrade > OWN_BANK_MAX_GRADE) {
+    const seen = args.gradeSeen ?? createGradeQuizSeen();
+    if (!args.gradeSeen) for (const id of recent) seen.ids.add(id);
+    const item = pickGradeQuiz({
+      grade: sharedGrade,
+      band: args.adaptiveBand ?? 0.5,
+      subjects: [subject],
+      seen,
+      rng,
+      items: args.gradeBank,
+    });
+    if (item) return fromGradeItem(item, subject);
+  }
+
   const bankPool = QUESTION_BANK.filter((q) => q.subject === subject && grades.has(q.grade));
 
   const tiers = [

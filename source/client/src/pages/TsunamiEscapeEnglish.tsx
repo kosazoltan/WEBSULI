@@ -1,5 +1,6 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
-import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
+import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
+import { QUIZ_TIMEOUT_SEC, tsunamiQuizSeconds } from "@/game-engine/tsunamiTiming";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -7,7 +8,18 @@ import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
-import { useClassroomGrade } from "@/lib/classroomStore";
+import { loadClassroomGrade, useClassroomGrade } from "@/lib/classroomStore";
+import type { GradeSubject } from "@/data/gradeQuizBank";
+import {
+  bandShiftForDifficulty,
+  clampBand,
+  createGradeQuizSeen,
+  difficultyForGrade,
+  gradeForGame,
+  markGradeQuizSeen,
+  pickGradeQuiz,
+  pickUnseenMaterial,
+} from "@/game-engine/gradeQuiz";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { sfxSuccess, sfxError, sfxLevelUp } from "@/lib/audioEngine";
@@ -485,11 +497,6 @@ const WIN_QUIZ_COUNT: Record<GameDifficulty, number> = {
 
 const WIN_BONUS_XP = 150;
 const SAFE_ZONE_BONUS_XP = 6;
-const QUIZ_TIMEOUT_SEC: Record<GameDifficulty, number> = {
-  easy: 14,
-  normal: 11,
-  hard: 9,
-};
 const QUIZ_WRONG_WATER_PENALTY: Record<GameDifficulty, number> = {
   easy: 4,
   normal: 6,
@@ -541,15 +548,40 @@ function loadNumber(key: string, fallback: number) {
   }
 }
 
-function parseDifficultyFromSearch(): GameDifficulty {
-  if (typeof window === "undefined") return "normal";
+/** A `?difficulty=` URL-paraméter, ha érvényes; különben `null` (az évfolyam dönt). */
+function parseDifficultyFromSearch(): GameDifficulty | null {
+  if (typeof window === "undefined") return null;
   const q = new URLSearchParams(window.location.search).get("difficulty");
   if (q === "easy" || q === "hard" || q === "normal") return q;
-  return "normal";
+  return null;
+}
+
+/** Spec 2026-09-29: tárgy-mód → a közös évfolyam-bank tárgyai (a vegyes mód a négy tárgy körforgása). */
+const TSUNAMI_GRADE_SUBJECTS: Record<TsunamiSubject, GradeSubject[]> = {
+  english: ["english"],
+  math: ["math"],
+  grammar: ["hungarian"],
+  nature: ["science"],
+  mixed: ["english", "math", "hungarian", "science"],
+};
+
+function tsunamiSubjectFromGradeSubject(subject: GradeSubject): TsunamiCoreSubject {
+  if (subject === "hungarian") return "grammar";
+  if (subject === "science" || subject === "history") return "nature";
+  return subject;
 }
 
 export default function TsunamiEscapeEnglish() {
-  const [difficulty, setDifficulty] = useState<GameDifficulty>(parseDifficultyFromSearch);
+  // Spec 2026-09-29: URL-paraméter nélkül a könnyű/közepes/nehéz alapértéke az évfolyamból jön.
+  const [difficulty, setDifficulty] = useState<GameDifficulty>(
+    () => parseDifficultyFromSearch() ?? difficultyForGrade(loadClassroomGrade()) ?? "normal",
+  );
+  /** A játékos kézzel (vagy URL-lel) választott nehézséget — ezt az évfolyam-váltás nem írja felül. */
+  const difficultyChosenRef = useRef(parseDifficultyFromSearch() != null);
+  const chooseDifficulty = useCallback((d: GameDifficulty) => {
+    difficultyChosenRef.current = true;
+    setDifficulty(d);
+  }, []);
   const [subject, setSubject] = useState<TsunamiSubject>("mixed");
   const [phase, setPhase] = useState<Phase>("menu");
 
@@ -640,6 +672,14 @@ export default function TsunamiEscapeEnglish() {
   const { grade: userGrade } = useClassroomGrade();
   const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
+  // Évfolyam-váltáskor (pl. a ClassroomGateModal után) az alapérték követi az évfolyamot,
+  // amíg a játékos nem választott kézzel.
+  useEffect(() => {
+    if (difficultyChosenRef.current) return;
+    const fromGrade = difficultyForGrade(userGrade);
+    if (fromGrade) setDifficulty(fromGrade);
+  }, [userGrade]);
+
   const mergedPools = useMemo<ActiveQuizPools>(() => {
     const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
     const matMed = materialItems
@@ -667,6 +707,26 @@ export default function TsunamiEscapeEnglish() {
   rewardQuestionsRef.current = coupon.active ? materialItems.map((q, i) => ({ ...q, id: q.id ?? `mat-${i}`, explanation: q.explanation ?? undefined, subject: "english" })) : [];
   const mergedPoolsRef = useRef(mergedPools);
   mergedPoolsRef.current = mergedPools;
+
+  /** Spec 2026-09-29: a közös évfolyam-bank állapota (a `pickQuiz` refeken át olvassa). */
+  const userGradeRef = useRef(userGrade);
+  userGradeRef.current = userGrade;
+  const gradeSeenRef = useRef(createGradeQuizSeen());
+  const gradeSubjectRoundRef = useRef(0);
+  const materialQuizzes = useMemo<Quiz[]>(
+    () =>
+      materialItems.filter(isPlayableQuestion).map((q, idx) => ({
+        id: q.id ?? `mat-${idx}`,
+        prompt: q.prompt,
+        options: [...q.options],
+        correctIndex: q.correctIndex,
+        explanation: q.explanation ?? undefined,
+        subject: "english" as const,
+      })),
+    [materialItems],
+  );
+  const materialQuizzesRef = useRef(materialQuizzes);
+  materialQuizzesRef.current = materialQuizzes;
 
   const { data: syncEligibility } = useQuery<SyncEligibility>({
     queryKey: ["/api/games/sync-eligibility"],
@@ -698,6 +758,36 @@ export default function TsunamiEscapeEnglish() {
     let eff = p;
     if (d === "hard") eff = Math.min(1, p * 1.22);
     if (d === "easy") eff = p * 0.78;
+
+    // Spec 2026-09-29: 3–12. évfolyamon (kupon-tananyag nélkül) nem látott tananyag-kvíz → a közös
+    // évfolyam-bank a tárgy-mód tárgyaiból, a sávot a nehézség-gomb eltolja → a régi szintes választás.
+    const sharedGrade = gradeForGame(userGradeRef.current);
+    if (sharedGrade != null && rewardQuestionsRef.current.length === 0) {
+      const seen = gradeSeenRef.current;
+      if (activeSubject === "english" || activeSubject === "mixed") {
+        const material = pickUnseenMaterial(materialQuizzesRef.current, seen);
+        if (material) {
+          markGradeQuizSeen(seen, material);
+          return shuffleQuiz(material);
+        }
+      }
+      const subjects = TSUNAMI_GRADE_SUBJECTS[activeSubject];
+      const band = clampBand(adaptiveRef.current.band + bandShiftForDifficulty(d));
+      for (let i = 0; i < subjects.length; i++) {
+        const gradeSubject = subjects[gradeSubjectRoundRef.current++ % subjects.length]!;
+        const item = pickGradeQuiz({ grade: sharedGrade, band, subjects: [gradeSubject], seen });
+        if (!item) continue;
+        markGradeQuizSeen(seen, item);
+        return shuffleQuiz({
+          id: item.id,
+          prompt: item.prompt,
+          options: [...item.options],
+          correctIndex: item.correctIndex,
+          explanation: item.explanation,
+          subject: tsunamiSubjectFromGradeSubject(item.subject),
+        });
+      }
+    }
 
     const subjectKey =
       activeSubject === "mixed"
@@ -745,7 +835,7 @@ export default function TsunamiEscapeEnglish() {
     setSessionXp(0);
     setCorrectQuizzesInRun(0);
     setSafeZoneX(50);
-    setQuizTimeLeft(QUIZ_TIMEOUT_SEC[difficulty]);
+    setQuizTimeLeft(tsunamiQuizSeconds(difficulty, adaptiveRef.current.band));
     setStormFlash(false);
     setDriftDir(0);
     driftDirRef.current = 0;
@@ -754,6 +844,8 @@ export default function TsunamiEscapeEnglish() {
     wrongAnswersRef.current = 0;
     answerLockedRef.current = false;
     recentQuizIdsRef.current = [];
+    gradeSeenRef.current = createGradeQuizSeen();
+    gradeSubjectRoundRef.current = 0;
     // Give an early first quiz so the run does not feel empty at the start.
     quizTimerRef.current = Math.max(0, PRESETS[difficulty].quizEverySec * 0.72);
     runTimerRef.current = 0;
@@ -937,7 +1029,7 @@ export default function TsunamiEscapeEnglish() {
       if (quizTimerRef.current >= quizEveryDyn) {
         quizTimerRef.current = 0;
         setQuiz(pickQuiz());
-        setQuizTimeLeft(adaptiveTimeBudget(QUIZ_TIMEOUT_SEC[runDifficultyRef.current], adaptiveRef.current.band));
+        setQuizTimeLeft(tsunamiQuizSeconds(runDifficultyRef.current, adaptiveRef.current.band));
         setPhase("quiz");
         return;
       }
@@ -1288,7 +1380,7 @@ export default function TsunamiEscapeEnglish() {
                       size="sm"
                       variant={difficulty === "easy" ? "default" : "outline"}
                       className={`h-11 px-4 ${difficulty === "easy" ? "bg-emerald-600 text-white border border-emerald-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
-                      onClick={() => setDifficulty("easy")}
+                      onClick={() => chooseDifficulty("easy")}
                     >
                       Könnyű
                     </Button>
@@ -1297,7 +1389,7 @@ export default function TsunamiEscapeEnglish() {
                       size="sm"
                       variant={difficulty === "normal" ? "default" : "outline"}
                       className={`h-11 px-4 ${difficulty === "normal" ? "bg-cyan-600 text-white border border-cyan-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
-                      onClick={() => setDifficulty("normal")}
+                      onClick={() => chooseDifficulty("normal")}
                     >
                       Közepes
                     </Button>
@@ -1306,7 +1398,7 @@ export default function TsunamiEscapeEnglish() {
                       size="sm"
                       variant={difficulty === "hard" ? "default" : "outline"}
                       className={`h-11 px-4 ${difficulty === "hard" ? "bg-rose-600 text-white border border-rose-100/40" : "bg-slate-900/95 border-white/35 text-white hover:bg-slate-800"}`}
-                      onClick={() => setDifficulty("hard")}
+                      onClick={() => chooseDifficulty("hard")}
                     >
                       Nehéz
                     </Button>

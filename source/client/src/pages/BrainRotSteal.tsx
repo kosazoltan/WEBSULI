@@ -27,6 +27,13 @@ import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { xpForAttempt } from "@/game-engine/retry-policy";
 import { stepBrainRot } from "@/lib/brainRotPhysics";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
+import {
+  createGradeQuizSeen,
+  gradeForGame,
+  markGradeQuizSeen,
+  pickGradeQuiz,
+  pickUnseenMaterial,
+} from "@/game-engine/gradeQuiz";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import BrainRotArena3D, { type ArenaBurst } from "@/game-engine/scenes/BrainRotArena3D";
@@ -40,7 +47,10 @@ type Quiz = {
   correctIndex: number;
   /** T-1: a MIÉRT rossz válasznál — a lecke exportjából vagy a generátorból. */
   explanation?: string | null;
-  category: "english" | "math" | "hungarian";
+  /** `science` / `history`: csak a közös évfolyam-bankból (3–12. évfolyam, spec 2026-09-29). */
+  category: "english" | "math" | "hungarian" | "science" | "history";
+  /** A játékos tananyagából jött (a 3–12. évfolyamos választásban elsőbbséget élvez). */
+  fromMaterial?: boolean;
 };
 
 type BrainRot = {
@@ -200,12 +210,16 @@ const CATEGORY_LABELS: Record<Quiz["category"], { label: string; color: string; 
   english: { label: "Angol", color: "text-cyan-300", icon: "\u{1F1EC}\u{1F1E7}" },
   math: { label: "Matek", color: "text-amber-300", icon: "\u{1F522}" },
   hungarian: { label: "Magyar nyelvtan", color: "text-emerald-300", icon: "\u{1F4DD}" },
+  science: { label: "Természettudomány", color: "text-lime-300", icon: "\u{1F52C}" },
+  history: { label: "Történelem", color: "text-orange-300", icon: "\u{1F3DB}\u{FE0F}" },
 };
 
 const CATEGORY_BORDERS: Record<Quiz["category"], string> = {
   english: "border-cyan-500/50",
   math: "border-amber-500/50",
   hungarian: "border-emerald-500/50",
+  science: "border-lime-500/50",
+  history: "border-orange-500/50",
 };
 
 /* --- Segédfüggvények --- */
@@ -300,7 +314,10 @@ export default function BrainRotSteal() {
    * több nyomással válaszolt. Mostantól a sáv a VÁLASZOKAT követi: három jó
    * után nehezít, két rossz után (gyorsabban) könnyít.
    */
-  const difficultyRef = useRef(startingDifficulty(4));
+  // Tananyag-kvíz: a játékos osztályának legutóbbi 3 anyagából (Claude-generált).
+  const { grade: userGrade } = useClassroomGrade();
+  // Spec 2026-09-29: a kezdő sáv a játékos évfolyamából (évfolyam nélkül a régi 4. osztályos sáv).
+  const difficultyRef = useRef(startingDifficulty(userGrade ?? 4));
   const answerHistoryRef = useRef<boolean[]>([]);
 
   const recordDifficultyAnswer = useCallback((correct: boolean) => {
@@ -332,8 +349,6 @@ export default function BrainRotSteal() {
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
 
-  // Tananyag-kvíz: a játékos osztályának legutóbbi 3 anyagából (Claude-generált).
-  const { grade: userGrade } = useClassroomGrade();
   const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
   /* --- Quiz valasztas --- */
@@ -352,14 +367,44 @@ export default function BrainRotSteal() {
         explanation: q.explanation ?? undefined,
           category: cat,
           topic: q.topic ?? undefined,
+          fromMaterial: true,
         };
       });
     return coupon.active && matMapped.length ? matMapped : [...matMapped, ...ALL_QUIZZES];
   }, [materialItems, coupon.active]);
 
+  /** Spec 2026-09-29: a futásban már feltett kérdések (azonosító + prompt). */
+  const gradeSeenRef = useRef(createGradeQuizSeen());
+
+  /**
+   * 3–12. évfolyamon: nem látott tananyag-kvíz → közös évfolyam-bank (a sáv szerinti szinten,
+   * minden tárgyból) → a régi véletlen választás, ha a közös bank üres/kimerült.
+   */
   const pickQuiz = useCallback((): Quiz => {
+    const sharedGrade = gradeForGame(userGrade);
+    const couponMaterialOnly = coupon.active && fullQuizPool.some((q) => q.fromMaterial);
+    if (sharedGrade != null && !couponMaterialOnly) {
+      const seen = gradeSeenRef.current;
+      const material = pickUnseenMaterial(fullQuizPool.filter((q) => q.fromMaterial), seen);
+      if (material) {
+        markGradeQuizSeen(seen, material);
+        return material;
+      }
+      const item = pickGradeQuiz({ grade: sharedGrade, band: difficultyRef.current, seen });
+      if (item) {
+        markGradeQuizSeen(seen, item);
+        return {
+          id: item.id,
+          prompt: item.prompt,
+          options: [...item.options],
+          correctIndex: item.correctIndex,
+          explanation: item.explanation,
+          category: item.subject,
+        };
+      }
+    }
     return pickRandom(fullQuizPool);
-  }, [fullQuizPool]);
+  }, [fullQuizPool, userGrade, coupon.active]);
 
   /* --- Reszecskek --- */
   const spawnParticles = useCallback((x: number, y: number, color: string, count: number, emoji?: string) => {
@@ -528,7 +573,8 @@ export default function BrainRotSteal() {
     setTimeLeft(ROUND_LIMIT);
     setRunSeconds(0);
     runSecondsRef.current = 0;
-    difficultyRef.current = startingDifficulty(4);
+    difficultyRef.current = startingDifficulty(userGrade ?? 4);
+    gradeSeenRef.current = createGradeQuizSeen();
     answerHistoryRef.current = [];
     setComboMultiplier(1);
     maxComboRef.current = 1;
@@ -536,7 +582,7 @@ export default function BrainRotSteal() {
     setScreenFlash(null);
     lastSpawnRef.current = 0;
     setPhase("play");
-  }, [streakProtector]);
+  }, [streakProtector, userGrade]);
 
   // R = quick-restart az "over" / "menu" képernyőn.
   useEffect(() => {
@@ -1120,7 +1166,7 @@ export default function BrainRotSteal() {
                     Vadászat vége!
                   </h2>
                   <p className="text-sm text-white/70 max-w-sm">
-                    Minden jó kvíz angol szavakat, matekot és magyart erősített!
+                    Minden jó kvíz a tudásodat erősítette: angol, matek, magyar, természettudomány és történelem!
                   </p>
                 </div>
 
