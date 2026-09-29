@@ -132,7 +132,8 @@ function ExampleBlock({ block, band }: { block: Extract<Block, { kind: "example"
       <BlockHead icon={Sparkles} label={theme.labels.example} />
       <p className={cn("font-medium", theme.body)}>{block.problem}</p>
 
-      <ol className="space-y-1 list-decimal list-inside text-sm">
+      {/* Spec 2026-09-29: számozott lépés-körök teljes méretű szöveggel (a `text-sm` lista apró volt). */}
+      <ol className="lesson-steps">
         {block.steps.slice(0, shown).map((step, i) => (
           <li key={i}>{step}</li>
         ))}
@@ -361,7 +362,7 @@ function LessonSection({
             {section.emoji}
           </span>
         )}
-        {section.heading}
+        <span className="lesson-chapter-title">{section.heading}</span>
       </h2>
       {section.blocks.map((block, bi) => (
         <LessonBlock
