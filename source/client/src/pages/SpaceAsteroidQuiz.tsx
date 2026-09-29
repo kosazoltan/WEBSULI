@@ -307,9 +307,10 @@ function buildPlayerShip(): THREE.Group {
 
   // Hátrahajló, lekerekített szárnyak kihúzott síkidomból, rózsaszín világító élléccel.
   const wingShape = new THREE.Shape();
+  // PR #133 review: the outermost point stays inside PLAYER_HALF_WIDTH (0.24 + 0.84 ≈ 1.08 < 1.125).
   wingShape.moveTo(0, 0.28);
-  wingShape.lineTo(0.8, -0.1);
-  wingShape.quadraticCurveTo(0.92, -0.18, 0.86, -0.33);
+  wingShape.lineTo(0.76, -0.1);
+  wingShape.quadraticCurveTo(0.86, -0.18, 0.8, -0.33);
   wingShape.lineTo(0.14, -0.44);
   wingShape.lineTo(0, -0.3);
   wingShape.closePath();
@@ -318,11 +319,11 @@ function buildPlayerShip(): THREE.Group {
   const edge = new THREE.BoxGeometry(0.62, 0.035, 0.05);
   for (const side of [-1, 1]) {
     const wing = new THREE.Mesh(wingGeo, wingMat);
-    wing.position.set(side * 0.27, -0.1, 0);
+    wing.position.set(side * 0.24, -0.1, 0);
     wing.scale.x = side;
     group.add(wing);
     const lead = new THREE.Mesh(edge, trimMat);
-    lead.position.set(side * 0.64, 0.04, 0.07);
+    lead.position.set(side * 0.6, 0.04, 0.07);
     lead.rotation.z = side * -0.44;
     group.add(lead);
     // Két hajtómű-gondola, a végükön világító gyűrűvel.
@@ -345,10 +346,10 @@ function buildPlayerShip(): THREE.Group {
 
   // Szárnyvégi jelzőfények (bal piros, jobb zöld — mint a repülőkön).
   const tipL = createGlowSprite("#ff4d6d", 0.42, 0.9);
-  tipL.position.set(-1.1, -0.42, 0.1);
+  tipL.position.set(-1.02, -0.42, 0.1);
   group.add(tipL);
   const tipR = createGlowSprite("#4dffb0", 0.42, 0.9);
-  tipR.position.set(1.1, -0.42, 0.1);
+  tipR.position.set(1.02, -0.42, 0.1);
   group.add(tipR);
 
   // Üvegkupola a pilótafülke fölött, sötét kerettel.
@@ -357,7 +358,8 @@ function buildPlayerShip(): THREE.Group {
   canopy.scale.set(0.95, 1.7, 0.7);
   group.add(canopy);
   const frame = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.022, 8, 28), darkMat);
-  frame.position.set(0, 0.36, 0.2);
+  // PR #133 review: in front of the glass's surface (the glass reaches z ≈ 0.244 along the rim), so it is visible.
+  frame.position.set(0, 0.36, 0.25);
   frame.scale.set(0.95, 1.7, 1);
   group.add(frame);
 

@@ -129,11 +129,14 @@ export function buildNebula(width: number, height: number, tier: LookTier): Nebu
         col += colorC * pow(smoothstep(0.5, 0.95, n * m * 1.8), 2.0) * 0.8;
         vec2 c = vUv - 0.5;
         col *= (1.0 - dot(c, c) * 1.1) * 0.85;
-        // Blue-noise-like dither (±1 step of 8-bit): removes the stepped bands of the dark gradients.
-        col += (texture2D(noiseTex, gl_FragCoord.xy / 256.0).b - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
+        #ifdef TONE_MAPPING
+        // Dither of ±1 step of the final 8-bit output (after tone mapping and sRGB — PR #133 review), only when
+        // drawing straight to the screen; the bloom path renders into a half-float target without banding.
+        gl_FragColor.rgb += (texture2D(noiseTex, gl_FragCoord.xy / 256.0).b - 0.5) / 255.0;
+        #endif
       }
     `,
   });
