@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { effortFor, FALLBACK_MODELS, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
@@ -231,6 +231,14 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
 }
 
 /** Runs independently of HTTP; only the legacy stream supplies a client abort signal. */
+/**
+ * Spec 2026-09-29 (PR #131 review, R1): the first author attempt uses the primary model; the repair rounds run on the
+ * author's fallback (a second model is likelier to fix what the first one got wrong), when one is configured.
+ */
+export function webAuthorModelForAttempt(attempt: number, primary: string, fallback: string | undefined): string {
+  return attempt > 0 && fallback ? fallback : primary;
+}
+
 export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate, bankCheckpoint, onBankCheckpoint }: ResearchObserver): Promise<ResearchArtifact> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
@@ -239,6 +247,8 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
   if (!studioModelReady(extractModel) || !studioModelReady(authorModel)) {
     throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva.");
   }
+  // Spec 2026-09-29 (PR #131 review, R1): the rollback HTML path also uses the author's fallback when its key is set.
+  const authorFallback = FALLBACK_MODELS.author && studioModelReady(FALLBACK_MODELS.author) ? FALLBACK_MODELS.author : undefined;
   // Spec 2026-09-25: the bank runs on the bank role — a missing key is reported before any paid call.
   const bankModel = resolveStudioModel("bank");
   if (!studioModelReady(bankModel)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(bankModel)}).`);
@@ -299,8 +309,15 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     html = await workflowCheckpoint("web-author-html", { input, method: LESSON_METHOD_VERSION, contract: "web-author-html-1", conceptIds }, async () => {
       let attempts = 0;
       for (;;) {
-        const provider = createStudioProvider(authorModel, PHASE_TIMEOUT_MS, MAX_TOKENS);
-        const response = await provider.chat(authorMessages, controller.signal);
+        let response: Awaited<ReturnType<ReturnType<typeof createStudioProvider>["chat"]>>;
+        const model = webAuthorModelForAttempt(attempts, authorModel, authorFallback);
+        try {
+          response = await createStudioProvider(model, PHASE_TIMEOUT_MS, MAX_TOKENS).chat(authorMessages, controller.signal);
+        } catch (error) {
+          // The primary's provider failed (not its content): the same attempt runs once on the fallback.
+          if (controller.signal.aborted || model !== authorModel || !authorFallback || authorFallback === authorModel) throw error;
+          response = await createStudioProvider(authorFallback, PHASE_TIMEOUT_MS, MAX_TOKENS).chat(authorMessages, controller.signal);
+        }
         await workflowUsage({ promptTokens: response.usage?.promptTokens, completionTokens: response.usage?.completionTokens });
         if (response.finishReason === "length" || response.finishReason === "max_tokens") {
           throw new WebResearchFailure("A szerzői válasz elérte a hosszkorlátot. A csonka tananyag nem menthető.");

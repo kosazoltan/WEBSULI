@@ -1296,7 +1296,7 @@ test("(q) fromMapBody: az üres törzs érvényes (a scope opcionális), a hián
  * 2026-09-09 — éles hiba: az animátor OpenRouter 429-en (rate limit) végleg elhalt,
  * pedig a FALLBACK_MODELS csak dokumentálva volt, a runner nem használta.
  * ------------------------------------------------------------------ */
-import { FALLBACK_MODELS, resolveStudioModel } from "../server/ai/models";
+import { FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../server/ai/models";
 
 function makeFailoverDeps(opts: { failModels: Set<string>; cannedResponse: string }) {
   const base = makeDeps(opts.cannedResponse);
@@ -1447,11 +1447,16 @@ test("(n) animator: ha az elsődleges ÉS a fallback modell is hibázik, az ered
   assert.deepEqual(job?.output?.lesson, GOOD_LESSON, "az eredeti lecke változatlanul megy tovább");
 });
 
+// Spec-változás 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md, tulajdonosi döntés): a szerzőnek
+// van tartaléka (GPT-5.6 Terra), de az a szerző SAJÁT (openai) családjában marad — külső családra továbbra sincs
+// visszaesés, a lektor független marad. Ha az elsődleges és a tartalék is bukik, a job hibára áll.
 test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   const primary = resolveStudioModel("author");
-  assert.equal(FALLBACK_MODELS.author, undefined);
+  const fallback = FALLBACK_MODELS.author!;
+  assert.ok(fallback, "a szerzőnek van tartaléka");
+  assert.equal(providerForModel(fallback), providerForModel(primary), "a tartalék a szerző saját családjában marad");
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
-    failModels: new Set([primary]),
+    failModels: new Set([primary, fallback]),
     cannedResponse: CANNED_AUTHOR,
   });
   store.seed({ id: "job-1", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
@@ -1459,7 +1464,7 @@ test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   const outcome = await runPipelineStep("job-1", { store, providerFactory, keyConfigured, promptLookup });
 
   assert.equal(outcome.ok, false);
-  assert.deepEqual(calls, [primary]);
+  assert.deepEqual(calls, [primary, fallback]);
   assert.equal((await store.loadJob("job-1"))?.status, "error");
   assert.match(outcome.reason, /Rate limit exceeded/);
 });
@@ -1774,6 +1779,34 @@ test("bank-ellenőr: vak megoldás nélkül nem fut; a korábban hibátlannak ta
   job.step = "lektor"; job.round = 1; job.status = "running";
   await runPipelineStep("bv-cache", first.deps);
   assert.equal(verifierCallsOf(first.calls).length, 1, "változatlan bank: nincs újabb bank-ellenőr hívás");
+});
+
+/* Spec 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md, tulajdonosi döntés): a szerző elsődleges
+ * modellje GPT-6 Luna, tartaléka GPT-5.6 Terra. Élesben mérve: egyetlen érvénytelen szerzői JSON az egész
+ * gyártást leállította, mert a szerzőnek nem volt tartaléka. */
+test("spec 2026-09-29: author — GPT-6 Luna elsődleges; érvénytelen JSON után a GPT-5.6 Terra tartalék írja meg", async () => {
+  assert.equal(resolveStudioModel("author", {}), "gpt-6-luna");
+  assert.equal(FALLBACK_MODELS.author, "gpt-5.6-terra");
+  const base = makeDeps(CANNED_AUTHOR);
+  const calls: string[] = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub",
+    model,
+    chat: async () => {
+      calls.push(model);
+      const content = model === "gpt-6-luna" ? '{"title": "Oszthatóság", "sections": [' : CANNED_AUTHOR;
+      return { content, finishReason: "stop", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  base.store.seed({ id: "author-fallback", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+
+  const outcome = await runPipelineStep("author-fallback", { ...base, providerFactory });
+
+  assert.equal(outcome.ok, true, JSON.stringify(outcome));
+  assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-terra"], "előbb GPT-6 Luna, érvénytelen JSON után a tartalék");
+  const job = await base.store.loadJob("author-fallback");
+  assert.equal((job as { model?: string | null })?.model, "gpt-5.6-terra", "a job a ténylegesen használt modellt rögzíti");
 });
 
 /* Spec 2026-09-29 (docs/specs/2026-09-29-tanari-temafokusz.md): a fókuszált job a kéréshez nem tartozó
