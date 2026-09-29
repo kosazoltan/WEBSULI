@@ -79,7 +79,8 @@ tests/speed-quiz-explanations.test.ts` → pass (változatlan tesztek).
    - Villám matek: a lap `randInt`…`isMathTask` szakasza TypeScript-átfordítással (`typescript.transpileModule`)
      `node:vm`-ben fut; `TEACHER_BANK` 3..12 mind ≥ 40, mindnek van `calc`-ja, a `calc` értéke pontosan EGY opcióval
      egyenlő és az a `correctIndex`; nincs ismétlődő prompt és ismétlődő opció; van `×` és `÷` évfolyamonként.
-   - Generátor: évfolyamonként ≥ 8 sablon (a `t === k` ágak száma az évfolyam blokkjában) és 3000 futás: négy
+   - Generátor: évfolyamonként ≥ 8 sablon (a `result =` sorok száma az évfolyam `level === N` blokkjában, és ez egyenlő a
+     `GENERATOR_TEMPLATES[N]` sorsolási tartománnyal) és 3000 futás: négy
      különböző véges opció, a `calc` pontosan egy opcióval egyenlő (= `correctIndex`), a `? =` alakú promptoknál a
      prompt kifejezése is kiszámolva egyezik; előfordul `*` és `/` a `calc`-ban.
 Parancs: `node --import tsx --test tests/game-bank-no-repeat-content.test.ts` → pass.
@@ -91,7 +92,10 @@ Parancs: `node --import tsx --test tests/game-bank-no-repeat-content.test.ts` �
    tétel, és sablononként 2 generált példány. A modell a kulcs nélkül MINDEN opciót `true/false`-ra minősít.
 4. Jelzés, ha nem pontosan egy `true`, vagy az nem a `correctIndex`. Kimenet: ellenőrzött / jelzett darabszám és a
    jelzettek listája (`scratchpad` JSON). Javítás → újrafuttatás a jelzettekre, amíg 0.
-Parancs: `node --import tsx game-bank-blind-check.local.mts` → `flagged: 0`.
+5. Érzékenységi próba (`BLIND_CANARY=1`): 20 szándékosan elrontott kulcs + 3 két helyes opciós tétel — mind a 23-at
+   jeleznie kell, különben a megoldó promptja nem elég szigorú.
+6. Második, független család (`BLIND_MODEL=grok-4.6`) ugyanarra a készletre; mindkét futás jelzéseit javítani kell.
+Parancs: `node --import tsx game-bank-blind-check.local.mts` → `jelzett: 0`.
 
 ## T7 — Kapuk
 `npx tsc --noEmit`; `npx tsc --noEmit -p tsconfig.test.json`; `npx eslint client/src server --max-warnings 0`;
