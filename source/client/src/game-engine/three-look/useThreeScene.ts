@@ -129,6 +129,10 @@ export function useThreeScene(
         disposeObjectTree(scene);
         postFx.dispose();
         renderer.dispose();
+        // A game that remounts its board (e.g. after every quiz) would otherwise
+        // pile up detached GL contexts until the browser evicts the oldest one.
+        // A still-attached canvas (StrictMode double mount) keeps its context.
+        if (!canvas.isConnected) renderer.forceContextLoss();
       }
     };
     // `setup` is read through a ref; callers control rebuilds with `deps`.
