@@ -1,5 +1,13 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
+import {
+  createGradeQuizSeen,
+  gradeForGame,
+  markGradeQuizSeen,
+  pickGradeQuiz,
+  pickUnseenMaterial,
+} from "@/game-engine/gradeQuiz";
+import { saveClassroomGrade } from "@/lib/classroomStore";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -101,7 +109,8 @@ type Quiz = {
   /** T-1: a MIÉRT rossz válasznál — a lecke exportjából vagy a generátorból. */
   explanation?: string | null;
   topic?: string | null;
-  source?: "material" | "fallback";
+  /** `grade`: a közös évfolyam-bankból (3–12. évfolyam, spec 2026-09-29). */
+  source?: "material" | "fallback" | "grade";
 };
 
 type EnemyState = {
@@ -891,9 +900,39 @@ export default function SpaceAsteroidQuiz() {
 
   const recentQuizPromptsRef = useRef<string[]>([]);
   const RECENT_WINDOW = 12;
+  /** Spec 2026-09-29: a futásban már feltett kérdések (azonosító + prompt) — a közös bank ismétlés-tilalma. */
+  const gradeSeenRef = useRef(createGradeQuizSeen());
+  const adaptiveRef = useRef(createAdaptiveSession(4));
 
-  /** Kihúz egy nem-régen-mutatott kvízt. Tananyag-kérdéseket részesít előnyben. */
+  /**
+   * Kihúz egy nem-régen-mutatott kvízt. Tananyag-kérdéseket részesít előnyben.
+   * 3–12. évfolyamon (spec 2026-09-29): nem látott tananyag-kvíz → közös évfolyam-bank
+   * (az adaptív sáv szerinti szinten) → a régi általános bank, ha a közös bank üres/kimerült.
+   */
   const pickQuiz = useCallback((): Quiz => {
+    const sharedGrade = gradeForGame(grade);
+    const couponMaterialOnly = coupon.active && quizPool.some((q) => q.source === "material");
+    if (sharedGrade != null && !couponMaterialOnly) {
+      const seen = gradeSeenRef.current;
+      const material = pickUnseenMaterial(quizPool.filter((q) => q.source === "material"), seen);
+      if (material) {
+        markGradeQuizSeen(seen, material);
+        return material;
+      }
+      const item = pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, seen });
+      if (item) {
+        markGradeQuizSeen(seen, item);
+        return {
+          id: item.id,
+          prompt: item.prompt,
+          options: [...item.options],
+          correctIndex: item.correctIndex,
+          explanation: item.explanation,
+          topic: item.subject === "science" ? "nature" : item.subject,
+          source: "grade",
+        };
+      }
+    }
     const pool = quizPool.length > 0 ? quizPool : FALLBACK_QUIZZES;
     const recent = recentQuizPromptsRef.current;
     const matFirst = pool.filter((q) => q.source === "material" && !recent.includes(q.prompt));
@@ -903,7 +942,7 @@ export default function SpaceAsteroidQuiz() {
     recent.push(picked.prompt);
     while (recent.length > RECENT_WINDOW) recent.shift();
     return picked;
-  }, [quizPool]);
+  }, [quizPool, grade, coupon.active]);
 
   /* ============== Phase / játékvezérlés ============== */
 
@@ -975,7 +1014,6 @@ export default function SpaceAsteroidQuiz() {
     return () => window.clearInterval(id);
   }, [phase, paused, powerTimer]);
 
-  const adaptiveRef = useRef(createAdaptiveSession(4));
   const answerLockedRef = useRef(false);
 
   const enqueueQuiz = useCallback((reason: QuizReason) => {
@@ -997,6 +1035,7 @@ export default function SpaceAsteroidQuiz() {
 
   const startNewRun = useCallback(() => {
     adaptiveRef.current.reset(grade ?? 4);
+    gradeSeenRef.current = createGradeQuizSeen();
     answerLockedRef.current = false;
     scoreSubmittedRef.current = false;
     streakProtector.resetProtector();
@@ -2308,6 +2347,8 @@ export default function SpaceAsteroidQuiz() {
   const onPickGrade = (g: number) => {
     setGrade(g);
     saveGrade(g);
+    // Spec 2026-09-29: a saját választó marad, de a közös classroomStore-ba is ír.
+    saveClassroomGrade(g);
     setPhase("intro");
   };
 
@@ -2606,7 +2647,7 @@ export default function SpaceAsteroidQuiz() {
                   {quizReason === "wave" ? `Hullám ${wave} kvíz` : "Vészhelyzet — kvíz!"}
                 </span>
                 <span className="text-xs font-bold text-cyan-300 uppercase">
-                  {activeQuiz.source === "material" ? "Tananyagodból" : "Általános"}
+                  {activeQuiz.source === "material" ? "Tananyagodból" : activeQuiz.source === "grade" ? `${grade}. osztály` : "Általános"}
                 </span>
               </div>
               <p className="text-[11px] text-white/65 mb-2">
