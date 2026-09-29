@@ -25,6 +25,21 @@
       ],
       "port": 5188,
       "cwd": "source"
+    },
+    {
+      "name": "websuli-visual-hooks",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "cross-env",
+        "VITE_ENABLE_RUNTIME_PROBE=1",
+        "VITE_ENABLE_GAME_TEST_HOOKS=1",
+        "vite",
+        "--port",
+        "5189",
+        "--strictPort"
+      ],
+      "port": 5189,
+      "cwd": "source"
     }
   ]
 }

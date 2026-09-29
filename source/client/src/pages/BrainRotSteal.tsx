@@ -29,6 +29,7 @@ import { stepBrainRot } from "@/lib/brainRotPhysics";
 import { nextDifficulty, startingDifficulty } from "@/game-engine/difficulty";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import BrainRotArena3D, { type ArenaBurst } from "@/game-engine/scenes/BrainRotArena3D";
 
 /* --- Típusok --- */
 type Quiz = {
@@ -268,6 +269,9 @@ export default function BrainRotSteal() {
   const [brainRots, setBrainRots] = useState<BrainRot[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
+  // 3D aréna: elkapáskor szikra-robbanás a lény padlópontján (csak látvány).
+  const [arenaBursts, setArenaBursts] = useState<ArenaBurst[]>([]);
+  const arenaBurstIdRef = useRef(0);
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [caughtRot, setCaughtRot] = useState<BrainRot | null>(null);
   /** A2: ugyanazon lény második helyes válaszánál csökkentett XP. */
@@ -485,6 +489,11 @@ export default function BrainRotSteal() {
       // Vizuális visszajelzés
       spawnParticles(caughtRot.x, caughtRot.y, "#fbbf24", 20, "\u2B50");
       addFloatingText(caughtRot.x, caughtRot.y - 30, `+${xpGain} XP`, "#fbbf24");
+      const burstId = arenaBurstIdRef.current++;
+      setArenaBursts((prev) => [...prev.slice(-3), { id: burstId, x: caughtRot.x, y: caughtRot.y }]);
+      timeoutsRef.current.push(
+        window.setTimeout(() => setArenaBursts((prev) => prev.filter((b) => b.id !== burstId)), 1200),
+      );
 
       if (multiplier >= 2) {
         sfxLevelUp();
@@ -947,6 +956,24 @@ export default function BrainRotSteal() {
                     backgroundImage: "linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)",
                     backgroundSize: "40px 40px",
                   }} />
+
+                  {/* 3D arena background (decorative; the creatures stay DOM buttons above it) */}
+                  <BrainRotArena3D
+                    rots={brainRots
+                      .filter((r) => !r.caught)
+                      .map((r) => {
+                        const age = (Date.now() - r.spawnTime) / BRAIN_ROT_LIFETIME;
+                        return {
+                          id: r.id,
+                          x: r.x,
+                          y: r.y,
+                          size: r.size,
+                          warning: age > 0.6,
+                          opacity: age > 0.7 ? Math.max(0, 1 - (age - 0.7) / 0.3) : 1,
+                        };
+                      })}
+                    bursts={arenaBursts}
+                  />
 
                   {/* Brain Rots */}
                   {brainRots

@@ -41,6 +41,7 @@ import {
   confettiParticles,
 } from "@/lib/wordLadderLogic";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
+import LadderScene3D from "@/game-engine/scenes/LadderScene3D";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 
 const LS_XP = "websuli-wordladder-xp";
@@ -312,6 +313,17 @@ export default function WordLadderHuEn() {
   /** Mérföldkő / sorozat felirat (rövid ideig). */
   const [banner, setBanner] = useState<string | null>(null);
   const [lastXpGain, setLastXpGain] = useState<number | null>(null);
+  /** A 3D létra él-e (WebGL); különben az SVG-létra és a DOM-mászó látszik. */
+  const [ladder3d, setLadder3d] = useState(false);
+  const ladderColumnRef = useRef<HTMLDivElement | null>(null);
+  const onLadderSupported = useCallback((s: boolean | null) => {
+    setLadder3d(s === true);
+    if (s !== true) ladderColumnRef.current?.style.removeProperty("--wl-climber-pct");
+  }, []);
+  // A 3D mászó képernyő-magassága (%) — az XP-felirat ehhez igazodik, React-render nélkül.
+  const onClimberScreenPct = useCallback((pct: number) => {
+    ladderColumnRef.current?.style.setProperty("--wl-climber-pct", `${pct}%`);
+  }, []);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A válasz-lock szinkron ref: két gyors kattintás ne dolgozódjon fel duplán.
@@ -756,13 +768,25 @@ export default function WordLadderHuEn() {
 
             {phase === "menu" && (
               <div data-game-menu="ladder" className="flex flex-col items-center justify-center flex-1 gap-4 py-6" data-testid="wl-menu">
-                <div className="relative w-28 h-32 min-h-0">
-                  <Ladder rung={0} total={RUNGS} />
-                  <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: "6%" }}>
-                    <motion.div animate={reducedMotion ? undefined : { y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 1.4 }}>
-                      <Climber streak={0} mood="idle" />
-                    </motion.div>
-                  </div>
+                <div className="relative w-28 h-32 min-h-0 rounded-2xl overflow-hidden">
+                  <LadderScene3D
+                    variant="preview"
+                    rung={0}
+                    total={RUNGS}
+                    zoneId="meadow"
+                    streak={0}
+                    mood="idle"
+                    fallback={
+                      <>
+                        <Ladder rung={0} total={RUNGS} />
+                        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: "6%" }}>
+                          <motion.div animate={reducedMotion ? undefined : { y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 1.4 }}>
+                            <Climber streak={0} mood="idle" />
+                          </motion.div>
+                        </div>
+                      </>
+                    }
+                  />
                 </div>
                 <p className="text-sm text-white/90 text-center max-w-sm font-semibold px-1">
                   {RUNGS} fok a zászlóig · 4 táj · minden jó válasz egy lépés felfelé
@@ -797,11 +821,25 @@ export default function WordLadderHuEn() {
                 />
                 <div className="flex-1 flex gap-2 sm:gap-3 min-h-0">
                   {/* LÉTRA */}
-                  <div className="relative w-[72px] sm:w-[92px] shrink-0" data-testid="wl-ladder">
-                    <Ladder rung={rung} total={RUNGS} />
+                  <div
+                    ref={ladderColumnRef}
+                    className={`relative w-[72px] sm:w-[92px] shrink-0 ${ladder3d ? "rounded-2xl overflow-hidden border border-white/15" : ""}`}
+                    data-testid="wl-ladder"
+                  >
+                    <LadderScene3D
+                      rung={rung}
+                      total={RUNGS}
+                      zoneId={zone.id}
+                      streak={streak}
+                      mood={climberMood}
+                      fallback={<Ladder rung={rung} total={RUNGS} />}
+                      onSupportedChange={onLadderSupported}
+                      onClimberScreenPct={onClimberScreenPct}
+                    />
+                    {/* A 3D mászó látszik; ez a DOM-mászó (testid) akkor átlátszó helyőrző, de együtt mozog. */}
                     <motion.div
                       className="absolute left-1/2 z-10"
-                      style={{ x: "-50%" }}
+                      style={{ x: "-50%", opacity: ladder3d ? 0 : 1 }}
                       animate={{
                         bottom: `${climberBottomPct}%`,
                         rotate: phase === "step" && stepDelta < 0 ? [0, -14, 10, 0] : 0,
@@ -821,7 +859,7 @@ export default function WordLadderHuEn() {
                         <motion.div
                           key={`${cursor}-${lastXpGain}`}
                           className="absolute left-1/2 -translate-x-1/2 text-sm font-black text-amber-200 drop-shadow"
-                          style={{ bottom: `${Math.min(92, climberBottomPct + 14)}%` }}
+                          style={{ bottom: `min(92%, calc(var(--wl-climber-pct, ${climberBottomPct}%) + 14%))` }}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: -18 }}
                           exit={{ opacity: 0 }}
