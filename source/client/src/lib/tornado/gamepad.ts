@@ -71,8 +71,10 @@ export function createGamepadRestGate(): (gp: GamepadLike | null | undefined) =>
       return false;
     }
     if (!armed) {
-      const centred = applyDeadzone(gp.axes[0] ?? 0) === 0 && applyDeadzone(gp.axes[1] ?? 0) === 0;
-      if (centred) armed = true;
+      // Only a FINITE raw reading proves the stick is centred: applyDeadzone maps NaN to 0, and a
+      // NaN wake-up sample used to arm the gate right before the resting [0, 1] (review PR #137).
+      const centred = (v: number | undefined) => Number.isFinite(v) && applyDeadzone(v as number) === 0;
+      if (centred(gp.axes[0]) && centred(gp.axes[1])) armed = true;
     }
     return armed;
   };

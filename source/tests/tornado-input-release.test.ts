@@ -82,3 +82,20 @@ test("a játékhurok a gamepadot a nyugalmi kapun át olvassa", () => {
   assert.match(page, /createGamepadRestGate\(\)/);
   assert.match(page, /readStandardGamepad\(\s*padGateRef\.current\(/);
 });
+
+// Review PR #137 (1): a NaN wake-up sample read as "centred" (applyDeadzone(NaN) === 0) and armed the
+// gate, so the resting [0, 1] right after it drove full reverse. Only FINITE raw axes may count.
+test("NaN ébredési minta nem élesíti a kaput: NaN → nyugalmi kitérés nem ad gázt", () => {
+  const gate = createGamepadRestGate();
+  const drive = (gp: { axes: number[]; buttons: never[] }) => readStandardGamepad(gate(gp) ? gp : null);
+  assert.ok(drive({ axes: [Number.NaN, Number.NaN], buttons: [] }).throttle === 0);
+  assert.ok(drive({ axes: [0, Number.NaN], buttons: [] }).throttle === 0);
+  assert.ok(drive({ axes: [Number.POSITIVE_INFINITY, 0], buttons: [] }).throttle === 0);
+  for (let i = 0; i < 10; i++) {
+    const d = drive({ axes: [0, 1], buttons: [] });
+    assert.ok(d.throttle === 0, `frame ${i} after NaN: throttle ${d.throttle}`);
+  }
+  // A real centred reading still arms it.
+  assert.ok(drive({ axes: [0.02, -0.03], buttons: [] }).throttle === 0);
+  assert.equal(drive({ axes: [0, -1], buttons: [] }).throttle, 1);
+});
