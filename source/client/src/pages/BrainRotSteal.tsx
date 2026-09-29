@@ -12,6 +12,9 @@ import GameNextGoalBar from "@/components/GameNextGoalBar";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import { useMaterialQuizzes } from "@/hooks/useMaterialQuizzes";
 import { useClassroomGrade } from "@/lib/classroomStore";
+import { useGradeLevel } from "@/game-engine/useGradeLevel";
+import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
+import { levelAdaptBand, levelStartBand } from "@/game-engine/levelTuning";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
@@ -101,6 +104,8 @@ const SPAWN_INTERVAL_BASE = 2200;
 const SPAWN_INTERVAL_MIN = 900;
 const BRAIN_ROT_LIFETIME = 6000;
 const MAX_BRAIN_ROTS = 8;
+/** Sikeres futás: ennyi elkapás (a napi kihívás meglévő küszöbe) — ez oldja fel a következő pályát is. */
+const BRAIN_ROT_CLEAR_CATCHES = 10;
 
 const BRAIN_ROT_EMOJIS = [
   { emoji: "\u{1F9E0}", name: "Agy", xp: 30 },
@@ -266,6 +271,11 @@ export default function BrainRotSteal() {
 
   useEffect(() => {
     return installGameTestApi({
+      probe: () => ({
+        level: runLevelRef.current,
+        band: difficultyRef.current,
+        paceScale: 1.4 - difficultyRef.current * 0.55,
+      }),
       forceState: (patch) => {
         if (patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
           setPhase(patch.phase);
@@ -319,14 +329,21 @@ export default function BrainRotSteal() {
   // Spec 2026-09-29: a kezdő sáv a játékos évfolyamából (évfolyam nélkül a régi 4. osztályos sáv).
   const difficultyRef = useRef(startingDifficulty(userGrade ?? 4));
   const answerHistoryRef = useRef<boolean[]>([]);
+  // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként (3–12.); a futás pályája a startkor rögzül.
+  const levels = useGradeLevel("brainrot", userGrade);
+  const runLevelRef = useRef<number | null>(null);
+  const levelClearedRef = useRef(false);
 
   const recordDifficultyAnswer = useCallback((correct: boolean) => {
     const history = [...answerHistoryRef.current, correct].slice(-6);
     answerHistoryRef.current = history;
-    difficultyRef.current = nextDifficulty({
-      recentCorrect: history,
-      current: difficultyRef.current,
-    });
+    difficultyRef.current = levelAdaptBand(
+      nextDifficulty({
+        recentCorrect: history,
+        current: difficultyRef.current,
+      }),
+      runLevelRef.current,
+    );
   }, []);
   const [comboMultiplier, setComboMultiplier] = useState(1);
   /** Futáson belüli max combo — a combo_4x jelvényhez (a végső combo gyakran 1-re reset). */
@@ -557,6 +574,8 @@ export default function BrainRotSteal() {
 
   /* --- Játék indítása --- */
   const startGame = useCallback(() => {
+    runLevelRef.current = levels.level;
+    levelClearedRef.current = false;
     scoreSubmittedRef.current = false;
     streakProtector.resetProtector();
     setRevealCorrectIdx(null);
@@ -573,7 +592,7 @@ export default function BrainRotSteal() {
     setTimeLeft(ROUND_LIMIT);
     setRunSeconds(0);
     runSecondsRef.current = 0;
-    difficultyRef.current = startingDifficulty(userGrade ?? 4);
+    difficultyRef.current = levelStartBand(runLevelRef.current, startingDifficulty(userGrade ?? 4));
     gradeSeenRef.current = createGradeQuizSeen();
     answerHistoryRef.current = [];
     setComboMultiplier(1);
@@ -582,7 +601,7 @@ export default function BrainRotSteal() {
     setScreenFlash(null);
     lastSpawnRef.current = 0;
     setPhase("play");
-  }, [streakProtector, userGrade]);
+  }, [streakProtector, userGrade, levels.level]);
 
   // R = quick-restart az "over" / "menu" képernyőn.
   useEffect(() => {
@@ -768,12 +787,20 @@ export default function BrainRotSteal() {
     });
     // Daily: ha a játékos legalább 10 brain rot-ot kapott el → "teljesítve".
     // (A Brain Rot-nak nincs "won" fázisa — a 10 elkapás a sikeres futás kritériuma.)
-    if (wasDailyAvailable && totalCaught >= 10) {
+    if (wasDailyAvailable && totalCaught >= BRAIN_ROT_CLEAR_CATCHES) {
       const daily = markDailyCompleted();
       if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, sessionXp, totalCaught, totalMissed, bestStreak, comboMultiplier]);
+
+  // A sikeres futás (legalább 10 elkapás a kör végén) a következő pályát oldja fel; a menü azt ajánlja.
+  useEffect(() => {
+    if (phase === "over" && totalCaught >= BRAIN_ROT_CLEAR_CATCHES && runLevelRef.current != null && !levelClearedRef.current) {
+      levelClearedRef.current = true;
+      levels.complete(runLevelRef.current);
+    }
+  }, [phase, totalCaught]);
 
   /* --- Render --- */
   const timePercent = (timeLeft / ROUND_LIMIT) * 100;
@@ -942,8 +969,16 @@ export default function BrainRotSteal() {
                   onClick={startGame}
                 >
                   <Brain className="w-5 h-5 mr-2" />
-                  Vadászat indítása!
+                  Vadászat indítása!{levels.level != null ? ` · ${levels.level}. pálya` : ""}
                 </Button>
+                {levels.active && levels.level != null ? (
+                  <GradeLevelPicker
+                    value={levels.level}
+                    unlocked={levels.unlocked}
+                    onChange={levels.select}
+                    label={`Pálya — ${userGrade}. osztály`}
+                  />
+                ) : null}
               </div>
             )}
 
