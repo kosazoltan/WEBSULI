@@ -26,3 +26,42 @@ export function escAction(phase: PlayPhase): "pause" | "exit" | "noop" {
   if (phase === "paused" || phase === "result_win" || phase === "result_lose") return "exit";
   return "noop";
 }
+
+/** The held driving keys (keyboard). */
+export type DriveKeys = { fwd: boolean; back: boolean; left: boolean; right: boolean; brake: boolean };
+
+/** Which driving key a `KeyboardEvent.key` holds down, or null. */
+export function driveKeyFor(key: string): keyof DriveKeys | null {
+  switch (key.toLowerCase()) {
+    case "w":
+    case "arrowup":
+      return "fwd";
+    case "s":
+    case "arrowdown":
+      return "back";
+    case "a":
+    case "arrowleft":
+      return "left";
+    case "d":
+    case "arrowright":
+      return "right";
+    case " ":
+      return "brake";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Let go of everything (spec 2026-09-29-tornado-fizika D11).
+ *
+ * A keyup is delivered to whichever window has focus. Hold S, alt-tab (or a notification steals
+ * focus), release — the game never hears it and keeps reversing. `blur` / `visibilitychange` call this.
+ */
+export function releaseDriveKeys(k: DriveKeys): void {
+  k.fwd = false;
+  k.back = false;
+  k.left = false;
+  k.right = false;
+  k.brake = false;
+}

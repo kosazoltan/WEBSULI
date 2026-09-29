@@ -95,11 +95,13 @@ import {
 } from "@/lib/tornado/wind";
 import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
 import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
-import { stepVehicle, STOPPED_SPEED, maxSpeedUnits } from "@/lib/tornado/drive";
-import { readStandardGamepad } from "@/lib/tornado/gamepad";
+import { stepVehicle, STOPPED_SPEED, maxSpeedUnits, windDriftUnits } from "@/lib/tornado/drive";
+import { createGamepadRestGate, readStandardGamepad } from "@/lib/tornado/gamepad";
 import {
   toggleCamera,
   escAction,
+  driveKeyFor,
+  releaseDriveKeys,
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import {
@@ -1027,6 +1029,7 @@ function PlayScreen(props: {
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   const touchRef = useRef({ fwd: false, back: false, left: false, right: false });
   const padAnchorPrevRef = useRef(false);
+  const padGateRef = useRef(createGamepadRestGate());
   const finishedRef = useRef(false);
   const materialRef = useRef<Question[]>(materialQuestions);
   materialRef.current = materialQuestions;
@@ -1292,28 +1295,13 @@ function PlayScreen(props: {
   /* ------- keyboard ------- */
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      const k = keysRef.current;
+      const driveKey = driveKeyFor(e.key);
+      if (driveKey) {
+        keysRef.current[driveKey] = true;
+        if (driveKey === "brake") e.preventDefault();
+        return;
+      }
       switch (e.key.toLowerCase()) {
-        case "w":
-        case "arrowup":
-          k.fwd = true;
-          break;
-        case "s":
-        case "arrowdown":
-          k.back = true;
-          break;
-        case "a":
-        case "arrowleft":
-          k.left = true;
-          break;
-        case "d":
-        case "arrowright":
-          k.right = true;
-          break;
-        case " ":
-          k.brake = true;
-          e.preventDefault();
-          break;
         case "f":
           tryAnchorRef.current();
           break;
@@ -1343,36 +1331,28 @@ function PlayScreen(props: {
       }
     };
     const up = (e: KeyboardEvent) => {
-      const k = keysRef.current;
-      switch (e.key.toLowerCase()) {
-        case "w":
-        case "arrowup":
-          k.fwd = false;
-          break;
-        case "s":
-        case "arrowdown":
-          k.back = false;
-          break;
-        case "a":
-        case "arrowleft":
-          k.left = false;
-          break;
-        case "d":
-        case "arrowright":
-          k.right = false;
-          break;
-        case " ":
-          k.brake = false;
-          break;
-        default:
-          break;
-      }
+      const driveKey = driveKeyFor(e.key);
+      if (driveKey) keysRef.current[driveKey] = false;
+    };
+    // Spec 2026-09-29-tornado-fizika D11: a keyup (or pointerup) that lands in another window never
+    // reaches us — without this a key held during alt-tab kept the car reversing on its own.
+    const releaseAll = () => {
+      releaseDriveKeys(keysRef.current);
+      const t = touchRef.current;
+      t.fwd = t.back = t.left = t.right = false;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") releaseAll();
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    window.addEventListener("blur", releaseAll);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", releaseAll);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
@@ -1618,7 +1598,8 @@ function PlayScreen(props: {
       const k = keysRef.current;
       const t = touchRef.current;
       const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
-      const pad = readStandardGamepad(pads[0] ?? pads[1] ?? null);
+      const rawPad = pads[0] ?? pads[1] ?? null;
+      const pad = readStandardGamepad(padGateRef.current(rawPad) ? rawPad : null);
       if (pad.anchor && !padAnchorPrevRef.current) tryAnchorRef.current();
       padAnchorPrevRef.current = pad.anchor;
 
@@ -1630,7 +1611,7 @@ function PlayScreen(props: {
       );
 
       if (!p.anchored) {
-        const windPush = windForceOn(windRef.current, props.vehicle.windResistance) * dt * 30;
+        const windPush = windDriftUnits(windForceOn(windRef.current, props.vehicle.windResistance));
         const windAngle = (windRef.current.windDirection * Math.PI) / 180;
         const next = stepVehicle(
           p,
