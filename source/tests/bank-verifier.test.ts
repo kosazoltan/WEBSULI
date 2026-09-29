@@ -8,6 +8,7 @@ import {
   bankVerifierChunks,
   buildBankVerifierPrompt,
   mergeBankVerifierNotes,
+  mergeVerifierRetry,
   openChoiceFlags,
   parseBankVerifierErrors,
   runBankVerifier,
@@ -188,7 +189,62 @@ test("egyválasztós: a jegyzet sosem késői figyelmeztetés — bank-tételné
   assert.equal(classifyNotes(late)[0].blocking, true);
   const verifier = { notes: [choiceBank, choiceCheck, plain], cleared: [], checked: 3, failedChunks: 0, rejectedPaths: [], unverifiedChoices: [{ path: "experience.quiz[7]", hash: "h7" }] };
   assert.deepEqual(openChoiceFlags(verifier, false).map((f) => f.path), ["experience.quiz[0]", "experience.quiz[7]"]);
-  assert.deepEqual(openChoiceFlags(verifier, true), [],
-    "javító kör jár: a jegyzet blokkolóként megy a csak-bank körbe; az ítélet nélküli tétel nem cleared, újra ellenőrzött");
+  // Review R1(c) (spec „Review-javítás 2026-09-29”): az ítélet nélküli tétel javítható körben is nyitott jelzés.
+  assert.deepEqual(openChoiceFlags(verifier, true).map((f) => f.path), ["experience.quiz[7]"],
+    "javító kör jár: a jegyzet blokkolóként megy a csak-bank körbe; az ítélet nélküli tétel akkor is a kapuhoz megy");
   assert.equal(mergeBankVerifierNotes([], [choiceBank], true)[0].subkind, "contradicts_source");
+});
+
+/* Review-javítás 2026-09-29 (PR #134): R1 fail-open, R2 deduplikáció. */
+
+test("review R1(a): az elbukott darab kulcsos tételei ítélet nélküliként megmaradnak (unverifiedChoices)", async () => {
+  const lesson = twoSectionLesson();
+  const result = await runBankVerifier({ lesson, call: async () => { throw new Error("időtúllépés"); } });
+  assert.equal(result.failedChunks, 2);
+  const e = lesson.experience!;
+  const keyed = [...e.quiz.map((_, i) => `experience.quiz[${i}]`), ...e.methods.flatMap((m, i) => (m.options ? [`experience.methods[${i}]`] : []))].sort();
+  assert.deepEqual(result.unverifiedChoices.map((u) => u.path).sort(), keyed);
+  assert.equal(result.unverifiedChoices.some((u) => u.path.startsWith("experience.tasks")), false, "nyitott feladat nem egyválasztós");
+  assert.deepEqual(openChoiceFlags(result, true).map((f) => f.path).sort(), keyed, "javítható körben is kapu-jelzés");
+});
+
+test("review R1(b): onlyPaths — csak a kért útvonalak mennek a modellhez", async () => {
+  const lesson = twoSectionLesson();
+  const prompts: string[] = [];
+  const result = await runBankVerifier({ lesson, onlyPaths: new Set(["experience.quiz[1]", "experience.quiz[3]"]), call: async (system) => { prompts.push(system); return { errors: [], choices: [] }; } });
+  assert.equal(prompts.length, 2, "a két útvonal két fejezetben van");
+  assert.equal(result.checked, 2);
+  const all = prompts.join("\n");
+  assert.match(all, /"path":"experience\.quiz\[1\]"/);
+  assert.match(all, /"path":"experience\.quiz\[3\]"/);
+  assert.doesNotMatch(all, /"path":"experience\.(quiz\[(0|2|4)\]|tasks|methods)/);
+  assert.deepEqual(bankVerifierChunks(lesson, new Set(), new Set(["experience.quiz[3]"])).flatMap((c) => c.items.map((i) => i.path)), ["experience.quiz[3]"]);
+});
+
+test("review R1(b): az újrafutás eredménye összefésülve — a második kör ítélete felülírja az ítélet nélkülit", () => {
+  const note = (path: string, message: string): RawNote => ({ kind: "source_conflict", subkind: "contradicts_source", blockPath: path, message });
+  const first = { notes: [note("experience.quiz[0]", "első"), note("experience.quiz[2]", "szabad hiba")], cleared: ["a"], checked: 5, failedChunks: 1, rejectedPaths: ["x"],
+    unverifiedChoices: [{ path: "experience.quiz[2]", hash: "h2" }, { path: "experience.quiz[3]", hash: "h3" }] };
+  const retry = { notes: [note("experience.quiz[2]", BANK_VERIFIER_NOTE_PREFIX + SINGLE_CHOICE_NOTE_MARK + "2 helyes opció")], cleared: ["h3"], checked: 2, failedChunks: 0, rejectedPaths: [], unverifiedChoices: [] };
+  const merged = mergeVerifierRetry(first, retry);
+  assert.deepEqual(merged.notes.map((n) => [n.blockPath, n.message]), [["experience.quiz[0]", "első"], ["experience.quiz[2]", BANK_VERIFIER_NOTE_PREFIX + SINGLE_CHOICE_NOTE_MARK + "2 helyes opció"]]);
+  assert.deepEqual(merged.cleared, ["a", "h3"]);
+  assert.deepEqual(merged.unverifiedChoices, []);
+  assert.equal(merged.failedChunks, 1);
+  assert.deepEqual(merged.rejectedPaths, ["x"]);
+});
+
+test("review R2: a lektor ugyanazon útvonalú (warn) jegyzete nem fedi el az egyválasztós blokkolót", () => {
+  const lektor: RawNote[] = [{ kind: "age", blockPath: "experience.quiz[0]", message: "Kicsit nehéz." }];
+  const choice: RawNote = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz[0]", message: BANK_VERIFIER_NOTE_PREFIX + SINGLE_CHOICE_NOTE_MARK + "4 helyes opció" };
+  for (const blocking of [true, false]) {
+    const merged = mergeBankVerifierNotes(lektor, [choice], blocking);
+    if (blocking) {
+      assert.deepEqual(merged.map((n) => n.message), ["Kicsit nehéz.", choice.message]);
+      assert.equal(classifyNotes(merged).filter((n) => n.blocking).length, 1);
+    }
+  }
+  const check = { ...choice, blockPath: "sections[0].blocks[4]" };
+  const late = mergeBankVerifierNotes([{ ...lektor[0], blockPath: "sections[0].blocks[4]" }], [check], false);
+  assert.equal(classifyNotes(late).filter((n) => n.blocking).length, 1, "check blokknál késői körben is blokkol");
 });

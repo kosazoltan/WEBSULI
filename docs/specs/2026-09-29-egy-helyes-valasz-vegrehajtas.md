@@ -134,3 +134,31 @@ majd SHA szerinti `git stash apply <sha>` + a bejegyzés eldobása.
 ## T7 — Kapuk
 `npx tsc --noEmit`; `npx tsc --noEmit -p tsconfig.test.json`; `npx eslint client/src server --max-warnings 0`;
 `node --import tsx --test tests/*.test.ts`; `npx vite build`. Elvárt: 0 hiba, minden teszt pass.
+
+## Review-javítás 2026-09-29 (PR #134)
+Terv: a spec „Review-javítás 2026-09-29” szakasza. Sorrend: tesztek → bukás a mostani kódon → kód → kapuk.
+- **R1** `server/studio/bank-verifier.ts`: `bankVerifierChunks(lesson, cleared, onlyPaths?)` és
+  `runBankVerifier({ …, onlyPaths? })` szűrő; a `catch` ágban a darab kulcsos tételei `unverifiedChoices`-ba;
+  `openChoiceFlags`: az `unverifiedChoices` mindig jelzés, a jegyzet-rész csak `!blocking`; új
+  `mergeVerifierRetry(first, retry)`. `server/studio/step-runner.ts` `startBankVerifier`: ha van ítélet nélküli tétel,
+  egy azonnali újrafutás `onlyPaths`-szel, az eredmény összefésülve.
+  Teszt (`tests/bank-verifier.test.ts`): elbukott darab → kulcsos tételei `unverifiedChoices`; `onlyPaths` csak a kért
+  útvonalakat küldi; `openChoiceFlags(…, true)` az ítélet nélkülit visszaadja; `mergeVerifierRetry`.
+  Teszt (`tests/lesson-pipeline-runner.test.ts`): javítható körben az első bank-ellenőr válasz ítélet nélküli → második
+  hívás csak az érintett útvonalakkal; ha az is üres → `choiceFlags`, a kapu nem publikál.
+- **R2** `mergeBankVerifierNotes`: az egyválasztós jegyzet a `taken` szűrőn átmegy. Teszt: lektor-warn ugyanazon az
+  útvonalon + egyválasztós jegyzet → mindkettő megmarad, a blokkoló blokkol.
+- **R3** `shared/single-choice-check.ts` `divisibilityProblems`: tagadás = `nem` közvetlenül az állítás előtt
+  (`nem [N-rag] oszthat…`); `ha` feltétel → hallgat. Teszt (`tests/single-choice-check.test.ts`): „Melyik szám
+  osztható 3-mal? Nem kell indokolni.” 12/14/16/20 kulcs 0 → `[]`; „Melyik szám NEM 3-mal osztható?” helyes kulccsal
+  `[]`, rossz kulccsal hiba; a meglévő „Melyik szám NEM osztható 3-mal?” és 234/567/891/648 eset változatlan.
+- **R4** `step-runner.ts`: `LEKTOR_REVIEW_VERSION = "skill-7.4-review-2"` a két `reviewInputHash` írásnál és a kapu
+  elvárt hashénél; a lektor lépés gyorsítótár-hashében is. Teszt: `review-1`-es bizonyítékkal a kapu nem publikál
+  (a mostani kódon publikál → bukik).
+- **Meglévő tesztek:** a `makeDeps` stub-modell eddig a bank-ellenőrnek is a kanonikus választ adta; R1(c) szerint az
+  ítélet nélküli tétel mindig kapu-jelzés, ezért a stub a bank-ellenőr hívására a tárolt lecke kulcsából helyes
+  `choices` ítéletet ad (a helyes modell viselkedése). Az állítások nem változnak. A PR saját tesztjében
+  (`bank-verifier.test.ts` „…sosem késői figyelmeztetés…”) az `openChoiceFlags(…, true)` elvárt értéke `[]` →
+  `["experience.quiz[7]"]` (R1(c) spec-változás: az ítélet nélküli tétel javítható körben is kapu-jelzés).
+- Kapuk: `npx tsc --noEmit`; `npx tsc --noEmit -p tsconfig.test.json`; `npm run lint`;
+  `node --import tsx --test tests/*.test.ts`; `npm run build`.

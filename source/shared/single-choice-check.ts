@@ -73,7 +73,7 @@ function divisibilityProblems(item: SingleChoiceItem): string[] {
   if ((p.match(/oszthat/g) ?? []).length !== 1) return [];
   if (!/(?<!\p{L})melyik(?!\p{L})|válaszd ki|jelöld|karikázd/u.test(p)) return [];
   // További feltétel vagy más kérdésfajta → nem biztosan kiszámolható (hallgat).
-  if (/(?<![\p{L}\d])(?:hány|mennyi|és|de|vagy|valamint|illetve|páros|páratlan|prím\p{L}*|négyzetszám|maradék\p{L}*|között)(?![\p{L}\d])|(?<!\p{L})leg\p{L}+|jegy/u.test(p)) return [];
+  if (/(?<![\p{L}\d])(?:hány|mennyi|ha|és|de|vagy|valamint|illetve|páros|páratlan|prím\p{L}*|négyzetszám|maradék\p{L}*|között)(?![\p{L}\d])|(?<!\p{L})leg\p{L}+|jegy/u.test(p)) return [];
   const m = p.match(/(\d+)\s*-\s*\p{L}{2,4}\s+(?:nem\s+)?oszthat|oszthat[óo]k?\s+(\d+)\s*-\s*\p{L}{2,4}(?!\p{L})/u);
   if (!m) return [];
   const divisor = Number(m[1] ?? m[2]);
@@ -82,7 +82,9 @@ function divisibilityProblems(item: SingleChoiceItem): string[] {
   if (numbersInPrompt.some((n) => Number(n) !== divisor)) return [];
   const values = item.options.map(integerOf);
   if (values.some((v) => v === null)) return [];
-  const negated = /(?<!\p{L})nem(?!\p{L})/u.test(p);
+  // Review R3 (2026-09-29): a tagadás csak az állításhoz kötve érvényes („nem osztható”, „NEM 3-mal osztható”) —
+  // egy szabad „Nem kell indokolni.” mondat nem fordítja meg a kérdést.
+  const negated = /(?<!\p{L})nem\s+(?:\d+\s*-\s*\p{L}{2,4}\s+)?oszthat/u.test(p);
   const satisfying = values.flatMap((v, i) => ((v! % divisor === 0) !== negated ? [i] : []));
   const suffix = (m[0].match(/-\s*(\p{L}{2,4})/u) ?? [])[1] ?? "";
   return exactlyOne(item, satisfying, `${negated ? "NEM osztható" : "osztható"} ${divisor}-${suffix}`);

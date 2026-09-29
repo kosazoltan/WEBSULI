@@ -55,7 +55,7 @@ import { ensureSectionVisuals } from "./section-visuals";
 import { applyVisualPatch } from "./visual-patch";
 import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
 import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolutions, sourceHashOf, type BlindSolutions } from "./blind-solver";
-import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag } from "./bank-verifier";
+import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, mergeVerifierRetry, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag } from "./bank-verifier";
 import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc } from "../../shared/lesson-arc";
@@ -94,6 +94,12 @@ import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
  */
 
 export const PIPELINE_PROMPT_VERSION = "ls-2c-fusion-7.4-6-direct";
+/**
+ * A lektor-bizonyíték (reviewInputHash) és a lektor-lépés gyorsítótárának verziója. Review R4 (2026-09-29,
+ * egy-helyes-valasz): review-1 → review-2, mert a review-1 bizonyíték az opciónkénti egyválasztós ellenőrzés nélkül
+ * készült — a mentett lektor-lépés újrafut, a régi bizonyítékkal a kapu nem publikál.
+ */
+export const LEKTOR_REVIEW_VERSION = "skill-7.4-review-2";
 
 export const NO_OPENROUTER_KEY_MESSAGE =
   "A modell saját API-kulcsa nincs beállítva — a modell-lépés nem indítható el. " +
@@ -408,13 +414,20 @@ function startBankVerifier(
   const lesson = job.output?.lesson as Lesson | undefined;
   if (!lesson?.experience || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
   const cleared = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
-  return runBankVerifier({
-    lesson, blind, cleared,
+  const run = (onlyPaths?: ReadonlySet<string>) => runBankVerifier({
+    lesson, blind, cleared, onlyPaths,
     call: async (system) => (await callStepModel(providerFactory(BANK_VERIFIER_MODEL, "visuals"), {
       step: "lektor", policy: "visuals", model: BANK_VERIFIER_MODEL, system, user: "Válaszolj kizárólag a kért JSON-nal.",
     })).json,
     onChunkError: (sectionIndex, reason) =>
       logger.warn(`[STUDIO] Bank-ellenőr darab elmaradt (${job.id}) ${sectionIndex + 1}. fejezet: ${reason.slice(0, 300)}`),
+  });
+  // Review R1(b): az ítélet nélkül maradt egyválasztós tételek (hiányzó `choices`, elbukott darab) egyszer azonnal
+  // újraellenőrzöttek, CSAK ezek az útvonalak; ami ezután is ítélet nélküli, az kapu-jelzés (openChoiceFlags).
+  return run().then(async (first) => {
+    if (!first.unverifiedChoices.length) return first;
+    logger.warn(`[STUDIO] Bank-ellenőr (${job.id}): ${first.unverifiedChoices.length} egyválasztós tétel ítélet nélkül — egy újraellenőrzés`);
+    return mergeVerifierRetry(first, await run(new Set(first.unverifiedChoices.map((u) => u.path))));
   }).catch(() => undefined);
 }
 
@@ -557,7 +570,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       return { ok: true, next: { step: job.step, round: job.round }, cached: true };
   }
 
-  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, { input, system, ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}) }, job.round);
+  const hash = computeStepHash(job.step, PIPELINE_PROMPT_VERSION, { input, system, ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}),
+    // Review R4: a telepítés előtt `ok`-ként mentett lektor-lépés nem használható újra az új ellenőrzés nélkül.
+    ...(job.step === "lektor" ? { review: LEKTOR_REVIEW_VERSION } : {}) }, job.round);
 
   // Idempotency: this exact input was already paid for and its output is stored.
   if (job.status === "ok" && job.inputHash === hash && job.output !== null) {
@@ -984,7 +999,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             ...job.output,
             report: parsed.data,
             reportRound: job.round,
-            reviewInputHash: computeStepHash("lektor", "skill-7.4-review-1", input, job.round),
+            reviewInputHash: computeStepHash("lektor", LEKTOR_REVIEW_VERSION, input, job.round),
             blockers,
             bankReview: { round: transition.round, feedback },
             bankOnlyRepairRound: transition.round,
@@ -1026,7 +1041,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           ...job.output,
           report: parsed.data,
           reportRound: job.round,
-          reviewInputHash: computeStepHash("lektor", "skill-7.4-review-1", input, job.round),
+          reviewInputHash: computeStepHash("lektor", LEKTOR_REVIEW_VERSION, input, job.round),
           blockers,
           ...(carriedNotes !== undefined ? { qualityNotes: carriedNotes } : {}),
         }),
@@ -1185,7 +1200,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
     // hasht → minden 2. körös, blokkolómentes lecke a kapun halt meg. A kapu UGYANAZT a
     // bemenetet építi, mint a lektor lépés.
     const gatePriorBlockers = job.round > 0 ? await store.loadBlockerNotes(job.id, job.round - 1) : [];
-    const expectedReviewHash = computeStepHash("lektor", "skill-7.4-review-1", {
+    const expectedReviewHash = computeStepHash("lektor", LEKTOR_REVIEW_VERSION, {
       lesson: rawLesson, map: mapInputOf(map), concepts: map.concepts,
       ...(gatePriorBlockers.length ? { previousBlockers: gatePriorBlockers } : {}),
     }, job.round);

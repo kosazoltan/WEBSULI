@@ -53,10 +53,14 @@ function choiceKeyOf(raw: Record<string, unknown>): ChoiceKey | undefined {
 
 const isExperiencePath = (path: string | undefined) => /^experience(?:\.|\[|$)/.test(path ?? "");
 
-/** Fejezetenkénti darabok (bank + a lecke check blokkjai); a korábban hibátlannak talált (cleared) tételek kimaradnak. */
-export function bankVerifierChunks(lesson: Lesson, cleared: ReadonlySet<string> = new Set()): BankVerifierChunk[] {
+/**
+ * Fejezetenkénti darabok (bank + a lecke check blokkjai); a korábban hibátlannak talált (cleared) tételek kimaradnak.
+ * Review R1(b): `onlyPaths` esetén csak a megadott útvonalak (az ítélet nélkül maradt tételek újraellenőrzése).
+ */
+export function bankVerifierChunks(lesson: Lesson, cleared: ReadonlySet<string> = new Set(), onlyPaths?: ReadonlySet<string>): BankVerifierChunk[] {
   const bySection = new Map<number, BankVerifierItem[]>();
   const push = (sectionIndex: number, path: string, raw: Record<string, unknown>) => {
+    if (onlyPaths && !onlyPaths.has(path)) return;
     const hash = bankItemHash(raw);
     if (cleared.has(hash)) return;
     const key = choiceKeyOf(raw);
@@ -156,11 +160,13 @@ export async function runBankVerifier(args: {
   lesson: Lesson;
   blind?: BlindSolutions;
   cleared?: ReadonlySet<string>;
+  /** Review R1(b): csak ezek az útvonalak (újraellenőrzés). */
+  onlyPaths?: ReadonlySet<string>;
   call: (system: string) => Promise<unknown>;
   onChunkError?: (sectionIndex: number, reason: string) => void;
   concurrency?: number;
 }): Promise<BankVerifierResult> {
-  const chunks = bankVerifierChunks(args.lesson, args.cleared);
+  const chunks = bankVerifierChunks(args.lesson, args.cleared, args.onlyPaths);
   const result: BankVerifierResult = { notes: [], cleared: [], checked: 0, failedChunks: 0, rejectedPaths: [], unverifiedChoices: [] };
   let next = 0;
   const worker = async () => {
@@ -188,6 +194,8 @@ export async function runBankVerifier(args: {
         }
       } catch (error) {
         result.failedChunks++;
+        // Review R1(a): az elbukott darab egyválasztós tételei ítélet nélküliek — nem tűnhetnek el nyomtalanul.
+        result.unverifiedChoices.push(...chunk.items.filter((i) => i.key).map((i) => ({ path: i.path, hash: i.hash })));
         args.onChunkError?.(chunk.sectionIndex, error instanceof Error ? error.message : String(error));
       }
     }
@@ -204,29 +212,46 @@ export const isSingleChoiceNote = (note: RawNote) => note.message.startsWith(BAN
  * A bank-ellenőr jegyzetei a lektoréi mellé; a lektor által már blokkolt útvonal nem duplikálódik.
  * Egyválasztós jegyzet sosem késői figyelmeztetés: ha csak-bank kör már nem jár, a bank-tételé a kapuhoz megy
  * (`openChoiceFlags` → `output.choiceFlags`), a lecke check blokkjáé blokkoló marad.
+ * Review R2: az egyválasztós jegyzetet a lektor ugyanazon útvonalú (akár warn/info) jegyzete nem fedheti el.
  */
 export function mergeBankVerifierNotes<T extends RawNote>(lektorNotes: T[], verifierNotes: RawNote[], blocking: boolean): Array<T | RawNote> {
   const taken = new Set(lektorNotes.filter((n) => n.blockPath).map((n) => n.blockPath));
-  const extra = verifierNotes.filter((n) => !taken.has(n.blockPath))
+  const extra = verifierNotes.filter((n) => isSingleChoiceNote(n) || !taken.has(n.blockPath))
     .filter((n) => blocking || !isSingleChoiceNote(n) || !isExperiencePath(n.blockPath))
     .map((n) => (blocking || isSingleChoiceNote(n) ? n : { ...n, subkind: BANK_CHECK_LATE_SUBKIND }));
   return [...lektorNotes, ...extra];
 }
 
 /**
- * Döntés 4: a kapunak átadott, nyitott egyválasztós jelzések. Csak ha csak-bank kör már nem jár (`!blocking`, a
- * terv edge case-e: „ismételt hiány → blokkoló jegyzet a round-limitnél”): a bank-tételek egyválasztós jegyzetei és
- * az ítélet nélkül maradt egyválasztós tételek. Javítható körben a jegyzet a csak-bank körbe megy, az ítélet nélküli
- * tétel pedig nem „cleared”, így a következő lektor-kör újra ellenőrzi.
+ * Döntés 4: a kapunak átadott, nyitott egyválasztós jelzések. Ha csak-bank kör már nem jár (`!blocking`): a
+ * bank-tételek egyválasztós jegyzetei (javítható körben ezek blokkolóként a csak-bank körbe mennek).
+ * Review R1(c): az (újraellenőrzés után is) ítélet nélkül maradt egyválasztós tétel MINDIG jelzés — különben
+ * blokkoló nélküli körben ellenőrizetlenül a kapura jutna. A következő lektor-kör a jelzéseket újraszámolja.
  */
 export function openChoiceFlags(result: Pick<BankVerifierResult, "notes" | "unverifiedChoices">, blocking: boolean): ChoiceFlag[] {
   const flags = new Map<string, ChoiceFlag>();
-  if (blocking) return [];
-  for (const n of result.notes) {
+  if (!blocking) for (const n of result.notes) {
     if (isSingleChoiceNote(n) && isExperiencePath(n.blockPath)) flags.set(n.blockPath!, { path: n.blockPath!, message: n.message });
   }
   for (const u of result.unverifiedChoices) {
     if (!flags.has(u.path)) flags.set(u.path, { path: u.path, message: `${BANK_VERIFIER_NOTE_PREFIX}${SINGLE_CHOICE_NOTE_MARK}nincs független opciónkénti ítélet — nem igazolt, hogy pontosan egy opció helyes.` });
   }
   return [...flags.values()];
+}
+
+/**
+ * Review R1(b): az ítélet nélküli tételek azonnali újraellenőrzésének összefésülése. Az újraellenőrzött útvonalak
+ * jegyzeteit a második kör adja; a „cleared” lista bővül; ítélet nélküli csak az marad, amit a második kör sem ítélt meg.
+ */
+export function mergeVerifierRetry(first: BankVerifierResult, retry: BankVerifierResult): BankVerifierResult {
+  const retried = new Set(first.unverifiedChoices.map((u) => u.path));
+  return {
+    notes: [...first.notes.filter((n) => !retried.has(n.blockPath ?? "")), ...retry.notes]
+      .sort((a, b) => (a.blockPath ?? "").localeCompare(b.blockPath ?? "")),
+    cleared: [...first.cleared, ...retry.cleared],
+    checked: first.checked,
+    failedChunks: first.failedChunks,
+    rejectedPaths: [...first.rejectedPaths, ...retry.rejectedPaths],
+    unverifiedChoices: retry.unverifiedChoices,
+  };
 }

@@ -70,3 +70,21 @@ a gyerekhez.
 - **E4** A kapu SHALL NOT publikálni leckét, amelyben megoldatlan egyválasztós hiba maradt (teszt).
 - **E5** A hibás régi játéktétel SHALL NOT jutni játékba (`isPlayableQuestion` teszt).
 - **E6** Kapuk zöldek; az új tesztek a javítás előtti kódon buknak; élő próbagyártás `done`.
+
+## Review-javítás 2026-09-29 (PR #134, 4 ellenőrzött lelet)
+- **R1 (P1, fail-open):** javítható körben (`bankRepairPossible`) az ítélet nélküli egyválasztós tétel (a modell nem ad
+  `choices`-t, vagy a darab elbukik/időtúllépés) sehol nem maradt nyitva, és blokkoló nélkül a job a kapura ment →
+  nem determinisztikus több-helyes tétel publikálható volt. **Döntés:** (a) az elbukott darab kulcsos tételei is
+  `unverifiedChoices`; (b) a lektor-lépésben ilyenkor a bank-ellenőr egyszer azonnal újrafut CSAK ezekre az
+  útvonalakra (`onlyPaths`); (c) ami ezután is ítélet nélkül marad, az MINDIG `choiceFlags` (a `blocking`-tól
+  függetlenül) → a kapu fail-closed kezeli. A következő lektor-kör a jelzéseket újraszámolja.
+- **R2 (deduplikáció):** a lektor bármely (akár warn/info) jegyzete ugyanazon az útvonalon elfedte az egyválasztós
+  blokkolót. **Döntés:** az egyválasztós jegyzet a deduplikáció miatt soha nem esik ki.
+- **R3 (hamis negáció):** a `nem` a prompt bármely pontján tagadásnak számított („Melyik szám osztható 3-mal? Nem kell
+  indokolni.” → hamis hiba). **Döntés:** a tagadás csak az állításhoz kötve érvényes: „nem osztható”, „NEM 3-mal
+  osztható”; feltételes mellékmondat („ha …”) esetén az őr hallgat.
+- **R4 (P2, újrahasználat):** a telepítéskor már `ok`-ként mentett lektor-lépés az új ellenőrzés nélkül
+  újrahasználódott. **Döntés:** a lektor-bizonyíték verziója `skill-7.4-review-1` → `skill-7.4-review-2` (egy
+  konstans, mindhárom helyen), és ez a lektor-lépés gyorsítótár-hashébe is bekerül, így a mentett lektor-lépés
+  újrafut; a már kapura lépett, régi bizonyítékú job a kapun nem publikál (fail-closed).
+- **Elfogadás:** R1–R4 mindegyikére új teszt, amely a javítás előtti kódon bukik; meglévő teszt nem gyengül.

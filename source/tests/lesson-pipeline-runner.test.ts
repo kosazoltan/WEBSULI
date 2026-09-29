@@ -503,6 +503,13 @@ function makeDeps(cannedResponse: string) {
     model,
     chat: async (messages: AIMessage[]) => {
       calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
+      // Review R1(c) (spec „Review-javítás 2026-09-29”): az ítélet nélküli egyválasztós tétel mindig kapu-jelzés, ezért
+      // a bank-ellenőr hívására a stub a helyes modell viselkedését adja: a lektorált lecke kulcsa szerinti ítéletet.
+      if ((messages[0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) {
+        const reviewed = [...store.jobs.values()].find((j) => j.step === "lektor" && (j.output?.lesson as Lesson | undefined)?.experience);
+        const choices = reviewed ? keyedChoices(reviewed.output!.lesson as Lesson) : [];
+        return { content: JSON.stringify({ errors: [], choices }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      }
       return { content: cannedResponse, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     },
     isAvailable: async () => true,
@@ -1728,6 +1735,7 @@ function keyedChoices(lesson: Lesson, override: Record<string, boolean[]> = {}) 
   const items: Array<[string, { options?: string[]; correctIndex?: number }]> = [
     ...e.quiz.map((q, i): [string, typeof q] => [`experience.quiz[${i}]`, q]),
     ...e.methods.map((m, i): [string, typeof m] => [`experience.methods[${i}]`, m]),
+    ...lesson.sections.flatMap((s, i) => s.blocks.flatMap((b, j): Array<[string, { options?: string[]; correctIndex?: number }]> => (b.kind === "check" ? [[`sections[${i}].blocks[${j}]`, b]] : []))),
   ];
   return items.filter(([, it]) => Array.isArray(it.options) && Number.isInteger(it.correctIndex))
     .map(([path, it]) => ({ path, truths: override[path] ?? it.options!.map((_, k) => k === it.correctIndex) }));
@@ -1875,6 +1883,73 @@ test("spec 2026-09-29 (E4): a lecke check blokkjában maradt determinisztikus eg
   assert.equal(gated.ok, false);
   assert.equal(log.length, 0);
   assert.match(deps.store.jobs.get("gate-chk")!.error ?? "", /Egyválasztós hiba maradt a leckében.*sections\[0\]\.blocks\[4\].*4 opció osztható 9-cel/);
+});
+
+/* Review-javítás 2026-09-29 (PR #134; spec „Review-javítás 2026-09-29”): R1 fail-open, R4 régi lektor-bizonyíték. */
+function withVerifierReplies(deps: Awaited<ReturnType<typeof bankVerifierSetup>>["deps"], lesson: Lesson, replies: Array<"none" | "keyed">) {
+  const systems: string[] = [];
+  const inner = deps.providerFactory;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      const system = args[0][0]?.content ?? "";
+      if (!system.includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
+      const reply = replies[Math.min(systems.length, replies.length - 1)];
+      systems.push(system);
+      return { content: JSON.stringify({ errors: [], choices: reply === "keyed" ? keyedChoices(lesson) : [] }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    } } as IAIProvider;
+  };
+  return { systems, deps: { ...deps, providerFactory } };
+}
+
+test("review R1(b): ítélet nélküli bank-ellenőr válasz → egy azonnali újraellenőrzés CSAK az érintett útvonalakkal", async () => {
+  const setup = await bankVerifierSetup("r1-retry", {}, []);
+  const { systems, deps } = withVerifierReplies(setup.deps, setup.lesson, ["none", "keyed"]);
+  const result = await runPipelineStep("r1-retry", deps);
+  assert.deepEqual(result.ok && result.next, { step: "gate", round: 0 }, JSON.stringify(result));
+  assert.equal(systems.length, 2, "egy újraellenőrzés");
+  assert.match(systems[1], /"path":"experience\.quiz\[74\]"/);
+  assert.doesNotMatch(systems[1], /"path":"experience\.tasks\[/, "csak az ítélet nélküli egyválasztós tételek");
+  assert.equal(setup.store.jobs.get("r1-retry")!.output?.choiceFlags, undefined, "a második ítélet lezárta");
+});
+
+test("review R1(c): javítható körben is — ami ítélet nélkül marad, kapu-jelzés; a kapu NEM publikál", async () => {
+  const setup = await bankVerifierSetup("r1-open", {}, []);
+  const { systems, deps } = withVerifierReplies(setup.deps, setup.lesson, ["none"]);
+  const job = setup.store.jobs.get("r1-open")!;
+  job.lessonId = "lesson-r1";
+  setup.store.lessons.set("lesson-r1", { id: "lesson-r1", mapId: "m1", json: setup.lesson });
+  const reviewed = await runPipelineStep("r1-open", deps);
+  assert.deepEqual(reviewed.ok && reviewed.next, { step: "gate", round: 0 }, JSON.stringify(reviewed));
+  assert.equal(systems.length, 2);
+  const e = setup.lesson.experience!;
+  const keyed = e.quiz.length + e.methods.filter((m) => m.options).length;
+  assert.equal((job.output?.choiceFlags as unknown[] | undefined)?.length, keyed, "minden ítélet nélküli egyválasztós tétel nyitott");
+  job.step = "gate"; job.status = "running";
+  const log = published(setup.store);
+  const gated = await runPipelineStep("r1-open", deps);
+  assert.equal(gated.ok, false);
+  assert.equal(log.length, 0);
+  assert.match(job.error ?? "", /Egyválasztós hiba maradt a bankban/);
+});
+
+test("review R4: telepítés előtti (skill-7.4-review-1) lektor-bizonyítékkal a kapu NEM publikál", async () => {
+  const { deps, store } = await bankVerifierSetup("r4", {}, []);
+  const job = store.jobs.get("r4")!;
+  job.lessonId = "lesson-r4";
+  store.lessons.set("lesson-r4", { id: "lesson-r4", mapId: "m1", json: job.output!.lesson });
+  const reviewed = await runPipelineStep("r4", deps);
+  assert.deepEqual(reviewed.ok && reviewed.next, { step: "gate", round: 0 }, JSON.stringify(reviewed));
+  job.output!.reviewInputHash = computeStepHash("lektor", "skill-7.4-review-1", {
+    lesson: job.output!.lesson, map: { id: MAP_META.id, title: MAP_META.title, subject: MAP_META.subject, classroom: MAP_META.classroom },
+    concepts: [{ localId: "area", examWeight: "core" }],
+  }, 0);
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  const gated = await runPipelineStep("r4", deps);
+  assert.equal(gated.ok, false);
+  assert.equal(log.length, 0);
+  assert.match(job.error ?? "", /aktuális tanításhoz/);
 });
 
 /* Spec 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md, tulajdonosi döntés): a szerző elsődleges

@@ -58,6 +58,15 @@ test("nincs hamis riasztás a nem kiszámolható kérdésekre (történelem, ang
   for (const item of silent) assert.deepEqual(singleChoiceProblems(item), [], item.prompt);
 });
 
+test("review R3: a tagadás az állításhoz kötött — egy szabad „Nem …” mondat nem fordítja meg a kérdést", () => {
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik szám osztható 3-mal? Nem kell indokolni.", options: ["12", "14", "16", "20"], correctIndex: 0 }), []);
+  assert.equal(singleChoiceProblems({ prompt: "Melyik szám osztható 3-mal? Nem kell indokolni.", options: ["12", "15", "16", "20"], correctIndex: 0 }).length, 1, "két osztható opció így is hiba");
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik szám NEM 3-mal osztható?", options: ["315", "472", "813", "126"], correctIndex: 1 }), []);
+  assert.equal(singleChoiceProblems({ prompt: "Melyik szám NEM 3-mal osztható?", options: ["315", "472", "813", "126"], correctIndex: 0 }).length, 1);
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik szám NEM osztható 3-mal?", options: ["315", "472", "813", "126"], correctIndex: 1 }), []);
+  assert.equal(singleChoiceProblems({ prompt: "Melyik szám osztható 9-cel?", options: ["234", "567", "891", "648"], correctIndex: 0 }).length, 1);
+});
+
 test("lessonSingleChoiceProblems: check blokk, kvíz és választós módszer útvonallal", () => {
   const bad = { question: "Melyik szám osztható 9-cel?", options: ["234", "567", "891", "648"], correctIndex: 0 };
   const found = lessonSingleChoiceProblems({
