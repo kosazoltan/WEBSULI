@@ -1128,6 +1128,8 @@ function PlayScreen(props: {
     // Player starts a few km from the funnel; tornado near the map centre.
     tornadoPosRef.current = { x: 0, z: 0, angle: drawRng() * Math.PI * 2, born: 0, alive: true };
     playerRef.current = { x: 0, z: fromKm(3.4), heading: Math.PI, speed: 0, anchored: false };
+    // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
+    camGroundRef.current = Number.NaN;
     windRef.current = initialWind(spec);
     timeLeftRef.current = spec.timeLimit;
     scoreRef.current = 0;
@@ -1587,6 +1589,8 @@ function PlayScreen(props: {
     rngRef.current.next = (props.level * 2654435761 + Math.floor(Math.random() * 9973)) >>> 0;
     tornadoPosRef.current = { x: 0, z: 0, angle: drawRng() * Math.PI * 2, born: 0, alive: true };
     playerRef.current = { x: 0, z: fromKm(3.4), heading: Math.PI, speed: 0, anchored: false };
+    // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
+    camGroundRef.current = Number.NaN;
     windRef.current = initialWind(spec);
     timeLeftRef.current = spec.timeLimit;
     scoreRef.current = 0;

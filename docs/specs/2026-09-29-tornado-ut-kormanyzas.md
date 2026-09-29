@@ -215,3 +215,8 @@ lépésekkel fut a fizika.
   8,4 → 13,5 egység (az út 18 széles) — kereszteződésben kicsit korábban kell kormányozni.
 - A HUD „MAX” felirata a szél maximuma, nem sebesség — félreérthető (nem-cél, külön jelzés).
 - Valódi telefonon a fps és az érintés-mintavétel nem mért.
+
+## Review-kör (PR #140)
+- **A kamera talajreferenciája újraindításkor (Copilot + Codex P2): javítva.** Mindkét játékos-teleportnál
+  (`TornadoHunter200.tsx`: szintindítás, „Újra”) `camGroundRef.current = Number.NaN`, így a `followHeight` a következő
+  képkockán azonnal az új talajra áll. Teszt: `tornado-camera-reset.test.ts`, a javítás előtt bukott.
