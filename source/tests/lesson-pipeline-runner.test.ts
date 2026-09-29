@@ -2153,3 +2153,37 @@ test("spec kapu-proba (E2): elfogyott szerzői keretnél a kapu célzott javít�
   assert.equal(outcome?.ok, false, `nincs szerzői kör kerett nélkül: ${JSON.stringify(outcome)}`);
   assert.match(deps.store.jobs.get("gate-budget")!.error ?? "", /tanítása hiányos \(a célzott javításhoz nincs több lépéskeret\)/);
 });
+
+
+test("spec kapu-proba (review P1): az AKTÍV jutalomküszöb dönt — 1-es küszöbnél az egykérdéses Próba elérhető, nem kapcsol ki", async () => {
+  const { deps } = await gateAtLimitSetup("proba-policy", (l) => {
+    l.sections[0].probaEnabled = true;
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, oneAreaCheck);
+  });
+  const { DEFAULT_REWARD_POLICY } = await import("../shared/reward-policy");
+  const policyDeps = { ...deps, rewardPolicy: async () => ({ ...DEFAULT_REWARD_POLICY, minCorrectForCoupon: 1 }) };
+  const log = published(deps.store);
+  const gated = await runPipelineStep("proba-policy", policyDeps);
+  assert.ok(gated.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  assert.equal((deps.store.lessons.get("lesson-proba-policy")!.json as Lesson).sections[0].probaEnabled, true, "elérhető Próba marad");
+  assert.equal(deps.store.jobs.get("proba-policy")!.output?.probaDisabled, undefined);
+});
+
+test("spec kapu-proba (review P2): a kapu nem írja felül a job lektorált leckéjét — újrafuttatva ugyanazt adja", async () => {
+  const { deps, lesson } = await gateAtLimitSetup("proba-rerun", (l) => {
+    l.sections[0].probaEnabled = true;
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, oneAreaCheck);
+  });
+  const original = structuredClone(lesson);
+  const log = published(deps.store);
+  assert.ok((await runPipelineStep("proba-rerun", deps)).ok);
+  const job = deps.store.jobs.get("proba-rerun")!;
+  assert.deepEqual(job.output?.lesson, original, "a job leckéje a lektorált eredeti marad");
+  // Megszakadt léptetés után a kapu újrafut: ugyanaz az eredmény, a lektor-bizonyíték érvényes marad.
+  job.step = "gate"; job.status = "running";
+  const again = await runPipelineStep("proba-rerun", deps);
+  assert.ok(again.ok, `újrafuttatható: ${JSON.stringify(again)}`);
+  assert.equal(log.length, 2);
+  assert.equal((deps.store.lessons.get("lesson-proba-rerun")!.json as Lesson).sections[0].probaEnabled, false);
+});

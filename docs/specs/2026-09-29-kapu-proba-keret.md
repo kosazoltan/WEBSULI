@@ -30,3 +30,14 @@
 - **E1** A limiten, egyetlen `proba_unreachable` lelettel a kapu SHALL NOT szerzői kört kérni; SHALL publikálni, a szakasz `probaEnabled: false`-szal (teszt; a régi kódon szerzői kör).
 - **E2** Elfogyott szerzői kerettel a kapu SHALL tiszta hibával megállni, kivétel nélkül (teszt; a régi kódon `next: author`).
 - **E3** Kapuk zöldek; élő újramérés ugyanazzal a témával: `done`, publikált lecke.
+
+## Review-kör (PR #141)
+- **P1 (aktív jutalomküszöb): javítva.** A Próba-küszöb deploy nélkül hangolható (`reward_policy`), a kapu eddig az
+  alapértelmezett 5-tel számolt; a meglévő `checkLessonArc` hívás sem kapta meg az aktív küszöböt. Új, injektálható
+  `PipelineDeps.rewardPolicy`: élesben `loadRewardPolicy()`, injektált tárral `DEFAULT_REWARD_POLICY`. A kikapcsolás
+  és az ív-mérés is ezt kapja. Teszt: 1-es küszöbnél az egykérdéses Próba nem kapcsol ki.
+- **P2 (újrafuttathatóság): javítva, a #134/#139-es kivételre is.** A kapu nem írja felül a `job.output.lesson`-t.
+  A lektorált eredeti marad, a kivétel és a kikapcsolás csak metaadat (`choiceGate`, `probaDisabled`), a módosított
+  lecke a `lessons` táblába és a publikációba megy. Így a megszakadt léptetés utáni újrafutás ugyanabból számol, és
+  a lektor-bizonyíték hash-e érvényes marad. A régi viselkedés az index-alapú kivételnél újrafuttatáskor rossz tételt
+  is kivehetett volna. Teszt: újrafuttatva ugyanaz, a job leckéje az eredeti.
