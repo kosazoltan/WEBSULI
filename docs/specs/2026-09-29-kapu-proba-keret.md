@@ -41,3 +41,18 @@
   lecke a `lessons` táblába és a publikációba megy. Így a megszakadt léptetés utáni újrafutás ugyanabból számol, és
   a lektor-bizonyíték hash-e érvényes marad. A régi viselkedés az index-alapú kivételnél újrafuttatáskor rossz tételt
   is kivehetett volna. Teszt: újrafuttatva ugyanaz, a job leckéje az eredeti.
+
+## Utómérés (élő job 9ef52e4f, 2026-09-29 este)
+A #141 a kikapcsolást MINDEN kapu-futáson alkalmazta. Élesben mind a 10 szakasz 1 kérdéssel és bekapcsolt Próbával
+jött, és mind kikapcsolt. A limit ELŐTT ez visszalépés: korábban a kapu→szerző javítókör pótolta a kérdéseket, így
+a gyerek jutalmazható Próbát kapott. **Javítás:** a determinisztikus kikapcsolás csak `round >= MAX_AUTHOR_ROUNDS`
+esetén fut; előtte a meglévő javítókör. Teszt: „utómérés … a limit ELŐTT … nem kapcsol ki”, a javítás előtt bukott;
+a limitkori E1 teszt változatlan.
+
+## Review-kör (PR #143)
+- **Végrehajtási fájl (Copilot + Codex P1): pótolva.** A kódot megelőző, AI-olvasható végrehajtás bekerült a
+  „Utómérés és review (#143)” szakaszba.
+- **A limit előtt elfogyott szerzői keret (Codex P2): javítva.** A kapu elején mért `repairBudget` alapján a
+  „nincs több szerzői kör” állapot (`round >= MAX` VAGY elfogyott keret) kapcsolja ki az elérhetetlen Próbát. A limit
+  előtti kapu→szerző átmenet keret nélkül tiszta hibával áll meg, nem „Váratlan hibával”. Két új teszt, a javítás
+  előtt buktak.
