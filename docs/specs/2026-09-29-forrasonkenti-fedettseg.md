@@ -39,3 +39,9 @@ A kivonatoló modell, a prompt-szerződés, a témafókusz és a kapuk változat
 - **E4** Kapuk zöldek; élő újramérés a kombinált forrással: a füzetlap fogalmai (Babilon városa, társadalmi rétegek, Ázsia/Közel-Kelet) a térképen vannak.
 - A kivonatolás cache-kulcsa (`EXTRACTION_VERSION`) `source-ledger-7-file-coverage`-re emelkedik, így ugyanazok a
   forrásfájlok nem a régi, hiányos térképet kapják vissza.
+
+## Review-kör (PR #147)
+- **Korlátlan fájlonkénti hívás (Copilot): javítva.** Kivonatolásonként legfeljebb `MAX_PER_FILE_COVERAGE` = 6 célzott
+  hívás; a kép és a rövid forrás kerül előre (azt szorítja ki a hosszú webes szöveg). Teszt: 12 fájlból 6 hívás, a kép az első.
+- **Az üres célzott kör megfigyelése (Copilot + Codex P2): javítva.** Ha lefutott célzott kör, a `coverage` megfigyelés
+  üres eredménnyel is rögzül. Őrteszt: `run-extraction-coverage-finding.test.ts`. Mindkét teszt a javítás előtt bukott.

@@ -231,12 +231,20 @@ export async function completeSourceCoverage(
   });
   let all = [...concepts, ...adopt(await audit(concepts), files, "coverage")];
   if (!perFile) return all;
-  for (const file of files) {
-    if (all.some(c => c.sourceRef.file === file.name)) continue;
+  // Review #147: bounded fan-out — at most MAX_PER_FILE_COVERAGE paid calls, images and short sources first (a short
+  // notebook is the one a long web text crowds out).
+  const uncovered = files
+    .filter(file => !all.some(c => c.sourceRef.file === file.name))
+    .sort((a, b) => Number(b.kind === "image") - Number(a.kind === "image") || a.content.length - b.content.length)
+    .slice(0, MAX_PER_FILE_COVERAGE);
+  for (const file of uncovered) {
     all = [...all, ...adopt(await perFile(file, all), [file], "file-coverage")];
   }
   return all;
 }
+
+/** Most targeted per-file coverage passes per extraction (review #147: no unbounded paid fan-out). */
+export const MAX_PER_FILE_COVERAGE = 6;
 
 export async function extractKnowledgeMap(
   input: { files: ExtractorFile[]; scope: ExtractorScope },

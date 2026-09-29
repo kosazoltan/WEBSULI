@@ -47,3 +47,19 @@ test("a célzott pótlás üres eredménye nem állítja meg a futást", async (
   const result = await completeSourceCoverage([webConcept], twoFiles, async () => ({ title: "", concepts: [] }), async () => ({ title: "", concepts: [] }));
   assert.deepEqual(result, [webConcept]);
 });
+
+test("review #147: a célzott pótlás legfeljebb MAX_PER_FILE_COVERAGE fájlra fut, a kép és a rövid fájl előnyben", async () => {
+  const { MAX_PER_FILE_COVERAGE } = await import("../server/studio/extractor");
+  const many = [
+    { name: "web.txt", kind: "text" as const, content: "Mezopotámia görög eredetű neve folyóközt jelent." },
+    ...Array.from({ length: 10 }, (_, i) => ({ name: `hosszu-${i}.txt`, kind: "text" as const, content: "x".repeat(1000 + i) })),
+    { name: "fuzet.jpg", kind: "image" as const, content: "Társadalom: élén papkirályok." },
+  ];
+  const calls: string[] = [];
+  await completeSourceCoverage([webConcept], many, async () => ({ title: "", concepts: [] }), async (file) => {
+    calls.push(file.name);
+    return { title: "", concepts: [] };
+  });
+  assert.equal(calls.length, MAX_PER_FILE_COVERAGE);
+  assert.equal(calls[0], "fuzet.jpg", "a kép kerül előre");
+});
