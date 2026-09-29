@@ -338,3 +338,23 @@ test("spec 2026-09-25: Studio-átadás — a közzététel visszaolvasásának h
   assert.equal(m.rows.get("studio-unverified")!.state, "error");
   assert.match(m.rows.get("studio-unverified")!.error!, /nem igazolható vissza/);
 });
+test("Codex (PR #128): a Studio-átadás kész jelzését bérletkapus írás menti; elvesztett bérletnél nincs kész jelzés", async () => {
+  const deps = () => ({
+    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
+    start: () => "run-3", read: async () => ({ phase: "done", detail: null, error: null, lessonId: "lesson-3", htmlFileId: "html-3" }), sleep: async () => undefined,
+  });
+  const fenced = memoryStore(); const workflows = memoryWorkflows(); const writes: string[] = [];
+  fenced.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
+  fenced.store.completeStudioLesson = async job => { writes.push(job.state); fenced.rows.set(job.id, structuredClone(job)); };
+  await createResearchJobs(fenced.store, (i, o) => generateWebStudioLesson(i, o, deps()), workflows.store).start("studio-fenced", "owner", input);
+  await until(() => ["done", "error"].includes(workflows.records.get("studio-fenced")?.view.state ?? ""));
+  assert.deepEqual(writes, ["done"]); assert.equal(fenced.rows.get("studio-fenced")!.state, "done");
+  assert.equal(workflows.records.get("studio-fenced")!.view.state, "done");
+
+  const lost = memoryStore(); const lostWorkflows = memoryWorkflows();
+  lost.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
+  lost.store.completeStudioLesson = async () => { throw new Error("Elavult vagy lejárt végrehajtó nem menthet tananyagot."); };
+  await createResearchJobs(lost.store, (i, o) => generateWebStudioLesson(i, o, deps()), lostWorkflows.store).start("studio-lost", "owner", input);
+  await until(() => lostWorkflows.records.get("studio-lost")?.view.state === "error");
+  assert.notEqual(lost.rows.get("studio-lost")!.state, "done");
+});

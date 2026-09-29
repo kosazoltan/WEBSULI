@@ -33,10 +33,14 @@ export function isStudioArtifact(value: unknown): value is StudioResearchArtifac
   return !!value && typeof value === "object" && (value as { kind?: unknown }).kind === "studio";
 }
 
-/** Each downloaded page → one text source; the URL and title head the text so they stay in the map's source. */
-export function webSourcesToOneStepFiles(downloaded: FetchedTeachingSource[]): OneStepRequest["files"] {
+/**
+ * Each downloaded page → one text source; the URL and title head the text so they stay in the map's source.
+ * `sources` lists exactly the pages handed over (Codex, PR #128): a page dropped by the caps is not "used".
+ */
+export function webSourcesToOneStepFiles(downloaded: FetchedTeachingSource[]): { files: OneStepRequest["files"]; sources: WebSource[] } {
   const names = fetchedSourcesToExtractorFiles(downloaded).map(file => file.name);
   const files: OneStepRequest["files"] = [];
+  const sources: WebSource[] = [];
   let budget = MAX_TOTAL_CHARS;
   downloaded.forEach((source, index) => {
     const text = source.text.trim();
@@ -44,8 +48,9 @@ export function webSourcesToOneStepFiles(downloaded: FetchedTeachingSource[]): O
     const content = `Forrás: ${source.url}\nCím: ${source.title}\n\n${text}`.slice(0, Math.min(MAX_SOURCE_CHARS, budget));
     budget -= content.length;
     files.push({ name: names[index], kind: "text", content });
+    sources.push({ url: source.url, title: source.title });
   });
-  return files;
+  return { files, sources };
 }
 
 const PHASE_LABELS: Record<string, string> = {
@@ -68,10 +73,11 @@ export async function generateWebStudioLesson(input: WebResearchChatRequest, obs
   }
   if (!runId) {
     const { downloaded } = await deps.gather(input, observer);
-    sources = downloaded.map(({ url, title }) => ({ url, title }));
-    observer.onEvent({ type: "sources", sources });
     if (!observer.userId) throw new WebResearchFailure("A Studio-gyártáshoz hitelesített készítő szükséges.");
-    const files = webSourcesToOneStepFiles(downloaded);
+    const handed = webSourcesToOneStepFiles(downloaded);
+    const files = handed.files;
+    sources = handed.sources;
+    observer.onEvent({ type: "sources", sources });
     if (!files.length) throw new WebResearchFailure("A letöltött oldalakból nem maradt feldolgozható szöveg. Új keresés szükséges.");
     const title = input.title?.trim();
     const data: OneStepRequest = { ...(title ? { title: title.slice(0, 255) } : {}), instructions: input.message.slice(0, 4000), files };

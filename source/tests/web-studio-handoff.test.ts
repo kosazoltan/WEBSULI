@@ -30,15 +30,18 @@ const running = (phase: string, detail: string | null = null): StudioRunView => 
 const done: StudioRunView = { phase: "done", detail: null, error: null, lessonId: "lesson-1", htmlFileId: "html-1" };
 
 test("a letöltött oldalak URL-fejléccel, mérethatáron belül, szöveges forrásként mennek át; az üres oldal kimarad", () => {
-  const files = webSourcesToOneStepFiles([page(1), page(2, "   "), page(3, "x".repeat(MAX_SOURCE_CHARS * 2))]);
+  const { files, sources } = webSourcesToOneStepFiles([page(1), page(2, "   "), page(3, "x".repeat(MAX_SOURCE_CHARS * 2))]);
   assert.equal(files.length, 2);
+  // Codex (PR #128): only the pages actually handed over count as used sources.
+  assert.deepEqual(sources.map(s => s.url), [page(1).url, page(3).url]);
   assert.ok(files.every(f => f.kind === "text"));
   assert.match(files[0].content, /^Forrás: https:\/\/pelda\.hu\/egervar\/1\nCím: Egervár 1\n\nEgervár ostroma 1\./);
   assert.equal(files[1].content.length, MAX_SOURCE_CHARS);
   assert.equal(new Set(files.map(f => f.name)).size, files.length);
   const many = webSourcesToOneStepFiles(Array.from({ length: 8 }, (_, i) => page(i, "y".repeat(MAX_SOURCE_CHARS))));
-  assert.ok(many.reduce((sum, f) => sum + f.content.length, 0) <= MAX_TOTAL_CHARS);
-  assert.ok(many.length < 8, "az összkeret a további oldalakat levágja");
+  assert.ok(many.files.reduce((sum, f) => sum + f.content.length, 0) <= MAX_TOTAL_CHARS);
+  assert.ok(many.files.length < 8, "az összkeret a további oldalakat levágja");
+  assert.equal(many.sources.length, many.files.length, "a levágott oldal nem felhasznált forrás");
 });
 
 test("új futás: a tanár kérése és a források a Studio-gyártáshoz kerülnek; a kész lecke az eredmény", async () => {

@@ -32,6 +32,8 @@ export interface ResearchJobStore {
   verifyMaterial?(id: string, userId: string, html: string): Promise<boolean>;
   /** Spec 2026-09-25: the Studio lesson is published and points at this material; its title and grade. */
   readStudioLesson?(htmlFileId: string, lessonId: string): Promise<{ title: string; classroom: number } | null>;
+  /** Codex (PR #128): the `done` write of a Studio hand-off, fenced by the workflow lease like `publish`. */
+  completeStudioLesson?(job: StoredResearchJob): Promise<void>;
 }
 export class ResearchJobConflict extends Error {}
 
@@ -146,7 +148,6 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     job.lessonId = artifact.lessonId;
     job.output = "studio";
     await workflowPhase("publish");
-    await workflowPhase("readback");
     const lesson = store.readStudioLesson ? await store.readStudioLesson(artifact.htmlFileId, artifact.lessonId) : null;
     if (!lesson) throw new WebResearchFailure("A Studio-lecke közzététele nem igazolható vissza.");
     job.title = job.input.title?.trim() || lesson.title;
@@ -155,7 +156,12 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
     job.state = "done";
     job.error = undefined;
     job.stage = "A tananyag elkészült és közzétéve (Studio-lecke).";
-    await store.update(job, "running");
+    // A worker that lost its lease must not mark the job done (the HTML path's publish is fenced the same way).
+    if (store.completeStudioLesson) await store.completeStudioLesson(job);
+    else await store.update(job, "running");
+    await workflowPhase("readback");
+    const saved = await store.read(job.id, job.userId);
+    if (saved?.state !== "done" || saved.materialId !== artifact.htmlFileId) throw new WebResearchFailure("A mentett tananyag visszaolvasása nem igazolta a kész eredményt.");
     return { kind: "material" as const, id: artifact.htmlFileId };
   }
   async function run(job: StoredResearchJob, retry = false, onStarted?: () => void) {
