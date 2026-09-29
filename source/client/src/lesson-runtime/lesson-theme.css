@@ -27,6 +27,10 @@
   --lesson-error: #fb7185;
   background: var(--lesson-bg);
   color: var(--lesson-ink);
+  /* Spec 2026-09-29: derived tokens. Accent-coloured TEXT is mixed toward the ink (which already contrasts
+     with the surface), so it stays readable in every world; the soft tint is for quiet chips. */
+  --lesson-accent-text: color-mix(in srgb, var(--lesson-accent) 62%, var(--lesson-ink));
+  --lesson-accent-soft: color-mix(in srgb, var(--lesson-accent) 14%, var(--lesson-surface));
 }
 
 [data-band="kid"] {
@@ -203,17 +207,28 @@
   box-shadow: var(--lesson-glow);
 }
 
+/* Spec 2026-09-29: a fejezet sorszáma jól látható jelvény (a 28 px-es, 13 px-es kör elveszett a cím mellett). */
 .lesson-section-no {
-  width: 28px;
-  height: 28px;
+  width: 38px;
+  height: 38px;
   flex: none;
-  border-radius: 50%;
+  border-radius: 12px;
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
   background: var(--lesson-accent);
   color: var(--lesson-accent-ink);
   box-shadow: var(--lesson-glow);
+}
+section[id^="section-"] > h2.lesson-heading {
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.lesson-chapter-title {
+  min-width: 0;
 }
 
 .lesson-block {
@@ -302,9 +317,86 @@
   background: var(--lesson-warn-bg);
   color: var(--lesson-warn-ink);
 }
+/* Spec 2026-09-29: az eredmény kiemelt doboz a siker-token PÁRRAL (háttér + tinta). Mérve: a csupasz
+   `color: var(--lesson-ok)` a sötét „arena” világban 1,62:1 volt. A szöveg („Eredmény: …”) változatlan. */
 .lesson-answer {
-  color: var(--lesson-ok);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: max(6px, calc(var(--lesson-radius) - 6px));
+  border-left: 4px solid var(--lesson-ok);
+  background: var(--lesson-ok-bg);
+  color: var(--lesson-ok-bg-ink);
   font-weight: 600;
+  line-height: 1.55;
+}
+.lesson-answer::before {
+  content: "✓";
+  flex: none;
+  width: 1.5em;
+  height: 1.5em;
+  margin-top: 0.02em;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.85em;
+  font-weight: 900;
+  background: var(--lesson-ok);
+  color: var(--lesson-ok-ink);
+}
+
+/* Spec 2026-09-29: a kidolgozott példa lépései számozott körökkel, teljes méretű szöveggel. */
+.lesson-steps {
+  counter-reset: lesson-step;
+  display: grid;
+  gap: 10px;
+  margin: 2px 0;
+  padding: 0;
+  list-style: none;
+}
+.lesson-steps > li {
+  counter-increment: lesson-step;
+  display: grid;
+  grid-template-columns: 1.75em minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  line-height: 1.6;
+}
+.lesson-steps > li::before {
+  content: counter(lesson-step);
+  width: 1.75em;
+  height: 1.75em;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.85em;
+  font-weight: 800;
+  background: var(--lesson-accent);
+  color: var(--lesson-accent-ink);
+}
+
+/* Spec 2026-09-29: egységes ábrakeret minden ábrafajtán (a figure[data-anim] minden rajzolón ott van). */
+[data-band] figure[data-anim] {
+  border-radius: var(--lesson-radius);
+  padding: clamp(14px, 2.4vw, 24px);
+  border: 1px solid var(--lesson-line);
+}
+[data-band] figure[data-anim] > figcaption {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lesson-line);
+  font-size: 0.92em;
+  line-height: 1.5;
+  color: var(--lesson-muted);
+}
+/* Az illusztráció témától független papírja (shared/svg-contrast.ts ILLUSTRATION_PAPER — ehhez mér a kontraszt-őr). */
+.lesson-figure-paper {
+  background: #f8fafc;
+  color: #0f172a;
+  border-radius: max(6px, calc(var(--lesson-radius) - 8px));
+  padding: 6px;
+  box-shadow: inset 0 0 0 1px rgb(15 23 42 / 0.1);
 }
 
 .lesson-recap-cards {
@@ -349,11 +441,11 @@
   min-height: 46px;
 }
 [data-band] .lesson-ghost-btn {
-  color: var(--lesson-accent);
+  color: var(--lesson-accent-text);
 }
 [data-band] .lesson-ghost-btn:hover {
-  background: var(--lesson-surface);
-  color: var(--lesson-accent);
+  background: var(--lesson-accent-soft);
+  color: var(--lesson-accent-text);
 }
 [data-band] .lesson-outline-btn {
   border-color: var(--lesson-accent);
@@ -420,6 +512,21 @@
 }
 [data-band] .bg-gradient-to-r:hover {
   filter: brightness(1.08);
+}
+/* Spec 2026-09-29: the timeline's 12 px event labels and its near-invisible connector (bg-muted). */
+[data-band] figure[data-anim="timeline"] .text-xs {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+[data-band] figure[data-anim="timeline"] .bg-muted {
+  background: var(--lesson-line);
+}
+/* Spec 2026-09-29: the bar chart's average label is text-red-600 (dark:… follows the APP theme, not the
+   lesson's): measured 3.56:1 on the dark teen stage. The lesson's own error token is paired with its surface;
+   every world's error/surface pair is ≥ 4.5:1 (tests/lesson-theme-contrast.test.ts — review #138: the dark
+   worlds' #fb7185 was only 3.9:1 on the arena/dojo surface, now #fda4af). */
+[data-band] figure[data-anim] .text-red-600 {
+  color: var(--lesson-error);
 }
 [data-band] .lesson-anim-stroke {
   stroke: var(--lesson-accent);

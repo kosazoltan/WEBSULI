@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import {
   moonLitPath,
@@ -405,12 +405,14 @@ export function RichNumberLineAnim({ params, caption }: AnimProps) {
  * az nem jelenik meg.
  */
 export function IllustrationAnim({ params, caption }: AnimProps) {
-  const check = sanitizeIllustration(params.svg);
+  // A tisztítás + kontraszt-őr nagy rajznál ~100 ms is lehet: csak az SVG változásakor fut újra.
+  const check = useMemo(() => sanitizeIllustration(params.svg), [params.svg]);
   if (!check.ok) return null;
   return (
     <figure className={FRAME} data-anim="illustration">
+      {/* Spec 2026-09-29: a rajz saját, témától független papírján jelenik meg (a kontraszt-őr ehhez mér). */}
       <div
-        className="mx-auto max-w-lg [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
+        className="lesson-figure-paper mx-auto max-w-lg [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
         aria-label={caption}
         // A tartalom a shared/illustration-svg.ts allowlistjén átment SVG (nincs script, esemény, link, stílus).
         dangerouslySetInnerHTML={{ __html: check.svg }}

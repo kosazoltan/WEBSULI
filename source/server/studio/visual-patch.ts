@@ -29,7 +29,7 @@ export const visualPatchSchema = z.object({
   sections: z.array(z.object({ index: z.number().int().min(0), visuals: z.array(z.unknown()).max(4) })).min(1),
 });
 
-export type VisualPatchResult = { lesson: Lesson; added: number; replaced: number; rejected: string[] };
+export type VisualPatchResult = { lesson: Lesson; added: number; replaced: number; rejected: string[]; notes: string[] };
 
 /** A folt a leckébe illesztve, vagy `null`, ha a válasz nem folt (pl. régi alakú teljes lecke). */
 export function applyVisualPatch(original: Lesson, json: unknown, concepts: ReadonlyArray<MapConcept> = []): VisualPatchResult | null {
@@ -37,6 +37,8 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
   const patch = visualPatchSchema.safeParse(json);
   if (!patch.success) return null;
   const rejected: string[] = [];
+  // Spec 2026-09-29: nem blokkoló jelzések (pl. a kontraszt-őr javította egy illusztráció feliratszínét).
+  const notes: string[] = [];
   let added = 0, replaced = 0;
   // Az illusztráció feliratainak forrása: a lecke látható tanítása (ábrák nélkül).
   const corpus = [original.title, ...original.sections.flatMap((s) => [s.heading, ...s.blocks.filter((b) => b.kind !== "animate").map((b) => JSON.stringify(b))])].join("\n");
@@ -54,6 +56,7 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
       const v = parsed.data;
       const problems = visualParamProblems(v.animKind, v.params);
       let params = v.params;
+      let contrastNote: string | null = null;
       if (v.animKind === "illustration" && !problems.length) {
         // Spec 2026-09-24 (2. szelet): a tisztított SVG kerül tárolásra; minden felirat a lecke szövegéből.
         const check = sanitizeIllustration(v.params.svg);
@@ -61,6 +64,7 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
           const ungrounded = ungroundedLabels(check.labels, corpus);
           if (ungrounded.length) problems.push(`a leckében nem szereplő felirat: ${ungrounded.join(", ").slice(0, 160)}`);
           params = { svg: check.svg };
+          if (check.contrastFixes.length) contrastNote = `${where}: a kontraszt-őr ${check.contrastFixes.length} felirat színét javította (${check.contrastFixes.join(", ").slice(0, 160)}) — kitöltött alakzaton explicit, kontrasztos szövegszín kell`;
         }
       }
       const block = blockSchema.safeParse({ kind: "animate", animKind: v.animKind, params, caption: v.caption, coversConceptIds: v.coversConceptIds });
@@ -79,6 +83,7 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
         }
       }
       if (problems.length || !block.success) { rejected.push(`${where} (${v.animKind}): ${problems.join("; ")}`); continue; }
+      if (contrastNote) notes.push(contrastNote);
       valid.push({ block: block.data, after: Math.min(v.after ?? section.blocks.length - 1, section.blocks.length - 1), replace: v.replace });
     }
     const replacements = new Map(valid.filter((v) => v.replace !== undefined).map((v) => [v.replace!, v.block] as const));
@@ -92,5 +97,5 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
     });
     section.blocks = blocks;
   }
-  return { lesson: { ...original, sections }, added, replaced, rejected };
+  return { lesson: { ...original, sections }, added, replaced, rejected, notes };
 }
