@@ -377,15 +377,86 @@ export function propsInChunk(cx: number, cz: number): WorldProp[] {
       kind = pick < 0.5 ? "tree" : pick < 0.72 ? "bush" : pick < 0.9 ? "fence" : "pole";
     }
 
-    props.push({
+    const prop: WorldProp = {
       kind,
       x,
       z,
       rotation: hash2(i + cx, i - cz, 89) * Math.PI * 2,
       scale: 0.8 + hash2(cx - i, cz + i, 97) * 0.6,
-    });
+    };
+    // Spec 2026-09-29-tornado-ut-kormanyzas D2: the centre test above ignored the prop's size, so a house
+    // centred 6 units off the centreline stood half on the asphalt. Keep the whole footprint clear.
+    clearRoads(prop);
+    if (isWater(prop.x, prop.z) || onBridge(prop.x, prop.z)) continue;
+    props.push(prop);
   }
   return props;
+}
+
+/* ============================ prop footprints ============================ */
+
+/** A prop's footprint edge stays at least this far from every road centreline (the band + a verge). */
+export const PROP_ROAD_CLEARANCE = ROAD_HALF_WIDTH + 1.5;
+
+/** Ground-projected outline in the prop's frame (three.js `rotation.y` convention, like the colliders). */
+export type PropFootprint = { kind: "circle"; r: number } | { kind: "box"; hx: number; hz: number; rotation: number };
+
+/**
+ * Everything of a prop that should stay off the road, not only what the car hits: roofs, the fuel canopy,
+ * tree crowns and the (soft) bush too. Sizes from the meshes in buildMeshes.ts; each collider of
+ * `collidersForProp` lies inside (pinned by tests/tornado-prop-clearance.test.ts).
+ */
+export function propFootprint(p: WorldProp): PropFootprint {
+  const k = p.scale;
+  const box = (hx: number, hz: number): PropFootprint => ({ kind: "box", hx: hx * k, hz: hz * k, rotation: p.rotation });
+  const circle = (r: number): PropFootprint => ({ kind: "circle", r: r * k });
+  switch (p.kind) {
+    case "house":
+      return box(4.4, 4.4); // the roof pyramid (6.2 / √2 ≈ 4.38) covers the 3.5 × 4 walls
+    case "barn":
+      return box(6.3, 8); // the half-cylinder roof covers the 5.5 × 8 body
+    case "fence":
+      return box(4.5, 0.11);
+    case "fuel":
+      return box(7, 4.5); // the canopy covers both posts (±6)
+    case "pole":
+      return box(2.1, 0.28); // the cross-arm
+    case "silo":
+      return circle(2.6);
+    case "watertower":
+      return circle(3.4); // the tank
+    case "tree":
+      return circle(2.6); // the crown
+    case "bush":
+    default:
+      return circle(1.5);
+  }
+}
+
+/** Half-extents of a footprint along the world x and z axes. */
+export function footprintExtent(fp: PropFootprint): { ex: number; ez: number } {
+  if (fp.kind === "circle") return { ex: fp.r, ez: fp.r };
+  const c = Math.abs(Math.cos(fp.rotation));
+  const s = Math.abs(Math.sin(fp.rotation));
+  return { ex: fp.hx * c + fp.hz * s, ez: fp.hx * s + fp.hz * c };
+}
+
+/**
+ * Move a prop away from the nearest road on each axis, on its own side, until its footprint clears
+ * `PROP_ROAD_CLEARANCE`. Road lines lie on chunk edges (−1200 + 300k), so the push always points into the
+ * prop's own chunk. Deterministic: a function of the prop alone.
+ */
+function clearRoads(p: WorldProp): void {
+  const { ex, ez } = footprintExtent(propFootprint(p));
+  p.x = pushOffLine(p.x, ex);
+  p.z = pushOffLine(p.z, ez);
+}
+
+function pushOffLine(v: number, extent: number): number {
+  const line = nearestLine(v);
+  const need = PROP_ROAD_CLEARANCE + extent;
+  if (Math.abs(v - line) >= need) return v;
+  return line + (v >= line ? need : -need);
 }
 
 /** Chunk keys within `radius` world units of a position. */
