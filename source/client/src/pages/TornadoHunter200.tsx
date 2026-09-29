@@ -1579,7 +1579,7 @@ function PlayScreen(props: {
     const playing = (ph === "seeking" || ph === "approach") && !pausedRef.current;
 
     // Always spin the funnel and rain so paused screens still feel alive.
-    animateTornado(tornado, dt, spec.tornadoIntensity);
+    animateTornado(tornado, dt, spec.tornadoIntensity, reducedMotionRef.current ? 0.35 : 1);
 
     if (playing) {
       elapsedRef.current += dt;

@@ -274,7 +274,7 @@ export function setAnchorsVisible(vehicleGroup: THREE.Group, visible: boolean): 
 
 export type TornadoMesh = {
   group: THREE.Group;
-  /** Stacked rings that make the funnel; animated by rotating each ring. */
+  /** Nested funnel shells; each spins at its own rate (`userData.spin`). */
   rings: THREE.Mesh[];
   debris: THREE.Points;
   debrisVelocities: Float32Array;
@@ -282,37 +282,174 @@ export type TornadoMesh = {
   skirt: THREE.Group;
 };
 
+/** Funnel height: it reaches into the storm-cloud base (~137) so the two merge. */
+const FUNNEL_HEIGHT = 146;
+/** World height where the funnel meets the storm cloud (cloud discs start at 150 − 13). */
+const FUNNEL_TOP_WORLD = 152;
+
+/** Uniforms shared by every shell of one funnel, so the sway stays in sync. */
+type FunnelShared = { time: { value: number }; sway: { value: number } };
+
 /**
- * The funnel: a stack of open cones, widest at the top, plus an orbiting debris
- * cloud. Cheap, and it reads instantly as a tornado from any distance — which
- * matters more here than physical accuracy.
+ * Funnel radius at height fraction t (0 = ground, 1 = cloud base): a narrow,
+ * slightly flared foot, a rope-like waist, then the classic trumpet flare.
+ */
+function funnelRadius(t: number): number {
+  return 3.6 + 3.8 * Math.exp(-t * 12) + Math.pow(t, 1.9) * 32;
+}
+
+const FUNNEL_VERTEX = /* glsl */ `
+  uniform float time;
+  uniform float sway;
+  uniform float height;
+  varying vec2 vUv;
+  varying vec3 vNormalV;
+  varying vec3 vViewPos;
+  #include <fog_pars_vertex>
+  void main() {
+    vUv = uv;
+    vec3 p = position;
+    float t = clamp(p.y / height, 0.0, 1.0);
+    // The rope bends: the foot stays planted, the upper body drifts and snakes.
+    float bend = t * t;
+    p.x += (sin(time * 0.55 + t * 2.3) * 7.0 + sin(time * 1.3 + t * 5.0) * 1.6) * bend * sway;
+    p.z += (cos(time * 0.43 + t * 1.9) * 6.0) * bend * sway;
+    vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+    vNormalV = normalize(normalMatrix * normal);
+    vViewPos = -mvPosition.xyz;
+    gl_Position = projectionMatrix * mvPosition;
+    #include <fog_vertex>
+  }
+`;
+
+const FUNNEL_FRAGMENT = /* glsl */ `
+  uniform float time;
+  uniform float spin;
+  uniform float opacity;
+  uniform float bands;
+  uniform vec3 dustColor;
+  uniform vec3 bodyColor;
+  uniform vec3 topColor;
+  uniform vec3 edgeColor;
+  varying vec2 vUv;
+  varying vec3 vNormalV;
+  varying vec3 vViewPos;
+  #include <fog_pars_fragment>
+  void main() {
+    float t = vUv.y;
+    // Swirl bands scroll around the funnel and climb with a twist.
+    float s = vUv.x * bands - t * 3.2 + time * spin;
+    float stripe = 0.5 + 0.5 * sin(s * 6.2831853);
+    float wisp = 0.5 + 0.5 * sin((vUv.x * bands * 2.0 + t * 9.0 - time * spin * 1.7) * 6.2831853 + stripe * 2.0);
+    float density = 0.45 + 0.4 * stripe + 0.25 * wisp;
+    // Smoke reads denser at the silhouette (longer path through it).
+    float facing = abs(dot(normalize(vNormalV), normalize(vViewPos)));
+    float edge = 1.0 - facing;
+    float alpha = opacity * density * (0.55 + 0.7 * pow(edge, 1.3));
+    // Soft foot and a soft top that melts into the storm cloud.
+    alpha *= smoothstep(0.0, 0.035, t) * (1.0 - smoothstep(0.78, 1.0, t));
+    vec3 col = mix(dustColor, bodyColor, smoothstep(0.0, 0.3, t));
+    col = mix(col, topColor, smoothstep(0.45, 1.0, t));
+    // Darker core, lighter dusty edges and bright-ish stripes.
+    col *= 0.6 + 0.4 * stripe;
+    col = mix(col, edgeColor, edge * 0.55);
+    gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }
+`;
+
+function funnelShell(
+  quality: GraphicsQuality,
+  shared: FunnelShared,
+  scale: number,
+  opts: { opacity: number; spin: number; bands: number; core: number },
+): THREE.Mesh {
+  const heightSegments = quality === "low" ? 14 : quality === "medium" ? 22 : 32;
+  const radial = quality === "low" ? 14 : quality === "medium" ? 20 : 28;
+  const points: THREE.Vector2[] = [];
+  for (let i = 0; i <= heightSegments; i++) {
+    const t = i / heightSegments;
+    points.push(new THREE.Vector2(funnelRadius(t) * scale, t * FUNNEL_HEIGHT));
+  }
+  const geometry = new THREE.LatheGeometry(points, radial);
+  const dust = new THREE.Color("#a88b66");
+  const body = new THREE.Color("#5f6878");
+  const top = new THREE.Color("#8994a6");
+  // Inner shells are the dark core, outer ones the light dusty veil.
+  dust.multiplyScalar(opts.core);
+  body.multiplyScalar(opts.core);
+  top.multiplyScalar(opts.core);
+  const material = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true,
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        spin: { value: opts.spin },
+        opacity: { value: opts.opacity },
+        bands: { value: opts.bands },
+        height: { value: FUNNEL_HEIGHT },
+        dustColor: { value: dust },
+        bodyColor: { value: body },
+        topColor: { value: top },
+        edgeColor: { value: new THREE.Color("#e6d8bd") },
+      },
+    ]),
+    vertexShader: FUNNEL_VERTEX,
+    fragmentShader: FUNNEL_FRAGMENT,
+  });
+  // `merge` clones uniforms; re-link the shared clock so every shell sways together.
+  material.uniforms.time = shared.time;
+  material.uniforms.sway = shared.sway;
+  const shell = new THREE.Mesh(geometry, material);
+  shell.userData.spin = opts.spin;
+  shell.frustumCulled = false;
+  return shell;
+}
+
+/**
+ * The funnel: nested, tapered lathe shells with a scrolling swirl shader —
+ * dark core, light dusty veil — that bend like a rope and melt into the storm
+ * cloud, plus an orbiting debris cloud and a dust skirt at the foot.
+ *
+ * Cost: 2 shells on LOW (≈450 triangles each), 4 on HIGH; one draw call each.
  */
 export function buildTornado(quality: GraphicsQuality): TornadoMesh {
   const profile = QUALITY_PROFILES[quality];
   const group = new THREE.Group();
   const rings: THREE.Mesh[] = [];
-  const ringCount = quality === "low" ? 7 : quality === "medium" ? 11 : 15;
+  const shared: FunnelShared = { time: { value: 0 }, sway: { value: 1 } };
+  group.userData.funnel = shared;
 
-  for (let i = 0; i < ringCount; i++) {
-    const t = i / (ringCount - 1);
-    const radius = 2.2 + Math.pow(t, 1.6) * 16;
-    // Dusty tan at the ground (it is lifting the field) → cool slate at the top,
-    // where it merges into the storm cloud.
-    const material = new THREE.MeshLambertMaterial({
-      color: new THREE.Color("#8f7a60").lerp(new THREE.Color("#8d97a8"), Math.pow(t, 0.7)),
-      emissive: new THREE.Color("#2a2d36"),
-      transparent: true,
-      opacity: 0.5 - t * 0.2,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      flatShading: true,
-    });
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.82, 9, 12, 1, true), material);
-    ring.position.y = 4 + i * 8;
-    ring.userData.spin = 2.6 - t * 1.4;
-    group.add(ring);
-    rings.push(ring);
-  }
+  const shells =
+    quality === "low"
+      ? [
+          { scale: 0.62, opacity: 0.85, spin: 0.9, bands: 3, core: 0.62 },
+          { scale: 1.0, opacity: 0.55, spin: 0.55, bands: 4, core: 1.05 },
+        ]
+      : quality === "medium"
+        ? [
+            { scale: 0.5, opacity: 0.9, spin: 1.1, bands: 3, core: 0.55 },
+            { scale: 0.78, opacity: 0.6, spin: 0.75, bands: 4, core: 0.85 },
+            { scale: 1.05, opacity: 0.45, spin: 0.5, bands: 5, core: 1.12 },
+          ]
+        : [
+            { scale: 0.42, opacity: 0.95, spin: 1.25, bands: 3, core: 0.5 },
+            { scale: 0.66, opacity: 0.7, spin: 0.9, bands: 4, core: 0.72 },
+            { scale: 0.88, opacity: 0.5, spin: 0.62, bands: 5, core: 0.95 },
+            { scale: 1.12, opacity: 0.36, spin: 0.42, bands: 6, core: 1.15 },
+          ];
+  shells.forEach((cfg, i) => {
+    const shell = funnelShell(quality, shared, cfg.scale, cfg);
+    // Inner shells first, so the veil is blended over the core.
+    shell.renderOrder = i;
+    group.add(shell);
+    rings.push(shell);
+  });
 
   // Debris orbiting the core.
   const count = profile.funnelParticles;
@@ -320,13 +457,15 @@ export function buildTornado(quality: GraphicsQuality): TornadoMesh {
   const velocities = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const h = Math.random() * 90;
-    const r = 3 + (h / 90) * 16 + Math.random() * 4;
+    // Every third particle belongs to the churning ring at the foot: low, wide, slow to climb.
+    const foot = i % 3 === 0;
+    const h = foot ? Math.random() * 8 : Math.random() * 90;
+    const r = foot ? 16 + Math.random() * 12 : 3 + (h / 90) * 16 + Math.random() * 4;
     positions[i * 3] = Math.cos(angle) * r;
     positions[i * 3 + 1] = h;
     positions[i * 3 + 2] = Math.sin(angle) * r;
     velocities[i * 3] = angle;
-    velocities[i * 3 + 1] = 6 + Math.random() * 22;
+    velocities[i * 3 + 1] = foot ? 1 + Math.random() * 3 : 6 + Math.random() * 22;
     velocities[i * 3 + 2] = r;
   }
   const debrisGeo = new THREE.BufferGeometry();
@@ -334,8 +473,8 @@ export function buildTornado(quality: GraphicsQuality): TornadoMesh {
   const debris = new THREE.Points(
     debrisGeo,
     new THREE.PointsMaterial({
-      color: "#7a6247",
-      size: 1.6,
+      color: "#6e5840",
+      size: 2.4,
       sizeAttenuation: true,
       transparent: true,
       opacity: 0.9,
@@ -371,17 +510,31 @@ export function buildTornado(quality: GraphicsQuality): TornadoMesh {
   return { group, rings, debris, debrisVelocities: velocities, skirt };
 }
 
-/** Spin the funnel one frame. */
-export function animateTornado(mesh: TornadoMesh, dt: number, intensity: number): void {
+/**
+ * Spin the funnel one frame. `motion` < 1 slows the decorative swirl and sway
+ * (reduced motion); the tornado itself still moves with the game.
+ */
+export function animateTornado(mesh: TornadoMesh, dt: number, intensity: number, motion = 1): void {
   const speed = 0.6 + intensity * 0.16;
+  // Whatever the level's size multiplier, the funnel's top ends at the storm
+  // cloud base (world y ≈ 150): small tornadoes get a slim rope, big ones a wedge.
+  const fit = FUNNEL_TOP_WORLD / (FUNNEL_HEIGHT * Math.max(0.1, mesh.group.scale.y));
   for (const ring of mesh.rings) {
-    ring.rotation.y += (ring.userData.spin as number) * dt * speed;
+    ring.rotation.y += (ring.userData.spin as number) * dt * speed * motion;
+    // A karcsú kis tölcsért kissé kiszélesítjük, a nagyot keskenyítjük.
+    const widen = Math.sqrt(fit);
+    ring.scale.set(widen, fit, widen);
+  }
+  const shared = mesh.group.userData.funnel as FunnelShared | undefined;
+  if (shared) {
+    shared.time.value += dt * speed * motion;
+    shared.sway.value = motion < 1 ? 0.3 : 1;
   }
   const attr = mesh.debris.geometry.getAttribute("position") as THREE.BufferAttribute;
   const arr = attr.array as Float32Array;
   const vel = mesh.debrisVelocities;
   for (let i = 0; i < arr.length / 3; i++) {
-    vel[i * 3] = (vel[i * 3]! + dt * (1.4 + intensity * 0.2)) % (Math.PI * 2);
+    vel[i * 3] = (vel[i * 3]! + dt * (1.4 + intensity * 0.2) * motion) % (Math.PI * 2);
     let y = arr[i * 3 + 1]! + vel[i * 3 + 1]! * dt;
     if (y > 92) y = 0;
     const r = vel[i * 3 + 2]! * (0.5 + (y / 92) * 0.9);
@@ -755,15 +908,49 @@ export function buildStormCloud(quality: GraphicsQuality): StormCloud {
     const t = i / Math.max(1, layers - 1);
     // Alul szélesebb, fölfelé keskenyedő üllő-alak, mint a valódi szuperfelhőnél.
     const radius = 150 - t * 55;
-    const material = new THREE.MeshLambertMaterial({
-      color: new THREE.Color().setHSL(0.62, 0.12, 0.30 + t * 0.14),
+    // Lágy, sávos pára a lapos „tányérok” helyett: a korong alja és teteje
+    // elhalványul, így a rétegek egymásba olvadnak.
+    const material = new THREE.ShaderMaterial({
       transparent: true,
-      opacity: 0.55 - t * 0.12,
       depthWrite: false,
       // A lényeg: a köd nem nyelheti el, különben ugyanúgy eltűnne, mint a tölcsér.
       fog: false,
-      flatShading: true,
       side: THREE.DoubleSide,
+      uniforms: {
+        color: { value: new THREE.Color().setHSL(0.62, 0.14, 0.3 + t * 0.16) },
+        opacity: { value: 0.62 - t * 0.12 },
+        seed: { value: i * 1.7 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormalV;
+        varying vec3 vViewPos;
+        void main() {
+          vUv = uv;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vNormalV = normalize(normalMatrix * normal);
+          vViewPos = -mv.xyz;
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 color;
+        uniform float opacity;
+        uniform float seed;
+        varying vec2 vUv;
+        varying vec3 vNormalV;
+        varying vec3 vViewPos;
+        void main() {
+          float band = smoothstep(0.0, 0.45, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y));
+          float lumps = 0.65 + 0.35 * sin(vUv.x * 6.2831853 * 7.0 + seed + sin(vUv.x * 6.2831853 * 3.0 + seed) * 1.5);
+          float edge = 1.0 - abs(dot(normalize(vNormalV), normalize(vViewPos)));
+          float a = opacity * band * lumps * (0.5 + 0.6 * edge);
+          vec3 col = color * (0.85 + 0.3 * vUv.y) * (0.9 + 0.2 * lumps);
+          gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
     });
     const disc = new THREE.Mesh(
       new THREE.CylinderGeometry(radius, radius * 0.86, 26, quality === "low" ? 10 : 16, 1, true),
