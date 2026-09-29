@@ -159,11 +159,17 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
   }
 
   const text = stripJsonFences(response.content ?? "").trim();
+  // Spec 2026-09-29 (PR #131 review, R2): a rejected answer was still paid for. The success path books its
+  // usage in callStepModel; the three rejecting branches below book it here, so a fallback after an invalid
+  // answer does not hide the first call's tokens.
+  const bookRejectedUsage = () => workflowUsage(response.usage);
   if (response.finishReason === "length" || response.finishReason === "max_tokens") {
+    await bookRejectedUsage();
     await workflowValidationFailure("A szolgáltató válasza elérte a hosszkorlátot.");
     throw new StepModelError(input.step, "a válasz elérte a hosszkorlátot; csonka eredmény nem használható");
   }
   if (text.length === 0) {
+    await bookRejectedUsage();
     await workflowValidationFailure("A szolgáltató válasza üres.");
     throw new StepModelError(input.step, "a válasz üres");
   }
@@ -178,6 +184,7 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     // mérés): a puszta hossz nem mondta meg, csonka válaszról vagy a modell hibás sorosításáról
     // van-e szó, és emiatt kétszer kellett szondázni. A nyitó/záró karakter és a hibapozíció
     // szerkezeti tény — ezekből a következő eset magától megkülönböztethető.
+    await bookRejectedUsage();
     await workflowValidationFailure("A válasz nem érvényes JSON.");
     throw new StepModelError(input.step, `a válasz nem érvényes JSON (${jsonFailureShape(text, error)})`);
   }

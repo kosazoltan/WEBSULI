@@ -53,3 +53,14 @@ a tartalék a szerző saját családjában van (`providerForModel` egyezik), és
 bukik, a job `error`, a hívássorrend `[elsődleges, tartalék]`.
 A `direct-studio-api.test.ts`-ben a `FALLBACK_MODELS.author === undefined` helyett három állítás: a tartalék a
 szerző családjában van, és különbözik a lektor elsődleges ÉS tartalék modelljének családjától.
+
+## Review-kör (PR #131, 2026-09-29)
+- **R1 (Codex, Copilot) — a régi webes HTML-út nem használta a tartalékot** (`web-research-runner.ts`, csak a
+  `WEB_RESEARCH_PIPELINE=html` visszaállításnál aktív): a szerzői hívás mindig `authorModel`-lel futott. Javítás:
+  `webAuthorModelForAttempt(attempt, primary, fallback)` — az első kísérlet az elsődleges modellen, a javítókör(ök)
+  a tartalékon (ha a kulcsa be van állítva); ha az elsődleges szolgáltató HIBÁT ad, ugyanaz a kísérlet egyszer a
+  tartalékon fut. Teszt: tiszta függvény + bekötés-őr.
+- **R2 (Copilot) — a bukott hívás tokenje elveszett**: a `callUncachedStepModel` a hosszkorlát, üres és
+  érvénytelen JSON ágon a `workflowUsage` NÉLKÜL dobott. Javítás: a használat ezeken az ágakon is rögzül
+  (a sikeres ágon továbbra is a `callStepModel` rögzíti — nincs dupla számolás). Teszt: workflow-ban egy érvénytelen
+  (20/10) és egy érvényes (5/5) hívás után a látogatás `tokensIn=25`, `tokensOut=15`.

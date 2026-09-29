@@ -17,3 +17,10 @@ Ellenőrzés: `node --import tsx --test tests/lesson-pipeline-runner.test.ts tes
 ## T3 — Kapuk és visszamérés
 1. `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.test.json`, `npm run lint`, `node --import tsx --test tests/*.test.ts`, `npm run build`.
 2. Deploy után élő webes próbagyártás a termelési kódúton (`web-live-oszthatosag.local.mts`) → `done`, lecke visszaolvasva.
+
+## T4 — Review-javítások (PR #131)
+1. Teszt először: `tests/author-fallback-review.test.ts` — (a) `webAuthorModelForAttempt(0,'p','f')==='p'`, `(1,…)==='f'`,
+   `(2,…)==='f'`, fallback nélkül mindig `'p'`; (b) bekötés-őr: a `web-research-runner.ts` a szerzői providert
+   `webAuthorModelForAttempt(attempts, …)`-tel választja (`createStudioProvider(model, …)`); (c) workflow-usage: érvénytelen JSON (20/10) + érvényes (5/5) → 25/15.
+2. Kód: `server/studio/web-research-runner.ts` (export + bekötés), `server/studio/run-step.ts` (usage a hibaágakon).
+3. Ellenőrzés: `node --import tsx --test tests/author-fallback-review.test.ts` → pass; teljes kapu.
