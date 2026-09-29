@@ -24,6 +24,7 @@ import {
   type Transition,
 } from "./pipeline";
 import { callStepModel, StepModelError } from "./run-step";
+import { applyTopicFocus, type TopicFocus } from "./topic-focus";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import {
   buildAnimatorPrompt,
@@ -251,6 +252,12 @@ export async function retryTimedOutLektor(jobId: string, deps: PipelineDeps = {}
     output: { ...job.output, previousLektorError: job.error } });
 }
 
+/** Spec 2026-09-29 (tanári témafókusz): the job's focused copy of the map; jobs without a focus are unchanged. */
+function focusedMapOf<T extends { concepts: MapConcept[] }>(map: T | null, job: JobView): T | null {
+  const focus = (job.output as { topicFocus?: TopicFocus } | null | undefined)?.topicFocus;
+  return map ? applyTopicFocus(map, focus) : map;
+}
+
 function normalizeStep(raw: string): StudioStep {
   return (STUDIO_STEPS as readonly string[]).includes(raw) ? (raw as StudioStep) : "error";
 }
@@ -424,7 +431,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     return runGate(store, job);
   }
 
-  const map = await store.loadMap(job.mapId);
+  // Spec 2026-09-29 (tanári témafókusz): the job works on its focused copy of the shared map.
+  const map = focusedMapOf(await store.loadMap(job.mapId), job);
   if (!map) return fail(store, job, "A térkép nem található — a lépés nem futhat le.");
   if (map.concepts.length === 0) {
     return fail(store, job, "A térkép nem tartalmaz fogalmat — a lépés nem futhat le.");
@@ -1039,7 +1047,7 @@ async function runGate(store: PipelineStore, job: JobView): Promise<StepOutcome>
     return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(parsed.error)}`);
   }
 
-  const map = await store.loadMap(job.mapId);
+  const map = focusedMapOf(await store.loadMap(job.mapId), job);
   if (!map) return fail(store, job, "A térkép nem található — a kapu nem futhat le.");
 
   const coverageGate = checkCoverageGate(parsed.data, map.concepts);
@@ -1211,7 +1219,7 @@ export async function approveOutline(
     return { ok: false, reason: `A vázlat alakilag hibás: ${zodIssues(parsed.error)}` };
   }
 
-  const map = await store.loadMap(job.mapId);
+  const map = focusedMapOf(await store.loadMap(job.mapId), job);
   if (!map) return { ok: false, reason: "A térkép nem található." };
 
   const coverage = outlineCoversMap(parsed.data.sections, map.concepts);
@@ -1305,7 +1313,7 @@ export async function startJobFromMap(
   mapId: string,
   input: { subject: string; classroom: number } | undefined,
   deps: PipelineDeps = {},
-  owner?: { instruction?: string; corrections?: SourceCorrection[] },
+  owner?: { instruction?: string; corrections?: SourceCorrection[]; topicFocus?: TopicFocus | null },
 ): Promise<{ ok: true; jobId: string } | { ok: false; reason: string }> {
   const { store } = await resolveDeps(deps);
   const map = await store.loadMap(mapId);
@@ -1324,8 +1332,9 @@ export async function startJobFromMap(
   const ownerOutput = {
     ...(owner?.instruction ? { ownerInstruction: owner.instruction } : {}),
     ...(owner?.corrections?.length ? { sourceCorrections: owner.corrections } : {}),
+    ...(owner?.topicFocus ? { topicFocus: owner.topicFocus } : {}),
   };
-  const hash = computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, { ...pedagogueInputOf(map), ...ownerOutput }, 0);
+  const hash = computeStepHash("pedagogue", PIPELINE_PROMPT_VERSION, { ...pedagogueInputOf(applyTopicFocus(map, owner?.topicFocus)), ...ownerOutput }, 0);
   const jobId = await store.createJob({
     mapId,
     step: "pedagogue",

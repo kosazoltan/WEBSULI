@@ -50,6 +50,7 @@ import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { correctionAuditText, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 import { callStepModel } from "./run-step";
+import { decideTopicFocus, type TopicFocus } from "./topic-focus";
 import { createStudioStepProvider } from "../ai/studio-provider";
 import type { MapConcept } from "./coverage";
 
@@ -151,7 +152,7 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
 }
 import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
-import { resolveStudioModel } from "../ai/models";
+import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 
 /**
  * LS-2c — the admin endpoints that drive the lesson pipeline.
@@ -284,6 +285,18 @@ lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: R
   if (!view) return res.status(404).json({ message: "Ismeretlen vagy lejárt futás." });
   res.json(view);
 });
+
+/**
+ * Spec 2026-09-29 (tanári témafókusz): one cheap classification on the gateHelper model, then its fallback (another
+ * provider) if the first stalls or answers unusably; if both fail the full map stays.
+ */
+async function focusForInstruction(mapId: string, instruction: string): Promise<TopicFocus | null> {
+  const map = await (await createDrizzlePipelineStore()).loadMap(mapId);
+  if (!map) return null;
+  const models = [...new Set([resolveStudioModel("gateHelper"), FALLBACK_MODELS.gateHelper].filter((m): m is string => !!m))];
+  return decideTopicFocus(instruction, map.concepts, models.map((model) => async (system: string, user: string) =>
+    (await callStepModel(createStudioStepProvider(model, "topicFocus"), { step: "pedagogue", policy: "topicFocus", model, system, user })).json));
+}
 
 /** The whole one-step chain, reporting each phase into the progress store. */
 export async function runOneStep(
@@ -435,8 +448,13 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   const corrections = await correctMapFromOwner(mapId, instruction, files.some((f) => f.kind === "image"));
   if (corrections.length) updateRun(runId, { phase: "extract", detail: `Forrás-helyesbítés: ${corrections.length} fogalom (${corrections.map((c) => c.term ?? c.localId).join(", ").slice(0, 200)})` });
 
+  // 2d) Spec 2026-09-29 (tanári témafókusz): with a teacher request, the concepts outside the requested topic
+  // are `extra` in THIS job (the shared map stays untouched — other runs reuse it by source hash).
+  const topicFocus = instruction ? await focusForInstruction(mapId, instruction) : null;
+  if (topicFocus) updateRun(runId, { phase: "extract", detail: `Témafókusz: a kért témához ${topicFocus.localIds.length} fogalom kötelező, ${topicFocus.demoted} kiegészítő lett.` });
+
   // 3) Lesson job on the freshly built map, driven with outline auto-approval.
-  const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom }, {}, { instruction, corrections });
+  const started = await startJobFromMap(mapId, { subject: scope.subject, classroom: scope.classroom }, {}, { instruction, corrections, topicFocus });
   if (!started.ok) {
     updateRun(runId, { phase: "error", error: started.reason, mapId });
     return;
