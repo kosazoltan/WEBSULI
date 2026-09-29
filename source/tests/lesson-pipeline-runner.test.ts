@@ -2103,14 +2103,14 @@ test("spec limit-banktetel (review): ha a bank-ellenőr ugyanarra a tételre má
 
 
 /* Spec 2026-09-29-kapu-proba-keret (élő újramérés, job 697296d4 / e880571c). */
-async function gateAtLimitSetup(id: string, mutate: (lesson: Lesson) => void) {
+async function gateAtLimitSetup(id: string, mutate: (lesson: Lesson) => void, round = MAX_AUTHOR_ROUNDS) {
   const lesson = standardFusionFixture(); lesson.mapId = "m1";
   const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept];
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
   mutate(lesson);
   const deps = makeDeps(JSON.stringify({ notes: [] }));
   deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
-  deps.store.seed({ id, mapId: "m1", lessonId: `lesson-${id}`, step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version } });
+  deps.store.seed({ id, mapId: "m1", lessonId: `lesson-${id}`, step: "lektor", round, output: { lesson, methodVersion: lesson.experience.version } });
   deps.store.lessons.set(`lesson-${id}`, { id: `lesson-${id}`, mapId: "m1", json: lesson });
   const reviewed = await runPipelineStep(id, deps);
   assert.ok(reviewed.ok && reviewed.next.step === "gate", JSON.stringify(reviewed));
@@ -2209,4 +2209,57 @@ test("spec limit-check (E2): a limiten banktétel + check blokk blokkoló → a 
   assert.equal(saved.sections[0].blocks.length, blocksBefore - 1);
   assert.equal(saved.sections[0].blocks.some((b) => b.kind === "check" && b.question === faulty.question), false, "a hibás ellenőrző kérdés nem jut a gyerekhez");
   assert.deepEqual([...(job.output?.choiceGate as { removed: string[] }).removed].sort(), ["experience.quiz[4]", "sections[0].blocks[2]"]);
+});
+
+
+test("spec kapu-proba (utómérés, élő job 9ef52e4f): a limit ELŐTT az elérhetetlen Próba nem kapcsol ki — a szerző pótolja a kérdéseket", async () => {
+  const { deps } = await gateAtLimitSetup("proba-early", (l) => {
+    l.sections[0].probaEnabled = true;
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, oneAreaCheck);
+  }, 0);
+  const log = published(deps.store);
+  const gated = await runPipelineStep("proba-early", deps);
+  assert.ok(gated.ok, JSON.stringify(gated));
+  assert.deepEqual(gated.ok && gated.next, { step: "author", round: 1 }, "a meglévő kapu→szerző javítókör");
+  assert.equal(log.length, 0, "nem publikál a javítás előtt");
+  assert.equal(deps.store.jobs.get("proba-early")!.output?.probaDisabled, undefined);
+  assert.equal((deps.store.lessons.get("lesson-proba-early")!.json as Lesson).sections[0].probaEnabled, true);
+});
+
+
+/* Review PR #143 (P2): a limit előtt elfogyott szerzői keret is limitnek számít — nincs „Váratlan hiba”. */
+async function withExhaustedAuthor<T>(id: string, work: () => Promise<T>): Promise<T | undefined> {
+  const { store } = memoryWorkflows();
+  let out: T | undefined;
+  await assert.rejects(executeWorkflow(store, { id: `${id}-run`, owner: "test", mode: "studio" }, async () => {
+    await workflowPhase("pedagogue");
+    for (let guard = 0; workflowStepVisitsLeft("author") > 0 && guard < 20; guard++) {
+      for (const step of ["author", "animator", "lektor"]) await workflowPhase(step);
+    }
+    out = await work();
+    throw new Error("teszt-vég");
+  }), /teszt-vég/);
+  return out;
+}
+
+test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel az elérhetetlen Próba kikapcsol és a lecke publikál", async () => {
+  const { deps } = await gateAtLimitSetup("proba-budget", (l) => {
+    l.sections[0].probaEnabled = true;
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, oneAreaCheck);
+  }, 0);
+  const log = published(deps.store);
+  const gated = await withExhaustedAuthor("proba-budget", () => runPipelineStep("proba-budget", deps));
+  assert.ok(gated?.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  assert.deepEqual(deps.store.jobs.get("proba-budget")!.output?.probaDisabled, [0]);
+});
+
+test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel más kapu-lelet → tiszta hiba, nem szerzői kör", async () => {
+  const { deps } = await gateAtLimitSetup("gate-early-budget", (l) => {
+    l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, { ...oneAreaCheck, question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
+  }, 0);
+  deps.store.maps.get("m1")!.concepts.push({ localId: "idegen", term: "Pitagorasz-tétel", examWeight: "supporting" } as MapConcept);
+  const gated = await withExhaustedAuthor("gate-early-budget", () => runPipelineStep("gate-early-budget", deps));
+  assert.equal(gated?.ok, false, `nincs szerzői kör keret nélkül: ${JSON.stringify(gated)}`);
+  assert.match(deps.store.jobs.get("gate-early-budget")!.error ?? "", /nincs több lépéskeret/);
 });
