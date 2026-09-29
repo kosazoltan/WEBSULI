@@ -31,3 +31,10 @@ rendben van), ugyanúgy, mint a #139-es banktétel.
 - **E2** A limiten a banktételre és egy check blokkra mutató blokkolókkal a lektor-lépés SHALL a kapura lépni; a kapu SHALL mindkettőt kivenni és publikálni (teszt; a régi kódon a lektor buktat).
 - **E3** Tanító blokkra mutató limit-blokkoló SHALL továbbra is buktatni (a meglévő „(r)” teszt).
 - **E4** Kapuk zöldek; élő újramérés ugyanazzal a témával.
+
+## Review-kör (PR #142)
+- **A 32 karakteres `blockPath`-korlát (Copilot + Codex P2): javítva, migráció nélkül.** A lektor-jelentés sémája
+  (`step-io.ts`) a validálás előtt a tétel szintjére normalizálja az útvonalat
+  (`sections[10].blocks[3].options[1]` → `sections[10].blocks[3]`, `experience.quiz[65].correctIndex` → `experience.quiz[65]`),
+  így a pontos al-útvonalas válasz nem buktatja a teljes jelentést, és a DB `varchar(32)` oszlopa is elég.
+  Teszt: a javítás előtt bukott.
