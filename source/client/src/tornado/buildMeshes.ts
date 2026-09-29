@@ -17,6 +17,7 @@
 import * as THREE from "three";
 
 import type { Vehicle } from "@/lib/tornado/vehicles";
+import { vehicleDimensions } from "@/lib/tornado/collision";
 import type { GraphicsQuality } from "@/lib/tornado/progress";
 import {
   terrainHeight,
@@ -121,9 +122,8 @@ export function buildVehicle(vehicle: Vehicle): THREE.Group {
   });
 
   const heavy = vehicle.silhouette === "tank" || vehicle.silhouette === "beast";
-  const width = heavy ? 3.1 : vehicle.silhouette === "van" ? 2.7 : 2.4;
-  const length = heavy ? 6.4 : vehicle.silhouette === "van" ? 6.0 : 5.2;
-  const height = vehicle.silhouette === "van" ? 1.9 : heavy ? 1.7 : 1.3;
+  // One source for the body size: the collision footprint (collision.ts) uses the same numbers.
+  const { width, length, height } = vehicleDimensions(vehicle.silhouette);
 
   const chassis = new THREE.Mesh(new THREE.BoxGeometry(width, height, length), bodyMat);
   chassis.position.y = height / 2 + 0.55;

@@ -97,6 +97,7 @@ import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/torna
 import { UPGRADE_TRACKS, statMultiplier } from "@/lib/tornado/upgrades";
 import { stepVehicle, STOPPED_SPEED, maxSpeedUnits, windDriftUnits } from "@/lib/tornado/drive";
 import { createGamepadRestGate, readStandardGamepad } from "@/lib/tornado/gamepad";
+import { collidersNear, resolveVehicleCollisions, vehicleDimensions } from "@/lib/tornado/collision";
 import {
   toggleCamera,
   escAction,
@@ -1594,6 +1595,7 @@ function PlayScreen(props: {
       // --- vehicle control ---
       const p = playerRef.current;
       const upg = upgradesFor(props.progress, props.vehicle.id);
+      const vehicleDims = vehicleDimensions(props.vehicle.silhouette);
       const grip = gripAt(p.x, p.z);
 
       const k = keysRef.current;
@@ -1627,12 +1629,16 @@ function PlayScreen(props: {
             windAngle,
           },
         );
-        const moved = Math.hypot(next.x - p.x, next.z - p.z);
+        // Spec 2026-09-29-tornado-fizika H2: houses, trees, poles and bridge railings are solid.
+        const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z));
+        const nx = clampToWorld(solid.x);
+        const nz = clampToWorld(solid.z);
+        const moved = Math.hypot(nx - p.x, nz - p.z);
         distanceTravelledRef.current += toKm(moved);
-        p.x = next.x;
-        p.z = next.z;
+        p.x = nx;
+        p.z = nz;
         p.heading = next.heading;
-        p.speed = next.speed;
+        p.speed = solid.speed;
       } else {
         p.speed = 0;
       }
