@@ -157,7 +157,11 @@ test("a webes ügynök route-ja hibánál visszatartja a HTML-t", () => {
   // Gate result is now handled before the artifact event, including automatic repair.
   assert.match(src, /decideWebResearchResult\(\{ stopReason, fullContent, repairAttempts, sources \}, html => verifyLessonMethodHtml\(html\)\)/);
   assert.match(src, /if \(result\.type === "error"\) throw new WebResearchFailure\(result.message\)/);
-  assert.match(src, /sources: \[\.\.\.fetched\.values\(\)\]/);
+  // Spec 2026-09-25 (gatherWebSources kiemelése): the returned sources are still the DOWNLOADED pages —
+  // gather returns [...fetched.values()], the lesson's sources are mapped from exactly that list.
+  assert.match(src, /const downloaded = \[\.\.\.fetched\.values\(\)\]/);
+  assert.match(src, /const sources: WebSource\[\] = downloaded\.map\(\(\{ url, title \}\) => \(\{ url, title \}\)\)/);
+  assert.match(src, /return \{ html: result\.html, sources, reviewEvidence \}/);
   assert.match(src, /cache_control: \{ type: "ephemeral" \}/);
   const panel = read("client/src/components/studio/WebResearchAgentPanel.tsx");
   assert.match(panel, /web-research-error/);

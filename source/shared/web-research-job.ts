@@ -15,7 +15,8 @@ export type WebResearchJob = {
   error?: string;
   canResume?: boolean;
   /** Spec 2026-09-19: review criteria left open after the repair rounds (published as warnings). */
-  warnings?: string[];
+  warnings?: string[];  /** Spec 2026-09-25: "studio" — made by the one-step Studio manufacture from the downloaded pages (no inline HTML). */
+  output?: "studio" | "html";
 };
 
 /** Human labels for the reviewer's criteria shown next to a published web lesson. */

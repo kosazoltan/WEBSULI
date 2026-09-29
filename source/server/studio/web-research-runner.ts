@@ -40,6 +40,10 @@ export type ResearchObserver = {
   /** Spec 2026-09-25: packets already built by an earlier execution of the same run (no model call on resume). */
   bankCheckpoint?: ExperienceCheckpoint;
   onBankCheckpoint?: (checkpoint: ExperienceCheckpoint) => Promise<void>;
+  /** Spec 2026-09-25 (webes Studio-átadás): the creator, and the one-step run a resumed job keeps following. */
+  userId?: string;
+  studioRunId?: string;
+  onStudioRun?: (runId: string) => Promise<void>;
 };
 const MAX_TOKENS = 64_000;
 const MAX_CONTINUATIONS = 5;
@@ -73,18 +77,13 @@ function lessonMetaFromHtml(html: string, fallback: { title: string; subject: st
   }
 }
 
-/** Runs independently of HTTP; only the legacy stream supplies a client abort signal. */
-export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate, bankCheckpoint, onBankCheckpoint }: ResearchObserver): Promise<ResearchArtifact> {
+/**
+ * Spec 2026-09-25 (webes Studio-átadás): search + fetch only — shared by the standalone HTML path and the
+ * Studio hand-off. Own abort controller and timers (20 min phase, 120 s idle); maps failures to WebResearchFailure.
+ */
+export async function gatherWebSources(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
-  const extractModel = resolveStudioModel("extract");
-  const authorModel = resolveWebResearchAuthorModel();
-  if (!studioModelReady(extractModel) || !studioModelReady(authorModel)) {
-    throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva.");
-  }
-  // Spec 2026-09-25: the bank runs on the bank role — a missing key is reported before any paid call.
-  const bankModel = resolveStudioModel("bank");
-  if (!studioModelReady(bankModel)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(bankModel)}).`);
   const controller = new AbortController();
   let timedOut = false;
   let idleTimer: NodeJS.Timeout | undefined;
@@ -218,6 +217,51 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     stopIdle();
     const downloaded = [...fetched.values()];
     if (!downloaded.length) throw new WebResearchFailure("Nincs letöltött forrásszöveg. A web_fetch eszközzel olvasd el a forrásokat, majd készíts teljes tananyagot.");
+    return { downloaded, topicSeed };
+  } catch (error) {
+    if (error instanceof WebResearchFailure) throw error;
+    logger.error("[WEB-RESEARCH] gather failure", { name: error instanceof Error ? error.name : "unknown", message: error instanceof Error ? error.message.slice(0, 400) : String(error), timedOut });
+    throw new WebResearchFailure(timedOut ? "Időtúllépés: a keresés nem fejeződött be az időkeretben."
+      : controller.signal.aborted ? "A kérés megszakadt." : "AI hiba történt a webes keresés közben.");
+  } finally {
+    clearTimeout(hardTimer);
+    if (idleTimer) clearTimeout(idleTimer);
+    signal?.removeEventListener("abort", abort);
+  }
+}
+
+/** Runs independently of HTTP; only the legacy stream supplies a client abort signal. */
+export async function generateWebResearchLesson(input: WebResearchChatRequest, { signal, onEvent, onCandidate, bankCheckpoint, onBankCheckpoint }: ResearchObserver): Promise<ResearchArtifact> {
+  const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
+  const extractModel = resolveStudioModel("extract");
+  const authorModel = resolveWebResearchAuthorModel();
+  if (!studioModelReady(extractModel) || !studioModelReady(authorModel)) {
+    throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva.");
+  }
+  // Spec 2026-09-25: the bank runs on the bank role — a missing key is reported before any paid call.
+  const bankModel = resolveStudioModel("bank");
+  if (!studioModelReady(bankModel)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(bankModel)}).`);
+  const startedAt = Date.now();
+  const { downloaded, topicSeed } = await gatherWebSources(input, { signal, onEvent, onCandidate });
+  const controller = new AbortController();
+  let timedOut = false;
+  let idleTimer: NodeJS.Timeout | undefined;
+  const timeout = () => { timedOut = true; controller.abort(); };
+  let hardTimer = setTimeout(timeout, PHASE_TIMEOUT_MS);
+  const restartPhaseTimer = () => {
+    clearTimeout(hardTimer);
+    hardTimer = setTimeout(timeout, PHASE_TIMEOUT_MS);
+  };
+  const stopIdle = () => { if (idleTimer) { clearTimeout(idleTimer); idleTimer = undefined; } };
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) abort();
+  try {
+    let fullContent = "";
+    const stopReason = "end_turn";
+    let repairAttempts = 0;
+    const sources: WebSource[] = downloaded.map(({ url, title }) => ({ url, title }));
 
     restartPhaseTimer();
     stopIdle();
@@ -330,7 +374,6 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     });
     html = injectWebExperience(html, assembledWebLessonData(brief, meta, experience));
     fullContent = html;
-    sources.splice(0, sources.length, ...[...fetched.values()].map(({ url, title }) => ({ url, title })));
 
     clearTimeout(hardTimer);
     stopIdle();
@@ -379,7 +422,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     if (result.type === "retry") throw new WebResearchFailure(`A tananyag az automatikus javítás után sem készült el: ${result.reason}`);
     if (result.type === "error") throw new WebResearchFailure(result.message);
     if (downloaded.length === 0) throw new WebResearchFailure("Nem érkezett ellenőrizhető internetes forráshivatkozás. A tananyag nem menthető.");
-    return { html: result.html, sources: [...fetched.values()].map(({ url, title }) => ({ url, title })), reviewEvidence };
+    return { html: result.html, sources, reviewEvidence };
   } catch (error) {
     if (error instanceof WebResearchFailure) throw error;
     if (error instanceof TeachingReviewFailure) throw new WebResearchFailure(error.message);
