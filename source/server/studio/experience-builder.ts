@@ -210,14 +210,9 @@ export function salvagePacket<P extends { methods: Array<{ id: string }>; tasks:
     const issues = validate(current);
     if (!issues.length) return removed.length ? { packet: current, removed } : null;
     if (round === maxRounds) return null;
-    const named = (issue: string, id: string) => {
-      let at = issue.indexOf(id);
-      for (; at >= 0; at = issue.indexOf(id, at + 1)) {
-        const before = issue[at - 1] ?? " ", after = issue[at + id.length] ?? " ";
-        if (!/[\w-]/.test(before) && !/[\w-]/.test(after)) return true;
-      }
-      return false;
-    };
+    // Review #153: csak a TÉTELHIBA alakja számít („ID: …” a sor elején, vagy az ismétlődés-üzenet „…csomaggal: ID („”);
+    // szabad szöveges keresés egy „0” azonosítót a Zod-útvonalra („tasks.0.coversConceptIds”) is illesztene.
+    const named = (issue: string, id: string) => issue.startsWith(`${id}: `) || issue.includes(`csomaggal: ${id} (`);
     const ids = [...current.methods, ...current.tasks, ...current.quiz].map((i) => i.id)
       .filter((id) => issues.some((issue) => named(issue, id)));
     if (!ids.length || removed.length + ids.length > budget) return null;
@@ -387,7 +382,12 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       const lastAttempt = attempt === PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS - 1;
       const arithmeticOnly = issues.length > 0 && issues.every(i => /hibás számítás/.test(i));
       if (parsed.success && lastAttempt && arithmeticOnly) deps.onToolFix?.("arithmetic-claims", issues.map(i => `figyelmeztetés (átengedve): ${i}`));
-      const salvaged = parsed.success && lastAttempt && issues.length && !arithmeticOnly ? salvagePacket(parsed.data, validate) : null;
+      // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
+      const quotaAndValidate = (p: Packet) => {
+        const quota = packetSchema.safeParse(p);
+        return quota.success ? validate(quota.data) : quota.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
+      };
+      const salvaged = parsed.success && lastAttempt && issues.length && !arithmeticOnly ? salvagePacket(parsed.data, quotaAndValidate) : null;
       if (salvaged) deps.onToolFix?.("bank-salvage", [`${unit.sectionIndex + 1}. fejezet: a mentő kísérlet után ${salvaged.removed.length} hibás tétel kivéve (${salvaged.removed.join(", ")}), a csomag többi része átvéve`]);
       if (parsed.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed.data;
       else if (salvaged) packet = salvaged.packet;

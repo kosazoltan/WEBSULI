@@ -24,6 +24,12 @@ test("a névvel megjelölt hibás tételek kikerülnek; szóhatár: t1 nem viszi
   assert.equal(input.tasks.length, 7, "az eredeti csomag érintetlen");
 });
 
+test("review #153: a Zod-útvonal („tasks.0.…”) nem illeszkedik egy „0” azonosítójú tételre", () => {
+  const p = packet(); p.tasks.push({ id: "0" });
+  const out = salvagePacket(p, (x) => [...validate(x), ...(x.tasks.some((t) => t.id === "0") ? ["tasks.0.coversConceptIds: Required"] : [])]);
+  assert.equal(out, null, "a névtelen (útvonal-) hiba nem vezet a „0” tétel kivételéhez");
+});
+
 test("nincs mentés: névtelen hiba, túl sok kivétel, vagy kivétel után is marad hiba", () => {
   assert.equal(salvagePacket(packet(), () => ["Hiányzó módszer: gate"]), null);
   const allBad = packet(); allBad.tasks.forEach((t) => { t.bad = true; });
@@ -32,7 +38,7 @@ test("nincs mentés: névtelen hiba, túl sok kivétel, vagy kivétel után is m
   assert.equal(salvagePacket({ ...packet(), tasks: [{ id: "t1" }] }, () => []), null, "hibátlan csomagnál nincs mit menteni");
 });
 
-test("valódi csomagépítés: a minden kísérletben hibás mintájú feladat kikerül, a lecke banka elkészül", async () => {
+test("valódi csomagépítés: a minden kísérletben hibás mintájú feladat kikerül, a lecke bankja elkészül", async () => {
   const lesson = standardFusionFixture(); lesson.mapId = "m1";
   const concepts = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept];
   const fixes: string[] = [];
