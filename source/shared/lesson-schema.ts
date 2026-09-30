@@ -300,6 +300,8 @@ export const lessonSchema = z.object({
   mapId: filled(64),
   sections: z.array(sectionSchema).min(1),
   misconceptions: z.array(misconceptionSchema).default([]),
+  /** U3 (C14): a tanár kérésének forrásból nem igazolható pontjai — nem tanítjuk, a tanárnak jelezzük (nem néma kihagyás). */
+  gaps: z.array(z.object({ id: filled(64), point: filled(300), reason: filled(300) })).max(60).optional(),
   /**
    * D1 flag. Literal true: a lesson cannot even be parsed while claiming it drew on
    * anything beyond the curated source.

@@ -821,6 +821,8 @@ lessonPipelineRouter.get("/jobs/:id", async (req: Request, res: Response) => {
       lessonId: row.lessonId,
       // B5: quality notes from gate/lektor after round-limit publish (LS-7).
       qualityNotes: Array.isArray(output?.qualityNotes) ? output.qualityNotes : [],
+      // U3 (C14): a tanár kérésének nem igazolható pontjai — a panel jelzi, nem néma kihagyás.
+      gaps: Array.isArray(output?.gaps) ? output.gaps : [],
     },
   });
 });

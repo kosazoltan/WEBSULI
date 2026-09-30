@@ -13,7 +13,7 @@ import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals";
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
-import { ownerInstructionPromptBlock } from "../../shared/owner-instruction";
+import { ownerInstructionPromptBlock, type OwnerInventory } from "../../shared/owner-instruction";
 import { correctionPromptLines, type SourceCorrection } from "./source-corrections";
 import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
 
@@ -49,6 +49,8 @@ export const outlineSectionSchema = z.object({
     .array(z.string().trim().min(1).transform((s) => s.slice(0, 40)))
     .transform((a) => a.slice(0, 4))
     .optional(),
+  /** U3 (C14): a tanári pontjegyzék ide rendelt, igazolt pontjai (azonosítók); a szerző ezeket mondja ki. */
+  instructionPointIds: z.array(z.string().trim().min(1).max(64)).max(40).optional(),
 });
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
@@ -199,9 +201,9 @@ export const TRANSCRIPTION_RULE_TEXT =
   "helyes olvasata, nem eltérés tőle. Ilyenkor legfeljebb book_probably_wrong (info) jegyzet jár, a hibás alakot " +
   "visszakövetelni tilos. Tényt, számot, dátumot ez a szabály nem ír felül.";
 
-export type OwnerContext = { instruction?: string; corrections?: SourceCorrection[] };
+export type OwnerContext = { instruction?: string; corrections?: SourceCorrection[]; /** U3 (C14): a kérés pontjegyzéke azonosítókkal. */ inventory?: OwnerInventory };
 function ownerLines(owner?: OwnerContext): string[] {
-  return [...ownerInstructionPromptBlock(owner?.instruction), ...correctionPromptLines(owner?.corrections)];
+  return [...ownerInstructionPromptBlock(owner?.instruction, owner?.inventory), ...correctionPromptLines(owner?.corrections)];
 }
 
 export type PromptMap = {
@@ -233,6 +235,14 @@ export function visualPlanningLines(world: VisualWorld): string[] {
 }
 
 /** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
+/** A tervező kimeneti alakja; a pontjegyzékes futás fejezetenként `instructionPointIds`-t is kér (U3). */
+function outlineShape(visual: boolean, inventory: boolean): string {
+  const section = visual
+    ? '"heading": string, "emoji": string, "keyPhrases": string[], "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[]'
+    : '"heading": string, "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[]';
+  const withPoints = inventory ? `${section}, "instructionPointIds": string[]` : section;
+  return `{ "sections": [{ ${withPoints} }], "misconceptions": [{ "conceptId": string, "text": string }]${visual ? ', "visual": { "world": string }' : ""} }`;
+}
 export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner?: OwnerContext): string {
   return [
     "Te vagy a pedagógus (tervkészítő). A kurált fogalomtérképből készíts lecke-vázlatot: ez a terv szabja meg a szerző, az ábrakészítő és a lektor munkáját, ezért pontos, tömör és teljes legyen.",
@@ -275,14 +285,25 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     "",
     ...(visual ? [...visualPlanningLines(visual), ""] : []),
     ...ownerLines(owner),
+    // U3 (C14): az igazolt pontokat a tervező rendeli fejezethez — a szerző csak ezeket mondja ki, a kapu azonosítónként méri.
+    ...(owner?.inventory ? ["PONTJEGYZÉK → FEJEZET: minden IGAZOLT pontot pontosan egy fejezet `instructionPointIds` mezőjébe tegyél (azonosítóval); a nem igazolt pontot ne tervezd be. Igazolt pont fejezet nélkül = hiányos terv.", ""] : []),
     "A válasz CSAK JSON legyen, a következő alakban:",
-    visual
-      ? '{ "sections": [{ "heading": string, "emoji": string, "keyPhrases": string[], "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[] }], "misconceptions": [{ "conceptId": string, "text": string }], "visual": { "world": string } }'
-      : '{ "sections": [{ "heading": string, "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[] }], "misconceptions": [{ "conceptId": string, "text": string }] }',
+    outlineShape(Boolean(visual), Boolean(owner?.inventory)),
     "",
     "Fogalomtérkép:",
     mapJson(map),
   ].join("\n");
+}
+
+/** U3 (C14): a fejezethez rendelt, igazolt tanári pontok a szerzőnek — kimondandó explain/example/recap szövegben. */
+function instructionPointLines(sections: ReadonlyArray<{ heading: string; instructionPointIds?: string[] }>, owner?: OwnerContext): string[] {
+  const inventory = owner?.inventory;
+  if (!inventory) return [];
+  const byId = new Map(inventory.points.map((p) => [p.id, p]));
+  const lines = sections.flatMap((section, i) => (section.instructionPointIds ?? []).map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p))
+    .map((p) => `- [${i}] ${section.heading}: ${p.id} — ${p.text}${p.sourceQuote ? ` — forrás: „${p.sourceQuote.slice(0, 160)}”` : ""}`));
+  if (!lines.length) return [];
+  return ["TANÁRI PONTOK FEJEZETENKÉNT (kötelező: a megnevezett fejezet explain/example/recap szövege mondja ki az állítást a forrás idézete alapján, közvetlenül — a program azonosítónként méri):", ...lines, ""];
 }
 
 /**
@@ -365,6 +386,7 @@ export function buildAuthorPrompt(
     SOURCE_REVIEW_RULES,
     "",
     ...ownerLines(owner),
+    ...instructionPointLines(sections, owner),
     "Hard rules:",
     "- Every block's coversConceptIds may use ONLY the ids below — never invent new ones:",
     conceptIds.join(", "),
