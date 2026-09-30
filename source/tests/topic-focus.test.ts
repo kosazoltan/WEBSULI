@@ -82,6 +82,16 @@ test("a fókusz-prompt a szabályokat, példákat és előfeltételeket is kéri
   assert.match(TOPIC_FOCUS_SYSTEM, /"narrow"/, "a modell dönti el, kér-e résztémát a tanár");
 });
 
+// Spec 2026-09-30-temafokusz-resztema-dontes: mérve a glm 4/8-szor „nem résztéma”-nak vette a füzetlap pontjait felsoroló
+// kérést („a forrás egészét kéri”), és a teljes 55 fogalmas térkép maradt. A résztéma a TUDÁSTÁRHOZ mérendő.
+test("a fókusz-prompt a felsoroló kérést („csak ezeket”) résztémának nevezi, a tudástár fogalmaihoz mérve", async () => {
+  const { TOPIC_FOCUS_SYSTEM } = await import("../server/studio/topic-focus");
+  assert.match(TOPIC_FOCUS_SYSTEM, /tudástár fogalmainak csak egy RÉSZÉT/);
+  assert.match(TOPIC_FOCUS_SYSTEM, /felsorolja/);
+  assert.match(TOPIC_FOCUS_SYSTEM, /csak ezeket/);
+  assert.doesNotMatch(TOPIC_FOCUS_SYSTEM, /a forrás egészét kéri/, "a „forrás egésze” kétértelmű, ha a tudástár több forrásból áll");
+});
+
 /* PR #132 review (Copilot): a bérletvesztés nem modellhiba — nem nyelhetjük el, különben egy lecserélt munkás folytatná. */
 test("decideTopicFocus: a workflow-ütközést és -várakozást továbbdobja, nem próbál tartalékot", async () => {
   const { WorkflowConflict, WorkflowWaiting } = await import("../server/workflows/engine");
