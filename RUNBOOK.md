@@ -128,6 +128,16 @@ forrás → [OCR] → extract → pedagogue → (ADMIN JÓVÁHAGYÁS) → author
 | `lektor` | újraolvasás, jegyzetelés — **soha nem ír át** | `server/studio/lektor.ts` |
 | `gate` | séma + fedettség ellenőrzés, majd publikálás | `server/studio/step-runner.ts` |
 
+Kiegészítő lépések a láncon belül (runtime-3, 2026-09-30 — részletek: `docs/lesson-improvement.md` „Utasításrendszer runtime-3”):
+
+| Mikor | Mi fut | Kulcsfájl |
+|---|---|---|
+| a `pedagogue` előtt, tanári kérésnél | tanári pontjegyzék (két kivonat, forrás-igazolás, `gaps`) | `server/studio/instruction-points.ts` |
+| az `author` végén, a bank előtt | forrás-hivatkozás törlése + jelentésőrző átírás | `server/studio/source-reference.ts` |
+| az `animator`-ban | bankcsomagok (BANKCSOMAG-SZERZŐDÉS, szigorú séma, javítási jogosultság) | `server/studio/experience-builder.ts`, `bank-repair.ts`, `bank-schema.ts` |
+| a `lektor`-ral párhuzamosan | vak megoldó + bank-ellenőr (tételenkénti ítélet) | `server/studio/blind-solver.ts`, `bank-verifier.ts` |
+| a `gate`-ben | azonosítós tanári-pont mérés, limit-tábla, ábra-kapu v1 | `instruction-check.ts`, `limit-policy.ts`, `figure-check.ts` |
+
 ### Két indítási út
 
 1. **Egylépéses** (`POST /api/studio/lessons/one-step`) — feltöltés → kész lecke.
