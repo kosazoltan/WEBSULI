@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
-import { auditWorkflow, findingsFromError, knownFinding, mergeFindings } from "./learning";
+import { auditWorkflow, findingsFromError, knownFinding, mergeFindings, unknownSample } from "./learning";
 import { runtimePrompt } from "../../shared/runtime-knowledge";
 import type { PromptRole } from "../../shared/instruction-bundles/roles";
 import { logger } from "../lib/logger";
@@ -119,7 +119,16 @@ export async function workflowFinding(code: SkillCode) {
 export async function workflowValidationFailure(error: unknown) {
   const ctx = context.getStore();
   if (!ctx) return;
-  ctx.record.view.skillFindings = mergeFindings(ctx.record.view.skillFindings ?? [], findingsFromError(error, ctx.record.view.visits.at(-1)?.step ?? "start"));
+  const findings = findingsFromError(error, ctx.record.view.visits.at(-1)?.step ?? "start");
+  ctx.record.view.skillFindings = mergeFindings(ctx.record.view.skillFindings ?? [], findings);
+  // Spec 2026-09-30 (B8, H11): az „unknown” hiba redaktált szövege a futás naplójába (lenyomatonként egyszer, max. 20) —
+  // eddig csak a lenyomat maradt, a szöveg emberhez nem jutott el.
+  for (const f of findings.filter((x) => x.code === "unknown")) {
+    const samples = ctx.record.view.unknownFindingSamples ?? [];
+    if (samples.length < 20 && !samples.some((x) => x.fingerprint === f.fingerprint)) {
+      ctx.record.view.unknownFindingSamples = [...samples, { step: f.step, fingerprint: f.fingerprint, text: unknownSample(error instanceof Error ? error.message : String(error)) }];
+    }
+  }
   await persist(ctx);
 }
 /** Call before domain writes and immediately before returning from their transaction.
