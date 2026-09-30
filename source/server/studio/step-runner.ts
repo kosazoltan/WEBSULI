@@ -74,7 +74,7 @@ import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBank
 import { skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
+import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowEnsureRepairBudget, workflowRepairBudgetAvailable, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, type BankItemRef } from "../../shared/bank-item-ref";
@@ -1081,10 +1081,10 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         const split = splitLimitBlockers(job.output?.lesson as Lesson | undefined, blockingNotes);
         if (!limitDowngrade) split.factual.push(...split.incomplete.splice(0));
         if (split.factual.length) {
-          const repairBudget = ["author", "animator", "lektor", "gate"].every((s) => workflowStepVisitsLeft(s) > 0);
           const teaching = job.output?.lesson as Lesson | undefined;
           const targets = teaching ? targetedRepairSections(teaching, split.factual, null) : null;
-          if (targets && repairBudget && !job.output?.targetedLektorRepairRound) {
+          // Spec 2026-09-30-dinamikus-keret: elfogyott keretnél a javítóút egyszeri többletkeretet kap (futásonként korlátozva).
+          if (targets && !job.output?.targetedLektorRepairRound && await workflowEnsureRepairBudget("lektor: tényhiba a tanításban a körlimiten")) {
             logger.warn(`[STUDIO] Tényhiba a tanításban a körlimiten (${job.id}), célzott szerzői javítás: fejezet ${targets.map((i) => i + 1).join(", ")}`);
             await store.saveStep(job.id, successPatch({
               ...job.output, report: parsed.data, reportRound: job.round,
@@ -1268,7 +1268,8 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   // Review #143 (P2): a szerzői javítás csak akkor jár, ha a javítási út minden lépésére van még látogatási keret;
   // a limit előtt elfogyott keret (megszakított és folytatott kör) is „nincs több szerzői kör”-nek számít.
   const repairBudget = ["author", "animator", "lektor", "gate"].every((s) => workflowStepVisitsLeft(s) > 0);
-  const noAuthorRepair = job.round >= MAX_AUTHOR_ROUNDS || !repairBudget;
+  // Review #154: a Próba kikapcsolása a DINAMIKUS keretet nézi — amíg többletkeret igényelhető, a szerző pótolja a kérdéseket.
+  const noAuthorRepair = job.round >= MAX_AUTHOR_ROUNDS || !(repairBudget || workflowRepairBudgetAvailable());
   const proba = noAuthorRepair ? disableUnreachableProba(parsed.data, arcOptions) : { lesson: parsed.data, disabled: [] as number[] };
   if (proba.disabled.length) {
     parsed.data = proba.lesson;
@@ -1321,7 +1322,9 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       const targets = targetedRepairSections(parsed.data, [], gateOutput as GateFeedbackLike);
       // Spec 2026-09-29-kapu-proba-keret (2. döntés; élő újramérés e880571c): célzott javítás csak akkor, ha a javítási
       // út minden lépésére van még látogatási keret — különben a motor kivételt dob („Váratlan hiba”).
-      if (targets && !job.output?.targetedGateRepairRound && repairBudget) {
+      const gateRepairBudget = !!targets && !job.output?.targetedGateRepairRound
+        && (repairBudget || await workflowEnsureRepairBudget("kapu: fejezethez köthető lelet a körlimiten"));
+      if (targets && !job.output?.targetedGateRepairRound && gateRepairBudget) {
         logger.warn(`[STUDIO/GATE] Kapu-lelet a limiten, célzott javítás (${job.id}): fejezet ${targets.map((i) => i + 1).join(", ")}`);
         await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: gateOutput, targetedGateRepairRound: job.round + 1 }, error: null, finishedAt: null });
         return { ok: true, next: { step: "author", round: job.round + 1 } };
@@ -1330,7 +1333,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       // publikálunk, ha a megalapozott fedettség core ≥ 95%, supporting ≥ 80% és nincs ismeretlen azonosító.
       const acceptance = limitAcceptance(parsed.data, map.concepts, coverageGate);
       if (!acceptance.ok) {
-        return fail(store, job, `A fúziós lecke tanítása hiányos${targets && !repairBudget ? " (a célzott javításhoz nincs több lépéskeret)" : ""}: ${gate.reasons.join("; ")}`);
+        return fail(store, job, `A fúziós lecke tanítása hiányos${targets && !job.output?.targetedGateRepairRound && !gateRepairBudget ? " (a célzott javításhoz nincs több lépéskeret)" : ""}: ${gate.reasons.join("; ")}`);
       }
       if (acceptance.stripped) {
         parsed.data = acceptance.lesson;
@@ -1345,7 +1348,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       logger.warn(`[STUDIO/GATE] Körlimit: nem-ténybeli kapu-lelet, a lecke publikál (${job.id}): core ${Math.round(acceptance.core * 100)}%, kiegészítő ${Math.round(acceptance.supporting * 100)}%`);
     } else {
       const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
-      if (transition.step === "author" && !repairBudget) {
+      if (transition.step === "author" && !repairBudget && !(await workflowEnsureRepairBudget("kapu: javítókör a körlimit előtt"))) {
         return fail(store, job, `A lecke kapuja hiányt mért, és a szerzői javításhoz nincs több lépéskeret: ${gate.reasons.join("; ")}`);
       }
       if (transition.step === "error") {
@@ -1407,7 +1410,8 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       if (missing.length) {
         const findings = missing.map((p) => ({ sectionIdx: p.section, point: p.point }));
         const reasons = missing.map((p) => `Tanári kérés hiányzó pontja${p.section !== null ? ` (${p.section + 1}. fejezet)` : ""}: ${p.point}`);
-        if (job.round < MAX_AUTHOR_ROUNDS && repairBudget && !job.output?.instructionRepairRound) {
+        // Spec 2026-09-30-dinamikus-keret: a tanári kérés hiányzó pontjára jobonként egy célzott kör a limiten is jár.
+        if (!job.output?.instructionRepairRound && (repairBudget || await workflowEnsureRepairBudget("tanári kérés hiányzó pontja"))) {
           const repairGate = { ...gateOutput, ok: false, reasons: [...gateOutput.reasons, ...reasons], instruction: findings };
           await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: repairGate, instructionRepairRound: job.round + 1 }, error: null, finishedAt: null });
           logger.warn(`[STUDIO/GATE] Tanári kérés hiányzó pontjai → célzott szerzői javítás (${job.id}, ${job.round + 1}. kör)`);
