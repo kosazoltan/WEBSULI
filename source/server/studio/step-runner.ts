@@ -55,7 +55,7 @@ import { stripUngroundedAnimateLabels } from "./grounding";
 import { ensureSectionVisuals } from "./section-visuals";
 import { applyVisualPatch } from "./visual-patch";
 import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
-import { designLessonVisuals } from "./visual-designer";
+import { designLessonVisuals, sectionsNeedingDesign } from "./visual-designer";
 import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolutions, sourceHashOf, type BlindSolutions } from "./blind-solver";
 import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, mergeVerifierRetry, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag } from "./bank-verifier";
 import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
@@ -631,7 +631,11 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         step: job.step, policy: "visualDesigner", model: m, system: sectionSystem, user,
       });
       const fallbackModel = FALLBACK_MODELS.animator;
+      // Élő mérés (2026-09-30, 2. kör): a szerző csak 2 fejezetet írt át, a tervező mégis mind a 12-t újrarajzolta
+      // (kb. 2,4 USD, a kész ábrák mellé második ábra). Csak az ábra nélküli vagy gyenge ábrájú fejezet kap hívást.
+      const designSections = sectionsNeedingDesign(designerLesson);
       const designed = await designLessonVisuals(designerLesson, map.concepts, {
+        sections: designSections,
         systemFor: (i, variant) => promptLookup(STUDIO_PROMPT_NAMES.animatorSection, buildSectionDesignerPrompt(variant, i, promptMapOf(map))),
         call: async (sectionSystem, user, sectionIndex) => {
           try {
@@ -645,7 +649,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         },
         log: (line) => logger.info(`[STUDIO] Ábratervező (${job.id}): ${line}`),
       });
-      logger.info(`[STUDIO] Ábratervező kész (${job.id}): ${designed.designed.length}/${designerLesson.sections.length} fejezet új ábrával, újrakérés: ${designed.retried.map((i) => i + 1).join(", ") || "–"}, hibás hívás: ${designed.failed.map((i) => i + 1).join(", ") || "–"}, token ${designed.usage.promptTokens}/${designed.usage.completionTokens}`);
+      logger.info(`[STUDIO] Ábratervező kész (${job.id}): ${designed.designed.length}/${designSections.length} tervezett fejezet új ábrával (${designerLesson.sections.length} fejezetből), újrakérés: ${designed.retried.map((i) => i + 1).join(", ") || "–"}, hibás hívás: ${designed.failed.map((i) => i + 1).join(", ") || "–"}, token ${designed.usage.promptTokens}/${designed.usage.completionTokens}`);
       // A tervező a teljes, ábrákkal kiegészített leckét adja; a szerződés-ellenőrzés (checkAnimatorResult) ugyanaz.
       json = designed.lesson;
       usage = designed.usage;

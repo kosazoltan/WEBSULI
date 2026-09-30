@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { designLessonVisuals, designerVisuals } from "../server/studio/visual-designer";
+import { designLessonVisuals, designerVisuals, sectionsNeedingDesign } from "../server/studio/visual-designer";
 import { weakVisuals } from "../server/studio/visual-quality";
 import type { Lesson } from "../shared/lesson-schema";
 
@@ -102,4 +102,22 @@ test("kevés rajzelemű illusztráció gyenge (sparse)", () => {
   const weak = weakVisuals(withSparse);
   assert.equal(weak.length, 1);
   assert.equal(weak[0].kind, "sparse");
+});
+
+test("szerzői javítókör után csak az ábra nélküli vagy gyenge ábrájú fejezet tervezendő", () => {
+  const good = { kind: "animate", animKind: "timeline", params: { events: ["Kr. e. 3100: írás", "Kr. e. 2500: Babilon"] }, caption: "Babilon az időrendben.", coversConceptIds: ["c3"] };
+  const echo = { kind: "animate", animKind: "geometry", params: { shape: "circle" }, caption: "zikkurat", coversConceptIds: ["c2"] };
+  const withFigures = { ...lesson, sections: [
+    lesson.sections[0],
+    { ...lesson.sections[1], blocks: [...lesson.sections[1].blocks, echo] },
+    { ...lesson.sections[2], blocks: [...lesson.sections[2].blocks, good] },
+  ] } as unknown as Lesson;
+  assert.deepEqual(sectionsNeedingDesign(withFigures), [0, 1]);
+});
+
+test("nincs tervezendő fejezet: egyetlen hívás sem megy ki", async () => {
+  let count = 0;
+  const result = await designLessonVisuals(lesson, concepts, { systemFor, sections: [], call: async () => { count++; return { json: { visuals: [] } }; } });
+  assert.equal(count, 0);
+  assert.equal(result.lesson.sections[0], lesson.sections[0]);
 });

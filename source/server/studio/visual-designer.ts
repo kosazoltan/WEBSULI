@@ -66,6 +66,19 @@ export function designerVisuals(json: unknown, sectionIndex: number, base?: Less
   return visuals;
 }
 
+/**
+ * A tervezendő fejezetek: ahol nincs ábra, vagy minden ábrája gyenge/hibás. A kész, jó ábrájú fejezet nem kap új
+ * hívást (a szerzői javítókör után csak az átírt fejezet ábrája esik ki).
+ */
+export function sectionsNeedingDesign(lesson: Lesson): number[] {
+  const weak = weakVisuals(lesson);
+  return lesson.sections.map((section, index) => {
+    const figures = section.blocks.map((b, i) => (b.kind === "animate" ? i : -1)).filter((i) => i >= 0);
+    const good = figures.filter((i) => !weak.some((w) => w.sectionIndex === index && w.blockIndex === i));
+    return good.length ? -1 : index;
+  }).filter((i) => i >= 0);
+}
+
 type Trial = { lesson: Lesson; accepted: number; problems: string[] };
 
 /** A fejezet foltjának próbája a megadott leckeváltozaton: elfogadott ábrák száma és a (magyar) problémák. */
