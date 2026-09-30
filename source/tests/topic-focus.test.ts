@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { MapConcept } from "../server/studio/coverage";
-import { applyTopicFocus, decideTopicFocus, validateTopicFocus } from "../server/studio/topic-focus";
+import { applyTopicFocus, decideTopicFocus, topicFocusModels, validateTopicFocus } from "../server/studio/topic-focus";
+
+// Spec 2026-09-30 (docs/specs/2026-09-30-temafokusz-kesleltetes.md): mérve a Mezopotámia-térképen (55 fogalom), az
+// éles úton — deepseek-v4-flash 1/5 döntés 60 s-on belül, glm-5.3-flash 5/5, 11–53 s. A glm megy elöl.
+test("topicFocusModels: a mérten megbízható glm-5.3-flash az első, a gateHelper-modell (deepseek) a tartalék", () => {
+  assert.deepEqual(topicFocusModels({}), ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4-flash"]);
+  assert.deepEqual(topicFocusModels({ STUDIO_MODEL_GATE_HELPER: "z-ai/glm-5.3-flash" }), ["z-ai/glm-5.3-flash"], "azonos modell kétszer nem hívódik");
+});
 
 /* Spec 2026-09-29 (docs/specs/2026-09-29-tanari-temafokusz.md): a tanári kérés a jobban szűkíti a kötelező
  * lefedettséget — a kérésen kívüli fogalmak `extra` súlyt kapnak a job saját térkép-másolatában. */

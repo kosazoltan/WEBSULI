@@ -1,6 +1,7 @@
 import type { MapConcept } from "./coverage";
 import { WorkflowConflict, WorkflowWaiting } from "../workflows/engine";
 import { logger } from "../lib/logger";
+import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 
 /**
  * Spec 2026-09-29 (docs/specs/2026-09-29-tanari-temafokusz.md, tulajdonosi döntés): a tanár kérése a JOBBAN
@@ -65,7 +66,17 @@ export function topicFocusUserMessage(instruction: string, concepts: MapConcept[
   return `A tanár kérése:\n${instruction.trim()}\n\nFogalmak (soronként egy JSON):\n${lines.join("\n")}`;
 }
 
-export type FocusCaller = (system: string, user: string) => Promise<unknown>;
+/**
+ * Spec 2026-09-30 (docs/specs/2026-09-30-temafokusz-kesleltetes.md): the model order of the focus decision.
+ * Mérve (Mezopotámia-térkép, 55 fogalom, éles út, 60 s-os határidő): a deepseek-v4-flash 5 hívásból 1-szer döntött
+ * (3 időtúllépés 60 s-nál, 1 üres válasz), a glm-5.3-flash 5/5-ször, 11–53 s alatt, azonos fókuszmérettel. A glm megy
+ * elöl, a deepseek (a `gateHelper` szerep modellje, más szolgáltató) a tartalék.
+ */
+export function topicFocusModels(env: Record<string, string | undefined> = process.env): string[] {
+  return [...new Set([FALLBACK_MODELS.gateHelper, resolveStudioModel("gateHelper", env)].filter((m): m is string => !!m))];
+}
+
+export type FocusCaller =(system: string, user: string) => Promise<unknown>;
 
 function describe(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
