@@ -1,5 +1,6 @@
 import type { Lesson } from "../../shared/lesson-schema";
 import { visualParamProblems } from "../../shared/lesson-visual-params";
+import { sanitizeIllustration } from "../../shared/illustration-svg";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 4. szelet): gyenge ábrák gépi felismerése.
@@ -12,7 +13,18 @@ import { visualParamProblems } from "../../shared/lesson-visual-params";
  * A mérés nem blokkol: az ábrakészítő egy célzott újrakérést kap rájuk, a maradék jelzésként marad.
  */
 
-export type WeakVisual = { sectionIndex: number; blockIndex: number; kind: "echo" | "outline" | "broken"; reason: string };
+export type WeakVisual = { sectionIndex: number; blockIndex: number; kind: "echo" | "outline" | "broken" | "sparse"; reason: string };
+
+/**
+ * Spec 2026-09-30 (ábratervező): a tulajdonos „nagyon primitív” jelzése mögött mért illusztrációk 3–8 rajzelemből álltak
+ * (egy téglalap-torony, két vonal-folyó). A rajzelemek (alakzatok) száma a tisztított SVG-ben, a papír nélkül.
+ */
+export const SPARSE_ILLUSTRATION_ELEMENTS = 10;
+export function illustrationShapeCount(svg: unknown): number {
+  const check = sanitizeIllustration(svg);
+  if (!check.ok) return 0;
+  return (check.svg.match(/<(path|circle|ellipse|rect|line|polyline|polygon)\b/g) ?? []).length - 1;
+}
 
 const norm = (s: string) => s.toLocaleLowerCase("hu").replace(/[\s.,;:!?·×*()–—-]+/g, " ").trim();
 
@@ -29,6 +41,13 @@ export function weakVisuals(lesson: Lesson): WeakVisual[] {
       }
       const problems = visualParamProblems(block.animKind, block.params);
       if (problems.length) { weak.push({ ...at, kind: "broken", reason: `hiányos adat, nem rajzolódik ki: ${problems.join("; ").slice(0, 200)}` }); return; }
+      if (block.animKind === "illustration") {
+        const shapes = illustrationShapeCount(block.params.svg);
+        if (shapes < SPARSE_ILLUSTRATION_ELEMENTS) {
+          weak.push({ ...at, kind: "sparse", reason: `kevés rajzelem (${shapes}) — a fogalmat részletesebben kell megmutatni: térhatás, megnevezett részek, kapcsolatot jelző nyilak (vagy scene3d)` });
+          return;
+        }
+      }
       if (block.animKind === "process" && exampleSteps.size) {
         const steps = Array.isArray(block.params.steps) ? (block.params.steps as unknown[]).filter((s): s is string => typeof s === "string").map(norm) : [];
         const copied = steps.filter((s) => exampleSteps.has(s)).length;

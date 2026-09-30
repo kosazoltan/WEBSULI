@@ -40,6 +40,8 @@ export const ANIM_KINDS = [
   "venn",
   // Spec 2026-09-24 (2. szelet): szabad SVG-illusztráció, szigorú tisztítással (shared/illustration-svg.ts).
   "illustration",
+  // Spec 2026-09-30 (ábratervező + 3D): forgatható 3D-jelenet leíró adatból (three.js a kliensben; a modell kódot nem ír).
+  "scene3d",
 ] as const;
 
 /** Hands-on interactions (LS-4 implements them). */

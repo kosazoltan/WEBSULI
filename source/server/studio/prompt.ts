@@ -22,6 +22,8 @@ export const STUDIO_PROMPT_NAMES = {
   /** Audit 2026-09-05: dedicated key — a DB-seeded general author prompt must not replace the scoped fix contract. */
   authorFix: "studio.author.fix.v1",
   animator: "studio.animator.v1",
+  /** Spec 2026-09-30: fejezetenkénti ábratervező — külön kulcs, a régi egész-leckés DB-felülírás nem írja felül. */
+  animatorSection: "studio.animator.section.v1",
   lektor: "studio.lektor.v1",
 } as const;
 

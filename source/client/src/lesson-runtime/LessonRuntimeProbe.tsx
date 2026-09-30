@@ -148,8 +148,28 @@ const VISUALS_LESSON: Lesson = {
   ],
 };
 
+/** Spec 2026-09-30 (ábratervező + 3D): `?scene3d=1` — a forgatható 3D-jelenet külön mérőleckéje (a `?visuals=1` öt ábrája változatlan). */
+const SCENE3D_LESSON: Lesson = {
+  ...VISUALS_LESSON,
+  title: "3D-jelenet próbája",
+  sections: [
+    visualSection("A zikkurat", "A zikkurat lépcsős toronytemplom: kisebbedő teraszok, a tetején a szentély. A Tigris és az Eufrátesz között épült, agyagtéglából.", "scene3d", {
+      objects: [
+        { shape: "stairs", at: [0, 0, 0], size: [6, 4, 6], steps: 4, color: "#d98c4a", label: "zikkurat" },
+        { shape: "box", at: [0, 4, 0], size: [1.4, 1, 1.4], color: "#f1e3c6", label: "szentély" },
+        { shape: "river", at: [0, 0, 0], points: [[-7, -7], [-5, -1], [-7, 7]], width: 1.4, color: "#3b82c4", label: "Tigris" },
+        { shape: "river", at: [0, 0, 0], points: [[7, -7], [6, 0], [8, 7]], width: 1.4, color: "#3b82c4", label: "Eufrátesz" },
+      ],
+      labels: [{ text: "agyagtégla", at: [3.2, 0.8, 3.2] }],
+      ground: "#e6c98f",
+      view: "iso",
+    }, "A zikkurat kisebbedő teraszai, tetején a szentéllyel, a Tigris és az Eufrátesz között."),
+  ],
+};
+
 function probeLesson(search: string): Lesson {
   const q = new URLSearchParams(search);
+  if (q.has("scene3d")) return SCENE3D_LESSON;
   if (q.has("visuals")) return VISUALS_LESSON;
   if (q.has("fusion")) {
     const lesson = fusionFixture();

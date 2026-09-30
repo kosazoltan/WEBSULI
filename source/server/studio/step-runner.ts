@@ -28,6 +28,7 @@ import { applyTopicFocus, type TopicFocus } from "./topic-focus";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import {
   buildAnimatorPrompt,
+  buildSectionDesignerPrompt,
   buildAuthorPrompt,
   buildConceptFixPrompt,
   buildLektorPrompt,
@@ -54,6 +55,7 @@ import { stripUngroundedAnimateLabels } from "./grounding";
 import { ensureSectionVisuals } from "./section-visuals";
 import { applyVisualPatch } from "./visual-patch";
 import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
+import { designLessonVisuals, sectionsNeedingDesign } from "./visual-designer";
 import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolutions, sourceHashOf, type BlindSolutions } from "./blind-solver";
 import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, mergeVerifierRetry, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag } from "./bank-verifier";
 import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
@@ -616,10 +618,41 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     });
   // Spec 2026-09-24 (bank-ellenőr): a lektor-hívással párhuzamosan indul, az eredményágban várjuk be.
   const bankCheck = job.step === "lektor" ? startBankVerifier(job, lektorBlind, providerFactory, keyConfigured) : undefined;
+  // Spec 2026-09-30 (ábratervező): fejezetenként külön Opus-hívás (a régi egész-leckés hívás 16k-ból rajzolt 11 ábrát).
+  // Visszakapcsolás a régi útra: STUDIO_VISUAL_DESIGNER=off.
+  const designerLesson = job.step === "animator" && !reusedVisuals && process.env.STUDIO_VISUAL_DESIGNER !== "off"
+    ? job.output?.lesson as Lesson | undefined : undefined;
   try {
     if (reusedVisuals) {
       json = job.output?.lesson;
       usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    } else if (designerLesson) {
+      const designerCall = (m: string, sectionSystem: string, user: string) => callStepModel(providerFactory(m, "visualDesigner"), {
+        step: job.step, policy: "visualDesigner", model: m, system: sectionSystem, user,
+      });
+      const fallbackModel = FALLBACK_MODELS.animator;
+      // Élő mérés (2026-09-30, 2. kör): a szerző csak 2 fejezetet írt át, a tervező mégis mind a 12-t újrarajzolta
+      // (kb. 2,4 USD, a kész ábrák mellé második ábra). Csak az ábra nélküli vagy gyenge ábrájú fejezet kap hívást.
+      const designSections = sectionsNeedingDesign(designerLesson);
+      const designed = await designLessonVisuals(designerLesson, map.concepts, {
+        sections: designSections,
+        systemFor: (i, variant) => promptLookup(STUDIO_PROMPT_NAMES.animatorSection, buildSectionDesignerPrompt(variant, i, promptMapOf(map))),
+        call: async (sectionSystem, user, sectionIndex) => {
+          try {
+            return await designerCall(primaryModel, sectionSystem, user);
+          } catch (error) {
+            // Csak modellhívás-hibára (nem séma-sértésre) egy próba a tartalék modellel, fejezetenként.
+            if (!(error instanceof StepModelError) || !fallbackModel || fallbackModel === primaryModel) throw error;
+            logger.warn(`[STUDIO] Ábratervező (${job.id}) ${sectionIndex + 1}. fejezet: ${primaryModel} hibázott — ${describeStepError(error)} → ${fallbackModel}`);
+            return designerCall(fallbackModel, sectionSystem, user);
+          }
+        },
+        log: (line) => logger.info(`[STUDIO] Ábratervező (${job.id}): ${line}`),
+      });
+      logger.info(`[STUDIO] Ábratervező kész (${job.id}): ${designed.designed.length}/${designSections.length} tervezett fejezet új ábrával (${designerLesson.sections.length} fejezetből), újrakérés: ${designed.retried.map((i) => i + 1).join(", ") || "–"}, hibás hívás: ${designed.failed.map((i) => i + 1).join(", ") || "–"}, token ${designed.usage.promptTokens}/${designed.usage.completionTokens}`);
+      // A tervező a teljes, ábrákkal kiegészített leckét adja; a szerződés-ellenőrzés (checkAnimatorResult) ugyanaz.
+      json = designed.lesson;
+      usage = designed.usage;
     } else {
     let result: Awaited<ReturnType<typeof attempt>>;
     try {
@@ -842,8 +875,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // Spec 2026-09-24 (4. szelet): gyenge ábra (a példa lépéseinek szövegdoboza, puszta körvonal, hiányos
       // adat) után egy célzott újrakérés az ábrakészítőnek — a friss sorszámokkal, mert a folt eltolta őket.
       let animated = outcome.lesson;
-      const weak = !animatorModelFailure && !reusedVisuals ? weakVisuals(animated) : [];
-      const rejectedVisuals = !animatorModelFailure && !outcome.fellBack ? patched?.rejected ?? [] : [];
+      // Az ábratervező már fejezetenként újrakérte a gyenge/elutasított ábrát — ott nincs második, egész-leckés kör.
+      const weak = !animatorModelFailure && !reusedVisuals && !designerLesson ? weakVisuals(animated) : [];
+      const rejectedVisuals = !animatorModelFailure && !outcome.fellBack && !designerLesson ? patched?.rejected ?? [] : [];
       if (weak.length || rejectedVisuals.length) {
         logger.warn(`[STUDIO] Gyenge/elutasított ábra (${job.id}): ${weak.map((w) => `${w.sectionIndex + 1}/${w.blockIndex} ${w.kind}`).join(", ")}${rejectedVisuals.length ? ` + ${rejectedVisuals.length} elutasított` : ""} → célzott újrakérés`);
         try {
