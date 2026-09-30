@@ -50,7 +50,7 @@ import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { correctionAuditText, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 import { callStepModel } from "./run-step";
-import { decideTopicFocus, type TopicFocus } from "./topic-focus";
+import { decideTopicFocus, topicFocusModels, type TopicFocus } from "./topic-focus";
 import { createStudioStepProvider } from "../ai/studio-provider";
 import type { MapConcept } from "./coverage";
 
@@ -152,7 +152,7 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
 }
 import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
-import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
+import { resolveStudioModel } from "../ai/models";
 
 /**
  * LS-2c — the admin endpoints that drive the lesson pipeline.
@@ -293,8 +293,7 @@ lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: R
 async function focusForInstruction(mapId: string, instruction: string): Promise<TopicFocus | null> {
   const map = await (await createDrizzlePipelineStore()).loadMap(mapId);
   if (!map) return null;
-  const models = [...new Set([resolveStudioModel("gateHelper"), FALLBACK_MODELS.gateHelper].filter((m): m is string => !!m))];
-  return decideTopicFocus(instruction, map.concepts, models.map((model) => async (system: string, user: string) =>
+  return decideTopicFocus(instruction, map.concepts, topicFocusModels().map((model) => async (system: string, user: string) =>
     (await callStepModel(createStudioStepProvider(model, "topicFocus"), { step: "pedagogue", policy: "topicFocus", model, system, user })).json));
 }
 

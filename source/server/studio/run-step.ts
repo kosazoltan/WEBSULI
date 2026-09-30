@@ -152,7 +152,9 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     signal?.throwIfAborted();
   } catch (error) {
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
-    const deadlineMs = stepDeadlineMs(input.step);
+    // Spec 2026-09-30 (témafókusz-késleltetés): the label must name the deadline that actually fired — the
+    // policy's, not the step's (topicFocus runs as step "pedagogue": 60 s cut, but the log said 300000ms).
+    const deadlineMs = stepDeadlineMs(input.policy ?? input.step);
     const cause = deadlineMs && signal?.aborted && signal.reason?.name === "TimeoutError"
       ? new AIProviderTimeoutError(provider.name, deadlineMs) : error;
     throw new StepModelError(input.step, "a szolgáltató hibát jelzett", { cause });

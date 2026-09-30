@@ -149,6 +149,31 @@ test("a bank/animátor kérés külső határidőt kap, amely a törzs olvasás�
   assert.equal(timeoutMs, 240_000);
 });
 
+// Spec 2026-09-30 (témafókusz-késleltetés, mérve élesben és helyben): a témafókusz `step: "pedagogue"`, `policy:
+// "topicFocus"` hívása 60 s-nál valóban megszakad, de a napló „Request timed out after 300000ms”-t írt, mert a hiba
+// címkéje a lépés (pedagogue, 300 s) határidejét nevezte meg, nem a ténylegesen lejárt szabályét.
+test("a témafókusz-hívás egyetlen kérés, 60 s-os határidővel, és a hiba a valóban lejárt 60 s-ot nevezi meg", async t => {
+  withEnv(t, { OPENROUTER_API_KEY: "test-placeholder" });
+  const controller = new AbortController();
+  let timeoutMs: number | undefined;
+  let fetches = 0;
+  t.mock.method(AbortSignal, "timeout", (ms: number) => { timeoutMs = ms; return controller.signal; });
+  t.mock.method(globalThis, "fetch", async () => {
+    fetches++;
+    controller.abort(new DOMException("A határidő lejárt", "TimeoutError"));
+    throw new DOMException("aborted", "AbortError");
+  });
+  const provider = createStudioStepProvider("deepseek/deepseek-v4-flash", "topicFocus");
+  let cause: unknown;
+  await assert.rejects(callStepModel(provider, { step: "pedagogue", policy: "topicFocus", model: provider.model, system: "S", user: "U" }),
+    (error: unknown) => { cause = (error as Error).cause; return true; });
+  assert.equal(timeoutMs, 60_000, "a külső határidő a topicFocus-szabályé");
+  assert.equal(fetches, 1, "egyetlen kérés, rejtett újrapróbálás nélkül");
+  assert.ok(cause instanceof AIProviderTimeoutError);
+  assert.match((cause as Error).message, /60000ms/);
+  assert.doesNotMatch((cause as Error).message, /300000ms/);
+});
+
 test("a lektor szabályzata változatlan; szabályzat nélküli lépés (author) nem kap effortot", async t => {
   withEnv(t, { OPENROUTER_API_KEY: "test-placeholder", AI_INTEGRATIONS_OPENAI_API_KEY: "test-placeholder" });
   assert.equal(STUDIO_STEP_POLICY.author, undefined);
