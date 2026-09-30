@@ -97,7 +97,8 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
   const all = passes.flat();
   const exclusions = all.filter((c) => c.kind === "exclude");
   const source = sourceText?.trim() ? normText(sourceText) : "";
-  const excluded: string[] = [];
+  // Review #161 (Sourcery): a tanár kizárása akkor is a jegyzék része (átláthatóság), ha nincs vele átfedő tanítandó jelölt.
+  const excluded: string[] = exclusions.map((e) => e.text).filter((t, i, arr) => arr.indexOf(t) === i);
   const byId = new Map<string, { texts: Set<string>; candidates: PointCandidate[] }>();
   const seenText = new Set<string>();
   for (const c of all) {
@@ -115,13 +116,16 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
     const first = entry.candidates[0];
     const texts = [...entry.texts];
     const contradictory = texts.length > 1 && !texts.every((t) => texts.every((u) => t === u || t.includes(u) || u.includes(t)));
-    const quoted = entry.candidates.find((c) => c.sourceQuote && alnum(normText(c.sourceQuote)).length >= 20 && source.includes(normText(c.sourceQuote)));
-    const supports = quoted?.supports ?? (quoted ? "yes" : undefined);
+    // Review #161 (Codex P1 / Sourcery): csak a KIMONDOTT `supports: "yes"` igazol — a betűhű idézet önmagában a témát
+    // érintheti (H34); a hiányzó ítélet ellenőrző-hiba → eldöntetlen, nem igazolt.
+    const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && alnum(normText(c.sourceQuote)).length >= 20 && source.includes(normText(c.sourceQuote)));
+    const quoted = verifiedQuotes.find((c) => c.supports === "yes") ?? verifiedQuotes.find((c) => c.supports === "no") ?? verifiedQuotes[0];
     const base = { id, text: first.text, requestSpan: first.requestSpan, processing: "processed" as const };
     if (contradictory) return { ...base, content: "ambiguous" as const, reason: `két kivonat másképp értelmezi: ${texts.join(" / ").slice(0, 200)}` };
     if (!source) return { ...base, content: "undecidable" as const, reason: "nincs forrásszöveg, a pont nem igazolható" };
-    if (quoted && supports === "yes") return { ...base, content: "pending" as const, sourceQuote: quoted.sourceQuote!, supports: "yes" as const, ...(quoted.reason ? { reason: quoted.reason } : {}) };
-    if (quoted) return { ...base, content: "not_in_source" as const, sourceQuote: quoted.sourceQuote!, supports: "no" as const, reason: quoted.reason ?? "az idézet a témát érinti, az állítást nem igazolja" };
+    if (quoted && quoted.supports === "yes") return { ...base, content: "pending" as const, sourceQuote: quoted.sourceQuote!, supports: "yes" as const, ...(quoted.reason ? { reason: quoted.reason } : {}) };
+    if (quoted && quoted.supports === "no") return { ...base, content: "not_in_source" as const, sourceQuote: quoted.sourceQuote!, supports: "no" as const, reason: quoted.reason ?? "az idézet a témát érinti, az állítást nem igazolja" };
+    if (quoted) return { ...base, content: "undecidable" as const, sourceQuote: quoted.sourceQuote!, reason: "a kivonatoló nem adott alátámasztási ítéletet (supports) az idézethez" };
     return { ...base, content: "not_in_source" as const, reason: first.reason ?? "nincs betűhű forrás-idézet" };
   }).sort((a, b) => haystack.indexOf(normText(a.requestSpan)) - haystack.indexOf(normText(b.requestSpan)));
   if (frame.truncated) points.push({ id: "pt-unprocessed", text: `A kérés feldolgozatlan része (${frame.rest.length} karakter a ${OWNER_INSTRUCTION_FRAME} karakteres kereten túl)`, requestSpan: frame.rest.slice(0, 160), processing: "unprocessed", content: "undecidable", reason: "kereten túl, nem feldolgozott" });

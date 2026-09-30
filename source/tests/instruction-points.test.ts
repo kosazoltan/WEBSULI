@@ -75,7 +75,13 @@ test("C14: jelölt csak betűhű requestSpan-nel marad; a kizárt tartalom kiesi
     { text: "A sírépítés technikája", requestSpan: "a piramisokat", kind: "teach", sourceQuote: "A piramisok a fáraók sírjai voltak", supports: "yes" },
   ] }, request);
   const inventory = buildInventory([raw, pass2], request, EGYPT_SOURCE);
-  assert.deepEqual(inventory.excluded, ["A múmiák készítése"], "a tanár által kizárt többletpont kiesik");
+  assert.deepEqual(inventory.excluded, ["A múmiákat nem kell tanítani", "A múmiák készítése"], "a kizárás maga és a kizárt többletpont is a jegyzékben (review #161)");
+  // Review #161 (P1): a betűhű idézet supports ítélet nélkül NEM igazol — eldöntetlen, nem tanítható
+  const noVerdict = buildInventory([[{ text: "A fáraók", requestSpan: "a fáraókat", kind: "teach", sourceQuote: "A fáraót isteni uralkodónak tartották" }]], request, EGYPT_SOURCE);
+  assert.equal(noVerdict.points[0].content, "undecidable");
+  assert.match(noVerdict.points[0].reason!, /nem adott alátámasztási ítéletet/);
+  assert.deepEqual(teachablePoints(noVerdict), []);
+  assert.deepEqual(buildInventory([[{ text: "Csak kizárás", requestSpan: "a múmiákat ne tanítsd", kind: "exclude" }]], request, EGYPT_SOURCE).excluded, ["Csak kizárás"], "kizárás átfedő tanítandó jelölt nélkül is megmarad");
   assert.ok(!inventory.points.some((p) => /múmi/i.test(p.text)));
   assert.equal(inventory.points.find((p) => p.text === "A fáraók")?.content, "pending");
   const piramis = inventory.points.find((p) => p.id === pointId("a piramisokat"))!;
