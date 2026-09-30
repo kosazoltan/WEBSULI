@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { logger } from "./logger";
+import { LESSON_SCORING_VERSION } from "@shared/answer-value";
 
 // A `preReadText` paraméter azért kell, mert a 403-as CSRF-ág már beolvasta
 // a body-t (res.text()) — a Response body csak egyszer olvasható, ismételt
@@ -136,7 +137,8 @@ export async function apiRequest<T = unknown>(
         debugLog(`[API REQUEST] ${method} ${url}, size: ${data ? JSON.stringify(data).length : 0} bytes`);
         
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
-        const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+        // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
+        const headers: Record<string, string> = { "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), ...(data ? { "Content-Type": "application/json" } : {}) };
         if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
           try {
             const csrfToken = await csrfTokenManager.getToken();

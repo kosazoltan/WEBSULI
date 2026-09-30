@@ -223,8 +223,8 @@ Mit tesz: minden ábra nélküli fejezetbe a saját levezetett példájából (�
 Mit NEM tesz: példa nélküli fejezetbe nem talál ki ábrát → ilyenkor a modell dolgozik.
 Futtatás: automatikus; kézzel \`npm run studio:tool -- section-visuals <lecke.json>\`.`,
   "arithmetic-claims": `### Eszköz: arithmetic-claims (minden bankcsomag-válasz után, kódból)
-Mit tesz: a módszerek, feladatok (kérdés + minta) és kvízek (kérdés + magyarázatok) szövegében minden „a · b = c" alakú (+ − · : műveletű, zárójel nélküli) aritmetikai állítást kiszámol; a hamis állítás (pl. „12 · 2 = 48", „154 · 8 = 1238") a csomagot javító körre küldi a lektor előtt.
-Mit NEM tesz: zárójeles kifejezést, szöveges következtetést, mértékegység-átváltást nem ítél meg — ezek a lektoré.
+Mit tesz: a módszerek, feladatok (kérdés+minta) és kvízek (kérdés+magyarázatok) szövegében minden „a · b = c" alakú (+ − · : műveletű, zárójel nélküli) aritmetikai állítást kiszámol; a hamis állítás (pl. „154 · 8 = 1238") a csomagot javító körre küldi a lektor előtt. Típusos feladatnál (typedAnswers) a referencia value-ját a kérdés kifejezéséből újraszámolja; eltérés vagy értelmezhetetlen referencia = csomaghiba.
+Mit NEM tesz: zárójeles kifejezést, szöveges következtetést, mértékegység-átváltást nem ítél meg (a lektoré).
 Futtatás: automatikus; kézzel \`npm run studio:tool -- arithmetic-claims <csomag.json>\`.`,
   "bank-salvage": `### Eszköz: bank-salvage (a MENTŐ kísérlet után is hibás csomagra, kódból)
 Mit tesz: az „ID: …” hibás tételeket kiveszi (≤ 20%), a csomagot csak teljes ellenőrzés után veszi át.
@@ -238,12 +238,14 @@ export type ToolSkillName = keyof typeof TOOL_SKILLS;
  *  the author got ~1,5k tokens of tool text per call they could not act on). */
 export const ROLE_TOOLS: Partial<Record<RoleSkillRole, ToolSkillName[]>> = {
   pedagogue: ["outline-autofix"],
-  animator: ["section-visuals", "bank-packet-autofix", "arithmetic-claims"],
+  // Spec 2026-09-30 (U2, B3): az ábratervező modell csak ábrát ad — a bankcsomagot a `bank` szerep építi, ezért a bank-eszközök
+  // leírása nála ~1,1 k karakter holt súly volt (mérve: 5365 > 5200 az eszközszöveg frissítése után).
+  animator: ["section-visuals"],
   bank: ["bank-packet-autofix", "arithmetic-claims", "bank-salvage"],
 };
 
 for (const [role, tools] of Object.entries(ROLE_TOOLS) as [RoleSkillRole, ToolSkillName[]][]) {
-  ROLE_SKILLS[role] += `\n## Eszközök (a program futtatja, nem te)\nAmit az alábbi eszköz javít, arra ne pazarolj kört; ami a „NEM javít" listán van, azt neked kell hibátlanul adnod.\n${tools.map(t => TOOL_SKILLS[t]).join("\n")}`;
+  ROLE_SKILLS[role] += `\n## Eszközök (a program futtatja, nem te)\nAmit az eszköz javít, arra ne pazarolj kört; a „NEM javít" listát neked kell hibátlanul adnod.\n${tools.map(t => TOOL_SKILLS[t]).join("\n")}`;
 }
 
 /**

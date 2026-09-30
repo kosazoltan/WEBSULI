@@ -11,6 +11,7 @@
  */
 
 import { EXPR, OPS, evaluateExpression } from "../../../shared/arithmetic-expression";
+import { referenceValueProblems, type TypedAnswer } from "../../../shared/answer-value";
 
 // Spec 2026-09-29 (egy-helyes-valasz): a kiértékelő a `shared/arithmetic-expression.ts`-be költözött (a kliens és a
 // `shared/single-choice-check.ts` is használja); itt változatlanul újraexportálva.
@@ -65,10 +66,13 @@ export function falseArithmeticClaims(text: string): string[] {
 }
 
 /** Bank items' texts with false arithmetic, for the packet validator. */
-export function arithmeticClaimProblems(packet: { methods?: Array<{ id: string; prompt?: string; answer?: string }>; tasks?: Array<{ id: string; q?: string; sample?: string }>; quiz?: Array<{ id: string; question?: string; feedbackPerOption?: string[] }> }): string[] {
+export function arithmeticClaimProblems(packet: { methods?: Array<{ id: string; prompt?: string; answer?: string }>; tasks?: Array<{ id: string; q?: string; sample?: string; typedAnswers?: readonly TypedAnswer[] }>; quiz?: Array<{ id: string; question?: string; feedbackPerOption?: string[] }> }): string[] {
   const problems: string[] = [];
   for (const m of packet.methods ?? []) for (const bad of falseArithmeticClaims(`${m.prompt ?? ""}\n${m.answer ?? ""}`)) problems.push(`${m.id}: hibás számítás a módszerben: ${bad}`);
   for (const t of packet.tasks ?? []) for (const bad of falseArithmeticClaims(`${t.q ?? ""}\n${t.sample ?? ""}`)) problems.push(`${t.id}: hibás számítás a feladatban vagy a mintában: ${bad}`);
+  // Spec 2026-09-30 (U1, C13): a típusos REFERENCIA igazsága — a kérdés kifejezéséből újraszámolva (a típusos mező önmagában
+  // nem javítja a hibás számítást: Astra 4–6. kör, korpusz 5e9e2a84 „111”).
+  for (const t of packet.tasks ?? []) if (t.typedAnswers?.length && t.q) problems.push(...referenceValueProblems({ id: t.id, q: t.q, typedAnswers: t.typedAnswers }).map((p) => `hibás referencia: ${p}`));
   for (const q of packet.quiz ?? []) for (const bad of falseArithmeticClaims(`${q.question ?? ""}\n${(q.feedbackPerOption ?? []).join("\n")}`)) problems.push(`${q.id}: hibás számítás a kérdésben vagy a magyarázatban: ${bad}`);
   return problems;
 }

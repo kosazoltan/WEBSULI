@@ -35,12 +35,20 @@ export function LessonView({ material }: { material: { id: string; title?: strin
   }
 
   if (error) {
+    // Spec 2026-09-30 (U1, §C-V/1): a 409 a pontozó-verzió kapuja — a régi oldal nem pontozhat némán rosszul; a
+    // felhasználó a kiszolgáló üzenetét és egy frissítő gombot kap, nem hálózati hibát (review #159).
+    const outdated = (error as Error & { status?: number }).status === 409;
     return (
       <div className="max-w-2xl mx-auto p-6">
-        <p className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
+        <p className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300" data-testid={outdated ? "lesson-outdated" : undefined}>
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          A lecke nem tölthető be. Lehet, hogy most gyenge a hálózat.
+          {outdated ? error.message : "A lecke nem tölthető be. Lehet, hogy most gyenge a hálózat."}
         </p>
+        {outdated && (
+          <button type="button" onClick={() => window.location.reload()} className="mt-3 mr-2 inline-flex items-center gap-2 min-h-11 px-4 rounded-lg border text-sm font-semibold" data-testid="lesson-refresh">
+            <RotateCw className="w-4 h-4" /> Oldal frissítése
+          </button>
+        )}
         <button type="button" onClick={() => void refetch()} disabled={isFetching} className="mt-3 inline-flex items-center gap-2 min-h-11 px-4 rounded-lg border text-sm font-semibold" data-testid="lesson-retry">
           <RotateCw className={isFetching ? "w-4 h-4 animate-spin" : "w-4 h-4"} /> Újrapróbálás
         </button>
