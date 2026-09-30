@@ -48,10 +48,14 @@ export function applyTopicFocus<T extends FocusableMap>(map: T, focus: TopicFocu
 }
 
 export const TOPIC_FOCUS_SYSTEM = [
-  "Tananyag-tervező segítő vagy. A tudástár a tanár által adott forrásból készült; a tanár kérést is írt.",
-  "ELŐSZÖR döntsd el, hogy a kérés a forrás egy RÉSZTÉMÁJÁT kéri-e (például: csak a 3-mal és 9-cel való",
-  "oszthatóságot a sok szabályból). Ha a kérés a terjedelemről, évfolyamról, nehézségről, stílusról, egy elírás",
-  "javításáról szól, vagy a forrás egészét kéri, akkor NEM résztéma: ilyenkor narrow=false és üres lista.",
+  // Spec 2026-09-30-temafokusz-resztema-dontes: „a forrás egésze” kétértelmű volt (a füzetlapot felsoroló kérést a glm
+  // 4/8-szor NEM résztémának vette) — a résztéma a tudástár fogalmaihoz mérendő.
+  "Tananyag-tervező segítő vagy. A tudástár a tanár által adott forrás(ok)ból készült; a tanár kérést is írt.",
+  "ELŐSZÖR döntsd el, hogy a kérés a tudástár fogalmainak csak egy RÉSZÉT kéri-e tanítani. Résztéma-kérés (narrow=true),",
+  "ha a kérés megnevez egy altémát (például: csak a 3-mal és 9-cel való oszthatóságot a sok szabályból), VAGY felsorolja,",
+  "mely pontokat tanítsa (például: „pontosan ezeket tanítsd”, „csak ezeket”, egy füzetlap pontjai), és a tudástárban ennél",
+  "több fogalom van. NEM résztéma (narrow=false, üres lista), ha a kérés csak a terjedelemről, évfolyamról, nehézségről,",
+  "stílusról vagy egy elírás javításáról szól, vagy kifejezetten a tudástár minden fogalmát kéri.",
   "Ha résztémát kér:",
   "Válaszd ki a fogalmak közül MINDAZT, ami a KÉRT TÉMA tanításához kell: a téma szabályait, azok magyarázatát",
   "(miért működnek), a témához tartozó kidolgozott példa-fogalmakat, a témán belüli összefüggéseket, és azokat az",
