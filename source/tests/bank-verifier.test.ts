@@ -205,7 +205,10 @@ test("review R1(a): az elbukott darab kulcsos tételei ítélet nélküliként m
   const keyed = [...e.quiz.map((_, i) => `experience.quiz[${i}]`), ...e.methods.flatMap((m, i) => (m.options ? [`experience.methods[${i}]`] : []))].sort();
   assert.deepEqual(result.unverifiedChoices.map((u) => u.path).sort(), keyed);
   assert.equal(result.unverifiedChoices.some((u) => u.path.startsWith("experience.tasks")), false, "nyitott feladat nem egyválasztós");
-  assert.deepEqual(openChoiceFlags(result, true).map((f) => f.path).sort(), keyed, "javítható körben is kapu-jelzés");
+  // Review #163 (P1): az elbukott darab NYÍLT tételei is eldöntetlenek, és a kapuhoz mennek (nem publikálhatók ellenőrizetlenül).
+  const open = [...e.tasks.map((_, i) => `experience.tasks[${i}]`), ...e.methods.flatMap((m, i) => (m.options ? [] : [`experience.methods[${i}]`]))].sort();
+  assert.deepEqual(result.unverifiedOpen.map((u) => u.path).sort(), open);
+  assert.deepEqual(openChoiceFlags(result, true).map((f) => f.path).sort(), [...keyed, ...open].sort(), "javítható körben is kapu-jelzés — egyválasztós és nyílt tétel is");
 });
 
 test("review R1(b): onlyPaths — csak a kért útvonalak mennek a modellhez", async () => {

@@ -66,7 +66,7 @@ import { applyVisualPatch } from "./visual-patch";
 import { weakVisuals, weakVisualsInstruction } from "./visual-quality";
 import { designLessonVisuals, sectionsNeedingDesign } from "./visual-designer";
 import { BLIND_SOLVER_MODEL, BLIND_SOLVER_SYSTEM, parseBlindSolverAnswer, sourceHashOf, type BlindSolutions } from "./blind-solver";
-import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, mergeVerifierRetry, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag, bankVerifierChunks, clearedWithoutOpen } from "./bank-verifier";
+import { BANK_VERIFIER_MODEL, mergeBankVerifierNotes, mergeVerifierRetry, openChoiceFlags, runBankVerifier, type BankVerifierResult, type ChoiceFlag, bankVerifierChunks, clearedWithoutOpen, verifierContext } from "./bank-verifier";
 import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 import { autofixOutline } from "./tools/outline-autofix";
 import { checkLessonArc, disableUnreachableProba } from "../../shared/lesson-arc";
@@ -510,8 +510,9 @@ function startBankVerifier(
   const lesson = job.output?.lesson as Lesson | undefined;
   if (!lesson?.experience || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
   const cleared = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
+  const context = verifierContext(lesson, blind, concepts, supportSkillVersion("bank-verifier"));
   const run = (onlyPaths?: ReadonlySet<string>) => runBankVerifier({
-    lesson, blind, cleared, onlyPaths, concepts,
+    lesson, blind, cleared, onlyPaths, concepts, context,
     call: async (system) => (await callStepModel(providerFactory(BANK_VERIFIER_MODEL, "visuals"), {
       step: "lektor", policy: "visuals", role: "bank-verifier", model: BANK_VERIFIER_MODEL, system, user: "Válaszolj kizárólag a kért JSON-nal.",
     })).json,
@@ -662,7 +663,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       lektorBlind = blind;
       // U5 (C5/H8): a bank-ellenőr által igazolt, változatlan tartalmú tételek útvonala — a lektor ne járja be újra.
       const clearedHashes = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
-      const verifiedPaths = new Set(bankVerifierChunks(lesson).flatMap((c) => c.items).filter((i) => clearedHashes.has(i.hash)).map((i) => i.path));
+      const verifiedContext = verifierContext(lesson, blind, map.concepts, supportSkillVersion("bank-verifier"));
+      const verifiedPaths = new Set(bankVerifierChunks(lesson, new Set(), undefined, verifiedContext).flatMap((c) => c.items).filter((i) => clearedHashes.has(i.hash)).map((i) => i.path));
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
         buildLektorPrompt(lesson, promptMapOf(map), previousBlockers, ownerOf(job), blind, verifiedPaths),
@@ -1182,7 +1184,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         const previouslyCleared = Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : [];
         // U5 (H48): „cleared” nem érvényes olyan tételre, amelyhez bármelyik forrásból (lektor VAGY bank-ellenőr) nyitott lelet tartozik.
         const openPaths = new Set(rawNotes.map((n) => n.blockPath).filter((p): p is string => !!p && /^experience(?:\.|\[)/.test(p)));
-        const clearedNow = clearedWithoutOpen(job.output?.lesson as Lesson, [...previouslyCleared, ...bankChecked.cleared], openPaths);
+        const clearedNow = clearedWithoutOpen(job.output?.lesson as Lesson, [...previouslyCleared, ...bankChecked.cleared], openPaths, verifierContext(job.output?.lesson as Lesson, lektorBlind, map.concepts, supportSkillVersion("bank-verifier")));
         job.output = {
           ...job.output,
           bankVerifierCleared: [...new Set(clearedNow)].slice(-3000),
@@ -1966,6 +1968,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           subkind: lektorNotes.subkind,
           message: lektorNotes.message,
           blockPath: lektorNotes.blockPath,
+          itemId: lektorNotes.itemId,
         })
         .from(lektorNotes)
         .where(
@@ -1980,6 +1983,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
         subkind: r.subkind ?? undefined,
         message: r.message,
         blockPath: r.blockPath ?? undefined,
+        ...(r.itemId ? { itemId: r.itemId } : {}),
       }));
     },
 
@@ -1990,7 +1994,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
     async loadReviewNotes(jobId, round) {
       const rows = await db.select().from(lektorNotes).where(and(eq(lektorNotes.jobId, jobId), eq(lektorNotes.round, round)));
       return rows.map(r => ({ kind: r.kind as RawNote["kind"], subkind: r.subkind ?? undefined,
-        message: r.message, blockPath: r.blockPath ?? undefined }));
+        message: r.message, blockPath: r.blockPath ?? undefined, ...(r.itemId ? { itemId: r.itemId } : {}) }));
     },
 
     async saveNotes(jobId, notes, round) {
@@ -2003,6 +2007,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           severity: n.severity,
           message: n.message,
           blockPath: n.blockPath ?? null,
+          itemId: n.itemId ?? null,
           round,
         })),
       );

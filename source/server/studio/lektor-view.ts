@@ -35,7 +35,8 @@ function animateLine(block: Record<string, unknown>): string {
     const facts = illustrationFacts(params.svg);
     return `animate/illustration: caption: ${caption} | feliratok: ${facts.labels.map((l) => `„${l}”`).join(", ") || "(nincs)"} | számok: ${facts.numbers.join(", ") || "(nincs)"} | elemek: ${facts.elements} (az SVG-törzs nem a lektor bemenete; a térbeli helyességet az ábra-kapu méri)`;
   }
-  return `animate/${kind}: caption: ${caption} | params: ${cut(params, 1200)}`;
+  // Review #163: a strukturált fajta params-a VESZTESÉGMENTESEN (a teljes bejárás ígérete ezen múlik).
+  return `animate/${kind}: caption: ${caption} | params: ${JSON.stringify(params)}`;
 }
 
 function blockLine(block: Record<string, unknown>): string {

@@ -693,7 +693,7 @@ test("csak-bank körben nincs ábra-modellhívás akkor sem, ha az ábrák nem �
   let checkpoint: ExperienceCheckpoint | undefined;
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
   const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "RUBRIKA-HIBA: több helyes példát enged a kérdés." }];
-  const deps = makeDeps(JSON.stringify({ notes }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts });
   deps.store.seed({ id: "bank-only-visuals", mapId: "m1", step: "lektor", output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
   const reviewed = await runPipelineStep("bank-only-visuals", deps);
@@ -721,7 +721,7 @@ test("lektori bankhiba közvetlenül a banképítőhöz jut (csak-bank kör); a 
     { kind: "language", blockPath: "experience.tasks.1.sample", message: "NYELVI-HIBA: hibás alany." },
     { kind: "source_conflict", subkind: "book_probably_wrong", message: "ADMIN-ONLY-FORRAS" },
   ];
-  const deps = makeDeps(JSON.stringify({ notes }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts });
   deps.store.seed({ id: "review-bank", mapId: "m1", step: "lektor", output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
   // Spec-változás 2026-09-19 (mérve run b5d07f3d): ha minden blokkoló banktétel, nincs szerzői
@@ -857,10 +857,13 @@ test("tiszta lektor utáni kapujavítás megőrzi az előző kör feloldott bank
     }
   }
 });
+// Spec 2026-09-30 (U5, H45 + review #163): a lektori jelentésben a `solutions` kulcs kötelező (üres lista is).
 const CANNED_LEKTOR_BENIGN = JSON.stringify({
+  solutions: [],
   notes: [{ kind: "source_conflict", subkind: "book_probably_wrong", message: "A könyv téved." }],
 });
 const CANNED_LEKTOR_BLOCKER = JSON.stringify({
+  solutions: [],
   notes: [{ kind: "source_conflict", subkind: "not_in_map", message: "A c1 állítás nincs a térképen." }],
 });
 
@@ -1545,7 +1548,7 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   let checkpoint: ExperienceCheckpoint | undefined;
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
   const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.3", message: "A kvíz a föld alatti részt kizárólag gyökérnek adja." };
-  const deps = makeDeps(JSON.stringify({ notes: [bankBlocker] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts });
   deps.store.seed({ id: "bank-only", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
 
@@ -1568,11 +1571,11 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   // Spec 2026-09-19 (mérve run 525b2797): a második csak-bank blokkoló (más tétel) még egy csak-bank
   // kört kap (MAX_BANK_ONLY_ROUNDS = 2); a harmadik verdikt a limiten végleges.
   job.step = "lektor"; job.round = MAX_AUTHOR_ROUNDS + 1; job.status = "ok";
-  const second = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ notes: [bankBlocker] })), store: deps.store });
+  const second = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] })), store: deps.store });
   assert.deepEqual(second.ok && second.next, { step: "animator", round: MAX_AUTHOR_ROUNDS + 2 }, `második csak-bank kör: ${JSON.stringify(second)}`);
   assert.equal(job.output?.bankOnlyRepairRounds, 2);
   job.step = "lektor"; job.round = MAX_AUTHOR_ROUNDS + 2; job.status = "ok";
-  const again = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ notes: [bankBlocker] })), store: deps.store });
+  const again = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] })), store: deps.store });
   // Spec 2026-09-29-limit-banktetel-kivetel (4. döntés, dokumentált változás): a harmadik verdikt a limiten nem buktatja
   // a leckét — a hibás banktétel kapu-jelzés lesz; a kapu kiveszi, ha a bank így is megfelel, különben nem publikál.
   assert.deepEqual(again.ok && again.next, { step: "gate", round: MAX_AUTHOR_ROUNDS + 2 }, JSON.stringify(again));
@@ -1587,7 +1590,7 @@ test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél
   let checkpoint: ExperienceCheckpoint | undefined;
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
   const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.3", message: "Réka és Janka is 273 kiskockát épített." };
-  const deps = makeDeps(JSON.stringify({ notes: [bankBlocker] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts });
   // Three author rounds (r0–r2) and one bank-only round (r3) already used 4 animator visits.
   deps.store.seed({ id: "budget", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS + 1, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version, bankOnlyRepairRounds: 1 } });
@@ -1615,7 +1618,7 @@ test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jö
   let checkpoint: ExperienceCheckpoint | undefined;
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
   const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.tasks.0", message: "A mintaválasz jobbról balra halad." };
-  const deps = makeDeps(JSON.stringify({ notes: [bankBlocker] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts });
   deps.store.seed({ id: "bank-only-early", mapId: "m1", step: "lektor", round: 0, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version } });
   const first = await runPipelineStep("bank-only-early", deps);
@@ -1634,14 +1637,14 @@ test("(r) körlimitnél tanítási tényhiba mellett nincs bank-only kör: egy c
   lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
   const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tanítási tényhiba." },
     { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.1", message: "Bankhiba." }];
-  const deps = makeDeps(JSON.stringify({ notes }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes }));
   deps.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
   deps.store.seed({ id: "mixed", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience!.version } });
   const outcome = await runPipelineStep("mixed", deps);
   assert.ok(outcome.ok && outcome.next.step === "author" && outcome.next.round === MAX_AUTHOR_ROUNDS + 1, `célzott szerzői kör: ${JSON.stringify(outcome)}`);
   assert.equal(deps.store.jobs.get("mixed")!.output?.targetedLektorRepairRound, MAX_AUTHOR_ROUNDS + 1);
 
-  const again = makeDeps(JSON.stringify({ notes }));
+  const again = makeDeps(JSON.stringify({ solutions: [], notes }));
   again.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
   again.store.seed({ id: "mixed2", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS + 1, output: { lesson, methodVersion: lesson.experience!.version, targetedLektorRepairRound: MAX_AUTHOR_ROUNDS + 1 } });
   const second = await runPipelineStep("mixed2", again);
@@ -1652,7 +1655,7 @@ test("(r) körlimitnél tanítási tényhiba mellett nincs bank-only kör: egy c
 /* Spec 2026-09-19 — Studio lektor convergence across author rounds. */
 test("(s) 1. körben új, korábban nem jelzett fejezet fedettségi hiánya figyelmeztetés → kapu; a tényhiba blokkol", async () => {
   const notes = [{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Új fejezeti hiány, az előző kör nem jelezte." }];
-  const deps = makeDeps(JSON.stringify({ notes }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes }));
   deps.store.seed({ id: "converge", mapId: "m1", step: "lektor", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON } });
   await deps.store.saveNotes("converge", classifyNotes([{ kind: "coverage_gap", subkind: "core", blockPath: "sections.1.blocks.0", message: "Előző kör hiánya." }]), 0);
   const outcome = await runPipelineStep("converge", deps);
@@ -1662,7 +1665,7 @@ test("(s) 1. körben új, korábban nem jelzett fejezet fedettségi hiánya figy
   const saved = await deps.store.loadBlockerNotes("converge", 1);
   assert.equal(saved.length, 0, "a leminősített jegyzet nem blokkolóként tárolódik");
 
-  const factual = makeDeps(JSON.stringify({ notes: [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba." }] }));
+  const factual = makeDeps(JSON.stringify({ solutions: [], notes: [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba." }] }));
   factual.store.seed({ id: "factual", mapId: "m1", step: "lektor", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON } });
   const blocked = await runPipelineStep("factual", factual);
   assert.ok(blocked.ok && blocked.next.step === "author" && blocked.next.round === 2, `a tényhiba új szerzői kört indít: ${JSON.stringify(blocked)}`);
@@ -2069,7 +2072,7 @@ async function limitSetup(id: string, lektorNotes: unknown[], spare = 0, mutate?
     const provider = inner(model);
     return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
       if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
-      return { content: JSON.stringify({ notes: lektorNotes }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      return { content: JSON.stringify({ solutions: [], notes: lektorNotes }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     } } as IAIProvider;
   };
   const job = setup.store.jobs.get(id)!;
@@ -2136,7 +2139,7 @@ test("spec limit-banktetel (review): ha a bank-ellenőr ugyanarra a tételre má
     const provider = inner(model);
     return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
       if (!(args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
-      return { content: JSON.stringify({ errors: [], choices: keyedChoices(lesson, { "experience.quiz[4]": [true, true, true] }) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      return { content: JSON.stringify({ errors: [], choices: keyedChoices(lesson, { "experience.quiz[4]": [true, true, true] }), verified: openPaths(lesson) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     } } as IAIProvider;
   } };
   assert.ok((await runPipelineStep("lim-dup", dupDeps)).ok);

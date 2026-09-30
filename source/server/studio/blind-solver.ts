@@ -57,9 +57,11 @@ export function parseBlindSolverAnswer(json: unknown): { solutions: BlindSolutio
 
 /** A lektor promptjának bizonyíték-blokkja; üres, ha nincs vak megoldás. */
 export function blindSolutionsPromptBlock(blind: BlindSolutions | undefined): string[] {
-  if (!blind?.solutions.length && !blind?.notEnough?.length) return [];
+  if (!blind || (!blind.solutions.length && !blind.notEnough?.length && !blind.partial)) return [];
+  // Review #163: a részleges (vagy teljesen hibás alakú) vak megoldás sem lehet néma — a lektor tudja, hogy nincs kulcs.
   if (!blind.solutions.length) return [
-    `FÜGGETLEN VAK MEGOLDÓ: egyetlen forrásfeladatot sem tudott megoldani — „${NOT_ENOUGH}”: ${blind.notEnough!.join("; ").slice(0, 600)}. Ezeknél a lecke megoldását a forrásból magad ellenőrizd, ne találgass.`,
+    ...(blind.notEnough?.length ? [`FÜGGETLEN VAK MEGOLDÓ: egyetlen forrásfeladatot sem tudott megoldani — „${NOT_ENOUGH}”: ${blind.notEnough.join("; ").slice(0, 600)}. Ezeknél a lecke megoldását a forrásból magad ellenőrizd, ne találgass.`] : []),
+    ...(blind.partial ? ["A vak megoldás RÉSZLEGES vagy hibás alakú volt: a forrásfeladatokra nincs független kulcs — a lecke megoldásait a forrásból magad számold újra."] : []),
   ];
   return [
     "FÜGGETLEN VAK MEGOLDÁSOK (egy másik modell a forrásból oldotta meg, a lecke ismerete NÉLKÜL; a bizonytalan tételek kimaradtak):",

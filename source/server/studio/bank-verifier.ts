@@ -25,8 +25,11 @@ export const BANK_VERIFIER_NOTE_PREFIX = "Bank-ellenőr: ";
 export const BANK_CHECK_LATE_SUBKIND = "bank_check_late";
 /** Az egyválasztós ítélet jegyzete — SOHA nem minősül vissza késői figyelmeztetéssé. */
 export const SINGLE_CHOICE_NOTE_MARK = "Egyválasztós tétel: ";
-/** A hash része: az opciónkénti ítélet előtt „cleared” tétel (futó jobok) újra ellenőrzésre megy. */
-const VERDICT_VERSION = "single-choice-1";
+/**
+ * A hash része: az opciónkénti ítélet előtt „cleared” tétel (futó jobok) újra ellenőrzésre megy.
+ * Review #163: a U5 ítélet-szerződés (kimondott `verified`, tételenként több kifogás) új verzió — a régi „cleared” érvénytelen.
+ */
+const VERDICT_VERSION = "verdict-2";
 
 const BANKS = ["methods", "tasks", "quiz"] as const;
 
@@ -43,8 +46,13 @@ function contentOf(item: Record<string, unknown>): Record<string, unknown> {
   return content;
 }
 
-export const bankItemHash = (item: Record<string, unknown>) =>
-  createHash("sha256").update(VERDICT_VERSION).update(JSON.stringify(contentOf(item))).digest("hex").slice(0, 24);
+/**
+ * Review #163 (H37 ellenőrzés-kulcs): a „cleared” a tétel tartalmához ÉS az ellenőrzés kontextusához (a fejezet tanítása,
+ * a fogalom-idézetek, a vak megoldás, az ellenőrző skill verziója) kötött — ezek változásakor a tétel újra ellenőrzésre megy.
+ */
+export const bankItemHash = (item: Record<string, unknown>, context = "") =>
+  createHash("sha256").update(VERDICT_VERSION).update(JSON.stringify(contentOf(item))).update(context).digest("hex").slice(0, 24);
+export type VerifierContext = (sectionIndex: number) => string;
 
 /** Egyválasztós tétel: szöveges opciók és egész kulcs-index. */
 function choiceKeyOf(raw: Record<string, unknown>): ChoiceKey | undefined {
@@ -59,11 +67,11 @@ const isExperiencePath = (path: string | undefined) => /^experience(?:\.|\[|$)/.
  * Fejezetenkénti darabok (bank + a lecke check blokkjai); a korábban hibátlannak talált (cleared) tételek kimaradnak.
  * Review R1(b): `onlyPaths` esetén csak a megadott útvonalak (az ítélet nélkül maradt tételek újraellenőrzése).
  */
-export function bankVerifierChunks(lesson: Lesson, cleared: ReadonlySet<string> = new Set(), onlyPaths?: ReadonlySet<string>): BankVerifierChunk[] {
+export function bankVerifierChunks(lesson: Lesson, cleared: ReadonlySet<string> = new Set(), onlyPaths?: ReadonlySet<string>, context?: VerifierContext): BankVerifierChunk[] {
   const bySection = new Map<number, BankVerifierItem[]>();
   const push = (sectionIndex: number, path: string, raw: Record<string, unknown>) => {
     if (onlyPaths && !onlyPaths.has(path)) return;
-    const hash = bankItemHash(raw);
+    const hash = bankItemHash(raw, context?.(sectionIndex) ?? "");
     if (cleared.has(hash)) return;
     const key = choiceKeyOf(raw);
     const list = bySection.get(sectionIndex) ?? [];
@@ -88,6 +96,13 @@ function promptView({ path, item, key }: BankVerifierItem): Record<string, unkno
   if (!key) return { path, ...item };
   const { correctIndex: _key, feedbackPerOption: _feedback, answer: _answer, ...rest } = item;
   return { path, ...rest };
+}
+
+/** A „cleared”-kulcs kontextusa (review #163): fejezet tanítása + idézetek + vak megoldás + ellenőrző skill verziója. */
+export function verifierContext(lesson: Pick<Lesson, "sections">, blind: BlindSolutions | undefined, concepts: ReadonlyArray<{ localId: string; quote?: string }>, skillVersion: string): VerifierContext {
+  const shared = createHash("sha256").update(skillVersion).update(JSON.stringify(blind?.solutions ?? [])).update(JSON.stringify(blind?.notEnough ?? []))
+    .update(JSON.stringify(concepts.map((c) => [c.localId, c.quote ?? ""]))).digest("hex");
+  return (sectionIndex) => `${shared}:${createHash("sha256").update(sectionTeaching(lesson.sections[sectionIndex])).digest("hex").slice(0, 24)}`;
 }
 
 /** U5 (H24): a fejezet tanítása (explain/example) — a fejezetfüggő tényt ehhez méri az ellenőr, nem a saját tudásához. */
@@ -131,7 +146,8 @@ const choiceSchema = z.object({ path: z.string().trim().min(1).max(40), truths: 
 
 /** U5 (H48): a kifogás kulcsa — útvonal + állítás-lenyomat; azonos kifogás egyszer, KÜLÖNBÖZŐ kifogás ugyanazon a tételen megmarad. */
 export const complaintKey = (path: string | undefined, message: string) =>
-  `${path ?? ""}::${message.replace(new RegExp(`^${BANK_VERIFIER_NOTE_PREFIX}`), "").toLocaleLowerCase("hu").replace(/[^\p{L}\p{N}]+/gu, "").slice(0, 80)}`;
+  // Review #163: a TELJES normalizált állítás lenyomata (a 80 karakteres vágás két, azonosan kezdődő kifogást összevont).
+  `${path ?? ""}::${createHash("sha256").update(message.replace(new RegExp(`^${BANK_VERIFIER_NOTE_PREFIX}`), "").toLocaleLowerCase("hu").replace(/[^\p{L}\p{N}]+/gu, "")).digest("hex").slice(0, 32)}`;
 
 /**
  * A modell hibalistája, opciónkénti ítéletei és kimondott igazolásai; csak a darabban szereplő útvonal marad.
@@ -201,6 +217,8 @@ export async function runBankVerifier(args: {
   blind?: BlindSolutions;
   /** U5 (H24): a tételek fogalmainak forrás-idézetei a prompthoz. */
   concepts?: ReadonlyArray<{ localId: string; term?: string; quote?: string }>;
+  /** Review #163: a „cleared”-kulcs ellenőrzési kontextusa. */
+  context?: VerifierContext;
   cleared?: ReadonlySet<string>;
   /** Review R1(b): csak ezek az útvonalak (újraellenőrzés). */
   onlyPaths?: ReadonlySet<string>;
@@ -208,7 +226,7 @@ export async function runBankVerifier(args: {
   onChunkError?: (sectionIndex: number, reason: string) => void;
   concurrency?: number;
 }): Promise<BankVerifierResult> {
-  const chunks = bankVerifierChunks(args.lesson, args.cleared, args.onlyPaths);
+  const chunks = bankVerifierChunks(args.lesson, args.cleared, args.onlyPaths, args.context);
   const result: BankVerifierResult = { notes: [], cleared: [], checked: 0, failedChunks: 0, rejectedPaths: [], unverifiedChoices: [], unverifiedOpen: [] };
   let next = 0;
   const worker = async () => {
@@ -258,9 +276,9 @@ export async function runBankVerifier(args: {
 }
 
 /** U5 (H48): „cleared” nem érvényes olyan tételre, amelyhez bármelyik forrásból nyitott lelet tartozik. */
-export function clearedWithoutOpen(lesson: Lesson, cleared: readonly string[], openPaths: ReadonlySet<string>): string[] {
+export function clearedWithoutOpen(lesson: Lesson, cleared: readonly string[], openPaths: ReadonlySet<string>, context?: VerifierContext): string[] {
   if (!openPaths.size) return [...cleared];
-  const openHashes = new Set(bankVerifierChunks(lesson).flatMap((c) => c.items).filter((i) => openPaths.has(i.path)).map((i) => i.hash));
+  const openHashes = new Set(bankVerifierChunks(lesson, new Set(), undefined, context).flatMap((c) => c.items).filter((i) => openPaths.has(i.path)).map((i) => i.hash));
   return cleared.filter((h) => !openHashes.has(h));
 }
 
@@ -289,13 +307,18 @@ export function mergeBankVerifierNotes<T extends RawNote>(lektorNotes: T[], veri
  * Review R1(c): az (újraellenőrzés után is) ítélet nélkül maradt egyválasztós tétel MINDIG jelzés — különben
  * blokkoló nélküli körben ellenőrizetlenül a kapura jutna. A következő lektor-kör a jelzéseket újraszámolja.
  */
-export function openChoiceFlags(result: Pick<BankVerifierResult, "notes" | "unverifiedChoices">, blocking: boolean): ChoiceFlag[] {
+export function openChoiceFlags(result: Pick<BankVerifierResult, "notes" | "unverifiedChoices"> & { unverifiedOpen?: BankVerifierResult["unverifiedOpen"] }, blocking: boolean): ChoiceFlag[] {
   const flags = new Map<string, ChoiceFlag>();
   if (!blocking) for (const n of result.notes) {
     if (isSingleChoiceNote(n) && isExperiencePath(n.blockPath)) flags.set(n.blockPath!, { path: n.blockPath!, message: n.message });
   }
   for (const u of result.unverifiedChoices) {
     if (!flags.has(u.path)) flags.set(u.path, { path: u.path, message: `${BANK_VERIFIER_NOTE_PREFIX}${SINGLE_CHOICE_NOTE_MARK}nincs független opciónkénti ítélet — nem igazolt, hogy pontosan egy opció helyes.` });
+  }
+  // Review #163 (P1): az újraellenőrzés után is eldöntetlen NYÍLT bank-tétel is a kapué (kivehető tétel) — nem publikálható
+  // ellenőrizetlenül. A check blokk mindig egyválasztós, ezért itt csak experience-útvonal állhat.
+  for (const u of result.unverifiedOpen ?? []) {
+    if (isExperiencePath(u.path) && !flags.has(u.path)) flags.set(u.path, { path: u.path, message: `${BANK_VERIFIER_NOTE_PREFIX}nincs független tételítélet (sem hiba, sem igazolás) — nem igazolt tétel.` });
   }
   return [...flags.values()];
 }

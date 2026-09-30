@@ -164,10 +164,10 @@ export function parseLektorResponse(json: unknown): { ok: true; report: LektorRe
   if (!json || typeof json !== "object" || Array.isArray(json)) return { ok: false, reason: "a jelentés nem JSON-objektum" };
   const raw = json as Record<string, unknown>;
   if (!Array.isArray(raw.notes)) return { ok: false, reason: "hiányzik a notes tömb (üres lista is kötelező)" };
-  if (raw.solutions !== undefined && !Array.isArray(raw.solutions)) return { ok: false, reason: "a solutions nem tömb" };
+  // Review #163: az önálló megoldás (solutions) kötelező kulcs — hiánya alaki hiba, nem csendes üres lista.
+  if (!Array.isArray(raw.solutions)) return { ok: false, reason: "hiányzik a solutions tömb (üres lista is kötelező, ha nincs forrásfeladat)" };
   if (raw.notes.length === 0 && raw.reviewedAll !== true) return { ok: false, reason: "üres notes csak reviewedAll: true mellett érvényes (a teljes bejárás kimondva)" };
-  // A tárolt alak a modell válaszát tükrözi (hiányzó solutions nem pótlódik üres listával — a régi jelentések és a naplók összevethetők maradnak).
-  const solutions = Array.isArray(raw.solutions) ? raw.solutions : [];
+  const solutions = raw.solutions as unknown[];
   const truncated = solutions.length > LEKTOR_SOLUTIONS_MAX ? solutions.length - LEKTOR_SOLUTIONS_MAX : 0;
   const parsed = lektorReportSchema.safeParse({ ...raw, ...(truncated ? { solutionsTruncated: truncated } : {}) });
   if (!parsed.success) return { ok: false, reason: parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };

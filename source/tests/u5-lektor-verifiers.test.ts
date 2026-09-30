@@ -44,7 +44,8 @@ test("H45/C18/H49: a lektori jelentés modell-határa — {} érvénytelen, üre
   assert.equal(parseLektorResponse({}).ok, false);
   assert.match((parseLektorResponse({}) as { reason: string }).reason, /notes/);
   assert.equal(parseLektorResponse({ notes: [] }).ok, false, "üres jelentés kimondás nélkül");
-  assert.equal(parseLektorResponse({ notes: [], reviewedAll: true }).ok, true);
+  assert.equal(parseLektorResponse({ notes: [], reviewedAll: true }).ok, false, "review #163: a solutions kulcs kötelező");
+  assert.equal(parseLektorResponse({ solutions: [], notes: [], reviewedAll: true }).ok, true);
   assert.equal(parseLektorResponse({ solutions: [], notes: [{ kind: "language", message: "x" }] }).ok, true);
   assert.equal(parseLektorResponse("nem objektum").ok, false);
   const many = Array.from({ length: LEKTOR_SOLUTIONS_MAX + 7 }, (_, i) => ({ task: `f${i}`, own: "1", lesson: "1", match: true }));
