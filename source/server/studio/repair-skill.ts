@@ -1,3 +1,6 @@
+import { workflowRuntimeVersion } from "../workflows/engine";
+import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
+import { REPAIR_SKILL_V2 } from "../../shared/instruction-bundles/websuli-runtime-2";
 import { createHash } from "node:crypto";
 import type { Lesson } from "../../shared/lesson-schema";
 import { roleSkillBlock } from "./role-skills";
@@ -42,10 +45,16 @@ Végigmentem a kérés-lista minden tételén? A régi (helyesbített) alakok sz
 export const REPAIR_SKILL_VERSION = createHash("sha256").update(REPAIR_SKILL).digest("hex").slice(0, 12);
 const START = "=== TANANYAGJAVÍTÓ SKILL";
 
-/** Author calls of the repair path: the repair skill first, then the author role skill; idempotent. */
-export function withRepairSkill(system: string): string {
+const REPAIR_SKILL_VERSION_V2 = createHash("sha256").update(REPAIR_SKILL_V2).digest("hex").slice(0, 12);
+
+/** Author calls of the repair path: the repair skill first, then the author role skill; idempotent.
+ *  Spec 2026-09-30 (B0): a runtime-1/-2 pillanatkép a befagyasztott javító-skillt kapja. */
+export function withRepairSkill(system: string, version: string | undefined = workflowRuntimeVersion()): string {
   if (system.startsWith(START)) return system;
-  return `${START} (v${REPAIR_SKILL_VERSION}) — ez a javítás kötelező eljárása ===\n${REPAIR_SKILL}\n=== TANANYAGJAVÍTÓ SKILL VÉGE ===\n${roleSkillBlock("author")}\n${system}`;
+  const frozen = isFrozenBundle(version);
+  const text = frozen ? REPAIR_SKILL_V2 : REPAIR_SKILL;
+  const v = frozen ? REPAIR_SKILL_VERSION_V2 : REPAIR_SKILL_VERSION;
+  return `${START} (v${v}) — ez a javítás kötelező eljárása ===\n${text}\n=== TANANYAGJAVÍTÓ SKILL VÉGE ===\n${roleSkillBlock("author", version)}\n${system}`;
 }
 
 /** The end of the user message: the checklist again, after the long lesson data (lost-in-the-middle). */

@@ -294,7 +294,7 @@ async function focusForInstruction(mapId: string, instruction: string): Promise<
   const map = await (await createDrizzlePipelineStore()).loadMap(mapId);
   if (!map) return null;
   return decideTopicFocus(instruction, map.concepts, topicFocusModels().map((model) => async (system: string, user: string) =>
-    (await callStepModel(createStudioStepProvider(model, "topicFocus"), { step: "pedagogue", policy: "topicFocus", model, system, user })).json));
+    (await callStepModel(createStudioStepProvider(model, "topicFocus"), { step: "pedagogue", policy: "topicFocus", role: "topic-focus", model, system, user })).json));
 }
 
 /** The whole one-step chain, reporting each phase into the progress store. */

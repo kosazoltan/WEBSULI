@@ -98,7 +98,7 @@ export async function loadExtractionConfig(): Promise<ExtractionConfig> {
     provider: providerForModel(resolveStudioModel("extract")),
     // The learned skill prompt goes to the model, but NOT into the cache key (spec 2026-09-19,
     // measured: it changed between runs, so the same source never hit its own map again).
-    systemPrompt: basePrompt + workflowSkillPrompt(),
+    systemPrompt: basePrompt + workflowSkillPrompt("extract"),
     cacheKeyPrompt: basePrompt,
   };
 }

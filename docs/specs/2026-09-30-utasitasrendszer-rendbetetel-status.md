@@ -14,7 +14,7 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H7 | Tanári pont tanítatlan | U3 | részleges (#155: forrásból igazolt pont kiegészítő fogalom) | PR #155 |
 | H8 | Lektor bemenet/költség | U5, U6 | nyitott | evidence-visits-tokens.txt |
 | H9 | Lektor altípus/útvonal | U5 | nyitott | — |
-| H10 | Runbook/tanult szabály szerep nélkül | U0 | nyitott | — |
+| H10 | Runbook/tanult szabály szerep nélkül | U0 | lezárt (PR U0: `roles.ts` RULE_ROLES/QUALITY_ROLES/BANK_MINIMUM_ROLES, `callStepModel.role`; teszt `instruction-bundles.test.ts`) | tesztek: bank kapja a 45/75-öt, lektor/vak megoldó nem |
 | H11 | Ismeretlen hibaosztály nem jut emberhez | B8 | nyitott | — |
 | H12 | Pedagógus kivétel | U4 | nyitott | — |
 | H13 | Szerző teljesíthetetlen utasítás | U4 | nyitott | — |
@@ -36,8 +36,8 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H34 | Tanári-kérés ellenőrző hiányai | U3 | nyitott | — |
 | H35 | Több helyes párosítás | U2 (+ szerzői try.match) | nyitott | — |
 | H36 | Elérhetetlen Próba | — | történeti (regresszió őrzi) — regressziós teszt megléte ellenőrzendő | #141/#143 |
-| H37 | Ellenőrzési gyorsítótár verziózatlan | U0, U5 | nyitott | — |
-| H38 | Runbook-verzióemelés törés | U0 | nyitott | — |
+| H37 | Ellenőrzési gyorsítótár verziózatlan | U0, U5 | nyitott — eltérés a végrehajtási fájltól: a három kulcs (tartalom/ellenőrzés/származás) bekötése a fogyasztó egységekbe kerül (U2 bank `contentKey`, U5 ellenőrzők `verificationKey`), az U0 a származási verziót (`runtimeVersion` a pillanatképben) és a DB-prompt rögzítését (`workflowPinnedPrompt`) adja | — |
+| H38 | Runbook-verzióemelés törés | U0 | lezárt (PR U0: `websuli-runtime-2.ts` archívum, `bundleRunbook`, verzió-tudatos `roleSkillBlock/withSupportSkill/withRepairSkill`; a runtime-2 pillanatkép promptja bájtra a régi képlet — teszt) | `instruction-bundles.test.ts` |
 | H39 | Hatókör-őrök | U4 | nyitott | — |
 | H40 | Megszakadt futás folytatása | — | külön spec | — |
 | H41 | UUID prompt, blokk-kind, PDF, térkép, parkolás | — | történeti — regresszió ellenőrzendő | `mapJson`, `AUTHOR_BLOCK_CATALOG` |

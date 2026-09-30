@@ -182,7 +182,7 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
   return {
     model,
     messages: [
-      { role: "system" as const, content: withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt() },
+      { role: "system" as const, content: withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt("scope") },
       { role: "user" as const, content: parts },
     ],
     max_completion_tokens: 2000,

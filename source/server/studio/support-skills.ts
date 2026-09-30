@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { workflowRuntimeVersion } from "../workflows/engine";
+import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
+import { SUPPORT_SKILLS_V2 } from "../../shared/instruction-bundles/websuli-runtime-2";
 
 /**
  * Spec 2026-09-23 — TÁMOGATÓ szerepek skilljei (runbook). A 7 gyártó szerep (role-skills.ts) mellett
@@ -275,17 +278,23 @@ export type SupportSkillKey = keyof typeof SUPPORT_SKILLS;
 const HEADER = "=== TÁMOGATÓ SKILL";
 const versions = new Map<string, string>();
 
-export function supportSkillVersion(key: SupportSkillKey): string {
-  let v = versions.get(key);
-  if (!v) { v = createHash("sha256").update(SUPPORT_SKILLS[key]).digest("hex").slice(0, 12); versions.set(key, v); }
+/** Spec 2026-09-30 (B0): a runtime-1/-2 pillanatkép a befagyasztott szöveget kapja (ha az archívumban létezik a kulcs). */
+function supportSkillText(key: SupportSkillKey, version: string | undefined): string {
+  return isFrozenBundle(version) && SUPPORT_SKILLS_V2[key] !== undefined ? SUPPORT_SKILLS_V2[key] : SUPPORT_SKILLS[key];
+}
+
+export function supportSkillVersion(key: SupportSkillKey, version: string | undefined = workflowRuntimeVersion()): string {
+  const cacheKey = `${isFrozenBundle(version) ? "frozen" : "live"}:${key}`;
+  let v = versions.get(cacheKey);
+  if (!v) { v = createHash("sha256").update(supportSkillText(key, version)).digest("hex").slice(0, 12); versions.set(cacheKey, v); }
   return v;
 }
 
 /** The skill goes to the START of the system prompt; idempotent. */
-export function withSupportSkill(key: SupportSkillKey, system: string): string {
-  const head = `${HEADER}: ${key} (v${supportSkillVersion(key)})`;
+export function withSupportSkill(key: SupportSkillKey, system: string, version: string | undefined = workflowRuntimeVersion()): string {
+  const head = `${HEADER}: ${key} (v${supportSkillVersion(key, version)})`;
   if (system.startsWith(`${HEADER}: ${key} `)) return system;
-  return `${head} — ez a szerep kötelező eljárása, a lenti utasítás ezt részletezi ===\n${SUPPORT_SKILLS[key]}\n=== SKILL VÉGE ===\n\n${system}`;
+  return `${head} — ez a szerep kötelező eljárása, a lenti utasítás ezt részletezi ===\n${supportSkillText(key, version)}\n=== SKILL VÉGE ===\n\n${system}`;
 }
 
 export function supportSkillList(): Array<{ role: string; version: string; text: string }> {

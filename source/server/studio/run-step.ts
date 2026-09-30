@@ -76,6 +76,7 @@ export function stepDeadlineMs(step: string): number | undefined {
   return step === "lektor" ? LEKTOR_TIMEOUT_MS : STUDIO_STEP_POLICY[step]?.timeoutMs;
 }
 import { workflowCheckpoint, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
+import { roleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 
 /**
  * LS-2c — the call layer between the pipeline state machine and the provider.
@@ -104,6 +105,12 @@ export type StepCallInput = {
   user: string;
   /** A határidő szabálya, ha eltér a lépésétől (spec 2026-09-24: az ábra-hívás "visuals"). */
   policy?: string;
+  /**
+   * Spec 2026-09-30 (U0, §C-V/3): a hívás TÉNYLEGES szerepe — ez dönti el, mely runbook-részt és tanult szabályt kapja.
+   * A bankhívás `bank`, a vak megoldó `blind-solver`, akkor is, ha az `animator`/`lektor` lépésen belül fut. Hiányában a
+   * lépés nevéből képzett szerep (ideiglenes; a hívó szerepe az erősebb).
+   */
+  role?: PromptRole;
 };
 
 export type StepCallResult = {
@@ -125,7 +132,7 @@ export async function callStepModel(
   signal?: AbortSignal,
 ): Promise<StepCallResult> {
   signal?.throwIfAborted();
-  input = { ...input, system: input.system + workflowSkillPrompt() };
+  input = { ...input, system: input.system + workflowSkillPrompt(input.role ?? roleForStep(input.step)) };
   return workflowCheckpoint("studio-model", input, async () => {
     // Mérve (5. mérés, run a0eb2bed): az animátor glm-hívása 609 s-ig futott a 240 s-os kliens-timeout
     // ellenére. Ok a forrásból: az OpenAI SDK `fetchWithTimeout` a `finally`-ban törli az időzítőt, amint a

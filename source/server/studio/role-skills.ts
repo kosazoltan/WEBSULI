@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { workflowRuntimeVersion } from "../workflows/engine";
+import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
+import { ROLE_SKILLS_V2, ROLE_SOULS_V2 } from "../../shared/instruction-bundles/websuli-runtime-2";
 
 /**
  * Szerep-skillek (tulajdonosi döntés 2026-09-19): minden modellhívás a saját szakaszának
@@ -262,24 +265,38 @@ Hogyan dolgozol:
 Amit soha: kitalált azonosító vagy adat; ugyanaz a fogalom két fejezetben; díszítő jelzők; „opcionális" vagy „választható" elem; a kért alaknál több.`,
 };
 
-const versions = new Map<RoleSkillRole, string>();
+const versions = new Map<string, string>();
+
+/**
+ * Spec 2026-09-30-utasitasrendszer-rendbetetel (B0): a skill szövege a futás utasításcsomag-verziója szerint — a
+ * runtime-1/-2 pillanatkép a befagyasztott archívumot kapja, az élő csomag a fenti konstansokat. A verzió alapból a futó
+ * workflow pillanatképéből jön; azon kívül (modul-betöltés, kézi Studio-út) az élő szöveg.
+ */
+function skillTexts(role: RoleSkillRole, version: string | undefined): { soul: string | undefined; skill: string } {
+  return isFrozenBundle(version) && ROLE_SKILLS_V2[role] !== undefined
+    ? { soul: ROLE_SOULS_V2[role], skill: ROLE_SKILLS_V2[role] }
+    : { soul: ROLE_SOULS[role], skill: ROLE_SKILLS[role] };
+}
 
 /** Rövid tartalom-hash: része a lépés- és bank-hashnek, hogy skill-módosítás után ne legyen cache-találat. */
-export function roleSkillVersion(role: RoleSkillRole): string {
-  let v = versions.get(role);
-  if (!v) { v = createHash("sha256").update(`${ROLE_SOULS[role] ?? ""}\n${ROLE_SKILLS[role]}`).digest("hex").slice(0, 12); versions.set(role, v); }
+export function roleSkillVersion(role: RoleSkillRole, version: string | undefined = workflowRuntimeVersion()): string {
+  const texts = skillTexts(role, version);
+  const key = `${isFrozenBundle(version) ? "frozen" : "live"}:${role}`;
+  let v = versions.get(key);
+  if (!v) { v = createHash("sha256").update(`${texts.soul ?? ""}\n${texts.skill}`).digest("hex").slice(0, 12); versions.set(key, v); }
   return v;
 }
 
-export function roleSkillBlock(role: RoleSkillRole): string {
-  const soul = ROLE_SOULS[role] ? `${ROLE_SOULS[role]}\n\n` : "";
-  return `${SKILL_START}: ${role} (v${roleSkillVersion(role)}) — ez a szakasz kötelező eljárása, a lenti utasítás ezt részletezi ===\n${soul}${ROLE_SKILLS[role]}\n${SKILL_END}\n`;
+export function roleSkillBlock(role: RoleSkillRole, version: string | undefined = workflowRuntimeVersion()): string {
+  const texts = skillTexts(role, version);
+  const soul = texts.soul ? `${texts.soul}\n\n` : "";
+  return `${SKILL_START}: ${role} (v${roleSkillVersion(role, version)}) — ez a szakasz kötelező eljárása, a lenti utasítás ezt részletezi ===\n${soul}${texts.skill}\n${SKILL_END}\n`;
 }
 
 /** A skill a rendszerutasítás ELEJÉRE kerül; idempotens (kétszeri alkalmazás nem duplázza). */
-export function withRoleSkill(role: RoleSkillRole, system: string): string {
+export function withRoleSkill(role: RoleSkillRole, system: string, version: string | undefined = workflowRuntimeVersion()): string {
   if (system.startsWith(`${SKILL_START}: ${role} `)) return system;
-  return `${roleSkillBlock(role)}\n${system}`;
+  return `${roleSkillBlock(role, version)}\n${system}`;
 }
 
 /** system_prompts-név → szerep, hogy a DB-s felülírás is megkapja a skillt. */
