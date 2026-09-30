@@ -104,8 +104,8 @@ function visitStrings(lesson: Lesson, visit: (text: string, path: string) => voi
  * - ÖSSZETETT régi alak („föld-változása” → „Hold változása”): a régi szó („föld”) más értelemben helyes lehet („a Föld
  *   körül kering”) — ezt a `staleFormCandidates` JELÖLTKÉNT adja, és a javító-lektor dönt.
  */
-export function staleFormProblems(lesson: Lesson, corrections: SourceCorrection[]): string[] {
-  const pure = staleForms(corrections.filter((c) => c.term !== undefined && c.from.term !== undefined && keptWords(c).length === 0));
+export function staleFormProblems(lesson: Lesson, corrections: SourceCorrection[], sourceWords: ReadonlySet<string> = new Set()): string[] {
+  const pure = staleForms(corrections.filter((c) => verifiedMisspelling(c, sourceWords)));
   if (!pure.length) return [];
   const hits: string[] = [];
   visitStrings(lesson, (text, path) => {
@@ -114,6 +114,38 @@ export function staleFormProblems(lesson: Lesson, corrections: SourceCorrection[
     if (found.length) hits.push(`${path}: ${found.join(", ")}`);
   });
   return hits.length ? [`A helyesbített régi alak még a leckében maradt — minden előfordulást javíts: ${hits.slice(0, 20).join("; ")}`] : [];
+}
+
+/**
+ * Review #164: a „megtartott szó nélküli” javítás NEM bizonyítja, hogy a régi alak nem létező szó — egy átírási
+ * helyesbítés valódi szót is cserélhet („Föld” → „Hold”), amely a leckében más, helyes értelemben állhat. Determinisztikus
+ * hiba csak az IGAZOLT elírás: a régi szó (a) az új alak egy szavának közeli alakja (legfeljebb 2 betű eltérés), és
+ * (b) a forrásban (a térkép fogalmainak szövegében, a helyesbített megnevezéseken kívül) sehol nem fordul elő. Minden más
+ * régi szó a jelölt-úton megy a javító-lektorhoz.
+ */
+export function verifiedMisspelling(c: SourceCorrection, sourceWords: ReadonlySet<string>): boolean {
+  if (c.term === undefined || c.from.term === undefined || keptWords(c).length > 0) return false;
+  const stale = staleForms([c]);
+  const now = words(c.term);
+  return stale.length > 0 && stale.every((w) => !sourceWords.has(w) && now.some((n) => editDistance(w, n) <= 2));
+}
+
+/** A forrás szókészlete (összehajtva): a fogalmak megnevezése, definíciója, idézete — a helyesbített megnevezés nélkül. */
+export function sourceWordSet(concepts: ReadonlyArray<{ localId: string; term?: string | null; definition?: string | null; quote?: string | null }>, corrections: SourceCorrection[]): Set<string> {
+  const corrected = new Set(corrections.filter((c) => c.from.term !== undefined).map((c) => c.localId));
+  const out = new Set<string>();
+  for (const c of concepts) for (const text of [corrected.has(c.localId) ? undefined : c.term, c.definition, c.quote]) if (text) for (const w of words(text)) out.add(w);
+  return out;
+}
+
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
 }
 
 /** A javítás megtartott (az új alakban is szereplő, ≥ 4 betűs) szavai — ezek a fogalom kulcsszavai. */
@@ -125,19 +157,21 @@ function keptWords(c: SourceCorrection): string[] {
 
 export type StaleCandidate = { id: string; path: string; sentence: string; oldForm: string; newForm: string };
 /** Szóegyüttállás egy mondatban: a régi szó (egész szóként) + a fogalom megtartott kulcsszava → JELÖLT, nem hiba. */
-export function staleFormCandidates(lesson: Lesson, corrections: SourceCorrection[]): StaleCandidate[] {
+export function staleFormCandidates(lesson: Lesson, corrections: SourceCorrection[], sourceWords: ReadonlySet<string> = new Set()): StaleCandidate[] {
   const out: StaleCandidate[] = [];
   for (const c of corrections) {
+    if (c.term === undefined || c.from.term === undefined || verifiedMisspelling(c, sourceWords)) continue;
     const kept = keptWords(c);
-    if (!kept.length) continue;
     const stale = staleForms([c]);
     if (!stale.length) continue;
     visitStrings(lesson, (text, path) => {
       for (const sentence of text.split(/(?<=[.!?])\s+/)) {
         const f = fold(sentence);
-        if (!stale.some((w) => wholeWord(f, w))) continue;
-        const sentenceWords = f.split(/[^a-z0-9]+/);
-        if (!kept.some((k) => sentenceWords.some((w) => w.startsWith(k.slice(0, Math.min(5, k.length)))))) continue;
+        if (kept.length) {
+          if (!stale.some((w) => wholeWord(f, w))) continue;
+          const sentenceWords = f.split(/[^a-z0-9]+/);
+          if (!kept.some((k) => sentenceWords.some((w) => w.startsWith(k.slice(0, Math.min(5, k.length)))))) continue;
+        } else if (!stale.some((w) => new RegExp(`(^|[^a-z0-9])${w}`).test(f))) continue; // valódi szó cseréje: ragozva is jelölt
         out.push({ id: `stale-${out.length}`, path, sentence: sentence.slice(0, 400), oldForm: c.from.term!, newForm: c.term! });
       }
     });
@@ -146,6 +180,8 @@ export function staleFormCandidates(lesson: Lesson, corrections: SourceCorrectio
 }
 
 export type StaleVerdict = { id: string; verdict: "igen" | "nem" | "bizonytalan"; reason: string };
+/** Review #164: az eldöntetlen jelölt a javítás-artefaktumban (`lessonRepairSchema.staleWarnings`). */
+export type StaleWarning = { path: string; sentence: string; oldForm: string; newForm: string; reason: string };
 /** A javító-lektor kérdése: a mondat a RÉGI (helyesbített) állítást állítja-e? */
 export function buildStaleJudgePrompt(candidates: StaleCandidate[]): { system: string; user: string } {
   return {

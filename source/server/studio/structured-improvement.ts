@@ -21,7 +21,7 @@ import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { designFromInstruction, visualWorld, type LessonFlair, type VisualWorldId } from "../../shared/lesson-visuals";
-import { buildStaleJudgePrompt, parseStaleVerdicts, repairChecklistTail, staleFormCandidates, staleFormProblems, withRepairSkill, type StaleVerdict } from "./repair-skill";
+import { buildStaleJudgePrompt, parseStaleVerdicts, repairChecklistTail, sourceWordSet, staleFormCandidates, staleFormProblems, withRepairSkill, type StaleWarning } from "./repair-skill";
 import { logger } from "../lib/logger";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
@@ -85,10 +85,12 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
   const transcript = Array.isArray(sourceFiles) && sourceFiles.some((f) => (f as { kind?: string } | null)?.kind === "image");
-  const { candidate, review, owner } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
+  const { candidate, review, owner, staleWarnings } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript });
   return lessonRepairSchema.parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
+    // Review #164: az eldöntetlen régi-alak jelöltek a javítás-artefaktumban maradnak (admin-nézet), nem csak a naplóban.
+    ...(staleWarnings?.length ? { staleWarnings } : {}),
   });
 }
 
@@ -129,29 +131,32 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   let candidate: Lesson | undefined;
   let previous: unknown;
   let correction = "";
-  let staleWarnings: StaleVerdict[] = [];
+  let staleWarnings: StaleWarning[] = [];
+  const sourceWords = sourceWordSet(source.concepts, owner.corrections);
   for (let attempt = 0; attempt < 2; attempt++) {
     // Spec 2026-09-23: the repair skill at the start of the system prompt, its checklist at the end of the user message.
     previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections), "repair");
     try {
       const parsed = lessonSchema.parse(previous);
       assertRepairTeaching(original, parsed, corrected, classroom);
-      const stale = staleFormProblems(parsed, owner.corrections);
+      const stale = staleFormProblems(parsed, owner.corrections, sourceWords);
       if (stale.length) throw new Error(stale.join("; "));
-      // Spec 2026-09-30 (U6, C16/H43): az összetett régi alak szóegyüttállása csak JELÖLT — a javító-lektor dönt; csak az
-      // „igen” (a régi állítást állítja) blokkol, a „bizonytalan” figyelmeztetés (a hívás hibája is bizonytalan).
-      const candidates = staleFormCandidates(parsed, owner.corrections);
+      // Spec 2026-09-30 (U6, C16/H43): a nem igazolt régi alak szóelőfordulása csak JELÖLT — a javító-lektor dönt; csak az
+      // „igen” (a régi állítást állítja) blokkol, a „bizonytalan” figyelmeztetés. Review #164 (§C-V/9): ha az ellenőrző
+      // hívás elbukik, a BIZONYÍTOTT helyesbítés nyitva marad — a kísérlet hibás (újrapróba, utána a javítás elutasítva).
+      const candidates = staleFormCandidates(parsed, owner.corrections, sourceWords);
       if (candidates.length) {
-        let verdicts: StaleVerdict[];
+        const judge = buildStaleJudgePrompt(candidates);
+        let raw: unknown;
         try {
-          const judge = buildStaleJudgePrompt(candidates);
-          verdicts = parseStaleVerdicts(await call("lektor", withRoleSkill("lektor", judge.system), judge.user, "lektor"), candidates);
+          raw = await call("lektor", withRoleSkill("lektor", judge.system), judge.user, "lektor");
         } catch (error) {
-          verdicts = candidates.map((c) => ({ id: c.id, verdict: "bizonytalan" as const, reason: `az ellenőrző hívás elbukott: ${error instanceof Error ? error.message.slice(0, 120) : String(error)}` }));
+          throw new Error(`A régi-alak ellenőrzése nem futott le, a helyesbítés nyitva marad: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`, { cause: error });
         }
+        const verdicts = parseStaleVerdicts(raw, candidates);
         const asserted = verdicts.filter((v) => v.verdict === "igen");
         if (asserted.length) throw new Error(`A helyesbített régi állítás még a leckében maradt: ${asserted.map((v) => { const c = candidates.find((x) => x.id === v.id)!; return `${c.path}: „${c.sentence.slice(0, 120)}” (${v.reason})`; }).join("; ")}`);
-        staleWarnings = verdicts.filter((v) => v.verdict === "bizonytalan");
+        staleWarnings = verdicts.filter((v) => v.verdict === "bizonytalan").map((v) => { const c = candidates.find((x) => x.id === v.id)!; return { path: c.path, sentence: c.sentence, oldForm: c.oldForm, newForm: c.newForm, reason: v.reason }; });
         if (staleWarnings.length) logger.warn(`[STUDIO] Javítás: ${staleWarnings.length} régi-alak jelölt eldöntetlen (figyelmeztetés, nem blokkol).`);
       }
       candidate = parsed;

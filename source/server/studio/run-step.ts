@@ -141,24 +141,30 @@ export async function callStepModel(
   // Spec 2026-09-30 (U6, C10): prompt-sorrend — a STABIL rész (runbook, utána a hívó skill-blokkja) elöl, a változó adat
   // hátul, hogy a szolgáltatói gyorsítótár az előtagot újrahasznosíthassa. A befagyasztott (runtime-2) futás a régi,
   // bájtra azonos sorrendet kapja (B0: régi futás = régi szöveg).
-  const runbook = workflowSkillPrompt(input.role);
-  input = { ...input, system: runbook && !isFrozenBundle(workflowRuntimeVersion()) ? `${runbook.replace(/^\s+/, "")}\n\n${input.system}` : input.system + runbook };
+  input = { ...input, system: withRunbook(input.system, input.role) };
   return workflowCheckpoint("studio-model", input, async () => {
     // Mérve (5. mérés, run a0eb2bed): az animátor glm-hívása 609 s-ig futott a 240 s-os kliens-timeout
     // ellenére. Ok a forrásból: az OpenAI SDK `fetchWithTimeout` a `finally`-ban törli az időzítőt, amint a
     // fejlécek megérkeztek — a TÖRZS (a lassú, 24k-ig futó generálás) olvasása korlát nélkül fut, az
     // OpenRouter pedig azonnal küld fejlécet. A lektor külső AbortSignal-határideje ezt már áthidalta;
     // ugyanez jár minden szabályzatos lépésnek: a jelzés a törzs olvasását is megszakítja.
-    const deadlineMs = stepDeadlineMs(input.policy ?? input.step);
-    if (deadlineMs) {
-      const deadline = AbortSignal.timeout(deadlineMs);
-      signal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-    }
+    // Review #164: a határidő KÉRÉSENKÉNT jár (a hosszkorlát utáni nagyobb keretű újrapróba friss határidőt kap), a
+    // külső megszakítás (a hívó jele) mindkét kérésre érvényes — lásd `callUncachedStepModel`.
     const result = await callUncachedStepModel(provider, input, signal);
     await workflowUsage(result.usage);
     return result;
   });
 }
+/**
+ * Spec 2026-09-30 (U6, C10): a szerep runbookja a rendszerutasítás ELEJÉN (stabil előtag); a befagyasztott (runtime-2)
+ * futás a régi, bájtra azonos sorrendet kapja (runbook a végén). Review #164: a közvetlen szolgáltatói hívások (pl. a webes
+ * kivonatoló) is ezt használják, hogy ugyanaz a sorrend és gyorsítótár-jelölés érvényesüljön.
+ */
+export function withRunbook(system: string, role: PromptRole): string {
+  const runbook = workflowSkillPrompt(role);
+  return runbook && !isFrozenBundle(workflowRuntimeVersion()) ? `${runbook.replace(/^\s+/, "")}\n\n${system}` : system + runbook;
+}
+
 /**
  * Spec 2026-09-30 (U6, C10): a stabil előtag hossza — a runbook (ha elöl áll) és az első skill-blokk vége
  * („=== SKILL VÉGE ===” / „=== TANANYAGJAVÍTÓ SKILL VÉGE ===”). Csak a jelölésre kell (Anthropic `cache_control`).
@@ -173,8 +179,15 @@ export function stablePrefixChars(system: string): number {
 /** Spec 2026-09-30 (U6): ársáv-figyelés — a hosszú kontextusú (≥ 200 k bemeneti token) hívás drágább sávba esik. */
 export const LONG_CONTEXT_PRICE_BAND = 200_000;
 
-async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput, signal?: AbortSignal): Promise<StepCallResult> {
+async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput, outer?: AbortSignal): Promise<StepCallResult> {
   let response: AIResponse;
+  const deadlineMs = stepDeadlineMs(input.policy ?? input.step);
+  /** Kérésenkénti jel: a szabályzat határideje minden kérésre újraindul, a külső megszakítás megmarad. */
+  const requestSignal = () => {
+    const deadline = deadlineMs ? AbortSignal.timeout(deadlineMs) : undefined;
+    return outer && deadline ? AbortSignal.any([outer, deadline]) : (deadline ?? outer);
+  };
+  let signal = requestSignal();
   const messages = [
     { role: "system" as const, content: input.system },
     { role: "user" as const, content: input.user },
@@ -194,6 +207,7 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
       const enlarged = Math.min(cap, current * 2);
       await workflowUsage(response.usage);
       logger.warn(`[STUDIO] A(z) "${input.step}" válasza elérte a ${current} tokenes keretet — egyszeri újrapróba ${enlarged} tokennel (${input.model}).`);
+      signal = requestSignal();
       response = await provider.chat(messages, signal, { ...baseOptions, maxTokens: enlarged });
       signal?.throwIfAborted();
     }
@@ -204,7 +218,6 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
     // Spec 2026-09-30 (témafókusz-késleltetés): the label must name the deadline that actually fired — the
     // policy's, not the step's (topicFocus runs as step "pedagogue": 60 s cut, but the log said 300000ms).
-    const deadlineMs = stepDeadlineMs(input.policy ?? input.step);
     const cause = deadlineMs && signal?.aborted && signal.reason?.name === "TimeoutError"
       ? new AIProviderTimeoutError(provider.name, deadlineMs) : error;
     throw new StepModelError(input.step, "a szolgáltató hibát jelzett", { cause });

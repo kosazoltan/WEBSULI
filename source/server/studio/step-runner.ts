@@ -1521,6 +1521,12 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         const reparsed = lessonSchema.safeParse(acceptance.lesson);
         if (!reparsed.success) return fail(store, job, `A megalapozatlan blokk kivétele után a lecke alakilag hibás: ${zodIssues(reparsed.error)}`);
         const reachable = disableUnreachableProba(reparsed.data, arcOptions);
+        // Review #164 (P1): a kivétel a bank és a tanítás kapcsolatát is megváltoztathatja (a banktétel fogalma a
+        // kivett blokkban élt) — a fúziós bankkapu az ÚJ jelöltre újrafut, hibánál a lecke nem publikálható.
+        if (isFusionMethodVersion(job.output?.methodVersion) || reachable.lesson.experience) {
+          const bankProblems = [...experienceProblems(reachable.lesson), ...verifyLessonSkillBank(reachable.lesson.experience, reachable.lesson.subject, reachable.lesson.sections).problems];
+          if (bankProblems.length) return fail(store, job, `A megalapozatlan blokk kivétele után a fúziós bank nem felel meg — nem publikálható: ${bankProblems.join("; ")}`);
+        }
         parsed.data = reachable.lesson;
         await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
         gate.coverage = checkCoverageGate(parsed.data, map.concepts).coverage;

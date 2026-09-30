@@ -108,10 +108,15 @@ export async function loadExtractionConfig(): Promise<ExtractionConfig> {
  * 2748 karakteres forrásnál is `length`-tel vágódott le. Csonka válasznál egyszer nagyobb kerettel kérdezünk újra; csonka
  * jegyzéket továbbra sem mentünk.
  */
-/** Spec 2026-09-30 (U6, C7): a quote-javítókör fájljai — csak a hibás fogalmak saját forrásfájlja; azonosítatlan hivatkozásnál mind. */
+/**
+ * Spec 2026-09-30 (U6, C7): a quote-javítókör fájljai — csak a hibás fogalmak saját forrásfájlja. Review #164: ha BÁRMELY
+ * hibás fogalom fájlja azonosítatlan (vegyes halmaz is), mind a fájl megy — különben annak a fogalomnak nem lenne forrása.
+ */
 export function filesForQuoteRepair<F extends { name: string }>(files: F[], failed: ReadonlyArray<{ sourceRef?: unknown }>): F[] {
-  const own = files.filter((file) => failed.some((concept) => (concept.sourceRef as { file?: string } | undefined)?.file === file.name));
-  return own.length ? own : files;
+  const names = new Set(files.map((file) => file.name));
+  const refs = failed.map((concept) => (concept.sourceRef as { file?: unknown } | undefined)?.file);
+  if (!refs.length || refs.some((ref) => typeof ref !== "string" || !names.has(ref))) return files;
+  return files.filter((file) => refs.includes(file.name));
 }
 
 export const EXTRACTION_TOKEN_BUDGETS = [8192, 24576] as const;

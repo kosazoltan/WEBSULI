@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { limitAcceptance } from "../server/studio/limit-policy";
 import { checkCoverageGate } from "../server/studio/coverage";
-import { buildStaleJudgePrompt, parseStaleVerdicts, REPAIR_SKILL, repairChecklistTail, staleFormCandidates, staleFormProblems } from "../server/studio/repair-skill";
+import { buildStaleJudgePrompt, parseStaleVerdicts, REPAIR_SKILL, repairChecklistTail, sourceWordSet, staleFormCandidates, staleFormProblems, verifiedMisspelling } from "../server/studio/repair-skill";
+import { lessonRepairSchema } from "../shared/lesson-repair";
 import { buildStructuredImprovement } from "../server/studio/structured-improvement";
 import { callStepModel, stablePrefixChars } from "../server/studio/run-step";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
@@ -69,7 +70,25 @@ test("C16/H43: tiszta régi alak determinisztikus hiba (ragozva is); összetett 
   assert.match(repairChecklistTail(pure), /A helyesbített régi állítás SEHOL nem maradhat[\s\S]*„terlet”/);
 });
 
-test("C16: a javító út a jelöltet a javító-lektorral dönteti el — „igen” javító kört indít, „nem” átmegy, a hívás hibája figyelmeztetés", async () => {
+test("review #164: valódi szó cseréje („Föld” → „Hold”) nem determinisztikus hiba, hanem jelölt; csak az igazolt elírás determinisztikus", () => {
+  const swap = [{ localId: "c3", term: "Hold", basis: "transcription" as const, reason: "", from: { term: "Föld" } }];
+  const lesson = lessonWith([[
+    { kind: "explain", text: "A Hold a Föld körül kering. A Földön élünk.", depth: "core", readAloud: true, coversConceptIds: ["c3"] },
+  ]]);
+  const words = sourceWordSet([{ localId: "c3", term: "Föld", definition: "A Hold a Föld körül kering." }], swap);
+  assert.equal(words.has("fold"), true, "a forrás más helyen valódi szóként használja");
+  assert.equal(verifiedMisspelling(swap[0], words), false);
+  assert.deepEqual(staleFormProblems(lesson, swap, words), [], "a forrásban élő szó nem determinisztikus hiba");
+  assert.deepEqual(staleFormCandidates(lesson, swap, words).map((c) => c.sentence), ["A Hold a Föld körül kering.", "A Földön élünk."], "minden (ragozott) előfordulás a javító-lektorhoz megy");
+  // a megnevezésben is javított fogalom régi megnevezése nem számít forrás-szónak
+  assert.equal(sourceWordSet([{ localId: "c1", term: "terlet", definition: "Az alap és a magasság szorzatának fele." }], [{ localId: "c1", term: "terület", basis: "owner", reason: "", from: { term: "terlet" } }]).has("terlet"), false);
+  // nem közeli alak (tényhelyesbítés, nem elírás) → jelölt
+  const fact = [{ localId: "c4", term: "Tigris", basis: "owner" as const, reason: "", from: { term: "Nílus" } }];
+  assert.equal(verifiedMisspelling(fact[0], new Set()), false);
+  assert.equal(staleFormCandidates(lessonWith([[{ kind: "explain", text: "A Nílus mentén éltek.", depth: "core", readAloud: true, coversConceptIds: ["c4"] }]]), fact).length, 1);
+});
+
+test("C16: a javító út a jelöltet a javító-lektorral dönteti el — „igen” javító kört indít, „nem” átmegy, a hívás hibája nyitva hagyja a helyesbítést", async () => {
   const original = fusionFixture(); const e = standardFusionFixture().experience!;
   const source = { subject: original.subject, classroom: original.classroom, concepts: [{ localId: "area", term: "hármoszög területe", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] }; // a térkép a RÉGI alakkal (a helyesbítés erre vonatkozik)
   const withSentence = (text: string) => { const l = structuredClone(original); l.sections.at(-1)!.blocks.push({ kind: "recap", bullets: [text] }); return l; };
@@ -90,9 +109,36 @@ test("C16: a javító út a jelöltet a javító-lektorral dönteti el — „ig
   assert.equal(asserted.judges, 1, "a javított mondatban már nincs jelölt");
   const denied = await run(() => ({ items: [{ id: "stale-0", verdict: "nem", reason: "más értelem" }] }));
   assert.equal(denied.authors, 1, "„nem” → átmegy, nincs javító kör");
+  // Review #164 (§C-V/9): a bizonyított helyesbítés az ellenőrző hibájánál nyitva marad — javító kör, nem csendes átengedés.
   const failed = await run(() => { throw new Error("szolgáltatói hiba"); });
-  assert.equal(failed.authors, 1, "a hívás hibája nem blokkol");
-  assert.equal((failed.result as { staleWarnings?: unknown[] }).staleWarnings?.length, 1, "…hanem figyelmeztetés");
+  assert.equal(failed.authors, 2, "a hívás hibája javító kört indít");
+  assert.equal((failed.result as { staleWarnings?: unknown[] }).staleWarnings, undefined);
+  const unsure = await run(() => ({ items: [{ id: "stale-0", verdict: "bizonytalan", reason: "nem dönthető" }] }));
+  assert.equal(unsure.authors, 1, "a modell „bizonytalan” ítélete figyelmeztetés");
+  const warnings = (unsure.result as { staleWarnings?: Array<{ sentence: string; oldForm: string }> }).staleWarnings;
+  assert.equal(warnings?.length, 1);
+  assert.match(warnings![0].sentence, /hármoszög területe/);
+  assert.equal(lessonRepairSchema.shape.staleWarnings.safeParse(warnings).success, true, "a javítás-artefaktum sémája tárolja");
+});
+
+test("review #164 (C11): a nagyobb keretű újrapróba FRISS kérésenkénti határidőt kap, a külső megszakítás mindkét kérésre él", async () => {
+  const signals: Array<AbortSignal | undefined> = [];
+  const outer = new AbortController();
+  const provider: IAIProvider = {
+    name: "stub", model: "gpt-6-luna", maxOutputTokens: 24_000, isAvailable: async () => true,
+    async chat(_m: AIMessage[], signal?: AbortSignal) {
+      signals.push(signal);
+      return signals.length === 1 ? { content: '{"a":', finishReason: "length" } : { content: '{"ok":true}', finishReason: "stop" };
+    },
+    async *streamChat() { yield { type: "done" as const }; },
+  };
+  // a lektor lépésnek szabályzati határideje van (LEKTOR_TIMEOUT_MS)
+  await callStepModel(provider, { step: "lektor", role: "lektor", model: "gpt-6-luna", system: "S", user: "U" }, outer.signal);
+  assert.equal(signals.length, 2);
+  assert.ok(signals[0] && signals[1] && signals[0] !== signals[1], "két külön kérésenkénti jel (a második határideje újraindul)");
+  assert.equal(signals[1]!.aborted, false);
+  outer.abort();
+  assert.equal(signals[1]!.aborted, true, "a külső megszakítás az újrapróba jelén is érvényes");
 });
 
 test("C11: hosszkorlát → EGYSZER nagyobb keret a modell plafonjáig; ismeretlen plafonnál a régi hiba", async () => {
@@ -144,6 +190,8 @@ test("C7: a quote-javítókör csak a hibás fogalmak saját forrásfájlját ka
   const files = [{ name: "a.pdf" }, { name: "b.jpg" }, { name: "c.txt" }];
   assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "b.jpg" } }]).map((f) => f.name), ["b.jpg"]);
   assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "ismeretlen" } }]).map((f) => f.name), ["a.pdf", "b.jpg", "c.txt"], "azonosítatlan hivatkozás → minden fájl");
+  assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "b.jpg" } }, { sourceRef: { file: "ismeretlen" } }]).map((f) => f.name), ["a.pdf", "b.jpg", "c.txt"], "review #164: vegyes halmaz (egy azonosítatlan) → minden fájl");
+  assert.deepEqual(filesForQuoteRepair(files, [{ sourceRef: { file: "b.jpg" } }, {}]).map((f) => f.name), ["a.pdf", "b.jpg", "c.txt"], "hivatkozás nélküli fogalom → minden fájl");
 });
 
 test("B1/B2 (H14): az ábra-szerződés 800×520-at mond, a skill legfeljebb 2 ábrát; az OCR a program oldalcímkéjét; külön webes kivonatoló skill", () => {

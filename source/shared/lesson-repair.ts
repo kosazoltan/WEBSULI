@@ -21,6 +21,10 @@ export const lessonRepairSchema = z.object({
     from: z.object({ term: z.string().optional(), definition: z.string().optional() }),
   })).optional(),
   classroom: z.number().int().min(1).max(12).optional(),
+  // Spec 2026-09-30 (U6, C16) + review #164: a javító-lektor által eldöntetlen régi-alak jelöltek (figyelmeztetés, admin).
+  staleWarnings: z.array(z.object({
+    path: z.string(), sentence: z.string().max(400), oldForm: z.string(), newForm: z.string(), reason: z.string().max(300),
+  })).optional(),
 });
 export type LessonRepair = z.infer<typeof lessonRepairSchema>;
 export function parseLessonRepair(content?: string): LessonRepair | null {
