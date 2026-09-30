@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { lessons, htmlFiles } from "../../shared/schema";
 import { lessonSchema } from "../../shared/lesson-schema";
+import { SCORING_HEADER, scoringGate } from "../../shared/answer-value";
 import { logger } from "../lib/logger";
 import { normalizeFingerprint } from "../lib/public-input";
 import { gradeProba } from "../rewards/grade";
@@ -64,6 +65,11 @@ lessonPublicRouter.get("/by-file/:htmlFileId", async (req: Request, res: Respons
     );
     return res.status(500).json({ message: "A lecke sérült, szólj az adminnak." });
   }
+
+  // Spec 2026-09-30 (U1, §C-V/1, 11): a régi (a pontozó-verziót nem ismerő) megnyitott oldal nem kaphat típusos leckét némán —
+  // a hibás pontozás helyett frissítést kér. A fejlécet nem küldő kliens a legrégebbi támogatott verzió.
+  const gate = scoringGate(parsed.data.experience?.scoringVersion, req.header(SCORING_HEADER));
+  if (!gate.ok) return res.status(gate.status).json({ message: gate.message, requiredScoringVersion: gate.requiredScoringVersion });
 
   res.json({ lessonId: row.id, version: row.version, lesson: parsed.data });
 });

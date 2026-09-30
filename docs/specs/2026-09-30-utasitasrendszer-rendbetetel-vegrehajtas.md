@@ -37,16 +37,16 @@ lektorhoz; DB-prompt pillanatkép változatlansága; `contentKey` nem változik 
 ## U1 — Pontozó és válaszmodell (C13, B4 `OPEN_ANSWER_RULES_HU`)
 Fájlok: `shared/lesson-experience.ts` (openTaskSchema), `shared/lesson-experience-score.ts`, új
 `shared/answer-value.ts`, `server/studio/tools/arithmetic-claims.ts`, kliens pontozó hívásai, `server/routes` lecke-API.
-1. `openTaskSchema`: opcionális `answers: [{part, kind: 'number'|'fraction'|'expression', value: string, unit?, form?:
+1. `openTaskSchema`: opcionális `typedAnswers: [{part, kind: 'number'|'fraction'|'expression', value: string, unit?, form?:
    'simplified-fraction'|'decimal'|'intermediate-step'|'any'}]`, `requiredDistinct?: [{category, from: string[][], count}]`,
    lecke-szintű `scoringVersion` (`LESSON_SCORING_VERSION = 2`; hiányzik = 1).
 2. `answer-value.ts`: kifejezésnyelv (egész, tizedes `,`/`.`, közönséges tört, `+ − · × * : /`, zárójel, egység a végén);
    normalizált érték-összevetés (tört egyszerűsítve, előjel); `form` ellenőrzés; `intermediate-step`: műveleti állapot
    egyezése (szóköz és azonos jelentésű jel nem különbség); nem értelmezhető → `undecidable`. `evaluateOpenAnswer` v2:
-   ha `answers` van, részfeladatonként az érték dönt (felcserélt részeredmény hibás), a `required` a szöveges részt méri;
+   ha `typedAnswers` van, részfeladatonként az érték dönt (felcserélt részeredmény hibás), a `required` a szöveges részt méri;
    `requiredDistinct`: kategóriánként a különböző találatok száma (szinonimacsoport = 1 elem); a `+ · : /` megmarad a
    `normalizeAnswer`-ben (v2-nél); v1 lecke a régi függvényen (`evaluateOpenAnswerV1`) pontozódik.
-3. Referencia igazsága: `arithmetic-claims` bővítése — a `q`-ban álló kifejezésből az `answers[].value` újraszámolva; eltérés
+3. Referencia igazsága: `arithmetic-claims` bővítése — a `q`-ban álló kifejezésből az `typedAnswers[].value` újraszámolva; eltérés
    = csomaghiba (nem figyelmeztetés).
 4. Kompatibilitás (§C-V/1, 11): a lecke-API a kliens `X-Websuli-Scoring` fejlécét (hiányzik → 1) a lecke verziójához méri;
    újabb lecke → 409 + frissítés-üzenet; a kliens az új verziót küldi; `tolerantLessonInput` megjelenít, nem pontoz némán.

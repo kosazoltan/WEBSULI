@@ -1,6 +1,7 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
+import { LESSON_SCORING_VERSION, referenceValue } from "./answer-value";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
 export const LEGACY_LESSON_METHOD_VERSION = "fusion-7.4-1" as const;
@@ -18,11 +19,23 @@ export const EXPERIENCE_THEMES = ["ocean", "forest", "sunset", "cosmos", "paper"
 const text = (max = 1500) => z.string().trim().min(1).max(max);
 const binding = { id: text(64), sectionIndex: z.number().int().min(0), coversConceptIds: z.array(text(64)).min(1), sourceHash: z.string().regex(/^[a-f0-9]{64}$/).optional() };
 
+/** Spec 2026-09-30 (U1, C13): típusos részeredmény zárt matematikai feladathoz — az érték dönt, nem a kulcsszó. */
+export const typedAnswerSchema = z.object({
+  part: text(40), kind: z.enum(["number", "fraction", "expression"]), value: text(120),
+  unit: text(24).optional(), form: z.enum(["any", "simplified-fraction", "decimal", "intermediate-step"]).optional(),
+});
+/** Kategóriakvóta: „2 fás és 2 lágy szárú példa” — kategóriánként legalább `count` KÜLÖNBÖZŐ elem, egy szinonimacsoport egy elem. */
+export const requiredDistinctSchema = z.object({
+  category: text(80), from: z.array(z.array(text(160)).min(1)).min(1).max(20), count: z.number().int().min(1).max(10),
+}).refine((r) => r.count <= r.from.length, { message: "A kért darabszám nem lehet több a felsorolt elemeknél." });
+
 export const openTaskSchema = z.object({
   ...binding, q: text(), required: z.array(z.array(text(160)).min(1)).min(1),
   bonus: z.array(z.array(text(160)).min(1)).default([]),
   minWords: z.number().int().min(1).max(100), needsSentence: z.boolean(), sample: text(2000),
   mode: z.enum(["written", "oral"]),
+  typedAnswers: z.array(typedAnswerSchema).min(1).max(8).optional(),
+  requiredDistinct: z.array(requiredDistinctSchema).min(1).max(6).optional(),
 });
 export const experienceQuizSchema = z.object({
   ...binding, question: text(), options: z.array(text(500)).min(3).max(4),
@@ -67,7 +80,13 @@ export const experiencePacketSchema = z.object({
   bankPlan: bankPlanSchema.optional(),
   language: z.string().regex(/^[a-z]{2}-[A-Z]{2}$/).optional(),
   glossary: z.array(glossaryEntrySchema).max(100).default([]),
+  /** Spec 2026-09-30 (U1, B0): a pontozási szerződés verziója; hiányzik = 1 (régi kulcsszó-pontozó). */
+  scoringVersion: z.number().int().min(1).max(LESSON_SCORING_VERSION).optional(),
 }).superRefine((e, ctx) => {
+  // Típusos mező csak a 2-es pontozási szerződéssel; a referenciaérték értelmezhető legyen (a pontozó nem találgat).
+  const typed = e.tasks.filter((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
+  if (typed.length && (e.scoringVersion ?? 1) < LESSON_SCORING_VERSION) ctx.addIssue({ code: "custom", path: ["scoringVersion"], message: `Típusos feladathoz scoringVersion=${LESSON_SCORING_VERSION} kell (${typed[0].id}).` });
+  for (const t of typed) for (const a of t.typedAnswers ?? []) if (a.form !== "intermediate-step" && referenceValue(a.value) === null) ctx.addIssue({ code: "custom", path: ["tasks"], message: `${t.id}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.` });
   if (e.version === LEGACY_LESSON_METHOD_VERSION) {
     if (e.methods.length < 11 || e.methods.length > 20 || e.tasks.length !== 45 || e.quiz.length !== 75 || e.quiz.some(q => q.options.length !== 3)) ctx.addIssue({ code: "custom", message: "A régi módszer 11–20 módszert, 45 feladatot és 75 háromválaszos kvízt igényel." });
   for (const kind of METHOD_KINDS) if (!e.methods.some(m => m.kind === kind)) {
