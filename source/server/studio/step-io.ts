@@ -72,13 +72,13 @@ export const outlineSectionSchema = z.object({
    * a 130-char hint from the model threw away a whole paid pedagogue round). Clamped.
    */
   animationSuggestions: z
-    .array(z.string().trim().min(1).transform((s) => s.slice(0, 120)))
+    .array(z.string().trim().min(1).transform((s) => s.slice(0, OUTLINE_LIMITS.animationSuggestion)))
     .default([]),
   /** Spec 2026-09-20 (színes tananyag): fejezet-emoji és a kiemelendő kulcskifejezések (advisory, vágva). */
-  emoji: z.string().trim().min(1).transform((s) => s.slice(0, 8)).optional(),
+  emoji: z.string().trim().min(1).transform((s) => s.slice(0, OUTLINE_LIMITS.emoji)).optional(),
   keyPhrases: z
-    .array(z.string().trim().min(1).transform((s) => s.slice(0, 40)))
-    .transform((a) => a.slice(0, 4))
+    .array(z.string().trim().min(1).transform((s) => s.slice(0, OUTLINE_LIMITS.keyPhrase)))
+    .transform((a) => a.slice(0, OUTLINE_LIMITS.keyPhrases))
     .optional(),
   /** U3 (C14): a tanári pontjegyzék ide rendelt, igazolt pontjai (azonosítók); a szerző ezeket mondja ki. */
   instructionPointIds: z.array(z.string().trim().min(1).max(64)).max(40).optional(),
@@ -285,7 +285,7 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     "- A fejezetcímek egyediek; ugyanaz a fogalom ne kapjon két fejezetet — kivéve a záró „A leggyakoribb hibák” és „Ellenőrzés” fejezetet, amely a már tanított fogalmakat ismétli (ez nem duplikáció).",
     "- A misconceptions minden eleme létező conceptId-hoz kötődjön, és csak a forrás tartalmából levezethető tévhit legyen.",
     "- A forrás adatait (számok, definíciók, feladatok) nem találod ki, nem egészíted ki és nem „javítod”; ha valami hiányzik a térképről, azt nem tervezed be.",
-    "- Az animationSuggestions elemei legfeljebb 120 karakteresek, konkrét, a fejezet tanításából rajzolható ábrát neveznek meg.",
+    `- Az animationSuggestions elemei legfeljebb ${OUTLINE_LIMITS.animationSuggestion} karakteresek, konkrét, a fejezet tanításából rajzolható ábrát neveznek meg.`,
     `- Korlátok (a program a túllépést vágja vagy elhagyja, és a jobban jelzi — ne lépd túl): emoji legfeljebb ${OUTLINE_LIMITS.emoji} karakter; keyPhrases legfeljebb ${OUTLINE_LIMITS.keyPhrases} elem, elemenként ${OUTLINE_LIMITS.keyPhrase} karakter; fejezetcím ${LESSON_TEXT_LIMITS.heading} karakter.`,
     "- Semmi próza, magyarázat, kódblokk-jelölés vagy bevezető: a válasz kizárólag az előírt JSON.",
     "",
@@ -404,9 +404,9 @@ export function buildSchemaRetryUser(zodIssues: string, repair?: { targetSection
  */
 export const TEACHING_CONTRACT = [
   "TANÍTÁSI SZERZŐDÉS (a program méri; megszegése a lecke elutasítása vagy javító kör):",
-  "1. Címke = állítás: a blokk coversConceptIds azonosítója azt állítja, hogy a blokk LÁTHATÓ szövege tanítja a fogalmat — a fogalom saját szavai (term) a blokk szövegében álljanak. Nem-explain blokk (example/check/try) címkéje akkor is megalapozott, ha UGYANABBAN a fejezetben egy explain már megalapozta. A recap nem kap címkét. A kapu minden címkét a szöveghez mér, és a megalapozatlan címkéjű leckét elutasítja.",
+  "1. Címke = állítás: a blokk coversConceptIds azonosítója azt állítja, hogy a blokk LÁTHATÓ szövege tanítja a fogalmat — a fogalom saját szavai (term) a blokk szövegében álljanak. A címke akkor is megalapozott, ha UGYANABBAN a fejezetben egy MÁSIK blokk (bármely fajtájú: explain, example, …) ugyanezt a fogalmat a saját szövegével megalapozza — a kapu fejezetenként így mér. A recap nem kap címkét. A megalapozatlan címkéjű leckét a kapu elutasítja.",
   "2. Csak a térkép fogalmait tanítod, a forrás szintjén: könnyebb anyagot általános tudásból nem helyettesítesz be, más évfolyamra nem hangolsz. A forrásból nem tanítható fogalmat kihagyod — nem találsz ki helyette mást, és nem jelented sehol: a hiányt a program fedettségi kapuja méri.",
-  `3. Hosszkorlátok (karakter, a séma számai): fejezetcím ${LESSON_TEXT_LIMITS.heading}; explain.text ${LESSON_TEXT_LIMITS.explain}; example.problem ${LESSON_TEXT_LIMITS.problem}, lépésenként ${LESSON_TEXT_LIMITS.step}, answer ${LESSON_TEXT_LIMITS.answer}; check.question ${LESSON_TEXT_LIMITS.question}, opció ${LESSON_TEXT_LIMITS.option}, visszajelzés ${LESSON_TEXT_LIMITS.feedback}; recap pont ${LESSON_TEXT_LIMITS.bullet}; ábra caption ${LESSON_TEXT_LIMITS.caption}. A túllépés sémahiba (javító kör).`,
+  `3. Hosszkorlátok (karakter, a séma számai): fejezetcím ${LESSON_TEXT_LIMITS.heading}; explain.text ${LESSON_TEXT_LIMITS.explain}; example.problem ${LESSON_TEXT_LIMITS.problem}, lépésenként ${LESSON_TEXT_LIMITS.step}, answer ${LESSON_TEXT_LIMITS.answer}; check.question ${LESSON_TEXT_LIMITS.question}, opció ${LESSON_TEXT_LIMITS.option}, visszajelzés ${LESSON_TEXT_LIMITS.feedback}, hint ${LESSON_TEXT_LIMITS.hint}; recap pont ${LESSON_TEXT_LIMITS.bullet}; ábra caption ${LESSON_TEXT_LIMITS.caption}. A túllépés sémahiba (javító kör).`,
   "4. A gyereknek szóló szöveg nem hivatkozik a forrásra, füzetre, tankönyvre, tananyagra („a forrás szerint”, „szerepel a füzetben”): a tartalmat közvetlenül állítod. (A program a maradékot a bank ELŐTT törli vagy átíratja — ne legyen mit.)",
   "5. title, subject, classroom, mapId: a program a saját, forrásból mért értékét írja be — add vissza a vázlat/térkép szerinti értéket, ne találj ki újat; sourceOnly mindig true. Minden check blokkban pontosan annyi feedbackPerOption, ahány opció.",
   "6. Ha gateFeedback érkezik: a felsorolt blokkokat a previousLesson-ben javítod, a lektori jegyzetekkel együtt; a fogalmat látható szövegben tanítod meg — nem rejtett kulcsszót fűzöl hozzá, és nem törlöd a tanítását.",

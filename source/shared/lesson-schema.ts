@@ -3,7 +3,7 @@ import { experienceSchema } from "./lesson-experience";
 import { parseReferenceExpression } from "./answer-value";
 
 /** U4 (B4 `TEACHING_CONTRACT`): a tanítási szövegek karakterkorlátai — EGY helyen; a séma és a szerzőnek adott szerződés ugyanezt mondja. */
-export const LESSON_TEXT_LIMITS = { heading: 255, explain: 4000, problem: 2000, step: 1000, answer: 1000, caption: 500, question: 1000, option: 500, feedback: 1000, bullet: 500 } as const;
+export const LESSON_TEXT_LIMITS = { heading: 255, explain: 4000, problem: 2000, step: 1000, answer: 1000, caption: 500, question: 1000, option: 500, feedback: 1000, hint: 1000, bullet: 500 } as const;
 import { triangleAreaLabParamsSchema } from "./triangle-area-lab";
 import { decisionStoryParamsSchema } from "./decision-story";
 
@@ -134,7 +134,7 @@ const checkBlock = z.object({
   options: z.array(filled(LESSON_TEXT_LIMITS.option)).min(2).max(5),
   correctIndex: z.number().int().min(0),
   feedbackPerOption: z.array(filled(LESSON_TEXT_LIMITS.feedback)),
-  hint: filled(1000).optional(),
+  hint: filled(LESSON_TEXT_LIMITS.hint).optional(),
   coversConceptIds,
 });
 

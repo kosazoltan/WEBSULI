@@ -31,20 +31,24 @@ function walk(value: unknown, path: string, visit: (text: string, path: string) 
   return value;
 }
 
+/** A bejárás hatóköre — `experienceOnly`: csak a bank (a tanítás a bank után már nem módosulhat, U4/H20). */
+export type ReferenceScope = { experienceOnly?: boolean };
+
 /** A gyereknek szóló szövegrészek bejárása: a nem-ábra blokkok és a bank. */
-function visitKidText(lesson: Lesson, visit: (text: string, path: string) => string): Lesson {
+function visitKidText(lesson: Lesson, visit: (text: string, path: string) => string, scope: ReferenceScope = {}): Lesson {
+  const experience = lesson.experience ? walk(lesson.experience, "experience", visit) as Lesson["experience"] : lesson.experience;
+  if (scope.experienceOnly) return { ...lesson, experience };
   const sections = lesson.sections.map((section, s) => ({
     ...section,
     heading: visit(section.heading, `sections[${s}].heading`),
     blocks: section.blocks.map((block, b) => (block.kind === "animate" ? block : walk(block, `sections[${s}].blocks[${b}]`, visit))),
   })) as Lesson["sections"];
-  const experience = lesson.experience ? walk(lesson.experience, "experience", visit) as Lesson["experience"] : lesson.experience;
   return { ...lesson, sections, experience };
 }
 
-export function sourceReferenceFindings(lesson: Lesson): SourceReference[] {
+export function sourceReferenceFindings(lesson: Lesson, scope: ReferenceScope = {}): SourceReference[] {
   const found: SourceReference[] = [];
-  visitKidText(lesson, (text, path) => { if (MENTION.test(text)) found.push({ path, text }); return text; });
+  visitKidText(lesson, (text, path) => { if (MENTION.test(text)) found.push({ path, text }); return text; }, scope);
   return found;
 }
 
@@ -59,13 +63,13 @@ function stripText(text: string): string {
 }
 
 /** Biztonságos törlés; egy feladat változása visszavonva, ha a saját mintája utána nem kapna teljes pontot. */
-export function stripSourceReferences(lesson: Lesson): { lesson: Lesson; fixed: number } {
+export function stripSourceReferences(lesson: Lesson, scope: ReferenceScope = {}): { lesson: Lesson; fixed: number } {
   let fixed = 0;
   const next = visitKidText(lesson, (text) => {
     const out = stripText(text);
     if (out !== text) fixed++;
     return out;
-  });
+  }, scope);
   if (next.experience && lesson.experience) {
     next.experience = {
       ...next.experience,
@@ -91,7 +95,10 @@ const numbersOf = (text: string) => (text.match(/\d+(?:[.,]\d+)?/g) ?? []).sort(
  * fogadható el, ha az eredetiben (ragozott alakban is) szerepelt. A számokat a `numbersOf` őrzi.
  */
 export function introducesNewProperNoun(before: string, after: string): boolean {
-  const capitalised = (text: string) => [...text.matchAll(/(?<!^|[.!?]\s|[„"(]\s*|\*\*)\b(\p{Lu}\p{Ll}{2,})/gu)].map((m) => m[1].toLocaleLowerCase("hu"));
+  // Review #162: a mondatkezdő nagybetűs szó is mérve — „A forrás Istárt …” → „Hammurapi Istárt …” éppen ott csúszott át.
+  // Egy közönséges mondatkezdő szó (ami az eredetiben nem szerepelt) így elutasítást okozhat: ez a biztonságos irány (az
+  // eredeti marad, figyelmeztetéssel).
+  const capitalised = (text: string) => [...text.matchAll(/(?<![\p{L}\p{N}])(\p{Lu}\p{Ll}{2,})/gu)].map((m) => m[1].toLocaleLowerCase("hu"));
   const known = before.toLocaleLowerCase("hu").match(/\p{L}+/gu) ?? [];
   return capitalised(after).some((word) => !known.some((k) => k.startsWith(word.slice(0, Math.max(4, word.length - 2))) || word.startsWith(k.slice(0, Math.max(4, k.length - 2)))));
 }
@@ -106,8 +113,8 @@ export const TEXT_FIX_MODEL = "claude-opus-5-5";
  * ellenőrzött: nincs benne forrás-szó, a számai azonosak, a hossza közel az eredetihez; a feladat saját mintája
  * utána is teljes pontot kap — különben az eredeti marad.
  */
-export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall): Promise<{ lesson: Lesson; rewritten: number; rejected: number; needsSource: number }> {
-  const findings = sourceReferenceFindings(lesson);
+export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall, scope: ReferenceScope = {}): Promise<{ lesson: Lesson; rewritten: number; rejected: number; needsSource: number }> {
+  const findings = sourceReferenceFindings(lesson, scope);
   if (!findings.length) return { lesson, rewritten: 0, rejected: 0, needsSource: 0 };
   const system = withSupportSkill("kid-text-fixer", "Írd át a kapott mondatokat a skill szerint. Kizárólag a kért JSON-t add vissza.");
   const user = JSON.stringify({ title: lesson.title, classroom: lesson.classroom, items: findings });

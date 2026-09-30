@@ -1,4 +1,5 @@
 import { OUTLINE_MAX_SECTIONS } from "../step-io";
+import { OUTLINE_LIMITS } from "../step-io";
 
 /**
  * Eszköz (2026-09-19): a tervkészítő vázlatának determinisztikus tisztítása a séma- és
@@ -31,7 +32,7 @@ export function autofixOutline(raw: unknown, concepts: ReadonlyArray<{ localId: 
     }
     if (isStrArr(section.animationSuggestions)) {
       const original = section.animationSuggestions;
-      const clipped = original.map(s => s.trim()).filter(Boolean).map(s => (s.length > 120 ? s.slice(0, 117).trimEnd() + "…" : s));
+      const clipped = original.map(s => s.trim()).filter(Boolean).map(s => (s.length > OUTLINE_LIMITS.animationSuggestion ? s.slice(0, OUTLINE_LIMITS.animationSuggestion - 3).trimEnd() + "…" : s));
       if (clipped.length !== original.length || clipped.some((s, n) => s !== original[n])) {
         section.animationSuggestions = clipped; fixes.push(`fejezet ${i + 1}: ábra-javaslat rövidítve`);
       }

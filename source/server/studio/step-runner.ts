@@ -840,6 +840,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const mergePatch = (candidate: unknown): { ok: true; json: unknown } | { ok: false; reason: string } => {
         const patch = parseSectionPatch(candidate);
         if (!patch) return { ok: false, reason: `A válasz teljes lecke (nem folt-alak), pedig a CÉLZOTT JAVÍTÁS csak a(z) ${authorRepair!.targetSections.map((i) => i + 1).join(", ")}. fejezet foltját kérte.` };
+        // Review #162: a folt MINDEN kijelölt fejezetet tartalmazza — az üres vagy részleges folt a javítást csendben elhagyná.
+        const missing = authorRepair!.targetSections.filter((i) => !patch.has(i));
+        if (missing.length) return { ok: false, reason: `A folt nem tartalmazza a kijelölt fejezet(ek)et: ${missing.map((i) => i + 1).join(", ")}. — minden kijelölt fejezetet vissza kell adni.` };
         try { return { ok: true, json: mergeSectionPatches(authorRepair!.previous, patch, authorRepair!.targetSections) }; }
         catch (error) { return { ok: false, reason: `A célzott javítás nem egyesíthető: ${error instanceof Error ? error.message : String(error)}` }; }
       };
@@ -937,7 +940,10 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
             return result.json;
           });
-          cleaned = rewrite.lesson;
+          // Review #162: az átírt lecke újra a sémán — érvénytelen (pl. hosszkorlátot sértő) átírás nem tárolható.
+          const revalidated = lessonSchema.safeParse(rewrite.lesson);
+          if (revalidated.success) cleaned = revalidated.data;
+          else logger.warn(`[STUDIO] A forrás-hivatkozás átírása sémát sértett (${job.id}) — az eredeti marad: ${zodIssues(revalidated.error).slice(0, 200)}`);
           logger.info(`[STUDIO] Forrás-hivatkozás átírva (${job.id}): ${rewrite.rewritten} mondat, ${rewrite.rejected} elutasítva, ${rewrite.needsSource} forrást igényel (marad figyelmeztetésnek)`);
         } catch (error) {
           logger.warn(`[STUDIO] A forrás-hivatkozás átírása elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
@@ -1067,8 +1073,26 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           return fail(store, job, describeStepError(error));
         }
       }
-      // Spec 2026-09-30 (U4, H20): a forrás-hivatkozás törlése/átírása a SZERZŐI lépés végén történik (a bank előtt); itt már nem
-      // módosul a tanítás — különben a bank tartalom-kulcsa a bank után változna.
+      // Spec 2026-09-30 (U4, H20): a TANÍTÁS forrás-hivatkozása a szerzői lépés végén kerül ki (a bank előtt); itt a tanítás már
+      // nem módosul. Review #162: a most épült BANK saját szövegeit viszont itt kell tisztítani (csak az experience részt).
+      if (completedLesson.experience) {
+        const bankStripped = stripSourceReferences(completedLesson, { experienceOnly: true });
+        if (bankStripped.fixed) { logger.info(`[STUDIO] Forrás-hivatkozás törölve a bankból (${job.id}): ${bankStripped.fixed} szövegrész`); completedLesson = bankStripped.lesson; }
+        if (sourceReferenceFindings(completedLesson, { experienceOnly: true }).length && keyConfigured(TEXT_FIX_MODEL)) {
+          try {
+            const rewrite = await rewriteSourceReferences(completedLesson, async (textSystem, user) => {
+              const result = await callStepModel(providerFactory(TEXT_FIX_MODEL, "textFix"), { step: job.step, policy: "textFix", role: "kid-text-fixer", model: TEXT_FIX_MODEL, system: textSystem, user });
+              if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
+              return result.json;
+            }, { experienceOnly: true });
+            const revalidated = lessonSchema.safeParse(rewrite.lesson);
+            if (revalidated.success) completedLesson = revalidated.data;
+            logger.info(`[STUDIO] Bank forrás-hivatkozása átírva (${job.id}): ${rewrite.rewritten} mondat, ${rewrite.rejected} elutasítva`);
+          } catch (error) {
+            logger.warn(`[STUDIO] A bank forrás-hivatkozásának átírása elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
+          }
+        }
+      }
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, completedLesson);
       await store.saveStep(
         job.id,

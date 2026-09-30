@@ -2554,3 +2554,27 @@ test("U4 (C3/H20): a forrás-hivatkozás a SZERZŐI lépés végén kerül ki �
   assert.equal((saved.sections[0].blocks[0] as { text: string }).text, "A sejt az élőlények alapegysége.", "a bevezető fordulat kódból törölve, a bank előtt");
   assert.equal(deps.calls.length, 1, "biztonságos törléshez nem kell átíró modell");
 });
+
+test("review #162: a célzott folt minden kijelölt fejezetet tartalmazzon — az üres folt módhiba, egy újrakérés", async () => {
+  const gate = { ok: false, reasons: ["A fogalom magyarázata hiányzik"], ungrounded: [{ blockIndex: 0, sectionIdx: 0, conceptId: "c1" }] };
+  const deps = makeDeps("");
+  scriptedProvider(deps, [JSON.stringify({ sections: {} }), JSON.stringify({ sections: { "0": GOOD_LESSON.sections[0] } })]);
+  deps.store.seed({ id: "targeted-empty", mapId: "m1", step: "author", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON, gate } });
+  const result = await runPipelineStep("targeted-empty", deps);
+  assert.equal(result.ok, true, JSON.stringify(deps.store.jobs.get("targeted-empty")!.error));
+  assert.equal(deps.calls.length, 2);
+  assert.match(deps.calls[1].user, /A folt nem tartalmazza a kijelölt fejezet\(ek\)et: 1\./);
+});
+
+test("review #162: a forrás-hivatkozás átírása után a lecke újra a sémán — a hosszkorlátot sértő átírás nem tárolódik", async () => {
+  const long = structuredClone(GOOD_LESSON);
+  const base = "A forrás Istárt a szerelem istenének nevezi. " + "Babilon a Folyóköz városa volt. ".repeat(80);
+  (long.sections[0].blocks[0] as { text: string }).text = base.slice(0, 2600);
+  const rewritten = ("Istár a szerelem istene. " + "Babilon a Folyóköz városa volt. ".repeat(140)).slice(0, 4100);
+  const deps = makeDeps("");
+  scriptedProvider(deps, [JSON.stringify(long), JSON.stringify({ items: [{ path: "sections[0].blocks[0].text", text: rewritten }] })]);
+  deps.store.seed({ id: "rewrite-schema", mapId: "m1", step: "author", round: 0, output: { approvedOutline: GOOD_OUTLINE } });
+  assert.equal((await runPipelineStep("rewrite-schema", deps)).ok, true, JSON.stringify(deps.store.jobs.get("rewrite-schema")!.error));
+  const saved = deps.store.jobs.get("rewrite-schema")!.output!.lesson as Lesson;
+  assert.equal((saved.sections[0].blocks[0] as { text: string }).text, base.slice(0, 2600), "az érvénytelen átírás helyett az eredeti marad");
+});

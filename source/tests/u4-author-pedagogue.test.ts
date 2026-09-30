@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { introducesNewProperNoun, rewriteSourceReferences } from "../server/studio/source-reference";
+import { introducesNewProperNoun, rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences } from "../server/studio/source-reference";
 import { groundingReport } from "../server/studio/grounding";
 import { targetedRepairSections } from "../server/studio/section-patch";
 import {
@@ -104,7 +104,8 @@ test("H13/B4: a szerzői prompt magyar, a TANÍTÁSI SZERZŐDÉS a séma számai
   assert.equal(prompt.split(LESSON_QUALITY_CONTRACT).length - 1, 1, "a minőségi szerződés csak a közös módszer-szerződésen belül (a runbook adja külön)");
   assert.doesNotMatch(prompt, /reportba|say so in the report|mapId változatlan/);
   assert.match(TEACHING_CONTRACT, new RegExp(`explain\\.text ${LESSON_TEXT_LIMITS.explain}; example\\.problem ${LESSON_TEXT_LIMITS.problem}`));
-  assert.match(TEACHING_CONTRACT, /UGYANABBAN a fejezetben egy explain már megalapozta/);
+  // Review #162 (tényhelyesbítés): a kapu fejezetenként BÁRMELY megalapozott blokkból örököl, nem csak explainből.
+  assert.match(TEACHING_CONTRACT, /UGYANABBAN a fejezetben egy MÁSIK blokk/);
   assert.match(TEACHING_CONTRACT, /nem hivatkozik a forrásra, füzetre/);
   const tooLong = lessonWith("x".repeat(LESSON_TEXT_LIMITS.explain + 1));
   assert.equal(lessonSchema.safeParse(tooLong).success, false, "a szerződés száma a séma száma");
@@ -114,4 +115,20 @@ test("H13/B4: a szerzői prompt magyar, a TANÍTÁSI SZERZŐDÉS a séma számai
   assert.match(buildSchemaRetryUser("hiba"), /TELJES leckét/);
   assert.match(ROLE_SKILLS.author, /TANÍTÁSI SZERZŐDÉS \(rendszerutasítás\) a mérce/);
   assert.match(ROLE_SKILLS.author, /teljes lecke ott hiba/);
+});
+
+test("review #162: mondatkezdő új tulajdonnév is elutasítva; a bank-tisztítás csak az experience részt érinti; a hint a szerződésben; a megalapozási szabály a kapu szerinti", () => {
+  assert.equal(introducesNewProperNoun("A forrás Istárt a szerelem istenének nevezi.", "Hammurapi Istárt a szerelem istenének nevezi."), true, "mondat elején álló új név");
+  assert.equal(introducesNewProperNoun("A forrás Istárt a szerelem istenének nevezi.", "Istár a szerelem istene."), false);
+  const lesson = standardFusionFixture();
+  lesson.sections[0].blocks[0] = { ...(lesson.sections[0].blocks[0] as object), text: "A forrás szerint a terület fontos." } as never;
+  lesson.experience!.tasks[0] = { ...lesson.experience!.tasks[0], q: "A forrás szerint mekkora a terület?" };
+  assert.deepEqual(sourceReferenceFindings(lesson, { experienceOnly: true }).map((f) => f.path), ["experience.tasks[0].q"]);
+  const stripped = stripSourceReferences(lesson, { experienceOnly: true });
+  assert.equal(stripped.lesson.experience!.tasks[0].q, "Mekkora a terület?");
+  assert.equal((stripped.lesson.sections[0].blocks[0] as { text: string }).text, "A forrás szerint a terület fontos.", "a tanítás a bank után nem módosul");
+  assert.match(TEACHING_CONTRACT, new RegExp(`hint ${LESSON_TEXT_LIMITS.hint}`));
+  assert.match(TEACHING_CONTRACT, /UGYANABBAN a fejezetben egy MÁSIK blokk \(bármely fajtájú/);
+  const clamped = outlineSchema.parse({ sections: [{ heading: "A", conceptIds: ["c1"], plannedBlocks: ["explain"], animationSuggestions: ["x".repeat(OUTLINE_LIMITS.animationSuggestion + 9)], emoji: "🙂".repeat(9) }], misconceptions: [] });
+  assert.equal(clamped.sections[0].animationSuggestions[0].length, OUTLINE_LIMITS.animationSuggestion, "a séma a közös korlátot használja");
 });
