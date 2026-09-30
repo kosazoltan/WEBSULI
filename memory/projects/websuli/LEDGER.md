@@ -647,3 +647,6 @@ DB-visszaolvasás (Hammurapi 0, papkirály 8) → élő oldal szövege igazolva.
 **#148 Témafókusz-késés** (merge `070657b`): mérve (55 fogalom, éles út) a deepseek-v4-flash 1/5-ször döntött 60 s-on belül,
 a glm-5.3-flash 5/5 (11–53 s) → a fókusznál a glm megy elöl, a deepseek a tartalék. A napló „300000ms” címkéje hamis volt
 (a lépés határideje a policy helyett) — javítva, a valódi 60 s-ot írja. Új tesztek, mindkettő bukott a régi kódon.
+**#149 Témafókusz-résztéma** (merge `b495b32`): a #148 utáni ellenőrző mérés szerint a glm 4/8-szor NEM résztémának vette a
+füzetlap pontjait felsoroló kérést („a forrás egészét kéri” kétértelmű) → a teljes 55 fogalmas térkép maradt volna. A prompt
+most a tudástár fogalmaihoz méri a résztémát: Mezopotámia 10/10 szűk, stílus-kérés 5/5 széles, oszthatóság 5/5 szűk; a lánc 6–8 s.
