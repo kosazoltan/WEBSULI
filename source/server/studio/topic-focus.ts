@@ -76,7 +76,7 @@ export function topicFocusModels(env: Record<string, string | undefined> = proce
   return [...new Set([FALLBACK_MODELS.gateHelper, resolveStudioModel("gateHelper", env)].filter((m): m is string => !!m))];
 }
 
-export type FocusCaller =(system: string, user: string) => Promise<unknown>;
+export type FocusCaller = (system: string, user: string) => Promise<unknown>;
 
 function describe(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
