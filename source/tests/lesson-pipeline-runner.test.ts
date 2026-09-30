@@ -219,14 +219,14 @@ test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu �
   const outline = { sections: [{ heading: lesson.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
   const deps = makeDeps("{}");
   deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
-  const answers = [outline, lesson, { notes: [] }]; let calls = 0; let publications = 0;
+  const answers = [outline, lesson, { solutions: [], notes: [], reviewedAll: true }]; let calls = 0; let publications = 0;
   // SPEC-VÁLTOZÁS (docs/specs/2026-09-29-egy-helyes-valasz.md, döntés 3): a bank-ellenőr vak megoldás nélkül is
   // fut, a lektorral párhuzamosan. A stub a bank-ellenőrnek a helyes opciónkénti ítéletet adja, a sorrendi
   // válaszlista (és a 3 lépéshívás) a többi lépésé marad.
   let verifierCalls = 0;
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
     chat: async (messages: AIMessage[]) => (messages[0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")
-      ? (verifierCalls++, { content: JSON.stringify({ errors: [], choices: keyedChoices(lesson) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } })
+      ? (verifierCalls++, { content: JSON.stringify({ errors: [], choices: keyedChoices(lesson), verified: openPaths(lesson) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } })
       : { content: JSON.stringify(answers[calls++]), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } },
   } as unknown as IAIProvider);
   deps.store.publishLesson = async () => { publications++; return { htmlFileId: "published-fixture", exportedQuizItems: lesson.experience!.quiz.length }; };
@@ -266,7 +266,7 @@ test("mért hiba 2026-09-19 (run b5d07f3d): a 2. körös, blokkolómentes lektor
   const lesson = standardFusionFixture(); lesson.mapId = "m1";
   const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
-  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
   deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
   deps.store.seed({ id: "proof-r1", mapId: "m1", lessonId: "lesson-proof", step: "lektor", round: 1, output: { lesson } });
   // Round 0 blocked one bank item; round 1 reviews with that note as previousBlockers.
@@ -287,7 +287,7 @@ for (const corruption of ["missing", "changed-lesson", "changed-source", "blocki
     const lesson = standardFusionFixture(); lesson.mapId = "m1";
     const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
     lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
-    const deps = makeDeps(JSON.stringify({ notes: [] }));
+    const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
     deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
     deps.store.seed({ id: "proof", mapId: "m1", lessonId: "lesson-proof", step: "lektor", output: { lesson } });
     const reviewed = await runPipelineStep("proof", deps); assert.ok(reviewed.ok);
@@ -508,7 +508,8 @@ function makeDeps(cannedResponse: string) {
       if ((messages[0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) {
         const reviewed = [...store.jobs.values()].find((j) => j.step === "lektor" && (j.output?.lesson as Lesson | undefined)?.experience);
         const choices = reviewed ? keyedChoices(reviewed.output!.lesson as Lesson) : [];
-        return { content: JSON.stringify({ errors: [], choices }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+        const verified = reviewed ? openPaths(reviewed.output!.lesson as Lesson) : [];
+        return { content: JSON.stringify({ errors: [], choices, verified }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
       }
       return { content: cannedResponse, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     },
@@ -570,7 +571,7 @@ test("lektor receives measured inflection scores from the current lesson, includ
     { ...base, id: "lily", minWords: 1, needsSentence: false, sample: "A liliom lepellevelei két körben helyezkednek el, egyformák, és alakjukban, színükben nem különülnek el.", required: [["lepellevelek", "lepellevél"], ["egyformák", "egyforma"], ["két körben", "két kör"], ["nem különülnek el", "nem különülnek", "nem különül el"]] },
     { ...base, id: "wrong", minWords: 1, sample: "Bicikli", required: [["gyökér"]] },
   ];
-  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
   deps.store.seed({ id: "scoring", mapId: "m1", step: "lektor", output: { lesson, sampleGradingEvidence: [{ id: "stale", score: 1 }] } });
   await runPipelineStep("scoring", { ...deps, promptLookup: async () => "Konfigurált lektori prompt." });
   // SPEC-VÁLTOZÁS (docs/specs/2026-09-29-egy-helyes-valasz.md, döntés 3): a bank-ellenőr vak megoldás nélkül is
@@ -588,7 +589,7 @@ test("lektor receives measured inflection scores from the current lesson, includ
   assert.match(lektorCall.system, /tartalmi helyesség/);
   const defaultEvidence = buildLektorPrompt(lesson, { ...MAP_META, concepts: MAP_CONCEPTS }).split("A program pontozási mérése (adat):\n")[1];
   assert.deepEqual(JSON.parse(defaultEvidence), evidence, "direct lesson repair receives the same measured evidence");
-  const legacy = makeDeps(JSON.stringify({ notes: [] }));
+  const legacy = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
   legacy.store.seed({ id: "legacy", mapId: "m1", step: "lektor", output: { lesson: GOOD_LESSON } });
   await runPipelineStep("legacy", legacy);
   assert.equal(legacy.calls[0].system.includes("A program pontozási mérése (adat):"), false);
@@ -604,7 +605,7 @@ test("lektor-tanítás 2026-09-24: a vak megoldó jobonként egyszer fut, a lekt
       calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
       const content = model === BLIND_SOLVER_MODEL
         ? JSON.stringify({ solutions: [{ task: "Téglatest: élek", answer: "7, 11, 6" }, { task: "Réka", answer: "NINCS ELÉG ADAT" }] })
-        : JSON.stringify({ solutions: [{ task: "Téglatest: élek", own: "7, 11, 6", lesson: "7, 11, 6", match: true }], notes: [] });
+        : JSON.stringify({ solutions: [{ task: "Téglatest: élek", own: "7, 11, 6", lesson: "7, 11, 6", match: true }], notes: [], reviewedAll: true });
       return { content, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     },
     isAvailable: async () => true,
@@ -629,7 +630,7 @@ test("lektor-tanítás 2026-09-24: a vak megoldó jobonként egyszer fut, a lekt
 test("kész, forrásfogalomhoz kötött ábrák: nulla animátorhívás, utána a lektor ténylegesen fut", async () => {
   const lesson = standardFusionFixture();
   delete lesson.experience;
-  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
   deps.store.seed({ id: "reuse", mapId: "m1", step: "animator", output: { lesson } });
   const result = await runPipelineStep("reuse", deps);
   assert.ok(result.ok && result.next.step === "lektor");
@@ -764,7 +765,7 @@ const CANNED_AUTHOR = JSON.stringify(GOOD_LESSON);
 
 test("a tárolt prompt mellett is eljut a teljes forrás a tényleges modellkérésbe", async () => {
   for (const step of ['pedagogue','author','animator','lektor'] as const) {
-    const deps=makeDeps(step==='pedagogue'?CANNED_PEDAGOGUE:step==='lektor'?JSON.stringify({notes:[]}):CANNED_AUTHOR);
+    const deps=makeDeps(step==='pedagogue'?CANNED_PEDAGOGUE:step==='lektor'?JSON.stringify({solutions:[],notes:[],reviewedAll:true}):CANNED_AUTHOR);
     deps.store.maps.get('m1')!.concepts=[{id:'internal-uuid-should-not-leak',localId:'c1',examWeight:'core',term:'A sejt',definition:'Az élőlények szerkezeti alapegysége.',quote:'A sejt az élőlények alapegysége.'},MAP_CONCEPTS[1]];
     deps.store.seed({id:'evidence',mapId:'m1',step,output:{approvedOutline:GOOD_OUTLINE,lesson:GOOD_LESSON}});
     await runPipelineStep('evidence',{...deps,promptLookup:async()=> 'Egyéni stílus: tömör magyar szöveg.'});
@@ -1373,11 +1374,11 @@ test("(m2) modellhiba: ha az elsődleges és a tartalék is hibázik, a második
   assert.match((await all.store.loadJob("job-3"))?.error ?? "", /második tartalék/);
 });
 
-test("(m3) a lektor jelentése 40-nél több önálló megoldással sem bukik (levágva)", () => {
+test("(m3) a lektor jelentése 45 önálló megoldással sem bukik és nem vág (U5/H49: a plafon 200, fölötte jelölt csonkolás)", () => {
   const solutions = Array.from({ length: 45 }, (_, i) => ({ task: `f${i}`, own: "1", lesson: "1", match: true }));
   const parsed = lektorReportSchema.safeParse({ solutions, notes: [] });
   assert.ok(parsed.success);
-  assert.equal(parsed.data.solutions?.length, 40);
+  assert.equal(parsed.data.solutions?.length, 45, "nincs néma 40-es vágás");
 });
 
 // Spec-változás 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): a 2026-09-19-es eszköz-kiváltás („példa
@@ -1522,7 +1523,7 @@ test("(p) spec 2026-09-19 — lektor: az elsődleges modell időtúllépése ut�
   assert.notEqual(primary, fallback);
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
     failModels: new Set([primary]),
-    cannedResponse: JSON.stringify({ notes: [] }),
+    cannedResponse: JSON.stringify({ solutions: [], notes: [], reviewedAll: true }),
   });
   store.seed({ id: "job-1", mapId: "m1", step: "lektor", status: "running", output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON } });
 
@@ -1722,7 +1723,7 @@ test("(u) kapu a körlimiten, fejezethez köthető lelettel → egy célzott sze
   // A 0. fejezet egy check blokkja idegen fogalom címkéjét viseli (a szövege nem tanítja) → a kapu
   // megalapozatlan címkét mér; a bankterv (explain/example alapú) érintetlen.
   lesson.sections[0].blocks.splice(lesson.sections[0].blocks.length - 1, 0, { kind: "check", question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], correctIndex: 0, feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
-  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
   deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
   deps.store.seed({ id: "gate-limit", mapId: "m1", lessonId: "lesson-gl", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version } });
   const reviewed = await runPipelineStep("gate-limit", deps);
@@ -1776,6 +1777,12 @@ test("(v) vizuális világ: a pedagógus rögzíti, a szerző fejezetei megkapj�
  * tételre opciónkénti ítéletet (`choices`) ad; ítélet nélkül a tétel nem „cleared”. A stub-modell ezért a helyes
  * modell viselkedését adja: a kulcs szerinti ítéletet (`override` útvonalanként felülírja).
  */
+/** U5 (H32): a helyes ellenőrző-modell a nyílt tételeket is KIMONDVA igazolja — a fel nem sorolt tétel eldöntetlen. */
+function openPaths(lesson: Lesson): string[] {
+  const e = lesson.experience!;
+  return [...e.tasks.map((_, i) => `experience.tasks[${i}]`), ...e.methods.flatMap((m, i) => (Array.isArray(m.options) ? [] : [`experience.methods[${i}]`]))];
+}
+
 function keyedChoices(lesson: Lesson, override: Record<string, boolean[]> = {}) {
   const e = lesson.experience!;
   const items: Array<[string, { options?: string[]; correctIndex?: number }]> = [
@@ -1803,7 +1810,7 @@ async function bankVerifierSetup(id: string, extraOutput: Record<string, unknown
     chat: async (messages: AIMessage[]) => {
       const system = messages[0]?.content ?? "";
       calls.push({ model, system });
-      const content = system.includes("TÁMOGATÓ SKILL: bank-verifier") ? JSON.stringify({ errors: verifierErrors, choices: keyedChoices(lesson, override) }) : JSON.stringify({ notes: [] });
+      const content = system.includes("TÁMOGATÓ SKILL: bank-verifier") ? JSON.stringify({ errors: verifierErrors, choices: keyedChoices(lesson, override), verified: openPaths(lesson) }) : JSON.stringify({ solutions: [], notes: [], reviewedAll: true });
       return { content, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     },
     isAvailable: async () => true,
@@ -1831,17 +1838,17 @@ test("bank-ellenőr: a lektor mellett fut; a talált banktétel-hiba csak-bank j
   assert.deepEqual(job.output?.bankVerifier, { round: 0, checked: e.methods.length + e.tasks.length + e.quiz.length, errors: 1, failedChunks: 0 });
 });
 
-test("bank-ellenőr: elfogyott csak-bank keretnél a hiba figyelmeztetés — a lecke nem bukik miatta", async () => {
+test("bank-ellenőr: elfogyott csak-bank keretnél a tételhiba BLOKKOLÓ marad (U5/H48: nincs késői leminősítés) — a kapu kivehető tételként kezeli, a lecke nem bukik miatta", async () => {
   const { deps, store } = await bankVerifierSetup("bv-late", { bankOnlyRepairRounds: MAX_BANK_ONLY_ROUNDS }, [QUIZ_ERROR]);
   const job = store.jobs.get("bv-late")!;
   job.round = MAX_AUTHOR_ROUNDS;
   const result = await runPipelineStep("bv-late", deps);
   assert.deepEqual(result.ok && result.next, { step: "gate", round: MAX_AUTHOR_ROUNDS }, JSON.stringify(result));
-  assert.equal(job.output?.blockers, 0);
   const saved = store.notes.get("bv-late") ?? [];
   assert.equal(saved.length, 1);
-  assert.equal(saved[0].subkind, "bank_check_late");
-  assert.equal(saved[0].blocking, false);
+  assert.equal(saved[0].subkind, "contradicts_source", "a keret elfogyása nem cáfolja a hibás tételt");
+  assert.equal(saved[0].blocking, true);
+  assert.equal(job.output?.blockers, 1);
 });
 
 // SPEC-VÁLTOZÁS (docs/specs/2026-09-29-egy-helyes-valasz.md, döntés 3): „A bank-ellenőr vak megoldás NÉLKÜL is
@@ -1942,7 +1949,8 @@ function withVerifierReplies(deps: Awaited<ReturnType<typeof bankVerifierSetup>>
       if (!system.includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
       const reply = replies[Math.min(systems.length, replies.length - 1)];
       systems.push(system);
-      return { content: JSON.stringify({ errors: [], choices: reply === "keyed" ? keyedChoices(lesson) : [] }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      // U5 (H32): a helyes ellenőrző a nyílt tételeket kimondva igazolja — a „none” válasz csak az egyválasztós ítéletet hagyja el.
+      return { content: JSON.stringify({ errors: [], choices: reply === "keyed" ? keyedChoices(lesson) : [], verified: openPaths(lesson) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     } } as IAIProvider;
   };
   return { systems, deps: { ...deps, providerFactory } };
@@ -2149,7 +2157,7 @@ async function gateAtLimitSetup(id: string, mutate: (lesson: Lesson) => void, ro
   const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept];
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => standardFusionFixture().experience! });
   mutate(lesson);
-  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
   deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
   deps.store.seed({ id, mapId: "m1", lessonId: `lesson-${id}`, step: "lektor", round, output: { lesson, methodVersion: lesson.experience.version } });
   deps.store.lessons.set(`lesson-${id}`, { id: `lesson-${id}`, mapId: "m1", json: lesson });
@@ -2322,7 +2330,7 @@ test("nem-elakadó (D3): a kapu a limiten csak nem-ténybeli lelettel (megalapoz
   const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept, { localId: "idegen", term: "Pitagorasz-tétel", examWeight: "extra" } as MapConcept];
   lesson.experience = await buildLessonExperience(lesson, [concepts[0]], { call: async () => standardFusionFixture().experience! });
   lesson.sections[0].blocks.splice(lesson.sections[0].blocks.length - 1, 0, { kind: "check", question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], correctIndex: 0, feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
-  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
   deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
   // A célzott kapu-javítás már lefutott (jobonként egyszer) — innen a 95/80-as szabály dönt.
   deps.store.seed({ id: "gate-accept", mapId: "m1", lessonId: "lesson-ga", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version, targetedGateRepairRound: MAX_AUTHOR_ROUNDS } });

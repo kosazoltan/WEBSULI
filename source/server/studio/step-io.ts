@@ -14,6 +14,7 @@ import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals";
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
 import { ownerInstructionPromptBlock, type OwnerInventory } from "../../shared/owner-instruction";
+import { lektorLessonView } from "./lektor-view";
 import { correctionPromptLines, type SourceCorrection } from "./source-corrections";
 import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
 
@@ -116,22 +117,28 @@ function normalizeItemPath(value: unknown): unknown {
   return block ? checkBlockPath(block) : value;
 }
 
+/** U5 (H49): a lektor önálló megoldásainak tárolási plafonja (fölötte jelölt csonkolás, nem néma vágás). */
+export const LEKTOR_SOLUTIONS_MAX = 200;
 export const lektorReportSchema = z.object({
   /**
    * Spec 2026-09-24 (lektor-tanítás a felvételi feladatlap öt futásából): a lektor a jegyzetek ELŐTT a lecke
    * kidolgozott forrásfeladatait önállóan megoldja. Mérve: a 7×11×5 = 385-ös hibás tanítást öt futásban sem
    * jelezte, mert a lecke részeredményéből indult. A lista tárolódik, így utólag ellenőrizhető.
    */
-  // Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): a 40-nél hosszabb lista nem buktatja a jelentést (nagy feladatlap) — levágva.
-  solutions: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 40) : v), z
+  // U5 (H49): nincs néma 40-es vágás — a tárolási plafon 200, a fölötte lévő rész `solutionsTruncated`-ként JELÖLT (részleges lektorálás).
+  solutions: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, LEKTOR_SOLUTIONS_MAX) : v), z
     .array(z.object({
       task: z.string().trim().min(1).max(200),
       own: z.string().trim().min(1).max(400),
       lesson: z.string().trim().max(400).default(""),
       match: z.boolean(),
     }))
-    .max(40)
+    .max(LEKTOR_SOLUTIONS_MAX)
     .optional()),
+  /** U5 (H49): ennyi önálló megoldás maradt a kereten túl — a jelentés részleges. */
+  solutionsTruncated: z.number().int().min(0).optional(),
+  /** U5 (H45): üres notes csak kimondott teljes bejárással érvényes. */
+  reviewedAll: z.boolean().optional(),
   notes: z
     .array(
       z.object({
@@ -147,6 +154,25 @@ export const lektorReportSchema = z.object({
 });
 
 export type LektorReport = z.infer<typeof lektorReportSchema>;
+
+/**
+ * U5 (H45/C18): a MODELL-határ szigorú alakja — a tárolt (régi) jelentés továbbra is a `lektorReportSchema`-val olvasható.
+ * `{}` érvénytelen; a `solutions` és a `notes` kulcs kötelező (üres lista is); üres `notes` csak `reviewedAll: true` mellett;
+ * a 200-nál hosszabb `solutions` nem bukik, hanem `solutionsTruncated`-ként jelölt.
+ */
+export function parseLektorResponse(json: unknown): { ok: true; report: LektorReport } | { ok: false; reason: string } {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return { ok: false, reason: "a jelentés nem JSON-objektum" };
+  const raw = json as Record<string, unknown>;
+  if (!Array.isArray(raw.notes)) return { ok: false, reason: "hiányzik a notes tömb (üres lista is kötelező)" };
+  if (raw.solutions !== undefined && !Array.isArray(raw.solutions)) return { ok: false, reason: "a solutions nem tömb" };
+  if (raw.notes.length === 0 && raw.reviewedAll !== true) return { ok: false, reason: "üres notes csak reviewedAll: true mellett érvényes (a teljes bejárás kimondva)" };
+  // A tárolt alak a modell válaszát tükrözi (hiányzó solutions nem pótlódik üres listával — a régi jelentések és a naplók összevethetők maradnak).
+  const solutions = Array.isArray(raw.solutions) ? raw.solutions : [];
+  const truncated = solutions.length > LEKTOR_SOLUTIONS_MAX ? solutions.length - LEKTOR_SOLUTIONS_MAX : 0;
+  const parsed = lektorReportSchema.safeParse({ ...raw, ...(truncated ? { solutionsTruncated: truncated } : {}) });
+  if (!parsed.success) return { ok: false, reason: parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+  return { ok: true, report: parsed.data };
+}
 
 export type OutlineCoverage = {
   ok: boolean;
@@ -528,9 +554,10 @@ export function buildLektorGradingEvidence(lesson: Lesson): string {
     "A program pontozási mérése (adat):\n" + JSON.stringify(evidence);
 }
 
-export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext, blind?: BlindSolutions): string {
+export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext, blind?: BlindSolutions, verifiedPaths?: ReadonlySet<string>): string {
   return [
-    LESSON_METHOD_CONTRACT,
+    // U5 (C5/H8): a szerző mérhető szerződése EGYSZER (a minőségi szerződést a runbook adja; a közös módszer-szerződés itt nem ismétlődik).
+    TEACHING_CONTRACT,
     ...blindSolutionsPromptBlock(blind),
     ...(previousBlockers.length ? [
       // Spec 2026-09-19: convergence across author rounds — the reviewer sees what it blocked
@@ -556,7 +583,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "",
     D1_RULE_TEXT,
     TRANSCRIPTION_RULE_TEXT,
-    LESSON_QUALITY_CONTRACT,
+    // U5 (H8): a minőségi szerződést a runbook adja a lektornak — itt nem ismétlődik (3× volt).
     SOURCE_REVIEW_RULES,
     ...ownerLines(owner),
     "Minden eltéréshez adj konkrét blockPath értéket és ellenőrizhető indokot. A forrásszámok cseréje vagy hibás levezetés source_conflict/contradicts_source; valóban hiányzó tanítás coverage_gap. A látható feladatot és minden válaszhoz tartozó magyarázatot is ellenőrizd.",
@@ -575,10 +602,11 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "- ÖNÁLLÓ MEGOLDÁS ELŐSZÖR: mielőtt a lecke megoldását elolvasnád, a lecke minden kidolgozott forrásfeladatát (example blokk) a térkép quote-jaiból, minden adatot felhasználva MAGAD oldd meg; térbeli/szöveges feladatnál kövesd végig, ki mit hová tesz, mi a közös rész. A solutions tömbbe írd: task, own (a te végeredményed), lesson (a lecke végeredménye), match. match: false → kötelező blokkoló a tanítás blockPath-jával.",
     "- Javítás iránya: mindig a kiszámolt, TELJES helyes válasz — listánál minden elem, rubrikánál a pontos required-szerkezet (minden kötelező elem külön csoport), opciónál a helyes érték. „Ne add mindkettőnek”, „bontsd szét”, „pl. …” hiányos lista nem elég.",
     "- Report with JSON ONLY: { \"solutions\": [{ \"task\": string, \"own\": string, \"lesson\": string, \"match\": boolean }], \"notes\": [{ \"kind\": \"source_conflict|coverage_gap|language|age\", \"subkind\": string?, \"message\": string, \"blockPath\": \"section.block\"? }] }",
+    "- A jelentés MINDIG tartalmazza a solutions és a notes kulcsot (üres lista is); üres notes CSAK reviewedAll: true mellett érvényes (ezzel mondod ki, hogy minden fejezetet és tételt bejártál). Egy tételhez több különálló hiba külön jegyzet vagy egy jegyzet az összes bizonyítékkal — egyik sem maradhat el.",
     "- Csak konkrét eltéréseket jelents, rövid indokkal és javítási céllal. Helyes tételekről ne írj egyenként beszámolót. Ne ismételd meg a leckét, a forrást vagy az ellenőrzési utasítást. Minden valódi hibát őrizz meg; a tömörség nem jelenthet kevesebb ellenőrzést.",
     "",
-    "Lesson:",
-    JSON.stringify(lesson, null, 2),
+    // U5 (C5/H8): kiírt útvonalas, tömör nézet — az SVG-törzs nem a lektor bemenete; az igazolt tételek jelöltek.
+    lektorLessonView(lesson, { verifiedPaths }),
     "",
     "Concept map:",
     mapJson(map),
