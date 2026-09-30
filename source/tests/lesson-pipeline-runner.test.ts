@@ -29,7 +29,7 @@ import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
 import { canReuseLessonVisuals } from "../server/studio/visual-reuse";
 import { studioJobs } from "../shared/schema";
-import { executeWorkflow, workflowPhase, workflowStepVisitsLeft, WorkflowWaiting, redactWorkflowError } from "../server/workflows/engine";
+import { executeWorkflow, workflowPhase, workflowStepVisitsLeft, workflowEnsureRepairBudget, REPAIR_BUDGET_GRANTS, WorkflowWaiting, redactWorkflowError } from "../server/workflows/engine";
 import { BLIND_SOLVER_MODEL, sourceHashOf } from "../server/studio/blind-solver";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
@@ -2180,17 +2180,13 @@ test("spec kapu-proba (E2): elfogyott szerzői keretnél a kapu célzott javít�
     l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, { ...oneAreaCheck, question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
   });
   deps.store.maps.get("m1")!.concepts.push({ localId: "idegen", term: "Pitagorasz-tétel", examWeight: "supporting" } as MapConcept);
-  const { store } = memoryWorkflows();
-  let outcome: Awaited<ReturnType<typeof runPipelineStep>> | undefined;
-  await assert.rejects(executeWorkflow(store, { id: "gate-budget-run", owner: "test", mode: "studio" }, async () => {
-    await workflowPhase("pedagogue");
-    for (let guard = 0; workflowStepVisitsLeft("author") > 0 && guard < 20; guard++) {
-      for (const step of ["author", "animator", "lektor"]) await workflowPhase(step);
-    }
-    assert.equal(workflowStepVisitsLeft("author"), 0);
-    outcome = await runPipelineStep("gate-budget", deps);
-    throw new Error("teszt-vég: a kapu döntött");
-  }), /teszt-vég: a kapu döntött/);
+  // Spec-változás 2026-09-30 (dinamikus keret): előbb a többletkerettel célzott javítás; csak a keret elfogyása után tiszta hiba.
+  const granted = await withExhaustedAuthor("gate-budget-a", () => runPipelineStep("gate-budget", deps), { thenAuthor: true });
+  assert.deepEqual(granted?.ok && granted.next, { step: "author", round: MAX_AUTHOR_ROUNDS + 1 }, JSON.stringify(granted));
+  const job = deps.store.jobs.get("gate-budget")!;
+  job.step = "gate"; job.round = MAX_AUTHOR_ROUNDS; job.status = "running";
+  job.output = { ...job.output, targetedGateRepairRound: undefined };
+  const outcome = await withExhaustedAuthor("gate-budget-b", () => runPipelineStep("gate-budget", deps), { grantsUsed: true });
   assert.equal(outcome?.ok, false, `nincs szerzői kör kerett nélkül: ${JSON.stringify(outcome)}`);
   assert.match(deps.store.jobs.get("gate-budget")!.error ?? "", /tanítása hiányos \(a célzott javításhoz nincs több lépéskeret\)/);
 });
@@ -2376,9 +2372,16 @@ test("tanári kérés: limit előtt a hiányzó pont EGY célzott szerzői kört
   assert.equal(wrapped.calls(), 1);
 });
 
+// Spec-változás 2026-09-30 (dinamikus keret): a limiten is jár EGY célzott kör; ha már volt, figyelmeztetés + publikálás.
 test("tanári kérés: a limiten a hiányzó pont figyelmeztetés, a lecke publikál; a mérés hibája nem állít meg", async () => {
+  const { deps: first } = await gateAtLimitSetup("instr-limit-first", () => undefined);
+  first.store.jobs.get("instr-limit-first")!.output!.ownerInstruction = "Tanítsd a magasság fogalmát is.";
+  const once = await runPipelineStep("instr-limit-first", withInstructionAnswer(first, MISSING_POINT).deps);
+  assert.deepEqual(once.ok && once.next, { step: "author", round: MAX_AUTHOR_ROUNDS + 1 }, "a limiten is egy célzott kör");
+
   const { deps } = await gateAtLimitSetup("instr-limit", () => undefined);
   deps.store.jobs.get("instr-limit")!.output!.ownerInstruction = "Tanítsd a magasság fogalmát is.";
+  deps.store.jobs.get("instr-limit")!.output!.instructionRepairRound = MAX_AUTHOR_ROUNDS;
   const wrapped = withInstructionAnswer(deps, MISSING_POINT);
   const log = published(deps.store);
   const gated = await runPipelineStep("instr-limit", wrapped.deps);
@@ -2390,6 +2393,7 @@ test("tanári kérés: a limiten a hiányzó pont figyelmeztetés, a lecke publi
 
   const { deps: failing } = await gateAtLimitSetup("instr-error", () => undefined);
   failing.store.jobs.get("instr-error")!.output!.ownerInstruction = "Tanítsd a magasság fogalmát is.";
+  failing.store.jobs.get("instr-error")!.output!.instructionRepairRound = MAX_AUTHOR_ROUNDS;
   const broken = withInstructionAnswer(failing, new Error("szolgáltatói hiba"));
   const failLog = published(failing.store);
   const ok = await runPipelineStep("instr-error", broken.deps);
@@ -2413,7 +2417,7 @@ test("spec kapu-proba (utómérés, élő job 9ef52e4f): a limit ELŐTT az elér
 
 
 /* Review PR #143 (P2): a limit előtt elfogyott szerzői keret is limitnek számít — nincs „Váratlan hiba”. */
-async function withExhaustedAuthor<T>(id: string, work: () => Promise<T>): Promise<T | undefined> {
+async function withExhaustedAuthor<T>(id: string, work: () => Promise<T>, opts: { grantsUsed?: boolean; thenAuthor?: boolean } = {}): Promise<T | undefined> {
   const { store } = memoryWorkflows();
   let out: T | undefined;
   await assert.rejects(executeWorkflow(store, { id: `${id}-run`, owner: "test", mode: "studio" }, async () => {
@@ -2421,10 +2425,23 @@ async function withExhaustedAuthor<T>(id: string, work: () => Promise<T>): Promi
     for (let guard = 0; workflowStepVisitsLeft("author") > 0 && guard < 20; guard++) {
       for (const step of ["author", "animator", "lektor"]) await workflowPhase(step);
     }
+    if (opts.grantsUsed) await exhaustRepairGrants();
     out = await work();
+    // Spec 2026-09-30-dinamikus-keret: a kapott többletkeret VALÓDI — a motor engedi a szerző lépést (nincs „Váratlan hiba”).
+    if (opts.thenAuthor) await workflowPhase("author");
     throw new Error("teszt-vég");
   }), /teszt-vég/);
   return out;
+}
+/** A futás mindkét dinamikus többletkeretét elhasználja (kérés + a javítóút végigjárása), utána nincs több. */
+async function exhaustRepairGrants() {
+  for (let grant = 0; grant < REPAIR_BUDGET_GRANTS; grant++) {
+    assert.equal(await workflowEnsureRepairBudget("teszt"), true);
+    for (let guard = 0; ["author", "animator", "lektor"].some((s) => workflowStepVisitsLeft(s) > 0) && guard < 10; guard++) {
+      for (const step of ["author", "animator", "lektor"]) if (workflowStepVisitsLeft(step) > 0) await workflowPhase(step);
+    }
+  }
+  assert.equal(await workflowEnsureRepairBudget("teszt"), false, "a többletkeret futásonként korlátos");
 }
 
 test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel az elérhetetlen Próba kikapcsol és a lecke publikál", async () => {
@@ -2444,7 +2461,13 @@ test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel más kapu-le
     l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, { ...oneAreaCheck, question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
   }, 0);
   deps.store.maps.get("m1")!.concepts.push({ localId: "idegen", term: "Pitagorasz-tétel", examWeight: "supporting" } as MapConcept);
-  const gated = await withExhaustedAuthor("gate-early-budget", () => runPipelineStep("gate-early-budget", deps));
+  // Spec-változás 2026-09-30 (dinamikus keret, tulajdonosi utasítás): elfogyott keretnél előbb többletkeret jár — a szerzői
+  // kör elindul, és a motor valóban engedi; csak a futásonkénti többletkeret elfogyása után tiszta hiba (nincs kivétel).
+  const granted = await withExhaustedAuthor("gate-early-budget", () => runPipelineStep("gate-early-budget", deps), { thenAuthor: true });
+  assert.deepEqual(granted?.ok && granted.next, { step: "author", round: 1 }, JSON.stringify(granted));
+  const job = deps.store.jobs.get("gate-early-budget")!;
+  job.step = "gate"; job.round = 0; job.status = "running";
+  const gated = await withExhaustedAuthor("gate-early-budget-2", () => runPipelineStep("gate-early-budget", deps), { grantsUsed: true });
   assert.equal(gated?.ok, false, `nincs szerzői kör keret nélkül: ${JSON.stringify(gated)}`);
   assert.match(deps.store.jobs.get("gate-early-budget")!.error ?? "", /nincs több lépéskeret/);
 });

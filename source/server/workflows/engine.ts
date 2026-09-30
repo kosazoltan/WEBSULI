@@ -39,6 +39,27 @@ export const workflowStepVisitsLeft = (id: string) => {
   const view = context.getStore()?.record.view;
   return view ? workflowVisitsLeft(view, id) : Infinity;
 };
+/**
+ * Spec 2026-09-30-dinamikus-keret (tulajdonosi utasítás: „a szerzőnek ne fogyjon el a kerete … dinamikus keretet kapjon”):
+ * a célzott javítóút (szerző → ábra/bank → lektor → kapu) az elfogyott lépésekre egyszeri +1 látogatást kap, futásonként
+ * legfeljebb REPAIR_BUDGET_GRANTS alkalommal. A többletkeret a futás nézetében rögzül (ok, időpont), így a folytatás is látja.
+ * Igaz, ha a teljes javítóútra van keret (akár a mostani többletkerettel).
+ */
+export const REPAIR_BUDGET_GRANTS = 2;
+const REPAIR_PATH = ["author", "animator", "lektor", "gate"];
+export async function workflowEnsureRepairBudget(reason: string): Promise<boolean> {
+  const ctx = context.getStore();
+  if (!ctx) return true;
+  const view = ctx.record.view;
+  const exhausted = REPAIR_PATH.filter((id) => workflowVisitsLeft(view, id) <= 0);
+  if (!exhausted.length) return true;
+  if ((view.repairGrants?.length ?? 0) >= REPAIR_BUDGET_GRANTS) return false;
+  view.definition = { ...view.definition, steps: view.definition.steps.map((step) => exhausted.includes(step.id) ? { ...step, maxVisits: step.maxVisits + 1 } : step) };
+  view.repairGrants = [...(view.repairGrants ?? []), { reason, at: Date.now() }];
+  await persist(ctx);
+  logger.warn(`[WORKFLOW] Dinamikus javítási keret (${view.id}): +1 látogatás (${exhausted.join(", ")}) — ${reason}; ${view.repairGrants.length}/${REPAIR_BUDGET_GRANTS}`);
+  return REPAIR_PATH.every((id) => workflowVisitsLeft(view, id) > 0);
+}
 export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version ?? preparationSkill.getStore()?.snapshot.version;
 export const workflowSkillPrompt = () => {
   const view = context.getStore()?.record.view;

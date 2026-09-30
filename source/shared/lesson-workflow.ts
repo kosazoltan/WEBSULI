@@ -53,6 +53,8 @@ export type WorkflowView = {
   skillFindings?: SkillFinding[];
   skillAudit?: SkillAudit;
   history?: Array<{ state: WorkflowView["state"]; visits: WorkflowVisit[]; error?: string }>;
+  /** Spec 2026-09-30-dinamikus-keret: a célzott javítóút egyszeri többletkeretei (ok + időpont), futásonként korlátozva. */
+  repairGrants?: Array<{ reason: string; at: number }>;
 };
 export const WORKFLOW_STATE_LABELS: Record<WorkflowView["state"], string> = {
   running: "Folyamatban", waiting: "Döntésre vár", ready: "Jelölt elkészült, alkalmazásra vár",
