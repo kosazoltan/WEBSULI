@@ -72,3 +72,15 @@ test("limitAcceptance: a megalapozatlan címke lekerül, a fedettség a megalapo
   assert.equal(only.ok, false);
   assert.equal(limitAcceptance(lesson, concepts, { unknownIds: ["zz"], ungrounded: [] }).ok, false, "ismeretlen azonosítóval soha");
 });
+
+test("review #151 (P1): a kivehető elemre (bank, check, ábra) mutató coverage_gap NEM minősül le — a kivétel kapja", () => {
+  const notes = classifyNotes([
+    { kind: "coverage_gap", subkind: "core", blockPath: "experience.quiz[0]", message: "bank-hiány" },
+    { kind: "coverage_gap", subkind: "core", blockPath: "sections[0].blocks[1]", message: "ábra-hiány" },
+    { kind: "coverage_gap", subkind: "core", blockPath: "sections[0].blocks[0]", message: "tanítási hiány" },
+  ]);
+  const at = downgradeAtLimit(notes, true, lesson);
+  assert.deepEqual(at.map((n) => n.blocking), [true, true, false]);
+  const split = splitLimitBlockers(lesson, at.filter((n) => n.blocking));
+  assert.deepEqual(split.removable.map((f) => f.path), ["experience.quiz[0]", "sections[0].blocks[1]"]);
+});

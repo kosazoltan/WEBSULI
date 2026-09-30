@@ -1051,7 +1051,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // ilyenkor nincs leminősítés, és a limiten maradt hiány is tényhibaként buktat. A kapu ugyanezt a jelzőt használja.
       const limitDowngrade = atLimit && !mismatches.length;
       job.output = { ...job.output, limitDowngrade };
-      const notes = downgradeAtLimit(convergence.notes, limitDowngrade);
+      const notes = downgradeAtLimit(convergence.notes, limitDowngrade, job.output?.lesson as Lesson | undefined);
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
       for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
@@ -1389,7 +1389,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     // Spec 2026-09-30-nem-elakado-kozzetetel (D1): UGYANAZ a besorolás, mint a lektor lépésben (konvergencia + limit-szabály);
     // eddig a konvergencia nélküli újrabesorolás egy figyelmeztetéssé minősített jegyzeten buktatta a kész leckét.
     const reviewNotes = report.success
-      ? downgradeAtLimit(classifyReviewNotes(report.data.notes, gatePriorBlockers, job.round), job.round >= MAX_AUTHOR_ROUNDS && job.output?.limitDowngrade === true)
+      ? downgradeAtLimit(classifyReviewNotes(report.data.notes, gatePriorBlockers, job.round), job.round >= MAX_AUTHOR_ROUNDS && job.output?.limitDowngrade === true, reviewed.data)
       : [];
     if (!report.success || reviewNotes.some(unresolvedBlocker)
       || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {

@@ -75,3 +75,10 @@ test("rewriteSourceReferences: csak ellenőrzött átírás (forrás-szó nélk�
   assert.deepEqual([rewritten, rejected], [1, 1]);
   assert.equal((L.sections[0].blocks[0] as { text: string }).text, "A forrás Istárt a szerelem istenének nevezi.", "az eredeti érintetlen");
 });
+
+test("review #151 (P2): „A tananyag szerint” és a nagybetűs „A Forrás szerint” is felismert és törölt", () => {
+  const L = lesson({ explain: "A tananyag szerint Babilon fontos város volt. A Forrás szerint agyagtéglából épült.", feedback: "Igen.", sample: "Babilon városa Kr. e. 2500 körül jött létre, és a folyóköz egyik fontos városa lett." });
+  assert.equal(sourceReferenceFindings(L).length, 1);
+  const { lesson: out } = stripSourceReferences(L);
+  assert.equal((out.sections[0].blocks[0] as { text: string }).text, "Babilon fontos város volt. Agyagtéglából épült.");
+});

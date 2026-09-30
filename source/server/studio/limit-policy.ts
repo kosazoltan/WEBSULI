@@ -19,10 +19,14 @@ export function classifyReviewNotes(raw: RawNote[], priorBlockers: RawNote[], ro
   return applyLektorConvergence(classifyNotes(raw), priorBlockers, round).notes;
 }
 
-/** A limiten a hiány-jellegű (`coverage_gap`) blokkoló figyelmeztetés lesz: a lecke hiányos lehet, de nem hamis. */
-export function downgradeAtLimit(notes: LektorNote[], atLimit: boolean): LektorNote[] {
+/**
+ * A limiten a TANÍTÁSI blokkra mutató hiány-jellegű (`coverage_gap`) blokkoló figyelmeztetés lesz: a lecke hiányos lehet,
+ * de nem hamis. Review PR #151 (P1): a kivehető elemre (banktétel, check, ábra) mutató jegyzet NEM minősül le — azt a
+ * kivételi logika kapja, különben a hibás tétel bent maradna.
+ */
+export function downgradeAtLimit(notes: LektorNote[], atLimit: boolean, lesson?: Lesson): LektorNote[] {
   if (!atLimit) return notes;
-  return notes.map((note) => note.blocking && note.kind === "coverage_gap"
+  return notes.map((note) => note.blocking && note.kind === "coverage_gap" && !(lesson && removablePath(lesson, note.blockPath))
     ? { ...note, severity: "warn", blocking: false, message: `${INCOMPLETE_PREFIX}${note.message}` }
     : note);
 }
