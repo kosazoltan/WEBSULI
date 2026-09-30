@@ -636,3 +636,14 @@ sumerok, Babilon, lépcsős zikkurat, társadalom: király-főpap, előkelők: p
 „füzetlap szerint” meta nélkül, Istár-kapu/Bábel nélkül. Maradék eltérés: a „papkirály” szó helyett a jelentése áll;
 Babilonnál egy mondatban Hammurapi. A korábbi Mezopotámia-változatok (5d31dd69, d9ce054f, 8ed51fa9) törlése a
 tulajdonos döntése.
+
+## 2026-09-30 — Mezopotámia kézi javítás + témafókusz-késés (PR #148)
+
+**Mezopotámia (anyag `86dfc04d`, lecke `3a9acc22`), kézi javítás a `docs/lesson-improvement.md` szerint:** a Babilon-fejezetből
+és 15 banktételből kikerült Hammurapi (a füzet csak „Babilon városa”-t tanítja; helyette a forrásban is szereplő
+agyagtégla / babiloniak / város–vidék), a társadalom-fejezetben a „papkirály” szó áll. Mentés → kapuk (séma, fedettség
+8/8+6/6, ív, bank, egy-helyes-válasz, mintaválasz-pontozás) → alkalmazás ugyanazzal a lesson/html azonosítóval →
+DB-visszaolvasás (Hammurapi 0, papkirály 8) → élő oldal szövege igazolva.
+**#148 Témafókusz-késés** (merge `070657b`): mérve (55 fogalom, éles út) a deepseek-v4-flash 1/5-ször döntött 60 s-on belül,
+a glm-5.3-flash 5/5 (11–53 s) → a fókusznál a glm megy elöl, a deepseek a tartalék. A napló „300000ms” címkéje hamis volt
+(a lépés határideje a policy helyett) — javítva, a valódi 60 s-ot írja. Új tesztek, mindkettő bukott a régi kódon.
