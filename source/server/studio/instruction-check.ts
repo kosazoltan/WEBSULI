@@ -50,7 +50,9 @@ export function parseInstructionCheck(json: unknown, lesson: Lesson): Instructio
     const p = item as { point?: unknown; taught?: unknown; evidence?: unknown; section?: unknown };
     if (typeof p?.point !== "string" || !p.point.trim()) return [];
     const evidence = typeof p.evidence === "string" ? p.evidence.trim() : "";
-    const proven = p.taught === true && evidence.length >= 8 && haystack.includes(norm(evidence));
+    // Review #152: a hossz a NORMALIZÁLT bizonyítékon mérve (a „********” normalizálva üres, az includes("") mindig igaz).
+    const normalized = norm(evidence);
+    const proven = p.taught === true && normalized.replace(/[^\p{L}\p{N}]/gu, "").length >= 8 && haystack.includes(normalized);
     const section = Number.isInteger(p.section) && (p.section as number) >= 0 && (p.section as number) < lesson.sections.length ? p.section as number : null;
     return [{ point: p.point.trim().slice(0, 300), taught: proven, evidence: proven ? evidence : "", section }];
   });

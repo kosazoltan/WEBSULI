@@ -33,9 +33,10 @@ test("hallucináció-őr: a „tanítja” csak betűhív bizonyítékkal marad;
     { point: "A zikkurat lépcsős toronytemplom", taught: true, evidence: "A zikkurat lépcsős toronytemplom, a tetején a szentély.", section: 1 },
     { point: "Az Istár kapu", taught: false, evidence: "", section: 7 },
     { point: "", taught: false },
+    { point: "Csillagos bizonyíték", taught: true, evidence: "********", section: 0 },
   ] }, lesson);
-  assert.deepEqual(points.map((p) => [p.taught, p.section]), [[false, 0], [true, 1], [false, null]]);
-  assert.deepEqual(missingPoints(points).map((p) => p.point), ["Babilon Kr. e. 2500 körül jött létre", "Az Istár kapu"]);
+  assert.deepEqual(points.map((p) => [p.taught, p.section]), [[false, 0], [true, 1], [false, null], [false, 0]]);
+  assert.deepEqual(missingPoints(points).map((p) => p.point), ["Babilon Kr. e. 2500 körül jött létre", "Az Istár kapu", "Csillagos bizonyíték"]);
   assert.throws(() => parseInstructionCheck({ notes: [] }, lesson), /nem a kért alakú/);
 });
 

@@ -11,7 +11,7 @@ import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
 import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, splitLimitBlockers } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
-import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, missingPoints, parseInstructionCheck, type InstructionCheck } from "./instruction-check";
+import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, missingPoints, parseInstructionCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
@@ -1372,10 +1372,12 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   // (ha van keret), különben figyelmeztetés — a mérés hibája soha nem állítja meg a gyártást.
   const ownerInstruction = typeof job.output?.ownerInstruction === "string" ? job.output.ownerInstruction.trim() : "";
   if (ownerInstruction && skill74 && models && models.keyConfigured(INSTRUCTION_CHECK_MODEL)) {
+    // Review #152: csak a MÉRÉS fail-open (modell, séma); a javítókör mentésének hibája nem nyelhető el.
+    let points: InstructionPoint[] | undefined;
     try {
       const hash = instructionCheckHash(ownerInstruction, parsed.data);
       const cached = job.output?.instructionCheck as InstructionCheck | undefined;
-      let points = cached?.hash === hash ? cached.points : undefined;
+      points = cached?.hash === hash ? cached.points : undefined;
       if (!points) {
         const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data);
         const result = await callStepModel(models.providerFactory(INSTRUCTION_CHECK_MODEL, "instructionCheck"), {
@@ -1384,6 +1386,11 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         points = parseInstructionCheck(result.json, parsed.data);
         job.output = { ...job.output, instructionCheck: { hash, points } satisfies InstructionCheck };
       }
+    } catch (error) {
+      points = undefined;
+      logger.warn(`[STUDIO/GATE] A tanári kérés mérése elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
+    }
+    if (points) {
       const missing = missingPoints(points);
       logger.info(`[STUDIO/GATE] Tanári kérés (${job.id}): ${points.length} pont, ${missing.length} hiányzik${missing.length ? `: ${missing.map((p) => p.point).join(" | ").slice(0, 400)}` : ""}`);
       if (missing.length) {
@@ -1397,8 +1404,6 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         }
         qualityNotes = appendQualityNote(qualityNotes, { reason: "instruction_missing", note: `A tanári kérés hiányzó pontjai: ${reasons.join(" | ").slice(0, 700)}`, round: job.round });
       }
-    } catch (error) {
-      logger.warn(`[STUDIO/GATE] A tanári kérés mérése elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
     }
   }
 
