@@ -86,6 +86,15 @@ function setAtPath(root: Record<string, unknown>, path: string, value: string): 
   return true;
 }
 const numbersOf = (text: string) => (text.match(/\d+(?:[.,]\d+)?/g) ?? []).sort().join("|");
+/**
+ * U4 (H33, jelentésmegőrzés): az átírt mondat nem vezethet be ÚJ tulajdonnevet — a mondat közepén nagybetűs szó csak akkor
+ * fogadható el, ha az eredetiben (ragozott alakban is) szerepelt. A számokat a `numbersOf` őrzi.
+ */
+export function introducesNewProperNoun(before: string, after: string): boolean {
+  const capitalised = (text: string) => [...text.matchAll(/(?<!^|[.!?]\s|[„"(]\s*|\*\*)\b(\p{Lu}\p{Ll}{2,})/gu)].map((m) => m[1].toLocaleLowerCase("hu"));
+  const known = before.toLocaleLowerCase("hu").match(/\p{L}+/gu) ?? [];
+  return capitalised(after).some((word) => !known.some((k) => k.startsWith(word.slice(0, Math.max(4, word.length - 2))) || word.startsWith(k.slice(0, Math.max(4, k.length - 2)))));
+}
 
 export type RewriteCall = (system: string, user: string) => Promise<unknown>;
 /** Az átíró modell (rövid, magyar, gyereknek szóló mondatok — a minőség fontosabb a pár centnél). */
@@ -97,20 +106,24 @@ export const TEXT_FIX_MODEL = "claude-opus-5-5";
  * ellenőrzött: nincs benne forrás-szó, a számai azonosak, a hossza közel az eredetihez; a feladat saját mintája
  * utána is teljes pontot kap — különben az eredeti marad.
  */
-export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall): Promise<{ lesson: Lesson; rewritten: number; rejected: number }> {
+export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall): Promise<{ lesson: Lesson; rewritten: number; rejected: number; needsSource: number }> {
   const findings = sourceReferenceFindings(lesson);
-  if (!findings.length) return { lesson, rewritten: 0, rejected: 0 };
+  if (!findings.length) return { lesson, rewritten: 0, rejected: 0, needsSource: 0 };
   const system = withSupportSkill("kid-text-fixer", "Írd át a kapott mondatokat a skill szerint. Kizárólag a kért JSON-t add vissza.");
   const user = JSON.stringify({ title: lesson.title, classroom: lesson.classroom, items: findings });
-  const answer = await call(system, user) as { items?: Array<{ path?: unknown; text?: unknown }> } | null;
+  const answer = await call(system, user) as { items?: Array<{ path?: unknown; text?: unknown; needsSource?: unknown }> } | null;
   const original = new Map(findings.map((f) => [f.path, f.text]));
   const next = structuredClone(lesson) as Lesson;
-  let rewritten = 0, rejected = 0;
+  let rewritten = 0, rejected = 0, needsSource = 0;
   for (const item of Array.isArray(answer?.items) ? answer!.items : []) {
     const path = typeof item?.path === "string" ? item.path : "";
     const before = original.get(path);
+    // U4 (H33): a modell jelezheti, hogy a hivatkozó tagmondat törlése után nem marad teljes állítás — akkor az eredeti marad
+    // (a kapu figyelmeztetése), új tényt a modell nem írhat.
+    if (before !== undefined && item?.needsSource === true) { needsSource++; continue; }
     const text = typeof item?.text === "string" ? item.text.trim() : "";
     const ok = before !== undefined && text && !MENTION.test(text) && numbersOf(text) === numbersOf(before)
+      && !introducesNewProperNoun(before, text)
       && text.length >= before.length * 0.4 && text.length <= before.length * 1.6;
     if (ok && setAtPath(next as unknown as Record<string, unknown>, path, text)) rewritten++;
     else rejected++;
@@ -121,5 +134,5 @@ export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall)
       tasks: next.experience.tasks.map((task, i) => (evaluateOpenAnswer(task.sample, task).state === "ok" ? task : lesson.experience!.tasks[i])),
     };
   }
-  return { lesson: next, rewritten, rejected };
+  return { lesson: next, rewritten, rejected, needsSource };
 }

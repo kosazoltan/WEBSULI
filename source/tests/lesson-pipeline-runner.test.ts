@@ -800,7 +800,8 @@ test("a szerző metaadata nem írhatja felül a forrásból felismert osztályt 
 });
 
 test("a kapu konkrét hibái és az előző lecke visszajutnak a szerző javító köréhez", async () => {
-  const deps = makeDeps(CANNED_AUTHOR);
+  // Spec 2026-09-30 (U4, C4): a kapu fejezethez kötött hibája CÉLZOTT módot jelent — a szerző folt-alakban válaszol.
+  const deps = makeDeps(JSON.stringify({ sections: { "0": GOOD_LESSON.sections[0] } }));
   const gate = {ok:false,reasons:["A fogalom magyarázata hiányzik"],ungrounded:[{blockIndex:0,conceptId:"c1"}]};
   deps.store.seed({id:"retry",mapId:"m1",step:"author",round:1,output:{approvedOutline:GOOD_OUTLINE,lesson:GOOD_LESSON,gate}});
   assert.equal((await runPipelineStep("retry",deps)).ok,true);
@@ -2394,7 +2395,8 @@ test("tanári kérés: a forrásból igazolt hiányzó pont kiegészítő fogalo
   // Review #155 (P1): az azonosító a célfejezet vázlatában — így a szerző ENGEDÉLYEZETT címkéi között is.
   const outline = job.output?.approvedOutline as { sections: Array<{ conceptIds: string[] }> };
   assert.ok(outline.sections[0].conceptIds.includes(extra[0].localId));
-  const allowedLine = (authorDeps.calls[0]?.system ?? "").split("ONLY the ids below")[1]?.split("\n")[1] ?? "";
+  // Spec 2026-09-30 (U4, H13): a szerzői prompt magyar — az engedélyezett azonosítók sora: „A használható fogalom-azonosítók (coversConceptIds) KIZÁRÓLAG: …”.
+  const allowedLine = (authorDeps.calls[0]?.system ?? "").split("KIZÁRÓLAG: ")[1]?.split("\n")[0] ?? "";
   assert.ok(allowedLine.includes(extra[0].localId), `engedélyezett azonosítók: ${allowedLine.slice(0, 200)}`);
 });
 
@@ -2503,4 +2505,52 @@ test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel más kapu-le
   const gated = await withExhaustedAuthor("gate-early-budget-2", () => runPipelineStep("gate-early-budget", deps), { grantsUsed: true });
   assert.equal(gated?.ok, false, `nincs szerzői kör keret nélkül: ${JSON.stringify(gated)}`);
   assert.match(deps.store.jobs.get("gate-early-budget")!.error ?? "", /nincs több lépéskeret/);
+});
+
+/* Spec 2026-09-30-utasitasrendszer-rendbetetel (U4): C4/H5 folt-alakú újrakérés; C3/H20 forrás-hivatkozás a szerzői lépés végén. */
+
+function scriptedProvider(deps: ReturnType<typeof makeDeps>, answers: string[]) {
+  let n = 0;
+  deps.providerFactory = (model: string) => ({
+    name: "stub", model, isAvailable: async () => true,
+    chat: async (messages: AIMessage[]) => {
+      deps.calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
+      const content = answers[Math.min(n++, answers.length - 1)];
+      return { content, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+  } as unknown as IAIProvider);
+}
+
+test("U4 (C4/H5): célzott javításban a teljes lecke módhiba → folt-alakú újrakérés, a folt egyesül; másodszor is teljes lecke → valódi hiba", async () => {
+  const gate = { ok: false, reasons: ["A fogalom magyarázata hiányzik"], ungrounded: [{ blockIndex: 0, sectionIdx: 0, conceptId: "c1" }] };
+  const patch = JSON.stringify({ sections: { "0": GOOD_LESSON.sections[0] } });
+  const ok = makeDeps("");
+  scriptedProvider(ok, [CANNED_AUTHOR, patch]);
+  ok.store.seed({ id: "targeted-ok", mapId: "m1", step: "author", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON, gate } });
+  const result = await runPipelineStep("targeted-ok", ok);
+  assert.equal(result.ok, true, JSON.stringify(ok.store.jobs.get("targeted-ok")!.error));
+  assert.equal(ok.calls.length, 2, "egy módhelyes újrakérés");
+  assert.match(ok.calls[1].user, /CÉLZOTT JAVÍTÁS szerződésének/);
+  assert.match(ok.calls[1].user, /FOLT-ALAKBAN/); assert.match(ok.calls[1].user, /teljes lecke itt hiba/);
+  assert.match(ok.calls[1].user, /"previousAnswer"/, "az első (teljes) válasz adatként megy vissza");
+  assert.equal((ok.store.jobs.get("targeted-ok")!.output!.lesson as Lesson).sections.length, GOOD_LESSON.sections.length);
+
+  const bad = makeDeps("");
+  scriptedProvider(bad, [CANNED_AUTHOR, CANNED_AUTHOR]);
+  bad.store.seed({ id: "targeted-bad", mapId: "m1", step: "author", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON, gate } });
+  const failed = await runPipelineStep("targeted-bad", bad);
+  assert.equal(failed.ok, false);
+  assert.equal(bad.calls.length, 2, "az újrakérés után nincs harmadik kör");
+  assert.match(String(bad.store.jobs.get("targeted-bad")!.error), /az újrakérés után sem folt-alakot adott/);
+});
+
+test("U4 (C3/H20): a forrás-hivatkozás a SZERZŐI lépés végén kerül ki — a mentett tanítás már tiszta, a bank erre épül; az ábra-lépés nem ír át", async () => {
+  const referencing = structuredClone(GOOD_LESSON);
+  (referencing.sections[0].blocks[0] as { text: string }).text = "A forrás szerint a sejt az élőlények alapegysége.";
+  const deps = makeDeps(JSON.stringify(referencing));
+  deps.store.seed({ id: "strip-author", mapId: "m1", step: "author", round: 0, output: { approvedOutline: GOOD_OUTLINE } });
+  assert.equal((await runPipelineStep("strip-author", deps)).ok, true, JSON.stringify(deps.store.jobs.get("strip-author")!.error));
+  const saved = deps.store.jobs.get("strip-author")!.output!.lesson as Lesson;
+  assert.equal((saved.sections[0].blocks[0] as { text: string }).text, "A sejt az élőlények alapegysége.", "a bevezető fordulat kódból törölve, a bank előtt");
+  assert.equal(deps.calls.length, 1, "biztonságos törléshez nem kell átíró modell");
 });

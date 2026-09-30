@@ -12,7 +12,7 @@ import {
 } from "../server/studio/step-runner";
 import { MAX_CHAIN_STEPS } from "../server/studio/pipeline";
 import { lessonSchema, type Lesson } from "../shared/lesson-schema";
-import type { IAIProvider } from "../server/ai/AIProvider";
+import type { AIMessage, IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 
 /**
@@ -177,13 +177,13 @@ function makeStore(job: JobView, recorded: Recorded): PipelineStore {
   };
 }
 
-/** Szkriptelt ál-modell: lépésenként a séma szerinti választ adja. */
-function scriptedProvider(step: () => string): IAIProvider {
+/** Szkriptelt ál-modell: lépésenként a séma szerinti választ adja (a promptot is látja — a célzott javítás folt-alakot kér). */
+function scriptedProvider(step: (messages: AIMessage[]) => string): IAIProvider {
   return {
     name: "stub",
     model: "stub/model",
-    chat: async () => ({
-      content: step(),
+    chat: async (messages: AIMessage[]) => ({
+      content: step(messages),
       usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
     }),
     isAvailable: async () => true,
@@ -210,11 +210,19 @@ async function runChain(): Promise<{ job: JobView; recorded: Recorded; steps: nu
     keyConfigured: () => true,
     promptLookup: async (_name: string, fallback: string) => fallback,
     providerFactory: () =>
-      scriptedProvider(() => {
+      scriptedProvider((messages) => {
         switch (job.step) {
           case "pedagogue":
             return JSON.stringify(OUTLINE);
-          case "author":
+          case "author": {
+            // Spec 2026-09-30 (U4, C4): célzott javításban a szerző CSAK a kijelölt fejezetek foltját adja — a teljes lecke módhiba.
+            const targeted = /0-tól számozott index: ([\d, ]+)\)/.exec(messages[0]?.content ?? "");
+            if (targeted) {
+              const indices = targeted[1].split(",").map((i) => Number(i.trim()));
+              return JSON.stringify({ sections: Object.fromEntries(indices.map((i) => [String(i), LESSON.sections[i]])) });
+            }
+            return JSON.stringify(LESSON);
+          }
           case "animator":
             return JSON.stringify(LESSON);
           case "lektor":
