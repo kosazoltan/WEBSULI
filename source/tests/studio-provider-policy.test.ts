@@ -32,7 +32,7 @@ test("a pedagógus a közvetlen Anthropic API-n fut: claude-opus-5, adaptív gon
   });
   const provider = createStudioStepProvider("claude-opus-5", "pedagogue");
   assert.ok(provider instanceof ClaudeProvider);
-  const result = await callStepModel(provider, { step: "pedagogue", model: provider.model, system: "Terv", user: "Csak JSON" });
+  const result = await callStepModel(provider, { step: "pedagogue", role: "pedagogue", model: provider.model, system: "Terv", user: "Csak JSON" });
   assert.deepEqual(result.json, { sections: [] }, "a thinking blokk után a text blokk a válasz");
   assert.equal(captured?.model, "claude-opus-5");
   assert.deepEqual(captured?.thinking, { type: "adaptive" });
@@ -55,7 +55,7 @@ test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async
   for (const step of ["bank", "animator"] as const) {
     const provider = createStudioStepProvider("z-ai/glm-5.3-flash", step);
     assert.ok(provider instanceof OpenRouterProvider);
-    await callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" });
+    await callStepModel(provider, { step: "animator", role: "animator", model: provider.model, system: "S", user: "U" });
   }
   assert.equal(bodies.length, 2);
   for (const body of bodies) {
@@ -76,7 +76,7 @@ test("a bank/animátor kérése egyszer megy el: az SDK nem próbálja újra cse
   for (const step of ["bank", "animator"] as const) {
     fetches = 0;
     const provider = createStudioStepProvider("z-ai/glm-5.3-flash", step);
-    await assert.rejects(callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" }));
+    await assert.rejects(callStepModel(provider, { step: "animator", role: "animator", model: provider.model, system: "S", user: "U" }));
     assert.equal(fetches, 1, `${step}: egyetlen kérés, rejtett újrapróbálás nélkül`);
   }
 });
@@ -144,7 +144,7 @@ test("a bank/animátor kérés külső határidőt kap, amely a törzs olvasás�
     throw new DOMException("aborted", "AbortError");
   });
   const provider = createStudioStepProvider("z-ai/glm-5.3-flash", "animator");
-  await assert.rejects(callStepModel(provider, { step: "animator", model: provider.model, system: "S", user: "U" }),
+  await assert.rejects(callStepModel(provider, { step: "animator", role: "animator", model: provider.model, system: "S", user: "U" }),
     (error: unknown) => error instanceof Error && error.cause instanceof AIProviderTimeoutError);
   assert.equal(timeoutMs, 240_000);
 });
@@ -165,7 +165,7 @@ test("a témafókusz-hívás egyetlen kérés, 60 s-os határidővel, és a hiba
   });
   const provider = createStudioStepProvider("deepseek/deepseek-v4-flash", "topicFocus");
   let cause: unknown;
-  await assert.rejects(callStepModel(provider, { step: "pedagogue", policy: "topicFocus", model: provider.model, system: "S", user: "U" }),
+  await assert.rejects(callStepModel(provider, { step: "pedagogue", role: "pedagogue", policy: "topicFocus", model: provider.model, system: "S", user: "U" }),
     (error: unknown) => { cause = (error as Error).cause; return true; });
   assert.equal(timeoutMs, 60_000, "a külső határidő a topicFocus-szabályé");
   assert.equal(fetches, 1, "egyetlen kérés, rejtett újrapróbálás nélkül");

@@ -126,7 +126,7 @@ ${specBlock}
 ✓ Értékelés: 90=5, 75=4, 60=3, 40=2, <40=1
 ✓ Reszponzív CSS 320px–2560px (clamp, @media)
 ✓ Helyi, ellenőrzött Nunito / Source Sans 3 / Source Serif 4 és UTF-8; sem Google Fonts, sem külső font nem szükséges
-✓ Sticky tab navigáció${workflowSkillPrompt()}`;
+✓ Sticky tab navigáció${workflowSkillPrompt("html-improve")}`;
 
     // Spec 2026-09-23: every model call starts with its role skill.
     const systemPrompt = withSupportSkill("html-improve", systemPromptBase);

@@ -5,6 +5,7 @@ import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_VE
 import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
 import { auditWorkflow, findingsFromError, knownFinding, mergeFindings } from "./learning";
 import { runtimePrompt } from "../../shared/runtime-knowledge";
+import type { PromptRole } from "../../shared/instruction-bundles/roles";
 import { logger } from "../lib/logger";
 
 export type WorkflowRecord = { view: WorkflowView; owner: string; checkpoints: Record<string, unknown> };
@@ -67,13 +68,47 @@ export async function workflowEnsureRepairBudget(reason: string): Promise<boolea
   return REPAIR_PATH.every((id) => workflowVisitsLeft(view, id) > 0);
 }
 export const workflowSkillVersion = () => context.getStore()?.record.view.skill?.version ?? preparationSkill.getStore()?.snapshot.version;
-export const workflowSkillPrompt = () => {
+/** Spec 2026-09-30 (B0): a futás pillanatképében rögzített utasításcsomag-verzió; azon kívül undefined (= élő). */
+export const workflowRuntimeVersion = () => context.getStore()?.record.view.skill?.runtimeVersion ?? preparationSkill.getStore()?.snapshot.runtimeVersion;
+/** A runbook és a tanult szabályok a hívás SZEREPÉRE szűrve (élő csomag); a régi pillanatkép szűretlen archív szöveget kap. */
+export const workflowSkillPrompt = (role?: PromptRole) => {
   const view = context.getStore()?.record.view;
   const preparation = preparationSkill.getStore();
   const snapshot = view?.skill ?? preparation?.snapshot;
   const mode = view?.definition.mode ?? preparation?.mode;
-  return snapshot && mode ? runtimePrompt(snapshot, mode) + skillRuleText(snapshot) : "";
+  return snapshot && mode ? runtimePrompt(snapshot, mode, role) + skillRuleText(snapshot, role) : "";
 };
+/**
+ * Spec 2026-09-30 (§C-V/2): a DB-s prompt-felülírás a futás első feloldásakor a pillanatképbe kerül (`checkpoints.prompts`),
+ * és a futás végéig az marad — a közben megváltozott DB-sor nem írja át a folyamatban lévő munka utasítását.
+ * Workflow-kontextuson kívül (kézi Studio-út) nincs rögzítés.
+ */
+export async function workflowPinnedPrompt<T>(name: string, resolve: () => Promise<T>): Promise<T> {
+  const ctx = context.getStore();
+  if (!ctx) return resolve();
+  const prompts = (ctx.record.checkpoints.prompts ??= {}) as Record<string, T>;
+  if (Object.hasOwn(prompts, name)) return prompts[name];
+  const value = await resolve();
+  prompts[name] = value;
+  await persist(ctx);
+  return value;
+}
+/**
+ * Review #158 (§C-V/2 maradék): a promptépítők (pl. `buildAuthorPrompt`) sablonszövege nem fagyasztható a futásba, mert a
+ * kimenetük a lecke aktuális tartalmától függ. Ezért a VÉGLEGES rendszerutasítás lenyomatát a futás rögzíti hívásonként
+ * (név + kör), és folytatáskor jelzi, ha ugyanaz a hívás más utasítást kapna — a változás így nem néma. A sablonszövegek
+ * csomagba emelése (TEACHING_CONTRACT stb.) az U4 feladata.
+ */
+export async function workflowNotePromptHash(key: string, system: string): Promise<void> {
+  const ctx = context.getStore();
+  if (!ctx) return;
+  const hashes = (ctx.record.checkpoints.promptHashes ??= {}) as Record<string, string>;
+  const digest = hash(system);
+  if (hashes[key] && hashes[key] !== digest) logger.warn(`[WORKFLOW] Az utasítás megváltozott folytatáskor (${ctx.record.view.id}, ${key}): a futás új sablonszöveget kapott.`);
+  if (hashes[key] === digest) return;
+  hashes[key] = digest;
+  await persist(ctx);
+}
 /** Record even a recoverable validation failure, before asking the model to repair it. */
 export async function workflowFinding(code: SkillCode) {
   const ctx = context.getStore();

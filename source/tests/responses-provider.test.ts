@@ -29,5 +29,5 @@ test("incomplete Responses output is rejected even when its text is valid JSON",
     { type: "message", content: [{ type: "output_text", text: '{"checks":[]}', annotations: [] }] },
   ] }), { status: 200, headers: { "Content-Type": "application/json" } }));
   const provider = new OpenAIProvider({ apiKey: "test-placeholder", model: "grok-4.6", apiMode: "responses" }, "xai");
-  await assert.rejects(callStepModel(provider, { step: "lektor", model: provider.model, system: "Lektor", user: "Forrás" }), /csonka eredmény/);
+  await assert.rejects(callStepModel(provider, { step: "lektor", role: "lektor", model: provider.model, system: "Lektor", user: "Forrás" }), /csonka eredmény/);
 });

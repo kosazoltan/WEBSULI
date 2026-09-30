@@ -31,7 +31,8 @@ export function bankProviderStep(attempt: number): "author" | "bank" {
  */
 export async function callBankPacketModel(provider: IAIProvider, model: string, system: string, user: string, signal?: AbortSignal): Promise<StepCallResult> {
   try {
-    return await callStepModel(provider, { step: "animator", model, system, user }, signal);
+    // Spec 2026-09-30 (§C-V/3): a bankcsomag az `animator` lépésen belül fut, de a szerepe `bank` — ezt kapja a runbook/szabály-szűrő.
+    return await callStepModel(provider, { step: "animator", role: "bank", model, system, user }, signal);
   } catch (error) {
     const timedOut = error instanceof StepModelError && error.cause instanceof AIProviderTimeoutError;
     if (error instanceof StepModelError && (!error.cause || timedOut)) {

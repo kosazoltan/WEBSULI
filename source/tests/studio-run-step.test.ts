@@ -10,7 +10,7 @@ test("a phase deadline reaches the provider and an aborted response is never acc
     assert.equal(signal, controller.signal); controller.abort();
     return { content: '{"ok":true}' };
   };
-  await assert.rejects(callStepModel(provider, { step: "lektor", model: "test", system: "S", user: "U" }, controller.signal), StepModelError);
+  await assert.rejects(callStepModel(provider, { step: "lektor", role: "lektor", model: "test", system: "S", user: "U" }, controller.signal), StepModelError);
 });
 import type { AIResponse, IAIProvider } from "../server/ai/AIProvider";
 
@@ -39,7 +39,7 @@ function stubProvider(response: string | (() => never), usage?: AIResponse["usag
 test("a JSON válasz parse-olódik", async () => {
   const out = await callStepModel(
     stubProvider('{"sections":[]}'),
-    { step: "pedagogue", model: "m/1", system: "S", user: "U" },
+    { step: "pedagogue", role: "pedagogue", model: "m/1", system: "S", user: "U" },
   );
 
   assert.deepEqual(out.json, { sections: [] });
@@ -49,7 +49,7 @@ test("a JSON válasz parse-olódik", async () => {
 test("a kód-keretes válasz is parse-olódik (fence-strip)", async () => {
   const out = await callStepModel(
     stubProvider('```json\n{"ok": true}\n```'),
-    { step: "lektor", model: "m/2", system: "S", user: "U" },
+    { step: "lektor", role: "lektor", model: "m/2", system: "S", user: "U" },
   );
 
   assert.deepEqual(out.json, { ok: true });
@@ -57,7 +57,7 @@ test("a kód-keretes válasz is parse-olódik (fence-strip)", async () => {
 
 test("érvénytelen JSON fail-closed: StepModelError", async () => {
   await assert.rejects(
-    callStepModel(stubProvider("ez nem JSON"), { step: "author", model: "m/3", system: "S", user: "U" }),
+    callStepModel(stubProvider("ez nem JSON"), { step: "author", role: "author", model: "m/3", system: "S", user: "U" }),
     StepModelError,
   );
 });
@@ -68,14 +68,14 @@ test("a provider hibája is StepModelError lesz", async () => {
   });
 
   await assert.rejects(
-    callStepModel(broken, { step: "author", model: "m/4", system: "S", user: "U" }),
+    callStepModel(broken, { step: "author", role: "author", model: "m/4", system: "S", user: "U" }),
     (e: unknown) => e instanceof StepModelError && /rate limited/.test(String((e as Error).cause)),
   );
 });
 
 test("üres válasz fail-closed", async () => {
   await assert.rejects(
-    callStepModel(stubProvider("   "), { step: "pedagogue", model: "m/5", system: "S", user: "U" }),
+    callStepModel(stubProvider("   "), { step: "pedagogue", role: "pedagogue", model: "m/5", system: "S", user: "U" }),
     StepModelError,
   );
 });

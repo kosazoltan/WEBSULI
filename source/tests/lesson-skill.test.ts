@@ -42,7 +42,7 @@ test("kijavított hiba a következő futás tényleges modellutasításába ker�
   let received = "";
   await executeWorkflow(store, { id: "second", owner: "a", mode: "web" }, async () => {
     await workflowPhase("generate");
-    await callStepModel(captureProvider(messages => { received = String(messages[0].content); }), { step: "author", model: "fixture", system: "Base rules", user: "Source" });
+    await callStepModel(captureProvider(messages => { received = String(messages[0].content); }), { step: "author", role: "author", model: "fixture", system: "Base rules", user: "Source" });
     return complete();
   });
   assert.match(received, /Base rules/); assert.match(received, /Fogalom|fogalomazonosító/);
@@ -57,7 +57,7 @@ test("folytatáskor ugyanaz a skill és checkpoint marad, az új futás már új
   const input = { id: "continue", owner: "a", mode: "web" as const };
   const work = async () => {
     await workflowPhase("generate");
-    await callStepModel(captureProvider(() => { calls++; }), { step: "author", model: "fixture", system: "Base", user: "Same" });
+    await callStepModel(captureProvider(() => { calls++; }), { step: "author", role: "author", model: "fixture", system: "Base", user: "Same" });
     await workflowPhase("knowledge"); await workflowPhase("author");
     await workflowPhase("gate"); await workflowPhase("publish");
     if (fail) throw new Error("Adatbázis kapcsolat megszakadt");
@@ -116,7 +116,7 @@ test("sikeres újrapróbálkozás után is megmarad a hibás JSON-válasz tapasz
   provider.chat = async () => ({ content: ++calls === 1 ? "invalid JSON" : '{"ok":true}' });
   const view = await executeWorkflow(store, { id: "json-repair", owner: "a", mode: "web" }, async () => {
     await workflowPhase("generate");
-    const input = { step: "author" as const, model: "fixture", system: "Base", user: "Source" };
+    const input = { step: "author" as const, role: "author" as const, model: "fixture", system: "Base", user: "Source" };
     await assert.rejects(callStepModel(provider, input), /JSON/);
     await callStepModel(provider, input);
     await workflowPhase("knowledge"); await workflowPhase("author");
