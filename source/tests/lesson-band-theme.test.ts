@@ -128,7 +128,8 @@ test("az author-prompt megnevezi a bandet és a regisztert; UUID-t nem tartalmaz
       { title: "T", subject: "s", classroom, concepts: [{ localId: "c1", examWeight: "core", id: "0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d", term: "x" }] } as never,
       [],
     );
-    assert.ok(prompt.includes(`Age band: ${band}`), `${classroom}. osztály → "${band}" band a promptban`);
+    // Spec 2026-09-30 (U4, H13): a szerzői prompt magyar — a korosztály címkéje is („Korosztály:”, korábban „Age band:”).
+    assert.ok(prompt.includes(`Korosztály: ${band}`), `${classroom}. osztály → "${band}" band a promptban`);
     assert.ok(prompt.includes(bandRegisterForPrompt(band)), `${band}: a regiszter-leírás szerepel`);
     assert.doesNotMatch(prompt, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, "DB UUID szivárgott a promptba");
   }

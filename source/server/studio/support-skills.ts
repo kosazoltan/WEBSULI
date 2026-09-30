@@ -218,22 +218,21 @@ Minden tény a kivonatban van? Egy helyes opció, egyező magyarázattal? Újras
 
   "kid-text-fixer": `# Skill: gyerekszöveg-javító (kid-text-fixer)
 ## Szerep
-Egy kész lecke gyereknek szóló mondataiból kiveszed a forrásra, füzetre, tankönyvre való hivatkozást. Mért ok (2026-09-30, Mezopotámia): ~50 mondat szólt így: „a forrás Istárt a szerelem istenének nevezi”, „Babilon városa Kr. e. 2500 körül szerepel a füzetben” — a gyerek nem látja a forrást.
+Egy kész lecke gyereknek szóló mondataiból kiveszed a forrásra, füzetre, tankönyvre való hivatkozást — a JELENTÉS megőrzésével. Mért ok (2026-09-30, Mezopotámia): ~50 mondat szólt így: „a forrás Istárt a szerelem istenének nevezi”, „Babilon városa Kr. e. 2500 körül szerepel a füzetben”; a gyerek nem látja a forrást. Mért hiba (H33): a javító új tényt tett a mondatba („jött létre”), amit a hivatkozó mondat nem állított.
 ## Bemenet
 Mondatok listája útvonallal (path) és szöveggel (text), a lecke címe és évfolyama.
 ## Kimenet
-Kizárólag JSON: { "items": [{ "path", "text" }] } — minden kapott path-hoz pontosan egy új szöveg.
+Kizárólag JSON: { "items": [{ "path", "text", "needsSource": boolean }] } — minden kapott path-hoz pontosan egy elem. needsSource: true, ha a hivatkozó tagmondat törlése után NEM marad teljes, önálló állítás (a forrás mondaná meg, mi történt) — ilyenkor text az eredeti, változatlanul.
 ## Lépések
-1. A tartalmat KÖZVETLENÜL állítod: „a forrás Istárt a szerelem istenének nevezi” → „Istár a szerelem istennője volt”; „Babilon városa Kr. e. 2500 körül szerepel a füzetben” → „Babilon városa Kr. e. 2500 körül jött létre”.
-2. Minden szám, évszám, név és állítás változatlan; csak a hivatkozás tűnik el. A kérdés kérdés marad, a „Helyes:”/„Nem helyes:” kezdet és a **kiemelés** megmarad.
-3. Rövid, a korosztálynak érthető magyar mondat; a hossz közel az eredetihez.
-4. Ha a mondat NEM a lecke forrására hivatkozik — földrajzi forrás („a Duna forrása”), történelmi forrás elemzése („a forrás megbízhatósága”), utasítás a gyereknek („írd a füzetedbe”) —, a szöveget VÁLTOZATLANUL adod vissza.
+1. Csak a hivatkozó tagmondatot/keretet töröld, a tartalmi állítást hagyd meg szó szerint: „a forrás Istárt a szerelem istenének nevezi” → „Istár a szerelem istene”; „A füzet szerint a Nílus évente árad” → „A Nílus évente árad”.
+2. Ha a hivatkozás maga az állítmány („X szerepel a füzetben”, „a forrás említi X-et”), a törlés után nincs állítás → needsSource: true, text változatlan. Új igét, évszámot, okot NEM találsz ki („szerepel a füzetben” ≠ „jött létre”).
+3. Minden szám, évszám, név és állítás változatlan; a kérdés kérdés marad, a „Helyes:”/„Nem helyes:” kezdet és a **kiemelés** megmarad; rövid, a korosztálynak érthető magyar mondat, a hossz közel az eredetihez.
+4. Ha a mondat NEM a lecke forrására hivatkozik — földrajzi forrás („a Duna forrása”), történelmi forrás elemzése („a forrás megbízhatósága”), utasítás a gyereknek („írd a füzetedbe”) —, a szöveget VÁLTOZATLANUL adod vissza (needsSource: false).
 ## Tilalmak
-- Új tény, szám, név; a mondat jelentésének megváltoztatása; a forrás, a füzet, a tankönyv, a tananyag szó bármilyen alakban.
+- Új tény, szám, név, ige vagy ok; a mondat jelentésének megváltoztatása; a forrás, a füzet, a tankönyv, a tananyag szó bármilyen alakban a javított szövegben.
 - Próza a JSON körül; kimaradt vagy kitalált path.
 ## Önellenőrzés a válasz előtt
-Minden path megvan? Egyik szövegben sincs forrás/füzet/tankönyv? Minden szám ugyanaz? Csak JSON?`,
-
+Minden path megvan? Minden javított mondat állítása benne volt az eredetiben? Egyik szövegben sincs forrás/füzet/tankönyv? Minden szám ugyanaz? Csak JSON?`,
   "instruction-points": `# Skill: tanári pontjegyzék-készítő (instruction-points)
 ## Szerep
 A tanár szabad szöveges kéréséből TARTALMI pontjegyzéket készítesz a tervezés ELŐTT, és minden ponthoz megnézed, a forrás alátámasztja-e. Mért ok (Egyiptom, 16–22 pont): a pontokat senki nem kapta listaként, 5–7 tanítatlan maradt; egy hiányzó pont forrás-idézete a témát érintette, nem az állítást igazolta.

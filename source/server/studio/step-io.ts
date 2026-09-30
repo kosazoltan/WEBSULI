@@ -5,7 +5,7 @@ import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
-import { ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
+import { ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
 import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
@@ -29,6 +29,37 @@ import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
 
 const id = () => z.string().trim().min(1).max(64);
 
+/** U4 (H50): a vázlat mezőinek korlátai EGY helyen — a séma vágja, a prompt kimondja, a program a vágást jelzi. */
+export const OUTLINE_LIMITS = { animationSuggestion: 120, keyPhrase: 40, keyPhrases: 4, emoji: 8 } as const;
+export type OutlineClamp = { section: number; field: "animationSuggestions" | "keyPhrases" | "emoji"; detail: string };
+/** A NYERS tervező-válasz korláton túli mezői (a séma csendes vágása helyett jelölt állapot). */
+export function outlineClamps(raw: unknown): OutlineClamp[] {
+  const sections = (raw as { sections?: unknown } | null)?.sections;
+  if (!Array.isArray(sections)) return [];
+  const out: OutlineClamp[] = [];
+  sections.forEach((section, i) => {
+    const sec = section as { animationSuggestions?: unknown; keyPhrases?: unknown; emoji?: unknown } | null;
+    if (Array.isArray(sec?.animationSuggestions)) sec!.animationSuggestions.forEach((a, k) => { if (typeof a === "string" && a.trim().length > OUTLINE_LIMITS.animationSuggestion) out.push({ section: i, field: "animationSuggestions", detail: `[${k}] ${a.trim().length} → ${OUTLINE_LIMITS.animationSuggestion} karakter` }); });
+    if (Array.isArray(sec?.keyPhrases)) {
+      sec!.keyPhrases.forEach((k, n) => { if (typeof k === "string" && k.trim().length > OUTLINE_LIMITS.keyPhrase) out.push({ section: i, field: "keyPhrases", detail: `[${n}] „${k.trim().slice(0, 30)}…” ${k.trim().length} karakter (> ${OUTLINE_LIMITS.keyPhrase}) — elhagyva, nem kötelező kiemelés` }); });
+      if (sec!.keyPhrases.length > OUTLINE_LIMITS.keyPhrases) out.push({ section: i, field: "keyPhrases", detail: `${sec!.keyPhrases.length} elem → ${OUTLINE_LIMITS.keyPhrases}` });
+    }
+    if (typeof sec?.emoji === "string" && sec.emoji.trim().length > OUTLINE_LIMITS.emoji) out.push({ section: i, field: "emoji", detail: `${sec.emoji.trim().length} → ${OUTLINE_LIMITS.emoji} karakter` });
+  });
+  return out;
+}
+/** A vágott kulcskifejezés nem kötelező kiemelés: a szerző csak az épen maradtakat kapja. */
+export function dropClampedKeyPhrases<O extends { sections: Array<{ keyPhrases?: string[] }> }>(outline: O, raw: unknown): O {
+  const rawSections = (raw as { sections?: unknown } | null)?.sections;
+  if (!Array.isArray(rawSections)) return outline;
+  return { ...outline, sections: outline.sections.map((section, i) => {
+    const rawPhrases = (rawSections[i] as { keyPhrases?: unknown } | null)?.keyPhrases;
+    if (!Array.isArray(rawPhrases) || !section.keyPhrases) return section;
+    const intact = rawPhrases.filter((k): k is string => typeof k === "string" && k.trim().length > 0 && k.trim().length <= OUTLINE_LIMITS.keyPhrase).map((k) => k.trim()).slice(0, OUTLINE_LIMITS.keyPhrases);
+    return { ...section, keyPhrases: intact };
+  }) };
+}
+
 export const outlineSectionSchema = z.object({
   heading: z.string().trim().min(1).max(255),
   /** Every core + ≥90% supporting concept id must appear across sections. */
@@ -41,13 +72,13 @@ export const outlineSectionSchema = z.object({
    * a 130-char hint from the model threw away a whole paid pedagogue round). Clamped.
    */
   animationSuggestions: z
-    .array(z.string().trim().min(1).transform((s) => s.slice(0, 120)))
+    .array(z.string().trim().min(1).transform((s) => s.slice(0, OUTLINE_LIMITS.animationSuggestion)))
     .default([]),
   /** Spec 2026-09-20 (színes tananyag): fejezet-emoji és a kiemelendő kulcskifejezések (advisory, vágva). */
-  emoji: z.string().trim().min(1).transform((s) => s.slice(0, 8)).optional(),
+  emoji: z.string().trim().min(1).transform((s) => s.slice(0, OUTLINE_LIMITS.emoji)).optional(),
   keyPhrases: z
-    .array(z.string().trim().min(1).transform((s) => s.slice(0, 40)))
-    .transform((a) => a.slice(0, 4))
+    .array(z.string().trim().min(1).transform((s) => s.slice(0, OUTLINE_LIMITS.keyPhrase)))
+    .transform((a) => a.slice(0, OUTLINE_LIMITS.keyPhrases))
     .optional(),
   /** U3 (C14): a tanári pontjegyzék ide rendelt, igazolt pontjai (azonosítók); a szerző ezeket mondja ki. */
   instructionPointIds: z.array(z.string().trim().min(1).max(64)).max(40).optional(),
@@ -251,10 +282,11 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     "TILALMAK (a program ellenőrzi, megszegésük a terv elutasítását jelenti):",
     "- Kizárólag a lenti térképen szereplő fogalom-azonosítókat (localId) használd; nem létező, átírt vagy kitalált azonosító tilos.",
     `- Legfeljebb ${OUTLINE_MAX_SECTIONS} fejezet. Minden fejezetben legalább egy fogalom (conceptIds nem üres).`,
-    "- A fejezetcímek egyediek; ugyanaz a fogalom ne kapjon két fejezetet.",
+    "- A fejezetcímek egyediek; ugyanaz a fogalom ne kapjon két fejezetet — kivéve a záró „A leggyakoribb hibák” és „Ellenőrzés” fejezetet, amely a már tanított fogalmakat ismétli (ez nem duplikáció).",
     "- A misconceptions minden eleme létező conceptId-hoz kötődjön, és csak a forrás tartalmából levezethető tévhit legyen.",
     "- A forrás adatait (számok, definíciók, feladatok) nem találod ki, nem egészíted ki és nem „javítod”; ha valami hiányzik a térképről, azt nem tervezed be.",
-    "- Az animationSuggestions elemei legfeljebb 120 karakteresek, konkrét, a fejezet tanításából rajzolható ábrát neveznek meg.",
+    `- Az animationSuggestions elemei legfeljebb ${OUTLINE_LIMITS.animationSuggestion} karakteresek, konkrét, a fejezet tanításából rajzolható ábrát neveznek meg.`,
+    `- Korlátok (a program a túllépést vágja vagy elhagyja, és a jobban jelzi — ne lépd túl): emoji legfeljebb ${OUTLINE_LIMITS.emoji} karakter; keyPhrases legfeljebb ${OUTLINE_LIMITS.keyPhrases} elem, elemenként ${OUTLINE_LIMITS.keyPhrase} karakter; fejezetcím ${LESSON_TEXT_LIMITS.heading} karakter.`,
     "- Semmi próza, magyarázat, kódblokk-jelölés vagy bevezető: a válasz kizárólag az előírt JSON.",
     "",
     "A körpazarlás elkerülése: fejezetenként add meg a tanítási sorrendet (explain → example lépésekkel → check), az ábra fajtáját és a forrás melyik feladata tartozik oda — így a szerzőnek nem kell szerkezetet kitalálnia, a lektor pedig ehhez a tervhez mér.",
@@ -351,16 +383,34 @@ export const SOURCE_REVIEW_RULES = [
  * #167 — séma-bukás utáni egyszeri javító kör user-üzenete: a konkrét zod-hibák
  * + a katalógus visszamegy a modellnek, hogy a második kör célzottan javítson.
  */
-export function buildSchemaRetryUser(zodIssues: string): string {
+export function buildSchemaRetryUser(zodIssues: string, repair?: { targetSections: ReadonlyArray<number> }): string {
   return [
-    "A válaszod NEM felelt meg a Lesson sémának. Pontos hibák:",
+    repair ? "A válaszod NEM felelt meg a CÉLZOTT JAVÍTÁS szerződésének vagy a Lesson sémának. Pontos hibák:" : "A válaszod NEM felelt meg a Lesson sémának. Pontos hibák:",
     zodIssues,
     "",
     AUTHOR_BLOCK_CATALOG,
     "",
-    "Írd újra a TELJES leckét úgy, hogy minden blokk a fenti hat kind egyike legyen. Válaszolj CSAK JSON-nal.",
+    // U4 (C4/H5): célzott módban az újrakérés is folt-alakot kér — a „teljes leckét” kérés ↔ folt-egyesítés ellentmondás megszűnt.
+    repair
+      ? `Írd újra CSAK a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet FOLT-ALAKBAN: { "sections": { "<0-tól számozott index>": { "heading": string, "probaEnabled": true, "blocks": [...] } } } (index: ${repair.targetSections.join(", ")}). Más fejezetet, title/subject mezőt NE küldj — teljes lecke itt hiba. Válaszolj CSAK JSON-nal.`
+      : "Írd újra a TELJES leckét úgy, hogy minden blokk a fenti hat kind egyike legyen. Válaszolj CSAK JSON-nal.",
   ].join("\n");
 }
+
+/**
+ * U4 (B4 `TEACHING_CONTRACT`, H6/H13): a szerző mérhető szabályai a KÓD konstansaiból — a megalapozás pontos szabálya
+ * (`grounding.ts`), a hosszkorlátok (`LESSON_TEXT_LIMITS`), a forrás-hivatkozás tilalma (`source-reference.ts`), a program
+ * által beírt mezők. Egy szabály egy helyen: a skill a munkamódot mondja, ez a mércét.
+ */
+export const TEACHING_CONTRACT = [
+  "TANÍTÁSI SZERZŐDÉS (a program méri; megszegése a lecke elutasítása vagy javító kör):",
+  "1. Címke = állítás: a blokk coversConceptIds azonosítója azt állítja, hogy a blokk LÁTHATÓ szövege tanítja a fogalmat — a fogalom saját szavai (term) a blokk szövegében álljanak. A címke akkor is megalapozott, ha UGYANABBAN a fejezetben egy MÁSIK blokk (bármely fajtájú: explain, example, …) ugyanezt a fogalmat a saját szövegével megalapozza — a kapu fejezetenként így mér. A recap nem kap címkét. A megalapozatlan címkéjű leckét a kapu elutasítja.",
+  "2. Csak a térkép fogalmait tanítod, a forrás szintjén: könnyebb anyagot általános tudásból nem helyettesítesz be, más évfolyamra nem hangolsz. A forrásból nem tanítható fogalmat kihagyod — nem találsz ki helyette mást, és nem jelented sehol: a hiányt a program fedettségi kapuja méri.",
+  `3. Hosszkorlátok (karakter, a séma számai): fejezetcím ${LESSON_TEXT_LIMITS.heading}; explain.text ${LESSON_TEXT_LIMITS.explain}; example.problem ${LESSON_TEXT_LIMITS.problem}, lépésenként ${LESSON_TEXT_LIMITS.step}, answer ${LESSON_TEXT_LIMITS.answer}; check.question ${LESSON_TEXT_LIMITS.question}, opció ${LESSON_TEXT_LIMITS.option}, visszajelzés ${LESSON_TEXT_LIMITS.feedback}, hint ${LESSON_TEXT_LIMITS.hint}; recap pont ${LESSON_TEXT_LIMITS.bullet}; ábra caption ${LESSON_TEXT_LIMITS.caption}. A túllépés sémahiba (javító kör).`,
+  "4. A gyereknek szóló szöveg nem hivatkozik a forrásra, füzetre, tankönyvre, tananyagra („a forrás szerint”, „szerepel a füzetben”): a tartalmat közvetlenül állítod. (A program a maradékot a bank ELŐTT törli vagy átíratja — ne legyen mit.)",
+  "5. title, subject, classroom, mapId: a program a saját, forrásból mért értékét írja be — add vissza a vázlat/térkép szerinti értéket, ne találj ki újat; sourceOnly mindig true. Minden check blokkban pontosan annyi feedbackPerOption, ahány opció.",
+  "6. Ha gateFeedback érkezik: a felsorolt blokkokat a previousLesson-ben javítod, a lektori jegyzetekkel együtt; a fogalmat látható szövegben tanítod meg — nem rejtett kulcsszót fűzöl hozzá, és nem törlöd a tanítását.",
+].join("\n");
 
 export function buildAuthorPrompt(
   sections: OutlineSection[],
@@ -375,37 +425,20 @@ export function buildAuthorPrompt(
   const band = ageBandForClassroom(map.classroom);
 
   const parts = [
-    "You are the lesson author. Write a complete lesson from the outline, in Hungarian, in a register matching the pupil's age band.",
-    // LS-9: the band was only implied by the classroom number; now it is named and described,
-    // so the register is a rule the model can follow rather than a guess (spec §3).
-    `Age band: ${band} (classroom ${map.classroom}). ${bandRegisterForPrompt(band)}`,
+    "Te vagy a SZERZŐ: a vázlatból teljes, magyar nyelvű leckét írsz, a tanuló korosztályának megfelelő nyelven és mélységben.",
+    // LS-9: a korosztályt nem az osztályszám sejteti, hanem néven nevezve, leírt regiszterrel (spec §3).
+    `Korosztály: ${band} (${map.classroom}. osztály). ${bandRegisterForPrompt(band)}`,
     "",
     D1_RULE_TEXT,
     TRANSCRIPTION_RULE_TEXT,
-    LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
     "",
     ...ownerLines(owner),
     ...instructionPointLines(sections, owner),
-    "Hard rules:",
-    "- Every block's coversConceptIds may use ONLY the ids below — never invent new ones:",
-    conceptIds.join(", "),
-    // #196 (mérve élesben, Kristóf-lecke): a szerző 8. osztályos geometriai
-    // forrásból 4. osztályos helyiérték-anyagot írt, és ráírta a geometriai
-    // címkéket. A fedettségi kapu 100%-ot mért, mert csak az ID-ket számolta.
-    "- A coversConceptIds id is a CLAIM that the block TEACHES that exact concept.",
-    "  The concept's own words MUST appear in the block's own text. Labelling a block",
-    "  with a concept it does not teach is a hard failure — the publishing gate now",
-    "  verifies every label against the block text and REJECTS the lesson.",
-    "  Introduce each claimed concept by its complete Hungarian term in a natural visible question/problem or teaching sentence. A question may give this topic context without giving away its answer. For match/dragSort, include meaningful concept labels in the visible items; hidden metadata and feedback shown only after an answer are not initial teaching evidence. Do not add an unrelated keyword list.",
-    "- Teach ONLY what the map's concepts state. Never substitute easier material from",
-    "  general knowledge, and never adjust the difficulty to a different school year:",
-    "  the concepts come from the teacher's uploaded source and define the level.",
-    "- If a concept cannot be taught from the source, leave it out and say so in the",
-    "  report — do NOT invent a replacement topic.",
-    "- sourceOnly must be true.",
-    "- Every check block needs feedbackPerOption with exactly as many entries as options.",
-    "- If gateFeedback is supplied, repair its listed blocks in previousLesson as well as lektor findings. Teach each claimed concept explicitly in visible text; do not just append hidden keywords or remove the concept's teaching.",
+    // U4 (H13): a szerző mérhető szabályai EGY helyen (TEACHING_CONTRACT); a minőségi szerződést a runbook és a
+    // LESSON_METHOD_CONTRACT adja — itt nem ismételjük.
+    TEACHING_CONTRACT,
+    `A használható fogalom-azonosítók (coversConceptIds) KIZÁRÓLAG: ${conceptIds.join(", ")}`,
     "",
     AUTHOR_BLOCK_CATALOG,
     "",
@@ -417,7 +450,7 @@ export function buildAuthorPrompt(
 
   if (authorNotes.length > 0) {
     parts.push(
-      "The lektor asked these fixes after the previous round (change ONLY these, nothing else):",
+      "A lektor javításai az előző kör után (CSAK ezeket változtasd, mást nem):",
       ...authorNotes.map((n) => `- [${n.kind}${n.subkind ? "/" + n.subkind : ""}] ${n.message}`),
       "",
     );
@@ -677,7 +710,7 @@ function sortKeysDeep(value: unknown): unknown {
 export function checkAnimatorResult(original: Lesson, candidate: Lesson): AnimatorCheck {
   const reasons: string[] = [];
 
-  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly", "experience"] as const;
+  const identityFields = ["title", "subject", "classroom", "mapId", "sourceOnly", "experience", "misconceptions"] as const;
   for (const field of identityFields) {
     if (canonicalJson(original[field]) !== canonicalJson(candidate[field])) {
       reasons.push(`A lecke azonosító mezője megváltozott: ${field}.`);
@@ -697,6 +730,11 @@ export function checkAnimatorResult(original: Lesson, candidate: Lesson): Animat
     );
   } else {
     original.sections.forEach((section, index) => {
+      // U4 (H39): a fejezet fejléce (cím, Próba, emoji) sem változhat — eddig csak a blokkokat mértük.
+      const other = candidate.sections[index];
+      if (other && (section.heading !== other.heading || section.probaEnabled !== other.probaEnabled || (section.emoji ?? null) !== (other.emoji ?? null))) {
+        reasons.push(`A(z) ${index + 1}. szakasz fejléce (cím/probaEnabled/emoji) megváltozott.`);
+      }
       const originalNonAnimate = section.blocks.filter((b) => b.kind !== "animate");
       const candidateNonAnimate =
         candidate.sections[index]?.blocks.filter((b) => b.kind !== "animate") ?? [];

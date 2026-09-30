@@ -16,7 +16,7 @@ export type GateFeedbackLike = {
   ok?: boolean;
   missingCore?: string[];
   unknownIds?: string[];
-  ungrounded?: Array<{ blockIndex: number }>;
+  ungrounded?: Array<{ blockIndex: number; sectionIdx?: number }>;
   arc?: Array<{ sectionIdx: number }>;
   /** Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés hiányzó pontjai (a fejezet nélküli → teljes javítás). */
   instruction?: Array<{ sectionIdx: number | null; point: string }>;
@@ -63,7 +63,8 @@ export function targetedRepairSections(
   if (gate && gate.ok === false) {
     if (gate.missingCore?.length || gate.unknownIds?.length) return null;
     for (const u of gate.ungrounded ?? []) {
-      const section = sectionOfFlatBlock(previous, u.blockIndex);
+      // U4 (C4): a kapu már fejezettel adja a leletet; a lapított index csak régi kapujelentésnél kell.
+      const section = typeof u.sectionIdx === "number" && u.sectionIdx >= 0 && u.sectionIdx < previous.sections.length ? u.sectionIdx : sectionOfFlatBlock(previous, u.blockIndex);
       if (section === null) return null;
       targets.add(section);
     }

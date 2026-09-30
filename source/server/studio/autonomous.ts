@@ -43,7 +43,9 @@ export type AutonomousReason =
   /** Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés egy tartalmi pontja a javítás után is hiányzik. */
   | "instruction_missing"
   /** Spec 2026-09-30-utasitasrendszer-rendbetetel (U3, C14): a kérés forrásból nem igazolható pontjai — nem tanítjuk, jelezzük. */
-  | "instruction_gaps";
+  | "instruction_gaps"
+  /** U4 (H50): a tervező vázlatának mezőit a program a korláton vágta/elhagyta — jelölt állapot, nem néma. */
+  | "outline_clamped";
 
 export type AutonomousInput = {
   reason: AutonomousReason;
@@ -74,6 +76,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   source_reference: "A gyereknek szóló szövegben forrás- vagy füzethivatkozás maradt — a lecke elkészült, a helyek a job kimenetében.",
   instruction_missing: "A tanári kérés egy vagy több pontja a javítás után is hiányzik — a lecke elkészült, a pontok a job kimenetében.",
   instruction_gaps: "A tanári kérés egy vagy több pontját a forrás nem igazolja — a lecke ezeket nem tanítja, a pontok a job kimenetében és a panelen.",
+  outline_clamped: "A tervező vázlatának egyes mezői a korláton túl voltak: a program vágta vagy elhagyta őket — a részletek a job kimenetében.",
 };
 
 /**

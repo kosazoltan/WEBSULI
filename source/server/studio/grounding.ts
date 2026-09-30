@@ -125,6 +125,8 @@ const STOP_WORDS = new Set(["egy", "hogy", "nem", "van", "vagy", "mint", "ami", 
 
 export type UngroundedClaim = {
   blockIndex: number;
+  /** U4 (C4): a blokk fejezete — a célzott javítás ebből dolgozik, nem a lapított indexből számol vissza. */
+  sectionIdx?: number;
   kind: string;
   conceptId: string;
   term: string;
@@ -240,6 +242,7 @@ export function groundingReport(
       } else {
         ungrounded.push({
           blockIndex,
+          ...(sectionOf !== undefined ? { sectionIdx: sectionOf[blockIndex] } : {}),
           kind: typeof block.kind === "string" ? block.kind : "?",
           conceptId: id,
           term: concept.term ?? id,

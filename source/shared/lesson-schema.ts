@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { experienceSchema } from "./lesson-experience";
 import { parseReferenceExpression } from "./answer-value";
+
+/** U4 (B4 `TEACHING_CONTRACT`): a tanítási szövegek karakterkorlátai — EGY helyen; a séma és a szerzőnek adott szerződés ugyanezt mondja. */
+export const LESSON_TEXT_LIMITS = { heading: 255, explain: 4000, problem: 2000, step: 1000, answer: 1000, caption: 500, question: 1000, option: 500, feedback: 1000, hint: 1000, bullet: 500 } as const;
 import { triangleAreaLabParamsSchema } from "./triangle-area-lab";
 import { decisionStoryParamsSchema } from "./decision-story";
 
@@ -97,7 +100,7 @@ const coversConceptIds = z.array(filled(64)).min(1);
 
 const explainBlock = z.object({
   kind: z.literal("explain"),
-  text: filled(4000),
+  text: filled(LESSON_TEXT_LIMITS.explain),
   depth: z.enum(EXPLAIN_DEPTHS),
   readAloud: z.boolean().default(true),
   coversConceptIds,
@@ -105,9 +108,9 @@ const explainBlock = z.object({
 
 const exampleBlock = z.object({
   kind: z.literal("example"),
-  problem: filled(2000),
-  steps: z.array(filled(1000)).min(1),
-  answer: filled(1000),
+  problem: filled(LESSON_TEXT_LIMITS.problem),
+  steps: z.array(filled(LESSON_TEXT_LIMITS.step)).min(1),
+  answer: filled(LESSON_TEXT_LIMITS.answer),
   coversConceptIds,
 });
 
@@ -115,7 +118,7 @@ const animateBlock = z.object({
   kind: z.literal("animate"),
   animKind: z.enum(ANIM_KINDS),
   params: z.record(z.unknown()),
-  caption: filled(500),
+  caption: filled(LESSON_TEXT_LIMITS.caption),
   coversConceptIds,
 });
 
@@ -127,11 +130,11 @@ const animateBlock = z.object({
  */
 const checkBlock = z.object({
   kind: z.literal("check"),
-  question: filled(1000),
-  options: z.array(filled(500)).min(2).max(5),
+  question: filled(LESSON_TEXT_LIMITS.question),
+  options: z.array(filled(LESSON_TEXT_LIMITS.option)).min(2).max(5),
   correctIndex: z.number().int().min(0),
-  feedbackPerOption: z.array(filled(1000)),
-  hint: filled(1000).optional(),
+  feedbackPerOption: z.array(filled(LESSON_TEXT_LIMITS.feedback)),
+  hint: filled(LESSON_TEXT_LIMITS.hint).optional(),
   coversConceptIds,
 });
 
@@ -148,7 +151,7 @@ const tryBlock = z.object({
  */
 const recapBlock = z.object({
   kind: z.literal("recap"),
-  bullets: z.array(filled(500)).min(1),
+  bullets: z.array(filled(LESSON_TEXT_LIMITS.bullet)).min(1),
   nextLessonId: filled(64).optional(),
 });
 
@@ -277,7 +280,7 @@ export const blockSchema = z
   });
 
 export const sectionSchema = z.object({
-  heading: filled(255),
+  heading: filled(LESSON_TEXT_LIMITS.heading),
   /** Spec 2026-09-20: a tervező által választott fejezet-emoji (a cím és a haladásjelző előtt). */
   emoji: z.string().trim().min(1).max(8).optional(),
   blocks: z.array(blockSchema).min(1),
