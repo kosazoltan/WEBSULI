@@ -61,15 +61,115 @@ function Moon({ cx, cy, r, lit, waxing }: { cx: number; cy: number; r: number; l
   );
 }
 
+/*
+ * Spec 2026-09-30 (docs/specs/2026-09-30-korforgas-felirat-utkozes.md): a fázisfelirat elrendezése.
+ * Mért hiba (Mezopotámia, 1280 px): a rögzített helyű, szélen befelé tolt kétsoros felirat a számozott
+ * körre csúszott. Most a felirat a kör külső oldalára kerül (kör sugara + margó, a sugár irányában), és
+ * ütközésnél (szél, kör, jelvény, középfelirat, másik felirat, nyilas gyűrű) elfordul / kijjebb megy;
+ * ha így sem fér el, a gyűrű sugara csökken.
+ */
+const CYCLE_W = 400, CYCLE_H = 400, CYCLE_R_MAX = 104, CYCLE_R_MIN = 60;
+const LINE_H = 24, ASCENT = 17, DESCENT = 5, CHAR_EM = 0.62, EDGE = 2, GAP = 2;
+const BADGE_R = 13;
+
+type Box = { l: number; t: number; r: number; b: number };
+type Circle = { x: number; y: number; r: number };
+export type CycleLabelLayout = { lines: string[]; x: number; top: number };
+export type CycleLayout = { R: number; node: number; labels: CycleLabelLayout[] };
+
+const boxesHit = (a: Box, b: Box) => a.l < b.r + GAP && b.l < a.r + GAP && a.t < b.b + GAP && b.t < a.b + GAP;
+const boxCircleHit = (b: Box, c: Circle) =>
+  Math.hypot(Math.max(b.l, Math.min(c.x, b.r)) - c.x, Math.max(b.t, Math.min(c.y, b.b)) - c.y) < c.r + GAP;
+/** A doboz legközelebbi pontjának távolsága a középponttól. */
+const boxDist = (b: Box, x: number, y: number) => Math.hypot(Math.max(b.l, Math.min(x, b.r)) - x, Math.max(b.t, Math.min(y, b.b)) - y);
+
+/** A középső felirat (és holdábránál a Föld-kör) — a rajzolással azonos geometria. */
+function cycleCenter(center: string | undefined, hasMoon: boolean): { boxes: Box[]; circles: Circle[] } {
+  const cx = CYCLE_W / 2, c = CYCLE_H / 2;
+  if (!center) return { boxes: [], circles: [] };
+  const lines = twoLines(center, 16);
+  const size = hasMoon ? 16 : 17;
+  const w = Math.max(...lines.map((l) => l.length)) * size * CHAR_EM;
+  const first = hasMoon ? c + 52 - (lines.length - 1) * 10 : c + 6 - (lines.length - 1) * 11;
+  const last = first + (lines.length - 1) * (hasMoon ? 21 : 22);
+  return {
+    boxes: [{ l: cx - w / 2, r: cx + w / 2, t: first - size - 1, b: last + DESCENT + 1 }],
+    circles: hasMoon ? [{ x: cx, y: c, r: 30 }] : [],
+  };
+}
+
+const PHASE_ANGLE = (i: number, n: number) => (i / n) * 2 * Math.PI - Math.PI / 2;
+
+/** Tiszta elrendező: gyűrűsugár és feliratdobozok. Sosem dob, sosem hagy ki feliratot. */
+export function layoutCycle(labels: string[], center: string | undefined, hasMoon: boolean): CycleLayout {
+  const n = labels.length, node = n > 8 ? 18 : 22, cx = CYCLE_W / 2, c = CYCLE_H / 2;
+  const mid = cycleCenter(center, hasMoon);
+  const texts = labels.map((label, i) => {
+    const a = PHASE_ANGLE(i, n);
+    const lines = twoLines(label, Math.abs(Math.cos(a)) < 0.3 ? 9 : 6);
+    return { a, lines, w: Math.max(...lines.map((l) => l.length)) * 16 * CHAR_EM, h: (lines.length - 1) * LINE_H + ASCENT + DESCENT };
+  });
+  const offsets = [0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90];
+  const tries = offsets.flatMap((off) => [0, 6, 12].map((extra) => ({ off, extra, cost: Math.abs(off) / 15 + extra / 6 })))
+    .sort((p, q) => p.cost - q.cost);
+
+  const circlesAt = (R: number): Circle[] => labels.flatMap((_, i) => {
+    const a = PHASE_ANGLE(i, n), x = cx + R * Math.cos(a), y = c + R * Math.sin(a);
+    return [{ x, y, r: node }, { x: x + node * 0.72, y: y - node * 0.72, r: BADGE_R }];
+  });
+  // A gyűrű használható, ha a körök nem érnek egymáshoz és a középfelirathoz.
+  const ringOk = (R: number) => {
+    const cs = circlesAt(R);
+    const nodes = cs.filter((_, k) => k % 2 === 0);
+    if (nodes.length > 1 && Math.hypot(nodes[0].x - nodes[1].x, nodes[0].y - nodes[1].y) < 2 * node + 6) return false;
+    return cs.every((ci) => mid.boxes.every((b) => !boxCircleHit(b, ci)) && mid.circles.every((m) => Math.hypot(m.x - ci.x, m.y - ci.y) >= m.r + ci.r + GAP));
+  };
+
+  const place = (R: number, ring: boolean, bestEffort: boolean): CycleLabelLayout[] | null => {
+    const circles = [...circlesAt(R), ...mid.circles];
+    const placed: Box[] = [...mid.boxes];
+    const out: CycleLabelLayout[] = [];
+    for (const [i, t] of texts.entries()) {
+      const nx = cx + R * Math.cos(t.a), ny = c + R * Math.sin(t.a);
+      let chosen: { box: Box; bad: number; k: number } | null = null;
+      for (const [k, tr] of tries.entries()) {
+        const th = t.a + (tr.off * Math.PI) / 180, ux = Math.cos(th), uy = Math.sin(th);
+        const s = Math.abs(ux) * t.w / 2 + Math.abs(uy) * t.h / 2, d = node + 8 + tr.extra + s;
+        const bx = nx + ux * d, by = ny + uy * d;
+        const box = { l: bx - t.w / 2, r: bx + t.w / 2, t: by - t.h / 2, b: by + t.h / 2 };
+        const bad = (box.l < EDGE || box.t < EDGE || box.r > CYCLE_W - EDGE || box.b > CYCLE_H - EDGE ? 1 : 0)
+          + circles.filter((ci) => boxCircleHit(box, ci)).length
+          + placed.filter((pb) => boxesHit(box, pb)).length
+          + (ring && boxDist(box, cx, c) < R + 4 ? 1 : 0);
+        if (bad === 0) { chosen = { box, bad, k }; break; }
+        if (bestEffort && (!chosen || bad < chosen.bad)) chosen = { box, bad, k };
+      }
+      if (!chosen || (chosen.bad > 0 && !bestEffort)) return null;
+      placed.push(chosen.box);
+      out[i] = { lines: t.lines, x: (chosen.box.l + chosen.box.r) / 2, top: chosen.box.t };
+    }
+    return out;
+  };
+
+  const radii: number[] = [];
+  for (let R = CYCLE_R_MAX; R >= CYCLE_R_MIN; R -= 4) if (R === CYCLE_R_MAX || ringOk(R)) radii.push(R);
+  for (const ring of [true, false]) for (const R of radii) {
+    const got = place(R, ring, false);
+    if (got) return { R, node, labels: got };
+  }
+  return { R: CYCLE_R_MAX, node, labels: place(CYCLE_R_MAX, false, true)! };
+}
+
 export function CycleAnim({ params, caption }: AnimProps) {
-  const p = parseVisualParams("cycle", params) as CycleParams | null;
-  if (!p) return null;
+  const p = useMemo(() => parseVisualParams("cycle", params) as CycleParams | null, [params]);
+  const hasMoon = !!p?.phases.some((ph) => ph.moon !== undefined);
+  const layout = useMemo(() => (p ? layoutCycle(p.phases.map((ph) => ph.label), p.center, hasMoon) : null), [p, hasMoon]);
+  if (!p || !layout) return null;
   const n = p.phases.length;
   // 400×400 rajzterület: 375 px-es telefonon (≈ 0,77-es skála) a 16-os betű ≈ 12 px marad (böngészőben mérve).
-  const W = 400, H = 400, cx = W / 2, c = H / 2, R = 104, node = n > 8 ? 18 : 22;
-  const hasMoon = p.phases.some((ph) => ph.moon !== undefined);
+  const W = CYCLE_W, H = CYCLE_H, cx = W / 2, c = H / 2, { R, node } = layout;
   const at = (i: number) => {
-    const a = (i / n) * 2 * Math.PI - Math.PI / 2;
+    const a = PHASE_ANGLE(i, n);
     return { x: cx + R * Math.cos(a), y: c + R * Math.sin(a), a };
   };
   return (
@@ -103,28 +203,19 @@ export function CycleAnim({ params, caption }: AnimProps) {
           )
         )}
         {p.phases.map((phase, i) => {
-          const { x, y, a } = at(i);
-          const ly = c + (R + node + 16) * Math.sin(a);
-          const anchor = Math.abs(Math.cos(a)) < 0.3 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
-          // Élő mérés (375 px, 8 fázis): a 45°-os „Növő hold” kilógott. Oldalt rövidebb sorok, és ha a becsült
-          // szélesség (félkövér ≈ 0,62 em/betű) így sem fér ki, a felirat beljebb csúszik.
-          const lines = twoLines(phase.label, anchor === "middle" ? 9 : 6);
-          const widest = Math.max(...lines.map((line) => line.length * 16 * 0.62));
-          let lx = cx + (R + node + 14) * Math.cos(a);
-          if (anchor === "start") lx = Math.min(lx, W - 4 - widest);
-          else if (anchor === "end") lx = Math.max(lx, 4 + widest);
-          else lx = Math.min(W - 4 - widest / 2, Math.max(4 + widest / 2, lx));
+          const { x, y } = at(i);
+          const label = layout.labels[i];
           const color = PALETTE[i % PALETTE.length];
           return (
-            <g key={i}>
+            <g key={i} data-phase={i}>
               {phase.moon !== undefined
                 ? <Moon cx={x} cy={y} r={node} lit={phase.moon} waxing={phase.waxing ?? true} />
                 : <circle cx={x} cy={y} r={node} fill={color} fillOpacity="0.9" />}
               {/* Témától független jelvény (mérve: a --card a lecke témájától eltérhet, 1,2:1 kontraszt). */}
               <circle cx={x + node * 0.72} cy={y - node * 0.72} r={13} fill="#ffffff" stroke={color} strokeWidth="2.5" />
               <text x={x + node * 0.72} y={y - node * 0.72 + 5.5} textAnchor="middle" fontSize="16" fontWeight="700" fill="#1e293b">{i + 1}</text>
-              {lines.map((line, k) => (
-                <text key={k} x={lx} y={ly + 5 + (k - (lines.length - 1) / 2) * 24} textAnchor={anchor} fontSize="16" fontWeight="600" fill="currentColor">{line}</text>
+              {label.lines.map((line, k) => (
+                <text key={k} x={label.x} y={label.top + ASCENT + k * LINE_H} textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">{line}</text>
               ))}
             </g>
           );
