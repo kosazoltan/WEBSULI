@@ -12,7 +12,7 @@ export const PROMPT_ROLES = [
   "extract", "ocr", "pedagogue", "author", "animator", "bank", "lektor", "repair",
   "scope", "corrector", "web-research", "web-extract", "web-author", "web-lektor", "web-repair",
   "html-improve", "html-fix", "creator-analyze", "creator-chat", "quiz-generator",
-  "kid-text-fixer", "instruction-checker", "bank-verifier", "blind-solver", "figure-check",
+  "kid-text-fixer", "instruction-checker", "instruction-points", "bank-verifier", "blind-solver", "figure-check",
   "topic-focus", "gate-helper", "quiz-polish",
 ] as const;
 export type PromptRole = (typeof PROMPT_ROLES)[number];
@@ -67,7 +67,7 @@ export const RULE_ROLES: Record<string, readonly PromptRole[]> = {
   oral_written: BANK_LIKE,
   coverage: ["pedagogue", "author", "repair", "web-author", "lektor"],
   teaching_depth: TEACHING,
-  source_fidelity: ["extract", "web-research", "web-extract", ...TEACHING, ...REVIEW],
+  source_fidelity: ["extract", "web-research", "web-extract", "instruction-points", ...TEACHING, ...REVIEW],
   review_evidence: REVIEW,
   html_complete: ["web-author", "html-improve", "html-fix", "creator-chat"],
   citations: ["web-author", "web-research"],

@@ -32,6 +32,7 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
     produced: {
       approvedOutline?: boolean;
       qualityNotes?: Array<{ reason?: string; note?: string; round?: number }>;
+      gaps?: Array<{ id: string; point: string; reason: string }>;
     };
   }>({
     queryKey: ["/api/studio/jobs", jobId],
@@ -145,6 +146,20 @@ export function JobMonitor({ jobId, onDone }: JobMonitorProps) {
             <CheckCircle2 className="w-4 h-4" />
             {view.stepLabel === "Kész" ? "A lecke elkészült." : "Ez a lépés elkészült."}
           </p>
+        )}
+
+        {Array.isArray(data.produced.gaps) && data.produced.gaps.length > 0 && (
+          <div className="rounded border border-slate-300 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2" data-testid="studio-instruction-gaps">
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4" />
+              A tanár kérésének forrásból nem igazolható pontjai (ezeket a lecke nem tanítja)
+            </p>
+            <ul className="text-sm text-slate-800 dark:text-slate-200 list-disc list-inside space-y-1">
+              {data.produced.gaps.map((g) => (
+                <li key={g.id}>{g.point} — {g.reason}</li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {Array.isArray(data.produced.qualityNotes) && data.produced.qualityNotes.length > 0 && (

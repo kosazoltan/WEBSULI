@@ -12,8 +12,9 @@ import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
 import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, splitLimitBlockers } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
 import { requireRoleForStep } from "../../shared/instruction-bundles/roles";
-import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
+import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, parseInventoryCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
+import { buildInstructionPointsPrompt, buildInventory, gapPoints, INSTRUCTION_POINTS_MODEL, inventoryConcepts, inventoryHash, ownerInventoryOf, parseInstructionPointCandidates, type InstructionInventory } from "./instruction-points";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
@@ -322,7 +323,53 @@ function pedagogueInputOf(map: StepMap) {
 function ownerOf(job: JobView): OwnerContext | undefined {
   const instruction = typeof job.output?.ownerInstruction === "string" ? job.output.ownerInstruction : undefined;
   const corrections = Array.isArray(job.output?.sourceCorrections) ? job.output.sourceCorrections as SourceCorrection[] : undefined;
-  return instruction || corrections?.length ? { instruction, corrections } : undefined;
+  // U3 (C14): a pontjegyzék a kérés mellett utazik — a tervező, a szerző és a lektor azonosítókkal kapja.
+  const inv = job.output?.instructionInventory as InstructionInventory | undefined;
+  const inventory = inv && Array.isArray(inv.points) ? ownerInventoryOf(inv) : undefined;
+  return instruction || corrections?.length ? { instruction, corrections, ...(inventory ? { inventory } : {}) } : undefined;
+}
+
+/**
+ * U3 (C14): a tanár kérésének pontjegyzéke EGYSZER, a tervezés előtt (két független kivonat → unió → állapot). Az igazolt
+ * pont kiegészítő fogalom (a szerző csak a tudástárból tanít); a nem igazolt pont `gaps` (a tanárnak jelezve). A mérés
+ * hibája nem állítja meg a gyártást (fail-open), de a jegyzék hiánya naplózott.
+ */
+async function ensureInstructionInventory(
+  job: JobView,
+  map: { meta: { title: string; subject: string; classroom: number; sourceText?: string | null }; concepts: MapConcept[] },
+  store: PipelineStore,
+  providerFactory: (model: string, step?: string) => IAIProvider,
+  keyConfigured: (model: string) => boolean,
+): Promise<InstructionInventory | undefined> {
+  const request = typeof job.output?.ownerInstruction === "string" ? job.output.ownerInstruction.trim() : "";
+  if (!request) return undefined;
+  const hash = inventoryHash(request, map.meta.sourceText);
+  const cached = job.output?.instructionInventory as InstructionInventory | undefined;
+  if (cached?.hash === hash) return cached;
+  if (!keyConfigured(INSTRUCTION_POINTS_MODEL)) { logger.warn(`[STUDIO] Pontjegyzék elmaradt (${job.id}): nincs kulcs a(z) ${INSTRUCTION_POINTS_MODEL} modellhez`); return undefined; }
+  try {
+    const passes = [];
+    for (const pass of [1, 2] as const) {
+      const prompt = buildInstructionPointsPrompt(request, map.meta.sourceText, map.meta, pass);
+      const result = await callStepModel(providerFactory(INSTRUCTION_POINTS_MODEL, "instructionCheck"), {
+        step: "pedagogue", policy: "instructionCheck", role: "instruction-points", model: INSTRUCTION_POINTS_MODEL, system: prompt.system, user: prompt.user,
+      });
+      passes.push(parseInstructionPointCandidates(result.json, request));
+    }
+    const inventory = buildInventory(passes, request, map.meta.sourceText, hash);
+    const previousExtra = (job.output?.instructionConcepts as MapConcept[] | undefined) ?? [];
+    const known = new Set([...map.concepts.map((c) => c.localId), ...previousExtra.map((c) => c.localId)]);
+    const added = inventoryConcepts(inventory).filter((c) => !known.has(c.localId));
+    for (const c of added) map.concepts.push(c);
+    const gaps = gapPoints(inventory);
+    logger.info(`[STUDIO] Pontjegyzék (${job.id}): ${inventory.points.length} pont (${passes[0].length}+${passes[1].length} jelölt), igazolt ${inventory.points.filter((p) => p.content === "pending").length}, hiány ${gaps.length}, kizárt ${inventory.excluded.length}${inventory.truncated ? ", CSONKA kérés" : ""}`);
+    job.output = { ...job.output, instructionInventory: inventory, gaps, ...(added.length ? { instructionConcepts: [...previousExtra, ...added] } : {}) };
+    await store.saveStep(job.id, { output: job.output });
+    return inventory;
+  } catch (error) {
+    logger.warn(`[STUDIO] A pontjegyzék elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+    return undefined;
+  }
 }
 
 function promptMapOf(map: StepMap) {
@@ -501,6 +548,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const proposedWorld = ((job.output?.visual as { world?: string } | undefined)?.world as VisualWorldId | undefined)
         ?? designFromInstruction(ownerOf(job)?.instruction)?.world ?? pickVisualWorld().id;
       const world = visualWorld(proposedWorld) ?? pickVisualWorld();
+      // U3 (C14): a pontjegyzék a tervezés ELŐTT, egyszer — a tervező már azonosítós pontokat rendel fejezethez.
+      await ensureInstructionInventory(job, map, store, providerFactory, keyConfigured);
       const owner = ownerOf(job);
       input = { ...pedagogueInputOf(map), visual: world.id, ...(owner ? { owner } : {}) };
       system = await promptLookup(
@@ -1432,16 +1481,25 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     // Review #152: csak a MÉRÉS fail-open (modell, séma); a javítókör mentésének hibája nem nyelhető el.
     let points: InstructionPoint[] | undefined;
     try {
-      const hash = instructionCheckHash(ownerInstruction, parsed.data, map.meta.sourceText);
+      // U3 (C14/§C-V/6): a jegyzék azonosítóihoz mért ítélet; a bizonyíték csak a megnevezett fejezet törzsszövegéből.
+      const inventory = job.output?.instructionInventory as InstructionInventory | undefined;
+      const hash = instructionCheckHash(ownerInstruction, parsed.data, map.meta.sourceText, inventory?.hash);
       const cached = job.output?.instructionCheck as InstructionCheck | undefined;
       points = cached?.hash === hash ? cached.points : undefined;
       if (!points) {
-        const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data, map.meta.sourceText);
+        const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data, map.meta.sourceText, inventory);
         const result = await callStepModel(models.providerFactory(INSTRUCTION_CHECK_MODEL, "instructionCheck"), {
           step: "gate" as StudioStep, policy: "instructionCheck", role: "instruction-checker", model: INSTRUCTION_CHECK_MODEL, system: prompt.system, user: prompt.user,
         });
-        points = parseInstructionCheck(result.json, parsed.data, map.meta.sourceText);
-        job.output = { ...job.output, instructionCheck: { hash, points } satisfies InstructionCheck };
+        if (inventory) {
+          const check = parseInventoryCheck(result.json, parsed.data, map.meta.sourceText, inventory);
+          points = check.points;
+          if (!check.complete) logger.warn(`[STUDIO/GATE] Tanári kérés (${job.id}): RÉSZLEGES ellenőrző-jelentés, nem jelentett azonosítók: ${check.missingIds.join(", ")}`);
+          job.output = { ...job.output, instructionCheck: { hash, points, complete: check.complete, missingIds: check.missingIds } satisfies InstructionCheck };
+        } else {
+          points = parseInstructionCheck(result.json, parsed.data, map.meta.sourceText);
+          job.output = { ...job.output, instructionCheck: { hash, points } satisfies InstructionCheck };
+        }
       }
     } catch (error) {
       points = undefined;
@@ -1522,6 +1580,12 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       note: `Forrás/füzet-hivatkozás maradt (${references.length}): ${references.slice(0, 6).map((r) => `${r.path}: „${r.text.slice(0, 80)}”`).join(" | ")}`,
       round: job.round,
     });
+  }
+  // U3 (C14): a forrásból nem igazolható tanári pontok a leckén és a jobban is jelölt hiányok (nem néma kihagyás).
+  const gaps = Array.isArray(job.output?.gaps) ? job.output.gaps as Array<{ id: string; point: string; reason: string }> : [];
+  if (gaps.length) {
+    await store.upsertLesson(job.lessonId, job.mapId, { ...parsed.data, gaps });
+    qualityNotes = appendQualityNote(qualityNotes, { reason: "instruction_gaps", note: `A tanár kérésének forrásból nem igazolható pontjai (nem tanítjuk): ${gaps.map((g) => `${g.point} — ${g.reason}`).join(" | ").slice(0, 700)}`, round: job.round });
   }
   const quality = {
     removed: choiceGate.removed,

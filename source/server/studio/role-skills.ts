@@ -96,6 +96,7 @@ Kizárólag JSON: { "sections": [{ "heading", "conceptIds": string[], "plannedBl
 4. Tévhitek: csak a forrásból levezethető, létező conceptId-hoz kötve, tömören.
 4b. Megjelenés és változatosság: ha a TANÁR KÉRÉSE stílust vagy közönséget nevez meg (pl. „rózsaszín, kislánynak”), a világot ahhoz választod; különben a tantárgyhoz és a korosztályhoz. A fejezet-emoji fejezetenként más. Az effekteket (különlegességeket) a program választja leckénként — azokat nem tervezed.
 5. Lefedettség: minden core és a supporting ≥ 90 %-a szerepeljen valamelyik fejezet conceptIds listájában.
+6. Tanári pontjegyzék (ha a prompt adja): minden IGAZOLT pontot pontosan egy fejezet instructionPointIds mezőjébe rendelsz (azonosítóval), a fejezet conceptIds-e a pont fogalmát is tartalmazza; a nem igazolt (nincs a forrásban / eldönthetetlen) pontot nem tervezed be.
 ## Tilalmak
 - Nem létező, átírt vagy összevont fogalom-azonosító; üres conceptIds; ismétlődő fejezetcím; 13+ fejezet.
 - A forrás tényeinek kitalálása, kiegészítése, javítása; a térképen nem szereplő tananyag betervezése.
@@ -117,7 +118,7 @@ Kizárólag JSON, a Lesson séma szerint: title, subject, classroom, mapId, sour
 4. check: 2–5 opció, egy helyes, minden opcióhoz visszajelzés; a fejezet tanításából.
 5. recap: 2–4 tömör pont. Minden nem-recap blokk coversConceptIds ≥ 1 valódi id.
 6. Javító körben: CSAK a jegyzetekben megnevezett hibát javítod; a nem érintett fejezeteket karakterre változatlanul adod vissza (a bank ezekre épül újra, ha változnak).
-7. Ha a prompt „TANÁR KÉRÉSE” vagy „FORRÁS-HELYESBÍTÉSEK” blokkot tartalmaz: a kérés szabja a terjedelmet/szintet/hangsúlyt, a helyesbítés-lista alakja a mérce (a térkép már azt tartalmazza).
+7. Ha a prompt „TANÁR KÉRÉSE” vagy „FORRÁS-HELYESBÍTÉSEK” blokkot tartalmaz: a kérés szabja a terjedelmet/szintet/hangsúlyt, a helyesbítés-lista alakja a mérce (a térkép már azt tartalmazza). A „TANÁRI PONTOK FEJEZETENKÉNT” listát a megnevezett fejezet explain/example/recap szövege mondja ki, a forrás idézete alapján, közvetlenül; a NINCS A FORRÁSBAN pontot nem tanítod és saját tudásból nem pótlod (a program hiányként jelzi).
 7b. Változatosság: a fejezetek ne egy kaptafára készüljenek — a példa lehet mini-történet, összehasonlítás, „tudtad?” érdekesség vagy lépéssor, a check kérdésformája is váltakozzon; a tény, a szám és a fogalom szavai nem változnak.
 8. Bejárás és belső igazság: a vázlat MINDEN fejezetét megírod, a középsőket is ugyanolyan mélységben; a szöveg nem hivatkozik olyanra, ami nincs a leckében („ahogy láttuk…”), a check helyes opciója és visszajelzése egyezik, minden végeredményt újraszámolsz.
 9. Kiemelés: a vázlat keyPhrases kifejezéseit a fejezet explain szövegében vagy recap pontjaiban **kettős csillaggal** emeld ki — pontosan a kifejezést, blokkonként ≤ 3, egész mondatot soha; kérdésben, opcióban, példa lépésében nem.

@@ -41,7 +41,9 @@ export type AutonomousReason =
   /** Spec 2026-09-30-nem-elakado-kozzetetel: forrás/füzet-hivatkozás maradt a gyereknek szóló szövegben. */
   | "source_reference"
   /** Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés egy tartalmi pontja a javítás után is hiányzik. */
-  | "instruction_missing";
+  | "instruction_missing"
+  /** Spec 2026-09-30-utasitasrendszer-rendbetetel (U3, C14): a kérés forrásból nem igazolható pontjai — nem tanítjuk, jelezzük. */
+  | "instruction_gaps";
 
 export type AutonomousInput = {
   reason: AutonomousReason;
@@ -71,6 +73,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   gate_limit_accepted: "A kapu a körlimiten nem-ténybeli hiányt mért (fedettség ≥ 95/80%) — a lecke elkészült, az okok a job kimenetében.",
   source_reference: "A gyereknek szóló szövegben forrás- vagy füzethivatkozás maradt — a lecke elkészült, a helyek a job kimenetében.",
   instruction_missing: "A tanári kérés egy vagy több pontja a javítás után is hiányzik — a lecke elkészült, a pontok a job kimenetében.",
+  instruction_gaps: "A tanári kérés egy vagy több pontját a forrás nem igazolja — a lecke ezeket nem tanítja, a pontok a job kimenetében és a panelen.",
 };
 
 /**
