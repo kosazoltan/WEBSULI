@@ -663,3 +663,12 @@ Tulajdonosi döntés: SVG + 3D, JPG/HTML nem. Unit 1752/1752, CI zöld, új E2E 
 Kézi javítás (`mezo-merge-fix`): „Babilon városa Kr. e. 2500 körül jött létre” + babiloniak, papkirály / papok és katonák,
 ~50 „a forrás / a füzet” hivatkozás ki a gyereknek szóló szövegből, 2 gyenge másodábra ki; kapuk zöldek, visszaolvasva.
 A régi anyagok (8ed51fa9, 86dfc04d) a tulajdonos döntésére várnak (nem töröltük).
+
+## 2026-09-30 (délután 2.) — nem elakadó közzététel, 1. szelet (PR #151, merge `0841619`)
+Tulajdonosi döntés: a 95%-os lecke jó; hibás banktétel/ábra kivehető, tényhiba a tanításban nem publikálható.
+D1 bug: a 7.4 végkapu konvergencia nélkül sorolt újra → közös besoroló (`limit-policy.ts`). D2: limiten ábra kivehető,
+tanítási `coverage_gap` figyelmeztetés (kivéve vak megoldás eltérésekor, és kivéve kivehető elemre mutatót), tényhibára
+1 célzott szerzői kör (keret függvényében), utána bukás. D3: kapu a limiten publikál, ha a megalapozott fedettség
+core ≥ 95%, kieg. ≥ 80%. D4: forrás/füzet-hivatkozás őr (gépi törlés + `kid-text-fixer` átírás; Mezopotámia-mentés 55 → 2).
+D6: `noteSectionKey` a zárójeles útvonalat is fejezet-kulcsnak veszi. Unit 1772/1772, CI zöld; visszajátszás 30 nap valódi
+bukásán: 11/11 publikálna. Nyitott szeletek: tanári ellenőrzőlista-kapu, bankcsomag részleges átvétele, modellhiba-tűrés.
