@@ -650,3 +650,16 @@ a glm-5.3-flash 5/5 (11–53 s) → a fókusznál a glm megy elöl, a deepseek a
 **#149 Témafókusz-résztéma** (merge `b495b32`): a #148 utáni ellenőrző mérés szerint a glm 4/8-szor NEM résztémának vette a
 füzetlap pontjait felsoroló kérést („a forrás egészét kéri” kétértelmű) → a teljes 55 fogalmas térkép maradt volna. A prompt
 most a tudástár fogalmaihoz méri a résztémát: Mezopotámia 10/10 szűk, stílus-kérés 5/5 széles, oszthatóság 5/5 szűk; a lánc 6–8 s.
+
+## 2026-09-30 (délután) — ábratervező ügynök + 3D-jelenet (PR #150, merge `5e0d27d`), Mezopotámia összefésülés
+**Gyökérok („primitív ábrák”):** az ábrakészítő (már Opus 5.5) egy hívásban, 16k tokenből rajzolta mind a 11 fejezet ábráját
+(665–1950 karakteres SVG-k). Bake-off (3 fejezet × Opus 5.5 / GPT-6 Luna / Terra, fejezetenként külön hívás): Opus 5.5 a legjobb.
+**Kód:** fejezetenkénti tervező (`visual-designer.ts`, 4 párhuzamos, high/24k, próba-beillesztés, 1 célzott újrakérés, csak az
+ábra nélküli/gyenge fejezet), új ábratervező-skill, `sparse` gyenge-osztály, új `scene3d` ábrafajta (three.js, forgatható,
+feliratok ütközés-feloldással), kontraszt-őr: a halvány vonal saját árnyalatában sötétül (a kék folyó nem lesz fekete).
+Tulajdonosi döntés: SVG + 3D, JPG/HTML nem. Unit 1752/1752, CI zöld, új E2E `tests/scene3d.spec.ts`.
+**Mezopotámia összefésülés:** élő futás (füzetfotó + a két régi térkép 6 webes oldala, tanári lista) → lecke `bdcddf67`, anyag
+`880b4047`, 1876 s, fedettség 10/10 + 7/7, 12 fejezet, 28/64/126. Hammurapi-fejezet a tulajdonos kérésére marad.
+Kézi javítás (`mezo-merge-fix`): „Babilon városa Kr. e. 2500 körül jött létre” + babiloniak, papkirály / papok és katonák,
+~50 „a forrás / a füzet” hivatkozás ki a gyereknek szóló szövegből, 2 gyenge másodábra ki; kapuk zöldek, visszaolvasva.
+A régi anyagok (8ed51fa9, 86dfc04d) a tulajdonos döntésére várnak (nem töröltük).
