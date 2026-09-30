@@ -224,6 +224,7 @@ Kizárólag JSON: { "items": [{ "path", "text" }] } — minden kapott path-hoz p
 1. A tartalmat KÖZVETLENÜL állítod: „a forrás Istárt a szerelem istenének nevezi” → „Istár a szerelem istennője volt”; „Babilon városa Kr. e. 2500 körül szerepel a füzetben” → „Babilon városa Kr. e. 2500 körül jött létre”.
 2. Minden szám, évszám, név és állítás változatlan; csak a hivatkozás tűnik el. A kérdés kérdés marad, a „Helyes:”/„Nem helyes:” kezdet és a **kiemelés** megmarad.
 3. Rövid, a korosztálynak érthető magyar mondat; a hossz közel az eredetihez.
+4. Ha a mondat NEM a lecke forrására hivatkozik — földrajzi forrás („a Duna forrása”), történelmi forrás elemzése („a forrás megbízhatósága”), utasítás a gyereknek („írd a füzetedbe”) —, a szöveget VÁLTOZATLANUL adod vissza.
 ## Tilalmak
 - Új tény, szám, név; a mondat jelentésének megváltoztatása; a forrás, a füzet, a tankönyv, a tananyag szó bármilyen alakban.
 - Próza a JSON körül; kimaradt vagy kitalált path.

@@ -1047,7 +1047,11 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // Spec 2026-09-30-nem-elakado-kozzetetel (D2): a limiten a hiány-jellegű tanítási blokkoló figyelmeztetés — a kapu
       // ugyanezt a szabályt használja (limit-policy), így a kettő nem dönthet eltérően.
       const atLimit = job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair;
-      const notes = downgradeAtLimit(convergence.notes, atLimit);
+      // Review PR #151: ha a lektor saját (vak) megoldása eltér a leckétől, egy „hiány” jegyzet számolási hibát takarhat —
+      // ilyenkor nincs leminősítés, és a limiten maradt hiány is tényhibaként buktat. A kapu ugyanezt a jelzőt használja.
+      const limitDowngrade = atLimit && !mismatches.length;
+      job.output = { ...job.output, limitDowngrade };
+      const notes = downgradeAtLimit(convergence.notes, limitDowngrade);
       await store.saveNotes(job.id, notes, job.round);
       const blockers = notes.filter((n) => n.blocking).length;
       for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
@@ -1063,6 +1067,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         // Spec 2026-09-29-limit-banktetel-kivetel + 2026-09-30-nem-elakado-kozzetetel (D2): a kivehető (banktétel, check,
         // ábra) kiesik a kapun; tényhiba a tanításban soha nem publikálható — ha van keret, EGY célzott szerzői javítás jár.
         const split = splitLimitBlockers(job.output?.lesson as Lesson | undefined, blockingNotes);
+        if (!limitDowngrade) split.factual.push(...split.incomplete.splice(0));
         if (split.factual.length) {
           const repairBudget = ["author", "animator", "lektor", "gate"].every((s) => workflowStepVisitsLeft(s) > 0);
           const teaching = job.output?.lesson as Lesson | undefined;
@@ -1384,7 +1389,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     // Spec 2026-09-30-nem-elakado-kozzetetel (D1): UGYANAZ a besorolás, mint a lektor lépésben (konvergencia + limit-szabály);
     // eddig a konvergencia nélküli újrabesorolás egy figyelmeztetéssé minősített jegyzeten buktatta a kész leckét.
     const reviewNotes = report.success
-      ? downgradeAtLimit(classifyReviewNotes(report.data.notes, gatePriorBlockers, job.round), job.round >= MAX_AUTHOR_ROUNDS)
+      ? downgradeAtLimit(classifyReviewNotes(report.data.notes, gatePriorBlockers, job.round), job.round >= MAX_AUTHOR_ROUNDS && job.output?.limitDowngrade === true)
       : [];
     if (!report.success || reviewNotes.some(unresolvedBlocker)
       || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {

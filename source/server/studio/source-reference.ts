@@ -11,7 +11,7 @@ import { withSupportSkill } from "./support-skills";
  */
 
 // Csak a HIVATKOZÓ fordulat (a forrás, a füzetben, forrás szerint) — a „Duna forrása” (földrajzi forrás) nem.
-const MENTION = /\b[Aa] (?:forrás|füzet|tankönyv)(?:ban|ben|ból|ből|ra|re|nak|nek|ot|et)?\b|\b(?:forrás|füzet|tankönyv)(?:ban|ben)? szerint\b/;
+const MENTION = /(?<!\p{L})[Aa] (?:forrás|füzet|tankönyv)(?:ban|ben|ból|ből|ra|re|nak|nek|ot|et)?(?!\p{L})|(?<!\p{L})(?:forrás|füzet|tankönyv)(?:ban|ben)? szerint(?!\p{L})/u;
 // Bevezető fordulat: mondat közbeni „, a forrás szerint,” → „,”; „A forrás szerint X” → „X” (mondatkezdő nagybetűvel).
 const MID_SENTENCE = /,\s*a (?:forrás|füzet|tankönyv) szerint(?=[,.;:!?])/g;
 const LEADING = /\b[Aa] (?:forrás|füzet|tankönyv) szerint,?\s+(\S)/g;

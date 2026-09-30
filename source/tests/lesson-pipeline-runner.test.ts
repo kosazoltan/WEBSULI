@@ -2257,6 +2257,25 @@ test("nem-elakadó (D2): a limiten hiány-jellegű tanítási jegyzet (coverage_
   assert.ok((job.output?.quality as { warnings: string[] }).warnings.some((w) => /hiány/i.test(w)));
 });
 
+test("nem-elakadó (review #151): ha a lektor vak megoldása eltér, a limiten maradt „hiány” jegyzet tényhibaként buktat", async () => {
+  const notes = [{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Mi hiányzik: a számolás." }];
+  const { deps, store, job } = await limitSetup("lim-mismatch", notes, 3);
+  job.output = { ...job.output, targetedLektorRepairRound: MAX_AUTHOR_ROUNDS }; // a célzott kör már lefutott
+  await store.saveNotes("lim-mismatch", classifyNotes([{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Előző kör: ugyanez." }]), MAX_AUTHOR_ROUNDS - 1);
+  const inner = deps.providerFactory;
+  const mismatchDeps = { ...deps, providerFactory: (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
+      return { content: JSON.stringify({ solutions: [{ task: "6 · 4 : 2", own: "12", lesson: "10", match: false }], notes }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    } } as IAIProvider;
+  } };
+  const reviewed = await runPipelineStep("lim-mismatch", mismatchDeps);
+  assert.equal(reviewed.ok, false, JSON.stringify(reviewed));
+  assert.match(job.error ?? "", /tényhiba maradt, nem publikálható/);
+  assert.equal(job.output?.limitDowngrade, false);
+});
+
 test("nem-elakadó (D1): a lektor konvergenciával leminősített jegyzete a 7.4 kapun sem buktat (limit előtt is)", async () => {
   const notes = [{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Késői, új fejezeti hiány." }];
   const { deps, store, job } = await limitSetup("lim-conv", notes, 3);
