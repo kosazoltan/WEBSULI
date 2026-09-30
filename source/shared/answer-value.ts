@@ -8,7 +8,7 @@
  *
  * Szándékosan import-szegény (csak a közös kifejezés-kiértékelő): a kliens és a szerver ugyanezt futtatja.
  */
-import { ATOM, SIGN, atomValue, evaluateExpression } from "./arithmetic-expression";
+import { ATOM, OPS, SIGN, atomValue, evaluateExpression } from "./arithmetic-expression";
 
 /** A lecke pontozási szerződésének verziója (`experience.scoringVersion`); hiányzó mező = 1 (régi kulcsszó-pontozó). */
 export const LESSON_SCORING_VERSION = 2;
@@ -32,10 +32,65 @@ export type TypedGrade = { total: number; correct: number; verdicts: PartVerdict
 const gcd = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcd(b, a % b));
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
 
+/**
+ * A típusos referencia KIFEJEZÉSNYELVE (U1 végrehajtás 2. pont): egész, tizedes, közönséges és vegyes tört, `+ − · × * : ÷ /`,
+ * ZÁRÓJEL, előjel. Külön a közös `evaluateExpression`-től (review #159): az a bankszöveg állításait szűri, és a zárójeles
+ * állítást szándékosan nem ítéli meg („5 – (–6) = 11”); a referencia viszont egyetlen, teljes egészében kiértékelendő
+ * kifejezés. `valid`: a szöveg maradék nélkül a nyelv része; `value`: az értéke (null, ha pl. nem pontos az osztás).
+ */
+export function parseReferenceExpression(expr: string): { valid: boolean; value: number | null } {
+  const tokens = expr.match(new RegExp(`${ATOM}|[${OPS}()]|\\S`, "g")) ?? [];
+  let pos = 0;
+  const invalid = { valid: false, value: null };
+  const peek = () => tokens[pos];
+  const isOp = (t: string | undefined, set: RegExp) => t !== undefined && t.length === 1 && set.test(t);
+  const factor = (): number | null | undefined => {
+    const t = peek();
+    if (t === undefined) return undefined;
+    if (/^[-−–]$/.test(t)) { pos++; const v = factor(); return v === undefined || v === null ? v : -v; }
+    if (t === "(") { pos++; const v = expression(); if (peek() !== ")") return undefined; pos++; return v; }
+    if (new RegExp(`^(?:${ATOM})$`).test(t)) { pos++; const v = atomValue(t); return Number.isNaN(v) ? null : v; }
+    return undefined;
+  };
+  const term = (): number | null | undefined => {
+    let left = factor();
+    while (isOp(peek(), /[·×*:÷/]/)) {
+      const op = tokens[pos++]; const right = factor();
+      if (left === undefined || right === undefined) return undefined;
+      if (left === null || right === null) { left = null; continue; }
+      if (/[:÷/]/.test(op)) { left = right === 0 || Math.abs((left / right) * right - left) > 1e-9 ? null : left / right; } else left = left * right;
+    }
+    return left;
+  };
+  const expression = (): number | null | undefined => {
+    let left = term();
+    while (isOp(peek(), /[+\-−–]/)) {
+      const op = tokens[pos++]; const right = term();
+      if (left === undefined || right === undefined) return undefined;
+      left = left === null || right === null ? null : op === "+" ? left + right : left - right;
+    }
+    return left;
+  };
+  const value = expression();
+  if (value === undefined || pos !== tokens.length || !tokens.length) return invalid;
+  return { valid: true, value: value === null || !Number.isFinite(value) ? null : Math.round(value * 1e6) / 1e6 };
+}
+
 /** Az elvárt érték száma; null, ha nem értelmezhető (a bank-ellenőrzés ezt „undecidable”-ként bukja, pontozni nem szabad). */
 export function referenceValue(value: string): number | null {
-  const v = evaluateExpression(value.trim());
-  return v === null || !Number.isFinite(v) ? null : v;
+  return parseReferenceExpression(value.trim()).value;
+}
+/** `intermediate-step` referencia: a kért köztes állapot maga is a kifejezésnyelv mondata legyen (review #159: „eredmény” nem az). */
+export const isExpressionText = (value: string): boolean => parseReferenceExpression(value.trim()).valid;
+
+/**
+ * A pontozott ablak: csak az első `words` szó (szó = szám vagy betűsor — a pontozó 1. szabálya). A típusos érték is csak
+ * ebben kereshető (review #159: az 500. szó utáni helyes érték nem érhet pontot).
+ */
+export function answerWindow(answer: string, words = 500): string {
+  let n = 0;
+  for (const m of answer.matchAll(/\d+(?:[.,]\d+)?|\p{L}+/gu)) if (++n === words) return answer.slice(0, (m.index ?? 0) + m[0].length);
+  return answer;
 }
 
 /** Egyszerűsített közönséges tört: `p/q`, q > 1, lnko(p, q) = 1 (a „2/4” és a „0,5” nem az). */
@@ -58,6 +113,19 @@ export function normalizeExpressionText(s: string): string {
 
 const ATOM_RE = new RegExp(`(?:${SIGN}(?=\\d))?(?:${ATOM})`, "g");
 
+/**
+ * A kért köztes állapot a válasz normalizált szövegében TOKENHATÁRON álljon (review #159, P1): a „35+64-12” nem lehet a
+ * „135+64-12” vagy a „35+64-120” részlete — a szomszédos karakter nem lehet számjegy, tizedespont vagy törtvonal.
+ */
+export function containsExpressionState(haystack: string, want: string): boolean {
+  if (!want.length) return false;
+  const boundary = (c: string | undefined) => c === undefined || !/[\d./]/.test(c);
+  for (let i = haystack.indexOf(want); i >= 0; i = haystack.indexOf(want, i + 1)) {
+    if (boundary(haystack[i - 1]) && boundary(haystack[i + want.length])) return true;
+  }
+  return false;
+}
+
 function unitPresent(answer: string, atomText: string, unit: string): boolean {
   const escaped = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
   return new RegExp(`${escaped(atomText)}\\s*${escaped(fold(unit))}`, "u").test(fold(answer));
@@ -67,15 +135,16 @@ function unitPresent(answer: string, atomText: string, unit: string): boolean {
  * A tanulói válasz részeredményeinek ítélete. A válaszban az elvárt értékek SORRENDBEN keresendők (részfeladatonként
  * előre haladva); közbeeső, más szám (indoklás, részszámítás) megengedett, felcserélt részeredmény nem.
  */
-export function gradeTypedAnswers(answer: string, answers: readonly TypedAnswer[]): TypedGrade {
+export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnswer[]): TypedGrade {
   const verdicts: PartVerdict[] = [];
+  const answer = answerWindow(rawAnswer);
   const atoms = [...answer.matchAll(ATOM_RE)].map((m) => ({ text: m[0], index: m.index ?? 0, value: atomValue(m[0].replace(/^[−–]/, "-")) }));
   let cursor = 0;
   let undecidable = false;
   for (const expected of answers) {
     if (expected.form === "intermediate-step") {
-      const want = normalizeExpressionText(expected.value);
-      const ok = want.length > 0 && normalizeExpressionText(answer).includes(want);
+      if (!isExpressionText(expected.value)) { undecidable = true; verdicts.push({ part: expected.part, ok: false, undecidable: true, reason: `A(z) ${expected.part} rész kért köztes alakja nem értelmezhető.` }); continue; }
+      const ok = containsExpressionState(normalizeExpressionText(answer), normalizeExpressionText(expected.value));
       verdicts.push({ part: expected.part, ok, reason: ok ? "A kért lépés szerepel." : `A(z) ${expected.part} részhez a kért alak (${expected.value}) hiányzik — értékazonos más alak nem elég.` });
       continue;
     }
@@ -107,7 +176,7 @@ export function referenceValueProblems(task: { id?: string; q: string; typedAnsw
   const problems: string[] = [];
   const chains = [...task.q.matchAll(new RegExp(`(?:${SIGN}(?=\\d))?(?:${ATOM})(?:\\s*[+\\-−–·×*:÷/]\\s*(?:${ATOM}))+`, "g"))].map((m) => m[0]).filter((c) => !/=/.test(c));
   for (const a of answers) {
-    if (a.form === "intermediate-step") continue;
+    if (a.form === "intermediate-step") { if (!isExpressionText(a.value)) problems.push(`${task.id ?? "feladat"}: a(z) ${a.part} rész kért köztes alakja („${a.value}”) nem a kifejezésnyelv mondata.`); continue; }
     const ref = referenceValue(a.value);
     if (ref === null) { problems.push(`${task.id ?? "feladat"}: a(z) ${a.part} rész referenciaértéke („${a.value}”) nem értelmezhető.`); continue; }
   }

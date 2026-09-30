@@ -89,8 +89,11 @@ test("a skill-segédek a futás csomagverziója szerint választanak: régi pill
   assert.ok(live.includes(ROLE_SKILLS.bank));
   const frozen = roleSkillBlock("bank", "websuli-runtime-2");
   assert.ok(frozen.includes(V2.ROLE_SKILLS_V2.bank));
-  // Ma az archívum és az élő szöveg azonos, ezért a verzió-hash is azonos → a folyamatban lévő bank-checkpoint nem vész el.
-  assert.equal(roleSkillVersion("bank", "websuli-runtime-2"), roleSkillVersion("bank", "websuli-runtime-3"));
+  // Az archív (runtime-2) skill-hash RÖGZÍTETT — a runtime-2 futás bank-checkpointja a mai élő szöveg változásától függetlenül
+  // érvényes marad; az élő (runtime-3) szöveg a review #159 eszközleírás-frissítése óta eltér, ezért a hash-e is más
+  // (a futó runtime-3 job a régi csomagot újraépíti — ez a B0 szerinti szándékos viselkedés, nem adatvesztés).
+  assert.equal(roleSkillVersion("bank", "websuli-runtime-2"), "e0cba995e067");
+  assert.notEqual(roleSkillVersion("bank", "websuli-runtime-2"), roleSkillVersion("bank", "websuli-runtime-3"));
   assert.ok(withSupportSkill("scope", "X", "websuli-runtime-2").includes(V2.SUPPORT_SKILLS_V2.scope));
   assert.ok(withSupportSkill("scope", "X").includes(SUPPORT_SKILLS.scope));
   assert.ok(withRepairSkill("X", "websuli-runtime-2").includes(V2.REPAIR_SKILL_V2));

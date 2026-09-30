@@ -1,5 +1,5 @@
 import type { OpenTask } from "./lesson-experience";
-import { gradeTypedAnswers } from "./answer-value";
+import { answerWindow, gradeTypedAnswers } from "./answer-value";
 
 /**
  * Spec 2026-09-30-utasitasrendszer-rendbetetel (U1): a pontozó két úton fut.
@@ -55,6 +55,29 @@ function wordHit(token: string, word: string): boolean {
 function conceptHit(tokens: string[], alternatives: readonly string[], tokenize: (s: string) => string[] = tokensOf): boolean {
   return alternatives.some(phrase => tokenize(phrase).every(word => tokens.some(token => wordHit(token, word))));
 }
+const OPERATOR_TOKEN = /^[+\-·:]$/;
+/**
+ * Kategóriakvóta (v2): hány KÜLÖNBÖZŐ csoportot talál a válasz úgy, hogy egy válasz-token csak egy csoportot igazolhat
+ * (review #159, P2: az „alma” egyetlen előfordulása nem két példa, ha két csoportban is szerepel).
+ */
+function distinctHits(tokens: string[], groups: ReadonlyArray<readonly string[]>): number {
+  const used = new Set<number>();
+  let found = 0;
+  for (const group of groups) {
+    let hit: number[] | null = null;
+    for (const phrase of group) {
+      const indices: number[] = [];
+      const complete = tokensOfV2(phrase).every(word => {
+        const i = tokens.findIndex((token, k) => !used.has(k) && !indices.includes(k) && wordHit(token, word));
+        if (i >= 0) indices.push(i);
+        return i >= 0;
+      });
+      if (complete) { hit = indices; break; }
+    }
+    if (hit) { hit.forEach(i => used.add(i)); found++; }
+  }
+  return found;
+}
 /** Generation diagnostics use the exact learner-side matcher, not another approximation. */
 export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "required">): string[][] {
   const tokens = tokensOf(answer).slice(0, 500);
@@ -87,9 +110,13 @@ export function evaluateOpenAnswerV1(answer: string, task: OpenTask): AnswerScor
  * egy sem → 0; némelyik → legfeljebb fél pont); a kategóriakvóta különböző elemeket számol (egy szinonimacsoport = 1 elem);
  * a `required` a szöveges részt méri; minWords/needsSentence/tagadás a v1 szabálya szerint.
  */
-export function evaluateOpenAnswerV2(answer: string, task: OpenTask): AnswerScore {
-  const tokens = tokensOfV2(answer).slice(0, 500);
-  if (tokens.length < task.minWords) return { state: "fail", score: 0, reason: "A válasz még túl rövid." };
+export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerScore {
+  // Review #159: a v2 tokenlista műveleti jelet is tartalmaz — a szószám (1. szabály: az írásjel 0 szó) és a típusos érték
+  // ugyanabból az 500 szavas ablakból számol.
+  const answer = answerWindow(rawAnswer);
+  const tokens = tokensOfV2(answer);
+  const wordCount = tokens.filter(t => !OPERATOR_TOKEN.test(t)).length;
+  if (wordCount < task.minWords) return { state: "fail", score: 0, reason: "A válasz még túl rövid." };
   let partialReason: string | null = null;
   if (task.typedAnswers?.length) {
     const grade = gradeTypedAnswers(answer, task.typedAnswers);
@@ -98,7 +125,7 @@ export function evaluateOpenAnswerV2(answer: string, task: OpenTask): AnswerScor
     if (grade.correct < grade.total) partialReason = `Részben jó: ${grade.total - grade.correct} részeredmény hibás vagy hiányzik. ${grade.verdicts.find(v => !v.ok)?.reason ?? ""}`.trim();
   }
   for (const rule of task.requiredDistinct ?? []) {
-    const distinct = rule.from.filter(group => conceptHit(tokens, group, tokensOfV2)).length;
+    const distinct = distinctHits(tokens, rule.from);
     if (distinct === 0) return { state: "fail", score: 0, reason: `A(z) „${rule.category}” kategóriából egy példa sincs a válaszban.` };
     if (distinct < rule.count) partialReason ??= `Részben jó: a(z) „${rule.category}” kategóriából ${rule.count} különböző példa kell, ${distinct} van.`;
   }
