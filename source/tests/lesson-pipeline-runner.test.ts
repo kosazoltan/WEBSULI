@@ -1312,7 +1312,8 @@ test("(q) fromMapBody: az üres törzs érvényes (a scope opcionális), a hián
  * 2026-09-09 — éles hiba: az animátor OpenRouter 429-en (rate limit) végleg elhalt,
  * pedig a FALLBACK_MODELS csak dokumentálva volt, a runner nem használta.
  * ------------------------------------------------------------------ */
-import { FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../server/ai/models";
+import { FALLBACK_MODELS, SECOND_FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../server/ai/models";
+import { lektorReportSchema } from "../server/studio/step-io";
 
 function makeFailoverDeps(opts: { failModels: Set<string>; cannedResponse: string }) {
   const base = makeDeps(opts.cannedResponse);
@@ -1347,6 +1348,35 @@ test("(m) modellhiba: az elsődleges modell 429-e után a lépés a FALLBACK_MOD
   const job = await store.loadJob("job-1");
   assert.equal(job?.status, "ok");
   assert.equal((job as { model?: string | null })?.model, fallback, "a job a ténylegesen használt modellt rögzíti");
+});
+
+// Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): élő bukás 2026-09-28 — az elsődleges ÉS a tartalék modell is hibázott.
+test("(m2) modellhiba: ha az elsődleges és a tartalék is hibázik, a második tartalék (más család) még lefuttatja a lépést", async () => {
+  const primary = resolveStudioModel("pedagogue");
+  const fallback = FALLBACK_MODELS.pedagogue!;
+  const last = SECOND_FALLBACK_MODELS.pedagogue;
+  assert.ok(new Set([primary, fallback, last]).size === 3);
+  assert.equal((SECOND_FALLBACK_MODELS as Record<string, string>).author, undefined, "a szerzőnek nincs idegen családú második tartaléka (tulajdonosi döntés 2026-09-29)");
+  assert.notEqual(providerForModel(SECOND_FALLBACK_MODELS.lektor), providerForModel(resolveStudioModel("author")), "a lektor független a szerzőtől");
+  const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({ failModels: new Set([primary, fallback]), cannedResponse: CANNED_PEDAGOGUE });
+  store.seed({ id: "job-2", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("job-2", { store, providerFactory, keyConfigured, promptLookup });
+  assert.equal(outcome.ok, true, JSON.stringify(outcome));
+  assert.deepEqual(calls, [primary, fallback, last]);
+  assert.equal(((await store.loadJob("job-2")) as { model?: string | null })?.model, last);
+
+  const all = makeFailoverDeps({ failModels: new Set([primary, fallback, last]), cannedResponse: CANNED_PEDAGOGUE });
+  all.store.seed({ id: "job-3", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const failed = await runPipelineStep("job-3", { store: all.store, providerFactory: all.providerFactory, keyConfigured: all.keyConfigured, promptLookup: all.promptLookup });
+  assert.equal(failed.ok, false);
+  assert.match((await all.store.loadJob("job-3"))?.error ?? "", /második tartalék/);
+});
+
+test("(m3) a lektor jelentése 40-nél több önálló megoldással sem bukik (levágva)", () => {
+  const solutions = Array.from({ length: 45 }, (_, i) => ({ task: `f${i}`, own: "1", lesson: "1", match: true }));
+  const parsed = lektorReportSchema.safeParse({ solutions, notes: [] });
+  assert.ok(parsed.success);
+  assert.equal(parsed.data.solutions?.length, 40);
 });
 
 // Spec-változás 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): a 2026-09-19-es eszköz-kiváltás („példa

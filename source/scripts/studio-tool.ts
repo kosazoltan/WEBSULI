@@ -16,6 +16,7 @@ import { arithmeticClaimProblems } from "../server/studio/tools/arithmetic-claim
 import { ensureSectionVisuals, deterministicSectionVisuals } from "../server/studio/section-visuals";
 import { lessonSchema } from "../shared/lesson-schema";
 import { TOOL_SKILLS } from "../server/studio/role-skills";
+import { salvagePacket } from "../server/studio/experience-builder";
 
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8")) as unknown;
 const [tool, ...args] = process.argv.slice(2);
@@ -54,6 +55,16 @@ switch (tool) {
     const concepts = Array.isArray(map) ? map : (map.concepts ?? []);
     const r = ensureSectionVisuals(lesson, concepts);
     out = { tool, added: r.added, modelCallNeeded: deterministicSectionVisuals(lesson, concepts) === null, result: r.lesson };
+    break;
+  }
+  case "bank-salvage": {
+    if (args.length < 2) usage();
+    // Kézi próba: a megadott hibalista (string[]) alapján egy körben kiveszi a megnevezett tételeket.
+    const issues = readJson(args[1]) as string[];
+    const packet = readJson(args[0]) as Parameters<typeof salvagePacket>[0];
+    let first = true;
+    const r = salvagePacket(packet, () => { const out = first ? issues : []; first = false; return out; });
+    out = { tool, removed: r?.removed ?? [], result: r?.packet ?? packet };
     break;
   }
   default:

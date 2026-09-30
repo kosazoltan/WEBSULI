@@ -223,6 +223,10 @@ Futtatás: automatikus; kézzel \`npm run studio:tool -- section-visuals <lecke.
 Mit tesz: a módszerek, feladatok (kérdés + minta) és kvízek (kérdés + magyarázatok) szövegében minden „a · b = c" alakú (+ − · : műveletű, zárójel nélküli) aritmetikai állítást kiszámol; a hamis állítás (pl. „12 · 2 = 48", „154 · 8 = 1238") a csomagot javító körre küldi a lektor előtt.
 Mit NEM tesz: zárójeles kifejezést, szöveges következtetést, mértékegység-átváltást nem ítél meg — ezek a lektoré.
 Futtatás: automatikus; kézzel \`npm run studio:tool -- arithmetic-claims <csomag.json>\`.`,
+  "bank-salvage": `### Eszköz: bank-salvage (a MENTŐ kísérlet után is hibás csomagra, kódból)
+Mit tesz: az „ID: …” hibás tételeket kiveszi (≤ 20%), a csomagot csak teljes ellenőrzés után veszi át.
+Mit NEM tesz: tételt nem javít, kvótát nem pótol — a kivett tétel hiányzik, ezért az első válaszod legyen hibátlan.
+Futtatás: automatikus; kézzel \`npm run studio:tool -- bank-salvage <csomag.json> <hibak.json>\`.`,
 } as const;
 export type ToolSkillName = keyof typeof TOOL_SKILLS;
 
@@ -232,7 +236,7 @@ export type ToolSkillName = keyof typeof TOOL_SKILLS;
 export const ROLE_TOOLS: Partial<Record<RoleSkillRole, ToolSkillName[]>> = {
   pedagogue: ["outline-autofix"],
   animator: ["section-visuals", "bank-packet-autofix", "arithmetic-claims"],
-  bank: ["bank-packet-autofix", "arithmetic-claims"],
+  bank: ["bank-packet-autofix", "arithmetic-claims", "bank-salvage"],
 };
 
 for (const [role, tools] of Object.entries(ROLE_TOOLS) as [RoleSkillRole, ToolSkillName[]][]) {

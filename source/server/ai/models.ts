@@ -92,6 +92,16 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
  */
 export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
 
+/**
+ * Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): a második tartalék, csak modellhívás-hibára. A SZERZŐ szándékosan
+ * nincs benne: tulajdonosi döntés 2026-09-29 (szerzomodell-gpt6-luna) — a szerző nem eshet ki a saját (openai)
+ * családjából, hogy a lektor független maradjon. A lektor második tartaléka ezért sem openai.
+ */
+export const SECOND_FALLBACK_MODELS = {
+  pedagogue: "gpt-5.6-terra",
+  lektor: "claude-opus-5-5",
+} as const satisfies Partial<Record<StudioStep, string>>;
+
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   extract: "grok-4.6",
   // Tulajdonosi döntés 2026-09-23: Gemini nem használható. Az OCR tartaléka és a kettős olvasás második,

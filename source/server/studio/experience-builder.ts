@@ -193,6 +193,36 @@ export function experienceSourcePrompt(lesson: Lesson, concepts: MapConcept[]): 
 }
 
 /** One content-addressed, independently validated packet per at most six concepts. */
+/**
+ * Spec 2026-09-30-nem-elakado-kozzetetel (3. szelet): a mentő kísérlet után is hibás csomag MEGMENTÉSE. A hibaüzenetben
+ * név szerint megjelölt tételek kikerülnek (legfeljebb a csomag 20%-a, legalább 2), és ha a maradék csomag MINDEN
+ * ellenőrzésen átmegy, átvesszük — a lecke nem bukik egy-két hibás tételen (tulajdonosi szabály: a hibás tétel kivehető).
+ * Élő bukások (21 nap): „A N. fejezet bankcsomagja a javító kör után sem megfelelő: … t6-gyak-2: hibás számítás …”.
+ */
+export function salvagePacket<P extends { methods: Array<{ id: string }>; tasks: Array<{ id: string }>; quiz: Array<{ id: string }> }>(
+  packet: P, validate: (packet: P) => string[], maxRounds = 3,
+): { packet: P; removed: string[] } | null {
+  const total = packet.methods.length + packet.tasks.length + packet.quiz.length;
+  const budget = Math.max(2, Math.floor(total * 0.2));
+  let current: P = structuredClone(packet);
+  const removed: string[] = [];
+  for (let round = 0; round <= maxRounds; round++) {
+    const issues = validate(current);
+    if (!issues.length) return removed.length ? { packet: current, removed } : null;
+    if (round === maxRounds) return null;
+    // Review #153: csak a TÉTELHIBA alakja számít („ID: …” a sor elején, vagy az ismétlődés-üzenet „…csomaggal: ID („”);
+    // szabad szöveges keresés egy „0” azonosítót a Zod-útvonalra („tasks.0.coversConceptIds”) is illesztene.
+    const named = (issue: string, id: string) => issue.startsWith(`${id}: `) || issue.includes(`csomaggal: ${id} (`);
+    const ids = [...current.methods, ...current.tasks, ...current.quiz].map((i) => i.id)
+      .filter((id) => issues.some((issue) => named(issue, id)));
+    if (!ids.length || removed.length + ids.length > budget) return null;
+    const drop = new Set(ids);
+    current = { ...current, methods: current.methods.filter((i) => !drop.has(i.id)), tasks: current.tasks.filter((i) => !drop.has(i.id)), quiz: current.quiz.filter((i) => !drop.has(i.id)) };
+    removed.push(...ids);
+  }
+  return null;
+}
+
 export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept[], deps: ExperienceBuildDeps): Promise<LessonExperience> {
   const plan = bankPlanSchema.parse(planLessonBank(lesson));
   const language = lessonLanguage(lesson.subject);
@@ -352,7 +382,15 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       const lastAttempt = attempt === PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS - 1;
       const arithmeticOnly = issues.length > 0 && issues.every(i => /hibás számítás/.test(i));
       if (parsed.success && lastAttempt && arithmeticOnly) deps.onToolFix?.("arithmetic-claims", issues.map(i => `figyelmeztetés (átengedve): ${i}`));
+      // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
+      const quotaAndValidate = (p: Packet) => {
+        const quota = packetSchema.safeParse(p);
+        return quota.success ? validate(quota.data) : quota.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
+      };
+      const salvaged = parsed.success && lastAttempt && issues.length && !arithmeticOnly ? salvagePacket(parsed.data, quotaAndValidate) : null;
+      if (salvaged) deps.onToolFix?.("bank-salvage", [`${unit.sectionIndex + 1}. fejezet: a mentő kísérlet után ${salvaged.removed.length} hibás tétel kivéve (${salvaged.removed.join(", ")}), a csomag többi része átvéve`]);
       if (parsed.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed.data;
+      else if (salvaged) packet = salvaged.packet;
       else {
         deps.onAttemptFailure?.(unit.sectionIndex, attempt, issues.join("; "));
         await workflowValidationFailure(issues.join("; "));
