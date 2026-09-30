@@ -2058,7 +2058,8 @@ export async function fixConceptOnLesson(
     const source = { ...mapRow, concepts: conceptRows.map(c => ({ ...c, examWeight: c.examWeight as ExamWeight })).sort((a, b) => a.localId.localeCompare(b.localId)) };
     const candidate = parsed.data;
     await workflowPhase("banks");
-    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user) => (await callStepModel(provider, { step: "author", role: "bank", model, system, user })).json });
+    // Review #160: a szigorú séma (U2/C8) ezen a bankúton is eljut a közvetlen OpenAI-szolgáltatóhoz (a közös bankhívó dönt az útról).
+    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user, _attempt, extra) => (await callBankPacketModel(provider, model, system, user, undefined, extra)).json });
     const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");

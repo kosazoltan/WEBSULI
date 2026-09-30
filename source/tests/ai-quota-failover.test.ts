@@ -67,3 +67,21 @@ test("gyár: közvetlen OpenAI-modellnél OpenRouter-kulccsal átállásra képe
   assert.ok(createStudioProvider("gpt-5.6-terra", 1000, 100, {}, { AI_INTEGRATIONS_OPENAI_API_KEY: "sk-openai" }) instanceof OpenAIProvider);
   assert.ok(createStudioProvider("z-ai/glm-5.3-flash", 1000, 100, {}, env) instanceof OpenRouterProvider, "OpenRouter-modell változatlan");
 });
+
+test("review #160: a hívásonkénti szigorú séma az elsődleges (közvetlen OpenAI) útra továbbmegy, a tartalék (OpenRouter) útra nem", async () => {
+  resetQuotaFailoverForTest();
+  const seen: Array<[string, unknown]> = [];
+  const rec = (name: string, fail = false): IAIProvider => ({
+    name, model: name,
+    async chat(_m: AIMessage[], _s?: AbortSignal, options?: unknown) { seen.push([name, options ?? null]); if (fail) throw new AIProviderQuotaError(name, "insufficient_quota"); return { content: "ok" }; },
+    async *streamChat() { yield { type: "done" as const }; },
+    async isAvailable() { return true; },
+  });
+  const rf = { type: "json_schema" as const, json_schema: { name: "x", strict: true, schema: { type: "object" } } };
+  await new QuotaFailoverProvider(rec("OpenAI"), () => rec("OpenRouter")).chat(msgs, undefined, { responseFormat: rf });
+  assert.deepEqual(seen, [["OpenAI", { responseFormat: rf }]], "az elsődleges megkapja a sémát");
+  seen.length = 0;
+  await new QuotaFailoverProvider(rec("OpenAI", true), () => rec("OpenRouter")).chat(msgs, undefined, { responseFormat: rf });
+  assert.deepEqual(seen, [["OpenAI", { responseFormat: rf }], ["OpenRouter", null]], "a tartalék út séma nélkül (JSON-mód + helyi validálás)");
+  resetQuotaFailoverForTest();
+});

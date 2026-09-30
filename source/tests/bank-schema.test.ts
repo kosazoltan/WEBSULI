@@ -5,23 +5,25 @@ import { experiencePacketSchema, openTaskSchema } from "../shared/lesson-experie
 import { callStepModel } from "../server/studio/run-step";
 import { callBankPacketModel } from "../server/studio/bank-call";
 import type { IAIProvider, AIMessage } from "../server/ai/AIProvider";
-import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { fusionFixture, standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { buildStructuredImprovement } from "../server/studio/structured-improvement";
 
 /* Spec 2026-09-30-utasitasrendszer-rendbetetel (U2b, C8): szigorú JSON-séma a bankcsomagra a közvetlen OpenAI-úton. */
 
-const counts = { methodMin: 2, taskCount: 5, taskMax: 45, quizCount: 10, quizMax: 75, language: false };
+const counts = { methodMin: 2, taskCount: 5, taskTarget: 6, taskMax: 45, quizCount: 10, quizTarget: 12, quizMax: 75, language: false };
 
-test("a szigorú séma strict, a darabszámot a séma kényszeríti, opcionális mező csak nullable alakban", () => {
+test("a szigorú séma strict, a darabszámot PONTOSAN a célra kényszeríti (review #160), opcionális mező csak nullable alakban", () => {
   const rf = bankResponseFormat(counts, false);
   assert.equal(rf.type, "json_schema");
   assert.equal(rf.json_schema.strict, true);
   const schema = JSON.stringify(rf.json_schema.schema);
-  assert.match(schema, /"minItems":5/); assert.match(schema, /"minItems":10/); assert.match(schema, /"maxItems":45/);
+  assert.match(schema, /"minItems":6/); assert.match(schema, /"maxItems":6/); assert.match(schema, /"minItems":12/); assert.match(schema, /"maxItems":12/);
+  assert.doesNotMatch(schema, /"maxItems":45/, "a teljes csomag nem sáv, hanem a cél"); assert.doesNotMatch(schema, /"minItems":5[,}]/);
   assert.doesNotMatch(schema, /"optional"/);
   assert.match(schema, /"additionalProperties":false/);
   const patch = bankResponseFormat(counts, true);
   assert.equal(patch.json_schema.name, "bank_packet_patch");
-  assert.doesNotMatch(JSON.stringify(patch.json_schema.schema).slice(0, 400), /"minItems":5/);
+  assert.match(JSON.stringify(patch.json_schema.schema), /"maxItems":45/, "a javító lista sávos: csak a cserélt tételek jönnek");
 });
 
 test("a szigorú séma tükrözi a helyi sémát: a fixture bankja átmegy rajta (null-ok nélkül), és a null-ok visszaalakulnak", () => {
@@ -33,7 +35,7 @@ test("a szigorú séma tükrözi a helyi sémát: a fixture bankja átmegy rajta
     quiz: e.quiz.map((q) => ({ ...toStrict(q as unknown as Record<string, unknown>, []), intent: q.intent ?? "recall" })),
     glossary: [],
   };
-  const full = strictPacketSchema({ methodMin: 2, taskCount: 1, taskMax: 480, quizCount: 1, quizMax: 960, language: false }).safeParse(packet);
+  const full = strictPacketSchema({ methodMin: 2, taskCount: 1, taskTarget: e.tasks.length, taskMax: 480, quizCount: 1, quizTarget: e.quiz.length, quizMax: 960, language: false }).safeParse(packet);
   assert.equal(full.success, true, JSON.stringify(full.success ? [] : full.error.issues.slice(0, 3)));
   assert.equal(strictPatchSchema.safeParse({ methods: [], tasks: [], quiz: [], glossary: [] }).success, true);
   const normalized = normalizeStrictPacket(packet) as { tasks: Array<Record<string, unknown>>; methods: Array<Record<string, unknown>> };
@@ -61,4 +63,20 @@ test("a response_format eljut a szolgáltatóhoz: callStepModel a chat 3. param�
   await callBankPacketModel(provider, "z-ai/glm-5.3-flash", "S", "U", undefined, { responseFormat: rf });
   assert.equal((seen[2] as { type: string }).type, "json_schema", "közvetlen OpenAI: megy a szigorú séma");
   assert.equal(seen[3], null, "OpenRouter-út: nincs szigorú séma (nem igazolt), marad a JSON-mód + helyi validálás");
+});
+
+test("review #160: a javító út (buildStructuredImprovement) bankhívása is megkapja a szigorú sémát (extra.responseFormat)", async () => {
+  const original = fusionFixture(); const e = standardFusionFixture().experience!;
+  const bankExtras: unknown[] = [];
+  let authorCalls = 0;
+  await buildStructuredImprovement(original, { subject: original.subject, classroom: original.classroom, concepts: [{ localId: "area", term: "terület", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] },
+    async (step, _system, _user, role, extra) => {
+      if (step === "pedagogue") return { corrections: [] };
+      if (step === "lektor") return { notes: [] };
+      if (role === "bank") { bankExtras.push(extra); return { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }; }
+      authorCalls++; return original;
+    });
+  assert.ok(authorCalls >= 1);
+  assert.ok(bankExtras.length >= 1, "volt bankhívás");
+  for (const extra of bankExtras) assert.equal((extra as { responseFormat?: { type?: string } } | undefined)?.responseFormat?.type, "json_schema");
 });

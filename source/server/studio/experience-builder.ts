@@ -341,9 +341,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       }
       problems.push(...crossProblems(packet, before).filter(p => p.startsWith("Ismétlődő")));
       // Spec 2026-09-30 (U2): a bank ábra nélkül épül, ezért tétel nem hivatkozhat ábrára — különben az ábra cseréje a bankot is érvényteleníti.
+      // Review #160: MINDEN, a tanulónak megjelenő szövegmező (magyarázat, megoldás, lépések is) — különben az ábracsere után elavul.
       for (const t of packet.tasks) if (hasFigureReference(`${t.q}\n${t.sample}`)) problems.push(`${t.id}: a feladat ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat (ábra nélkül épül).`);
-      for (const q of packet.quiz) if (hasFigureReference(`${q.question}\n${q.options.join("\n")}`)) problems.push(`${q.id}: a kvíz ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat.`);
-      for (const m of packet.methods) if (hasFigureReference(m.prompt)) problems.push(`${m.id}: a módszer ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat.`);
+      for (const q of packet.quiz) if (hasFigureReference(`${q.question}\n${q.options.join("\n")}\n${q.feedbackPerOption.join("\n")}`)) problems.push(`${q.id}: a kvíz ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat.`);
+      for (const m of packet.methods) if (hasFigureReference(`${m.prompt}\n${m.answer}\n${(m.options ?? []).join("\n")}\n${(m.steps ?? []).join("\n")}`)) problems.push(`${m.id}: a módszer ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat.`);
       return problems;
     };
     const fromPrevious = deps.previous?.version === LESSON_METHOD_VERSION ? {
@@ -396,7 +397,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // kísérlet (tartalék, majd mentőmodell) kapja meg. Szolgáltatói hiba változatlanul kilép.
       let response: unknown;
       // Spec 2026-09-30 (U2/C8): szigorú séma a szolgáltatónak (a hívó dönt, hogy az adott út támogatja-e); a null-ok visszaalakítva.
-      const responseFormat = bankResponseFormat({ methodMin: methodKinds.length, taskCount, taskMax: Math.max(taskTarget, 45), quizCount, quizMax: Math.max(quizTarget, 75), language: Boolean(language) }, Boolean(repairBase));
+      const responseFormat = bankResponseFormat({ methodMin: methodKinds.length, taskCount, taskTarget, taskMax: Math.max(taskTarget, 45), quizCount, quizTarget, quizMax: Math.max(quizTarget, 75), language: Boolean(language) }, Boolean(repairBase));
       try { response = normalizeStrictPacket(await deps.call(system, prompt, attempt, { responseFormat })); }
       catch (error) {
         if (!(error instanceof RetryableBankCallError)) throw error;

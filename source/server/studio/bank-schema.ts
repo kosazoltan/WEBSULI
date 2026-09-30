@@ -46,18 +46,22 @@ const strictGlossary = z.object({ word: text(160), translation: text(300), partO
 export type BankPacketCounts = {
   /** Kötelező módszerek száma (methodKinds hossza). */
   methodMin: number;
-  /** Feladat és kvíz: pontosan a cél (target) — a program a Count alatt elutasít, a target fölött vág. */
-  taskCount: number; taskMax: number; quizCount: number; quizMax: number;
+  /**
+   * Feladat és kvíz: a szigorú séma PONTOSAN a célt (target) kéri (review #160: a minimum–maximum sáv nem a szerződés
+   * „PONTOSAN target” ígérete volt); a helyi (tartalék úti) séma a Count alatt elutasít, a Max fölött nem fogad —
+   * a tartalék modell tűrése szándékos, a szerződés ezt így is mondja („a program Count alatt elutasít”).
+   */
+  taskCount: number; taskTarget: number; taskMax: number; quizCount: number; quizTarget: number; quizMax: number;
   /** Nyelvi leckénél kötelező a szószedet. */
   language: boolean;
 };
 
-/** TELJES csomag (első kísérlet és teljes újraírás). */
+/** TELJES csomag (első kísérlet és teljes újraírás): a darabszám pontosan a cél. */
 export function strictPacketSchema(c: BankPacketCounts) {
   return z.object({
     methods: z.array(strictMethod).min(Math.max(1, c.methodMin)).max(20),
-    tasks: z.array(strictTask).min(c.taskCount).max(c.taskMax),
-    quiz: z.array(strictQuiz).min(c.quizCount).max(c.quizMax),
+    tasks: z.array(strictTask).min(c.taskTarget).max(c.taskTarget),
+    quiz: z.array(strictQuiz).min(c.quizTarget).max(c.quizTarget),
     glossary: z.array(strictGlossary).min(c.language ? 1 : 0).max(30),
   });
 }

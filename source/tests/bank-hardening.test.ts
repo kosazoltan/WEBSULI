@@ -63,3 +63,24 @@ test("H52: a nyitott aritmetikai lelet a végleges tétel-azonosítóval jut a k
   assert.match(flags[0].message, /nyitott aritmetikai lelet/);
   assert.deepEqual(openBankFindingFlags(lesson, undefined), []);
 });
+
+test("review #160 (H35 korpusz-eset): az értékazonos számoldal (1/2, 2/4, 3/6) is többértelmű párosító", () => {
+  const lesson = standardFusionFixture();
+  const withMatch = (pairs: Array<{ left: string; right: string }>) => ({
+    ...lesson, sections: lesson.sections.map((s, i) => (i === 0 ? { ...s, blocks: [...s.blocks, { kind: "try", tryKind: "match", spec: { pairs }, coversConceptIds: (s.blocks.find((b) => "coversConceptIds" in b) as { coversConceptIds: string[] }).coversConceptIds }] } : s)),
+  });
+  const numeric = lessonSchema.safeParse(withMatch([{ left: "1/2", right: "fél" }, { left: "2/4", right: "két negyed" }, { left: "3/6", right: "három hatod" }]));
+  assert.equal(numeric.success, false, "job 986b7f82: 1/2, 2/4 és 3/6 három egyforma értékű bal oldal");
+  assert.match(JSON.stringify(numeric.success ? [] : numeric.error.issues), /többértelmű/);
+  assert.equal(lessonSchema.safeParse(withMatch([{ left: "1/2", right: "0,5" }, { left: "1/4", right: "0,25" }])).success, true, "különböző értékek rendben");
+});
+
+test("review #160: az ábra-hivatkozás a kvíz magyarázatában és a módszer megoldásában/lépéseiben is javító kört indít", async () => {
+  const lesson = standardFusionFixture(), e = lesson.experience!;
+  const bad = { methods: e.methods.map((m, i) => (i === 0 ? { ...m, answer: `${m.answer} Lásd az ábrán.` } : m)), tasks: e.tasks, quiz: e.quiz.map((q, i) => (i === 0 ? { ...q, feedbackPerOption: q.feedbackPerOption.map((f, k) => (k === 0 ? `${f} Nézd meg a 2. ábrát!` : f)) } : q)), glossary: [] };
+  const users: string[] = [];
+  await buildLessonExperience(lesson, [], { call: async (_s, user) => { users.push(user); return users.length === 1 ? bad : { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }; } });
+  assert.equal(users.length, 2);
+  assert.match(users[1], /a kvíz ábrára hivatkozik/);
+  assert.match(users[1], /a módszer ábrára hivatkozik/);
+});

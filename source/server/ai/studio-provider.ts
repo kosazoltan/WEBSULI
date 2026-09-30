@@ -2,7 +2,7 @@ import { OpenAIProvider } from "./OpenAIProvider";
 import { OpenRouterProvider } from "./OpenRouterProvider";
 import { ClaudeProvider } from "./ClaudeProvider";
 import { AI_KEY_NAMES, aiKeyStatus, keyNameForModel, providerForModel } from "./models";
-import { AIProviderQuotaError, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type IAIProvider } from "./AIProvider";
+import { AIProviderQuotaError, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type ChatCallOptions, type IAIProvider } from "./AIProvider";
 import { logger } from "../lib/logger";
 
 /** Resolve credentials by model, never by whichever key happens to be available. */
@@ -56,15 +56,24 @@ export class QuotaFailoverProvider implements IAIProvider {
     this.model = primary.model;
   }
   private route(): IAIProvider { return (this.fallback ??= this.makeFallback()); }
-  async chat(messages: AIMessage[], signal?: AbortSignal): Promise<AIResponse> {
-    if (this.now() < quotaExhaustedUntil) return this.route().chat(messages, signal);
+  /**
+   * Review #160: a hívásonkénti beállítás (szigorú `responseFormat`, U2/C8) az ELSŐDLEGES (közvetlen OpenAI) útra megy
+   * tovább; a tartalék (OpenRouter) útra nem — ott a szigorú séma nem igazolt, JSON-mód + helyi validálás marad.
+   */
+  private fallbackOptions(options?: ChatCallOptions): ChatCallOptions | undefined {
+    if (!options) return undefined;
+    const { responseFormat: _dropped, ...rest } = options;
+    return Object.keys(rest).length ? rest : undefined;
+  }
+  async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
+    if (this.now() < quotaExhaustedUntil) return this.route().chat(messages, signal, this.fallbackOptions(options));
     try {
-      return await this.primary.chat(messages, signal);
+      return await this.primary.chat(messages, signal, options);
     } catch (error) {
       if (!(error instanceof AIProviderQuotaError)) throw error;
       quotaExhaustedUntil = this.now() + QUOTA_FAILOVER_MEMORY_MS;
       logger.warn(`[AI] ${this.primary.name} kerete elfogyott (${this.model}) — ugyanaz a modell az OpenRouteren át, ${QUOTA_FAILOVER_MEMORY_MS / 60_000} percig.`);
-      return this.route().chat(messages, signal);
+      return this.route().chat(messages, signal, this.fallbackOptions(options));
     }
   }
   async *streamChat(messages: AIMessage[], signal?: AbortSignal): AsyncGenerator<AIStreamChunk, void, unknown> {
