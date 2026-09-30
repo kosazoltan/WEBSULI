@@ -89,7 +89,8 @@ export const lektorReportSchema = z.object({
    * kidolgozott forrásfeladatait önállóan megoldja. Mérve: a 7×11×5 = 385-ös hibás tanítást öt futásban sem
    * jelezte, mert a lecke részeredményéből indult. A lista tárolódik, így utólag ellenőrizhető.
    */
-  solutions: z
+  // Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): a 40-nél hosszabb lista nem buktatja a jelentést (nagy feladatlap) — levágva.
+  solutions: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 40) : v), z
     .array(z.object({
       task: z.string().trim().min(1).max(200),
       own: z.string().trim().min(1).max(400),
@@ -97,7 +98,7 @@ export const lektorReportSchema = z.object({
       match: z.boolean(),
     }))
     .max(40)
-    .optional(),
+    .optional()),
   notes: z
     .array(
       z.object({

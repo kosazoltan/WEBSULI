@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
-import { FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { FALLBACK_MODELS, SECOND_FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -675,10 +675,21 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         result = await attempt(fallbackModel);
         model = fallbackModel;
       } catch (fallbackError) {
-        throw new StepModelError(
-          job.step,
-          `${describeStepError(primaryError)} [${primaryModel}]; fallback: ${describeStepError(fallbackError)} [${fallbackModel}]`,
-        );
+        // Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): élő bukás (2026-09-28) — a lektor elsődleges modellje üres
+        // választ adott, a tartalék a hosszkorlátba ütközött, és a kész lecke elveszett. Egy harmadik, más családú modell
+        // még megpróbálja (csak modellhívás-hibára, és csak ha a kulcsa be van állítva).
+        const lastModel = SECOND_FALLBACK_MODELS[job.step as keyof typeof SECOND_FALLBACK_MODELS];
+        const chain = `${describeStepError(primaryError)} [${primaryModel}]; fallback: ${describeStepError(fallbackError)} [${fallbackModel}]`;
+        if (!(fallbackError instanceof StepModelError) || !lastModel || lastModel === primaryModel || lastModel === fallbackModel || !keyConfigured(lastModel)) {
+          throw new StepModelError(job.step, chain);
+        }
+        logger.warn(`[STUDIO] ${job.step} (${job.id}): a tartalék modell (${fallbackModel}) is hibázott — ${describeStepError(fallbackError)} → második tartalék: ${lastModel}`);
+        try {
+          result = await attempt(lastModel);
+          model = lastModel;
+        } catch (lastError) {
+          throw new StepModelError(job.step, `${chain}; második tartalék: ${describeStepError(lastError)} [${lastModel}]`);
+        }
       }
     }
     json = result.json;
