@@ -145,12 +145,16 @@ function buildScene(THREE: typeof ThreeNS, p: Scene3dParams) {
   Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 0.5, far: radius * 6 });
   scene.add(sun, sun.target);
 
+  disposables.push({ dispose: () => sun.shadow.dispose() });
   const groundPoints = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => new THREE.Vector3(center.x + groundRadius * Math.cos((k * Math.PI) / 4), 0, center.z + groundRadius * Math.sin((k * Math.PI) / 4)));
   return { scene, center, radius, box, groundPoints, dispose: () => disposables.forEach((x) => x.dispose()) };
 }
 
 export function Scene3dAnim({ params, caption }: AnimProps) {
-  const parsed = useMemo(() => parseVisualParams("scene3d", params), [params]);
+  // Review (PR #150): a LessonView minden rendernél új params-objektumot ad — tartalom szerint memózunk, különben
+  // minden szülő-újrarajzolás lebontaná és újraépítené a WebGL-jelenetet (elveszne a forgatás).
+  const paramsKey = useMemo(() => JSON.stringify(params), [params]);
+  const parsed = useMemo(() => parseVisualParams("scene3d", params), [paramsKey]);
   const hostRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const lineRefs = useRef<Array<SVGLineElement | null>>([]);
@@ -174,6 +178,9 @@ export function Scene3dAnim({ params, caption }: AnimProps) {
         setFailed(true);
         return;
       }
+      // Review (PR #150): a takarítás a létrehozás sorrendjében gyűlik, így egy későbbi kivétel sem hagy élő WebGL-kontextust.
+      const undo: Array<() => void> = [() => { renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); }];
+      cleanup = () => { for (const fn of undo.splice(0).reverse()) { try { fn(); } catch { /* takarítás: a többit is lefuttatjuk */ } } };
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -182,6 +189,7 @@ export function Scene3dAnim({ params, caption }: AnimProps) {
       renderer.domElement.style.height = "100%";
       host.prepend(renderer.domElement);
       const { scene, center, radius, box, groundPoints, dispose } = buildScene(THREE, parsed);
+      undo.push(dispose);
       const camera = new THREE.PerspectiveCamera(38, 4 / 3, 0.1, radius * 20);
       const start = VIEW_ANGLES[parsed.view ?? "iso"];
       let { azimuth, elevation } = start;
@@ -284,7 +292,7 @@ export function Scene3dAnim({ params, caption }: AnimProps) {
       };
       frame = requestAnimationFrame(tick);
 
-      cleanup = () => {
+      undo.push(() => {
         cancelAnimationFrame(frame);
         observer.disconnect();
         io.disconnect();
@@ -292,11 +300,8 @@ export function Scene3dAnim({ params, caption }: AnimProps) {
         renderer.domElement.removeEventListener("pointermove", onMove);
         renderer.domElement.removeEventListener("pointerup", onUp);
         renderer.domElement.removeEventListener("pointercancel", onUp);
-        dispose();
-        renderer.dispose();
-        renderer.domElement.remove();
-      };
-    }).catch(() => { if (!disposed) setFailed(true); });
+      });
+    }).catch(() => { cleanup(); if (!disposed) setFailed(true); });
     return () => { disposed = true; cleanup(); };
   }, [parsed, labels]);
 

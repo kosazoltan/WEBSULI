@@ -36,6 +36,8 @@ export type DesignerResult = {
 };
 
 export const DESIGNER_CONCURRENCY = 4;
+/** A prompt legfeljebb 2 ábrát kér; a folt-séma 4-nél többet egészben elutasítana — a többlet levágva, nem az összes ábra. */
+const MAX_SECTION_VISUALS = 2;
 const FIRST_USER = "Válaszolj kizárólag a kért JSON-nal.";
 
 /**
@@ -83,6 +85,8 @@ type Trial = { lesson: Lesson; accepted: number; problems: string[] };
 
 /** A fejezet foltjának próbája a megadott leckeváltozaton: elfogadott ábrák száma és a (magyar) problémák. */
 export function trySectionVisuals(lesson: Lesson, sectionIndex: number, visuals: unknown[], concepts: ReadonlyArray<MapConcept>): Trial {
+  const extra = visuals.length > MAX_SECTION_VISUALS ? [`${visuals.length} ábra jött, legfeljebb ${MAX_SECTION_VISUALS} kell — a többlet kimaradt`] : [];
+  visuals = visuals.slice(0, MAX_SECTION_VISUALS);
   const trial = applyVisualPatch(lesson, { sections: [{ index: sectionIndex, visuals }] }, concepts);
   if (!trial) return { lesson, accepted: 0, problems: ["a válasz nem a kért alakú JSON: {\"visuals\":[…]} kell"] };
   const before = new Set<Block>(lesson.sections[sectionIndex].blocks);
@@ -91,7 +95,7 @@ export function trySectionVisuals(lesson: Lesson, sectionIndex: number, visuals:
   return {
     lesson: trial.lesson,
     accepted: trial.added + trial.replaced - weak.length,
-    problems: [...trial.rejected, ...weak.map((w) => `${sectionIndex}. fejezet (index), ${w.blockIndex}. blokk (i): ${w.reason}`)],
+    problems: [...extra, ...trial.rejected, ...weak.map((w) => `${sectionIndex}. fejezet (index), ${w.blockIndex}. blokk (i): ${w.reason}`)],
   };
 }
 
