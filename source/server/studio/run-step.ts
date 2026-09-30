@@ -77,6 +77,7 @@ export function stepDeadlineMs(step: string): number | undefined {
 }
 import { workflowCheckpoint, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
 import type { PromptRole } from "../../shared/instruction-bundles/roles";
+import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 
 /**
  * LS-2c — the call layer between the pipeline state machine and the provider.
@@ -112,6 +113,8 @@ export type StepCallInput = {
    * alapértelmezést a hívó a `requireRoleForStep(step)` segéddel adja meg, ha valóban a lépés szerepét akarja.
    */
   role: PromptRole;
+  /** Spec 2026-09-30 (U2/C8): hívásonkénti szigorú JSON-séma (`json_schema`, strict) — csak a támogató szolgáltató használja. */
+  responseFormat?: ResponseFormatJsonSchema;
 };
 
 export type StepCallResult = {
@@ -156,7 +159,7 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     response = await provider.chat([
       { role: "system", content: input.system },
       { role: "user", content: input.user },
-    ], signal);
+    ], signal, input.responseFormat ? { responseFormat: input.responseFormat } : undefined);
     signal?.throwIfAborted();
   } catch (error) {
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");

@@ -15,7 +15,8 @@ import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
 import { callStepModel } from "./run-step";
 import { createStudioStepProvider } from "../ai/studio-provider";
-import { resolveStudioModel } from "../ai/models";
+import { providerForModel, resolveStudioModel } from "../ai/models";
+import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
@@ -73,10 +74,12 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const [material] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, fileId));
   if (!material) throw new Error("Az eredeti tananyag metaadatai nem találhatók.");
   const source = await loadSource(row.mapId);
-  const call = async (step: RepairStep, system: string, user: string, role: PromptRole = requireRoleForStep(step)) => {
+  const call = async (step: RepairStep, system: string, user: string, role: PromptRole = requireRoleForStep(step), extra?: { responseFormat?: ResponseFormatJsonSchema }) => {
     const model = resolveStudioModel(step);
     const provider = createStudioStepProvider(model, step);
-    return (await callStepModel(provider, { step, role, model, system, user })).json;
+    // Review #160 (U2/C8): szigorú séma csak a közvetlen OpenAI-úton; tartalék úton JSON-mód + helyi validálás.
+    const responseFormat = extra?.responseFormat && providerForModel(model) === "openai" ? extra.responseFormat : undefined;
+    return (await callStepModel(provider, { step, role, model, system, user, ...(responseFormat ? { responseFormat } : {}) })).json;
   };
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
@@ -90,7 +93,8 @@ export async function generateStructuredImprovement(fileId: string, instruction?
 
 /** Shared generation path: also executable against read-only source with local artifacts. */
 type RepairStep = "author" | "lektor" | "pedagogue";
-type RepairCall = (step: RepairStep, system: string, user: string, role?: PromptRole) => Promise<unknown>;
+/** `extra.responseFormat` (U2/C8): a bankhívás szigorú sémája — a megvalósító csak a támogató (közvetlen OpenAI) úton adja tovább. */
+type RepairCall = (step: RepairStep, system: string, user: string, role?: PromptRole, extra?: { responseFormat?: ResponseFormatJsonSchema }) => Promise<unknown>;
 export type RepairOwner = { instruction?: string; corrections: SourceCorrection[]; classroom?: number; design?: { world?: VisualWorldId; flair?: LessonFlair[] } };
 
 export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } = {}) {
@@ -150,7 +154,8 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
   const design = owner?.design;
-  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user) => call("author", system, user, "bank"),
+  // Review #160: a szigorú séma (U2/C8) a javító út bankhívásán is átmegy; a hívó dönt, hogy az út támogatja-e.
+  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
     ...(design?.world ? { theme: design.world } : {}), ...(design?.flair ? { flair: design.flair } : {}) });
   assertRepairCandidate(original, candidate, source, classroom);
   await workflowPhase("lektor");

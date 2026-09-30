@@ -27,6 +27,11 @@ export interface AIResponse {
   };
 }
 
+/** Szigorú JSON-séma válaszformátum (OpenAI Structured Outputs alak). */
+export type ResponseFormatJsonSchema = { type: "json_schema"; json_schema: { name: string; strict?: boolean; schema: Record<string, unknown>; description?: string } };
+/** Hívásonkénti beállítás a szolgáltatónak (a provider-konfig a lépésé, ez az egyes kérésé). */
+export type ChatCallOptions = { responseFormat?: ResponseFormatJsonSchema };
+
 export interface AIProviderConfig {
   apiKey: string;
   model: string;
@@ -53,7 +58,11 @@ export interface IAIProvider {
   /**
    * Non-streaming chat completion
    */
-  chat(messages: AIMessage[], signal?: AbortSignal): Promise<AIResponse>;
+  /**
+   * `options.responseFormat` (spec 2026-09-30, U2/C8): hívásonkénti szigorú JSON-séma a szolgáltatónak (`json_schema`,
+   * strict). Csak az azt támogató szolgáltató (közvetlen OpenAI) használja; a többi figyelmen kívül hagyja.
+   */
+  chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse>;
   
   /**
    * Streaming chat completion

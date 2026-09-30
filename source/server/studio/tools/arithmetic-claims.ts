@@ -72,7 +72,8 @@ export function arithmeticClaimProblems(packet: { methods?: Array<{ id: string; 
   for (const t of packet.tasks ?? []) for (const bad of falseArithmeticClaims(`${t.q ?? ""}\n${t.sample ?? ""}`)) problems.push(`${t.id}: hibás számítás a feladatban vagy a mintában: ${bad}`);
   // Spec 2026-09-30 (U1, C13): a típusos REFERENCIA igazsága — a kérdés kifejezéséből újraszámolva (a típusos mező önmagában
   // nem javítja a hibás számítást: Astra 4–6. kör, korpusz 5e9e2a84 „111”).
-  for (const t of packet.tasks ?? []) if (t.typedAnswers?.length && t.q) problems.push(...referenceValueProblems({ id: t.id, q: t.q, typedAnswers: t.typedAnswers }).map((p) => `hibás referencia: ${p}`));
+  // A tétel-azonosító a sor elején (javítási jogosultság és mentés is így ismeri fel a tételhibát).
+  for (const t of packet.tasks ?? []) if (t.typedAnswers?.length && t.q) problems.push(...referenceValueProblems({ id: t.id, q: t.q, typedAnswers: t.typedAnswers }).map((p) => p.startsWith(`${t.id}: `) ? `${t.id}: hibás referencia: ${p.slice(t.id.length + 2)}` : `${t.id}: hibás referencia: ${p}`));
   for (const q of packet.quiz ?? []) for (const bad of falseArithmeticClaims(`${q.question ?? ""}\n${(q.feedbackPerOption ?? []).join("\n")}`)) problems.push(`${q.id}: hibás számítás a kérdésben vagy a magyarázatban: ${bad}`);
   return problems;
 }
