@@ -672,3 +672,13 @@ tanítási `coverage_gap` figyelmeztetés (kivéve vak megoldás eltérésekor, 
 core ≥ 95%, kieg. ≥ 80%. D4: forrás/füzet-hivatkozás őr (gépi törlés + `kid-text-fixer` átírás; Mezopotámia-mentés 55 → 2).
 D6: `noteSectionKey` a zárójeles útvonalat is fejezet-kulcsnak veszi. Unit 1772/1772, CI zöld; visszajátszás 30 nap valódi
 bukásán: 11/11 publikálna. Nyitott szeletek: tanári ellenőrzőlista-kapu, bankcsomag részleges átvétele, modellhiba-tűrés.
+
+## 2026-09-30 (este) — nem elakadó közzététel 2–4. szelet (PR #152 `026e62d`, #153 `56e95f6`)
+**#152 tanári kérés ellenőrzőlista-kapu:** a kérést eddig semmi nem mérte a kész leckén. Opus 5.5 pontonként mér, a
+„tanítja” csak betűhív (normalizálva is érdemi) bizonyítékkal; hiányzó pontra limit előtt 1 célzott szerzői kör, a limiten
+figyelmeztetés; a mérés hibája nem állít meg. Élő: a Mezopotámia javítás előtti leckéjében megtalálta a 3 kézzel javított
++ 6 további valódi hiányt → a lecke (880b4047) kézi, ellenőrzött pótlással 29/29.
+**#153 bankcsomag-mentés + második tartalék:** a mentő kísérlet után a „ID:” alakban megnevezett hibás tételek (≤ 20%)
+kikerülnek, átvétel csak kvóta + teljes validálás után; pedagógus/lektor második tartalék (terra / opus), a szerző
+szándékosan nem (tulajdonosi döntés 2026-09-29). Codex/Copilot review-leletek (P1 kvóta, ID-illesztés, fail-open) javítva.
+Unit 1783/1783, CI zöld, élesítve, füstteszt 200. Nem vállalt, nyitott: szerver-újraindulás utáni automatikus folytatás.
