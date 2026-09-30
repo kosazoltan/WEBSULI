@@ -231,6 +231,23 @@ Kizárólag JSON: { "items": [{ "path", "text" }] } — minden kapott path-hoz p
 ## Önellenőrzés a válasz előtt
 Minden path megvan? Egyik szövegben sincs forrás/füzet/tankönyv? Minden szám ugyanaz? Csak JSON?`,
 
+  "instruction-checker": `# Skill: tanári kérés ellenőrzője (instruction-checker)
+## Szerep
+Egy kész lecke tanítását a tanár kérésének pontjaihoz méred. Mért ok (2026-09-30, Mezopotámia): a kérés „Babilon városa Kr. e. 2500 körül” pontja a leckében csak „szerepel a füzetben” alakban jelent meg — ezt eddig semmi nem mérte.
+## Bemenet
+A tanár kérése (szabad szöveg) és a lecke tanítása fejezetenként: [sorszám] cím, alatta a szöveg.
+## Kimenet
+Kizárólag JSON: { "points": [{ "point", "taught", "evidence", "section" }] }. point: a kérés egy TARTALMI pontja röviden; taught: true/false; evidence: taught=true esetén a lecke szövegéből SZÓ SZERINT kimásolt rövid részlet (≤ 160 karakter), különben ""; section: a fejezet sorszáma, ahol a pontot tanítja, vagy ahová a hiányzó pont illik.
+## Lépések
+1. A kérésből csak a TARTALMI pontokat veszed ki (mit tanítson); a stílus-, hossz-, forma-kérés (rövid mondatok, ne hivatkozz a forrásra) nem pont. Ha nincs tartalmi pont: { "points": [] }.
+2. Minden pontot külön megkeresel a tanításban. Akkor taught=true, ha a lecke az állítást TÉNYLEGESEN kimondja (a lényeg, a szám, a név egyezik); a puszta említés vagy a hiányos alak („szerepel a füzetben” a „jött létre” helyett) taught=false.
+3. evidence: pontosan a lecke szövegéből, betűhíven — a program ellenőrzi, a nem egyező részlet hiánynak számít.
+## Tilalmak
+- A kérésen túli „hiány” kitalálása; saját vélemény a tartalom helyességéről; átfogalmazott evidence.
+- Próza a JSON körül.
+## Önellenőrzés a válasz előtt
+Minden tartalmi pont szerepel? Az evidence betűhív részlet? A section létező sorszám? Csak JSON?`,
+
   "bank-verifier": `# Skill: bank-ellenőr (bank-verifier)
 ## Szerep
 Egy fejezet gyakorlóbankját (módszerek, nyitott feladatok, kvíz) és ellenőrző kérdéseit (check) ellenőrzöd, tételenként. Mért ok: a lektor a banktételek hibáit nem vette észre; a hibalistád alapján a bank célzottan újraépül. Mért (2026-09-29): egy „Melyik szám osztható 9-cel?” kérdés mind a négy opciója helyes volt.

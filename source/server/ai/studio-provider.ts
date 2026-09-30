@@ -107,6 +107,8 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   visualDesigner: { timeoutMs: 300_000, maxTokens: 24_000, reasoningEffort: "high" },
   // Spec 2026-09-30-nem-elakado-kozzetetel (D4): a forrás-hivatkozó mondatok átírása (rövid, egy hívás leckénként).
   textFix: { timeoutMs: 180_000, maxTokens: 16_000, reasoningEffort: "low" },
+  // Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés pontjainak mérése a kész leckén.
+  instructionCheck: { timeoutMs: 180_000, maxTokens: 12_000, reasoningEffort: "medium" },
   gateHelper: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
   // Spec 2026-09-29 (tanári témafókusz, 2. kör): mérve 13–18 s egy döntés; élesben egyszer 180 s-ig akadt.
   // Rövid saját határidő, hogy akadásnál a tartalék modell még időben dönthessen; JSON-mód (deepseek-v4-flash-en a

@@ -18,6 +18,8 @@ export type GateFeedbackLike = {
   unknownIds?: string[];
   ungrounded?: Array<{ blockIndex: number }>;
   arc?: Array<{ sectionIdx: number }>;
+  /** Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés hiányzó pontjai (a fejezet nélküli → teljes javítás). */
+  instruction?: Array<{ sectionIdx: number | null; point: string }>;
   reasons?: string[];
 };
 
@@ -69,7 +71,11 @@ export function targetedRepairSections(
       if (f.sectionIdx < 0 || f.sectionIdx >= previous.sections.length) return null;
       targets.add(f.sectionIdx);
     }
-    const explained = (gate.ungrounded?.length ?? 0) + (gate.arc?.length ?? 0);
+    for (const f of gate.instruction ?? []) {
+      if (f.sectionIdx === null || f.sectionIdx < 0 || f.sectionIdx >= previous.sections.length) return null;
+      targets.add(f.sectionIdx);
+    }
+    const explained = (gate.ungrounded?.length ?? 0) + (gate.arc?.length ?? 0) + (gate.instruction?.length ?? 0);
     if (!explained && (gate.reasons?.length ?? 0) > 0) return null;
   }
   return targets.size ? [...targets].sort((a, b) => a - b) : null;

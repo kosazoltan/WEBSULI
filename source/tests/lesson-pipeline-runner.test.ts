@@ -2312,6 +2312,61 @@ test("nem-elakadó (D3): a kapu a limiten csak nem-ténybeli lelettel (megalapoz
   assert.ok(notes.some((n) => n.reason === "gate_limit_accepted" && /core 100%/.test(n.note)), JSON.stringify(notes));
 });
 
+/* Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés pontjai a kész leckén. */
+function withInstructionAnswer(deps: ReturnType<typeof makeDeps>, answer: unknown) {
+  const inner = deps.providerFactory;
+  let calls = 0;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if (!(args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: instruction-checker")) return provider.chat(...args);
+      calls++;
+      if (answer instanceof Error) throw answer;
+      return { content: JSON.stringify(answer), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    } } as IAIProvider;
+  };
+  return { deps: { ...deps, providerFactory }, calls: () => calls };
+}
+const MISSING_POINT = { points: [{ point: "A háromszög magassága merőleges az alapra", taught: false, evidence: "", section: 0 }] };
+
+test("tanári kérés: limit előtt a hiányzó pont EGY célzott szerzői kört kap, a pont a kapu okai között", async () => {
+  const { deps } = await gateAtLimitSetup("instr-repair", () => undefined, 0);
+  deps.store.jobs.get("instr-repair")!.output!.ownerInstruction = "Tanítsd a magasság fogalmát is.";
+  const wrapped = withInstructionAnswer(deps, MISSING_POINT);
+  const log = published(deps.store);
+  const gated = await runPipelineStep("instr-repair", wrapped.deps);
+  assert.deepEqual(gated.ok && gated.next, { step: "author", round: 1 }, JSON.stringify(gated));
+  assert.equal(log.length, 0);
+  const job = deps.store.jobs.get("instr-repair")!;
+  assert.equal(job.output?.instructionRepairRound, 1);
+  const gate = job.output?.gate as { ok: boolean; reasons: string[]; instruction: Array<{ sectionIdx: number }> };
+  assert.equal(gate.ok, false);
+  assert.ok(gate.reasons.some((r) => /Tanári kérés hiányzó pontja \(1\. fejezet\): A háromszög magassága/.test(r)), JSON.stringify(gate.reasons));
+  assert.deepEqual(gate.instruction.map((f) => f.sectionIdx), [0]);
+  assert.equal(wrapped.calls(), 1);
+});
+
+test("tanári kérés: a limiten a hiányzó pont figyelmeztetés, a lecke publikál; a mérés hibája nem állít meg", async () => {
+  const { deps } = await gateAtLimitSetup("instr-limit", () => undefined);
+  deps.store.jobs.get("instr-limit")!.output!.ownerInstruction = "Tanítsd a magasság fogalmát is.";
+  const wrapped = withInstructionAnswer(deps, MISSING_POINT);
+  const log = published(deps.store);
+  const gated = await runPipelineStep("instr-limit", wrapped.deps);
+  assert.ok(gated.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  const job = deps.store.jobs.get("instr-limit")!;
+  assert.ok((job.output?.qualityNotes as Array<{ reason: string }>).some((n) => n.reason === "instruction_missing"));
+  assert.equal((job.output?.instructionCheck as { points: unknown[] }).points.length, 1);
+
+  const { deps: failing } = await gateAtLimitSetup("instr-error", () => undefined);
+  failing.store.jobs.get("instr-error")!.output!.ownerInstruction = "Tanítsd a magasság fogalmát is.";
+  const broken = withInstructionAnswer(failing, new Error("szolgáltatói hiba"));
+  const failLog = published(failing.store);
+  const ok = await runPipelineStep("instr-error", broken.deps);
+  assert.ok(ok.ok, JSON.stringify(ok));
+  assert.equal(failLog.length, 1, "a mérés hibája mellett is publikál");
+});
+
 test("spec kapu-proba (utómérés, élő job 9ef52e4f): a limit ELŐTT az elérhetetlen Próba nem kapcsol ki — a szerző pótolja a kérdéseket", async () => {
   const { deps } = await gateAtLimitSetup("proba-early", (l) => {
     l.sections[0].probaEnabled = true;
