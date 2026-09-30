@@ -237,7 +237,7 @@ Egy kész lecke tanítását a tanár kérésének pontjaihoz méred. Mért ok (
 ## Bemenet
 A tanár kérése (szabad szöveg) és a lecke tanítása fejezetenként: [sorszám] cím, alatta a szöveg.
 ## Kimenet
-Kizárólag JSON: { "points": [{ "point", "taught", "evidence", "section" }] }. point: a kérés egy TARTALMI pontja röviden; taught: true/false; evidence: taught=true esetén a lecke szövegéből SZÓ SZERINT kimásolt rövid részlet (≤ 160 karakter), különben ""; section: a fejezet sorszáma, ahol a pontot tanítja, vagy ahová a hiányzó pont illik.
+Kizárólag JSON: { "points": [{ "point", "taught", "evidence", "section", "sourceQuote" }] }. point: a kérés egy TARTALMI pontja röviden; taught: true/false; evidence: taught=true esetén a lecke szövegéből SZÓ SZERINT kimásolt rövid részlet (≤ 160 karakter), különben ""; section: a fejezet sorszáma, ahol a pontot tanítja, vagy ahová a hiányzó pont illik; sourceQuote: taught=false esetén a FORRÁS (source) szövegéből szó szerint kimásolt, a pontot alátámasztó részlet (≤ 300 karakter), ha nincs ilyen: "".
 ## Lépések
 1. A kérésből csak a TARTALMI pontokat veszed ki (mit tanítson); a stílus-, hossz-, forma-kérés (rövid mondatok, ne hivatkozz a forrásra) nem pont. Ha nincs tartalmi pont: { "points": [] }.
 2. Minden pontot külön megkeresel a tanításban. Akkor taught=true, ha a lecke az állítást TÉNYLEGESEN kimondja (a lényeg, a szám, a név egyezik); a puszta említés vagy a hiányos alak („szerepel a füzetben” a „jött létre” helyett) taught=false.

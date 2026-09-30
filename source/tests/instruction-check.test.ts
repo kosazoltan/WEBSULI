@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildInstructionCheckPrompt, instructionCheckHash, missingPoints, parseInstructionCheck, teachingText } from "../server/studio/instruction-check";
+import { buildInstructionCheckPrompt, instructionCheckHash, instructionConceptsFrom, missingPoints, parseInstructionCheck, teachingText } from "../server/studio/instruction-check";
 import type { Lesson } from "../shared/lesson-schema";
 
 /** Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés mérése, hallucináció-őrrel. */
@@ -44,4 +44,21 @@ test("a hash a kérés és a tanítás függvénye (változatlan leckére nincs 
   const a = instructionCheckHash("x", lesson);
   assert.equal(a, instructionCheckHash("x", lesson));
   assert.notEqual(a, instructionCheckHash("y", lesson));
+  assert.notEqual(a, instructionCheckHash("x", lesson, "más forrás"), "review #155: a forrás is a kulcs része");
+});
+
+test("forrásból igazolt hiányzó pont → kiegészítő fogalom; a nem betűhív forrás-idézet elvetve", () => {
+  const source = "A papok, a hadsereg vezetői voltak az előkelők. Az írnokok a hivatalokban dolgoztak, és vezették a nyilvántartást.";
+  const points = parseInstructionCheck({ points: [
+    { point: "Az írnokok mint társadalmi csoport", taught: false, evidence: "", section: 0, sourceQuote: "Az írnokok a hivatalokban dolgoztak, és vezették a nyilvántartást." },
+    { point: "A katonák", taught: false, evidence: "", section: 0, sourceQuote: "A katonák a fáraó seregében szolgáltak és védték az országot." },
+  ] }, lesson, source);
+  assert.equal(points[0].sourceQuote, "Az írnokok a hivatalokban dolgoztak, és vezették a nyilvántartást.");
+  assert.equal(points[1].sourceQuote, undefined, "a forrásban nem szereplő idézet nem fogadható el");
+  const concepts = instructionConceptsFrom(points);
+  assert.equal(concepts.length, 1);
+  assert.match(concepts[0].localId, /^instr-[0-9a-f]{8}$/);
+  assert.deepEqual([concepts[0].term, concepts[0].examWeight, concepts[0].quote], ["Az írnokok mint társadalmi csoport", "supporting", points[0].sourceQuote]);
+  assert.equal(instructionConceptsFrom(points)[0].localId, concepts[0].localId, "determinisztikus azonosító");
+  assert.match(buildInstructionCheckPrompt("x", lesson, source).user, /hivatalokban dolgoztak/);
 });
