@@ -9,6 +9,8 @@ import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
+import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, splitLimitBlockers } from "./limit-policy";
+import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
@@ -945,6 +947,27 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           return fail(store, job, describeStepError(error));
         }
       }
+      // Spec 2026-09-30-nem-elakado-kozzetetel (D4): a gyerek nem látja a forrást — a bevezető „a forrás szerint” fordulat
+      // a lektor ELŐTT kikerül (a lektor így a tisztított leckét látja); a maradék a kapun figyelmeztetés.
+      const references = stripSourceReferences(completedLesson);
+      if (references.fixed) {
+        logger.info(`[STUDIO] Forrás-hivatkozás törölve a gyereknek szóló szövegből (${job.id}): ${references.fixed} szövegrész`);
+        completedLesson = references.lesson;
+      }
+      // A nem gépiesen törölhető (alanyként álló) hivatkozás: egy ellenőrzött átíró hívás. Hibája soha nem állítja meg a gyártást.
+      if (sourceReferenceFindings(completedLesson).length && keyConfigured(TEXT_FIX_MODEL)) {
+        try {
+          const rewrite = await rewriteSourceReferences(completedLesson, async (textSystem, user) => {
+            const result = await callStepModel(providerFactory(TEXT_FIX_MODEL, "textFix"), { step: job.step, policy: "textFix", model: TEXT_FIX_MODEL, system: textSystem, user });
+            if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
+            return result.json;
+          });
+          completedLesson = rewrite.lesson;
+          logger.info(`[STUDIO] Forrás-hivatkozás átírva (${job.id}): ${rewrite.rewritten} mondat, ${rewrite.rejected} elutasítva (marad figyelmeztetésnek)`);
+        } catch (error) {
+          logger.warn(`[STUDIO] A forrás-hivatkozás átírása elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
+        }
+      }
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, completedLesson);
       await store.saveStep(
         job.id,
@@ -1011,30 +1034,52 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       if (convergence.downgraded.length) {
         logger.warn(`[STUDIO] Lektor konvergencia (${job.id}, ${job.round}. kör): ${convergence.downgraded.length} késői fedettségi jegyzet figyelmeztetéssé minősítve`);
       }
-      const notes = convergence.notes;
-      await store.saveNotes(job.id, notes, job.round);
-      const blockers = notes.filter((n) => n.blocking).length;
-      for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
-
       // Spec 2026-09-19 (measured: the owner's 49-concept map failed at the limit on ONE quiz
       // item, curate run b4d94132): when every remaining blocker is a bank item, rebuild only
       // those items once more instead of rewriting the teaching or failing the lesson.
-      const blockingNotes = notes.filter((n) => n.blocking);
-      const bankOnly = blockingNotes.length > 0 && blockingNotes.every((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
+      const convergedBlocking = convergence.notes.filter((n) => n.blocking);
+      const bankOnly = convergedBlocking.length > 0 && convergedBlocking.every((n) => /^experience(?:\.|\[|$)/.test(n.blockPath ?? ""));
       // Mérve (run b5d07f3d, 2026-09-19): egyetlen banktétel-blokkolónál a szerzői kör a teljes
       // tanítást újraírta, és 6 változatlan tartalmú csomag épült újra. Ha MINDEN blokkoló
       // banktétel, a tanítás nem hibás → bármelyik körben a csak-bank javítás jön (jobonként
       // egyszer); a szerzői újraírás csak tanítási blokkolóra jár.
       const bankOnlyRepair = bankRepairPossible && bankOnly;
-      if (blockers > 0 && job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair) {
-        // Spec 2026-09-29-limit-banktetel-kivetel (2. döntés; élő mérés job 44b5afa1): ha MINDEN maradék blokkoló egy
-        // létező banktételre mutat, a tétel esik ki a kapun (ha a bank így is megfelel), nem a lecke. Tanítási
-        // blokkoló vagy nem létező tétel továbbra is buktat.
-        const limitFlags = limitBankFlags(job.output?.lesson as Lesson | undefined, blockingNotes);
-        if (!limitFlags) {
-          return fail(store, job, `A lektor ${blockers} tartalmi javítást kér: ${blockingNotes.map(n => n.message).join("; ")}`,
+      // Spec 2026-09-30-nem-elakado-kozzetetel (D2): a limiten a hiány-jellegű tanítási blokkoló figyelmeztetés — a kapu
+      // ugyanezt a szabályt használja (limit-policy), így a kettő nem dönthet eltérően.
+      const atLimit = job.round >= MAX_AUTHOR_ROUNDS && fusion && !bankOnlyRepair;
+      const notes = downgradeAtLimit(convergence.notes, atLimit);
+      await store.saveNotes(job.id, notes, job.round);
+      const blockers = notes.filter((n) => n.blocking).length;
+      for (const code of lektorSkillCodes(notes)) await workflowFinding(code);
+      const blockingNotes = notes.filter((n) => n.blocking);
+      const incompleteAtLimit = atLimit ? notes.filter((n) => !n.blocking && n.kind === "coverage_gap" && convergedBlocking.some((c) => c.blockPath === n.blockPath && c.kind === n.kind)) : [];
+      if (incompleteAtLimit.length) {
+        logger.warn(`[STUDIO] Körlimit (${job.id}, ${job.round}. kör): ${incompleteAtLimit.length} hiány-jellegű tanítási jegyzet figyelmeztetésként megy tovább`);
+        job.output = { ...job.output, qualityNotes: appendQualityNote(job.output?.qualityNotes, {
+          reason: "lektor_incomplete", note: `Hiányos tanítás (nem hamis): ${incompleteAtLimit.map((n) => n.message).join(" | ").slice(0, 600)}`, round: job.round,
+        }) };
+      }
+      if (blockers > 0 && atLimit) {
+        // Spec 2026-09-29-limit-banktetel-kivetel + 2026-09-30-nem-elakado-kozzetetel (D2): a kivehető (banktétel, check,
+        // ábra) kiesik a kapun; tényhiba a tanításban soha nem publikálható — ha van keret, EGY célzott szerzői javítás jár.
+        const split = splitLimitBlockers(job.output?.lesson as Lesson | undefined, blockingNotes);
+        if (split.factual.length) {
+          const repairBudget = ["author", "animator", "lektor", "gate"].every((s) => workflowStepVisitsLeft(s) > 0);
+          const teaching = job.output?.lesson as Lesson | undefined;
+          const targets = teaching ? targetedRepairSections(teaching, split.factual, null) : null;
+          if (targets && repairBudget && !job.output?.targetedLektorRepairRound) {
+            logger.warn(`[STUDIO] Tényhiba a tanításban a körlimiten (${job.id}), célzott szerzői javítás: fejezet ${targets.map((i) => i + 1).join(", ")}`);
+            await store.saveStep(job.id, successPatch({
+              ...job.output, report: parsed.data, reportRound: job.round,
+              reviewInputHash: computeStepHash("lektor", LEKTOR_REVIEW_VERSION, input, job.round),
+              blockers, targetedLektorRepairRound: job.round + 1,
+            }));
+            return { ok: true, next: { step: "author", round: job.round + 1 } };
+          }
+          return fail(store, job, `A lektor ${blockers} tartalmi javítást kér — tényhiba maradt, nem publikálható: ${split.factual.map(n => n.message).join("; ")}`,
             { ...job.output, report: parsed.data, reportRound: job.round, blockers });
         }
+        const limitFlags = split.removable;
         const existing = Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : [];
         // Ugyanarra a tételre a bank-ellenőr is jelezhetett: a jelzés egyszer marad, de limit-eredetű (a kapu üzenete miatt).
         const limitPaths = new Set(limitFlags.map((f) => f.path));
@@ -1125,31 +1170,6 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
  * őr leletei ∪ a bank-ellenőr utolsó körének `choiceFlags`-e. Bank-tétel → kivétel, ha a bank utána is megfelel;
  * különben, és a lecke check blokkjánál, a lecke nem publikálható.
  */
-/** A limiten maradt blokkolók kapu-jelzésként, ha MIND egy létező banktételre mutat; különben null. */
-export function limitBankFlags(lesson: Lesson | undefined, blockingNotes: Array<{ blockPath?: string | null; message: string }>): ChoiceFlag[] | null {
-  const e = lesson?.experience;
-  if (!e || !blockingNotes.length) return null;
-  const flags: ChoiceFlag[] = [];
-  for (const note of blockingNotes) {
-    const path = removableItemPath(lesson!, note.blockPath);
-    if (!path) return null;
-    if (!flags.some((f) => f.path === path)) flags.push({ path, message: note.message, origin: "limit" });
-  }
-  return flags;
-}
-
-/**
- * Egy limitkori blokkoló által kivehető tétel normalizált útvonala: létező banktétel, vagy (spec
- * 2026-09-29-limit-check-kivetel) létező `check` blokk; minden más (tanító blokk, nem létező elem) → null.
- */
-function removableItemPath(lesson: Lesson, blockPath: string | null | undefined): string | null {
-  const bank = bankItemRef(blockPath);
-  if (bank) return lesson.experience && bank.index < lesson.experience[bank.bank].length ? bankItemPath(bank) : null;
-  const check = checkBlockRef(blockPath);
-  if (check && lesson.sections[check.section]?.blocks[check.block]?.kind === "check") return checkBlockPath(check);
-  return null;
-}
-
 export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[] } | { error: string } {
   const flags = new Map<string, string>();
   for (const f of lessonSingleChoiceProblems(lesson)) flags.set(f.path, `${f.path}: ${f.problems.join(" ")}`);
@@ -1170,7 +1190,8 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
     if (ref && lesson.experience && ref.index < lesson.experience[ref.bank].length) {
       byBank[ref.bank].add(ref.index);
       removed.set(bankItemPath(ref), message);
-    } else if (check && limitOrigin.has(path) && lesson.sections[check.section]?.blocks[check.block]?.kind === "check") {
+    } else if (check && limitOrigin.has(path) && ["check", "animate"].includes(lesson.sections[check.section]?.blocks[check.block]?.kind ?? "")) {
+      // Spec 2026-09-30-nem-elakado-kozzetetel (D2): a körlimiten blokkolt ÁBRA is kivehető (a tanítás marad).
       // Spec 2026-09-29-limit-check-kivetel: a körlimiten lektor által blokkolt ellenőrző kérdés kivehető; a limit-jelzés
       // nélküli (determinisztikus őr által talált) check-hiba továbbra is buktat (#134, E4).
       if (!checkBlocks.has(check.section)) checkBlocks.set(check.section, new Set());
@@ -1281,48 +1302,62 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       const targets = targetedRepairSections(parsed.data, [], gateOutput as GateFeedbackLike);
       // Spec 2026-09-29-kapu-proba-keret (2. döntés; élő újramérés e880571c): célzott javítás csak akkor, ha a javítási
       // út minden lépésére van még látogatási keret — különben a motor kivételt dob („Váratlan hiba”).
-      if (targets && !job.output?.targetedGateRepairRound && !repairBudget) {
-        return fail(store, job, `A fúziós lecke tanítása hiányos (a célzott javításhoz nincs több lépéskeret): ${gate.reasons.join("; ")}`);
-      }
-      if (targets && !job.output?.targetedGateRepairRound) {
+      if (targets && !job.output?.targetedGateRepairRound && repairBudget) {
         logger.warn(`[STUDIO/GATE] Kapu-lelet a limiten, célzott javítás (${job.id}): fejezet ${targets.map((i) => i + 1).join(", ")}`);
         await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: gateOutput, targetedGateRepairRound: job.round + 1 }, error: null, finishedAt: null });
         return { ok: true, next: { step: "author", round: job.round + 1 } };
       }
-      return fail(store, job, `A fúziós lecke tanítása hiányos: ${gate.reasons.join("; ")}`);
-    }
-    const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
-    if (transition.step === "author" && !repairBudget) {
-      return fail(store, job, `A lecke kapuja hiányt mért, és a szerzői javításhoz nincs több lépéskeret: ${gate.reasons.join("; ")}`);
-    }
-    if (transition.step === "error") {
-      return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);
-    }
-    // LS-7 (#189): a limit előtt javító kör; a limit UTÁN nem parkolunk emberre —
-    // a lecke elkészül, a kapu-hiány pedig jelzésként megy vele. Publikálás
-    // nélküli "done" némán üres tananyagot jelentene, ami rosszabb a hibánál.
-    if (transition.step !== "done") {
-      await store.saveStep(job.id, {
-        status: "ok",
-        output: { ...job.output, gate: gateOutput },
-        error: null,
-        finishedAt: null,
+      // Spec 2026-09-30-nem-elakado-kozzetetel (D3): a kapu leletei nem ténybeliek (fedettség, ív, címke) — a limiten
+      // publikálunk, ha a megalapozott fedettség core ≥ 95%, supporting ≥ 80% és nincs ismeretlen azonosító.
+      const acceptance = limitAcceptance(parsed.data, map.concepts, coverageGate);
+      if (!acceptance.ok) {
+        return fail(store, job, `A fúziós lecke tanítása hiányos${targets && !repairBudget ? " (a célzott javításhoz nincs több lépéskeret)" : ""}: ${gate.reasons.join("; ")}`);
+      }
+      if (acceptance.stripped) {
+        parsed.data = acceptance.lesson;
+        await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
+        gate.coverage = checkCoverageGate(parsed.data, map.concepts).coverage;
+      }
+      qualityNotes = appendQualityNote(qualityNotes, {
+        reason: "gate_limit_accepted",
+        note: `A kapu a körlimiten hiányt mért (core ${Math.round(acceptance.core * 100)}%, kiegészítő ${Math.round(acceptance.supporting * 100)}%${acceptance.stripped ? `, ${acceptance.stripped} megalapozatlan címke levéve` : ""}): ${gate.reasons.join(" ").slice(0, 600)}`,
+        round: job.round,
       });
-      return { ok: true, next: transition };
+      logger.warn(`[STUDIO/GATE] Körlimit: nem-ténybeli kapu-lelet, a lecke publikál (${job.id}): core ${Math.round(acceptance.core * 100)}%, kiegészítő ${Math.round(acceptance.supporting * 100)}%`);
+    } else {
+      const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
+      if (transition.step === "author" && !repairBudget) {
+        return fail(store, job, `A lecke kapuja hiányt mért, és a szerzői javításhoz nincs több lépéskeret: ${gate.reasons.join("; ")}`);
+      }
+      if (transition.step === "error") {
+        return fail(store, job, `${transition.reason ?? "A kapu elutasította a leckét."} (${gate.reasons.join(" ")})`);
+      }
+      // LS-7 (#189): a limit előtt javító kör; a limit UTÁN nem parkolunk emberre —
+      // a lecke elkészül, a kapu-hiány pedig jelzésként megy vele. Publikálás
+      // nélküli "done" némán üres tananyagot jelentene, ami rosszabb a hibánál.
+      if (transition.step !== "done") {
+        await store.saveStep(job.id, {
+          status: "ok",
+          output: { ...job.output, gate: gateOutput },
+          error: null,
+          finishedAt: null,
+        });
+        return { ok: true, next: transition };
+      }
+      const decision = autonomousDecision({
+        reason: "gate_rejected",
+        round: job.round,
+        detail: gate.reasons.join(" "),
+      });
+      qualityNotes = appendQualityNote(qualityNotes, {
+        reason: "gate_rejected",
+        note: decision.note ?? "A publikálási kapu hiányt mért.",
+        round: job.round,
+      });
+      logger.warn(
+        `[STUDIO/GATE] A kapu hiányt mért, de az autonóm futás publikál (job ${job.id}): ${gate.reasons.join(" ")}`,
+      );
     }
-    const decision = autonomousDecision({
-      reason: "gate_rejected",
-      round: job.round,
-      detail: gate.reasons.join(" "),
-    });
-    qualityNotes = appendQualityNote(qualityNotes, {
-      reason: "gate_rejected",
-      note: decision.note ?? "A publikálási kapu hiányt mért.",
-      round: job.round,
-    });
-    logger.warn(
-      `[STUDIO/GATE] A kapu hiányt mért, de az autonóm futás publikál (job ${job.id}): ${gate.reasons.join(" ")}`,
-    );
   }
 
   if (skill74) {
@@ -1346,12 +1381,31 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       const check = checkBlockRef(note.blockPath);
       return !check || !removedItems.has(checkBlockPath(check));
     };
-    if (!report.success || classifyNotes(report.data.notes).some(unresolvedBlocker)
+    // Spec 2026-09-30-nem-elakado-kozzetetel (D1): UGYANAZ a besorolás, mint a lektor lépésben (konvergencia + limit-szabály);
+    // eddig a konvergencia nélküli újrabesorolás egy figyelmeztetéssé minősített jegyzeten buktatta a kész leckét.
+    const reviewNotes = report.success
+      ? downgradeAtLimit(classifyReviewNotes(report.data.notes, gatePriorBlockers, job.round), job.round >= MAX_AUTHOR_ROUNDS)
+      : [];
+    if (!report.success || reviewNotes.some(unresolvedBlocker)
       || job.output?.reportRound !== job.round || job.output?.reviewInputHash !== expectedReviewHash) {
       return fail(store, job, "A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges.");
     }
   }
 
+  // Spec 2026-09-30-nem-elakado-kozzetetel (D4, D5): a maradék forrás-hivatkozás figyelmeztetés (nem tényhiba), és a
+  // publikált lecke minőség-összesítőt kap (kivett tételek + figyelmeztetések).
+  const references = sourceReferenceFindings(parsed.data);
+  if (references.length) {
+    qualityNotes = appendQualityNote(qualityNotes, {
+      reason: "source_reference",
+      note: `Forrás/füzet-hivatkozás maradt (${references.length}): ${references.slice(0, 6).map((r) => `${r.path}: „${r.text.slice(0, 80)}”`).join(" | ")}`,
+      round: job.round,
+    });
+  }
+  const quality = {
+    removed: choiceGate.removed,
+    warnings: (Array.isArray(qualityNotes) ? qualityNotes as Array<{ note?: string }> : []).map((n) => n.note ?? "").filter(Boolean),
+  };
   const published = await store.publishLesson({
     lessonId: job.lessonId,
     mapId: job.mapId,
@@ -1370,6 +1424,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       gate: gateOutput,
       htmlFileId: published.htmlFileId,
       exportedQuizItems: published.exportedQuizItems,
+      quality,
       ...(qualityNotes !== undefined ? { qualityNotes } : {}),
     },
     error: null,

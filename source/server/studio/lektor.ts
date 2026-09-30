@@ -116,8 +116,10 @@ export function applyLektorVerdict(lesson: Lesson, raw: RawNote[]): LektorVerdic
 
 /** `sections.6.blocks.0` → `sections.6`; `section.block`/bank paths stay as written. */
 export function noteSectionKey(blockPath: string | undefined): string {
-  const m = blockPath?.match(/^sections?\.(\d+)/);
-  return m ? `sections.${m[1]}` : (blockPath ?? "");
+  // Spec 2026-09-30-nem-elakado-kozzetetel: a lektor-séma a zárójeles alakra normalizál (`sections[0].blocks[0]`) —
+  // eddig csak a pontozottat ismertük fel, így a konvergencia blokk-, nem fejezet-szinten hasonlított.
+  const m = blockPath?.match(/^sections?(?:\.(\d+)|\[(\d+)\])/);
+  return m ? `sections.${m[1] ?? m[2]}` : (blockPath ?? "");
 }
 
 /**
