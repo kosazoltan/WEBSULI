@@ -131,9 +131,14 @@ export const experiencePacketSchema = z.object({
     const items = e[bank];
     if (new Set(items.map(i => i.id)).size !== items.length) ctx.addIssue({ code: "custom", path: [bank], message: "Ismétlődő tételazonosító." });
   }
-  for (const [bank, questions] of [["tasks", e.tasks.map(t => t.q)], ["quiz", e.quiz.map(q => q.question)]] as const) {
-    const keys = questions.map(questionKey);
-    if (new Set(keys).size !== keys.length) ctx.addIssue({ code: "custom", path: [bank], message: "Ismétlődő kérdés; valódi változatok szükségesek." });
+  // Spec 2026-09-30 (U2, C9): az ismétlődés a MÁSODIK tételt nevezi meg (javítási jogosultság), az elsőt hivatkozza.
+  for (const [bank, items] of [["tasks", e.tasks.map(t => ({ id: t.id, text: t.q }))], ["quiz", e.quiz.map(q => ({ id: q.id, text: q.question }))]] as const) {
+    const seen = new Map<string, string>();
+    for (const item of items) {
+      const key = questionKey(item.text), first = seen.get(key);
+      if (first !== undefined) ctx.addIssue({ code: "custom", path: [bank], message: `${item.id}: Ismétlődő kérdés (megegyezik: ${first}); valódi változat szükséges.` });
+      else seen.set(key, item.id);
+    }
   }
   if (e.language && !e.glossary.length) ctx.addIssue({ code: "custom", path: ["glossary"], message: "Nyelvi leckéhez szószedet kell." });
 });
@@ -196,6 +201,25 @@ export function experienceTheme(seed: string): LessonExperience["theme"] {
   let hash = 2166136261;
   for (const c of seed) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
   return EXPERIENCE_THEMES[(hash >>> 0) % EXPERIENCE_THEMES.length];
+}
+
+/**
+ * B4 (spec 2026-09-30, U2): a BANKCSOMAG mérhető szerződése a bank-szerepnek — a program tényleges ellenőrzéseiből
+ * (csomagséma, `experiencePacketSchema`, keresztellenőrzés, aritmetika, pontozó) fogalmazva, a csomag saját számaival.
+ * Egy szabály egy helyen: a skill a viselkedést mondja, ez a mércét; a `OPEN_ANSWER_RULES_HU` a pontozó részleteit.
+ */
+export function bankPacketContract(c: { sectionIndex: number; conceptIds: readonly string[]; methodKinds: readonly string[]; taskCount: number; taskTarget: number; quizCount: number; quizTarget: number; language?: string }): string {
+  return [
+    "BANKCSOMAG-SZERZŐDÉS (a program méri; a hibás tétel javító kört kap, a csomagszintű hiba teljes újraírást):",
+    `1. Darabszám: methods legalább ${c.methodKinds.length} (kindek: ${c.methodKinds.join(", ")}), legfeljebb 20; tasks PONTOSAN ${c.taskTarget} (a program ${c.taskCount} alatt elutasít); quiz PONTOSAN ${c.quizTarget} (${c.quizCount} alatt elutasít); glossary: ${c.language ? `legalább 1 elem (${c.language})` : "[]"}.`,
+    `2. Csomaghatár: minden tétel sectionIndex=${c.sectionIndex}, coversConceptIds csak ebből: ${JSON.stringify(c.conceptIds)}; kvíznél pontosan egy id; fogalmanként legalább egy intent=recall és egy intent=apply kvíz és legalább egy nyílt feladat.`,
+    "3. EBBEN a csomagban legalább egy mode=\"oral\" és egy mode=\"written\" nyílt feladat.",
+    "4. Kérdés-egyediség: a kérdés kulcsa (kisbetű, írásjel nélkül; a + − · × : / jel és a számok megmaradnak) nem ismétlődhet a csomagon belül, sem a korábbi csomagok kérdéseivel és kapukérdéseivel; két kapukérdés (gate) csak különböző lehet.",
+    "5. Egyválasztós tétel (kvíz; gate/myth/popup módszer): 3–4 különböző opció, PONTOSAN egy igaz, minden opcióhoz magyarázat; a correctIndex opciójának száma egyezzen a magyarázatban helyesnek mondott számmal; minden kiírt „a · b = c” állítás igaz (a program kiszámolja).",
+    "6. Nyílt feladat: a sample a saját rubrikán 1 pont (a pontozó szabályai lent); számolós feladatnál typedAnswers, amelynek value-ját a program a kérdés kifejezéséből újraszámolja; a végeredmény nem required-csoport.",
+    "7. Tilos: ábrára („az ábrán”, „N. ábra”), forrásra, füzetre hivatkozni; csomagon kívüli fogalom; a tanításban nem szereplő tény; párosításban ismétlődő oldal.",
+    "8. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételei és mezői cserélhetők, eredeti id-val, minden mezővel; új id és törlés tilos; a többit a program változatlanul megőrzi.",
+  ].join("\n");
 }
 
 export function lessonLanguage(subject: string): string | undefined {

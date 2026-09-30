@@ -5,10 +5,10 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 
 | # | Rövid név | Egység | Állapot | Bizonyíték |
 |---|---|---|---|---|
-| H1 | Banktétel tényhiba (rubrika + számolás) | U1, U2, U5 | nyitott | — |
-| H2 | Minta ≠ rubrika; pontozó-szerződés hiányos | U1, U2 | nyitott (a tagadás-heurisztika: ismert maradó) | — |
-| H3 | Csomag darabszám/alak | U2 | részleges (PR U2: szigorú `json_schema` a KÖZVETLEN OpenAI-úton — `bank-schema.ts` tükör-séma, `ChatCallOptions.responseFormat`, csak `providerForModel === "openai"`; élő próba: luna+terra elfogadta a valódi sémát, `evidence-so-bank.txt`; a darabszám-magyarázat és a B1 bank-skill → U2c) | `bank-schema.test.ts` |
-| H4 | Ismétlődő kérdés, három kulcs | U2 | nyitott | — |
+| H1 | Banktétel tényhiba (rubrika + számolás) | U1, U2, U5 | részleges (U1: típusos referencia újraszámolva; U2c: `BANKCSOMAG-SZERZŐDÉS` + `OPEN_ANSWER_RULES_HU` a bank rendszerutasításában, bank skill B1 újraírva, bank-ellenőr a `typedAnswers`-t méri; a lektor/bank-ellenőr bemeneti része U5) | `bank-repair.test.ts` |
+| H2 | Minta ≠ rubrika; pontozó-szerződés hiányos | U1, U2 | részleges (U1: `OPEN_ANSWER_RULES_HU` a kód konstansaiból; U2c: a szerződés a bank promptban, a skill a minWords/sample szabályt mondja; a tagadás-heurisztika ismert maradó) | `bank-repair.test.ts` |
+| H3 | Csomag darabszám/alak | U2 | lezárt a U2 hatókörében (U2b: szigorú `json_schema` a közvetlen OpenAI-úton; U2c: a szerződés PONTOSAN target darabszámot mond, csomagszintű hiba → teljes újraírás, tételhiba → hibakódhoz kötött javítási jogosultság `bank-repair.ts`; a tartalék úton JSON-mód + helyi validálás) | `bank-schema.test.ts`, `bank-repair.test.ts` |
+| H4 | Ismétlődő kérdés, három kulcs | U2 | lezárt (U2a: közös `questionKey`; U2c: a csomagon belüli ismétlődés a MÁSODIK tételt nevezi meg → célzott csere, a korábbi csomagok kérdései és kapukérdései a promptban) | `bank-hardening.test.ts`, `bank-repair.test.ts` |
 | H5 | Szerzői javítókör „title/subject Required” | U4 | nyitott | — |
 | H6 | Megalapozatlan címke, lapított index | U4 | nyitott | — |
 | H7 | Tanári pont tanítatlan | U3 | részleges (#155: forrásból igazolt pont kiegészítő fogalom) | PR #155 |
@@ -46,11 +46,11 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H43 | Régi-alak tiltás | U6 | nyitott | — |
 | H44 | Duplikátum-kulcsok írásjel-törlés | U2a | lezárt (PR U2a: közös `questionKey` a csomag-sémában, a kapukérdés-őrben és a csomagok közti összevetésben; a korábbi kapukérdések a promptban) | `bank-hardening.test.ts` |
 | H45 | Üres lektori jelentés | U5 | nyitott | — |
-| H46 | Oral/written csomagonként | U2 | nyitott | — |
+| H46 | Oral/written csomagonként | U2c | lezárt (a szerződés 3. pontja és a prompt „EBBEN a csomagban legalább egy oral és egy written” — kimondva; a `experiencePacketSchema` csomagonként méri, a hiány csomagszintű → teljes újraírás) | `bank-repair.test.ts` |
 | H47 | Tanári kérés 2000-re vágva | U3 | nyitott | — |
 | H48 | Bank-ellenőri lelet elnyomása | U5 | nyitott | — |
 | H49 | Lektori solutions 40-re vágva | U5 | nyitott | — |
 | H50 | Vázlatmezők csendes vágása | U4 | nyitott | — |
 | H51 | Újrahívás-összefésülés lelettörlés | U5 | nyitott | — |
 | H52 | Utolsó kísérlet aritmetikai jelzés | U2a | lezárt (PR U2a: nyitott lelet → `bankOpenFindings` a jobban → a kapun `origin: "arithmetic"` kivehető tétel; a csomag továbbra is átmegy) | `bank-hardening.test.ts`, régi „biztonsági szelep” teszt változatlan |
-| H53 | Lektori „első menet” példa | U2 | nyitott | — |
+| H53 | Lektori „első menet” példa | U2c | lezárt (a `buildLektorPrompt` kalibráló példája cserélve: köztes műveleti állapotot kérő kérdésnél az értékazonos más alak HIBÁS → blokkoló; a lektor skill 5. pontja és a bank-ellenőr is a `typedAnswers`/form szabályt ismeri) | `bank-repair.test.ts` |

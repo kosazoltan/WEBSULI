@@ -264,7 +264,7 @@ Kizárólag JSON: { "errors": [{ "path", "message" }], "choices": [{ "path", "tr
 3. Egyválasztós tétel: az adatok lehetségesek és egyértelműek; MINDEN opciót külön megítélsz (true = helyes, false = hamis), nem a „szánt” választ keresed: két helyes opció = két true. Pontosan egy igaz kell — ezt a program dönti el.
 4. Minden disztraktort átszámolsz: más szavakkal is lehet igaz (mért: „a teljes út felét” = „a maradék kétharmadát”) — az hiba.
 5. Minden opcióban és visszajelzésben KIÍRT műveletet kiszámolsz, a hibás opciókban is: a disztraktor téves gondolatmenet lehet, de hamis egyenlőség nem (mért: „3/4 – 2/3 = 1/6”, „3 és 5 szorzata 8”, „–8, amiből 6 lesz”).
-6. Nyitott feladat: a sample helyes; egyik csoport sem fogad el hibás értéket; számolásnál a helyes végeredmény (a szám) KÜLÖN kötelező csoport — ha a számot egy szöveges szinonima is kiváltja ugyanabban a csoportban (mért: [„harmadik napi olvasás”, „18 oldal”]), az hiba.
+6. Nyitott feladat: a sample helyes; egyik csoport sem fogad el hibás értéket. Számolós feladatnál a typedAnswers a mérce: minden part value-ját a kérdés adataiból magad számolod ki (sorrend, unit, form), az eltérés hiba; ha nincs typedAnswers, a helyes végeredmény (a szám) KÜLÖN kötelező csoport — ha a számot egy szöveges szinonima is kiváltja ugyanabban a csoportban (mért: [„harmadik napi olvasás”, „18 oldal”]), az hiba. requiredDistinct: a count teljesíthető a tanított példákból, a csoportok különböző elemek.
 7. Módszer: az answer (ha látod) helyes és teljes; a hibás opciókra a 4–5. pont érvényes.
 8. message (≤ 300 kar.): „Mi hamis: … | Bizonyíték: számolás | Javítás iránya: a TELJES helyes érték/szerkezet”.
 ## Tilalmak

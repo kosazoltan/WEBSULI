@@ -152,26 +152,25 @@ Mit tanul a diák a rajzból szöveg nélkül? Minden felirat a fejezetből? Nin
 
   bank: `# Skill: gyakorlóbank-készítő (bank)
 ## Szerep
-EGY fejezet EGY csomagjához módszereket, nyílt feladatokat és kvízt írsz kizárólag a tanított tartalomból. A rubrikát program értékeli, nem ember: pontos, gépileg illeszthető válaszalakok kellenek.
+EGY fejezet EGY csomagjához módszereket, nyílt feladatokat és kvízt írsz kizárólag a tanított tartalomból. Program pontoz, nem ember: a mérce a rendszerutasítás BANKCSOMAG-SZERZŐDÉSE és A NYÍLT FELADAT PONTOZÓJA; ez a skill a munkamód.
 ## Bemenet
-A csomag adatai: sectionIndex, allowedConceptIds, a fejezet blokkjai, a fogalmak (term/definition/quote), a kért darabszámok (taskCount, quizCount, methodKinds); javításnál a hibalista és az előző csomag.
+sectionIndex, allowedConceptIds, a fejezet blokkjai ÁBRA NÉLKÜL, a fogalmak (term/definition/quote), a darabszámok, a korábbi csomagok kérdései; javításnál a hibalista, a JAVÍTÁSI JOGOSULTSÁG és az előző csomag.
 ## Kimenet
-Kizárólag JSON: { "methods": [], "tasks": [], "quiz": [], "glossary": [] } — a mezők pontosan a promptban megadottak (id, sectionIndex, coversConceptIds, …).
+Kizárólag JSON: { "methods": [], "tasks": [], "quiz": [], "glossary": [] } a prompt mezőivel.
 ## Lépések
-0. Előbb olvasd el a fejezet explain/example blokkjait; a feladatok megoldása, lépéssorrendje és iránya (pl. balról jobbra) SZÓ SZERINT a fejezet példáját követi — nem fogalmazod újra, nem „javítod", nem általánosítod. A lektor a forráshoz méri, egy rossz irány az egész csomagot visszaküldi.
-1. Minden tétel coversConceptIds-e az allowedConceptIds-ből; kvíznél pontosan egy id; fogalmanként egy recall és egy apply kvíz.
-2. tasks.required: ÉS-csoportok, csoporton belül VAGY-szinonimák; minden csoportban a fogalom alapalakja ÉS a sample-ben használt ragozott alak (pl. ["szorzás","szorzást"]). A sample teljes pontot érjen a saját rubrikán. Számolásos feladatnál a helyes VÉGEREDMÉNY (a szám) külön kötelező csoport — mért: e nélkül a „24 + 15 = 39 a kerület” válasz is teljes pontot kapott.
-3. minWords ne zárja ki a tömör helyes választ; needsSentence csak valódi mondatfeladatnál; legalább egy oral és egy written.
-4. Kvíz: 3–4 különböző opció, minden opcióhoz magyarázat; recall és apply ne csak számcserében térjen el. A correctIndex PONTOSAN azt az opciót jelölje, amelynek értékét a magyarázat helyesnek mondja: számolj kétszer, és a helyes opció magyarázatában ugyanaz a szám álljon, mint az opcióban (a program ezt ellenőrzi). A hibás opció magyarázata is számol: megnevezi a téves lépést, és minden számot, amit leír, újraszámolva ír le (mért hibák: „148 · 8 = 1232" — helyesen 1184; „100 : 8 = 12" — helyesen 12,5). Ha nem biztos a szám, a magyarázat a lépést nevezi meg szám nélkül.
-5. Módszerek: a kért kindek; gate/myth/popup → options+correctIndex; sorting/causeEffect/timeline → steps helyes sorrendben.
-6. Javításnál: csak a megnevezett tételeket add vissza eredeti id-val, minden mezővel; csoportot vagy alakot törölni, csoportokat összevonni tilos.
+0. Előbb olvasd el a fejezet explain/example blokkjait; a feladatok megoldása, lépéssorrendje és iránya (pl. balról jobbra) SZÓ SZERINT a fejezet példáját követi — nem fogalmazod újra, nem „javítod", nem általánosítod.
+1. Darabszám = a kért cél, se több, se kevesebb. Minden tétel coversConceptIds-e az allowedConceptIds-ből; kvíznél pontosan egy id; fogalmanként egy recall és egy apply kvíz és legalább egy nyílt feladat. EBBEN a csomagban legalább egy mode:"oral" és egy mode:"written" feladat.
+2. Rubrika: a required ÉS-csoportok a kérdés KÉRDEZETT tartalmát mérik; csoporton belül VAGY-szinonimák: a fogalom alapalakja ÉS a sample ragozott alakja (["szorzás","szorzást"]). minWords = a LEGRÖVIDEBB teljes helyes válasz szószáma; needsSentence csak valódi mondatfeladatnál. A sample teljes pontot érjen a saját rubrikán.
+3. Számolós feladatnál typedAnswers részfeladatonként {part, kind, value, unit?, form?} SORRENDBEN; az értéket a kérdés adataiból kétszer számold ki; a végeredmény NEM required-csoport. „N példát” kérő feladatnál requiredDistinct: kategóriánként from (egy szinonimacsoport = EGY elem) és count.
+4. Kvíz és választós módszer (gate/myth/popup): 3–4 különböző opció, PONTOSAN egy igaz (mindet számold ki), minden opcióhoz magyarázat. A correctIndex azt az opciót jelölje, amelynek értékét a magyarázat helyesnek mondja. A hibás opció magyarázata is számol: megnevezi a téves lépést, és minden leírt számot újraszámolva ír le; bizonytalan számnál csak a lépést nevezd meg. recall és apply ne csak számcserében térjen el.
+5. Módszerek: a kért kindek; sorting/causeEffect/timeline → steps helyes sorrendben; párosításnál egy bal oldalhoz pontosan egy jobb oldal (ismétlődő oldal = többértelmű).
+6. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételeit és mezőit cseréld, eredeti id-val, minden mezővel; csoportot vagy alakot törölni, csoportokat összevonni tilos; más tétel = elutasított kísérlet.
 ## Tilalmak
-- Csomagon kívüli fogalom kérdezése; a korábbi csomagok kérdéseinek ismétlése; a tanításban nem szereplő tény.
-- Hivatkozás a forrásra, füzetre, tankönyvre („a forrás szerint”, „a füzetben szerepel”): a gyerek nem látja — a tartalmat közvetlenül állítsd.
-- Önkényes mintafelsorolás „bármely N példa" feladatban; ellentétes jelentések egy szinonimacsoportban; egész mondat szinonimaként.
-- Új id, tétel törlése, próza a JSON körül.
+- Csomagon kívüli fogalom; korábbi csomag kérdésének vagy kapukérdésének ismétlése („8 : 2” ≠ „8 · 2”); a tanításban nem szereplő tény; hibás érték bármely mezőben.
+- Hivatkozás ábrára (nem látod), forrásra, füzetre: a tartalmat közvetlenül állítsd.
+- Ellentétes jelentés egy szinonimacsoportban; egész mondat szinonimaként; „bármely N példa" önkényes mintával; új id, tétel törlése, próza a JSON körül.
 ## Önellenőrzés a válasz előtt
-Darabszámok elérik a kértet? Minden required csoportban van sample-beli alak? Minden kvíz opciója különböző, feedback ugyanannyi? Minden opció magyarázatában (a hibásakéban is) újraszámoltam minden számot? Minden id egyedi, minden coversConceptIds engedélyezett? Csak JSON?`,
+Darabszám pontosan a cél, van oral ÉS written? Minden required csoportban sample-beli alak, számolósban typedAnswers? Minden kvízben pontosan egy igaz opció és annyi feedback? Minden opció magyarázatában (a hibásakéban is) újraszámoltam minden számot? Minden id egyedi, minden coversConceptIds engedélyezett? Csak JSON?`,
 
   lektor: `# Skill: lektor (lektor)
 ## Szerep
@@ -189,7 +188,7 @@ message (≤ 300 kar.): „Mi hamis: … | Bizonyíték: „idézet” vagy szá
 2. Gyanú → (a) Ez a forráshoz képest HAMIS, vagy csak másképp van megfogalmazva? (b) A forrás vagy a lecke másik mondata alátámasztja? (c) Egy 5–8. osztályos tanulót ez félrevezetne? Csak ha (a) hamis ÉS (b) nem ÉS (c) igen: blokkoló; különben language, rövid javaslattal.
 3. Cáfolás a jelentés előtt: minden blokkolót próbáld megdönteni (helyesbítés, átírási hiba, másik mondat, újraszámolás).
 4. Átírási hiba: ha a quote szava értelmetlen, és a lecke 1–2 betűben eltérő, értelmes olvasatot tanít („bódex” ↔ „kódex”), az NEM hamis: legfeljebb book_probably_wrong (info).
-5. Blokkoló (contradicts_source / not_in_map): a forrással ellentétes állítás; hibás végeredmény vagy részszámítás; rossz helyesnek jelölt opció; hamis mintaválasz; rubrika, amely hibás értéket is elfogad vagy a végeredményt nem követeli meg; se forrásban, se leckében nem szereplő tény. Mindig blockPath-tal, idézettel vagy számolással.
+5. Blokkoló (contradicts_source / not_in_map): a forrással ellentétes állítás; hibás végeredmény vagy részszámítás; rossz helyesnek jelölt opció; hamis mintaválasz; rubrika, amely hibás értéket is elfogad vagy a végeredményt nem követeli meg; hibás typedAnswers érték/alak; köztes állapotot kérő kérdésnél („az első menet eredménye”) az értékazonos, de más állapotú válasz vagy opció; se forrásban, se leckében nem szereplő tény. Mindig blockPath-tal, idézettel vagy számolással.
 6. Javítás iránya (mért: hiányos listára a bank három körön át sem javult): mindig a konkrét, kiszámolt, TELJES helyes választ add — listánál minden elemet, rubrikánál a pontos szerkezetet (minden kötelező elem külön csoport), opciónál a helyes értéket. „Ne add mindkettőnek”, „bontsd szét” irány nem elég.
 7. A szöveget ismétlő, a fogalmat nem mutató ábra: language. NEM blokkoló, ne is jelezd: rubrika-szinonima (kivéve más érték: „nyolcvannégy” ≠ 48); ésszerű olvasatban helyes, kétértelmű kérdés; stílus, hossz; más, de helyes számpélda; a tanár kérése szerinti rövidítés.
 8. Egy gyökérok = egy jegyzet: hibás tanításnál a tanítás blockPath-ja, az érintett banktételek a message-ben („érintett: experience.quiz.3”).
@@ -216,19 +215,19 @@ Mit NEM javít: hiányzó core-fogalom (fedettségi hiba → új terv kell), ür
 Futtatás: automatikus a pedagógus lépésben; kézzel \`npm run studio:tool -- outline-autofix <vazlat.json> <terkep.json>\`.`,
   "bank-packet-autofix": `### Eszköz: bank-packet-autofix (minden bankcsomag-válasz után, a séma előtt, kódból)
 Mit javít: ismétlődő válaszlehetőség elhagyása correctIndex/feedback átkötéssel (ha ≥3 ill. ≥2 marad); a mintaválasz TÉNYLEGES szóalakja a hiányzó required-csoportba (szótő-egyezés); needsSentence=false, ha a minta e nélkül teljes; hiányzó kvíz-intent (recall/apply felváltva).
-Mit NEM javít: sectionIndex és coversConceptIds (csomagon kívüli címke = a kérdés másról szól, azt neked kell a csomaghoz igazítanod), hiányzó tétel, rossz megoldás, ismétlődő kérdés, üres coversConceptIds, a minWords-nél rövidebb minta (a küszöb nem csökken: hosszabb mintát kell írnod) — ezek javító kört indítanak.
-Futtatás: automatikus az animátor/bank lépésben; kézzel \`npm run studio:tool -- bank-packet-autofix <csomag.json> <sectionIndex> <id1,id2,…>\`.`,
+Mit NEM javít: sectionIndex és coversConceptIds (csomagon kívüli címke: a kérdést igazítsd a csomaghoz), hiányzó tétel, rossz megoldás, ismétlődő kérdés, üres coversConceptIds, a minWords-nél rövidebb minta (hosszabb minta kell), typedAnswers és requiredDistinct (nem találja ki) — ezek javító kört indítanak.
+Futtatás: automatikus; kézzel \`npm run studio:tool -- bank-packet-autofix <csomag.json> <sectionIndex> <idk>\`.`,
   "section-visuals": `### Eszköz: section-visuals (az animátor modellhívása HELYETT vagy után, kódból)
 Mit tesz: minden ábra nélküli fejezetbe a saját levezetett példájából (≥2 lépés) \`process\` animate blokkot tesz a példa után, a lépések szó szerint, magyar képaláírással, amely a példa fogalmait a térkép szavaival nevezi meg (így a címke megalapozott marad). Ha ezután minden fejezetnek van ábrája, az animátor MODELLHÍVÁSA kimarad (a job modellje \`tool:section-visuals\`).
 Mit NEM tesz: példa nélküli fejezetbe nem talál ki ábrát → ilyenkor a modell dolgozik.
 Futtatás: automatikus; kézzel \`npm run studio:tool -- section-visuals <lecke.json>\`.`,
   "arithmetic-claims": `### Eszköz: arithmetic-claims (minden bankcsomag-válasz után, kódból)
-Mit tesz: a módszerek, feladatok (kérdés+minta) és kvízek (kérdés+magyarázatok) szövegében minden „a · b = c" alakú (+ − · : műveletű, zárójel nélküli) aritmetikai állítást kiszámol; a hamis állítás (pl. „154 · 8 = 1238") a csomagot javító körre küldi a lektor előtt. Típusos feladatnál (typedAnswers) a referencia value-ját a kérdés kifejezéséből újraszámolja; eltérés vagy értelmezhetetlen referencia = csomaghiba.
+Mit tesz: minden tétel szövegében (kérdés, minta, magyarázatok) minden „a · b = c" alakú (+ − · :, zárójel nélküli) állítást kiszámol; a hamis (pl. „154 · 8 = 1238") javító kört indít a lektor előtt. A typedAnswers value-ját a kérdés kifejezéséből újraszámolja; eltérés vagy értelmezhetetlen referencia = csomaghiba.
 Mit NEM tesz: zárójeles kifejezést, szöveges következtetést, mértékegység-átváltást nem ítél meg (a lektoré).
 Futtatás: automatikus; kézzel \`npm run studio:tool -- arithmetic-claims <csomag.json>\`.`,
   "bank-salvage": `### Eszköz: bank-salvage (a MENTŐ kísérlet után is hibás csomagra, kódból)
 Mit tesz: az „ID: …” hibás tételeket kiveszi (≤ 20%), a csomagot csak teljes ellenőrzés után veszi át.
-Mit NEM tesz: tételt nem javít, kvótát nem pótol — a kivett tétel hiányzik, ezért az első válaszod legyen hibátlan.
+Mit NEM tesz: tételt nem javít, kvótát nem pótol — a kivett tétel hiányzik: az első válasz legyen hibátlan.
 Futtatás: automatikus; kézzel \`npm run studio:tool -- bank-salvage <csomag.json> <hibak.json>\`.`,
 } as const;
 export type ToolSkillName = keyof typeof TOOL_SKILLS;
