@@ -42,6 +42,8 @@ export type RawNote = {
   message: string;
   /** "sectionIndex.blockIndex", when the note points at one block. */
   blockPath?: string;
+  /** U5 (H48): a banktétel STABIL azonosítója — a lelet nem a tömbindexhez, hanem a tételhez kötött. */
+  itemId?: string;
 };
 
 export type LektorNote = RawNote & {

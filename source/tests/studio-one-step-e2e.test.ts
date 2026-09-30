@@ -227,7 +227,7 @@ async function runChain(): Promise<{ job: JobView; recorded: Recorded; steps: nu
             return JSON.stringify(LESSON);
           case "lektor":
             // Kifogástalan lecke: nincs blokkoló jegyzet.
-            return JSON.stringify({ notes: [] });
+            return JSON.stringify({ solutions: [], notes: [], reviewedAll: true });
           default:
             return "{}";
         }

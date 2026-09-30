@@ -789,6 +789,8 @@ export const lektorNotes = pgTable(
     message: text("message").notNull(),
     /** "szakaszIndex.blokkIndex", ha egy blokkra mutat. */
     blockPath: varchar("block_path", { length: 32 }),
+    /** Spec 2026-09-30 (U5, H48): a banktétel stabil azonosítója (a lelet nem a tömbindexhez kötött). */
+    itemId: varchar("item_id", { length: 96 }),
     /** Audit 2026-09-05: a lektor-kör, amelyben a jegyzet született — az author csak az előző kört kapja. */
     round: integer("round").notNull().default(0),
     resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: "set null" }),

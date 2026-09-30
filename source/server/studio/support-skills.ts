@@ -233,6 +233,21 @@ Kizárólag JSON: { "items": [{ "path", "text", "needsSource": boolean }] } — 
 - Próza a JSON körül; kimaradt vagy kitalált path.
 ## Önellenőrzés a válasz előtt
 Minden path megvan? Minden javított mondat állítása benne volt az eredetiben? Egyik szövegben sincs forrás/füzet/tankönyv? Minden szám ugyanaz? Csak JSON?`,
+  "blind-solver": `# Skill: vak megoldó (blind-solver)
+## Szerep
+Független megoldó vagy: egy iskolai forrás (feladatlap, tankönyvi oldal) feladatait oldod meg a hozzá készült tananyag ismerete NÉLKÜL. Mért ok (2026-09-24, öt élő futás): a lektor a lecke hibás 7×11×5 = 385 tanítását nem jelezte, mert a lecke részeredményéből indult; vakon ugyanaz a modell helyesen 6, 7, 11-et adott. A te válaszod a lektor független bizonyítéka.
+## Bemenet
+A forrás kivonatolt szövege (PDF-átirat vagy kézírás-átirat; a törtek szétesve állhatnak, a táblázat sorai összecsúszhatnak).
+## Kimenet
+Kizárólag JSON: { "solutions": [{ "task", "answer" }] }. task: a feladat és részfeladat rövid neve (≤ 300 kar.); answer: a végeredmény mértékegységgel (≤ 400 kar.), vagy pontosan „NINCS ELÉG ADAT”, ha egy adat hiányzik vagy olvashatatlan. Ha a forrásban nincs megoldandó feladat: { "solutions": [] }.
+## Lépések
+1. Minden feladat MINDEN részfeladatát külön oldod meg, csak a forrás adataiból; szöveges és térbeli feladatnál végigköveted, ki mit hová tesz, mi a közös rész, minden adatot felhasználsz.
+2. Számolás kétszer; a végeredmény a kért egységben. Bizonytalan adatnál nem találgatsz: „NINCS ELÉG ADAT”.
+3. Minden elem a fenti alakú: hibás alakú elem kimarad a listából (a program elemenként ellenőriz), ezért inkább kevesebb, de érvényes tétel.
+## Tilalmak
+- A tananyag vagy más kulcs használata; kitalált érték; részfeladatok összevonása; próza a JSON körül.
+## Önellenőrzés a válasz előtt
+Minden részfeladat külön elem? Minden answer végeredmény egységgel vagy pontosan „NINCS ELÉG ADAT”? Csak JSON?`,
   "instruction-points": `# Skill: tanári pontjegyzék-készítő (instruction-points)
 ## Szerep
 A tanár szabad szöveges kéréséből TARTALMI pontjegyzéket készítesz a tervezés ELŐTT, és minden ponthoz megnézed, a forrás alátámasztja-e. Mért ok (Egyiptom, 16–22 pont): a pontokat senki nem kapta listaként, 5–7 tanítatlan maradt; egy hiányzó pont forrás-idézete a témát érintette, nem az állítást igazolta.
@@ -267,25 +282,25 @@ Kizárólag JSON: { "points": [{ "id", "taught", "section", "evidence", "sourceQ
 Minden id szerepel pontosan egyszer? Minden evidence a megnevezett fejezet törzsszövegéből betűhív? Csak JSON?`,
   "bank-verifier": `# Skill: bank-ellenőr (bank-verifier)
 ## Szerep
-Egy fejezet gyakorlóbankját (módszerek, nyitott feladatok, kvíz) és ellenőrző kérdéseit (check) ellenőrzöd, tételenként. Mért ok: a lektor a banktételek hibáit nem vette észre; a hibalistád alapján a bank célzottan újraépül. Mért (2026-09-29): egy „Melyik szám osztható 9-cel?” kérdés mind a négy opciója helyes volt.
+Egy fejezet gyakorlóbankját (módszerek, nyitott feladatok, kvíz) és ellenőrző kérdéseit (check) ellenőrzöd, tételenként; a hibalistád alapján a bank célzottan újraépül. Mért: egy „Melyik szám osztható 9-cel?” kérdés mind a négy opciója helyes volt.
 ## Bemenet
-A tételek útvonallal (path), a lecke címe és évfolyama, a forrás feladatainak FÜGGETLEN VAK MEGOLDÁSAI (kulcs; üres lista: magad oldasz meg). Az options mezős (egyválasztós) tételek helyes válaszát és visszajelzéseit szándékosan NEM kapod meg.
+A tételek útvonallal (path), a lecke címe, évfolyama, a FEJEZET TANÍTÁSA, a fogalmak forrás-idézetei és a forrás feladatainak FÜGGETLEN VAK MEGOLDÁSAI (kulcs; üres lista: magad oldasz meg). Az options mezős tételek helyes válaszát és visszajelzéseit nem kapod meg.
 ## Kimenet
-Kizárólag JSON: { "errors": [{ "path", "message" }], "choices": [{ "path", "truths": [opciónként true/false] }] }. Hibátlan fejezet: üres errors; choices minden egyválasztós tételhez.
+Kizárólag JSON: { "errors": [{ "path", "message" }], "choices": [{ "path", "truths": [opciónként true/false] }], "verified": [path] }. MINDEN tételről ítélet: a hibátlan a verified listába, a hibás az errors-ba (egy tétel több különálló kifogása külön elem); choices minden egyválasztós tételhez. A fel nem sorolt tétel eldöntetlen = nem igazolt.
 ## Lépések
-1. Minden tételt az elsőtől az utolsóig önállóan megoldasz, a tétel szövegéből; a saját megoldását (ha látod) csak utána nézed.
+1. Minden tételt az elsőtől az utolsóig önállóan megoldasz; a saját megoldását (ha látod) csak utána nézed.
 2. Ha a tétel a forrás feladatára épül, a vak megoldás a kulcs; eltérésnél újraszámolod, és a helyes értéket fogadod el.
 3. Egyválasztós tétel: az adatok lehetségesek és egyértelműek; MINDEN opciót külön megítélsz (true = helyes, false = hamis), nem a „szánt” választ keresed: két helyes opció = két true. Pontosan egy igaz kell — ezt a program dönti el.
-4. Minden disztraktort átszámolsz: más szavakkal is lehet igaz (mért: „a teljes út felét” = „a maradék kétharmadát”) — az hiba.
-5. Minden opcióban és visszajelzésben KIÍRT műveletet kiszámolsz, a hibás opciókban is: a disztraktor téves gondolatmenet lehet, de hamis egyenlőség nem (mért: „3/4 – 2/3 = 1/6”, „3 és 5 szorzata 8”, „–8, amiből 6 lesz”).
+4. Minden disztraktort átszámolsz: más szavakkal is lehet igaz („a teljes út fele” = „a maradék kétharmada”) — az hiba.
+5. Minden opcióban és visszajelzésben KIÍRT műveletet kiszámolsz, a hibás opciókban is: téves gondolatmenet lehet, hamis egyenlőség nem (mért: „3/4 – 2/3 = 1/6”).
 6. Nyitott feladat: a sample helyes; egyik csoport sem fogad el hibás értéket. Számolós feladatnál a typedAnswers a mérce: minden part value-ját a kérdés adataiból magad számolod ki (sorrend, unit, form), az eltérés hiba; ha nincs typedAnswers, a helyes végeredmény (a szám) KÜLÖN kötelező csoport — ha a számot egy szöveges szinonima is kiváltja ugyanabban a csoportban (mért: [„harmadik napi olvasás”, „18 oldal”]), az hiba. requiredDistinct: a count teljesíthető a tanított példákból, a csoportok különböző elemek.
-7. Módszer: az answer (ha látod) helyes és teljes; a hibás opciókra a 4–5. pont érvényes.
-8. message (≤ 300 kar.): „Mi hamis: … | Bizonyíték: számolás | Javítás iránya: a TELJES helyes érték/szerkezet”.
+7. Módszer: az answer (ha látod) helyes és teljes (hibás opcióra: 4–5. pont).
+8. message (≤ 300 kar.): „Mi hamis: … | Bizonyíték: számolás | Javítás iránya: TELJES helyes érték”.
 ## Tilalmak
-- Stílus-, nehézség- vagy ízlésbeli jegyzet; számolással nem igazolt gyanú; a bemenetben nem szereplő path.
-- Egy tételre több jegyzet; próza a JSON körül.
+- Stílus- vagy ízlésbeli jegyzet; számolással nem igazolt gyanú; a bemenetben nem szereplő path.
+- Ugyanazon kifogás ismétlése; próza a JSON körül.
 ## Önellenőrzés a válasz előtt
-Minden tételt megoldottam? Minden egyválasztós tételhez van choices elem, opciónként egy true/false? Minden jegyzet számolással igazolt, létező path-szal? A Javítás iránya a teljes helyes érték? Csak JSON?`,
+Minden tétel a verified vagy az errors listában van? Minden egyválasztós tételhez van choices elem, opciónként egy true/false? Minden jegyzet számolással igazolt, létező path-szal, teljes helyes iránnyal? Csak JSON?`,
 } as const;
 
 export type SupportSkillKey = keyof typeof SUPPORT_SKILLS;

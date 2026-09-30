@@ -45,7 +45,11 @@ export type AutonomousReason =
   /** Spec 2026-09-30-utasitasrendszer-rendbetetel (U3, C14): a kérés forrásból nem igazolható pontjai — nem tanítjuk, jelezzük. */
   | "instruction_gaps"
   /** U4 (H50): a tervező vázlatának mezőit a program a korláton vágta/elhagyta — jelölt állapot, nem néma. */
-  | "outline_clamped";
+  | "outline_clamped"
+  /** U5 (H49): a lektor önálló megoldásainak egy része a kereten túl volt — részleges lektorálás. */
+  | "lektor_partial"
+  /** U5 (ábra-kapu): az ábra felirata nem a fejezet tanításából való — figyelmeztetés a mérés (§C-V/12) nélkül. */
+  | "figure_check";
 
 export type AutonomousInput = {
   reason: AutonomousReason;
@@ -77,6 +81,8 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   instruction_missing: "A tanári kérés egy vagy több pontja a javítás után is hiányzik — a lecke elkészült, a pontok a job kimenetében.",
   instruction_gaps: "A tanári kérés egy vagy több pontját a forrás nem igazolja — a lecke ezeket nem tanítja, a pontok a job kimenetében és a panelen.",
   outline_clamped: "A tervező vázlatának egyes mezői a korláton túl voltak: a program vágta vagy elhagyta őket — a részletek a job kimenetében.",
+  lektor_partial: "A lektor önálló megoldásainak egy része a kereten túl volt — a lektorálás részleges, nem teljes igazolás.",
+  figure_check: "Egy vagy több ábra felirata nem a fejezet tanításából való — az ábra-kapu figyelmeztetése (mérés nélkül nem buktat).",
 };
 
 /**
