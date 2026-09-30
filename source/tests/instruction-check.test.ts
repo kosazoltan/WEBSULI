@@ -44,6 +44,7 @@ test("a hash a kérés és a tanítás függvénye (változatlan leckére nincs 
   const a = instructionCheckHash("x", lesson);
   assert.equal(a, instructionCheckHash("x", lesson));
   assert.notEqual(a, instructionCheckHash("y", lesson));
+  assert.notEqual(a, instructionCheckHash("x", lesson, "más forrás"), "review #155: a forrás is a kulcs része");
 });
 
 test("forrásból igazolt hiányzó pont → kiegészítő fogalom; a nem betűhív forrás-idézet elvetve", () => {

@@ -2377,6 +2377,7 @@ test("tanári kérés: a forrásból igazolt hiányzó pont kiegészítő fogalo
   const map = deps.store.maps.get("m1")!;
   map.meta = { ...map.meta, sourceText: "A háromszög magassága az alapra merőleges szakasz, amely a szemközti csúcsból indul." };
   deps.store.jobs.get("instr-source")!.output!.ownerInstruction = "Tanítsd a magasság fogalmát is.";
+  deps.store.jobs.get("instr-source")!.output!.approvedOutline = GOOD_OUTLINE;
   const answer = { points: [{ point: "A háromszög magassága", taught: false, evidence: "", section: 0, sourceQuote: "A háromszög magassága az alapra merőleges szakasz" }] };
   const gated = await runPipelineStep("instr-source", withInstructionAnswer(deps, answer).deps);
   assert.deepEqual(gated.ok && gated.next, { step: "author", round: 1 }, JSON.stringify(gated));
@@ -2386,11 +2387,15 @@ test("tanári kérés: a forrásból igazolt hiányzó pont kiegészítő fogalo
   assert.equal(extra[0].term, "A háromszög magassága");
   // A következő (szerzői) lépés a fókuszált tudástárat kapja: benne a kiegészítő fogalom az idézettel.
   job.step = "author"; job.round = 1; job.status = "running";
-  job.output = { ...job.output, approvedOutline: GOOD_OUTLINE };
   const authorDeps = makeDeps(CANNED_AUTHOR);
   authorDeps.store = deps.store;
   await runPipelineStep("instr-source", authorDeps);
   assert.ok(authorDeps.calls.some((c) => c.system.includes(extra[0].localId) && c.system.includes("az alapra merőleges szakasz")), "a szerző látja a forrásból igazolt kiegészítő fogalmat");
+  // Review #155 (P1): az azonosító a célfejezet vázlatában — így a szerző ENGEDÉLYEZETT címkéi között is.
+  const outline = job.output?.approvedOutline as { sections: Array<{ conceptIds: string[] }> };
+  assert.ok(outline.sections[0].conceptIds.includes(extra[0].localId));
+  const allowedLine = (authorDeps.calls[0]?.system ?? "").split("ONLY the ids below")[1]?.split("\n")[1] ?? "";
+  assert.ok(allowedLine.includes(extra[0].localId), `engedélyezett azonosítók: ${allowedLine.slice(0, 200)}`);
 });
 
 // Spec-változás 2026-09-30 (dinamikus keret): a limiten is jár EGY célzott kör; ha már volt, figyelmeztetés + publikálás.

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
@@ -11,7 +11,7 @@ import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
 import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, splitLimitBlockers } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
-import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptsFrom, missingPoints, parseInstructionCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
+import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
@@ -136,6 +136,11 @@ export type PublishInput = {
   classroom: number;
   coverage: Coverage;
   quizItems: InsertGameQuizItem[];
+  /**
+   * Review #155: a tanári kérés forrásból igazolt kiegészítő fogalmai tartósan a térképre kerülnek (`extra` súllyal — más
+   * jobok fedettségét nem terhelik), hogy a lecke `instr-*` címkéit a későbbi javítás is ismerje.
+   */
+  extraConcepts?: MapConcept[];
 };
 
 export type JobView = {
@@ -1395,7 +1400,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     // Review #152: csak a MÉRÉS fail-open (modell, séma); a javítókör mentésének hibája nem nyelhető el.
     let points: InstructionPoint[] | undefined;
     try {
-      const hash = instructionCheckHash(ownerInstruction, parsed.data);
+      const hash = instructionCheckHash(ownerInstruction, parsed.data, map.meta.sourceText);
       const cached = job.output?.instructionCheck as InstructionCheck | undefined;
       points = cached?.hash === hash ? cached.points : undefined;
       if (!points) {
@@ -1423,7 +1428,19 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
           const previousExtra = (job.output?.instructionConcepts as MapConcept[] | undefined) ?? [];
           const extra = [...previousExtra, ...instructionConceptsFrom(missing).filter((c) => !previousExtra.some((p) => p.localId === c.localId))];
           if (extra.length > previousExtra.length) logger.info(`[STUDIO/GATE] Tanári kérés: ${extra.length - previousExtra.length} hiányzó pont forrásból igazolt kiegészítő fogalom lett (${job.id})`);
-          await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: repairGate, instructionRepairRound: job.round + 1, ...(extra.length ? { instructionConcepts: extra } : {}) }, error: null, finishedAt: null });
+          // Review #155 (P1): a szerző csak a vázlat azonosítóit címkézheti — az új fogalom a célfejezet vázlatába is bekerül.
+          const withIds = (outline: unknown) => {
+            const o = outline as { sections?: Array<{ conceptIds?: string[] }> } | undefined;
+            if (!o?.sections) return outline;
+            return { ...o, sections: o.sections.map((section, i) => {
+              const ids = missing.filter((m) => m.section === i && m.sourceQuote).map((m) => instructionConceptId(m.point));
+              return ids.length ? { ...section, conceptIds: [...new Set([...(section.conceptIds ?? []), ...ids])] } : section;
+            }) };
+          };
+          await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: repairGate, instructionRepairRound: job.round + 1,
+            ...(extra.length ? { instructionConcepts: extra } : {}),
+            ...(job.output?.approvedOutline ? { approvedOutline: withIds(job.output.approvedOutline) } : {}),
+            ...(job.output?.outline ? { outline: withIds(job.output.outline) } : {}) }, error: null, finishedAt: null });
           logger.warn(`[STUDIO/GATE] Tanári kérés hiányzó pontjai → célzott szerzői javítás (${job.id}, ${job.round + 1}. kör)`);
           return { ok: true, next: { step: "author", round: job.round + 1 } };
         }
@@ -1485,6 +1502,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     classroom: parsed.data.classroom,
     coverage: gate.coverage,
     quizItems: exportQuizItemsForPublish(parsed.data, job.lessonId, conceptIdResolver(map.concepts)),
+    ...(Array.isArray(job.output?.instructionConcepts) && job.output.instructionConcepts.length ? { extraConcepts: job.output.instructionConcepts as MapConcept[] } : {}),
   });
   logger.info(
     `[STUDIO/GATE] Lecke publikálva: ${job.lessonId} → html_files ${published.htmlFileId}, ${published.exportedQuizItems} kvíz-tétel exportálva`,
@@ -1852,6 +1870,13 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
             updatedAt: new Date(),
           })
           .where(eq(lessons.id, input.lessonId));
+        // Csak a még hiányzó sor kerül be (NOT EXISTS) — a meglévő fogalomhoz kötött játékelemek érintetlenek maradnak.
+        for (const [i, c] of (input.extraConcepts ?? []).entries()) {
+          await tx.execute(sql`insert into km_concepts (map_id, local_id, term, definition, quote, source_ref, type, exam_weight, verbatim_ok, review_state, order_index)
+            select ${input.mapId}, ${c.localId}, ${(c.term ?? c.localId).slice(0, 200)}, ${c.definition ?? c.term ?? ""}, ${c.quote ?? ""},
+              ${JSON.stringify({ file: "tanári kérés (forrásból igazolt)" })}::jsonb, 'fact', 'extra', true, 'kept', ${10_000 + i}
+            where not exists (select 1 from km_concepts where map_id = ${input.mapId} and local_id = ${c.localId})`);
+        }
         // Idempotent re-publish: the previous export of this lesson goes first.
         await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, input.lessonId));
         if (input.quizItems.length > 0) {

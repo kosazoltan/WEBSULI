@@ -16,7 +16,11 @@ export const INSTRUCTION_CHECK_MODEL = "claude-opus-5-5";
 export type InstructionPoint = { point: string; taught: boolean; evidence: string; section: number | null; sourceQuote?: string };
 export type InstructionCheck = { hash: string; points: InstructionPoint[] };
 
-/** A lecke tanítása fejezetenként (cím, explain, példa, összefoglaló) — ezt kapja a modell és ebben keresünk bizonyítékot. */
+/**
+ * A lecke tanítása fejezetenként (cím, explain, példa, összefoglaló) — ebben keressük a „tanítja” bizonyítékát. A modell
+ * mellette opcionálisan a forrásszöveget is kapja; a hiányzó pont `sourceQuote`-ját a `parseInstructionCheck` külön, a
+ * forrásban ellenőrzi.
+ */
 export function teachingText(lesson: Lesson): string {
   return lesson.sections.map((section, i) => {
     const parts = section.blocks.flatMap((b) => {
@@ -29,8 +33,10 @@ export function teachingText(lesson: Lesson): string {
   }).join("\n\n");
 }
 
-export function instructionCheckHash(instruction: string, lesson: Lesson): string {
-  return createHash("sha256").update(`${instruction}\n---\n${teachingText(lesson)}`).digest("hex");
+/** Review #155 (P2): a kulcs a forrást és a mérés sémaverzióját is tartalmazza (a forrás befolyásolja az eredményt). */
+export const INSTRUCTION_CHECK_VERSION = "v2-source-quote";
+export function instructionCheckHash(instruction: string, lesson: Lesson, sourceText?: string | null): string {
+  return createHash("sha256").update(`${INSTRUCTION_CHECK_VERSION}\n${instruction}\n---\n${teachingText(lesson)}\n---\n${sourceText ?? ""}`).digest("hex");
 }
 
 export function buildInstructionCheckPrompt(instruction: string, lesson: Lesson, sourceText?: string | null): { system: string; user: string } {
@@ -58,9 +64,10 @@ export function parseInstructionCheck(json: unknown, lesson: Lesson, sourceText?
     const proven = p.taught === true && normalized.replace(/[^\p{L}\p{N}]/gu, "").length >= 8 && haystack.includes(normalized);
     const section = Number.isInteger(p.section) && (p.section as number) >= 0 && (p.section as number) < lesson.sections.length ? p.section as number : null;
     // Spec 2026-09-30-tanari-keres-forrasbol: a hiányzó pont forrás-idézete csak betűhíven (normalizálva) elfogadható.
-    const quote = typeof p.sourceQuote === "string" ? p.sourceQuote.trim() : "";
+    // Review #155: a dokumentált 300 karakteres korlát a programban is (ellenőrzés és tárolás ugyanazon a szeleten).
+    const quote = typeof p.sourceQuote === "string" ? p.sourceQuote.trim().slice(0, 300) : "";
     const quoted = !proven && source && norm(quote).replace(/[^\p{L}\p{N}]/gu, "").length >= 20 && source.includes(norm(quote));
-    return [{ point: p.point.trim().slice(0, 300), taught: proven, evidence: proven ? evidence : "", section, ...(quoted ? { sourceQuote: quote.slice(0, 400) } : {}) }];
+    return [{ point: p.point.trim().slice(0, 300), taught: proven, evidence: proven ? evidence : "", section, ...(quoted ? { sourceQuote: quote } : {}) }];
   });
 }
 
@@ -69,9 +76,10 @@ export function parseInstructionCheck(json: unknown, lesson: Lesson, sourceText?
  * csak a tudástár fogalmaiból tanít, a kivonatolás viszont ezekre a pontokra nem készített fogalmat. A forrásból betűhíven
  * igazolt hiányzó pont kiegészítő fogalom lesz a job (fókuszált) tudástárában — a „forrás a mérce” szabály így sem sérül.
  */
+export const instructionConceptId = (point: string) => `instr-${createHash("sha1").update(point).digest("hex").slice(0, 8)}`;
 export function instructionConceptsFrom(points: InstructionPoint[]): MapConcept[] {
   return points.filter((p) => !p.taught && p.sourceQuote).map((p) => ({
-    localId: `instr-${createHash("sha1").update(p.point).digest("hex").slice(0, 8)}`,
+    localId: instructionConceptId(p.point),
     term: p.point.slice(0, 80),
     definition: p.point,
     quote: p.sourceQuote,
