@@ -11,7 +11,7 @@ import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
 import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, splitLimitBlockers } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
-import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, missingPoints, parseInstructionCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
+import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptsFrom, missingPoints, parseInstructionCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
@@ -276,7 +276,13 @@ export async function retryTimedOutLektor(jobId: string, deps: PipelineDeps = {}
 /** Spec 2026-09-29 (tanári témafókusz): the job's focused copy of the map; jobs without a focus are unchanged. */
 function focusedMapOf<T extends { concepts: MapConcept[] }>(map: T | null, job: JobView): T | null {
   const focus = (job.output as { topicFocus?: TopicFocus } | null | undefined)?.topicFocus;
-  return map ? applyTopicFocus(map, focus) : map;
+  if (!map) return map;
+  const focused = applyTopicFocus(map, focus);
+  // Spec 2026-09-30-tanari-keres-forrasbol: a tanári kérés forrásból igazolt, hiányzó pontjai kiegészítő fogalmak.
+  const extra = (job.output?.instructionConcepts as MapConcept[] | undefined) ?? [];
+  const known = new Set(focused.concepts.map((c) => c.localId));
+  const added = extra.filter((c) => c?.localId && !known.has(c.localId));
+  return added.length ? { ...focused, concepts: [...focused.concepts, ...added] } : focused;
 }
 
 function normalizeStep(raw: string): StudioStep {
@@ -1393,11 +1399,11 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       const cached = job.output?.instructionCheck as InstructionCheck | undefined;
       points = cached?.hash === hash ? cached.points : undefined;
       if (!points) {
-        const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data);
+        const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data, map.meta.sourceText);
         const result = await callStepModel(models.providerFactory(INSTRUCTION_CHECK_MODEL, "instructionCheck"), {
           step: "gate" as StudioStep, policy: "instructionCheck", model: INSTRUCTION_CHECK_MODEL, system: prompt.system, user: prompt.user,
         });
-        points = parseInstructionCheck(result.json, parsed.data);
+        points = parseInstructionCheck(result.json, parsed.data, map.meta.sourceText);
         job.output = { ...job.output, instructionCheck: { hash, points } satisfies InstructionCheck };
       }
     } catch (error) {
@@ -1413,7 +1419,11 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         // Spec 2026-09-30-dinamikus-keret: a tanári kérés hiányzó pontjára jobonként egy célzott kör a limiten is jár.
         if (!job.output?.instructionRepairRound && (repairBudget || await workflowEnsureRepairBudget("tanári kérés hiányzó pontja"))) {
           const repairGate = { ...gateOutput, ok: false, reasons: [...gateOutput.reasons, ...reasons], instruction: findings };
-          await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: repairGate, instructionRepairRound: job.round + 1 }, error: null, finishedAt: null });
+          // A forrásból igazolt hiányzó pontok kiegészítő fogalmak lesznek (a szerző csak a tudástárból tanít).
+          const previousExtra = (job.output?.instructionConcepts as MapConcept[] | undefined) ?? [];
+          const extra = [...previousExtra, ...instructionConceptsFrom(missing).filter((c) => !previousExtra.some((p) => p.localId === c.localId))];
+          if (extra.length > previousExtra.length) logger.info(`[STUDIO/GATE] Tanári kérés: ${extra.length - previousExtra.length} hiányzó pont forrásból igazolt kiegészítő fogalom lett (${job.id})`);
+          await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: repairGate, instructionRepairRound: job.round + 1, ...(extra.length ? { instructionConcepts: extra } : {}) }, error: null, finishedAt: null });
           logger.warn(`[STUDIO/GATE] Tanári kérés hiányzó pontjai → célzott szerzői javítás (${job.id}, ${job.round + 1}. kör)`);
           return { ok: true, next: { step: "author", round: job.round + 1 } };
         }

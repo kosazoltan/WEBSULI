@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Lesson } from "../../shared/lesson-schema";
+import type { MapConcept } from "./coverage";
 import { withSupportSkill } from "./support-skills";
 
 /**
@@ -12,7 +13,7 @@ import { withSupportSkill } from "./support-skills";
 
 export const INSTRUCTION_CHECK_MODEL = "claude-opus-5-5";
 
-export type InstructionPoint = { point: string; taught: boolean; evidence: string; section: number | null };
+export type InstructionPoint = { point: string; taught: boolean; evidence: string; section: number | null; sourceQuote?: string };
 export type InstructionCheck = { hash: string; points: InstructionPoint[] };
 
 /** A lecke tanítása fejezetenként (cím, explain, példa, összefoglaló) — ezt kapja a modell és ebben keresünk bizonyítékot. */
@@ -32,30 +33,50 @@ export function instructionCheckHash(instruction: string, lesson: Lesson): strin
   return createHash("sha256").update(`${instruction}\n---\n${teachingText(lesson)}`).digest("hex");
 }
 
-export function buildInstructionCheckPrompt(instruction: string, lesson: Lesson): { system: string; user: string } {
+export function buildInstructionCheckPrompt(instruction: string, lesson: Lesson, sourceText?: string | null): { system: string; user: string } {
   return {
     system: withSupportSkill("instruction-checker", "Mérd a tanár kérését a lecke tanításához a skill szerint. Kizárólag a kért JSON-t add vissza."),
-    user: JSON.stringify({ title: lesson.title, classroom: lesson.classroom, instruction, lesson: teachingText(lesson) }),
+    user: JSON.stringify({ title: lesson.title, classroom: lesson.classroom, instruction, lesson: teachingText(lesson),
+      ...(sourceText?.trim() ? { source: sourceText.slice(0, 60_000) } : {}) }),
   };
 }
 
 const norm = (s: string) => s.toLocaleLowerCase("hu").replace(/\*\*/g, "").replace(/[„”"'’]/g, "").replace(/\s+/g, " ").trim();
 
 /** A modell válasza pontokká; a bizonyíték nélküli (vagy nem betűhív) „tanítja” hiánynak számít. */
-export function parseInstructionCheck(json: unknown, lesson: Lesson): InstructionPoint[] {
+export function parseInstructionCheck(json: unknown, lesson: Lesson, sourceText?: string | null): InstructionPoint[] {
   const raw = (json as { points?: unknown } | null)?.points;
   if (!Array.isArray(raw)) throw new Error("a tanári kérés mérése nem a kért alakú JSON");
   const haystack = norm(teachingText(lesson));
+  const source = sourceText ? norm(sourceText) : "";
   return raw.flatMap((item) => {
-    const p = item as { point?: unknown; taught?: unknown; evidence?: unknown; section?: unknown };
+    const p = item as { point?: unknown; taught?: unknown; evidence?: unknown; section?: unknown; sourceQuote?: unknown };
     if (typeof p?.point !== "string" || !p.point.trim()) return [];
     const evidence = typeof p.evidence === "string" ? p.evidence.trim() : "";
     // Review #152: a hossz a NORMALIZÁLT bizonyítékon mérve (a „********” normalizálva üres, az includes("") mindig igaz).
     const normalized = norm(evidence);
     const proven = p.taught === true && normalized.replace(/[^\p{L}\p{N}]/gu, "").length >= 8 && haystack.includes(normalized);
     const section = Number.isInteger(p.section) && (p.section as number) >= 0 && (p.section as number) < lesson.sections.length ? p.section as number : null;
-    return [{ point: p.point.trim().slice(0, 300), taught: proven, evidence: proven ? evidence : "", section }];
+    // Spec 2026-09-30-tanari-keres-forrasbol: a hiányzó pont forrás-idézete csak betűhíven (normalizálva) elfogadható.
+    const quote = typeof p.sourceQuote === "string" ? p.sourceQuote.trim() : "";
+    const quoted = !proven && source && norm(quote).replace(/[^\p{L}\p{N}]/gu, "").length >= 20 && source.includes(norm(quote));
+    return [{ point: p.point.trim().slice(0, 300), taught: proven, evidence: proven ? evidence : "", section, ...(quoted ? { sourceQuote: quote.slice(0, 400) } : {}) }];
   });
+}
+
+/**
+ * Spec 2026-09-30-tanari-keres-forrasbol (élő mérés: Egyiptom, 22 pontból 5 hiányzott, pedig a forrásban benne volt): a szerző
+ * csak a tudástár fogalmaiból tanít, a kivonatolás viszont ezekre a pontokra nem készített fogalmat. A forrásból betűhíven
+ * igazolt hiányzó pont kiegészítő fogalom lesz a job (fókuszált) tudástárában — a „forrás a mérce” szabály így sem sérül.
+ */
+export function instructionConceptsFrom(points: InstructionPoint[]): MapConcept[] {
+  return points.filter((p) => !p.taught && p.sourceQuote).map((p) => ({
+    localId: `instr-${createHash("sha1").update(p.point).digest("hex").slice(0, 8)}`,
+    term: p.point.slice(0, 80),
+    definition: p.point,
+    quote: p.sourceQuote,
+    examWeight: "supporting" as const,
+  } as MapConcept));
 }
 
 export const missingPoints = (points: InstructionPoint[]) => points.filter((p) => !p.taught);
