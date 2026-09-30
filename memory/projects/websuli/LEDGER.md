@@ -682,3 +682,10 @@ figyelmeztetés; a mérés hibája nem állít meg. Élő: a Mezopotámia javít
 kikerülnek, átvétel csak kvóta + teljes validálás után; pedagógus/lektor második tartalék (terra / opus), a szerző
 szándékosan nem (tulajdonosi döntés 2026-09-29). Codex/Copilot review-leletek (P1 kvóta, ID-illesztés, fail-open) javítva.
 Unit 1783/1783, CI zöld, élesítve, füstteszt 200. Nem vállalt, nyitott: szerver-újraindulás utáni automatikus folytatás.
+
+## 2026-09-30 — dinamikus keret (#154) + tanári kérés forrásból (#155)
+**#154:** a célzott javítóút elfogyott keretnél egyszeri többletkeretet kap (`workflowEnsureRepairBudget`, 2 grant), a Próba-döntés is
+ezt nézi. **#155:** a tanári kérés forrásból betűhíven igazolt (≤ 300 kar.) hiányzó pontja `instr-*` kiegészítő fogalom lesz, az
+azonosító a célfejezet vázlatába is bekerül (a szerző engedélyezett címkéi közé), publikáláskor `extra` súllyal tartósan a térképre
+kerül (NOT EXISTS beszúrás), a mérés-hash a forrást és sémaverziót is tartalmazza. Unit 1785/1785, CI zöld, merge e082bbe, élesítve.
+Élő próba: új Egyiptom-gyártás (3) indítva a merge után.
