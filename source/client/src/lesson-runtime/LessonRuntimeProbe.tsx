@@ -145,7 +145,14 @@ const VISUALS_LESSON: Lesson = {
       { sets: ["kék kabát", "kék sapka"], regions: { A: "≤ 7", AB: "≥ 15", B: "≤ 8" }, universe: "30 fős osztály" }, "Kék kabát és kék sapka: a közös rész legalább 15."),
     visualSection("Kerekítés", "Százasokra kerekítve 1452 → 1500, mert 1450 és 1549 között minden szám 1500-ra kerekül.", "numberLine",
       { from: 1400, to: 1600, step: 50, marks: [{ value: 1452, label: "1452" }], jumps: [{ from: 1452, to: 1500, label: "→ 1500" }] }, "1452 százasokra kerekítve 1500."),
-    // Spec 2026-09-30: forgatható 3D-jelenet (zikkurat a két folyó között).
+  ],
+};
+
+/** Spec 2026-09-30 (ábratervező + 3D): `?scene3d=1` — a forgatható 3D-jelenet külön mérőleckéje (a `?visuals=1` öt ábrája változatlan). */
+const SCENE3D_LESSON: Lesson = {
+  ...VISUALS_LESSON,
+  title: "3D-jelenet próbája",
+  sections: [
     visualSection("A zikkurat", "A zikkurat lépcsős toronytemplom: kisebbedő teraszok, a tetején a szentély. A Tigris és az Eufrátesz között épült, agyagtéglából.", "scene3d", {
       objects: [
         { shape: "stairs", at: [0, 0, 0], size: [6, 4, 6], steps: 4, color: "#d98c4a", label: "zikkurat" },
@@ -162,6 +169,7 @@ const VISUALS_LESSON: Lesson = {
 
 function probeLesson(search: string): Lesson {
   const q = new URLSearchParams(search);
+  if (q.has("scene3d")) return SCENE3D_LESSON;
   if (q.has("visuals")) return VISUALS_LESSON;
   if (q.has("fusion")) {
     const lesson = fusionFixture();
