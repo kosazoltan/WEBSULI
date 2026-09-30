@@ -72,6 +72,45 @@ export const numberLineParamsSchema = z.object({
 export const processParamsSchema = z.object({ steps: z.array(label(160)).min(2).max(8) });
 export const timelineParamsSchema = z.object({ events: z.array(label(80)).min(2).max(10) });
 
+/**
+ * Spec 2026-09-30 (docs/specs/2026-09-30-abratervezo-3d.md): forgatható 3D-jelenet. A modell csak leíró adatot ad
+ * (alakzat, hely, méret, szín, felirat); a kliens three.js-szel rajzolja — végrehajtandó kód nem kerül a leckébe.
+ * Koordináták: x jobbra, y felfelé, z a néző felé; a talaj az y = 0 sík.
+ */
+const coord = z.number().finite().min(-10).max(10);
+const extent = z.number().finite().min(0.05).max(20);
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "#rrggbb szín");
+export const SCENE3D_SHAPES = ["box", "cylinder", "cone", "sphere", "stairs", "plane", "river"] as const;
+export const SCENE3D_MAX_LABELS = 8;
+export const scene3dParamsSchema = z.object({
+  objects: z.array(z.object({
+    shape: z.enum(SCENE3D_SHAPES),
+    /** Az alakzat talppontjának közepe (a lépcső/hasáb alja). */
+    at: z.tuple([coord, coord, coord]),
+    /** Szélesség (x), magasság (y), mélység (z); hengernél/kúpnál/gömbnél a szélesség az átmérő. */
+    size: z.tuple([extent, extent, extent]).optional(),
+    color: hexColor,
+    label: label(40).optional(),
+    /** Lépcsős tömb (zikkurat) szintjeinek száma; felfelé kisebbedő szintek. */
+    steps: z.number().int().min(2).max(8).optional(),
+    /** Folyó: a talajon futó sáv középvonala [x, z] pontokkal. */
+    points: z.array(z.tuple([coord, coord])).min(2).max(12).optional(),
+    /** Folyó szélessége. */
+    width: z.number().finite().min(0.1).max(4).optional(),
+    rotY: z.number().finite().min(-180).max(180).optional(),
+  })).min(1).max(40),
+  labels: z.array(z.object({ text: label(40), at: z.tuple([coord, coord, coord]) })).max(SCENE3D_MAX_LABELS).optional(),
+  ground: hexColor.optional(),
+  view: z.enum(["iso", "front", "top"]).optional(),
+}).superRefine((p, ctx) => {
+  p.objects.forEach((o, i) => {
+    if (o.shape === "river" && !o.points) ctx.addIssue({ code: "custom", path: ["objects", i, "points"], message: "river: hiányzó points" });
+    if (o.shape !== "river" && !o.size) ctx.addIssue({ code: "custom", path: ["objects", i, "size"], message: `${o.shape}: hiányzó size` });
+  });
+  const count = p.objects.filter((o) => o.label).length + (p.labels?.length ?? 0);
+  if (count > SCENE3D_MAX_LABELS) ctx.addIssue({ code: "custom", path: ["labels"], message: `legfeljebb ${SCENE3D_MAX_LABELS} felirat (most ${count})` });
+});
+
 export const VISUAL_PARAM_SCHEMAS = {
   cycle: cycleParamsSchema,
   labeledShape: labeledShapeParamsSchema,
@@ -80,6 +119,7 @@ export const VISUAL_PARAM_SCHEMAS = {
   numberLine: numberLineParamsSchema,
   process: processParamsSchema,
   timeline: timelineParamsSchema,
+  scene3d: scene3dParamsSchema,
 } as const;
 
 export type VisualParamKind = keyof typeof VISUAL_PARAM_SCHEMAS;
@@ -88,6 +128,7 @@ export type LabeledShapeParams = z.infer<typeof labeledShapeParamsSchema>;
 export type BarChartParams = z.infer<typeof barChartParamsSchema>;
 export type VennParams = z.infer<typeof vennParamsSchema>;
 export type NumberLineParams = z.infer<typeof numberLineParamsSchema>;
+export type Scene3dParams = z.infer<typeof scene3dParamsSchema>;
 
 /** Validated params, or the reasons they cannot be drawn. Kinds without a schema pass through. */
 export function visualParamProblems(kind: string, params: unknown): string[] {
@@ -132,6 +173,7 @@ export const VISUAL_PARAMS_CONTRACT = [
   'venn — halmazok: {"sets":["kék kabát","kék sapka"],"regions"?:{"A":7,"B":8,"AB":15,"none":0},"universe"?:"30 fős osztály"} 2–3 halmaz; tartomány: A, B, C, AB, AC, BC, ABC, none.',
   'numberLine — számegyenes: {"from":1400,"to":1600,"step"?:50,"highlightTo"?,"marks"?:[{"value":1452,"label":"1452"}],"jumps"?:[{"from":1452,"to":1500,"label":"kerekítés"}]} legfeljebb 40 osztás.',
   'illustration — szabad SVG-rajz, CSAK ha a fenti fajták nem mutatják a lényeget (pl. Stonehenge kőkörei, egy sejt részei, a Nap–Föld–Hold helyzete): {"svg":"<svg viewBox=\\"0 0 400 260\\" xmlns=\\"http://www.w3.org/2000/svg\\">…</svg>"}. Csak alap alakzatok (path, circle, ellipse, rect, line, polyline, polygon), text/tspan, g, defs, linearGradient/radialGradient, marker; nincs style, script, kép, link. A rajz világos papíron (#f8fafc) jelenik meg minden témában: szabad felirat és vonal #0f172a; kitöltött alakzaton a felirat explicit, kontrasztos színű (világos kitöltésen #0f172a, sötéten #ffffff), currentColor nélkül; kitöltés közepes telítettségű szín. Minden felirat szava szerepeljen a leckében; font-size ≥ 16 a viewBox 400 szélességénél (arányosan: szélesség/25); a feliratok ne fedjék egymást (sortávolság ≥ 1,3 × betűméret, becsült szélesség ≈ 0,55 × betűméret × betűszám), ne lógjanak ki a viewBoxból; transform nélkül; ≤ 30 000 karakter.',
+  'scene3d — forgatható 3D-jelenet, ha TÉRBELI forma vagy elrendezés a lényeg (épület és részei, táj folyókkal, egymáshoz viszonyított helyek): {"objects":[{"shape":"stairs","at":[0,0,0],"size":[6,4,6],"steps":4,"color":"#d98c4a","label":"zikkurat"},{"shape":"box","at":[0,4,0],"size":[1.4,1,1.4],"color":"#f1e3c6","label":"szentély"},{"shape":"river","at":[0,0,0],"points":[[-8,-6],[-5,0],[-7,6]],"width":1.2,"color":"#3b82c4","label":"Tigris"}],"labels"?:[{"text":"…","at":[x,y,z]}],"ground"?:"#e6c98f","view"?:"iso"}. shape: box|cylinder|cone|sphere|stairs|plane|river; at = talppont [x,y,z] −10…10 (y felfelé, a talaj y=0); size = [szélesség, magasság, mélység] 0.05–20 (river-nél nem kell); stairs: 2–8 felfelé kisebbedő szint; river: points [x,z] 2–12 pont. Szín #rrggbb; ≤ 40 objektum; legfeljebb 8 felirat összesen; minden felirat szava a leckéből.',
   'timeline — {"events":["i. e. 776: első olimpia","1000: István koronázása"]} (≥ 2 esemény, időrendben). process — {"steps":["…","…"]} CSAK valódi eljárásra (2–8 lépés), SOHA nem a példa lépéseinek szó szerinti ismétlésére.',
 ].join("\n");
 
@@ -158,6 +200,7 @@ export function renderedVisualTexts(animKind: string, params: unknown): string[]
     case "numberLine": return [...field(p.marks, "label"), ...field(p.jumps, "label")];
     case "labeledShape": return [...["width", "height", "depth", "radius"].flatMap((k) => str(p[k])), ...str(p.note)];
     case "illustration": { const check = sanitizeIllustration(p.svg); return check.ok ? check.labels : []; }
+    case "scene3d": return [...field(p.objects, "label"), ...field(p.labels, "text")];
     default: return [];
   }
 }

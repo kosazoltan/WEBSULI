@@ -33,7 +33,8 @@ function hasRenderableData(block: Extract<Block, { kind: "animate" }>): boolean 
     case "labeledShape":
     case "barChart":
     case "venn":
-    case "illustration": return visualParamProblems(block.animKind, p).length === 0;
+    case "illustration":
+    case "scene3d": return visualParamProblems(block.animKind, p).length === 0;
   }
 }
 

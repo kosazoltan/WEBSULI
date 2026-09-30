@@ -4,6 +4,7 @@ import type { AnimKind } from "@shared/lesson-schema";
 import { TriangleAreaLab } from "./TriangleAreaLab";
 import { DecisionStory } from "./DecisionStory";
 import { BarChartAnim, CycleAnim, IllustrationAnim, LabeledShapeAnim, RichNumberLineAnim, VennAnim } from "./explanatory-visuals";
+import { Scene3dAnim } from "./scene3d-anim";
 
 /**
  * LS-4 — the eight planned animation kinds (master plan §4).
@@ -200,4 +201,5 @@ export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
   barChart: BarChartAnim,
   venn: VennAnim,
   illustration: IllustrationAnim,
+  scene3d: Scene3dAnim,
 };

@@ -145,6 +145,18 @@ const VISUALS_LESSON: Lesson = {
       { sets: ["kék kabát", "kék sapka"], regions: { A: "≤ 7", AB: "≥ 15", B: "≤ 8" }, universe: "30 fős osztály" }, "Kék kabát és kék sapka: a közös rész legalább 15."),
     visualSection("Kerekítés", "Százasokra kerekítve 1452 → 1500, mert 1450 és 1549 között minden szám 1500-ra kerekül.", "numberLine",
       { from: 1400, to: 1600, step: 50, marks: [{ value: 1452, label: "1452" }], jumps: [{ from: 1452, to: 1500, label: "→ 1500" }] }, "1452 százasokra kerekítve 1500."),
+    // Spec 2026-09-30: forgatható 3D-jelenet (zikkurat a két folyó között).
+    visualSection("A zikkurat", "A zikkurat lépcsős toronytemplom: kisebbedő teraszok, a tetején a szentély. A Tigris és az Eufrátesz között épült, agyagtéglából.", "scene3d", {
+      objects: [
+        { shape: "stairs", at: [0, 0, 0], size: [6, 4, 6], steps: 4, color: "#d98c4a", label: "zikkurat" },
+        { shape: "box", at: [0, 4, 0], size: [1.4, 1, 1.4], color: "#f1e3c6", label: "szentély" },
+        { shape: "river", at: [0, 0, 0], points: [[-7, -7], [-5, -1], [-7, 7]], width: 1.4, color: "#3b82c4", label: "Tigris" },
+        { shape: "river", at: [0, 0, 0], points: [[7, -7], [6, 0], [8, 7]], width: 1.4, color: "#3b82c4", label: "Eufrátesz" },
+      ],
+      labels: [{ text: "agyagtégla", at: [3.2, 0.8, 3.2] }],
+      ground: "#e6c98f",
+      view: "iso",
+    }, "A zikkurat kisebbedő teraszai, tetején a szentéllyel, a Tigris és az Eufrátesz között."),
   ],
 };
 

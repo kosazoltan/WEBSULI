@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ANIM_KINDS, blockSchema, type Block, type Lesson } from "../../shared/lesson-schema";
-import { visualParamProblems } from "../../shared/lesson-visual-params";
+import { renderedVisualTexts, visualParamProblems } from "../../shared/lesson-visual-params";
 import { sanitizeIllustration, ungroundedLabels } from "../../shared/illustration-svg";
 import { blockText, checkGrounding } from "./grounding";
 import type { MapConcept } from "./coverage";
@@ -66,6 +66,11 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
           params = { svg: check.svg };
           if (check.contrastFixes.length) contrastNote = `${where}: a kontraszt-őr ${check.contrastFixes.length} felirat színét javította (${check.contrastFixes.join(", ").slice(0, 160)}) — kitöltött alakzaton explicit, kontrasztos szövegszín kell`;
         }
+      }
+      if (v.animKind === "scene3d" && !problems.length) {
+        // Spec 2026-09-30: a 3D-jelenet feliratai is a lecke szavaiból (ugyanaz a mérce, mint az illusztrációnál).
+        const ungrounded = ungroundedLabels(renderedVisualTexts("scene3d", v.params), corpus);
+        if (ungrounded.length) problems.push(`a leckében nem szereplő felirat: ${ungrounded.join(", ").slice(0, 160)}`);
       }
       const block = blockSchema.safeParse({ kind: "animate", animKind: v.animKind, params, caption: v.caption, coversConceptIds: v.coversConceptIds });
       if (!block.success) problems.push(...block.error.issues.map((i) => `${i.path.join(".")} ${i.message}`));
