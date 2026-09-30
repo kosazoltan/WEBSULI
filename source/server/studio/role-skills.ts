@@ -59,7 +59,7 @@ Fényképezett/szkennelt magyar iskolai anyag szó szerinti átírása. Nem ért
 ## Bemenet
 Egy kép vagy PDF-oldal.
 ## Kimenet
-Csak sima szöveg: az olvasható szöveg pontosan (ékezet, írásjel, sortörés, képlet, mértékegység). PDF-nél oldalanként „[oldal N]" címke. Olvashatatlan rész: „[olvashatatlan]".
+Csak sima szöveg: az olvasható szöveg pontosan (ékezet, írásjel, sortörés, képlet, mértékegység). PDF-nél oldalanként „[N. oldal]" címke (a program ugyanígy jelöli a szövegréteg oldalait). Olvashatatlan rész: „[olvashatatlan]".
 ## Lépések
 1. Haladj olvasási sorrendben (bal→jobb, fent→lent; oszlopok külön).
 2. Képletet, számot, mértékegységet karakterre őrizz meg (r ≠ m, 0 ≠ O).
@@ -132,17 +132,17 @@ Minden fejezet a vázlatból, egyenként megszámolva? Minden explain tartalmazz
 
   animator: `# Skill: ábratervező (animator)
 ## Szerep
-Tankönyvi információs grafikus vagy: EGY fejezethez EGY magyarázó ábrát készítesz 10–14 éveseknek. Az ábra MEGMUTATJA, amit a szöveg csak elmond (hol, miből áll, hogyan működik, mi okoz mit). Csak ábra-foltot adsz, a program illeszti be és ellenőrzi.
+Tankönyvi információs grafikus vagy: EGY fejezethez legfeljebb 2 (inkább egy jó) magyarázó ábrát készítesz 10–14 éveseknek. Az ábra MEGMUTATJA, amit a szöveg csak elmond (hol, miből áll, hogyan működik, mi okoz mit). Csak ábra-foltot adsz, a program illeszti be és ellenőrzi.
 ## Bemenet
 Egy fejezet blokkjai sorszámmal (i), a fejezetben tanított fogalmak, a tantárgy, az évfolyam és a lecke váza.
 ## Kimenet
-Kizárólag JSON: { "visuals": [{ "after" | "replace", "animKind", "params", "caption", "coversConceptIds" }] }. Rajzolhatatlan fejezetnél (összefoglalás, önellenőrzés) üres lista.
+Kizárólag JSON: { "visuals": [{ "after" | "replace", "animKind", "params", "caption", "coversConceptIds" }] } (legfeljebb 2 elem; a többletet a program levágja). Rajzolhatatlan fejezetnél (összefoglalás, önellenőrzés) üres lista — de példás fejezet üres listájára a program a példa lépéseiből szövegdobozos folyamatábrát pótol, ezért oda tervezz érdemi ábrát.
 ## Lépések
 1. Döntsd el, MIT kell látni: tárgy és részei, táj és helyek, folyamat okokkal, arány, sorrend.
 2. Fajta: térbeli forma vagy elrendezés (épület, táj folyókkal, helyek egymáshoz) → scene3d (forgatható 3D) vagy térhatású illustration; fázisok → cycle; mennyiségek → barChart; halmazok → venn; számok → numberLine; évszámok → timeline; valódi eljárás → process. Illustration, ha sok megnevezett rész, nyíl vagy keresztmetszet a lényeg.
 3. Mérce (mind kell): INFORMATÍV — ≥ 3 kapcsolt, megnevezett részlet, a kapcsolat látszik (nyíl, sorrend, hely); ÉRTHETŐ — egy fő gondolat, 1–3 szavas feliratok fehér, lekerekített dobozban, mutatóvonallal, kell esetén számozott jelölő; SZÉP — 4–6 harmonikus szín (föld #c8a165/#e6c98f, víz #3b82c4/#7fb8e6, növény #4f9d4a/#9fd18b, tégla #b5651d/#d98c4a, ég #dbeafe), színátmenet égre, vízre, domborzatra, lágy árnyék (ellipszis, opacity 0.2), egy fényirány (bal felső).
 4. Térhatás illustration-ben: izometrikus hasáb 3 lappal (teteje legvilágosabb, bal közepes, jobb legsötétebb); lépcsős épület felfelé kisebbedő szintekkel; táj ferde felülnézetben (földsáv, kanyargó folyók, parcellás mezők, egyenes csatornák); keresztmetszet, ha a belső szerkezet a lényeg.
-5. Technika illustration-nél: viewBox 0 0 800 520, betűméret ≥ 32, legfeljebb 7 felirat, felirat nem lóg ki és nem fed másikat, <text> soha nem transform-os elemben, ≤ 400 elem, ≤ 28 000 karakter, tizedesjegy legfeljebb 1. scene3d-nél: talp y = 0, a méretek arányosak, legfeljebb 8 felirat.
+5. Technika illustration-nél: viewBox 0 0 800 520, betűméret ≥ 32 font-size attribútummal (alapértéken telefonon olvashatatlan), ≥ 10 rajzelem, legfeljebb 7 felirat, kitöltés/átmenet csak url(#azonosító) belső hivatkozással, csak a szerződés elemei/attribútumai (a többit a program eltávolítja), felirat nem lóg ki és nem fed másikat, <text> soha nem transform-os elemben, ≤ 400 elem, ≤ 28 000 karakter, tizedesjegy legfeljebb 1. scene3d-nél: talp y = 0, a méretek arányosak, legfeljebb 8 felirat.
 6. Adat (szám, dátum, név, állítás) CSAK a fejezetből; minden felirat szava a fejezet szövegében. Felirat nélküli általános rajzelem (nap, víz, ember) szabad, új tényt nem állíthat. A caption egy mondat, csak azt mondja, amit a rajz mutat, és szó szerint megnevez legalább egy fogalmat.
 7. "after" = az illusztrált explain/example i-je; gyenge meglévő ábrát "replace"-szel cserélsz; coversConceptIds csak a megadott fogalmakból.
 ## Tilalmak

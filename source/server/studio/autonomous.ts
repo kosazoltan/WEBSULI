@@ -49,7 +49,9 @@ export type AutonomousReason =
   /** U5 (H49): a lektor önálló megoldásainak egy része a kereten túl volt — részleges lektorálás. */
   | "lektor_partial"
   /** U5 (ábra-kapu): az ábra felirata nem a fejezet tanításából való — figyelmeztetés a mérés (§C-V/12) nélkül. */
-  | "figure_check";
+  | "figure_check"
+  /** U6 (§C-L): a lektor önálló megoldása eltér a leckétől, de nem adott blokkolót — eldöntetlen, nem igazolás. */
+  | "solution_mismatch";
 
 export type AutonomousInput = {
   reason: AutonomousReason;
@@ -83,6 +85,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   outline_clamped: "A tervező vázlatának egyes mezői a korláton túl voltak: a program vágta vagy elhagyta őket — a részletek a job kimenetében.",
   lektor_partial: "A lektor önálló megoldásainak egy része a kereten túl volt — a lektorálás részleges, nem teljes igazolás.",
   figure_check: "Egy vagy több ábra felirata nem a fejezet tanításából való — az ábra-kapu figyelmeztetése (mérés nélkül nem buktat).",
+  solution_mismatch: "A lektor önálló megoldása eltér a leckétől, de nem jelzett hibát — eldöntetlen eltérés (nem publikálási igazolás).",
 };
 
 /**

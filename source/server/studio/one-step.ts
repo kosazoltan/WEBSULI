@@ -112,6 +112,8 @@ const SCOPE_PROMPT = [
   // likely written for" találgatásra hívott. A 8. osztályos geometria-forrásra
   // (háromszög területe, kör kerülete, körgyűrű, (n-2)·180°) a modell 4-et adott,
   // és a lecke végig 4. osztályos szinten készült el.
+  // Spec 2026-09-30 (U6, B2): a besoroló skill 1. lépése a promptban is — minden fájl, a középsők is.
+  "Examine EVERY file from the first to the last; the topic of a middle page counts the same as the first.",
   "Determine the classroom ONLY from the mathematical/technical content that is actually",
   "visible in the source. Ignore handwriting quality and page layout — a messy page is not",
   "a sign of a younger pupil.",

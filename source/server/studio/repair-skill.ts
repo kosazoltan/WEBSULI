@@ -35,12 +35,12 @@ Kizárólag a teljes lecke JSON-ja a Lesson séma szerint (title, subject, class
 7. Belső igazság: a szöveg nem állít olyat, ami nincs benne („ahogy az előző fejezetben láttuk…”, ha nem láttuk); a check helyesnek jelölt opciója és a visszajelzése ugyanazt mondja; minden számítás végeredményét újraszámolod.
 ## Tilalmak
 - Saját tudásból vett tény, szám, példa, név, évszám; a térkép állításainak „javítása” a helyesbítés-listán kívül.
-- A helyesbített RÉGI alak (pl. „bódex”, „föld-változása”) meghagyása bárhol a leckében.
+- A helyesbített RÉGI ÁLLÍTÁS bárhol a leckében (pl. „bódex” a kódex neveként); a régi szó MÁS értelemben megengedett („a Föld körül kering”).
 - Jó, nem kifogásolt rész átírása, stílus-csinosítás, hosszabbítás kérés nélkül; fejezet átnevezése, összevonása, átrendezése kérés nélkül.
 - Kért tétel csendes elhagyása; olyan kijelentés, amely a javítást elvégzettnek mutatja, de a szöveg nem tartalmazza.
 - Nem létező conceptId, a coversConceptIds címke olyan blokkon, amelynek szövege nem tanítja a fogalmat; próza a JSON körül.
 ## Önellenőrzés a válasz előtt
-Végigmentem a kérés-lista minden tételén? A régi (helyesbített) alakok száma a teljes JSON-ban nulla? Minden tény, szám és név a térképről vagy a korábbi, forrással egyező szövegből jön? A nem érintett fejezetek karakterre azonosak? A classroom a kért évfolyam? Csak JSON?`;
+Végigmentem a kérés-lista minden tételén? A helyesbített régi állítás sehol nem szerepel? Minden tény, szám és név a térképről vagy a korábbi, forrással egyező szövegből jön? A nem érintett fejezetek karakterre azonosak? A classroom a kért évfolyam? Csak JSON?`;
 
 export const REPAIR_SKILL_VERSION = createHash("sha256").update(REPAIR_SKILL).digest("hex").slice(0, 12);
 const START = "=== TANANYAGJAVÍTÓ SKILL";
@@ -65,7 +65,7 @@ export function repairChecklistTail(corrections: SourceCorrection[]): string {
     "ZÁRÓ ELLENŐRZÉS (a fenti hosszú adat után, a válasz előtt):",
     "1. A tanár kérésének minden tétele elvégezve vagy — ha a forrásból nem lehet — kitalálás nélkül kihagyva.",
     "2. A leckét az első fejezettől az utolsóig bejártad; minden érintett helyen javítottál, a kérdésekben és a visszajelzésekben is.",
-    ...(stale.length ? [`3. Ezek a régi alakok SEHOL nem maradhatnak (a program ellenőrzi): ${stale.map((w) => `„${w}”`).join(", ")}.`] : []),
+    ...(stale.length ? [`3. A helyesbített régi állítás SEHOL nem maradhat (a program ellenőrzi): ${stale.map((w) => `„${w}”`).join(", ")} — a szó más értelemben (pl. „a Föld”) megengedett.`] : []),
     `${stale.length ? 4 : 3}. Új tény, szám, név csak a térképről; a nem érintett rész karakterre változatlan; nincs stílus-csinosítás.`,
     "Válasz: CSAK a teljes lecke JSON-ja.",
   ].join("\n");
@@ -85,18 +85,88 @@ export function staleForms(corrections: SourceCorrection[]): string[] {
   return [...out];
 }
 
-/** Deterministic guard: every visible string of the lesson, searched for a corrected (old) form. */
-export function staleFormProblems(lesson: Lesson, corrections: SourceCorrection[]): string[] {
-  const stale = staleForms(corrections);
-  if (!stale.length) return [];
-  const hits: string[] = [];
-  const visit = (value: unknown, path: string) => {
-    if (typeof value === "string") {
-      const found = stale.filter((w) => new RegExp(`(^|[^a-z0-9])${w}`).test(fold(value)));
-      if (found.length) hits.push(`${path}: ${found.join(", ")}`);
-    } else if (Array.isArray(value)) value.forEach((v, i) => visit(v, `${path}.${i}`));
-    else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) if (k !== "coversConceptIds" && k !== "mapId") visit(v, path ? `${path}.${k}` : k);
+/** Whole-word occurrence (both sides bounded) of a folded stale word — „fold” nem illeszkedik a „földrajz” szóra (H43). */
+const wholeWord = (folded: string, w: string) => new RegExp(`(^|[^a-z0-9])${w}($|[^a-z0-9])`).test(folded);
+
+function visitStrings(lesson: Lesson, visit: (text: string, path: string) => void) {
+  const walk = (value: unknown, path: string) => {
+    if (typeof value === "string") visit(value, path);
+    else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}.${i}`));
+    else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) if (k !== "coversConceptIds" && k !== "mapId") walk(v, path ? `${path}.${k}` : k);
   };
-  visit({ ...lesson, experience: undefined }, "");
+  walk({ ...lesson, experience: undefined }, "");
+}
+
+/**
+ * Spec 2026-09-30 (U6, C16/H43): a régi alak két esete.
+ * - TISZTA régi alak (a régi kifejezésnek nincs megtartott szava: „terlet” → „terület”, „bódex” → „kódex”): a szó
+ *   bármely egész-szavas előfordulása maga a régi állítás → determinisztikus hiba (ez a függvény).
+ * - ÖSSZETETT régi alak („föld-változása” → „Hold változása”): a régi szó („föld”) más értelemben helyes lehet („a Föld
+ *   körül kering”) — ezt a `staleFormCandidates` JELÖLTKÉNT adja, és a javító-lektor dönt.
+ */
+export function staleFormProblems(lesson: Lesson, corrections: SourceCorrection[]): string[] {
+  const pure = staleForms(corrections.filter((c) => c.term !== undefined && c.from.term !== undefined && keptWords(c).length === 0));
+  if (!pure.length) return [];
+  const hits: string[] = [];
+  visitStrings(lesson, (text, path) => {
+    // A tiszta régi alak nem létező szó („terlet”), ezért a ragozott alakja is hiba — itt a bal oldali szóhatár elég.
+    const found = pure.filter((w) => new RegExp(`(^|[^a-z0-9])${w}`).test(fold(text)));
+    if (found.length) hits.push(`${path}: ${found.join(", ")}`);
+  });
   return hits.length ? [`A helyesbített régi alak még a leckében maradt — minden előfordulást javíts: ${hits.slice(0, 20).join("; ")}`] : [];
+}
+
+/** A javítás megtartott (az új alakban is szereplő, ≥ 4 betűs) szavai — ezek a fogalom kulcsszavai. */
+function keptWords(c: SourceCorrection): string[] {
+  if (c.term === undefined || c.from.term === undefined) return [];
+  const now = new Set(words(c.term));
+  return words(c.from.term).filter((w) => w.length >= 4 && now.has(w));
+}
+
+export type StaleCandidate = { id: string; path: string; sentence: string; oldForm: string; newForm: string };
+/** Szóegyüttállás egy mondatban: a régi szó (egész szóként) + a fogalom megtartott kulcsszava → JELÖLT, nem hiba. */
+export function staleFormCandidates(lesson: Lesson, corrections: SourceCorrection[]): StaleCandidate[] {
+  const out: StaleCandidate[] = [];
+  for (const c of corrections) {
+    const kept = keptWords(c);
+    if (!kept.length) continue;
+    const stale = staleForms([c]);
+    if (!stale.length) continue;
+    visitStrings(lesson, (text, path) => {
+      for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+        const f = fold(sentence);
+        if (!stale.some((w) => wholeWord(f, w))) continue;
+        const sentenceWords = f.split(/[^a-z0-9]+/);
+        if (!kept.some((k) => sentenceWords.some((w) => w.startsWith(k.slice(0, Math.min(5, k.length)))))) continue;
+        out.push({ id: `stale-${out.length}`, path, sentence: sentence.slice(0, 400), oldForm: c.from.term!, newForm: c.term! });
+      }
+    });
+  }
+  return out;
+}
+
+export type StaleVerdict = { id: string; verdict: "igen" | "nem" | "bizonytalan"; reason: string };
+/** A javító-lektor kérdése: a mondat a RÉGI (helyesbített) állítást állítja-e? */
+export function buildStaleJudgePrompt(candidates: StaleCandidate[]): { system: string; user: string } {
+  return {
+    system: [
+      "JAVÍTÓ-LEKTOR — RÉGI ÁLLÍTÁS ELLENŐRZÉSE (spec 2026-09-30, C16).",
+      "Minden jelölt mondatról döntsd el: a mondat a HELYESBÍTETT RÉGI ÁLLÍTÁST állítja-e (igen), vagy a régi szó más, helyes értelemben szerepel / a mondat épp a helyes alakot tanítja (nem). Ha a mondatból nem dönthető el: bizonytalan.",
+      "A puszta szóelőfordulás nem hiba: „Nem a Föld változása, hanem a Hold változása adja a naptárt” → nem; „A föld-változása alapján készítettek naptárt” → igen.",
+      'Kizárólag JSON: { "items": [{ "id": string, "verdict": "igen"|"nem"|"bizonytalan", "reason": string }] } — minden id-hoz pontosan egy elem.',
+    ].join("\n"),
+    user: JSON.stringify({ candidates: candidates.map((c) => ({ id: c.id, sentence: c.sentence, oldForm: c.oldForm, newForm: c.newForm })) }),
+  };
+}
+export function parseStaleVerdicts(json: unknown, candidates: StaleCandidate[]): StaleVerdict[] {
+  const items = (json as { items?: unknown } | null)?.items;
+  const byId = new Map<string, StaleVerdict>();
+  if (Array.isArray(items)) for (const raw of items) {
+    const it = raw as { id?: unknown; verdict?: unknown; reason?: unknown };
+    if (typeof it?.id !== "string" || byId.has(it.id)) continue;
+    const verdict = it.verdict === "igen" || it.verdict === "nem" || it.verdict === "bizonytalan" ? it.verdict : "bizonytalan";
+    byId.set(it.id, { id: it.id, verdict, reason: typeof it.reason === "string" ? it.reason.slice(0, 300) : "" });
+  }
+  // A nem jelentett jelölt eldöntetlen (H51 elve: a hiányzó ítélet nem „nem”).
+  return candidates.map((c) => byId.get(c.id) ?? { id: c.id, verdict: "bizonytalan", reason: "az ellenőrző nem adott ítéletet" });
 }

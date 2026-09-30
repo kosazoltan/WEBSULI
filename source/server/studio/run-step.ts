@@ -75,7 +75,9 @@ export function jsonFailureShape(text: string, error: unknown): string {
 export function stepDeadlineMs(step: string): number | undefined {
   return step === "lektor" ? LEKTOR_TIMEOUT_MS : STUDIO_STEP_POLICY[step]?.timeoutMs;
 }
-import { workflowCheckpoint, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
+import { workflowCheckpoint, workflowRuntimeVersion, workflowUsage, workflowSkillPrompt, workflowValidationFailure } from "../workflows/engine";
+import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
+import { maxOutputForModel } from "../ai/models";
 import type { PromptRole } from "../../shared/instruction-bundles/roles";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 
@@ -136,7 +138,11 @@ export async function callStepModel(
   signal?: AbortSignal,
 ): Promise<StepCallResult> {
   signal?.throwIfAborted();
-  input = { ...input, system: input.system + workflowSkillPrompt(input.role) };
+  // Spec 2026-09-30 (U6, C10): prompt-sorrend — a STABIL rész (runbook, utána a hívó skill-blokkja) elöl, a változó adat
+  // hátul, hogy a szolgáltatói gyorsítótár az előtagot újrahasznosíthassa. A befagyasztott (runtime-2) futás a régi,
+  // bájtra azonos sorrendet kapja (B0: régi futás = régi szöveg).
+  const runbook = workflowSkillPrompt(input.role);
+  input = { ...input, system: runbook && !isFrozenBundle(workflowRuntimeVersion()) ? `${runbook.replace(/^\s+/, "")}\n\n${input.system}` : input.system + runbook };
   return workflowCheckpoint("studio-model", input, async () => {
     // Mérve (5. mérés, run a0eb2bed): az animátor glm-hívása 609 s-ig futott a 240 s-os kliens-timeout
     // ellenére. Ok a forrásból: az OpenAI SDK `fetchWithTimeout` a `finally`-ban törli az időzítőt, amint a
@@ -153,14 +159,47 @@ export async function callStepModel(
     return result;
   });
 }
+/**
+ * Spec 2026-09-30 (U6, C10): a stabil előtag hossza — a runbook (ha elöl áll) és az első skill-blokk vége
+ * („=== SKILL VÉGE ===” / „=== TANANYAGJAVÍTÓ SKILL VÉGE ===”). Csak a jelölésre kell (Anthropic `cache_control`).
+ */
+export function stablePrefixChars(system: string): number {
+  const ends = ["=== SKILL VÉGE ===", "=== TANANYAGJAVÍTÓ SKILL VÉGE ==="].map((m) => { const i = system.indexOf(m); return i >= 0 ? i + m.length : -1; }).filter((i) => i > 0);
+  if (ends.length) return Math.min(...ends);
+  const runbookEnd = system.startsWith("WEBSULI SAJÁT RUNBOOK") ? system.indexOf("\n\n", 40) : -1;
+  return runbookEnd > 0 ? runbookEnd : 0;
+}
+
+/** Spec 2026-09-30 (U6): ársáv-figyelés — a hosszú kontextusú (≥ 200 k bemeneti token) hívás drágább sávba esik. */
+export const LONG_CONTEXT_PRICE_BAND = 200_000;
+
 async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput, signal?: AbortSignal): Promise<StepCallResult> {
   let response: AIResponse;
+  const messages = [
+    { role: "system" as const, content: input.system },
+    { role: "user" as const, content: input.user },
+  ];
+  const baseOptions = {
+    ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
+    ...(stablePrefixChars(input.system) > 0 ? { cachePrefixChars: stablePrefixChars(input.system) } : {}),
+  };
   try {
-    response = await provider.chat([
-      { role: "system", content: input.system },
-      { role: "user", content: input.user },
-    ], signal, input.responseFormat ? { responseFormat: input.responseFormat } : undefined);
+    response = await provider.chat(messages, signal, Object.keys(baseOptions).length ? baseOptions : undefined);
     signal?.throwIfAborted();
+    // Spec 2026-09-30 (U6, C11): hosszkorlát → EGYSZER nagyobb keret a modell plafonjáig; ismeretlen plafon vagy már
+    // maximális keret esetén marad a régi viselkedés (a csonka válasz nem használható).
+    const current = provider.maxOutputTokens;
+    const cap = maxOutputForModel(input.model);
+    if ((response.finishReason === "length" || response.finishReason === "max_tokens") && current && cap && cap > current) {
+      const enlarged = Math.min(cap, current * 2);
+      await workflowUsage(response.usage);
+      logger.warn(`[STUDIO] A(z) "${input.step}" válasza elérte a ${current} tokenes keretet — egyszeri újrapróba ${enlarged} tokennel (${input.model}).`);
+      response = await provider.chat(messages, signal, { ...baseOptions, maxTokens: enlarged });
+      signal?.throwIfAborted();
+    }
+    if ((response.usage?.promptTokens ?? 0) >= LONG_CONTEXT_PRICE_BAND) {
+      logger.warn(`[STUDIO] Hosszú kontextus (${response.usage!.promptTokens} bemeneti token ≥ ${LONG_CONTEXT_PRICE_BAND}) — drágább ársáv (${input.step}, ${input.model}).`);
+    }
   } catch (error) {
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
     // Spec 2026-09-30 (témafókusz-késleltetés): the label must name the deadline that actually fired — the

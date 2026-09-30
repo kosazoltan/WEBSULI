@@ -23,6 +23,7 @@ export class OpenAIProvider implements IAIProvider {
   private apiMode?: AIProviderConfig['apiMode'];
   private reasoningEffort?: AIProviderConfig['reasoningEffort'];
   private jsonMode?: boolean;
+  get maxOutputTokens(): number | undefined { return this.maxTokens; }
 
   constructor(config: AIProviderConfig, vendor: "openai" | "xai" = "openai") {
     this.name = vendor === "xai" ? "xAI" : "OpenAI";
@@ -43,13 +44,15 @@ export class OpenAIProvider implements IAIProvider {
   async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
     try {
       if (this.apiMode === 'responses') {
+        const outputBudget = options?.maxTokens ?? this.maxTokens;
         const response = await this.client.responses.create({
           model: this.model, input: messages, store: false,
-          ...(this.maxTokens ? { max_output_tokens: this.maxTokens } : {}),
+          ...(outputBudget ? { max_output_tokens: outputBudget } : {}),
           ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
         }, { signal });
         return { content: response.output_text ?? '', finishReason: response.status === 'completed' ? 'stop' : 'length',
-          usage: response.usage ? { promptTokens: response.usage.input_tokens, completionTokens: response.usage.output_tokens, totalTokens: response.usage.total_tokens } : undefined };
+          usage: response.usage ? { promptTokens: response.usage.input_tokens, completionTokens: response.usage.output_tokens, totalTokens: response.usage.total_tokens,
+            ...(response.usage.input_tokens_details?.cached_tokens ? { cachedTokens: response.usage.input_tokens_details.cached_tokens } : {}) } : undefined };
       }
       const response = await this.client.chat.completions.create(
         {
@@ -58,7 +61,7 @@ export class OpenAIProvider implements IAIProvider {
             role: msg.role,
             content: msg.content,
           })),
-          ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
+          ...((options?.maxTokens ?? this.maxTokens) ? { max_completion_tokens: options?.maxTokens ?? this.maxTokens } : {}),
           // Spec 2026-09-30 (U2/C8): hívásonkénti szigorú séma, ha a hívó adja; különben a lépés JSON-módja (ha van).
           ...(options?.responseFormat ? { response_format: options.responseFormat as never } : this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
         },
@@ -78,6 +81,7 @@ export class OpenAIProvider implements IAIProvider {
               promptTokens: response.usage.prompt_tokens,
               completionTokens: response.usage.completion_tokens,
               totalTokens: response.usage.total_tokens,
+              ...(response.usage.prompt_tokens_details?.cached_tokens ? { cachedTokens: response.usage.prompt_tokens_details.cached_tokens } : {}),
             }
           : undefined,
       };

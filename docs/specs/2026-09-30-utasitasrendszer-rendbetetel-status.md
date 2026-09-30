@@ -18,13 +18,13 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H11 | Ismeretlen hibaosztály nem jut emberhez | B8 | nyitott | — |
 | H12 | Pedagógus ellentmondás | U4 | lezárt (a tervező prompt és skill kimondja: a záró „A leggyakoribb hibák” / „Ellenőrzés” fejezet fogalomismétlése nem duplikáció) | `u4-author-pedagogue.test.ts` |
 | H13 | Szerző teljesíthetetlen utasítás | U4 | lezárt (magyar szerzői prompt; „reportba írd” és angol „Hard rules” törölve; `TEACHING_CONTRACT` egyszer a séma számaival: megalapozás, hosszkorlátok, forrás-hivatkozás tilalma, program által beírt mezők; a minőségi szerződés csak a közös módszer-szerződésben + runbook) | `u4-author-pedagogue.test.ts`, `lesson-band-theme.test.ts` (címke: Korosztály) |
-| H14 | Ábratervező skill/contract | U6 | nyitott | — |
+| H14 | Ábratervező | U6 | lezárt (animator skill: legfeljebb 2 ábra, a példás fejezet üres listájára a program szövegdobozt pótol — ezért oda érdemi ábra kell, 800×520, ≥ 10 rajzelem, font-size attribútum, `url(#id)`, allowlist; a bank-eszközök leírása U2 óta nincs nála; `VISUAL_PARAMS_CONTRACT` illustration példája 800×520, font-size ≥ 32) | `u6-limit-cost.test.ts` |
 | H15 | Vak megoldó | U5 | lezárt (saját `blind-solver` támogató skill; elemenkénti sémahiba → az elem kimarad, `partial: true`; a „NINCS ELÉG ADAT” tételek `notEnough` listában megőrizve, a lektor és a bank-ellenőr látja) | `u5-lektor-verifiers.test.ts` |
 | H16 | Dokumentáció ↔ 95% | B6 | nyitott | — |
 | H17 | Memória elavult | B7 | nyitott | — |
 | H19 | Ábra a bank ujjlenyomatában | U2a | lezárt (PR U2a: `withoutFigures` a bank tartalom-kulcsában és bemenetében; teszt: ábracsere nem épít újra) | `bank-hardening.test.ts` |
 | H20 | Forrás-hivatkozás törlése a bank UTÁN | U4 | lezárt (C3: törlés + jelentésőrző átírás a SZERZŐI lépés végén, a bank előtt; az ábra-lépés már nem módosítja a tanítást) | `lesson-pipeline-runner.test.ts` (U4 C3/H20) |
-| H21 | Kivonatoló csonkolás / quote-kör | U6 | részleges (#156: nagyobb keret) | PR #156 |
+| H21 | Kivonatoló csonkolás; quote-javítókör minden fájlt újraküld | U6 (C7) | lezárt (#156: 8192→24576 keret; U6/C7: a quote-javítókör csak a hibás fogalmak saját fájlját kapja — `filesForQuoteRepair`) | `u6-limit-cost.test.ts` |
 | H22 | Kivonatoló/OCR/scope szövegek | U6 | nyitott | — |
 | H23 | Webes skillek | U6 | nyitott | — |
 | H24 | Bank-ellenőr bemenete | U5 | lezárt (a fejezet explain/example/recap tanítása és a tételek fogalmainak forrás-idézetei a promptban; a `verified` lista kötelező) | `u5-lektor-verifiers.test.ts` |
@@ -42,8 +42,8 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H39 | Hatókör-őrök | U4 | lezárt (`checkAnimatorResult`: fejezetcím, `probaEnabled`, `emoji`, `misconceptions` is; `checkConceptFixResult` már mérte a címet) | `u4-author-pedagogue.test.ts` |
 | H40 | Megszakadt futás folytatása | — | külön spec | — |
 | H41 | UUID prompt, blokk-kind, PDF, térkép, parkolás | — | történeti — regresszió ellenőrzendő | `mapJson`, `AUTHOR_BLOCK_CATALOG` |
-| H42 | Limit-policy címkehiba | U6 | nyitott | `limit-policy.ts:79` |
-| H43 | Régi-alak tiltás | U6 | nyitott | — |
+| H42 | Limit-policy címkehiba | U6 (C15) | lezárt (`limitAcceptance`: a blokk minden megalapozatlan címkéje lekerül, a címke nélküli nem-recap blokk kivétel — a célzott javító kör után; üres fejezet → nem publikálható; a kapu a kivétel után sémát, Próba-elérhetőséget, ívet újramér és jelzi) | `u6-limit-cost.test.ts` |
+| H43 | Régi-alak tiltás | U6 (C16) | lezárt (tiszta, nem létező régi alak: determinisztikus hiba ragozva is; összetett régi alak („föld-változása”): egész-szavas + kulcsszó-együttállás csak JELÖLT → javító-lektor „igen/nem/bizonytalan”; csak az „igen” blokkol, a „bizonytalan” és a hívás hibája figyelmeztetés; `REPAIR_SKILL` szövege ugyanezt mondja) | `u6-limit-cost.test.ts` |
 | H44 | Duplikátum-kulcsok írásjel-törlés | U2a | lezárt (PR U2a: közös `questionKey` a csomag-sémában, a kapukérdés-őrben és a csomagok közti összevetésben; a korábbi kapukérdések a promptban) | `bank-hardening.test.ts` |
 | H45 | Üres lektori jelentés `{}` alakilag érvényes (notes default `[]`, solutions opcionális) | U5 | lezárt (`parseLektorResponse` a modell-határon: `{}` érvénytelen, `notes` kötelező, üres notes csak `reviewedAll: true` mellett; egy módhelyes újrakérés, utána hiba; a tárolt régi jelentés lenient sémával olvasható) | `u5-lektor-verifiers.test.ts` |
 | H46 | Oral/written csomagonként | U2c | lezárt (a szerződés 3. pontja és a prompt „EBBEN a csomagban legalább egy oral és egy written” — kimondva; a `experiencePacketSchema` csomagonként méri, a hiány csomagszintű → teljes újraírás) | `bank-repair.test.ts` |
@@ -58,3 +58,10 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 ## U5 eltérés a tervtől — ábra-kapu (rögzítve 2026-09-30)
 
 - A tervezett renderelt (PNG) + „mit mutat?” látás-alapú ábra-ellenőrzés NEM készült el: a szolgáltatói absztrakció (`AIMessage.content: string`) nem visz képet, és a futtató környezetben nincs SVG→PNG renderelő. Elkészült a determinisztikus rész (`figure-check.ts`, `FIGURE_CHECK_VERSION = v1-labels`): az ábra név-szerű feliratai (≤ 4 szó) a saját fejezet tanításából vagy a caption-ből legyenek levezethetők — a lelet FIGYELMEZTETÉS (`figure_check` qualityNote), nem buktat, ahogy a §C-V/12 mérés nélkül előírja. A látás-alapú ellenőrzés külön szeletet igényel: képbemenet a provider-rétegben + renderelő.
+
+## U6 — költség és keret (rögzítve 2026-09-30)
+
+- C11: a hosszkorlát utáni EGYSZERI nagyobb keret hívásonként (`callUncachedStepModel`, ×2 a modell plafonjáig — `maxOutputForModel`, forrás: OpenRouter /models `top_provider.max_completion_tokens`, `evidence-models-raw.json`); ismeretlen modellnél a régi viselkedés. **Eltérés:** a spec „közös próbálkozás-számláló a szolgáltatói/séma/tartalom/tartalék körökön át” része nem új számlálóként készült el — a körök összkeretét továbbra is a workflow látogatási kerete (`workflowStepVisitsLeft`, `workflowEnsureRepairBudget`) korlátozza.
+- C10: a futó (runtime-3) csomagnál a runbook a rendszerutasítás ELEJÉRE került (stabil előtag), a befagyasztott runtime-2 futás bájtra azonos régi sorrendet kap; Anthropic `cache_control` a stabil előtagon (`cachePrefixChars`); `cachedTokens`/`cacheWriteTokens` a szolgáltatói válaszból a látogatásba (`cacheReadTokens`/`cacheWriteTokens`); 200 k bemeneti token fölött ársáv-figyelmeztetés a naplóban. A sorrendváltás a futó runtime-3 jobok `studio-model` checkpoint-kulcsát megváltoztatja (folytatáskor új modellhívás).
+- §C-L: az eldöntetlen önálló-megoldás eltérés `solution_mismatch` qualityNote (figyelmeztetés, nem bukás, nem igazolás).
+- B2: külön `web-extract` támogató skill (a `web-research` csak gyűjt); a besoroló prompt kimondja a skill 1. lépését; OCR oldalcímke „[N. oldal]” (a program szövegrétege is így jelöl).

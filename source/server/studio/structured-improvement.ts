@@ -21,7 +21,8 @@ import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { designFromInstruction, visualWorld, type LessonFlair, type VisualWorldId } from "../../shared/lesson-visuals";
-import { repairChecklistTail, staleFormProblems, withRepairSkill } from "./repair-skill";
+import { buildStaleJudgePrompt, parseStaleVerdicts, repairChecklistTail, staleFormCandidates, staleFormProblems, withRepairSkill, type StaleVerdict } from "./repair-skill";
+import { logger } from "../lib/logger";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
@@ -128,6 +129,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   let candidate: Lesson | undefined;
   let previous: unknown;
   let correction = "";
+  let staleWarnings: StaleVerdict[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     // Spec 2026-09-23: the repair skill at the start of the system prompt, its checklist at the end of the user message.
     previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections), "repair");
@@ -136,6 +138,22 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
       assertRepairTeaching(original, parsed, corrected, classroom);
       const stale = staleFormProblems(parsed, owner.corrections);
       if (stale.length) throw new Error(stale.join("; "));
+      // Spec 2026-09-30 (U6, C16/H43): az összetett régi alak szóegyüttállása csak JELÖLT — a javító-lektor dönt; csak az
+      // „igen” (a régi állítást állítja) blokkol, a „bizonytalan” figyelmeztetés (a hívás hibája is bizonytalan).
+      const candidates = staleFormCandidates(parsed, owner.corrections);
+      if (candidates.length) {
+        let verdicts: StaleVerdict[];
+        try {
+          const judge = buildStaleJudgePrompt(candidates);
+          verdicts = parseStaleVerdicts(await call("lektor", withRoleSkill("lektor", judge.system), judge.user, "lektor"), candidates);
+        } catch (error) {
+          verdicts = candidates.map((c) => ({ id: c.id, verdict: "bizonytalan" as const, reason: `az ellenőrző hívás elbukott: ${error instanceof Error ? error.message.slice(0, 120) : String(error)}` }));
+        }
+        const asserted = verdicts.filter((v) => v.verdict === "igen");
+        if (asserted.length) throw new Error(`A helyesbített régi állítás még a leckében maradt: ${asserted.map((v) => { const c = candidates.find((x) => x.id === v.id)!; return `${c.path}: „${c.sentence.slice(0, 120)}” (${v.reason})`; }).join("; ")}`);
+        staleWarnings = verdicts.filter((v) => v.verdict === "bizonytalan");
+        if (staleWarnings.length) logger.warn(`[STUDIO] Javítás: ${staleWarnings.length} régi-alak jelölt eldöntetlen (figyelmeztetés, nem blokkol).`);
+      }
       candidate = parsed;
       break;
     } catch (error) {
@@ -145,7 +163,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
     }
   }
   if (!candidate) throw new Error("A javított tanítás hiányzik.");
-  return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner), owner };
+  return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner), owner, ...(staleWarnings.length ? { staleWarnings } : {}) };
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
