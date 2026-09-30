@@ -74,6 +74,17 @@ test("a halvány körvonal a papíron legalább 3:1 lesz (nem-szöveges kontrasz
   assert.ok(contrastRatio(stroke!, ILLUSTRATION_PAPER.background) >= 3, `a vonal ${stroke}`);
 });
 
+test("spec 2026-09-30: a halvány kék folyó a homokszínű földön kék marad (a színe sötétül, nem lesz fekete)", () => {
+  // Élő mérés (Mezopotámia-ábrák): a #3b82c4 folyó a #e6c98f földön 2,5:1 volt, és az őr #0f172a-ra cserélte.
+  const r = clean(svgOf('<rect x="0" y="0" width="400" height="220" fill="#e6c98f"/><path d="M40 20 C 120 100, 60 160, 140 210" fill="none" stroke="#3b82c4" stroke-width="10"/><text x="200" y="60" font-size="20">Tigris</text>'));
+  const stroke = /<path[^>]*stroke="(#[0-9a-f]{6})"[^>]*stroke-width="10"/.exec(r.svg)?.[1];
+  assert.ok(stroke, "van stroke");
+  assert.ok(contrastRatio(stroke!, "#e6c98f") >= 3, `a folyó ${stroke}`);
+  assert.notEqual(stroke, ILLUSTRATION_PAPER.ink);
+  const [red, green, blue] = [1, 3, 5].map((i) => parseInt(stroke!.slice(i, i + 2), 16));
+  assert.ok(blue > red && blue > green, `kék árnyalat marad: ${stroke}`);
+});
+
 test("transzformált csoport: az alakzat a helyén mérődik", () => {
   // A sötét téglalap translate(200 0) után x = 210…390-en van; a felirat x = 230-on rajta áll.
   const r = clean(svgOf('<g transform="translate(200 0)"><rect x="10" y="10" width="180" height="120" fill="#111827"/></g><text x="230" y="70" font-size="20" fill="#1f2937">Szeged</text>'));

@@ -101,6 +101,21 @@ function readableOn(bg: Rgb): string {
   return contrastRatio(DARK_TEXT, bg) >= contrastRatio(LIGHT_TEXT, bg) ? DARK_TEXT : LIGHT_TEXT;
 }
 
+/**
+ * Spec 2026-09-30 (ábratervező): a halvány vonal SZÍNÉT megtartva sötétít (világos háttéren) vagy világosít (sötéten),
+ * amíg el nem éri a kért kontrasztot. Élő mérés: a kék folyó (#3b82c4) a homokszínű földön 3:1 alatt volt, és a korábbi
+ * őr feketére (#0f172a) cserélte — a folyó jelentése (víz = kék) elveszett. Végső tartalék a tinta/fehér.
+ */
+export function keepHueContrast(color: Rgb, bg: Rgb, min: number): string {
+  const target: Rgb = readableOn(bg) === DARK_TEXT ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 };
+  for (let t = 0.05; t <= 0.95; t += 0.05) {
+    const mixed = { r: color.r + (target.r - color.r) * t, g: color.g + (target.g - color.g) * t, b: color.b + (target.b - color.b) * t };
+    const hex = toHex(mixed);
+    if (contrastRatio(hex, bg) >= min) return hex;
+  }
+  return readableOn(bg);
+}
+
 /* ---------------------------------------------------------------- geometry */
 
 type Matrix = [number, number, number, number, number, number];
@@ -539,7 +554,7 @@ export function enforceIllustrationContrast(root: Element, paper: Surface = ILLU
     if (!stroke || !local || !m) continue;
     const bg = backgroundAt(root, apply(m, local), el, paper, el);
     if (contrastRatio(over(stroke, bg), bg) >= MIN_GRAPHIC_CONTRAST) continue;
-    el.setAttribute("stroke", readableOn(bg));
+    el.setAttribute("stroke", keepHueContrast(over(stroke, bg), bg, MIN_GRAPHIC_CONTRAST));
     if (parseFloat(inherited(el, "stroke-opacity", root) ?? "1") < 1) el.setAttribute("stroke-opacity", "1");
   }
   return fixed;
