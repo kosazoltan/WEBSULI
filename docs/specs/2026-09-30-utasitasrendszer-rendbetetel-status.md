@@ -11,7 +11,7 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H4 | Ismétlődő kérdés, három kulcs | U2 | lezárt (U2a: közös `questionKey`; U2c: a csomagon belüli ismétlődés a MÁSODIK tételt nevezi meg → célzott csere, a korábbi csomagok kérdései és kapukérdései a promptban) | `bank-hardening.test.ts`, `bank-repair.test.ts` |
 | H5 | Szerzői javítókör „title/subject Required” | U4 | nyitott | — |
 | H6 | Megalapozatlan címke, lapított index | U4 | nyitott | — |
-| H7 | Tanári pont tanítatlan | U3 | részleges (#155: forrásból igazolt pont kiegészítő fogalom) | PR #155 |
+| H7 | Tanári kérés pontja tanítatlan | U3 | lezárt a U3 hatókörében (`instruction-points.ts`: pontjegyzék EGYSZER a pedagógus előtt, két független kivonat uniója, `requestSpan`-visszakötés, igazolt pont kiegészítő fogalom, a tervező `instructionPointIds`-szel fejezethez rendeli, a szerző fejezetenként kapja; kapu azonosítónként) — a modell-kivonat minősége élő mérésre vár (D) | `instruction-points.test.ts` (valódi Egyiptom-kérés, 16 pont, szimulált kivonat) |
 | H8 | Lektor bemenet/költség | U5, U6 | nyitott | evidence-visits-tokens.txt |
 | H9 | Lektor altípus/útvonal | U5 | nyitott | — |
 | H10 | Runbook/tanult szabály szerep nélkül | U0 | lezárt (PR #158: `roles.ts` RULE_ROLES/QUALITY_ROLES/BANK_MINIMUM_ROLES; `callStepModel.role` KÖTELEZŐ — review után nincs lépés-alapú csendes tartalék; a 45/75 kivéve a `LESSON_QUALITY_CONTRACT`-ból; teszt `instruction-bundles.test.ts`) | tesztek: bank kapja a 45/75-öt, lektor/vak megoldó nem |
@@ -33,7 +33,7 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H31 | Pontozó sorrend-/törtvak | U1 | nyitott | `2/1 → 1` mérve |
 | H32 | Bank-ellenőr ítélet nélkül igazolt | U5 | nyitott | — |
 | H33 | kid-text-fixer új tényt vezet be | U4 | nyitott | — |
-| H34 | Tanári-kérés ellenőrző hiányai | U3 | nyitott | — |
+| H34 | Tanári-kérés ellenőrző: üres lista elfogadva; egész leckében keres; cím is bizonyíték; forrás 60 000-re vágva | U3 | lezárt (v3: üres lista kérés-pontok mellett hiba; bizonyíték csak a megnevezett fejezet törzsszövegéből, cím kizárva; nem jelentett id → részleges jelentés, `undecidable`; „a forrás alátámasztja” külön `supports` ítélet — a téma érintése nem igazol; a 60 000-es forráskeret marad, dokumentált) | `instruction-points.test.ts` |
 | H35 | Több helyes párosítás | U2a (+ U5 bank-ellenőr try-blokk) | részleges (PR U2a: `lessonSchema` try.match többértelműség-őr; a bank-ellenőr try-blokk bemenete U5) | `bank-hardening.test.ts` |
 | H36 | Elérhetetlen Próba | — | történeti (regresszió őrzi) — regressziós teszt megléte ellenőrzendő | #141/#143 |
 | H37 | Ellenőrzési gyorsítótár verziózatlan | U0, U5 | nyitott — eltérés a végrehajtási fájltól: a három kulcs (tartalom/ellenőrzés/származás) bekötése a fogyasztó egységekbe kerül (U2 bank `contentKey`, U5 ellenőrzők `verificationKey`), az U0 a származási verziót (`runtimeVersion` a pillanatképben) és a DB-prompt rögzítését (`workflowPinnedPrompt`) adja | — |
@@ -47,10 +47,10 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H44 | Duplikátum-kulcsok írásjel-törlés | U2a | lezárt (PR U2a: közös `questionKey` a csomag-sémában, a kapukérdés-őrben és a csomagok közti összevetésben; a korábbi kapukérdések a promptban) | `bank-hardening.test.ts` |
 | H45 | Üres lektori jelentés | U5 | nyitott | — |
 | H46 | Oral/written csomagonként | U2c | lezárt (a szerződés 3. pontja és a prompt „EBBEN a csomagban legalább egy oral és egy written” — kimondva; a `experiencePacketSchema` csomagonként méri, a hiány csomagszintű → teljes újraírás) | `bank-repair.test.ts` |
-| H47 | Tanári kérés 2000-re vágva | U3 | nyitott | — |
+| H47 | Tanári kérés némán 2000 karakterre vágva | U3 | lezárt (`OWNER_INSTRUCTION_MAX` 100 000 tárolási plafon; a 32 000-es hívási kereten túli rész JELÖLT `unprocessed` pont + `truncated: true`, a promptblokk is jelzi) | `instruction-points.test.ts` |
 | H48 | Bank-ellenőri lelet elnyomása | U5 | nyitott | — |
 | H49 | Lektori solutions 40-re vágva | U5 | nyitott | — |
-| H50 | Vázlatmezők csendes vágása | U4 | nyitott | — |
+| H50 | Pedagógusi vázlat mezői (`animationSuggestions` 120, `keyPhrases` 40, `emoji` 8), tanári kérés (2000), lektori `solutions` (40) csendben vágva | U3 (kérés), U4 (vázlat), U5 (solutions) | részleges (U3: a kérés vágása jelölt állapot; a vázlatmezők és a solutions U4/U5) | `instruction-points.test.ts` |
 | H51 | Újrahívás-összefésülés lelettörlés | U5 | nyitott | — |
 | H52 | Utolsó kísérlet aritmetikai jelzés | U2a | lezárt (PR U2a: nyitott lelet → `bankOpenFindings` a jobban → a kapun `origin: "arithmetic"` kivehető tétel; a csomag továbbra is átmegy) | `bank-hardening.test.ts`, régi „biztonsági szelep” teszt változatlan |
 | H53 | Lektori „első menet” példa | U2c | lezárt (a `buildLektorPrompt` kalibráló példája cserélve: köztes műveleti állapotot kérő kérdésnél az értékazonos más alak HIBÁS → blokkoló; a lektor skill 5. pontja és a bank-ellenőr is a `typedAnswers`/form szabályt ismeri) | `bank-repair.test.ts` |
