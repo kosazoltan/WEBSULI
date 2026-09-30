@@ -85,7 +85,7 @@ export function applyTeachingPatch(html: string, raw: unknown, allowedSections?:
 
 export const callTeachingRepair = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("author"), deadline = AbortSignal.timeout(240_000);
-  return (await callStepModel(createStudioProvider(model, 240_000, 16_000), { step: "author", model, system: withSupportSkill("web-repair", system), user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
+  return (await callStepModel(createStudioProvider(model, 240_000, 16_000), { step: "author", role: "web-repair", model, system: withSupportSkill("web-repair", system), user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
 };
 export async function reviewAndRepairWebTeaching(html: string, sources: FetchedTeachingSource[], options: {
   requestedTopic?: string; signal?: AbortSignal; review?: typeof reviewWebTeaching; repair?: typeof callTeachingRepair;

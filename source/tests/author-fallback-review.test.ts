@@ -35,9 +35,9 @@ test("R2: a workflow a bukott (érvénytelen JSON-os) modellhívás tokenjét is
   } as unknown as IAIProvider);
   const view = await executeWorkflow(store, { id: "usage", owner: "a", mode: "web" }, async () => {
     await workflowPhase("generate");
-    await assert.rejects(callStepModel(reply('{"title": "x", "sections": [', 20, 10), { step: "author", model: "gpt-6-luna", system: "s", user: "u1" }),
+    await assert.rejects(callStepModel(reply('{"title": "x", "sections": [', 20, 10), { step: "author", role: "author", model: "gpt-6-luna", system: "s", user: "u1" }),
       (error: unknown) => error instanceof StepModelError && /nem érvényes JSON/.test(error.message));
-    await callStepModel(reply('{"ok": true}', 5, 5), { step: "author", model: "gpt-5.6-terra", system: "s", user: "u2" });
+    await callStepModel(reply('{"ok": true}', 5, 5), { step: "author", role: "author", model: "gpt-5.6-terra", system: "s", user: "u2" });
     await workflowPhase("knowledge"); await workflowPhase("author"); await workflowPhase("gate"); await workflowPhase("publish"); await workflowPhase("readback");
     return { kind: "material" as const, id: "ok" };
   });

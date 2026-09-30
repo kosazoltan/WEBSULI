@@ -475,7 +475,7 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
   const concepts = rows.map((c) => ({ id: c.id, localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight as MapConcept["examWeight"] }));
   const model = resolveStudioModel("pedagogue");
   const result = await proposeSourceCorrections(async (system, user) =>
-    (await callStepModel(createStudioStepProvider(model, "pedagogue"), { step: "pedagogue", model, system, user })).json,
+    (await callStepModel(createStudioStepProvider(model, "pedagogue"), { step: "pedagogue", role: "corrector", model, system, user })).json,
   concepts, { instruction, transcript });
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);

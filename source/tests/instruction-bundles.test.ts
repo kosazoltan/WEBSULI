@@ -25,8 +25,8 @@ const v3Snapshot = (): SkillSnapshot => skillSnapshot("upload", ["schema", "bank
 
 test("a befagyasztott runtime-2 archívum bájtra rögzített (tartalom-hash), nem szerkeszthető észrevétlenül", () => {
   const frozen = JSON.stringify([V2.SOUL_V2, V2.IAM_V2, V2.RECOVERY_V2, V2.QUALITY_V2, V2.BANK_MINIMUM_V2, V2.SKILL_RULES_V2, V2.ROLE_SKILLS_V2, V2.ROLE_SOULS_V2, V2.SUPPORT_SKILLS_V2, V2.REPAIR_SKILL_V2]);
-  // A hash a 2026-09-30-i élő szövegek lenyomata; ha ez a teszt bukik, valaki az archívumot módosította — azt tilos.
-  assert.equal(sha(frozen).slice(0, 16), sha(frozen).slice(0, 16));
+  // A 2026-09-30-i élő szövegek RÖGZÍTETT lenyomata (review #158): ha ez a teszt bukik, valaki az archívumot módosította — az tilos.
+  assert.equal(sha(frozen), "0d2f80854a5f94fd4a6521871c77809186808930a4984159be51bada2f5b1527");
   assert.equal(Object.keys(V2.ROLE_SKILLS_V2).length, 7);
   assert.equal(Object.keys(V2.SKILL_RULES_V2).length, 15);
   assert.ok(V2.REPAIR_SKILL_V2.startsWith("# Skill: tananyagjavító"));
@@ -39,8 +39,8 @@ test("az új futás a 3-as csomagot rögzíti; a régi (runtime-2) pillanatkép 
   const chain = workflowDefinition("upload").steps.map((s) => s.label).join(" → ");
   const legacyFormula = `\n\nWEBSULI SAJÁT RUNBOOK (websuli-runtime-2)\n${V2.SOUL_V2}\n${V2.IAM_V2}\nA teljes folyamat: ${chain}. Ebben a modellhívásban csak a kért részfeladatot végezd el; a szerver hajtja végre a lépéseket.\n${V2.RECOVERY_V2}\n${V2.QUALITY_V2 + V2.BANK_MINIMUM_V2}\n`;
   for (const role of ["lektor", "bank", "extract", undefined] as const) assert.equal(runtimePrompt(v2Snapshot, "upload", role), legacyFormula, `régi futás szerep nélkül is ugyanazt kapja (${role})`);
-  const v1 = runtimePrompt({ ...v2Snapshot, runtimeVersion: "websuli-runtime-1" }, "upload", "bank");
-  assert.ok(v1.endsWith(`${V2.RECOVERY_V2}\n\n`), "runtime-1: nincs minőségi blokk");
+  // §C-V/11: a runtime-1 futásnak nincs archivált teljes promptja → explicit leállítás, nem rekonstrukció (review #158).
+  assert.throws(() => runtimePrompt({ ...v2Snapshot, runtimeVersion: "websuli-runtime-1" }, "upload", "bank"), /nem folytatható/);
   assert.throws(() => runtimePrompt({ ...v2Snapshot, runtimeVersion: "websuli-runtime-9" }, "upload"), /Ismeretlen/);
   // A régi pillanatkép a régi szabályszöveget kapja, szűrés nélkül (a lektor is látja a bank-szabályt — mint eddig).
   const oldRules = skillRuleText(v2Snapshot, "lektor");
@@ -79,7 +79,9 @@ test("élő csomag: a tanult szabályok szerepre szűrve; a katalógus és a lek
   for (const code of Object.keys(SKILL_RULES)) assert.ok(code in RULE_ROLES, `nincs szerep-leképezés: ${code}`);
   for (const roles of Object.values(RULE_ROLES)) for (const r of roles) assert.ok((PROMPT_ROLES as readonly string[]).includes(r), r);
   assert.equal(roleForStep("animator"), "animator"); assert.equal(roleForStep("gateHelper"), "gate-helper"); assert.equal(roleForStep("x"), undefined);
-  assert.equal(isFrozenBundle(undefined), true); assert.equal(isFrozenBundle("websuli-runtime-3"), false);
+  // undefined = nincs futó workflow → ÉLŐ csomag (az OCR modul-betöltése és a kézi Studio-út nem az archívumot kapja).
+  assert.equal(isFrozenBundle(undefined), false); assert.equal(isFrozenBundle("websuli-runtime-3"), false); assert.equal(isFrozenBundle("websuli-runtime-2"), true);
+  assert.ok(roleSkillBlock("bank").includes(ROLE_SKILLS.bank), "kontextuson kívül az élő skill");
 });
 
 test("a skill-segédek a futás csomagverziója szerint választanak: régi pillanatkép → archív szöveg, azonos hash", async () => {
@@ -89,7 +91,7 @@ test("a skill-segédek a futás csomagverziója szerint választanak: régi pill
   assert.ok(frozen.includes(V2.ROLE_SKILLS_V2.bank));
   // Ma az archívum és az élő szöveg azonos, ezért a verzió-hash is azonos → a folyamatban lévő bank-checkpoint nem vész el.
   assert.equal(roleSkillVersion("bank", "websuli-runtime-2"), roleSkillVersion("bank", "websuli-runtime-3"));
-  assert.ok(withSupportSkill("scope", "X", "websuli-runtime-1").includes(V2.SUPPORT_SKILLS_V2.scope));
+  assert.ok(withSupportSkill("scope", "X", "websuli-runtime-2").includes(V2.SUPPORT_SKILLS_V2.scope));
   assert.ok(withSupportSkill("scope", "X").includes(SUPPORT_SKILLS.scope));
   assert.ok(withRepairSkill("X", "websuli-runtime-2").includes(V2.REPAIR_SKILL_V2));
   // futó workflow-ban a verzió automatikus
@@ -117,7 +119,7 @@ test("callStepModel a hívás szerepével szűr: a bankhívás kapja a 45/75-öt
   await executeWorkflow(store, { id: "roles", owner: "o", mode: "upload" }, async () => {
     await workflowPhase("source");
     await callStepModel(provider("bank"), { step: "animator", role: "bank", model: "m", system: "B", user: "u" });
-    await callStepModel(provider("lektor"), { step: "lektor", model: "m", system: "L", user: "u" });
+    await callStepModel(provider("lektor"), { step: "lektor", role: "lektor", model: "m", system: "L", user: "u" });
     await callStepModel(provider("blind"), { step: "lektor", role: "blind-solver", model: "m", system: "V", user: "u" });
     for (const step of workflowDefinition("upload").steps.slice(1)) await workflowPhase(step.id);
     return { kind: "material" as const, id: "r" };

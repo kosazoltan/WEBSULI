@@ -9,6 +9,7 @@ import { buildStructuredImprovement, finishStructuredImprovement } from "../serv
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
 import { resolveStudioModel } from "../server/ai/models";
 import { callStepModel } from "../server/studio/run-step";
+import { requireRoleForStep, type PromptRole } from "../shared/instruction-bundles/roles";
 import { classifyNotes } from "../server/studio/lektor";
 import { buildLektorPrompt, lektorReportSchema } from "../server/studio/step-io";
 
@@ -36,11 +37,11 @@ let checkpoint: ExperienceCheckpoint | undefined;
 try { checkpoint = JSON.parse(await readFile(new URL("checkpoint.json", out), "utf8")); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 let calls = 0, tokensIn = 0, tokensOut = 0;
 const started = Date.now();
-const call = async (step: "author" | "lektor" | "pedagogue", system: string, user: string) => {
+const call = async (step: "author" | "lektor" | "pedagogue", system: string, user: string, role?: PromptRole) => {
   const model = resolveStudioModel(step);
   process.stdout.write(`${++calls}. modellhívás: ${step}, bemenet ${system.length + user.length} karakter\n`);
   const provider = new OpenRouterProvider({ apiKey: process.env.OPENROUTER_API_KEY ?? "", model, timeout: 180000, maxTokens: 24000 });
-  const result = await callStepModel(provider, { step, model, system, user });
+  const result = await callStepModel(provider, { step, role: role ?? requireRoleForStep(step), model, system, user });
   await writeFile(new URL(`${reviewOnly ? "review-follow-up" : "full-repair"}-call-${calls}.json`, out), JSON.stringify(result.json, null, 2));
   tokensIn += result.usage?.promptTokens ?? 0; tokensOut += result.usage?.completionTokens ?? 0;
   return result.json;

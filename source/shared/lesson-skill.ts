@@ -43,7 +43,8 @@ export type SkillLesson = SkillFinding & { state: "active" | "observed" | "disab
  * pillanatkép a régi katalógust adja szűrés nélkül — a folyamatban lévő futás utasítása nem változik.
  */
 export function skillRuleText(snapshot: SkillSnapshot, role?: PromptRole): string {
-  const frozen = isFrozenBundle(snapshot.runtimeVersion);
+  // Verzió nélküli (legacy) vagy befagyasztott pillanatkép = régi futás: régi katalógus, szűrés nélkül.
+  const frozen = !snapshot.runtimeVersion || isFrozenBundle(snapshot.runtimeVersion);
   const catalog: Record<string, readonly [string, string]> = frozen ? SKILL_RULES_V2 : SKILL_RULES;
   const rules = snapshot.rules.filter(code => Object.hasOwn(catalog, code)).filter(code => frozen || !role || ruleAppliesToRole(code, role));
   if (!rules.length) return "";

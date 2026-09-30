@@ -24,7 +24,7 @@ test("a valódi Studio lektorkérés Responses medium, teljes bemenet, nincs sze
     ] }), { headers: { "Content-Type": "application/json" } });
   });
   const provider = createStudioStepProvider("grok-4.6", "lektor");
-  const result = await callStepModel(provider, { step: "lektor", model: provider.model, system: "Teljes lecke és forrás", user: "Csak hibajegyek" });
+  const result = await callStepModel(provider, { step: "lektor", role: "lektor", model: provider.model, system: "Teljes lecke és forrás", user: "Csak hibajegyek" });
   assert.deepEqual(result.json, { notes: [] });
 });
 
@@ -40,7 +40,7 @@ test("megszakított lektor nem adhat vissza érvényes JSON-t sem", async t => {
   const controller = new AbortController();
   t.mock.method(globalThis, "fetch", async () => { controller.abort(); return new Response('{}', { headers: { "Content-Type": "application/json" } }); });
   const provider = new OpenAIProvider({ apiKey: "test-placeholder", model: "grok-4.6", maxRetries: 0 }, "xai");
-  await assert.rejects(callStepModel(provider, { step: "lektor", model: provider.model, system: "Forrás", user: "Teszt" }, controller.signal));
+  await assert.rejects(callStepModel(provider, { step: "lektor", role: "lektor", model: provider.model, system: "Forrás", user: "Teszt" }, controller.signal));
 });
 
 test("OpenRouter lektornál is egyetlen HTTP-próba van", async t => {
@@ -60,6 +60,6 @@ test("a lektor saját határideje folytatható timeoutként marad meg", async t 
     throw new DOMException("aborted", "AbortError");
   });
   const provider = new OpenAIProvider({ apiKey: "test-placeholder", model: "grok-4.6", maxRetries: 0 }, "xai");
-  await assert.rejects(callStepModel(provider, { step: "lektor", model: provider.model, system: "Forrás", user: "Teszt" }),
+  await assert.rejects(callStepModel(provider, { step: "lektor", role: "lektor", model: provider.model, system: "Forrás", user: "Teszt" }),
     (error: unknown) => error instanceof Error && error.cause instanceof AIProviderTimeoutError);
 });

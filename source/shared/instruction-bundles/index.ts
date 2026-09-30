@@ -20,7 +20,8 @@ export type RunbookTexts = { soul: string; iam: string; recovery: string; qualit
 
 /** A runbook szövegei egy adott csomagverzióra és szerepre. Ismeretlen verzió: hiba (az eredeti módszer nem pótolható). */
 export function bundleRunbook(version: string, role?: PromptRole): RunbookTexts {
-  if (version === "websuli-runtime-1") return { soul: SOUL_V2, iam: IAM_V2, recovery: RECOVERY_V2, quality: "" };
+  // §C-V/11: archivált teljes prompt nélküli régi futás nem rekonstruálható verzióazonosítóból — explicit leállítás.
+  if (version === "websuli-runtime-1") throw new Error("A futás a régi (websuli-runtime-1) utasításcsomaggal készült; archivált teljes prompt nélkül nem folytatható új utasítással — indíts új készítést.");
   if (version === "websuli-runtime-2") return { soul: SOUL_V2, iam: IAM_V2, recovery: RECOVERY_V2, quality: QUALITY_V2 + BANK_MINIMUM_V2 };
   if (version !== INSTRUCTION_BUNDLE_VERSION) throw new Error("Ismeretlen futási tudástárverzió; az eredeti módszer nem helyettesíthető.");
   // Élő csomag: szerep nélküli hívás (ismeretlen hívó) a teljes szöveget kapja — a szűrés csak megnevezett szerepre.
@@ -31,5 +32,6 @@ export function bundleRunbook(version: string, role?: PromptRole): RunbookTexts 
 
 /** A tanult szabályok katalógusa a csomagverzió szerint (a befagyasztott a régi szövegeket adja). */
 export function bundleRuleCatalog(version: string | undefined): Record<string, readonly [string, string]> {
-  return isFrozenBundle(version) ? SKILL_RULES_V2 : SKILL_RULES;
+  // A verzió nélküli (legacy) pillanatkép régi futás: a régi katalógust kapja.
+  return version === undefined || isFrozenBundle(version) ? SKILL_RULES_V2 : SKILL_RULES;
 }

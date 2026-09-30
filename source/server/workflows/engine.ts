@@ -83,15 +83,31 @@ export const workflowSkillPrompt = (role?: PromptRole) => {
  * és a futás végéig az marad — a közben megváltozott DB-sor nem írja át a folyamatban lévő munka utasítását.
  * Workflow-kontextuson kívül (kézi Studio-út) nincs rögzítés.
  */
-export async function workflowPinnedPrompt(name: string, resolve: () => Promise<string | null>): Promise<string | null> {
+export async function workflowPinnedPrompt<T>(name: string, resolve: () => Promise<T>): Promise<T> {
   const ctx = context.getStore();
   if (!ctx) return resolve();
-  const prompts = (ctx.record.checkpoints.prompts ??= {}) as Record<string, string | null>;
+  const prompts = (ctx.record.checkpoints.prompts ??= {}) as Record<string, T>;
   if (Object.hasOwn(prompts, name)) return prompts[name];
   const value = await resolve();
   prompts[name] = value;
   await persist(ctx);
   return value;
+}
+/**
+ * Review #158 (§C-V/2 maradék): a promptépítők (pl. `buildAuthorPrompt`) sablonszövege nem fagyasztható a futásba, mert a
+ * kimenetük a lecke aktuális tartalmától függ. Ezért a VÉGLEGES rendszerutasítás lenyomatát a futás rögzíti hívásonként
+ * (név + kör), és folytatáskor jelzi, ha ugyanaz a hívás más utasítást kapna — a változás így nem néma. A sablonszövegek
+ * csomagba emelése (TEACHING_CONTRACT stb.) az U4 feladata.
+ */
+export async function workflowNotePromptHash(key: string, system: string): Promise<void> {
+  const ctx = context.getStore();
+  if (!ctx) return;
+  const hashes = (ctx.record.checkpoints.promptHashes ??= {}) as Record<string, string>;
+  const digest = hash(system);
+  if (hashes[key] && hashes[key] !== digest) logger.warn(`[WORKFLOW] Az utasítás megváltozott folytatáskor (${ctx.record.view.id}, ${key}): a futás új sablonszöveget kapott.`);
+  if (hashes[key] === digest) return;
+  hashes[key] = digest;
+  await persist(ctx);
 }
 /** Record even a recoverable validation failure, before asking the model to repair it. */
 export async function workflowFinding(code: SkillCode) {

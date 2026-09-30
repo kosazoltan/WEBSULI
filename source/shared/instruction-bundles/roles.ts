@@ -26,13 +26,29 @@ export function roleForStep(step: string): PromptRole | undefined {
   return map[step];
 }
 
-/** Befagyasztott csomagverziók: a régi pillanatképpel futó munka a `websuli-runtime-2.ts` archív szövegét kapja. */
-export const FROZEN_BUNDLE_VERSIONS = ["websuli-runtime-1", "websuli-runtime-2"] as const;
+/** A hívási szerep a lépésből, kötelezően (fail-closed): a pipeline négy modell-lépése és a segédlépések. */
+export function requireRoleForStep(step: string): PromptRole {
+  const role = roleForStep(step);
+  if (!role) throw new Error(`Ismeretlen hívási szerep a(z) „${step}” lépéshez — a hívónak explicit role-t kell adnia.`);
+  return role;
+}
+
+/**
+ * Befagyasztott csomagverzió: a runtime-2 pillanatképpel futó munka a `websuli-runtime-2.ts` archív szövegét kapja.
+ * A runtime-1 NEM folytatható (nincs archivált teljes promptja — §C-V/11; a `bundleRunbook` explicit hibát ad).
+ * `undefined` = nincs futó workflow (kézi Studio-út, modul-betöltés) → ÉLŐ csomag (review #158: az OCR és a kézi utak
+ * korábban tévesen az archívumot kapták volna).
+ */
+export const FROZEN_BUNDLE_VERSIONS = ["websuli-runtime-2"] as const;
 export const isFrozenBundle = (version: string | undefined): boolean =>
-  version === undefined || (FROZEN_BUNDLE_VERSIONS as readonly string[]).includes(version);
+  version !== undefined && (FROZEN_BUNDLE_VERSIONS as readonly string[]).includes(version);
 
 const ALL = PROMPT_ROLES as readonly PromptRole[];
-const BANK_LIKE: readonly PromptRole[] = ["bank", "web-author", "html-improve", "html-fix", "repair"];
+/**
+ * Bankot ÍRÓ szerepek: a Studio bankcsomagja és a HTML-utak, ahol a modell maga írja a JSON-bankot (web-author,
+ * html-improve, html-fix). A javító szerző (`repair`) nem: a bankját a külön `bank` hívás építi (review #158).
+ */
+const BANK_LIKE: readonly PromptRole[] = ["bank", "web-author", "html-improve", "html-fix"];
 const TEACHING: readonly PromptRole[] = ["pedagogue", "author", "repair", "web-author", "web-repair", "creator-chat", "html-improve"];
 const REVIEW: readonly PromptRole[] = ["lektor", "web-lektor", "bank-verifier", "instruction-checker"];
 

@@ -140,7 +140,7 @@ export function assertTeachingReviewEvidence(html: string, sources: { url: strin
 export const callTeachingReviewer = async (system: string, user: string, signal?: AbortSignal) => {
   const model = resolveStudioModel("lektor");
   try {
-    return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", model, system: withSupportSkill("web-lektor", system), user }, signal)).json;
+    return (await callStepModel(createStudioStepProvider(model, "lektor"), { step: "lektor", role: "web-lektor", model, system: withSupportSkill("web-lektor", system), user }, signal)).json;
   } catch (primaryError) {
     // Spec 2026-09-19: the same lektor fallback as the Studio runner — only on a provider
     // failure (timeout, 5xx, bad JSON), never on a content verdict, never after an abort.
@@ -152,7 +152,7 @@ export const callTeachingReviewer = async (system: string, user: string, signal?
     };
     logger.warn(`[WEB-RESEARCH] A lektor (${model}) hibázott: ${reason(primaryError)} → tartalék: ${fallback}`);
     try {
-      return (await callStepModel(createStudioStepProvider(fallback, "lektor"), { step: "lektor", model: fallback, system: withSupportSkill("web-lektor", system), user }, signal)).json;
+      return (await callStepModel(createStudioStepProvider(fallback, "lektor"), { step: "lektor", role: "web-lektor", model: fallback, system: withSupportSkill("web-lektor", system), user }, signal)).json;
     } catch (fallbackError) {
       // Spec 2026-09-25 (élő futás f8c62334): a tartalék hibája eddig elveszett, csak az elsődlegesé látszott.
       logger.error(`[WEB-RESEARCH] A tartalék lektor (${fallback}) is hibázott: ${reason(fallbackError)}`);

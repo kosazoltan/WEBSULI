@@ -21,6 +21,7 @@ import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, 
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
 import { designFromInstruction, visualWorld, type LessonFlair, type VisualWorldId } from "../../shared/lesson-visuals";
 import { repairChecklistTail, staleFormProblems, withRepairSkill } from "./repair-skill";
+import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 
@@ -72,10 +73,10 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const [material] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, fileId));
   if (!material) throw new Error("Az eredeti tananyag metaadatai nem találhatók.");
   const source = await loadSource(row.mapId);
-  const call = async (step: RepairStep, system: string, user: string) => {
+  const call = async (step: RepairStep, system: string, user: string, role: PromptRole = requireRoleForStep(step)) => {
     const model = resolveStudioModel(step);
     const provider = createStudioStepProvider(model, step);
-    return (await callStepModel(provider, { step, model, system, user })).json;
+    return (await callStepModel(provider, { step, role, model, system, user })).json;
   };
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
@@ -89,14 +90,14 @@ export async function generateStructuredImprovement(fileId: string, instruction?
 
 /** Shared generation path: also executable against read-only source with local artifacts. */
 type RepairStep = "author" | "lektor" | "pedagogue";
-type RepairCall = (step: RepairStep, system: string, user: string) => Promise<unknown>;
+type RepairCall = (step: RepairStep, system: string, user: string, role?: PromptRole) => Promise<unknown>;
 export type RepairOwner = { instruction?: string; corrections: SourceCorrection[]; classroom?: number; design?: { world?: VisualWorldId; flair?: LessonFlair[] } };
 
 export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } = {}) {
   await workflowPhase("author");
   // Spec 2026-09-23: the teacher's request may carry documented source corrections and an explicit grade.
   const proposal = instruction || opts.transcript
-    ? await proposeSourceCorrections((system, user) => call("pedagogue", system, user), source.concepts, { instruction, transcript: !!opts.transcript })
+    ? await proposeSourceCorrections((system, user) => call("pedagogue", system, user, "corrector"), source.concepts, { instruction, transcript: !!opts.transcript })
     : { corrections: [] as SourceCorrection[] };
   const asked = explicitClassroomOf(instruction);
   const owner: RepairOwner = { instruction, corrections: proposal.corrections, ...(asked !== undefined && asked !== original.classroom ? { classroom: asked } : {}) };
@@ -125,7 +126,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   let correction = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     // Spec 2026-09-23: the repair skill at the start of the system prompt, its checklist at the end of the user message.
-    previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections));
+    previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections), "repair");
     try {
       const parsed = lessonSchema.parse(previous);
       assertRepairTeaching(original, parsed, corrected, classroom);
@@ -149,7 +150,7 @@ export async function finishStructuredImprovement(original: Lesson, candidate: L
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
   const design = owner?.design;
-  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user) => call("author", system, user),
+  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, call: (system, user) => call("author", system, user, "bank"),
     ...(design?.world ? { theme: design.world } : {}), ...(design?.flair ? { flair: design.flair } : {}) });
   assertRepairCandidate(original, candidate, source, classroom);
   await workflowPhase("lektor");
