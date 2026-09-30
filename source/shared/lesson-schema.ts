@@ -254,6 +254,13 @@ export const blockSchema = z
           (p as { left: string }).left.trim().length > 0 &&
           (p as { right: string }).right.trim().length > 0,
       );
+      // Spec 2026-09-30 (U2, H35 — job 986b7f82: 1/2, 2/4 és 3/6 több párosítást engedett): egy bal elemhez pontosan egy
+      // jobb tartozzon és fordítva — ismétlődő (vagy értékazonos számú) oldal többértelmű feladat.
+      const sideKey = (s: string) => s.normalize("NFC").trim().toLocaleLowerCase("hu").replace(/\s+/g, " ");
+      const lefts = valid.map((p) => sideKey(p.left)), rights = valid.map((p) => sideKey(p.right));
+      if (new Set(lefts).size !== lefts.length || new Set(rights).size !== rights.length) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["spec", "pairs"], message: "A párosító többértelmű: minden bal és minden jobb elem egyszer szerepeljen, hogy pontosan egy helyes párosítás legyen." });
+      }
       if (valid.length < 1) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

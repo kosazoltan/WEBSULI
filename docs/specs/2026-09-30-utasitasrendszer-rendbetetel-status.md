@@ -22,7 +22,7 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H15 | Vak megoldó skill, néma veszteség | U5 | nyitott | — |
 | H16 | Dokumentáció ↔ 95% | B6 | nyitott | — |
 | H17 | Memória elavult | B7 | nyitott | — |
-| H19 | Ábra a bank ujjlenyomatában | U2 | nyitott | — |
+| H19 | Ábra a bank ujjlenyomatában | U2a | lezárt (PR U2a: `withoutFigures` a bank tartalom-kulcsában és bemenetében; teszt: ábracsere nem épít újra) | `bank-hardening.test.ts` |
 | H20 | Forrás-hivatkozás a bank után | U4 | nyitott | — |
 | H21 | Kivonatoló csonkolás / quote-kör | U6 | részleges (#156: nagyobb keret) | PR #156 |
 | H22 | Kivonatoló/OCR/scope szövegek | U6 | nyitott | — |
@@ -34,7 +34,7 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H32 | Bank-ellenőr ítélet nélkül igazolt | U5 | nyitott | — |
 | H33 | kid-text-fixer új tényt vezet be | U4 | nyitott | — |
 | H34 | Tanári-kérés ellenőrző hiányai | U3 | nyitott | — |
-| H35 | Több helyes párosítás | U2 (+ szerzői try.match) | nyitott | — |
+| H35 | Több helyes párosítás | U2a (+ U5 bank-ellenőr try-blokk) | részleges (PR U2a: `lessonSchema` try.match többértelműség-őr; a bank-ellenőr try-blokk bemenete U5) | `bank-hardening.test.ts` |
 | H36 | Elérhetetlen Próba | — | történeti (regresszió őrzi) — regressziós teszt megléte ellenőrzendő | #141/#143 |
 | H37 | Ellenőrzési gyorsítótár verziózatlan | U0, U5 | nyitott — eltérés a végrehajtási fájltól: a három kulcs (tartalom/ellenőrzés/származás) bekötése a fogyasztó egységekbe kerül (U2 bank `contentKey`, U5 ellenőrzők `verificationKey`), az U0 a származási verziót (`runtimeVersion` a pillanatképben) és a DB-prompt rögzítését (`workflowPinnedPrompt`) adja | — |
 | H38 | Runbook-verzióemelés törés | U0 | lezárt (PR #158: `websuli-runtime-2.ts` archívum rögzített sha256-tal, `bundleRunbook`, verzió-tudatos `roleSkillBlock/withSupportSkill/withRepairSkill`; a runtime-2 pillanatkép promptja bájtra a régi képlet; runtime-1 explicit leállítás §C-V/11; workflow-n kívül élő csomag) | `instruction-bundles.test.ts` |
@@ -44,7 +44,7 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H41 | UUID prompt, blokk-kind, PDF, térkép, parkolás | — | történeti — regresszió ellenőrzendő | `mapJson`, `AUTHOR_BLOCK_CATALOG` |
 | H42 | Limit-policy címkehiba | U6 | nyitott | `limit-policy.ts:79` |
 | H43 | Régi-alak tiltás | U6 | nyitott | — |
-| H44 | Duplikátum-kulcsok írásjel-törlés | U2 | nyitott | — |
+| H44 | Duplikátum-kulcsok írásjel-törlés | U2a | lezárt (PR U2a: közös `questionKey` a csomag-sémában, a kapukérdés-őrben és a csomagok közti összevetésben; a korábbi kapukérdések a promptban) | `bank-hardening.test.ts` |
 | H45 | Üres lektori jelentés | U5 | nyitott | — |
 | H46 | Oral/written csomagonként | U2 | nyitott | — |
 | H47 | Tanári kérés 2000-re vágva | U3 | nyitott | — |
@@ -52,5 +52,5 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 | H49 | Lektori solutions 40-re vágva | U5 | nyitott | — |
 | H50 | Vázlatmezők csendes vágása | U4 | nyitott | — |
 | H51 | Újrahívás-összefésülés lelettörlés | U5 | nyitott | — |
-| H52 | Utolsó kísérlet aritmetikai jelzés | U2 | nyitott | — |
+| H52 | Utolsó kísérlet aritmetikai jelzés | U2a | lezárt (PR U2a: nyitott lelet → `bankOpenFindings` a jobban → a kapun `origin: "arithmetic"` kivehető tétel; a csomag továbbra is átmegy) | `bank-hardening.test.ts`, régi „biztonsági szelep” teszt változatlan |
 | H53 | Lektori „első menet” példa | U2 | nyitott | — |

@@ -34,7 +34,8 @@ type ChoiceKey = { options: string[]; correctIndex: number };
 export type BankVerifierItem = { path: string; hash: string; item: Record<string, unknown>; key?: ChoiceKey };
 export type BankVerifierChunk = { sectionIndex: number; items: BankVerifierItem[] };
 /** `origin: "limit"`: a lektor körlimiten maradt banktétel-blokkolója (spec 2026-09-29-limit-banktetel-kivetel). */
-export type ChoiceFlag = { path: string; message: string; origin?: "limit" };
+/** `origin`: `limit` = körlimiten maradt lektori kifogás; `arithmetic` = az utolsó bankkísérlet nyitott aritmetikai lelete (H52). */
+export type ChoiceFlag = { path: string; message: string; origin?: "limit" | "arithmetic" };
 
 /** A tétel ellenőrzendő tartalma: az azonosítók és a kötési metaadat nélkül. */
 function contentOf(item: Record<string, unknown>): Record<string, unknown> {

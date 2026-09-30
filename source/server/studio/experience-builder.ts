@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gateQuestionProblems } from "../../shared/lesson-experience";
+import { gateQuestionProblems, hasFigureReference, questionKey } from "../../shared/lesson-experience";
 import { z } from "zod";
 import { LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
 import { evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../shared/lesson-experience-score";
@@ -45,6 +45,12 @@ export type ExperienceBuildDeps = {
   onToolFix?(tool: string, fixes: string[]): void;
   /** Mérve (4. mérés): a bukott bankkísérlet oka eddig csak ujjlenyomatként maradt — a hívó naplózza. */
   onAttemptFailure?(sectionIndex: number, attempt: number, reason: string): void;
+  /**
+   * Spec 2026-09-30 (U2, H52): az utolsó (mentő) kísérlet CSAK aritmetikai leletével elfogadott csomag tétele NYITOTT lelet
+   * marad (nem néma figyelmeztetés): a hívó a kapunak adja át kivehető tételként (limit-tábla), amíg cáfolat vagy javítás
+   * le nem zárja. Az `itemId` a végleges (hash-alapú) tétel-azonosító.
+   */
+  onOpenFinding?(finding: { sectionIndex: number; itemId: string; message: string }): void;
   /** Egyszerre épülő csomagok száma (alapból 1 = soros; a runner PACKET_CONCURRENCY-t ad). */
   concurrency?: number;
   /** Spec 2026-09-20: a lecke vizuális világa (a tervező választása) — a bank témája ez, nem hash. */
@@ -223,6 +229,11 @@ export function salvagePacket<P extends { methods: Array<{ id: string }>; tasks:
   return null;
 }
 
+
+/** Spec 2026-09-30 (U2, H19): a bank tartalom-kulcsa és bemenete a fejezet ÁBRA NÉLKÜLI változata — ábracsere nem építi újra a csomagot. */
+function withoutFigures<S extends { blocks: Array<{ kind: string }> }>(section: S | undefined): S | undefined {
+  return section ? { ...section, blocks: section.blocks.filter((b) => b.kind !== "animate") } : section;
+}
 export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept[], deps: ExperienceBuildDeps): Promise<LessonExperience> {
   const plan = bankPlanSchema.parse(planLessonBank(lesson));
   const language = lessonLanguage(lesson.subject);
@@ -242,9 +253,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       [prior.quiz.map(q => q.question), packet.quiz.map(q => ({ id: q.id, text: q.question }))],
     ];
     for (const [past, added] of pairs) {
-      const seen = new Set(past.map(normalizeAnswer));
+      // Spec 2026-09-30 (U2, H44): közös kulcs, a műveleti jel megmarad — „15 + 4” és „15 · 4” nem ismétlődés.
+      const seen = new Set(past.map(questionKey));
       for (const item of added) {
-        const key = normalizeAnswer(item.text);
+        const key = questionKey(item.text);
         if (seen.has(key)) problems.push(`Ismétlődő kérdés egy korábbi csomaggal: ${item.id} („${item.text.slice(0, 120)}”) — ehhez a tételhez új, más kérdést írj.`);
         seen.add(key);
       }
@@ -254,7 +266,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
   const unitTeaching = (unitIndex: number, unit: (typeof plan.units)[number]) => {
     const { taskCount, quizCount, taskTarget, quizTarget, methodKinds } = bankUnitQuota(plan, unitIndex);
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
-    const teaching = { version: LESSON_METHOD_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, taskTarget, quizTarget, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: lesson.sections[unit.sectionIndex], concepts: source, allowedConceptIds: unit.conceptIds };
+    const teaching = { version: LESSON_METHOD_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, taskTarget, quizTarget, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: withoutFigures(lesson.sections[unit.sectionIndex]), concepts: source, allowedConceptIds: unit.conceptIds };
     return { taskCount, quizCount, taskTarget, quizTarget, methodKinds, teaching, baseHash: createHash("sha256").update(canonicalJson(teaching)).digest("hex") };
   };
   // Élő futás 67a05970 (2026-09-24): a kifogás fogalom szerint minden olyan csomaghoz eljutott, amely ugyanazt a
@@ -307,6 +319,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
         if (score.score !== 1) problems.push(`${t.id}: a mintaválasz nem teljes pont. ${score.reason} A minta szószáma: ${wordCount}; minWords: ${t.minWords}. A mintában fel nem ismert kötelező szinonimacsoportok: ${JSON.stringify(missingAnswerConcepts(t.sample, t))}.`);
       }
       problems.push(...crossProblems(packet, before).filter(p => p.startsWith("Ismétlődő")));
+      // Spec 2026-09-30 (U2): a bank ábra nélkül épül, ezért tétel nem hivatkozhat ábrára — különben az ábra cseréje a bankot is érvényteleníti.
+      for (const t of packet.tasks) if (hasFigureReference(`${t.q}\n${t.sample}`)) problems.push(`${t.id}: a feladat ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat (ábra nélkül épül).`);
+      for (const q of packet.quiz) if (hasFigureReference(`${q.question}\n${q.options.join("\n")}`)) problems.push(`${q.id}: a kvíz ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat.`);
+      for (const m of packet.methods) if (hasFigureReference(m.prompt)) problems.push(`${m.id}: a módszer ábrára hivatkozik — a bank csak a tanítás szövegére hivatkozhat.`);
       return problems;
     };
     const fromPrevious = deps.previous?.version === LESSON_METHOD_VERSION ? {
@@ -316,6 +332,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       glossary: deps.previous.glossary.filter(i => i.sourceHash === hash),
     } : undefined;
     let packet: Packet | undefined;
+    let openIssues: string[] = [];
     for (const saved of [checkpoint.parts[hash], fromPrevious]) {
       const parsed = packetSchema.safeParse(saved);
       if (parsed.success && validate(parsed.data).length === 0) { packet = parsed.data; break; }
@@ -347,7 +364,8 @@ Az értékelő szóalakokat illeszt, nem nyelvi modell. Minden required csoportb
 ${reviewBase ? `TARTALMI LEKTORI JAVÍTÁS: csak ezek az ID-k módosíthatók: ${JSON.stringify([...allowedReviewIds!])}. Ezek kérdését és hibás rubrikáját a forrás szerint összhangba hozhatod; a nem érintett tételeket a program változatlanul megőrzi, azokat ne küldd vissza.` : `A javított required minden korábbi csoportot külön őrizzen meg, annak összes korábbi alakjával. Új szinonimát hozzáadhatsz; csoportot vagy alakot törölni, két kötelező csoportot összevonni tilos. Ezt a program is ellenőrzi.${bindingRepairIds.size ? ` Kivétel: a bizonyítottan csomaghatársértő feladatok (${JSON.stringify([...bindingRepairIds])}) kérdését, mintáját és hibás rubrikáját az engedélyezett tanítás szerint együtt javítsd; ezeknél a hibás követelmény cserélhető.` : ""}`}
 ${quizTarget} kvíz (legalább ${quizCount}): minden fogalomhoz egy intent=recall és egy intent=apply. Mind: id,sectionIndex,coversConceptIds:[egyetlen ID],intent,question,options (3 vagy 4 különböző),correctIndex,feedbackPerOption (minden opcióhoz magyarázat). Felidézés és valódi alkalmazás külön kérdés, ne csak számot cserélj!
 ${language ? `Nyelv: ${language}. glossary: a csomag ténylegesen tanított szavai, mind {word,translation,partOfSpeech,example,exampleTranslation}; legalább egy elem.` : "glossary: []."}
-Korábbi kérdések, ne ismételd: ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question) })}
+Ábrára, rajzra, „az ábrán látható” részletre NE hivatkozz: a csomag a tanítás szövegéből épül, az ábrát nem látod.
+Korábbi kérdések és kapukérdések, ne ismételd (a program a műveleti jelet is figyeli, a „8 : 2” és a „8 · 2” különböző): ${JSON.stringify({ tasks: tasks.map(t => t.q), quiz: quiz.map(q => q.question), gates: methods.filter(m => m.kind === "gate").map(m => m.prompt) })}
 ${errors ? `Az előző válasz hibái: ${errors}.
 ${repairBase ? "JAVÍTÁSI MÓD: a teljes csomag már megvan. Csak a javítandó tételeket add vissza methods/tasks/quiz tömbökben, eredeti id-val és minden mezőjükkel. A változatlan tömb lehet üres vagy elhagyható: a program megőrzi a korábbi tételeket. Tételt törölni, új id-t megadni tilos. A glossary üresen vagy elhagyva változatlan marad; nem üresen a teljes javított szószedetet tartalmazza. A program ID szerint egyesít, utána a TELJES bankot újra ellenőrzi." : "A korábbi csomag alakja hibás. Add vissza a TELJES csomagot, a fent előírt összes tétellel; részleges javítólista nem elegendő."}
 Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
@@ -381,7 +399,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // átmegy, a lektor pedig úgyis a forráshoz méri.
       const lastAttempt = attempt === PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS - 1;
       const arithmeticOnly = issues.length > 0 && issues.every(i => /hibás számítás/.test(i));
-      if (parsed.success && lastAttempt && arithmeticOnly) deps.onToolFix?.("arithmetic-claims", issues.map(i => `figyelmeztetés (átengedve): ${i}`));
+      // Spec 2026-09-30 (U2, H52): nem néma figyelmeztetés — nyitott lelet, amelyet a kapu kivehető tételként kezel (limit-tábla).
+      if (parsed.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
       // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
       const quotaAndValidate = (p: Packet) => {
         const quota = packetSchema.safeParse(p);
@@ -400,11 +419,20 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       }
     }
     if (!packet) throw new Error(`A ${unit.sectionIndex + 1}. fejezet bankcsomagja a javító kör után sem megfelelő: ${errors}`, lastError instanceof Error ? { cause: lastError } : undefined);
+    // H52: a nyitott aritmetikai lelet a VÉGLEGES azonosítóval jut a hívóhoz (a modell azonosítója lent lecserélődik).
+    const originalIds = { methods: packet.methods.map(i => i.id), tasks: packet.tasks.map(i => i.id), quiz: packet.quiz.map(i => i.id) };
     // IDs are scoped to the exact source/teaching version; reused packets retain them.
     packet.methods = packet.methods.map((i, n) => ({ ...i, id: `m-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     packet.tasks = packet.tasks.map((i, n) => ({ ...i, id: `t-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     packet.quiz = packet.quiz.map((i, n) => ({ ...i, id: `q-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     packet.glossary = packet.glossary.map(i => ({ ...i, sourceHash: hash }));
+    for (const issue of openIssues) {
+      const modelId = issue.split(":")[0]?.trim();
+      for (const bank of BANKS) {
+        const n = originalIds[bank].indexOf(modelId);
+        if (n >= 0) deps.onOpenFinding?.({ sectionIndex: unit.sectionIndex, itemId: packet[bank][n].id, message: issue });
+      }
+    }
     checkpoint.parts[hash] = packet;
     if (reviewFeedback.length) checkpoint.reviewedHashes![baseHash] = hash;
     await deps.save?.(checkpoint);

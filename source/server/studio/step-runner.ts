@@ -948,9 +948,11 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
       if (isFusionMethodVersion(job.output?.methodVersion) || original.experience) {
         try {
+          const bankOpenFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = [];
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
             previous: original.experience,
+            onOpenFinding: (finding) => bankOpenFindings.push(finding),
             theme: visualWorld((job.output?.visual as { world?: string } | undefined)?.world)?.id,
             reviewFeedback: bankReview?.feedback,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
@@ -975,6 +977,9 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             },
           });
           completedLesson = { ...completedLesson, experience };
+          // Spec 2026-09-30 (U2, H52): a nyitott aritmetikai leletek a jobban maradnak; a kapu kivehető tételként kapja őket.
+          job.output = { ...job.output, bankOpenFindings };
+          if (bankOpenFindings.length) logger.warn(`[STUDIO] Nyitott aritmetikai lelet a kapunak (${job.id}): ${bankOpenFindings.map((f) => f.itemId).join(", ")}`);
         } catch (error) {
           return fail(store, job, describeStepError(error));
         }
@@ -1207,6 +1212,24 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
  * őr leletei ∪ a bank-ellenőr utolsó körének `choiceFlags`-e. Bank-tétel → kivétel, ha a bank utána is megfelel;
  * különben, és a lecke check blokkjánál, a lecke nem publikálható.
  */
+
+/**
+ * Spec 2026-09-30 (U2, H52): az utolsó bankkísérlet nyitott aritmetikai leletei a kapun kivehető tételként jelennek meg
+ * (limit-tábla), a végleges tétel-azonosítóból a lecke aktuális bankjának útvonalára feloldva. A már nem létező tétel
+ * (időközben kivették/újraépült) nem jelez.
+ */
+export function openBankFindingFlags(lesson: Lesson, raw: unknown): ChoiceFlag[] {
+  if (!Array.isArray(raw) || !lesson.experience) return [];
+  const flags: ChoiceFlag[] = [];
+  for (const f of raw as Array<{ itemId?: unknown; message?: unknown }>) {
+    if (typeof f?.itemId !== "string") continue;
+    for (const bank of ["tasks", "quiz", "methods"] as const) {
+      const index = lesson.experience[bank].findIndex((item) => item.id === f.itemId);
+      if (index >= 0) flags.push({ path: bankItemPath({ bank, index }), message: `nyitott aritmetikai lelet: ${String(f.message ?? "")}`, origin: "arithmetic" });
+    }
+  }
+  return flags;
+}
 export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[] } | { error: string } {
   const flags = new Map<string, string>();
   for (const f of lessonSingleChoiceProblems(lesson)) flags.set(f.path, `${f.path}: ${f.problems.join(" ")}`);
@@ -1270,7 +1293,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   if (!reviewed.success) {
     return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(reviewed.error)}`);
   }
-  const choiceGate = resolveChoiceGate(reviewed.data, job.output?.choiceFlags);
+  const choiceGate = resolveChoiceGate(reviewed.data, [...(Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : []), ...openBankFindingFlags(reviewed.data, job.output?.bankOpenFindings)]);
   if ("error" in choiceGate) return fail(store, job, choiceGate.error);
   // A lektor-bizonyíték (lent) az EREDETI, lektorált leckéhez kötött; a kivétel csak elvesz belőle.
   const parsed = { data: choiceGate.lesson };

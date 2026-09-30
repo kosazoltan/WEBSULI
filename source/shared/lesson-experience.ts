@@ -132,7 +132,7 @@ export const experiencePacketSchema = z.object({
     if (new Set(items.map(i => i.id)).size !== items.length) ctx.addIssue({ code: "custom", path: [bank], message: "Ismétlődő tételazonosító." });
   }
   for (const [bank, questions] of [["tasks", e.tasks.map(t => t.q)], ["quiz", e.quiz.map(q => q.question)]] as const) {
-    const keys = questions.map(q => q.toLocaleLowerCase("hu").replace(/[\p{P}\p{Z}]/gu, ""));
+    const keys = questions.map(questionKey);
     if (new Set(keys).size !== keys.length) ctx.addIssue({ code: "custom", path: [bank], message: "Ismétlődő kérdés; valódi változatok szükségesek." });
   }
   if (e.language && !e.glossary.length) ctx.addIssue({ code: "custom", path: ["glossary"], message: "Nyelvi leckéhez szószedet kell." });
@@ -146,9 +146,22 @@ export type OpenTask = z.infer<typeof openTaskSchema>;
 export type ExperienceQuiz = z.infer<typeof experienceQuizSchema>;
 export type CognitiveMethod = z.infer<typeof methodSchema>;
 export type LessonBankPlan = z.infer<typeof bankPlanSchema>;
+/**
+ * Spec 2026-09-30 (U2, H44): EGY közös kérdés-kulcs az ismétlődés-ellenőrzéshez (csomag-séma, kapukérdés, csomagok
+ * közti összevetés). A műveleti jel és a törtvonal a kulcs része — a „8 : 2” és a „8 · 2” különböző kérdés; a szóköz és
+ * az egyéb írásjel nem számít; a jel-szinonimák (× * → ·, ÷ → :, − – → -) egyformák.
+ */
+export function questionKey(text: string): string {
+  return text.normalize("NFC").toLocaleLowerCase("hu").replace(/[×*]/g, "·").replace(/÷/g, ":").replace(/[−–]/g, "-").replace(/[^\p{L}\p{N}+\-·:/]/gu, "");
+}
+/** Spec 2026-09-30 (U2): a bank csak a tanítás SZÖVEGÉRE hivatkozhat — ábra-sorszámra, „az ábrán látható” fordulatra nem (a bank ábra nélkül épül). */
+// A JS `\b` csak ASCII-betűnél határ, ezért ékezetes szónál lookaround kell (`(?<!\p{L})…(?!\p{L})`).
+export const FIGURE_REFERENCE = /(?<!\p{L})(?:\d+\.\s*)?ábr(?:a|án|át|ája|ának|ához|ára|ából)(?!\p{L})|az ábrán látható|a rajzon látható/iu;
+export const hasFigureReference = (text: string): boolean => FIGURE_REFERENCE.test(text);
+
 export function gateQuestionProblems(methods: { kind: string; prompt: string }[]): string[] {
   const gates = methods.filter(m => m.kind === "gate");
-  const keys = gates.map(m => m.prompt.normalize("NFC").toLocaleLowerCase("hu").replace(/[\p{P}\p{Z}]/gu, ""));
+  const keys = gates.map(m => questionKey(m.prompt));
   return new Set(keys).size === gates.length ? [] : ["Ismétlődő kapukérdés: különböző kérdés szükséges, új azonosító nem elég."];
 }
 /** Applied independently of a supplied version at every new publication boundary. */
