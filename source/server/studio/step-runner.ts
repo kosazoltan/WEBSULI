@@ -74,7 +74,7 @@ import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBank
 import { skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowEnsureRepairBudget, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
+import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowEnsureRepairBudget, workflowRepairBudgetAvailable, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, type BankItemRef } from "../../shared/bank-item-ref";
@@ -1268,7 +1268,8 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   // Review #143 (P2): a szerzői javítás csak akkor jár, ha a javítási út minden lépésére van még látogatási keret;
   // a limit előtt elfogyott keret (megszakított és folytatott kör) is „nincs több szerzői kör”-nek számít.
   const repairBudget = ["author", "animator", "lektor", "gate"].every((s) => workflowStepVisitsLeft(s) > 0);
-  const noAuthorRepair = job.round >= MAX_AUTHOR_ROUNDS || !repairBudget;
+  // Review #154: a Próba kikapcsolása a DINAMIKUS keretet nézi — amíg többletkeret igényelhető, a szerző pótolja a kérdéseket.
+  const noAuthorRepair = job.round >= MAX_AUTHOR_ROUNDS || !(repairBudget || workflowRepairBudgetAvailable());
   const proba = noAuthorRepair ? disableUnreachableProba(parsed.data, arcOptions) : { lesson: parsed.data, disabled: [] as number[] };
   if (proba.disabled.length) {
     parsed.data = proba.lesson;

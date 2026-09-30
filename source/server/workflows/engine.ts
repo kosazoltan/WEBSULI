@@ -47,6 +47,12 @@ export const workflowStepVisitsLeft = (id: string) => {
  */
 export const REPAIR_BUDGET_GRANTS = 2;
 const REPAIR_PATH = ["author", "animator", "lektor", "gate"];
+/** Review #154: van-e keret a javítóútra — a még igényelhető többletkerettel együtt, de FOGYASZTÁS nélkül. */
+export function workflowRepairBudgetAvailable(): boolean {
+  const view = context.getStore()?.record.view;
+  if (!view) return true;
+  return REPAIR_PATH.every((id) => workflowVisitsLeft(view, id) > 0) || (view.repairGrants?.length ?? 0) < REPAIR_BUDGET_GRANTS;
+}
 export async function workflowEnsureRepairBudget(reason: string): Promise<boolean> {
   const ctx = context.getStore();
   if (!ctx) return true;

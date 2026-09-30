@@ -2,7 +2,7 @@
 
 > Dátum: 2026-09-30 · Szerző: Claude (Opus 5.5) · Állapot: JÓVÁHAGYVA
 > Tulajdonosi utasítás: „gondoskodj róla, hogy a szerzőnek ne fogyjon el a kerete … dinamikus keretet kapjon”.
-> Végrehajtás: ez a fájl §4 (kis, 4 fájlos változás; a lépések itt vannak rögzítve).
+> Végrehajtás: `docs/specs/2026-09-30-dinamikus-keret-vegrehajtas.md`
 
 ## Cél
 A célzott javítókörök (lektor-tényhiba a limiten, kapu-lelet, tanári kérés hiányzó pontja) a független ellenőrzés szerint

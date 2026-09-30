@@ -2450,7 +2450,14 @@ test("review #143 (P2): a limit ELŐTT, elfogyott szerzői kerettel az elérhete
     l.sections[0].blocks.splice(l.sections[0].blocks.length - 1, 0, oneAreaCheck);
   }, 0);
   const log = published(deps.store);
-  const gated = await withExhaustedAuthor("proba-budget", () => runPipelineStep("proba-budget", deps));
+  // Spec-változás 2026-09-30 (dinamikus keret, review #154): amíg többletkeret igényelhető, a szerző pótolja a kérdéseket
+  // (a Próba nem kapcsol ki); csak a futásonkénti többletkeret elfogyása után kapcsol ki, és a lecke publikál.
+  const granted = await withExhaustedAuthor("proba-budget-a", () => runPipelineStep("proba-budget", deps), { thenAuthor: true });
+  assert.deepEqual(granted?.ok && granted.next, { step: "author", round: 1 }, JSON.stringify(granted));
+  assert.equal(log.length, 0);
+  const job = deps.store.jobs.get("proba-budget")!;
+  job.step = "gate"; job.round = 0; job.status = "running";
+  const gated = await withExhaustedAuthor("proba-budget-b", () => runPipelineStep("proba-budget", deps), { grantsUsed: true });
   assert.ok(gated?.ok, JSON.stringify(gated));
   assert.equal(log.length, 1);
   assert.deepEqual(deps.store.jobs.get("proba-budget")!.output?.probaDisabled, [0]);
