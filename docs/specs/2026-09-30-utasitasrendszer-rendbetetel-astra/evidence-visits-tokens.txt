@@ -1,0 +1,40 @@
+# lesson_workflow_runs.snapshot.visits — lépésenkénti tokensIn/tokensOut (szolgáltatói usage, a workflowUsage() írja)
+
+## run 767d9813-1f93-4218-b4a1-e071dff94b41 2026-09-30T15:36:01.444Z
+source       visits=1 tokensIn=0 tokensOut=0
+scope        visits=1 tokensIn=0 tokensOut=0
+knowledge    visits=1 tokensIn=0 tokensOut=0
+sourceCheck  visits=1 tokensIn=27709 tokensOut=531
+pedagogue    visits=1 tokensIn=28251 tokensOut=3087
+author       visits=3 tokensIn=146672 tokensOut=36489
+animator     visits=5 tokensIn=526323 tokensOut=169055
+lektor       visits=5 tokensIn=731366 tokensOut=86400
+gate         visits=2 tokensIn=102774 tokensOut=6354
+readback     visits=1 tokensIn=0 tokensOut=0
+raw visits: [{"step":"source","state":"done"},{"step":"scope","state":"done"},{"step":"knowledge","state":"done"},{"step":"sourceCheck","state":"done","tokensIn":27709,"tokensOut":531},{"step":"pedagogue","state":"done","tokensIn":28251,"tokensOut":3087},{"step":"author","state":"done","tokensIn":25081,"tokensOut":10442},{"step":"animator","state":"done","tokensIn":219364,"tokensOut":87172},{"step":"lektor","state":"done","tokensIn":209364,"tokensOut":30650},{"step":"author","state":"done","tokensIn":69154,"tokensOut":15552},{"step":"animator","state":"done","tokensIn":97880,"tokensOut":35172},{"step":"lektor","state":"done","tokensIn":161736,"tokensOut":22576},{"step":"animator","state":"done","tokensIn":60776,"tokensOut":2934},{"step":"lektor","state":"done","tokensIn":109832,"tokensOut":7356},{"step":"animator","state":"done","tokensIn":13877,"tokensOut":288},{"step":"lektor","state":"done","tokensIn":90681,"tokensOut":4905},{"step":"gate","state":"done","tokensIn":51262,"tokensOut":2970},{"step":"author","state":"done","tokensIn":52437,"tokensOut":10495},{"step":"animator","state":"done","tokensIn":134426,"tokensOut":43489},{"step":"lektor","state":"done","tokensIn":159753,"tokensOut":20913},{"step":"gate","state":"done","tokensIn":51512,"tokensOut":3384},{"step":"readback","state":"done"}]
+
+## run cb55182c-eb98-43ff-b025-99a3c2848b7c 2026-09-30T14:00:22.215Z
+source       visits=1 tokensIn=0 tokensOut=0
+scope        visits=1 tokensIn=0 tokensOut=0
+knowledge    visits=1 tokensIn=0 tokensOut=0
+sourceCheck  visits=1 tokensIn=22329 tokensOut=413
+pedagogue    visits=1 tokensIn=23291 tokensOut=2456
+author       visits=4 tokensIn=293624 tokensOut=29112
+animator     visits=5 tokensIn=724421 tokensOut=240006
+lektor       visits=5 tokensIn=829642 tokensOut=90903
+gate         visits=2 tokensIn=21439 tokensOut=8590
+readback     visits=1 tokensIn=0 tokensOut=0
+raw visits: [{"step":"source","state":"done"},{"step":"scope","state":"done"},{"step":"knowledge","state":"done"},{"step":"sourceCheck","state":"done","tokensIn":22329,"tokensOut":413},{"step":"pedagogue","state":"done","tokensIn":23291,"tokensOut":2456},{"step":"author","state":"done","tokensIn":21865,"tokensOut":13844},{"step":"animator","state":"done","tokensIn":335609,"tokensOut":156242},{"step":"lektor","state":"done","tokensIn":242336,"tokensOut":27457},{"step":"author","state":"done","tokensIn":90348,"tokensOut":4194},{"step":"animator","state":"done","tokensIn":132777,"tokensOut":38653},{"step":"lektor","state":"done","tokensIn":165458,"tokensOut":17851},{"step":"author","state":"done","tokensIn":94232,"tokensOut":5466},{"step":"animator","state":"done","tokensIn":108564,"tokensOut":19398},{"step":"lektor","state":"done","tokensIn":147032,"tokensOut":15949},{"step":"animator","state":"done","tokensIn":61559,"tokensOut":2279},{"step":"lektor","state":"done","tokensIn":130691,"tokensOut":13178},{"step":"gate","state":"done","tokensIn":10680,"tokensOut":4849},{"step":"author","state":"done","tokensIn":87179,"tokensOut":5608},{"step":"animator","state":"done","tokensIn":85912,"tokensOut":23434},{"step":"lektor","state":"done","tokensIn":144125,"tokensOut":16468},{"step":"gate","state":"done","tokensIn":10759,"tokensOut":3741},{"step":"readback","state":"done"}]
+
+## run 6e00a1a2-eb77-4588-89ca-8ea9306633e7 2026-09-30T10:10:40.999Z
+source       visits=1 tokensIn=0 tokensOut=0
+scope        visits=1 tokensIn=0 tokensOut=0
+knowledge    visits=1 tokensIn=0 tokensOut=0
+sourceCheck  visits=1 tokensIn=18168 tokensOut=1242
+pedagogue    visits=1 tokensIn=19565 tokensOut=3058
+author       visits=2 tokensIn=74841 tokensOut=18356
+animator     visits=4 tokensIn=796103 tokensOut=317496
+lektor       visits=4 tokensIn=764851 tokensOut=74571
+gate         visits=1 tokensIn=0 tokensOut=0
+readback     visits=1 tokensIn=0 tokensOut=0
+raw visits: [{"step":"source","state":"done"},{"step":"scope","state":"done"},{"step":"knowledge","state":"done"},{"step":"sourceCheck","state":"done","tokensIn":18168,"tokensOut":1242},{"step":"pedagogue","state":"done","tokensIn":19565,"tokensOut":3058},{"step":"author","state":"done","tokensIn":19379,"tokensOut":14044},{"step":"animator","state":"done","tokensIn":344814,"tokensOut":179508},{"step":"lektor","state":"done","tokensIn":250015,"tokensOut":35490},{"step":"author","state":"done","tokensIn":55462,"tokensOut":4312},{"step":"animator","state":"done","tokensIn":345716,"tokensOut":133842},{"step":"lektor","state":"done","tokensIn":213390,"tokensOut":20191},{"step":"animator","state":"done","tokensIn":88386,"tokensOut":3683},{"step":"lektor","state":"done","tokensIn":158360,"tokensOut":12125},{"step":"animator","state":"done","tokensIn":17187,"tokensOut":463},{"step":"lektor","state":"done","tokensIn":143086,"tokensOut":6765},{"step":"gate","state":"done"},{"step":"readback","state":"done"}]

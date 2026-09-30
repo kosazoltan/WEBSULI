@@ -1,0 +1,544 @@
+# STUDIO JOBS (63)
+
+## job 0e7674bb 2026-09-05T08:46 status=error step=error round=0 tok=1027/3472
+ERROR: A lecke alakilag hibás: sections.0.blocks.0.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.0.blocks.1.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.0.blocks.2.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.0.blocks.3.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.1.blocks.0.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.1.blocks.1.kind: Invalid discrim
+
+## job b2d768ef 2026-09-05T08:48 status=error step=error round=0 tok=1217/3889
+ERROR: A lecke alakilag hibás: sections.0.blocks.0.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.0.blocks.1.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.0.blocks.2.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.0.blocks.3.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.1.blocks.0.kind: Invalid discriminator value. Expected 'explain' | 'example' | 'animate' | 'check' | 'try' | 'recap'; sections.1.blocks.1.kind: Invalid discrim
+
+## job 6332d3e3 2026-09-05T10:00 status=error step=error round=0 tok=4038/6605
+ERROR: Az animátor megsértette a szerződést — A(z) 1. szakasz nem-animate blokkjai megváltoztak.; A(z) 2. szakasz nem-animate blokkjai megváltoztak.; A(z) 4. szakasz nem-animate blokkjai megváltoztak.; A(z) 5. szakasz nem-animate blokkjai megváltoztak.
+
+## job cda4b74c 2026-09-05T10:24 status=ok step=gate round=0 tok=4936/13688
+LEKTOR[language/konzisztencia] "" :: A második szakasz címe Hétszűnyű Kapanyányimonyókot Fehérlófia társai között sorolja fel, de a szakasz magyarázó blokkja ellenfélként mutatja be. Ez az ellentmondás zavaró lehet az 5. osztályos tanulóknak.
+
+## job fd62b66a 2026-09-05T17:24 status=error step=error round=0 tok=3709/7696
+ERROR: A pipeline-lánc nem ért véget a lépés-határon belül.
+LEKTOR[source_conflict/missing_coversConceptIds] section6.block1 :: A recap block nem tartalmaz coversConceptIds mezőt; minden blokknak meg kell jelölnie a lefedett fogalmakat.
+LEKTOR[language/typo] "" :: A szakaszcímben hiba van: 'Lecs//apódás és a felhők'. A helyes alak valószínűleg 'Lecsapódás és a felhők'.
+
+## job f4462d63 2026-09-05T18:15 status=error step=error round=0 tok=4221/3970
+ERROR: Ismeretlen hiba.
+
+## job 22b397c4 2026-09-05T18:52 status=error step=error round=0 tok=null/null
+ERROR: A vázlat nem felel meg a térképnek — hiányzó kulcsfogalom: viz-korforgasa, parolgas, vizgoz, lecsapodas, felho, csapadek, beszivargas, talajviz, viz-korforgasa-jelentosege, lefolyas; ismeretlen fogalom-azonosító: 543115d9-17b9-4779-98fd-de9d24f3d36e, 17e15e99-a7f1-46a9-8939-1a627b9cf847, 0ae8ae9d-f445-413b-9e9b-25b1190e7ab5, 9fff02ec-4537-4221-8f7d-1eb3bda29890, 223501df-d016-4445-9524-95434007181c, 2fe30d97-d144-49b1-9523-6759cc78c062, d2570b6f-58fa-4d7d-8a20-fac48b131272, a7cc41f6-c189-4361-ba81-3edf68275872, 368f9748-177c-4c22-8c7c-b922eb07b620, 2841a5ba-01f2-4823-9009-7e32741ad22d, e1c735b3-2078-4614-89dc-57182e7cb2b0, d61653e8-d054-440d-be23-7997b8415baf, 3576be8d-0228-4bb6-b443-8c194e1
+
+## job 88f3a8f7 2026-09-06T01:14 status=error step=error round=0 tok=null/null
+ERROR: A vázlat alakilag hibás: sections.2.animationSuggestions.0: String must contain at most 120 character(s)
+
+## job 986b7f82 2026-09-06T07:12 status=ok step=done round=0 tok=6835/13376
+LEKTOR[source_conflict/book_probably_wrong] Törtek.try :: A párosító feladat megoldása nem egyértelmű: az 1/2 és a 2/4 is egyenlő a jobb oldali 1/2 és 3/6 törtekkel is, ezért több helyes párosítás is lehetséges.
+
+## job 14bb50b7 2026-09-09T16:43 status=error step=error round=0 tok=5195/5219
+ERROR: A(z) "animator" lépés modellhívása hibára futott: a szolgáltató hibát jelzett
+
+## job fdb9d1d8 2026-09-11T05:34 status=error step=error round=0 tok=8693/6404
+ERROR: A 1. fejezet bankcsomagja a javító kör után sem megfelelő: methods: Array must contain exactly 2 element(s); tasks: Array must contain exactly 5 element(s); quiz: Array must contain exactly 10 element(s)
+
+## job 4f853db8 2026-09-11T06:10 status=error step=error round=0 tok=9046/6480
+ERROR: A 1. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=5, quiz=10; elvárt: methods=2, tasks=5, quiz=10. task-viragos-noveny-teste: a mintaválasz nem teljes pont. Részben jó. Még 1 kötelező fogalom hiányzik.
+
+## job 222202f1 2026-09-11T06:47 status=error step=error round=2 tok=9184/12045
+ERROR: A 3. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=6, quiz=12; elvárt: methods=2, tasks=6, quiz=12. t2-fa-es-cserje: a mintaválasz nem teljes pont. A válasz még túl rövid. A mintában fel nem ismert kötelező szinonimacsoportok: [].
+LEKTOR[source_conflict/contradicts_source] experience.tasks.12 :: A kérdés két fás és két lágy szárú példát kér a tanultak közül, a required viszont mind az öt példanövényt (szilvafa, szőlő, tulipán, búza, paradicsom) kötelezővé teszi. A forrás szerinti helyes 2+2 felsorolás így nem jár teljes ponttal; ez kulcsszóvadászat, nem a tanított állítás mérése.
+LEKTOR[source_conflict/contradicts_source] experience.tasks.33 :: A required szinonimacsoportban a „kevéssé feltűnő” mellett önállóan elfogadott a „feltűnő” is. A Tananyag szerint a szélbeporzású virágok virágtakarója kevéssé feltűnő (vagy hiányozhat); a csupán „feltűnő” válasz a tanított állítás ellentéte, mégis teljesítheti a csoportot.
+LEKTOR[source_conflict/contradicts_source] experience.methods.13 :: A mintaválasz ok-okozatot gyárt: a kevéssé feltűnő/hiányzó virágtakaró miatt termelnének sok virágport. A tanított forrás két külön tényt közöl, a sok virágpor indoka pedig az, hogy biztos legyen a beporzás, nem a takaró feltűnése.
+LEKTOR[source_conflict/book_probably_wrong] sections.6.blocks.0 :: A lecke a forrás „koccsan/koccsannal” alakját követi. A botanikai szakkifejezés kocsány; a koccan/koccsan alak valószínű forráshiba. A lecke állítását emiatt nem kellene átírni a forrás javítása nélkül.
+
+## job 02bef79c 2026-09-11T08:06 status=error step=error round=2 tok=59255/38004
+ERROR: A fúziós lecke lektori hibái a javítókör után is fennállnak; hibás megoldások nem publikálhatók.
+GATE: 9 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: viragos-noveny-teste („virágos növények testfelépítése") a(z) 1. animate blokkon; viragos-noveny-teste („virágos növények testfelépítése") a(z) 3. example blokkon; gyoker-nedvesseg („a gyökér növekedése") a(z
+
+## job d672423e 2026-09-11T17:19 status=error step=error round=0 tok=3764/3961
+ERROR: A lecke olyan fogalomra hivatkozik, ami nem szerepel a térképen: terulet-mertekegyseg.
+
+## job 41a94054 2026-09-14T08:54 status=error step=error round=0 tok=8178/6225
+ERROR: A 1. fejezet bankcsomagja a javító kör után sem megfelelő: methods=3, tasks=10, quiz=18; elvárt: methods=3, tasks=10, quiz=18. task-g-hasonlitsd-ossze-osztassal: a mintaválasz nem teljes pont. Részben jó. Még 1 kötelező fogalom hiányzik. A minta szószáma: 10; minWords: 7. A mintában fel nem ismert kötelező szinonimacsoportok: [["kivonás","kivonást"]].
+
+## job c757e30c 2026-09-14T10:20 status=ok step=done round=2 tok=38766/611
+
+## job 0fb4afeb 2026-09-14T11:03 status=error step=error round=2 tok=27802/8156
+ERROR: A szerver újraindult a lecke-készítés közben — indítsd újra a lépést az „Újra” gombbal.
+GATE: 11 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: lesson-structure („Lecke felépítése") a(z) 7. example blokkon; unfinished-blocks-not-hidden („Hiányzó blokkok szándékos láthatósága") a(z) 7. example blokkon; example-one-step-per-click („Példamegoldás felfe
+
+## job 434d1dcb 2026-09-19T08:03 status=error step=error round=0 tok=93475/52215
+ERROR: A(z) "lektor" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([xAI] Request timed out.)
+
+## job b4d94132 2026-09-19T11:24 status=error step=error round=2 tok=190470/82642
+ERROR: A lektor 1 tartalmi javítást kér: A kvíz a föld alatti fogyasztott részt kizárólag gyökérnek adja; a forrás és a későbbi tanítás szerint gumó (szár) és hagymafej (hajtás) is föld alatti.
+LEKTOR[coverage_gap/warn] sections.3 :: A térkép extra fogalma (káposzta őszi pincés/vermes tárolása, Vecsés) nincs megtanítva.
+LEKTOR[coverage_gap/warn] sections.5 :: A térkép extra fogalma (petrezselyem = fehérrépa) nincs megtanítva.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.3 :: A kvíz a föld alatti fogyasztott részt kizárólag gyökérnek adja; a forrás és a későbbi tanítás szerint gumó (szár) és hagymafej (hajtás) is föld alatti.
+GATE: 10 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: fuszpaprika-keszitese („a fűszerpaprika készítése") a(z) 11. try blokkon; burgonya-kemenyito („a burgonya gumójának keményítője") a(z) 17. animate blokkon; burgonya-eletmodja-es-tarolasa („a burgonya életmód
+
+## job 3ed5ca90 2026-09-19T11:26 status=error step=error round=2 tok=59958/678
+ERROR: A fúziós lecke tanítása hiányos: 1 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: talaj-kialakulasa („A talaj kialakulása") a(z) 6. animate blokkon.
+GATE: 9 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: termekenyseg („termékenység") a(z) 1. animate blokkon; aprozzodas („aprózódás") a(z) 6. animate blokkon; mallas („mállás") a(z) 6. animate blokkon; elolenyek-megtelepedese („Az élőlények megtelepedése") a(z) 
+
+## job 19ac6b82 2026-09-19T11:28 status=ok step=done round=1 tok=52054/799
+
+## job 5e9f97d9 2026-09-19T11:58 status=ok step=done round=2 tok=62584/983
+
+## job 6cb1bc89 2026-09-19T12:21 status=error step=error round=2 tok=34234/11039
+ERROR: A 6. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=2, quiz=4; elvárt: methods=2, tasks=2, quiz=4. s5-fogyasztasi-szaporitas-written: a mintaválasz nem teljes pont. A fogalmak megvannak; fogalmazd őket összefüggő mondattá. A minta szószáma: 9; minWords: 8. A mintában fel nem ismert kötelező szinonimacsoportok: [].
+LEKTOR[coverage_gap/core] sections.7.blocks.0 :: A voroshagyma-fogyasztasa core fogalom forrása: nem a termést, hanem a hagymafejet fogyasztjuk, zsenge leveleivel együtt nyersen és főve is. A 8. fejezet magyarázata csak a hagymafejet tanítja; a nyers/főtt zsenge levél hiányzik, mégis a kvíz és a szóbeli minta ezt kéri.
+LEKTOR[coverage_gap/] sections.6.blocks.0 :: Extra fogalom (fejes-kaposzta-tarolasa-es-termovideke): őszi pincés/vermes tárolás és Vecsés környéke nincs a tananyagban.
+LEKTOR[coverage_gap/] sections.8.blocks.0 :: Extra fogalom (petrezselyem-masik-neve): a petrezselyem fehérrépa elnevezése nincs megtanítva.
+GATE: 13 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: gyumolcs („gyümölcs") a(z) 1. example blokkon; fogyasztott-zoldsegreszek („a zöldségeskert növényeinek fogyasztott részei") a(z) 1. example blokkon; mellekgyokerzet („bojtos mellékgyökérzet") a(z) 8. example
+
+## job 6cc5930d 2026-09-19T13:03 status=error step=error round=2 tok=146573/59440
+ERROR: A lektor 1 tartalmi javítást kér: A fogalomtérkép idézete szerint a burgonya összetett levelei is mérgezőek, nem csak a zöld bogyótermés. A tanítás, a példa, az ábra és a bank csak a termést említi; a levelek mérgező voltát tanítsd meg, vagy a kérdéseket ehhez igazítsd.
+LEKTOR[coverage_gap/core] sections.6.blocks.0 :: A fogalomtérkép idézete szerint a burgonya összetett levelei is mérgezőek, nem csak a zöld bogyótermés. A tanítás, a példa, az ábra és a bank csak a termést említi; a levelek mérgező voltát tanítsd meg, vagy a kérdéseket ehhez igazítsd.
+LEKTOR[coverage_gap/] sections.5.blocks.0 :: A paradicsom idézete egynyári növényt, összetett levelet és vitaminokban gazdag terméshúst is tanít; a fejezet csak a szárat, a terméshéjat és az öntözést bontja ki. Hiányzó idézett tényeket ne kérdezz, vagy egészítsd ki a tanítást.
+
+## job b5c220a6 2026-09-19T14:49 status=error step=error round=0 tok=8169/4922
+ERROR: A helyi próbafolyamat megszakadt (harness leállítva) — a forrásból már van közzétett lecke.
+
+## job 4d2fa21a 2026-09-19T14:58 status=error step=error round=0 tok=null/null
+ERROR: A helyi cache-kulcs próbafutás megszakítva (harness leállítva); nem éles gyártás.
+
+## job c9ad716b 2026-09-19T14:59 status=error step=error round=0 tok=5658/1424
+ERROR: A helyi cache-kulcs próbafutás megszakítva (harness leállítva); nem éles gyártás.
+
+## job 1eeac4fd 2026-09-19T15:44 status=error step=error round=3 tok=64768/311
+ERROR: A fúziós lecke tanítása hiányos: 8 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: united-kingdom („The United Kingdom (UK)") a(z) 26. check blokkon; united-kingdom („The United Kingdom (UK)") a(z) 42. check blokkon; ireland-languages („Ireland languages") a(z) 43. check blokkon; yorkshire-lancashire („Yorkshire and Lancashire") a(z) 60. check blokkon; shire-county-names („shire county names") a(z) 61. check blokkon.
+GATE: 1 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: shire-county-names („shire county names") a(z) 57. example blokkon.
+
+## job 59a91e6b 2026-09-19T16:07 status=error step=error round=1 tok=19566/5309
+ERROR: A 2. fejezet bankcsomagja a javító kör után sem megfelelő: methods=4, tasks=16, quiz=26; elvárt: methods=4, tasks=16, quiz=26. Ismétlődő kérdés egy korábbi csomaggal.
+LEKTOR[coverage_gap/core] sections.0 :: Egyik fejezetben sincs érdemi ábra/szemléltető modell, pedig a 7.4 szerint fejezetenként kell.
+LEKTOR[coverage_gap/] experience.quiz.52 :: A kvíz 18 + 20 : 5 – 1 kifejezést kérdez, ez a Tananyagon nem szerepel.
+LEKTOR[coverage_gap/] experience.quiz.53 :: A kvíz 7 + 4 · 5 – 6 (és negatív opció) nem tanított műveletsor.
+LEKTOR[coverage_gap/] experience.quiz.55 :: A kvíz 40 – 18 : 3 + 2 kifejezést kérdez, ez a Tananyagon nem szerepel.
+LEKTOR[age/] experience.quiz.53 :: A 7 + 4 · (-1) opció negatív számot hoz be, 5. osztályos tanított tartalom nincs hozzá.
+
+## job 0f39fb5e 2026-09-19T16:55 status=error step=error round=0 tok=10467/8307
+ERROR: A(z) "animator" lépés modellhívása hibára futott: a válasz elérte a hosszkorlátot; csonka eredmény nem használható
+
+## job d6a31359 2026-09-19T17:18 status=error step=error round=1 tok=70781/307
+ERROR: A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges.
+
+## job c3a878a5 2026-09-19T17:42 status=error step=error round=2 tok=40843/25027
+ERROR: A lektor 1 tartalmi javítást kér: A kérdés az „első menet” eredményét kéri, a tanított első menet pedig a szorzás-osztás teljes, balról jobbra elvégzése (35 + 64 – 12). A helyesnek jelölt opció (35 + 8 · 8 – 12) csak a 72 : 9 utáni köztes sor; a helyes opció magyarázata is 35 + 64 – 12-t ír, ami ellentmond a kijelölt válasznak.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.74 :: A kérdés az „első menet” eredményét kéri, a tanított első menet pedig a szorzás-osztás teljes, balról jobbra elvégzése (35 + 64 – 12). A helyesnek jelölt opció (35 + 8 · 8 – 12) csak a 72 : 9 utáni köztes sor; a helyes opció magyarázata is 35 + 64 – 12-t ír, ami ellentmond a kijelölt válasznak.
+GATE: 2 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: muveleti-sorrend-zarojel-szorzas-36-osztva („Zárójeles szorzás és osztás példája") a(z) 35. example blokkon; zarojel-hasznalata („Zárójel használata") a(z) 38. example blokkon.
+
+## job 1d5ee08b 2026-09-19T23:46 status=error step=error round=2 tok=18809/8300
+ERROR: A 11. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=4, quiz=9; elvárt: methods=2, tasks=4, quiz=9. s10-quiz-2: a(z) 27 opció indoklása 10 értékről szól, nem a sajátjáról — az opció és az indoklása ellentmond.
+LEKTOR[source_conflict/contradicts_source] section.block :: A hibajavító animáció felirata a 9 + 3 · 2 hibás útját „12 · 2 = 2”-re vágja; a tanított hibás út 12 · 2 = 24.
+
+## job a1d17883 2026-09-20T05:28 status=error step=error round=2 tok=72386/5104
+ERROR: A fúziós lecke tanítása hiányos: 1 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: zarojeles-muveleti-sorrend-osztas-pelda („Zárójeles műveleti sorrend osztással") a(z) 10. explain blokkon.
+
+## job ff2f43a4 2026-09-20T06:32 status=ok step=done round=0 tok=94085/13823
+LEKTOR[language/] experience.quiz.111 :: A helyes opción a „pontosan a dédszülők…” a forrás és a tananyag „legfeljebb a dédszülők…” állítását kétértelművé teszi; cseréld „legfeljebb”-re, ahogy a visszajelzés is írja.
+
+## job 60834b15 2026-09-20T07:33 status=error step=error round=0 tok=10751/5967
+ERROR: A 7. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=6, quiz=9; elvárt: methods=2, tasks=6, quiz=9. t6-gyak-2: hibás számítás a feladatban vagy a mintában: 40 – 18 + 4 = 22 (helyesen: 26)
+
+## job 5e9e2a84 2026-09-20T07:53 status=error step=error round=1 tok=69883/6803
+ERROR: A 9. fejezet bankcsomagja a javító kör után sem megfelelő: quiz: a javítás csak egyedi, már létező tételazonosítót cserélhet.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.69 :: A jelölt helyes válasz 86, de 60 – 42 : 7 · 5 + 4 értéke a forrás balról jobbra szabálya szerint 34: 42 : 7 = 6, 6 · 5 = 30, majd 60 – 30 + 4 = 34. A magyarázat (60 + 30 = 90, majd 90 – 4 = 86) felcseréli a kivonást és az összeadást. A forrás: „majd ismét balról jobbra haladva az összeadásokat és a 
+LEKTOR[source_conflict/contradicts_source] experience.tasks.40 :: A mintaválasz 111, de 100 – 24 : 6 · 5 + 9 = 89: 24 : 6 = 4, 4 · 5 = 20, majd 100 – 20 + 9 = 89. A 100 + 20 = 120, majd 120 – 9 = 111 lépés megsérti a balról jobbra összeadás-kivonást. Ugyanez a hibás 111 szerepel a m-5f81db98b48117431a63542b-0 idővonalon is.
+LEKTOR[source_conflict/contradicts_source] experience.tasks.44 :: A mintaválasz 99, de 80 – 36 : 6 · 4 + 5 = 61: 36 : 6 = 6, 6 · 4 = 24, majd 80 – 24 + 5 = 61. A 80 + 24 = 104, majd 104 – 5 = 99 ismét a kivonást tenné az összeadás utánra, a forrás balról jobbra szabályával szemben.
+
+## job 64b9550b 2026-09-20T08:58 status=ok step=done round=0 tok=70735/10490
+
+## job a0eb2bed 2026-09-20T09:49 status=ok step=done round=2 tok=101428/8437
+
+## job b72c8e5e 2026-09-20T11:55 status=ok step=done round=1 tok=66461/3574
+
+## job dd53e8d5 2026-09-23T15:27 status=ok step=done round=0 tok=67604/17027
+LEKTOR[source_conflict/book_probably_wrong] 2.0 :: A c7 idézet („10 ev = 1 evszazad = 10 évtized”) és definíció („10 év 1 évszázad, illetve 10 évtized”) önellentmondó: 10 év nem egyenlő 10 évtizeddel. Ugyanez ellentmond a c8 idézetnek („1000 év = 10 évszázad = 1 ezerév”), mert abból 1 évszázad = 100 év következik, nem 10 év. A lecke a c8-cal összeeg
+
+## job 29a13b45 2026-09-24T05:00 status=error step=animator round=4 tok=95114/7557
+ERROR: Élő próba 2026-09-24: a workflow látogatási kerete (4) kevesebb volt, mint a futtató 3 szerzői + 2 csak-bank köre; javítva (keret 5).
+LEKTOR[source_conflict/contradicts_source] experience.quiz.89 :: Mi hamis: Réka és Janka is 385−77−35=273 kiskockát épített. | Bizonyíték: „Marci, Gergő, Réka és Janka”; 77+35+273+273=658≠385. | Javítás: a 273 maradék kettejüké, ne add mindkettőnek. érintett: experience.quiz.91, experience.tasks.47–49
+GATE: A kiegészítő fogalmak fedettsége 88%, a minimum 90%.
+
+## job 9c0169b7 2026-09-24T05:54 status=error step=error round=2 tok=100660/14048
+ERROR: A 12. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=5, quiz=10; elvárt: methods=2, tasks=5, quiz=10. Ismétlődő kérdés egy korábbi csomaggal.; Ismétlődő kérdés egy korábbi csomaggal.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.108 :: Mi hamis: a 1505 magyarázata szerint tízesekre 1500-ra kerekül. | Bizonyíték: 1505→1510; a lecke 1504-et tanítja legnagyobb 1500-nak. | Javítás iránya: a feedback írja: 1505 tízesekre 1510.
+LEKTOR[source_conflict/contradicts_source] experience.tasks.60 :: Mi hamis: a mintaválasz/required 2 közös elemet vár, pedig 15+14−25=4. | Bizonyíték: 29−25=4; a minta előbb 2-t, majd 4-et ír. | Javítás iránya: required és sample a 4-et várja, a 2-t töröld.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.93 :: Mi hamis: Réka és Janka is 350 kockát épített. | Bizonyíték: 7·11·6=462, 462−77−35=350 a teljes maradék; 350+350+112=812≠462. Érintett: experience.quiz.95, experience.tasks.47-49. | Javítás: a 350-et ne add mindkettőjüknek.
+
+## job e79ab9da 2026-09-24T06:33 status=error step=error round=3 tok=94643/18062
+ERROR: A szerver újraindult a lecke-készítés közben — indítsd újra a lépést az „Újra” gombbal.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.99 :: Mi hamis: 5 közös sapka+kesztyű mellett 38 gyerek visel legalább egyet a 30 fős osztályban. | Bizonyíték: 23+20-5=38>30; a tanított min. átfedés 23+20-30=13, ezért 5 lehetetlen. | Javítás: lehetséges átfedéssel vagy a forrás számaival kérdezz.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.93 :: Mi hamis: Réka 273 kockát épít (385-77-35), mintha a teljes maradék az övé. | Bizonyíték: Janka „fejezte be” a téglatestet, a maradék nem mind Rékaé. | Javítás: bontsd Réka és Janka kockáit; érintett: experience.quiz.92, experience.tasks.48.
+GATE: A kiegészítő fogalmak fedettsége 88%, a minimum 90%.
+
+## job 3cd8b269 2026-09-24T09:33 status=error step=error round=2 tok=93917/9411
+ERROR: A fúziós lecke tanítása hiányos: A kiegészítő fogalmak fedettsége 88%, a minimum 90%.
+
+## job 5e6384cd 2026-09-24T09:50 status=error step=error round=2 tok=13887/490
+ERROR: A lektor 2 tartalmi javítást kér: Mi hamis: a required a 2320-at és a 2312-t is elfogadja | Bizonyíték: minta 2 _ 2 _; 2312 tízese 1; 2320 jegyei 0,2,3 nem egymás utániak | Javítás iránya: csak pl. 2123, 2321, 2120 legyen required.; Mi hamis: a 1649-et hibásnak jelöli (1700-ra kerekülne) | Bizonyíték: százasokra 1550–1649 → 1600 (leckében 1549→1500, 1550→1600); 1649 tízese 4 | Javítás iránya: hibás opciónak pl. 1650 vagy 1549 kell.
+LEKTOR[source_conflict/contradicts_source] experience.tasks.18 :: Mi hamis: a required a 2320-at és a 2312-t is elfogadja | Bizonyíték: minta 2 _ 2 _; 2312 tízese 1; 2320 jegyei 0,2,3 nem egymás utániak | Javítás iránya: csak pl. 2123, 2321, 2120 legyen required.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.115 :: Mi hamis: a 1649-et hibásnak jelöli (1700-ra kerekülne) | Bizonyíték: százasokra 1550–1649 → 1600 (leckében 1549→1500, 1550→1600); 1649 tízese 4 | Javítás iránya: hibás opciónak pl. 1650 vagy 1549 kell.
+
+## job dcfdc1af 2026-09-24T11:39 status=ok step=done round=1 tok=75813/6548
+
+## job d0731b46 2026-09-24T11:53 status=ok step=done round=0 tok=74294/10386
+
+## job 351e14cc 2026-09-24T13:06 status=error step=error round=1 tok=80402/11322
+ERROR: A 10. fejezet bankcsomagja a javító kör után sem megfelelő: A modellhívás hibázott: gpt-5.6-terra: A(z) "animator" lépés modellhívása hibára futott: a válasz nem érvényes JSON (4542 karakter, lezárt, de középen hibás (a modell sorosítása), 3595. pozíció)
+LEKTOR[source_conflict/contradicts_source] experience.tasks.0 :: Mi hamis: a rubrika nem kéri a négy művelet eredményét, csak az „eredmény” és „egyszerűsített” szavakat, így hibás szám is teljes pontot kaphat. | Bizonyíték: required: eredmény/eredményeket; egyszerűsített/egyszerűsítve | Javítás iránya: required külön: 17/12; 7/12; 6; 2.
+LEKTOR[source_conflict/contradicts_source] experience.tasks.29 :: Mi hamis: a rubrika nem kéri az ötödik jegyet (5), csak átlag/összeg/szorzat/20 szavakat. | Bizonyíték: required: átlag; összeg; szorzat; 20; a kérdés: hányas volt az ötödik dolgozata | Javítás iránya: required külön csoport: 5 vagy 5-ös.
+
+## job 68a5b500 2026-09-24T13:52 status=error step=error round=2 tok=85267/12222
+ERROR: Mérő futás: a helyi gyártó folyamat 60 perces időkorlátja leállította a 2. csak-bank javító körben (bankmodell-csere előtti mérés).
+LEKTOR[source_conflict/contradicts_source] experience.tasks[37] :: Mi hamis: a végeredmények (–3 és 11) nem külön kötelező csoportok | Bizonyíték: a „5 – 8” és a „5 – (–6)” csoportot a kifejezés eredmény nélkül is teljesíti | Javítás iránya: külön csoport: ["5 – 8","5-8"], ["–3","-3","–3 °C"], ["5 – (–6)","5 - (-6)"], ["11","11 °C"]
+LEKTOR[source_conflict/contradicts_source] experience.quiz.64 :: Mi hamis: a helyes opció indoklása szerint 2/3 + 3/4-nél a 6 és a 4 a közös nevező | Bizonyíték: a nevezők 3 és 4; 2/3 = 8/12, 3/4 = 9/12 | Javítás iránya: „Helyes: a 3 és a 4 közös nevezője 12. Ezért 2/3 = 8/12 és 3/4 = 9/12; az összeg 17/12.”
+LEKTOR[source_conflict/contradicts_source] experience.methods[13] :: Mi hamis: a 3. opció hamis egyenlőséget ír: 4 · 15 = 20 | Bizonyíték: 4 · 15 = 60 | Javítás iránya: igaz műveletű disztraktor, pl. „4 · 10 = 40 munkanap, ez kevesebb a 60 munkanapnál, tehát hibás az eredmény”
+LEKTOR[source_conflict/contradicts_source] experience.tasks.36 :: Mi hamis: a kért déli hőmérséklet (5) csak bonus, nincs kötelező csoportban | Bizonyíték: –6 + 11 = 5 °C; a required csak az „emelkedés/összeadás” szavakat kéri | Javítás iránya: külön kötelező csoport: ["5","5 °C"]
+
+## job 67a05970 2026-09-24T15:36 status=ok step=done round=2 tok=86141/10105
+
+## job a804b07f 2026-09-24T16:18 status=ok step=done round=2 tok=68652/4360
+
+## job 0ea87ab1 2026-09-29T09:11 status=error step=error round=0 tok=14727/4114
+ERROR: A(z) "author" lépés modellhívása hibára futott: a válasz nem érvényes JSON (29651 karakter, lezárt, a végén hibás, ismeretlen pozíció)
+
+## job 09262645 2026-09-29T10:55 status=ok step=done round=1 tok=88069/6352
+
+## job 9051f074 2026-09-29T11:45 status=ok step=done round=1 tok=89476/7206
+
+## job d6f5d4bc 2026-09-29T14:07 status=error step=error round=3 tok=149557/37683
+ERROR: A lektor 2 tartalmi javítást kér: Mi hamis: a 418 4-gyel oszthatóként van jelölve (correctIndex 0). | Bizonyíték: 18 = 4·4+2, 19 = 4·4+3, egyik sem osztható 4-gyel. | Javítás iránya: helyes opció: „Egyik sem osztható 4-gyel.” (3. index); a 0. opció hamis maradjon.; Mi hamis: a required csoport a 52-t is elfogadja a 9472 utolsó két jegyeként. | Bizonyíték: 9472 utolsó két jegye 72, 72 : 4 = 18. | Javítás iránya: a csoport legyen 72 / 72-t / 72-es (ne 52); a minta 72-vel maradjon.
+LEKTOR[source_conflict/contradicts_source] experience.quiz.65 :: Mi hamis: a 418 4-gyel oszthatóként van jelölve (correctIndex 0). | Bizonyíték: 18 = 4·4+2, 19 = 4·4+3, egyik sem osztható 4-gyel. | Javítás iránya: helyes opció: „Egyik sem osztható 4-gyel.” (3. index); a 0. opció hamis maradjon.
+LEKTOR[source_conflict/contradicts_source] experience.tasks.13 :: Mi hamis: a required csoport a 52-t is elfogadja a 9472 utolsó két jegyeként. | Bizonyíték: 9472 utolsó két jegye 72, 72 : 4 = 18. | Javítás iránya: a csoport legyen 72 / 72-t / 72-es (ne 52); a minta 72-vel maradjon.
+GATE: 1 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: c4 („Utolsó két helyiérték") a(z) 22. example blokkon.
+
+## job e880571c 2026-09-29T15:04 status=error step=error round=4 tok=76180/11085
+ERROR: A szerver újraindult a lecke-készítés közben — indítsd újra a lépést az „Újra” gombbal.
+LEKTOR[source_conflict/contradicts_source] experience.tasks[9] :: Mi hamis: a ["osztható 4-gyel"] csoportot a hibás „a 248 nem osztható 4-gyel” is teljesíti. | Bizonyíték: 48=12·4, a 248 osztható 4-gyel. | Javítás iránya: kötelező csoport „a 248 osztható 4-gyel”, a „nem osztható” tagadás kizárásával.
+LEKTOR[source_conflict/contradicts_source] experience.tasks[36] :: Mi hamis: a sample és az 1. required csoport a „100-nál kisebb” számokról szól, a kérdés a 24 és 40 közöttiekről | Bizonyíték: 100 alatt 4, 8, …, 96 is osztható 4-gyel, nem csak 28, 32, 36 | Javítás iránya: „A 24 és 40 közötti, 4-gyel osztható számok: 28, 32, 36; négyesével követik egymást.”
+GATE: „A leggyakoribb hibák" (8. szakasz): a szakasz 1 kérdést hoz, a játékidőhöz viszont 5 helyes válasz kell — így a Próba hibátlan kitöltéssel sem ér jutalmat. Írj legalább 5 kérdést, vagy kapcsold ki a Próbát.
+QNOTE: {"note":"A lektor a gépi javító körök után is jelzett blokkolót — a lecke elkészült, a lektor jegyzetei a Studio panelen olvashatók. (2 blokkoló jegyzet)","round":3,"reason":"lektor_blocker"}
+
+## job 06f5e6ae 2026-09-29T15:57 status=error step=error round=2 tok=100272/12003
+ERROR: A lektor 8 tartalmi javítást kér: Mi hamis: a 3. opció is helyes indoklás, így két jó válasz van. | Bizonyíték: 4k mindig páros; 133 páratlan, ezért nem osztható 4-gyel. | Javítás iránya: 3. opció: „Mert minden páros szám osztható 4-gyel.”; Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint („Mert külön kell megvizsgálni az utolsó két számjegyeket: a 132-nél 32, a 133-nál 33 a vizsgált szám.”, „Mert csak a 132-höz hasonló páros számok oszthatók 4-gyel.”) — pontosan egy helyes opció kell. Javítás iránya: a disztraktorokat hamissá kell írni, vagy a kérdést egyértelművé tenni. | Mi hamis: a 3. opció is helyes indoklás, így két jó válasz van | Bizonyíték: 4-gyel csak pár
+LEKTOR[source_conflict/contradicts_source] experience.quiz[31] :: Mi hamis: a 3. opció is helyes indoklás, így két jó válasz van. | Bizonyíték: 4k mindig páros; 133 páratlan, ezért nem osztható 4-gyel. | Javítás iránya: 3. opció: „Mert minden páros szám osztható 4-gyel.”
+
+## job 1ebf7a88 2026-09-29T17:17 status=error step=error round=0 tok=190074/67109
+ERROR: A(z) "lektor" lépés modellhívása hibára futott: A(z) "lektor" lépés modellhívása hibára futott: a válasz üres [grok-4.6]; fallback: A(z) "lektor" lépés modellhívása hibára futott: a válasz elérte a hosszkorlátot; csonka eredmény nem használható [anthropic/claude-sonnet-5]
+
+## job 6d86b2b1 2026-09-30T08:12 status=ok step=done round=3 tok=138660/5942
+
+## job 5ca6ab42 2026-09-30T12:03 status=ok step=done round=4 tok=107848/10732
+QNOTE: {"note":"A tanári kérés hiányzó pontjai: Tanári kérés hiányzó pontja (6. fejezet): A hivatalnokok (írnokok) mint társadalmi csoport | Tanári kérés hiányzó pontja (6. fejezet): A katonák mint társadalmi csoport | Tanári kérés hiányzó pontja (8. fejeze
+INSTR-MISSING: A hivatalnokok (írnokok) mint társadalmi csoport quote=n
+INSTR-MISSING: A katonák mint társadalmi csoport quote=n
+INSTR-MISSING: A múmiák készítése quote=n
+INSTR-MISSING: A gízai piramisok quote=n
+INSTR-MISSING: Az időmérés quote=n
+LIMITDOWN: true
+
+## job d76548dd 2026-09-30T13:40 status=ok step=done round=4 tok=87423/11230
+LEKTOR[source_conflict/contradicts_source] experience.tasks[41] :: Mi hamis: a required a jelenkor szinonimájaként a „jelent” szót is elfogadja. | Bizonyíték: c1 „őskor, ókor, középkor, újkor, jelenkor”. | Javítás iránya: required csoport: jelenkor, jelenkort.
+QNOTE: {"note":"A lektor a gépi javító körök után is jelzett blokkolót — a lecke elkészült, a lektor jegyzetei a Studio panelen olvashatók. (1 blokkoló jegyzet)","round":4,"reason":"lektor_blocker"}
+QNOTE: {"note":"A tanári kérés hiányzó pontjai: Tanári kérés hiányzó pontja (4. fejezet): A fáraó hatalma: isteni uralkodó | Tanári kérés hiányzó pontja (6. fejezet): A túlvilágba vetett hit | Tanári kérés hiányzó pontja (6. fejezet): A múmiák készítése | T
+INSTR-MISSING: A fáraó hatalma: isteni uralkodó quote=n
+INSTR-MISSING: A túlvilágba vetett hit quote=n
+INSTR-MISSING: A múmiák készítése quote=n
+INSTR-MISSING: A papirusz quote=n
+INSTR-MISSING: Az egyiptomi naptár quote=y
+LIMITDOWN: true
+
+# WORKFLOW RUNS (109)
+run a1707ade 2026-09-11T18:54 upload state=error tokIn=0 err=Invalid PDF structure. findings=[] steps=source
+run 84aadba8 2026-09-11T19:18 upload state=error tokIn=9852 err=A lecke olyan fogalomra hivatkozik, ami nem szerepel a térképen: terulet-mertekegyseg. findings=[] steps=source scope knowledge sourceCheck pedagogue author
+run b1ba2127 2026-09-12T03:18 web state=done tokIn=120560 err="" findings=[] steps=generate gate publish readback
+run 0b37a30f 2026-09-13T18:31 web state=error tokIn=670 err=A célzott javító modellhívása nem fejeződött be. A jelölt még nem publikálható. findings=["sample_score@generate","teaching_depth@generate","infrastructure@generate"] steps=generate
+run 4d48ef0a 2026-09-14T10:53 upload state=error tokIn=39214 err=A 1. fejezet bankcsomagja a javító kör után sem megfelelő: methods=3, tasks=10, quiz=18; elvárt: methods=3, tasks=10, quiz=18. ta[titkos érték]: a mintaválasz nem teljes pont. Részben jó. Még 1 kötelező fogalom hiányzik. A minta szószáma: 10; minWords: 7. A mintában fel nem ismert kötelező szinonima findings=["coverage@knowledge","bank_cardinality@animator","sample_score@animator"] steps=source scope knowledge sourceCheck pedagogue author animator
+run 801b379a 2026-09-14T12:20 upload state=done tokIn=175983 err="" findings=["source_fidelity@lektor","infrastructure@lektor","coverage@lektor","infrastructure@animator","sample_score@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor lektor author animator animator lektor gate readback
+run 5223e9bf 2026-09-14T13:02 upload state=error tokIn=473689 err=Elfogyott a lépés javítási kerete: Ábrák és gyakorlóbankok. findings=["schema@knowledge","coverage@knowledge","sample_score@animator","oral_written@animator","bank_cardinality@animator","infrastructure@lektor","unknown@gate","unknown@animator","duplicate_question@anima steps=source scope knowledge sourceCheck pedagogue author animator lektor lektor gate author animator animator lektor gate author
+run 95172103 2026-09-19T10:00 upload state=error tokIn=151571 err=A(z) "lektor" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([xAI] Request timed out.) findings=["coverage@knowledge","source_fidelity@knowledge","concept_reference@author","infrastructure@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor
+run 6df4acbe 2026-09-19T11:41 upload state=error tokIn=0 err=Lezárva 2026-09-24 (audit): a forrásellenőrzés-parkolás 2026-09-19 óta megszűnt, a futás egylépéses része már hibára zárt; ez a rekord nem folytatható. findings=["coverage@knowledge","source_fidelity@knowledge"] steps=source scope knowledge sourceCheck
+run 6b243d53 2026-09-19T12:30 upload state=error tokIn=0 err=Lezárva 2026-09-24 (audit): a forrásellenőrzés-parkolás 2026-09-19 óta megszűnt, a futás egylépéses része már hibára zárt; ez a rekord nem folytatható. findings=["coverage@knowledge","source_fidelity@knowledge"] steps=source scope knowledge sourceCheck
+run 15919f77 2026-09-19T12:36 upload state=error tokIn=0 err=Lezárva 2026-09-24 (audit): a forrásellenőrzés-parkolás 2026-09-19 óta megszűnt, a futás egylépéses része már hibára zárt; ez a rekord nem folytatható. findings=["coverage@knowledge","source_fidelity@knowledge"] steps=source scope knowledge sourceCheck
+run c02778ff 2026-09-19T13:24 upload state=error tokIn=984199 err=A lektor 1 tartalmi javítást kér: A kvíz a föld alatti fogyasztott részt kizárólag gyökérnek adja; a forrás és a későbbi tanítás szerint gumó (szár) és hagymafej (hajtás) is föld alatti. findings=["infrastructure@pedagogue","schema@author","sample_score@animator","duplicate_question@animator","unknown@gate","source_fidelity@lektor","unknown@animator","unknown@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor author animator lektor
+run be202c1d 2026-09-19T13:25 upload state=error tokIn=423524 err=A fúziós lecke tanítása hiányos: 1 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: talaj-kialakulasa („A talaj kialakulása") a(z) 6. animate blokkon. findings=["infrastructure@pedagogue","sample_score@animator","unknown@gate","source_fidelity@lektor","unknown@gate","coverage@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor author animator lektor gate
+run 2ef2d847 2026-09-19T13:28 upload state=done tokIn=228579 err="" findings=["bank_cardinality@animator","sample_score@animator","typography@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor gate readback
+run 0aa2435b 2026-09-19T13:29 web state=error tokIn=145309 err=A tananyag az automatikus javítás után sem készült el: 1. fejezet: hiányzó tanítási szemléltetés; feliratozott ábra vagy lépéses kártyasor szükséges.; 2. fejezet: hiányzó tanítási szemléltetés; feliratozott ábra vagy lépéses kártyasor szükséges.; 4. fejezet: hiányzó tanítási szemléltetés; feliratozo findings=["bank_cardinality@generate","sample_score@generate"] steps=generate
+run 33ed1235 2026-09-19T13:51 web state=error tokIn=615521 err=A célzott tartalmi javítás után további ellenőrzés szükséges: Tanítási minőség (explanation_depth): A 4. fejezet a szikesedést csak a sófelhalmozódás–termőképesség-romlás párral adja meg, holott a forrás a kiváltó hogyan/miért láncot (ingadozó talajvízszint, párolgás–csapadék, vízelvezetés/öntözés)  findings=["source_fidelity@generate","sample_score@generate","bank_cardinality@generate","teaching_depth@generate","repair_scope@generate","schema@generate"] steps=generate
+run bf70a388 2026-09-19T13:57 upload state=done tokIn=402525 err="" findings=["sample_score@animator","unknown@gate","coverage@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor author animator lektor gate readback
+run d8946a8d 2026-09-19T14:21 upload state=error tokIn=614701 err=A 6. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=2, quiz=4; elvárt: methods=2, tasks=2, quiz=4. s5-fogyasztasi-szaporitas-written: a mintaválasz nem teljes pont. A fogalmak megvannak; fogalmazd őket összefüggő mondattá. A minta szószáma: 9; minWords: 8. A mintában fel nem  findings=["sample_score@animator","unknown@gate","oral_written@animator","coverage@lektor","bank_cardinality@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor author animator
+run 0a77f3da 2026-09-19T14:21 web state=error tokIn=420162 err=A célzott tartalmi javítás után további ellenőrzés szükséges: Tanítási minőség (source_coverage): A forrás Talajszint szócikke a talajszelvény szakaszát szín, szerkezet, humusztartalom szerinti elkülönüléssel határozza meg. A 0. fejezet csak az A/B/C-szint szerepét írja le, a forrásbeli általános de findings=["sample_score@generate","teaching_depth@generate","repair_scope@generate","source_fidelity@generate"] steps=generate
+run db388686 2026-09-19T14:39 web state=error tokIn=571227 err=A célzott tartalmi javítás után további ellenőrzés szükséges: Tanítási minőség (explanation_depth): A 0. fejezet a talajképződést a forrás három jelzőjével (fizikai, kémiai, biológiai) ismétli, de nem bontja ki, hogyan mállik/aprózódik a kőzet, és mi a három átalakulás különbsége. A talajvédelemnél  findings=["sample_score@generate","bank_cardinality@generate","teaching_depth@generate","review_evidence@generate","source_fidelity@generate","repair_scope@generate","schema@generate"] steps=generate
+run 61e81034 2026-09-19T15:03 upload state=error tokIn=833203 err=A lektor 1 tartalmi javítást kér: A fogalomtérkép idézete szerint a burgonya összetett levelei is mérgezőek, nem csak a zöld bogyótermés. A tanítás, a példa, az ábra és a bank csak a termést említi; a levelek mérgező voltát tanítsd meg, vagy a kérdéseket ehhez igazítsd. findings=["sample_score@animator","oral_written@animator","source_fidelity@lektor","coverage@lektor","unknown@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor author animator lektor
+run 551bb3f7 2026-09-19T15:03 web state=done tokIn=513404 err="" findings=["bank_cardinality@generate","sample_score@generate","teaching_depth@generate","schema@generate","repair_scope@generate"] steps=generate knowledge author gate publish readback
+run 3722a725 2026-09-19T15:46 upload state=done tokIn=801993 err="" findings=["sample_score@animator","unknown@gate","oral_written@animator","unknown@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor gate author animator lektor gate readback
+run eaa8b013 2026-09-19T16:49 upload state=interrupted tokIn=34464 err=A végrehajtó megszakadt; a befejezés nem igazolt. findings=[] steps=source scope knowledge sourceCheck pedagogue author animator
+run fc3278b9 2026-09-19T16:58 upload state=interrupted tokIn=0 err=A végrehajtó megszakadt; a befejezés nem igazolt. findings=[] steps=source scope knowledge sourceCheck pedagogue
+run ab9465bd 2026-09-19T16:59 upload state=interrupted tokIn=5658 err=A végrehajtó megszakadt; a befejezés nem igazolt. findings=[] steps=source scope knowledge sourceCheck pedagogue author
+run 8143233d 2026-09-19T17:43 upload state=error tokIn=788539 err=A fúziós lecke tanítása hiányos: 8 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: united-kingdom („The United Kingdom (UK)") a(z) 26. check blokkon; united-kingdom („The United Kingdom (UK)") a(z) 42. check blokkon; ireland-languages („Ireland languages") a findings=["coverage@gate","duplicate_question@animator","source_fidelity@lektor","sample_score@animator","unknown@gate","oral_written@animator","unknown@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor gate author animator lektor animator lektor gate
+run 28b73aa3 2026-09-19T18:07 upload state=error tokIn=192164 err=A 2. fejezet bankcsomagja a javító kör után sem megfelelő: methods=4, tasks=16, quiz=26; elvárt: methods=4, tasks=16, quiz=26. Ismétlődő kérdés egy korábbi csomaggal. findings=["bank_cardinality@animator","sample_score@animator","coverage@lektor","duplicate_question@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator
+run 98b1a526 2026-09-19T18:55 upload state=error tokIn=0 err=A térkép nem található. findings=[] steps=source scope knowledge sourceCheck
+run 45233b4b 2026-09-19T18:55 upload state=error tokIn=66539 err=A(z) "animator" lépés modellhívása hibára futott: a válasz elérte a hosszkorlátot; csonka eredmény nem használható findings=["duplicate_question@animator","infrastructure@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator
+run b5d07f3d 2026-09-19T19:18 upload state=error tokIn=354965 err=A 7.4 végkapuhoz az aktuális tanításhoz, bankhoz és forráshoz kötött, blokkolómentes lektorálás szükséges. findings=["sample_score@animator","source_fidelity@lektor","bank_cardinality@animator","unknown@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor gate
+run 525b2797 2026-09-19T19:42 upload state=error tokIn=391241 err=A lektor 1 tartalmi javítást kér: A kérdés az „első menet” eredményét kéri, a tanított első menet pedig a szorzás-osztás teljes, balról jobbra elvégzése (35 + 64 – 12). A helyesnek jelölt opció (35 + 8 · 8 – 12) csak a 72 : 9 utáni köztes sor; a helyes opció magyarázata is 35 + 64 – 12-t ír, ami ell findings=["schema@animator","infrastructure@animator","unknown@animator","unknown@animator","source_fidelity@lektor","unknown@gate","unknown@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate author animator lektor
+run 2210c108 2026-09-19T21:02 upload state=done tokIn=345005 err="" findings=["duplicate_question@animator","infrastructure@animator","unknown@animator","sample_score@animator","repair_scope@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run 3aafddb1 2026-09-19T21:35 upload state=done tokIn=490917 err="" findings=["schema@animator","unknown@animator","unknown@gate","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor animator lektor gate readback
+run e1b57553 2026-09-20T01:46 upload state=done tokIn=932139 err="" findings=["bank_cardinality@animator","schema@animator","unknown@animator","duplicate_question@animator","coverage@lektor","source_fidelity@lektor","oral_written@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor animator lektor animator lektor gate readback
+run 9205bd65 2026-09-20T01:46 upload state=error tokIn=475277 err=A 11. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=4, quiz=9; elvárt: methods=2, tasks=4, quiz=9. s10-quiz-2: a(z) 27 opció indoklása 10 értékről szól, nem a sajátjáról — az opció és az indoklása ellentmond. findings=["bank_cardinality@animator","unknown@animator","unknown@animator","unknown@animator","unknown@animator","schema@animator","unknown@animator","source_fidelity@lektor","coverage@lektor","unknown@animat steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor author animator
+run 59fcb2af 2026-09-20T02:05 upload state=done tokIn=665568 err="" findings=["sample_score@animator","source_fidelity@lektor","infrastructure@animator","duplicate_question@animator","unknown@gate","schema@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate author animator lektor animator lektor gate readback
+run 128fda1b 2026-09-20T06:27 upload state=done tokIn=334116 err="" findings=["schema@animator","infrastructure@animator","unknown@animator","unknown@animator","duplicate_question@animator","unknown@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run 924dbfaf 2026-09-20T06:54 upload state=done tokIn=325537 err="" findings=["schema@animator","unknown@animator","unknown@animator","unknown@animator","unknown@animator","unknown@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate author animator lektor gate readback
+run 4a4fb9f2 2026-09-20T07:28 upload state=error tokIn=466921 err=A fúziós lecke tanítása hiányos: 1 fogalom-címkét a blokk saját szövege nem támaszt alá — a lecke nem a forrásból dolgozott: zarojeles-muveleti-sorrend-osztas-pelda („Zárójeles műveleti sorrend osztással") a(z) 10. explain blokkon. findings=["schema@animator","bank_cardinality@animator","unknown@animator","source_fidelity@lektor","unknown@animator","unknown@gate","coverage@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator lektor gate
+run 3d18dbe1 2026-09-20T07:52 upload state=done tokIn=314006 err="" findings=["unknown@animator","unknown@animator","unknown@animator","bank_cardinality@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run c099e7a7 2026-09-20T08:30 upload state=done tokIn=323889 err="" findings=["coverage@knowledge","unknown@animator","schema@animator","bank_cardinality@animator","oral_written@animator","unknown@animator","sample_score@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate readback
+run 8769e7ea 2026-09-20T09:02 upload state=done tokIn=370074 err="" findings=["schema@animator","bank_cardinality@animator","unknown@animator","unknown@animator","unknown@animator","source_fidelity@lektor","duplicate_question@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run 94a5ccf9 2026-09-20T09:33 upload state=error tokIn=161825 err=A 7. fejezet bankcsomagja a javító kör után sem megfelelő: methods=2, tasks=6, quiz=9; elvárt: methods=2, tasks=6, quiz=9. t6-gyak-2: hibás számítás a feladatban vagy a mintában: 40 – 18 + 4 = 22 (helyesen: 26) findings=["sample_score@animator","unknown@animator","bank_cardinality@animator","unknown@animator","unknown@animator","unknown@animator","infrastructure@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator
+run 1cfcf45c 2026-09-20T09:33 upload state=done tokIn=312525 err="" findings=["schema@animator","duplicate_question@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run 537ea443 2026-09-20T09:33 web state=done tokIn=496414 err="" findings=["bank_cardinality@generate","review_evidence@generate","teaching_depth@generate","repair_scope@generate"] steps=generate knowledge author gate publish readback
+run 8909db64 2026-09-20T09:53 upload state=error tokIn=311370 err=A 9. fejezet bankcsomagja a javító kör után sem megfelelő: quiz: a javítás csak egyedi, már létező tételazonosítót cserélhet. findings=["schema@animator","unknown@animator","unknown@animator","unknown@animator","source_fidelity@lektor","unknown@animator","duplicate_question@animator","repair_scope@animator","bank_cardinality@animator steps=source scope knowledge sourceCheck pedagogue author animator lektor animator
+run 7aaed852 2026-09-20T10:15 upload state=done tokIn=355724 err="" findings=["unknown@animator","unknown@animator","unknown@animator","unknown@animator","unknown@animator","unknown@animator","source_fidelity@lektor","unknown@animator","duplicate_question@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run a9a4f683 2026-09-20T10:58 upload state=done tokIn=251332 err="" findings=["unknown@animator","schema@animator","unknown@animator","infrastructure@animator","unknown@animator","unknown@animator","unknown@animator","bank_cardinality@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate readback
+run 0633d661 2026-09-20T11:49 upload state=done tokIn=661777 err="" findings=["sample_score@animator","oral_written@animator","unknown@animator","schema@animator","source_fidelity@lektor","infrastructure@animator","bank_cardinality@animator","unknown@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate author animator lektor gate readback
+run 1abf6f10 2026-09-20T12:36 upload state=done tokIn=0 err="" findings=[] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate readback
+run cf69dfdd 2026-09-20T12:36 upload state=done tokIn=191728 err="" findings=["schema@animator","sample_score@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate readback
+run 41b17f6d 2026-09-20T13:04 upload state=done tokIn=182789 err="" findings=["schema@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate readback
+run 0a262308 2026-09-20T13:21 upload state=done tokIn=372377 err="" findings=["schema@animator","infrastructure@animator","unknown@animator","duplicate_question@animator","sample_score@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run 6dc05624 2026-09-20T13:54 upload state=done tokIn=322419 err="" findings=["schema@animator","infrastructure@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor gate readback
+run 98e7db2d 2026-09-20T15:01 html state=ready tokIn=0 err="" findings=["html_complete@author"] steps=source author gate save readback
+run apply:98 2026-09-20T15:52 apply state=done tokIn=0 err="" findings=[] steps=source gate apply readback
+run apply:2b 2026-09-20T15:52 apply state=error tokIn=0 err=Pontosan egy valódi, inert JSON-bank szükséges.; Pontosan egy data-lesson-panel="teaching" szükséges.; Pontosan egy valódi navigációs gomb szükséges: data-lesson-tab="teaching".; Pontosan egy data-lesson-panel="methods" szükséges.; Pontosan egy valódi navigációs gomb szükséges: data-lesson-tab="meth findings=[] steps=source gate
+run 3ba35814 2026-09-23T17:26 upload state=done tokIn=216352 err="" findings=["unknown@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate readback
+run 4756f8c2 2026-09-23T17:44 repair state=error tokIn=170558 err=A lektor javítást kér, az eredeti érintetlen: A c2 forrásdefiníciója és idézete „föld-változása”, nem Hold. A lecke Hold-változásként tanítja; javítsd a forrás „föld-változása – holdnaptár” adatára.; A mintaválasz Hold-változáshoz köti a holdnaptárt; a térkép c2 szerint föld-változás. A pontozott vá findings=["source_fidelity@lektor"] steps=source author banks lektor
+run e3348439 2026-09-23T17:57 repair state=error tokIn=194198 err=A lektor javítást kér, az eredeti érintetlen: A core c7 (évtized és évszázad) forrásbeli számkapcsolatát (10 év = 1 évszázad = 10 évtized) a fejezet nem tanítja; vázlatosan csak „hosszabb időtartamok” megnevezését adja, és a bank is ezt kéri. A forrás képletét kidolgozott példával kell tanítani.; A  findings=["bank_cardinality@banks","duplicate_question@banks","coverage@lektor","source_fidelity@lektor"] steps=source author banks lektor
+run bb6c1413 2026-09-23T19:52 repair state=ready tokIn=185671 err="" findings=[] steps=source author banks lektor gate save readback
+run apply:bb 2026-09-23T20:02 apply state=done tokIn=0 err="" findings=[] steps=source gate apply readback
+run 00cbfc38 2026-09-24T04:20 repair state=ready tokIn=161066 err="" findings=["unknown@author"] steps=source author banks lektor gate save readback
+run apply:00 2026-09-24T04:27 apply state=done tokIn=0 err="" findings=[] steps=source gate apply readback
+run 720a50c4 2026-09-24T04:42 repair state=error tokIn=45347 err=A javított tanítás ellenőrzése sikertelen; bankgyártás nem indult: A javított lecke nem teljes: 2 kulcsfogalmat egyetlen blokk sem tanít: c29, c30.; A kiegészítő fogalmak fedettsége 86%, a minimum 90%. findings=["coverage@author"] steps=source author
+run f04dbc06 2026-09-24T04:45 repair state=ready tokIn=136827 err="" findings=[] steps=source author banks lektor gate save readback
+run apply:f0 2026-09-24T04:56 apply state=done tokIn=0 err="" findings=[] steps=source gate apply readback
+run 18f2d2ec 2026-09-24T06:59 upload state=error tokIn=949325 err=Elfogyott a lépés javítási kerete: Ábrák és gyakorlóbankok. findings=["coverage@gate","unknown@animator","unknown@animator","bank_cardinality@animator","unknown@animator","sample_score@animator","oral_written@animator","source_fidelity@lektor","unknown@animator","infra steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor gate author animator lektor animator lektor
+run 53d2ebf3 2026-09-24T07:53 upload state=error tokIn=635691 err=A készítés nem adott vissza teljes leckét. findings=["unknown@animator","schema@animator","bank_cardinality@animator","oral_written@animator","unknown@animator","source_fidelity@lektor","infrastructure@animator","sample_score@animator","duplicate_quest steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator
+run 9ab0c786 2026-09-24T08:33 upload state=interrupted tokIn=964350 err=A végrehajtó megszakadt; a befejezés nem igazolt. findings=["schema@animator","unknown@animator","unknown@animator","unknown@animator","bank_cardinality@animator","unknown@animator","infrastructure@animator","unknown@animator","unknown@animator","unknown@anim steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor gate author animator lektor animator
+run 60b5488e 2026-09-24T11:33 upload state=error tokIn=631198 err=A készítés nem adott vissza teljes leckét. findings=["infrastructure@animator","unknown@animator","source_fidelity@lektor","unknown@animator","coverage@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor animator lektor gate
+run 046caa49 2026-09-24T11:50 upload state=error tokIn=715026 err=A készítés nem adott vissza teljes leckét. findings=["schema@lektor","unknown@animator","unknown@animator","source_fidelity@lektor","unknown@animator","unknown@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator lektor
+run 65bf6e6d 2026-09-24T13:38 upload state=error tokIn=548077 err=A készítés nem adott vissza teljes leckét. findings=["sample_score@animator","coverage@lektor","bank_cardinality@animator","oral_written@animator","duplicate_question@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor gate
+run d1f5ab23 2026-09-24T13:53 upload state=error tokIn=254158 err=A készítés nem adott vissza teljes leckét. findings=["unknown@animator","sample_score@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate
+run 1e40c4a1 2026-09-24T15:05 upload state=error tokIn=660757 err=A 10. fejezet bankcsomagja a javító kör után sem megfelelő: A modellhívás hibázott: gpt-5.6-terra: A(z) "animator" lépés modellhívása hibára futott: a válasz nem érvényes JSON (4542 karakter, lezárt, de középen hibás (a modell sorosítása), 3595. pozíció) findings=["coverage@knowledge","unknown@animator","oral_written@animator","schema@animator","unknown@animator","sample_score@animator","bank_cardinality@animator","unknown@animator","unknown@animator","infrast steps=source scope knowledge sourceCheck pedagogue author animator lektor animator
+run 86f264f5 2026-09-24T15:51 upload state=interrupted tokIn=1136779 err=A végrehajtó megszakadt; a befejezés nem igazolt. findings=["schema@animator","unknown@animator","infrastructure@animator","unknown@animator","oral_written@animator","repair_scope@animator","unknown@animator","source_fidelity@lektor","unknown@animator","dupli steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator
+run 12a04efe 2026-09-24T17:36 upload state=done tokIn=1199356 err="" findings=["schema@author","sample_score@animator","oral_written@animator","repair_scope@animator","bank_cardinality@animator","duplicate_question@animator","source_fidelity@lektor","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator lektor gate readback
+run 3d1ea930 2026-09-24T18:17 upload state=done tokIn=0 err="" findings=[] steps=source scope knowledge sourceCheck pedagogue author animator lektor gate readback
+run 971e95f9 2026-09-24T18:18 upload state=done tokIn=560651 err="" findings=["sample_score@animator","schema@animator","source_fidelity@lektor","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator lektor gate readback
+run 22a38c0a 2026-09-25T12:04 web state=done tokIn=437484 err="" findings=["teaching_depth@generate","infrastructure@generate","bank_cardinality@generate","review_evidence@generate","source_fidelity@generate"] steps=generate knowledge author gate publish readback
+run 97e16600 2026-09-29T11:09 web state=error tokIn=513 err=A Studio-gyártás hibával megállt: A(z) "author" lépés modellhívása hibára futott: a válasz nem érvényes JSON (29651 karakter, lezárt, a végén hibás, ismeretlen pozíció) findings=[] steps=generate
+run 0f22a6af 2026-09-29T11:09 upload state=error tokIn=22572 err=A(z) "author" lépés modellhívása hibára futott: a válasz nem érvényes JSON (29651 karakter, lezárt, a végén hibás, ismeretlen pozíció) findings=["schema@author","coverage@knowledge"] steps=source scope knowledge sourceCheck pedagogue author
+run aa0e61d7 2026-09-29T12:32 web state=done tokIn=23384 err="" findings=[] steps=generate knowledge author gate publish readback
+run 94842a1c 2026-09-29T12:33 upload state=done tokIn=408752 err="" findings=["infrastructure@sourceCheck","sample_score@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run bddbbebd 2026-09-29T12:53 web state=done tokIn=23367 err="" findings=[] steps=generate knowledge author gate publish readback
+run d0b03438 2026-09-29T12:54 upload state=done tokIn=522326 err="" findings=["schema@knowledge","coverage@knowledge","sample_score@animator","oral_written@animator","unknown@animator","unknown@animator","unknown@animator","unknown@animator","duplicate_question@animator","unkn steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor gate readback
+run c1114ef9 2026-09-29T13:42 web state=done tokIn=106755 err="" findings=[] steps=generate knowledge author gate publish readback
+run ebcdd811 2026-09-29T13:43 upload state=done tokIn=475894 err="" findings=["coverage@knowledge","sample_score@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run 44b5afa1 2026-09-29T16:04 web state=error tokIn=25210 err=A Studio-gyártás hibával megállt: A lektor 2 tartalmi javítást kér: Mi hamis: a 418 4-gyel oszthatóként van jelölve (correctIndex 0). | Bizonyíték: 18 = 4·4+2, 19 = 4·4+3, egyik sem osztható 4-gyel. | Javítás iránya: helyes opció: „Egyik sem osztható 4-gyel.” (3. index); a 0. opció hamis maradjon.;  findings=[] steps=generate
+run d6830fa0 2026-09-29T16:05 upload state=error tokIn=1327758 err=A lektor 2 tartalmi javítást kér: Mi hamis: a 418 4-gyel oszthatóként van jelölve (correctIndex 0). | Bizonyíték: 18 = 4·4+2, 19 = 4·4+3, egyik sem osztható 4-gyel. | Javítás iránya: helyes opció: „Egyik sem osztható 4-gyel.” (3. index); a 0. opció hamis maradjon.; Mi hamis: a required csoport a 52- findings=["coverage@knowledge","duplicate_question@animator","bank_cardinality@animator","unknown@animator","sample_score@animator","repair_scope@animator","source_fidelity@lektor","unknown@animator","unknown@ steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator lektor gate author animator lektor
+run 697296d4 2026-09-29T17:02 web state=error tokIn=21760 err=A Studio-gyártás hibával megállt: Váratlan hiba történt. Próbáld újra. findings=[] steps=generate
+run 2b7a38bb 2026-09-29T17:02 upload state=error tokIn=1013049 err=Elfogyott a lépés javítási kerete: Tananyag írása. findings=["schema@knowledge","coverage@knowledge","sample_score@animator","bank_cardinality@animator","duplicate_question@animator","oral_written@animator","source_fidelity@lektor","unknown@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor author animator lektor animator lektor gate
+run e5c5df92 2026-09-29T17:55 web state=error tokIn=23423 err=A Studio-gyártás hibával megállt: A lektor 8 tartalmi javítást kér: Mi hamis: a 3. opció is helyes indoklás, így két jó válasz van. | Bizonyíték: 4k mindig páros; 133 páratlan, ezért nem osztható 4-gyel. | Javítás iránya: 3. opció: „Mert minden páros szám osztható 4-gyel.”; Bank-ellenőr: Egyválasztó findings=[] steps=generate
+run 299332f4 2026-09-29T17:56 upload state=error tokIn=872416 err=A lektor 8 tartalmi javítást kér: Mi hamis: a 3. opció is helyes indoklás, így két jó válasz van. | Bizonyíték: 4k mindig páros; 133 páratlan, ezért nem osztható 4-gyel. | Javítás iránya: 3. opció: „Mert minden páros szám osztható 4-gyel.”; Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a függetle findings=["infrastructure@animator","sample_score@animator","duplicate_question@animator","source_fidelity@lektor","schema@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor author animator lektor
+run 5a211047 2026-09-29T18:41 upload state=done tokIn=550844 err="" findings=["sample_score@animator","bank_cardinality@animator","source_fidelity@lektor","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor gate readback
+run 623b5474 2026-09-29T18:41 web state=done tokIn=351 err="" findings=[] steps=generate knowledge author gate publish readback
+run 279c4be3 2026-09-29T18:41 upload state=done tokIn=766783 err="" findings=["infrastructure@sourceCheck","sample_score@animator","bank_cardinality@animator","source_fidelity@lektor","unknown@gate"] steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator lektor gate author animator lektor gate readback
+run aed999eb 2026-09-29T18:53 web state=done tokIn=147194 err="" findings=[] steps=generate knowledge author gate publish readback
+run 1a151f36 2026-09-29T18:53 upload state=done tokIn=771625 err="" findings=["coverage@knowledge","infrastructure@sourceCheck","infrastructure@animator","sample_score@animator","bank_cardinality@animator","duplicate_question@animator","source_fidelity@lektor","unknown@animato steps=source scope knowledge sourceCheck pedagogue author animator lektor animator lektor animator lektor gate readback
+run 7399f6f2 2026-09-29T19:14 upload state=error tokIn=627006 err=A(z) "lektor" lépés modellhívása hibára futott: A(z) "lektor" lépés modellhívása hibára futott: a válasz üres [grok-4.6]; fallback: A(z) "lektor" lépés modellhívása hibára futott: a válasz elérte a hosszkorlátot; csonka eredmény nem használható [anthropic/claude-sonnet-5] findings=["coverage@knowledge","infrastructure@sourceCheck","sample_score@animator","bank_cardinality@animator","duplicate_question@animator","infrastructure@lektor","unknown@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor
+run 97a79dfc 2026-09-29T20:32 upload state=interrupted tokIn=803434 err=A végrehajtó megszakadt; a befejezés nem igazolt. findings=["coverage@lektor","infrastructure@sourceCheck","sample_score@animator","duplicate_question@animator","schema@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor animator lektor gate readback
+run 8a4ba2f9 2026-09-29T22:18 upload state=done tokIn=760164 err="" findings=["coverage@lektor","infrastructure@animator","sample_score@animator","duplicate_question@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor animator lektor animator lektor gate readback
+run 48379eb1 2026-09-30T09:10 repair state=ready tokIn=184990 err="" findings=["sample_score@banks","bank_cardinality@banks"] steps=source author banks lektor gate save readback
+run apply:48 2026-09-30T09:37 apply state=done tokIn=0 err="" findings=[] steps=source gate apply readback
+run 6e00a1a2 2026-09-30T10:10 upload state=done tokIn=1673528 err="" findings=["coverage@lektor","sample_score@animator","duplicate_question@animator","source_fidelity@lektor"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor animator lektor animator lektor gate readback
+run cb55182c 2026-09-30T14:00 upload state=done tokIn=1914746 err="" findings=["coverage@knowledge","source_fidelity@lektor","sample_score@animator","unknown@animator","duplicate_question@animator","unknown@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor author animator lektor animator lektor gate author animator lektor gate readback
+run e7028e6f 2026-09-30T15:18 upload state=error tokIn=0 err=A kivonatolás nem sikerült. Próbáld újra. findings=[] steps=source scope knowledge
+run 767d9813 2026-09-30T15:36 upload state=done tokIn=1563095 err="" findings=["coverage@lektor","source_fidelity@lektor","sample_score@animator","duplicate_question@animator","oral_written@animator","bank_cardinality@animator"] steps=source scope knowledge sourceCheck pedagogue author animator lektor author animator lektor animator lektor animator lektor gate author animator lektor gate readback
+
+# SKILL LESSONS (185)
+50x rec=25 active source_fidelity@lektor b44f3d4e176a3a9529d7ad74529f52f532a721145b568c0e241fa6c5abf0
+47x rec=22 active sample_score@animator 2a7c72298378f56bf55a71ca6948c65b84eca52914cf2a1e1e342543bddd
+37x rec=18 active schema@animator 00d0a2c31469ecce1618e5ac05ffcf875ffdb34b7aa3250c8be7151915b7
+34x rec=15 active bank_cardinality@animator 74134ed996f96045b42ceff5d3786993af4ee3831b4165adfdca1792e5b9
+29x rec=10 active coverage@lektor 99574008f3f23ee3aae3e042ad2f361551ae753abfe28107bf54ef5c1372
+28x rec=15 active duplicate_question@animator f6e7348c2579b12256ee98485d5b8bb8c78d81b929e5e3e3f9619931cefd
+20x rec=9 observed infrastructure@animator 636c7964aca294dcdd9981e7c85843dea879adf12c0d3ddde7ad7112b886
+17x rec=7 active oral_written@animator 91c8220f63a08113edb759d1869b877f036de4de1097f65e57368df8ba6d
+12x rec=4 active repair_scope@animator ea83b79f011758b5a0145f267247e41829ec016701a870974d65fda91ddf
+9x rec=3 active teaching_depth@generate af70b74728609873fc75201096f8741caf03ac234de0b652b675e3d0b692
+6x rec=1 observed infrastructure@lektor 480c299e144a62d7e96805620c8032cca0a54f8a22f9225a3117ff2586dc
+5x rec=3 observed unknown@animator d4d607b561e928f15b1cf2e5c3ed7df901e5c93caa1bfb482d8f535eda11
+5x rec=1 active coverage@knowledge 99574008f3f23ee3aae3e042ad2f361551ae753abfe28107bf54ef5c1372
+5x rec=3 observed infrastructure@sourceCheck 84a07e44f6749cf15ad98aab1bad3dfdb13341938fca4360589e011113ed
+4x rec=2 observed unknown@animator a5eabab169bf1ff6b5e4e05c55dad10649eefccfd14aba5bc9f7e75d0c5b
+4x rec=1 active sample_score@animator 2a7c72298378f56bf55a71ca6948c65b84eca52914cf2a1e1e342543bddd
+3x rec=1 active bank_cardinality@banks 74134ed996f96045b42ceff5d3786993af4ee3831b4165adfdca1792e5b9
+3x rec=1 observed infrastructure@generate 006447fe04a3f16d9477f49dc2396b18841eb1c22536930a8c3f8cfc39b4
+3x rec=1 observed unknown@animator 204082cbd1d331638797549d5b34d5e8ef2b6ef58f5ad4230e72f0b5ca8d
+3x rec=1 active source_fidelity@lektor b44f3d4e176a3a9529d7ad74529f52f532a721145b568c0e241fa6c5abf0
+3x rec=0 active schema@knowledge 00d0a2c31469ecce1618e5ac05ffcf875ffdb34b7aa3250c8be7151915b7
+3x rec=0 active oral_written@animator 91c8220f63a08113edb759d1869b877f036de4de1097f65e57368df8ba6d
+3x rec=0 active bank_cardinality@animator 74134ed996f96045b42ceff5d3786993af4ee3831b4165adfdca1792e5b9
+3x rec=2 active review_evidence@generate e37bddd7a20c04c5b67184f15e109f6bc3c9950a9aaba79de6a2e51c9473
+3x rec=0 active coverage@knowledge 99574008f3f23ee3aae3e042ad2f361551ae753abfe28107bf54ef5c1372
+3x rec=0 observed unknown@gate 1b9f35c3a1b54c72fc37b177025d076335f5bd66f5c96b759bed9f4a4319
+3x rec=0 observed infrastructure@pedagogue 9108b8fe8ed37b1187afd16919eb4a6174da2baa8b658948cef0c05afceb
+2x rec=0 observed unknown@gate feb1942645a4414f49c622b8c95d965808cd5691fc15666a7de06ae3f3b7
+2x rec=1 observed unknown@animator 08ad65b3f5b6e0b75c8582a691501daac7375ca10f7365b9feb71016cf8e
+2x rec=0 observed unknown@animator 68a54e47820200b24f5138015455ca0985f3ac90cbf59f007edf4213816d
+2x rec=0 active coverage@author 99574008f3f23ee3aae3e042ad2f361551ae753abfe28107bf54ef5c1372
+2x rec=0 observed unknown@animator 709da472d87aa1c2c7532174a4048210a5bd1876f4f6652d357b785a4128
+2x rec=1 active sample_score@banks 2a7c72298378f56bf55a71ca6948c65b84eca52914cf2a1e1e342543bddd
+2x rec=1 observed unknown@gate a88448b12c7d884c515f08152497013b527b561d06ba785d4f677a117e23
+2x rec=0 active source_fidelity@knowledge b44f3d4e176a3a9529d7ad74529f52f532a721145b568c0e241fa6c5abf0
+2x rec=2 observed unknown@animator b0d257f9b1ce597804b4a41ebe453b802faaa486df6471a6a76125a69532
+2x rec=0 active source_fidelity@lektor b44f3d4e176a3a9529d7ad74529f52f532a721145b568c0e241fa6c5abf0
+2x rec=2 observed unknown@animator b5cc28a502af794901be3fc1a2cf50d80602c887991580aacea1ce8804bc
+2x rec=1 observed infrastructure@animator 636c7964aca294dcdd9981e7c85843dea879adf12c0d3ddde7ad7112b886
+2x rec=0 observed unknown@animator c6c9f045544ea462ec5ccf9068905352b0ee9cdf1c1523554fae8415099e
+1x rec=1 observed unknown@animator 032895ea3879b5bbb5f4217be17588a76276dc20b2fb4e69b772c2539094
+1x rec=1 observed unknown@animator f7d00cbd93cc10cdb8f40337fed934521a28ff2724b0f83f226f55ca061f
+1x rec=1 observed unknown@animator c4021af25ff902cde1b60a57ed4b5dfeb31a3cac8948eaa3fb75dae96f79
+1x rec=1 observed unknown@animator d719c01e825cac5efce3c821f8cba3111d7110de3d658c19f863c28ef3a5
+1x rec=1 observed unknown@animator 37e36f99c6a6e094157511c0967754bb180101243bd2782ea4807b210820
+1x rec=0 observed unknown@animator f8930eac7c0666a5065f22075b5dc764eedaf19a176ea7b3f3816d80c151
+1x rec=1 observed unknown@animator 7ca50f3cd67b46ab7a65841e2362f67374d72ad1c4d1c74fbef2ad215fd1
+1x rec=1 observed unknown@animator 075b1555f7cb6ba31cbaa49c3d37a5bed7f95ae76ece76b02dd009aed461
+1x rec=1 observed unknown@animator fa9afffc79eb52c80182f6ff04d26a3a6b5225de04842028dcff21cd61b8
+1x rec=1 observed unknown@animator 901a4827d139de9e500d476dae6aec1fba4422ea7dc3b5d33de976d5e596
+1x rec=1 observed unknown@animator f83e036f3b832f7add1351bebc56a5baeace40dab3dbefda289f5cb42095
+1x rec=1 observed unknown@animator ed4947d2d6d3a6faf176bc826e283724f2f167701662bab4124845306758
+1x rec=0 observed unknown@animator b3a3f0c325a91bb9ad3cad74c5527b2fa6bd68259990cf0c36ca4c6ffd43
+1x rec=0 observed unknown@animator 9d2aa5e4f4e85473396d278f62ed1ed7e4da5a37510398056e8ee8474744
+1x rec=0 observed unknown@animator 3a97a723aff5f9a8b3def09ebfa4513b89bb7a5f851c25461ac02099e3cd
+1x rec=0 observed unknown@animator a8dfe824ab647d9bb6b388ac6e20d2d97a9ddb4d0b3ede9084551092d93b
+1x rec=0 observed unknown@animator 3e0a4ec22087be3d982b60287facc32cec6406a5b2f5a8fdba57ce074433
+1x rec=0 observed unknown@animator 45df59460976579db08a0625bf2f4e8ee8a59ba3a27eec89f0153d7342c1
+1x rec=0 observed unknown@animator 4c06dbff60ebbcf196674a1710ece0e21e4682b774c0f819c8f751b56fb9
+1x rec=1 observed unknown@animator 1f2cae5dbec1d8a2a94a70e2c4ea26f9d71383806ff865390a18ed235479
+1x rec=1 observed unknown@animator d5debc1aa9bfee0f3f5c04e1b02948e3498240527fd38fb112f2bc0e9d1b
+1x rec=1 observed unknown@animator 940cf93359563865673896093bf8340b6b5d7442ca78e1f1e6c077205fb4
+1x rec=1 observed unknown@animator 2c8b46b12af4a4df28f704161999658fd81dc0eda2b1bdf16a34d7dfd68b
+1x rec=1 observed unknown@animator 3384c668bf6fa25ce7357cf22407bd1e77ff5d75ea846bb2ce36a30d9175
+1x rec=1 observed unknown@animator 9591f28e17779d05f0a628190617ef6c80fea7bf6dad368cb6ef99c69196
+1x rec=1 observed unknown@animator 3c47ce112ce068a842644b825e44d5d76b189be79fbe8e369e8d3e91cfbb
+1x rec=1 observed unknown@animator 8ced2f07c8cb0a644ef462341ca9033fe3f92224fea28130fda7813cd9fd
+1x rec=1 observed unknown@animator 5278bf5388d25656e314e437aa3d5b079b375bd69d007cf478c5db6f375e
+1x rec=1 observed unknown@animator 895e813082a69dc3530d9f84d29a0e175fff4c7cf1e59d1356db3daf869a
+1x rec=1 observed unknown@animator 28fdaaac7ad228e40e0e73422e01602e8ac243ed3a566ea6451798b086ff
+1x rec=1 observed unknown@gate 4c5727229d1dcb620992bc003c708a9f4cbd6e69816f8205449e4a437e46
+1x rec=1 observed unknown@animator 13c33dd773a359afc13f3e2dfe5dae921205bc418dbf1f66ea578270cafb
+1x rec=1 active html_complete@author c74c8a7134fb09942a66f60515a3df3551f885093c55163033f8cc372883
+1x rec=1 observed unknown@animator 7687758890512005034a5b9f738ab377af5a528893dfbad3b5e1293acd69
+1x rec=0 active duplicate_question@banks f6e7348c2579b12256ee98485d5b8bb8c78d81b929e5e3e3f9619931cefd
+1x rec=0 observed infrastructure@lektor 480c299e144a62d7e96805620c8032cca0a54f8a22f9225a3117ff2586dc
+1x rec=0 observed unknown@apply f6cd732019c2d6969fa20247168fa915295ef8aeaf3360a923b9e0a3b6bf
+1x rec=1 observed unknown@author 7c411df04ac7c0c53b343aa398911171c651447d4f7b233565ab1568602d
+1x rec=0 observed unknown@animator 57295f10fdef8a250e9cd055d4114aa94de7ef120f1fcc1b7d54a35add6a
+1x rec=0 observed unknown@animator cbe20cba3df23061a2d6cc8774ef87d745eeb0c30c891ea0cb06a46c98ae
+1x rec=0 observed unknown@animator 3910fe934b329b691873ffb4f83dcf0eca616f4c4ac9e8ead8b8ab28e76d
+1x rec=0 observed unknown@animator 0671bd84c5fa50bfbb8240356272095183031275c479e369e406053ce835
+1x rec=0 observed unknown@animator b0e4800b6111419edb8dead72f15be92a79c8bd980f0c74bcdcdd51a1f1d
+1x rec=0 observed unknown@animator 52d860cbee2da3d49c02afc5029edee82b7e68c2b3daef9a279decb17821
+1x rec=0 observed unknown@lektor 8e0cc9367754f08e5767e2a50416472368ad6146cb2a354e5109abd4f036
+1x rec=0 observed unknown@animator a0d33acd1f204657a3f274e8652e2f908dece75d2fa41ac1bd78c043ab62
+1x rec=0 observed unknown@animator ee4e721d617c66a3cd9a96732d8837ece8e4f6d3d8ef783696ef5777a2c3
+1x rec=0 observed unknown@animator 688b68678b1bccaf6bb807b3c53eb24e95136fd14f26537c8e3f10859117
+1x rec=0 observed unknown@animator 20499eeeb7c56af4e6f2c0f77f624a1cf92d69089c2cd6d20619344b856e
+1x rec=0 observed unknown@animator 7931142426770f45fd5cd87a400ae4c537a6911ebe375eaf2b00fd71b875
+1x rec=0 observed unknown@animator 32655401e3c36bd6237386d1c9d36214bc67e3c07e9eb0ede51c857c5c28
+1x rec=0 observed unknown@animator 21b4612493ed38e3216a01dd0cf4c205c1204c482446975d3383b014c303
+1x rec=0 observed unknown@animator 3b2b30a16ba6d1eb94414829d2b30ce1f9513c42f57da53ff027bf294f25
+1x rec=0 observed unknown@animator da415b790e89ee3b7fd3883b9241a6b96470025c693427bef3ff53a195fe
+1x rec=0 observed unknown@animator b9173cebf6207f58ad699528e6464ae41daf8f1469a486d3e44538fee09d
+1x rec=0 observed unknown@animator 92a8c8a2a3bb0034ecdab3a7758a7d7046daff5ad83dda06f72bf53bfc8b
+1x rec=0 observed unknown@animator 7a991e8d53e0d9aaa80cbf93682f38e734ca691b6fa7644ce68940cc2a38
+1x rec=0 observed unknown@animator b0d199419ff3c0874e5e8951bb6e66a19d8a44dad7e0d4a7cc7529870910
+1x rec=0 observed unknown@animator ed5e18ddb54bab1789edf8114fd2eddd831c183250f5c2248aa00f47c019
+1x rec=0 observed unknown@animator 8d6da2ff7ba520ffa9002bf3cc857cc87d9fdc4eac9ab509dc920e068f00
+1x rec=0 observed unknown@animator e2769b23a3a0471f4c247a820da18d564185ef963611ca27ca948e6348c7
+1x rec=0 observed unknown@animator 1f1ca6da1b65b5e6bdb71f7c57f90aa2d4403464b68878e05c0e27ccbf8d
+1x rec=0 observed unknown@animator 3c8a3f6e5c2f970e8f6e4948557638158d07a0289aa4fa5786a53326183e
+1x rec=0 observed unknown@lektor 2345307d4469d89dc55235946245ccf7be9ffdd04c8797559418b678e183
+1x rec=0 observed unknown@animator f9f6348ec445624d7c08352ccb36e817ebf85cd5571c4e48d2acd943d8ef
+1x rec=0 observed unknown@animator bd7cf8b5dc323d70c3b69496a9102546a1fead4db773ee2e1f502ee7c105
+1x rec=0 observed unknown@animator af92b1a2796742ab3ac81126022388ded391b6d5f785d513121e1a208241
+1x rec=0 observed unknown@animator 7377b81207edce707de397ca72a84e0810f48cdbf0c5c6c0dbd91505ed0b
+1x rec=0 observed unknown@animator 272468e394d2fe8b3f40b6418b54cf8690d11eabd20bee84474ff688fe97
+1x rec=0 observed unknown@animator b4f74ba4cffcea1139690ad56feb10e78bd52446ed632cba3db6fa68a0fe
+1x rec=0 observed unknown@animator 0205d5e13489ac1d942ddeafedb2ae16025e95a3af72c75a32660d2db8b9
+1x rec=0 observed unknown@animator 3adcd5cc0c0e286b95d7965c5450a7aa75ebb0f83ebe0f4863f351ae0e20
+1x rec=0 observed unknown@animator 02f826ffabfdeb1bbdbe37afefa6ee976a89a8de21d5b77bc34ccea1de97
+1x rec=0 observed unknown@animator 0459e5cffe6d43e6a0cd94fb5ee83de9f694809d4050110a79a3f56d172d
+1x rec=0 observed unknown@animator 2dc1f10a545b048da323436cf16ec2b8ec0b7455c18c8f735d059bf8ac9d
+1x rec=0 observed unknown@animator f6aa06816005f81e401c7d44f25da8124f793255f70c9beb35c971201b0a
+1x rec=0 observed unknown@animator 0b609cee0a63f9f6a58183987047442659945d5dc76a27cd6c52fff99f38
+1x rec=0 observed unknown@animator d40c17e43d0f64cde549203fa45e34f61e8b38cd8c2503006ee75751b31b
+1x rec=0 observed unknown@animator b68f5a215eff0997a7c2a3633a4d474b304479feab461a9bbf97b7461b11
+1x rec=0 observed unknown@animator a12a9f117fa95a1fbd9d34d4fe9f6184b5d51804556006f8ee1a5e2f2568
+1x rec=0 observed unknown@animator 74ccaa7882c4a7eeecf42908ecbbe657202252869ed0d663f6fcbe49f7a7
+1x rec=0 observed unknown@animator a954a2b0ede9b7ca2297d475bccf0bcbd692a37068a6e21052c75da420ab
+1x rec=1 observed unknown@animator 8a63bb2f631086ee8accd6667d267c9888d8d8988ffa03842d096aeae89e
+1x rec=1 observed unknown@animator 866d5eaed6a06a2110b28252b7e0eef77ff65b475da0e1e7459316dee14f
+1x rec=0 observed unknown@generate 49bcce1607fd2fa083ff396a9ef36c7525dde368aa4f9bc4925dcdef61e1
+1x rec=0 observed unknown@source c566908f507f3ea2c5fb43e94a3f96ef2c00f7a559ecdba55558c76e9a96
+1x rec=1 observed unknown@animator afb67da091ffe7a808fb3b4c5dde054598cf4ce3414efe2ff0d3806bbf0e
+1x rec=1 observed unknown@animator 1e9594a11f774f219e86bd062a4798687b0687d39abeeccbefd9f21a9f75
+1x rec=1 observed unknown@animator baa55af12a0d0cbe962480dee522fe5f1581e192cfd24d12c11650b8da66
+1x rec=1 observed unknown@animator fb1b65f4a55b83a5b3e7430b508f8623609dd52315bd32892c0f5fda4093
+1x rec=0 observed unknown@animator 37ba8e008a428381b691d6d915e7b12d5c64c57b0a478e62a3b00f9b2713
+1x rec=0 observed unknown@gate 3e5f278f6c3fcc49c1642f9a418e0424bed04ab05b62a0f5761b3d8978f8
+1x rec=0 observed unknown@gate 5fd3e258a71ca92a813e5c082e8ddaf91991d435320568750a453cc518c1
+1x rec=0 observed unknown@gate 1c0042bda0222b730b0e9110811beacf6691bdd50606f596f8e39503f57f
+1x rec=0 observed unknown@generate 7d637eb3e6568ab5cd6bb209c446949a723a54fe379c2c03948242718617
+1x rec=0 observed unknown@lektor a3be2fc7e0e04ca3c11567550cb9f1397f702d926f48f04ab2abb036d7d9
+1x rec=0 observed unknown@generate eb2e564c5b72b159eb2c5638fa193bc36c89b41edcca846c43eacbe2f4bb
+1x rec=1 observed unknown@animator f24afb37390b8c8e095ca1c042a130504fd43347c1f0145aae58f1a50009
+1x rec=1 observed unknown@gate ac45e130ebe004051b25207d92fc20852073a56fe35f618c0e4871964a72
+1x rec=1 observed unknown@animator 88ab453b9561bfda57f94b6394e8cb018e82da3520242902c79a32533534
+1x rec=1 observed unknown@animator e9b1ffc7c6d0ce4bd8c1dd3ed655dea7475ee03c2f323697d3d92a9a4dab
+1x rec=0 observed unknown@knowledge 8711d173915c3aa592a98794ce8ebf39b4dffb186ca84f8182fe3aec1979
+1x rec=0 observed infrastructure@lektor 480c299e144a62d7e96805620c8032cca0a54f8a22f9225a3117ff2586dc
+1x rec=0 observed unknown@lektor 18bc1124c022dbac9b683c603d542062ee577237c5d852fa84271330bad5
+1x rec=0 observed infrastructure@readback 47684aa6d2dbab7ac9aad35656e8563f9c8bb26507339d80476975ec4372
+1x rec=1 observed unknown@animator 2e9f85a5bb4ad0095b46ec4ad393f72509f6bd92bf753910afcb23c7c621
+1x rec=0 active concept_reference@author d6833aee343304fbc61871d6bc91826a24b786dd93c3e9c19d02102c17db
+1x rec=0 observed unknown@generate 324f4f350b1a6cd4d6abacc2fdc660d14a758cf21e112e2b1d0010490be0
+1x rec=0 active bank_cardinality@animator 74134ed996f96045b42ceff5d3786993af4ee3831b4165adfdca1792e5b9
+1x rec=0 active sample_score@animator 2a7c72298378f56bf55a71ca6948c65b84eca52914cf2a1e1e342543bddd
+1x rec=0 active concept_reference@author 0d6d65c4133cd2522f32b6e9ff2ead2bd09f3710cf56e0b6b1504b165829
+1x rec=0 observed infrastructure@lektor 480c299e144a62d7e96805620c8032cca0a54f8a22f9225a3117ff2586dc
+1x rec=0 active duplicate_question@animator f6e7348c2579b12256ee98485d5b8bb8c78d81b929e5e3e3f9619931cefd
+1x rec=0 observed unknown@gate 21bb3069a454b7ebd3b178d48ccad55b2f1e7d538a23323aaed6485d7942
+1x rec=0 observed unknown@author fca0fb199fdf4bed5c0e7b70b3bfc1ea8bb81a0efe72634aec3f8ad43806
+1x rec=1 active typography@gate c9895fdf6d43239288ba6c95bb0418df841d4d2f6d6751a97132cfb0e6ec
+1x rec=0 observed unknown@gate 1cd103efacd72552446d15cb75b362769956a7cb4f3d589a1ef899574bc6
+1x rec=0 observed unknown@gate a75fb1f2997349089186b61e3e48862e2744c7a6edc19b7fded284ee7a72
+1x rec=0 observed unknown@gate 5bf08f888add4d2b5599b67bf042765def6b1524baf3b5e901ad9abf9eef
+1x rec=0 observed unknown@animator 6bf1581776087281fcdf1b0106ece8c164718fe29c5c6905c8d9d5caa9c1
+1x rec=0 observed unknown@lektor 299cdf24c90e68773c3f684a5bb0fc6cdf7212565815d8bc4a44bbc36b67
+1x rec=1 observed unknown@gate 57a9c5a832354d9a465337fb66e3b110a05b630e4c068966d7fb8a58657c
+1x rec=0 observed unknown@gate 410637a9f0acd24f3f82595e7760eeb294fde7657bc1d5032eaa6d702aeb
+1x rec=0 observed unknown@gate 8cd96d68c3eacc31b55aec2f17b5ec61bfc5398a5bb628f0801d5e549651
+1x rec=0 observed unknown@sourceCheck dbc4b0d4268d3943f5ec6ac8b1f8cd133f2e21433fd464fd78ed7fe7048a
+1x rec=0 observed unknown@gate 3b3873292c4a62c446232a26df7fce635ba0c094e04b345c634f8061d196
+1x rec=0 observed unknown@lektor ef04955b7c1fca5336a079980d242c933b0a80ba3c46aa38d67bc582dc7c
+1x rec=1 observed unknown@gate 551973c5159386fe399bfa57f3806b4950bc8f0c57d9abe3cdd5d325f3ed
+1x rec=1 observed unknown@gate 98afb705ecc920497b2d4920ce18b944a07bf3a18e1694aff7990bf4b8ac
+1x rec=0 observed infrastructure@author 629400cd455ce9f5d529d604991890537d6f940b63ca1d1bb7b9630cb813
+1x rec=0 observed unknown@animator 1cf79aa50d21b0339865ccbde7954130fc07ecb14a863194cb92ffb27156
+1x rec=0 observed unknown@gate 77d541a6651c05a3a5d8f6f4d0a4d3f73ff05ba8b1a105721dbde6332d3b
+1x rec=0 observed unknown@gate 480610fac3189fd158f4776bd43abc1f9e8660e43d316ec4884bdff64cda
+1x rec=0 observed unknown@lektor d001c77704953772a7c889b9ddeb7517127a8fb1f14fee55f7ba0b727a9c
+1x rec=1 observed unknown@animator 5c15d070f7f724e14113d92b3dd17ed0da1be27088a260a9c2032e8a78b6
+1x rec=1 observed unknown@gate cc391c3979d7a4a6d832818facf8b609f8b6a373eff5b3a390abc8d94f52
+1x rec=0 observed unknown@animator de249a29b14515c39e8cb799a5de6e0c463b0ceffd0c1067c84530f9403d
+1x rec=0 observed unknown@animator 3c3f74943c978c726d1e836bb0ea3e07b24ae2a579991e308b85447477f1
+1x rec=0 observed unknown@animator 078c0478a0b31f92ef434d71302ae942b501eaa5ea8094b6e537bc6d6240
+1x rec=0 observed unknown@animator 162c3794f38034967876cbc444a2e310a2f563686c76744e04276093574f
+1x rec=0 observed unknown@animator 546faaa4246e4a755026bb11718ab59a27d007d3b55ebff33f25a3d05b57
+1x rec=0 observed unknown@animator a1ac7eab17d4d5fc36d4739d2711e8b11d5ee18508ae274eb75d25cfb34a
+1x rec=0 observed unknown@animator eac989367fdfc43957fdb96f75fd159e895bc08d19dc25f1ddedc9a69ad0
+1x rec=1 observed unknown@animator 46d33788955f93e010b31f683e813787a22a418a54f9f36d4535f25052b1
+1x rec=1 observed unknown@gate fb241e2878e6c6de38fbaa1bdc81b2355bdcb0064fefe3c24813229fd6d8
