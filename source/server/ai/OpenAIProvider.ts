@@ -11,6 +11,7 @@ import {
   AIProviderAuthError,
   AIProviderQuotaError,
   isQuotaExhausted,
+  type ChatCallOptions,
 } from './AIProvider';
 
 export class OpenAIProvider implements IAIProvider {
@@ -21,10 +22,12 @@ export class OpenAIProvider implements IAIProvider {
   private maxTokens?: number;
   private apiMode?: AIProviderConfig['apiMode'];
   private reasoningEffort?: AIProviderConfig['reasoningEffort'];
+  private jsonMode?: boolean;
 
   constructor(config: AIProviderConfig, vendor: "openai" | "xai" = "openai") {
     this.name = vendor === "xai" ? "xAI" : "OpenAI";
     this.maxTokens = config.maxTokens;
+    this.jsonMode = config.jsonMode;
     this.apiMode = config.apiMode;
     this.reasoningEffort = config.reasoningEffort;
     this.model = config.model;
@@ -37,7 +40,7 @@ export class OpenAIProvider implements IAIProvider {
     });
   }
 
-  async chat(messages: AIMessage[], signal?: AbortSignal): Promise<AIResponse> {
+  async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
     try {
       if (this.apiMode === 'responses') {
         const response = await this.client.responses.create({
@@ -56,6 +59,8 @@ export class OpenAIProvider implements IAIProvider {
             content: msg.content,
           })),
           ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
+          // Spec 2026-09-30 (U2/C8): hívásonkénti szigorú séma, ha a hívó adja; különben a lépés JSON-módja (ha van).
+          ...(options?.responseFormat ? { response_format: options.responseFormat as never } : this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
         },
         { signal }
       );

@@ -378,11 +378,11 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         onEvent({ type: "status", message: `Gyakorlóbank készítése: ${packetsDone}. csomag kész…` });
         await onBankCheckpoint?.(checkpoint);
       },
-      async call(system, user, attempt) {
+      async call(system, user, attempt, extra) {
         const model = bankModelForAttempt(attempt);
         if (!studioModelReady(model)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(model)}).`);
         if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[WEB-RESEARCH] Bankcsomag ${bankProviderStep(attempt) === "author" ? "mentőkör" : "tartalék modell"}: ${model}, ${attempt} bukott kísérlet után.`);
-        return (await callBankPacketModel(createStudioStepProvider(model, bankProviderStep(attempt)), model, system, user, controller.signal)).json;
+        return (await callBankPacketModel(createStudioStepProvider(model, bankProviderStep(attempt)), model, system, user, controller.signal, extra)).json;
       },
     }).catch((error: unknown) => {
       // An exhausted packet is a plain Error with the validator's reason — name it instead of "AI hiba".

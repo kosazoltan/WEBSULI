@@ -1,5 +1,5 @@
-import { AIProviderTimeoutError, type IAIProvider } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
+import { AIProviderTimeoutError, type IAIProvider, type ResponseFormatJsonSchema } from "../ai/AIProvider";
+import { BANK_RESCUE_MODEL, FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../ai/models";
 import { PACKET_ATTEMPTS, RetryableBankCallError } from "./experience-builder";
 import { callStepModel, StepModelError, type StepCallResult } from "./run-step";
 
@@ -29,10 +29,12 @@ export function bankProviderStep(attempt: number): "author" | "bank" {
  * next model. Mérve (4. mérés): an időtúllépés a modell lassúsága (elfajult, 24k-ig futó válasz) — ez is a
  * következő kísérleté. Other provider failures (429/5xx/key) keep their cause and fail the run once (resume path).
  */
-export async function callBankPacketModel(provider: IAIProvider, model: string, system: string, user: string, signal?: AbortSignal): Promise<StepCallResult> {
+export async function callBankPacketModel(provider: IAIProvider, model: string, system: string, user: string, signal?: AbortSignal, extra?: { responseFormat?: ResponseFormatJsonSchema }): Promise<StepCallResult> {
   try {
     // Spec 2026-09-30 (§C-V/3): a bankcsomag az `animator` lépésen belül fut, de a szerepe `bank` — ezt kapja a runbook/szabály-szűrő.
-    return await callStepModel(provider, { step: "animator", role: "bank", model, system, user }, signal);
+    // Spec 2026-09-30 (U2/C8): a szigorú séma csak az igazoltan támogató KÖZVETLEN OpenAI-úton megy; tartalék úton JSON-mód + helyi validálás.
+    const responseFormat = extra?.responseFormat && providerForModel(model) === "openai" ? extra.responseFormat : undefined;
+    return await callStepModel(provider, { step: "animator", role: "bank", model, system, user, ...(responseFormat ? { responseFormat } : {}) }, signal);
   } catch (error) {
     const timedOut = error instanceof StepModelError && error.cause instanceof AIProviderTimeoutError;
     if (error instanceof StepModelError && (!error.cause || timedOut)) {

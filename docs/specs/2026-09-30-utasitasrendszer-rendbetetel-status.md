@@ -7,7 +7,7 @@ Csak futtatott teszt/PR hivatkozással állítható „lezárt”.
 |---|---|---|---|---|
 | H1 | Banktétel tényhiba (rubrika + számolás) | U1, U2, U5 | nyitott | — |
 | H2 | Minta ≠ rubrika; pontozó-szerződés hiányos | U1, U2 | nyitott (a tagadás-heurisztika: ismert maradó) | — |
-| H3 | Csomag darabszám/alak | U2 | nyitott | — |
+| H3 | Csomag darabszám/alak | U2 | részleges (PR U2: szigorú `json_schema` a KÖZVETLEN OpenAI-úton — `bank-schema.ts` tükör-séma, `ChatCallOptions.responseFormat`, csak `providerForModel === "openai"`; élő próba: luna+terra elfogadta a valódi sémát, `evidence-so-bank.txt`; a darabszám-magyarázat és a B1 bank-skill → U2c) | `bank-schema.test.ts` |
 | H4 | Ismétlődő kérdés, három kulcs | U2 | nyitott | — |
 | H5 | Szerzői javítókör „title/subject Required” | U4 | nyitott | — |
 | H6 | Megalapozatlan címke, lapított index | U4 | nyitott | — |

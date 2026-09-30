@@ -13,6 +13,8 @@ import { workflowSkillVersion, workflowValidationFailure } from "../workflows/en
 import { roleSkillBlock, roleSkillVersion } from "./role-skills";
 import { pickLessonFlair } from "../../shared/lesson-visuals";
 import { autofixBankPacket } from "./tools/bank-packet-autofix";
+import { bankResponseFormat, normalizeStrictPacket } from "./bank-schema";
+import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 import { arithmeticClaimProblems } from "./tools/arithmetic-claims";
 import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 
@@ -40,7 +42,7 @@ export type ExperienceBuildDeps = {
    * PACKET_ATTEMPTS run on the cheap bank model; the caller may route the final rescue
    * attempt (attempt === PACKET_ATTEMPTS) to the strong model.
    */
-  call(system: string, user: string, attempt: number): Promise<unknown>;
+  call(system: string, user: string, attempt: number, extra?: { responseFormat?: ResponseFormatJsonSchema }): Promise<unknown>;
   /** Eszköz-javítások naplózása (bank-packet-autofix). */
   onToolFix?(tool: string, fixes: string[]): void;
   /** Mérve (4. mérés): a bukott bankkísérlet oka eddig csak ujjlenyomatként maradt — a hívó naplózza. */
@@ -374,7 +376,9 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // csomag után. A modell-kimeneti hiba (hossz, üres, nem JSON) BUKOTT KÍSÉRLET: a következő
       // kísérlet (tartalék, majd mentőmodell) kapja meg. Szolgáltatói hiba változatlanul kilép.
       let response: unknown;
-      try { response = await deps.call(system, prompt, attempt); }
+      // Spec 2026-09-30 (U2/C8): szigorú séma a szolgáltatónak (a hívó dönt, hogy az adott út támogatja-e); a null-ok visszaalakítva.
+      const responseFormat = bankResponseFormat({ methodMin: methodKinds.length, taskCount, taskMax: Math.max(taskTarget, 45), quizCount, quizMax: Math.max(quizTarget, 75), language: Boolean(language) }, Boolean(repairBase));
+      try { response = normalizeStrictPacket(await deps.call(system, prompt, attempt, { responseFormat })); }
       catch (error) {
         if (!(error instanceof RetryableBankCallError)) throw error;
         errors = `A modellhívás hibázott: ${error.message}`;

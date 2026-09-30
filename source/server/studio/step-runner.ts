@@ -958,7 +958,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
             onAttemptFailure: (sectionIndex, attempt, reason) => logger.warn(`[STUDIO] Bankcsomag bukott kísérlet (${job.id}) ${sectionIndex + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 600)}`),
             concurrency: PACKET_CONCURRENCY,
-            call: async (bankSystem, user, attempt) => {
+            call: async (bankSystem, user, attempt, extra) => {
               // Spec 2026-09-19 / 2026-09-25: bank model per attempt (primary → fallback → rescue), shared with the web path.
               const bankModel = bankModelForAttempt(attempt);
               bankModelUsed = bankModel;
@@ -967,7 +967,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
               // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
               if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
               // Model-output failure / timeout → RetryableBankCallError (next attempt); other provider failures → resume path.
-              const result = await callBankPacketModel(providerFactory(bankModel, bankProviderStep(attempt)), bankModel, bankSystem, user);
+              const result = await callBankPacketModel(providerFactory(bankModel, bankProviderStep(attempt)), bankModel, bankSystem, user, undefined, extra);
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
             },
