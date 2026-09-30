@@ -11,6 +11,7 @@ import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
 import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, splitLimitBlockers } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
+import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, missingPoints, parseInstructionCheck, type InstructionCheck } from "./instruction-check";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
@@ -457,7 +458,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   }
   await workflowPhase(job.step);
   if (job.step === "gate") {
-    return runGate(store, job, await rewardPolicy());
+    return runGate(store, job, await rewardPolicy(), { providerFactory, keyConfigured });
   }
 
   // Spec 2026-09-29 (tanári témafókusz): the job works on its focused copy of the shared map.
@@ -1227,7 +1228,9 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
   return { lesson: reduced, removed: [...removed.keys()] };
 }
 
-async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy = DEFAULT_REWARD_POLICY): Promise<StepOutcome> {
+type GateModels = { providerFactory: (model: string, step?: string) => IAIProvider; keyConfigured: (model: string) => boolean };
+
+async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy = DEFAULT_REWARD_POLICY, models?: GateModels): Promise<StepOutcome> {
   const rawLesson = job.output?.lesson;
   if (!rawLesson || !job.lessonId) {
     return fail(store, job, "A kapuhoz nincs lecke a jobban — a szerző lépés nem futott le.");
@@ -1362,6 +1365,40 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       logger.warn(
         `[STUDIO/GATE] A kapu hiányt mért, de az autonóm futás publikál (job ${job.id}): ${gate.reasons.join(" ")}`,
       );
+    }
+  }
+
+  // Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés pontjai a kész leckén. Hiányzó pontra EGY célzott szerzői kör
+  // (ha van keret), különben figyelmeztetés — a mérés hibája soha nem állítja meg a gyártást.
+  const ownerInstruction = typeof job.output?.ownerInstruction === "string" ? job.output.ownerInstruction.trim() : "";
+  if (ownerInstruction && skill74 && models && models.keyConfigured(INSTRUCTION_CHECK_MODEL)) {
+    try {
+      const hash = instructionCheckHash(ownerInstruction, parsed.data);
+      const cached = job.output?.instructionCheck as InstructionCheck | undefined;
+      let points = cached?.hash === hash ? cached.points : undefined;
+      if (!points) {
+        const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data);
+        const result = await callStepModel(models.providerFactory(INSTRUCTION_CHECK_MODEL, "instructionCheck"), {
+          step: "gate" as StudioStep, policy: "instructionCheck", model: INSTRUCTION_CHECK_MODEL, system: prompt.system, user: prompt.user,
+        });
+        points = parseInstructionCheck(result.json, parsed.data);
+        job.output = { ...job.output, instructionCheck: { hash, points } satisfies InstructionCheck };
+      }
+      const missing = missingPoints(points);
+      logger.info(`[STUDIO/GATE] Tanári kérés (${job.id}): ${points.length} pont, ${missing.length} hiányzik${missing.length ? `: ${missing.map((p) => p.point).join(" | ").slice(0, 400)}` : ""}`);
+      if (missing.length) {
+        const findings = missing.map((p) => ({ sectionIdx: p.section, point: p.point }));
+        const reasons = missing.map((p) => `Tanári kérés hiányzó pontja${p.section !== null ? ` (${p.section + 1}. fejezet)` : ""}: ${p.point}`);
+        if (job.round < MAX_AUTHOR_ROUNDS && repairBudget && !job.output?.instructionRepairRound) {
+          const repairGate = { ...gateOutput, ok: false, reasons: [...gateOutput.reasons, ...reasons], instruction: findings };
+          await store.saveStep(job.id, { status: "ok", output: { ...job.output, gate: repairGate, instructionRepairRound: job.round + 1 }, error: null, finishedAt: null });
+          logger.warn(`[STUDIO/GATE] Tanári kérés hiányzó pontjai → célzott szerzői javítás (${job.id}, ${job.round + 1}. kör)`);
+          return { ok: true, next: { step: "author", round: job.round + 1 } };
+        }
+        qualityNotes = appendQualityNote(qualityNotes, { reason: "instruction_missing", note: `A tanári kérés hiányzó pontjai: ${reasons.join(" | ").slice(0, 700)}`, round: job.round });
+      }
+    } catch (error) {
+      logger.warn(`[STUDIO/GATE] A tanári kérés mérése elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
     }
   }
 

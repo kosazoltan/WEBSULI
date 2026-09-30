@@ -39,7 +39,9 @@ export type AutonomousReason =
   /** Spec 2026-09-30-nem-elakado-kozzetetel: a kapu a limiten nem-ténybeli lelettel, a 95/80-as szabály szerint publikált. */
   | "gate_limit_accepted"
   /** Spec 2026-09-30-nem-elakado-kozzetetel: forrás/füzet-hivatkozás maradt a gyereknek szóló szövegben. */
-  | "source_reference";
+  | "source_reference"
+  /** Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés egy tartalmi pontja a javítás után is hiányzik. */
+  | "instruction_missing";
 
 export type AutonomousInput = {
   reason: AutonomousReason;
@@ -68,6 +70,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   lektor_incomplete: "A lektor hiányt (nem tévedést) jelzett a körlimiten — a lecke elkészült, a hiány a jegyzetekben szerepel.",
   gate_limit_accepted: "A kapu a körlimiten nem-ténybeli hiányt mért (fedettség ≥ 95/80%) — a lecke elkészült, az okok a job kimenetében.",
   source_reference: "A gyereknek szóló szövegben forrás- vagy füzethivatkozás maradt — a lecke elkészült, a helyek a job kimenetében.",
+  instruction_missing: "A tanári kérés egy vagy több pontja a javítás után is hiányzik — a lecke elkészült, a pontok a job kimenetében.",
 };
 
 /**
