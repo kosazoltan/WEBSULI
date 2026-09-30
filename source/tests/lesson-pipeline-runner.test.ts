@@ -1594,7 +1594,10 @@ test("(q2) mérve run b5d07f3d: már az első körben is csak-bank javítás jö
   assert.equal((job.output?.bankReview as { feedback: unknown[] }).feedback.length, 1);
 });
 
-test("(r) körlimitnél tanítási blokkoló mellett nincs bank-only kör: azonnali hiba", async () => {
+// Spec-változás 2026-09-30 (docs/specs/2026-09-30-nem-elakado-kozzetetel.md, D2, tulajdonosi döntés): a limiten maradt
+// tanítási TÉNYHIBA továbbra sem publikálható, de előbb EGY célzott szerzői javítás jár (ha van keret); csak az utáni
+// tényhiba buktat. Bank-only kör változatlanul nincs tanítási blokkoló mellett.
+test("(r) körlimitnél tanítási tényhiba mellett nincs bank-only kör: egy célzott szerzői javítás, utána hiba", async () => {
   const lesson = standardFusionFixture();
   lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
   const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tanítási tényhiba." },
@@ -1603,8 +1606,15 @@ test("(r) körlimitnél tanítási blokkoló mellett nincs bank-only kör: azonn
   deps.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
   deps.store.seed({ id: "mixed", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience!.version } });
   const outcome = await runPipelineStep("mixed", deps);
-  assert.equal(outcome.ok, false);
-  assert.match(deps.store.jobs.get("mixed")!.error ?? "", /A lektor 2 tartalmi javítást kér/);
+  assert.ok(outcome.ok && outcome.next.step === "author" && outcome.next.round === MAX_AUTHOR_ROUNDS + 1, `célzott szerzői kör: ${JSON.stringify(outcome)}`);
+  assert.equal(deps.store.jobs.get("mixed")!.output?.targetedLektorRepairRound, MAX_AUTHOR_ROUNDS + 1);
+
+  const again = makeDeps(JSON.stringify({ notes }));
+  again.store.maps.set("m1", { meta: MAP_META, concepts: [{ localId: "area", examWeight: "core" }] });
+  again.store.seed({ id: "mixed2", mapId: "m1", step: "lektor", round: MAX_AUTHOR_ROUNDS + 1, output: { lesson, methodVersion: lesson.experience!.version, targetedLektorRepairRound: MAX_AUTHOR_ROUNDS + 1 } });
+  const second = await runPipelineStep("mixed2", again);
+  assert.equal(second.ok, false);
+  assert.match(again.store.jobs.get("mixed2")!.error ?? "", /A lektor 2 tartalmi javítást kér — tényhiba maradt, nem publikálható/);
 });
 
 /* Spec 2026-09-19 — Studio lektor convergence across author rounds. */
@@ -2211,6 +2221,96 @@ test("spec limit-check (E2): a limiten banktétel + check blokk blokkoló → a 
   assert.deepEqual([...(job.output?.choiceGate as { removed: string[] }).removed].sort(), ["experience.quiz[4]", "sections[0].blocks[2]"]);
 });
 
+
+/* Spec 2026-09-30 (docs/specs/2026-09-30-nem-elakado-kozzetetel.md): nem elakadó közzététel. */
+test("nem-elakadó (D2): a limiten ábrára mutató blokkoló → a kapu kiveszi az ábrát, a tanítás marad, publikál", async () => {
+  const figure: Block = { kind: "animate", animKind: "process", params: { steps: ["alap és magasság", "szorzat fele"] }, caption: "A háromszög területe lépésenként", coversConceptIds: ["area"] };
+  const notes = [{ kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.2", message: "Mi hamis: az ábra rossz sorrendet mutat." }];
+  const { deps, store, job, lesson } = await limitSetup("lim-anim", notes, 3, (l) => { l.sections[0].blocks.splice(2, 0, figure); });
+  const blocksBefore = lesson.sections[0].blocks.length;
+  const reviewed = await runPipelineStep("lim-anim", deps);
+  assert.deepEqual(reviewed.ok && reviewed.next, { step: "gate", round: MAX_AUTHOR_ROUNDS }, JSON.stringify(reviewed));
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  const gated = await runPipelineStep("lim-anim", deps);
+  assert.ok(gated.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  const saved = store.lessons.get(job.lessonId!)!.json as Lesson;
+  assert.equal(saved.sections[0].blocks.length, blocksBefore - 1);
+  assert.equal(saved.sections[0].blocks.some((b) => b.kind === "animate" && b.caption === figure.caption), false, "a hibás ábra nem jut a gyerekhez");
+  assert.deepEqual((job.output?.quality as { removed: string[] }).removed, ["sections[0].blocks[2]"]);
+});
+
+test("nem-elakadó (D2): a limiten hiány-jellegű tanítási jegyzet (coverage_gap) → figyelmeztetés, a 7.4 kapu publikál", async () => {
+  const notes = [{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Mi hiányzik: a magasság fogalma." }];
+  const { deps, store, job } = await limitSetup("lim-gap", notes, 3);
+  // Az előző kör UGYANEZT a fejezetet blokkolta → a konvergencia nem minősíti le; a limit-szabály dönt.
+  await store.saveNotes("lim-gap", classifyNotes([{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Előző kör: ugyanez a hiány." }]), MAX_AUTHOR_ROUNDS - 1);
+  const reviewed = await runPipelineStep("lim-gap", deps);
+  assert.deepEqual(reviewed.ok && reviewed.next, { step: "gate", round: MAX_AUTHOR_ROUNDS }, JSON.stringify(reviewed));
+  assert.ok(((job.output?.qualityNotes ?? []) as Array<{ reason: string }>).some((n) => n.reason === "lektor_incomplete"), JSON.stringify(job.output?.qualityNotes));
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  const gated = await runPipelineStep("lim-gap", deps);
+  assert.ok(gated.ok, JSON.stringify(gated));
+  assert.equal(log.length, 1);
+  assert.ok((job.output?.quality as { warnings: string[] }).warnings.some((w) => /hiány/i.test(w)));
+});
+
+test("nem-elakadó (review #151): ha a lektor vak megoldása eltér, a limiten maradt „hiány” jegyzet tényhibaként buktat", async () => {
+  const notes = [{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Mi hiányzik: a számolás." }];
+  const { deps, store, job } = await limitSetup("lim-mismatch", notes, 3);
+  job.output = { ...job.output, targetedLektorRepairRound: MAX_AUTHOR_ROUNDS }; // a célzott kör már lefutott
+  await store.saveNotes("lim-mismatch", classifyNotes([{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Előző kör: ugyanez." }]), MAX_AUTHOR_ROUNDS - 1);
+  const inner = deps.providerFactory;
+  const mismatchDeps = { ...deps, providerFactory: (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")) return provider.chat(...args);
+      return { content: JSON.stringify({ solutions: [{ task: "6 · 4 : 2", own: "12", lesson: "10", match: false }], notes }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    } } as IAIProvider;
+  } };
+  const reviewed = await runPipelineStep("lim-mismatch", mismatchDeps);
+  assert.equal(reviewed.ok, false, JSON.stringify(reviewed));
+  assert.match(job.error ?? "", /tényhiba maradt, nem publikálható/);
+  assert.equal(job.output?.limitDowngrade, false);
+});
+
+test("nem-elakadó (D1): a lektor konvergenciával leminősített jegyzete a 7.4 kapun sem buktat (limit előtt is)", async () => {
+  const notes = [{ kind: "coverage_gap", subkind: "core", blockPath: "sections.0.blocks.0", message: "Késői, új fejezeti hiány." }];
+  const { deps, store, job } = await limitSetup("lim-conv", notes, 3);
+  job.round = 1;
+  await store.saveNotes("lim-conv", classifyNotes([{ kind: "coverage_gap", subkind: "core", blockPath: "sections.9.blocks.0", message: "Előző kör, másik fejezet." }]), 0);
+  const reviewed = await runPipelineStep("lim-conv", deps);
+  assert.deepEqual(reviewed.ok && reviewed.next, { step: "gate", round: 1 }, JSON.stringify(reviewed));
+  job.step = "gate"; job.status = "running";
+  const log = published(store);
+  const gated = await runPipelineStep("lim-conv", deps);
+  assert.ok(gated.ok, `a konvergenciával leminősített jegyzet nem buktat: ${JSON.stringify(gated)} ${job.error ?? ""}`);
+  assert.equal(log.length, 1);
+});
+
+test("nem-elakadó (D3): a kapu a limiten csak nem-ténybeli lelettel (megalapozatlan címke), a célzott javítás után → publikál figyelmeztetéssel", async () => {
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept, { localId: "idegen", term: "Pitagorasz-tétel", examWeight: "extra" } as MapConcept];
+  lesson.experience = await buildLessonExperience(lesson, [concepts[0]], { call: async () => standardFusionFixture().experience! });
+  lesson.sections[0].blocks.splice(lesson.sections[0].blocks.length - 1, 0, { kind: "check", question: "Melyik állítás igaz a fenti számolásra?", options: ["Az első", "A második"], correctIndex: 0, feedbackPerOption: ["Igen.", "Nem."], coversConceptIds: ["idegen"] });
+  const deps = makeDeps(JSON.stringify({ notes: [] }));
+  deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+  // A célzott kapu-javítás már lefutott (jobonként egyszer) — innen a 95/80-as szabály dönt.
+  deps.store.seed({ id: "gate-accept", mapId: "m1", lessonId: "lesson-ga", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version, targetedGateRepairRound: MAX_AUTHOR_ROUNDS } });
+  deps.store.lessons.set("lesson-ga", { id: "lesson-ga", mapId: "m1", json: lesson });
+  const reviewed = await runPipelineStep("gate-accept", deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "gate", JSON.stringify(reviewed));
+  await advanceJob("gate-accept", reviewed.next, { status: "running" }, deps);
+  const log = published(deps.store);
+  const gated = await runPipelineStep("gate-accept", deps);
+  const job = deps.store.jobs.get("gate-accept")!;
+  assert.ok(gated.ok, `publikál: ${JSON.stringify(gated)} ${job.error ?? ""}`);
+  assert.equal(log.length, 1);
+  const notes = job.output?.qualityNotes as Array<{ reason: string; note: string }>;
+  assert.ok(notes.some((n) => n.reason === "gate_limit_accepted" && /core 100%/.test(n.note)), JSON.stringify(notes));
+});
 
 test("spec kapu-proba (utómérés, élő job 9ef52e4f): a limit ELŐTT az elérhetetlen Próba nem kapcsol ki — a szerző pótolja a kérdéseket", async () => {
   const { deps } = await gateAtLimitSetup("proba-early", (l) => {

@@ -33,7 +33,13 @@ export type AutonomousReason =
   /** A publikálási kapu (séma + fedettség) elutasította a leckét. */
   | "gate_rejected"
   /** Technikai hiba: modellhívás, zod-séma, DB. */
-  | "step_error";
+  | "step_error"
+  /** Spec 2026-09-30-nem-elakado-kozzetetel: a limiten hiány-jellegű (nem hamis) tanítási jegyzet figyelmeztetésként. */
+  | "lektor_incomplete"
+  /** Spec 2026-09-30-nem-elakado-kozzetetel: a kapu a limiten nem-ténybeli lelettel, a 95/80-as szabály szerint publikált. */
+  | "gate_limit_accepted"
+  /** Spec 2026-09-30-nem-elakado-kozzetetel: forrás/füzet-hivatkozás maradt a gyereknek szóló szövegben. */
+  | "source_reference";
 
 export type AutonomousInput = {
   reason: AutonomousReason;
@@ -59,6 +65,9 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   gate_rejected:
     "A publikálási kapu a gépi javító körök után is hiányt mért — a lecke elkészült, " +
     "a kapu indoklása a job kimenetében szerepel.",
+  lektor_incomplete: "A lektor hiányt (nem tévedést) jelzett a körlimiten — a lecke elkészült, a hiány a jegyzetekben szerepel.",
+  gate_limit_accepted: "A kapu a körlimiten nem-ténybeli hiányt mért (fedettség ≥ 95/80%) — a lecke elkészült, az okok a job kimenetében.",
+  source_reference: "A gyereknek szóló szövegben forrás- vagy füzethivatkozás maradt — a lecke elkészült, a helyek a job kimenetében.",
 };
 
 /**

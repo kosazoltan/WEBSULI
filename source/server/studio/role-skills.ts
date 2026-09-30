@@ -164,6 +164,7 @@ Kizárólag JSON: { "methods": [], "tasks": [], "quiz": [], "glossary": [] } —
 6. Javításnál: csak a megnevezett tételeket add vissza eredeti id-val, minden mezővel; csoportot vagy alakot törölni, csoportokat összevonni tilos.
 ## Tilalmak
 - Csomagon kívüli fogalom kérdezése; a korábbi csomagok kérdéseinek ismétlése; a tanításban nem szereplő tény.
+- Hivatkozás a forrásra, füzetre, tankönyvre („a forrás szerint”, „a füzetben szerepel”): a gyerek nem látja — a tartalmat közvetlenül állítsd.
 - Önkényes mintafelsorolás „bármely N példa" feladatban; ellentétes jelentések egy szinonimacsoportban; egész mondat szinonimaként.
 - Új id, tétel törlése, próza a JSON körül.
 ## Önellenőrzés a válasz előtt

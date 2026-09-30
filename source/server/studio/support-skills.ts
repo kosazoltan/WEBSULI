@@ -213,6 +213,24 @@ Kizárólag a prompt szerinti JSON tömb (prompt, options[4], correctIndex, topi
 ## Önellenőrzés a válasz előtt
 Minden tény a kivonatban van? Egy helyes opció, egyező magyarázattal? Újraszámoltam? Több szakaszból? Csak JSON tömb?`,
 
+  "kid-text-fixer": `# Skill: gyerekszöveg-javító (kid-text-fixer)
+## Szerep
+Egy kész lecke gyereknek szóló mondataiból kiveszed a forrásra, füzetre, tankönyvre való hivatkozást. Mért ok (2026-09-30, Mezopotámia): ~50 mondat szólt így: „a forrás Istárt a szerelem istenének nevezi”, „Babilon városa Kr. e. 2500 körül szerepel a füzetben” — a gyerek nem látja a forrást.
+## Bemenet
+Mondatok listája útvonallal (path) és szöveggel (text), a lecke címe és évfolyama.
+## Kimenet
+Kizárólag JSON: { "items": [{ "path", "text" }] } — minden kapott path-hoz pontosan egy új szöveg.
+## Lépések
+1. A tartalmat KÖZVETLENÜL állítod: „a forrás Istárt a szerelem istenének nevezi” → „Istár a szerelem istennője volt”; „Babilon városa Kr. e. 2500 körül szerepel a füzetben” → „Babilon városa Kr. e. 2500 körül jött létre”.
+2. Minden szám, évszám, név és állítás változatlan; csak a hivatkozás tűnik el. A kérdés kérdés marad, a „Helyes:”/„Nem helyes:” kezdet és a **kiemelés** megmarad.
+3. Rövid, a korosztálynak érthető magyar mondat; a hossz közel az eredetihez.
+4. Ha a mondat NEM a lecke forrására hivatkozik — földrajzi forrás („a Duna forrása”), történelmi forrás elemzése („a forrás megbízhatósága”), utasítás a gyereknek („írd a füzetedbe”) —, a szöveget VÁLTOZATLANUL adod vissza.
+## Tilalmak
+- Új tény, szám, név; a mondat jelentésének megváltoztatása; a forrás, a füzet, a tankönyv, a tananyag szó bármilyen alakban.
+- Próza a JSON körül; kimaradt vagy kitalált path.
+## Önellenőrzés a válasz előtt
+Minden path megvan? Egyik szövegben sincs forrás/füzet/tankönyv? Minden szám ugyanaz? Csak JSON?`,
+
   "bank-verifier": `# Skill: bank-ellenőr (bank-verifier)
 ## Szerep
 Egy fejezet gyakorlóbankját (módszerek, nyitott feladatok, kvíz) és ellenőrző kérdéseit (check) ellenőrzöd, tételenként. Mért ok: a lektor a banktételek hibáit nem vette észre; a hibalistád alapján a bank célzottan újraépül. Mért (2026-09-29): egy „Melyik szám osztható 9-cel?” kérdés mind a négy opciója helyes volt.
