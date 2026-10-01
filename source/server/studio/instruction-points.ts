@@ -14,7 +14,7 @@ import { withSupportSkill } from "./support-skills";
  * A jegyzék determinisztikus szabályai (a modell javasol, a program dönt):
  * - két FÜGGETLEN kivonat uniója a jelöltlista (teljesség);
  * - végleges pont csak `requestSpan` visszakötéssel (a kérés betűhű részlete) — enélkül a jelölt kiesik;
- * - a tanár által kizárt tartalom (`exclude`) kiesik; azonos span eltérő értelmezéssel → `ambiguous`;
+ * - a tanár által kizárt tartalom (`exclude`) kiesik; azonos span = egy pont; ellentétes, betűhű forrás-ítélet → `ambiguous`;
  * - „a forrás alátámasztja” külön ellenőrzés: betűhű idézet ÉS `supports: yes`; különben `not_in_source`;
  *   forrásszöveg nélkül `undecidable` (ok megnevezve);
  * - a keretbe (`OWNER_INSTRUCTION_FRAME`) nem férő rész `unprocessed` pontként JELÖLT, nem elhallgatott (H47/H50).
@@ -92,29 +92,6 @@ export function parseInstructionPointCandidates(json: unknown, request: string):
 
 const overlaps = (a: string, b: string) => { const x = normText(a), y = normText(b); return x.length > 0 && y.length > 0 && (x.includes(y) || y.includes(x)); };
 
-/**
- * Élő mérés (Egyiptom r3, job ba8e35bb, 2026-10-01): 27 pontból 14 lett `ambiguous`, mert a két kivonat ugyanarra a
- * kérésrészletre csak MÁS SZAVAKKAL írt pontot („A papok a társadalom egyik csoportja.” / „a társadalom csoportja:
- * papok”). A terv (§U3) az EGYMÁSNAK ELLENTMONDÓ értelmezést jelöli többértelműnek, nem az átfogalmazást. Determinisztikus
- * mérce: a jelölt akkor értelmezi ugyanazt a kérésrészletet, ha a szövege a részlet tartalmáról szól (közös, ékezet
- * nélküli szótő); ha valamelyik eltérő szövegű jelölt nem kötődik a részlethez („a piramisokat” → „A sírépítés
- * technikája”), az átértelmezés → `ambiguous`.
- */
-const foldHu = (s: string) => normText(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-// Review #167: a 3 betűs rövidítés (DNS, ENSZ-alak) is szótő; a gyakori 3 betűs kötőszavak nem.
-const SHORT_STOP = new Set(["egy", "meg", "nem", "van", "sem", "fel", "mar", "ami", "aki", "ott", "itt", "ezt", "azt", "kis"]);
-const words = (s: string) => foldHu(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-const stems = (s: string) => words(s).filter((w) => w.length >= 4 || (w.length === 3 && !SHORT_STOP.has(w))).map((w) => w.slice(0, 5));
-const wordHit = (st: string, text: string) => st.length >= 4 ? text.includes(st) : words(text).includes(st);
-function anchoredToSpan(text: string, span: string): boolean {
-  const t = foldHu(text), r = foldHu(span);
-  return stems(text).some((st) => wordHit(st, r)) || stems(span).some((st) => wordHit(st, t));
-}
-/** Közös szótő két jelölt szövege között (a részlethez nem kötődő, de a kötött jelölttel azonos tartalmú átfogalmazás). */
-const sharesStem = (a: string, b: string) => { const fb = foldHu(b); return stems(a).some((st) => wordHit(st, fb)); };
-/** Review #167 (P1): az ellentétes állítás (tagadás) közös témaszó mellett is ellentmondó értelmezés. */
-const NEGATION = new Set(["nem", "sem", "soha", "sehol", "nincs", "nincsen", "sincs", "se", "ne"]);
-const negated = (s: string) => words(s).some((w) => NEGATION.has(w));
 
 /**
  * Betűhű idézet a forrásból. Élő mérés (ba8e35bb): a „papiruszra írtak” felsorolás-tétel (16 betű) a 20 betűs alsó határ
@@ -138,28 +115,21 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
   const sourceLines = new Set((sourceText ?? "").split(/\r?\n/).map(lineKey).filter(Boolean));
   // Review #161 (Sourcery): a tanár kizárása akkor is a jegyzék része (átláthatóság), ha nincs vele átfedő tanítandó jelölt.
   const excluded: string[] = exclusions.map((e) => e.text).filter((t, i, arr) => arr.indexOf(t) === i);
-  const byId = new Map<string, { texts: Set<string>; candidates: PointCandidate[] }>();
+  const byId = new Map<string, { candidates: PointCandidate[] }>();
   const seenText = new Set<string>();
   for (const c of all) {
     if (c.kind !== "teach") continue;
     if (exclusions.some((e) => overlaps(e.text, c.text) || overlaps(e.requestSpan, c.requestSpan) || overlaps(e.text, c.requestSpan))) { if (!excluded.includes(c.text)) excluded.push(c.text); continue; }
     const id = pointId(c.requestSpan);
     const entry = byId.get(id);
-    if (entry) { entry.texts.add(normText(c.text)); entry.candidates.push(c); continue; }
+    if (entry) { entry.candidates.push(c); continue; }
     if (seenText.has(normText(c.text))) continue; // ugyanaz a pont másik spanből — nem két pont
     seenText.add(normText(c.text));
-    byId.set(id, { texts: new Set([normText(c.text)]), candidates: [c] });
+    byId.set(id, { candidates: [c] });
   }
   const haystack = normText(frame.processed);
   const points: InventoryPoint[] = [...byId.entries()].map(([id, entry]) => {
     const first = entry.candidates[0];
-    const texts = [...entry.texts];
-    const reworded = texts.length > 1 && !texts.every((t) => texts.every((u) => t === u || t.includes(u) || u.includes(t)));
-    // Ellentmondó értelmezés: (a) eltérő polaritás (tagadás); (b) eltérő szövegű jelölt, amely sem a részlethez, sem egy
-    // részlethez kötött jelölt szövegéhez nem kötődik (közös szótő).
-    const anchored = entry.candidates.filter((c) => anchoredToSpan(c.text, c.requestSpan));
-    const polarity = new Set(entry.candidates.map((c) => negated(c.text)));
-    const contradictory = polarity.size > 1 || (reworded && entry.candidates.some((c) => !anchored.includes(c) && !anchored.some((a) => sharesStem(c.text, a.text))));
     // Review #161 (Codex P1 / Sourcery): csak a KIMONDOTT `supports: "yes"` igazol — a betűhű idézet önmagában a témát
     // érintheti (H34); a hiányzó ítélet ellenőrző-hiba → eldöntetlen, nem igazolt.
     const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && verbatimInSource(c.sourceQuote, source, sourceLines));
@@ -167,7 +137,11 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
     // A tanítandó szöveg az IGAZOLT értelmezés megfogalmazása (ha van ilyen), különben az első jelölté.
     const shown = quoted && quoted.supports === "yes" ? quoted : first;
     const base = { id, text: shown.text, requestSpan: first.requestSpan, processing: "processed" as const };
-    if (contradictory) return { ...base, content: "ambiguous" as const, reason: `két kivonat másképp értelmezi: ${texts.join(" / ").slice(0, 200)}` };
+    // Spec-módosítás 2026-10-01 (U3, tulajdonosi jóváhagyás): az azonos kérésrészlethez tartozó jelöltek EGY pont (a szöveg
+    // átfogalmazása nem ellentmondás — élő mérés ba8e35bb: 14/27 hamis „ambiguous”); többértelmű csak akkor, ha a két kivonat
+    // betűhű idézettel ELLENTÉTES forrás-ítéletet ad (supports yes és no).
+    const contradictory = verifiedQuotes.some((c) => c.supports === "yes") && verifiedQuotes.some((c) => c.supports === "no");
+    if (contradictory) return { ...base, content: "ambiguous" as const, reason: `a két kivonat ellentétes forrás-ítéletet ad: ${[...new Set(entry.candidates.map((c) => c.text))].join(" / ").slice(0, 200)}` };
     if (!source) return { ...base, content: "undecidable" as const, reason: "nincs forrásszöveg, a pont nem igazolható" };
     if (quoted && quoted.supports === "yes") return { ...base, content: "pending" as const, sourceQuote: quoted.sourceQuote!, supports: "yes" as const, ...(quoted.reason ? { reason: quoted.reason } : {}) };
     if (quoted && quoted.supports === "no") return { ...base, content: "not_in_source" as const, sourceQuote: quoted.sourceQuote!, supports: "no" as const, reason: quoted.reason ?? "az idézet a témát érinti, az állítást nem igazolja" };

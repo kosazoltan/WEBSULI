@@ -59,7 +59,7 @@ test("H47/H50: a kérés teljes szövege tárolódik; a kereten túli rész JEL�
   assert.match(buildInstructionPointsPrompt(long, "x", { title: "T", subject: "s", classroom: 5 }, 1).user, /requestTruncated/);
 });
 
-test("C14: jelölt csak betűhű requestSpan-nel marad; a kizárt tartalom kiesik; azonos span eltérő értelmezéssel többértelmű", () => {
+test("C14: jelölt csak betűhű requestSpan-nel marad; a kizárt tartalom kiesik; azonos span = egy pont (spec-módosítás 2026-10-01)", () => {
   const request = "Tanítsd a piramisokat és a fáraókat, de a múmiákat ne tanítsd. Rövid mondatokban írj.";
   const raw = parseInstructionPointCandidates({ points: [
     { text: "A piramisok", requestSpan: "a piramisokat", kind: "teach" },
@@ -85,9 +85,11 @@ test("C14: jelölt csak betűhű requestSpan-nel marad; a kizárt tartalom kiesi
   assert.ok(!inventory.points.some((p) => /múmi/i.test(p.text)));
   assert.equal(inventory.points.find((p) => p.text === "A fáraók")?.content, "pending");
   const piramis = inventory.points.find((p) => p.id === pointId("a piramisokat"))!;
-  assert.equal(piramis.content, "ambiguous", "ugyanaz a span két, egymást nem tartalmazó értelmezéssel");
-  assert.match(piramis.reason!, /két kivonat másképp értelmezi/);
-  assert.deepEqual(gapPoints(inventory).map((g) => g.id), [piramis.id]);
+  // Spec-módosítás 2026-10-01 (U3, tulajdonosi jóváhagyás): azonos span = egy pont; az átfogalmazás nem ellentmondás —
+  // a szöveg az igazolt jelölté. Többértelmű csak az ellentétes, betűhű forrás-ítélet (lásd a review #167 tesztet).
+  assert.equal(piramis.content, "pending");
+  assert.equal(piramis.text, "A sírépítés technikája");
+  assert.deepEqual(gapPoints(inventory).map((g) => g.id), []);
 });
 
 test("Egyiptom-korpusz (16 pont, valódi kérés): két kivonat uniója, forrás-igazolás külön ellenőrzéssel, hiányok a tanárnak", () => {
@@ -213,26 +215,27 @@ test("élő mérés ba8e35bb: az átfogalmazás nem többértelmű; a rövid, te
   assert.equal(by("papok").text, "A papok a társadalom egyik csoportja.", "az igazolt értelmezés szövege");
   assert.equal(by("sokistenhit").content, "pending", "„sokistenhit” / „több istenben hittek”: közös szótő a részlettel");
   assert.equal(by("a papirusz").content, "pending", "16 betűs, de teljes forrássor → igazol");
-  assert.equal(by("a piramisokat").content, "ambiguous", "a részlethez nem kötődő átértelmezés továbbra is többértelmű");
+  assert.equal(by("a piramisokat").content, "pending", "azonos span = egy pont, az igazolt jelölt szövegével (spec-módosítás 2026-10-01)");
   const hiero = by("a hieroglif írás");
   assert.equal(hiero.content, "not_in_source", "a sor RÉSZLETE (nem teljes sor, < 20 betű) nem igazol");
   assert.match(hiero.reason!, /nem igazolható betűhűen/, "nem a modell „kimondja” indoka");
 });
 
-test("review #167: tagadó ellentét többértelmű; a záró írásjeles rövid forrássor is igazol; a 3 betűs rövidítés horgony", () => {
+test("review #167: ellentétes, betűhű forrás-ítélet többértelmű; a záró írásjeles rövid forrássor is igazol; ítélet-ütközés nélkül nincs többértelműség", () => {
   const request = "a fáraó hatalma; a papirusz; a DNS";
-  const source = ["Egyiptom", "- papiruszra írtak.", "- A DNS örökítőanyag, a sejtmagban található."].join("\n");
+  const source = ["Egyiptom", "- papiruszra írtak.", "- A DNS örökítőanyag, a sejtmagban található.", "- A fáraót isteni uralkodónak tartották az egyiptomiak."].join("\n");
   const inv = buildInventory([[
-    { text: "A fáraó isteni uralkodó volt.", requestSpan: "a fáraó hatalma", kind: "teach" as const },
+    { text: "A fáraó isteni uralkodó volt.", requestSpan: "a fáraó hatalma", kind: "teach" as const, sourceQuote: "A fáraót isteni uralkodónak tartották az egyiptomiak.", supports: "yes" as const },
     { text: "Papiruszra írtak.", requestSpan: "a papirusz", kind: "teach" as const, sourceQuote: "papiruszra írtak.", supports: "yes" as const },
     { text: "A DNS örökítőanyag.", requestSpan: "a DNS", kind: "teach" as const },
   ], [
-    { text: "A fáraó nem volt isteni uralkodó.", requestSpan: "a fáraó hatalma", kind: "teach" as const },
+    { text: "A fáraó nem volt isteni uralkodó.", requestSpan: "a fáraó hatalma", kind: "teach" as const, sourceQuote: "A fáraót isteni uralkodónak tartották az egyiptomiak.", supports: "no" as const },
     { text: "A dezoxiribonukleinsav hordozza az örökítő információt.", requestSpan: "a DNS", kind: "teach" as const },
   ]], request, source);
   const by = (span: string) => inv.points.find((p) => p.id === pointId(span))!;
-  assert.equal(by("a fáraó hatalma").content, "ambiguous", "közös témaszó, ellentétes állítás");
+  assert.equal(by("a fáraó hatalma").content, "ambiguous", "ugyanarra az idézetre yes és no ítélet");
+  assert.match(by("a fáraó hatalma").reason!, /ellentétes forrás-ítéletet/);
   assert.equal(by("a papirusz").content, "pending", "„papiruszra írtak.” — a záró pont nem akadály");
-  assert.notEqual(by("a DNS").content, "ambiguous", "a rövidítés horgony; a másik jelölt a kötött jelölttel közös szótövű");
+  assert.notEqual(by("a DNS").content, "ambiguous", "átfogalmazás ítélet-ütközés nélkül");
   assert.equal(inv.version, "v2-inventory", "a szemantika-váltás új verzió → a mentett jegyzék újraszámolódik");
 });
