@@ -7,3 +7,5 @@
 3. Ugyanez a #170 blokk-kivétel utáni bankigazításnál (`reconcileBankWithTeaching` után, a kapu limit-ágán).
 4. Tesztek: séma (jelölt fejezet lazít, jelöletlen nem, fogalom feladat nélkül → hiba); futtató (limit-kivétel → publikál
    jelöléssel). Ellenőrzés: tsc, eslint, teljes unit; status-sor.
+5. **1. kiterjesztés:** a jelölt fejezetben a fogalomnak 0 nyílt feladata is lehet (a felidéző+alkalmazó kvízpár kötelező); teszt: séma-eset.
+6. **2. kiterjesztés:** a jelölt fejezetben a módszer-minimum is lazul; lazítható fejezet a limit-eredetű feladat- VAGY módszer-kivétel fejezete (`resolveChoiceGate`), ill. a blokk-kivétel utáni bankigazításban a kikerült nyílt feladat vagy módszer fejezete (`reconcileBankWithTeaching().trimSections`); a minőségi jegyzet (`bank_trimmed`) mindkettőt említi. Tesztek: séma-eset, limit-eredetű módszer-kivétel, `trimSections` módszerre; ingyenes kapu-visszajátszás a d280388a jobon.

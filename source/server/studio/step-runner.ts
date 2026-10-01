@@ -1462,7 +1462,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     // Review P2: a job leckéje a lektorált EREDETI marad — a kapu újrafuttatva ugyanabból számol (idempotens).
     job.output = { ...job.output, choiceGate: { removed: choiceGate.removed },
       // Review #171: a lazított publikálás az admin minőségi jegyzetei között (JobMonitor).
-      ...(choiceGate.trimmed?.length ? { qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "bank_trimmed", note: `A limiten kivett hibás nyílt feladat után lazított fejezet-csomag: ${choiceGate.trimmed.map((i) => i + 1).join(", ")}. fejezet (fogalmanként legalább 1 nyílt feladat maradt).`, round: job.round }) } : {}) };
+      ...(choiceGate.trimmed?.length ? { qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "bank_trimmed", note: `A limiten kivett hibás nyílt feladat vagy módszer után lazított fejezet-csomag: ${choiceGate.trimmed.map((i) => i + 1).join(", ")}. fejezet (a fogalmankénti felidéző + alkalmazó kvízpár megmaradt).`, round: job.round }) } : {}) };
     logger.warn(`[STUDIO/GATE] Hibás banktétel kivéve (egyválasztós vagy a körlimiten maradt; ${job.id}): ${choiceGate.removed.join(", ")}`);
   }
 
