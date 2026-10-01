@@ -57,7 +57,7 @@ node --no-warnings kanban.mjs stats                    # összesítő
 
 | # | Státusz | Tárgy |
 |---|---|---|
-| 999 | doing | SPEC(2026-09-30): utasításrendszer-rendbetétel U0–U6 + B6–B8 (PR #158–#163+) |
+| 999 | done | SPEC(2026-09-30): utasításrendszer-rendbetétel U0–U6 + B6–B8 (PR #158–#165) + élő mérés utáni javítások (#166–#174); bizonyíték: élő Egyiptom-futás a0d0bf35 (main e2638ae) publikált, 2 kör, tanári pontok 13/13, bank-ellenőr 0 hiba |
 
 ## Állapot — 2026-09-13
 
