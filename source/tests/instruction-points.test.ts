@@ -191,3 +191,30 @@ test("gaps: a séma fogadja, a régi lecke változatlan; skillek és szerep bek�
   for (const must of ["PONTJEGYZÉKÉHEZ", "nem a címében", "MINDEN kapott id-hoz pontosan egy elem", "más fejezet szövege bizonyítékként"]) assert.ok(SUPPORT_SKILLS["instruction-checker"].includes(must), must);
   assert.ok(SUPPORT_SKILLS["instruction-points"].length < 2800 && SUPPORT_SKILLS["instruction-checker"].length < 2800);
 });
+
+test("élő mérés ba8e35bb: az átfogalmazás nem többértelmű; a rövid, teljes forrássor igazol; ellenőrizhetetlen idézetnél program-indok", () => {
+  const request = "a társadalom: fáraó, papok és hivatalnokok (írnokok), katonák; a vallás: sokistenhit, a túlvilágba vetett hit; a hieroglif írás és a papirusz; a piramisokat";
+  const source = ["Egyiptom", "- a papok a templomokban szolgáltak, ők a társadalom fontos csoportja", "- több istenben hittek, a sokistenhit jellemezte őket", "- I. Egyiptomi írás = hieroglifák", "- papiruszra írtak", "- A piramisok a fáraók sírjai voltak"].join("\n");
+  const pass1 = [
+    { text: "A papok a társadalom egyik csoportja.", requestSpan: "papok", kind: "teach" as const, sourceQuote: "a papok a templomokban szolgáltak, ők a társadalom fontos csoportja", supports: "yes" as const },
+    { text: "Az egyiptomiak sokistenhitűek voltak.", requestSpan: "sokistenhit", kind: "teach" as const, sourceQuote: "több istenben hittek, a sokistenhit jellemezte őket", supports: "yes" as const },
+    { text: "Papiruszra írtak.", requestSpan: "a papirusz", kind: "teach" as const, sourceQuote: "papiruszra írtak", supports: "yes" as const, reason: "A forrás kimondja." },
+    { text: "A piramisok", requestSpan: "a piramisokat", kind: "teach" as const },
+  ];
+  const pass2 = [
+    { text: "a társadalom csoportja: papok", requestSpan: "papok", kind: "teach" as const },
+    { text: "Az egyiptomiak több istenben hittek", requestSpan: "sokistenhit", kind: "teach" as const },
+    { text: "A sírépítés technikája", requestSpan: "a piramisokat", kind: "teach" as const, sourceQuote: "A piramisok a fáraók sírjai voltak", supports: "yes" as const },
+    { text: "A hieroglifákat papiruszra írták", requestSpan: "a hieroglif írás", kind: "teach" as const, sourceQuote: "papiruszra", supports: "yes" as const, reason: "A forrás kimondja." },
+  ];
+  const inventory = buildInventory([pass1, pass2], request, source);
+  const by = (span: string) => inventory.points.find((p) => p.id === pointId(span))!;
+  assert.equal(by("papok").content, "pending", "átfogalmazás, mindkettő a papokról szól");
+  assert.equal(by("papok").text, "A papok a társadalom egyik csoportja.", "az igazolt értelmezés szövege");
+  assert.equal(by("sokistenhit").content, "pending", "„sokistenhit” / „több istenben hittek”: közös szótő a részlettel");
+  assert.equal(by("a papirusz").content, "pending", "16 betűs, de teljes forrássor → igazol");
+  assert.equal(by("a piramisokat").content, "ambiguous", "a részlethez nem kötődő átértelmezés továbbra is többértelmű");
+  const hiero = by("a hieroglif írás");
+  assert.equal(hiero.content, "not_in_source", "a sor RÉSZLETE (nem teljes sor, < 20 betű) nem igazol");
+  assert.match(hiero.reason!, /nem igazolható betűhűen/, "nem a modell „kimondja” indoka");
+});

@@ -91,12 +91,38 @@ export function parseInstructionPointCandidates(json: unknown, request: string):
 
 const overlaps = (a: string, b: string) => { const x = normText(a), y = normText(b); return x.length > 0 && y.length > 0 && (x.includes(y) || y.includes(x)); };
 
+/**
+ * Élő mérés (Egyiptom r3, job ba8e35bb, 2026-10-01): 27 pontból 14 lett `ambiguous`, mert a két kivonat ugyanarra a
+ * kérésrészletre csak MÁS SZAVAKKAL írt pontot („A papok a társadalom egyik csoportja.” / „a társadalom csoportja:
+ * papok”). A terv (§U3) az EGYMÁSNAK ELLENTMONDÓ értelmezést jelöli többértelműnek, nem az átfogalmazást. Determinisztikus
+ * mérce: a jelölt akkor értelmezi ugyanazt a kérésrészletet, ha a szövege a részlet tartalmáról szól (közös, ékezet
+ * nélküli szótő); ha valamelyik eltérő szövegű jelölt nem kötődik a részlethez („a piramisokat” → „A sírépítés
+ * technikája”), az átértelmezés → `ambiguous`.
+ */
+const foldHu = (s: string) => normText(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const stems = (s: string) => foldHu(s).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4).map((w) => w.slice(0, 5));
+function anchoredToSpan(text: string, span: string): boolean {
+  const t = foldHu(text), r = foldHu(span);
+  return stems(text).some((st) => r.includes(st)) || stems(span).some((st) => t.includes(st));
+}
+
+/**
+ * Betűhű idézet a forrásból. Élő mérés (ba8e35bb): a „papiruszra írtak” felsorolás-tétel (16 betű) a 20 betűs alsó határ
+ * miatt nem igazolt — a rövid idézet akkor is igazol, ha egy TELJES forrássor / felsorolás-tétel betűhű másolata.
+ */
+function verbatimInSource(quote: string, source: string, sourceLines: ReadonlySet<string>): boolean {
+  const q = normText(quote);
+  if (!source.includes(q)) return false;
+  return alnum(q).length >= 20 || (alnum(q).length >= 8 && sourceLines.has(q));
+}
+
 /** A független kivonatok uniójából a végleges, állapotolt jegyzék. */
 export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidate>>, request: string, sourceText: string | null | undefined, hash = inventoryHash(request, sourceText)): InstructionInventory {
   const frame = requestFrames(request);
   const all = passes.flat();
   const exclusions = all.filter((c) => c.kind === "exclude");
   const source = sourceText?.trim() ? normText(sourceText) : "";
+  const sourceLines = new Set((sourceText ?? "").split(/\r?\n/).map((line) => normText(line.replace(/^\s*[-•*–]\s*/, "")).replace(/[.;:,]$/, "")).filter(Boolean));
   // Review #161 (Sourcery): a tanár kizárása akkor is a jegyzék része (átláthatóság), ha nincs vele átfedő tanítandó jelölt.
   const excluded: string[] = exclusions.map((e) => e.text).filter((t, i, arr) => arr.indexOf(t) === i);
   const byId = new Map<string, { texts: Set<string>; candidates: PointCandidate[] }>();
@@ -115,17 +141,23 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
   const points: InventoryPoint[] = [...byId.entries()].map(([id, entry]) => {
     const first = entry.candidates[0];
     const texts = [...entry.texts];
-    const contradictory = texts.length > 1 && !texts.every((t) => texts.every((u) => t === u || t.includes(u) || u.includes(t)));
+    const reworded = texts.length > 1 && !texts.every((t) => texts.every((u) => t === u || t.includes(u) || u.includes(t)));
+    const contradictory = reworded && entry.candidates.some((c) => !anchoredToSpan(c.text, c.requestSpan));
     // Review #161 (Codex P1 / Sourcery): csak a KIMONDOTT `supports: "yes"` igazol — a betűhű idézet önmagában a témát
     // érintheti (H34); a hiányzó ítélet ellenőrző-hiba → eldöntetlen, nem igazolt.
-    const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && alnum(normText(c.sourceQuote)).length >= 20 && source.includes(normText(c.sourceQuote)));
+    const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && verbatimInSource(c.sourceQuote, source, sourceLines));
     const quoted = verifiedQuotes.find((c) => c.supports === "yes") ?? verifiedQuotes.find((c) => c.supports === "no") ?? verifiedQuotes[0];
-    const base = { id, text: first.text, requestSpan: first.requestSpan, processing: "processed" as const };
+    // A tanítandó szöveg az IGAZOLT értelmezés megfogalmazása (ha van ilyen), különben az első jelölté.
+    const shown = quoted && quoted.supports === "yes" ? quoted : first;
+    const base = { id, text: shown.text, requestSpan: first.requestSpan, processing: "processed" as const };
     if (contradictory) return { ...base, content: "ambiguous" as const, reason: `két kivonat másképp értelmezi: ${texts.join(" / ").slice(0, 200)}` };
     if (!source) return { ...base, content: "undecidable" as const, reason: "nincs forrásszöveg, a pont nem igazolható" };
     if (quoted && quoted.supports === "yes") return { ...base, content: "pending" as const, sourceQuote: quoted.sourceQuote!, supports: "yes" as const, ...(quoted.reason ? { reason: quoted.reason } : {}) };
     if (quoted && quoted.supports === "no") return { ...base, content: "not_in_source" as const, sourceQuote: quoted.sourceQuote!, supports: "no" as const, reason: quoted.reason ?? "az idézet a témát érinti, az állítást nem igazolja" };
     if (quoted) return { ...base, content: "undecidable" as const, sourceQuote: quoted.sourceQuote!, reason: "a kivonatoló nem adott alátámasztási ítéletet (supports) az idézethez" };
+    // A modell „a forrás kimondja” indoka nem jelenhet meg ellenőrizhetetlen idézet mellett (mért: félrevezető hiány-ok).
+    const claimed = entry.candidates.find((c) => c.supports === "yes" && c.sourceQuote);
+    if (claimed) return { ...base, content: "not_in_source" as const, reason: `a forrás-idézet nem igazolható betűhűen: „${claimed.sourceQuote!.slice(0, 120)}”` };
     return { ...base, content: "not_in_source" as const, reason: first.reason ?? "nincs betűhű forrás-idézet" };
   }).sort((a, b) => haystack.indexOf(normText(a.requestSpan)) - haystack.indexOf(normText(b.requestSpan)));
   if (frame.truncated) points.push({ id: "pt-unprocessed", text: `A kérés feldolgozatlan része (${frame.rest.length} karakter a ${OWNER_INSTRUCTION_FRAME} karakteres kereten túl)`, requestSpan: frame.rest.slice(0, 160), processing: "unprocessed", content: "undecidable", reason: "kereten túl, nem feldolgozott" });
