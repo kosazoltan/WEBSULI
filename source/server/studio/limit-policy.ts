@@ -64,9 +64,9 @@ export function removablePath(lesson: Lesson, blockPath: string | null | undefin
  * fejezet már nem tanítja (explain/example címke); a bankterv a kivétel utáni leckéből újraszámolódik. Mért (f5c23de2): a bank a
  * kivett, megalapozatlan blokkokra épült, a bankkapu ezért elutasított.
  */
-export function reconcileBankWithTeaching(lesson: Lesson): { lesson: Lesson; removedItems: string[] } {
+export function reconcileBankWithTeaching(lesson: Lesson): { lesson: Lesson; removedItems: string[]; taskSections: number[] } {
   const experience = lesson.experience;
-  if (!experience) return { lesson, removedItems: [] };
+  if (!experience) return { lesson, removedItems: [], taskSections: [] };
   const taught = lesson.sections.map((section) => new Set(section.blocks.flatMap((b) => (b.kind === "explain" || b.kind === "example" ? b.coversConceptIds : []))));
   const removedItems: string[] = [];
   const keep = <T extends { id: string; sectionIndex: number; coversConceptIds: string[] }>(items: T[]) => items.filter((item) => {
@@ -74,11 +74,25 @@ export function reconcileBankWithTeaching(lesson: Lesson): { lesson: Lesson; rem
     if (!ok) removedItems.push(item.id);
     return ok;
   });
-  const next = { ...experience, methods: keep(experience.methods), tasks: keep(experience.tasks), quiz: keep(experience.quiz) };
-  if (!removedItems.length) return { lesson, removedItems };
+  const tasks = keep(experience.tasks);
+  const taskSections = [...new Set(experience.tasks.filter((t) => !tasks.includes(t)).map((t) => t.sectionIndex))];
+  const next = { ...experience, methods: keep(experience.methods), tasks, quiz: keep(experience.quiz) };
+  if (!removedItems.length) return { lesson, removedItems, taskSections };
   const reconciled: Lesson = { ...lesson, experience: next };
-  if (experience.bankPlan) reconciled.experience = { ...next, bankPlan: planLessonBank(reconciled, experience.version) };
-  return { lesson: reconciled, removedItems };
+  if (experience.bankPlan) {
+    // A korábbi lazítás-jelölés (spec 2026-10-01-limit-csomag-lazitas) az újraszámolt bankterven is megmarad.
+    const kept = experience.bankPlan.trimmedSections?.filter((i) => i < lesson.sections.length);
+    reconciled.experience = { ...next, bankPlan: { ...planLessonBank(reconciled, experience.version), ...(kept?.length ? { trimmedSections: kept } : {}) } };
+  }
+  return { lesson: reconciled, removedItems, taskSections };
+}
+
+/** Spec 2026-10-01-limit-csomag-lazitas: a megadott fejezetek csomagja lazított (a bankterv jelölése; csak kivételkor). */
+export function withTrimmedSections(lesson: Lesson, sections: number[]): Lesson {
+  const plan = lesson.experience?.bankPlan;
+  if (!plan || !sections.length) return lesson;
+  const trimmedSections = [...new Set([...(plan.trimmedSections ?? []), ...sections])].sort((a, b) => a - b);
+  return { ...lesson, experience: { ...lesson.experience!, bankPlan: { ...plan, trimmedSections } } };
 }
 
 export type LimitAcceptance = { ok: boolean; lesson: Lesson; core: number; supporting: number; stripped: number; removedBlocks: string[]; reason?: string };

@@ -72,6 +72,8 @@ export const bankUnitSchema = z.object({
 });
 export const bankPlanSchema = z.object({
   units: z.array(bankUnitSchema).min(1).max(80), taskRound: z.number().int().min(1).max(15), quizRound: z.number().int().min(1).max(25),
+  /** Spec 2026-10-01-limit-csomag-lazitas: a limiten tétel-kivétel után lazított fejezetek (csak a kapu állítja). */
+  trimmedSections: z.array(z.number().int().min(0)).max(80).optional(),
 });
 export const experiencePacketSchema = z.object({
   version: z.enum([LEGACY_LESSON_METHOD_VERSION, PREVIOUS_LESSON_METHOD_VERSION, COMPACT_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION]), theme: z.enum(EXPERIENCE_THEMES),
@@ -110,7 +112,10 @@ export const experiencePacketSchema = z.object({
         const methods = e.methods.filter(belongs), tasks = e.tasks.filter(belongs), quiz = e.quiz.filter(belongs);
         if ((e.version === LESSON_METHOD_VERSION ? methods.length < 2 : methods.length !== 2) || new Set(methods.map(m => m.kind)).size < 2) ctx.addIssue({ code: "custom", message: `A ${unit.sectionIndex + 1}. fejezet (sectionIndex=${unit.sectionIndex}) csomagjához legalább két különböző, releváns módszer kell.` });
         const taskMinimum = Math.max(2, unit.conceptIds.length), quizMinimum = unit.conceptIds.length * 2;
-        if ((e.version !== PREVIOUS_LESSON_METHOD_VERSION ? tasks.length < taskMinimum : tasks.length !== taskMinimum) || !tasks.some(t => t.mode === "oral") || !tasks.some(t => t.mode === "written")) ctx.addIssue({ code: "custom", message: "A nyílt bank mérete, írásos vagy szóbeli változata hiányos." });
+        // Spec 2026-10-01-limit-csomag-lazitas: a jelölt fejezetben a nyílt feladat darab/pár-követelménye kimarad; a
+        // fogalmankénti „nincs nyílt feladat” ellenőrzés (lent) marad.
+        const trimmed = plan.trimmedSections?.includes(unit.sectionIndex) ?? false;
+        if (!trimmed && ((e.version !== PREVIOUS_LESSON_METHOD_VERSION ? tasks.length < taskMinimum : tasks.length !== taskMinimum) || !tasks.some(t => t.mode === "oral") || !tasks.some(t => t.mode === "written"))) ctx.addIssue({ code: "custom", message: "A nyílt bank mérete, írásos vagy szóbeli változata hiányos." });
         if (e.version !== PREVIOUS_LESSON_METHOD_VERSION ? quiz.length < quizMinimum : quiz.length !== quizMinimum) ctx.addIssue({ code: "custom", message: "Fogalmanként legalább két kvízkérdés szükséges." });
         for (const id of unit.conceptIds) {
           if (!tasks.some(t => t.coversConceptIds.includes(id))) ctx.addIssue({ code: "custom", message: `${id}: nincs nyílt feladat.` });

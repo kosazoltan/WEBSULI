@@ -9,7 +9,7 @@ import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
-import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, reconcileBankWithTeaching, splitLimitBlockers } from "./limit-policy";
+import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, reconcileBankWithTeaching, splitLimitBlockers, withTrimmedSections } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
 import { requireRoleForStep } from "../../shared/instruction-bundles/roles";
 import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, parseInventoryCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
@@ -1411,7 +1411,7 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
   const all = [...flags.values()].join("; ");
   if (blocking.length) return { error: `Egyválasztós hiba maradt a leckében, nem publikálható (pontosan egy helyes opció kell): ${blocking.join("; ")}` };
   const experience = lesson.experience!;
-  const reduced: Lesson = { ...lesson,
+  let reduced: Lesson = { ...lesson,
     sections: checkBlocks.size
       ? lesson.sections.map((section, i) => (checkBlocks.has(i) ? { ...section, blocks: section.blocks.filter((_, j) => !checkBlocks.get(i)!.has(j)) } : section))
       : lesson.sections,
@@ -1421,7 +1421,14 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
     methods: experience.methods.filter((_, i) => !byBank.methods.has(i)),
     tasks: experience.tasks.filter((_, i) => !byBank.tasks.has(i)),
   } };
-  const after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
+  let after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
+  // Spec 2026-10-01-limit-csomag-lazitas (tulajdonosi döntés): a kivett nyílt feladatok fejezetében a csomag lazított (fogalmanként
+  // legalább 1 nyílt feladat marad, a többi minimum változatlan) — egyszeri újramérés a jelöléssel.
+  if (after.length && byBank.tasks.size) {
+    const trimmed = withTrimmedSections(reduced, [...byBank.tasks].map((i) => experience.tasks[i].sectionIndex));
+    const retry = [...experienceProblems(trimmed), ...verifyLessonSkillBank(trimmed.experience, trimmed.subject, trimmed.sections).problems];
+    if (!retry.length) { reduced = trimmed; after = retry; }
+  }
   if (after.length) {
     const fromLimit = limitOrigin.size > 0;
     return { error: fromLimit
@@ -1539,7 +1546,14 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         const bankFit = reconcileBankWithTeaching(probaFix.lesson);
         const reachable = { ...probaFix, lesson: bankFit.lesson };
         if (isFusionMethodVersion(job.output?.methodVersion) || reachable.lesson.experience) {
-          const bankProblems = [...experienceProblems(reachable.lesson), ...verifyLessonSkillBank(reachable.lesson.experience, reachable.lesson.subject, reachable.lesson.sections).problems];
+          const measure = (l: Lesson) => [...experienceProblems(l), ...verifyLessonSkillBank(l.experience, l.subject, l.sections).problems];
+          let bankProblems = measure(reachable.lesson);
+          // Spec 2026-10-01-limit-csomag-lazitas: a kivett nyílt feladatok fejezetében lazított csomag — egyszeri újramérés.
+          if (bankProblems.length && bankFit.taskSections.length) {
+            const trimmed = withTrimmedSections(reachable.lesson, bankFit.taskSections);
+            const retry = measure(trimmed);
+            if (!retry.length) { reachable.lesson = trimmed; bankProblems = retry; }
+          }
           if (bankProblems.length) return fail(store, job, `A megalapozatlan blokk kivétele után a fúziós bank nem felel meg — nem publikálható: ${bankProblems.join("; ")}`);
         }
         parsed.data = reachable.lesson;
