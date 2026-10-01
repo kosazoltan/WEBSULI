@@ -49,8 +49,11 @@ NEM fut típushibás adaton (mérve, zod 3.25.76; audit B szintén) — a #174 m
 `partial: true` eredmény is újrahasznosul), tanári ellenőrzés (`step-runner.ts:1625-1640`, a cache a `complete`/`missingIds`
 mezőt nem nézi). Ugyanaz az osztály, mint a #168 (átíró kihagyott tételei).
 
-**Döntés:** (a) a bankcsomag-jelölt előbb ALAK-sémán megy át (tételsémák darabszám nélkül); autofix és szabályok csak alakhelyes
-adaton; alakhiba → javító kör; a `validate` kivétele → hibaüzenet → javító kör (nem lépéshalál); az autofix típus-őrrel hív pontozót.
+**Döntés:** (a) az előfeldolgozó (autofix) szándékosan a séma előtt fut (formai hibákat javít modell-kör nélkül), ezért a
+hibaosztályt két szinten zárjuk: az autofix csak alakhelyes adaton hív pontozót (típus-őr: `sample`, `typedAnswers`), ÉS a
+determinisztikus eszköz (autofix, szabályok) bármely kivétele BUKOTT KÍSÉRLET (javító kör), nem a lépés halála. A konkrét
+`.trim()`-összeomlást a #174 `referenceValue`-őre már megelőzi (mérve: a próbált 10 alakhiba egyike sem dob kivételt); az itteni
+javítás az osztályt zárja le (mutációval igazolva: a kivételt dobó eszköz a catch nélkül megöli a lépést, vele javító kör).
 (b) A vak megoldó és a tanári ellenőrzés gyorsítótára csak TELJES eredményt használ újra; részleges eredménynél egy újrakérés.
 
 ### 2.3 Szolgáltatói keret-átállás nem egységes
