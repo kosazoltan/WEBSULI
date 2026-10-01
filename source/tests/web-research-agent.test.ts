@@ -73,7 +73,10 @@ test("a gyűjtés HTML nélkül, letöltött forrással kész; fetch nélkül ú
   assert.equal(one.type, "retry");
   if (one.type === "retry") assert.match(one.instruction, /legalább 2 különböző/);
   assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "x", repairAttempts: 0, fetchedCount: 2 }).type, "retry");
-  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "x", repairAttempts: 1, fetchedCount: 1 }).type, "ready", "az újrakérés után a meglévővel kész");
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "x", repairAttempts: 1, fetchedCount: 1, fewSourcesRetried: true }).type, "ready", "az újrakérés után a meglévővel kész");
+  // review #176: 0 → (javítás) → 1–2 oldal: a kevés-forrásos újrakérés még jár, mert az eddigi javítás a 0-oldalas volt
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "x", repairAttempts: 1, fetchedCount: 2 }).type, "retry");
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "x", repairAttempts: 2, fetchedCount: 2 }).type, "ready", "elfogyott keretnél a meglévővel kész");
   const empty = decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "Összefoglaló.", repairAttempts: 0, fetchedCount: 0 });
   assert.equal(empty.type, "retry");
   if (empty.type === "retry") assert.doesNotMatch(empty.instruction, /HTML_START/);

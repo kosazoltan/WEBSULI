@@ -113,7 +113,7 @@ type GatherCompletion = { type: "ready" } | { type: "retry"; instruction: string
 
 /** Search and fetch only. HTML in this phase is never a finished lesson. */
 export function decideWebResearchGatherResult(
-  result: { stopReason: string | null; fullContent: string; repairAttempts: number; fetchedCount: number },
+  result: { stopReason: string | null; fullContent: string; repairAttempts: number; fetchedCount: number; fewSourcesRetried?: boolean },
 ): GatherCompletion {
   const { stopReason, repairAttempts, fetchedCount } = result;
   if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
@@ -123,8 +123,9 @@ export function decideWebResearchGatherResult(
   if (stopReason !== "end_turn") return { type: "error", message: "A keresés nem fejeződött be szabályosan. Nem készült menthető tananyag." };
   if (fetchedCount >= MIN_FETCHED_SOURCES) return { type: "ready" };
   if (fetchedCount >= 1) {
-    // 1–2 oldal: egy célzott újrakérés több forrásért; ha elfogyott a kísérlet, a meglévővel kész (nem bukik).
-    if (repairAttempts >= 1) return { type: "ready" };
+    // 1–2 oldal: EGY célzott újrakérés több forrásért (review #176: külön állapot, a 0-oldalas javítástól függetlenül);
+    // ha már lefutott vagy a javítási keret elfogyott, a meglévővel kész (nem bukik).
+    if (result.fewSourcesRetried || repairAttempts >= MAX_ARTIFACT_REPAIRS) return { type: "ready" };
     const missing = MIN_FETCHED_SOURCES - fetchedCount;
     const reason = `Csak ${fetchedCount} oldal teljes szövege töltődött le; legalább ${MIN_FETCHED_SOURCES} kell.`;
     return { type: "retry", reason, instruction: `${reason} A web_fetch eszközzel tölts le még legalább ${missing} különböző, a témához tartozó oldalt a találatok közül (tantervi, tankönyvi, NAT-hoz illő). HTML tananyagot, pontozó JavaScriptet ne írj; rövid magyar státusz megengedett.` };
