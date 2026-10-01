@@ -1585,6 +1585,30 @@ test("(q) körlimitnél csak bank-tételes blokkoló → egy animátor bankjaví
   assert.deepEqual((deps.store.jobs.get("bank-only")!.output?.choiceFlags as Array<{ path: string }>).map((f) => f.path), ["experience.quiz[3]"]);
 });
 
+test("spec 2026-10-01-kapu-javitas-bankkor: a célzott kapu-javítás körében elfogyott csak-bank körök mellett EGY saját bankkör jár", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.3", message: "A kapu-javítás új kvíztétele hibás." };
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  const round = MAX_AUTHOR_ROUNDS + 1;
+  // mért (74b63038): a két csak-bank kör már elfogyott, a kapu célzott szerzői javítása épített új bankot ebben a körben
+  deps.store.seed({ id: "gate-bank", mapId: "m1", step: "lektor", round, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version, bankOnlyRepairRounds: 2, targetedGateRepairRound: round } });
+  const first = await runPipelineStep("gate-bank", deps);
+  assert.deepEqual(first.ok && first.next, { step: "animator", round: round + 1 }, JSON.stringify(first));
+  const job = deps.store.jobs.get("gate-bank")!;
+  assert.equal(job.output?.gateBankRepairUsed, true);
+  // jobonként egyszer: a következő bankhiba már a kapuhoz megy kivételre
+  job.step = "lektor"; job.round = round + 1; job.status = "ok";
+  job.output = { ...job.output, targetedGateRepairRound: round + 1 };
+  const again = await runPipelineStep(job.id, { ...makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] })), store: deps.store });
+  assert.deepEqual(again.ok && again.next, { step: "gate", round: round + 1 }, JSON.stringify(again));
+});
+
 test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél nincs csak-bank kör — tiszta lektori hiba, nem kivétel", async () => {
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);
