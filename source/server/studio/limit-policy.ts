@@ -3,6 +3,7 @@ import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef } from "../../
 import { applyLektorConvergence, classifyNotes, type LektorNote, type RawNote } from "./lektor";
 import type { ChoiceFlag } from "./bank-verifier";
 import { computeCoverage, type CoverageGateResult, type MapConcept } from "./coverage";
+import { planLessonBank } from "../../shared/lesson-bank-plan";
 
 /**
  * Spec 2026-09-30 (docs/specs/2026-09-30-nem-elakado-kozzetetel.md), tulajdonosi döntés: a 95%-os lecke már jó; a hibás
@@ -56,6 +57,28 @@ export function removablePath(lesson: Lesson, blockPath: string | null | undefin
   const ref = checkBlockRef(blockPath);
   const kind = ref ? lesson.sections[ref.section]?.blocks[ref.block]?.kind : undefined;
   return ref && (kind === "check" || kind === "animate") ? checkBlockPath(ref) : null;
+}
+
+/**
+ * Spec 2026-10-01-limit-blokk-kivetel-bank: a blokk-kivétel után a bankból kikerül minden tétel, amelynek fogalmát a megnevezett
+ * fejezet már nem tanítja (explain/example címke); a bankterv a kivétel utáni leckéből újraszámolódik. Mért (f5c23de2): a bank a
+ * kivett, megalapozatlan blokkokra épült, a bankkapu ezért elutasított.
+ */
+export function reconcileBankWithTeaching(lesson: Lesson): { lesson: Lesson; removedItems: string[] } {
+  const experience = lesson.experience;
+  if (!experience) return { lesson, removedItems: [] };
+  const taught = lesson.sections.map((section) => new Set(section.blocks.flatMap((b) => (b.kind === "explain" || b.kind === "example" ? b.coversConceptIds : []))));
+  const removedItems: string[] = [];
+  const keep = <T extends { id: string; sectionIndex: number; coversConceptIds: string[] }>(items: T[]) => items.filter((item) => {
+    const ok = !!taught[item.sectionIndex] && item.coversConceptIds.every((id) => taught[item.sectionIndex].has(id));
+    if (!ok) removedItems.push(item.id);
+    return ok;
+  });
+  const next = { ...experience, methods: keep(experience.methods), tasks: keep(experience.tasks), quiz: keep(experience.quiz) };
+  if (!removedItems.length) return { lesson, removedItems };
+  const reconciled: Lesson = { ...lesson, experience: next };
+  if (experience.bankPlan) reconciled.experience = { ...next, bankPlan: planLessonBank(reconciled, experience.version) };
+  return { lesson: reconciled, removedItems };
 }
 
 export type LimitAcceptance = { ok: boolean; lesson: Lesson; core: number; supporting: number; stripped: number; removedBlocks: string[]; reason?: string };
