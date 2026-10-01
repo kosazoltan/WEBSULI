@@ -43,16 +43,25 @@ export const MAX_AUTHOR_ROUNDS = 2;
  * into a fake "lépés-határ" error in production (job fd62b66a, 2026-09-05).
  */
 /**
- * Spec 2026-09-19 (mérve run 525b2797): csak-bank javító körök száma jobonként. Tétel-szintű
- * bankhibáért nem dobunk el egy 70 perces leckét — de csak a workflow látogatási keretén belül (animator/lektor
- * maxVisits 4): három szerzői kör után a keret elfogy, ott a lektor dönt (élő mérés 2026-09-24, run 29a13b45).
+ * Spec 2026-10-01-javitasi-fokonyv: a körlimit-javítások EGYETLEN táblája — fajtánként limit, a javítóút lépései, és jár-e rá
+ * dinamikus (workflow) többletkeret. A döntés és a könyvelés a `repair-ledger.ts`-ben; a lánc-korlát ebből számolódik.
+ * - bankOnly: csak-bank javító kör (mérve run 525b2797: tétel-szintű bankhibáért nem dobunk el egy leckét); dinamikus keret nem jár
+ *   (élő mérés run 29a13b45: a workflow-keret elfogyása után a lektor dönt).
+ * - gateBank: a célzott kapu-javítás újraépített bankjára egy saját csak-bank kör (spec 2026-10-01-kapu-javitas-bankkor).
+ * - targetedGate / targetedLektor / instruction: jobonként egy-egy célzott szerzői javítás (spec 2026-09-30-dinamikus-keret).
  */
-export const MAX_BANK_ONLY_ROUNDS = 2;
-// + MAX_BANK_ONLY_ROUNDS bank-only repair rounds (animator → lektor → gate each).
-// + a célzott javítókörök (lektor-tényhiba, kapu-lelet, tanári kérés — jobonként egyszer-egyszer, spec 2026-09-30-dinamikus-keret).
-export const TARGETED_REPAIR_ROUNDS = 3;
-// + a kapu-javítás utáni egy csak-bank kör (spec 2026-10-01-kapu-javitas-bankkor): animator → lektor → gate.
-export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 3 * MAX_BANK_ONLY_ROUNDS + 4 * TARGETED_REPAIR_ROUNDS + 3 + 1;
+export type RepairKind = "bankOnly" | "gateBank" | "targetedGate" | "targetedLektor" | "instruction";
+export const REPAIR_KINDS: Readonly<Record<RepairKind, { limit: number; steps: readonly string[]; dynamicBudget: boolean }>> = {
+  bankOnly: { limit: 2, steps: ["animator", "lektor", "gate"], dynamicBudget: false },
+  gateBank: { limit: 1, steps: ["animator", "lektor", "gate"], dynamicBudget: true },
+  targetedGate: { limit: 1, steps: ["author", "animator", "lektor", "gate"], dynamicBudget: true },
+  targetedLektor: { limit: 1, steps: ["author", "animator", "lektor", "gate"], dynamicBudget: true },
+  instruction: { limit: 1, steps: ["author", "animator", "lektor", "gate"], dynamicBudget: true },
+};
+export const MAX_BANK_ONLY_ROUNDS = REPAIR_KINDS.bankOnly.limit;
+/** A javítások legfeljebb ennyi lánc-lépést adnak a leghosszabb legális úthoz (a táblából, nem kézzel). */
+export const REPAIR_CHAIN_STEPS = Object.values(REPAIR_KINDS).reduce((n, k) => n + k.limit * k.steps.length, 0);
+export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + REPAIR_CHAIN_STEPS + 1;
 
 export function isTerminal(step: StudioStep): boolean {
   return step === "done" || step === "error";
