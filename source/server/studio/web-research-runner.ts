@@ -121,6 +121,7 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
     let stopReason: string | null = null;
     let continuations = 0;
     let repairAttempts = 0;
+    let fewSourcesRetried = false;
     const startedAt = Date.now();
 
     restartPhaseTimer();
@@ -196,8 +197,9 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
         logger.info(`[WEB-RESEARCH] pause_turn → folytatás #${continuations}`);
         continue;
       }
-      const gather = decideWebResearchGatherResult({ stopReason, fullContent, repairAttempts, fetchedCount: fetched.size });
+      const gather = decideWebResearchGatherResult({ stopReason, fullContent, repairAttempts, fetchedCount: fetched.size, fewSourcesRetried });
       if (gather.type === "retry") {
+        if (fetched.size >= 1) fewSourcesRetried = true;
         await workflowValidationFailure(gather.reason);
         await onCandidate?.(fullContent, { problems: gather.reason });
         repairAttempts += 1;

@@ -1111,7 +1111,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             const revalidated = lessonSchema.safeParse(rewrite.lesson);
             if (revalidated.success) completedLesson = revalidated.data;
             else logger.warn(`[STUDIO] A bank forrás-hivatkozásának átírása sémát sértett (${job.id}) — az eredeti marad: ${zodIssues(revalidated.error).slice(0, 200)}`);
-            logger.info(`[STUDIO] Bank forrás-hivatkozása átírva (${job.id}): ${revalidated.success ? rewrite.rewritten : 0} mondat, ${rewrite.rejected} elutasítva, ${rewrite.needsSource} forrást igényel, ${rewrite.unreported} nem jelentett`);
+            logger.info(`[STUDIO] Bank forrás-hivatkozása átírva (${job.id}): ${revalidated.success ? rewrite.rewritten : 0} mondat, ${rewrite.rejected} elutasítva, ${rewrite.needsSource} forrást igényel, ${revalidated.success ? rewrite.neutralized : 0} semleges visszajelzésre cserélve, ${rewrite.unreported} nem jelentett`);
           } catch (error) {
             logger.warn(`[STUDIO] A bank forrás-hivatkozásának átírása elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
           }
