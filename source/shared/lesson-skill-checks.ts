@@ -3,13 +3,13 @@ import { evaluateOpenAnswer } from "./lesson-experience-score";
 import { lessonSingleChoiceProblems } from "./single-choice-check";
 import type { Lesson } from "./lesson-schema";
 
-export const LESSON_SKILL_CHECK_VERSION = "tananyag-keszito-7.4-check-1";
+export const LESSON_SKILL_CHECK_VERSION = "tananyag-keszito-7.4-check-2";
 /** Shared by runtime documentation and the publication validators; not learned/optional rules. */
 export const LESSON_SKILL_CHECK_RUNBOOK = `KÖTELEZŐ TANANYAGKÉSZÍTŐ 7.4 ELLENŐRZŐ (${LESSON_SKILL_CHECK_VERSION}):
 1. A teljes tanítás, forrás és program által megállapított évfolyam egyezzen; séma, fogalomfedettség, hogyan/miért, kidolgozott példa, fejezetenként összegzés és szemléltetés szükséges.
-2. Négy lap: Tananyag, Módszerek, Feladatok, Kvíz. Legalább 45/75 bank, 15/25 kör, mind a tíz módszertípus, két különböző kapukérdés. Fogalomhoz kötött írásbeli/szóbeli feladat és felidéző/alkalmazó kvíz; duplikált vagy tanítatlan kérdés tilos.
+2. Négy lap: Tananyag, Módszerek, Feladatok, Kvíz. Legalább 45/75 bank, 15/25 kör, mind a tíz módszertípus, két különböző kapukérdés. Körlimiten, hibás tétel/blokk kivétele után a PUBLIKÁLÁSI PADLÓ a mérce (spec 2026-10-01-gyokerok-egyben): 45/75, fogalmanként felidéző+alkalmazó kvíz, egy helyes opció, két kapukérdés; a fejezet-csomag szabályok és a tíz típus együttes megléte ekkor nem kötelező. Fogalomhoz kötött írásbeli/szóbeli feladat és felidéző/alkalmazó kvíz; duplikált vagy tanítatlan kérdés tilos.
 3. A tényleges pontozó minden saját mintára 1, üres válaszra 0 pontot adjon. Nyelvleckénél teljes szószedet és helyes TTS-nyelv kell.
-4. Független lektor ellenőrizze a teljes forráshűséget és pedagógiai minőséget, minden bankválaszt is. Hiányzó, elavult, csonkolt vagy blokkoló jelentés nem jogosít publikálásra. Javítás után új ellenőrzés kell, körlimit nem lazít kaput.
+4. Független lektor ellenőrizze a teljes forráshűséget és pedagógiai minőséget, minden bankválaszt is. Hiányzó, elavult, csonkolt vagy blokkoló jelentés nem jogosít publikálásra. Javítás után új ellenőrzés kell, körlimit tényhibát nem enged át, a bank-padlót a 2. pont szerint alkalmazza.
 5. Valódi böngészős kiadási próba: négy lap, téves/részleges/helyes válasz, új kör és eredménymegőrzés, helyi magyar font, évfolyamszínek, 320 px/álló/fekvő/asztali nézet, 44 px vezérlők, átfedés és overflow. Statikus kapu nem bizonyít böngészős sikert.
 6. Javítás külön jelölt; alkalmazás előtt mentés és frissességellenőrzés, utána tranzakciós írás és visszaolvasás. Csak mentett és visszaolvasott eredmény kész; modell-önértékelés nem bizonyíték.`;
 

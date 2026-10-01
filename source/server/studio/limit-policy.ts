@@ -83,9 +83,20 @@ export function reconcileBankWithTeaching(lesson: Lesson): { lesson: Lesson; rem
   if (experience.bankPlan) {
     // A korábbi lazítás-jelölés (spec 2026-10-01-limit-csomag-lazitas) az újraszámolt bankterven is megmarad.
     const kept = experience.bankPlan.trimmedSections?.filter((i) => i < lesson.sections.length);
-    reconciled.experience = { ...next, bankPlan: { ...planLessonBank(reconciled, experience.version), ...(kept?.length ? { trimmedSections: kept } : {}) } };
+    reconciled.experience = { ...next, bankPlan: { ...planLessonBank(reconciled, experience.version), ...(kept?.length ? { trimmedSections: kept } : {}), ...(experience.bankPlan.limitRelaxed ? { limitRelaxed: true } : {}) } };
   }
   return { lesson: reconciled, removedItems, trimSections };
+}
+
+/**
+ * Spec 2026-10-01-gyokerok-egyben (2.1): a körlimiten történt tétel-/blokk-kivétel után a bank mércéje a publikálási padló.
+ * EGY helyen, determinisztikusan: `bankPlan.limitRelaxed = true` (+ a kivétellel érintett fejezetek jelölése adatként).
+ */
+export function applyLimitRelaxation(lesson: Lesson, sections: number[] = []): Lesson {
+  const withSections = withTrimmedSections(lesson, sections);
+  const plan = withSections.experience?.bankPlan;
+  if (!plan || plan.limitRelaxed) return withSections;
+  return { ...withSections, experience: { ...withSections.experience!, bankPlan: { ...plan, limitRelaxed: true } } };
 }
 
 /** Spec 2026-10-01-limit-csomag-lazitas: a megadott fejezetek csomagja lazított (a bankterv jelölése; csak kivételkor). */

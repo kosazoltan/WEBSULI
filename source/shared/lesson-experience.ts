@@ -74,6 +74,12 @@ export const bankPlanSchema = z.object({
   units: z.array(bankUnitSchema).min(1).max(80), taskRound: z.number().int().min(1).max(15), quizRound: z.number().int().min(1).max(25),
   /** Spec 2026-10-01-limit-csomag-lazitas: a limiten tétel-kivétel után lazított fejezetek (csak a kapu állítja). */
   trimmedSections: z.array(z.number().int().min(0)).max(80).optional(),
+  /**
+   * Spec 2026-10-01-gyokerok-egyben (2.1, publikálási padló): a körlimiten történt tétel-/blokk-kivétel után a bank mércéje a
+   * padló — 45/75, fogalmanként felidéző+alkalmazó kvíz, egy helyes opció, egyediség, bankterv-konzisztencia; a fejezet-csomag
+   * szabályok és a 10 módszerfajta globális megléte nem él. Csak a kapu állítja (`applyLimitRelaxation`).
+   */
+  limitRelaxed: z.boolean().optional(),
 });
 export const experiencePacketSchema = z.object({
   version: z.enum([LEGACY_LESSON_METHOD_VERSION, PREVIOUS_LESSON_METHOD_VERSION, COMPACT_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION]), theme: z.enum(EXPERIENCE_THEMES),
@@ -111,13 +117,14 @@ export const experiencePacketSchema = z.object({
         const belongs = (item: { sectionIndex: number; coversConceptIds: string[] }) => item.sectionIndex === unit.sectionIndex && item.coversConceptIds.every(id => unit.conceptIds.includes(id));
         const methods = e.methods.filter(belongs), tasks = e.tasks.filter(belongs), quiz = e.quiz.filter(belongs);
         // Spec 2026-10-01-limit-csomag-lazitas (2. tulajdonosi kiterjesztés): a jelölt fejezetben a módszer-minimum is lazul.
-        const trimmed = plan.trimmedSections?.includes(unit.sectionIndex) ?? false;
+        const trimmed = plan.limitRelaxed === true || (plan.trimmedSections?.includes(unit.sectionIndex) ?? false);
         if (!trimmed && ((e.version === LESSON_METHOD_VERSION ? methods.length < 2 : methods.length !== 2) || new Set(methods.map(m => m.kind)).size < 2)) ctx.addIssue({ code: "custom", message: `A ${unit.sectionIndex + 1}. fejezet (sectionIndex=${unit.sectionIndex}) csomagjához legalább két különböző, releváns módszer kell.` });
         const taskMinimum = Math.max(2, unit.conceptIds.length), quizMinimum = unit.conceptIds.length * 2;
         // Spec 2026-10-01-limit-csomag-lazitas (+ tulajdonosi kiterjesztés): a jelölt fejezetben a nyílt feladat darab/pár-
         // követelménye kimarad, és egy fogalomnak 0 nyílt feladata is lehet — a felidéző + alkalmazó kvízkérdése (lent) kötelező marad.
         if (!trimmed && ((e.version !== PREVIOUS_LESSON_METHOD_VERSION ? tasks.length < taskMinimum : tasks.length !== taskMinimum) || !tasks.some(t => t.mode === "oral") || !tasks.some(t => t.mode === "written"))) ctx.addIssue({ code: "custom", message: "A nyílt bank mérete, írásos vagy szóbeli változata hiányos." });
-        if (e.version !== PREVIOUS_LESSON_METHOD_VERSION ? quiz.length < quizMinimum : quiz.length !== quizMinimum) ctx.addIssue({ code: "custom", message: "Fogalmanként legalább két kvízkérdés szükséges." });
+        // A padlón (limitRelaxed) a fejezet kvíz-minimuma nem él; a fogalmankénti felidéző+alkalmazó pár (lent) igen.
+        if (!trimmed && (e.version !== PREVIOUS_LESSON_METHOD_VERSION ? quiz.length < quizMinimum : quiz.length !== quizMinimum)) ctx.addIssue({ code: "custom", message: "Fogalmanként legalább két kvízkérdés szükséges." });
         for (const id of unit.conceptIds) {
           if (!trimmed && !tasks.some(t => t.coversConceptIds.includes(id))) ctx.addIssue({ code: "custom", message: `${id}: nincs nyílt feladat.` });
           for (const intent of ["recall", "apply"] as const) if (!quiz.some(q => q.coversConceptIds.length === 1 && q.coversConceptIds[0] === id && q.intent === intent)) ctx.addIssue({ code: "custom", message: `${id}: hiányzó ${intent} kvíz.` });
@@ -189,10 +196,11 @@ export function gateQuestionProblems(methods: { kind: string; prompt: string }[]
   return new Set(keys).size === gates.length ? [] : ["Ismétlődő kapukérdés: különböző kérdés szükséges, új azonosító nem elég."];
 }
 /** Applied independently of a supplied version at every new publication boundary. */
-export function publicationBankProblems(e: { tasks: unknown[]; quiz: unknown[]; methods: { kind: string; prompt: string }[]; bankPlan?: { taskRound: number; quizRound: number }; version: string }): string[] {
+export function publicationBankProblems(e: { tasks: unknown[]; quiz: unknown[]; methods: { kind: string; prompt: string }[]; bankPlan?: { taskRound: number; quizRound: number; limitRelaxed?: boolean }; version: string }): string[] {
   const problems: string[] = gateQuestionProblems(e.methods);
   if (e.tasks.length < LESSON_BANK_SIZES.tasks || e.quiz.length < LESSON_BANK_SIZES.quiz) problems.push("Legalább 45 szöveges feladat és 75 kvízkérdés szükséges.");
-  for (const kind of METHOD_KINDS) if (!e.methods.some(m => m.kind === kind)) problems.push(`Hiányzó módszer: ${kind}.`);
+  // Spec 2026-10-01-gyokerok-egyben (2.1): a padlón a 10 módszerfajta globális megléte nem él (a kivett tétel egyedi fajtájú lehetett).
+  if (!e.bankPlan?.limitRelaxed) for (const kind of METHOD_KINDS) if (!e.methods.some(m => m.kind === kind)) problems.push(`Hiányzó módszer: ${kind}.`);
   if (e.methods.filter(m => m.kind === "gate").length < 2) problems.push("Legalább két kapukérdés szükséges.");
   if (e.version !== LEGACY_LESSON_METHOD_VERSION && (e.bankPlan?.taskRound !== 15 || e.bankPlan?.quizRound !== 25)) problems.push("A teljes gyakorlókör 15 szöveges feladat és 25 kvízkérdés.");
   return problems;

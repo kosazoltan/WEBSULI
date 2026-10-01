@@ -134,11 +134,14 @@ export class AIProviderQuotaError extends AIProviderError {
 }
 
 /** OpenAI: 429 + insufficient_quota / credit_balance_exhausted; OpenRouter: 402 (nincs elég kredit). */
-export function isQuotaExhausted(error: { status?: number; code?: unknown; type?: unknown; error?: unknown }): boolean {
-  const body = (error.error ?? {}) as { code?: unknown; type?: unknown };
+export function isQuotaExhausted(error: { status?: number; code?: unknown; type?: unknown; error?: unknown; message?: unknown }): boolean {
+  const body = (error.error ?? {}) as { code?: unknown; type?: unknown; message?: unknown };
   const codes = [error.code, error.type, body.code, body.type].map(v => String(v ?? ""));
   if (error.status === 402) return true;
-  return error.status === 429 && codes.some(c => c === "insufficient_quota" || c === "credit_balance_exhausted");
+  if (error.status !== 429) return false;
+  if (codes.some(c => c === "insufficient_quota" || c === "credit_balance_exhausted")) return true;
+  // Spec 2026-10-01-gyokerok-egyben (2.3): az OpenAI előre fizetett számlázás üzenete (mért: „You have no credits remaining”).
+  return /no credits remaining|exceeded your current quota|insufficient[_ ]quota/i.test(`${String(error.message ?? "")} ${String(body.message ?? "")}`);
 }
 
 export class AIProviderAuthError extends AIProviderError {

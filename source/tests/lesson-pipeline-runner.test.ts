@@ -2471,7 +2471,10 @@ test("spec 2026-10-01-limit-blokk-kivetel-bank: a kivett blokk fogalmára épül
   const saved = deps.store.lessons.get("lesson-fit")!.json as Lesson;
   assert.equal(saved.sections[1].blocks.length, 1, "a megalapozatlan blokk kivéve");
   assert.ok(![...saved.experience!.methods, ...saved.experience!.tasks, ...saved.experience!.quiz].some((i) => i.sectionIndex === 1), "a 2. fejezet tételei is kikerültek");
-  assert.deepEqual(saved.experience!.bankPlan, planLessonBank(saved, bank.version), "a bankterv a kivétel utáni leckéből");
+  // Spec 2026-10-01-gyokerok-egyben (2.1): a bankterv a kivétel utáni leckéből, és a kivétel miatt a publikálási padló jelölve.
+  const { trimmedSections: _t, limitRelaxed, ...plan } = saved.experience!.bankPlan!;
+  assert.deepEqual(plan, planLessonBank(saved, bank.version), "a bankterv a kivétel utáni leckéből");
+  assert.equal(limitRelaxed, true, "a bankból kikerült tétel után a bank a padló szerint mér");
   const notes = job.output?.qualityNotes as Array<{ reason: string; note: string }>;
   assert.ok(notes.some((n) => n.reason === "gate_limit_accepted" && /6 banktétel is/.test(n.note)), JSON.stringify(notes));
 });
@@ -2714,4 +2717,61 @@ test("review #162: a forrás-hivatkozás átírása után a lecke újra a sémá
   assert.equal((await runPipelineStep("rewrite-schema", deps)).ok, true, JSON.stringify(deps.store.jobs.get("rewrite-schema")!.error));
   const saved = deps.store.jobs.get("rewrite-schema")!.output!.lesson as Lesson;
   assert.equal((saved.sections[0].blocks[0] as { text: string }).text, base.slice(0, 2600), "az érvénytelen átírás helyett az eredeti marad");
+});
+
+test("spec 2026-10-01-gyokerok-egyben (2.2b, E4): a vak megoldó RÉSZLEGES eredménye egyszer újrakérhető, utána a cache érvényes", async () => {
+  // benign (nem blokkoló) lektori jegyzet, hogy a lektor-lépés a vak megoldóig és tovább jusson; a vak megoldó kulcsa „beállítva”
+  const { deps, job } = await limitSetup("blind-partial", [{ kind: "source_conflict", subkind: "book_probably_wrong", message: "A könyv téved." }]);
+  deps.keyConfigured = () => true;
+  // a setup előre beültetett vak-megoldás cache-ét töröljük: a teszt éppen a cache szabályát méri
+  delete (job.output as Record<string, unknown>).blindSolutions;
+  const inner = deps.providerFactory;
+  let blindCalls = 0;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: blind-solver")) {
+        blindCalls++;
+        // 1. válasz: részleges (a lista nem tömb) → partial; 2. válasz: teljes
+        return { content: JSON.stringify(blindCalls === 1 ? { solutions: "nem tömb" } : { solutions: [] }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      }
+      return provider.chat(...args);
+    } } as IAIProvider;
+  };
+  const run = async () => { job.step = "lektor"; job.status = "running"; await runPipelineStep("blind-partial", { ...deps, providerFactory }); };
+  await run();
+  assert.equal(blindCalls, 1);
+  assert.equal((job.output?.blindSolutions as { partial?: boolean }).partial, true, "az első eredmény részleges");
+  await run();
+  assert.equal(blindCalls, 2, "a részleges eredmény egyszer újrakérve");
+  assert.equal((job.output?.blindSolutions as { partial?: boolean }).partial, undefined, "a második, teljes eredmény tárolva");
+  await run();
+  assert.equal(blindCalls, 2, "a teljes eredmény a cache-ből jön");
+});
+
+test("review #177 (2.2b): ha a vak megoldó újrakérése hibázik, a részleges eredmény marad és nem indul minden körben újabb próba", async () => {
+  const { deps, job } = await limitSetup("blind-retry-fail", [{ kind: "source_conflict", subkind: "book_probably_wrong", message: "A könyv téved." }]);
+  deps.keyConfigured = () => true;
+  delete (job.output as Record<string, unknown>).blindSolutions;
+  const inner = deps.providerFactory;
+  let blindCalls = 0;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: blind-solver")) {
+        blindCalls++;
+        if (blindCalls === 1) return { content: JSON.stringify({ solutions: "nem tömb" }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+        throw new Error("szolgáltatói hiba az újrakérésnél");
+      }
+      return provider.chat(...args);
+    } } as IAIProvider;
+  };
+  const run = async () => { job.step = "lektor"; job.status = "running"; await runPipelineStep("blind-retry-fail", { ...deps, providerFactory }); };
+  await run(); await run();
+  assert.equal(blindCalls, 2, "részleges → egy újrakérés (ami hibázik)");
+  const cached = job.output?.blindSolutions as { partial?: boolean; retried?: boolean };
+  assert.equal(cached.partial, true, "a részleges eredmény megmarad");
+  assert.equal(cached.retried, true, "a próbálkozás ténye tartós");
+  await run();
+  assert.equal(blindCalls, 2, "hibás újrakérés után nincs újabb fizetett próba");
 });

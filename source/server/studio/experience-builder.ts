@@ -45,7 +45,7 @@ export type ExperienceBuildDeps = {
    */
   call(system: string, user: string, attempt: number, extra?: { responseFormat?: ResponseFormatJsonSchema }): Promise<unknown>;
   /** Eszköz-javítások naplózása (bank-packet-autofix). */
-  onToolFix?(tool: string, fixes: string[]): void;
+  /** Eszköz-seam (spec 2026-10-01-gyokerok-egyben 2.2a): a determinisztikus előfeldolgozó cserélhető (teszt: kivételt dobó eszköz). */ autofix?: typeof autofixBankPacket; onToolFix?(tool: string, fixes: string[]): void;
   /** Mérve (4. mérés): a bukott bankkísérlet oka eddig csak ujjlenyomatként maradt — a hívó naplózza. */
   onAttemptFailure?(sectionIndex: number, attempt: number, reason: string): void;
   /**
@@ -413,36 +413,44 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; deps.onAttemptFailure?.(unit.sectionIndex, attempt, errors); await workflowValidationFailure(errors); continue; }
       }
       // Eszköz (2026-09-19): formai hibák kódból, a séma előtt — nem ér modell-kört.
-      const autofix = autofixBankPacket(candidate, { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds });
-      if (autofix.fixes.length) { candidate = autofix.packet; deps.onToolFix?.("bank-packet-autofix", autofix.fixes); }
+      // Spec 2026-10-01-gyokerok-egyben (2.2a): a determinisztikus eszköz (autofix, szabályok) kivétele a NYERS modell-adaton
+      // BUKOTT KÍSÉRLET (javító kör), nem a lépés halála (mért: `value.trim is not a function`, job 35370b32).
+      let toolFailure: string | undefined;
+      try {
+        const autofix = (deps.autofix ?? autofixBankPacket)(candidate, { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds });
+        if (autofix.fixes.length) { candidate = autofix.packet; deps.onToolFix?.("bank-packet-autofix", autofix.fixes); }
+      } catch (error) { toolFailure = `a csomag alakja hibás (az előfeldolgozó nem tudta értelmezni): ${error instanceof Error ? error.message : String(error)}`; }
       previous = candidate;
-      const parsed = packetSchema.safeParse(candidate);
-      const issues = parsed.success ? validate(parsed.data) : parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
+      const parsed = toolFailure ? undefined : packetSchema.safeParse(candidate);
+      let issues: string[];
+      if (toolFailure || !parsed) issues = [toolFailure ?? "a csomag alakja hibás"];
+      else if (!parsed?.success) issues = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
+      else { try { issues = validate(parsed!.data); } catch (error) { issues = [`a csomag ellenőrzése kivételt dobott (hibás alakú adat): ${error instanceof Error ? error.message : String(error)}`]; } }
       // Biztonsági szelep (regressziós futás 94a5ccf9): az aritmetikai gyanú determinisztikus, de nem
       // tévedhetetlen; az utolsó (mentő) kísérletnél egyedül nem ölheti meg a csomagot — figyelmeztetéssel
       // átmegy, a lektor pedig úgyis a forráshoz méri.
       const lastAttempt = attempt === PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS - 1;
       const arithmeticOnly = issues.length > 0 && issues.every(i => /hibás számítás/.test(i));
       // Spec 2026-09-30 (U2, H52): nem néma figyelmeztetés — nyitott lelet, amelyet a kapu kivehető tételként kezel (limit-tábla).
-      if (parsed.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
+      if (parsed?.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
       // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
       const quotaAndValidate = (p: Packet) => {
         const quota = packetSchema.safeParse(p);
         return quota.success ? validate(quota.data) : quota.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       };
-      const salvaged = parsed.success && lastAttempt && issues.length && !arithmeticOnly ? salvagePacket(parsed.data, quotaAndValidate) : null;
+      const salvaged = parsed?.success && lastAttempt && issues.length && !arithmeticOnly ? salvagePacket(parsed!.data, quotaAndValidate) : null;
       if (salvaged) deps.onToolFix?.("bank-salvage", [`${unit.sectionIndex + 1}. fejezet: a mentő kísérlet után ${salvaged.removed.length} hibás tétel kivéve (${salvaged.removed.join(", ")}), a csomag többi része átvéve`]);
-      if (parsed.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed.data;
+      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed!.data;
       else if (salvaged) packet = salvaged.packet;
       else {
         deps.onAttemptFailure?.(unit.sectionIndex, attempt, issues.join("; "));
         await workflowValidationFailure(issues.join("; "));
         errors = `${packetCounts(candidate)}; elvárt: methods=${methodKinds.length}, tasks=${taskCount}, quiz=${quizCount}. ${issues.join("; ")}`;
-        const uniqueIds = parsed.success && BANKS.every(bank => new Set(parsed.data[bank].map(item => item.id)).size === parsed.data[bank].length);
+        const uniqueIds = parsed?.success && BANKS.every(bank => new Set(parsed!.data[bank].map(item => item.id)).size === parsed!.data[bank].length);
         // Spec 2026-09-30 (U2, C9): a javítási jogosultság a hibakódból; csomagszintű hiba (darabszám, hiányzó módszer, oral/written)
         // tételcserével nem javítható → teljes újraírás, nem elvesztegetett javító kör.
-        const plan = parsed.success && uniqueIds ? repairPermissions(issues, parsed.data) : { allows: [] as RepairPermission[], packetLevel: issues };
-        repairBase = parsed.success && uniqueIds && plan.allows.length && !plan.packetLevel.length ? parsed.data : undefined;
+        const plan = parsed?.success && uniqueIds ? repairPermissions(issues, parsed!.data) : { allows: [] as RepairPermission[], packetLevel: issues };
+        repairBase = parsed?.success && uniqueIds && plan.allows.length && !plan.packetLevel.length ? parsed!.data : undefined;
         bindingRepairIds = new Set(repairBase?.tasks.filter(t => t.sectionIndex !== unit.sectionIndex || t.coversConceptIds.some(id => !unit.conceptIds.includes(id))).map(t => t.id));
         repairAllowed = repairBase ? new Map<string, string[] | "*">([
           ...[...(allowedReviewIds ?? [])].map(id => [id, "*"] as const),

@@ -1,4 +1,4 @@
-import { studioConnection } from "../ai/studio-provider";
+import { studioConnection, withQuotaFailover } from "../ai/studio-provider";
 /**
  * #163 — OCR layer for image sources (owner decision, 2026-09-05).
  *
@@ -236,7 +236,7 @@ export const OCR_ADJUDICATION_PROMPT = withRoleSkill("ocr", [
 /** The adjudication call: the image + the first read + the disputed spans. */
 export async function callOcrAdjudicator(file: ExtractorFile, model: string, first: string, disputes: OcrDisagreement[]): Promise<string> {
   const OpenAI = (await import("openai")).default;
-  const connection = studioConnection(model);
+  return withQuotaFailover(studioConnection(model), async (connection) => {
   const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 0 });
   const base = ocrRequestParams(connection.model, file.content);
   const text = `Első átirat:\n<<<\n${first}\n>>>\nEltérések (első olvasat → második olvasat):\n${disputes.slice(0, 80).map((d, n) => `${n + 1}. „${d.first}” ↔ „${d.second}”`).join("\n")}`;
@@ -251,6 +251,7 @@ export async function callOcrAdjudicator(file: ExtractorFile, model: string, fir
     return response.choices[0]?.message?.content?.trim() ?? "";
   }
   return "";
+  });
 }
 
 /** The searchable source text: base text sources + non-empty OCR transcripts. */
@@ -301,7 +302,8 @@ export function ocrVendorRequest<T extends { reasoning?: unknown }>(vendor: stri
 /** The default OCR callable: one cheap vision call per image. */
 export async function callOcrModel(file: ExtractorFile, model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
-  const connection = studioConnection(model);
+  // Spec 2026-10-01-gyokerok-egyben (2.3): kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át.
+  return withQuotaFailover(studioConnection(model), async (connection) => {
   const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
 
   const imageParams = ocrRequestParams(connection.model, file.content);
@@ -320,4 +322,5 @@ export async function callOcrModel(file: ExtractorFile, model: string): Promise<
     return response.choices[0]?.message?.content?.trim() ?? "";
   }
   return "";
+  });
 }

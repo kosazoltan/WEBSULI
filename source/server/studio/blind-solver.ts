@@ -25,7 +25,7 @@ export const BLIND_SOLVER_SYSTEM = [
 
 export type BlindSolution = { task: string; answer: string };
 /** U5 (C6/H15): a „NINCS ELÉG ADAT” tételek megőrizve (a lektor lássa, mit nem lehetett megoldani); `partial` = elemenkénti sémahiba volt. */
-export type BlindSolutions = { sourceHash: string; model: string; solutions: BlindSolution[]; notEnough?: string[]; partial?: boolean };
+export type BlindSolutions = { sourceHash: string; model: string; solutions: BlindSolution[]; notEnough?: string[]; partial?: boolean; /** Spec 2026-10-01-gyokerok-egyben (2.2b): a részleges eredmény egyszer újrakérve. */ retried?: boolean };
 
 export const sourceHashOf = (sourceText: string) => createHash("sha256").update(sourceText).digest("hex");
 
