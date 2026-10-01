@@ -77,11 +77,13 @@ export function parseReferenceExpression(expr: string): { valid: boolean; value:
 }
 
 /** Az elvárt érték száma; null, ha nem értelmezhető (a bank-ellenőrzés ezt „undecidable”-ként bukja, pontozni nem szabad). */
-export function referenceValue(value: string): number | null {
-  return parseReferenceExpression(value.trim()).value;
+// Élő mérés (job 35370b32, 2026-10-01): a modell szám típust írt a `value` mezőbe; a zod a típushiba MELLETT is lefuttatja a
+// séma `superRefine`-jét, ahol a `.trim()` kivételt dobott és az egész lépés összeomlott — a nem-szöveg érték nem értelmezhető.
+export function referenceValue(value: unknown): number | null {
+  return typeof value === "string" ? parseReferenceExpression(value.trim()).value : null;
 }
 /** `intermediate-step` referencia: a kért köztes állapot maga is a kifejezésnyelv mondata legyen (review #159: „eredmény” nem az). */
-export const isExpressionText = (value: string): boolean => parseReferenceExpression(value.trim()).valid;
+export const isExpressionText = (value: unknown): boolean => typeof value === "string" && parseReferenceExpression(value.trim()).valid;
 
 /**
  * A pontozott ablak: csak az első `words` szó (szó = szám vagy betűsor — a pontozó 1. szabálya). A típusos érték is csak
