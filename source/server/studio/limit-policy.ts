@@ -58,27 +58,33 @@ export function removablePath(lesson: Lesson, blockPath: string | null | undefin
   return ref && (kind === "check" || kind === "animate") ? checkBlockPath(ref) : null;
 }
 
-export type LimitAcceptance = { ok: boolean; lesson: Lesson; core: number; supporting: number; stripped: number };
+export type LimitAcceptance = { ok: boolean; lesson: Lesson; core: number; supporting: number; stripped: number; removedBlocks: string[]; reason?: string };
 
 /**
  * A kapu a limiten: nem-ténybeli lelet (fedettség, ív, megalapozatlan címke) esetén publikálható-e a lecke.
- * A megalapozatlan címke lekerül (ha a blokknak marad másik), a fedettség a MEGALAPOZOTT címkékből számolódik.
+ * A megalapozatlan címke lekerül, a fedettség a MEGALAPOZOTT címkékből számolódik.
+ * Spec 2026-09-30 (U6, C15/H42 — §C-L): ha egy blokk MINDEN címkéje megalapozatlan, eddig változatlanul maradt, és a
+ * valótlan címke a 95%-os arány mellett publikálódhatott. Most a címkék lekerülnek; a címke nélkül maradó nem-recap
+ * blokk (a célzott javító kör után vagyunk) KIVÉTELRE kerül, a fedettség a kivétel UTÁN mérve. Ha a kivétel üres
+ * fejezetet hagyna, a lecke nem publikálható (a fejezet egésze megalapozatlan).
  */
 export function limitAcceptance(lesson: Lesson, concepts: MapConcept[], gate: Pick<CoverageGateResult, "unknownIds" | "ungrounded">): LimitAcceptance {
   const bad = new Set(gate.ungrounded.map((u) => `${u.blockIndex}:${u.conceptId}`));
   let flat = -1;
   let stripped = 0;
+  const removedBlocks: string[] = [];
   const grounded = new Set<string>();
-  const sections = lesson.sections.map((section) => ({
+  const sections = lesson.sections.map((section, si) => ({
     ...section,
-    blocks: section.blocks.map((block) => {
+    blocks: section.blocks.flatMap((block, bi): Lesson["sections"][number]["blocks"] => {
       flat++;
-      if (!("coversConceptIds" in block)) return block;
+      if (!("coversConceptIds" in block)) return [block];
       const keep = block.coversConceptIds.filter((id) => !bad.has(`${flat}:${id}`));
       for (const id of keep) grounded.add(id);
-      if (keep.length === block.coversConceptIds.length || !keep.length) return block;
+      if (keep.length === block.coversConceptIds.length) return [block];
       stripped += block.coversConceptIds.length - keep.length;
-      return { ...block, coversConceptIds: keep };
+      if (!keep.length) { removedBlocks.push(`sections[${si}].blocks[${bi}]`); return []; }
+      return [{ ...block, coversConceptIds: keep }];
     }),
   })) as Lesson["sections"];
   const out: Lesson = stripped ? { ...lesson, sections } : lesson;
@@ -87,6 +93,8 @@ export function limitAcceptance(lesson: Lesson, concepts: MapConcept[], gate: Pi
     return of.length ? of.filter((c) => grounded.has(c.localId)).length / of.length : 1;
   };
   const core = ratio("core"), supporting = ratio("supporting");
+  const emptied = sections.findIndex((section) => section.blocks.length === 0);
+  if (emptied >= 0) return { ok: false, lesson: out, core, supporting, stripped, removedBlocks, reason: `a(z) ${emptied + 1}. fejezet minden blokkja megalapozatlan címkéjű — a kivétel után üres maradna` };
   const unknown = gate.unknownIds.length > 0 || computeCoverage(out, concepts).unknownIds.length > 0;
-  return { ok: !unknown && core >= LIMIT_CORE_MIN && supporting >= LIMIT_SUPPORTING_MIN, lesson: out, core, supporting, stripped };
+  return { ok: !unknown && core >= LIMIT_CORE_MIN && supporting >= LIMIT_SUPPORTING_MIN, lesson: out, core, supporting, stripped, removedBlocks };
 }

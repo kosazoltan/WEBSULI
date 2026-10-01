@@ -108,6 +108,17 @@ export async function loadExtractionConfig(): Promise<ExtractionConfig> {
  * 2748 karakteres forrásnál is `length`-tel vágódott le. Csonka válasznál egyszer nagyobb kerettel kérdezünk újra; csonka
  * jegyzéket továbbra sem mentünk.
  */
+/**
+ * Spec 2026-09-30 (U6, C7): a quote-javítókör fájljai — csak a hibás fogalmak saját forrásfájlja. Review #164: ha BÁRMELY
+ * hibás fogalom fájlja azonosítatlan (vegyes halmaz is), mind a fájl megy — különben annak a fogalomnak nem lenne forrása.
+ */
+export function filesForQuoteRepair<F extends { name: string }>(files: F[], failed: ReadonlyArray<{ sourceRef?: unknown }>): F[] {
+  const names = new Set(files.map((file) => file.name));
+  const refs = failed.map((concept) => (concept.sourceRef as { file?: unknown } | undefined)?.file);
+  if (!refs.length || refs.some((ref) => typeof ref !== "string" || !names.has(ref))) return files;
+  return files.filter((file) => refs.includes(file.name));
+}
+
 export const EXTRACTION_TOKEN_BUDGETS = [8192, 24576] as const;
 export async function completeWithinBudget<R extends { choices: Array<{ finish_reason?: string | null }> }>(
   create: (maxTokens: number) => Promise<R>,
@@ -219,7 +230,9 @@ export async function runExtraction(input: RunInput): Promise<string> {
   const checked = await repairSourceQuotes(covered, files, async (failed, round) => {
     await workflowFinding("source_fidelity");
     input.onPhase?.("extract", `Forrásidézetek automatikus javítása: ${failed.length} fogalom, ${round}. kör…`);
-    const result = await callExtractorModel(files, input.scope, systemPrompt, model, {
+    // Spec 2026-09-30 (U6, C7): a quote-javítókör CSAK a hibás fogalmak saját forrásfájlját kapja (eddig minden fájl újra
+    // ment); ha a hivatkozott fájl nem azonosítható, marad a teljes lista.
+    const result = await callExtractorModel(filesForQuoteRepair(files, failed), input.scope, systemPrompt, model, {
       concepts: failed,
       issues: failed.map((concept, index) => ({ index, fields: [`${concept.id}: csak a quote mezőt javítsd, a saját forrásfájljának átiratából. Ne írj át definíciót vagy azonosítót. A javítás eredménye id és quote mezőket tartalmazzon.`] })),
     });

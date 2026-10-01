@@ -24,13 +24,26 @@ export interface AIResponse {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /** Spec 2026-09-30 (U6, C10): a gyorsítótárból olvasott bemeneti tokenek (OpenAI `cached_tokens`, Anthropic `cache_read_input_tokens`). */
+    cachedTokens?: number;
+    /** Anthropic `cache_creation_input_tokens` — a gyorsítótárba írt bemeneti tokenek. */
+    cacheWriteTokens?: number;
   };
 }
 
 /** Szigorú JSON-séma válaszformátum (OpenAI Structured Outputs alak). */
 export type ResponseFormatJsonSchema = { type: "json_schema"; json_schema: { name: string; strict?: boolean; schema: Record<string, unknown>; description?: string } };
 /** Hívásonkénti beállítás a szolgáltatónak (a provider-konfig a lépésé, ez az egyes kérésé). */
-export type ChatCallOptions = { responseFormat?: ResponseFormatJsonSchema };
+export type ChatCallOptions = {
+  responseFormat?: ResponseFormatJsonSchema;
+  /** Spec 2026-09-30 (U6, C11): a kimeneti keret felülírása EGY kérésre (hosszkorlát utáni egyszeri, nagyobb keret). */
+  maxTokens?: number;
+  /**
+   * Spec 2026-09-30 (U6, C10): a rendszerutasítás első `cachePrefixChars` karaktere a stabil előtag (runbook + skill) —
+   * az ezt támogató szolgáltató (Anthropic) `cache_control`-lal jelöli; a többi figyelmen kívül hagyja.
+   */
+  cachePrefixChars?: number;
+};
 
 export interface AIProviderConfig {
   apiKey: string;
@@ -54,6 +67,8 @@ export interface AIProviderConfig {
 export interface IAIProvider {
   readonly name: string;
   readonly model: string;
+  /** Spec 2026-09-30 (U6, C11): a szolgáltató beállított kimeneti kerete (ha ismert) — a hosszkorlát-újrapróba ebből nő. */
+  readonly maxOutputTokens?: number;
   
   /**
    * Non-streaming chat completion

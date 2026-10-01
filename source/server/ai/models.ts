@@ -93,6 +93,22 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
 export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
 
 /**
+ * Spec 2026-09-30 (U6, C11): modellenkénti kimeneti plafon a hosszkorlát utáni EGYSZERI nagyobb kerethez. Forrás: az
+ * OpenRouter /models lista `top_provider.max_completion_tokens` mezője, 2026-09-30-án lekérve
+ * (`docs/specs/2026-09-30-utasitasrendszer-rendbetetel-astra/evidence-models-raw.json`). Ismeretlen modellnél nincs
+ * újrapróba (a régi viselkedés: a csonka válasz hiba). Kulcs: a gyártó-előtag és a pont/kötőjel különbség nélkül.
+ */
+const MAX_OUTPUT_BY_MODEL: Record<string, number> = {
+  "gpt-6-luna": 128_000, "gpt-6-astra": 128_000, "gpt-5-6-terra": 128_000,
+  "claude-opus-5-5": 128_000, "claude-opus-5": 128_000, "claude-sonnet-5": 128_000,
+  "glm-5-3-flash": 943_717, "grok-4-6": 450_000, "deepseek-v4-flash": 384_000, "qwen3-vl-32b-instruct": 32_768,
+};
+export function maxOutputForModel(modelId: string): number | undefined {
+  const key = modelId.replace(/^[^/]+\//, "").replace(/\./g, "-").toLowerCase();
+  return MAX_OUTPUT_BY_MODEL[key];
+}
+
+/**
  * Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): a második tartalék, csak modellhívás-hibára. A SZERZŐ szándékosan
  * nincs benne: tulajdonosi döntés 2026-09-29 (szerzomodell-gpt6-luna) — a szerző nem eshet ki a saját (openai)
  * családjából, hogy a lektor független maradjon. A lektor második tartaléka ezért sem openai.

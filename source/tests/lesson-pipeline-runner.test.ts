@@ -24,6 +24,9 @@ import { fromMapBody } from "../server/studio/from-map-body";
 import { AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import { lessonSchema, type Block, type Lesson } from "../shared/lesson-schema";
+import { experienceProblems } from "../shared/lesson-experience-validation";
+import { planLessonBank } from "../shared/lesson-bank-plan";
+import { verifyLessonSkillBank } from "../shared/lesson-skill-checks";
 import { classifyNotes, type LektorNote } from "../server/studio/lektor";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { buildLessonExperience, type ExperienceCheckpoint } from "../server/studio/experience-builder";
@@ -2348,6 +2351,34 @@ test("nem-elakadó (D3): a kapu a limiten csak nem-ténybeli lelettel (megalapoz
   assert.equal(log.length, 1);
   const notes = job.output?.qualityNotes as Array<{ reason: string; note: string }>;
   assert.ok(notes.some((n) => n.reason === "gate_limit_accepted" && /core 100%/.test(n.note)), JSON.stringify(notes));
+});
+
+test("review #164 (U6, C15): a megalapozatlan blokk kivétele után a fúziós bankkapu az ÚJ jelöltre újrafut — a bankterv eltérése buktat", async () => {
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept];
+  // A 2. fejezet egyetlen tanító blokkja megalapozatlan címkéjű: a bankterv a kivétel ELŐTT erre a fejezetre is épít.
+  lesson.sections.push({ heading: "Még egy fejezet", probaEnabled: false, blocks: [
+    { kind: "explain", text: "Egy kitalált mondat, amely semmit sem tanít a témáról.", depth: "core", readAloud: true, coversConceptIds: ["area"] },
+    { kind: "recap", bullets: ["Összefoglaló mondat."] },
+  ] } as Lesson["sections"][number]);
+  const bank = standardFusionFixture().experience!;
+  // Két csomag: a fixture tételei felváltva a két fejezethez (mindkettő az „area” fogalmat tanítja).
+  const split = <T extends { sectionIndex: number }>(items: T[]) => items.map((item, i) => ({ ...item, sectionIndex: i % 2 }));
+  lesson.experience = { ...bank, methods: split(bank.methods), tasks: split(bank.tasks), quiz: [...split(bank.quiz.filter((q) => q.intent !== "apply")), ...bank.quiz.filter((q) => q.intent === "apply").flatMap((q) => [{ ...q, sectionIndex: 0 }, { ...q, id: `${q.id}-2`, sectionIndex: 1, question: `${q.question} (második fejezet)` }])], bankPlan: planLessonBank(lesson, bank.version) };
+  assert.deepEqual([...experienceProblems(lesson), ...verifyLessonSkillBank(lesson.experience, lesson.subject, lesson.sections).problems], [], "a kivétel előtt a bank rendben");
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
+  deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+  deps.store.seed({ id: "gate-rm", mapId: "m1", lessonId: "lesson-rm", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version, targetedGateRepairRound: MAX_AUTHOR_ROUNDS } });
+  deps.store.lessons.set("lesson-rm", { id: "lesson-rm", mapId: "m1", json: lesson });
+  const reviewed = await runPipelineStep("gate-rm", deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "gate", JSON.stringify(reviewed));
+  await advanceJob("gate-rm", reviewed.next, { status: "running" }, deps);
+  const log = published(deps.store);
+  const gated = await runPipelineStep("gate-rm", deps);
+  const job = deps.store.jobs.get("gate-rm")!;
+  assert.equal(gated.ok, false, JSON.stringify(gated));
+  assert.match(job.error ?? "", /kivétele után a fúziós bank nem felel meg/);
+  assert.equal(log.length, 0);
 });
 
 /* Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés pontjai a kész leckén. */

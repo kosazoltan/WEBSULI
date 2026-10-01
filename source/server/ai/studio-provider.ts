@@ -55,6 +55,7 @@ export class QuotaFailoverProvider implements IAIProvider {
     this.name = primary.name;
     this.model = primary.model;
   }
+  get maxOutputTokens(): number | undefined { return this.primary.maxOutputTokens; }
   private route(): IAIProvider { return (this.fallback ??= this.makeFallback()); }
   /**
    * Review #160: a hívásonkénti beállítás (szigorú `responseFormat`, U2/C8) az ELSŐDLEGES (közvetlen OpenAI) útra megy

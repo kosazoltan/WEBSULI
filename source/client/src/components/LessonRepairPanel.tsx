@@ -152,6 +152,11 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
                   <li key={c.localId}>Forrás-helyesbítés: „{c.from.term ?? c.from.definition}” → „{c.term ?? c.definition}”</li>
                 ))}
                 <li>Lektori megjegyzések: {repair.reviewNotes?.length ?? 0} (blokkoló nincs)</li>
+                {(repair.staleWarnings ?? []).map((w, i) => (
+                  <li key={`stale-${i}`} className="text-amber-700 dark:text-amber-400" data-testid="lesson-repair-stale-warning">
+                    Eldöntetlen régi alak („{w.oldForm}” → „{w.newForm}”): „{w.sentence}” — nézd át alkalmazás előtt.
+                  </li>
+                ))}
               </ul>
             )}
             <div className="flex flex-wrap gap-2">

@@ -11,6 +11,8 @@ import {
   AIProviderAuthError,
   AIProviderQuotaError,
   isQuotaExhausted,
+
+  type ChatCallOptions,
 } from './AIProvider';
 
 /**
@@ -95,14 +97,18 @@ export class OpenRouterProvider implements IAIProvider {
     return this.configured;
   }
 
-  async chat(messages: AIMessage[], signal?: AbortSignal): Promise<AIResponse> {
+  /** Spec 2026-09-30 (U6): a beállított kimeneti keret; a szigorú séma (`responseFormat`) ezen az úton szándékosan nem megy. */
+  get maxOutputTokens(): number | undefined { return this.maxTokens; }
+
+  async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
     this.assertConfigured();
     try {
+      const outputBudget = options?.maxTokens ?? this.maxTokens;
       const response = await this.client.chat.completions.create(
         {
           model: this.model,
           messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
-          ...(this.maxTokens ? { max_completion_tokens: this.maxTokens } : {}),
+          ...(outputBudget ? { max_completion_tokens: outputBudget } : {}),
           ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
           ...(this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
           temperature: 0.7,
@@ -123,6 +129,7 @@ export class OpenRouterProvider implements IAIProvider {
               promptTokens: response.usage.prompt_tokens,
               completionTokens: response.usage.completion_tokens,
               totalTokens: response.usage.total_tokens,
+              ...(response.usage.prompt_tokens_details?.cached_tokens ? { cachedTokens: response.usage.prompt_tokens_details.cached_tokens } : {}),
             }
           : undefined,
       };

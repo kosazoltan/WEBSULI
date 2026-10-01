@@ -42,6 +42,8 @@ export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
 export type WorkflowVisit = {
   step: string; attempt: number; startedAt: number; finishedAt?: number;
   state: "running" | "done" | "error" | "waiting"; error?: string; tokensIn?: number; tokensOut?: number; cacheHits: number;
+  /** Spec 2026-09-30 (U6, C10): a szolgáltatói gyorsítótárból olvasott / oda írt bemeneti tokenek. */
+  cacheReadTokens?: number; cacheWriteTokens?: number;
 };
 export type WorkflowView = {
   id: string; definition: WorkflowDefinition; state: "running" | "waiting" | "ready" | "done" | "error" | "interrupted";

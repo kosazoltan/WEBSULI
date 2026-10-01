@@ -206,7 +206,7 @@ export async function workflowCheckpoint<T>(name: string, input: unknown, work: 
   return result;
 }
 
-export async function workflowUsage(usage: { prompt_tokens?: number; completion_tokens?: number; input_tokens?: number; output_tokens?: number; promptTokens?: number; completionTokens?: number } | undefined) {
+export async function workflowUsage(usage: { prompt_tokens?: number; completion_tokens?: number; input_tokens?: number; output_tokens?: number; promptTokens?: number; completionTokens?: number ; cachedTokens?: number; cacheWriteTokens?: number} | undefined) {
   const ctx = context.getStore();
   const visit = ctx?.record.view.visits.at(-1);
   if (!ctx || !visit || !usage) return;
@@ -214,6 +214,9 @@ export async function workflowUsage(usage: { prompt_tokens?: number; completion_
   const output = usage.completion_tokens ?? usage.output_tokens ?? usage.completionTokens;
   if (input !== undefined) visit.tokensIn = (visit.tokensIn ?? 0) + input;
   if (output !== undefined) visit.tokensOut = (visit.tokensOut ?? 0) + output;
+  // Spec 2026-09-30 (U6, C10): a gyorsítótár-olvasás/-írás a látogatásban — a költségmérés (D) ebből számol.
+  if (usage.cachedTokens) visit.cacheReadTokens = (visit.cacheReadTokens ?? 0) + usage.cachedTokens;
+  if (usage.cacheWriteTokens) visit.cacheWriteTokens = (visit.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
   await persist(ctx);
 }
 

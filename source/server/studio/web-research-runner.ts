@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { effortFor, FALLBACK_MODELS, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
@@ -6,7 +7,7 @@ import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { verifyTeachingVisuals } from "../improve/verify-html-teaching";
-import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
+import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowRuntimeVersion, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { hasHtmlLessonData, readRawHtmlLessonData } from "../../shared/lesson-html-data";
 import { decideWebResearchGatherResult, decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchGatherPrompt, webLessonAuthorPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
@@ -14,7 +15,7 @@ import { fetchedTeachingSources, teachingReviewEvidence, subjectiveOnlyFailures,
 import { repairWebLessonBank } from "./web-bank-repair";
 import { reviewAndRepairWebTeaching } from "./web-teaching-repair";
 import { stripJsonFences } from "../ai/OpenRouterProvider";
-import { StepModelError } from "./run-step";
+import { StepModelError, stablePrefixChars, withRunbook } from "./run-step";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, type ExperienceCheckpoint } from "./experience-builder";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import { withSupportSkill } from "./support-skills";
@@ -279,11 +280,15 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     const files = fetchedSourcesToExtractorFiles(downloaded);
     const extraction = await workflowCheckpoint("web-extract", { input, method: LESSON_METHOD_VERSION, contract: "web-extract-1", urls: downloaded.map(s => s.url) }, () => extractWebConcepts(files, { subject: input.title?.trim() || "tananyag", classroom: input.classroom }, async (system, user) => {
       const provider = createStudioProvider(extractModel, 180_000, 12_000);
+      // Review #164 (U6, C10): runtime-3-ban a runbook elöl és a stabil előtag gyorsítótár-jelölést kap, mint a
+      // `callStepModel` útján; a befagyasztott futás a régi sorrendet és jelölés nélküli hívást kapja.
+      const extractSystem = withRunbook(withSupportSkill(isFrozenBundle(workflowRuntimeVersion()) ? "web-research" : "web-extract", system), "web-extract");
+      const cachePrefixChars = isFrozenBundle(workflowRuntimeVersion()) ? 0 : stablePrefixChars(extractSystem);
       const response = await provider.chat([
-        { role: "system", content: withSupportSkill("web-research", system) + workflowSkillPrompt("web-extract") },
+        { role: "system", content: extractSystem },
         { role: "user", content: user },
-      ], controller.signal);
-      await workflowUsage({ promptTokens: response.usage?.promptTokens, completionTokens: response.usage?.completionTokens });
+      ], controller.signal, cachePrefixChars > 0 ? { cachePrefixChars } : undefined);
+      await workflowUsage(response.usage);
       if (response.finishReason === "length" || response.finishReason === "max_tokens") {
         throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
       }

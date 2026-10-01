@@ -1154,6 +1154,8 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       logger.info(`[STUDIO] Lektor önálló megoldás (${job.id}, ${job.round}. kör): ${solutions.length} feladat, ${mismatches.length} eltérés${mismatches.length ? `: ${mismatches.map((m) => `${m.task}: saját ${m.own} ↔ lecke ${m.lesson}`).join(" | ").slice(0, 600)}` : ""}`);
       if (mismatches.length && !classifyNotes(parsed.data.notes).some((n) => n.blocking)) {
         logger.warn(`[STUDIO] A lektor eltérést talált a saját megoldásában, de nem adott blokkolót (${job.id}) — önellentmondó jelentés.`);
+        // Spec 2026-09-30 (U6, §C-L): eldöntetlen eltérés → figyelmeztetés a jobban, nem bukás és nem igazolás.
+        job.output = { ...job.output, qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "solution_mismatch", note: `A lektor önálló megoldása eltér a leckétől (${mismatches.map((m) => `${m.task}: ${m.own} ↔ ${m.lesson}`).join(" | ").slice(0, 400)}), blokkoló nélkül — eldöntetlen.`, round: job.round }) };
       }
 
       const fusion = isFusionMethodVersion(job.output?.methodVersion) || !!(job.output?.lesson as Lesson | undefined)?.experience;
@@ -1510,16 +1512,30 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       // publikálunk, ha a megalapozott fedettség core ≥ 95%, supporting ≥ 80% és nincs ismeretlen azonosító.
       const acceptance = limitAcceptance(parsed.data, map.concepts, coverageGate);
       if (!acceptance.ok) {
-        return fail(store, job, `A fúziós lecke tanítása hiányos${targets && !job.output?.targetedGateRepairRound && !gateRepairBudget ? " (a célzott javításhoz nincs több lépéskeret)" : ""}: ${gate.reasons.join("; ")}`);
+        return fail(store, job, `A fúziós lecke tanítása hiányos${targets && !job.output?.targetedGateRepairRound && !gateRepairBudget ? " (a célzott javításhoz nincs több lépéskeret)" : ""}${acceptance.reason ? ` (${acceptance.reason})` : ""}: ${gate.reasons.join("; ")}`);
       }
+      let removalNote = "";
       if (acceptance.stripped) {
-        parsed.data = acceptance.lesson;
+        // Spec 2026-09-30 (U6, C15 — §C-L „közös kapu”): a kivétel utáni ÚJ jelölt teljes ellenőrzési állapota — séma, Próba-
+        // elérhetőség és ív újramérve; séma-hibás jelölt nem publikálható.
+        const reparsed = lessonSchema.safeParse(acceptance.lesson);
+        if (!reparsed.success) return fail(store, job, `A megalapozatlan blokk kivétele után a lecke alakilag hibás: ${zodIssues(reparsed.error)}`);
+        const reachable = disableUnreachableProba(reparsed.data, arcOptions);
+        // Review #164 (P1): a kivétel a bank és a tanítás kapcsolatát is megváltoztathatja (a banktétel fogalma a
+        // kivett blokkban élt) — a fúziós bankkapu az ÚJ jelöltre újrafut, hibánál a lecke nem publikálható.
+        if (isFusionMethodVersion(job.output?.methodVersion) || reachable.lesson.experience) {
+          const bankProblems = [...experienceProblems(reachable.lesson), ...verifyLessonSkillBank(reachable.lesson.experience, reachable.lesson.subject, reachable.lesson.sections).problems];
+          if (bankProblems.length) return fail(store, job, `A megalapozatlan blokk kivétele után a fúziós bank nem felel meg — nem publikálható: ${bankProblems.join("; ")}`);
+        }
+        parsed.data = reachable.lesson;
         await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
         gate.coverage = checkCoverageGate(parsed.data, map.concepts).coverage;
+        const rearc = checkLessonArc(parsed.data, arcOptions);
+        if (acceptance.removedBlocks.length) removalNote = `; ${acceptance.removedBlocks.length} teljesen megalapozatlan blokk kivéve (${acceptance.removedBlocks.join(", ").slice(0, 200)})${rearc.ok ? "" : `, az ív a kivétel után: ${rearc.reasons.join(" ").slice(0, 200)}`}${reachable.disabled.length ? `, Próba kikapcsolva: ${reachable.disabled.map((i) => i + 1).join(", ")}. fejezet` : ""}`;
       }
       qualityNotes = appendQualityNote(qualityNotes, {
         reason: "gate_limit_accepted",
-        note: `A kapu a körlimiten hiányt mért (core ${Math.round(acceptance.core * 100)}%, kiegészítő ${Math.round(acceptance.supporting * 100)}%${acceptance.stripped ? `, ${acceptance.stripped} megalapozatlan címke levéve` : ""}): ${gate.reasons.join(" ").slice(0, 600)}`,
+        note: `A kapu a körlimiten hiányt mért (core ${Math.round(acceptance.core * 100)}%, kiegészítő ${Math.round(acceptance.supporting * 100)}%${acceptance.stripped ? `, ${acceptance.stripped} megalapozatlan címke levéve` : ""}${removalNote}): ${gate.reasons.join(" ").slice(0, 600)}`,
         round: job.round,
       });
       logger.warn(`[STUDIO/GATE] Körlimit: nem-ténybeli kapu-lelet, a lecke publikál (${job.id}): core ${Math.round(acceptance.core * 100)}%, kiegészítő ${Math.round(acceptance.supporting * 100)}%`);
