@@ -41,6 +41,15 @@ test("kapu: a limiten kivett egyetlen szóbeli feladat után a lecke a jelölés
   assert.deepEqual(result.removed, [`experience.tasks[${oralIndex}]`]);
   assert.deepEqual(result.lesson.experience!.bankPlan!.trimmedSections, [0]);
   assert.equal(result.lesson.experience!.tasks.some((t) => t.mode === "oral"), false);
+  assert.deepEqual(result.trimmed, [0], "a kapu jelzi a lazítást (minőségi jegyzethez)");
+});
+
+test("review #171: nem limit-eredetű (aritmetikai) kivételnél nincs lazítás — a régi szigor marad", () => {
+  const lesson = singleOral();
+  const oralIndex = lesson.experience!.tasks.findIndex((t) => t.mode === "oral");
+  const result = resolveChoiceGate(lesson, [{ path: `experience.tasks[${oralIndex}]`, message: "Nyitott aritmetikai lelet.", origin: "arithmetic" }]);
+  assert.ok("error" in result, JSON.stringify(result));
+  assert.match(result.error, /írásos vagy szóbeli változata hiányos/);
 });
 
 test("withTrimmedSections: egyesít, rendez, bankterv nélkül változatlan", () => {

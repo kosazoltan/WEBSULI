@@ -48,6 +48,8 @@ export type AutonomousReason =
   | "outline_clamped"
   /** U5 (H49): a lektor önálló megoldásainak egy része a kereten túl volt — részleges lektorálás. */
   | "lektor_partial"
+  /** Spec 2026-10-01-limit-csomag-lazitas: a limiten a hibás nyílt feladat kivétele után a fejezet csomagja lazított. */
+  | "bank_trimmed"
   /** U5 (ábra-kapu): az ábra felirata nem a fejezet tanításából való — figyelmeztetés a mérés (§C-V/12) nélkül. */
   | "figure_check"
   /** U6 (§C-L): a lektor önálló megoldása eltér a leckétől, de nem adott blokkolót — eldöntetlen, nem igazolás. */
@@ -84,6 +86,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   instruction_gaps: "A tanári kérés egy vagy több pontját a forrás nem igazolja — a lecke ezeket nem tanítja, a pontok a job kimenetében és a panelen.",
   outline_clamped: "A tervező vázlatának egyes mezői a korláton túl voltak: a program vágta vagy elhagyta őket — a részletek a job kimenetében.",
   lektor_partial: "A lektor önálló megoldásainak egy része a kereten túl volt — a lektorálás részleges, nem teljes igazolás.",
+  bank_trimmed: "A limiten egy hibás nyílt feladat kikerült, a fejezet gyakorlócsomagja ezért kisebb (fogalmanként legalább 1 nyílt feladat maradt) — a fejezetek a job kimenetében.",
   figure_check: "Egy vagy több ábra felirata nem a fejezet tanításából való — az ábra-kapu figyelmeztetése (mérés nélkül nem buktat).",
   solution_mismatch: "A lektor önálló megoldása eltér a leckétől, de nem jelzett hibát — eldöntetlen eltérés (nem publikálási igazolás).",
 };
