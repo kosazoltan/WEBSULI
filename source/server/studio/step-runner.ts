@@ -966,7 +966,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
           const revalidated = lessonSchema.safeParse(rewrite.lesson);
           if (revalidated.success) cleaned = revalidated.data;
           else logger.warn(`[STUDIO] A forrás-hivatkozás átírása sémát sértett (${job.id}) — az eredeti marad: ${zodIssues(revalidated.error).slice(0, 200)}`);
-          logger.info(`[STUDIO] Forrás-hivatkozás átírva (${job.id}): ${rewrite.rewritten} mondat, ${rewrite.rejected} elutasítva, ${rewrite.needsSource} forrást igényel (marad figyelmeztetésnek)`);
+          logger.info(`[STUDIO] Forrás-hivatkozás átírva (${job.id}): ${rewrite.rewritten} mondat, ${rewrite.rejected} elutasítva, ${rewrite.needsSource} forrást igényel, ${rewrite.unreported} nem jelentett (marad figyelmeztetésnek)`);
         } catch (error) {
           logger.warn(`[STUDIO] A forrás-hivatkozás átírása elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
         }
@@ -1109,7 +1109,8 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             }, { experienceOnly: true });
             const revalidated = lessonSchema.safeParse(rewrite.lesson);
             if (revalidated.success) completedLesson = revalidated.data;
-            logger.info(`[STUDIO] Bank forrás-hivatkozása átírva (${job.id}): ${rewrite.rewritten} mondat, ${rewrite.rejected} elutasítva`);
+            else logger.warn(`[STUDIO] A bank forrás-hivatkozásának átírása sémát sértett (${job.id}) — az eredeti marad: ${zodIssues(revalidated.error).slice(0, 200)}`);
+            logger.info(`[STUDIO] Bank forrás-hivatkozása átírva (${job.id}): ${rewrite.rewritten} mondat, ${rewrite.rejected} elutasítva, ${rewrite.needsSource} forrást igényel, ${rewrite.unreported} nem jelentett`);
           } catch (error) {
             logger.warn(`[STUDIO] A bank forrás-hivatkozásának átírása elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
           }

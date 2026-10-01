@@ -82,3 +82,23 @@ test("review #151 (P2): „A tananyag szerint” és a nagybetűs „A Forrás s
   const { lesson: out } = stripSourceReferences(L);
   assert.equal((out.sections[0].blocks[0] as { text: string }).text, "Babilon fontos város volt. Agyagtéglából épült.");
 });
+
+test("élő mérés ba8e35bb: a modell által ki nem jelentett tétel EGYSZER célzottan újra megy; a maradék „nem jelentett” szám", async () => {
+  const L = lesson({ explain: "A forrás Istárt a szerelem istenének nevezi.", feedback: "Helyes: a tananyag szerint Babilon nagy város volt.", sample: "Babilon városa Kr. e. 2500 körül jött létre, és a folyóköz egyik fontos városa lett." });
+  const asked: string[][] = [];
+  const result = await rewriteSourceReferences(L, async (_system, user) => {
+    const items = (JSON.parse(user) as { items: Array<{ path: string }> }).items.map((i) => i.path);
+    asked.push(items);
+    // 1. válasz: csak az első tétel; 2. válasz: a kimaradt
+    return asked.length === 1
+      ? { items: [{ path: "sections[0].blocks[0].text", text: "Istár a szerelem istennője volt." }] }
+      : { items: [{ path: "sections[0].blocks[2].feedbackPerOption[0]", text: "Helyes: Babilon nagy város volt." }] };
+  });
+  assert.deepEqual(asked, [["sections[0].blocks[0].text", "sections[0].blocks[2].feedbackPerOption[0]"], ["sections[0].blocks[2].feedbackPerOption[0]"]], "a második kérés csak a kimaradt tételt kapja");
+  assert.deepEqual([result.rewritten, result.rejected, result.unreported], [2, 0, 0]);
+  assert.equal(sourceReferenceFindings(result.lesson).length, 0);
+  let calls = 0;
+  const silent = await rewriteSourceReferences(L, async () => { calls++; return { items: [] }; });
+  assert.equal(calls, 2, "legfeljebb egy újrakérés");
+  assert.deepEqual([silent.rewritten, silent.rejected, silent.unreported], [0, 0, 2]);
+});
