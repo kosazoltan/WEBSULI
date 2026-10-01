@@ -86,7 +86,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   instruction_gaps: "A tanári kérés egy vagy több pontját a forrás nem igazolja — a lecke ezeket nem tanítja, a pontok a job kimenetében és a panelen.",
   outline_clamped: "A tervező vázlatának egyes mezői a korláton túl voltak: a program vágta vagy elhagyta őket — a részletek a job kimenetében.",
   lektor_partial: "A lektor önálló megoldásainak egy része a kereten túl volt — a lektorálás részleges, nem teljes igazolás.",
-  bank_trimmed: "A limiten egy hibás nyílt feladat kikerült, a fejezet gyakorlócsomagja ezért kisebb (fogalmanként legalább 1 nyílt feladat maradt) — a fejezetek a job kimenetében.",
+  bank_trimmed: "A limiten egy hibás nyílt feladat vagy módszer kikerült, a fejezet gyakorlócsomagja ezért kisebb (a fogalmankénti kvízpár megmaradt) — a fejezetek a job kimenetében.",
   figure_check: "Egy vagy több ábra felirata nem a fejezet tanításából való — az ábra-kapu figyelmeztetése (mérés nélkül nem buktat).",
   solution_mismatch: "A lektor önálló megoldása eltér a leckétől, de nem jelzett hibát — eldöntetlen eltérés (nem publikálási igazolás).",
 };

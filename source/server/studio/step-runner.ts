@@ -1425,7 +1425,8 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
   // Spec 2026-10-01-limit-csomag-lazitas (tulajdonosi döntés): a kivett nyílt feladatok fejezetében a csomag lazított (fogalmanként
   // legalább 1 nyílt feladat marad, a többi minimum változatlan) — egyszeri újramérés a jelöléssel.
   // Review #171: csak a LIMIT-eredetű nyílt feladatok fejezete lazítható (az aritmetikai/egyéb kivétel szabálya változatlan).
-  const limitTaskSections = [...new Set([...limitOrigin].map((p) => bankItemRef(p)).filter((r): r is BankItemRef => r?.bank === "tasks" && r.index < experience.tasks.length).map((r) => experience.tasks[r.index].sectionIndex))];
+  // 2. tulajdonosi kiterjesztés: a limit-eredetű módszer-kivétel fejezete is lazítható (a kvíz nem).
+  const limitTaskSections = [...new Set([...limitOrigin].map((p) => bankItemRef(p)).filter((r): r is BankItemRef => (r?.bank === "tasks" || r?.bank === "methods") && r.index < experience[r.bank].length).map((r) => experience[r.bank][r.index].sectionIndex))];
   let trimmedSections: number[] = [];
   if (after.length && limitTaskSections.length) {
     const trimmed = withTrimmedSections(reduced, limitTaskSections);
@@ -1461,7 +1462,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     // Review P2: a job leckéje a lektorált EREDETI marad — a kapu újrafuttatva ugyanabból számol (idempotens).
     job.output = { ...job.output, choiceGate: { removed: choiceGate.removed },
       // Review #171: a lazított publikálás az admin minőségi jegyzetei között (JobMonitor).
-      ...(choiceGate.trimmed?.length ? { qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "bank_trimmed", note: `A limiten kivett hibás nyílt feladat után lazított fejezet-csomag: ${choiceGate.trimmed.map((i) => i + 1).join(", ")}. fejezet (fogalmanként legalább 1 nyílt feladat maradt).`, round: job.round }) } : {}) };
+      ...(choiceGate.trimmed?.length ? { qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "bank_trimmed", note: `A limiten kivett hibás nyílt feladat vagy módszer után lazított fejezet-csomag: ${choiceGate.trimmed.map((i) => i + 1).join(", ")}. fejezet (a fogalmankénti felidéző + alkalmazó kvízpár megmaradt).`, round: job.round }) } : {}) };
     logger.warn(`[STUDIO/GATE] Hibás banktétel kivéve (egyválasztós vagy a körlimiten maradt; ${job.id}): ${choiceGate.removed.join(", ")}`);
   }
 
@@ -1555,10 +1556,10 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
           const measure = (l: Lesson) => [...experienceProblems(l), ...verifyLessonSkillBank(l.experience, l.subject, l.sections).problems];
           let bankProblems = measure(reachable.lesson);
           // Spec 2026-10-01-limit-csomag-lazitas: a kivett nyílt feladatok fejezetében lazított csomag — egyszeri újramérés.
-          if (bankProblems.length && bankFit.taskSections.length) {
-            const trimmed = withTrimmedSections(reachable.lesson, bankFit.taskSections);
+          if (bankProblems.length && bankFit.trimSections.length) {
+            const trimmed = withTrimmedSections(reachable.lesson, bankFit.trimSections);
             const retry = measure(trimmed);
-            if (!retry.length) { reachable.lesson = trimmed; bankProblems = retry; bankTrimmed = bankFit.taskSections; }
+            if (!retry.length) { reachable.lesson = trimmed; bankProblems = retry; bankTrimmed = bankFit.trimSections; }
           }
           if (bankProblems.length) return fail(store, job, `A megalapozatlan blokk kivétele után a fúziós bank nem felel meg — nem publikálható: ${bankProblems.join("; ")}`);
         }
