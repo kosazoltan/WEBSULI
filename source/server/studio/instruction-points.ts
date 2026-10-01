@@ -20,7 +20,8 @@ import { withSupportSkill } from "./support-skills";
  * - a keretbe (`OWNER_INSTRUCTION_FRAME`) nem férő rész `unprocessed` pontként JELÖLT, nem elhallgatott (H47/H50).
  */
 
-export const INSTRUCTION_POINTS_VERSION = "v1-inventory";
+// Review #167: a többértelműség és az idézet-igazolás szemantikája változott — a mentett jegyzékek újraszámolódnak.
+export const INSTRUCTION_POINTS_VERSION = "v2-inventory";
 export const INSTRUCTION_POINTS_MODEL = "claude-opus-5-5";
 
 export type PointState = "pending" | "taught" | "source_available_missing" | "not_in_source" | "undecidable" | "ambiguous";
@@ -100,20 +101,32 @@ const overlaps = (a: string, b: string) => { const x = normText(a), y = normText
  * technikája”), az átértelmezés → `ambiguous`.
  */
 const foldHu = (s: string) => normText(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-const stems = (s: string) => foldHu(s).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4).map((w) => w.slice(0, 5));
+// Review #167: a 3 betűs rövidítés (DNS, ENSZ-alak) is szótő; a gyakori 3 betűs kötőszavak nem.
+const SHORT_STOP = new Set(["egy", "meg", "nem", "van", "sem", "fel", "mar", "ami", "aki", "ott", "itt", "ezt", "azt", "kis"]);
+const words = (s: string) => foldHu(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+const stems = (s: string) => words(s).filter((w) => w.length >= 4 || (w.length === 3 && !SHORT_STOP.has(w))).map((w) => w.slice(0, 5));
+const wordHit = (st: string, text: string) => st.length >= 4 ? text.includes(st) : words(text).includes(st);
 function anchoredToSpan(text: string, span: string): boolean {
   const t = foldHu(text), r = foldHu(span);
-  return stems(text).some((st) => r.includes(st)) || stems(span).some((st) => t.includes(st));
+  return stems(text).some((st) => wordHit(st, r)) || stems(span).some((st) => wordHit(st, t));
 }
+/** Közös szótő két jelölt szövege között (a részlethez nem kötődő, de a kötött jelölttel azonos tartalmú átfogalmazás). */
+const sharesStem = (a: string, b: string) => { const fb = foldHu(b); return stems(a).some((st) => wordHit(st, fb)); };
+/** Review #167 (P1): az ellentétes állítás (tagadás) közös témaszó mellett is ellentmondó értelmezés. */
+const NEGATION = new Set(["nem", "sem", "soha", "sehol", "nincs", "nincsen", "sincs", "se", "ne"]);
+const negated = (s: string) => words(s).some((w) => NEGATION.has(w));
 
 /**
  * Betűhű idézet a forrásból. Élő mérés (ba8e35bb): a „papiruszra írtak” felsorolás-tétel (16 betű) a 20 betűs alsó határ
  * miatt nem igazolt — a rövid idézet akkor is igazol, ha egy TELJES forrássor / felsorolás-tétel betűhű másolata.
  */
+/** Egy forrássor / idézet összevethető alakja: felsorolásjel és záró írásjel nélkül (review #167: a „papiruszra írtak.” is). */
+export const lineKey = (s: string) => normText(s.replace(/^\s*[-•*–]\s*/, "")).replace(/[.;:,!?]+$/, "").trim();
 function verbatimInSource(quote: string, source: string, sourceLines: ReadonlySet<string>): boolean {
   const q = normText(quote);
   if (!source.includes(q)) return false;
-  return alnum(q).length >= 20 || (alnum(q).length >= 8 && sourceLines.has(q));
+  const key = lineKey(quote);
+  return alnum(q).length >= 20 || (alnum(key).length >= 8 && sourceLines.has(key));
 }
 
 /** A független kivonatok uniójából a végleges, állapotolt jegyzék. */
@@ -122,7 +135,7 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
   const all = passes.flat();
   const exclusions = all.filter((c) => c.kind === "exclude");
   const source = sourceText?.trim() ? normText(sourceText) : "";
-  const sourceLines = new Set((sourceText ?? "").split(/\r?\n/).map((line) => normText(line.replace(/^\s*[-•*–]\s*/, "")).replace(/[.;:,]$/, "")).filter(Boolean));
+  const sourceLines = new Set((sourceText ?? "").split(/\r?\n/).map(lineKey).filter(Boolean));
   // Review #161 (Sourcery): a tanár kizárása akkor is a jegyzék része (átláthatóság), ha nincs vele átfedő tanítandó jelölt.
   const excluded: string[] = exclusions.map((e) => e.text).filter((t, i, arr) => arr.indexOf(t) === i);
   const byId = new Map<string, { texts: Set<string>; candidates: PointCandidate[] }>();
@@ -142,7 +155,11 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
     const first = entry.candidates[0];
     const texts = [...entry.texts];
     const reworded = texts.length > 1 && !texts.every((t) => texts.every((u) => t === u || t.includes(u) || u.includes(t)));
-    const contradictory = reworded && entry.candidates.some((c) => !anchoredToSpan(c.text, c.requestSpan));
+    // Ellentmondó értelmezés: (a) eltérő polaritás (tagadás); (b) eltérő szövegű jelölt, amely sem a részlethez, sem egy
+    // részlethez kötött jelölt szövegéhez nem kötődik (közös szótő).
+    const anchored = entry.candidates.filter((c) => anchoredToSpan(c.text, c.requestSpan));
+    const polarity = new Set(entry.candidates.map((c) => negated(c.text)));
+    const contradictory = polarity.size > 1 || (reworded && entry.candidates.some((c) => !anchored.includes(c) && !anchored.some((a) => sharesStem(c.text, a.text))));
     // Review #161 (Codex P1 / Sourcery): csak a KIMONDOTT `supports: "yes"` igazol — a betűhű idézet önmagában a témát
     // érintheti (H34); a hiányzó ítélet ellenőrző-hiba → eldöntetlen, nem igazolt.
     const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && verbatimInSource(c.sourceQuote, source, sourceLines));

@@ -218,3 +218,21 @@ test("élő mérés ba8e35bb: az átfogalmazás nem többértelmű; a rövid, te
   assert.equal(hiero.content, "not_in_source", "a sor RÉSZLETE (nem teljes sor, < 20 betű) nem igazol");
   assert.match(hiero.reason!, /nem igazolható betűhűen/, "nem a modell „kimondja” indoka");
 });
+
+test("review #167: tagadó ellentét többértelmű; a záró írásjeles rövid forrássor is igazol; a 3 betűs rövidítés horgony", () => {
+  const request = "a fáraó hatalma; a papirusz; a DNS";
+  const source = ["Egyiptom", "- papiruszra írtak.", "- A DNS örökítőanyag, a sejtmagban található."].join("\n");
+  const inv = buildInventory([[
+    { text: "A fáraó isteni uralkodó volt.", requestSpan: "a fáraó hatalma", kind: "teach" as const },
+    { text: "Papiruszra írtak.", requestSpan: "a papirusz", kind: "teach" as const, sourceQuote: "papiruszra írtak.", supports: "yes" as const },
+    { text: "A DNS örökítőanyag.", requestSpan: "a DNS", kind: "teach" as const },
+  ], [
+    { text: "A fáraó nem volt isteni uralkodó.", requestSpan: "a fáraó hatalma", kind: "teach" as const },
+    { text: "A dezoxiribonukleinsav hordozza az örökítő információt.", requestSpan: "a DNS", kind: "teach" as const },
+  ]], request, source);
+  const by = (span: string) => inv.points.find((p) => p.id === pointId(span))!;
+  assert.equal(by("a fáraó hatalma").content, "ambiguous", "közös témaszó, ellentétes állítás");
+  assert.equal(by("a papirusz").content, "pending", "„papiruszra írtak.” — a záró pont nem akadály");
+  assert.notEqual(by("a DNS").content, "ambiguous", "a rövidítés horgony; a másik jelölt a kötött jelölttel közös szótövű");
+  assert.equal(inv.version, "v2-inventory", "a szemantika-váltás új verzió → a mentett jegyzék újraszámolódik");
+});
