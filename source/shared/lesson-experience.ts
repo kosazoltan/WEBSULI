@@ -112,13 +112,13 @@ export const experiencePacketSchema = z.object({
         const methods = e.methods.filter(belongs), tasks = e.tasks.filter(belongs), quiz = e.quiz.filter(belongs);
         if ((e.version === LESSON_METHOD_VERSION ? methods.length < 2 : methods.length !== 2) || new Set(methods.map(m => m.kind)).size < 2) ctx.addIssue({ code: "custom", message: `A ${unit.sectionIndex + 1}. fejezet (sectionIndex=${unit.sectionIndex}) csomagjához legalább két különböző, releváns módszer kell.` });
         const taskMinimum = Math.max(2, unit.conceptIds.length), quizMinimum = unit.conceptIds.length * 2;
-        // Spec 2026-10-01-limit-csomag-lazitas: a jelölt fejezetben a nyílt feladat darab/pár-követelménye kimarad; a
-        // fogalmankénti „nincs nyílt feladat” ellenőrzés (lent) marad.
+        // Spec 2026-10-01-limit-csomag-lazitas (+ tulajdonosi kiterjesztés): a jelölt fejezetben a nyílt feladat darab/pár-
+        // követelménye kimarad, és egy fogalomnak 0 nyílt feladata is lehet — a felidéző + alkalmazó kvízkérdése (lent) kötelező marad.
         const trimmed = plan.trimmedSections?.includes(unit.sectionIndex) ?? false;
         if (!trimmed && ((e.version !== PREVIOUS_LESSON_METHOD_VERSION ? tasks.length < taskMinimum : tasks.length !== taskMinimum) || !tasks.some(t => t.mode === "oral") || !tasks.some(t => t.mode === "written"))) ctx.addIssue({ code: "custom", message: "A nyílt bank mérete, írásos vagy szóbeli változata hiányos." });
         if (e.version !== PREVIOUS_LESSON_METHOD_VERSION ? quiz.length < quizMinimum : quiz.length !== quizMinimum) ctx.addIssue({ code: "custom", message: "Fogalmanként legalább két kvízkérdés szükséges." });
         for (const id of unit.conceptIds) {
-          if (!tasks.some(t => t.coversConceptIds.includes(id))) ctx.addIssue({ code: "custom", message: `${id}: nincs nyílt feladat.` });
+          if (!trimmed && !tasks.some(t => t.coversConceptIds.includes(id))) ctx.addIssue({ code: "custom", message: `${id}: nincs nyílt feladat.` });
           for (const intent of ["recall", "apply"] as const) if (!quiz.some(q => q.coversConceptIds.length === 1 && q.coversConceptIds[0] === id && q.intent === intent)) ctx.addIssue({ code: "custom", message: `${id}: hiányzó ${intent} kvíz.` });
         }
       }

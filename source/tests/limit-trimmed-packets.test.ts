@@ -20,14 +20,19 @@ const singleOral = () => {
   return lesson;
 };
 
-test("séma: a jelölt fejezetben nem kötelező a szóbeli/írásbeli pár; jelöletlen fejezetben igen; feladat nélküli fogalom mindig hiba", () => {
+test("séma: a jelölt fejezetben nem kötelező a szóbeli/írásbeli pár, és fogalom nyílt feladat nélkül is lehet, ha a kvízpár megvan; jelöletlenben a régi szigor", () => {
   const lesson = singleOral();
   const e = lesson.experience!;
   const noOral = { ...e, tasks: e.tasks.filter((t) => t.mode !== "oral") };
   assert.match(JSON.stringify(experienceSchema.safeParse(noOral).error?.issues ?? []), /írásos vagy szóbeli változata hiányos/, "jelöletlen: a régi szigor");
   assert.equal(experienceSchema.safeParse({ ...noOral, bankPlan: { ...noOral.bankPlan!, trimmedSections: [0] } }).success, true, "jelölt fejezet: lazított");
+  // Tulajdonosi kiterjesztés (2026-10-01, ingyenes visszajátszás: a kivett feladat a fogalom EGYETLEN feladata volt): a jelölt
+  // fejezetben a fogalom feladat nélkül is maradhat, ha a felidéző + alkalmazó kvízkérdése megvan; anélkül hiba.
   const noTask = { ...e, tasks: [], bankPlan: { ...e.bankPlan!, trimmedSections: [0] } };
-  assert.match(JSON.stringify(experienceSchema.safeParse(noTask).error?.issues ?? []), /nincs nyílt feladat/, "fogalom feladat nélkül → hiba");
+  assert.doesNotMatch(JSON.stringify(experienceSchema.safeParse(noTask).error?.issues ?? []), /nincs nyílt feladat/);
+  assert.match(JSON.stringify(experienceSchema.safeParse({ ...e, tasks: [] }).error?.issues ?? []), /nincs nyílt feladat/, "jelöletlen: hiba");
+  const noApply = { ...noTask, quiz: e.quiz.filter((q) => q.intent !== "apply") };
+  assert.match(JSON.stringify(experienceSchema.safeParse(noApply).error?.issues ?? []), /hiányzó apply kvíz/, "a kvízpár kötelező marad");
 });
 
 test("kapu: a limiten kivett egyetlen szóbeli feladat után a lecke a jelöléssel átmegy; jelölés nélkül elutasítás lenne", () => {

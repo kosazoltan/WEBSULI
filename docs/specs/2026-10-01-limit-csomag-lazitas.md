@@ -14,3 +14,5 @@ feladat; a módszer- és kvízminimum, valamint a teljes bank 45/75-ös minimuma
 **Elfogadás (EARS):** HA a limiten tétel-kivétel után az egyetlen hiba az érintett fejezet nyílt-feladat darab/pár-követelménye,
 AKKOR a lecke publikál, `trimmedSections` jelöléssel és minőségi jegyzettel; HA bármely fogalomnak nem marad nyílt feladata,
 vagy más bankhiba van, AKKOR elutasítás (változatlan). Jelölés nélküli bankra a séma a régi szigorral érvényes.
+
+**Kiterjesztés (tulajdonosi jóváhagyás, 2026-10-01):** az ingyenes kapu-visszajátszás (602481ef, 74b63038) szerint a kivett hibás feladat a fogalom EGYETLEN nyílt feladata volt („maat”, „shut”, „öntözőrendszer”) — a „fogalmanként ≥ 1 nyílt feladat” feltétel így sem engedett. A jelölt fejezetben a fogalomnak 0 nyílt feladata is lehet, ha a felidéző + alkalmazó kvízkérdése megvan (ez kötelező marad); a 45/75-ös teljes minimum változatlan.
