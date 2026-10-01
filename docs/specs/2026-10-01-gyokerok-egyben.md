@@ -85,8 +85,10 @@ most nagyobb a hasznánál — külön spec, ha a mérés indokolja.
 Modellválasztás, promptok újraírása, a webes gyűjtő (#176), a játékok, a felület; a 45/75 és a kvízpár floor változatlan.
 
 ## 4. Elfogadás (EARS)
-- E1 HA a limiten tétel- vagy blokk-kivétel történt, AKKOR a bank a padló szerint mér, és a három rögzített bukott futás
-  (`d280388a`, `602481ef`, `74b63038`) a visszajátszásban publikál.
+- E1 HA a limiten tétel- vagy blokk-kivétel történt, AKKOR a bank a padló szerint mér: a rögzített bukott futások közül
+  `d280388a` és `74b63038` a visszajátszásban publikál; `602481ef` a bank-zsákutcán már átmegy, de a 95/80-as fedettségi
+  padlón (core 92%) jogosan nem publikál — az elvárt kimenet a fixture-ben rögzítve (`expected`), a visszajátszó csak az attól
+  eltérő eredményt tekinti hibának.
 - E2 HA a bankcsomag-jelölt alakhibás (pl. szám a szöveg mezőben), AKKOR javító kör indul, és a lépés NEM dob kivételt.
 - E3 HA a szolgáltató 429-et ad `insufficient_quota` kóddal VAGY „no credits remaining” üzenettel, AKKOR a kivonatoló, az OCR és a
   besoroló a tartalék útvonalon fut tovább (teszt: hamis szolgáltatóval).

@@ -477,6 +477,9 @@ async function ensureBlindSolutions(
   if (cached?.sourceHash === sourceHash && (!cached.partial || cached.retried)) return cached;
   const retried = cached?.sourceHash === sourceHash && !!cached.partial;
   if (!keyConfigured(BLIND_SOLVER_MODEL)) return undefined;
+  // Review #177: az újrakérés ténye a hívás ELŐTT tartós (hibánál sem indul minden körben újabb fizetett próba), és hibánál a
+  // cache-elt részleges eredmény marad a lektoré.
+  if (retried && cached) { job.output = { ...job.output, blindSolutions: { ...cached, retried: true } }; await store.saveStep(job.id, { output: job.output }); }
   try {
     const result = await callStepModel(providerFactory(BLIND_SOLVER_MODEL, "visuals"), {
       // U5 (C6/H15): saját támogató skill (B2); a rendszerutasítás törzse változatlan.
@@ -492,7 +495,7 @@ ${sourceText.slice(0, 60_000)}`,
     return blind;
   } catch (error) {
     logger.warn(`[STUDIO] A vak megoldó elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
-    return undefined;
+    return retried && cached ? { ...cached, retried: true } : undefined;
   }
 }
 
@@ -1617,6 +1620,8 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       // Spec 2026-10-01-gyokerok-egyben (2.2b): a részleges (nem teljes) jelentés egyszer újrakérhető.
       const checkRetried = cached?.hash === hash && cached.complete === false && !cached.retried;
       points = cached?.hash === hash && !checkRetried ? cached.points : undefined;
+      // Review #177: a próbálkozás ténye a hívás előtt tartós; hibánál a részleges jelentés marad.
+      if (checkRetried && cached) job.output = { ...job.output, instructionCheck: { ...cached, retried: true } };
       if (!points) {
         const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data, map.meta.sourceText, inventory);
         const result = await callStepModel(models.providerFactory(INSTRUCTION_CHECK_MODEL, "instructionCheck"), {
@@ -1633,8 +1638,9 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         }
       }
     } catch (error) {
-      points = undefined;
-      logger.warn(`[STUDIO/GATE] A tanári kérés mérése elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
+      const partial = job.output?.instructionCheck as InstructionCheck | undefined;
+      points = partial?.retried && partial.points?.length ? partial.points : undefined;
+      logger.warn(`[STUDIO/GATE] A tanári kérés mérése elmaradt (${job.id})${points ? " — a korábbi részleges jelentés marad" : ""}: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
     }
     if (points) {
       const missing = missingPoints(points);

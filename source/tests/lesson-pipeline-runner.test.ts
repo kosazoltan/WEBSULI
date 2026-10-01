@@ -2748,3 +2748,30 @@ test("spec 2026-10-01-gyokerok-egyben (2.2b, E4): a vak megoldó RÉSZLEGES ered
   await run();
   assert.equal(blindCalls, 2, "a teljes eredmény a cache-ből jön");
 });
+
+test("review #177 (2.2b): ha a vak megoldó újrakérése hibázik, a részleges eredmény marad és nem indul minden körben újabb próba", async () => {
+  const { deps, job } = await limitSetup("blind-retry-fail", [{ kind: "source_conflict", subkind: "book_probably_wrong", message: "A könyv téved." }]);
+  deps.keyConfigured = () => true;
+  delete (job.output as Record<string, unknown>).blindSolutions;
+  const inner = deps.providerFactory;
+  let blindCalls = 0;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
+      if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: blind-solver")) {
+        blindCalls++;
+        if (blindCalls === 1) return { content: JSON.stringify({ solutions: "nem tömb" }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+        throw new Error("szolgáltatói hiba az újrakérésnél");
+      }
+      return provider.chat(...args);
+    } } as IAIProvider;
+  };
+  const run = async () => { job.step = "lektor"; job.status = "running"; await runPipelineStep("blind-retry-fail", { ...deps, providerFactory }); };
+  await run(); await run();
+  assert.equal(blindCalls, 2, "részleges → egy újrakérés (ami hibázik)");
+  const cached = job.output?.blindSolutions as { partial?: boolean; retried?: boolean };
+  assert.equal(cached.partial, true, "a részleges eredmény megmarad");
+  assert.equal(cached.retried, true, "a próbálkozás ténye tartós");
+  await run();
+  assert.equal(blindCalls, 2, "hibás újrakérés után nincs újabb fizetett próba");
+});

@@ -23,6 +23,8 @@ export type ReplayFixture = {
   topicFocus?: TopicFocus | null;
   instructionConcepts?: MapConcept[];
   concepts: MapConcept[];
+  /** Review #177: a rögzített futás ELVÁRT kimenete — a visszajátszó és a teszt csak az ettől eltérő eredményt tekinti hibának. */
+  expected?: { publishable: boolean; stage?: ReplayResult["stage"]; note?: string };
 };
 
 export type ReplayResult = {
@@ -39,6 +41,13 @@ export type ReplayResult = {
 
 const measure = (l: Lesson) => [...experienceProblems(l), ...verifyLessonSkillBank(l.experience, l.subject, l.sections).problems];
 
+/** Igaz, ha a visszajátszás a fixture-ben rögzített elvárással egyezik (elvárás nélkül: publikálás az elvárás). */
+export function replayMatchesExpectation(fixture: ReplayFixture, result: ReplayResult): boolean {
+  const expected = fixture.expected ?? { publishable: true };
+  if (expected.publishable) return result.publishable;
+  return !result.publishable && (!expected.stage || result.stage === expected.stage);
+}
+
 export function replayLimitGate(fixture: ReplayFixture): ReplayResult {
   const parsedLesson = lessonSchema.safeParse(fixture.lesson);
   if (!parsedLesson.success) return { publishable: false, stage: "schema", reason: parsedLesson.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; "), removed: [], removedBlocks: [], removedItems: [], limitRelaxed: false };
@@ -49,7 +58,8 @@ export function replayLimitGate(fixture: ReplayFixture): ReplayResult {
   const known = new Set(focused.concepts.map((c) => c.localId));
   const concepts = [...focused.concepts, ...(fixture.instructionConcepts ?? []).filter((c) => c?.localId && !known.has(c.localId))];
   const arc = { minChecksForProba: DEFAULT_REWARD_POLICY.minCorrectForCoupon };
-  let candidate = choice.lesson;
+  // Review #177: az éles kapu a körlimiten a fedettség mérése ELŐTT kikapcsolja az elérhetetlen Próbát (step-runner, noAuthorRepair ág).
+  let candidate = disableUnreachableProba(choice.lesson, arc).lesson;
   let removedBlocks: string[] = [], removedItems: string[] = [];
   const coverage = checkCoverageGate(candidate, concepts);
   if (!coverage.ok) {

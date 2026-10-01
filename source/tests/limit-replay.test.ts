@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { replayLimitGate, type ReplayFixture } from "../server/studio/limit-replay";
+import { replayLimitGate, replayMatchesExpectation, type ReplayFixture } from "../server/studio/limit-replay";
 import { lessonSchema } from "../shared/lesson-schema";
 
 /* Spec 2026-10-01-gyokerok-egyben (2.1 + 2.4, E1): a rögzített, élesben BUKOTT futások a kapu körlimit-ágán — modell nélkül —
@@ -14,19 +14,14 @@ test("van rögzített bukott futás a visszajátszáshoz", () => {
   assert.ok(files.length >= 3, `legalább három rögzített futás kell, most: ${files.join(", ")}`);
 });
 
-/**
- * Elvárt kimenet rögzített futásonként. A 602481ef (run 1a276e30) élesben a bank-zsákutcán bukott; a padlóval a bank átmegy,
- * de a TANÍTÁS fedettsége a 95/80-as tulajdonosi szabály alatt marad (core 92%) — ez jogos, tartalmi nem-publikálás, nem zsákutca.
- */
-const EXPECTED: Record<string, { publishable: boolean; stage?: string }> = {
-  "egyiptom-602481ef-task-only-concept.json": { publishable: false, stage: "acceptance" },
-};
-
+// Az elvárt kimenet a fixture-ben rögzített (`expected`). A 602481ef (run 1a276e30) élesben a bank-zsákutcán bukott; a padlóval a
+// bank átmegy, de a TANÍTÁS fedettsége a 95/80-as tulajdonosi szabály alatt marad (core 92%) — jogos, tartalmi nem-publikálás.
 for (const file of files) {
-  const expected = EXPECTED[file] ?? { publishable: true };
+  const fixture = JSON.parse(readFileSync(new URL(file, dir), "utf8")) as ReplayFixture;
+  const expected = fixture.expected ?? { publishable: true };
   test(`visszajátszás: ${file} — ${expected.publishable ? "a kapu limit-ágán publikál" : `nem publikál, de csak a(z) ${expected.stage} padlón`}`, () => {
-    const fixture = JSON.parse(readFileSync(new URL(file, dir), "utf8")) as ReplayFixture;
     const result = replayLimitGate(fixture);
+    assert.equal(replayMatchesExpectation(fixture, result), true, `${result.stage}: ${result.reason ?? ""}`);
     assert.notEqual(result.stage, "choice", `a limit-kivétel utáni bank-zsákutca megszűnt: ${result.reason ?? ""}`);
     assert.notEqual(result.stage, "bank", `a blokk-kivétel utáni bank-zsákutca megszűnt: ${result.reason ?? ""}`);
     if (!expected.publishable) { assert.equal(result.stage, expected.stage, result.reason ?? ""); return; }

@@ -7,7 +7,7 @@
  * A `--job` az éles DB-ből olvas (csak olvasás), és opcionálisan fixture-ként menti a futást.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { replayLimitGate, type ReplayFixture } from "../../server/studio/limit-replay";
+import { replayLimitGate, replayMatchesExpectation, type ReplayFixture } from "../../server/studio/limit-replay";
 
 async function loadFromDb(jobId: string): Promise<ReplayFixture> {
   const { sql } = await import("drizzle-orm");
@@ -41,7 +41,8 @@ if (!fixtures.length) { console.error("Adj meg fixture JSON-t vagy --job <id>-t.
 let failed = 0;
 for (const fx of fixtures) {
   const r = replayLimitGate(fx);
-  if (!r.publishable) failed++;
-  console.log(`${fx.jobId.slice(0, 8)} ${r.publishable ? "PUBLIKÁL" : `NEM PUBLIKÁL (${r.stage})`} — kivett tétel: ${r.removed.length}, kivett blokk: ${r.removedBlocks.length}, bankból kikerült: ${r.removedItems.length}, padló: ${r.limitRelaxed}${r.reason ? `\n  ok: ${r.reason.slice(0, 300)}` : ""}`);
+  const ok = replayMatchesExpectation(fx, r);
+  if (!ok) failed++;
+  console.log(`${ok ? "OK " : "ELTÉR"} ${fx.jobId.slice(0, 8)} ${r.publishable ? "PUBLIKÁL" : `NEM PUBLIKÁL (${r.stage})`}${fx.expected ? ` [elvárt: ${fx.expected.publishable ? "publikál" : `nem publikál, ${fx.expected.stage ?? "bármely"} padló`}]` : ""} — kivett tétel: ${r.removed.length}, kivett blokk: ${r.removedBlocks.length}, bankból kikerült: ${r.removedItems.length}, padló: ${r.limitRelaxed}${r.reason ? `\n  ok: ${r.reason.slice(0, 300)}` : ""}`);
 }
 process.exit(failed ? 1 : 0);
