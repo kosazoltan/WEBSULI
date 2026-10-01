@@ -5,6 +5,9 @@ import { compactFusionFixture } from "../shared/fixtures/lesson-fusion";
  * Tulajdonosi jelzés (2026-10-01, telefon-képernyőkép): a lecke alatti admin „Tananyag javítása” panel címe szinte
  * olvashatatlan. Gyökérok: a `bg-card` kártyán nem volt saját szövegszín (`text-card-foreground`), a cím a lecke-oldal
  * örökölt szövegszínét kapta. A mérés a kirajzolt (számított) szín és a kártya háttere közti WCAG-kontraszt.
+ *
+ * Review #172: az alkalmazás nem kapcsolja be a Tailwind `.dark` osztályt (nincs témaváltó, a kliens nem képezi le az
+ * OS-preferenciát) — a felhasználónál előforduló két állapot az OS világos/sötét preferenciája; ezt a kettőt méri a teszt.
  */
 const srgb = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
 const lum = ([r, g, b]: number[]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
@@ -12,7 +15,7 @@ const rgb = (css: string) => (css.match(/\d+(\.\d+)?/g) ?? []).slice(0, 4).map(N
 
 test.use({ serviceWorkers: "block" });
 for (const mode of ["light", "dark"] as const) {
-  test(`a „Tananyag javítása” cím olvasható (${mode})`, async ({ page }) => {
+  test(`a „Tananyag javítása” cím olvasható (OS ${mode} preferencia)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: mode });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.route("**/api/**", (route) => {
