@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { redactCredentials } from "../lib/error-sanitize";
 import { RUNTIME_KNOWLEDGE_VERSION, SKILL_METHOD_VERSION, SKILL_RULES, skillForMode, type SkillFinding, type SkillCode, type SkillSnapshot, type SkillAudit } from "../../shared/lesson-skill";
 import { workflowDefinition, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 
@@ -42,9 +43,15 @@ export function unknownShape(text: string): string {
   return text.replace(/https?:\/\/\S+|\b[\w.-]+@[\w.-]+\b|(?:sk-|Bearer\s+)\S+/gi, "[value]")
     .replace(/["'`][^"'`]*["'`]/g, "[value]").replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "[id]").replace(/\d+/g, "#").slice(0, 2000);
 }
-/** A futás naplójába kerülő minta: a lenyomat alakja + a magyar idézőjeles („…”) tartalom is kitakarva (a lenyomat változatlan). */
+/**
+ * A futás naplójába kerülő minta (a lenyomat változatlan). Review #165: a redakció a TELJES szövegen, a csonkolás ELŐTT
+ * fut — a közös credential-politika (`redactCredentials`: címkézett kulcs/jelszó/token a sor végéig), a magyar idézet
+ * (a lezáratlan is, a szöveg végéig), utána a lenyomat-alak; ami párosítatlan idézőjel a csonkolás után marad, az a
+ * végéig kitakarva.
+ */
 export function unknownSample(text: string): string {
-  return unknownShape(text).replace(/„[^”]*”/g, "[value]").slice(0, 400);
+  const masked = redactCredentials(text).replace(/„[^”]*(?:”|$)/g, "[value]");
+  return unknownShape(masked).replace(/["'`„”][^]*$/, "[value]").slice(0, 400);
 }
 export function mergeFindings(...groups: SkillFinding[][]): SkillFinding[] {
   const findings = new Map<string, SkillFinding>();

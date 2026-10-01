@@ -27,12 +27,15 @@ export function escapeHtml(str: string | null | undefined): string {
  */
 export function sanitizeForEmail(text: string | undefined | null): string {
   if (!text) return "";
-  return text
-    .replace(
-      /\b(password|passwd|pwd|token|secret|api[_-]?key|apikey|authorization|auth|bearer|cookie|session[_-]?id)\b\s*[:=]?[^\n\r]*/gi,
-      (_match, label: string) => `${label}: [REDACTED]`,
-    )
-    .substring(0, 2000);
+  return redactCredentials(text).substring(0, 2000);
+}
+
+/** The shared credential policy without truncation (the label and the rest of its line are removed). */
+export function redactCredentials(text: string): string {
+  return text.replace(
+    /\b(password|passwd|pwd|token|secret|api[_-]?key|apikey|authorization|auth|bearer|cookie|session[_-]?id)\b\s*[:=]?[^\n\r]*/gi,
+    (_match, label: string) => `${label}: [REDACTED]`,
+  );
 }
 
 /**

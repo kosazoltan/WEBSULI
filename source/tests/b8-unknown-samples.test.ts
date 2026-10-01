@@ -29,3 +29,28 @@ test("B8: az ismeretlen hibaosztály redaktált szövegmintája a futás nézet�
   assert.equal(unknownSample("„idézet” 7 db"), "[value] # db");
   assert.equal(unknownShape("„idézet” 7 db"), "„idézet” # db", "a lenyomat alakja (és így a tanult lenyomat) változatlan");
 });
+
+test("review #165: a minta redakciója a csonkolás ELŐTT fut — hosszú és lezáratlan idézet, címkézett titkok", () => {
+  const long = `Új hiba: „${"forrásmondat ".repeat(300)}” vége`;
+  assert.doesNotMatch(unknownSample(long), /forrásmondat/, "2000 karakternél hosszabb idézet sem szivárog");
+  assert.doesNotMatch(unknownSample("Új hiba: „lezáratlan forrásidézet folytatódik"), /forrásidézet/, "lezáratlan magyar idézet a végéig kitakarva");
+  assert.doesNotMatch(unknownSample('Új hiba: "lezáratlan ascii idézet'), /ascii idézet/, "lezáratlan ASCII idézet a végéig kitakarva");
+  for (const secret of ["api_key=super-secret-value", "token=ghp_exampletoken", "password: hunter2", "Authorization: Bearer abc.def"]) {
+    assert.doesNotMatch(unknownSample(`Új hibaalak ${secret}`), /super-secret|ghp_example|hunter2|abc\.def/, secret);
+  }
+  assert.match(unknownSample("Új hibaalak api_key=x"), /^Új hibaalak api_key: \[REDACTED\]/);
+});
+
+test("review #165: legfeljebb 20 minta futásonként (21 különböző lenyomatból is)", async () => {
+  const { store } = memoryWorkflows();
+  const shapes = "abcdefghijklmnopqrstuvwxyz".split("").slice(0, 21);
+  await executeWorkflow(store, { id: "b8-cap", owner: "o", mode: "upload" }, async () => {
+    await workflowPhase(workflowDefinition("upload").steps[0].id);
+    for (const c of shapes) await workflowValidationFailure(new Error(`Egészen új hibaalak ${c.repeat(3)}`));
+    for (const step of workflowDefinition("upload").steps.slice(1)) await workflowPhase(step.id);
+    return { kind: "material" as const, id: "r" };
+  });
+  const view = (await store.read("b8-cap", "o"))!.view;
+  assert.equal(new Set(shapes.map((c) => findingsFromError(new Error(`Egészen új hibaalak ${c.repeat(3)}`), "source")[0].fingerprint)).size, 21, "21 különböző lenyomat");
+  assert.equal(view.unknownFindingSamples?.length, 20);
+});
