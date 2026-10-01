@@ -5,6 +5,8 @@ description: Internetes tananyagkészítés a programon belüli témára — ker
 
 # Internetes tananyag-pipeline
 
+> **Utasításrendszer runtime-3 (2026-09-30).** A kivonatolás a külön `web-extract` támogató skillt kapja (a `web-research` csak gyűjt); a runtime-2 futás a régi, közös szöveget. Részletek: [közös módszer — „Utasításrendszer runtime-3”](../../../docs/lesson-improvement.md).
+
 Aktiváld, ha a feladat internetes keresésből készülő tananyag, `web-research`, webes tudásbázis, fetch nélküli HTML vagy a 7.4 skill webes bekötése.
 
 Először olvasd: [közös módszer](../../../docs/lesson-improvement.md), [v7.4](../../../docs/specs/tananyag-keszito-SKILL-v7_4.md), [készítő skill](../tananyag-keszito/SKILL.md), [2026-09-13-es spec](../../../docs/specs/2026-09-13-web-knowledge-pipeline.md).

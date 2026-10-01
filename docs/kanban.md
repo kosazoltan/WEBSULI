@@ -53,6 +53,12 @@ node --no-warnings kanban.mjs stats                    # összesítő
 | `REGRESSZIO(#n):` | korábbi jegy visszaesése |
 | `STANDING(binding):` | tartós szabály, nem záródik le |
 
+## Állapot — 2026-09-30
+
+| # | Státusz | Tárgy |
+|---|---|---|
+| 999 | doing | SPEC(2026-09-30): utasításrendszer-rendbetétel U0–U6 + B6–B8 (PR #158–#163+) |
+
 ## Állapot — 2026-09-13
 
 Nyitott elemek (a CLI `list` a hiteles forrás; ezt a táblázatot a session frissíti):

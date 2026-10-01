@@ -87,6 +87,10 @@ export function WorkflowGraph({ run }: { run: WorkflowView }) {
         <ul className="mt-2 list-inside list-disc">{run.skill.rules.map(code => <li key={code}>{SKILL_RULES[code]?.[0] ?? "Korábbi szabály"}</li>)}</ul></>}
       <a className="mt-2 inline-flex min-h-11 items-center underline" href={`/api/studio/skills/${skillForMode(run.definition.mode)}?format=markdown`}>Aktuális skill letöltése</a>
       {run.skillAudit?.findings.map(f => <p key={f.fingerprint} className="mt-2 break-words">{f.code === "unknown" ? "Új hibafajta rögzítve; értelmezése még szükséges." : f.code === "infrastructure" ? "Működési hiba rögzítve; nem pedagógiai szabály." : `Rögzített tapasztalat: ${SKILL_RULES[f.code][0]}.`}</p>)}
+      {run.unknownFindingSamples?.length ? <div className="mt-3" data-testid="workflow-unknown-samples">
+        <p className="font-semibold">Új hibafajták szövege (kitakarva):</p>
+        <ul className="mt-1 list-inside list-disc space-y-1">{run.unknownFindingSamples.map(s => <li key={s.fingerprint} className="break-words">{run.definition.steps.find(step => step.id === s.step)?.label ?? s.step}: {s.text}</li>)}</ul>
+      </div> : null}
     </details>
   </section>;
 }

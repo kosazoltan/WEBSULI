@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { redactCredentials } from "../lib/error-sanitize";
 import { RUNTIME_KNOWLEDGE_VERSION, SKILL_METHOD_VERSION, SKILL_RULES, skillForMode, type SkillFinding, type SkillCode, type SkillSnapshot, type SkillAudit } from "../../shared/lesson-skill";
 import { workflowDefinition, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 
@@ -31,9 +32,26 @@ export function findingsFromError(error: unknown, step: string): SkillFinding[] 
   const matches = detectors.filter(([, regex]) => regex.test(text)).map(([code]) => knownFinding(code, step));
   if (matches.length) return matches;
   // No raw message, source, title, identifier or instruction is persisted in a skill.
-  const shape = text.replace(/https?:\/\/\S+|\b[\w.-]+@[\w.-]+\b|(?:sk-|Bearer\s+)\S+/gi, "[value]")
-    .replace(/["'`][^"'`]*["'`]/g, "[value]").replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "[id]").replace(/\d+/g, "#").slice(0, 2000);
+  const shape = unknownShape(text);
   return [{ code: "unknown", step, fingerprint: digest(`${SKILL_METHOD_VERSION}:${step}:${shape}`) }];
+}
+/**
+ * A hibaüzenet redaktált alakja (URL, e-mail, kulcs, idézett tartalom, azonosító, szám kitakarva). Spec 2026-09-30 (B8,
+ * H11): az ismeretlen osztály szövegmintája ebből kerül a futás naplójába — a tanult skillbe továbbra is csak a lenyomat.
+ */
+export function unknownShape(text: string): string {
+  return text.replace(/https?:\/\/\S+|\b[\w.-]+@[\w.-]+\b|(?:sk-|Bearer\s+)\S+/gi, "[value]")
+    .replace(/["'`][^"'`]*["'`]/g, "[value]").replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "[id]").replace(/\d+/g, "#").slice(0, 2000);
+}
+/**
+ * A futás naplójába kerülő minta (a lenyomat változatlan). Review #165: a redakció a TELJES szövegen, a csonkolás ELŐTT
+ * fut — a közös credential-politika (`redactCredentials`: címkézett kulcs/jelszó/token a sor végéig), a magyar idézet
+ * (a lezáratlan is, a szöveg végéig), utána a lenyomat-alak; ami párosítatlan idézőjel a csonkolás után marad, az a
+ * végéig kitakarva.
+ */
+export function unknownSample(text: string): string {
+  const masked = redactCredentials(text).replace(/„[^”]*(?:”|$)/g, "[value]");
+  return unknownShape(masked).replace(/["'`„”][^]*$/, "[value]").slice(0, 400);
 }
 export function mergeFindings(...groups: SkillFinding[][]): SkillFinding[] {
   const findings = new Map<string, SkillFinding>();

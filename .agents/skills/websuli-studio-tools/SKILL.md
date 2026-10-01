@@ -5,6 +5,8 @@ description: A Studio determinisztikus eszközei (outline-autofix, bank-packet-a
 
 # Studio eszközök — modellhívás helyett kód
 
+> **Utasításrendszer runtime-3 (2026-09-30).** Runtime-3 determinisztikus rétegek (2026-09-30): `bank-repair.ts` (hibakódból levezetett javítási jogosultság), `bank-schema.ts` (szigorú JSON-séma a közvetlen OpenAI-úton), `lektor-view.ts` (tömör lektor-nézet), `figure-check.ts` (ábra-kapu v1), `instruction-points.ts` (tanári pontjegyzék), `limit-policy.ts` (limit-tábla, blokk-kivétel). Leírás: [közös módszer — „Utasításrendszer runtime-3”](../../../docs/lesson-improvement.md).
+
 Cél (tulajdonosi döntés 2026-09-19): a formai hibákat és a sablonos munkát determinisztikus szkript végezze, a fizetett modellkör csak tartalmi hibára maradjon. Az eszközök forrása és a szerep-skillekbe írt leírásuk egy helyen él: `source/server/studio/role-skills.ts` (`TOOL_SKILLS`, `ROLE_TOOLS`).
 
 ## Az eszközök

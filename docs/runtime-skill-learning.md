@@ -14,6 +14,10 @@ A kézi Studio-forráskivonatolás egyetlen betöltött skillkontextust használ
 
 A rendszer a végrehajtás tapasztalatait tanulja meg, nem a nyelvi modell súlyait módosítja. A feltöltés, internetes készítés, Studio, teljes/célzott/HTML-javítás és alkalmazás a közös végrehajtót használja.
 
+## Szerepre szűrt runbook és ismeretlen hibák (2026-09-30)
+
+A runtime-3 csomagban minden modellhívás a saját szerepének (`PromptRole`) runbook-részét és tanult szabályait kapja (`shared/instruction-bundles/roles.ts`, `RULE_ROLES`); a befagyasztott runtime-2 futás a régi, szűretlen szöveget. Az „unknown” osztályú hiba redaktált szövegmintája (URL, kulcs, idézett tartalom, szám kitakarva) a futás nézetébe kerül (`unknownFindingSamples`) — emberi átnézésre; a tanult skillben továbbra is csak a lenyomat van.
+
 ## Egy futás menete
 
 1. A készítő saját, az aktuális módszerverzióhoz tartozó aktív skill-kiegészítései betöltődnek. A készítési és javítási tapasztalatok külön skillhez tartoznak.

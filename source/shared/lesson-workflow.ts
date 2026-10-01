@@ -53,6 +53,8 @@ export type WorkflowView = {
   resourceId?: string;
   skill?: SkillSnapshot;
   skillFindings?: SkillFinding[];
+  /** Spec 2026-09-30 (B8, H11): az „unknown” osztályú hibák redaktált szövegmintája a FUTÁS naplójában (emberi átnézésre); a tanult skillbe nem kerül. */
+  unknownFindingSamples?: Array<{ step: string; fingerprint: string; text: string }>;
   skillAudit?: SkillAudit;
   history?: Array<{ state: WorkflowView["state"]; visits: WorkflowVisit[]; error?: string }>;
   /** Spec 2026-09-30-dinamikus-keret: a célzott javítóút egyszeri többletkeretei (ok + időpont), futásonként korlátozva. */

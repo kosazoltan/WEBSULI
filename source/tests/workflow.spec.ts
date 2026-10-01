@@ -11,6 +11,8 @@ const runs: WorkflowView[] = WORKFLOW_MODES.map((mode, index) => ({
   skill: { skill: ["html", "repair", "concept", "apply"].includes(mode) ? "tananyag-javito" : "tananyag-keszito", version: "fixture-learning-version", rules: ["sample_score"] },
   skillAudit: { version: SKILL_METHOD_VERSION, execution: 1, at: 1700000001000, outcome: mode === "web" ? "stopped" : "passed",
     checks: { sequence: mode !== "web", gate: mode !== "web", readback: mode !== "web" }, findings: [{ code: "sample_score", fingerprint: "fixture", step: "author" }, { code: "unknown", fingerprint: "novel", step: "author" }] },
+  // Spec 2026-09-30 (B8, H11) + review #165: az ismeretlen hibaosztály kitakart mintája a futásnézetben (hosszú, töretlen szóval is).
+  ...(mode === "web" ? { unknownFindingSamples: [{ step: workflowDefinition("web").steps[0].id, fingerprint: "novel", text: `Egészen új hibaalak a [value] mellett: # tétel ${"nagyonhosszútöretlenszó".repeat(6)}` }] } : {}),
 }));
 test.use({ serviceWorkers: "block" });
 test.beforeEach(async ({ page }) => {
@@ -69,6 +71,10 @@ for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1440, 900]])
     const finalLearning = page.getByTestId("workflow-learning");
     if (await finalLearning.getAttribute("open") === null) await finalLearning.locator("summary").click();
     await expect(page.getByTestId("workflow-learning").getByText("A teljes befejezés nem igazolt; a futás megállását és tapasztalatait rögzítettük.", { exact: true })).toBeVisible();
+    const samples = page.getByTestId("workflow-unknown-samples");
+    await expect(samples).toContainText("Egészen új hibaalak a [value] mellett");
+    expect(await samples.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: `test-results/workflow-${width}.png`, fullPage: true });
     await page.reload();
     await expect(page.getByTestId("workflow-history")).toBeVisible();
