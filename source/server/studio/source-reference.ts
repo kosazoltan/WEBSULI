@@ -113,33 +113,50 @@ export const TEXT_FIX_MODEL = "claude-opus-5-5";
  * ellenőrzött: nincs benne forrás-szó, a számai azonosak, a hossza közel az eredetihez; a feladat saját mintája
  * utána is teljes pontot kap — különben az eredeti marad.
  */
-export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall, scope: ReferenceScope = {}): Promise<{ lesson: Lesson; rewritten: number; rejected: number; needsSource: number }> {
+export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall, scope: ReferenceScope = {}): Promise<{ lesson: Lesson; rewritten: number; rejected: number; needsSource: number; unreported: number }> {
   const findings = sourceReferenceFindings(lesson, scope);
-  if (!findings.length) return { lesson, rewritten: 0, rejected: 0, needsSource: 0 };
+  if (!findings.length) return { lesson, rewritten: 0, rejected: 0, needsSource: 0, unreported: 0 };
   const system = withSupportSkill("kid-text-fixer", "Írd át a kapott mondatokat a skill szerint. Kizárólag a kért JSON-t add vissza.");
-  const user = JSON.stringify({ title: lesson.title, classroom: lesson.classroom, items: findings });
-  const answer = await call(system, user) as { items?: Array<{ path?: unknown; text?: unknown; needsSource?: unknown }> } | null;
   const original = new Map(findings.map((f) => [f.path, f.text]));
   const next = structuredClone(lesson) as Lesson;
   let rewritten = 0, rejected = 0, needsSource = 0;
-  for (const item of Array.isArray(answer?.items) ? answer!.items : []) {
-    const path = typeof item?.path === "string" ? item.path : "";
-    const before = original.get(path);
-    // U4 (H33): a modell jelezheti, hogy a hivatkozó tagmondat törlése után nem marad teljes állítás — akkor az eredeti marad
-    // (a kapu figyelmeztetése), új tényt a modell nem írhat.
-    if (before !== undefined && item?.needsSource === true) { needsSource++; continue; }
-    const text = typeof item?.text === "string" ? item.text.trim() : "";
-    const ok = before !== undefined && text && !MENTION.test(text) && numbersOf(text) === numbersOf(before)
-      && !introducesNewProperNoun(before, text)
-      && text.length >= before.length * 0.4 && text.length <= before.length * 1.6;
-    if (ok && setAtPath(next as unknown as Record<string, unknown>, path, text)) rewritten++;
-    else rejected++;
+  // Élő mérés (Egyiptom r3, job ba8e35bb, 2026-10-01): a modell a 15 tételből 12-t adott vissza („12 átírva, 0 elutasítva”),
+  // a 3 ki nem jelentett tétel csendben a leckében maradt. A ki nem jelentett tételek EGYSZER célzottan újra mennek, a
+  // maradék `unreported` számként a naplóba kerül (a kapu figyelmeztetése marad).
+  const answered = new Set<string>();
+  let pending = findings;
+  for (let attempt = 0; attempt < 2 && pending.length; attempt++) {
+    const user = JSON.stringify({ title: lesson.title, classroom: lesson.classroom, items: pending });
+    let answer: { items?: Array<{ path?: unknown; text?: unknown; needsSource?: unknown }> } | null;
+    try {
+      answer = await call(system, user) as typeof answer;
+    } catch (error) {
+      // Review #168: az újrakérés hibája nem dobhatja el az első kör sikeres átírásait — a kimaradt tétel „nem jelentett” marad.
+      if (attempt === 0) throw error;
+      break;
+    }
+    for (const item of Array.isArray(answer?.items) ? answer!.items : []) {
+      const path = typeof item?.path === "string" ? item.path : "";
+      const before = pending.some((f) => f.path === path) && !answered.has(path) ? original.get(path) : undefined;
+      if (before !== undefined) answered.add(path);
+      // U4 (H33): a modell jelezheti, hogy a hivatkozó tagmondat törlése után nem marad teljes állítás — akkor az eredeti marad
+      // (a kapu figyelmeztetése), új tényt a modell nem írhat.
+      if (before !== undefined && item?.needsSource === true) { needsSource++; continue; }
+      const text = typeof item?.text === "string" ? item.text.trim() : "";
+      const ok = before !== undefined && text && !MENTION.test(text) && numbersOf(text) === numbersOf(before)
+        && !introducesNewProperNoun(before, text)
+        && text.length >= before.length * 0.4 && text.length <= before.length * 1.6;
+      if (ok && setAtPath(next as unknown as Record<string, unknown>, path, text)) rewritten++;
+      else rejected++;
+    }
+    pending = pending.filter((f) => !answered.has(f.path));
   }
+  const unreported = pending.length;
   if (next.experience && lesson.experience) {
     next.experience = {
       ...next.experience,
       tasks: next.experience.tasks.map((task, i) => (evaluateOpenAnswer(task.sample, task).state === "ok" ? task : lesson.experience!.tasks[i])),
     };
   }
-  return { lesson: next, rewritten, rejected, needsSource };
+  return { lesson: next, rewritten, rejected, needsSource, unreported };
 }
