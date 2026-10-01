@@ -9,7 +9,7 @@ import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
-import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, reconcileBankWithTeaching, splitLimitBlockers } from "./limit-policy";
+import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, reconcileBankWithTeaching, splitLimitBlockers, withTrimmedSections } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
 import { requireRoleForStep } from "../../shared/instruction-bundles/roles";
 import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, parseInventoryCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
@@ -1379,7 +1379,7 @@ export function openBankFindingFlags(lesson: Lesson, raw: unknown): ChoiceFlag[]
   }
   return flags;
 }
-export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[] } | { error: string } {
+export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[]; trimmed?: number[] } | { error: string } {
   const flags = new Map<string, string>();
   for (const f of lessonSingleChoiceProblems(lesson)) flags.set(f.path, `${f.path}: ${f.problems.join(" ")}`);
   const limitOrigin = new Set<string>();
@@ -1411,7 +1411,7 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
   const all = [...flags.values()].join("; ");
   if (blocking.length) return { error: `Egyválasztós hiba maradt a leckében, nem publikálható (pontosan egy helyes opció kell): ${blocking.join("; ")}` };
   const experience = lesson.experience!;
-  const reduced: Lesson = { ...lesson,
+  let reduced: Lesson = { ...lesson,
     sections: checkBlocks.size
       ? lesson.sections.map((section, i) => (checkBlocks.has(i) ? { ...section, blocks: section.blocks.filter((_, j) => !checkBlocks.get(i)!.has(j)) } : section))
       : lesson.sections,
@@ -1421,14 +1421,24 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
     methods: experience.methods.filter((_, i) => !byBank.methods.has(i)),
     tasks: experience.tasks.filter((_, i) => !byBank.tasks.has(i)),
   } };
-  const after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
+  let after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
+  // Spec 2026-10-01-limit-csomag-lazitas (tulajdonosi döntés): a kivett nyílt feladatok fejezetében a csomag lazított (fogalmanként
+  // legalább 1 nyílt feladat marad, a többi minimum változatlan) — egyszeri újramérés a jelöléssel.
+  // Review #171: csak a LIMIT-eredetű nyílt feladatok fejezete lazítható (az aritmetikai/egyéb kivétel szabálya változatlan).
+  const limitTaskSections = [...new Set([...limitOrigin].map((p) => bankItemRef(p)).filter((r): r is BankItemRef => r?.bank === "tasks" && r.index < experience.tasks.length).map((r) => experience.tasks[r.index].sectionIndex))];
+  let trimmedSections: number[] = [];
+  if (after.length && limitTaskSections.length) {
+    const trimmed = withTrimmedSections(reduced, limitTaskSections);
+    const retry = [...experienceProblems(trimmed), ...verifyLessonSkillBank(trimmed.experience, trimmed.subject, trimmed.sections).problems];
+    if (!retry.length) { reduced = trimmed; after = retry; trimmedSections = limitTaskSections; }
+  }
   if (after.length) {
     const fromLimit = limitOrigin.size > 0;
     return { error: fromLimit
       ? `Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})`
       : `Egyválasztós hiba maradt a bankban, és a tételek kivétele után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})` };
   }
-  return { lesson: reduced, removed: [...removed.keys()] };
+  return { lesson: reduced, removed: [...removed.keys()], ...(trimmedSections.length ? { trimmed: trimmedSections } : {}) };
 }
 
 type GateModels = { providerFactory: (model: string, step?: string) => IAIProvider; keyConfigured: (model: string) => boolean };
@@ -1449,7 +1459,9 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   if (choiceGate.removed.length) {
     await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
     // Review P2: a job leckéje a lektorált EREDETI marad — a kapu újrafuttatva ugyanabból számol (idempotens).
-    job.output = { ...job.output, choiceGate: { removed: choiceGate.removed } };
+    job.output = { ...job.output, choiceGate: { removed: choiceGate.removed },
+      // Review #171: a lazított publikálás az admin minőségi jegyzetei között (JobMonitor).
+      ...(choiceGate.trimmed?.length ? { qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "bank_trimmed", note: `A limiten kivett hibás nyílt feladat után lazított fejezet-csomag: ${choiceGate.trimmed.map((i) => i + 1).join(", ")}. fejezet (fogalmanként legalább 1 nyílt feladat maradt).`, round: job.round }) } : {}) };
     logger.warn(`[STUDIO/GATE] Hibás banktétel kivéve (egyválasztós vagy a körlimiten maradt; ${job.id}): ${choiceGate.removed.join(", ")}`);
   }
 
@@ -1537,16 +1549,24 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         // Spec 2026-10-01-limit-blokk-kivetel-bank: a kivett tanítás fogalmára épülő banktételek is kikerülnek, a bankterv
         // újraszámolódik; utána (review #164, P1) a fúziós bankkapu az ÚJ jelöltre fut, hibánál a lecke nem publikálható.
         const bankFit = reconcileBankWithTeaching(probaFix.lesson);
+        let bankTrimmed: number[] = [];
         const reachable = { ...probaFix, lesson: bankFit.lesson };
         if (isFusionMethodVersion(job.output?.methodVersion) || reachable.lesson.experience) {
-          const bankProblems = [...experienceProblems(reachable.lesson), ...verifyLessonSkillBank(reachable.lesson.experience, reachable.lesson.subject, reachable.lesson.sections).problems];
+          const measure = (l: Lesson) => [...experienceProblems(l), ...verifyLessonSkillBank(l.experience, l.subject, l.sections).problems];
+          let bankProblems = measure(reachable.lesson);
+          // Spec 2026-10-01-limit-csomag-lazitas: a kivett nyílt feladatok fejezetében lazított csomag — egyszeri újramérés.
+          if (bankProblems.length && bankFit.taskSections.length) {
+            const trimmed = withTrimmedSections(reachable.lesson, bankFit.taskSections);
+            const retry = measure(trimmed);
+            if (!retry.length) { reachable.lesson = trimmed; bankProblems = retry; bankTrimmed = bankFit.taskSections; }
+          }
           if (bankProblems.length) return fail(store, job, `A megalapozatlan blokk kivétele után a fúziós bank nem felel meg — nem publikálható: ${bankProblems.join("; ")}`);
         }
         parsed.data = reachable.lesson;
         await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
         gate.coverage = checkCoverageGate(parsed.data, map.concepts).coverage;
         const rearc = checkLessonArc(parsed.data, arcOptions);
-        if (acceptance.removedBlocks.length) removalNote = `; ${acceptance.removedBlocks.length} teljesen megalapozatlan blokk kivéve (${acceptance.removedBlocks.join(", ").slice(0, 200)})${bankFit.removedItems.length ? `, a hozzá tartozó ${bankFit.removedItems.length} banktétel is` : ""}${rearc.ok ? "" : `, az ív a kivétel után: ${rearc.reasons.join(" ").slice(0, 200)}`}${reachable.disabled.length ? `, Próba kikapcsolva: ${reachable.disabled.map((i) => i + 1).join(", ")}. fejezet` : ""}`;
+        if (acceptance.removedBlocks.length) removalNote = `; ${acceptance.removedBlocks.length} teljesen megalapozatlan blokk kivéve (${acceptance.removedBlocks.join(", ").slice(0, 200)})${bankFit.removedItems.length ? `, a hozzá tartozó ${bankFit.removedItems.length} banktétel is` : ""}${bankTrimmed.length ? `, lazított fejezet-csomag: ${bankTrimmed.map((i) => i + 1).join(", ")}. fejezet` : ""}${rearc.ok ? "" : `, az ív a kivétel után: ${rearc.reasons.join(" ").slice(0, 200)}`}${reachable.disabled.length ? `, Próba kikapcsolva: ${reachable.disabled.map((i) => i + 1).join(", ")}. fejezet` : ""}`;
       }
       qualityNotes = appendQualityNote(qualityNotes, {
         reason: "gate_limit_accepted",
