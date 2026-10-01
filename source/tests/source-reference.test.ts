@@ -101,4 +101,13 @@ test("élő mérés ba8e35bb: a modell által ki nem jelentett tétel EGYSZER c�
   const silent = await rewriteSourceReferences(L, async () => { calls++; return { items: [] }; });
   assert.equal(calls, 2, "legfeljebb egy újrakérés");
   assert.deepEqual([silent.rewritten, silent.rejected, silent.unreported], [0, 0, 2]);
+  // review #168: az újrakérés hibája nem dobja el az első kör átírását
+  let n = 0;
+  const partial = await rewriteSourceReferences(L, async () => {
+    if (++n === 2) throw new Error("szolgáltatói időtúllépés");
+    return { items: [{ path: "sections[0].blocks[0].text", text: "Istár a szerelem istennője volt." }] };
+  });
+  assert.deepEqual([partial.rewritten, partial.unreported], [1, 1]);
+  assert.equal((partial.lesson.sections[0].blocks[0] as { text: string }).text, "Istár a szerelem istennője volt.");
+  await assert.rejects(rewriteSourceReferences(L, async () => { throw new Error("első hívás hibája"); }), /első hívás hibája/, "az első hívás hibája a hívóhoz megy (változatlan)");
 });

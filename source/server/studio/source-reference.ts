@@ -127,7 +127,14 @@ export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall,
   let pending = findings;
   for (let attempt = 0; attempt < 2 && pending.length; attempt++) {
     const user = JSON.stringify({ title: lesson.title, classroom: lesson.classroom, items: pending });
-    const answer = await call(system, user) as { items?: Array<{ path?: unknown; text?: unknown; needsSource?: unknown }> } | null;
+    let answer: { items?: Array<{ path?: unknown; text?: unknown; needsSource?: unknown }> } | null;
+    try {
+      answer = await call(system, user) as typeof answer;
+    } catch (error) {
+      // Review #168: az újrakérés hibája nem dobhatja el az első kör sikeres átírásait — a kimaradt tétel „nem jelentett” marad.
+      if (attempt === 0) throw error;
+      break;
+    }
     for (const item of Array.isArray(answer?.items) ? answer!.items : []) {
       const path = typeof item?.path === "string" ? item.path : "";
       const before = pending.some((f) => f.path === path) && !answered.has(path) ? original.get(path) : undefined;
