@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateOpenAnswer, evaluateOpenAnswerV1, isTypedTask, normalizeAnswerV2, OPEN_ANSWER_RULES_HU, STEM_SUFFIXES } from "../shared/lesson-experience-score";
-import { gradeTypedAnswers, referenceValueProblems, scoringGate, isSimplifiedFraction, normalizeExpressionText, LESSON_SCORING_VERSION, containsExpressionState, referenceValue } from "../shared/answer-value";
+import { gradeTypedAnswers, referenceValueProblems, scoringGate, isSimplifiedFraction, normalizeExpressionText, LESSON_SCORING_VERSION, containsExpressionState, referenceValue, isExpressionText } from "../shared/answer-value";
 import { evaluateExpression } from "../shared/arithmetic-expression";
 import { experienceSchema, requiredDistinctSchema, type OpenTask } from "../shared/lesson-experience";
 import { arithmeticClaimProblems } from "../server/studio/tools/arithmetic-claims";
@@ -175,4 +175,14 @@ test("review #159: a műveleti jel nem szó (minWords), és az 500. szó utáni 
   const filler = Array.from({ length: 500 }, () => "alma").join(" "); // betűsor: a „szó4” alak számjegye maga is érték lenne
   assert.equal(evaluateOpenAnswer(`Az eredmény: ${filler} 4`, task).score, 0, "az 500. szó utáni érték már nem számít");
   assert.equal(evaluateOpenAnswer(`Az eredmény: 4 ${filler}`, task).score, 1);
+});
+
+test("élő mérés 35370b32: a nem-szöveg típusos érték (modell szám-értéke) sémahiba, nem kivétel — a csomag javító kört kaphat", () => {
+  const e = standardFusionFixture().experience!;
+  const bad = { ...e, scoringVersion: LESSON_SCORING_VERSION, tasks: e.tasks.map((t, i) => (i === 1 ? { ...t, typedAnswers: [{ part: "a", kind: "number", value: 12 }] } : t)) };
+  let parsed: ReturnType<typeof experienceSchema.safeParse> | undefined;
+  assert.doesNotThrow(() => { parsed = experienceSchema.safeParse(bad); });
+  assert.equal(parsed!.success, false);
+  assert.equal(referenceValue(12 as unknown), null);
+  assert.equal(isExpressionText(undefined), false);
 });
