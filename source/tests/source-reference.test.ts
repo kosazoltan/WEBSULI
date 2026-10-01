@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences } from "../server/studio/source-reference";
+import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import { NEUTRAL_WRONG_FEEDBACK, rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences } from "../server/studio/source-reference";
 import type { Lesson } from "../shared/lesson-schema";
 
 /** Spec 2026-09-30 (docs/specs/2026-09-30-nem-elakado-kozzetetel.md, D4) — élő minták a Mezopotámia-futásból. */
@@ -110,4 +111,22 @@ test("élő mérés ba8e35bb: a modell által ki nem jelentett tétel EGYSZER c�
   assert.deepEqual([partial.rewritten, partial.unreported], [1, 1]);
   assert.equal((partial.lesson.sections[0].blocks[0] as { text: string }).text, "Istár a szerelem istennője volt.");
   await assert.rejects(rewriteSourceReferences(L, async () => { throw new Error("első hívás hibája"); }), /első hívás hibája/, "az első hívás hibája a hívóhoz megy (változatlan)");
+});
+
+test("élő mérés a0d0bf35: „forrást igényel” jelzésű HIBÁS opció-visszajelzés a bankban semleges, helyes visszajelzést kap; a helyes opcióé marad", async () => {
+  const L = standardFusionFixture();
+  const q = L.experience!.quiz[0];
+  const wrong = q.correctIndex === 0 ? 1 : 0;
+  const fb = [...q.feedbackPerOption];
+  fb[wrong] = "A tananyag nem a fáraók korához kapcsolja a kő előkerülését.";
+  fb[q.correctIndex] = "Helyes: a tananyag szerint ez így van.";
+  L.experience!.quiz[0] = { ...q, feedbackPerOption: fb };
+  const wrongPath = `experience.quiz[0].feedbackPerOption[${wrong}]`, rightPath = `experience.quiz[0].feedbackPerOption[${q.correctIndex}]`;
+  const found = sourceReferenceFindings(L, { experienceOnly: true }).map((f) => f.path);
+  assert.ok(found.includes(wrongPath) && found.includes(rightPath), JSON.stringify(found));
+  const result = await rewriteSourceReferences(L, async (_s, user) => ({ items: (JSON.parse(user) as { items: Array<{ path: string }> }).items.map((i) => ({ path: i.path, needsSource: true })) }), { experienceOnly: true });
+  assert.equal(result.lesson.experience!.quiz[0].feedbackPerOption[wrong], NEUTRAL_WRONG_FEEDBACK);
+  assert.equal(result.lesson.experience!.quiz[0].feedbackPerOption[q.correctIndex], fb[q.correctIndex], "a helyes opció visszajelzése nem cserélődik");
+  assert.equal(result.neutralized, 1);
+  assert.ok(result.needsSource >= 1);
 });

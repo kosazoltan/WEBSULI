@@ -236,7 +236,7 @@ export function bankPacketContract(c: { sectionIndex: number; conceptIds: readon
     "4. Kérdés-egyediség: a kérdés kulcsa (kisbetű, írásjel nélkül; a + − · × : / jel és a számok megmaradnak) nem ismétlődhet a csomagon belül, sem a korábbi csomagok kérdéseivel és kapukérdéseivel; két kapukérdés (gate) csak különböző lehet.",
     "5. Egyválasztós tétel (kvíz; gate/myth/popup módszer): 3–4 különböző opció, PONTOSAN egy igaz, minden opcióhoz magyarázat; a correctIndex opciójának száma egyezzen a magyarázatban helyesnek mondott számmal; minden kiírt „a · b = c” állítás igaz (a program kiszámolja).",
     "6. Nyílt feladat: a sample a saját rubrikán 1 pont (a pontozó szabályai lent); számolós feladatnál typedAnswers, amelynek value-ját a program a kérdés kifejezéséből újraszámolja; a végeredmény nem required-csoport.",
-    "7. Tilos: ábrára („az ábrán”, „N. ábra”), forrásra, füzetre hivatkozni; csomagon kívüli fogalom; a tanításban nem szereplő tény; párosításban ismétlődő oldal.",
+    "7. Tilos: ábrára („az ábrán”, „N. ábra”), forrásra, füzetre, tananyagra („a tananyag szerint”, „a tananyag nem …”) hivatkozni — a visszajelzés magát a tényt mondja ki; csomagon kívüli fogalom; a tanításban nem szereplő tény; párosításban ismétlődő oldal.",
     "8. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételei és mezői cserélhetők, eredeti id-val, minden mezővel; új id és törlés tilos; a többit a program változatlanul megőrzi.",
   ].join("\n");
 }

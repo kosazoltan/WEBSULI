@@ -41,6 +41,8 @@ export function extractGeneratedHtml(fullText: string): string | null {
 
 type Completion = { type: "ready"; html: string } | { type: "retry"; instruction: string; reason: string } | { type: "error"; message: string };
 const MAX_ARTIFACT_REPAIRS = 2;
+/** Spec 2026-10-01-forrasgyujtes-es-bank-hivatkozas: a cél legalább ennyi letöltött, témához tartozó oldal (mért: 15 találat, 1 letöltés). */
+export const MIN_FETCHED_SOURCES = 3;
 
 /** An SDK turn finishing is not evidence that the requested lesson exists. */
 export function decideWebResearchResult(
@@ -119,7 +121,14 @@ export function decideWebResearchGatherResult(
   }
   if (stopReason === "refusal") return { type: "error", message: "A modell elutasította a forrásgyűjtést." };
   if (stopReason !== "end_turn") return { type: "error", message: "A keresés nem fejeződött be szabályosan. Nem készült menthető tananyag." };
-  if (fetchedCount >= 1) return { type: "ready" };
+  if (fetchedCount >= MIN_FETCHED_SOURCES) return { type: "ready" };
+  if (fetchedCount >= 1) {
+    // 1–2 oldal: egy célzott újrakérés több forrásért; ha elfogyott a kísérlet, a meglévővel kész (nem bukik).
+    if (repairAttempts >= 1) return { type: "ready" };
+    const missing = MIN_FETCHED_SOURCES - fetchedCount;
+    const reason = `Csak ${fetchedCount} oldal teljes szövege töltődött le; legalább ${MIN_FETCHED_SOURCES} kell.`;
+    return { type: "retry", reason, instruction: `${reason} A web_fetch eszközzel tölts le még legalább ${missing} különböző, a témához tartozó oldalt a találatok közül (tantervi, tankönyvi, NAT-hoz illő). HTML tananyagot, pontozó JavaScriptet ne írj; rövid magyar státusz megengedett.` };
+  }
   const html = extractGeneratedHtml(result.fullContent);
   const reason = html
     ? "HTML tananyag a gyűjtésben nem helyettesíti a letöltött forrást. A web_fetch eszközzel olvasd el a felhasznált oldalak teljes szövegét."
@@ -145,7 +154,7 @@ export function webResearchGatherPrompt(classroom: number, title?: string, topic
     "FELADATOD:",
     "1. KERESS az interneten (web_search) magyar tantervi, tankönyvi vagy NAT/OFI-hoz illő forrásokat a kért témához.",
     "2. A web_fetch eszközzel töltsd le a felhasznált oldalak teljes szövegét. A találati cím és a snippet nem elegendő. Hozzáférési hibaoldal (403, blocked, Just a moment) nem forrás.",
-    "3. A gyűjtés akkor kész, ha legalább egy témához tartozó oldal teljes szövege le van töltve. Rövid magyar státusz megengedett.",
+    `3. A gyűjtés akkor kész, ha legalább ${MIN_FETCHED_SOURCES} különböző, témához tartozó oldal teljes szövege le van töltve (ha ennyi nem érhető el, a meglévőkkel). Rövid magyar státusz megengedett.`,
     "TILOS: HTML tananyag, <!DOCTYPE, ee_evaluate, saját pontozó JavaScript, JSON-bank, ígéret hogy a tananyag kész.",
     "Ne kérj újabb engedélyt. A tanítást a program a letöltött szövegből készített jegyzékből írja.",
   ].filter((line): line is string => line !== null).join("\n");

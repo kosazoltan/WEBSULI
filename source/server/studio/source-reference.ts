@@ -113,13 +113,26 @@ export const TEXT_FIX_MODEL = "claude-opus-5-5";
  * ellenőrzött: nincs benne forrás-szó, a számai azonosak, a hossza közel az eredetihez; a feladat saját mintája
  * utána is teljes pontot kap — különben az eredeti marad.
  */
-export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall, scope: ReferenceScope = {}): Promise<{ lesson: Lesson; rewritten: number; rejected: number; needsSource: number; unreported: number }> {
+/**
+ * Spec 2026-10-01-forrasgyujtes-es-bank-hivatkozas: egy HIBÁS válaszlehetőség visszajelzése, amelynek átírásához az átíró
+ * „forrást igényel” jelzést adott, semleges, helyes visszajelzést kap (mért a0d0bf35: „A tananyag nem a fáraók korához
+ * kapcsolja a kő előkerülését.” bennmaradt). A helyes opció visszajelzése és más mező nem cserélődik.
+ */
+export const NEUTRAL_WRONG_FEEDBACK = "Nem ez a helyes válasz — olvasd el újra a fejezet magyarázatát.";
+function isWrongOptionFeedback(lesson: Lesson, path: string): boolean {
+  const m = /^experience\.(quiz|methods)\[(\d+)\]\.feedbackPerOption\[(\d+)\]$/.exec(path);
+  if (!m || !lesson.experience) return false;
+  const item = (lesson.experience[m[1] as "quiz" | "methods"] as Array<{ correctIndex?: unknown }>)[Number(m[2])];
+  return typeof item?.correctIndex === "number" && item.correctIndex !== Number(m[3]);
+}
+
+export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall, scope: ReferenceScope = {}): Promise<{ lesson: Lesson; rewritten: number; rejected: number; needsSource: number; unreported: number; neutralized: number }> {
   const findings = sourceReferenceFindings(lesson, scope);
-  if (!findings.length) return { lesson, rewritten: 0, rejected: 0, needsSource: 0, unreported: 0 };
+  if (!findings.length) return { lesson, rewritten: 0, rejected: 0, needsSource: 0, unreported: 0, neutralized: 0 };
   const system = withSupportSkill("kid-text-fixer", "Írd át a kapott mondatokat a skill szerint. Kizárólag a kért JSON-t add vissza.");
   const original = new Map(findings.map((f) => [f.path, f.text]));
   const next = structuredClone(lesson) as Lesson;
-  let rewritten = 0, rejected = 0, needsSource = 0;
+  let rewritten = 0, rejected = 0, needsSource = 0, neutralized = 0;
   // Élő mérés (Egyiptom r3, job ba8e35bb, 2026-10-01): a modell a 15 tételből 12-t adott vissza („12 átírva, 0 elutasítva”),
   // a 3 ki nem jelentett tétel csendben a leckében maradt. A ki nem jelentett tételek EGYSZER célzottan újra mennek, a
   // maradék `unreported` számként a naplóba kerül (a kapu figyelmeztetése marad).
@@ -141,7 +154,11 @@ export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall,
       if (before !== undefined) answered.add(path);
       // U4 (H33): a modell jelezheti, hogy a hivatkozó tagmondat törlése után nem marad teljes állítás — akkor az eredeti marad
       // (a kapu figyelmeztetése), új tényt a modell nem írhat.
-      if (before !== undefined && item?.needsSource === true) { needsSource++; continue; }
+      if (before !== undefined && item?.needsSource === true) {
+        if (isWrongOptionFeedback(lesson, path) && setAtPath(next as unknown as Record<string, unknown>, path, NEUTRAL_WRONG_FEEDBACK)) neutralized++;
+        else needsSource++;
+        continue;
+      }
       const text = typeof item?.text === "string" ? item.text.trim() : "";
       const ok = before !== undefined && text && !MENTION.test(text) && numbersOf(text) === numbersOf(before)
         && !introducesNewProperNoun(before, text)
@@ -158,5 +175,5 @@ export async function rewriteSourceReferences(lesson: Lesson, call: RewriteCall,
       tasks: next.experience.tasks.map((task, i) => (evaluateOpenAnswer(task.sample, task).state === "ok" ? task : lesson.experience!.tasks[i])),
     };
   }
-  return { lesson: next, rewritten, rejected, needsSource, unreported };
+  return { lesson: next, rewritten, rejected, needsSource, unreported, neutralized };
 }

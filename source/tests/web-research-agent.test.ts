@@ -65,8 +65,15 @@ test("a web_fetch tool direct hívású, korlátos és teljes oldalt kér", () =
 
 test("a gyűjtés HTML nélkül, letöltött forrással kész; fetch nélkül újrapróbál", () => {
   const html = `${HTML_START}\n<!DOCTYPE html>\n<html lang="hu"><body><p>${"x".repeat(80)}</p></body></html>`;
-  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "Letöltöttem a forrást.", repairAttempts: 0, fetchedCount: 1 }).type, "ready");
-  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: html, repairAttempts: 0, fetchedCount: 1 }).type, "ready");
+  // Spec-változás 2026-10-01-forrasgyujtes-es-bank-hivatkozas (tulajdonosi kérés): a cél ≥ 3 letöltött oldal; 1 oldallal
+  // egy célzott újrakérés jár, utána a meglévővel kész.
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "Letöltöttem a forrást.", repairAttempts: 0, fetchedCount: 3 }).type, "ready");
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: html, repairAttempts: 0, fetchedCount: 3 }).type, "ready");
+  const one = decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "Letöltöttem a forrást.", repairAttempts: 0, fetchedCount: 1 });
+  assert.equal(one.type, "retry");
+  if (one.type === "retry") assert.match(one.instruction, /legalább 2 különböző/);
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "x", repairAttempts: 0, fetchedCount: 2 }).type, "retry");
+  assert.equal(decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "x", repairAttempts: 1, fetchedCount: 1 }).type, "ready", "az újrakérés után a meglévővel kész");
   const empty = decideWebResearchGatherResult({ stopReason: "end_turn", fullContent: "Összefoglaló.", repairAttempts: 0, fetchedCount: 0 });
   assert.equal(empty.type, "retry");
   if (empty.type === "retry") assert.doesNotMatch(empty.instruction, /HTML_START/);
