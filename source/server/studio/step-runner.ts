@@ -19,7 +19,7 @@ import { buildInstructionPointsPrompt, buildInventory, gapPoints, INSTRUCTION_PO
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
 import { MAX_AUTHOR_ROUNDS } from "./pipeline";
-import { canSpendRepair, ensureRepairPath, repairRemaining, repairSpentForRound, spendRepair } from "./repair-ledger";
+import { canSpendRepair, ensureRepairPath, repairPathAvailable, repairRemaining, repairSpentForRound, spendRepair } from "./repair-ledger";
 import { STUDIO_PROMPT_NAMES, studioPromptStore } from "./prompt";
 import {
   computeStepHash,
@@ -83,7 +83,7 @@ import { supportSkillVersion, withSupportSkill } from "./support-skills";
 import { FIGURE_CHECK_VERSION, figureCheck } from "./figure-check";
 import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
-import { workflowPhase, workflowFence, workflowStepVisitsLeft, workflowRepairBudgetAvailable, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError, workflowPinnedPrompt, workflowNotePromptHash } from "../workflows/engine";
+import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError, workflowPinnedPrompt, workflowNotePromptHash } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, type BankItemRef } from "../../shared/bank-item-ref";
@@ -1461,9 +1461,8 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   const arcOptions = { minChecksForProba: policy.minCorrectForCoupon };
   // Review #143 (P2): a szerzői javítás csak akkor jár, ha a javítási út minden lépésére van még látogatási keret;
   // a limit előtt elfogyott keret (megszakított és folytatott kör) is „nincs több szerzői kör”-nek számít.
-  const repairBudget = ["author", "animator", "lektor", "gate"].every((s) => workflowStepVisitsLeft(s) > 0);
   // Review #154: a Próba kikapcsolása a DINAMIKUS keretet nézi — amíg többletkeret igényelhető, a szerző pótolja a kérdéseket.
-  const noAuthorRepair = job.round >= MAX_AUTHOR_ROUNDS || !(repairBudget || workflowRepairBudgetAvailable());
+  const noAuthorRepair = job.round >= MAX_AUTHOR_ROUNDS || !repairPathAvailable();
   const proba = noAuthorRepair ? disableUnreachableProba(parsed.data, arcOptions) : { lesson: parsed.data, disabled: [] as number[] };
   if (proba.disabled.length) {
     parsed.data = proba.lesson;
@@ -1561,7 +1560,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       logger.warn(`[STUDIO/GATE] Körlimit: nem-ténybeli kapu-lelet, a lecke publikál (${job.id}): core ${Math.round(acceptance.core * 100)}%, kiegészítő ${Math.round(acceptance.supporting * 100)}%`);
     } else {
       const transition = nextStep({ step: "gate", ok: true, round: job.round, gatePassed: false });
-      if (transition.step === "author" && !repairBudget && !(await ensureRepairPath("kapu: javítókör a körlimit előtt"))) {
+      if (transition.step === "author" && !(await ensureRepairPath("kapu: javítókör a körlimit előtt"))) {
         return fail(store, job, `A lecke kapuja hiányt mért, és a szerzői javításhoz nincs több lépéskeret: ${gate.reasons.join("; ")}`);
       }
       if (transition.step === "error") {

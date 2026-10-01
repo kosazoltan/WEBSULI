@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { MAX_AUTHOR_ROUNDS, MAX_BANK_ONLY_ROUNDS, MAX_CHAIN_STEPS, REPAIR_CHAIN_STEPS, REPAIR_KINDS } from "../server/studio/pipeline";
-import { canSpendRepair, ensureRepairPath, repairRemaining, repairSpentForRound, repairUse, spendRepair, type RepairBudget } from "../server/studio/repair-ledger";
+import { canSpendRepair, ensureRepairPath, repairPathAvailable, repairPathOpen, repairRemaining, repairSpentForRound, repairUse, spendRepair, type RepairBudget } from "../server/studio/repair-ledger";
 
 /* Spec 2026-10-01-javitasi-fokonyv: a körlimit-javítások egyetlen főkönyve — egy tábla, egy olvasó, egy író, egy keret-döntés. */
 
@@ -85,4 +85,18 @@ test("forrás-ellenőrzés: a lépésfuttató a régi javítás-jelzőket nem ol
     assert.equal(new RegExp(`output\\??\\.${field}\\b|\\b${field}:`).test(src), false, `${field} közvetlen használata a step-runnerben`);
   }
   assert.equal(/\bMAX_BANK_ONLY_ROUNDS\b(?!\s*csak-bank)/.test(src.replace(/\/\/.*$/gm, "")), false, "a csak-bank limitet a főkönyv táblája adja");
+  // review #179: a javítóút keretét sem méri helyben (sem látogatás, sem dinamikus keret) — csak a főkönyv
+  for (const fn of ["workflowStepVisitsLeft", "workflowRepairBudgetAvailable", "workflowEnsureRepairBudget"]) {
+    assert.equal(src.includes(fn), false, `${fn} közvetlen használata a step-runnerben`);
+  }
+});
+
+test("review #179: repairPathOpen / repairPathAvailable — fogyasztás nélküli elérhetőség a főkönyvben", () => {
+  const open: RepairBudget = { visitsLeft: () => 1, ensure: async () => true, grantsLeft: () => false };
+  const closedNoGrant: RepairBudget = { visitsLeft: (s) => (s === "author" ? 0 : 1), ensure: async () => true, grantsLeft: () => false };
+  const closedGrant: RepairBudget = { ...closedNoGrant, grantsLeft: () => true };
+  assert.equal(repairPathOpen(open), true);
+  assert.equal(repairPathOpen(closedNoGrant), false);
+  assert.equal(repairPathAvailable(closedNoGrant), false);
+  assert.equal(repairPathAvailable(closedGrant), true, "a még igényelhető többletkeret elérhetővé teszi");
 });

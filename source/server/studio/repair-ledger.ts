@@ -1,5 +1,5 @@
 import { REPAIR_KINDS, type RepairKind } from "./pipeline";
-import { workflowEnsureRepairBudget, workflowStepVisitsLeft } from "../workflows/engine";
+import { workflowEnsureRepairBudget, workflowRepairBudgetAvailable, workflowStepVisitsLeft } from "../workflows/engine";
 
 /**
  * Spec 2026-10-01-javitasi-fokonyv: a körlimit-javítások EGYETLEN főkönyve. A lépésfuttató minden javítás-döntése ezen megy át:
@@ -56,13 +56,22 @@ export function spendRepair<T extends Record<string, unknown>>(out: T | null | u
   return { ...(out ?? ({} as T)), ...legacyMirror(kind, next, round), repairLedger: ledger } as T & { repairLedger: RepairLedger };
 }
 
-export type RepairBudget = { visitsLeft: (step: string) => number; ensure: (reason: string) => Promise<boolean> };
-const workflowBudget: RepairBudget = { visitsLeft: workflowStepVisitsLeft, ensure: workflowEnsureRepairBudget };
+export type RepairBudget = { visitsLeft: (step: string) => number; ensure: (reason: string) => Promise<boolean>; grantsLeft?: () => boolean };
+const workflowBudget: RepairBudget = { visitsLeft: workflowStepVisitsLeft, ensure: workflowEnsureRepairBudget, grantsLeft: workflowRepairBudgetAvailable };
 const REPAIR_PATH = ["author", "animator", "lektor", "gate"] as const;
+
+/** Review #179: a szerzői javítóút NYITOTT-e most (minden lépésre van látogatás) — fogyasztás nélkül. */
+export function repairPathOpen(budget: RepairBudget = workflowBudget): boolean {
+  return REPAIR_PATH.every((s) => budget.visitsLeft(s) > 0);
+}
+/** Review #179: elérhető-e a javítóút — nyitott, vagy még igényelhető dinamikus többletkeret (fogyasztás nélkül). */
+export function repairPathAvailable(budget: RepairBudget = workflowBudget): boolean {
+  return repairPathOpen(budget) || (budget.grantsLeft?.() ?? false);
+}
 
 /** A szerzői javítóút (a limit ELŐTTI rendes kör) kerete: minden lépésre van látogatás, vagy a dinamikus keret pótolja. */
 export async function ensureRepairPath(reason: string, budget: RepairBudget = workflowBudget): Promise<boolean> {
-  if (REPAIR_PATH.every((s) => budget.visitsLeft(s) > 0)) return true;
+  if (repairPathOpen(budget)) return true;
   return budget.ensure(reason);
 }
 
