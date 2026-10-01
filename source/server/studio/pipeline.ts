@@ -51,7 +51,8 @@ export const MAX_BANK_ONLY_ROUNDS = 2;
 // + MAX_BANK_ONLY_ROUNDS bank-only repair rounds (animator → lektor → gate each).
 // + a célzott javítókörök (lektor-tényhiba, kapu-lelet, tanári kérés — jobonként egyszer-egyszer, spec 2026-09-30-dinamikus-keret).
 export const TARGETED_REPAIR_ROUNDS = 3;
-export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 3 * MAX_BANK_ONLY_ROUNDS + 4 * TARGETED_REPAIR_ROUNDS + 1;
+// + a kapu-javítás utáni egy csak-bank kör (spec 2026-10-01-kapu-javitas-bankkor): animator → lektor → gate.
+export const MAX_CHAIN_STEPS = 1 + (MAX_AUTHOR_ROUNDS + 1) * 4 + 3 * MAX_BANK_ONLY_ROUNDS + 4 * TARGETED_REPAIR_ROUNDS + 3 + 1;
 
 export function isTerminal(step: StudioStep): boolean {
   return step === "done" || step === "error";

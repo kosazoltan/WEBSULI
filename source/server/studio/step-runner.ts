@@ -1170,13 +1170,23 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       // animátor-látogatást kérte; a workflow-őr kivételt dobott, 43 perc munka „Váratlan hiba”
       // lett és a job „running”-ban maradt. A csak-bank kör csak a futó workflow keretén belül jár;
       // ha elfogyott, a lektor az alábbi ágon tiszta, okot megnevező hibával zár.
-      const bankRepairPossible = fusion && bankOnlyRoundsUsed < MAX_BANK_ONLY_ROUNDS
+      let bankRepairPossible = fusion && bankOnlyRoundsUsed < MAX_BANK_ONLY_ROUNDS
         && workflowStepVisitsLeft("animator") > 0 && workflowStepVisitsLeft("lektor") > 0
         && !!(job.output?.lesson as Lesson | undefined)?.experience;
 
       // Spec 2026-09-24 (bank-ellenőr): a hibák experience.* jegyzetként a csak-bank körbe mennek; ha az már
       // nem jár, figyelmeztetésként tárolódnak (tétel-szintű bankhibáért a leckét nem buktatjuk).
       const bankChecked = bankCheck ? await bankCheck : undefined;
+      // Spec 2026-10-01-kapu-javitas-bankkor: a célzott kapu-javítás újraépített bankcsomagjaira EGY saját csak-bank kör jár
+      // (élő mérés 74b63038: a bank a 3. körre 0 hibás volt, a kapu-javítás új csomagjai 5 hibát hoztak, kör már nem járt).
+      // Review #169: csak az ELFOGYOTT csak-bank körök után (a körszámhoz kötve), nem a puszta látogatási keret-hiánynál.
+      const gateBankRound = bankOnlyRoundsUsed >= MAX_BANK_ONLY_ROUNDS && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
+        && job.output?.targetedGateRepairRound === job.round && !job.output?.gateBankRepairUsed
+        && (!!bankChecked?.notes.length || parsed.data.notes.some((n) => /^experience(?:\.|\[)/.test(n.blockPath ?? "")));
+      if (gateBankRound) {
+        bankRepairPossible = await workflowEnsureRepairBudget("kapu-javítás utáni csak-bank kör")
+          && workflowStepVisitsLeft("animator") > 0 && workflowStepVisitsLeft("lektor") > 0;
+      }
       let rawNotes: RawNote[] = parsed.data.notes;
       // Spec 2026-09-29 (egy-helyes-valasz, döntés 4): a kör nyitott egyválasztós jelzései a kapuhoz mennek; a
       // korábbi kör jelzései nem öröklődnek (a kapu az utolsó lektor-kör után fut).
@@ -1287,6 +1297,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             bankReview: { round: transition.round, feedback },
             bankOnlyRepairRound: transition.round,
             bankOnlyRepairRounds: bankOnlyRoundsUsed + 1,
+            ...(gateBankRound ? { gateBankRepairUsed: true } : {}),
           }),
         );
         return { ok: true, next: transition };
