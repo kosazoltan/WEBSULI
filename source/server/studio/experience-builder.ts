@@ -489,7 +489,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
     }
   }
-  const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, scoringVersion: scoringVersionFor(tasks), theme: deps.theme ?? deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), flair: deps.flair ?? deps.previous?.flair ?? pickLessonFlair(`${lesson.subject}:${lesson.title}:${lesson.mapId}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
+  const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, scoringVersion: scoringVersionFor(tasks, deps.previous?.scoringVersion), theme: deps.theme ?? deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), flair: deps.flair ?? deps.previous?.flair ?? pickLessonFlair(`${lesson.subject}:${lesson.title}:${lesson.mapId}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
   const problems = experienceProblems(lesson, experience);
   if (problems.length) throw new Error(`A fúziós lecke nem teljes: ${problems.join("; ")}`);
   return experience;

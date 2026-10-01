@@ -148,9 +148,11 @@ export const experiencePacketSchema = z.object({
  * (hiányzik = 1, a régi kliens is pontozza). Mért (élő Egyiptom-futás 7ee8913e, 2026-10-01): a bank típusos feladatot írt,
  * a csomag-ellenőrzés `scoringVersion=2`-t követelt, amit senki nem állított be — a csomag 4 kísérlet után bukott.
  */
-export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: unknown[]; requiredDistinct?: unknown[] }>, current?: number): number | undefined {
+export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: unknown[]; requiredDistinct?: unknown[] }>, current?: unknown): number | undefined {
+  // Review #166: a meglévő verzió csak érvényes tartományban (1..LESSON_SCORING_VERSION, egész) marad meg; a hibás érték a régi alapérték.
+  const valid = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= LESSON_SCORING_VERSION ? current : undefined;
   const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
-  return typed ? Math.max(current ?? 1, LESSON_SCORING_VERSION) : current;
+  return typed ? LESSON_SCORING_VERSION : valid;
 }
 
 export const experienceSchema = experiencePacketSchema.superRefine((e, ctx) => {

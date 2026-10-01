@@ -21,6 +21,8 @@ test("scoringVersionFor: típusos feladat → 2, típus nélküli bank → a meg
   assert.equal(scoringVersionFor(standardFusionFixture().experience!.tasks), undefined);
   assert.equal(scoringVersionFor([{ requiredDistinct: [{}] }]), LESSON_SCORING_VERSION);
   assert.equal(scoringVersionFor([], 2), 2, "a meglévő verzió nem csökken");
+  // review #166: érvénytelen meglévő érték nem marad meg
+  for (const bad of [3, 0, 1.5, "2", null]) assert.equal(scoringVersionFor([], bad), undefined, String(bad));
 });
 
 test("a bankgyártó a típusos feladatot tartalmazó csomagot elfogadja, és a lecke scoringVersion=2-t kap; típus nélkül marad a régi", async () => {
@@ -32,6 +34,9 @@ test("a bankgyártó a típusos feladatot tartalmazó csomagot elfogadja, és a 
   assert.equal(typed.scoringVersion, LESSON_SCORING_VERSION);
   const plain = await buildLessonExperience(lesson, [{ localId: "area", examWeight: "core" }], { call: async () => standardFusionFixture().experience! });
   assert.equal(plain.scoringVersion, undefined, "típus nélküli lecke: a régi kliens is pontozza");
+  // review #166: újraépítéskor a korábbi v2 lecke nem minősül vissza
+  const rebuilt = await buildLessonExperience(lesson, [{ localId: "area", examWeight: "core" }], { previous: typed, call: async () => standardFusionFixture().experience! });
+  assert.equal(rebuilt.scoringVersion, LESSON_SCORING_VERSION);
 });
 
 test("a webes bankfolt típusos feladata a lecke pontozási verzióját 2-re emeli", () => {
@@ -40,4 +45,8 @@ test("a webes bankfolt típusos feladata a lecke pontozási verzióját 2-re eme
   const html = `<!DOCTYPE html><html><body>${["teaching", "methods", "tasks", "quiz"].map((t) => `<button data-lesson-tab="${t}">${t}</button><section data-lesson-panel="${t}">${t === "teaching" ? teachingHtml : ""}</section>`).join("")}<script type="application/json" id="websuli-lesson-data">${JSON.stringify(data)}</script></body></html>`;
   const patched = applyWebBankPatch(html, { tasks: [typedBank().tasks[1]] });
   assert.equal(readHtmlLessonData(patched).experience.scoringVersion, LESSON_SCORING_VERSION);
+  // review #166: hibás meglévő verzió típus nélküli foltnál nem íródik vissza
+  const broken = html.replace('"experience":{', '"experience":{"scoringVersion":3,');
+  const untyped = applyWebBankPatch(broken, { tasks: [e.tasks[0]] });
+  assert.equal(readHtmlLessonData(untyped).experience.scoringVersion, undefined);
 });

@@ -50,6 +50,7 @@ export function applyWebBankPatch(html: string, patch: unknown): string {
   // Spec 2026-09-30 (U1): a folt típusos feladatot hozhat — a pontozási verzió a tartalomból (a program állítja).
   const version = scoringVersionFor(data.experience.tasks as Array<{ typedAnswers?: unknown[]; requiredDistinct?: unknown[] }>, (data.experience as { scoringVersion?: number }).scoringVersion);
   if (version !== undefined) (data.experience as { scoringVersion?: number }).scoringVersion = version;
+  else delete (data.experience as { scoringVersion?: number }).scoringVersion;
   return html.slice(0, start) + JSON.stringify(data).replace(/</g, "\\u003c") + html.slice(end);
 }
 
