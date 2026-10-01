@@ -1609,6 +1609,35 @@ test("spec 2026-10-01-kapu-javitas-bankkor: a célzott kapu-javítás körében 
   assert.deepEqual(again.ok && again.next, { step: "gate", round: round + 1 }, JSON.stringify(again));
 });
 
+test("spec 2026-10-01-kapu-javitas-bankkor (review #169): kimerített dinamikus keretnél nincs kapu-bankkör — a kapuhoz megy", async () => {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.3", message: "A kapu-javítás új kvíztétele hibás." };
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  const round = MAX_AUTHOR_ROUNDS + 1;
+  deps.store.seed({ id: "gate-bank-spent", mapId: "m1", step: "lektor", round, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version, bankOnlyRepairRounds: 2, targetedGateRepairRound: round } });
+  const { store } = memoryWorkflows();
+  await assert.rejects(executeWorkflow(store, { id: "gate-bank-spent-run", owner: "test", mode: "studio" }, async () => {
+    // a dinamikus keret mindkét bővítése (REPAIR_BUDGET_GRANTS = 2) elhasználva, a végén az animátor-keret kimerítve
+    for (const step of ["pedagogue", "author", "animator", "lektor", "author", "animator", "lektor", "author"]) await workflowPhase(step);
+    assert.equal(await workflowEnsureRepairBudget("teszt: 1. bővítés (szerző)"), true);
+    for (const step of ["animator", "lektor", "author"]) await workflowPhase(step);
+    assert.equal(await workflowEnsureRepairBudget("teszt: 2. bővítés (szerző)"), true);
+    await workflowPhase("animator");
+    assert.equal(workflowStepVisitsLeft("animator"), 0);
+    assert.equal(REPAIR_BUDGET_GRANTS, 2);
+    const result = await runPipelineStep("gate-bank-spent", deps);
+    assert.deepEqual(result.ok && result.next, { step: "gate", round }, JSON.stringify(result));
+    throw new Error("teszt-vég");
+  }), /teszt-vég/);
+  assert.equal(deps.store.jobs.get("gate-bank-spent")!.output?.gateBankRepairUsed, undefined);
+});
+
 test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél nincs csak-bank kör — tiszta lektori hiba, nem kivétel", async () => {
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);

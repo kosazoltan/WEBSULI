@@ -1179,7 +1179,8 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       const bankChecked = bankCheck ? await bankCheck : undefined;
       // Spec 2026-10-01-kapu-javitas-bankkor: a célzott kapu-javítás újraépített bankcsomagjaira EGY saját csak-bank kör jár
       // (élő mérés 74b63038: a bank a 3. körre 0 hibás volt, a kapu-javítás új csomagjai 5 hibát hoztak, kör már nem járt).
-      const gateBankRound = !bankRepairPossible && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
+      // Review #169: csak az ELFOGYOTT csak-bank körök után (a körszámhoz kötve), nem a puszta látogatási keret-hiánynál.
+      const gateBankRound = bankOnlyRoundsUsed >= MAX_BANK_ONLY_ROUNDS && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
         && job.output?.targetedGateRepairRound === job.round && !job.output?.gateBankRepairUsed
         && (!!bankChecked?.notes.length || parsed.data.notes.some((n) => /^experience(?:\.|\[)/.test(n.blockPath ?? "")));
       if (gateBankRound) {
