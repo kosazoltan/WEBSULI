@@ -90,7 +90,7 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
   const s = status.data?.status;
   return (
     <section className={embedded ? "" : "max-w-3xl mx-auto my-8 px-4"} data-testid="lesson-repair-panel" aria-labelledby="lesson-repair-title">
-      <div className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
+      <div className="rounded-xl border bg-card text-card-foreground p-4 space-y-3 shadow-sm">
         <h2 id="lesson-repair-title" className="flex items-center gap-2 text-base font-semibold">
           <Wrench className="w-4 h-4" /> Tananyag javítása
         </h2>
