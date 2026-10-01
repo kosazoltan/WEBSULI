@@ -9,7 +9,7 @@ import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
-import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, splitLimitBlockers } from "./limit-policy";
+import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, reconcileBankWithTeaching, splitLimitBlockers } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
 import { requireRoleForStep } from "../../shared/instruction-bundles/roles";
 import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, parseInventoryCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
@@ -1533,9 +1533,11 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         // elérhetőség és ív újramérve; séma-hibás jelölt nem publikálható.
         const reparsed = lessonSchema.safeParse(acceptance.lesson);
         if (!reparsed.success) return fail(store, job, `A megalapozatlan blokk kivétele után a lecke alakilag hibás: ${zodIssues(reparsed.error)}`);
-        const reachable = disableUnreachableProba(reparsed.data, arcOptions);
-        // Review #164 (P1): a kivétel a bank és a tanítás kapcsolatát is megváltoztathatja (a banktétel fogalma a
-        // kivett blokkban élt) — a fúziós bankkapu az ÚJ jelöltre újrafut, hibánál a lecke nem publikálható.
+        const probaFix = disableUnreachableProba(reparsed.data, arcOptions);
+        // Spec 2026-10-01-limit-blokk-kivetel-bank: a kivett tanítás fogalmára épülő banktételek is kikerülnek, a bankterv
+        // újraszámolódik; utána (review #164, P1) a fúziós bankkapu az ÚJ jelöltre fut, hibánál a lecke nem publikálható.
+        const bankFit = reconcileBankWithTeaching(probaFix.lesson);
+        const reachable = { ...probaFix, lesson: bankFit.lesson };
         if (isFusionMethodVersion(job.output?.methodVersion) || reachable.lesson.experience) {
           const bankProblems = [...experienceProblems(reachable.lesson), ...verifyLessonSkillBank(reachable.lesson.experience, reachable.lesson.subject, reachable.lesson.sections).problems];
           if (bankProblems.length) return fail(store, job, `A megalapozatlan blokk kivétele után a fúziós bank nem felel meg — nem publikálható: ${bankProblems.join("; ")}`);
@@ -1544,7 +1546,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
         gate.coverage = checkCoverageGate(parsed.data, map.concepts).coverage;
         const rearc = checkLessonArc(parsed.data, arcOptions);
-        if (acceptance.removedBlocks.length) removalNote = `; ${acceptance.removedBlocks.length} teljesen megalapozatlan blokk kivéve (${acceptance.removedBlocks.join(", ").slice(0, 200)})${rearc.ok ? "" : `, az ív a kivétel után: ${rearc.reasons.join(" ").slice(0, 200)}`}${reachable.disabled.length ? `, Próba kikapcsolva: ${reachable.disabled.map((i) => i + 1).join(", ")}. fejezet` : ""}`;
+        if (acceptance.removedBlocks.length) removalNote = `; ${acceptance.removedBlocks.length} teljesen megalapozatlan blokk kivéve (${acceptance.removedBlocks.join(", ").slice(0, 200)})${bankFit.removedItems.length ? `, a hozzá tartozó ${bankFit.removedItems.length} banktétel is` : ""}${rearc.ok ? "" : `, az ív a kivétel után: ${rearc.reasons.join(" ").slice(0, 200)}`}${reachable.disabled.length ? `, Próba kikapcsolva: ${reachable.disabled.map((i) => i + 1).join(", ")}. fejezet` : ""}`;
       }
       qualityNotes = appendQualityNote(qualityNotes, {
         reason: "gate_limit_accepted",

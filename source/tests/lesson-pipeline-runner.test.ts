@@ -26,6 +26,7 @@ import type { MapConcept } from "../server/studio/coverage";
 import { lessonSchema, type Block, type Lesson } from "../shared/lesson-schema";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { planLessonBank } from "../shared/lesson-bank-plan";
+import { reconcileBankWithTeaching } from "../server/studio/limit-policy";
 import { verifyLessonSkillBank } from "../shared/lesson-skill-checks";
 import { classifyNotes, type LektorNote } from "../server/studio/lektor";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
@@ -2432,6 +2433,47 @@ test("review #164 (U6, C15): a megalapozatlan blokk kivétele után a fúziós b
   assert.equal(gated.ok, false, JSON.stringify(gated));
   assert.match(job.error ?? "", /kivétele után a fúziós bank nem felel meg/);
   assert.equal(log.length, 0);
+});
+
+test("spec 2026-10-01-limit-blokk-kivetel-bank: a kivett blokk fogalmára épülő banktételek is kikerülnek, a bankterv újraszámolódik → publikál", async () => {
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const concepts: MapConcept[] = [{ localId: "area", term: "háromszög területe", examWeight: "core" } as MapConcept];
+  lesson.sections.push({ heading: "Még egy fejezet", probaEnabled: false, blocks: [
+    { kind: "explain", text: "Egy kitalált mondat, amely semmit sem tanít a témáról.", depth: "core", readAloud: true, coversConceptIds: ["area"] },
+    { kind: "recap", bullets: ["Összefoglaló mondat."] },
+  ] } as Lesson["sections"][number]);
+  const bank = standardFusionFixture().experience!;
+  // a teljes bank a megalapozott 1. fejezetre épül; a 2. fejezet (a kivett blokk) saját, minimális csomagot kap
+  const second = <T extends { id: string; sectionIndex: number }>(item: T, extra: Partial<T>) => ({ ...item, ...extra, id: `${item.id}-s2`, sectionIndex: 1 });
+  const kinds = [...new Set(bank.methods.map((m) => m.kind))].slice(0, 2).map((kind) => bank.methods.find((m) => m.kind === kind)!);
+  const oral = bank.tasks.find((t) => t.mode === "oral")!, written = bank.tasks.find((t) => t.mode === "written")!;
+  const recall = bank.quiz.find((q) => q.intent === "recall" && q.coversConceptIds.length === 1)!, apply = bank.quiz.find((q) => q.intent === "apply" && q.coversConceptIds.length === 1)!;
+  lesson.experience = { ...bank,
+    methods: [...bank.methods, ...kinds.map((m) => second(m, { prompt: `${m.prompt} (második fejezet)` }))],
+    tasks: [...bank.tasks, second(oral, { q: `${oral.q} (második fejezet)` }), second(written, { q: `${written.q} (második fejezet)` })],
+    quiz: [...bank.quiz, second(recall, { question: `${recall.question} (második fejezet)` }), second(apply, { question: `${apply.question} (második fejezet)` })],
+  };
+  lesson.experience.bankPlan = planLessonBank(lesson, bank.version);
+  const before = reconcileBankWithTeaching(lesson);
+  assert.deepEqual(before.removedItems, [], "a kivétel előtt minden tétel tanított fogalomra épül");
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [], reviewedAll: true }));
+  deps.store.maps.set("m1", { meta: { id: "m1", title: lesson.title, subject: lesson.subject, classroom: lesson.classroom }, concepts });
+  deps.store.seed({ id: "gate-fit", mapId: "m1", lessonId: "lesson-fit", step: "lektor", round: MAX_AUTHOR_ROUNDS, output: { lesson, methodVersion: lesson.experience.version, targetedGateRepairRound: MAX_AUTHOR_ROUNDS } });
+  deps.store.lessons.set("lesson-fit", { id: "lesson-fit", mapId: "m1", json: lesson });
+  const reviewed = await runPipelineStep("gate-fit", deps);
+  assert.ok(reviewed.ok && reviewed.next.step === "gate", JSON.stringify(reviewed));
+  await advanceJob("gate-fit", reviewed.next, { status: "running" }, deps);
+  const log = published(deps.store);
+  const gated = await runPipelineStep("gate-fit", deps);
+  const job = deps.store.jobs.get("gate-fit")!;
+  assert.ok(gated.ok, `publikál: ${JSON.stringify(gated)} ${job.error ?? ""}`);
+  assert.equal(log.length, 1);
+  const saved = deps.store.lessons.get("lesson-fit")!.json as Lesson;
+  assert.equal(saved.sections[1].blocks.length, 1, "a megalapozatlan blokk kivéve");
+  assert.ok(![...saved.experience!.methods, ...saved.experience!.tasks, ...saved.experience!.quiz].some((i) => i.sectionIndex === 1), "a 2. fejezet tételei is kikerültek");
+  assert.deepEqual(saved.experience!.bankPlan, planLessonBank(saved, bank.version), "a bankterv a kivétel utáni leckéből");
+  const notes = job.output?.qualityNotes as Array<{ reason: string; note: string }>;
+  assert.ok(notes.some((n) => n.reason === "gate_limit_accepted" && /6 banktétel is/.test(n.note)), JSON.stringify(notes));
 });
 
 /* Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés pontjai a kész leckén. */
