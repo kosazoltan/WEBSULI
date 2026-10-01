@@ -142,6 +142,17 @@ export const experiencePacketSchema = z.object({
   }
   if (e.language && !e.glossary.length) ctx.addIssue({ code: "custom", path: ["glossary"], message: "Nyelvi leckéhez szószedet kell." });
 });
+/**
+ * Spec 2026-09-30 (U1, B0) — a pontozási verzió a TARTALOMBÓL következik, a program állítja be (a modell nem írhatja):
+ * típusos feladat (`typedAnswers` / `requiredDistinct`) → `LESSON_SCORING_VERSION`; típus nélküli bank → a meglévő érték
+ * (hiányzik = 1, a régi kliens is pontozza). Mért (élő Egyiptom-futás 7ee8913e, 2026-10-01): a bank típusos feladatot írt,
+ * a csomag-ellenőrzés `scoringVersion=2`-t követelt, amit senki nem állított be — a csomag 4 kísérlet után bukott.
+ */
+export function scoringVersionFor(tasks: ReadonlyArray<{ typedAnswers?: unknown[]; requiredDistinct?: unknown[] }>, current?: number): number | undefined {
+  const typed = tasks.some((t) => t.typedAnswers?.length || t.requiredDistinct?.length);
+  return typed ? Math.max(current ?? 1, LESSON_SCORING_VERSION) : current;
+}
+
 export const experienceSchema = experiencePacketSchema.superRefine((e, ctx) => {
   if (e.version === COMPACT_LESSON_METHOD_VERSION && (e.tasks.length < 15 || e.quiz.length < 15)) ctx.addIssue({ code: "custom", message: "A korábbi módszerhez legalább 15 szöveges feladat és 15 kvízkérdés szükséges." });
   if (e.version === LESSON_METHOD_VERSION) for (const message of publicationBankProblems(e)) ctx.addIssue({ code: "custom", message });

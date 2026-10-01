@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gateQuestionProblems, hasFigureReference, questionKey } from "../../shared/lesson-experience";
+import { gateQuestionProblems, hasFigureReference, questionKey, scoringVersionFor } from "../../shared/lesson-experience";
 import { z } from "zod";
 import { LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, bankPacketContract, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
 import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../shared/lesson-experience-score";
@@ -320,7 +320,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     });
     type Packet = z.infer<typeof packetSchema>;
     const validate = (packet: Packet): string[] => {
-      const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
+      const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, scoringVersion: scoringVersionFor(packet.tasks), bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       problems.push(...gateQuestionProblems([...before.methods, ...packet.methods]));
       problems.push(...quizCorrectIndexProblems(packet.quiz));
@@ -489,7 +489,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
     }
   }
-  const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, theme: deps.theme ?? deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), flair: deps.flair ?? deps.previous?.flair ?? pickLessonFlair(`${lesson.subject}:${lesson.title}:${lesson.mapId}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
+  const experience = experienceSchema.parse({ version: LESSON_METHOD_VERSION, scoringVersion: scoringVersionFor(tasks), theme: deps.theme ?? deps.previous?.theme ?? experienceTheme(`${lesson.subject}:${lesson.title}`), flair: deps.flair ?? deps.previous?.flair ?? pickLessonFlair(`${lesson.subject}:${lesson.title}:${lesson.mapId}`), methods, tasks, quiz, language, bankPlan: plan, glossary: glossary.filter((g, i) => glossary.findIndex(other => other.word === g.word && other.translation === g.translation) === i) });
   const problems = experienceProblems(lesson, experience);
   if (problems.length) throw new Error(`A fúziós lecke nem teljes: ${problems.join("; ")}`);
   return experience;
