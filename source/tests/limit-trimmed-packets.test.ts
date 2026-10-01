@@ -64,3 +64,13 @@ test("withTrimmedSections: egyesít, rendez, bankterv nélkül változatlan", ()
   const plain = { ...lesson, experience: { ...lesson.experience!, bankPlan: undefined } };
   assert.equal(withTrimmedSections(plain, [0]), plain);
 });
+
+test("2. tulajdonosi kiterjesztés: a jelölt fejezetben a módszer-minimum is lazul; jelöletlenben a régi szigor; a kvízpár marad", () => {
+  const e = singleOral().experience!;
+  const oneMethod = { ...e, methods: e.methods.filter((m, i, all) => all.findIndex((x) => x.kind === m.kind) === i).slice(0, 1).concat(e.methods.filter((m) => m.kind === "gate").slice(0, 2)) };
+  // jelölés nélkül a fejezet-szintű módszerhiány hiba
+  const strict = JSON.stringify(experienceSchema.safeParse({ ...oneMethod, methods: oneMethod.methods.slice(0, 1) }).error?.issues ?? []);
+  assert.match(strict, /legalább két különböző, releváns módszer kell/);
+  const relaxed = JSON.stringify(experienceSchema.safeParse({ ...oneMethod, methods: oneMethod.methods.slice(0, 1), bankPlan: { ...e.bankPlan!, trimmedSections: [0] } }).error?.issues ?? []);
+  assert.doesNotMatch(relaxed, /legalább két különböző, releváns módszer kell/, "jelölt fejezet: a módszer-minimum lazul");
+});
