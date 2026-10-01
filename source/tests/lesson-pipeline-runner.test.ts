@@ -2254,7 +2254,9 @@ test("spec kapu-proba (E2): elfogyott szerzői keretnél a kapu célzott javít�
   assert.deepEqual(granted?.ok && granted.next, { step: "author", round: MAX_AUTHOR_ROUNDS + 1 }, JSON.stringify(granted));
   const job = deps.store.jobs.get("gate-budget")!;
   job.step = "gate"; job.round = MAX_AUTHOR_ROUNDS; job.status = "running";
-  job.output = { ...job.output, targetedGateRepairRound: undefined };
+  // Spec 2026-10-01-javitasi-fokonyv: a javítás-felhasználás forrása a főkönyv (`repairLedger`); a „még fel nem használt”
+  // állapot visszaállítása a főkönyvre is vonatkozik (az elvárás változatlan).
+  job.output = { ...job.output, targetedGateRepairRound: undefined, repairLedger: undefined };
   const outcome = await withExhaustedAuthor("gate-budget-b", () => runPipelineStep("gate-budget", deps), { grantsUsed: true });
   assert.equal(outcome?.ok, false, `nincs szerzői kör kerett nélkül: ${JSON.stringify(outcome)}`);
   assert.match(deps.store.jobs.get("gate-budget")!.error ?? "", /tanítása hiányos \(a célzott javításhoz nincs több lépéskeret\)/);
