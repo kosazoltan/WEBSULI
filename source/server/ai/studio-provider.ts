@@ -2,7 +2,7 @@ import { OpenAIProvider } from "./OpenAIProvider";
 import { OpenRouterProvider } from "./OpenRouterProvider";
 import { ClaudeProvider } from "./ClaudeProvider";
 import { AI_KEY_NAMES, aiKeyStatus, keyNameForModel, providerForModel } from "./models";
-import { AIProviderQuotaError, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type ChatCallOptions, type IAIProvider } from "./AIProvider";
+import { AIProviderQuotaError, isQuotaExhausted, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type ChatCallOptions, type IAIProvider } from "./AIProvider";
 import { logger } from "../lib/logger";
 
 /** Resolve credentials by model, never by whichever key happens to be available. */
@@ -19,6 +19,28 @@ export function studioConnection(model: string, env: Record<string, string | und
       : vendor === "anthropic" ? "https://api.anthropic.com"
       : "https://openrouter.ai/api/v1",
   };
+}
+
+export type StudioConnection = ReturnType<typeof studioConnection>;
+
+/**
+ * Spec 2026-10-01-gyokerok-egyben (2.3): a NYERS SDK-klienst használó hívások (kivonatoló, OCR, témakör-besoroló) ugyanazt a
+ * keret-átállást kapják, mint a `createStudioProvider` útja — kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át, közös
+ * 10 perces memóriával. A hívó a kapott kapcsolattal építi a klienst és a kérést (a `vendor` szerint).
+ */
+export async function withQuotaFailover<T>(connection: StudioConnection, run: (connection: StudioConnection) => Promise<T>, env: Record<string, string | undefined> = process.env, now = () => Date.now()): Promise<T> {
+  const routerKey = env[AI_KEY_NAMES.openrouter]?.trim();
+  if (connection.vendor !== "openai" || !routerKey) return run(connection);
+  const fallback: StudioConnection = { vendor: "openrouter", apiKey: routerKey, model: `openai/${connection.model}`, baseURL: "https://openrouter.ai/api/v1" };
+  if (now() < quotaExhaustedUntil) return run(fallback);
+  try {
+    return await run(connection);
+  } catch (error) {
+    if (!(error instanceof AIProviderQuotaError) && !(error && typeof error === "object" && isQuotaExhausted(error as { status?: number }))) throw error;
+    quotaExhaustedUntil = now() + QUOTA_FAILOVER_MEMORY_MS;
+    logger.warn(`[AI] OpenAI kerete elfogyott (${connection.model}) — ugyanaz a modell az OpenRouteren át, ${QUOTA_FAILOVER_MEMORY_MS / 60_000} percig (közvetlen kliens).`);
+    return run(fallback);
+  }
 }
 
 export function studioModelReady(model: string) {

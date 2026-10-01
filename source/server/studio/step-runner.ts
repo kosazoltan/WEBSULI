@@ -9,7 +9,7 @@ import { logger } from "../lib/logger";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
-import { classifyReviewNotes, downgradeAtLimit, limitAcceptance, reconcileBankWithTeaching, splitLimitBlockers, withTrimmedSections } from "./limit-policy";
+import { applyLimitRelaxation, classifyReviewNotes, downgradeAtLimit, limitAcceptance, reconcileBankWithTeaching, splitLimitBlockers } from "./limit-policy";
 import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences, TEXT_FIX_MODEL } from "./source-reference";
 import { requireRoleForStep } from "../../shared/instruction-bundles/roles";
 import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, parseInventoryCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
@@ -473,7 +473,9 @@ async function ensureBlindSolutions(
   if (!sourceText?.trim()) return undefined;
   const sourceHash = sourceHashOf(sourceText);
   const cached = job.output?.blindSolutions as BlindSolutions | undefined;
-  if (cached?.sourceHash === sourceHash) return cached;
+  // Spec 2026-10-01-gyokerok-egyben (2.2b): a RÉSZLEGES eredmény egyszer újrakérhető; teljes (vagy már újrakért) eredmény újrahasznosul.
+  if (cached?.sourceHash === sourceHash && (!cached.partial || cached.retried)) return cached;
+  const retried = cached?.sourceHash === sourceHash && !!cached.partial;
   if (!keyConfigured(BLIND_SOLVER_MODEL)) return undefined;
   try {
     const result = await callStepModel(providerFactory(BLIND_SOLVER_MODEL, "visuals"), {
@@ -483,7 +485,7 @@ async function ensureBlindSolutions(
 ${sourceText.slice(0, 60_000)}`,
     });
     const answer = parseBlindSolverAnswer(result.json);
-    const blind: BlindSolutions = { sourceHash, model: BLIND_SOLVER_MODEL, solutions: answer.solutions, ...(answer.notEnough.length ? { notEnough: answer.notEnough } : {}), ...(answer.partial ? { partial: true } : {}) };
+    const blind: BlindSolutions = { sourceHash, model: BLIND_SOLVER_MODEL, solutions: answer.solutions, ...(answer.notEnough.length ? { notEnough: answer.notEnough } : {}), ...(answer.partial ? { partial: true } : {}), ...(retried ? { retried: true } : {}) };
     logger.info(`[STUDIO] Vak megoldó (${job.id}): ${blind.solutions.length} megoldott feladatrész, ${answer.notEnough.length} „nincs elég adat”${answer.partial ? ", RÉSZLEGES lista (hibás alakú elem kimaradt)" : ""}`);
     job.output = { ...job.output, blindSolutions: blind };
     await store.saveStep(job.id, { output: job.output });
@@ -1379,7 +1381,7 @@ export function openBankFindingFlags(lesson: Lesson, raw: unknown): ChoiceFlag[]
   }
   return flags;
 }
-export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[]; trimmed?: number[] } | { error: string } {
+export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: Lesson; removed: string[]; trimmed?: number[]; limitRelaxed?: true } | { error: string } {
   const flags = new Map<string, string>();
   for (const f of lessonSingleChoiceProblems(lesson)) flags.set(f.path, `${f.path}: ${f.problems.join(" ")}`);
   const limitOrigin = new Set<string>();
@@ -1421,25 +1423,19 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
     methods: experience.methods.filter((_, i) => !byBank.methods.has(i)),
     tasks: experience.tasks.filter((_, i) => !byBank.tasks.has(i)),
   } };
-  let after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
-  // Spec 2026-10-01-limit-csomag-lazitas (tulajdonosi döntés): a kivett nyílt feladatok fejezetében a csomag lazított (fogalmanként
-  // legalább 1 nyílt feladat marad, a többi minimum változatlan) — egyszeri újramérés a jelöléssel.
-  // Review #171: csak a LIMIT-eredetű nyílt feladatok fejezete lazítható (az aritmetikai/egyéb kivétel szabálya változatlan).
-  // 2. tulajdonosi kiterjesztés: a limit-eredetű módszer-kivétel fejezete is lazítható (a kvíz nem).
-  const limitTaskSections = [...new Set([...limitOrigin].map((p) => bankItemRef(p)).filter((r): r is BankItemRef => (r?.bank === "tasks" || r?.bank === "methods") && r.index < experience[r.bank].length).map((r) => experience[r.bank][r.index].sectionIndex))];
-  let trimmedSections: number[] = [];
-  if (after.length && limitTaskSections.length) {
-    const trimmed = withTrimmedSections(reduced, limitTaskSections);
-    const retry = [...experienceProblems(trimmed), ...verifyLessonSkillBank(trimmed.experience, trimmed.subject, trimmed.sections).problems];
-    if (!retry.length) { reduced = trimmed; after = retry; trimmedSections = limitTaskSections; }
-  }
+  // Spec 2026-10-01-gyokerok-egyben (2.1): LIMIT-eredetű banktétel-kivétel után a bank mércéje a publikálási padló — EGY helyen,
+  // determinisztikusan (nem „újramérés, ha hibás”); az aritmetikai/egyéb eredetű kivétel szabálya változatlan.
+  const limitRemoved = [...limitOrigin].map((p) => bankItemRef(p)).filter((r): r is BankItemRef => !!r && r.index < experience[r.bank].length);
+  const trimmedSections = [...new Set(limitRemoved.filter((r) => r.bank !== "quiz").map((r) => experience[r.bank][r.index].sectionIndex))];
+  if (limitRemoved.length) reduced = applyLimitRelaxation(reduced, trimmedSections);
+  const after = [...experienceProblems(reduced), ...verifyLessonSkillBank(reduced.experience, reduced.subject, reduced.sections).problems];
   if (after.length) {
     const fromLimit = limitOrigin.size > 0;
     return { error: fromLimit
       ? `Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})`
       : `Egyválasztós hiba maradt a bankban, és a tételek kivétele után a bank nem felelne meg — nem publikálható: ${all} (kivétel után: ${after.join("; ")})` };
   }
-  return { lesson: reduced, removed: [...removed.keys()], ...(trimmedSections.length ? { trimmed: trimmedSections } : {}) };
+  return { lesson: reduced, removed: [...removed.keys()], ...(limitRemoved.length ? { trimmed: trimmedSections, limitRelaxed: true as const } : {}) };
 }
 
 type GateModels = { providerFactory: (model: string, step?: string) => IAIProvider; keyConfigured: (model: string) => boolean };
@@ -1462,7 +1458,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     // Review P2: a job leckéje a lektorált EREDETI marad — a kapu újrafuttatva ugyanabból számol (idempotens).
     job.output = { ...job.output, choiceGate: { removed: choiceGate.removed },
       // Review #171: a lazított publikálás az admin minőségi jegyzetei között (JobMonitor).
-      ...(choiceGate.trimmed?.length ? { qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "bank_trimmed", note: `A limiten kivett hibás nyílt feladat vagy módszer után lazított fejezet-csomag: ${choiceGate.trimmed.map((i) => i + 1).join(", ")}. fejezet (a fogalmankénti felidéző + alkalmazó kvízpár megmaradt).`, round: job.round }) } : {}) };
+      ...(choiceGate.limitRelaxed ? { qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "bank_trimmed", note: `A limiten kivett hibás banktétel után a bank a publikálási padló szerint mér (45/75, fogalmanként felidéző + alkalmazó kvíz)${choiceGate.trimmed?.length ? `; érintett fejezet: ${choiceGate.trimmed.map((i) => i + 1).join(", ")}.` : "."}`, round: job.round }) } : {}) };
     logger.warn(`[STUDIO/GATE] Hibás banktétel kivéve (egyválasztós vagy a körlimiten maradt; ${job.id}): ${choiceGate.removed.join(", ")}`);
   }
 
@@ -1554,20 +1550,16 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         const reachable = { ...probaFix, lesson: bankFit.lesson };
         if (isFusionMethodVersion(job.output?.methodVersion) || reachable.lesson.experience) {
           const measure = (l: Lesson) => [...experienceProblems(l), ...verifyLessonSkillBank(l.experience, l.subject, l.sections).problems];
-          let bankProblems = measure(reachable.lesson);
-          // Spec 2026-10-01-limit-csomag-lazitas: a kivett nyílt feladatok fejezetében lazított csomag — egyszeri újramérés.
-          if (bankProblems.length && bankFit.trimSections.length) {
-            const trimmed = withTrimmedSections(reachable.lesson, bankFit.trimSections);
-            const retry = measure(trimmed);
-            if (!retry.length) { reachable.lesson = trimmed; bankProblems = retry; bankTrimmed = bankFit.trimSections; }
-          }
+          // Spec 2026-10-01-gyokerok-egyben (2.1): a blokk-kivétel miatt kikerült banktételek után a padló — determinisztikusan.
+          if (bankFit.removedItems.length) { reachable.lesson = applyLimitRelaxation(reachable.lesson, bankFit.trimSections); bankTrimmed = bankFit.trimSections; }
+          const bankProblems = measure(reachable.lesson);
           if (bankProblems.length) return fail(store, job, `A megalapozatlan blokk kivétele után a fúziós bank nem felel meg — nem publikálható: ${bankProblems.join("; ")}`);
         }
         parsed.data = reachable.lesson;
         await store.upsertLesson(job.lessonId, job.mapId, parsed.data);
         gate.coverage = checkCoverageGate(parsed.data, map.concepts).coverage;
         const rearc = checkLessonArc(parsed.data, arcOptions);
-        if (acceptance.removedBlocks.length) removalNote = `; ${acceptance.removedBlocks.length} teljesen megalapozatlan blokk kivéve (${acceptance.removedBlocks.join(", ").slice(0, 200)})${bankFit.removedItems.length ? `, a hozzá tartozó ${bankFit.removedItems.length} banktétel is` : ""}${bankTrimmed.length ? `, lazított fejezet-csomag: ${bankTrimmed.map((i) => i + 1).join(", ")}. fejezet` : ""}${rearc.ok ? "" : `, az ív a kivétel után: ${rearc.reasons.join(" ").slice(0, 200)}`}${reachable.disabled.length ? `, Próba kikapcsolva: ${reachable.disabled.map((i) => i + 1).join(", ")}. fejezet` : ""}`;
+        if (acceptance.removedBlocks.length) removalNote = `; ${acceptance.removedBlocks.length} teljesen megalapozatlan blokk kivéve (${acceptance.removedBlocks.join(", ").slice(0, 200)})${bankFit.removedItems.length ? `, a hozzá tartozó ${bankFit.removedItems.length} banktétel is` : ""}${bankFit.removedItems.length ? `, a bank a publikálási padló szerint${bankTrimmed.length ? ` (érintett fejezet: ${bankTrimmed.map((i) => i + 1).join(", ")}.)` : ""}` : ""}${rearc.ok ? "" : `, az ív a kivétel után: ${rearc.reasons.join(" ").slice(0, 200)}`}${reachable.disabled.length ? `, Próba kikapcsolva: ${reachable.disabled.map((i) => i + 1).join(", ")}. fejezet` : ""}`;
       }
       qualityNotes = appendQualityNote(qualityNotes, {
         reason: "gate_limit_accepted",
@@ -1622,7 +1614,9 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       const inventory = job.output?.instructionInventory as InstructionInventory | undefined;
       const hash = instructionCheckHash(ownerInstruction, parsed.data, map.meta.sourceText, inventory?.hash);
       const cached = job.output?.instructionCheck as InstructionCheck | undefined;
-      points = cached?.hash === hash ? cached.points : undefined;
+      // Spec 2026-10-01-gyokerok-egyben (2.2b): a részleges (nem teljes) jelentés egyszer újrakérhető.
+      const checkRetried = cached?.hash === hash && cached.complete === false && !cached.retried;
+      points = cached?.hash === hash && !checkRetried ? cached.points : undefined;
       if (!points) {
         const prompt = buildInstructionCheckPrompt(ownerInstruction, parsed.data, map.meta.sourceText, inventory);
         const result = await callStepModel(models.providerFactory(INSTRUCTION_CHECK_MODEL, "instructionCheck"), {
@@ -1632,7 +1626,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
           const check = parseInventoryCheck(result.json, parsed.data, map.meta.sourceText, inventory);
           points = check.points;
           if (!check.complete) logger.warn(`[STUDIO/GATE] Tanári kérés (${job.id}): RÉSZLEGES ellenőrző-jelentés, nem jelentett azonosítók: ${check.missingIds.join(", ")}`);
-          job.output = { ...job.output, instructionCheck: { hash, points, complete: check.complete, missingIds: check.missingIds } satisfies InstructionCheck };
+          job.output = { ...job.output, instructionCheck: { hash, points, complete: check.complete, missingIds: check.missingIds, ...(checkRetried ? { retried: true } : {}) } satisfies InstructionCheck };
         } else {
           points = parseInstructionCheck(result.json, parsed.data, map.meta.sourceText);
           job.output = { ...job.output, instructionCheck: { hash, points } satisfies InstructionCheck };

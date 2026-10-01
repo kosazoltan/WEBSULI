@@ -1,4 +1,4 @@
-import { studioConnection } from "../ai/studio-provider";
+import { withQuotaFailover, studioConnection } from "../ai/studio-provider";
 import { withSupportSkill } from "./support-skills";
 import { workflowSkillPrompt } from "../workflows/engine";
 /**
@@ -195,17 +195,17 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
 /** Default scope model call: one cheap vision call over all sources. */
 export async function callScopeModel(files: ExtractorFile[], model: string): Promise<string> {
   const OpenAI = (await import("openai")).default;
-  const connection = studioConnection(model);
-  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
-
   const parts = await scopeContentParts(files);
-
-  const params = scopeRequestParams(connection.model, parts);
-  const request = connection.vendor === "openrouter" ? params : (({ reasoning: _reasoning, ...rest }) => rest)(params);
-  // The reasoning extension is only sent to OpenRouter.
-  const response = await client.chat.completions.create(
-    request as unknown as Parameters<typeof client.chat.completions.create>[0],
-  );
-  if ("choices" in response) return response.choices[0]?.message?.content ?? "";
-  return "";
+  // Spec 2026-10-01-gyokerok-egyben (2.3): kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át.
+  return withQuotaFailover(studioConnection(model), async (connection) => {
+    const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
+    const params = scopeRequestParams(connection.model, parts);
+    const request = connection.vendor === "openrouter" ? params : (({ reasoning: _reasoning, ...rest }) => rest)(params);
+    // The reasoning extension is only sent to OpenRouter.
+    const response = await client.chat.completions.create(
+      request as unknown as Parameters<typeof client.chat.completions.create>[0],
+    );
+    if ("choices" in response) return response.choices[0]?.message?.content ?? "";
+    return "";
+  });
 }

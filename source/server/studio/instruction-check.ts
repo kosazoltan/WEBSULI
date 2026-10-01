@@ -15,7 +15,7 @@ import { teachablePoints, type InstructionInventory } from "./instruction-points
 export const INSTRUCTION_CHECK_MODEL = "claude-opus-5-5";
 
 export type InstructionPoint = { point: string; taught: boolean; evidence: string; section: number | null; sourceQuote?: string; /** U3: a pontjegyzék azonosítója. */ id?: string; /** U3: az ellenőrző nem jelentette (részleges jelentés). */ undecidable?: boolean };
-export type InstructionCheck = { hash: string; points: InstructionPoint[]; /** U3 (§C-V/6): teljes = minden jegyzék-azonosítóról van ítélet. */ complete?: boolean; missingIds?: string[] };
+export type InstructionCheck = { hash: string; points: InstructionPoint[]; /** U3 (§C-V/6): teljes = minden jegyzék-azonosítóról van ítélet. */ complete?: boolean; missingIds?: string[]; /** Spec 2026-10-01-gyokerok-egyben (2.2b): a részleges jelentés egyszer újrakérve. */ retried?: boolean; };
 
 /**
  * A lecke tanítása fejezetenként (cím, explain, példa, összefoglaló) — ebben keressük a „tanítja” bizonyítékát. A modell

@@ -71,7 +71,10 @@ function fixTask(task: Obj, fixes: string[]): void {
     }
   }
   task.required = required;
-  if (typeof task.minWords === "number" && typeof task.needsSentence === "boolean") {
+  // Spec 2026-10-01-gyokerok-egyben (2.2a): a pontozó csak alakhelyes adaton fut — a nyers modell-JSON típushibája (pl. szám a
+  // `typedAnswers[].value` mezőben) itt nem dobhat kivételt; az ilyen tétel a sémához megy, és javító kört kap.
+  const typedOk = !Array.isArray(task.typedAnswers) || task.typedAnswers.every(a => isObj(a) && typeof a.value === "string" && typeof a.part === "string");
+  if (typeof task.minWords === "number" && typeof task.needsSentence === "boolean" && typeof task.sample === "string" && typedOk) {
     const asTask = task as unknown as OpenTask;
     if (asTask.needsSentence && evaluateOpenAnswer(task.sample, asTask).score !== 1 && evaluateOpenAnswer(task.sample, { ...asTask, needsSentence: false }).score === 1) {
       task.needsSentence = false; fixes.push(`${id}: needsSentence=false (a minta kötőszó nélkül is teljes)`);
