@@ -18,6 +18,7 @@ import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
 import { resolveLegacyModel } from "./ai/models";
 import { withSupportSkill } from "./studio/support-skills";
+import { cachedSystem } from "./ai/prompt-cache";
 import { validateGeneratedQuizItems } from "./gameQuizValidation";
 
 const ANTHROPIC_API_KEY = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
@@ -112,7 +113,7 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
   const response = await client.messages.create({
     model: ANTHROPIC_MODEL,
     max_tokens: maxTokens,
-    system: withSupportSkill("quiz-generator", SYSTEM_PROMPT),
+    system: cachedSystem(withSupportSkill("quiz-generator", SYSTEM_PROMPT)), // Spec 2026-10-03-gpt61-sol-kv-cache
     messages: [{ role: "user", content: userPrompt }],
   });
 

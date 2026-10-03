@@ -99,7 +99,7 @@ export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
  * újrapróba (a régi viselkedés: a csonka válasz hiba). Kulcs: a gyártó-előtag és a pont/kötőjel különbség nélkül.
  */
 const MAX_OUTPUT_BY_MODEL: Record<string, number> = {
-  "gpt-6-luna": 128_000, "gpt-6-astra": 128_000, "gpt-5-6-terra": 128_000,
+  "gpt-6-luna": 128_000, "gpt-6-astra": 128_000, "gpt-5-6-terra": 128_000, "gpt-6-1-sol": 128_000,
   "claude-opus-5-5": 128_000, "claude-opus-5": 128_000, "claude-sonnet-5": 128_000,
   "glm-5-3-flash": 943_717, "grok-4-6": 450_000, "deepseek-v4-flash": 384_000, "qwen3-vl-32b-instruct": 32_768,
 };
@@ -163,13 +163,13 @@ export const LEGACY_MODELS = {
   /** adminRouter POST /html-fix/theme — Claude JSON theme rewrite (routes.ts ~1316) */
   htmlTheme: "claude-opus-5",
   /** Enhanced Creator SSE two-phase OpenAI HTML fix (routes.ts ~1479, ~1508) */
-  htmlFixStream: "gpt-5.6-sol",
+  htmlFixStream: "gpt-6.1-sol",
   /** Enhanced Creator Claude chat stream, full HTML generation (routes.ts ~1790) */
   claudeChat: "claude-opus-5",
   /** Vision analysis of uploaded files (routes.ts ~1942 multi, ~2055 single) */
-  analyzeFiles: "gpt-5.6-sol",
+  analyzeFiles: "gpt-6.1-sol",
   /** Enhanced Creator ChatGPT chat stream (routes.ts ~2212) */
-  chatgptChat: "gpt-5.6-sol",
+  chatgptChat: "gpt-6.1-sol",
   /** Enhanced Creator Claude HTML generation stream (routes.ts ~2417) */
   claudeHtml: "claude-opus-5",
   /** HTML modernisation: Anthropic primary, direct OpenAI Terra fallback. */
@@ -192,7 +192,7 @@ export type LegacyTask = keyof typeof LEGACY_MODELS;
  * Verified live 2026-09-04, because the two vendors spell this differently and guessing
  * would have produced a 400 in production:
  *
- *  - OpenAI (`gpt-5.6-sol`): top-level `reasoning_effort: "medium"`.
+ *  - OpenAI (`gpt-6.1-sol`, tulajdonosi döntés 2026-10-03 a gpt-5.6-sol helyett): top-level `reasoning_effort: "medium"`.
  *  - Anthropic (`claude-opus-5`): `output_config: { effort: "medium" }`. The older
  *    `thinking: {type:"enabled"}` shape is rejected by this model — the API itself
  *    replied "use thinking.type.adaptive and output_config.effort".
@@ -234,7 +234,7 @@ export function keyNameForModel(modelId: string): string {
 /**
  * Which API key each legacy task needs.
  *
- * Explicit rather than inferred from the model id: `gpt-5.6-sol` obviously means OpenAI
+ * Explicit rather than inferred from the model id: `gpt-6.1-sol` obviously means OpenAI
  * today, but the mapping is what a readiness check reports to an admin, and a guess
  * there is worse than no check. Measured 2026-09-04: production had none of these set,
  * and every route built its SDK client anyway — the first admin click got a raw vendor

@@ -15,7 +15,7 @@ import { Router, Request } from 'express';
 import { storage } from './storage';
 import { logger } from './lib/logger';
 import type { HtmlFile } from '@shared/schema';
-import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
+import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { executeWorkflow, workflowPhase, workflowSkillPrompt, workflowFinding } from "./workflows/engine";
 import { workflowStore } from "./workflows/store";
 import { htmlBaselineHash } from "./improve/html-baseline";
@@ -57,7 +57,8 @@ async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile
     await workflowPhase("source");
     if (!originalFile.content?.trim()) throw new Error("Az eredeti tananyag üres.");
     await workflowPhase("author");
-    const specBlock = lessonHtmlSpecPrompt({
+    // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus spec a (cache-elt) rendszerpromptban, a leckénként változó téma külön.
+    const { theme: themeBlock, spec: specBlock } = lessonHtmlSpecParts({
       classroom: originalFile.classroom ?? 5,
       seed: originalFile.title,
       subjectHint: `${originalFile.title} ${originalFile.description ?? ''}`,
@@ -209,6 +210,7 @@ ${originalFile.content}
 
         const stream = improveProvider.streamChat([
           { role: 'system', content: systemPrompt },
+          { role: 'system', content: themeBlock },
           { role: 'user', content: userPrompt }
         ], controller.signal);
 
@@ -290,7 +292,7 @@ ${originalFile.content}
         );
         let continuation = '';
         const contStream = improveProvider.streamChat(
-          buildContinuationMessages(systemPrompt, userPrompt, joined),
+          buildContinuationMessages([systemPrompt, themeBlock], userPrompt, joined),
           controller.signal,
         );
         for await (const chunk of contStream) {

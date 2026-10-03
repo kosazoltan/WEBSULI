@@ -128,13 +128,17 @@ test("a webes gyűjtő prompt nem tartalmazza a v7.4 JS-dumpot; a szerzői a fú
 
 test("routes.ts mindkét készítő promptja és az Okosítás a közös specet fűzi be", () => {
   const routes = read("server/routes.ts");
-  assert.match(routes, /import \{ lessonHtmlSpecPrompt \} from "\.\/ai\/lesson-html-spec"/);
-  assert.ok((routes.match(/lessonHtmlSpecPrompt\(\{/g) ?? []).length >= 2, "két készítő route");
+  // Spec 2026-10-03-gpt61-sol-kv-cache: a közös spec két részben (statikus spec a cache-töréspont előtt, téma utána) — mindkettő
+  // ugyanúgy bekerül a kérésbe.
+  assert.match(routes, /import \{ lessonHtmlSpecParts \} from "\.\/ai\/lesson-html-spec"/);
+  assert.ok((routes.match(/lessonHtmlSpecParts\(\{/g) ?? []).length >= 2, "két készítő route");
+  assert.ok((routes.match(/const dynamicPrompt = `\$\{themeBlock\}/g) ?? []).length >= 2, "a téma mindkét készítő route kérésébe bekerül");
   assert.match(routes, /\$\{customPrompt\.prompt\}\\n\\n\$\{specBlock\}/, "a DB-s egyedi prompt mellé is hozzáfűződik");
   assert.doesNotMatch(routes, /SOHA @font-face vagy Google Fonts/);
   assert.doesNotMatch(routes, /Segoe UI, Noto Sans, system-ui/);
   const improve = read("server/improveAsync.ts");
-  assert.match(improve, /lessonHtmlSpecPrompt\(\{/);
+  assert.match(improve, /lessonHtmlSpecParts\(\{/);
+  assert.match(improve, /\{ role: 'system', content: themeBlock \}/, "a téma az Okosítás kérésébe is bekerül");
   assert.match(improve, /\$\{specBlock\}/);
   assert.doesNotMatch(improve, /TILOS\*\*: @font-face, Google Fonts/);
   // a régi kötelező font-sor eltűnt (a „Segoe UI” csak a cserére utasító prioritásban maradhat)
