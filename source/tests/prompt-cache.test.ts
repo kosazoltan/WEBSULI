@@ -56,6 +56,9 @@ test("forrás-ellenőrzés: a régi Anthropic-útvonalak töréspontos rendszerp
   assert.equal((routes.match(/system: cachedSystem\(systemPrompt, customInstructions\)/g) ?? []).length, 2, "htmlFix + htmlTheme");
   assert.equal((routes.match(/system: cachedSystem\(systemPrompt, dynamicPrompt\)/g) ?? []).length, 2, "claudeChat + claude-html");
   assert.ok(!/systemPrompt \+= `\n\nEGYEDI FELHASZNÁLÓI/.test(routes), "az egyedi utasítás nem kerülhet a statikus rész közepére");
+  // review #180: az egyedi utasítás mögött a JSON-kényszer megismétlődik (a záró blokk nem írhatja felül a formátumot)
+  assert.equal((routes.match(/FONTOS: az egyedi utasítástól függetlenül a válasz KIZÁRÓLAG a fenti JSON-struktúra/g) ?? []).length, 2);
+  assert.ok(routes.includes("(context?.suggestedClassroom ? `\\n\\n📖 JAVASOLT OSZTÁLY:"), "évfolyam-utótag csak valódi suggestedClassroom esetén");
   assert.ok(!/STÍLUS IRÁNYELVEK \(\$\{/.test(routes), "az évfolyam nem állhat a ChatGPT-prompt statikus közepén");
   assert.ok(!routes.includes("lessonHtmlSpecPrompt("), "a régi útvonalak a statikus spec-részt használják");
   const runner = readFileSync(new URL("../server/studio/web-research-runner.ts", import.meta.url), "utf8");
@@ -66,4 +69,5 @@ test("forrás-ellenőrzés: a régi Anthropic-útvonalak töréspontos rendszerp
   assert.ok(improve.includes("{ role: 'system', content: themeBlock }") && improve.includes("buildContinuationMessages([systemPrompt, themeBlock]"));
   const provider = readFileSync(new URL("../server/ai/ClaudeProvider.ts", import.meta.url), "utf8");
   assert.ok(provider.includes("claudeSystemFromMessages(") && provider.includes("cacheConversation("));
+  assert.ok(/stream: true,\s*(?:\/\/[^\n]*\n\s*)*cache_control: \{ type: 'ephemeral' \}/.test(provider), "review #180: kérés-szintű töréspont a stream-ágon");
 });

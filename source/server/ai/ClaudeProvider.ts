@@ -109,6 +109,9 @@ export class ClaudeProvider implements IAIProvider {
           system: claudeSystemFromMessages(systemMessages.map(m => m.content)),
           messages: cacheConversation(conversationMessages),
           stream: true,
+          // Review #180 (Codex): kérés-szintű automatikus töréspont az utolsó blokkon — az ELSŐ hívás is eltárolja a nagy
+          // user-promptot, így már az első folytatás cache-találat (az explicit jelölő ugyanazzal a TTL-lel összefér).
+          cache_control: { type: 'ephemeral' },
         },
         { signal }
       );

@@ -1246,7 +1246,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus rész (skill + feladat + formátum) elöl, cache-törésponttal; az egyedi
       // felhasználói utasítás utána.
-      const customInstructions = customPrompt && customPrompt.trim() ? `EGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}` : "";
+      // Review #180 (Codex): az egyedi utasítás a JSON-korlát MÖGÉ kerülne — a záró blokk ezért megismétli a formátum-kényszert.
+      const customInstructions = customPrompt && customPrompt.trim()
+        ? `EGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}\n\nFONTOS: az egyedi utasítástól függetlenül a válasz KIZÁRÓLAG a fenti JSON-struktúra legyen, más szöveg nélkül.`
+        : "";
 
       systemPrompt += `\n\nFONTOS: A választ KIZÁRÓLAG JSON formátumban add vissza, a következő struktúrával:
 {
@@ -1341,7 +1344,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus rész (skill + feladat + formátum) elöl, cache-törésponttal; az egyedi
       // felhasználói utasítás utána.
-      const customInstructions = customPrompt && customPrompt.trim() ? `EGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}` : "";
+      // Review #180 (Codex): az egyedi utasítás a JSON-korlát MÖGÉ kerülne — a záró blokk ezért megismétli a formátum-kényszert.
+      const customInstructions = customPrompt && customPrompt.trim()
+        ? `EGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}\n\nFONTOS: az egyedi utasítástól függetlenül a válasz KIZÁRÓLAG a fenti JSON-struktúra legyen, más szöveg nélkül.`
+        : "";
 
       systemPrompt += `\n\nFONTOS: A választ KIZÁRÓLAG JSON formátumban add vissza, a következő struktúrával:
 {
@@ -2146,7 +2152,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 - Minden fogalmat RÉSZLETESEN fejtsd ki, ne feltételezd az előzetes tudást
 - A tananyag ÖNMAGÁBAN is érthető legyen, külső források nélkül
 
-✏️ STÍLUS IRÁNYELVEK (a lent megadott JAVASOLT OSZTÁLY szerint):
+✏️ STÍLUS IRÁNYELVEK (a lent megadott JAVASOLT OSZTÁLY szerint, ha van):
 - 1-3. osztály: Egyszerű, rövid mondatok, sok példa, játékos hangnem, "Tudtad, hogy...?"
 - 4. osztály: Vidám, barátságos stílus, kérdések beépítése, érdekességek
 - 5-7. osztály: Energikus, izgalmas témák, fiúkhoz szóló példák (autók, sport, technológia)
@@ -2175,7 +2181,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         {
           role: "system",
           // Spec 2026-10-03-gpt61-sol-kv-cache: a változó rész (dokumentum, osztály) a statikus prompt UTÁN — OpenAI-előtag-cache.
-          content: finalPrompt + (contextInfo || `\n\n📖 JAVASOLT OSZTÁLY: ${context?.suggestedClassroom || '?'}. osztály`)
+          content: finalPrompt + (contextInfo || (context?.suggestedClassroom ? `\n\n📖 JAVASOLT OSZTÁLY: ${context.suggestedClassroom}. osztály` : ''))
         }
       ];
 
