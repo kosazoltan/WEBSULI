@@ -55,7 +55,7 @@ import {
   parseLektorResponse,
   LEKTOR_SOLUTIONS_MAX,
 } from "./step-io";
-import type { SourceCorrection } from "./source-corrections";
+import { correctionNotes, type SourceCorrection } from "./source-corrections";
 import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
 import { pickVisualWorld, visualWorld, harmoniseSectionEmojis, type VisualWorldId, designFromInstruction } from "../../shared/lesson-visuals";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
@@ -341,6 +341,13 @@ function ownerOf(job: JobView): OwnerContext | undefined {
   const inv = job.output?.instructionInventory as InstructionInventory | undefined;
   const inventory = inv && Array.isArray(inv.points) ? ownerInventoryOf(inv) : undefined;
   return instruction || corrections?.length ? { instruction, corrections, ...(inventory ? { inventory } : {}) } : undefined;
+}
+
+/** Spec 2026-10-03-forras-aritmetika-helyesbites: a bank-ellenőr (és a „cleared”-kulcs) a helyesbített fogalom mellé a helyesbítést is kapja. */
+function verifierConceptsOf(map: { concepts: MapConcept[] }, job: JobView): Array<MapConcept & { correction?: string }> {
+  const notes = correctionNotes(ownerOf(job)?.corrections);
+  if (!notes.size) return map.concepts;
+  return map.concepts.map((c) => (notes.has(c.localId) ? { ...c, correction: notes.get(c.localId) } : c));
 }
 
 /**
@@ -669,7 +676,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       lektorBlind = blind;
       // U5 (C5/H8): a bank-ellenőr által igazolt, változatlan tartalmú tételek útvonala — a lektor ne járja be újra.
       const clearedHashes = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
-      const verifiedContext = verifierContext(lesson, blind, map.concepts, supportSkillVersion("bank-verifier"));
+      const verifiedContext = verifierContext(lesson, blind, verifierConceptsOf(map, job), supportSkillVersion("bank-verifier"));
       const verifiedPaths = new Set(bankVerifierChunks(lesson, new Set(), undefined, verifiedContext).flatMap((c) => c.items).filter((i) => clearedHashes.has(i.hash)).map((i) => i.path));
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
@@ -719,7 +726,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       user: "Válaszolj kizárólag a kért JSON-nal.",
     });
   // Spec 2026-09-24 (bank-ellenőr): a lektor-hívással párhuzamosan indul, az eredményágban várjuk be.
-  const bankCheck = job.step === "lektor" ? startBankVerifier(job, lektorBlind, providerFactory, keyConfigured, map.concepts) : undefined;
+  const bankCheck = job.step === "lektor" ? startBankVerifier(job, lektorBlind, providerFactory, keyConfigured, verifierConceptsOf(map, job)) : undefined;
   // Spec 2026-09-30 (ábratervező): fejezetenként külön Opus-hívás (a régi egész-leckés hívás 16k-ból rajzolt 11 ábrát).
   // Visszakapcsolás a régi útra: STUDIO_VISUAL_DESIGNER=off.
   const designerLesson = job.step === "animator" && !reusedVisuals && process.env.STUDIO_VISUAL_DESIGNER !== "off"
@@ -1196,7 +1203,7 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         const previouslyCleared = Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : [];
         // U5 (H48): „cleared” nem érvényes olyan tételre, amelyhez bármelyik forrásból (lektor VAGY bank-ellenőr) nyitott lelet tartozik.
         const openPaths = new Set(rawNotes.map((n) => n.blockPath).filter((p): p is string => !!p && /^experience(?:\.|\[)/.test(p)));
-        const clearedNow = clearedWithoutOpen(job.output?.lesson as Lesson, [...previouslyCleared, ...bankChecked.cleared], openPaths, verifierContext(job.output?.lesson as Lesson, lektorBlind, map.concepts, supportSkillVersion("bank-verifier")));
+        const clearedNow = clearedWithoutOpen(job.output?.lesson as Lesson, [...previouslyCleared, ...bankChecked.cleared], openPaths, verifierContext(job.output?.lesson as Lesson, lektorBlind, verifierConceptsOf(map, job), supportSkillVersion("bank-verifier")));
         job.output = {
           ...job.output,
           bankVerifierCleared: [...new Set(clearedNow)].slice(-3000),

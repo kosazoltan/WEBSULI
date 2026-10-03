@@ -17,8 +17,10 @@ export const lessonRepairSchema = z.object({
   ownerInstruction: z.string().max(4000).optional(),
   sourceCorrections: z.array(z.object({
     localId: z.string().min(1), term: z.string().min(1).max(200).optional(), definition: z.string().min(1).optional(),
-    basis: z.enum(["owner", "transcription"]), reason: z.string(),
+    // Spec 2026-10-03-forras-aritmetika-helyesbites (review #181): a determinisztikus `arithmetic` alap és a tanuló hibája.
+    basis: z.enum(["owner", "transcription", "arithmetic"]), reason: z.string(),
     from: z.object({ term: z.string().optional(), definition: z.string().optional() }),
+    studentError: z.object({ expression: z.string(), written: z.string(), expected: z.string() }).optional(),
   })).optional(),
   classroom: z.number().int().min(1).max(12).optional(),
   // Spec 2026-09-30 (U6, C16) + review #164: a javító-lektor által eldöntetlen régi-alak jelöltek (figyelmeztetés, admin).

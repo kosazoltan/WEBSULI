@@ -48,7 +48,7 @@ import { workflowStore } from "../workflows/store";
 import { htmlFiles } from "../../shared/schema";
 import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
-import { correctionAuditText, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
+import { arithmeticSourceCorrections, correctionApplied, correctionAuditText, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 import { callStepModel } from "./run-step";
 import { decideTopicFocus, topicFocusModels, type TopicFocus } from "./topic-focus";
 import { createStudioStepProvider } from "../ai/studio-provider";
@@ -470,23 +470,32 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
  * (term/definition only; the quote stays the transcript evidence). Never throws: no correction on failure.
  */
 export async function correctMapFromOwner(mapId: string, instruction: string | undefined, transcript: boolean): Promise<SourceCorrection[]> {
-  if (!instruction && !transcript) return [];
   const rows = await db.select().from(kmConcepts).where(and(eq(kmConcepts.mapId, mapId), ne(kmConcepts.reviewState, "rejected")));
   const concepts = rows.map((c) => ({ id: c.id, localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight as MapConcept["examWeight"] }));
+  // Spec 2026-10-03-forras-aritmetika-helyesbites: a determinisztikus (modell nélküli) kör MINDIG fut — a hamis egyenlőség a
+  // forrásban kéréstől és fotótól függetlenül hamis (mért: map 6701ee87, 7 hamis sor → 73 bank-lelet → nem publikálható).
+  const arithmetic = arithmeticSourceCorrections(concepts);
+  if (arithmetic.length) logger.warn(`[STUDIO/1STEP] Hamis egyenlőség a forrásban (${arithmetic.length}): ${arithmetic.map((c) => `${c.localId}: ${c.reason}`).join(" | ").slice(0, 1500)}`);
   const model = resolveStudioModel("pedagogue");
-  const result = await proposeSourceCorrections(async (system, user) =>
-    (await callStepModel(createStudioStepProvider(model, "pedagogue"), { step: "pedagogue", role: "corrector", model, system, user })).json,
-  concepts, { instruction, transcript });
+  const result = instruction || transcript
+    ? await proposeSourceCorrections(async (system, user) =>
+      (await callStepModel(createStudioStepProvider(model, "pedagogue"), { step: "pedagogue", role: "corrector", model, system, user })).json,
+    concepts, { instruction, transcript })
+    : { corrections: [] as SourceCorrection[], rejected: [] as string[] };
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
+  const corrections = mergeCorrections(arithmetic, result.corrections);
   // The full audit goes to the log and the job output (sourceCorrections); the column holds only a code.
-  for (const fix of result.corrections) logger.info(`[STUDIO/1STEP] ${fix.localId}: ${correctionAuditText(fix)}`);
-  if (!result.corrections.length) return [];
+  for (const fix of corrections) logger.info(`[STUDIO/1STEP] ${fix.localId}: ${correctionAuditText(fix)}`);
+  if (!corrections.length) return [];
+  // Review #181: újraindításkor a sor már helyesbített — nincs írás, de a helyesbítés a jobbal utazik (bank-ellenőr mércéje).
+  const pending = corrections.filter((fix) => { const row = rows.find((r) => r.localId === fix.localId); return row && !correctionApplied(fix, row); });
+  if (!pending.length) return corrections;
   // Audit 2026-09-24: all rows commit together or none; a failed write never stops the run (the lesson is
   // then made from the uncorrected map, exactly as before corrections existed) — the docstring's promise.
   try {
     await db.transaction(async (tx) => {
-      for (const fix of result.corrections) {
+      for (const fix of pending) {
         const row = rows.find((r) => r.localId === fix.localId);
         if (!row) continue;
         await tx.update(kmConcepts).set({
@@ -502,7 +511,7 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     logger.warn(`[STUDIO/1STEP] A forrás-helyesbítés mentése elmaradt (${error instanceof Error ? error.message : String(error)}) — helyesbítés nélkül folytatjuk.`);
     return [];
   }
-  return result.corrections;
+  return corrections;
 }
 
 /**
@@ -779,7 +788,10 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
 
   // #180: `{}` (the Studio panel's body) means "the map's own scope".
   const scope = parsed.data && "subject" in parsed.data ? parsed.data : undefined;
-  const started = await startJobFromMap(req.params.mapId, scope);
+  // Spec 2026-10-03-forras-aritmetika-helyesbites: a meglévő térképről indított (újraindított) lecke is a determinisztikus
+  // helyesbítésen megy át (kérés/fotó nélkül nincs modellhívás) — különben a hamis forrás-egyenlőség újra tényként tanítódna.
+  const corrections = await correctMapFromOwner(req.params.mapId, undefined, false);
+  const started = await startJobFromMap(req.params.mapId, scope, {}, corrections.length ? { corrections } : undefined);
   if (!started.ok) return res.status(409).json({ message: started.reason });
 
   res.status(201).json({ jobId: started.jobId });

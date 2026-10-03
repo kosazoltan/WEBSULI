@@ -99,9 +99,9 @@ function promptView({ path, item, key }: BankVerifierItem): Record<string, unkno
 }
 
 /** A „cleared”-kulcs kontextusa (review #163): fejezet tanítása + idézetek + vak megoldás + ellenőrző skill verziója. */
-export function verifierContext(lesson: Pick<Lesson, "sections">, blind: BlindSolutions | undefined, concepts: ReadonlyArray<{ localId: string; quote?: string }>, skillVersion: string): VerifierContext {
+export function verifierContext(lesson: Pick<Lesson, "sections">, blind: BlindSolutions | undefined, concepts: ReadonlyArray<{ localId: string; quote?: string; correction?: string }>, skillVersion: string): VerifierContext {
   const shared = createHash("sha256").update(skillVersion).update(JSON.stringify(blind?.solutions ?? [])).update(JSON.stringify(blind?.notEnough ?? []))
-    .update(JSON.stringify(concepts.map((c) => [c.localId, c.quote ?? ""]))).digest("hex");
+    .update(JSON.stringify(concepts.map((c) => [c.localId, c.quote ?? "", c.correction ?? ""]))).digest("hex");
   return (sectionIndex) => `${shared}:${createHash("sha256").update(sectionTeaching(lesson.sections[sectionIndex])).digest("hex").slice(0, 24)}`;
 }
 
@@ -116,15 +116,16 @@ function sectionTeaching(section: Lesson["sections"][number] | undefined): strin
   }).join("\n").slice(0, 12_000);
 }
 
-export function buildBankVerifierPrompt(chunk: BankVerifierChunk, blind: BlindSolutions | undefined, lesson: Pick<Lesson, "title" | "classroom" | "sections">, concepts: ReadonlyArray<{ localId: string; term?: string; quote?: string }> = []): string {
+export function buildBankVerifierPrompt(chunk: BankVerifierChunk, blind: BlindSolutions | undefined, lesson: Pick<Lesson, "title" | "classroom" | "sections">, concepts: ReadonlyArray<{ localId: string; term?: string; quote?: string; correction?: string }> = []): string {
   const heading = lesson.sections[chunk.sectionIndex]?.heading ?? "";
   const wanted = new Set(chunk.items.flatMap((i) => i.conceptIds ?? []));
-  const quotes = concepts.filter((c) => wanted.has(c.localId) && c.quote).map((c) => `- ${c.localId}${c.term ? ` (${c.term})` : ""}: „${c.quote!.slice(0, 400)}”`);
+  // Spec 2026-10-03-forras-aritmetika-helyesbites: a dokumentáltan helyesbített sornál a helyesbítés a mérce, nem az idézet.
+  const quotes = concepts.filter((c) => wanted.has(c.localId) && c.quote).map((c) => `- ${c.localId}${c.term ? ` (${c.term})` : ""}: „${c.quote!.slice(0, 400)}”${c.correction ? `\n  ⚠ HELYESBÍTVE (dokumentált kurálás; ennél a fogalomnál EZ a mérce, nem az idézet): ${c.correction.slice(0, 500)}` : ""}`);
   return withSupportSkill("bank-verifier", [
     `Lecke: ${lesson.title} (${lesson.classroom}. évfolyam). Fejezet: ${chunk.sectionIndex + 1}. ${heading}`.trim(),
     "A FEJEZET TANÍTÁSA (ADAT — a tételek ehhez képest legyenek igazak):",
     sectionTeaching(lesson.sections[chunk.sectionIndex]) || "(nincs tanítási szöveg ebben a fejezetben)",
-    ...(quotes.length ? ["A TÉTELEK FOGALMAINAK FORRÁS-IDÉZETEI (ADAT; a forrás a mérce):", ...quotes] : []),
+    ...(quotes.length ? ["A TÉTELEK FOGALMAINAK FORRÁS-IDÉZETEI (ADAT; a forrás a mérce — a HELYESBÍTVE jelölt sornál a helyesbítés):", ...quotes] : []),
     "FÜGGETLEN VAK MEGOLDÁSOK (a forrás feladatai, a lecke ismerete NÉLKÜL megoldva; ADAT; üres lista = nincs, magad oldod meg):",
     JSON.stringify(blind?.solutions ?? []),
     ...(blind?.notEnough?.length ? [`A vak megoldó „NINCS ELÉG ADAT”-nak jelölte: ${blind.notEnough.join("; ").slice(0, 400)}`] : []),
@@ -216,7 +217,7 @@ export async function runBankVerifier(args: {
   lesson: Lesson;
   blind?: BlindSolutions;
   /** U5 (H24): a tételek fogalmainak forrás-idézetei a prompthoz. */
-  concepts?: ReadonlyArray<{ localId: string; term?: string; quote?: string }>;
+  concepts?: ReadonlyArray<{ localId: string; term?: string; quote?: string; correction?: string }>;
   /** Review #163: a „cleared”-kulcs ellenőrzési kontextusa. */
   context?: VerifierContext;
   cleared?: ReadonlySet<string>;

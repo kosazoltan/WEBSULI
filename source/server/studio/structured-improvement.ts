@@ -25,7 +25,7 @@ import { buildStaleJudgePrompt, parseStaleVerdicts, repairChecklistTail, sourceW
 import { logger } from "../lib/logger";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
-import { applySourceCorrections, correctionReasonCode, explicitClassroomOf, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
+import { applySourceCorrections, arithmeticSourceCorrections, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 
 export const repairHash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
@@ -107,7 +107,8 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
     ? await proposeSourceCorrections((system, user) => call("pedagogue", system, user, "corrector"), source.concepts, { instruction, transcript: !!opts.transcript })
     : { corrections: [] as SourceCorrection[] };
   const asked = explicitClassroomOf(instruction);
-  const owner: RepairOwner = { instruction, corrections: proposal.corrections, ...(asked !== undefined && asked !== original.classroom ? { classroom: asked } : {}) };
+  // Spec 2026-10-03-forras-aritmetika-helyesbites: a hamis forrás-egyenlőség a javítási úton is determinisztikusan helyesbített.
+  const owner: RepairOwner = { instruction, corrections: mergeCorrections(arithmeticSourceCorrections(source.concepts), proposal.corrections), ...(asked !== undefined && asked !== original.classroom ? { classroom: asked } : {}) };
   const corrected: RepairSource = { ...source, ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}), concepts: applySourceCorrections(source.concepts, owner.corrections) };
   const classroom = owner.classroom ?? original.classroom;
   // Spec 2026-09-24: a tanár kérése („rózsaszín, kislánynak, effektekkel”) választhat világot és különlegességeket.
