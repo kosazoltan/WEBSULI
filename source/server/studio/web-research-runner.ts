@@ -10,7 +10,7 @@ import { verifyTeachingVisuals } from "../improve/verify-html-teaching";
 import { workflowCheckpoint, savedWorkflowResult, type WorkflowRecord, workflowRuntimeVersion, workflowSkillPrompt, workflowValidationFailure, workflowUsage } from "../workflows/engine";
 import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { hasHtmlLessonData, readRawHtmlLessonData } from "../../shared/lesson-html-data";
-import { decideWebResearchGatherResult, decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchGatherPrompt, webLessonAuthorPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
+import { decideWebResearchGatherResult, decideWebResearchResult, extractGeneratedHtml, htmlLooksComplete, HTML_START, webResearchGatherParts, webLessonAuthorPrompt, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
 import { fetchedTeachingSources, teachingReviewEvidence, subjectiveOnlyFailures, TeachingReviewFailure, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { repairWebLessonBank } from "./web-bank-repair";
 import { reviewAndRepairWebTeaching } from "./web-teaching-repair";
@@ -19,6 +19,7 @@ import { StepModelError, stablePrefixChars, withRunbook } from "./run-step";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, type ExperienceCheckpoint } from "./experience-builder";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import { withSupportSkill } from "./support-skills";
+import { cachedSystem } from "../ai/prompt-cache";
 import {
   assembledWebLessonData,
   extractWebConcepts,
@@ -124,6 +125,7 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
     let fewSourcesRetried = false;
     const startedAt = Date.now();
 
+    const gatherParts = webResearchGatherParts(input.classroom, input.title, topicSeed);
     restartPhaseTimer();
     for (;;) {
       let providerCalled = false;
@@ -134,15 +136,12 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
           model: resolveLegacyModel("webResearch"),
           output_config: { effort: effortFor("webResearch") },
           max_tokens: MAX_TOKENS,
-          system: [
-            {
-              type: "text",
-              text: withSupportSkill("web-research", webResearchGatherPrompt(input.classroom, input.title, topicSeed)) + workflowSkillPrompt("web-research"),
-              cache_control: { type: "ephemeral" },
-            },
-          ],
+          // Spec 2026-10-03-gpt61-sol-kv-cache: statikus rész (skill + feladat + workflow-skill) töréspontos blokkban, a kérés
+          // (évfolyam, cím, mag) utána; a kérés-szintű töréspont a pause_turn-folytatásokban a letöltött oldalakat is cache-eli.
+          system: cachedSystem(withSupportSkill("web-research", gatherParts.fixed) + workflowSkillPrompt("web-research"), gatherParts.request),
           tools: [WEB_SEARCH_TOOL, WEB_FETCH_TOOL],
           messages,
+          cache_control: { type: "ephemeral" },
         },
         { signal: controller.signal },
       );

@@ -153,7 +153,8 @@ test("minden legacy feladat megmondja, melyik kulcs kell hozzá", () => {
 });
 
 test("resolveLegacyModel környezeti felülírást is elfogad", () => {
-  assert.equal(resolveLegacyModel("chatgptChat", {}), "gpt-5.6-sol");
+  // Tulajdonosi modellváltás 2026-10-03: a gpt-5.6-sol helyett gpt-6.1-sol (saját OpenAI-kulcs).
+  assert.equal(resolveLegacyModel("chatgptChat", {}), "gpt-6.1-sol");
   assert.equal(
     resolveLegacyModel("chatgptChat", { LEGACY_MODEL_CHATGPT_CHAT: "gpt-5.6-luna" }),
     "gpt-5.6-luna",
@@ -161,7 +162,7 @@ test("resolveLegacyModel környezeti felülírást is elfogad", () => {
   // Üres felülírás nem számít felülírásnak.
   assert.equal(
     resolveLegacyModel("chatgptChat", { LEGACY_MODEL_CHATGPT_CHAT: "  " }),
-    "gpt-5.6-sol",
+    "gpt-6.1-sol",
   );
 });
 
@@ -185,7 +186,7 @@ test("a webes tananyag-ügynök Opus 5 low efforton fut", () => {
 
 test("providerForModel az azonosító alakjából dönt", () => {
   assert.equal(providerForModel("claude-opus-5"), "anthropic");
-  assert.equal(providerForModel("gpt-5.6-sol"), "openai");
+  assert.equal(providerForModel("gpt-6.1-sol"), "openai");
   assert.equal(providerForModel("z-ai/glm-5.3-flash"), "openrouter");
 });
 

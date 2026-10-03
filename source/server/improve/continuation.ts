@@ -25,12 +25,14 @@ const CONTINUE_COMMAND = [
 
 /** A folytatás-kérés üzenetei: eredeti kontextus + részleges kimenet + parancs. */
 export function buildContinuationMessages(
-  systemPrompt: string,
+  systemPrompt: string | string[],
   userPrompt: string,
   partialHtml: string,
 ): AIMessage[] {
+  // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus és a változó system-rész külön üzenet marad (cache-töréspont).
+  const system: AIMessage[] = (Array.isArray(systemPrompt) ? systemPrompt : [systemPrompt]).map((content) => ({ role: "system", content }));
   return [
-    { role: "system", content: systemPrompt },
+    ...system,
     { role: "user", content: userPrompt },
     { role: "assistant", content: partialHtml },
     { role: "user", content: CONTINUE_COMMAND },

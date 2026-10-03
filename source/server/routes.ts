@@ -38,7 +38,8 @@ import { lessonPipelineRouter } from "./studio/lesson-pipeline-routes";
 import { webResearchRouter } from "./studio/web-research-routes";
 import { workflowRouter } from "./workflows/routes";
 import { applyTrackedImprovement } from "./workflows/apply";
-import { lessonHtmlSpecPrompt } from "./ai/lesson-html-spec";
+import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
+import { cachedSystem } from "./ai/prompt-cache";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
@@ -1243,9 +1244,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 - Hozzáférhetőségi hibák (hiányzó alt szövegek, ARIA attribútumok)
 - Biztonsági hibák (XSS, injection vulnerabilities)`;
 
-      if (customPrompt && customPrompt.trim()) {
-        systemPrompt += `\n\nEGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}`;
-      }
+      // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus rész (skill + feladat + formátum) elöl, cache-törésponttal; az egyedi
+      // felhasználói utasítás utána.
+      const customInstructions = customPrompt && customPrompt.trim() ? `EGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}` : "";
 
       systemPrompt += `\n\nFONTOS: A választ KIZÁRÓLAG JSON formátumban add vissza, a következő struktúrával:
 {
@@ -1264,7 +1265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         model: resolveLegacyModel("htmlFix"),
         output_config: { effort: effortFor("htmlFix") },
         max_tokens: 4096,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt, customInstructions),
         messages: [
           {
             role: "user",
@@ -1338,9 +1339,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 - Finom árnyékok
 - Tiszta tipográfia (Poppins, Inter)`;
 
-      if (customPrompt && customPrompt.trim()) {
-        systemPrompt += `\n\nEGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}`;
-      }
+      // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus rész (skill + feladat + formátum) elöl, cache-törésponttal; az egyedi
+      // felhasználói utasítás utána.
+      const customInstructions = customPrompt && customPrompt.trim() ? `EGYEDI FELHASZNÁLÓI UTASÍTÁSOK:\n${customPrompt.trim()}` : "";
 
       systemPrompt += `\n\nFONTOS: A választ KIZÁRÓLAG JSON formátumban add vissza, a következő struktúrával:
 {
@@ -1358,7 +1359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         model: resolveLegacyModel("htmlTheme"),
         output_config: { effort: effortFor("htmlTheme") },
         max_tokens: 4096,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt, customInstructions),
         messages: [
           {
             role: "user",
@@ -1708,7 +1709,8 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
 
       // v7.4 (2026-09-09): a technikai szerződés a közös spec-modulból jön; a DB-s egyedi
       // prompt csak a hangnemet/személyiséget adja, és a spec ALÁ kerül (nem írja felül).
-      const specBlock = lessonHtmlSpecPrompt({
+      // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus spec a cache-töréspont előtt, a leckénként változó téma utána.
+      const { theme: themeBlock, spec: specBlock } = lessonHtmlSpecParts({
         classroom: Number(classroom) || 5,
         seed: `${title ?? ''} ${description ?? ''}`.trim() || 'websuli',
         subjectHint: `${title ?? ''} ${description ?? ''}`,
@@ -1737,8 +1739,8 @@ BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
       // Spec 2026-09-23: the DB-overridable prompt cannot bypass the role skill.
       systemPrompt = withSupportSkill("creator-chat", systemPrompt);
 
-      // Append metadata to system prompt
-      systemPrompt += `\n\nMETADATA:
+      // Append metadata after the cache breakpoint (theme + metadata vary per lesson)
+      const dynamicPrompt = `${themeBlock}\n\nMETADATA:
 ${title ? `- Cím: ${title}` : '- Cím: még nincs'}
 ${description ? `- Leírás: ${description}` : ''}
 ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végleges besorolást a tartalomból állapítsd meg.` : '- Évfolyam: a tartalomból állapítsd meg, ne kérdezd a készítőt.'}`;
@@ -1754,8 +1756,10 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
         model: resolveLegacyModel("claudeChat"),
         output_config: { effort: effortFor("claudeChat") },
         max_tokens: 64000, // Full four-page method, including both banks.
-        system: systemPrompt,
-        messages: messages
+        system: cachedSystem(systemPrompt, dynamicPrompt),
+        messages: messages,
+        // Spec 2026-10-03-gpt61-sol-kv-cache: a többkörös beszélgetés előzménye is a gyorsítótárból jön.
+        cache_control: { type: "ephemeral" },
       });
 
       let fullContent = '';
@@ -2142,7 +2146,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 - Minden fogalmat RÉSZLETESEN fejtsd ki, ne feltételezd az előzetes tudást
 - A tananyag ÖNMAGÁBAN is érthető legyen, külső források nélkül
 
-✏️ STÍLUS IRÁNYELVEK (${context?.suggestedClassroom || '?'}. osztály):
+✏️ STÍLUS IRÁNYELVEK (a lent megadott JAVASOLT OSZTÁLY szerint):
 - 1-3. osztály: Egyszerű, rövid mondatok, sok példa, játékos hangnem, "Tudtad, hogy...?"
 - 4. osztály: Vidám, barátságos stílus, kérdések beépítése, érdekességek
 - 5-7. osztály: Energikus, izgalmas témák, fiúkhoz szóló példák (autók, sport, technológia)
@@ -2170,7 +2174,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         {
           role: "system",
-          content: finalPrompt + contextInfo
+          // Spec 2026-10-03-gpt61-sol-kv-cache: a változó rész (dokumentum, osztály) a statikus prompt UTÁN — OpenAI-előtag-cache.
+          content: finalPrompt + (contextInfo || `\n\n📖 JAVASOLT OSZTÁLY: ${context?.suggestedClassroom || '?'}. osztály`)
         }
       ];
 
@@ -2323,39 +2328,44 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         content: message
       });
 
-      const specBlock = lessonHtmlSpecPrompt({
+      // Spec 2026-10-03-gpt61-sol-kv-cache: a statikus rész (skill + feladat + spec) a cache-töréspont előtt; a téma, a
+      // szöveges tartalom és a metadata utána.
+      const { theme: themeBlock, spec: specBlock } = lessonHtmlSpecParts({
         classroom: Number(metadata?.classroom) || 5,
         seed: `${metadata?.title ?? ''} ${(textContent ?? '').slice(0, 200)}`.trim() || 'websuli',
         subjectHint: `${metadata?.title ?? ''} ${metadata?.description ?? ''}`,
       });
-      const systemPrompt = `Te egy interaktív HTML tananyag készítő szakértő vagy (Tananyag Készítő v7.4).
+      const systemPrompt = withSupportSkill("creator-chat", `Te egy interaktív HTML tananyag készítő szakértő vagy (Tananyag Készítő v7.4).
 
 FELADATOD:
 1. Beszélgess a felhasználóval a HTML struktúráról, stílusról
 2. Ha a felhasználó kéri ("készítsd el", "generáld", "csináld meg"), készíts TELJES HTML-t
 3. HTML generálásnál MINDIG kezd: <!-- HTML_START --> (ez kötelező!)
 
+${specBlock}
+
+BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`);
+      const dynamicPrompt = `${themeBlock}
+
 ${textContent ? `SZÖVEGES TARTALOM (ezt alakítsd HTML-lé):\n${textContent}\n` : ''}
 
 METADATA:
 ${metadata?.title ? `Cím: ${metadata.title}` : ''}
 ${metadata?.description ? `Leírás: ${metadata.description}` : ''}
-${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; a végleges évfolyamot a tartalomból állapítsd meg.` : ''}
-
-${specBlock}
-
-BESZÉLGETÉS: Barátságos, támogató. Ha kész a HTML, jelezd!`;
+${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; a végleges évfolyamot a tartalomból állapítsd meg.` : ''}`;
 
       logger.info(`[CLAUDE HTML] Streaming HTML generation...`);
-      logger.info(`[CLAUDE HTML] System prompt length: ${systemPrompt.length}`);
+      logger.info(`[CLAUDE HTML] System prompt length: ${systemPrompt.length + dynamicPrompt.length}`);
       logger.info(`[CLAUDE HTML] Messages count: ${messages.length}`);
 
       const stream = await anthropic.messages.stream({
         model: resolveLegacyModel("claudeHtml"),
         output_config: { effort: effortFor("claudeHtml") },
         max_tokens: 64000, // v7.4: a teljes spec szerinti anyag 32K-nál is csonkult (mért, 2026-09-09); streamelve 64K
-        system: withSupportSkill("creator-chat", systemPrompt),
+        system: cachedSystem(systemPrompt, dynamicPrompt),
         messages,
+        // Spec 2026-10-03-gpt61-sol-kv-cache: a többkörös beszélgetés előzménye is a gyorsítótárból jön.
+        cache_control: { type: "ephemeral" },
       }, {
         signal: controller.signal
       });

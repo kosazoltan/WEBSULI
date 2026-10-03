@@ -143,14 +143,15 @@ export function decideWebResearchGatherResult(
   };
 }
 
-export function webResearchGatherPrompt(classroom: number, title?: string, topicSeed?: string): string {
+/**
+ * Spec 2026-10-03-gpt61-sol-kv-cache: a gyűjtő prompt statikus része (szerep + feladat) és a kérésenként változó része
+ * (évfolyam, cím, keresési mag) külön — a statikus rész a cache-töréspont előtt áll.
+ */
+export function webResearchGatherParts(classroom: number, title?: string, topicSeed?: string): { fixed: string; request: string } {
   const requestedTitle = title?.trim();
   const seed = topicSeed?.trim();
-  return [
+  const fixed = [
     "Te a WEBSULI forrásgyűjtő ügynöke vagy. A feladatod KERESÉS és LETÖLTÉS, nem tananyagírás.",
-    `Keresési támpont: ${gradeLine(classroom)}. A végső évfolyamot később a tanított fogalmakból állapítja meg a program.`,
-    requestedTitle ? `A kért téma/cím: ${requestedTitle}` : null,
-    seed && seed !== requestedTitle ? `További keresési mag: ${seed}` : null,
     "",
     "FELADATOD:",
     "1. KERESS az interneten (web_search) magyar tantervi, tankönyvi vagy NAT/OFI-hoz illő forrásokat a kért témához.",
@@ -158,7 +159,18 @@ export function webResearchGatherPrompt(classroom: number, title?: string, topic
     `3. A gyűjtés akkor kész, ha legalább ${MIN_FETCHED_SOURCES} különböző, témához tartozó oldal teljes szövege le van töltve (ha ennyi nem érhető el, a meglévőkkel). Rövid magyar státusz megengedett.`,
     "TILOS: HTML tananyag, <!DOCTYPE, ee_evaluate, saját pontozó JavaScript, JSON-bank, ígéret hogy a tananyag kész.",
     "Ne kérj újabb engedélyt. A tanítást a program a letöltött szövegből készített jegyzékből írja.",
+  ].join("\n");
+  const request = [
+    `Keresési támpont: ${gradeLine(classroom)}. A végső évfolyamot később a tanított fogalmakból állapítja meg a program.`,
+    requestedTitle ? `A kért téma/cím: ${requestedTitle}` : null,
+    seed && seed !== requestedTitle ? `További keresési mag: ${seed}` : null,
   ].filter((line): line is string => line !== null).join("\n");
+  return { fixed, request };
+}
+
+export function webResearchGatherPrompt(classroom: number, title?: string, topicSeed?: string): string {
+  const { fixed, request } = webResearchGatherParts(classroom, title, topicSeed);
+  return `${fixed}\n\n${request}`;
 }
 
 export function webLessonAuthorPrompt(classroom: number, title?: string, topicSeed?: string): string {

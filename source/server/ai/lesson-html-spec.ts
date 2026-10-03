@@ -475,6 +475,15 @@ export type LessonSpecPromptOptions = {
 
 /** A teljes spec + a kiválasztott téma egy blokkban, a hívó preambuluma UTÁN fűzendő. */
 export function lessonHtmlSpecPrompt(opts: LessonSpecPromptOptions): string {
+  const { theme, spec } = lessonHtmlSpecParts(opts);
+  return `${theme}\n\n${spec}`;
+}
+
+/**
+ * Spec 2026-10-03-gpt61-sol-kv-cache: a leckénként változó téma és a statikus spec KÜLÖN — a KV-cache-hez a statikus spec
+ * kerül előre (töréspont), a téma utána.
+ */
+export function lessonHtmlSpecParts(opts: LessonSpecPromptOptions): { theme: string; spec: string } {
   const theme = opts.theme ?? pickLessonTheme(opts.seed, opts.classroom, opts.subjectHint);
-  return `${lessonThemePrompt(theme, opts.classroom)}\n\n${LESSON_HTML_SPEC_V74}\n\n${LESSON_METHOD_CONTRACT}\n\n${HTML_LESSON_DATA_CONTRACT}`;
+  return { theme: lessonThemePrompt(theme, opts.classroom), spec: `${LESSON_HTML_SPEC_V74}\n\n${LESSON_METHOD_CONTRACT}\n\n${HTML_LESSON_DATA_CONTRACT}` };
 }

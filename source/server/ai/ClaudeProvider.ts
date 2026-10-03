@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { cacheConversation, claudeSystemFromMessages } from './prompt-cache';
 import {
   IAIProvider,
   AIMessage,
@@ -99,15 +100,14 @@ export class ClaudeProvider implements IAIProvider {
       const systemMessages = messages.filter(m => m.role === 'system');
       const conversationMessages = messages.filter(m => m.role !== 'system');
 
+      // Spec 2026-10-03-gpt61-sol-kv-cache: a hívó a statikus és a változó system-részt külön üzenetben adja → töréspont
+      // a statikus rész végén; folytatásos körben az első user-üzenet (pl. a teljes eredeti tananyag) is a gyorsítótárból jön.
       const stream = await this.client.messages.create(
         {
           model: this.model,
           max_tokens: this.maxTokens,
-          system: systemMessages.map(m => m.content).join('\n\n'),
-          messages: conversationMessages.map(msg => ({
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content,
-          })),
+          system: claudeSystemFromMessages(systemMessages.map(m => m.content)),
+          messages: cacheConversation(conversationMessages),
           stream: true,
         },
         { signal }
