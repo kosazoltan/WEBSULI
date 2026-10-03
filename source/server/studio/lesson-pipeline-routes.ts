@@ -48,7 +48,7 @@ import { workflowStore } from "../workflows/store";
 import { htmlFiles } from "../../shared/schema";
 import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
-import { arithmeticSourceCorrections, correctionAuditText, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
+import { arithmeticSourceCorrections, correctionApplied, correctionAuditText, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 import { callStepModel } from "./run-step";
 import { decideTopicFocus, topicFocusModels, type TopicFocus } from "./topic-focus";
 import { createStudioStepProvider } from "../ai/studio-provider";
@@ -488,11 +488,14 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
   // The full audit goes to the log and the job output (sourceCorrections); the column holds only a code.
   for (const fix of corrections) logger.info(`[STUDIO/1STEP] ${fix.localId}: ${correctionAuditText(fix)}`);
   if (!corrections.length) return [];
+  // Review #181: újraindításkor a sor már helyesbített — nincs írás, de a helyesbítés a jobbal utazik (bank-ellenőr mércéje).
+  const pending = corrections.filter((fix) => { const row = rows.find((r) => r.localId === fix.localId); return row && !correctionApplied(fix, row); });
+  if (!pending.length) return corrections;
   // Audit 2026-09-24: all rows commit together or none; a failed write never stops the run (the lesson is
   // then made from the uncorrected map, exactly as before corrections existed) — the docstring's promise.
   try {
     await db.transaction(async (tx) => {
-      for (const fix of corrections) {
+      for (const fix of pending) {
         const row = rows.find((r) => r.localId === fix.localId);
         if (!row) continue;
         await tx.update(kmConcepts).set({

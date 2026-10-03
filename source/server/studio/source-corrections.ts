@@ -20,6 +20,8 @@ import { NUM, evaluateExpression } from "../../shared/arithmetic-expression";
 export type CorrectionBasis = "owner" | "transcription" | "arithmetic";
 /** km_concepts.term is varchar(200). */
 export const TERM_MAX = 200;
+/** Tulajdonosi döntés 2026-10-03: a forrás hamis egyenlősége a TANULÓ saját megoldása → negatív példaként tárolt, kiemelt figyelem. */
+export type StudentError = { expression: string; written: string; expected: string };
 export type SourceCorrection = {
   localId: string;
   term?: string;
@@ -27,6 +29,8 @@ export type SourceCorrection = {
   basis: CorrectionBasis;
   reason: string;
   from: { term?: string; definition?: string };
+  /** Csak `arithmetic` alapnál: a tanuló hibás megoldása (negatív példa) strukturáltan. */
+  studentError?: StudentError;
 };
 export type CorrectionResult = { corrections: SourceCorrection[]; classroom?: number; rejected: string[]; warning?: string };
 
@@ -188,9 +192,7 @@ export function correctionPromptLines(corrections: SourceCorrection[] | undefine
     "FORRÁS-HELYESBÍTÉSEK (dokumentált kurálás — a térkép term/definition mezője MÁR a helyesbített alakot tartalmazza; a quote az eredeti átirat, bizonyítékként változatlan):",
     ...corrections.map((c) => `- ${c.localId} [${c.basis === "owner" ? "tanári kérés" : c.basis === "arithmetic" ? "hamis egyenlőség a forrásban" : "átírási hiba"}]: ${correctionAuditText(c)}`),
     "Ha a lecke a helyesbített alakot tanítja, az NEM ellentmondás a forrással; a quote eltérő betűalakját ne kérd vissza.",
-    ...(corrections.some((c) => c.basis === "arithmetic")
-      ? ["A „hamis egyenlőség a forrásban” sorokat TILOS eredményként tanítani vagy banktételben helyesnek állítani: a helyesbített (kiszámolt) eredmény a tanítandó; a forrás sora legfeljebb javítandó tanulói hibaként említhető."]
-      : []),
+    ...studentErrorPromptLines(corrections),
     "",
   ];
 }
@@ -250,6 +252,8 @@ function sideValue(side: string): number | null {
 }
 
 const EQUATION_CHARS = /^[\d\s+\-−–·×*:÷/().,]+$/;
+/** Review #181: „1.000” — ponttal tagolt ezres vagy tizedes? Nem olvasható biztosan (ld. shared/single-choice-check.ts) → nem állítunk semmit. */
+const DOTTED_THOUSANDS = /\d\.\d{3}(?!\d)/;
 
 /**
  * Az idézet egyenlőség(lánc)e, ha a bal oldala kiértékelhető és valamelyik szomszédos tag eltér VAGY olvashatatlan („-2-8=-+6”).
@@ -260,7 +264,7 @@ export function sourceArithmeticClaim(quote: string | null | undefined): Arithme
   const cleaned = quote.replace(/\s*[✓✔✗✘]+\s*$/u, "").trim();
   if (!cleaned.includes("=")) return null;
   const segments = cleaned.split("=").map((s) => s.trim());
-  if (segments.length < 2 || segments.some((s) => !s || !EQUATION_CHARS.test(s))) return null;
+  if (segments.length < 2 || segments.some((s) => !s || !EQUATION_CHARS.test(s) || DOTTED_THOUSANDS.test(s))) return null;
   const values = segments.map(sideValue);
   if (values[0] === null) return null;
   for (let i = 1; i < segments.length; i++) {
@@ -275,26 +279,36 @@ export function sourceArithmeticClaim(quote: string | null | undefined): Arithme
 const formatValue = (v: number) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1e6) / 1e6).replace(".", ","));
 
 export function arithmeticCorrectionDefinition(claim: ArithmeticClaim, quote: string): string {
-  return `A helyes eredmény: ${claim.expression} = ${formatValue(claim.expected)}. A forrás átirata „${quote.trim()}” — ez a sor hamis (tanulói hiba vagy olvasati zaj), eredményként nem tanítható; a helyes eredményt tanítsd, a forrás sorát legfeljebb javítandó hibaként említsd.`;
+  return `A helyes eredmény: ${claim.expression} = ${formatValue(claim.expected)}. A forrás sora „${quote.trim()}” a TANULÓ HIBÁS MEGOLDÁSA (negatív példa): eredményként nem tanítható; a helyes eredményt tanítsd, a tanuló hibáját címkézett negatív példaként mutasd be (mi a hiba, miért), és adj több hasonló gyakorló példát erre a hibatípusra.`;
 }
 
 type ConceptLike = { localId: string; term?: string | null; definition?: string | null; quote?: string | null };
 
-/** Determinisztikus, modell nélküli helyesbítések; idempotens (a már helyesbített definíció nem kap új auditot). */
+/**
+ * Determinisztikus, modell nélküli helyesbítések. Review #181: a már helyesbített (újraindított) térképen is visszaadja a
+ * helyesbítést — a job `sourceCorrections` mezője viszi a bank-ellenőrhöz a mércét —, csak az audit (`from`) üres, és a
+ * mentés nem ír újra (ld. correctMapFromOwner).
+ */
 export function arithmeticSourceCorrections(concepts: ReadonlyArray<ConceptLike>): SourceCorrection[] {
   const out: SourceCorrection[] = [];
   for (const c of concepts) {
     const claim = sourceArithmeticClaim(c.quote);
     if (!claim) continue;
     const definition = arithmeticCorrectionDefinition(claim, c.quote!);
-    if ((c.definition ?? "") === definition) continue;
+    const alreadyApplied = (c.definition ?? "") === definition;
     out.push({
       localId: c.localId, basis: "arithmetic", definition,
-      reason: `hamis egyenlőség a forrásban: „${claim.expression} = ${claim.written}”, helyesen ${formatValue(claim.expected)}`,
-      from: { definition: c.definition ?? "" },
+      reason: `a tanuló hibás megoldása a forrásban: „${claim.expression} = ${claim.written}”, helyesen ${formatValue(claim.expected)}`,
+      from: alreadyApplied ? {} : { definition: c.definition ?? "" },
+      studentError: { expression: claim.expression, written: claim.written, expected: formatValue(claim.expected) },
     });
   }
   return out;
+}
+
+/** Igaz, ha a helyesbítés a sorban már érvényben van (nincs mit írni). */
+export function correctionApplied(fix: SourceCorrection, row: { term?: string | null; definition?: string | null }): boolean {
+  return (fix.term === undefined || fix.term === row.term) && (fix.definition === undefined || fix.definition === row.definition);
 }
 
 /** A determinisztikus helyesbítés nyer: ugyanarra a fogalomra a modell javaslata kimarad. */
@@ -303,9 +317,32 @@ export function mergeCorrections(deterministic: SourceCorrection[], proposed: So
   return [...deterministic, ...proposed.filter((c) => !taken.has(c.localId))];
 }
 
+/** A tanuló hibái (negatív példák) — tulajdonosi döntés 2026-10-03: a tananyag célzottan épít rájuk. */
+export function studentErrors(corrections: SourceCorrection[] | undefined): Array<SourceCorrection & { studentError: StudentError }> {
+  return (corrections ?? []).filter((c): c is SourceCorrection & { studentError: StudentError } => !!c.studentError);
+}
+
+/** Prompt-blokk tervezőnek/szerzőnek/lektornak: a tanuló hibái negatív példaként, kiemelt figyelemmel (a hibából tanítunk). */
+export function studentErrorPromptLines(corrections: SourceCorrection[] | undefined): string[] {
+  const errors = studentErrors(corrections);
+  if (!errors.length) return [];
+  return [
+    "TANULÓI HIBÁK A FORRÁSBAN (negatív példák — KIEMELT FIGYELEM; a hibás megoldásokat a diák készítette, ezekből tanítjuk jobban):",
+    ...errors.map((c) => `- ${c.localId}: a tanuló ezt írta: „${c.studentError.expression} = ${c.studentError.written}” — HIBÁS; helyesen ${c.studentError.expression} = ${c.studentError.expected}.`),
+    "Szabályok: (1) a fogalmat tanító fejezet a tanuló hibás megoldását CÍMKÉZETT negatív példaként mutassa be („Gyakori hiba:” — mi a hiba, miért hibás, a helyes gondolatmenet lépésről lépésre); " +
+      "(2) a bankban legalább KÉT hasonló, ugyanerre a hibatípusra célzott gyakorló tétel legyen (feladat vagy módszer), és kvíztételben a tanuló hibás eredménye disztraktorként szerepelhet, magyarázó visszajelzéssel; " +
+      "(3) a hibás eredményt TILOS helyes eredményként tanítani vagy kulcsként jelölni; " +
+      "(4) lektor: ha a negatív példa vagy a két hasonló gyakorló tétel hiányzik, jelezd coverage_gap-ként.",
+  ];
+}
+
 /** A bank-ellenőrnek: fogalmanként a helyesbítés szövege (az idézet mellé — az ellenőr mércéje az idézet helyett ez). */
 export function correctionNotes(corrections: SourceCorrection[] | undefined): Map<string, string> {
   const notes = new Map<string, string>();
-  for (const c of corrections ?? []) notes.set(c.localId, c.basis === "arithmetic" ? `hamis egyenlőség a forrásban — ${c.definition ?? ""}` : correctionAuditText(c));
+  for (const c of corrections ?? []) {
+    notes.set(c.localId, c.studentError
+      ? `a tanuló hibás megoldása a forrásban (negatív példa): „${c.studentError.expression} = ${c.studentError.written}” HIBÁS, helyesen ${c.studentError.expression} = ${c.studentError.expected}; a hibás érték disztraktorként vagy címkézett negatív példaként megjelenhet, helyes válaszként vagy kulcsként SOHA`
+      : c.basis === "arithmetic" ? `hamis egyenlőség a forrásban — ${c.definition ?? ""}` : correctionAuditText(c));
+  }
   return notes;
 }
