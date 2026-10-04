@@ -48,6 +48,9 @@ export function parseReferenceExpression(expr: string): { valid: boolean; value:
     const t = peek();
     if (t === undefined) return undefined;
     if (/^[-−–]$/.test(t)) { pos++; const v = factor(); return v === undefined || v === null ? v : -v; }
+    // Mért (2026-10-04, run 69cacab5, negatív számok): a „+3” előjeles alak a 7. osztályos jelölés — az egyoperandusú plusz
+    // nélkül a referencia „nem értelmezhető” lett, és minden ilyen bankcsomag bukott kísérletet ért.
+    if (t === "+") { pos++; return factor(); }
     if (t === "(") { pos++; const v = expression(); if (peek() !== ")") return undefined; pos++; return v; }
     if (new RegExp(`^(?:${ATOM})$`).test(t)) { pos++; const v = atomValue(t); return Number.isNaN(v) ? null : v; }
     return undefined;
