@@ -1,5 +1,8 @@
 # Végrehajtás — élő próba leletei
 
+0. `server/studio/grounding.ts` `checkGrounding`: `formulaPresent(term, blockText)` (szóköz, `−`/`–` normalizálva,
+   számhatárral); képlet-fogalomnál CSAK ez dönt (az előjel-vak tartalékok nem) — a korai `return false` csak akkor marad,
+   ha a fogalomnak se szava, se képlete nincs. Teszt: `tests/grounding-formula.test.ts` (élő kivonatokkal) + visszajátszás.
 1. `shared/answer-value.ts` `parseReferenceExpression` `factor()`: `if (t === "+") { pos++; return factor(); }`.
    Teszt: `tests/signed-reference-value.test.ts`.
 2. `server/studio/role-skills.ts` `skilledPromptLookup` és `server/studio/step-runner.ts` `PipelineDeps.promptLookup`: opcionális

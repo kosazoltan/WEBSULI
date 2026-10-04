@@ -60,11 +60,19 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // mond ítéletet, ugyanolyan hazug, mint amelyik mérés nélkül átenged.
   // A hívó (`groundingReport`) ezért csak a `term`-mel rendelkező fogalmakat adja ide.
   const words = significantWords(concept.term ?? "");
-  if (words.length === 0) return false;
+  // Spec 2026-10-04-elo-proba-leletek (0. pont; mérve: job bce352a5 50/52, job 3b4b165c 74/74 hamis lelet): a KÉPLET-fogalom
+  // („5+(+8)”, „9-(-6)”) szavai rövidek, az érdemi szólista üres — eddig itt azonnal `false` lett, a blokk szó szerinti
+  // „5+(+8)=+13”-a mellett is. A képlet a fogalom megnevezése: előjel-pontosan keressük. Se szó, se képlet: nem mérhető
+  // → nem megalapozott (változatlan).
+  const formula = formulaOf(concept.term ?? "");
+  if (words.length === 0 && !formula) return false;
 
   const haystack = normalizeText(blockText);
   // Egy pár szavas blokk nem taníthat fogalmat, bármit is állít a címke.
   if (haystack.split(" ").filter(Boolean).length < 4) return false;
+  // Képlet-fogalomnál CSAK az előjel-pontos képlet dönt: az idézet-számok tartaléka előjel-vak („9-(+6)=+3” számai a „9-(-6)=+3”
+  // fogalmat is „megalapoznák”), a testvér-fogalmak definíciói pedig szinte szó szerint azonosak.
+  if (formula && words.length === 0) return formulaPresent(formula, blockText);
 
   const tokens = haystack.split(" ").filter(Boolean);
   const stems = new Set(tokens.map(stem));
@@ -92,7 +100,7 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
     return tokens.some((t) => t.includes(stem(word)));
   };
 
-  if (words.every(present)) return true;
+  if (words.length > 0 && words.every(present)) return true;
   // Spec 2026-09-19 (mérve: UK-földrajz futás, angol forrás → magyar lecke): a fogalom NEVE a
   // forrás nyelvén van („The United Kingdom (UK)"), a tanítás magyarul („Egyesült Királyság").
   // A kurált magyar DEFINÍCIÓ érdemi szavai ugyanúgy a forrásból jönnek: ha azok legalább fele
@@ -109,6 +117,26 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // különböző számot tartalmaz, és azok ≥ 75 %-a a blokkban is szerepel, a blokk a forrás
   // példáját dolgozza ki: megalapozott.
   return quoteNumbersPresent(concept.quote ?? concept.definition ?? "", haystack);
+}
+
+/** Képlet-alak: szóköz nélkül, egységes mínuszjellel; `null`, ha a fogalom neve nem képlet (nincs számjegy, vagy betű van benne). */
+export function formulaOf(term: string): string | null {
+  const compact = term.replace(/[−–]/g, "-").replace(/\s+/g, "");
+  return /\d/.test(compact) && /^[\d+\-·×*:÷/().,=]+$/.test(compact) ? compact : null;
+}
+
+/** A blokk előjel-pontosan tartalmazza-e a képletet (számhatárral: a „5+(+8)” nem egyezik a „15+(+8)”-cal). */
+export function formulaPresent(formula: string, blockText: string): boolean {
+  const compact = blockText.replace(/[−–]/g, "-").replace(/\s+/g, "");
+  let at = compact.indexOf(formula);
+  while (at >= 0) {
+    const before = compact[at - 1];
+    const after = compact[at + formula.length];
+    // a kezdő szám előtt nem állhat számjegy; a záró szám után nem folytatódhat szám (pl. „-2-8” ≠ „-2-89”)
+    if (!(before && /\d/.test(before) && /^\d/.test(formula)) && !(after && /[\d.,]/.test(after) && /\d$/.test(formula))) return true;
+    at = compact.indexOf(formula, at + 1);
+  }
+  return false;
 }
 
 /** Distinct numeric tokens of the source quote found in the block text (≥2 numbers, ≥75 % present). */
