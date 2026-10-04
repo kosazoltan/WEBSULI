@@ -21,7 +21,10 @@ test("előjel-pontosság: a testvér-fogalmat tanító blokk NEM alapozza meg (a
 });
 
 test("változatlan: rövid blokk nem alapoz meg; szöveges fogalom a régi szabály szerint; képlet-felismerés", () => {
-  assert.equal(checkGrounding("5+(+8)=+13", concept("5+(+8)", "5+(+8)=+13")), false, "4 szónál rövidebb blokk");
+  // Spec 2026-10-04-kepletbiztos-heurisztikak (3. pont, dokumentált változás): képlet-fogalomnál a képlet-ág a „< 4 szó” szabály
+  // ELŐTT fut — a „-5-(-8) = ___” ellenőrző blokk a képletet gyakoroltatja. Szöveges fogalomnál a szabály változatlan.
+  assert.equal(checkGrounding("5+(+8)=+13", concept("5+(+8)", "5+(+8)=+13")), true, "rövid képlet-blokk");
+  assert.equal(checkGrounding("Negatív számok", { localId: "t", term: "Negatív számok kivonása", examWeight: "core" }), false, "4 szónál rövidebb szöveges blokk");
   const text: MapConcept = { localId: "t", term: "Negatív számok kivonása", definition: "A téma a negatív számok kivonása.", examWeight: "core" };
   assert.equal(checkGrounding("A negatív számok kivonásakor az ellentett hozzáadására gondolunk.", text), true);
   assert.equal(checkGrounding("A példák ellenőrzéséhez haladj végig ezen a meneten lépésről lépésre.", text), false);

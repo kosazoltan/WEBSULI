@@ -18,9 +18,14 @@ test("review #185: a pontjegyzék verziója emelve (a mentett v2-es, hibás jegy
   assert.equal(inv.version, "v3-inventory");
 });
 
-test("szigor marad: előjel-eltérés, töredék és nem létező sor nem igazol", () => {
+test("szigor marad: előjel-eltérés és nem létező sor nem igazol; a forrásban betűhűen álló képlet-töredék igen", () => {
+  // Spec 2026-10-04-kepletbiztos-heurisztikak (6. pont, dokumentált változás): a betűhűség a JELENLÉT kérdése, nem a sor-teljességé —
+  // a „-5-(-8)” a „-5-(-8)=+3” forrássorban betűhűen áll, ezért igazol (eddig: not_in_source).
   const inv = buildInventory([[point("ehhez hasonló feladatsorokat készíts meg", "5-(-8)=+3"), point("majd ugyanúgy a gyakorló feladatokat", "-5-(-8)"), point("megoldási magyarázatokkal", "-5-(-8)=13")]], REQUEST, SOURCE);
-  assert.deepEqual(inv.points.map((p) => p.content), ["not_in_source", "not_in_source", "not_in_source"]);
+  const bySpan = (span: string) => inv.points.find((p) => p.requestSpan === span)!.content;
+  assert.equal(bySpan("ehhez hasonló feladatsorokat készíts meg"), "not_in_source", "előjel-eltérés: „5-(-8)=+3” ≠ „-5-(-8)=+3”");
+  assert.equal(bySpan("majd ugyanúgy a gyakorló feladatokat"), "pending", "betűhű töredék: „-5-(-8)”");
+  assert.equal(bySpan("megoldási magyarázatokkal"), "not_in_source", "nem létező sor: „-5-(-8)=13”");
 });
 
 test("formulaLineKey: képlet-sor kulcsa (mínuszjel nem felsorolásjel), szöveges sor nem képlet", () => {

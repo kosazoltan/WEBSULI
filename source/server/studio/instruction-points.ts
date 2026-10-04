@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { OWNER_INSTRUCTION_FRAME, type OwnerInventory } from "../../shared/owner-instruction";
 import type { MapConcept } from "./coverage";
 import { instructionConceptId } from "./instruction-check";
+import { containsFormula, formulaKey, isFormulaText } from "../../shared/formula-text";
 import { withSupportSkill } from "./support-skills";
 
 /**
@@ -81,7 +82,8 @@ export function parseInstructionPointCandidates(json: unknown, request: string):
     const p = item as { text?: unknown; requestSpan?: unknown; kind?: unknown; sourceQuote?: unknown; supports?: unknown; reason?: unknown };
     if (typeof p?.text !== "string" || !p.text.trim() || typeof p.requestSpan !== "string") continue;
     const span = p.requestSpan.trim();
-    if (alnum(span).length < 3 || !haystack.includes(normText(span))) continue;
+    // Spec 2026-10-04-kepletbiztos-heurisztikak (5. pont): a képlet-részlet („9-(-6)” = „96”) nem esik ki a 3-as határon.
+    if ((alnum(span).length < 3 && !isFormulaText(span)) || !haystack.includes(normText(span))) continue;
     const kind = p.kind === "exclude" || p.kind === "style" ? p.kind : "teach";
     const quote = typeof p.sourceQuote === "string" ? p.sourceQuote.trim().slice(0, 300) : "";
     out.push({ text: p.text.trim().slice(0, 200), requestSpan: span.slice(0, 400), kind,
@@ -107,12 +109,14 @@ export const lineKey = (s: string) => normText(s.replace(/^\s*[-•*–]\s*/, ""
  * csak akkor, ha számjegy, műveleti jel és „=” van benne, betű nincs. A TELJES sor pontos (előjel-pontos) egyezése igazol.
  */
 export function formulaLineKey(s: string): string | null {
-  const key = normText(s).replace(/[−–]/g, "-").replace(/\s+/g, "").replace(/[✓✔✗✘.;,!?]+$/u, ""); // review #185: pipa és záró írásjel bármilyen sorrendben
-  return /\d/.test(key) && /=/.test(key) && /[+\-·×*:÷/]/.test(key) && !/\p{L}/u.test(key) ? key : null;
+  // Spec 2026-10-04-kepletbiztos-heurisztikak: a közös modul kulcsa (pipa/írásjel bármilyen sorrendben — review #185).
+  const key = formulaKey(s);
+  return key && key.includes("=") ? key : null;
 }
-function verbatimInSource(quote: string, source: string, sourceLines: ReadonlySet<string>, formulaLines: ReadonlySet<string> = new Set()): boolean {
-  const formula = formulaLineKey(quote);
-  if (formula && formulaLines.has(formula)) return true;
+function verbatimInSource(quote: string, source: string, sourceLines: ReadonlySet<string>, rawSource = source): boolean {
+  // Spec 2026-10-04-kepletbiztos-heurisztikak (6. pont): képlet-idézetnél az előjel-pontos, önálló jelenlét dönt a forrásban —
+  // a címkés („b) 9-(-6)=15”) és a kétoszlopos sor, valamint a forrásban betűhűen álló képlet-részlet is igazol.
+  if (isFormulaText(quote)) return containsFormula(rawSource, quote); // nyers forrás: a sortörés határ
   const q = normText(quote);
   if (!source.includes(q)) return false;
   const key = lineKey(quote);
@@ -126,7 +130,6 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
   const exclusions = all.filter((c) => c.kind === "exclude");
   const source = sourceText?.trim() ? normText(sourceText) : "";
   const sourceLines = new Set((sourceText ?? "").split(/\r?\n/).map(lineKey).filter(Boolean));
-  const formulaLines = new Set((sourceText ?? "").split(/\r?\n/).map(formulaLineKey).filter((k): k is string => !!k));
   // Review #161 (Sourcery): a tanár kizárása akkor is a jegyzék része (átláthatóság), ha nincs vele átfedő tanítandó jelölt.
   const excluded: string[] = exclusions.map((e) => e.text).filter((t, i, arr) => arr.indexOf(t) === i);
   const byId = new Map<string, { candidates: PointCandidate[] }>();
@@ -146,7 +149,7 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
     const first = entry.candidates[0];
     // Review #161 (Codex P1 / Sourcery): csak a KIMONDOTT `supports: "yes"` igazol — a betűhű idézet önmagában a témát
     // érintheti (H34); a hiányzó ítélet ellenőrző-hiba → eldöntetlen, nem igazolt.
-    const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && verbatimInSource(c.sourceQuote, source, sourceLines, formulaLines));
+    const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && verbatimInSource(c.sourceQuote, source, sourceLines, sourceText ?? ""));
     const quoted = verifiedQuotes.find((c) => c.supports === "yes") ?? verifiedQuotes.find((c) => c.supports === "no") ?? verifiedQuotes[0];
     // A tanítandó szöveg az IGAZOLT értelmezés megfogalmazása (ha van ilyen), különben az első jelölté.
     const shown = quoted && quoted.supports === "yes" ? quoted : first;
