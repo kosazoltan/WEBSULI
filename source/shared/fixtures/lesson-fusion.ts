@@ -1,18 +1,22 @@
-import { LEGACY_LESSON_METHOD_VERSION, COMPACT_LESSON_METHOD_VERSION, LESSON_METHOD_VERSION, METHOD_KINDS, type LessonExperience } from "../lesson-experience";
+import { LEGACY_LESSON_METHOD_VERSION, COMPACT_LESSON_METHOD_VERSION, LESSON_BANK_RESERVE, LESSON_METHOD_VERSION, METHOD_KINDS, type LessonExperience } from "../lesson-experience";
 import { planLessonBank } from "../lesson-bank-plan";
 import type { Lesson } from "../lesson-schema";
 
 /** Synthetic, deterministic browser fixture. Never persisted as a manufactured lesson. */
+const fixtureBind = { sectionIndex: 0, coversConceptIds: ["area"] };
+const fixtureTask = (i: number): LessonExperience["tasks"][number] => ({
+  ...fixtureBind, id: `t${i + 1}`, q: `Mekkora a háromszög területe, ha az alap ${i + 2} cm, a hozzá tartozó magasság 4 cm?`,
+  required: [[String((i + 2) * 2)]], bonus: [], minWords: 1, needsSentence: false, sample: `${(i + 2) * 2} cm²`, mode: i % 7 === 0 ? "oral" : "written",
+});
+const fixtureQuiz = (i: number): LessonExperience["quiz"][number] => ({
+  ...fixtureBind, id: `q${i + 1}`, question: `A háromszög alapja ${i + 2} cm, magassága 2 cm. Mekkora a területe?`, options: [`${i + 2} cm²`, `${(i + 2) * 2} cm²`, `${i + 3} cm²`], correctIndex: 0,
+  feedbackPerOption: ["Az alap és a magasság szorzatát osztjuk kettővel.", "A szorzatot még kettővel kell osztani.", "Az összeadás helyett szorozz, majd oszd kettővel."],
+});
+
 export function fusionFixture(): Lesson {
-  const bind = { sectionIndex: 0, coversConceptIds: ["area"] };
-  const tasks: LessonExperience["tasks"] = Array.from({ length: 45 }, (_, i) => ({
-    ...bind, id: `t${i + 1}`, q: `Mekkora a háromszög területe, ha az alap ${i + 2} cm, a hozzá tartozó magasság 4 cm?`,
-    required: [[String((i + 2) * 2)]], bonus: [], minWords: 1, needsSentence: false, sample: `${(i + 2) * 2} cm²`, mode: i % 7 === 0 ? "oral" : "written",
-  }));
-  const quiz: LessonExperience["quiz"] = Array.from({ length: 75 }, (_, i) => ({
-    ...bind, id: `q${i + 1}`, question: `A háromszög alapja ${i + 2} cm, magassága 2 cm. Mekkora a területe?`, options: [`${i + 2} cm²`, `${(i + 2) * 2} cm²`, `${i + 3} cm²`], correctIndex: 0,
-    feedbackPerOption: ["Az alap és a magasság szorzatát osztjuk kettővel.", "A szorzatot még kettővel kell osztani.", "Az összeadás helyett szorozz, majd oszd kettővel."],
-  }));
+  const bind = fixtureBind;
+  const tasks: LessonExperience["tasks"] = Array.from({ length: 45 }, (_, i) => fixtureTask(i));
+  const quiz: LessonExperience["quiz"] = Array.from({ length: 75 }, (_, i) => fixtureQuiz(i));
   const methods: LessonExperience["methods"] = [...METHOD_KINDS, "gate" as const].map((kind, i) => ({
     ...bind, id: `m${i + 1}`, kind, title: { prediction: "Kétszer olyan magas", gate: "A fél téglalap", myth: "A ferde oldal csapdája", sorting: "Állítsd össze a megoldást", causeEffect: "Mi változik a magassággal?", conflict: "Más alak, ugyanannyi terület", selfCheck: "Mondd el a képletet!", popup: "Egy gyors ellenőrzés", timeline: "A számolás útja", analogy: "Egy téglalap két fele" }[kind],
     prompt: kind === "prediction" ? "Mi történik a háromszög területével, ha változatlan alap mellett megkétszerezzük a magasságát?" : "Hogyan számoljuk ki a háromszög területét az alap és a hozzá tartozó magasság ismeretében?",
@@ -60,8 +64,11 @@ export function compactFusionFixture(): Lesson {
 export function standardFusionFixture(): Lesson {
   const lesson = compactFusionFixture(), original = fusionFixture().experience!;
   const e = lesson.experience!;
+  // Spec 2026-10-04-bank-tartalek-es-elojel: a banképítő a tartalékos darabszámot (45+3 / 75+5) követeli, a tesztadat is ezt adja.
+  const reserveTasks = Array.from({ length: LESSON_BANK_RESERVE.tasks }, (_, i) => ({ ...fixtureTask(original.tasks.length + i), mode: "written" as const }));
+  const reserveQuiz = Array.from({ length: LESSON_BANK_RESERVE.quiz }, (_, i) => fixtureQuiz(original.quiz.length + i));
   lesson.experience = { ...e, version: LESSON_METHOD_VERSION, bankPlan: planLessonBank(lesson), methods: original.methods,
-    tasks: [...e.tasks, ...original.tasks.slice(e.tasks.length)],
-    quiz: [...e.quiz, ...original.quiz.slice(e.quiz.length).map(q => ({ ...q, intent: "recall" as const }))] };
+    tasks: [...e.tasks, ...original.tasks.slice(e.tasks.length), ...reserveTasks],
+    quiz: [...e.quiz, ...[...original.quiz.slice(e.quiz.length), ...reserveQuiz].map(q => ({ ...q, intent: "recall" as const }))] };
   return lesson;
 }

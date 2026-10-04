@@ -113,9 +113,37 @@ export function falseArithmeticClaims(text: string): string[] {
   return problems;
 }
 
-/** Bank items' texts with false arithmetic, for the packet validator. */
-export function arithmeticClaimProblems(packet: { methods?: Array<{ id: string; prompt?: string; answer?: string }>; tasks?: Array<{ id: string; q?: string; sample?: string; typedAnswers?: readonly TypedAnswer[] }>; quiz?: Array<{ id: string; question?: string; feedbackPerOption?: string[] }> }): string[] {
+const LONE_SIGNED_NUMBER = /^([+\-−–]?)\s*(\d+(?:[.,]\d+)?)$/;
+
+/**
+ * Spec 2026-10-04-bank-tartalek-es-elojel (mért: a required `["-13","13"]` a +13-at is elfogadta a -13 helyett): egy VAGY-
+ * csoportban (required/bonus) a nem nulla szám és az ellentettje együtt előjel-kétértelmű — a pontozó bármelyiket elfogadná.
+ * Külön csoportban (ÉS) mindkettő jogos lehet (pl. „mindkét szám abszolút értéke 13”), azt nem jelezzük.
+ */
+export function signAmbiguousRubricProblems(task: { id: string; required?: unknown; bonus?: unknown }): string[] {
   const problems: string[] = [];
+  for (const groups of [task.required, task.bonus]) {
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      if (!Array.isArray(group)) continue;
+      const signs = new Map<number, Set<string>>();
+      for (const alt of group) {
+        const m = typeof alt === "string" ? alt.trim().match(LONE_SIGNED_NUMBER) : null;
+        const value = m ? Number(m[2].replace(",", ".")) : 0;
+        if (!m || value === 0) continue;
+        if (!signs.has(value)) signs.set(value, new Set());
+        signs.get(value)!.add(m[1] && m[1] !== "+" ? "-" : "+");
+      }
+      for (const [value, set] of signs) if (set.size === 2) problems.push(`${task.id}: előjel-kétértelmű rubrika: egy csoport a ${value}-t és a -${value}-t is elfogadja (${JSON.stringify(group)}) — csak a helyes előjelű érték maradjon.`);
+    }
+  }
+  return problems;
+}
+
+/** Bank items' texts with false arithmetic, for the packet validator. */
+export function arithmeticClaimProblems(packet: { methods?: Array<{ id: string; prompt?: string; answer?: string }>; tasks?: Array<{ id: string; q?: string; sample?: string; typedAnswers?: readonly TypedAnswer[]; required?: unknown; bonus?: unknown }>; quiz?: Array<{ id: string; question?: string; feedbackPerOption?: string[] }> }): string[] {
+  const problems: string[] = [];
+  for (const t of packet.tasks ?? []) problems.push(...signAmbiguousRubricProblems(t));
   for (const m of packet.methods ?? []) for (const bad of falseArithmeticClaims(`${m.prompt ?? ""}\n${m.answer ?? ""}`)) problems.push(`${m.id}: hibás számítás a módszerben: ${bad}`);
   for (const t of packet.tasks ?? []) for (const bad of falseArithmeticClaims(`${t.q ?? ""}\n${t.sample ?? ""}`)) problems.push(`${t.id}: hibás számítás a feladatban vagy a mintában: ${bad}`);
   // Spec 2026-09-30 (U1, C13): a típusos REFERENCIA igazsága — a kérdés kifejezéséből újraszámolva (a típusos mező önmagában

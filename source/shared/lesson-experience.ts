@@ -238,7 +238,7 @@ export function experienceTheme(seed: string): LessonExperience["theme"] {
 export function bankPacketContract(c: { sectionIndex: number; conceptIds: readonly string[]; methodKinds: readonly string[]; taskCount: number; taskTarget: number; quizCount: number; quizTarget: number; language?: string }): string {
   return [
     "BANKCSOMAG-SZERZŐDÉS (a program méri; a hibás tétel javító kört kap, a csomagszintű hiba teljes újraírást):",
-    `1. Darabszám: methods legalább ${c.methodKinds.length} (kindek: ${c.methodKinds.join(", ")}), legfeljebb 20; tasks PONTOSAN ${c.taskTarget} (a program ${c.taskCount} alatt elutasít); quiz PONTOSAN ${c.quizTarget} (${c.quizCount} alatt elutasít); glossary: ${c.language ? `legalább 1 elem (${c.language})` : "[]"}.`,
+    `1. Darabszám: methods legalább ${c.methodKinds.length} (kindek: ${c.methodKinds.join(", ")}), legfeljebb 20; tasks PONTOSAN ${c.taskTarget}, quiz PONTOSAN ${c.quizTarget} (a program ennél kevesebbet elutasít — a tartalék kötelező; csak a mentő kivétel mehet ${c.taskCount}/${c.quizCount}-ig); glossary: ${c.language ? `legalább 1 elem (${c.language})` : "[]"}.`,
     `2. Csomaghatár: minden tétel sectionIndex=${c.sectionIndex}, coversConceptIds csak ebből: ${JSON.stringify(c.conceptIds)}; kvíznél pontosan egy id; fogalmanként legalább egy intent=recall és egy intent=apply kvíz és legalább egy nyílt feladat.`,
     "3. EBBEN a csomagban legalább egy mode=\"oral\" és egy mode=\"written\" nyílt feladat.",
     "4. Kérdés-egyediség: a kérdés kulcsa (kisbetű, írásjel nélkül; a + − · × : / jel és a számok megmaradnak) nem ismétlődhet a csomagon belül, sem a korábbi csomagok kérdéseivel és kapukérdéseivel; két kapukérdés (gate) csak különböző lehet.",

@@ -1,6 +1,9 @@
 import type { MapConcept } from "./coverage";
 import { withSupportSkill } from "./support-skills";
-import { NUM, evaluateExpression } from "../../shared/arithmetic-expression";
+import { evaluateExpression, normalizeSignedParens } from "../../shared/arithmetic-expression";
+
+// Spec 2026-10-04-bank-tartalek-es-elojel: a normalizáló a közös modulba költözött (a bank egy-helyes őre is használja).
+export { normalizeSignedParens };
 
 /**
  * Spec 2026-09-23 — forrás-helyesbítés mint DOKUMENTÁLT kurálás.
@@ -240,14 +243,6 @@ export async function proposeSourceCorrections(
  * ami determinisztikusan hamis, azt a definíció helyesbíti, a quote (bizonyíték) változatlan.
  */
 export type ArithmeticClaim = { expression: string; written: string; expected: number };
-
-/** Előjeles zárójel összevonása, hogy a kiértékelő értse: `a-(-b)`→`a+b`, `a-(+b)`→`a-b`, `a+(-b)`→`a-b`, `a+(+b)`→`a+b`, vezető `(-a)`→`-a`. */
-export function normalizeSignedParens(expr: string): string {
-  let s = expr.replace(/[−–]/g, "-");
-  s = s.replace(new RegExp(`^\\s*\\(\\s*([+-]?)\\s*(${NUM})\\s*\\)`), (_m, sign: string, n: string) => `${sign === "-" ? "-" : ""}${n}`);
-  s = s.replace(new RegExp(`([+-])\\s*\\(\\s*([+-]?)\\s*(${NUM})\\s*\\)`, "g"), (_m, op: string, sign: string, n: string) => `${op === sign ? "+" : sign ? "-" : op} ${n}`);
-  return s;
-}
 
 /** Egy oldal értéke; a vezető „+” (eredmény-jelölés: „+3”) nem műveleti jel. Nem kiértékelhető → null (nem állítunk semmit). */
 function sideValue(side: string): number | null {

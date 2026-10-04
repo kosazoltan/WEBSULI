@@ -61,3 +61,11 @@ export function evaluateExpression(expr: string): number | null {
   for (let i = 0; i < ops.length; i++) result = /[+]/.test(ops[i]) ? result + values[i + 1] : result - values[i + 1];
   return Math.round(result * 1e6) / 1e6;
 }
+
+/** Előjeles zárójel összevonása, hogy a kiértékelő értse: `a-(-b)`→`a+b`, `a-(+b)`→`a-b`, `a+(-b)`→`a-b`, `a+(+b)`→`a+b`, vezető `(-a)`→`-a`. */
+export function normalizeSignedParens(expr: string): string {
+  let s = expr.replace(/[−–]/g, "-");
+  s = s.replace(new RegExp(`^\\s*\\(\\s*([+-]?)\\s*(${NUM})\\s*\\)`), (_m, sign: string, n: string) => `${sign === "-" ? "-" : ""}${n}`);
+  s = s.replace(new RegExp(`([+-])\\s*\\(\\s*([+-]?)\\s*(${NUM})\\s*\\)`, "g"), (_m, op: string, sign: string, n: string) => `${op === sign ? "+" : sign ? "-" : op} ${n}`);
+  return s;
+}
