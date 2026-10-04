@@ -21,7 +21,8 @@ import { withSupportSkill } from "./support-skills";
  */
 
 // Review #167: a többértelműség és az idézet-igazolás szemantikája változott — a mentett jegyzékek újraszámolódnak.
-export const INSTRUCTION_POINTS_VERSION = "v2-inventory";
+// Spec 2026-10-04-tanari-pont-keplet-idezet: a képlet-sor igazolása szemantika-váltás → a mentett jegyzék újraszámolódik.
+export const INSTRUCTION_POINTS_VERSION = "v3-inventory";
 export const INSTRUCTION_POINTS_MODEL = "claude-opus-5-5";
 
 export type PointState = "pending" | "taught" | "source_available_missing" | "not_in_source" | "undecidable" | "ambiguous";
@@ -106,7 +107,7 @@ export const lineKey = (s: string) => normText(s.replace(/^\s*[-•*–]\s*/, ""
  * csak akkor, ha számjegy, műveleti jel és „=” van benne, betű nincs. A TELJES sor pontos (előjel-pontos) egyezése igazol.
  */
 export function formulaLineKey(s: string): string | null {
-  const key = normText(s).replace(/[−–]/g, "-").replace(/\s+/g, "").replace(/[✓✔✗✘]+$/u, "").replace(/[.;,!?]+$/, "");
+  const key = normText(s).replace(/[−–]/g, "-").replace(/\s+/g, "").replace(/[✓✔✗✘.;,!?]+$/u, ""); // review #185: pipa és záró írásjel bármilyen sorrendben
   return /\d/.test(key) && /=/.test(key) && /[+\-·×*:÷/]/.test(key) && !/\p{L}/u.test(key) ? key : null;
 }
 function verbatimInSource(quote: string, source: string, sourceLines: ReadonlySet<string>, formulaLines: ReadonlySet<string> = new Set()): boolean {

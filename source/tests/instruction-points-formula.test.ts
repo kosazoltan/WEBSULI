@@ -13,6 +13,11 @@ test("a forrás teljes képlet-sora betűhű idézet: a tanár pontja igazolt (p
   assert.deepEqual(inv.points.map((p) => p.content), ["pending", "pending", "pending"], JSON.stringify(inv.points.map((p) => p.reason)));
 });
 
+test("review #185: a pontjegyzék verziója emelve (a mentett v2-es, hibás jegyzék újraszámolódik)", () => {
+  const inv = buildInventory([[point("ehhez hasonló feladatsorokat készíts meg", "-5-(-8)=+3")]], REQUEST, SOURCE);
+  assert.equal(inv.version, "v3-inventory");
+});
+
 test("szigor marad: előjel-eltérés, töredék és nem létező sor nem igazol", () => {
   const inv = buildInventory([[point("ehhez hasonló feladatsorokat készíts meg", "5-(-8)=+3"), point("majd ugyanúgy a gyakorló feladatokat", "-5-(-8)"), point("megoldási magyarázatokkal", "-5-(-8)=13")]], REQUEST, SOURCE);
   assert.deepEqual(inv.points.map((p) => p.content), ["not_in_source", "not_in_source", "not_in_source"]);
@@ -24,4 +29,7 @@ test("formulaLineKey: képlet-sor kulcsa (mínuszjel nem felsorolásjel), szöve
   assert.equal(formulaLineKey("-5   -2   0   1   3"), null, "nincs „=”");
   assert.equal(formulaLineKey("Negatív számok"), null);
   assert.equal(formulaLineKey("x = 5 + 3"), null, "betűt tartalmaz");
+  // review #185: pipa és záró írásjel vegyes sorrendben
+  assert.equal(formulaLineKey("1+1=2 ✓."), "1+1=2");
+  assert.equal(formulaLineKey("1+1=2. ✓"), "1+1=2");
 });

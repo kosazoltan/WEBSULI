@@ -237,5 +237,6 @@ test("review #167: ellentétes, betűhű forrás-ítélet többértelmű; a zár
   assert.match(by("a fáraó hatalma").reason!, /ellentétes forrás-ítéletet/);
   assert.equal(by("a papirusz").content, "pending", "„papiruszra írtak.” — a záró pont nem akadály");
   assert.notEqual(by("a DNS").content, "ambiguous", "átfogalmazás ítélet-ütközés nélkül");
-  assert.equal(inv.version, "v2-inventory", "a szemantika-váltás új verzió → a mentett jegyzék újraszámolódik");
+  // Spec 2026-10-04-tanari-pont-keplet-idezet (dokumentált szemantika-váltás): v2 → v3.
+  assert.equal(inv.version, "v3-inventory", "a szemantika-váltás új verzió → a mentett jegyzék újraszámolódik");
 });

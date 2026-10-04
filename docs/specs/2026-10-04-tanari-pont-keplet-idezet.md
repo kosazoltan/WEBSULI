@@ -16,6 +16,10 @@ publikált (0414c274), de a kapu „Tanári kérés: 0 pont, 0 hiányzik”-ot m
 Képlet-sornál (számjegy + műveleti jel + „=”, betű nélkül; a sorvégi pipa/iksz levágva) a TELJES forrássor pontos, előjel-
 pontos egyezése betűhű igazolás. A mínuszjel képlet-sor elején nem felsorolásjel.
 
+## Verzió (review #185)
+A jegyzék szemantikája változik → `INSTRUCTION_POINTS_VERSION` v2-inventory → v3-inventory (a mentett jegyzék hash-e
+változik, így újraszámolódik); a meglévő teszt elvárása ennek megfelelően v3. A pipa és a záró írásjel bármilyen sorrendben levágódik.
+
 ## Nem-cél
 A szöveges idézetek szabálya (20 / 8 karakter) változatlan; a pontok tartalmi besorolása (supports igen/nem) változatlan.
 
