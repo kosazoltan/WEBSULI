@@ -3,6 +3,7 @@ import type { Lesson } from "../../shared/lesson-schema";
 import type { MapConcept } from "./coverage";
 import { withSupportSkill } from "./support-skills";
 import { teachablePoints, type InstructionInventory } from "./instruction-points";
+import { containsFormula, isFormulaText } from "../../shared/formula-text";
 
 /**
  * Spec 2026-09-30-tanari-ellenorzolista: a tanári kérés pontjainak mérése a kész leckén.
@@ -50,7 +51,8 @@ export function sectionBodyText(lesson: Lesson, index: number): string {
  * Review #155 (P2): a kulcs a forrást és a mérés sémaverzióját is tartalmazza (a forrás befolyásolja az eredményt).
  * U3: ellenőrzés-kulcs (B0 `verificationKey`) — a pontjegyzék hash-e is része, ha van.
  */
-export const INSTRUCTION_CHECK_VERSION = "v3-inventory";
+// Spec 2026-10-04-kepletbiztos-heurisztikak (review #186): a képlet-bizonyíték értékelése változott → a mentett ellenőrzés újraszámolódik.
+export const INSTRUCTION_CHECK_VERSION = "v4-inventory";
 export function instructionCheckHash(instruction: string, lesson: Lesson, sourceText?: string | null, inventoryHash?: string): string {
   return createHash("sha256").update(`${INSTRUCTION_CHECK_VERSION}\n${instruction}\n---\n${teachingText(lesson)}\n---\n${sourceText ?? ""}\n---\n${inventoryHash ?? ""}`).digest("hex");
 }
@@ -87,9 +89,16 @@ export function parseInventoryCheck(json: unknown, lesson: Lesson, sourceText: s
     const section = Number.isInteger(p.section) && (p.section as number) >= 0 && (p.section as number) < lesson.sections.length ? p.section as number : null;
     const evidence = typeof p.evidence === "string" ? p.evidence.trim() : "";
     const normalized = norm(evidence);
-    const proven = p.taught === true && section !== null && alnumLength(normalized) >= 8 && norm(sectionBodyText(lesson, section)).includes(normalized);
+    // Spec 2026-10-04-kepletbiztos-heurisztikak (1. pont): a KÉPLET-bizonyíték („-5-(-8)=+3”) betű/szám-tartalma a 8-as határ alatt van — képletnél a
+    // fejezet-törzsben előjel-pontos, önálló jelenlét dönt (közös modul).
+    const body = section !== null ? sectionBodyText(lesson, section) : "";
+    const proven = p.taught === true && section !== null && (isFormulaText(evidence)
+      ? containsFormula(body, evidence)
+      : alnumLength(normalized) >= 8 && norm(body).includes(normalized));
     const quote = typeof p.sourceQuote === "string" ? p.sourceQuote.trim().slice(0, 300) : "";
-    const quoted = !proven && source && alnumLength(norm(quote)) >= 20 && source.includes(norm(quote));
+    const quoted = !proven && !!source && (isFormulaText(quote)
+      ? containsFormula(sourceText ?? "", quote)
+      : alnumLength(norm(quote)) >= 20 && source.includes(norm(quote)));
     reported.set(p.id, { id: p.id, point: point.text, taught: proven, evidence: proven ? evidence : "", section, ...(quoted ? { sourceQuote: quote } : point.sourceQuote && !proven ? { sourceQuote: point.sourceQuote } : {}) });
   }
   const missingIds = expected.filter((p) => !reported.has(p.id)).map((p) => p.id);
@@ -111,12 +120,16 @@ export function parseInstructionCheck(json: unknown, lesson: Lesson, sourceText?
     const evidence = typeof p.evidence === "string" ? p.evidence.trim() : "";
     // Review #152: a hossz a NORMALIZÁLT bizonyítékon mérve (a „********” normalizálva üres, az includes("") mindig igaz).
     const normalized = norm(evidence);
-    const proven = p.taught === true && normalized.replace(/[^\p{L}\p{N}]/gu, "").length >= 8 && haystack.includes(normalized);
+    const proven = p.taught === true && (isFormulaText(evidence)
+      ? containsFormula(teachingText(lesson), evidence)
+      : normalized.replace(/[^\p{L}\p{N}]/gu, "").length >= 8 && haystack.includes(normalized));
     const section = Number.isInteger(p.section) && (p.section as number) >= 0 && (p.section as number) < lesson.sections.length ? p.section as number : null;
     // Spec 2026-09-30-tanari-keres-forrasbol: a hiányzó pont forrás-idézete csak betűhíven (normalizálva) elfogadható.
     // Review #155: a dokumentált 300 karakteres korlát a programban is (ellenőrzés és tárolás ugyanazon a szeleten).
     const quote = typeof p.sourceQuote === "string" ? p.sourceQuote.trim().slice(0, 300) : "";
-    const quoted = !proven && source && norm(quote).replace(/[^\p{L}\p{N}]/gu, "").length >= 20 && source.includes(norm(quote));
+    const quoted = !proven && !!source && (isFormulaText(quote)
+      ? containsFormula(sourceText ?? "", quote)
+      : norm(quote).replace(/[^\p{L}\p{N}]/gu, "").length >= 20 && source.includes(norm(quote)));
     return [{ point: p.point.trim().slice(0, 300), taught: proven, evidence: proven ? evidence : "", section, ...(quoted ? { sourceQuote: quote } : {}) }];
   });
 }

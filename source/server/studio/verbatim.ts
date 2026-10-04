@@ -11,6 +11,7 @@
  * breaks. Normalising those away keeps the guard focused on the one question that
  * matters — is this sentence in the book or did the model invent it?
  */
+import { containsFormula, isFormulaText } from "../../shared/formula-text";
 
 export type VerbatimReason = "empty" | "no_source" | "not_found";
 
@@ -183,5 +184,8 @@ export function checkVerbatim(quote: string, sourceText: string): VerbatimResult
   const haystack = normalizeForCompare(sourceText ?? "");
   if (!haystack) return { ok: false, reason: "no_source" };
 
-  return haystack.includes(needle) ? { ok: true } : { ok: false, reason: "not_found" };
+  if (haystack.includes(needle)) return { ok: true };
+  // Spec 2026-10-04-kepletbiztos-heurisztikak (4. pont): a KÉPLET-idézet („-5-(-8)=+3”) a „-5 - (-8) = +3” forrásban csak a szóközökben tér el —
+  // a betűhűség a jelekre és számokra vonatkozik, ezért képletnél az előjel-pontos, önálló jelenlét dönt (közös modul).
+  return isFormulaText(quote ?? "") && containsFormula(sourceText ?? "", quote ?? "") ? { ok: true } : { ok: false, reason: "not_found" };
 }

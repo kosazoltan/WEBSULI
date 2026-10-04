@@ -179,7 +179,16 @@ export function referenceValueProblems(task: { id?: string; q: string; typedAnsw
   const answers = task.typedAnswers ?? [];
   if (!answers.length) return [];
   const problems: string[] = [];
-  const chains = [...task.q.matchAll(new RegExp(`(?:${SIGN}(?=\\d))?(?:${ATOM})(?:\\s*[+\\-−–·×*:÷/]\\s*(?:${ATOM}))+`, "g"))].map((m) => m[0]).filter((c) => !/=/.test(c));
+  // Spec 2026-10-04-kepletbiztos-heurisztikak (7. pont): a zárójelhez TAPADÓ részlánc („Mennyi 5-8-(-2)?” → „5-8”) a teljes kifejezés töredéke — nem
+  // ítélhető (a zárójeles kifejezést ez a függvény dokumentáltan nem ítéli meg; a bank-ellenőr dolga).
+  const chains = [...task.q.matchAll(new RegExp(`(?:${SIGN}(?=\\d))?(?:${ATOM})(?:\\s*[+\\-−–·×*:÷/]\\s*(?:${ATOM}))+`, "g"))]
+    .filter((m) => {
+      const before = task.q.slice(0, m.index ?? 0), after = task.q.slice((m.index ?? 0) + m[0].length);
+      // review #186: CSAK a kifejezéshez tapadó zárójel számít — közvetlenül nyitó zárójel előtte, vagy záró zárójel + művelet;
+      // utána művelet + nyitó zárójel, vagy közvetlenül záró zárójel. Az „a) 5-8” jelölés és az „5-8 (indokold)” megjegyzés nem.
+      return !/\(\s*$|\)\s*[+\-−–·×*:÷/]\s*$/.test(before) && !/^\s*[+\-−–·×*:÷/]\s*\(|^\s*\)/.test(after);
+    })
+    .map((m) => m[0]).filter((c) => !/=/.test(c));
   for (const a of answers) {
     if (a.form === "intermediate-step") { if (!isExpressionText(a.value)) problems.push(`${task.id ?? "feladat"}: a(z) ${a.part} rész kért köztes alakja („${a.value}”) nem a kifejezésnyelv mondata.`); continue; }
     const ref = referenceValue(a.value);
