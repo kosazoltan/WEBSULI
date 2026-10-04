@@ -34,5 +34,10 @@ test("forrás-ellenőrzés: a lépésfuttató a lenyomatot lépés:kör (fejezet
   const src = readFileSync(new URL("../server/studio/step-runner.ts", import.meta.url), "utf8");
   assert.ok(src.includes("await workflowNotePromptHash(callKey ? `${name}#${callKey}` : name, system);"));
   assert.ok(src.includes("basePromptLookup(name, fallback, `${job.step}:${job.round}${extra ? `:${extra}` : \"\"}`)"));
-  assert.ok(src.includes("buildSectionDesignerPrompt(variant, i, promptMapOf(map)), `${i}:${variant}`)"));
+  assert.ok(src.includes("buildSectionDesignerPrompt(variant, i, promptMapOf(map)), `fejezet${i}:próba${attempt}`)"), "review #184: próba-sorszám, nem a lecke-objektum");
+  assert.ok(!/`\$\{i\}:\$\{variant\}`/.test(src), "a lecke-objektum nem kerülhet a kulcsba ([object Object])");
+  assert.ok(src.includes('buildAnimatorPrompt(animated, promptMapOf(map)), "gyenge-ábra-javítás")'), "review #184: a gyenge-ábra javító hívás saját kulcsot kap");
+  assert.ok(src.includes('const resolved = await lookup(name, "", callKey);'), "review #184: a beinjektált lookup is megkapja a kulcsot");
+  const designer = readFileSync(new URL("../server/studio/visual-designer.ts", import.meta.url), "utf8");
+  assert.ok(designer.includes("options.systemFor(index, lesson, 0)") && designer.includes("options.systemFor(index, base, 1)"));
 });

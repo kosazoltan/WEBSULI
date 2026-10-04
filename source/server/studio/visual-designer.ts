@@ -20,7 +20,8 @@ export type DesignerCall = (system: string, user: string, sectionIndex: number, 
 export type DesignerOptions = {
   call: DesignerCall;
   /** A fejezet promptja az adott leckeváltozaton (az újrakérésnél a már beillesztett ábrás változat sorszámaival). */
-  systemFor: (sectionIndex: number, lesson: Lesson) => Promise<string> | string;
+  /** `attempt`: 0 = első kérés, 1 = újrakérés (review #184: a prompt-lenyomat kulcsa ebből, nem a lecke-objektumból). */
+  systemFor: (sectionIndex: number, lesson: Lesson, attempt: number) => Promise<string> | string;
   concurrency?: number;
   sections?: number[];
   log?: (line: string) => void;
@@ -122,7 +123,7 @@ export async function designLessonVisuals(lesson: Lesson, concepts: ReadonlyArra
   const designOne = async (index: number) => {
     const started = Date.now();
     try {
-      const first = await options.call(await options.systemFor(index, lesson), FIRST_USER, index, 0);
+      const first = await options.call(await options.systemFor(index, lesson, 0), FIRST_USER, index, 0);
       add(first.usage);
       const firstVisuals = designerVisuals(first.json, index, lesson.sections[index]);
       let best: Trial = firstVisuals
@@ -133,7 +134,7 @@ export async function designLessonVisuals(lesson: Lesson, concepts: ReadonlyArra
         retried.push(index);
         try {
           const base = best.lesson;
-          const second = await options.call(await options.systemFor(index, base), retryUser(best.problems), index, 1);
+          const second = await options.call(await options.systemFor(index, base, 1), retryUser(best.problems), index, 1);
           add(second.usage);
           const secondVisuals = designerVisuals(second.json, index, base.sections[index]);
           if (secondVisuals) {

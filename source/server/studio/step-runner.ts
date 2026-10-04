@@ -255,7 +255,7 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
       // futás végéig az marad — a közben módosított DB-sor nem írja át a futó munkát. Az üres tartalék jelzi a hiányzó sort
       // (a bolt a blank sort is tartaléknak veszi), így a tartalékkal véletlenül egyező sor is jelenlévőként rögzül.
       const pinned = await workflowPinnedPrompt<{ present: boolean; text: string }>(name, async () => {
-        const resolved = await lookup(name, "");
+        const resolved = await lookup(name, "", callKey);
         return resolved ? { present: true, text: resolved } : { present: false, text: "" };
       });
       const system = pinned.present ? pinned.text + "\n\nAktuális kötelező szerződés és forrásadatok (eltérésnél ez az irányadó):\n" + fallback : fallback;
@@ -751,7 +751,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const designSections = sectionsNeedingDesign(designerLesson);
       const designed = await designLessonVisuals(designerLesson, map.concepts, {
         sections: designSections,
-        systemFor: (i, variant) => promptLookup(STUDIO_PROMPT_NAMES.animatorSection, buildSectionDesignerPrompt(variant, i, promptMapOf(map)), `${i}:${variant}`),
+        systemFor: (i, variant, attempt) => promptLookup(STUDIO_PROMPT_NAMES.animatorSection, buildSectionDesignerPrompt(variant, i, promptMapOf(map)), `fejezet${i}:próba${attempt}`),
         call: async (sectionSystem, user, sectionIndex) => {
           try {
             return await designerCall(primaryModel, sectionSystem, user);
@@ -1046,7 +1046,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       if (weak.length || rejectedVisuals.length) {
         logger.warn(`[STUDIO] Gyenge/elutasított ábra (${job.id}): ${weak.map((w) => `${w.sectionIndex + 1}/${w.blockIndex} ${w.kind}`).join(", ")}${rejectedVisuals.length ? ` + ${rejectedVisuals.length} elutasított` : ""} → célzott újrakérés`);
         try {
-          const repairSystem = await promptLookup(STUDIO_PROMPT_NAMES.animator, buildAnimatorPrompt(animated, promptMapOf(map)));
+          const repairSystem = await promptLookup(STUDIO_PROMPT_NAMES.animator, buildAnimatorPrompt(animated, promptMapOf(map)), "gyenge-ábra-javítás");
           const repair = await callStepModel(providerFactory(model, "visuals"), {
             step: job.step, role: "animator", policy: "visuals", model, system: repairSystem,
             user: `${weakVisualsInstruction(weak, rejectedVisuals)}

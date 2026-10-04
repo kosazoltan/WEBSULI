@@ -65,6 +65,7 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // „5+(+8)=+13”-a mellett is. A képlet a fogalom megnevezése: előjel-pontosan keressük. Se szó, se képlet: nem mérhető
   // → nem megalapozott (változatlan).
   const formula = formulaOf(concept.term ?? "");
+  // Review #184 (Codex): a képlet-ágat a KÉPLET megléte választja, nem a szószám („500+480” számai ≥3 karakteresek).
   if (words.length === 0 && !formula) return false;
 
   const haystack = normalizeText(blockText);
@@ -72,7 +73,7 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   if (haystack.split(" ").filter(Boolean).length < 4) return false;
   // Képlet-fogalomnál CSAK az előjel-pontos képlet dönt: az idézet-számok tartaléka előjel-vak („9-(+6)=+3” számai a „9-(-6)=+3”
   // fogalmat is „megalapoznák”), a testvér-fogalmak definíciói pedig szinte szó szerint azonosak.
-  if (formula && words.length === 0) return formulaPresent(formula, blockText);
+  if (formula) return formulaPresent(formula, blockText);
 
   const tokens = haystack.split(" ").filter(Boolean);
   const stems = new Set(tokens.map(stem));
@@ -125,15 +126,31 @@ export function formulaOf(term: string): string | null {
   return /\d/.test(compact) && /^[\d+\-·×*:÷/().,=]+$/.test(compact) ? compact : null;
 }
 
-/** A blokk előjel-pontosan tartalmazza-e a képletet (számhatárral: a „5+(+8)” nem egyezik a „15+(+8)”-cal). */
+const FORMULA_OPS = "+\\-·×*:÷/";
+/**
+ * A blokk előjel-pontosan tartalmazza-e a képletet, ÖNÁLLÓ kifejezésként (review #184):
+ * - előtte nem állhat számjegy, tizedesjel vagy műveleti jel — különben más operandus vagy egy hosszabb kifejezés része
+ *   („-5+(+8)” nem alapozza meg az „5+(+8)”-at, „12-2-8” a „-2-8”-at, „1-5+(-8)” a „-5+(-8)”-at);
+ * - utána nem folytatódhat számmal (számjegy, vagy tizedesjel + számjegy), sem műveleti jel + szám/zárójel formában
+ *   („-2-89”, „-2-8,5”, „-2-8+1” nem); a mondatvégi pont/vessző és a toldalék („-2-8-at”) rendben van.
+ */
 export function formulaPresent(formula: string, blockText: string): boolean {
   const compact = blockText.replace(/[−–]/g, "-").replace(/\s+/g, "");
+  const badAfter = new RegExp(`^(?:\\d|[.,]\\d|[${FORMULA_OPS}][\\d(])`);
+  // Előtte: számjegy/tizedesjel → más szám; „+”/„-” számmal kezdődő képlet előtt → előjel vagy művelet (más operandus);
+  // egyéb műveleti jel (·×*:÷/) csak akkor kifejezés-folytatás, ha előtte szám vagy zárójel áll — különben címke („Számold ki:”).
+  const badBefore = (prefix: string): boolean => {
+    const c = prefix.slice(-1);
+    if (!c) return false;
+    if (/[\d.,]/.test(c)) return true;
+    if (/[+-]/.test(c)) return /^\d/.test(formula) || /[\d)]$/.test(prefix.slice(0, -1));
+    if (/[·×*:÷/]/.test(c)) return /[\d)]$/.test(prefix.slice(0, -1));
+    return false;
+  };
   let at = compact.indexOf(formula);
   while (at >= 0) {
-    const before = compact[at - 1];
-    const after = compact[at + formula.length];
-    // a kezdő szám előtt nem állhat számjegy; a záró szám után nem folytatódhat szám (pl. „-2-8” ≠ „-2-89”)
-    if (!(before && /\d/.test(before) && /^\d/.test(formula)) && !(after && /[\d.,]/.test(after) && /\d$/.test(formula))) return true;
+    const after = compact.slice(at + formula.length, at + formula.length + 2);
+    if (!badBefore(compact.slice(0, at)) && !badAfter.test(after)) return true;
     at = compact.indexOf(formula, at + 1);
   }
   return false;

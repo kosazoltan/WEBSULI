@@ -31,3 +31,22 @@ test("változatlan: rövid blokk nem alapoz meg; szöveges fogalom a régi szab�
   assert.equal(formulaPresent("-8-6", "a -8-6=-14 sor"), true);
   assert.equal(formulaPresent("-8-6", "a -8-60 sor"), false);
 });
+
+test("review #184: valódi számhatár mindkét oldalon — más operandus és hosszabb kifejezés nem, írásjel és toldalék igen", () => {
+  assert.equal(formulaPresent("5+(+8)", "Számold ki: -5+(+8) eredményét!"), false, "előtte előjel: más operandus");
+  assert.equal(formulaPresent("5+(+8)", "Számold ki: 1,5+(+8) eredményét!"), false, "előtte tizedesjel");
+  assert.equal(formulaPresent("-2-8", "Számold ki: 12-2-8 eredményét!"), false, "hosszabb kifejezés vége");
+  assert.equal(formulaPresent("-5+(-8)", "Számold ki: 1-5+(-8) eredményét!"), false);
+  assert.equal(formulaPresent("-2-8", "Számold ki: -2-8+1 eredményét!"), false, "hosszabb kifejezés eleje");
+  assert.equal(formulaPresent("-2-8", "Számold ki: -2-8,5 eredményét!"), false, "tizedes folytatás");
+  assert.equal(formulaPresent("-2-8", "Az utolsó feladat: -2-8."), true, "mondatvégi pont");
+  assert.equal(formulaPresent("-2-8", "Előbb a -2-8, majd a -2-(+8)."), true, "vessző után szöveg");
+  assert.equal(formulaPresent("-2-8", "Számold ki a -2-8-at a számegyenesen."), true, "toldalék");
+  assert.equal(formulaPresent("5+(+8)", "(5+(+8)) zárójelben is"), true);
+});
+
+test("review #184 (Codex): a háromjegyű számokat tartalmazó képlet is képletként, előjel-pontosan dönt", () => {
+  const c: MapConcept = { localId: "k", term: "500+480", quote: "500+480=980", examWeight: "core" };
+  assert.equal(checkGrounding("Számold ki a 500-480 különbséget, majd ellenőrizd az eredményt.", c), false, "a szavas ág eltüntette volna a műveleti jelet");
+  assert.equal(checkGrounding("Számold ki a 500+480 összeget, majd ellenőrizd az eredményt.", c), true);
+});
