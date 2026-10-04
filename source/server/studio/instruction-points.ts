@@ -21,7 +21,8 @@ import { withSupportSkill } from "./support-skills";
  */
 
 // Review #167: a többértelműség és az idézet-igazolás szemantikája változott — a mentett jegyzékek újraszámolódnak.
-export const INSTRUCTION_POINTS_VERSION = "v2-inventory";
+// Spec 2026-10-04-tanari-pont-keplet-idezet: a képlet-sor igazolása szemantika-váltás → a mentett jegyzék újraszámolódik.
+export const INSTRUCTION_POINTS_VERSION = "v3-inventory";
 export const INSTRUCTION_POINTS_MODEL = "claude-opus-5-5";
 
 export type PointState = "pending" | "taught" | "source_available_missing" | "not_in_source" | "undecidable" | "ambiguous";
@@ -99,7 +100,19 @@ const overlaps = (a: string, b: string) => { const x = normText(a), y = normText
  */
 /** Egy forrássor / idézet összevethető alakja: felsorolásjel és záró írásjel nélkül (review #167: a „papiruszra írtak.” is). */
 export const lineKey = (s: string) => normText(s.replace(/^\s*[-•*–]\s*/, "")).replace(/[.;:,!?]+$/, "").trim();
-function verbatimInSource(quote: string, source: string, sourceLines: ReadonlySet<string>): boolean {
+/**
+ * Spec 2026-10-04-tanari-pont-keplet-idezet (mérve: job 49657518 — „-5-(-8)=+3” teljes forrássor, mégis „nem igazolható”):
+ * a KÉPLET-sor betű/szám-tartalma 3–5 karakter, így a 20/8-as alsó határ alatt marad, a `lineKey` pedig a sor eleji mínuszjelet
+ * felsorolásjelnek vette. Képlet-sor kulcsa: szóköz nélkül, egységes mínuszjellel, sorvégi pipa/iksz és záró írásjel nélkül —
+ * csak akkor, ha számjegy, műveleti jel és „=” van benne, betű nincs. A TELJES sor pontos (előjel-pontos) egyezése igazol.
+ */
+export function formulaLineKey(s: string): string | null {
+  const key = normText(s).replace(/[−–]/g, "-").replace(/\s+/g, "").replace(/[✓✔✗✘.;,!?]+$/u, ""); // review #185: pipa és záró írásjel bármilyen sorrendben
+  return /\d/.test(key) && /=/.test(key) && /[+\-·×*:÷/]/.test(key) && !/\p{L}/u.test(key) ? key : null;
+}
+function verbatimInSource(quote: string, source: string, sourceLines: ReadonlySet<string>, formulaLines: ReadonlySet<string> = new Set()): boolean {
+  const formula = formulaLineKey(quote);
+  if (formula && formulaLines.has(formula)) return true;
   const q = normText(quote);
   if (!source.includes(q)) return false;
   const key = lineKey(quote);
@@ -113,6 +126,7 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
   const exclusions = all.filter((c) => c.kind === "exclude");
   const source = sourceText?.trim() ? normText(sourceText) : "";
   const sourceLines = new Set((sourceText ?? "").split(/\r?\n/).map(lineKey).filter(Boolean));
+  const formulaLines = new Set((sourceText ?? "").split(/\r?\n/).map(formulaLineKey).filter((k): k is string => !!k));
   // Review #161 (Sourcery): a tanár kizárása akkor is a jegyzék része (átláthatóság), ha nincs vele átfedő tanítandó jelölt.
   const excluded: string[] = exclusions.map((e) => e.text).filter((t, i, arr) => arr.indexOf(t) === i);
   const byId = new Map<string, { candidates: PointCandidate[] }>();
@@ -132,7 +146,7 @@ export function buildInventory(passes: ReadonlyArray<ReadonlyArray<PointCandidat
     const first = entry.candidates[0];
     // Review #161 (Codex P1 / Sourcery): csak a KIMONDOTT `supports: "yes"` igazol — a betűhű idézet önmagában a témát
     // érintheti (H34); a hiányzó ítélet ellenőrző-hiba → eldöntetlen, nem igazolt.
-    const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && verbatimInSource(c.sourceQuote, source, sourceLines));
+    const verifiedQuotes = entry.candidates.filter((c) => c.sourceQuote && verbatimInSource(c.sourceQuote, source, sourceLines, formulaLines));
     const quoted = verifiedQuotes.find((c) => c.supports === "yes") ?? verifiedQuotes.find((c) => c.supports === "no") ?? verifiedQuotes[0];
     // A tanítandó szöveg az IGAZOLT értelmezés megfogalmazása (ha van ilyen), különben az első jelölté.
     const shown = quoted && quoted.supports === "yes" ? quoted : first;
