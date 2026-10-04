@@ -1639,6 +1639,65 @@ test("spec 2026-10-01-kapu-javitas-bankkor (review #169): kimerített dinamikus 
   assert.equal(deps.store.jobs.get("gate-bank-spent")!.output?.gateBankRepairUsed, undefined);
 });
 
+async function gateBankDeadZoneCase(id: string, grantsUsed: number) {
+  const lesson = standardFusionFixture();
+  const packet = structuredClone(lesson.experience!);
+  const concepts: MapConcept[] = [{ localId: "area", examWeight: "core" }];
+  lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
+  let checkpoint: ExperienceCheckpoint | undefined;
+  lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  const bankBlocker = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz.3", message: "A kapu-javítás új kvíztétele hibás." };
+  const deps = makeDeps(JSON.stringify({ solutions: [], notes: [bankBlocker] }));
+  deps.store.maps.set("m1", { meta: MAP_META, concepts });
+  const round = MAX_AUTHOR_ROUNDS + 1;
+  // mért (run fade891d): EGY csak-bank kör maradt, de az animátor-látogatás elfogyott; a kapu-javítás épített új bankot ebben a körben
+  deps.store.seed({ id, mapId: "m1", step: "lektor", round, output: { lesson, experienceCheckpoint: checkpoint, methodVersion: lesson.experience.version, bankOnlyRepairRounds: 1, bankOnlyRepairRound: round - 1, targetedGateRepairRound: round } });
+  const { store } = memoryWorkflows();
+  let next: unknown;
+  await assert.rejects(executeWorkflow(store, { id: `${id}-run`, owner: "test", mode: "studio" }, async () => {
+    // a mért sorrend: 3 szerzői kör, egy csak-bank kör, kapu, célzott kapu-javítás (dinamikus kerettel)
+    for (const step of ["pedagogue", "author", "animator", "lektor", "author", "animator", "lektor", "author", "animator", "lektor", "animator", "lektor", "gate"]) await workflowPhase(step);
+    assert.equal(await workflowEnsureRepairBudget("teszt: kapu-javítás"), true);
+    await workflowPhase("author");
+    await workflowPhase("animator");
+    // az animátor-keret kimerítése (a lektornak marad egy látogatás — azt a lépésfuttató fogyasztja)
+    const exhaustAnimator = async () => {
+      while (workflowStepVisitsLeft("animator") > 0) {
+        assert.ok(workflowStepVisitsLeft("lektor") > 1, "a lektornak maradnia kell egy látogatásnak");
+        await workflowPhase("lektor");
+        await workflowPhase("animator");
+      }
+    };
+    await exhaustAnimator();
+    if (grantsUsed > 1) {
+      // a 2. bővítés is elhasználva: az animátor +1-et kap, de a lépésfuttató lektor-látogatása után a LEKTOR fogy el —
+      // a rendes csak-bank kör így sem költhető el, és több grant nincs
+      assert.equal(await workflowEnsureRepairBudget("teszt: 2. bővítés"), true);
+      assert.equal(workflowStepVisitsLeft("lektor"), 1);
+    } else {
+      assert.equal(workflowStepVisitsLeft("animator"), 0);
+      assert.ok(workflowStepVisitsLeft("lektor") >= 1);
+    }
+    const result = await runPipelineStep(id, deps);
+    next = result.ok && result.next;
+    throw new Error("teszt-vég");
+  }), /teszt-vég/);
+  return { next, round, output: deps.store.jobs.get(id)!.output };
+}
+
+test("spec 2026-10-04-kapu-bankkor-holtzona: csak-bank limit maradt, de látogatás nincs → a kapu-bankkör jár (dinamikus kerettel)", async () => {
+  const { next, round, output } = await gateBankDeadZoneCase("gate-bank-deadzone", 1);
+  assert.deepEqual(next, { step: "animator", round: round + 1 }, JSON.stringify(next));
+  assert.equal(output?.gateBankRepairUsed, true, "a kapu-bankkör költődött");
+  assert.equal(output?.bankOnlyRepairRounds, 1, "a rendes csak-bank keret érintetlen");
+});
+
+test("spec 2026-10-04-kapu-bankkor-holtzona: ugyanez kimerített dinamikus kerettel → a kapuhoz megy (változatlan)", async () => {
+  const { next, round, output } = await gateBankDeadZoneCase("gate-bank-deadzone-spent", REPAIR_BUDGET_GRANTS);
+  assert.deepEqual(next, { step: "gate", round }, JSON.stringify(next));
+  assert.equal(output?.gateBankRepairUsed, undefined);
+});
+
 test("(q3) élő mérés 2026-09-24 (run 29a13b45): elfogyott workflow-keretnél nincs csak-bank kör — tiszta lektori hiba, nem kivétel", async () => {
   const lesson = standardFusionFixture();
   const packet = structuredClone(lesson.experience!);

@@ -1187,8 +1187,11 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       const bankChecked = bankCheck ? await bankCheck : undefined;
       // Spec 2026-10-01-kapu-javitas-bankkor: a célzott kapu-javítás újraépített bankcsomagjaira EGY saját csak-bank kör jár
       // (élő mérés 74b63038: a bank a 3. körre 0 hibás volt, a kapu-javítás új csomagjai 5 hibát hoztak, kör már nem járt).
-      // Review #169: csak az ELFOGYOTT csak-bank körök után (a körszámhoz kötve), nem a puszta látogatási keret-hiánynál.
-      const gateBankRound = repairRemaining(job.output, "bankOnly") === 0 && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
+      // Review #169: a körszámhoz kötve (csak a célzott kapu-javítás körében).
+      // Spec 2026-10-04-kapu-bankkor-holtzona (mért: run fade891d): akkor jár, ha a rendes csak-bank kör most NEM költhető el —
+      // a limitje elfogyott, VAGY a javítóútjára nincs látogatás (a `bankOnly` nem kérhet dinamikus keretet, a kapu-bankkör igen).
+      // Korábban a „limit maradt, látogatás nincs” eset holtzóna volt: a kapu-javítás új bankjának hibái javítás nélkül mentek a kapura.
+      const gateBankRound = !bankRepairPossible && fusion && !!(job.output?.lesson as Lesson | undefined)?.experience
         && repairSpentForRound(job.output, "targetedGate", job.round) && repairRemaining(job.output, "gateBank") > 0
         && (!!bankChecked?.notes.length || parsed.data.notes.some((n) => /^experience(?:\.|\[)/.test(n.blockPath ?? "")));
       if (gateBankRound) bankRepairPossible = await canSpendRepair(job.output, "gateBank", "kapu-javítás utáni csak-bank kör");
