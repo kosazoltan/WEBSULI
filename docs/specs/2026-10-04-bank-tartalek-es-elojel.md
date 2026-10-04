@@ -85,4 +85,6 @@ A „(kivétel után: …)” rész a képernyőn levágódott — NEM ellenőrz
   - `tests/bank-repair.test.ts`: a prompt és a szerződés szövege a kötelező tartalékot mondja.
   - `tests/lesson-pipeline-runner.test.ts` `bankVerifierSetup`: a kapu-tesztek továbbra is a tartalék NÉLKÜLI 45/75-ös bankot
     mérik (kifejezetten levágva), a tartalékot a meglévő `spare` paraméter adja — az állítások változatlanok.
+  - `tests/html-lesson-quality.browser.ts` (CI: Playwright E2E): a „teljes bank” darabszáma a tesztadatból jön (volt: rögzített
+    45/75) — ugyanazt méri (minden banktétel megjelenik), csak a tartalékos tesztadathoz igazodik.
 - NOT RUN: éles újraindítás (a felhőből az éles szerver nem érhető el); a tulajdonos indítja újra a leckét.
