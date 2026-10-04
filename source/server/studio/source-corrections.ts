@@ -181,7 +181,10 @@ export function correctionReasonCode(fix: Pick<SourceCorrection, "basis">): stri
 
 export function correctionAuditText(fix: SourceCorrection): string {
   const label = fix.basis === "owner" ? "tanár" : fix.basis === "arithmetic" ? "számolás" : "átírás";
-  const parts = [fix.term !== undefined ? `„${fix.from.term}” → „${fix.term}”` : "", fix.definition !== undefined ? `definíció: „${fix.from.definition}” → „${fix.definition}”` : ""].filter(Boolean);
+  // Mért (2026-10-04, run 69cacab5): az újraindításkor már érvényben lévő helyesbítésnek nincs régi alakja (review #181: `from` üres)
+  // — az audit ezt mondja ki, nem „undefined”-ot ír.
+  const before = (v: string | undefined) => (v === undefined ? "(már helyesbítve)" : `„${v}”`);
+  const parts = [fix.term !== undefined ? `${before(fix.from.term)} → „${fix.term}”` : "", fix.definition !== undefined ? `definíció: ${before(fix.from.definition)} → „${fix.definition}”` : ""].filter(Boolean);
   return `helyesbítés (${label}): ${parts.join("; ")}`.slice(0, 1000);
 }
 

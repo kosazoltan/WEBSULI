@@ -227,7 +227,8 @@ export type PipelineDeps = {
   providerFactory?: (model: string, step?: string) => IAIProvider;
   keyConfigured?: (model: string) => boolean;
   /** Prompt lookup by name with an inline fallback; defaults to studioPromptStore. */
-  promptLookup?: (name: string, fallback: string) => Promise<string>;
+  /** `callKey`: a hívás azonosítója a futáson belül (lépés:kör[:fejezet:változat]) — a prompt-lenyomat kulcsa (review #158 szándéka). */
+  promptLookup?: (name: string, fallback: string, callKey?: string) => Promise<string>;
   /**
    * Spec 2026-09-29-kapu-proba-keret (review P1): az AKTÍV jutalom-szabály (a Próba küszöbe deploy nélkül hangolható).
    * Éles futás (nincs injektált tár): a DB-ből; injektált tárral (tesztek) az alapértelmezett szabály.
@@ -249,16 +250,18 @@ async function resolveDeps(deps: PipelineDeps): Promise<ResolvedDeps> {
     keyConfigured: deps.keyConfigured ?? studioModelReady,
     rewardPolicy: deps.rewardPolicy ?? (deps.store ? async () => DEFAULT_REWARD_POLICY : loadRewardPolicy),
     // Szerep-skill (2026-09-19): a DB-s felülírás és a beépített prompt is a szerep skilljével indul.
-    promptLookup: skilledPromptLookup(async (name, fallback) => {
+    promptLookup: skilledPromptLookup(async (name, fallback, callKey) => {
       // Spec 2026-09-30 (§C-V/2): a DB-s felülírás (jelenléte ÉS szövege) a futás első feloldásakor a pillanatképbe kerül, és a
       // futás végéig az marad — a közben módosított DB-sor nem írja át a futó munkát. Az üres tartalék jelzi a hiányzó sort
       // (a bolt a blank sort is tartaléknak veszi), így a tartalékkal véletlenül egyező sor is jelenlévőként rögzül.
       const pinned = await workflowPinnedPrompt<{ present: boolean; text: string }>(name, async () => {
-        const resolved = await lookup(name, "");
+        const resolved = await lookup(name, "", callKey);
         return resolved ? { present: true, text: resolved } : { present: false, text: "" };
       });
       const system = pinned.present ? pinned.text + "\n\nAktuális kötelező szerződés és forrásadatok (eltérésnél ez az irányadó):\n" + fallback : fallback;
-      await workflowNotePromptHash(name, system);
+      // Mért (2026-10-04, run 69cacab5): a csak névvel kulcsolt lenyomat minden új fejezetnél/körnél hamis „megváltozott” jelzést
+      // adott — a doksi szerint hívásonként (név + kör) kell rögzíteni.
+      await workflowNotePromptHash(callKey ? `${name}#${callKey}` : name, system);
       return system;
     }),
   };
@@ -545,12 +548,15 @@ function startBankVerifier(
 }
 
 export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): Promise<StepOutcome> {
-  const { store, providerFactory, keyConfigured, promptLookup, rewardPolicy } = await resolveDeps(deps);
+  const { store, providerFactory, keyConfigured, promptLookup: basePromptLookup, rewardPolicy } = await resolveDeps(deps);
 
   const job = await store.loadJob(jobId);
   if (!job) {
     return { ok: false, next: { step: "error", round: 0 }, reason: "A job nem található." };
   }
+  // A prompt-lenyomat hívásonként (lépés:kör, fejezetnél + fejezet:változat) — folytatáskor csak az UGYANAZON hívás eltérése jelez.
+  const promptLookup = (name: string, fallback: string, extra?: string) =>
+    basePromptLookup(name, fallback, `${job.step}:${job.round}${extra ? `:${extra}` : ""}`);
 
   if (isTerminal(job.step)) {
     return { ok: true, next: { step: job.step, round: job.round }, cached: true };
@@ -745,7 +751,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const designSections = sectionsNeedingDesign(designerLesson);
       const designed = await designLessonVisuals(designerLesson, map.concepts, {
         sections: designSections,
-        systemFor: (i, variant) => promptLookup(STUDIO_PROMPT_NAMES.animatorSection, buildSectionDesignerPrompt(variant, i, promptMapOf(map))),
+        systemFor: (i, variant, attempt) => promptLookup(STUDIO_PROMPT_NAMES.animatorSection, buildSectionDesignerPrompt(variant, i, promptMapOf(map)), `fejezet${i}:próba${attempt}`),
         call: async (sectionSystem, user, sectionIndex) => {
           try {
             return await designerCall(primaryModel, sectionSystem, user);
@@ -1040,7 +1046,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       if (weak.length || rejectedVisuals.length) {
         logger.warn(`[STUDIO] Gyenge/elutasított ábra (${job.id}): ${weak.map((w) => `${w.sectionIndex + 1}/${w.blockIndex} ${w.kind}`).join(", ")}${rejectedVisuals.length ? ` + ${rejectedVisuals.length} elutasított` : ""} → célzott újrakérés`);
         try {
-          const repairSystem = await promptLookup(STUDIO_PROMPT_NAMES.animator, buildAnimatorPrompt(animated, promptMapOf(map)));
+          const repairSystem = await promptLookup(STUDIO_PROMPT_NAMES.animator, buildAnimatorPrompt(animated, promptMapOf(map)), "gyenge-ábra-javítás");
           const repair = await callStepModel(providerFactory(model, "visuals"), {
             step: job.step, role: "animator", policy: "visuals", model, system: repairSystem,
             user: `${weakVisualsInstruction(weak, rejectedVisuals)}

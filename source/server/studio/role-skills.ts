@@ -313,10 +313,10 @@ export function roleForPromptName(name: string): RoleSkillRole | undefined {
 }
 
 /** A runner promptLookup-ja köré: a DB-ből jövő vagy beépített prompt mindig a szerep skilljével indul. */
-export function skilledPromptLookup<T extends (name: string, fallback: string) => Promise<string>>(lookup: T): (name: string, fallback: string) => Promise<string> {
-  return async (name, fallback) => {
+export function skilledPromptLookup<T extends (name: string, fallback: string, callKey?: string) => Promise<string>>(lookup: T): (name: string, fallback: string, callKey?: string) => Promise<string> {
+  return async (name, fallback, callKey) => {
     const role = roleForPromptName(name);
-    const prompt = await lookup(name, fallback);
+    const prompt = await lookup(name, fallback, callKey);
     return role ? withRoleSkill(role, prompt) : prompt;
   };
 }
