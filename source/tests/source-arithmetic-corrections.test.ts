@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { arithmeticSourceCorrections, correctionApplied, correctionNotes, correctionPromptLines, mergeCorrections, normalizeSignedParens, sourceArithmeticClaim, studentErrorPromptLines, studentErrors, type SourceCorrection } from "../server/studio/source-corrections";
+import { arithmeticSourceCorrections, correctionApplied, correctionAuditText, correctionNotes, correctionPromptLines, mergeCorrections, normalizeSignedParens, sourceArithmeticClaim, studentErrorPromptLines, studentErrors, type SourceCorrection } from "../server/studio/source-corrections";
 import { buildBankVerifierPrompt, verifierContext } from "../server/studio/bank-verifier";
 import { buildAuthorPrompt, buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
@@ -53,6 +53,9 @@ test("idempotens és a determinisztikus nyer a modell-javaslattal szemben", () =
   assert.ok(again.every((c) => c.from.definition === undefined && c.studentError), "de új audit nincs");
   assert.ok(again.every((c) => correctionApplied(c, applied.find((a) => a.localId === c.localId)!)), "és nincs mit írni");
   assert.equal(correctionApplied(first[0], concepts.find((a) => a.localId === first[0].localId)!), false);
+  // mért (run 69cacab5): az újraindítás auditja nem ír „undefined”-ot
+  assert.ok(again.every((c) => !correctionAuditText(c).includes("undefined") && correctionAuditText(c).includes("(már helyesbítve)")));
+  assert.ok(correctionAuditText(first[0]).startsWith("helyesbítés (számolás): definíció: „A forrás szerint"), "az első helyesbítés auditja a régi definíciót idézi");
   const model: SourceCorrection[] = [{ localId: "c2", basis: "transcription", reason: "x", definition: "más", from: { definition: "" } }, { localId: "c13", basis: "owner", reason: "y", term: "Számegyenes", from: { term: "Számegyenes jelölései" } }];
   const merged = mergeCorrections(first, model);
   assert.equal(merged.filter((c) => c.localId === "c2").length, 1);
