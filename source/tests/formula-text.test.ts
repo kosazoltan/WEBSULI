@@ -67,3 +67,14 @@ test("a 7 igazolt hiba javítva (mért bemenetekkel)", () => {
   assert.deepEqual(referenceValueProblems({ id: "t", q: "Mennyi 5-8-(-2)?", typedAnswers: [{ part: "e", kind: "number", value: "-1" }] }), []);
   assert.equal(referenceValueProblems({ id: "t", q: "Mennyi 5-8?", typedAnswers: [{ part: "e", kind: "number", value: "-1" }] }).length, 1);
 });
+
+test("review #186: csak a TAPADÓ zárójel; részfeladat-jel és megjegyzés mellett a hamis referencia továbbra is hiba; előjel-pontos kérés-részlet", () => {
+  const wrong = (q: string) => referenceValueProblems({ id: "t", q, typedAnswers: [{ part: "e", kind: "number", value: "99" }] }).length;
+  assert.equal(wrong("a) 5-8"), 1, "részfeladat-jel");
+  assert.equal(wrong("(a) 5-8"), 1);
+  assert.equal(wrong("Mennyi 5-8 (indokold)?"), 1, "megjegyzés zárójelben");
+  assert.equal(wrong("Az (egész számok között) 5-8 eredménye?"), 1);
+  assert.equal(wrong("Mennyi (5-8)·2?"), 0, "zárójeles csoport belseje: nem ítélhető");
+  assert.equal(wrong("Mennyi (-2)+5-8?"), 0, "záró zárójel + művelet előtte: részlánc");
+  assert.equal(parseInstructionPointCandidates({ points: [{ text: "Gyakoroltasd", requestSpan: "9-(+6)", kind: "teach" }] }, "Tanítsd a 9-(-6) műveletet").length, 0, "előjel-eltérő részlet nem fogadható el");
+});

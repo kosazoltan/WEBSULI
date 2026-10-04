@@ -28,6 +28,12 @@ egy szóköz), `isFormulaText` (számjegy + műveleti jel vagy „=”, betű n�
 művelet + szám/zárójel; egyenlet-képletnél a bal oldal + a láncban később álló „= jobb oldal” is egyezés). Mind a 7 hely ezt
 használja; a szöveges ágak szabályai változatlanok.
 
+## Review #186 pontosítások
+- A képletes kérés-részlet jelenléte is előjel-pontos (`containsFormula` a kérésben).
+- A részlánc-szűrő CSAK a kifejezéshez tapadó zárójelet nézi (nyitó zárójel közvetlenül előtte, záró zárójel + művelet; utána
+  művelet + nyitó zárójel vagy záró zárójel) — az „a) 5-8” részfeladat-jel és az „5-8 (indokold)” megjegyzés ítélhető marad.
+- Gyorsítótár-verziók: `INSTRUCTION_POINTS_VERSION` és `INSTRUCTION_CHECK_VERSION` → v4 (a mentett jegyzék/ellenőrzés újraszámolódik).
+
 ## Nem-cél (külön szelet, bizonyítékkal listázva a PR-ban)
 A pontozó (v1/v2 kulcsszó-csoportok) előjel-/zárójel-érzékenysége, `questionKey`, `single-choice-check` „+3”, `complaintKey`,
 `falseArithmeticClaims` abszolút érték, match `sideKey`, SVG-címke — minőségi, nem leckét blokkoló.

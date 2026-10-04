@@ -23,7 +23,8 @@ import { withSupportSkill } from "./support-skills";
 
 // Review #167: a többértelműség és az idézet-igazolás szemantikája változott — a mentett jegyzékek újraszámolódnak.
 // Spec 2026-10-04-tanari-pont-keplet-idezet: a képlet-sor igazolása szemantika-váltás → a mentett jegyzék újraszámolódik.
-export const INSTRUCTION_POINTS_VERSION = "v3-inventory";
+// Spec 2026-10-04-kepletbiztos-heurisztikak (review #186): a képlet-idézet igazolása ismét változott → v4, a mentett jegyzék újraszámolódik.
+export const INSTRUCTION_POINTS_VERSION = "v4-inventory";
 export const INSTRUCTION_POINTS_MODEL = "claude-opus-5-5";
 
 export type PointState = "pending" | "taught" | "source_available_missing" | "not_in_source" | "undecidable" | "ambiguous";
@@ -83,7 +84,8 @@ export function parseInstructionPointCandidates(json: unknown, request: string):
     if (typeof p?.text !== "string" || !p.text.trim() || typeof p.requestSpan !== "string") continue;
     const span = p.requestSpan.trim();
     // Spec 2026-10-04-kepletbiztos-heurisztikak (5. pont): a képlet-részlet („9-(-6)” = „96”) nem esik ki a 3-as határon.
-    if ((alnum(span).length < 3 && !isFormulaText(span)) || !haystack.includes(normText(span))) continue;
+    // review #186: a képlet-részlet jelenléte is előjel-pontos (a normText-es includes a „9-(+6)”-ot a „9-(-6)” kérésben is elfogadná).
+    if ((alnum(span).length < 3 && !isFormulaText(span)) || (isFormulaText(span) ? !containsFormula(requestFrames(request).processed, span) : !haystack.includes(normText(span)))) continue;
     const kind = p.kind === "exclude" || p.kind === "style" ? p.kind : "teach";
     const quote = typeof p.sourceQuote === "string" ? p.sourceQuote.trim().slice(0, 300) : "";
     out.push({ text: p.text.trim().slice(0, 200), requestSpan: span.slice(0, 400), kind,

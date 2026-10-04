@@ -51,7 +51,8 @@ export function sectionBodyText(lesson: Lesson, index: number): string {
  * Review #155 (P2): a kulcs a forrást és a mérés sémaverzióját is tartalmazza (a forrás befolyásolja az eredményt).
  * U3: ellenőrzés-kulcs (B0 `verificationKey`) — a pontjegyzék hash-e is része, ha van.
  */
-export const INSTRUCTION_CHECK_VERSION = "v3-inventory";
+// Spec 2026-10-04-kepletbiztos-heurisztikak (review #186): a képlet-bizonyíték értékelése változott → a mentett ellenőrzés újraszámolódik.
+export const INSTRUCTION_CHECK_VERSION = "v4-inventory";
 export function instructionCheckHash(instruction: string, lesson: Lesson, sourceText?: string | null, inventoryHash?: string): string {
   return createHash("sha256").update(`${INSTRUCTION_CHECK_VERSION}\n${instruction}\n---\n${teachingText(lesson)}\n---\n${sourceText ?? ""}\n---\n${inventoryHash ?? ""}`).digest("hex");
 }

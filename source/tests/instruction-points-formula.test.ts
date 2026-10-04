@@ -15,7 +15,7 @@ test("a forrás teljes képlet-sora betűhű idézet: a tanár pontja igazolt (p
 
 test("review #185: a pontjegyzék verziója emelve (a mentett v2-es, hibás jegyzék újraszámolódik)", () => {
   const inv = buildInventory([[point("ehhez hasonló feladatsorokat készíts meg", "-5-(-8)=+3")]], REQUEST, SOURCE);
-  assert.equal(inv.version, "v3-inventory");
+  assert.equal(inv.version, "v4-inventory", "review #186: a képlet-szemantika ismét változott → v4");
 });
 
 test("szigor marad: előjel-eltérés és nem létező sor nem igazol; a forrásban betűhűen álló képlet-töredék igen", () => {

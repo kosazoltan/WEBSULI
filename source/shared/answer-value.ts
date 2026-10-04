@@ -184,7 +184,9 @@ export function referenceValueProblems(task: { id?: string; q: string; typedAnsw
   const chains = [...task.q.matchAll(new RegExp(`(?:${SIGN}(?=\\d))?(?:${ATOM})(?:\\s*[+\\-−–·×*:÷/]\\s*(?:${ATOM}))+`, "g"))]
     .filter((m) => {
       const before = task.q.slice(0, m.index ?? 0), after = task.q.slice((m.index ?? 0) + m[0].length);
-      return !/[()]\s*$|[()]\s*[+\-−–·×*:÷/]\s*$/.test(before) && !/^\s*[+\-−–·×*:÷/]?\s*[()]/.test(after);
+      // review #186: CSAK a kifejezéshez tapadó zárójel számít — közvetlenül nyitó zárójel előtte, vagy záró zárójel + művelet;
+      // utána művelet + nyitó zárójel, vagy közvetlenül záró zárójel. Az „a) 5-8” jelölés és az „5-8 (indokold)” megjegyzés nem.
+      return !/\(\s*$|\)\s*[+\-−–·×*:÷/]\s*$/.test(before) && !/^\s*[+\-−–·×*:÷/]\s*\(|^\s*\)/.test(after);
     })
     .map((m) => m[0]).filter((c) => !/=/.test(c));
   for (const a of answers) {
