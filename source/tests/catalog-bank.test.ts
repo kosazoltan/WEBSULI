@@ -8,7 +8,7 @@ import type { Classification } from "../server/catalog/classify";
 /* Spec 2026-10-05-s3-katalogus-bank — öröklött tantárgy, státusz-szabály, bizalmi szint, lenyomat-összevonás, tárolás. */
 
 const cls = (subject: string, extra: Partial<Classification> = {}): Classification => ({ subject, secondarySubjects: [], grade: 5, topicArea: "Tört", topic: "Törtek összeadása", lessonType: "gyakorlo-feladatlap", confidence: "high", evidence: "e", ...extra }) as Classification;
-const quiz = (provenance: string, fingerprint: string, d: Partial<CatalogItemDraft> = {}): CatalogItemDraft & { classroom: number | null } =>
+const quiz = (provenance: string, fingerprint: string, d: Partial<CatalogItemDraft & { classroom: number | null }> = {}): CatalogItemDraft & { classroom: number | null } =>
   ({ kind: "quiz", provenance, prompt: "Mennyi 2 + 3?", options: ["4", "5", "6"], correctIndex: 1, fingerprint, classroom: null, ...d });
 
 const agreed = (provenance: string, subject: string, extra: Partial<Classification> = {}): LessonClassification => ({ provenance, status: "agreed", classification: cls(subject, extra) });
