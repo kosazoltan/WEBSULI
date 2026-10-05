@@ -94,10 +94,16 @@ export class StepModelError extends Error {
   override readonly name = "StepModelError";
   /** The step that failed, so the job row can be marked `error` precisely. */
   readonly step: StudioStep;
+  /**
+   * Spec 2026-10-05-s9: az elutasított (csonka / nem JSON) válasz kivonata az orkesztrátor elemzéséhez — CSAK a hiba objektumán,
+   * soha nem az üzenetben, naplóban vagy DB-ben (a nyers szöveg prompt-injekció is lehet; az orkesztrátor adatként kapja).
+   */
+  readonly rawOutput?: string;
 
-  constructor(step: StudioStep, message: string, options?: { cause?: unknown }) {
+  constructor(step: StudioStep, message: string, options?: { cause?: unknown; rawOutput?: string }) {
     super(`A(z) "${step}" lépés modellhívása hibára futott: ${message}`, options);
     this.step = step;
+    if (options?.rawOutput) this.rawOutput = options.rawOutput.slice(0, 12_000);
   }
 }
 
@@ -240,7 +246,7 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
   if (response.finishReason === "length" || response.finishReason === "max_tokens") {
     await bookRejectedUsage();
     await workflowValidationFailure("A szolgáltató válasza elérte a hosszkorlátot.");
-    throw new StepModelError(input.step, "a válasz elérte a hosszkorlátot; csonka eredmény nem használható");
+    throw new StepModelError(input.step, "a válasz elérte a hosszkorlátot; csonka eredmény nem használható", { rawOutput: text });
   }
   if (text.length === 0) {
     await bookRejectedUsage();
@@ -260,6 +266,6 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
     // szerkezeti tény — ezekből a következő eset magától megkülönböztethető.
     await bookRejectedUsage();
     await workflowValidationFailure("A válasz nem érvényes JSON.");
-    throw new StepModelError(input.step, `a válasz nem érvényes JSON (${jsonFailureShape(text, error)})`);
+    throw new StepModelError(input.step, `a válasz nem érvényes JSON (${jsonFailureShape(text, error)})`, { rawOutput: text });
   }
 }

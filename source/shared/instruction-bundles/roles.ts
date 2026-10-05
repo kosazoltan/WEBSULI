@@ -13,7 +13,7 @@ export const PROMPT_ROLES = [
   "scope", "corrector", "web-research", "web-extract", "web-author", "web-lektor", "web-repair",
   "html-improve", "html-fix", "creator-analyze", "creator-chat", "quiz-generator",
   "kid-text-fixer", "instruction-checker", "instruction-points", "bank-verifier", "blind-solver", "figure-check",
-  "topic-focus", "gate-helper", "quiz-polish",
+  "topic-focus", "gate-helper", "quiz-polish", "orchestrator",
   // Spec 2026-10-05-s2-tartalom-besorolas: a tantárgyi katalógus tartalom alapú besorolója (saját skill-szöveggel).
   "catalog-classifier",
 ] as const;
