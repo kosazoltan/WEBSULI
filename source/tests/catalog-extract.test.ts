@@ -70,6 +70,8 @@ test("fúziós lecke: a kinyert kvíz/feladat/módszer darab egyezik a lecke ban
   assert.equal(count("quiz"), uniq(lesson.experience!.quiz, (q) => q.question + q.options.join("|") + q.correctIndex));
   assert.equal(count("open_task"), uniq(lesson.experience!.tasks, (t) => t.q));
   assert.ok(count("method") > 0 && count("section") > 0);
+  // review #188 (Copilot): PONTOS módszer-darab (fajta + tartalom szerint egyedi), nem csak „legalább egy”
+  assert.equal(count("method"), uniq(lesson.experience!.methods, (m) => [m.kind, m.prompt, m.answer, (m.options ?? []).join("|"), m.correctIndex ?? "", (m.steps ?? []).join("|")].join("§")));
   // review #188: a sorrend-lépések megmaradnak
   const withSteps = lesson.experience!.methods.filter((m) => m.steps?.length).length;
   assert.equal(items.filter((i) => i.kind === "method" && i.steps?.length).length > 0, withSteps > 0);

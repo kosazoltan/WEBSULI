@@ -42,7 +42,9 @@ const norm = (s: string) => s.normalize("NFC").toLocaleLowerCase("hu").replace(/
 /** Duplikátum-szűrés: MINDEN tudást hordozó mező (review #188: a szöveg, a kulcsszó-csoportok és a lépések is — különben két azonos
  *  című, de más tartalmú fejezet/feladat összevonódna és tudás veszne el). */
 export function itemFingerprint(item: Omit<CatalogItemDraft, "fingerprint" | "provenance">): string {
-  const parts = [item.kind, norm(item.prompt), norm(item.body ?? ""), ...(item.options ?? []).map(norm), String(item.correctIndex ?? ""), ...(item.accepted ?? []).map(norm),
+  // review #188 (Copilot): a módszer altípusa (shape: fusion.method.<kind>) is — különben az azonos szövegű, de más fajtájú
+  // módszerek összevonódnának (a standard fixture-ben 11 → 4).
+  const parts = [item.kind, item.kind === "method" ? item.shape ?? "" : "", norm(item.prompt), norm(item.body ?? ""), ...(item.options ?? []).map(norm), String(item.correctIndex ?? ""), ...(item.accepted ?? []).map(norm),
     ...(item.keywordGroups ?? []).map((g) => g.map(norm).join("|")), ...(item.steps ?? []).map(norm),
     ...(item.pair ? [norm(item.pair.source), norm(item.pair.target)] : [])];
   return createHash("sha1").update(parts.join("\u0001")).digest("hex").slice(0, 16);

@@ -1,20 +1,22 @@
 // Spec 2026-10-05-s1-katalogus-kinyeres: mind a 201 lecke (177 régi HTML + publikált fúziós) determinisztikus kinyerése.
 // CSAK OLVAS az éles DB-ből. Futtatás: npx tsx scripts/catalog/extract-all.mts
-import "dotenv/config";
 import { mkdirSync, writeFileSync } from "node:fs";
-import pg from "pg";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { extractLegacyLesson } from "../../server/catalog/legacy-extract";
 import { extractFusionLesson } from "../../server/catalog/fusion-extract";
 import type { CatalogItemDraft } from "../../server/catalog/catalog-item";
+import { withReadOnlyDb } from "../lib/read-only-db";
 
 const day = new Date().toISOString().slice(0, 10);
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-await client.connect();
-try {
-  await client.query("BEGIN READ ONLY");
-  const legacy = (await client.query(`select id, title, classroom, content from html_files where coalesce(content_type,'html') in ('html','text/html') order by created_at`)).rows;
-  const fusion = (await client.query(`select l.id, l.json from lessons l where l.published_at is not null order by l.published_at`)).rows;
-  await client.query("ROLLBACK");
+// Review #188 (Copilot): ellenőrzött TLS + csak olvasó tranzakció (közös segéd); a kimenet a repóhoz képest.
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(here, "../../..");
+{
+  const { legacy, fusion } = await withReadOnlyDb(async (query) => ({
+    legacy: await query<{ id: string; title: string; classroom: number | null; content: string | null }>(`select id, title, classroom, content from html_files where coalesce(content_type,'html') in ('html','text/html') order by created_at`),
+    fusion: await query<{ id: string; json: any }>(`select l.id, l.json from lessons l where l.published_at is not null order by l.published_at`),
+  }));
 
   const perLesson: Array<Record<string, unknown>> = [];
   const all: Array<CatalogItemDraft & { lessonTitle: string; classroom: number | null; source: "legacy" | "fusion" }> = [];
@@ -57,6 +59,4 @@ try {
   mkdirSync(".catalog", { recursive: true });
   writeFileSync(`.catalog/${day}-items.json`, JSON.stringify(all) + "\n");
   console.log(JSON.stringify({ lessons: summary.lessons, legacyScriptParseOk: summary.legacyScriptParseOk, keyedQuizCoverage: summary.keyedQuizCoverage, totals, empty: summary.emptyLegacyLessons.length, items: all.length }, null, 1));
-} finally {
-  await client.end();
 }
