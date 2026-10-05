@@ -53,25 +53,28 @@ node --no-warnings kanban.mjs stats                    # összesítő
 | `REGRESSZIO(#n):` | korábbi jegy visszaesése |
 | `STANDING(binding):` | tartós szabály, nem záródik le |
 
-## Állapot — 2026-09-30
+## Állapot — 2026-10-05
+
+A CLI `list` a hiteles forrás; ez a pillanatkép a 2026-10-05-i higiéniai söprés után készült.
 
 | # | Státusz | Tárgy |
 |---|---|---|
-| 999 | done | SPEC(2026-09-30): utasításrendszer-rendbetétel U0–U6 + B6–B8 (PR #158–#165) + élő mérés utáni javítások (#166–#174); bizonyíték: élő Egyiptom-futás a0d0bf35 (main e2638ae) publikált, 2 kör, tanári pontok 13/13, bank-ellenőr 0 hiba |
+| 1113 | done | TUDÁSBANK S2–S4 — PR #189, #193; éles import: 201 lecke, 17 bank, 23 209 sor |
+| 1114 | done | S9/S10 orkesztrátor, streamelés, automatikus folytatás — PR #190–#192 |
+| 1115 | done | S11 OCR: bizonytalanság, szótár-őr, két erős olvasó fúziója — PR #192, #194, #195, #197 |
+| 1116 | done | BANK determinisztikus normalizálás + kapu-javítás adagolva — PR #196; élő lecke 13f2102b |
+| 1117 | done | BUG(lecke-adat): „jeggyel” kvízkulcs — éles javítás |
+| 1118 | backlog | TANÁRI JAVÍTÁS: lecke 13f2102b két függő fogalma |
+| 1119 | backlog | DÖNTÉS: nyitott PR #182 |
+| 1120 | backlog | TUDÁSBANK S6 → S5 → S7 → S8 |
+| 560 | backlog | BUG(web-research): tudásbázis nélkül készülő internetes HTML |
+| 187 | backlog | BUG(autoBackup): szerverindulásonkénti mentés |
+| 152 | backlog | Gyenge-modell végrehajtási fegyelem (STANDING) |
+| 127 | backlog | Kliens hibariport HMAC-rétege |
 
-## Állapot — 2026-09-13
-
-Nyitott elemek (a CLI `list` a hiteles forrás; ezt a táblázatot a session frissíti):
-
-| # | Státusz | Tárgy |
-|---|---|---|
-| 560 | doing | BUG(web-research): tudásbázis nélkül készülő internetes HTML |
-| 187 | doing | BUG(autoBackup): minden szerverindulas 16MB mentest ir |
-| 152 | backlog | Gyenge-modell (Qwen/Deepseek/GLM) végrehajtási fegyelem |
-| 127 | backlog | Kliens hibariport HMAC-rétege elérhetetlen a böngészőből |
-
-A Lesson Studio szeletei (LS-0 … LS-6b) és a #159–#183 hibajavítások lezárva. A 2026-09-13-as webes tudásbázis-pipeline kódja a `lesson-flow-2` folyamatverzió; éles gyártás ebben a szeletben nem indult.
-
+Higiénia 2026-10-05: a review-ban ragadt #189/#191/#196/#197 és a doing #999 bizonyítékkal lezárva, a #202 duplikátum zárva;
+munkafák (s10, s11, s116, continuous-release) eltávolítva; 107 beolvasztott helyi és 121 távoli ág törölve, a nem beolvasztott
+`backup/pr-128-*` ágak `archive/*` tagben; a gyökér- és `source/` naplók a `tmp/_archiv-2026-10-05/` alá kerültek.
 
 ## Kapcsolódás külső követőhöz
 
