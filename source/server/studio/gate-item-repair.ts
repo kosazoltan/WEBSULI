@@ -20,7 +20,8 @@ const ITEM_SCHEMAS: Record<BankItemRef["bank"], z.ZodTypeAny> = { quiz: experien
 
 export type GateRepairDeps = OrchestrationDeps & {
   /** A bankmodell hívása (szerep: bank) — a javított rendszerprompttal; JSON-t ad vissza. */
-  callBank: (system: string, user: string) => Promise<unknown>;
+  /** `round`: az orkesztrált kör (1, 2) — a hívó a 2. körben erősebb modellre eszkalálhat (S9/4). */
+  callBank: (system: string, user: string, round: number) => Promise<unknown>;
   /** A független bank-ellenőr CSAK erre az útvonalra; üres lista = ítélet és hiba nélkül átment. */
   verify: (lesson: Lesson, path: string) => Promise<string[]>;
   bankModel: string;
@@ -70,12 +71,17 @@ export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag
     const result = await orchestratedRetry(
       { role: "bank", step: "bank", model: deps.bankModel, system: deps.bankSystem, user, point: `gate:${args.round}:${t.path}`, round: args.round, ...(args.subject ? { subject: args.subject } : {}) },
       { kind: "gate", reasons: [t.message], rawOutput: JSON.stringify(before) },
-      async (corrected) => {
-        const raw = await deps.callBank(corrected, user);
+      async (corrected, n) => {
+        const raw = await deps.callBank(corrected, user, n);
         const candidate = (raw && typeof raw === "object" && !Array.isArray(raw) && "tetel" in raw ? (raw as { tetel: unknown }).tetel : raw) as Record<string, unknown>;
         const parsed = ITEM_SCHEMAS[t.ref.bank].safeParse(candidate);
         if (!parsed.success) throw new OrchestrationValidationError("gate", parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), JSON.stringify(candidate).slice(0, 6000));
         const item = parsed.data as Record<string, unknown>;
+        // S9/4 (mért: a bankmodell kétszer változatlanul adta vissza a tételt): a javítás meg sem történt → azonnal, a független
+        // ellenőr (drága) hívása nélkül; az orkesztrátor ezt a pontos okot kapja.
+        if (JSON.stringify(item) === JSON.stringify(ITEM_SCHEMAS[t.ref.bank].safeParse(before).data ?? before)) {
+          throw new OrchestrationValidationError("gate", ["a tétel VÁLTOZATLAN — a kért javítás nem történt meg; a megnevezett hibát a tétel szövegében ténylegesen meg kell szüntetni"], JSON.stringify(item).slice(0, 6000));
+        }
         const problems = [...bindingProblems(before, item), ...choiceProblems(t.ref, item, lesson.title)];
         const next = withItem(lesson, t.ref, item);
         problems.push(...experienceProblems(next), ...verifyLessonSkillBank(next.experience, next.subject, next.sections).problems);

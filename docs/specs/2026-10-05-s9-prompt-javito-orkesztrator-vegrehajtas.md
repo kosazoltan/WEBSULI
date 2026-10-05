@@ -102,3 +102,13 @@ Mért (élő próba, job c1f9d12a): a kapu megállt — `quiz[23]` két helyes o
    jegyzet `gate_item_repaired`; a job leckéje frissül (újrafuttatva idempotens). Bármely bukás → a régi hibaút.
 4. Szerző-keret 48k (tulajdonosi döntés): mindkét új szerzőmodell 24k fölött írt → az első hívás kárba ment.
 Bizonyítás: olcsó visszajátszás a mentett jobon (csak a kapu), utána teljes élő futás ugyanazon a képen.
+
+## S9/4 — lektor-blokkolók az orkesztrátornak; kapu-javítás modell-eszkalációval (tulajdonosi kérdés + visszajátszás, 2026-10-05)
+Tulajdonosi kérdés: „A lektor blokkoló jegyzeteit az orkesztrátor nem olvassa, nem javítja?” Mért: a szerző javító körében a
+blokkoló jegyzetek nyersen mennek a promptba (`step-runner.ts` szerző-ág, `reviewNotes`); a futásban 2 blokkoló a körlimitig
+megmaradt. A kapu-visszajátszás (job c1f9d12a) 2. futásában a bankmodell kétszer VÁLTOZATLANUL adta vissza a tételt.
+1. Szerző javító köre blokkolóval: az orkesztrátor (`point: author:<kör>:lektor`) a blokkoló jegyzetekből és az érintett fejezetek
+   előző szövegéből gyökérokot + fejezetre szabott javító utasítást ír; ez a rendszerprompt végére kerül (a jegyzetek mellett).
+   Ellenőrzőpontból (folytatáskor nincs új hívás, a lépés-hash stabil). Hiba/keret esetén a régi viselkedés.
+2. Kapu-tételjavítás: változatlan tétel → azonnali determinisztikus elutasítás („a javítás nem történt meg”) a független ellenőr
+   előtt; a 2. kör a mentőmodellen (`BANK_RESCUE_MODEL`) fut.

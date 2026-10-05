@@ -62,3 +62,16 @@ test(`legfeljebb ${GATE_REPAIR_MAX_ITEMS} tétel; nem banktétel-útvonal nem ja
   assert.equal(await repairFlaggedBankItems({ lesson, flags: many, round: 3, deps }), null);
   assert.equal(await repairFlaggedBankItems({ lesson, flags: [{ path: "sections[0].blocks[1]", message: "x" }], round: 3, deps }), null);
 });
+
+test("S9/4: változatlanul visszaadott tétel → azonnali elutasítás a független ellenőr nélkül; a 2. kör eszkalálható (kör-szám a hívónak)", async () => {
+  const { lesson, quiz0 } = setup();
+  const rounds: number[] = [];
+  let verified = 0;
+  const res = await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, deps: setup({
+    callBank: async (_s, _u, round) => { rounds.push(round); return round === 1 ? quiz0 : { ...quiz0, question: `${String(quiz0.question)} (2. kör)` }; },
+    verify: async () => { verified++; return []; },
+  }).deps });
+  assert.deepEqual(rounds, [1, 2], "a 2. kör a kör-számmal (a hívó erősebb modellre vált)");
+  assert.equal(verified, 1, "a változatlan tételre nem hívtuk a független ellenőrt");
+  assert.match(String((res!.lesson.experience!.quiz[0] as { question: string }).question), /\(2\. kör\)$/);
+});
