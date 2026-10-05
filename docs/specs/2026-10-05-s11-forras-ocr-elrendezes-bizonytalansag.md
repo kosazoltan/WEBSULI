@@ -97,3 +97,6 @@ szót; átengedi az Ázsia, Közel-Kelet, zikkurat, folyóköz, öntözéses, to
 - A szótár által nem ismert, de az erős olvasó által megerősített szó jel nélkül marad (teszt: „sumérok”).
 - Tiszta szövegnél nincs plusz modellhívás (teszt).
 - Teljes unit, tsc, lint zöld; a meglévő OCR-tesztek változatlanok.
+Mérés (2026-10-05, csak OCR + célzott erős olvasás): a szótár 3 sort jelzett (Kesia, Felt, sumérok, határak). A „Kesia, Föld - Felt.”
+sor ⟦?⟧-t kapott (nem lesz belőle tény); „papok és határak” → „papok és katonák” (a fotóval egyező, a tanári helyesbítés szerint);
+a „sumérok” megerősítve, jel nélkül.
