@@ -90,3 +90,8 @@ test("S11/6 5. pont: a vitatott szakasz minden vitatott szava jelölt; a jelet e
   assert.equal(quoteTouchesUncertain("a Nílus áradási", marked), true, "a jelet elhagyó idézet sem tény");
   assert.equal(quoteTouchesUncertain("őskori kezdetétől", marked), false, "a közös, biztos rész tanítható");
 });
+
+test("review #196: a bizonytalan-idézet ellenőrzés NFD/NFC-független", async () => {
+  const { quoteTouchesUncertain } = await import("../shared/transcript-marks");
+  assert.equal(quoteTouchesUncertain("a Nílus áradási".normalize("NFD"), "a Nílus⟦?⟧ áradási⟦?⟧ éveinek⟦?⟧"), true);
+});

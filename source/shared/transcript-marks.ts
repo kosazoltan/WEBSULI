@@ -17,7 +17,8 @@ export function stripTranscriptMarks<T>(value: T): T {
   return value;
 }
 
-const wordKey = (w: string) => w.toLocaleLowerCase("hu").replace(/[^\p{L}\p{N}]/gu, "");
+// Review #196: NFC-normalizálás (NFD/NFC eltérés ne okozzon téves „biztos” eredményt).
+const wordKey = (w: string) => w.normalize("NFC").toLocaleLowerCase("hu").replace(/[^\p{L}\p{N}]/gu, "");
 /**
  * Spec S11/6 (biztonság): az idézet akkor is bizonytalan, ha a modell a jelet elhagyta, de a FORRÁSBAN jelölt („szó⟦?⟧”) szót idéz —
  * különben a jelölőket figyelmen kívül hagyó szó szerinti ellenőrzés mellett a bizonytalan olvasat tanított ténnyé válhatna.

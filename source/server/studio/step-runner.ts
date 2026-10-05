@@ -1535,9 +1535,10 @@ async function repairGateItems(store: PipelineStore, job: JobView, lesson: Lesso
   const map = focusedMapOf(await store.loadMap(job.mapId), job);
   const concepts = map ? verifierConceptsOf(map, job) : [];
   const bankModel = resolveStudioModel("bank");
-  if (!models.keyConfigured(bankModel) || !models.keyConfigured(BANK_VERIFIER_MODEL)) {
+  const missingKey = !models.keyConfigured(bankModel) ? bankModel : !models.keyConfigured(BANK_VERIFIER_MODEL) ? BANK_VERIFIER_MODEL : null;
+  if (missingKey) {
     // Spec S11/6 + S9/7: nincs néma kihagyás.
-    logger.warn(`[ORKESZTRÁTOR] kapu (${job.id}): a kapu-javítás kimarad — nincs kulcs (${!models.keyConfigured(bankModel) ? bankModel : BANK_VERIFIER_MODEL}).`);
+    logger.warn(`[ORKESZTRÁTOR] kapu (${job.id}): a kapu-javítás kimarad — nincs kulcs (${missingKey}).`);
     return null;
   }
   const sameRef = (a: string | undefined, b: string) => { const x = bankItemRef(a), y = bankItemRef(b); return !!x && !!y && x.bank === y.bank && x.index === y.index; };

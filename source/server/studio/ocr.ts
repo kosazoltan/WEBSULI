@@ -420,7 +420,9 @@ export function decideNonWordLines(text: string, lines: NonWordLine[], strong: M
 function isMinorRevision(current: string, reading: string, questioned: string[]): boolean {
   const cur = lexiconWordsOf(current).map((t) => t.word), str = lexiconWordsOf(reading).map((t) => t.word);
   if (cur.length === 0 || cur.length !== str.length) return false;
-  return cur.every((w, n) => wordKey(w) === wordKey(str[n]) || (questioned.includes(w) && editDistance(wordKey(w), wordKey(str[n])) <= 2));
+  // Review #196: a kérdésesség normalizált kulccsal (kis-/nagybetű, írásjel) — nem nyers szöveg-egyezéssel.
+  const asked = new Set(questioned.map(wordKey));
+  return cur.every((w, n) => wordKey(w) === wordKey(str[n]) || (asked.has(wordKey(w)) && editDistance(wordKey(w), wordKey(str[n])) <= 2));
 }
 
 /**
