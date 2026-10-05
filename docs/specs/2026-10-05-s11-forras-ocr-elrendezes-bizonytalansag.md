@@ -216,3 +216,8 @@ igazolt fogalom → „túl bizonytalan” megállás. Tulajdonosi döntés: az 
 - **Mérés-rögzítés:** a fixture `transcripts`/`measured` blokkja az ÖNÁLLÓ olvasóké (+ `claude-opus-5-5`); a fúzió nem olvasó, ezért a
   saját `fusion` blokkjába kerül (a fúzió A-olvasata — sol high — is ott). A meglévő „a forrás-OCR elsődleges olvasója a legjobb
   (önálló) olvasó” teszt változatlan; új teszt őrzi, hogy a fúzió ≥ minden önálló olvasó és ≥ a saját A-olvasata.
+**Mérés és spec-változás (S11/7, 2026-10-05):** a tulajdonos 5 füzetlapján: claude-opus-5-5 (medium) 100%, gpt-6.1-sol (high) 99,4%,
+fúzió 99,4%, qwen 87,1%, glm 85,3%. Az egyetlen eltérés a 2. lap „1900” kulcsa (a kézírás kétértelmű; az opus maga is „1900⟦?⟧”-et olvasott,
+a többi olvasó „2900”-at) — a kulcs utólag NEM módosul. Mivel a forrás-OCR eredménye mostantól a FÚZIÓ (nem egyetlen olvasó), a
+`tests/ocr-handwriting-history.test.ts` S11/5-ös „a forrás-OCR elsődleges olvasója a mezőny legjobbja” állítása a spec elfogadási
+feltételére cserélődik: a fúzió ≥ a saját A-olvasata, ≥ a gyenge olvasók (qwen, glm) és ≥ 95%.
