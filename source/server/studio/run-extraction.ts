@@ -320,6 +320,16 @@ export async function createCachedSourceOcr(ocrModel: string) {
   // Spec 2026-10-05-s11/4: szótár-őr a végső átiraton — a nem-szós sorokat az erős olvasó célzottan újraolvassa (nélküle: ⟦?⟧).
   const guard = { lexicon: loadHungarianLexicon, strongLines: strongReady ? (file: Parameters<typeof callOcrStrongLines>[0], lines: Parameters<typeof callOcrStrongLines>[2]) => callOcrStrongLines(file, thirdModel, lines) : undefined };
   const rereadHash = createHash("sha256").update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
+  const promptHash = createHash("sha256").update(OCR_ADJUDICATION_PROMPT).update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
+  if (strongReady && thirdModel !== ocrModel) {
+    // Spec 2026-10-05-s11/5 (tulajdonosi döntés a 8. élő futás után): a forrás-OCR-ben az erős olvasó olvas ELSŐKÉNT és dönt
+    // vitában; a konfigurált (mért) OCR-modell a független második; a 2-a-3-ból harmadik szavazó elmarad.
+    const strong = withOcrCache((file) => callOcrModel(file, thirdModel), thirdModel, store);
+    // Review #195: ha az erős olvasó kiesik, a független második olvasó (FALLBACK) lép a helyére — mindig két olvasat.
+    const substitute = secondModel && secondModel !== ocrModel && secondModel !== thirdModel && studioModelReady(secondModel) ? withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store) : undefined;
+    const dualStrong = dualReadOcr(strong, first, (file, text, disputes) => callOcrAdjudicator(file, thirdModel, text, disputes), undefined, guard, { adjudicatorDecides: true, substitute });
+    return withOcrCache(dualStrong, `${thirdModel}|${ocrModel}|dual-strong-adj|${promptHash}`, store, (file) => !dualStrong.degraded(file));
+  }
   if (!secondModel || secondModel === ocrModel || !studioModelReady(secondModel)) {
     // Review #194: az egyolvasós út is szótár-őrön megy át (a végső átirat mindig ellenőrzött); a degraded eredmény nem kerül cache-be.
     const single = lexiconGuardedOcr(first, guard);
@@ -328,6 +338,5 @@ export async function createCachedSourceOcr(ocrModel: string) {
   const second = withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store);
   const third = strongReady ? withOcrCache((file) => callOcrModel(file, thirdModel), thirdModel, store) : undefined;
   const dual = dualReadOcr(first, second, (file, text, disputes) => callOcrAdjudicator(file, ocrModel, text, disputes), third, guard);
-  const promptHash = createHash("sha256").update(OCR_ADJUDICATION_PROMPT).update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
   return withOcrCache(dual, `${ocrModel}|${secondModel}|dual-3-lex|${third ? thirdModel : "-"}|${promptHash}`, store, (file) => !dual.degraded(file));
 }

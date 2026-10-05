@@ -252,7 +252,8 @@ function markByCursor(decided: string, disputes: OcrDisagreement[]): string {
  * érdemi vita (az egyoldalú is, ha a döntő átiratban megvan a nem üres olvasat), és a döntő átirat minden olyan változtatása, amely
  * egyik vitatott olvasattal sem egyezik (harmadik alak). `first` nélkül a régi, szövegkereséses út fut (sorrendtartó kurzorral).
  */
-export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreement & { at?: number })[], first?: string): string {
+/** `thirdFormOnly` (spec S11/5, erős elsődleges olvasó): csak a döntő olvasat saját, egyik olvasattal sem egyező alakja kap jelet. */
+export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreement & { at?: number })[], first?: string, opts: { thirdFormOnly?: boolean } = {}): string {
   if (first === undefined) return markByCursor(decided, disputes);
   const a = positionedTokens(first), c = positionedTokens(decided);
   const map = alignTokens(a.map((t) => t.key), c.map((t) => t.key));
@@ -266,6 +267,7 @@ export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreeme
     return [prev + 1, next];
   };
   let cursor = 0;
+  const spans: Array<{ s: number; e: number; r: string[] }> = [];
   for (const d of disputes) {
     const keys = ocrTokens(d.first).map(tokenKey);
     let s = d.at ?? -1;
@@ -274,7 +276,8 @@ export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreeme
     }
     if (s < 0) continue;
     cursor = s + keys.length;
-    if (!isSubstantive(d)) continue;
+    spans.push({ s, e: s + keys.length, r: [d.first, d.second] });
+    if (opts.thirdFormOnly || !isSubstantive(d)) continue;
     const end = lastEnd(...decidedRange(s, s + keys.length));
     if (end >= 0) ends.push(end);
   }
@@ -287,7 +290,9 @@ export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreeme
     const nj = ni < a.length ? map[ni] : c.length;
     const changed = c.slice(j, nj).map((t) => t.key).filter(Boolean).join(" ");
     const was = a.slice(i, ni).map((t) => t.key).filter(Boolean).join(" ");
-    if (changed && changed !== was && !readings.some((r) => r.includes(` ${changed} `))) {
+    // Review #195: erős elsődlegesnél az ADOTT hely vitájának olvasataihoz mérünk (más vita olvasata itt harmadik alak).
+    const pool = opts.thirdFormOnly ? spans.filter((x) => x.s <= ni && x.e >= i).flatMap((x) => x.r).map((r) => ` ${keyedOf(r)} `) : readings;
+    if (changed && changed !== was && !pool.some((r) => r.includes(` ${changed} `))) {
       const end = lastEnd(j, nj);
       if (end >= 0) ends.push(end);
     }
@@ -493,7 +498,9 @@ export function lexiconGuardedOcr(ocr: OcrFn, guard: OcrLexiconGuard): DualReadO
   return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
 }
 
-export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator, third?: OcrFn, guard?: OcrLexiconGuard): DualReadOcr {
+/** `opts.adjudicatorDecides` (spec S11/5): az erős elsődleges olvasónál a sikeres döntő olvasás dönt — jel csak a saját bizonytalanságánál
+ *  (⟦?⟧), a harmadik alaknál és a szótár-őrnél; a döntő olvasás elvetésekor a régi, vita-alapú jelölés marad. */
+export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator, third?: OcrFn, guard?: OcrLexiconGuard, opts: { adjudicatorDecides?: boolean; substitute?: OcrFn } = {}): DualReadOcr {
   const degradedFiles = new WeakSet<ExtractorFile>();
   // Spec 2026-10-05-s11/4: a végső (settle utáni) képátirat szótár-őrön megy át; szótár-hiba → változatlan szöveg, „degraded”.
   const guarded = (file: ExtractorFile, text: string): Promise<string> => applyLexiconGuard(file, text, guard, () => degradedFiles.add(file));
@@ -523,10 +530,12 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     if (!primary || !other) {
       const failed = !primary ? a : b;
       const reason = failed.status === "rejected" ? (failed.reason instanceof Error ? failed.reason.message : String(failed.reason)) : "üres válasz";
-      logger.warn(`[STUDIO/OCR] ${file.name}: ${!primary ? "az első" : "a második"} olvasó kiesett (${reason.slice(0, 200)})${third ? " — az erős olvasó lép a helyére." : "."}`);
-      if (third) {
+      logger.warn(`[STUDIO/OCR] ${file.name}: ${!primary ? "az első" : "a második"} olvasó kiesett (${reason.slice(0, 200)})${third ? " — az erős olvasó lép a helyére." : opts.substitute ? " — a helyettesítő olvasó lép a helyére." : "."}`);
+      // Review #195: helyettesítő olvasó külön is megadható (erős elsődlegesnél nincs szavazó, de a kiesést pótolni kell).
+      const replacement = third ?? opts.substitute;
+      if (replacement) {
         try {
-          const substitute = (await third(file)).trim();
+          const substitute = (await replacement(file)).trim();
           if (substitute) { if (!primary) primary = substitute; else other = substitute; voter = null; }
         } catch (error) {
           logger.warn(`[STUDIO/OCR] ${file.name}: az erős olvasó is kiesett (${error instanceof Error ? error.message : String(error)}).`);
@@ -544,7 +553,7 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     logger.info(`[STUDIO/OCR] ${file.name}: a két olvasat ${disputes.length} helyen eltér — döntő olvasás a képpel.`);
     try {
       const decided = (await adjudicate(file, primary, disputes)).trim();
-      if (decided && adjudicationStaysInDispute(primary, decided, disputes)) return settle(file, markUnresolvedDisputes(decided, located, primary), disputes, voter);
+      if (decided && adjudicationStaysInDispute(primary, decided, disputes)) return settle(file, markUnresolvedDisputes(decided, located, primary, { thirdFormOnly: opts.adjudicatorDecides }), disputes, voter);
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasat a vitatott helyeken kívül is változtatott — az első olvasat marad.`);
     } catch (error) {
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasás hibázott (${error instanceof Error ? error.message : String(error)}) — az első olvasat marad.`);
