@@ -213,6 +213,33 @@ export function markUnresolvedDisputes(decided: string, disputes: OcrDisagreemen
   return out;
 }
 
+/**
+ * Spec 2026-10-05-s11/2 (tulajdonosi döntés): a jelölt (`⟦?⟧`) vitákat egy erős, FÜGGETLEN harmadik olvasat dönti el — 2 a 3-ból:
+ * ha a harmadik olvasat (tokenre, szóhatáron) PONTOSAN az egyik vitatott olvasatot tartalmazza, az nyer, és a jel lekerül; egyezés
+ * nélkül a jel marad. A harmadik olvasó nem ír új szöveget, csak választ a két meglévő közül. Mért: gpt-6.1-sol és Opus 5.5 a
+ * Mezopotámia-füzetet szinte hibátlanul olvasta (a két alap-olvasó 11 helyen eltért).
+ */
+export function resolveByThirdReading(marked: string, disputes: OcrDisagreement[], third: string): string {
+  const keyed = (s: string) => ` ${ocrTokens(s).map(tokenKey).filter(Boolean).join(" ")} `;
+  const t3 = keyed(third);
+  let out = marked;
+  for (const d of disputes) {
+    const a = keyed(d.first), b = keyed(d.second);
+    if (a.trim() === "" || b.trim() === "") continue;
+    const hasA = t3.includes(a), hasB = t3.includes(b);
+    if (hasA === hasB) continue;
+    const winner = hasA ? d.first.trim() : d.second.trim();
+    for (const span of [d.first, d.second].map((s) => s.trim()).filter(Boolean)) {
+      const markedSpan = `${span}${UNCERTAIN_MARK}`;
+      const at = out.indexOf(markedSpan);
+      if (at < 0) continue;
+      out = `${out.slice(0, at)}${winner}${out.slice(at + markedSpan.length)}`;
+      break;
+    }
+  }
+  return out;
+}
+
 export type OcrAdjudicator = (file: ExtractorFile, first: string, disputes: OcrDisagreement[]) => Promise<string>;
 
 /** Dual-read OCR for images; PDFs and failures fall back to the first read (fail-open, as before). */
@@ -222,8 +249,21 @@ export type OcrAdjudicator = (file: ExtractorFile, first: string, disputes: OcrD
  */
 export type DualReadOcr = OcrFn & { degraded(file: ExtractorFile): boolean };
 
-export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator): DualReadOcr {
+export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator, third?: OcrFn): DualReadOcr {
   const degradedFiles = new WeakSet<ExtractorFile>();
+  // Spec 2026-10-05-s11/2: ha jelölt vita maradt, a független harmadik olvasat dönt (2 a 3-ból); hibánál a jelölt átirat marad.
+  const settle = async (file: ExtractorFile, marked: string, disputes: OcrDisagreement[]): Promise<string> => {
+    if (!third || !marked.includes(UNCERTAIN_MARK)) return marked;
+    try {
+      const resolved = resolveByThirdReading(marked, disputes, await third(file));
+      const left = resolved.split(UNCERTAIN_MARK).length - 1, before = marked.split(UNCERTAIN_MARK).length - 1;
+      logger.info(`[STUDIO/OCR] ${file.name}: harmadik olvasat — ${before - left}/${before} vitatott hely feloldva (2 a 3-ból).`);
+      return resolved;
+    } catch (error) {
+      logger.warn(`[STUDIO/OCR] ${file.name}: a harmadik olvasat hibázott (${error instanceof Error ? error.message : String(error)}) — a jelölt átirat marad.`);
+      return marked;
+    }
+  };
   const read = async (file: ExtractorFile): Promise<string> => {
     degradedFiles.delete(file);
     if (file.kind !== "image") return first(file);
@@ -238,7 +278,7 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     logger.info(`[STUDIO/OCR] ${file.name}: a két olvasat ${disputes.length} helyen eltér — döntő olvasás a képpel.`);
     try {
       const decided = (await adjudicate(file, a.value, disputes)).trim();
-      if (decided && adjudicationStaysInDispute(a.value, decided, disputes)) return markUnresolvedDisputes(decided, disputes);
+      if (decided && adjudicationStaysInDispute(a.value, decided, disputes)) return settle(file, markUnresolvedDisputes(decided, disputes), disputes);
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasat a vitatott helyeken kívül is változtatott — az első olvasat marad.`);
     } catch (error) {
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasás hibázott (${error instanceof Error ? error.message : String(error)}) — az első olvasat marad.`);
@@ -246,7 +286,7 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     degradedFiles.add(file);
     // Spec 2026-10-05-s11 (mérve: a döntő olvasat elvetése után a vita nyoma elveszett — „Kesia, Föld - Felt.”, „határak” jel nélkül):
     // az első olvasat megtartásakor is jelölt az érdemi eltérés.
-    return markUnresolvedDisputes(a.value, disputes);
+    return settle(file, markUnresolvedDisputes(a.value, disputes), disputes);
   };
   return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
 }

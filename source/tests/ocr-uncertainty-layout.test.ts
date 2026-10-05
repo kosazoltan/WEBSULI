@@ -54,3 +54,26 @@ test("mért (S11 OCR-mérés): ha a döntő olvasatot a program elveti, az első
   const failing = dualReadOcr(async () => "Előkelők: papok és határak", async () => "Előkelők: papok és katonák", async () => { throw new Error("időtúllépés"); });
   assert.match(await failing(file), /határak⟦\?⟧/);
 });
+
+test("S11/2: a harmadik olvasat 2 a 3-ból dönt — egyező olvasat nyer, a jel lekerül; egyezés nélkül a jel marad; új szöveget nem ír", async () => {
+  const { resolveByThirdReading } = await import("../server/studio/ocr");
+  const disputes = [{ first: "határak", second: "katonák" }, { first: "Kesia, Föld - Felt.", second: "Ásia, Kösel-Felet" }];
+  const marked = "Előkelők: papok és határak⟦?⟧\nKesia, Föld - Felt.⟦?⟧ térsége";
+  const out = resolveByThirdReading(marked, disputes, "Előkelők: papok és katonák\nÁzsia, Közel-Kelet térsége");
+  assert.match(out, /papok és katonák\n/, "a harmadik a második olvasattal egyezett → az nyer, jel nélkül");
+  assert.match(out, /Kesia, Föld - Felt\.⟦\?⟧/, "egyik olvasattal sem egyezett → a jel marad (nem ír új szöveget)");
+  assert.doesNotMatch(out, /Közel-Kelet/);
+});
+
+test("S11/2: a dualReadOcr a jelölt vitánál meghívja a harmadik olvasót; hibánál a jelölt átirat marad", async () => {
+  const file = { name: "fuzet.jpg", kind: "image", content: "data:image/jpeg;base64,AA" } as ExtractorFile;
+  let thirdCalls = 0;
+  const ok = dualReadOcr(async () => "Előkelők: papok és határak", async () => "Előkelők: papok és katonák", async (_f, first) => first, async () => { thirdCalls++; return "Előkelők: papok és katonák"; });
+  assert.equal(await ok(file), "Előkelők: papok és katonák");
+  assert.equal(thirdCalls, 1);
+  const failing = dualReadOcr(async () => "Előkelők: papok és határak", async () => "Előkelők: papok és katonák", async (_f, first) => first, async () => { throw new Error("hiba"); });
+  assert.match(await failing(file), /határak⟦\?⟧/);
+  const clean = dualReadOcr(async () => "egyforma", async () => "egyforma", async (_f, first) => first, async () => { thirdCalls++; return "x"; });
+  await clean(file);
+  assert.equal(thirdCalls, 1, "vita nélkül nincs harmadik olvasás");
+});

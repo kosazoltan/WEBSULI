@@ -97,6 +97,12 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
 export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
 
 /**
+ * Spec 2026-10-05-s11/2 (tulajdonosi döntés): a vitatott OCR-helyek harmadik, erős, független olvasója (2 a 3-ból). Mért a
+ * Mezopotámia-füzetfotón: gpt-6.1-sol 8,3 s alatt szinte hibátlan olvasat (a két alap-olvasó 11 helyen eltért).
+ */
+export const OCR_THIRD_READER_MODEL = "gpt-6.1-sol";
+
+/**
  * Spec 2026-09-30 (U6, C11): modellenkénti kimeneti plafon a hosszkorlát utáni EGYSZERI nagyobb kerethez. Forrás: az
  * OpenRouter /models lista `top_provider.max_completion_tokens` mezője, 2026-09-30-án lekérve
  * (`docs/specs/2026-09-30-utasitasrendszer-rendbetetel-astra/evidence-models-raw.json`). Ismeretlen modellnél nincs

@@ -39,3 +39,11 @@ mély oka forrás-oldali.
   OCR-je — csak OCR-hívás, néhány cent — a „társadalom” keretet sorszámozva adja).
 - A gyereknek szóló leckében nincs `⟦?⟧` / `[KERET` jelölő (teszt).
 - Teljes unit, tsc, lint zöld; a meglévő OCR-tesztek a dokumentált változásig változatlanok.
+
+## S11/2 — harmadik, erős olvasó a vitatott helyekre (tulajdonosi döntés 2026-10-05, a friss élő futás után)
+Mért: a friss futás az S11-gyel „túl bizonytalan átirat” hibával megállt (10 fogalomból 3 igazolt; 11 eltérés a két olvasó között).
+Szabály: ha a döntő átiratban `⟦?⟧` maradt, egy erős látómodell FÜGGETLENÜL újraolvassa az oldalt; minden jelölt vitánál a 2 a 3-ból
+szavazás dönt (a harmadik olvasat tokenre egyezik az egyik vitatott olvasattal → az nyer, a jel lekerül); egyezés nélkül a jel marad.
+A harmadik olvasó NEM írhat új szöveget (csak a két meglévő olvasat közül választ). Hibánál/hiánynál a jelölt átirat marad (fail-safe).
+Elfogadás: a Mezopotámia-fotón a jelölt helyek többsége feloldódik, a térkép gépi jóváhagyása átmegy, és a „Közel-Kelet” sor nem válik
+hamis ténnyé (vagy helyes, vagy jelölt marad).
