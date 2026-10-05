@@ -4,7 +4,7 @@ import { stepStreamIdleMs } from "../ai/studio-provider";
 import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { logger } from "../lib/logger";
 import { workflowCheckpoint, workflowOrchestratorAllow, workflowRecordFailure, workflowUsage } from "../workflows/engine";
-import { ORCHESTRATOR_MAX_ROUNDS, ORCHESTRATOR_MODELS, orchestrate, withCorrectivePrompt, type FailureKind, type OrchestratorInput, type OrchestratorResult } from "../workflows/orchestrator";
+import { echoesInput, ORCHESTRATOR_MAX_ROUNDS, ORCHESTRATOR_MODELS, orchestrate, withCorrectivePrompt, type FailureKind, type OrchestratorInput, type OrchestratorResult } from "../workflows/orchestrator";
 import { StepModelError } from "./run-step";
 import { withSupportSkill } from "./support-skills";
 
@@ -36,19 +36,8 @@ export function failureKindOf(error: unknown): FailureKind | null {
   return null;
 }
 
-/** A javító prompt nem lehet a bukott kimenet / bemenet szó szerinti továbbítása (≥ 200 karakteres egyező darab) — injekció ellen. */
-export function echoesInput(corrective: string, sources: Array<string | undefined>): boolean {
-  // Pontos: BÁRMELY 200 karakteres egyező darab (az ablakos mintavétel a 200–299 karakteres másolatot átengedte — teszt mérte).
-  // Olcsó előszűrő: csak ott ellenőriz, ahol a 24 karakteres előtag már szerepel.
-  for (const src of sources) {
-    if (!src || src.length < 200 || corrective.length < 200) continue;
-    for (let i = 0; i + 200 <= src.length; i++) {
-      if (!corrective.includes(src.slice(i, i + 24))) continue;
-      if (corrective.includes(src.slice(i, i + 200))) return true;
-    }
-  }
-  return false;
-}
+/** A javító prompt injekció-szűrése az orkesztrátor-magban (review #190); itt a meglévő hívók miatt újraexportálva. */
+export { echoesInput };
 
 export type OrchestrationDeps = {
   providerFactory: (model: string, step?: string) => IAIProvider;
