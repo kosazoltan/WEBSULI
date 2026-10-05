@@ -1,0 +1,4531 @@
+{
+  "measuredAt": "2026-10-05T14:25:39.016Z",
+  "mode": "all",
+  "models": [
+    "z-ai/glm-5.3-flash",
+    "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash"
+  ],
+  "lessons": 201,
+  "agreed": 197,
+  "review": 4,
+  "unclassified": 0,
+  "pilotSubjectAgreement": "10/10",
+  "pilotTypeAgreement": "9/10",
+  "tokens": {
+    "in": 1283427,
+    "out": 119548,
+    "perLessonIn": 6385,
+    "perLessonOut": 595
+  },
+  "results": [
+    {
+      "provenance": "legacy_html:aa3cf1e0-6815-4af4-a836-a4fd80b02161",
+      "title": "8.osztály  anyagforgalom jelentősége és az előbél felépítése",
+      "ms": 9266,
+      "usage": {
+        "promptTokens": 5882,
+        "completionTokens": 422
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Emésztőrendszer, anyagforgalom",
+      "topic": "Anyagforgalom és az előbél felépítése",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Az emberi szervezet energiaforgalma', 'A szájüreg anatómiája', 'A gyomor'; magyarázó tartalom tápanyagokról, vitaminokról, emésztőrendszer felépítéséről."
+    },
+    {
+      "provenance": "legacy_html:b7861b2e-b3cc-4e79-abff-58f88cf69071",
+      "title": "8. osztályos hőtan",
+      "ms": 6699,
+      "usage": {
+        "promptTokens": 6569,
+        "completionTokens": 477
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "fizika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Hőtan",
+      "topic": "Hőjelenségek: halmazállapotok, hőátadás, belső energia",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Fejezetek: 'Halmazállapot-változások', 'Belső energia', 'Hőátadás módjai'; 'Feladatok (15 db)', 'Kvíz (25 kérdés)' – több hőtani témakört átfogó teljes tananyag + gyakorló.",
+      "subjectOk": true,
+      "typeOk": false
+    },
+    {
+      "provenance": "legacy_html:6e3331f4-e1ef-4d21-902f-c6e6c0cfffeb",
+      "title": "Harmadik osztályos matek angol-magyar",
+      "ms": 11426,
+      "usage": {
+        "promptTokens": 7291,
+        "completionTokens": 380
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [
+        "angol"
+      ],
+      "grade": 3,
+      "topicArea": "Szorzás",
+      "topic": "A szorzás és a szorzótábla",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a szorzás?', 'A szorzótábla', 'A szorzás tulajdonságai'; magyarázó szöveg szorzótáblákkal és példafeladatokkal, angol szakszavakkal (multiplication, factor, product)."
+    },
+    {
+      "provenance": "legacy_html:a07288fb-0c15-4e5e-8ba7-1f9ee6d4be76",
+      "title": "3. Osztály matek szorzás",
+      "ms": 10132,
+      "usage": {
+        "promptTokens": 5848,
+        "completionTokens": 593
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Szorzás",
+      "topic": "A szorzás: fogalom, tényezők, szorzótábla, szöveges feladatok",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Mi a szorzás? – az ismételt összeadás rövid írásmódja”, „A szorzás részei: tényező, tényező, szorzat”, „A szorzótábla és a különleges szorzások”, „Szöveges feladatok megoldása szorzással”; magyarázat, kidolgozott példák és mini-összefoglalók egyetlen témakörben."
+    },
+    {
+      "provenance": "legacy_html:d2cfe174-6951-4862-b0a0-7abc41d93dd2",
+      "title": "4. Osztály Angol Nyelvtan - Témazáró Felkészítő",
+      "ms": 9843,
+      "usage": {
+        "promptTokens": 6202,
+        "completionTokens": 484
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Angol nyelvtan",
+      "topic": "\"To be\" ige és birtokos melléknevek",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Tartalom: 'Mi a \"to be\" ige', 'Birtokos melléknevek', 'Gyakorló Kérdések – 15 Feladat', 'Témazáró Kvíz – 25 Kérdés'; több témakört ölel fel, magyarázattal és kvízzel, célynyelv az angol."
+    },
+    {
+      "provenance": "legacy_html:c41a24f3-2ac5-49a4-9ba0-3772632b6957",
+      "title": "4. Osztály Telling the Time  Az óra kifejezése",
+      "ms": 12455,
+      "usage": {
+        "promptTokens": 6595,
+        "completionTokens": 471
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "szókincs és nyelvi formák",
+      "topic": "Az idő kifejezése angolul",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Szókincstáblák (What time is it?, half past two), prepozíciógyakorlás (past/to, at), rövid kvízkérdések és kifejezés-gyakorlás jellemzik; a célnyelv az angol, magyarázat magyarul.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:56e3a4a0-3d03-4770-9026-1d4a9a96d997",
+      "title": "8. Osztály Francia október",
+      "ms": 15511,
+      "usage": {
+        "promptTokens": 6246,
+        "completionTokens": 663
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "francia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Francia nyelv – kultúra, olvasáskészség",
+      "topic": "Október 7-i ünnepek Franciaországban",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Francia szöveg magyar kiejtéssel és fordítással ('Francia szöveg', 'Kiejtés (magyarosan)', 'Magyar fordítás'), több témakör (vallási ünnep, Munka Világnapja, Pamut Világnapja), '15 kérdés - Szöveges feladatok' és 'Összefoglaló táblázat' jelzi az átfogó felkészítést."
+    },
+    {
+      "provenance": "legacy_html:bfd097b3-0214-4345-a163-bdc01b0307bd",
+      "title": "8. Osztály Ady endre tananyag teljes",
+      "ms": 10435,
+      "usage": {
+        "promptTokens": 5811,
+        "completionTokens": 354
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "20. századi magyar irodalom",
+      "topic": "Ady Endre élete és költészete",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "'Ady Endre - Témazáró dolgozat tananyag', 'Kvíz - Teszteld tudásod', fejezetek: Új versek (1906), Ady szimbólumai, Ady és a Holnap – több témakört átfogó felkészítő anyag."
+    },
+    {
+      "provenance": "legacy_html:8d4635eb-6918-4871-b667-6bdc9f09a666",
+      "title": "8. Osztály Az ember testfelépítése és mozgása",
+      "ms": 25279,
+      "usage": {
+        "promptTokens": 6314,
+        "completionTokens": 844
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Az ember testfelépítése és mozgása",
+      "topic": "Emberi test, bőr, csontváz és izmok",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Az emberi test felépítését, a bőr szerepét, a csontváz feladatait és az izmok működését magyarázó fejezetek, összefoglaló és ellenőrző kérdések.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:f08fdfb8-2d9f-4206-93bd-f7cde6459a96",
+      "title": "5. Osztály Bibliaismeret a biblia könyvei",
+      "ms": 7951,
+      "usage": {
+        "promptTokens": 6893,
+        "completionTokens": 363
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "hit-es-erkolcstan",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Bibliaismeret",
+      "topic": "A Biblia könyvei és felosztása",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a Biblia?', 'A Biblia két nagy része', 'Az Ószövetség felosztása', 'Az Újszövetség felosztása' — magyarázó, fogalomtanító struktúra; Biblia felépítése és üdvtörténet."
+    },
+    {
+      "provenance": "legacy_html:67d3d5a7-0e02-4b11-b2e4-56c5fa958035",
+      "title": "Az emberré válás folyamata - 5. osztály",
+      "ms": 10851,
+      "usage": {
+        "promptTokens": 5740,
+        "completionTokens": 425
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Őskor, az ember fejlődése",
+      "topic": "Az emberré válás folyamata és főbb szakaszai",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A fejlődés főbb szakaszai', 'Homo habilis', 'Homo erectus', 'Crô-Magnoni ember'; magyarázó fejezetek, összefoglalás, kvíz jellemzik.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:52cb0c2e-9ecf-4628-8316-a06348e3904c",
+      "title": "8. Osztály TESZT Az anyagforgalom jelentősége és az előbél felépítése",
+      "ms": 11403,
+      "usage": {
+        "promptTokens": 6609,
+        "completionTokens": 614
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Emésztés és anyagforgalom",
+      "topic": "Anyagforgalom, tápanyagok és az előbél",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Fejezetek: 'Az anyagforgalom négy lépése', 'A tápanyagok – szénhidrátok', 'A szájüreg – az emésztés kezdete'; magyarázó szöveg tápanyagokról, emésztőrendszerről, ellenőrző kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:7ad8a89c-272b-4e06-94f7-ad9b6a2e43b6",
+      "title": "4. osztály Cselekvés, Történés, Igék - Témazáró Felkészítő",
+      "ms": 13214,
+      "usage": {
+        "promptTokens": 6218,
+        "completionTokens": 1297
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Nyelvtan – szófajok",
+      "topic": "Cselekvést és történést kifejező igék",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Tanári magyarázat: 'A cselekvést és történést jelentő szavakat igéknek nevezzük'; igeragozás, igeidők, ellentétes/rokon jelentésű igék; quiz tételek a ragozásról és igeidőkről."
+    },
+    {
+      "provenance": "legacy_html:13bd959b-c3f1-4743-a440-26d5515ee756",
+      "title": "5. Osztály kommunikáció tananyag teljes",
+      "ms": 10020,
+      "usage": {
+        "promptTokens": 5812,
+        "completionTokens": 536
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Kommunikáció",
+      "topic": "Kommunikáció: jelek, üzenet, kód, csatorna, beszédhelyzet",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Tanári magyarázatok: 'Mi a kommunikáció?', természetes/mesterséges/nyelvi/nem nyelvi jelek, üzenet, kód, csatorna, beszédhelyzet — a magyar nyelvtan kommunikáció témaköre; feladatok csak a végén."
+    },
+    {
+      "provenance": "legacy_html:aa823d25-6b08-48ef-9439-ab8312dc5d68",
+      "title": "5. Osztály Történelem görögország",
+      "ms": 11768,
+      "usage": {
+        "promptTokens": 5677,
+        "completionTokens": 398
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Ókori Görögország",
+      "topic": "Görög városállamok, kultúra és örökség",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A városállamok (polisz)', 'ATHÉN - tudás városa', 'SPÁRTA - katonák városa', 'Görög istenek', 'Olimpiai játékok'; tanári magyarázatok, összefoglaló, kvíz — fogalomtanító történelemtartalom."
+    },
+    {
+      "provenance": "legacy_html:e03c2f74-5e65-4dac-aacc-87e0ab239c15",
+      "title": "8. Osztály földrajz Magyarország gazdasága",
+      "ms": 6779,
+      "usage": {
+        "promptTokens": 6785,
+        "completionTokens": 384
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "foldrajz",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Magyarország gazdasága",
+      "topic": "Gazdasági ágazatok, kereskedelem, regionális különbségek",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Fejezetek: mezőgazdaság, ipar, szolgáltatások, külkereskedelem, regionális különbségek; 'Témazáró tananyag', 'Mit kell tudni a témazáróhoz?', 25 kérdéses témazáró kvíz."
+    },
+    {
+      "provenance": "legacy_html:bfa1bf47-7cde-402e-a85d-12104648f223",
+      "title": "8. Osztály Green war novell",
+      "ms": 9238,
+      "usage": {
+        "promptTokens": 5331,
+        "completionTokens": 285
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "szövegértés",
+      "topic": "The Green Wars novella feldolgozása",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "Angol nyelvű story szöveg és comprehension kérdések: 'The Green Wars - Full Story', 'Comprehension Questions (15 Questions)', 'Multiple Choice Quiz' – idegen nyelvi olvasásértés, irodalmi mű feldolgozása."
+    },
+    {
+      "provenance": "legacy_html:c0fac1db-088f-43dc-9e0a-ce7a95c5cf86",
+      "title": "5. Osztály Arany János családi kör teljes tananyag",
+      "ms": 13838,
+      "usage": {
+        "promptTokens": 6765,
+        "completionTokens": 407
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "líra",
+      "topic": "Arany János: Családi kör",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "A vers teljes szövege, versszakonkénti elemzés, műfaj (lírai idill), irodalmi eszközök, szimbólumok, kvíz és szöveges feladatok – irodalmi mű feldolgozása."
+    },
+    {
+      "provenance": "legacy_html:71631735-1c78-4930-9e3c-2063c6019ad0",
+      "title": "8. Osztály Energia és energiaváltozások",
+      "ms": 14177,
+      "usage": {
+        "promptTokens": 7803,
+        "completionTokens": 472
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "fizika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Hőtan",
+      "topic": "Energia és energiaváltozások: belső energia, hő, kalorimetria",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Fejezetek: Belső energia, Hő, Fajhő, Olvadáshő, Párolgáshő, Kalorimetria alaptörvénye; cím: 'Átfogó felkészítő témazáró dolgozathoz'; sok számítási feladat és kvíz több hőtani témakörben."
+    },
+    {
+      "provenance": "legacy_html:2403df64-621f-4fec-afb3-5d21dcd90566",
+      "title": "4 osztályos környezetismeret Budapest, barangolás, Alföld",
+      "ms": 17905,
+      "usage": {
+        "promptTokens": 6728,
+        "completionTokens": 722
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Budapest és az Alföld",
+      "topic": "Budapest és az Alföld jellemzői",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakör (Budapest, természetjárás, Alföld), '✅ Tanulási tippek a témazáróhoz' és 'Összefoglalás' fejezetek, quiz- és short_answer tételek jelzik a témazáró-felkészítést."
+    },
+    {
+      "provenance": "legacy_html:dd99029c-8eae-4768-b3e3-2e3511d09537",
+      "title": "8. Osztály Az emberré válás folyamata és a történelem forrásai",
+      "ms": 7089,
+      "usage": {
+        "promptTokens": 5767,
+        "completionTokens": 616
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Őstörténet",
+      "topic": "Az emberré válás és a történelem forrásai",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "„Témazáró felkészítő tananyag” alcím; témakörök: „Mi a történelem?”, „A történelem forrásai”, „Az emberré válás folyamata”, „A tűz felfedezése”, „Homo sapiens” – több témakör, kvíz és szöveges feladatok."
+    },
+    {
+      "provenance": "legacy_html:6f879cf8-d9d7-431f-a029-8e3270fd28d1",
+      "title": "8. osztály algebra",
+      "ms": 7928,
+      "usage": {
+        "promptTokens": 6488,
+        "completionTokens": 382
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "algebra",
+      "topic": "Betűs kifejezések, egyenletek, szöveges feladatok",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Cím és tartalom: „Algebra – Témazáró Felkészítő"
+    },
+    {
+      "provenance": "legacy_html:37c4179d-0adc-4c2f-a438-997aee7604f3",
+      "title": "5 osztály Magyar Irodalom Jókai Mór",
+      "ms": 83504,
+      "usage": {
+        "promptTokens": 6469,
+        "completionTokens": 985
+      },
+      "status": "review",
+      "reason": "eltérő tantárgy: magyar-nyelvtan / magyar-irodalom",
+      "candidates": [
+        {
+          "model": "z-ai/glm-5.3-flash",
+          "classification": {
+            "subject": "magyar-nyelvtan",
+            "secondarySubjects": [
+              "magyar-irodalom"
+            ],
+            "grade": 5,
+            "topicArea": "Helyesírás alapelvei és Jókai Mór élete",
+            "topic": "Helyesírás alapelvei, Jókai Mór pályája",
+            "lessonType": "temazaro-felkeszito",
+            "confidence": "high",
+            "evidence": "Fejezetek: 'A kiejtés elve', 'A szóelemzés elve', 'Helyesírás alapelvei' (nyelvtan) és 'Jókai Mór - Időrend', 'Pályakezdése' (irodalom); cím: 'Témazáró felkészítő' – több témakör keverése."
+          }
+        },
+        {
+          "model": "deepseek/deepseek-v4.1-flash",
+          "classification": {
+            "subject": "magyar-irodalom",
+            "secondarySubjects": [
+              "magyar-nyelvtan"
+            ],
+            "grade": 5,
+            "topicArea": "Magyar nyelv és irodalom",
+            "topic": "Helyesírás alapelvei és Jókai Mór",
+            "lessonType": "temazaro-felkeszito",
+            "confidence": "medium",
+            "evidence": "A tananyag címe 'Témazáró felkészítő - Helyesírás alapelvei & Jókai Mór', két témakört kever: nyelvtani helyesírási alapelveket (kiejtés, szóelemzés, hagyomány, egyszerűsítés) és Jókai Mór életrajzát, időrendjét, fogalmait, kvízekkel."
+          }
+        }
+      ]
+    },
+    {
+      "provenance": "legacy_html:e35a6b68-5db2-4dcd-8601-89e457564a07",
+      "title": "5. osztály hívatlan látogató természettan",
+      "ms": 7913,
+      "usage": {
+        "promptTokens": 5668,
+        "completionTokens": 428
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "kártevők és kórokozók a kertben",
+      "topic": "Kerti kártevők és gombás betegségek",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "„Biológia – 5. osztály”; fejezetek: moníliás gyümölcsrothadás, peronoszpóra, csigák, burgonyabogár fejlődése; magyarázó szöveg, új fogalmak, ellenőrző kérdések"
+    },
+    {
+      "provenance": "legacy_html:ba94fbf9-7b0e-424d-a7b8-d7571234ea11",
+      "title": "4. Osztály all about me english",
+      "ms": 15008,
+      "usage": {
+        "promptTokens": 5182,
+        "completionTokens": 282
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Unit 2 – All About Me",
+      "topic": "birtoklás (have got), these/those, can, szókincs",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Több témakör keveredése: 'Grammar – Have Got', 'These / Those', 'Can', 'Vocabulary Revision', 'Grammar Revision', 'Communication Practice', '🎯 Quiz' – egységzáró, mérésre felkészítő jelleg."
+    },
+    {
+      "provenance": "legacy_html:474c2dc1-cc23-4db7-9f63-b8f2340ec5cc",
+      "title": "4. Osztály all about me",
+      "ms": 12905,
+      "usage": {
+        "promptTokens": 5548,
+        "completionTokens": 490
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "All About Me – szókincs és nyelvtan",
+      "topic": "Birtoklás, mutatás, képesség kifejezése angolul",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Vocabulary listák (watch, hoody, dog), Grammar: have got, these/those, Whose, Can; quiz-kérdések rövid nyelvi gyakorlattal."
+    },
+    {
+      "provenance": "legacy_html:9052ec2f-a16c-4f6b-a713-fc8efefea75a",
+      "title": "4. Osztály Alpokalja Dunántúl",
+      "ms": 56856,
+      "usage": {
+        "promptTokens": 9673,
+        "completionTokens": 2379
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Hazánk földrajza",
+      "topic": "Alpokalja és a Dunántúli-dombság",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Hol helyezkedik el?', 'Felszíne és hegységei', 'Éghajlat és élővilág', 'A Balaton és környéke' – tájak, élővilág, települések magyarázata; 4. évfolyamos integrált hazai tájismeret, kvízzel és gondolkodtató kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:0d147ecd-5c5f-46e7-879f-7b74f843a136",
+      "title": "8 osztályos tananyag Savak és savmaradékok",
+      "ms": 19179,
+      "usage": {
+        "promptTokens": 6680,
+        "completionTokens": 613
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kemia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Savak és savmaradékok",
+      "topic": "Savak tulajdonságai, savmaradék-ionok, pH",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Cím és tartalom: „Témazáró felkészítő”, fejezetek: „Savak kémiai tulajdonságai”, „A savmaradék fogalma”, „pH-skála”; 15 szöveges feladat + 25 kérdéses kvíz több témakört ölel fel."
+    },
+    {
+      "provenance": "legacy_html:41556a7d-2539-47e1-bfb4-e9833a925566",
+      "title": "8. osztály nyelvtan határozók",
+      "ms": 13674,
+      "usage": {
+        "promptTokens": 6907,
+        "completionTokens": 413
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "nyelvtan",
+      "topic": "határozók és fajtáik",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: '1. Mi a határozó?', '2. A határozók fő csoportjai' – 12 határozótípus táblázattal, magyarázatok, majd gyakorló feladatok és kvíz; fő rész a fogalom magyarázata."
+    },
+    {
+      "provenance": "legacy_html:6db199e7-815c-4929-9996-de196172ccf4",
+      "title": "3. osztályos matek űrkaland alapműveletek",
+      "ms": 4134,
+      "usage": {
+        "promptTokens": 4118,
+        "completionTokens": 341
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "alapműveletek",
+      "topic": "összeadás, kivonás, szorzás, osztás gyakorlása",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "„150 szuper matek-küldetés”, „Villámszámolás”, feladatok: „120 + 340 = ?”, „8 × ☐ = 56”, szöveges feladatok pénzzel, busszal — túlnyomórészt gyakorló feladatok, kevés magyarázat."
+    },
+    {
+      "provenance": "legacy_html:83ceef73-70c4-4226-9870-3985753a1ace",
+      "title": "5. Osztály növények testfelépítése",
+      "ms": 41155,
+      "usage": {
+        "promptTokens": 9625,
+        "completionTokens": 4476
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Növények testfelépítése",
+      "topic": "A növény szervei és működésük",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Fejezetek: 'A növény testének fő részei', 'Gyökérzet', 'Szár'; 'Tanári magyarázat' és 'Kiegészítő fogalmi magyarázat' a gyökérszőr, szállítószövet, fás/lágy szár fogalmairól. Egyetlen témakör (növény testfelépítése) magyarázattal és kvízkérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:d1cbfb26-577a-4681-a828-86831a5f9886",
+      "title": "8. Osztály Abigél",
+      "ms": 7290,
+      "usage": {
+        "promptTokens": 6555,
+        "completionTokens": 338
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Szabó Magda: Abigél",
+      "topic": "Abigél regény feldolgozása",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "Szabó Magda élete, Gina és a Matula cselekménye, szereplőjellemzés, szimbólumok, műfaj: ifjúsági regény kvízkérdések"
+    },
+    {
+      "provenance": "legacy_html:1d905a9f-0045-45c8-89d1-bef9365c345f",
+      "title": "4. osztály - Igekötők és igék",
+      "ms": 74330,
+      "usage": {
+        "promptTokens": 6546,
+        "completionTokens": 1018
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Szófajok, helyesírás",
+      "topic": "Igekötők és igék",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „2.1. Az ige fogalma\", „2.2. Az igekötő fogalma\", „2.3. Igekötős igék\", „Helyesírási és használati szabályok\" – magyarázat, tanári megjegyzés, példák, majd gyakorló feladatok és kvíz."
+    },
+    {
+      "provenance": "legacy_html:14bcedea-ed4e-4842-b594-0e09ec058efc",
+      "title": "5. osztály törtek Egyszerűsítése és bővítése",
+      "ms": 13254,
+      "usage": {
+        "promptTokens": 6364,
+        "completionTokens": 338
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "törtek",
+      "topic": "Törtek egyszerűsítése és bővítése",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az a tört?', 'Hogyan egyszerűsítünk törteket?', 'Mi az a tört bővítése?'; magyarázatok (LNKO, számláló/nevező), gyakorló példák, ellenőrző kérdések – egy témakör fogalom-tanító feldolgozása.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:c6b4656c-c292-45ea-8471-39273802188b",
+      "title": "8. osztály - Bolyai Természettudományi Felkészítő",
+      "ms": 16345,
+      "usage": {
+        "promptTokens": 7330,
+        "completionTokens": 1569
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [
+        "matematika",
+        "kemia",
+        "fizika"
+      ],
+      "grade": 8,
+      "topicArea": "Bolyai természettudományi versenyfelkészítés",
+      "topic": "Több témakört átfogó természettudományi felkészítő",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Cím: 'Bolyai Természettudományi Felkészítő: Matematika • Kémia • Fizika • Biológia • Földrajz'; fejezetek több tárgyból (ceruza-cérna matematika, PVC kémia, hőtágulás fizika, országok földrajz); 100 kérdéses quiz több témakörben."
+    },
+    {
+      "provenance": "legacy_html:ba65a525-9330-42d5-a175-ef5ed7ee9252",
+      "title": "5. osztály - ĐURAĐ (GYÖRGY) BRANKOVIĆ",
+      "ms": 10049,
+      "usage": {
+        "promptTokens": 8792,
+        "completionTokens": 863
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Középkori Szerbia történelme",
+      "topic": "Đurađ Branković szerb despota élete és uralkodása",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Történelmi háttér”, „Fő események időrendben”, „Kettős hűbériség”; tartalom: Smederevo, Szegedi béke, oszmán terjeszkedés, Nándorfehérvár – történelmi személyiség feldolgozása magyarázattal és értelmező kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:CGZZrsPlmLsZD_eog31OV",
+      "title": "Határozók A, Á - 8. osztályos nyelvtan",
+      "ms": 24236,
+      "usage": {
+        "promptTokens": 9836,
+        "completionTokens": 816
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Nyelvtan",
+      "topic": "Határozók: A, Á, T végű határozók",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a határozó?', 'Helyhatározó', 'Ragok és jelek a határozóknál'; magyarázó tartalom, példák, ellenőrző kérdések, kvíz."
+    },
+    {
+      "provenance": "legacy_html:p0zzBVSIV-xty-XWGB2ZC",
+      "title": "Programozási alapismeretek - GitHub Kezdőknek",
+      "ms": 8503,
+      "usage": {
+        "promptTokens": 5546,
+        "completionTokens": 366
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Programozási eszközök",
+      "topic": "GitHub és Git alapok kezdőknek",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Fejezetek: 'Mi az a GitHub?', 'Alapfogalmak', Git parancsok (git clone, git push), commit üzenetek, lépésről lépésre magyarázat eszközhasználathoz/projekthez."
+    },
+    {
+      "provenance": "legacy_html:tltJ7T26DZi1Yy_Xftv0D",
+      "title": "Programozási alapismeretek - Windows Fejlesztői Környezet",
+      "ms": 17429,
+      "usage": {
+        "promptTokens": 5665,
+        "completionTokens": 552
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Fejlesztői környezet",
+      "topic": "Windows fejlesztői környezet kialakítása",
+      "lessonType": "gyakorlati-projekt",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Visual Studio Code telepítése', 'Git for Windows telepítése', 'Node.js és npm telepítése' — eszköztelepítés és beállítás lépésről lépésre, gyakorlati útmutató kezdőknek."
+    },
+    {
+      "provenance": "legacy_html:fiCtktjV2STlyXpEBDtTn",
+      "title": "3. osztály - Daily Routines - Napi Rutinok Angolul",
+      "ms": 9114,
+      "usage": {
+        "promptTokens": 6023,
+        "completionTokens": 348
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "napi rutinok",
+      "topic": "Daily routines – mindennapi tevékenységek angolul",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Szószedet napi tevékenységekkel (I wake up, I brush my teeth), időprepozíciók magyarázata (at seven o'clock, in the morning, by bus), rövid kitöltős és kvízkérdések szókincsre és nyelvi formákra."
+    },
+    {
+      "provenance": "legacy_html:vkgBtZ7CbozDWwRVVQvGX",
+      "title": "A család és a nemzeti identitás - 8. osztály",
+      "ms": 10003,
+      "usage": {
+        "promptTokens": 6671,
+        "completionTokens": 1352
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "hit-es-erkolcstan",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Család és nemzeti identitás",
+      "topic": "A család funkciói és a nemzeti identitás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "A szöveg maga is 'hittan/erkölcstan tananyag'-ként jelöli; család funkciói, szocializáció, nemzet, patriotizmus, nemzeti ünnepek (Március 15., Augusztus 20.) témakörök, magyarázó fejezetekkel."
+    },
+    {
+      "provenance": "legacy_html:Wp_Ly5eQhePlDu8TQ85FM",
+      "title": "Az Ókori Kelet Civilizációi - 8. osztály",
+      "ms": 9538,
+      "usage": {
+        "promptTokens": 6727,
+        "completionTokens": 478
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Ókori Kelet",
+      "topic": "Az ókori keleti civilizációk: Mezopotámia, Egyiptom, India, Kína",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Több témakör (Mezopotámia, Egyiptom, Izrael, Fönícia, India, Kína) összefoglaló táblázattal, szöveges feladatokkal, kvízzel és értékeléssel – témazáró jellegű felkészítő."
+    },
+    {
+      "provenance": "legacy_html:02sEhHTX6yvjQgrgAkg_6",
+      "title": "5. osztály - Arany János: Családi kör - Interaktív Tananyag",
+      "ms": 7127,
+      "usage": {
+        "promptTokens": 6548,
+        "completionTokens": 368
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Líra",
+      "topic": "Arany János: Családi kör elemzése",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "A vers teljes szövege, Keletkezés, Forma és szerkezet, Stilisztikai eszközök fejezetek; kvízkérdések a versről (1851, paraszti származás, nosztalgia)."
+    },
+    {
+      "provenance": "legacy_html:WxCKg-Oss4ndgQmeH7gUB",
+      "title": "4. osztály - Halloween Poems - Angol Nyelv Lecke",
+      "ms": 12687,
+      "usage": {
+        "promptTokens": 4876,
+        "completionTokens": 424
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Halloween",
+      "topic": "Halloween versek és szókincs",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Angol nyelvű versek (Trick or Treat, Spooky Night), szójegyzék 'Új szavak ebből a versből', kvíz kérdések szókincsre ('What is \"pumpkin\" in Hungarian?')"
+    },
+    {
+      "provenance": "legacy_html:3j1DnOnG1Lts-YPCic70R",
+      "title": "Programozási alapismeretek - VS Code & GitHub Fejlesztői Útmutató - Claude Code-dal",
+      "ms": 10244,
+      "usage": {
+        "promptTokens": 5812,
+        "completionTokens": 619
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Szoftverfejlesztői eszközök",
+      "topic": "VS Code és GitHub használata fejlesztőként",
+      "lessonType": "gyakorlati-projekt",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'VS Code Felépítése', 'Terminál Használat', 'Repository Létrehozás & Klónozás', 'Commit, Push, Pull Műveletek', 'Branch-ek Használata' — eszközhasználati, gyakorlati fejlesztői útmutató projektciklussal."
+    },
+    {
+      "provenance": "legacy_html:gcZE8I5cVw-U7L-ajAuPB",
+      "title": "3. osztály - Szorzás és maradékos osztás - Interaktív tananyag",
+      "ms": 11847,
+      "usage": {
+        "promptTokens": 6613,
+        "completionTokens": 361
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Szorzás és osztás",
+      "topic": "A szorzás és a maradékos osztás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A szorzás jelentése', 'A maradékos osztás jelentése', magyarázatok, lépésről lépésre példák, majd gyakorló feladatok és kvíz; a magyarázat a fő rész."
+    },
+    {
+      "provenance": "legacy_html:EdM2-2jaU6oVroGfRCcoL",
+      "title": "5. osztály - A mézelő méh - Interaktív tananyag",
+      "ms": 69213,
+      "usage": {
+        "promptTokens": 6270,
+        "completionTokens": 479
+      },
+      "status": "review",
+      "reason": "eltérő tantárgy: biologia / termeszetismeret",
+      "candidates": [
+        {
+          "model": "z-ai/glm-5.3-flash",
+          "classification": {
+            "subject": "biologia",
+            "secondarySubjects": [],
+            "grade": 5,
+            "topicArea": "Rovarok / állattan",
+            "topic": "A mézelő méh testfelépítése, élete és haszna",
+            "lessonType": "fogalomtanito",
+            "confidence": "high",
+            "evidence": "Fejezetek: testfelépítés, méhcsalád tagjai, beporzás, életciklus; tanári magyarázatok, fogalom-összefoglaló, kvíz – magyarázó tartalomlecke biológiai tudással (rovarok, ökoszisztéma)."
+          }
+        },
+        {
+          "model": "deepseek/deepseek-v4.1-flash",
+          "classification": {
+            "subject": "termeszetismeret",
+            "secondarySubjects": [],
+            "grade": 5,
+            "topicArea": "Élővilág – rovarok",
+            "topic": "A mézelő méh felépítése és élete",
+            "lessonType": "fogalomtanito",
+            "confidence": "high",
+            "evidence": "5. osztályos integrált természettudományos tartalom: „A méh teste három fő részre tagolódik"
+          }
+        }
+      ]
+    },
+    {
+      "provenance": "legacy_html:lVFj6JdHWSCQSmY_xfPBE",
+      "title": "5. osztály - Hagyomány szerinti és egyszerűsítő írásmód",
+      "ms": 6039,
+      "usage": {
+        "promptTokens": 6222,
+        "completionTokens": 480
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "helyesírás",
+      "topic": "Hagyomány szerinti és egyszerűsítő írásmód",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a hagyomány szerinti és egyszerűsítő írásmód?', 'Hagyomány szerinti írásmód', 'Egyszerűsítő írásmód', 'Összefoglaló táblázat'; magyarázat és példák a hasonulásról, helyesírás szabályokról.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:kLYcLIze0rKZRPK86-lyS",
+      "title": "A testek elektromos állapota - 8. osztály",
+      "ms": 8733,
+      "usage": {
+        "promptTokens": 6382,
+        "completionTokens": 567
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "fizika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Elektromosság",
+      "topic": "Testek elektromos állapota, sztatikus feltöltődés",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: atomfelépítés, dörzsöléses feltöltődés, elektromos megosztás, elektromos mező; magyarázó, fogalom-tanító struktúra gyakorló feladatokkal és kvízzel."
+    },
+    {
+      "provenance": "legacy_html:p4GQxbW0R3cEj9JOv2G6m",
+      "title": "Ókori Keleti Civilizációk 2 - 8. osztály",
+      "ms": 8267,
+      "usage": {
+        "promptTokens": 6274,
+        "completionTokens": 502
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "ókori történelem",
+      "topic": "Ókori keleti civilizációk (India, Kína, Mezopotámia, Egyiptom, Izrael, Fönícia)",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Több témakör (India, Kína, Mezopotámia, Egyiptom, Izrael, Fönícia) egy leckében, 'Gratulálunk!', 'Gyakorló feladatok', 'Kvíz' záró fejezetekkel — témazáró felkészítő jelleg."
+    },
+    {
+      "provenance": "legacy_html:vwXrkXLZkbpWd8R58KcIX",
+      "title": "5. osztály - Magyar Népmesék - Fehérlófia és Tündérszép Ilona",
+      "ms": 9206,
+      "usage": {
+        "promptTokens": 6620,
+        "completionTokens": 484
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Magyar népmesék",
+      "topic": "Fehérlófia és Tündérszép Ilona feldolgozása",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "Két népmese (Fehérlófia, Árgyélus és Ilona) cselekményének fejezetes feldolgozása, tanári magyarázat ok-okozati összefüggésekről, majd gyakorló feladatok és kvíz a mesék tartalmáról."
+    },
+    {
+      "provenance": "legacy_html:57ba5c4b-9fd6-4bcb-b43a-c5adfc41623f",
+      "title": "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona",
+      "ms": 6446,
+      "usage": {
+        "promptTokens": 6225,
+        "completionTokens": 375
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Népmesék",
+      "topic": "Fehérlófia és Tündérszép Ilona feldolgozása",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "Magyar népmesék (Fehérlófia, Tündérszép Ilona és Árgyélus) szövegértése, mesei cselekmény, szereplők, tanulságok; ellenőrző kérdések és kvízek a mesék tartalmáról."
+    },
+    {
+      "provenance": "legacy_html:ca6c41d8-0a4c-4602-898d-c33afb1a3932",
+      "title": "8. osztályos Matematika - Szöveges Feladatok",
+      "ms": 14084,
+      "usage": {
+        "promptTokens": 6923,
+        "completionTokens": 361
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Szöveges feladatok",
+      "topic": "Egyenletes, arányos, sebesség, százalék, sűrűség feladatok",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Cím: 'Szöveges Feladatok - Teljes Témazáró'; több témakör keveredik (egyenlet, munkavégzés, arány, sebesség, százalék, térfogat-tömeg-sűrűség), plusz 'Összetett témazáró feladatsor' és 'Írásbeli Dolgozatok' fejezetek."
+    },
+    {
+      "provenance": "legacy_html:57a51632-018a-4b45-ab5f-413d87ee5ee3",
+      "title": "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona",
+      "ms": 7264,
+      "usage": {
+        "promptTokens": 6203,
+        "completionTokens": 400
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "magyar népmesék",
+      "topic": "Fehérlófia és Tündérszép Ilona és Árgyélus",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "Népmesék (Fehérlófia, Tündérszép Ilona és Árgyélus) cselekményének feldolgozása és szövegértő kérdések: 'Ki volt Fehérlófia édesanyja?', 'Összefoglaló tanulságok'."
+    },
+    {
+      "provenance": "legacy_html:8d3fc600-4689-4bf9-a212-60c4b5c2295f",
+      "title": "Molekulák, ionok és vegyületek - 8. osztály",
+      "ms": 13764,
+      "usage": {
+        "promptTokens": 6194,
+        "completionTokens": 365
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kemia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Kémiai kötések és anyagok felépítése",
+      "topic": "Molekulák, ionok és vegyületek",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Atom – az anyag alapegysége', 'Ionos vegyületek', 'Molekulás (kovalens) vegyületek'; fogalmak magyarázata kovalens kötésről, kationról/anionról, majd gyakorló feladatok és kvíz."
+    },
+    {
+      "provenance": "legacy_html:e3629394-f978-45a7-b8df-7285fb61ed7a",
+      "title": "Jobs - Foglalkozások 🎨 | 3. osztály Angol - Teljes Tananyag",
+      "ms": 27860,
+      "usage": {
+        "promptTokens": 6098,
+        "completionTokens": 490
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "szókincs és nyelvi szerkezetek",
+      "topic": "Foglalkozások (jobs): szókincs, be-ige, munkahely",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Szókincstár foglalkozásokkal (teacher, doctor), 'be' ige használata, workplaces, Basic Conversation kérdés-válasz szerkezetek, sok rövid gyakorló és kvízkérdés – célnyelv az angol.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:6fe62692-7d0c-4fd2-9c71-318fd0e68fa5",
+      "title": "Peru / Life in Peru - 3. osztályos Angol Tananyag",
+      "ms": 14164,
+      "usage": {
+        "promptTokens": 5770,
+        "completionTokens": 436
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [
+        "foldrajz"
+      ],
+      "grade": 3,
+      "topicArea": "Peru / Life in Peru",
+      "topic": "Peru földrajza, élete, szókincse angolul",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Angol szókincslisták magyar fordítással (country, South America, rainforest), magyar–angol fordításos feladatok és szókvízek; cél a nyelvtanulás, tartalom Peru ismerete."
+    },
+    {
+      "provenance": "legacy_html:b73046b3-f681-43b9-ace6-b24b058ceebe",
+      "title": "5. osztály Angol - My Cousin Danny",
+      "ms": 10040,
+      "usage": {
+        "promptTokens": 5970,
+        "completionTokens": 521
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Személy bemutatása, személyleírás",
+      "topic": "Unokatestvér bemutatása: to be, likes szerkezet",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Szószedet (tall, dark, friendly, chatty), nyelvtani szerkezetek (to be, He/She likes + -s), sok rövid kiegészítő/fordító kérdés és kvíz; cél: 'bemutatni valakit angolul'."
+    },
+    {
+      "provenance": "legacy_html:2f7fd2f0-a963-4b2b-91cd-654c59464ea5",
+      "title": "Replit AI - Professzionális Fejlesztés",
+      "ms": 28323,
+      "usage": {
+        "promptTokens": 6728,
+        "completionTokens": 638
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Webfejlesztés Replit AI-val",
+      "topic": "JWT autentikáció, RBAC, responsive design, AI-használat",
+      "lessonType": "fogalomtanito",
+      "confidence": "medium",
+      "evidence": "Tartalom: Node.js/Express JWT login kód, RBAC, Tailwind CSS, Replit AI promptolás, caching — fogalommagyarázatokkal és ellenőrző quiz-kérdésekkel; gyakorlati fejlesztési témakörök sorozata."
+    },
+    {
+      "provenance": "legacy_html:3b26ab36-9765-4ab5-9bd6-b6c0ef0fcad8",
+      "title": "Modern Authentikációs Rendszerek",
+      "ms": 11796,
+      "usage": {
+        "promptTokens": 6757,
+        "completionTokens": 495
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Webfejlesztés, biztonság",
+      "topic": "Modern authentikációs módszerek (session, JWT, OAuth, MFA, WebAuthn)",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Session-Based vs Token-Based Authentication', 'OAuth 2.0 és OpenID Connect', 'MFA', 'Passwordless Authentication', 'WebAuthn és FIDO2', 'bcrypt, scrypt, Argon2'; Node.js/Express kódpéldák; magyarázat + ellenőrző quiz-kérdések jellege."
+    },
+    {
+      "provenance": "legacy_html:93ef3230-c4ca-4364-ab01-a79d0d52a162",
+      "title": "Informatika - ChatGPT Használata Kezdőknek",
+      "ms": 6830,
+      "usage": {
+        "promptTokens": 7377,
+        "completionTokens": 576
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Digitális kultúra / MI-eszközök",
+      "topic": "ChatGPT használata és promptírás kezdőknek",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a ChatGPT és mire használható?', 'A pontos utasítás (prompt) fontossága', 'Hogyan írjunk jó promptot? Az 5 elem' — AI-eszköz használatát oktató magyarázó lecke, programozási segítség említése informatikai keretet jelez."
+    },
+    {
+      "provenance": "legacy_html:8c971f9e-5fc0-4911-be65-a29cad213dc4",
+      "title": "Informatika - ChatGPT 2 PRO Tananyag",
+      "ms": 13622,
+      "usage": {
+        "promptTokens": 7365,
+        "completionTokens": 488
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Digitális kompetenciák – mesterséges intelligencia használata",
+      "topic": "Profi ChatGPT prompt-írás: haladó technikák és workflow",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A profi prompt lényege és három pillére', 'Chain-of-Thought', 'MASTER TEMPLATE', 'Meta-prompt és automatizálás'; magyarázó, fogalom-felépítő szerkezet célkitűzésekkel."
+    },
+    {
+      "provenance": "legacy_html:945c11c2-2024-4747-89a5-1c8cc5aacc0d",
+      "title": "ChatGPT 3 – Mester Tananyag | Professzionális AI Promptolás",
+      "ms": 11732,
+      "usage": {
+        "promptTokens": 6567,
+        "completionTokens": 433
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "Digitális kultúra – MI-használat",
+      "topic": "Mester szintű ChatGPT promptolás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: Multi-Role Architecture, Prompt Pipeline, Meta-Promptolás, Self-Debugging; magyarázó szöveg kulcsgondolatokkal, példákkal, végén gyakorló feladatok és kvíz — fogalom-tanító AI-promptoló lecke."
+    },
+    {
+      "provenance": "legacy_html:fec9e07c-6993-44b2-99ad-e64589da2b0e",
+      "title": "Informatika - Replit Fiók Létrehozása",
+      "ms": 13226,
+      "usage": {
+        "promptTokens": 7195,
+        "completionTokens": 750
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": null,
+      "topicArea": "digitális eszközhasználat / online platformok",
+      "topic": "Replit fiók létrehozása Google-fiókkal",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Lépésről lépésre útmutató: 'Replit Megnyitása', 'Belépés Google-lel', 'Kétlépcsős Azonosítás', hibaelhárítás és 'Összefoglalás' — eszközhasználati, magyarázó lecke, nem feladatlap."
+    },
+    {
+      "provenance": "legacy_html:00f45374-883b-4ff5-9346-bc9dac7dbd0b",
+      "title": "4. osztály - Írásbeli műveletek és szöveges feladatok",
+      "ms": 7276,
+      "usage": {
+        "promptTokens": 7014,
+        "completionTokens": 347
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Írásbeli műveletek",
+      "topic": "Írásbeli összeadás, kivonás, szorzás, osztás, szöveges feladatok",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: Írásbeli összeadás/kivonás/szorzás/osztás, Szöveges feladatok megoldása; magyarázó lépések és példák, gyakorló quiz tételek."
+    },
+    {
+      "provenance": "legacy_html:f8ebcfc5-87db-48be-a16f-cd818d604eea",
+      "title": "Matematika - Közönséges és Vegyes Törtek (5. osztály) - Racing Edition",
+      "ms": 11489,
+      "usage": {
+        "promptTokens": 6789,
+        "completionTokens": 471
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Törtek",
+      "topic": "Közönséges és vegyes törtek műveletei",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az a törtszám?', 'Törttípusok', 'Egyszerűsítés', 'Összefoglalás'; részletes magyarázatok autós példákkal, szakaszvégi kvízekkel."
+    },
+    {
+      "provenance": "legacy_html:b3df99c2-8631-4e32-9c65-063afcc18e8e",
+      "title": "8. osztály - 🫁 Légzőrendszer - Interaktív Tananyag",
+      "ms": 7845,
+      "usage": {
+        "promptTokens": 7027,
+        "completionTokens": 429
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Emberi szervezet",
+      "topic": "Légzőrendszer felépítése és működése",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Tartalom: orrüreg, garat, gége, tüdő, gázcsere, sejtlégzés, hangadás — magyarázó fejezetek, ellenőrző kvíz és szöveges feladatok jellemzik."
+    },
+    {
+      "provenance": "legacy_html:4fc1a3c8-b888-4358-8119-1194d1a0a2a0",
+      "title": "🏔️ Dunántúli-középhegység - Földrajz 4. osztály",
+      "ms": 36961,
+      "usage": {
+        "promptTokens": 10235,
+        "completionTokens": 2479
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "foldrajz",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Magyarország tájai",
+      "topic": "Dunántúli-középhegység",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a Dunántúli-középhegység?', 'Melyik hegységek tartoznak ide?', 'Milyen az időjárás?', 'Balaton' – Magyarország tájainak magyarázó tananyaga, kvízzel és feladatokkal."
+    },
+    {
+      "provenance": "legacy_html:57f1f035-8161-46c6-bd88-1e30fc1ee640",
+      "title": "Life in Peru - 3. osztályos Angol Tananyag",
+      "ms": 3838,
+      "usage": {
+        "promptTokens": 5973,
+        "completionTokens": 504
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [
+        "foldrajz"
+      ],
+      "grade": 3,
+      "topicArea": "angol nyelv",
+      "topic": "Life in Peru - szókincs és olvasás",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Célnyelv angol: 'Hasznos angol szavak Peruról', 'What does interesting mean?'; magyar magyarázat, fogalomtartalom (tájak, ételek, ünnepek) + gyakorló feladatok."
+    },
+    {
+      "provenance": "legacy_html:da617ee3-1738-4c05-84b1-f69d6d30fa73",
+      "title": "Modern Magyar Líra | 8. osztály",
+      "ms": 13147,
+      "usage": {
+        "promptTokens": 6797,
+        "completionTokens": 665
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Modern magyar líra",
+      "topic": "20. századi magyar költők versei és élete",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Több költő (Kosztolányi, Babits, Juhász Gyula, Tóth Árpád, József Attila, Radnóti) több művének feldolgozása, 'Összefoglalás', 'Gyakorló feladatok' és 'Kvíz teszt' fejezetekkel — több témakört átfogó, mérésre felkészítő lecke."
+    },
+    {
+      "provenance": "legacy_html:e000275f-0ea7-4603-9209-23bc69bbf12e",
+      "title": "Have Got - Angol 5. osztály",
+      "ms": 10449,
+      "usage": {
+        "promptTokens": 6304,
+        "completionTokens": 510
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "have got szerkezet és család szókincs",
+      "topic": "Have got szerkezet ragozása és családtagok szókincse",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Magyarázó fejezetek: 'Mi az a Have Got?', ragozási táblázat (have got/has got, tagadás, kérdés), családtagok szókincslistája, gyakori hibák, majd gyakorló feladatok és kvíz."
+    },
+    {
+      "provenance": "legacy_html:1c39fbb6-5a10-4f00-9d4c-415e6f5f5fe5",
+      "title": "8. osztály - Fizika 8. - Elektromos áram",
+      "ms": 9921,
+      "usage": {
+        "promptTokens": 6742,
+        "completionTokens": 445
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "fizika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Elektromosságtan",
+      "topic": "Elektromos áram, áramerősség, vezetők, elektromos biztonság",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az elektromos áram?', 'Áramerősség', 'Vezető anyagok', 'Elektromos biztonság'; magyarázó tartalom definíciókkal, analógiákkal, tévhitekkel és quiz tételekkel (Ohm, amper, vezetőképesség)."
+    },
+    {
+      "provenance": "legacy_html:daf8cd1d-6822-4f49-a2e8-29afeb7b0502",
+      "title": "🏎️ Elválasztás és Betűrend Verseny - 5. osztály",
+      "ms": 7350,
+      "usage": {
+        "promptTokens": 6491,
+        "completionTokens": 424
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Helyesírás",
+      "topic": "Elválasztás és betűrendbe sorolás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Elválasztás alapjai', 'Betűrendbe sorolás - Az ábécé útja'; szótagolás, többjegyű betűk (dzs, cs), összetett szavak elválasztása."
+    },
+    {
+      "provenance": "legacy_html:f512f7f9-148f-4ac7-9076-fa9c36385132",
+      "title": "4. osztály - Polish Christmas - 4th Grade English",
+      "ms": 7545,
+      "usage": {
+        "promptTokens": 5257,
+        "completionTokens": 399
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "karácsonyi szokások Lengyelországban",
+      "topic": "Polish Christmas traditions in English",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Angol célnyelv: 'Polish Christmas – Simple Text', szókincs-tételek (vocab: Christmas, midnight mass), mondatkiegészítők és kvízek angolul, magyar fordításokkal."
+    },
+    {
+      "provenance": "legacy_html:2eaadef7-8de9-4ae4-8de6-efa193e0de16",
+      "title": "8. osztály - Nyugat költői - Tananyag",
+      "ms": 7086,
+      "usage": {
+        "promptTokens": 6654,
+        "completionTokens": 431
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Nyugat-korszak lírája",
+      "topic": "A Nyugat költői és az impresszionizmus",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: Babits, Kosztolányi, Tóth Árpád, Juhász Gyula, Radnóti versei, életrajzok; 'Mi az impresszionizmus?', stilisztikai eszközök, metafora, szinesztézia magyarázata, összefoglaló."
+    },
+    {
+      "provenance": "legacy_html:a26c14c0-e9e8-42a9-9cc5-c9e2294e9169",
+      "title": "I Built a Little Snowman - Angol 3. osztály",
+      "ms": 15101,
+      "usage": {
+        "promptTokens": 5960,
+        "completionTokens": 431
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "téli vers, szókincs, egyszerű múlt",
+      "topic": "I Built a Little Snowman vers feldolgozása",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Szószedet (snowman, bunny, carrot), kiejtési segédlet magyaros átírással, mozgások a vershez, egyszerű múlt (built, ate) gyakorlása kvízkérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:c7ef61d6-ca4f-4bd5-8057-12af768fc051",
+      "title": "Magyar Népzene - 8. osztály",
+      "ms": 12901,
+      "usage": {
+        "promptTokens": 6544,
+        "completionTokens": 445
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "enek-zene",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "zenei műveltség / népzene",
+      "topic": "Magyar népzene: hangsorok, tájegységek, gyűjtés, táncház",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A pentaton hangsor', 'Dallamtípusok - Régi és új stílus', 'Magyar népi hangszerek', 'A népzenegyűjtés története', 'A táncházmozgalom'; magyarázó tartalom, kulcsfogalmak, ellenőrző kvíz és szöveges feladatok.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:48d3a2a2-2591-4983-9b19-64847d29c50a",
+      "title": "4. osztály - 🎄✨ Christmas in Poland - 4th Grade English ✨🎄",
+      "ms": 10937,
+      "usage": {
+        "promptTokens": 5651,
+        "completionTokens": 570
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Karácsonyi szókincs és kultúra",
+      "topic": "Christmas in Poland – szokások, ételek, kifejezések",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Cél a szókincs elsajátítása: 'Megtanulod az ételek és szokások angol nevét'; Vocabulary/Szószedet és Polish Expressions fejezetek, rövid quiz és fordítási feladatok ('Write the English word for ponty')."
+    },
+    {
+      "provenance": "legacy_html:56eb4480-71a1-4b39-8f77-9432c74e3604",
+      "title": "🖥️ Tömbök és Véletlen Számok - Digitális Kultúra 8. osztály",
+      "ms": 11314,
+      "usage": {
+        "promptTokens": 6646,
+        "completionTokens": 546
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "programozás / digitális kultúra",
+      "topic": "Tömbök (array) és véletlen számok algoritmusai",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "A lecke önmagát 'Témazáró előkészítő'-nek jelöli; a tömb, indexelés, bejárás, véletlen számok több témakörét foglalja össze magyarázattal, szöveges feladatokkal és kvízteszttel a mérésre való felkészüléshez."
+    },
+    {
+      "provenance": "legacy_html:35de9a61-652f-4eed-b07d-e78a6afb5c17",
+      "title": "3. osztály - 🏎️ Számoló Verseny - 1000-es számkör",
+      "ms": 7019,
+      "usage": {
+        "promptTokens": 6084,
+        "completionTokens": 547
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "1000-es számkör",
+      "topic": "Fejszámolás összeadás és kivonás trükkökkel",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Tízesekkel számolunk', 'Kerekítés 5-tel', 'Szétbontás' — magyarázat példákkal, majd 'Gyakorló Kör' és 'Kvíz Verseny' feladatbankokkal."
+    },
+    {
+      "provenance": "legacy_html:10194d9e-c4f9-4c67-9abb-5f49464f3fcd",
+      "title": "🦋 Maradékos osztás és szorzás - 4. osztály",
+      "ms": 14456,
+      "usage": {
+        "promptTokens": 6455,
+        "completionTokens": 383
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Számtan, 100-as számkör",
+      "topic": "Maradékos osztás és szorzás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a szorzás?', 'Mi a maradékos osztás?', 'Példa: 13 : 4', 'Hogyan ellenőrizzük?'; magyarázó tartalom, szabály: 'osztandó = osztó × hányados + maradék', majd gyakorló kvíz."
+    },
+    {
+      "provenance": "legacy_html:ee0ac8cd-d1c4-47be-8050-ee6fa7784ea9",
+      "title": "🇫🇷 8. Osztályos Francia Témazáró",
+      "ms": 11548,
+      "usage": {
+        "promptTokens": 6344,
+        "completionTokens": 443
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "francia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Alapvető francia nyelvtan",
+      "topic": "Igék ragozása, névelők, birtokos szerkezetek",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Cím és tartalom: 'Francia Témazáró: 8. osztály • Komplett Tananyag'; több témakör (ER-igék, être/avoir, névelők, mutató/birtokos melléknevek, il y a) összefoglalva kvízekkel és feladatokkal."
+    },
+    {
+      "provenance": "legacy_html:9896c34f-c9f6-4f2f-8efe-296461ceaeee",
+      "title": "8. Osztályos Matematika Témazáró | Interaktív Tananyag",
+      "ms": 8517,
+      "usage": {
+        "promptTokens": 6700,
+        "completionTokens": 478
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Százalékszámítás, arányosság, kamatszámítás",
+      "topic": "Százalékszámítás és arányosság témazáró felkészítés",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Cím: '8. Osztályos Matematika Témazáró'; több témakör keveredik: százalékszámítás ('Százalékérték = Alap × (Százalékláb ÷ 100)'), ÁFA, egyenes és fordított arányosság, kamatszámítás, plusz 'Gyakorló Feladatok' és 'Kvíz Teszt'."
+    },
+    {
+      "provenance": "legacy_html:2b4e9607-a548-4612-8c71-329ae09367cd",
+      "title": "5. osztályos kompetenciamérés felkészítő",
+      "ms": 22496,
+      "usage": {
+        "promptTokens": 6184,
+        "completionTokens": 930
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [
+        "matematika",
+        "angol"
+      ],
+      "grade": 5,
+      "topicArea": "kompetenciamérés-felkészítés",
+      "topic": "Szövegértés, nyelvtan, matematika és angol alapok",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakört kever: 'Nyelvtan alapok', 'Helyesírás', 'Alapműveletek', 'Törtek és tizedesek', 'To be ige' angol szókincsel; cél: 'Felkészülés az országos mérésre'.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:430a770a-26dc-48f2-9b81-a68bed6656da",
+      "title": "5. Osztályos Komplex Kompetenciamérés Felkészítő",
+      "ms": 35451,
+      "usage": {
+        "promptTokens": 9391,
+        "completionTokens": 4277
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [
+        "matematika",
+        "angol"
+      ],
+      "grade": 5,
+      "topicArea": "Komplex kompetenciamérés felkészítő",
+      "topic": "Szövegértés, matematika és angol felkészítő",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "medium",
+      "evidence": "A tartalom egyszerre készít fel magyar szövegértésből, matematikai szöveges feladatokból és angol nyelvi feladatokból („Magyar · Matematika · Angol”, „Kompetenciamérésre való sikeres felkészülés”)."
+    },
+    {
+      "provenance": "legacy_html:e379309a-2d2d-4678-af7e-088847aa3a0f",
+      "title": "Elektromosságtan - Fizika 8. osztály",
+      "ms": 9146,
+      "usage": {
+        "promptTokens": 6211,
+        "completionTokens": 609
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "fizika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Elektromosságtan",
+      "topic": "Elektromos állapot, áram, áramkörök, balesetvédelem",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Felirat: 'Témazáró felkészítő'; több témakör keveredik (elektromos állapot, részecskeszerkezet, áramerősség I=Q/t, vezetők, áramkörök, balesetvédelem), magyarázatok + szöveges feladatok + kvíz."
+    },
+    {
+      "provenance": "legacy_html:b766e520-5176-4284-93ed-dd17336c421e",
+      "title": "🏔️ Északi-középhegység 4. osztály",
+      "ms": 12064,
+      "usage": {
+        "promptTokens": 6479,
+        "completionTokens": 721
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Magyarország tájai",
+      "topic": "Északi-középhegység tájföldrajza",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Tájismertető tartalom: hegység részei (Mátra, Bükk), Kékes, barlangok, nemzeti parkok, települések; magyarázó fejezetek és kvíz — 4. osztályos környezetismeret."
+    },
+    {
+      "provenance": "legacy_html:5e61dd64-f1bb-4e33-bb4b-82c450496d97",
+      "title": "🫁 Légzőrendszer - 8. osztály",
+      "ms": 9964,
+      "usage": {
+        "promptTokens": 6844,
+        "completionTokens": 390
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "légzőrendszer",
+      "topic": "A légzőrendszer felépítése és működése",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A légzőrendszer felépítése', 'Gázcsere – külső és belső légzés', 'Tüdő és léghólyagocskák'; tartalom szöveges magyarázat, végén kvíz és szöveges feladatok."
+    },
+    {
+      "provenance": "legacy_html:bb12adc8-bece-4700-8237-52b463ad3844",
+      "title": "Egyszerű mondat elemzése – 8. osztály",
+      "ms": 11414,
+      "usage": {
+        "promptTokens": 6389,
+        "completionTokens": 384
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Nyelvtan – mondattan",
+      "topic": "Egyszerű mondat elemzése",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mondatfajták', 'Az egyszerű mondatok szerkezete', 'A mondatrészek', 'Az állítmány fajtái'; magyarázatok, mintaelemzések, kvíz és nyitott kérdések (tőmondat, tárgy, határozó)."
+    },
+    {
+      "provenance": "legacy_html:ec4b3dcd-de74-4e91-9bcb-1b79ad018c98",
+      "title": "A kereszténység és az iszlám - Témazáró tananyag 5. osztály",
+      "ms": 11253,
+      "usage": {
+        "promptTokens": 6467,
+        "completionTokens": 409
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "világvallások",
+      "topic": "A kereszténység és az iszlám",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Témazáró tananyag: 'Témazáró céljai', 'Kötelező fogalmak', 'Összehasonlítás – a témazáró legfontosabb része', 'Témazáró kvíz'; tartalom: kereszténység eredete, terjedése, iszlám keletkezése, Mohamed, Korán – történelmi fogalmak."
+    },
+    {
+      "provenance": "legacy_html:2ae90d2b-ab77-401b-bd9e-65e2ed94b8a9",
+      "title": "🎵 Suno AI - Zenekészítés mesterséges intelligenciával",
+      "ms": 15815,
+      "usage": {
+        "promptTokens": 6005,
+        "completionTokens": 537
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [
+        "enek-zene"
+      ],
+      "grade": null,
+      "topicArea": "Mesterséges intelligencia eszközhasználat",
+      "topic": "Zenekészítés a Suno AI-val promptokkal",
+      "lessonType": "gyakorlati-projekt",
+      "confidence": "high",
+      "evidence": "Webes AI-eszköz használatát tanítja lépésről lépésre: 'Regisztráció / Belépés', 'Prompt megadása', 'Generálás', 'Letöltés' — eszközhasználati gyakorlat, nem zeneelmélet."
+    },
+    {
+      "provenance": "legacy_html:b94ddfdc-61ca-41d9-b485-b5362dbd1ac7",
+      "title": "10-es átlépéses kivonás - 3. osztály",
+      "ms": 13610,
+      "usage": {
+        "promptTokens": 5363,
+        "completionTokens": 390
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Kivonás",
+      "topic": "10-es átlépéses (kölcsönzéses) kivonás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Magyarázó fejezetek: 'Mi az a 10-es átlépéses kivonás?', 'A lépések sorrendje', kölcsönzés lépésről lépésre (54–8, 73–9), majd szöveges feladatok és kvízek gyakorlásként."
+    },
+    {
+      "provenance": "legacy_html:5b13de69-acd6-4f15-919a-d6d01a8cab34",
+      "title": "4. osztály - Who's vs Whose - Bilingual Interactive Lesson",
+      "ms": 8518,
+      "usage": {
+        "promptTokens": 3820,
+        "completionTokens": 298
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "nyelvtan",
+      "topic": "Who's vs Whose",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Célnyelvi nyelvi forma: 'Fill in the blanks with either who's or whose', sok rövid gyakorló kérdés (15+25), who's/whose megkülönböztetése."
+    },
+    {
+      "provenance": "legacy_html:c4067907-bd19-4f46-84b1-d87d62825d21",
+      "title": "Hossz mértékegységei - 4. osztály",
+      "ms": 9720,
+      "usage": {
+        "promptTokens": 6512,
+        "completionTokens": 429
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Mérés és mértékegységek",
+      "topic": "Hossz mértékegységei és átváltásuk",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az a hossz?', 'Váltószámok', 'Hogyan váltunk át?'; magyarázó definíciók és példák, kvíz tételek átváltásról (pl. '250 cm hány m?')"
+    },
+    {
+      "provenance": "legacy_html:fa1bff1c-932b-4aec-b79f-93ff7dbe10c4",
+      "title": "8. osztály - Reakciótípusok - Kémia Kaland",
+      "ms": 12005,
+      "usage": {
+        "promptTokens": 6899,
+        "completionTokens": 388
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kemia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "kémiai reakciók",
+      "topic": "Reakciótípusok és reakciósebesség",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: Egyesülés, Bomlás, Helyettesítés, Cserebomlás, Gázképződés, Csapadékképződés, Reakciósebességek, Exoterm/Endoterm; kémiai egyenletek (2Mg + O₂ → 2MgO), fogalommagyarázatok és példák jellemzők."
+    },
+    {
+      "provenance": "legacy_html:e3ca72fc-7837-4315-a942-6ed22a3aad37",
+      "title": "3. Osztályos Angol Témazáró - Decemberi Felkészítő",
+      "ms": 12745,
+      "usage": {
+        "promptTokens": 5894,
+        "completionTokens": 483
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "alapszókincs és nyelvtani alapok",
+      "topic": "Család, otthon, to be, have got, can",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakört kever: 'Család / Family', 'Otthon / House', 'Létige / To Be', 'Have got', 'Can', 'Helymeghatározás' — magyarázatok, gyakorló feladatok és kvíz témazáró felkészítő jellegűek."
+    },
+    {
+      "provenance": "legacy_html:8dbfb925-c7c3-4bf9-a56e-dfa3a51ebb2f",
+      "title": "8. osztály - Csokis Muffin Készítés - Kezdőknek",
+      "ms": 9114,
+      "usage": {
+        "promptTokens": 6076,
+        "completionTokens": 594
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "technika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Élelmiszerkészítés / konyhai gyakorlat",
+      "topic": "Csokis muffin készítése kezdőknek",
+      "lessonType": "gyakorlati-projekt",
+      "confidence": "high",
+      "evidence": "Lépésről lépésre recept: bevásárlólista, hozzávalók (liszt, tojás, sütőpor), sütő előmelegítése 180°C, tálak összeöntése, sütés 18–20 perc, interaktív checklist — gyakorlati konyhai tevékenység, nem tudományos magyarázat."
+    },
+    {
+      "provenance": "legacy_html:96725668-9f7b-4c38-bc66-9a331db7076f",
+      "title": "8. osztály - Anyagforgalom és Légzés - Interaktív Tananyag",
+      "ms": 10727,
+      "usage": {
+        "promptTokens": 6698,
+        "completionTokens": 347
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Emésztő- és légzőrendszer",
+      "topic": "Anyagforgalom, emésztés és légzés",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: emésztőrendszer szakaszai, emésztőnedvek, légzőrendszer felépítése, gázcsere; magyarázó tartalom ellenőrző kérdésekkel és feladatokkal."
+    },
+    {
+      "provenance": "legacy_html:9386e36c-3cc6-46f7-9d50-5e4ca4ce74c1",
+      "title": "3. osztály - Kivonás tízesátlépéssel - Autós Matek Kaland",
+      "ms": 16050,
+      "usage": {
+        "promptTokens": 6640,
+        "completionTokens": 841
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Helyiértékes számolás, műveletek",
+      "topic": "Kivonás tízesátlépéssel (kölcsönzés)",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Magyarázó fejezetek: „Mi a kivonás?”, „Mi az a tízesátlépés?”, lépésről lépésre példa (43 − 5), helyiérték-táblázat, csak utána gyakorló feladatok és kvíz."
+    },
+    {
+      "provenance": "legacy_html:225c9ec5-13f6-4b4b-876e-35f767a29d84",
+      "title": "⚽ Törtek - Focis matek 5. osztály",
+      "ms": 9505,
+      "usage": {
+        "promptTokens": 6580,
+        "completionTokens": 558
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Törtek",
+      "topic": "Törtek: fogalom, vegyes tört, egyszerűsítés, műveletek",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az a tört?', 'Vegyes tört és átalakítása', 'Egyszerűsítés', 'Bővítés', 'Törtek összeadása/kivonása' — egy témakör (törtek) magyarázattal, focis példákkal és gyakorló kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:615c043f-6cbf-4376-9f29-a1a1e23cc12c",
+      "title": "🎄 3. Osztályos Angol Témazáró - Decemberi Felkészítő",
+      "ms": 16760,
+      "usage": {
+        "promptTokens": 5865,
+        "completionTokens": 592
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Alapvető nyelvtani szerkezetek és szókincs",
+      "topic": "Család, otthon, to be, have got, can",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakör keveredik: 'Család / Family', 'Otthon / House', 'Létige / To Be', 'Birtoklás / Have got', 'Képesség / Can' + kvíz és olvasmány; célnyelv az angol, magyar magyarázattal."
+    },
+    {
+      "provenance": "legacy_html:72b51bad-1ad9-4b5a-bb4b-60985fcdf15f",
+      "title": "⚗️ Pitagorasz és a Koordináták Titkai - 8. osztály",
+      "ms": 9401,
+      "usage": {
+        "promptTokens": 6797,
+        "completionTokens": 645
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Geometria és koordinátageometria",
+      "topic": "Pitagorasz-tétel és távolságképlet alkalmazása",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A tétel megfogalmazása' (a²+b²=c²), 'A távolságképlet' d=√[(x₂-x₁)²+(y₂-y₁)²], magyarázat, példaszámítások és kapukérdések; '✍️ Gyakorló Feladatok' csak záró rész."
+    },
+    {
+      "provenance": "legacy_html:0242c170-71a0-43ce-8bb0-8e2de0cdc4cf",
+      "title": "Tömbök, ciklusok, feltételek - 8. osztály | MATRIX",
+      "ms": 3916,
+      "usage": {
+        "promptTokens": 6168,
+        "completionTokens": 403
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "informatika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Programozás alapjai",
+      "topic": "Tömbök, ciklusok, feltételek C-ben",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Tömb // Array, For Loop // Ciklus, If Statement // Feltétel fejezetek; 'INFORMATIKA :: 8. OSZTÁLY :: TÉMAZÁRÓ' jelzés; quiz és open_task tételek több fogalomról (tömb, ciklus, modulo)."
+    },
+    {
+      "provenance": "legacy_html:14ede195-8bfb-4f85-86b5-8f6c7794d3e4",
+      "title": "Kivonás 10-es átlépéssel - 3. osztály",
+      "ms": 12345,
+      "usage": {
+        "promptTokens": 6443,
+        "completionTokens": 386
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Számtan / műveletek",
+      "topic": "Kivonás 10-es átlépéssel (kölcsönzés)",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Mi az a 10-es átlépés?”, „Lépésről lépésre: 736 − 618”, „Dupla kölcsönzés: 700 − 610” — magyarázat a kölcsönzésről, majd gyakorló kvízek."
+    },
+    {
+      "provenance": "legacy_html:08333651-2304-412a-ba12-4ee653330342",
+      "title": "There are - Focis tananyag 5. osztály",
+      "ms": 22501,
+      "usage": {
+        "promptTokens": 6277,
+        "completionTokens": 878
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "There is / There are szerkezet",
+      "topic": "There is/are állító és tagadó mondatok",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Lépésről lépésre magyarázott nyelvtani szabályok (There is/are, isn't/aren't, a/an, some/any), példamondatok, összefoglaló táblázat, tipikus hibák; a gyakorló feladatok és kvíz a magyarázatot követik."
+    },
+    {
+      "provenance": "legacy_html:df4e8be3-304e-4c5b-9ca2-e27cd3c2ef30",
+      "title": "Több fogyasztó az áramkörben | 8. osztály Fizika",
+      "ms": 19081,
+      "usage": {
+        "promptTokens": 6798,
+        "completionTokens": 466
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "fizika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Elektromosság",
+      "topic": "Soros és párhuzamos kapcsolás az áramkörben",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Párhuzamos kapcsolás – A csillár példája', 'Soros kapcsolás törvényszerűségei', 'Ohm-törvény: U = R · I'; magyarázó tartalom áramkör részeiről, kapcsolási módokról, előtét-ellenállásról, gyakorló tételekkel."
+    },
+    {
+      "provenance": "legacy_html:2511d97c-f71b-403c-a768-7bc1a3e4d5c6",
+      "title": "Az Alpok térsége: Ausztria és Svájc - 8. osztály",
+      "ms": 9539,
+      "usage": {
+        "promptTokens": 6466,
+        "completionTokens": 530
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "foldrajz",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Regionális földrajz – Európa",
+      "topic": "Az Alpok térsége: Ausztria és Svájc",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Header: '8. osztályos földrajz | Témazáró felkészítő'. Több témakör keveredik: hegységkialakulás, éghajlat, vízrajz, Ausztria és Svájc gazdasága, nemzetiségek; 15+25 kérdéses feladat- és kvízszeccsel."
+    },
+    {
+      "provenance": "legacy_html:02d9aecf-65cc-4b73-af57-6f1009211736",
+      "title": "Az Erdő - Környezetismeret 4. osztály 🦊",
+      "ms": 13886,
+      "usage": {
+        "promptTokens": 6664,
+        "completionTokens": 449
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Élőhelyek, életközösségek",
+      "topic": "Az erdő élővilága és életközössége",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Az erdő fogalma', 'Az erdő szintjei', 'Tápláléklánc', 'Gombák'; lexikon-magyarázatok táblázatokkal (fa részei, erdőtípusok), ellenőrző kérdések — 4. osztályos környezetismeret."
+    },
+    {
+      "provenance": "legacy_html:614b4bd8-7f40-4ba0-8850-3e5b6438769f",
+      "title": "Az ókori Hellász - 8. osztály",
+      "ms": 9804,
+      "usage": {
+        "promptTokens": 6982,
+        "completionTokens": 410
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Ókori Görögország",
+      "topic": "Hellász földrajza, poliszok, Athén és Spárta",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Fejezetek: minószi és mükénéi civilizáció, polisz, gyarmatosítás, Spárta vs. Athén, demokrácia; kvíz, szöveges feladatok, 'Eredményed' — több témakört átfogó mérésre felkészítő anyag."
+    },
+    {
+      "provenance": "legacy_html:2454abf0-b849-43ee-8ee5-d2e9d5107c9b",
+      "title": "4. Osztály Angol - Interactive Learning",
+      "ms": 26507,
+      "usage": {
+        "promptTokens": 5949,
+        "completionTokens": 523
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Alap szókincs és nyelvtan",
+      "topic": "Hét napjai, idő, Present Simple, can, have got",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Lexikai tudástár több témakörrel (Days of the Week, Telling the Time, Present Simple, Have Got, CAN) + interaktív gyakorlás, kvíz, eredmény — több témakört átfogó ismétlő/gyakorló anyag."
+    },
+    {
+      "provenance": "legacy_html:52adc0dc-3fd7-4222-94d6-d4498bbf75c5",
+      "title": "Full Blast 1 - Angol 4. osztály",
+      "ms": 4413,
+      "usage": {
+        "promptTokens": 6266,
+        "completionTokens": 415
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Alapszókincs és nyelvtan",
+      "topic": "Országok, család, foglalkozások, létige, Present Simple",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Témakörlisták szó-pár fordításokkal (Countries & Nationalities, Family, Jobs, Days of the Week), rövid szókincs- és nyelvtani kérdések: 'They ___ got a big house', 'She stud___ hard', 'Mi a guitar magyarul?'."
+    },
+    {
+      "provenance": "legacy_html:79a15f31-ca31-4552-bf87-64726336e7ca",
+      "title": "Az ókori Hellász II - 8. osztály",
+      "ms": 7665,
+      "usage": {
+        "promptTokens": 6289,
+        "completionTokens": 327
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Ókori Görögország",
+      "topic": "Hellász: polisz, Spárta, Athén, kultúra",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Fejezetek: Hellász földrajzi alapjai, polisz felépítése, Spárta, Athén, Vallás és kultúra; teszt kvíz és szöveges feladatok több témakört ölelnek fel."
+    },
+    {
+      "provenance": "legacy_html:f95ed828-8f6b-4aa8-9b94-70daf710af68",
+      "title": "3. osztály - 🎮 Matek Küldetés - Összeadás és Kivonás",
+      "ms": 17911,
+      "usage": {
+        "promptTokens": 5300,
+        "completionTokens": 576
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Számtan",
+      "topic": "Összeadás és kivonás 0-tól 20-ig",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "Magyarázó fejezetek (Az összeadás ereje, A kivonás varázsa) után 50 gyakorló feladat ('50 Küldetés: Számold ki az eredményt'), Boss harc kvízekkel."
+    },
+    {
+      "provenance": "legacy_html:15d4b54d-a256-4d6a-b42f-fa8e1e28c8f9",
+      "title": "3. osztály - 🎮 Matek Aréna - 10-es Átlépés Mester",
+      "ms": 15583,
+      "usage": {
+        "promptTokens": 4368,
+        "completionTokens": 388
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "összeadás-kivonás 20-ig",
+      "topic": "10-es átlépés gyakorlása",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "Rövid magyarázat ('Mi az a 10-es átlépés?'), majd '50 Kihívás' gyakorló feladatsor XP-pontozással; tartalom: 8+5, 15-8 átlépéssel."
+    },
+    {
+      "provenance": "legacy_html:7f9083e5-b1f9-4fe0-8c94-376ed61d228c",
+      "title": "A főnév - Magyar nyelvtan 4. osztály",
+      "ms": 16026,
+      "usage": {
+        "promptTokens": 6387,
+        "completionTokens": 411
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "szófajtan",
+      "topic": "A főnév: köznév, tulajdonnév, toldalékolás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a főnév?', 'A főnév két nagy csoportja', 'A köznév fajtái', 'A főnév toldalékolása'; magyarázó táblázatok, tévhitek, kapukérdések és gyakorló kvízek egyetlen témakörben."
+    },
+    {
+      "provenance": "legacy_html:a3332443-5452-47ca-9a17-a9a51b9247cd",
+      "title": "3. osztály - 🏎️ Matek Verseny - Turbo Számolás",
+      "ms": 13216,
+      "usage": {
+        "promptTokens": 4127,
+        "completionTokens": 416
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Fejszámolás",
+      "topic": "Átlépéses összeadás és kivonás 10-ig",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "Összeadás/kivonás turbo tippek, 50 kör számolási feladatsor, verseny-szabály, pontozás — gyakorló jelleg, kevés magyarázat."
+    },
+    {
+      "provenance": "legacy_html:7954fc51-883e-4fdb-a069-a58ff3f1fad7",
+      "title": "8. osztály - Hozzárendelések",
+      "ms": 8423,
+      "usage": {
+        "promptTokens": 6632,
+        "completionTokens": 379
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Függvények, hozzárendelések",
+      "topic": "Hozzárendelések és lineáris függvények",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az a hozzárendelés?', 'Lineáris függvények', 'y = mx + b, meredekség, tengely-metszet'; magyarázó tartalom alaphalmaz, képhalmaz, függvény fogalmáról, gyakorló feladatokkal és kvízzel."
+    },
+    {
+      "provenance": "legacy_html:ad44bdfd-f5e7-44ba-aab1-743d4fd3c756",
+      "title": "3. osztály - 🥷 Ninja Matek Dojo - Kivonás Mester",
+      "ms": 13545,
+      "usage": {
+        "promptTokens": 4323,
+        "completionTokens": 330
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "kivonás",
+      "topic": "Kivonás 10-es átlépéssel, 1–20 és 1–100 számkör",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "100 kihívás, feladatszámlálók ('Feladat', 'Kész', 'Hátra'), két szint (1-20, 1-100), kevés magyarázat, csak rövid 'Ninja tipp' technikai segítség"
+    },
+    {
+      "provenance": "legacy_html:dd9410c6-b249-4cfa-a094-3178d502508e",
+      "title": "4. osztály - 🦋 A mező és rét csodálatos világa 🌸",
+      "ms": 17707,
+      "usage": {
+        "promptTokens": 6618,
+        "completionTokens": 385
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Élőhelyek: mező és rét",
+      "topic": "A mező és rét élővilága, növényei és állatai",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a mező és mi a rét?', 'A mező - az ember műve', 'Gyógynövények a réten', 'Állatok a mezőn és a réten', tápláléklánc magyarázattal, majd gyakorló részek (Kapukérdések, Tévhit vagy igazság)."
+    },
+    {
+      "provenance": "legacy_html:f64f5d9c-6760-4af6-b6c0-96969e1df935",
+      "title": "8. osztály - 🎸 Gitár Alapok - Balkezes Útmutató",
+      "ms": 15334,
+      "usage": {
+        "promptTokens": 6022,
+        "completionTokens": 663
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "enek-zene",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Gitár alapok",
+      "topic": "Balkezes gitár: hangolás, akkordok, pengetés",
+      "lessonType": "gyakorlati-projekt",
+      "confidence": "medium",
+      "evidence": "Gyakorlati hangszeres útmutató: 'Fontos részek' (gitár részei), 'Standard hangolás: e-B-G-D-A-E', akkorddiagramok, pengetési minták, gyakorlatok és napi rutin — hangszerhasználat gyakorlati oktatása."
+    },
+    {
+      "provenance": "legacy_html:e83e84c6-ab70-4945-9dbb-2fda3c2b85d2",
+      "title": "3. osztály - 🚀 Galaktikus Matek Ultra - Vegyes Kivonás",
+      "ms": 13899,
+      "usage": {
+        "promptTokens": 4274,
+        "completionTokens": 432
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "kivonás",
+      "topic": "Vegyes kivonás átlépéssel, 1–3 jegyű számok",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "Fejezetek: '10-es átlépés példák', '100-as átlépés küldetések'; 100 feladat (53−8, 723−56), kevés magyarázat, tippek; '100 KÜLDETÉS' gyakorló formátum."
+    },
+    {
+      "provenance": "legacy_html:370b369c-55ae-4cc0-bf10-3e61c785c482",
+      "title": "Űrmértékek - 4. osztály - Matematika",
+      "ms": 14272,
+      "usage": {
+        "promptTokens": 6362,
+        "completionTokens": 385
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Mértékek és mértékegységek",
+      "topic": "Űrmértékek és átváltások (liter, dl, cl, ml)",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Magyarázó fejezetek: 'Mi az űrmérték?', 'Az űrmérték egységei', 'Az átváltások varázslata' (l→dl→cl→ml, váltószám 10), majd szöveges feladatok és kvíz gyakorlás."
+    },
+    {
+      "provenance": "legacy_html:35636417-c4ea-4121-ae6b-cfe92a861e05",
+      "title": "3. osztály - 🎮 Írásbeli Összeadás Mester",
+      "ms": 9779,
+      "usage": {
+        "promptTokens": 5498,
+        "completionTokens": 670
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Számolás, helyiérték",
+      "topic": "Írásbeli összeadás helyiérték-oszlopokkal",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "low",
+      "evidence": "Fejezetek: '📚 Mi az a helyiérték?', '📝 Lépésről lépésre megoldás', majd '🎮 Most te jössz! - 50 feladat' – magyarázat után 50 gyakorló feladat, helyiérték-oszlopos összeadás (NAT 2020, 3. osztály)."
+    },
+    {
+      "provenance": "legacy_html:9bbf97b9-e04a-4d3e-8f0e-50104c51f3ee",
+      "title": "🎮 4. Osztály - Osztás Mester",
+      "ms": 84792,
+      "usage": {
+        "promptTokens": 4584,
+        "completionTokens": 1102
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Műveletek",
+      "topic": "Írásbeli osztás gyakorlása",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "low",
+      "evidence": "„Írásbeli osztás - Mi ez?”, „Kétjegyű : Egyjegyű (pl. 84 : 4 = 21)”, „Gyakorlás: 75 osztás feladat” — osztás művelet magyarázata és 75 gyakorló feladat."
+    },
+    {
+      "provenance": "legacy_html:622fd794-8fa7-40cc-bfc6-f8ce6c9570c8",
+      "title": "4. osztály - 📚 Írásbeli Osztás Mestere - Teljes Levezetés",
+      "ms": 14245,
+      "usage": {
+        "promptTokens": 5828,
+        "completionTokens": 426
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Osztás",
+      "topic": "Írásbeli osztás teljes levezetése maradékkal",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Mi az OSZTÁS?”, „Az osztás NÉGY része”, „A MARADÉK”, „Írásbeli osztás MÓDSZERE”; magyarázó alapfogalmak (osztandó, osztó, hányados, maradék) és lépésről lépésre levezetett példák."
+    },
+    {
+      "provenance": "legacy_html:fceb8af8-91bc-4e62-9b4f-cb3bd55f8aa5",
+      "title": "4. osztály - 🍎 Osztás Varázslat - Tanuljunk együtt!",
+      "ms": 4879,
+      "usage": {
+        "promptTokens": 5866,
+        "completionTokens": 371
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "műveletek",
+      "topic": "Osztás, maradékos osztás, írásbeli osztás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az OSZTÁS?', 'Az osztás részei', 'Mi az a MARADÉK?', 'Hogyan osztunk ÍRÁSBAN?' – magyarázó tartalomlecke, majd 'Most te jössz! – 50 feladat' gyakorlás."
+    },
+    {
+      "provenance": "legacy_html:ef7617cb-f00a-4eda-92ab-3d62003e180f",
+      "title": "4. osztály - 🌊 A víz, vízpart – Élet a vízben 🐸",
+      "ms": 10428,
+      "usage": {
+        "promptTokens": 6544,
+        "completionTokens": 423
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Vizes élőhelyek",
+      "topic": "Élet a vízben és a vízparton",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "„4. osztály – Környezetismeret | NAT 2020”; fejezetek: vízparti fák, nádas, vízparti madarak, hód, vidra, békák, halak, táplálékláncok; magyarázó szöveg + kvíz."
+    },
+    {
+      "provenance": "legacy_html:333a9d72-7a0c-4f75-83fd-421689354800",
+      "title": "3. osztály - ⚡ Kivonás Mester - 1000-es számkör",
+      "ms": 4046,
+      "usage": {
+        "promptTokens": 4530,
+        "completionTokens": 441
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Írásbeli aritmetika",
+      "topic": "Írásbeli kivonás az 1000-es számkörben",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "Rövid szabályismétlés (kölcsönkérés) után '50 feladat' gyakorló blokk; a magyarázat csak mintapéldákon keresztül jelenik meg, a fókusz a feladatmegoldás."
+    },
+    {
+      "provenance": "legacy_html:3264c955-ab3b-4257-b368-a42ae79125ab",
+      "title": "3. osztály - 🎯 Becslés Mester - 1000-es számkör",
+      "ms": 9832,
+      "usage": {
+        "promptTokens": 5825,
+        "completionTokens": 555
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "1000-es számkör",
+      "topic": "Becslés és kerekítés",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "low",
+      "evidence": "Kerekítés szabályai, becslés mintapéldák összeadásra/kivonásra, majd „50 becslés feladat"
+    },
+    {
+      "provenance": "legacy_html:af0d6508-fbb6-46ed-a149-d6e46efed5ed",
+      "title": "3. osztály - 🎬 Bandi bácsi Matek Órája",
+      "ms": 14772,
+      "usage": {
+        "promptTokens": 3509,
+        "completionTokens": 357
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "Számtan",
+      "topic": "Írásbeli kivonás és becslés kerekítéssel",
+      "lessonType": "fogalomtanito",
+      "confidence": "medium",
+      "evidence": "„Kivonás: jobbról balra!”, „Kölcsönkérés ha kell!”, „Becslés: kerekíts!” – írásbeli kivonás magyarázata gyakorlópéldával."
+    },
+    {
+      "provenance": "legacy_html:471a8929-9b7f-4b10-9b38-13a37d018a6a",
+      "title": "4. osztály angol present_continuous",
+      "ms": 10392,
+      "usage": {
+        "promptTokens": 5883,
+        "completionTokens": 546
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "nyelvtan / igeidők",
+      "topic": "Present Continuous és Simple Past képzése, használata",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Magyarázó fejezetek: '🎯 Mikor használjuk?', '📐 Hogyan képezzük? am/is/are + ige -ing', 'ige + -ed', táblázatok, példák, kapukérdések és kvíz a tanult igeidők gyakorlására."
+    },
+    {
+      "provenance": "legacy_html:79175e69-4a3a-4bb1-a24c-f5b9372a5ea3",
+      "title": "Kert és Park – 4. osztály Környezetismeret",
+      "ms": 23111,
+      "usage": {
+        "promptTokens": 6233,
+        "completionTokens": 908
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Életközösségek lakóhelyünk környezetében",
+      "topic": "Kert és park növényei, élőlényei",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetcím: „Életközösségek lakóhelyünk környezetében: Zöldséges- és gyümölcsöskert · Park”; magyarázó fejezetek („Mi az a kert?”, gyümölcsfák körforgása), ellenőrző kérdések és kvíz – 4. osztály · Környezetismeret · NAT 2020."
+    },
+    {
+      "provenance": "legacy_html:b5923814-3411-4c1e-988f-843908918a24",
+      "title": "There are – Angol 4. osztály",
+      "ms": 8805,
+      "usage": {
+        "promptTokens": 5987,
+        "completionTokens": 556
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Nyelvtan",
+      "topic": "There is/There are és elöljárószók",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Nyelvtani magyarázat: 'There is = Van (egyes szám)', 'There are = Vannak (többes szám)', 'Prepositions – Elöljárószók: in, on'; versek, kvízek és fordítási feladatok angol nyelvtanról"
+    },
+    {
+      "provenance": "legacy_html:baf280be-54ea-4707-84e4-048b9f089faa",
+      "title": "English Grammar with Pictures - 4th Grade",
+      "ms": 4088,
+      "usage": {
+        "promptTokens": 4819,
+        "completionTokens": 398
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Angol nyelvtan",
+      "topic": "Have got, there is/are, igeidők, elöljárók",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "low",
+      "evidence": "Képleírós mondatírás, 'Fill in the gaps' nyelvtani gyakorlatok (have/has got, there is/are, prepozíciók, igeidők) és 25 kérdéses quiz – túlnyomórészt gyakorló feladatok, kevés magyarázat."
+    },
+    {
+      "provenance": "legacy_html:a6e17518-e60f-433a-b793-96fab6500c52",
+      "title": "4. osztály - Where I Live - Module 4 - English Tananyag",
+      "ms": 12466,
+      "usage": {
+        "promptTokens": 5698,
+        "completionTokens": 516
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Where I Live – ház, lakókörnyezet",
+      "topic": "Szobák, bútorok, prepozíciók, there is/are, must",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Modul több témakört kever: 'Home Sweet Home' szókincs, 'Prepositions of Place', 'There is / There are', 'Must / Mustn't', 'Ordinal Numbers', 'Round-up / Osszefoglalas' + kvízek, szöveges feladatok."
+    },
+    {
+      "provenance": "legacy_html:36ee76f3-2f29-4433-9343-aa41999eff6a",
+      "title": "🎮 Főnevek és Tulajdonnevek – 3. osztály",
+      "ms": 9730,
+      "usage": {
+        "promptTokens": 6137,
+        "completionTokens": 396
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "szófajok – főnevek",
+      "topic": "Főnevek és tulajdonnevek, helyesírásuk",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "„Mi az a főnév?”, köznév vs. tulajdonnév, helyesírási szabályok, egyes/többes szám – magyarázó fejezetek és ellenőrző kérdések."
+    },
+    {
+      "provenance": "legacy_html:9370eb25-8496-4641-9782-d9c452bccd60",
+      "title": "4. osztály - Testrészek, érzékszervek",
+      "ms": 11904,
+      "usage": {
+        "promptTokens": 6379,
+        "completionTokens": 460
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Az emberi test",
+      "topic": "Testrészek és érzékszervek",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Tartalom: 'Az emberi test részei' (fej, nyak, törzs, végtagok), 'Az érzékszervek' (szem, fül, orr, nyelv, bőr); a szöveg maga is '4. osztály Környezetismeret'-ként jelöli; magyarázó fejezetek és összefoglalás jellemző, kvíz csak záró elem."
+    },
+    {
+      "provenance": "legacy_html:64163549-aaf6-4c55-bff7-2b20026d4624",
+      "title": "5. osztály - Az égés tananyag",
+      "ms": 7721,
+      "usage": {
+        "promptTokens": 6393,
+        "completionTokens": 1140
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "kémiai alapismeretek",
+      "topic": "Az égés: gyors és lassú égés",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "„Természetismeret – 5. osztály”, „Az égés az egyik legrégebben ismert kémiai jelenség”, „Az égés feltétele az oxigén, az éghető anyag és a megfelelő hőmérséklet”; egy témakör magyarázattal és gyakorló kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:2d118899-28af-4f28-9e67-88acc4669fe5",
+      "title": "🌸 Magyar Nyelvtan – 4. osztály",
+      "ms": 8295,
+      "usage": {
+        "promptTokens": 6549,
+        "completionTokens": 556
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "nyelvtan",
+      "topic": "Éves összefoglaló: mondat, szófajok, mondatrészek",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakört kever: „Mi a szöveg?”, „2. Szófajok” (főnév, melléknév, ige), „3. Mondatrészek”; teljes éves összefoglaló magyarázattal és quiz-tételekkel."
+    },
+    {
+      "provenance": "legacy_html:a185344e-c083-4a74-9f56-c3ac66d64dd1",
+      "title": "4. osztály - 🌸 Helyesírás – Kiejtéstől eltérően írjuk",
+      "ms": 5088,
+      "usage": {
+        "promptTokens": 6912,
+        "completionTokens": 424
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "helyesírás",
+      "topic": "Kiejtéstől eltérő írás, összeolvadás, magánhangzók",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Mi az a kiejtéstől eltérő írás?”, „6 fő csoport – Kiejtéstől eltérő szavak”, etimológiai elv, összeolvadás (-lj→jj, -tj→tty), magánhangzók hosszú-rövid; magyarázó fejezetek + gyakorló tételek."
+    },
+    {
+      "provenance": "legacy_html:6307b5ed-2aae-4694-b140-bad3e44e60c9",
+      "title": "5. osztály - Honfoglalás ötödik osztály",
+      "ms": 14312,
+      "usage": {
+        "promptTokens": 6726,
+        "completionTokens": 443
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Középkori magyar történelem",
+      "topic": "Honfoglalás és István király kora",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A magyarok eredete és vándorlása', 'A honfoglalás (895–896)', 'István megkoronázása'; magyarázó szöveg évszámokkal, mondákkal, vármegyerendszerrel."
+    },
+    {
+      "provenance": "legacy_html:26a62a74-ddab-4609-ba05-6d045fe877f2",
+      "title": "3. osztály - RÖVID VEGETABLES & FRUITS",
+      "ms": 11091,
+      "usage": {
+        "promptTokens": 2699,
+        "completionTokens": 145
+      },
+      "status": "review",
+      "reason": "csak egy modell adott érvényes választ — unclassified — deepseek/deepseek-v4.1-flash: A(z) \"pedagogue\" lépés modellhívása hibára futott: a szolgáltató hibát jelzett | unclassified — deepseek/deepseek-v4-flash: A(z) \"pedagogue\" lépés modellhívása hibára futott: a szolgáltató hibát jelzett",
+      "candidates": [
+        {
+          "model": "z-ai/glm-5.3-flash",
+          "classification": {
+            "subject": "angol",
+            "secondarySubjects": [],
+            "grade": 3,
+            "topicArea": "szókincs",
+            "topic": "Zöldségek és gyümölcsök angolul",
+            "lessonType": "szokincs-nyelvi",
+            "confidence": "high",
+            "evidence": "Angol szókincs: 'vegetable szó zöldséget jelent', 'Fruits - Gyümölcsök (13 szó)', kiejtés-gombok, többes szám szabályok, a/an használat, countable/uncountable főnevek, vocab és fordítós tételek."
+          }
+        }
+      ]
+    },
+    {
+      "provenance": "legacy_html:40309069-2cfe-467d-aad8-c6ca3737c60d",
+      "title": "4. osztály - Bővített Az emberi test – Testrészek, érzékszervek, mozgás szervrendszere",
+      "ms": 19184,
+      "usage": {
+        "promptTokens": 6602,
+        "completionTokens": 761
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Emberi test",
+      "topic": "Testrészek, érzékszervek, mozgás szervrendszere",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "A tananyag címe és tartalma: „Testrészek, érzékszervek, mozgás szervrendszere - 4. osztály Környezetismeret”; fejezetek: „Az emberi test részei”, „Az érzékszervek”, „A mozgás szervrendszere”, magyarázó szöveggel és kvízzel."
+    },
+    {
+      "provenance": "legacy_html:d9f323b5-e4b6-4ddf-9752-18796f5a946f",
+      "title": "3. osztály - VEGETABLES & FRUITS",
+      "ms": 18540,
+      "usage": {
+        "promptTokens": 5478,
+        "completionTokens": 572
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "szókincs",
+      "topic": "Zöldségek és gyümölcsök angolul",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Zöldség- és gyümölcsszavak kiejtéssel, többes szám szabályok, a/an, countable/uncountable főnevek; sok rövid szókincs- és nyelvtani kérdés (quiz, open_task)."
+    },
+    {
+      "provenance": "legacy_html:6bd4408c-0cb7-498f-a4d7-5454df7c2a2f",
+      "title": "4. osztály - Matematika, Alakzatok Tananyag.",
+      "ms": 15017,
+      "usage": {
+        "promptTokens": 3212,
+        "completionTokens": 163
+      },
+      "status": "review",
+      "reason": "csak egy modell adott érvényes választ — unclassified — deepseek/deepseek-v4.1-flash: A(z) \"pedagogue\" lépés modellhívása hibára futott: a szolgáltató hibát jelzett | unclassified — deepseek/deepseek-v4-flash: A(z) \"pedagogue\" lépés modellhívása hibára futott: a szolgáltató hibát jelzett",
+      "candidates": [
+        {
+          "model": "z-ai/glm-5.3-flash",
+          "classification": {
+            "subject": "matematika",
+            "secondarySubjects": [],
+            "grade": 4,
+            "topicArea": "Geometria",
+            "topic": "Alakzatok: testek, sokszögek, kerület, terület",
+            "lessonType": "fogalomtanito",
+            "confidence": "high",
+            "evidence": "Fejezetek: 'Síkidomok és sokszögek', 'Négyszögek, téglalap, négyzet', 'Kerület', 'Terület'; magyarázó szöveg: 'A sokszög olyan síkidom, amelyet csak egyenes vonalak határolnak', képletek és ellenőrző kérdések."
+          }
+        }
+      ]
+    },
+    {
+      "provenance": "legacy_html:59f1ce9a-92e5-4908-82fa-1027d82583bf",
+      "title": "4. osztály - Tulajdonságot kifejező szavak",
+      "ms": 5214,
+      "usage": {
+        "promptTokens": 6408,
+        "completionTokens": 447
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Nyelvtan – szófajok, helyesírás",
+      "topic": "Tulajdonságot kifejező szavak (melléknevek)",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: fokozás (alapfok, középfok, felsőfok), -ó/-ő és -ú/-ű helyesírása, j/ly melléknevekben, -i toldalékos alakok, szinonim/antonim szavak – nyelvtani fogalomtanítás."
+    },
+    {
+      "provenance": "legacy_html:b89e3bfc-0d63-4c87-8844-2039785210ce",
+      "title": "Csehország · Lengyelország · Románia – Földrajz 8. osztály",
+      "ms": 16657,
+      "usage": {
+        "promptTokens": 5941,
+        "completionTokens": 763
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "foldrajz",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Európa regionális földrajza",
+      "topic": "Csehország, Lengyelország, Románia",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "„Röpdolgozat felkészítő”, 45 feladat / 75 kvízkérdés; országok elhelyezkedése, domborzat, folyók, gazdaság, történelem – több ország témaköreinek együttes ismétlése."
+    },
+    {
+      "provenance": "legacy_html:22974d3e-8930-463f-8410-31a6f9f539fe",
+      "title": "5. osztály - My daily routine tananyag",
+      "ms": 19120,
+      "usage": {
+        "promptTokens": 5543,
+        "completionTokens": 802
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Present Simple",
+      "topic": "Napi rutin és Present Simple",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek magyarázzák a Present Simple igeidőt és napi rutin szókincset; táblázatok (állító, tagadó, kérdő mondat), szókincslista és gyakorló kérdések vegyesen, egyetlen témakör magyarázattal."
+    },
+    {
+      "provenance": "legacy_html:a665bb96-c2ab-4cf8-bcc6-64d6f8a66432",
+      "title": "Felszín és Térfogat – 5. osztály",
+      "ms": 9785,
+      "usage": {
+        "promptTokens": 6866,
+        "completionTokens": 454
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Geometria – testek",
+      "topic": "Kocka és téglatest felszíne és térfogata",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'FELSZÍN & TÉRFOGAT', 'KOCKA', 'TÉGLATEST', 'MÉRTÉKEGYSÉGEK'; képletek magyarázata (F = 6·a², T = a³), lépésenkénti példák, ellenőrző quiz és nyitott feladatok."
+    },
+    {
+      "provenance": "legacy_html:34cba9d2-78d9-42cd-9ddb-02a3c5ffd472",
+      "title": "Geometriai Transzformációk – 8. osztály",
+      "ms": 24852,
+      "usage": {
+        "promptTokens": 7338,
+        "completionTokens": 1821
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Geometria",
+      "topic": "Geometriai transzformációk: tükrözés, forgatás, eltolás, hasonlóság",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Tengelyes tükrözés', 'Középpontos tükrözés', 'Forgatás', 'Eltolás és vektorok', 'Középpontos hasonlóság'; magyarázó szöveg definíciókkal és tulajdonságokkal, ellenőrző kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:31090536-ad32-4883-98b0-1eb97712677a",
+      "title": "Összetett szavak – 8. osztály | Magyar Nyelv",
+      "ms": 4283,
+      "usage": {
+        "promptTokens": 6918,
+        "completionTokens": 424
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "szóalkotás",
+      "topic": "Összetett szavak típusai és helyesírása",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Mi az összetett szó?”, „Alárendelő összetett szavak”, „A helyesírás szabályai”; szófaj/szóalkotás-tartalom, mondattani viszonyok (alanyos, tárgyas, jelzős összetétel), egybeírás-kötőjel szabályok."
+    },
+    {
+      "provenance": "legacy_html:e75c3d52-2562-4f7a-b22d-6e432d20432e",
+      "title": "4. osztály - A légzés szervrendszere",
+      "ms": 7924,
+      "usage": {
+        "promptTokens": 6501,
+        "completionTokens": 615
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Emberi test – szervrendszerek",
+      "topic": "A légzés szervrendszere és a légzőszervek",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a légzés?', 'A légzőszervek bemutatása' – orrnyílás, orrüreg, légcső, tüdő, oxigén/szén-dioxid gázcsere magyarázata; ellenőrző quiz-kérdések a fogalmakhoz."
+    },
+    {
+      "provenance": "legacy_html:55a5f92c-7faf-4405-a113-dd43c795b8e9",
+      "title": "4. osztály - A táplálkozás és légzés szervrendszere",
+      "ms": 5090,
+      "usage": {
+        "promptTokens": 6713,
+        "completionTokens": 363
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Emberi test",
+      "topic": "Táplálkozás és légzés szervrendszere",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "4. osztályos környezetismeret ('Környezetismeret • 4. osztály • NAT 2020'); emésztő- és légzőrendszer magyarázata fejezetekkel, ellenőrző kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:0f9a96d4-280d-434c-aa2e-5b94a4007742",
+      "title": "5. osztály - Környezetünk anyagai - 5. osztály tananyag",
+      "ms": 31425,
+      "usage": {
+        "promptTokens": 6694,
+        "completionTokens": 1084
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Környezetünk anyagai",
+      "topic": "Talaj, víz, levegő, égés, mesterséges anyagok",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Integrált természettudomány 5. osztályra: talaj, víz, levegő, égés, mesterséges anyagok több témakörben; fejezetek és vegyes tételek („A talaj alkotóelemei"
+    },
+    {
+      "provenance": "legacy_html:a06b350d-b10d-41ea-b8b4-8653a25a760b",
+      "title": "5. osztály - Árpád-kori királyok: I. László, Könyves Kálmán, II. András",
+      "ms": 10302,
+      "usage": {
+        "promptTokens": 6781,
+        "completionTokens": 474
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Árpád-kori magyar történelem",
+      "topic": "I. László, Könyves Kálmán, II. András",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Fejezetcímek és magyarázó szöveg: „Három nagy Árpád-házi király”, „A lovagkirály”, „Miért »Könyves«?”, „AZ ARANYBULLA (1222)” — uralkodók bemutatása magyarázattal, ellenőrző kérdésekkel és kvízzel."
+    },
+    {
+      "provenance": "legacy_html:d2051adf-3489-40f1-996d-f4c188b06d34",
+      "title": "5. osztály - A Pál utcai fiúk - Interaktív tananyag",
+      "ms": 12979,
+      "usage": {
+        "promptTokens": 6933,
+        "completionTokens": 493
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "regényfeldolgozás",
+      "topic": "Molnár Ferenc: A Pál utcai fiúk",
+      "lessonType": "irodalmi-mu",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A szerző: Molnár Ferenc', 'A főszereplők', 'Stílus és szerkezet'; tartalom a regény cselekményét, szereplőit, témáit (barátság, hűség) dolgozza fel, quiz-kérdések a műről."
+    },
+    {
+      "provenance": "legacy_html:1370a217-b5a1-4fed-9022-d54be147c85f",
+      "title": "A számot, mennyiséget kifejező szavak – 4. osztály",
+      "ms": 23766,
+      "usage": {
+        "promptTokens": 6686,
+        "completionTokens": 428
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "szófajok – számnevek",
+      "topic": "A számot, mennyiséget kifejező szavak",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: tőszám, sorszám, törtszám, határozatlan számnevek, helyesírás, toldalékolás, dátumok írása; szöveg: „a számneveknek is nevezik”, magyarázat és ellenőrző kérdések."
+    },
+    {
+      "provenance": "legacy_html:50786309-7ca8-48a0-8028-280ecd2a634e",
+      "title": "3. osztály - ⚡ CYBER KIVONÁS – 100 küldetés",
+      "ms": 19665,
+      "usage": {
+        "promptTokens": 3705,
+        "completionTokens": 357
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "kivonás",
+      "topic": "kivonás gyakorlása 100 feladattal",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "100 küldetés, TALÁLAT/HIBA számláló, pontosság – gyakorló feladatsor kivonásból"
+    },
+    {
+      "provenance": "legacy_html:0f7311f5-a612-42a4-bc32-f9d30425840d",
+      "title": "Nagy-Britannia és Franciaország – 8. osztályos földrajz",
+      "ms": 15860,
+      "usage": {
+        "promptTokens": 6591,
+        "completionTokens": 456
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "foldrajz",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Európa regionális földrajza",
+      "topic": "Nagy-Britannia és Franciaország természet- és társadalomföldrajza",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: Földrajzi fekvés és felosztás, Domborzat, Éghajlat és vízrajz, Népesség és városok, Gazdaság, Közlekedés; részletes magyarázó szöveg (Ben Nevis, óceáni éghajlat, Brexit), ellenőrző kérdések és interaktív feladatok."
+    },
+    {
+      "provenance": "legacy_html:bdf4ab7c-579c-4206-a6de-5890db774701",
+      "title": "Sorozatok és koordináta-rendszer | 5. osztály - Cyber Mission",
+      "ms": 9467,
+      "usage": {
+        "promptTokens": 6831,
+        "completionTokens": 362
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Sorozatok és koordináta-geometria",
+      "topic": "Számsorozatok és a koordináta-rendszer",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az a számsorozat?', 'A számtani sorozat', 'A koordináta-rendszer felépítése', 'Pontok ábrázolása'; magyarázó szöveg differenciával, síknegyedekkel, ellenőrző kérdésekkel."
+    },
+    {
+      "provenance": "legacy_html:6f3541f9-9b75-42e6-bfb7-9722311da03d",
+      "title": "4. osztály - 💖 Az emberi test - Egészségünk 💖",
+      "ms": 17295,
+      "usage": {
+        "promptTokens": 6665,
+        "completionTokens": 513
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Emberi test és egészség",
+      "topic": "Keringés, szív, vesék, egészséges életmód",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a vér?', 'A szív – a keringés központja', 'A vesék – a test szűrőberendezése', 'Helyes táplálkozás'; magyarázó szöveg ellenőrző kérdésekkel, 4. évfolyamos test- és egészségtudatos tartalom."
+    },
+    {
+      "provenance": "legacy_html:31d692de-ea60-4f03-ae77-7e727c567d47",
+      "title": "5. osztály - ⚖️ A tömeg mérése, mértékegységei – Interaktív Tananyag",
+      "ms": 9685,
+      "usage": {
+        "promptTokens": 6559,
+        "completionTokens": 410
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "mértékegységek",
+      "topic": "A tömeg mérése és mértékegységei",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Az alap-mértékegység: a kilogramm', 'Mértékegység-átváltás a gyakorlatban'; szöveg: '5. osztály · matematika · interaktív tananyag'; magyarázó fejezetek és példafeladatok, nem több témakör keverése."
+    },
+    {
+      "provenance": "legacy_html:695cc63c-5a15-4c05-a61c-0fe102e88b99",
+      "title": "26. Ismerj meg, fogadj el! - 4. osztály természetismeret",
+      "ms": 48629,
+      "usage": {
+        "promptTokens": 6891,
+        "completionTokens": 664
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Ember és társadalom / egészséges életmód",
+      "topic": "Fogyatékkal élők megismerése, elfogadása, érzékszervek védelme",
+      "lessonType": "fogalomtanito",
+      "confidence": "medium",
+      "evidence": "4. osztályos integrált, ember-központú tartalom: 'Veleszületett vagy szerzett sérülés', 'Mozgássérültek', 'Látássérültek', 'Érzékszerveink védelme', 'Hogyan segíthetünk?' – magyarázó fejezetek és ellenőrző kérdések jellemzik."
+    },
+    {
+      "provenance": "legacy_html:06c25019-9c71-4e62-b3ff-85c5092f975d",
+      "title": "4. osztály - 25. Betegség, gyógyulás - 4. osztály tananyag",
+      "ms": 6970,
+      "usage": {
+        "promptTokens": 6749,
+        "completionTokens": 454
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Egészség és betegség",
+      "topic": "Betegség, gyógyulás, egészségmegőrzés",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Kórokozók, betegségtünetek, lázcsillapítás, orvos, védőoltás fejezetek; 4. osztályos környezetismeret anyag magyarázattal és kvízzel."
+    },
+    {
+      "provenance": "legacy_html:35f47c72-af3a-4019-85ef-2baa46496893",
+      "title": "4. osztály - Tört részek és mértékek.",
+      "ms": 10330,
+      "usage": {
+        "promptTokens": 6154,
+        "completionTokens": 457
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Törtek és mértékegységek",
+      "topic": "Törtrészek számítása időben, tömegben, űrtartalomban, hosszúságban",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Mi a tört? – Bevezetés” (nevező, számláló), mintafeladatok „1 negyed óra = 15 perc”, „1 kg = 100 dkg”, mértékek táblázata; végén gyakorló feladatsorok és teszt."
+    },
+    {
+      "provenance": "legacy_html:91c07347-e02a-4a5e-ab47-2f0416576ae5",
+      "title": "4. osztály - Angol nyelvtan - Countable & Uncountable nouns",
+      "ms": 22233,
+      "usage": {
+        "promptTokens": 6502,
+        "completionTokens": 386
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Angol nyelvtan",
+      "topic": "Countable és uncountable főnevek, some/any/much",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi az a megszámolható főnév?', 'A SOME szó használata', 'A MUCH és MANY szavak'; magyarázó szöveg mini-összefoglalókkal, célnyelv az angol."
+    },
+    {
+      "provenance": "legacy_html:378f394a-f124-4573-8117-773790b62e0a",
+      "title": "5. osztály - A számírás fejlődése - Római számok",
+      "ms": 8558,
+      "usage": {
+        "promptTokens": 6630,
+        "completionTokens": 500
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "számírás, számrendszerek",
+      "topic": "Római számok és a számírás fejlődése",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Az egyiptomi számírás', 'A római számjegyek', 'Az összeadás elve', 'A kivonás elve'; magyarázó szöveg helyiértékről, additív rendszerről, quiz-tételek római számokról."
+    },
+    {
+      "provenance": "legacy_html:0a2ed750-6d59-45e1-898c-4ff969ea5c90",
+      "title": "Számolás római számokkal - 5. osztály",
+      "ms": 14358,
+      "usage": {
+        "promptTokens": 6820,
+        "completionTokens": 548
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Számolás római számokkal",
+      "topic": "Átváltás és számolás római számokkal",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "low",
+      "evidence": "Fejezetek: 'Arab szám → római szám', 'Összeadás római számokkal', 'Kivonás', 'Szorzás és osztás', 'Gyakorló labor – végtelen feladat'; sok quiz és open_task feladat."
+    },
+    {
+      "provenance": "legacy_html:af8ef8c4-41b8-466c-8acc-d008551c00de",
+      "title": "Angol gyakorlás",
+      "ms": 8400,
+      "usage": {
+        "promptTokens": 5466,
+        "completionTokens": 858
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Szeptemberi ismétlés",
+      "topic": "Köszönés, számok, család, színek ismétlése",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "„Szeptemberben az angolórán azt ismételjük, amit tavaly tanultunk: köszönés, bemutatkozás, számok, család, színek és háziállatok” – több témakör gyakorló ismétlése, kvízzel és feladatokkal."
+    },
+    {
+      "provenance": "legacy_html:b1ba2127-76e3-48fe-bde3-797179f77d9f",
+      "title": "Odysseus",
+      "ms": 8557,
+      "usage": {
+        "promptTokens": 5462,
+        "completionTokens": 608
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-irodalom",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Görög mondák, Homérosz eposzai",
+      "topic": "Odüsszeusz: trójai háború és hazatérés",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "„Az Odüsszeia – Homérosz eposza”, „A mű eposz: nagy terjedelmű, verses elbeszélő költemény” – irodalmi műfajok, mondakör feldolgozása, mini-összefoglalókkal, fejezetes magyarázattal."
+    },
+    {
+      "provenance": "legacy_html:496282b7-371f-4be8-b16e-d8e08aa00b98",
+      "title": "A virágos növények - 5. osztály",
+      "ms": 8662,
+      "usage": {
+        "promptTokens": 6871,
+        "completionTokens": 488
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Növénytan",
+      "topic": "A virágos növények testfelépítése, virág és termés",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A virágos növények testfelépítése', 'A gyökér', 'A virág felépítése', 'A beporzás' – magyarázó szöveg, mini-összefoglalók, új fogalmak; 5. osztályos integrált természettudomány."
+    },
+    {
+      "provenance": "legacy_html:414aa52f-1711-4a19-893f-1e2e4b609961",
+      "title": "Műveleti sorrend - 5. osztály",
+      "ms": 12557,
+      "usage": {
+        "promptTokens": 6847,
+        "completionTokens": 435
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Számtan, műveletek",
+      "topic": "Műveleti sorrend: zárójel, szorzás-osztás, összeadás-kivonás",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Első szabály: a szorzás és az osztás erősebb', 'a zárójel mindent felülír'; kidolgozott példák (148 + 6 · 8), magyarázat, mini-összefoglalók, gyakorló tételek."
+    },
+    {
+      "provenance": "legacy_html:36070bc6-6113-4c2c-9dbc-89931cf30741",
+      "title": "Melyik szervét fogyasztjuk zöldségféléinknek? - 5. osztály",
+      "ms": 8654,
+      "usage": {
+        "promptTokens": 6704,
+        "completionTokens": 475
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "növénytan / zöldségfélék",
+      "topic": "Zöldségek fogyasztott szervei (gyökér, szár, levél, termés)",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A paprika szervei', 'Gyökértípusok', 'Levéltípusok', 'Átalakult szárak és hajtások', 'Termések', 'Egynyári, kétnyári és évelő növények'; szöveg: '5. osztály · természettudomány', növényi szervek magyarázata, ellenőrző kérdések."
+    },
+    {
+      "provenance": "legacy_html:551bb3f7-2713-49dc-b1f2-61f3a1faf553",
+      "title": "természetismeret — 5. osztály",
+      "ms": 7520,
+      "usage": {
+        "promptTokens": 5612,
+        "completionTokens": 447
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [
+        "foldrajz"
+      ],
+      "grade": 5,
+      "topicArea": "talajtan",
+      "topic": "A talaj felépítése, típusai és védelme",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek magyarázó formában: 'Mi a humusz?', 'Zonális és azonális talajok', 'A talaj felépítése, keletkezése és megóvása'; 5. évfolyamos integrált természettudományos tartalom tájakkal, éghajlattal."
+    },
+    {
+      "provenance": "legacy_html:345a84d9-9d3a-4f4c-9e7b-622e53a7d01d",
+      "title": "Present Simple és az időhasználat - 6. osztály angol",
+      "ms": 6948,
+      "usage": {
+        "promptTokens": 6488,
+        "completionTokens": 512
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "nyelvtan / jelen idők",
+      "topic": "Present Simple és időhasználat",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Fejezetek magyarázattal: 'Mi az a Present Simple?', 'Állító mondat: az alak', 'Tagadás: don't és doesn't', 'Gyakorisági határozók', 'AT, ON, IN'; szószedet, olvasmány, majd gyakorló tételek (quiz, open_task). Egy témakör (Present Simple + idő) magyarázattal, nem témazáró."
+    },
+    {
+      "provenance": "legacy_html:537ea443-ab98-4d86-9260-98acc95fc765",
+      "title": "A víz körforgása a természetben",
+      "ms": 5717,
+      "usage": {
+        "promptTokens": 5637,
+        "completionTokens": 332
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "vízkörforgás, hidroszféra",
+      "topic": "A víz körforgása a természetben",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: párolgás, kondenzáció, csapadék, felszín alatti vizek; magyarázó, fogalom-tanító felépítés kidolgozott példákkal; saját jelzés: Természetismeret · 5. évfolyam."
+    },
+    {
+      "provenance": "legacy_html:22a38c0a-e43c-4cbf-b05c-39b694caf9d9",
+      "title": "Első károly magyar király",
+      "ms": 8969,
+      "usage": {
+        "promptTokens": 5447,
+        "completionTokens": 400
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "Középkori magyar történelem",
+      "topic": "I. Károly uralkodása és koronázásai",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Versenyfelkészítő: 'versenytipp', 'kidolgozott példa', több témakör (trónharc, tartományurak, kormányzás, bevételek, Visegrád) egy uralkodó köré."
+    },
+    {
+      "provenance": "lesson:2dc12886-d023-4243-953d-ddcd29aa5df9",
+      "title": "Kristóf Matek – Összefoglaló lecke",
+      "ms": 20247,
+      "usage": {
+        "promptTokens": 5528,
+        "completionTokens": 1287
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "matematika összefoglaló",
+      "topic": "Helyiérték, alapműveletek, törtek, geometria, mérés",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakört átfogó összefoglaló: fejezetek 'Természetes számok és helyiérték', 'Szorzás és osztás', 'Törtek', 'Síkidomok és testek', 'Mérés, mértékegységek és adatok'; a tartalom helyiérték-bontás, írásbeli összeadás, osztás, törtfogalom magyarázata."
+    },
+    {
+      "provenance": "lesson:fa50cc1b-24f0-4a25-8ca1-0a7eb08c352f",
+      "title": "A Föld kering a Nap körül",
+      "ms": 10172,
+      "usage": {
+        "promptTokens": 4656,
+        "completionTokens": 475
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Föld mozgása",
+      "topic": "A Föld kering a Nap körül",
+      "lessonType": "fogalomtanito",
+      "confidence": "low",
+      "evidence": "Természettudományos tartalom (Föld keringése a Nap körül) 4. évfolyamos szinten; magyarázat és ellenőrző kérdések vezetik, sok rövid quiz és mondatgyakorlat.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "lesson:4faf19b6-2a77-4f27-8e10-7c5704acadee",
+      "title": "A talaj kialakulása, összetevői és termékenysége",
+      "ms": 2880,
+      "usage": {
+        "promptTokens": 6761,
+        "completionTokens": 441
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Természettudomány",
+      "topic": "A talaj kialakulása, összetevői, termékenysége",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Hogyan alakul ki a talaj? Aprózódás, mállás…"
+    },
+    {
+      "provenance": "lesson:9d982753-5be7-4033-91cd-7fa6e245cd7b",
+      "title": "A talaj: kialakulása, összetétele és védelme",
+      "ms": 6650,
+      "usage": {
+        "promptTokens": 7279,
+        "completionTokens": 483
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "földtan / talajtan",
+      "topic": "A talaj kialakulása, összetétele és védelme",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "5–6. évfolyamos integrált természetismereti tartalom: talaj termékenysége, aprózódás, mállás, humusz, erózió és defláció, talajvédelem; magyarázó fejezetek és ellenőrző kérdések."
+    },
+    {
+      "provenance": "lesson:57d894d9-ed9b-428b-ab59-0e42a6e969ed",
+      "title": "Család és nemzeti identitás",
+      "ms": 7004,
+      "usage": {
+        "promptTokens": 7166,
+        "completionTokens": 474
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tarsadalmi-ismeretek",
+      "secondarySubjects": [],
+      "grade": 7,
+      "topicArea": "család és nemzeti identitás",
+      "topic": "Család funkciói, szocializáció, nemzet és nemzeti identitás",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Fejezetek: „Házasság, polgári házasságkötés, élettársi kapcsolat”, „A család funkciói”, „Nemzet, nemzeti identitás, patriotizmus”, „Nemzeti jelképek és nemzeti ünnepek” – több témakör; „Ellenőrzés – hogyan légy biztos magadban?”"
+    },
+    {
+      "provenance": "lesson:73bcdab7-6109-4dd9-acd9-c04d117e9826",
+      "title": "Műveleti sorrend tanulása",
+      "ms": 3002,
+      "usage": {
+        "promptTokens": 7497,
+        "completionTokens": 378
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "műveleti sorrend",
+      "topic": "Műveleti sorrend: zárójel, szorzás-osztás elsőbbsége",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A szorzás és az osztás elsőbbsége', 'A zárójel: mi dönti el a sorrendet?'; magyarázó szöveg lépésenkénti példákkal (148 + 6 · 8 = 196), quiz és open_task tételek egy témakörben."
+    },
+    {
+      "provenance": "lesson:a82fb9d8-e518-4868-b51d-64c5d0f777c2",
+      "title": "Zöldségek növényi szervei és fejlődése",
+      "ms": 6293,
+      "usage": {
+        "promptTokens": 7537,
+        "completionTokens": 612
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "növényismeret",
+      "topic": "Zöldségnövények szervei, fejlődése és fajtái",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek magyarázzák a zöldség fogalmát, egynyári/kétnyári fejlődést, növényi szerveket (főgyökérzet, erezet), majd paprika, paradicsom, burgonya, káposzta, hagyma, sárgarépa bemutatása; végén 'Ellenőrzés' című rész."
+    },
+    {
+      "provenance": "lesson:dcce4dbe-cb41-41b3-923e-ea034f8fd4b5",
+      "title": "A talaj",
+      "ms": 14254,
+      "usage": {
+        "promptTokens": 7385,
+        "completionTokens": 602
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "termeszetismeret",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Talajtan / földtudomány",
+      "topic": "A talaj fogalma, talajképződés és termékenység",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A talaj három összetevője', 'A humusz – a talaj sötét kincse', 'az aprózódás', 'a mállás'; a szöveg a talaj fogalmát, talajképződést és termékenységet magyarázza, ellenőrző kérdésekkel – 5. évfolyamos integrált természettudomány."
+    },
+    {
+      "provenance": "lesson:01638ae9-41bd-4658-ba31-46f0ab9369e5",
+      "title": "Az időszámítás és az emberiség kezdetei",
+      "ms": 6643,
+      "usage": {
+        "promptTokens": 6961,
+        "completionTokens": 401
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Történelem alapok",
+      "topic": "Időszámítás, történelmi korok, források",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: Az időszámítás, A történelmi korok és határaik, A történelem forrásai; fogalmak: holdnaptár, őskor, középkor, kódex, iniciálé."
+    },
+    {
+      "provenance": "lesson:d2043ac4-ef09-4de4-bac6-46c5e7ff6bbb",
+      "title": "6. évfolyam matematika feladatlap – megoldási stratégiák",
+      "ms": 19784,
+      "usage": {
+        "promptTokens": 7363,
+        "completionTokens": 836
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "mértékegységek, helyi érték, geometria, problémamegoldás",
+      "topic": "Megoldási stratégiák: átváltás, kerekítés, kerület-terület",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Több témakör keveredik: mértékegység-átváltás, helyi érték és kerekítés, téglalap kerülete/területe, téglatest, halmazok átfedése; feladatok és hibajavítás („A leggyakoribb hibák és önellenőrzés”) jellemzők."
+    },
+    {
+      "provenance": "lesson:2c0825a5-4762-4331-a41f-096bb47ee6d3",
+      "title": "6. osztályos matematika gyakorló feladatlap",
+      "ms": 14224,
+      "usage": {
+        "promptTokens": 7573,
+        "completionTokens": 514
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "alapműveletek és alkalmazások",
+      "topic": "számolás, átlag, kerület-terület, oszthatóság gyakorlása",
+      "lessonType": "gyakorlo-feladatlap",
+      "confidence": "high",
+      "evidence": "Cím: gyakorló feladatlap; sok feladattípus (szorzás, visszajáró, átlag, kerület/terület, téglatest kockái, oszthatóság) kevés magyarázattal, quiz és open_task tételek, önellenőrzés fejezet."
+    },
+    {
+      "provenance": "lesson:38b1238d-f41f-42e5-9784-4bf60f73af94",
+      "title": "6. osztályos matematika gyakorló feladatlap",
+      "ms": 9348,
+      "usage": {
+        "promptTokens": 7851,
+        "completionTokens": 682
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "témazáró felkészítés",
+      "topic": "alapműveletek, szöveges feladatok, geometria, halmazok",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Fejezetek több témakört kevernek: 'Bemelegítés: a négy alapművelet', 'Terület és a veteményes negyede', 'Halmazok: focizók és úszók', 'Oszthatóság', plusz 'Ellenőrzés – hogyan légy biztos magadban?' és 'A leggyakoribb hibák' — több témakörös felkészítő gyakorlat."
+    },
+    {
+      "provenance": "lesson:fb9bb986-d5bb-4f02-bcd9-5bc495befdde",
+      "title": "Törtek, százalék, arányosság, szögek, téglalap, átlag és egész számok",
+      "ms": 9791,
+      "usage": {
+        "promptTokens": 7818,
+        "completionTokens": 644
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "törtek, százalékszámítás, arányosság, geometria, átlag",
+      "topic": "Törtek, százalék, arányosság, szögek, téglalap, átlag",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakört kever: „Műveletek törtekkel”, „Százalékos árcsökkentés”, „Egyenes és fordított arányosság”, „A háromszög szögei”, „A téglalap kerülete és területe”, „Az átlag”, „Egész számok” – feladatok és „A leggyakoribb hibák”, „Ellenőrzés” címek témazáró jellegre utalnak."
+    },
+    {
+      "provenance": "lesson:91b53ef1-8230-459f-8b40-171b8fae76b6",
+      "title": "Törtek, százalékok, sebesség, arányok és számolási stratégiák",
+      "ms": 12679,
+      "usage": {
+        "promptTokens": 7375,
+        "completionTokens": 544
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "Törtek, százalékok, arányok",
+      "topic": "Törtek, százalékok, sebesség, arányos osztás",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Több témakör keveredik: 'Törtekkel és tizedes törtekkel végzett műveletek', 'Százalékszámítás', 'Egyenletes sebesség', 'Arányos osztás', 'L alakú kert területe', 'negatív hőmérsékletek és átlag' fejezetek; quiz és open_task tételek gyakorlása."
+    },
+    {
+      "provenance": "lesson:716fd49c-1b34-477a-a4b8-bb5382e2e364",
+      "title": "Oszthatóság 3-mal és 9-cel",
+      "ms": 75135,
+      "usage": {
+        "promptTokens": 7672,
+        "completionTokens": 1721
+      },
+      "status": "agreed",
+      "models": [
+        "deepseek/deepseek-v4.1-flash",
+        "deepseek/deepseek-v4-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "Oszthatóság",
+      "topic": "Oszthatóság 3-mal és 9-cel",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A 3-mal való oszthatóság szabálya', 'A 9-cel való oszthatóság szabálya', 'Miért működik a számjegyösszeg?' — definíciók, lépésről lépésre megoldott példák (3975, 8232), ellenőrző kérdések."
+    },
+    {
+      "provenance": "lesson:d63d15d1-c060-453d-b133-90235d7a80c3",
+      "title": "Hunyadi János, a kormányzó",
+      "ms": 29967,
+      "usage": {
+        "promptTokens": 7518,
+        "completionTokens": 471
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 6,
+      "topicArea": "Középkori magyar történelem",
+      "topic": "Hunyadi János: várnai csata és nándorfehérvári diadal",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A várnai csata lefolyása 1444. november 10.', 'Kormányzóvá választás 1446-ban', 'Nándorfehérvár ostroma 1456', 'A harangszó születése' – történelmi események, szereplők (I. Ulászló, II. Murád, Cesarini) magyarázata."
+    },
+    {
+      "provenance": "lesson:bdcddf67-b234-4d24-b444-e241c2705780",
+      "title": "Mezopotámia",
+      "ms": 16386,
+      "usage": {
+        "promptTokens": 7083,
+        "completionTokens": 419
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Ókor",
+      "topic": "Mezopotámia: első városok, állam, Hammurapi",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "low",
+      "evidence": "Tartalom: „folyóköz”, „Tigris és Eufrátesz”, „Az ókor a Kr. e. 3000-től Kr. u. 476-ig tartó történelmi korszak”, Hammurapi törvényei, ékírás, zikkurat — történelmi témakör; több alfejezet és „A leggyakoribb hibák és az önellenőrzés” témazáró-felkészítő jellegű."
+    },
+    {
+      "provenance": "lesson:522ec56f-ae3c-47db-bf55-23127a0a7981",
+      "title": "Az ókori Egyiptom",
+      "ms": 17349,
+      "usage": {
+        "promptTokens": 6778,
+        "completionTokens": 619
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Az ókori Egyiptom",
+      "topic": "Az ókori Egyiptom: Nílus, fáraók, társadalom, kultúra",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A fáraó, az isteni uralkodó', 'Hieroglifák és papirusz', 'Piramisok, múmiák, sírok'; szöveg: 'Egyiptom az ókori keleti államok közé tartozott' – történelmi magyarázó lecke ellenőrző kérdésekkel."
+    },
+    {
+      "provenance": "lesson:5a91d36f-f2fe-4d8a-be7e-cb7767a2a759",
+      "title": "Az ókori Egyiptom",
+      "ms": 16458,
+      "usage": {
+        "promptTokens": 6918,
+        "completionTokens": 682
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Ókor",
+      "topic": "Az ókori Egyiptom",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Két országból egy: az Egyiptomi Birodalom létrejötte', 'A fáraó, az isteni uralkodó', 'Piramisok, sziklasírok'; szöveg a Nílusról, Ménész, Kr.e. 3000; magyarázat+ellenőrző kérdések dominálnak."
+    },
+    {
+      "provenance": "lesson:7c6c5216-90f5-4b54-97e4-d02733fed9f0",
+      "title": "Az ókori Egyiptom",
+      "ms": 10522,
+      "usage": {
+        "promptTokens": 7009,
+        "completionTokens": 443
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Ókori Egyiptom",
+      "topic": "Az ókori Egyiptom: fáraók, piramisok, hieroglifák",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A fáraó, Egyiptom uralkodója', 'A piramisok: a fáraók sírjai Gízában', 'Hieroglifák'; Kr.e. 3000, Ménész, Alsó- és Felső-Egyiptom egyesülése."
+    },
+    {
+      "provenance": "lesson:68e0ae13-0545-46c3-aa4f-835d26b64110",
+      "title": "Az ókori Egyiptom",
+      "ms": 6844,
+      "usage": {
+        "promptTokens": 6685,
+        "completionTokens": 391
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Ókori Egyiptom",
+      "topic": "Az ókori Egyiptom: Nílus, fáraók, piramisok",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Alsó- és Felső-Egyiptom egyesülése', 'A fáraó, Egyiptom uralkodója', 'A piramisok', 'Hieroglifák'; Kr. e. 3000, Ménész fáraó – történelmi tartalom magyarázattal és ellenőrző kérdésekkel."
+    },
+    {
+      "provenance": "lesson:e9b0d96f-e246-419e-87fa-2cf0d1653091",
+      "title": "Az ókori Egyiptom",
+      "ms": 6665,
+      "usage": {
+        "promptTokens": 7111,
+        "completionTokens": 477
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Ókori Egyiptom",
+      "topic": "Az ókori Egyiptom és a Nílus",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A Nílus áradása', 'Ki volt a fáraó?', 'A piramisok', 'Hieroglifák és papirusz'; szöveg: 'Az ókori keleti államok közé Mezopotámia, Egyiptom, India és Kína tartozott' — történelmi magyarázó lecke."
+    },
+    {
+      "provenance": "lesson:ba8669b2-057a-45e6-8ec1-085539b7a25e",
+      "title": "Az ókori Egyiptom",
+      "ms": 6905,
+      "usage": {
+        "promptTokens": 7065,
+        "completionTokens": 763
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "tortenelem",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "Ókori Egyiptom",
+      "topic": "Az ókori Egyiptom: Nílus, fáraók, piramisok",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "„Egyiptom az ókori keleti államok közé tartozott”, fáraó, piramisok, hieroglifák, Alsó- és Felső-Egyiptom egyesülése — történelmi fogalom-magyarázat ellenőrző kérdésekkel."
+    },
+    {
+      "provenance": "lesson:0414c274-8c43-44f9-9639-d1c151cc680a",
+      "title": "Negatív számok kivonása",
+      "ms": 10689,
+      "usage": {
+        "promptTokens": 7210,
+        "completionTokens": 463
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 7,
+      "topicArea": "Algebra / egész számok műveletei",
+      "topic": "Negatív számok kivonása",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek magyarázattal: 'Miért csúszik el a negatív számok kivonása?', 'A számegyenes: hol állunk, merre lépünk?'; lépésről lépésre példák (9-(-6)=15), ellenőrző quiz-kérdések, kevés feladat — fogalom-tanító lecke."
+    }
+  ]
+}

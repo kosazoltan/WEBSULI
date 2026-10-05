@@ -1,0 +1,15 @@
+{
+  "note": "Spec 2026-10-05-s2-tartalom-besorolas — a pilot KÉZI mércéje, a modell futtatása ELŐTT rögzítve. Elfogadható halmaz, ahol a tartalom valóban többféle besorolást enged (indoklással).",
+  "lessons": [
+    { "provenance": "legacy_html:b7861b2e", "title": "8. osztályos hőtan", "subject": ["fizika"], "lessonType": ["fogalomtanito", "gyakorlo-feladatlap"], "why": "hőtan = fizika; a cím szerint besorolhatatlan volt" },
+    { "provenance": "legacy_html:c7ef61d6", "title": "Magyar Népzene - 8. osztály", "subject": ["enek-zene"], "lessonType": ["fogalomtanito"], "why": "népzene = ének-zene (nem magyar nyelv/irodalom)" },
+    { "provenance": "legacy_html:2b4e9607", "title": "5. osztályos kompetenciamérés felkészítő", "subject": ["matematika", "magyar-irodalom", "magyar-nyelvtan"], "lessonType": ["temazaro-felkeszito"], "why": "vegyes (matek + szövegértés): a fő tantárgy bármelyik lehet, a secondarySubjects nem lehet üres" },
+    { "provenance": "legacy_html:c41a24f3", "title": "4. Osztály Telling the Time", "subject": ["angol"], "lessonType": ["szokincs-nyelvi"], "why": "célnyelv angol, kifejezés-tanulás" },
+    { "provenance": "legacy_html:e3629394", "title": "Jobs - Foglalkozások | 3. osztály Angol", "subject": ["angol"], "lessonType": ["szokincs-nyelvi"], "why": "szókincs" },
+    { "provenance": "legacy_html:67d3d5a7", "title": "Az emberré válás folyamata - 5. osztály", "subject": ["tortenelem"], "lessonType": ["fogalomtanito"], "why": "5. évf. történelem nyitótéma" },
+    { "provenance": "legacy_html:14bcedea", "title": "5. osztály törtek Egyszerűsítése és bővítése", "subject": ["matematika"], "lessonType": ["fogalomtanito", "gyakorlo-feladatlap"], "why": "matek; magyarázat + sok gyakorló tétel" },
+    { "provenance": "legacy_html:8d4635eb", "title": "8. Osztály Az ember testfelépítése és mozgása", "subject": ["biologia"], "lessonType": ["fogalomtanito"], "why": "8. évf. biológia (vázrendszer, mozgás)" },
+    { "provenance": "legacy_html:lVFj6JdH", "title": "5. osztály - Hagyomány szerinti és egyszerűsítő írásmód", "subject": ["magyar-nyelvtan"], "lessonType": ["fogalomtanito"], "why": "helyesírási elvek = nyelvtan; a cím szerint besorolhatatlan volt" },
+    { "provenance": "lesson:fa50cc1b", "title": "A Föld kering a Nap körül (4. évf., fúziós)", "subject": ["kornyezetismeret"], "lessonType": ["fogalomtanito"], "why": "4. évfolyam = környezetismeret a taxonómia szerint (a DB-ben „Természetismeret”-ként áll — ezt a pilot éppen ellenőrzi)" }
+  ]
+}
