@@ -138,3 +138,7 @@ elmarad. A kézírásos mérés pótolandó, ha a képek meglesznek.
 döntő olvasó saját bizonytalanságánál, a harmadik (egyik olvasattal sem egyező) alaknál és a szótár-őrnél. A döntő olvasás elvetésekor
 a régi, vita-alapú jelölés marad. Mért (cache-elt olvasatok): a régi szabály a helyes „Közel - Kelet”, „lépcsőzetes”, „katonák” sorokat
 is jelölte (a gyenge qwen létező, de rossz szavai miatt); az új szabály mellett jel nélküliek.
+**Pótló mérés (2026-10-05, a tulajdonos 5 kézírásos történelem-füzetlapján, `tests/fixtures/ocr-handwriting-history.json`):**
+gpt-6.1-sol 99,4% · qwen3-vl-32b 87,1% · glm-5.3-flash 85,3% (kulcs-token recall, a #190-es mérővel; a kulcsok a futtatás előtt
+rögzítve). A `tests/ocr-handwriting-history.test.ts` hálózat nélkül újraszámol, és őrzi, hogy a forrás-OCR elsődleges olvasója a legjobb.
+A #190-es 3 kézírásos MATEK-lap továbbra is méretlen a sol-lal → a `DEFAULT_MODELS.ocr` nem változik.
