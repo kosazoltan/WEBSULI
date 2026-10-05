@@ -5,7 +5,7 @@ import { subjectKeyOf } from "../shared/subject-key";
 import { buildSubjectSkill, trapExample, verifierTraps, SPARSE_LIMIT } from "../server/catalog/subject-skill-builder";
 import { subjectSkillBlock, subjectSkillVersion } from "../server/studio/subject-skills";
 import { LESSON_TYPE_SKILLS } from "../shared/lesson-type-skills";
-import { LESSON_TYPES } from "../shared/catalog-taxonomy";
+import { LESSON_TYPES, CATALOG_SUBJECTS, SUBJECT_LABELS } from "../shared/catalog-taxonomy";
 import type { BankRow } from "../server/catalog/bank-rows";
 
 /* Spec 2026-10-05-s4-tantargyi-skillek. */
@@ -52,7 +52,7 @@ test("ritka tantárgy: jelölve, mintatétel nélkül", () => {
   assert.match(s.text, /ritka/);
 });
 
-test("csapdák: lektor-minta anonim (szám → #, idézet → „…”); gépi leletek osztályozva", () => {
+test("csapdák: lektor-minta rövidített és maszkolt (szám → #, idézet → „…”; nem garantált anonimizálás); gépi leletek osztályozva", () => {
   assert.equal(trapExample("A 3. opció szerint „12 · 2 = 48”, pedig 24."), "A #. opció szerint „…”, pedig #.");
   const traps = verifierTraps("fizika", [row({ status: "flagged", checks: ["ismétlődő válaszlehetőség"] }), row({ status: "flagged", checks: ["hamis egyenlőség: 2 = 3"] }), row({ status: "flagged", subject: "kemia", checks: ["ismétlődő válaszlehetőség"] })]);
   assert.deepEqual(traps.map((t) => `${t.code}:${t.count}`).sort(), ["hamis számítás:1", "ismétlődő válaszlehetőség:1"]);
@@ -86,4 +86,34 @@ test("v2 (valós korpuszon mérve): ékezet nélküli magyar tétel nem minta (i
   assert.doesNotMatch(text, /Hany kulonbozo/);
   assert.match(text, /Hány különböző jelet/);
   assert.equal((text.match(/7\. évf\.: [Hh]őtan/g) ?? []).length, 1, "„Hőtan” és „hőtan” egy témakör");
+});
+
+test("review #193 (8): minden hivatalos tantárgynév (SUBJECT_LABELS) a saját bank-kulcsára képeződik", () => {
+  for (const s of CATALOG_SUBJECTS) assert.equal(subjectKeyOf(SUBJECT_LABELS[s]), s, SUBJECT_LABELS[s]);
+});
+
+test("review #193 (3): a leckeszám és a témakör-térkép csak az egyező besorolású leckékből (agreedProvenances)", () => {
+  const rows = many(40, { provenances: ["lesson:agreed", "lesson:review"] });
+  const all = buildSubjectSkill("fizika", rows, [], "d");
+  assert.equal(all.lessons, 2, "halmaz nélkül minden provenance számít (visszafelé kompatibilis)");
+  const s = buildSubjectSkill("fizika", rows, [], "d", new Set(["lesson:agreed"]));
+  assert.equal(s.lessons, 1);
+  assert.match(s.text, /7\. évf\.: Hőtan — 40 tétel, 1 lecke/);
+  assert.match(s.text, /leckék: 1 \|/);
+});
+
+test("review #193 (2): a lektor-minta maszkolja az e-mailt és a névszerű szópárt is (egyszerű maszk, nem anonimizálás)", () => {
+  assert.equal(trapExample("Kiss Péter ezt írta: pelda@iskola.hu — 3 hiba"), "[név] ezt írta: …@… — # hiba");
+  assert.doesNotMatch(trapExample("Nagy Anna Mária és anna@x.hu"), /Anna|Nagy|@x/);
+});
+
+test("review #193 (9): a kizárás-listán lévő tétel nem lehet minta, de a bank-számokban marad; a lista indokolt és létező lenyomatú", async () => {
+  const { SAMPLE_EXCLUSIONS } = await import("../server/catalog/sample-exclusions");
+  const bad = Object.keys(SAMPLE_EXCLUSIONS)[0];
+  const rows = [...many(40), row({ fingerprint: bad, prompt: "KIZÁRT MINTA" })];
+  const s = buildSubjectSkill("fizika", rows, [], "d");
+  assert.doesNotMatch(s.text, /KIZÁRT MINTA/);
+  assert.equal(s.activeItems, 41);
+  for (const [fp, e] of Object.entries(SAMPLE_EXCLUSIONS)) { assert.match(fp, /^[0-9a-f]{16}$/); assert.ok(e.reason.length > 10 && e.provenance.length > 5); }
+  assert.doesNotMatch(readFileSync(new URL("../shared/subject-skills/magyar-nyelvtan.md", import.meta.url), "utf8"), /jegy-gyel/);
 });

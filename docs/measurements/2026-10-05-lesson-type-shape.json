@@ -4,18 +4,18 @@
  "types": {
   "fogalomtanito": {
    "lessons": 110,
-   "items": 13643,
+   "items": 13698,
    "kinds": {
-    "section": 2111,
+    "section": 2116,
     "open_task": 2579,
-    "quiz": 7203,
+    "quiz": 7253,
     "short_answer": 1407,
     "method": 343
    },
    "share": {
-    "quiz": 52.8,
-    "open_task": 18.9,
-    "section": 15.5,
+    "quiz": 52.9,
+    "open_task": 18.8,
+    "section": 15.4,
     "short_answer": 10.3,
     "method": 2.5
    }
@@ -65,21 +65,21 @@
    }
   },
   "szokincs-nyelvi": {
-   "lessons": 19,
-   "items": 2458,
+   "lessons": 18,
+   "items": 2403,
    "kinds": {
-    "quiz": 1273,
-    "section": 215,
+    "section": 210,
     "short_answer": 595,
+    "quiz": 1223,
     "vocab": 123,
     "open_task": 252
    },
    "share": {
-    "quiz": 51.8,
-    "short_answer": 24.2,
-    "open_task": 10.3,
+    "quiz": 50.9,
+    "short_answer": 24.8,
+    "open_task": 10.5,
     "section": 8.7,
-    "vocab": 5
+    "vocab": 5.1
    }
   },
   "temazaro-felkeszito": {

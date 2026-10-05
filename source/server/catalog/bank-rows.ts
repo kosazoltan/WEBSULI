@@ -67,7 +67,11 @@ export function itemStatus(item: CatalogItemDraft, agreed: boolean): { status: B
   return { status: checks.length ? "flagged" : "active", checks };
 }
 
-const STATUS_RANK: Record<BankRow["status"], number> = { review: 0, flagged: 1, active: 2 };
+type Candidate = { item: CatalogItemDraft; place: LessonPlacement; trust: Trust; status: BankRow["status"]; checks: string[] };
+
+/** A sor „nyertes” előfordulása: egyező besorolás előbb, majd magasabb bizalom, végül a provenance betűrendje — sorrendfüggetlen. */
+const compareCandidates = (a: Candidate, b: Candidate): number =>
+  Number(b.place.agreed) - Number(a.place.agreed) || TRUST_RANK[b.trust] - TRUST_RANK[a.trust] || a.item.provenance.localeCompare(b.item.provenance);
 
 export function toBankRows(
   items: Array<CatalogItemDraft & { classroom?: number | null }>,
@@ -75,31 +79,31 @@ export function toBankRows(
   adminSubjects: ReadonlyMap<string, string> = new Map(),
 ): BankRow[] {
   const byLesson = new Map(classifications.map((c) => [c.provenance, c]));
-  const rows = new Map<string, BankRow>();
+  const groups = new Map<string, Candidate[]>();
   for (const item of items) {
     const place = placeLesson(byLesson.get(item.provenance), item.classroom ?? null, adminSubjects.get(item.provenance));
     const { status, checks } = itemStatus(item, place.agreed);
-    const trust = trustOf(item.provenance);
     const key = `${place.subject}\u0001${item.fingerprint}`;
-    const prev = rows.get(key);
-    if (!prev) {
-      rows.set(key, {
-        subject: place.subject, grade: place.grade, topicArea: place.topicArea, topic: place.topic, lessonType: place.lessonType,
-        kind: item.kind, prompt: item.prompt, body: item.body ?? null, options: item.options ?? null, correctIndex: item.correctIndex ?? null,
-        accepted: item.accepted ?? null, keywordGroups: item.keywordGroups ?? null, steps: item.steps ?? null, pair: item.pair ?? null,
-        conceptIds: item.conceptIds ?? null, provenances: [item.provenance], trust, status, checks, fingerprint: item.fingerprint,
-      });
-      continue;
-    }
-    // Ugyanaz a tétel több leckében: egy sor, minden forrás; a magasabb bizalmi szint és a hozzá tartozó téma marad; a legkisebb
-    // évfolyam (ahol először előfordul); az egyező besorolású lecke tagsága erősebb az átnézendőnél.
-    if (!prev.provenances.includes(item.provenance)) prev.provenances.push(item.provenance);
-    if (TRUST_RANK[trust] > TRUST_RANK[prev.trust]) Object.assign(prev, { trust, topicArea: place.topicArea ?? prev.topicArea, topic: place.topic ?? prev.topic, lessonType: place.lessonType ?? prev.lessonType });
-    if (place.grade !== null && (prev.grade === null || place.grade < prev.grade)) prev.grade = place.grade;
-    if (STATUS_RANK[status] > STATUS_RANK[prev.status]) Object.assign(prev, { status, checks });
+    const list = groups.get(key) ?? [];
+    list.push({ item, place, trust: trustOf(item.provenance), status, checks });
+    groups.set(key, list);
   }
-  for (const row of rows.values()) row.provenances.sort();
-  return [...rows.values()];
+  // Ugyanaz a tétel több leckében: egy sor, minden forrás. A metaadat (téma, lecketípus, státusz, ellenőrzések, bizalom) EGY nyertes
+  // előfordulásból jön (rendezési kulcs: egyező besorolás, bizalom, provenance) — a bemenet sorrendje nem számít. Évfolyam: a legkisebb
+  // az egyező besorolású leckék között (ha nincs ilyen, az összes közül).
+  const rows: BankRow[] = [];
+  for (const list of groups.values()) {
+    const sorted = [...list].sort(compareCandidates);
+    const { item, place, trust, status, checks } = sorted[0];
+    const grades = (sorted.some((c) => c.place.agreed) ? sorted.filter((c) => c.place.agreed) : sorted).flatMap((c) => (c.place.grade === null ? [] : [c.place.grade]));
+    rows.push({
+      subject: place.subject, grade: grades.length ? Math.min(...grades) : null, topicArea: place.topicArea, topic: place.topic, lessonType: place.lessonType,
+      kind: item.kind, prompt: item.prompt, body: item.body ?? null, options: item.options ?? null, correctIndex: item.correctIndex ?? null,
+      accepted: item.accepted ?? null, keywordGroups: item.keywordGroups ?? null, steps: item.steps ?? null, pair: item.pair ?? null,
+      conceptIds: item.conceptIds ?? null, provenances: [...new Set(sorted.map((c) => c.item.provenance))].sort(), trust, status, checks: [...checks], fingerprint: item.fingerprint,
+    });
+  }
+  return rows;
 }
 
 /** Bankonkénti összesítés (dry-run és admin-összefoglaló közös alakja). */

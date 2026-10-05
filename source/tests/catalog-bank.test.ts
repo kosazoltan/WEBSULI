@@ -80,3 +80,34 @@ test("import: alapból dry-run; írás csak teljes besorolással; az admin-stát
   assert.match(src, /CASE WHEN catalog_items\.status_by_admin THEN catalog_items\.status ELSE EXCLUDED\.status END/);
   assert.match(src, /DELETE FROM catalog_items c WHERE NOT c\.status_by_admin/);
 });
+
+/* Review #193 (6): az összevonás determinisztikus — a bemenet sorrendje nem számít; a nyertes előfordulás adja a metaadatot. */
+test("összevonás: két sorrend → azonos sorok; a nyertes az egyező besorolású, magas bizalmú előfordulás; évfolyam csak egyező leckékből", () => {
+  const items = [quiz("legacy_html:rev", "same", { classroom: 3 }), quiz("lesson:a", "same", { classroom: 7 }), quiz("lesson:b", "same", { classroom: 6 })];
+  const cl: LessonClassification[] = [
+    { provenance: "legacy_html:rev", status: "review", candidates: [{ model: "m", classification: cls("matematika", { topic: "Átnézendő téma", topicArea: "Átnézendő" }) }], reason: "r" },
+    agreed("lesson:a", "matematika", { topic: "A téma" }), agreed("lesson:b", "matematika", { topic: "B téma" }),
+  ];
+  const one = toBankRows(items, cl);
+  const two = toBankRows([...items].reverse(), [...cl].reverse());
+  assert.deepEqual(one, two);
+  assert.equal(one.length, 1);
+  assert.equal(one[0].topic, "A téma", "az egyező besorolású, provenance szerint első nyer — nem a szülői átnézendő példány");
+  assert.equal(one[0].trust, "pipeline_verified");
+  assert.equal(one[0].status, "active");
+  assert.equal(one[0].grade, 6, "a 3. évfolyamú átnézendő lecke nem húzza le az évfolyamot");
+  assert.deepEqual(one[0].provenances, ["legacy_html:rev", "lesson:a", "lesson:b"]);
+});
+
+/* Review #193 (1,4,5): kemény kapuk az importban (forrásszintű szerződés — a script az éles DB-hez kötött, itt nem futtatható). */
+test("import: eltávolított lecke kapu (--allow-removed), elavult lecke törlése, számellenőrzés a tranzakción BELÜL", () => {
+  const src = readFileSync(new URL("../scripts/catalog/import.mts", import.meta.url), "utf8");
+  assert.match(src, /\.filter\(\(p\) => !lessons\.has\(p\)\)/, "a besorolás ÉS a DB leckéi is ellenőrzöttek");
+  assert.match(src, /dbLessonProvenances/);
+  assert.match(src, /removedLessons\.length && !allowRemoved/);
+  assert.match(src, /DELETE FROM catalog_lessons WHERE admin_subject IS NULL AND provenance <> ALL/);
+  const tx = src.slice(src.indexOf("await withWriteTransaction"));
+  const verifyAt = tx.indexOf("throw new Error(`a DB-számok eltérnek");
+  assert.ok(verifyAt > 0 && verifyAt < tx.indexOf("\n});"), "az ellenőrzés a tranzakció törzsében van (hiba → ROLLBACK)");
+  assert.match(tx, /WHERE NOT status_by_admin GROUP BY/);
+});

@@ -19,27 +19,27 @@ const repoRoot = resolve(here, "../../..");
 const day = process.argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a)) ?? new Date().toISOString().slice(0, 10);
 const fromDb = process.argv.includes("--db");
 
-async function rowsFromFiles(): Promise<BankRow[]> {
+async function rowsFromFiles(): Promise<{ rows: BankRow[]; agreed: Set<string> }> {
   const items = JSON.parse(readFileSync(resolve(here, "../../.catalog", `${day}-items.json`), "utf8")) as Array<CatalogItemDraft & { classroom: number | null }>;
   const classified = JSON.parse(readFileSync(resolve(repoRoot, "docs/measurements", `${day}-classify-all.json`), "utf8")) as { results: Array<Record<string, unknown> & { provenance: string; status: string }> };
   const cls: LessonClassification[] = classified.results.map((r) => r.status === "agreed"
     ? { provenance: r.provenance, status: "agreed", classification: r as unknown as Classification }
     : r.status === "review" ? { provenance: r.provenance, status: "review", candidates: (r.candidates ?? []) as Array<{ model: string; classification: Classification }>, reason: String(r.reason ?? "") }
       : { provenance: r.provenance, status: "unclassified", reason: String(r.reason ?? "") });
-  return toBankRows(items, cls);
+  return { rows: toBankRows(items, cls), agreed: new Set(cls.filter((c) => c.status === "agreed").map((c) => c.provenance)) };
 }
 
-async function rowsFromDb(): Promise<BankRow[]> {
-  return withReadOnlyDb(async (q) => (await q<Record<string, unknown>>(`SELECT subject, grade, topic_area, topic, lesson_type, kind, prompt, body, options, correct_index, accepted,
+async function rowsFromDb(): Promise<{ rows: BankRow[]; agreed: Set<string> }> {
+  return withReadOnlyDb(async (q) => ({ agreed: new Set((await q<{ provenance: string }>("SELECT provenance FROM catalog_lessons WHERE classification_status = 'agreed' OR admin_subject IS NOT NULL")).map((r) => r.provenance)), rows: (await q<Record<string, unknown>>(`SELECT subject, grade, topic_area, topic, lesson_type, kind, prompt, body, options, correct_index, accepted,
     keyword_groups, steps, pair, concept_ids, provenances, trust, status, checks, fingerprint FROM catalog_items WHERE status IN ('active','flagged')`)).map((r) => ({
     subject: String(r.subject), grade: r.grade as number | null, topicArea: r.topic_area as string | null, topic: r.topic as string | null, lessonType: r.lesson_type as string | null,
     kind: r.kind as BankRow["kind"], prompt: String(r.prompt), body: r.body as string | null, options: r.options as string[] | null, correctIndex: r.correct_index as number | null,
     accepted: r.accepted as string[] | null, keywordGroups: r.keyword_groups as string[][] | null, steps: r.steps as string[] | null, pair: r.pair as BankRow["pair"], conceptIds: r.concept_ids as string[] | null,
     provenances: r.provenances as string[], trust: r.trust as BankRow["trust"], status: r.status as BankRow["status"], checks: r.checks as string[], fingerprint: String(r.fingerprint),
-  })));
+  })) }));
 }
 
-const rows = fromDb ? await rowsFromDb() : await rowsFromFiles();
+const { rows, agreed: agreedProvenances } = fromDb ? await rowsFromDb() : await rowsFromFiles();
 
 // Lektor-csapdák tantárgyanként: jegyzet → feladat → tudástérkép szabad szöveges tantárgya → bank-kulcs (ismeretlen → kimarad).
 const notes = await withReadOnlyDb((q) => q<{ subject: string | null; kind: string; subkind: string | null; message: string }>(
@@ -61,7 +61,7 @@ for (const n of notes) {
 const outDir = resolve(here, "../../shared/subject-skills");
 mkdirSync(outDir, { recursive: true });
 for (const f of readdirSync(outDir)) if (f.endsWith(".md")) rmSync(resolve(outDir, f));
-const built = CATALOG_SUBJECTS.map((s) => buildSubjectSkill(s, rows, [...(lektorTraps.get(s)?.values() ?? []), ...verifierTraps(s, rows)], day)).filter((s) => s.activeItems > 0);
+const built = CATALOG_SUBJECTS.map((s) => buildSubjectSkill(s, rows, [...(lektorTraps.get(s)?.values() ?? []), ...verifierTraps(s, rows)], day, agreedProvenances)).filter((s) => s.activeItems > 0);
 for (const s of built) writeFileSync(resolve(outDir, `${s.subject}.md`), s.text);
 const index = [
   "// GENERÁLT FÁJL — scripts/catalog/build-subject-skills.mts. Kézzel ne szerkeszd; újragenerálás után a verzió-hash változik.",
@@ -86,7 +86,7 @@ for (const r of rows) {
   s.items++;
   s.kinds[r.kind] = (s.kinds[r.kind] ?? 0) + 1;
   const set = lessonsByType.get(r.lessonType) ?? new Set<string>();
-  for (const p of r.provenances) set.add(p);
+  for (const p of r.provenances) if (agreedProvenances.has(p)) set.add(p);
   lessonsByType.set(r.lessonType, set);
 }
 for (const [t, set] of lessonsByType) shape[t].lessons = set.size;

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { SUBJECT_LABELS, type CatalogSubject } from "../../shared/catalog-taxonomy";
 import type { BankRow } from "./bank-rows";
+import { isExcludedSample } from "./sample-exclusions";
 
 /**
  * Spec 2026-10-05-s4-tantargyi-skillek: a tantárgyi skill DETERMINISZTIKUS összeállítása a visszafejtett katalógusból (modell
@@ -47,9 +48,12 @@ function sampleLine(r: BankRow): string {
 }
 
 /** Egy tantárgy skill-szövege a bank-soraiból. `rows` bármilyen sorrendben jöhet — a kimenet rendezett. */
-export function buildSubjectSkill(subject: CatalogSubject, allRows: readonly BankRow[], traps: readonly Trap[], sourceDay: string): SubjectSkill {
+export function buildSubjectSkill(subject: CatalogSubject, allRows: readonly BankRow[], traps: readonly Trap[], sourceDay: string, agreedProvenances?: ReadonlySet<string>): SubjectSkill {
   const rows = allRows.filter((r) => r.subject === subject && r.status === "active");
-  const lessons = new Set(rows.flatMap((r) => r.provenances)).size;
+  // Spec S4: a leckeszám és a témakör-térkép CSAK az egyező besorolású leckékből (aktív tételek ∩ agreed leckék) — az átnézendő
+  // lecke, amely egy aktív sorba beolvadt, nem számít bele. Ha a halmaz nincs megadva, minden provenance számít.
+  const countable = (r: BankRow): string[] => (agreedProvenances ? r.provenances.filter((p) => agreedProvenances.has(p)) : r.provenances);
+  const lessons = new Set(rows.flatMap(countable)).size;
   const sparse = rows.length < SPARSE_LIMIT;
   const out: string[] = [];
   out.push(`# Tantárgyi skill: ${SUBJECT_LABELS[subject]} (bank: ${subject})`);
@@ -67,7 +71,7 @@ export function buildSubjectSkill(subject: CatalogSubject, allRows: readonly Ban
     const a = areas.get(key) ?? { grade: r.grade, area, items: 0, lessons: new Set<string>() };
     if (area.localeCompare(a.area, "hu") < 0) a.area = area;
     a.items++;
-    for (const p of r.provenances) a.lessons.add(p);
+    for (const p of countable(r)) a.lessons.add(p);
     areas.set(key, a);
   }
   const areaList = [...areas.entries()].sort((x, y) => x[0].localeCompare(y[0], "hu")).map(([, a]) => a);
@@ -87,7 +91,7 @@ export function buildSubjectSkill(subject: CatalogSubject, allRows: readonly Ban
     let taken = 0;
     for (const a of areaList) {
       if (taken >= MAX_SAMPLES) break;
-      const pool = rows.filter((r) => r.trust === "parent_verified" && r.kind !== "section" && areaKey(r.topicArea ?? "(témakör nélkül)") === areaKey(a.area) && r.grade === a.grade
+      const pool = rows.filter((r) => r.trust === "parent_verified" && r.kind !== "section" && !isExcludedSample(r.fingerprint) && areaKey(r.topicArea ?? "(témakör nélkül)") === areaKey(a.area) && r.grade === a.grade
         && !unaccentedHungarian(subject, `${r.prompt} ${(r.options ?? []).join(" ")}`))
         .sort((x, y) => x.fingerprint.localeCompare(y.fingerprint)).slice(0, Math.min(SAMPLES_PER_AREA, MAX_SAMPLES - taken));
       if (!pool.length) continue;
@@ -107,9 +111,13 @@ export function buildSubjectSkill(subject: CatalogSubject, allRows: readonly Ban
   return { subject, text, sparse, activeItems: rows.length, lessons, version: createHash("sha256").update(text).digest("hex").slice(0, 12) };
 }
 
-/** Lektor-jegyzet üzenetének anonim mintája: szám → #, idézett szöveg → „…”, 120 karakter. */
+/**
+ * Lektor-jegyzet üzenetének rövidített mintája: idézett szöveg → „…”, e-mail/`@`-os token → „…@…”, két nagybetűs szó egymás után
+ * (névszerű) → „[név]”, szám → #, 120 karakter. Ez egyszerű maszkolás, NEM garantált anonimizálás.
+ */
 export function trapExample(message: string): string {
-  return clip(oneLine(message).replace(/[„"«][^”"»]*[”"»]/g, "„…”").replace(/\d+(?:[.,]\d+)?/g, "#"), 120);
+  return clip(oneLine(message).replace(/[„"«][^”"»]*[”"»]/g, "„…”").replace(/\S*@\S*/g, "…@…")
+    .replace(/(?<![\p{L}])\p{Lu}\p{Ll}+(?:[ -]\p{Lu}\p{Ll}+)+/gu, "[név]").replace(/\d+(?:[.,]\d+)?/g, "#"), 120);
 }
 
 /** A gépi ellenőrző leleteiből tantárgyi csapda-osztályok (a jelölt tételek `checks` mezőjéből). */

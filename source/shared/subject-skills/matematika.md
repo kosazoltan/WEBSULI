@@ -1,5 +1,5 @@
 # Tantárgyi skill: Matematika (bank: matematika)
-<!-- subject-skill-builder v2 | forrás: 2026-10-05 | leckék: 52 | aktív tételek: 5259 -->
+<!-- subject-skill-builder v2 | forrás: 2026-10-05 | leckék: 51 | aktív tételek: 5259 -->
 
 ## Szabályok
 - Ez a(z) Matematika bank tudása; más tantárgy (más természettudományi ág) bankjára NE hivatkozz.
@@ -17,10 +17,10 @@
 - 3. évf.: összeadás és kivonás — 10 tétel, 1 lecke
 - 3. évf.: összeadás-kivonás 20-ig — 7 tétel, 1 lecke
 - 3. évf.: számolás — 2 tétel, 1 lecke
-- 3. évf.: számtan — 5 tétel, 2 lecke
-- 3. évf.: számtan, 1000-es számkör — 6 tétel, 1 lecke
+- 3. évf.: számtan — 4 tétel, 1 lecke
+- 3. évf.: számtan, 1000-es számkör — 7 tétel, 2 lecke
 - 3. évf.: Szorzás — 20 tétel, 1 lecke
-- 3. évf.: Szorzás és osztás — 208 tétel, 2 lecke
+- 3. évf.: Szorzás és osztás — 208 tétel, 1 lecke
 - 4. évf.: Geometria — 121 tétel, 1 lecke
 - 4. évf.: Írásbeli műveletek — 37 tétel, 1 lecke
 - 4. évf.: matematika alapismeretek — 6 tétel, 1 lecke
@@ -32,8 +32,8 @@
 - 5. évf.: Geometria – testek — 136 tétel, 1 lecke
 - 5. évf.: Mérés és mértékegységek — 136 tétel, 1 lecke
 - 5. évf.: műveletek — 148 tétel, 1 lecke
-- 5. évf.: Római számok — 178 tétel, 1 lecke
-- 5. évf.: Számírás, számrendszerek — 191 tétel, 2 lecke
+- 5. évf.: Római számok — 179 tétel, 2 lecke
+- 5. évf.: Számírás, számrendszerek — 190 tétel, 1 lecke
 - 5. évf.: Számok, műveletek, algebra — 154 tétel, 1 lecke
 - 5. évf.: Számtan, algebrai alapok — 155 tétel, 1 lecke
 - 5. évf.: törtek — 408 tétel, 3 lecke

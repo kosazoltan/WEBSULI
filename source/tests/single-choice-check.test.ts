@@ -80,3 +80,11 @@ test("lessonSingleChoiceProblems: check blokk, kvíz és választós módszer ú
   assert.equal(found[1].id, "q1");
   assert.ok(found.every((f) => f.problems.length === 1));
 });
+
+test("review #193 (7): az „Egyik sem” nem kapcsolja ki az érték-egyezés vizsgálatát — a többi opció összehasonlítása marad", () => {
+  const problems = singleChoiceProblems({ prompt: "Melyik szám egyenlő a nulla egésszel és öt tizeddel?", options: ["0,5", "2/4", "Egyik sem"], correctIndex: 0 });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /ugyanazt jelenti/);
+  // a gyűjtő-opció („Mind helyes”) továbbra is szándékossá teszi az egyenértékű alakokat
+  assert.deepEqual(singleChoiceProblems({ prompt: "Melyik szám egyenlő a nulla egésszel és öt tizeddel?", options: ["0,5", "2/4", "Mind helyes"], correctIndex: 2 }), []);
+});

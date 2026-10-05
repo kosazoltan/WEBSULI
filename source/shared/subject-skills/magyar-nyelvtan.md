@@ -56,7 +56,7 @@
 - [kvíz] Válaszd ki a helyes elválasztást: OSZTÁLY — a) o-sztály; b) osz-tály; c) oszt-ály; d) osztá-ly (helyes: b)
 ### 5. évf. — Helyesírás és irodalom
 - [kvíz] Mit mutat a 'hosszú' szó írása? — a) Kiejtés elvét; b) Szóelemzés elvét; c) Hagyomány elvét; d) Egyszerűsítés elvét (helyes: d)
-- [kvíz] Hogyan írjuk: 'jegy' + '-gyel' toldalékkal? — a) jeggyel; b) jegy-gyel; c) jeggel; d) jegyel (helyes: b)
+- [kvíz] Mennyi idővel felesége halála után házasodott meg újra Jókai? — a) 5 év; b) 10 év; c) 13 év; d) 15 év (helyes: c)
 ### 8. évf. — nyelvtan
 - [kvíz] Mi a helyhatározó három fő kérdése? — a) Mikor? Meddig? Mióta?; b) Hol? Hová? Honnan?; c) Hogyan? Miként? Milyen módon?; d) Kivel? Kinek? Mivel? (helyes: b)
 - [rövid válasz] Elemezd ezt a mondatot minden határozó szempontjából: 'Tegnap délután boldogan sétáltam gyorsan a parkban barátaimmal.' — elfogadott: Öt határozó van: 'Tegnap délután' - idő…

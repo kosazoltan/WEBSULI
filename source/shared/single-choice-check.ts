@@ -44,7 +44,9 @@ const ABOUT_FORM = /egyszerűs|bővít|alak|formá|írásmód|felír|tizedes tö
 const NEGATED_EQUALITY = /(?<!\p{L})nem\s+(?:egyenlő|egyenértékű|ugyanannyi|ugyanakkora|azonos értékű)/u;
 /** Spec 2026-10-05-s3-katalogus-bank (mérve: „24/36 = ?” → 4/6 | 2/3 | 12/18 | „Mind helyes”): ha van gyűjtő-opció, az egyenértékű
  *  alakok SZÁNDÉKOSAK (épp az a kérdés, hogy mindegyik helyes-e). */
-const AGGREGATE_OPTION = /^(?:mind(?:egyik|en|három|kettő|négy)?\s+(?:helyes|igaz|jó)|mindegyik|mindhárom|mindkettő|egyik sem)/u;
+// Review #193 (7): az „Egyik sem” NEM gyűjtő-opció — nem teszi szándékossá a másik opciók érték-egyezését; számértéke nincs,
+// ezért az érték-összehasonlításból magától kimarad, a többi opció összehasonlítása marad.
+const AGGREGATE_OPTION = /^(?:mind(?:egyik|en|három|kettő|négy)?\s+(?:helyes|igaz|jó)|mindegyik|mindhárom|mindkettő)/u;
 
 function duplicateProblems(prompt: string, options: readonly string[]): string[] {
   const problems: string[] = [];

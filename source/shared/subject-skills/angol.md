@@ -17,10 +17,10 @@
 - 3. évf.: téli vers és szókincs — 134 tétel, 1 lecke
 - 4. évf.: alapszókincs és nyelvtan — 371 tétel, 2 lecke
 - 4. évf.: alapvető szókincs és nyelvtan ismétlés — 13 tétel, 1 lecke
-- 4. évf.: All About Me — 16 tétel, 1 lecke
+- 4. évf.: All About Me — 71 tétel, 2 lecke
 - 4. évf.: angol nyelv - kultúra és szókincs — 140 tétel, 1 lecke
 - 4. évf.: angol nyelvtan — 198 tétel, 3 lecke
-- 4. évf.: Angol nyelvtan és szókincs — 71 tétel, 2 lecke
+- 4. évf.: Angol nyelvtan és szókincs — 16 tétel, 1 lecke
 - 4. évf.: Halloween — 126 tétel, 1 lecke
 - 4. évf.: Karácsonyi szokások és szókincs — 223 tétel, 1 lecke
 - 4. évf.: nyelvtan — 338 tétel, 2 lecke
@@ -64,15 +64,15 @@
 ### 4. évf. — alapszókincs és nyelvtan
 - [szókincs] bookshop → konyvesbolt
 - [szókincs] him → ot (fiu)
+### 4. évf. — All About Me
+- [kvíz] It's Tom's ___. — a) dog; b) dogs; c) dog's; d) dogs' (helyes: a)
+- [kvíz] Those are ___ boots. — a) she; b) her; c) hers; d) she's (helyes: b)
 ### 4. évf. — angol nyelv - kultúra és szókincs
 - [kvíz] What does 'share' mean? — a) Keep alone; b) Give part to others; c) Steal; d) Break (helyes: b)
 - [nyílt] Name one traditional Polish Christmas drink: — kulcsszavak: compote, tea, wine
 ### 4. évf. — angol nyelvtan
 - [rövid válasz] Egészítsd ki: We ___ friends. (Mi barátok vagyunk.) — elfogadott: Helyes válasz: are Magyarázat: A 'we' (…
 - [kvíz] She ___ a beautiful picture yesterday. — a) draw; b) drew; c) drawed (helyes: b)
-### 4. évf. — Angol nyelvtan és szókincs
-- [kvíz] It's Tom's ___. — a) dog; b) dogs; c) dog's; d) dogs' (helyes: a)
-- [kvíz] Those are ___ boots. — a) she; b) her; c) hers; d) she's (helyes: b)
 ### 4. évf. — Halloween
 - [kvíz] What animal is mentioned with the moon? — a) Dog; b) Cat; c) Bird; d) Mouse (helyes: b)
 - [kvíz] When is Halloween? — a) Morning; b) Afternoon; c) Tonight; d) Tomorrow (helyes: c)

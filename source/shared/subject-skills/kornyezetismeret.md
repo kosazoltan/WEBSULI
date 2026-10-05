@@ -7,14 +7,14 @@
 - Szó szerint csak azonos témájú és évfolyamú tételt vegyél át; egyébként csak sablonként használd.
 
 ## Témakörök évfolyamonként
-- 4. évf.: Az emberi test — 140 tétel, 2 lecke
+- 4. évf.: Az emberi test — 3 tétel, 1 lecke
 - 4. évf.: Az emberi test szervrendszerei — 147 tétel, 1 lecke
 - 4. évf.: egészségtan — 142 tétel, 1 lecke
 - 4. évf.: Életközösségek — 149 tétel, 1 lecke
 - 4. évf.: Életközösségek lakóhelyünk környezetében — 127 tétel, 1 lecke
 - 4. évf.: Élőhelyek — 147 tétel, 1 lecke
 - 4. évf.: Ember és társadalom / egészség — 153 tétel, 1 lecke
-- 4. évf.: Emberi test — 51 tétel, 1 lecke
+- 4. évf.: Emberi test — 188 tétel, 2 lecke
 - 4. évf.: Emberi test és egészség — 160 tétel, 1 lecke
 - 4. évf.: Magyarország földrajza — 123 tétel, 2 lecke
 - 4. évf.: Világűr — 132 tétel, 1 lecke
@@ -24,9 +24,6 @@
 - kvíz 52% · nyílt feladat 19% · magyarázó fejezet 17% · rövid válasz 11% · módszer 1%
 
 ## Mintatételek (szülő-ellenőrzött)
-### 4. évf. — Az emberi test
-- [nyílt] Sorold fel a négy alapízt! — kulcsszavak: édes, sós, savanyú, keserű
-- [kvíz] Miért pislogunk? — a) Hogy jobban lássunk; b) Hogy könnyel lemossuk a szennyeződést; c) Azért mert fáradtak vagyunk (helyes: b)
 ### 4. évf. — Az emberi test szervrendszerei
 - [kvíz] Mi történik a tüdőben? — a) Étel emésztődik; b) Oxigén jut a vérbe; c) Víz szívódik fel (helyes: b)
 - [nyílt] Mi az inhaláló (inhalálókészülék)? — kulcsszavak: gyógyszer, permet, légút, tágít
@@ -46,8 +43,8 @@
 - [nyílt] Hogyan segíthetünk egy vak embernek az utcán? — kulcsszavak: megfog, átkel
 - [nyílt] Mit használnak a látássérültek az olvasáshoz? — kulcsszavak: hangoskönyv, braille
 ### 4. évf. — Emberi test
+- [nyílt] Sorold fel a négy alapízt! — kulcsszavak: édes, sós, savanyú, keserű
 - [kvíz] Melyik akaratlanul működő izom? — a) A karizom; b) A szívizom; c) A lábizom (helyes: b)
-- [nyílt] Mire van szükséged ahhoz, hogy mozogni tudj? — kulcsszavak: csont, izom, izmok, csontok
 ### 4. évf. — Emberi test és egészség
 - [nyílt] Sorolj fel legalább 3 fontos tisztálkodási tevékenységet! — kulcsszavak: mosakod, fogmos, fürd
 - [kvíz] Mi segít a vérnek a betegségek elleni küzdelemben? — a) Védőanyagok; b) Cukor; c) Víz (helyes: a)

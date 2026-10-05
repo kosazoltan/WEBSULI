@@ -1,4 +1,4 @@
-import { CATALOG_SUBJECTS, type CatalogSubject } from "./catalog-taxonomy";
+import { CATALOG_SUBJECTS, SUBJECT_LABELS, type CatalogSubject } from "./catalog-taxonomy";
 
 /**
  * Spec 2026-10-05-s4-tantargyi-skillek: a gyártás szabad szöveges tantárgya (`knowledge_maps.subject`) → katalógus-bank kulcs.
@@ -36,12 +36,21 @@ const SYNONYMS: Record<string, CatalogSubject | null> = {
   "technika es tervezes": "technika",
 };
 
-const BY_KEY = new Map<string, CatalogSubject>(CATALOG_SUBJECTS.map((s) => [normalize(s.replace(/-/g, " ")), s]));
+// A hivatalos megjelenített nevek (zárójeles rész nélkül) is kulcsok — a szinonimák elsőbbséget élveznek (review #193, S4 spec).
+const BY_KEY = new Map<string, CatalogSubject>([
+  ...CATALOG_SUBJECTS.map((s) => [normalize(SUBJECT_LABELS[s].replace(/\([^)]*\)/g, " ")), s] as const),
+  ...CATALOG_SUBJECTS.map((s) => [normalize(s.replace(/-/g, " ")), s] as const),
+]);
+
+const lookup = (key: string): CatalogSubject | null | undefined => (key in SYNONYMS ? SYNONYMS[key] : BY_KEY.get(key));
 
 export function subjectKeyOf(text: string | null | undefined): CatalogSubject | null {
   if (!text) return null;
   const key = normalize(text);
   if (!key) return null;
-  if (key in SYNONYMS) return SYNONYMS[key];
-  return BY_KEY.get(key) ?? null;
+  // Teljes szöveg előbb; ha nincs találat, a zárójeles rész nélkül (pl. „Környezetismeret (1–4. évfolyam)”).
+  const exact = lookup(key);
+  if (exact !== undefined) return exact;
+  const bare = normalize(text.replace(/\([^)]*\)/g, " "));
+  return bare && bare !== key ? lookup(bare) ?? null : null;
 }
