@@ -19,6 +19,7 @@ Tokenköltség (a `studio_jobs.tokens_*` csak az utolsó lépést tárolja — U
 tanulói eredmény (S8).
 
 ## Elfogadás (EARS)
-- A 2026-10-05-ös terv számai reprodukálódnak: 77 futás / 23 siker; a bukás-osztályozás determinisztikus és teszttel rögzített.
+- Csak a LEZÁRT futás (step done/error) számít (review #187); a kanonikus mérés: 75 futás / 23 siker / 52 bukás — a terv számai
+  ebből származnak. A bukás = step error (a köztes lépés status=error nem). A kapcsolat ellenőrzött TLS-sel, csak olvasó tranzakcióban.
 - HA a főkönyv hiányzik, AKKOR a régi mezőkből számol (repair-ledger `repairUse`).
 - Teljes unit, tsc, lint zöld.

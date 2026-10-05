@@ -1,46 +1,46 @@
 {
-  "measuredAt": "2026-10-05T07:19:50.628Z",
-  "jobs": 77,
+  "measuredAt": "2026-10-05T07:30:56.600Z",
+  "jobs": 75,
   "summary": [
     {
       "subject": "ÖSSZESEN",
-      "runs": 77,
+      "runs": 75,
       "success": 23,
-      "successRate": 0.3,
+      "successRate": 0.31,
       "failures": {
         "schema_code": 6,
         "animator_contract": 1,
         "budget_engine": 1,
         "coverage_grounding": 5,
-        "infrastructure": 10,
+        "infrastructure": 9,
         "bank_packet": 12,
         "other": 5,
         "factual_at_limit": 6,
         "source_extraction": 1,
         "bank_floor_after_removal": 6
       },
-      "avgBankNotes": 10.45,
-      "avgTeachNotes": 1.18,
-      "avgBankOnlyRounds": 0.68
+      "avgBankNotes": 10.69,
+      "avgTeachNotes": 1.17,
+      "avgBankOnlyRounds": 0.67
     },
     {
       "subject": "Matematika",
-      "runs": 32,
+      "runs": 31,
       "success": 8,
-      "successRate": 0.25,
+      "successRate": 0.26,
       "failures": {
         "other": 3,
         "bank_packet": 7,
         "source_extraction": 1,
         "factual_at_limit": 4,
         "coverage_grounding": 2,
-        "infrastructure": 4,
+        "infrastructure": 3,
         "schema_code": 1,
         "bank_floor_after_removal": 2
       },
-      "avgBankNotes": 16.81,
+      "avgBankNotes": 17.26,
       "avgTeachNotes": 1.06,
-      "avgBankOnlyRounds": 0.84
+      "avgBankOnlyRounds": 0.81
     },
     {
       "subject": "Természetismeret",
@@ -75,7 +75,7 @@
     },
     {
       "subject": "Magyar nyelv és irodalom",
-      "runs": 5,
+      "runs": 4,
       "success": 0,
       "successRate": 0,
       "failures": {
@@ -83,7 +83,7 @@
         "animator_contract": 1
       },
       "avgBankNotes": 0,
-      "avgTeachNotes": 0.4,
+      "avgTeachNotes": 0,
       "avgBankOnlyRounds": 0
     },
     {
@@ -174,19 +174,6 @@
       "lektorNotes": 0,
       "lektorBankNotes": 0,
       "lektorTeachNotes": 0
-    },
-    {
-      "id": "cda4b74c-73e9-4356-a679-fa670b30e64e",
-      "subject": "Magyar nyelv és irodalom",
-      "success": false,
-      "failed": false,
-      "failureClass": null,
-      "bankOnlyRounds": 0,
-      "targetedGate": 0,
-      "gateBank": 0,
-      "lektorNotes": 2,
-      "lektorBankNotes": 0,
-      "lektorTeachNotes": 2
     },
     {
       "id": "fd62b66a-06a5-4b36-aa63-7ebf62d4d746",
@@ -680,19 +667,6 @@
       "gateBank": 0,
       "lektorNotes": 1,
       "lektorBankNotes": 0,
-      "lektorTeachNotes": 1
-    },
-    {
-      "id": "29a13b45-3b00-4dc4-a62b-d44d4aef821a",
-      "subject": "Matematika",
-      "success": false,
-      "failed": true,
-      "failureClass": "infrastructure",
-      "bankOnlyRounds": 2,
-      "targetedGate": 0,
-      "gateBank": 0,
-      "lektorNotes": 4,
-      "lektorBankNotes": 3,
       "lektorTeachNotes": 1
     },
     {

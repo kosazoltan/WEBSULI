@@ -70,7 +70,8 @@ export const normalizeSubject = (s: string | null | undefined): string => {
 
 export function jobMetrics(row: JobRow, notes: NoteCounts = { total: 0, bank: 0, teach: 0 }): JobMetrics {
   const success = row.step === "done";
-  const failed = row.step === "error" || row.status === "error";
+  // Review #187: a spec szerint a bukás a TERMINÁLIS `step = error` (a `status = error` egy köztes lépésen nem lezárt futás).
+  const failed = row.step === "error";
   return {
     id: row.id,
     subject: normalizeSubject(row.subject),
@@ -101,7 +102,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function subjectSummary(metrics: JobMetrics[]): SubjectSummary[] {
   const groups = new Map<string, JobMetrics[]>();
-  for (const m of metrics) groups.set(m.subject, [...(groups.get(m.subject) ?? []), m]);
+  for (const m of metrics) { const g = groups.get(m.subject); if (g) g.push(m); else groups.set(m.subject, [m]); }
   const all: Array<[string, JobMetrics[]]> = [["ÖSSZESEN", metrics], ...[...groups.entries()].sort((a, b) => b[1].length - a[1].length)];
   return all.map(([subject, ms]) => {
     const failures: Partial<Record<FailureClass, number>> = {};

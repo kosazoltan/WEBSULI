@@ -21,14 +21,15 @@ Matematika ~38, Angol/idegen nyelv ~31, Természettudomány ~25, Magyar ~15, Tö
 földrajz, ének, hittan, kompetenciamérés) a besorolhatatlanok között.
 
 ### 1.2 Futások eredményessége
-- `studio_jobs`: 77 futás → **23 sikeres (30%)**, 52 bukott. Matematika 8/32 (25%), Természetismeret 5/17, Történelem 9/16 (56%),
-  magyar 0/5, környezetismeret 0/3. Heti trend: 1/9 → 0/6 → 7/26 → 5/12 → 10/24 (javul, de messze nem szabályszerű).
-- A bukások oka (52): bank-csomag / animátor-szerződés („a bankcsomag a javító kör után sem megfelelő”, „az animátor megsértette
-  a szerződést”) a legnagyobb csoport; bank-padló kivétel után 6; tényhiba a limiten 6; séma/kódhiba 6; infrastruktúra 7;
-  fedettség/megalapozottság 4 (a #184/#186 előtt ennek nagy része hamis lelet volt).
+- Kanonikus mérés (S0, `docs/measurements/2026-10-05-baseline.json`, csak a LEZÁRT futások): **75 futás → 23 sikeres (31%)**,
+  52 bukott. Matematika 8/31 (26%), Természetismeret 5/18 (28%), Történelem 9/16 (56%), magyar 0/4, környezetismeret 0/3.
+  Heti trend (minden job, 2 nem lezárttal): 1/9 → 0/6 → 7/26 → 5/12 → 10/24 (javul, de messze nem szabályszerű).
+- A bukások oka (52, S0-osztályozó): bank-csomag 12, infrastruktúra 9, bank-padló kivétel után 6, tényhiba a limiten 6,
+  séma/kódhiba 6, fedettség/megalapozottság 5 (a #184/#186 előtt ennek nagy része hamis lelet volt), egyéb 5, animátor-szerződés 1,
+  keret 1, forrás 1.
 - Lektori jegyzetek (896): **a hibák zöme a gyakorlóbankban van** — Matematika 538/572, Történelem 237/250 bank-tétel; a tanítás
   (explain/example) jegyzetei kevesek. A tanult hibaminták közül a legnagyobb az osztályozatlan „unknown/animator” (114).
-- **Témaátfedés (durva jelzőszám):** a 77 futásból 52-höz, a 52 bukottból 39-hez már létezett témaközeli lecke a katalógusban
+- **Témaátfedés (durva, kulcsszavas jelzőszám, minden jobra):** a 77 jobból 52-höz, a 52 bukottból 39-hez már létezett témaközeli lecke a katalógusban
   (±1 évfolyam, közös tartalmi szó) — a tudás nagyrészt MEGVOLT, a rendszer nem használta.
 - **Tanulói eredményesség NEM mérhető:** `lesson_attempts` = 4, `concept_results` = 0. A „lecke eredményessége” ma csak gyártási
   minőséggel (kapu, lektor, bank-ellenőr, szülői ellenőrzés) mérhető; a tanulói mérés bekötése külön szelet (8. pont).
@@ -77,7 +78,7 @@ tudás, tantárgyi skill, tantárgyi memória **nincs**; a tanulás tulajdonoson
    a kereten, a tanuláson és a mérésen — itt a hiba nem is látszik. Workflow alá kerülve ugyanaz a kapu/tanulás védi őket.
 
 **Várható hatás (becslés, mérendő):** a bukások ~75%-a (39/52) olyan témán történt, amelyhez volt katalógus-anyag; a bukások
-legnagyobb osztálya a bank. Reális cél az első fázis után: a futás-sikeresség **30% → 70–85%** a katalógus által fedett
+legnagyobb osztálya a bank. Reális cél az első fázis után: a futás-sikeresség **31% → 70–85%** a katalógus által fedett
 témákon, a bank-javító körök és a lektori bank-jegyzetek **legalább felére** csökkenése. Nem fedett témán (új tananyag) a
 hatás kisebb (csak a tantárgyi skill és memória). A számok **nem ígéretek**: a 6. pont mérési protokollja dönti el.
 
@@ -204,7 +205,7 @@ flowchart TD
 
 | Szelet | Tartalom | Költség | Elfogadás (EARS, röviden) |
 |---|---|---|---|
-| **S0 Mérési alap** | A/B-visszajátszó keret a rögzített futásokra (bank-hibák/lecke, csak-bank körök, kapu-első-átmenet, sikeresség) | 0 modell | a mai 77 futásra reprodukálható alapszámok |
+| **S0 Mérési alap** | A/B-visszajátszó keret a rögzített futásokra (bank-hibák/lecke, csak-bank körök, kapu-első-átmenet, sikeresség) | 0 modell | a mai 75 lezárt futásra reprodukálható alapszámok (kanonikus: `docs/measurements/2026-10-05-baseline.json`) |
 | **S1 Katalógus-gyűjtés** | mind a 201 lecke (177 régi + 24 fúziós) DETERMINISZTIKUS kinyerése: fejezetek, magyarázó szöveg, kvíz (kérdés/opciók/kulcs), feladat (kulcsszó/minta), módszer | 0 modell | ≥95% kvíz helyes kulccsal kinyerve; kézi mintavétel 20 leckén |
 | **S2 Tartalom alapú besorolás** | tantárgy · évfolyam · téma · lecketípus TARTALOMBÓL (olcsó modell + determinisztikus jelek), tantárgyanként KÜLÖN bank | ~177 olcsó hívás (pilot 10 leckén méri a pontos tokenszámot) | a 52 cím szerint besorolhatatlan lecke is besorolva; kézi ellenőrzés: ≥95% egyezés |
 | **S3 Ellenőrző + bizalmi szint** | #181/#186 determinisztikus ellenőrző a katalógus-tételekre; `parent_verified` / `pipeline_verified` / `flagged` | 0 modell | a jelölt tételek listája a szülőnek átnézésre |
