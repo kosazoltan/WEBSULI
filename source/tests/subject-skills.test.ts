@@ -73,3 +73,17 @@ test("S6 előtt a gyártás nem kapja meg: egyetlen gyártási modul sem import�
     assert.doesNotMatch(readFileSync(new URL(`${dir}/${f}`, import.meta.url), "utf8"), /subject-skills|lesson-type-skills/, `${dir}/${f}`);
   }
 });
+
+test("v2 (valós korpuszon mérve): ékezet nélküli magyar tétel nem minta (idegen nyelvű bankban igen); a témakör kis-/nagybetűtől független", async () => {
+  const { unaccentedHungarian } = await import("../server/catalog/subject-skill-builder");
+  assert.equal(unaccentedHungarian("matematika", "Hany kulonbozo jelet hasznal a romai szamiras?"), true);
+  assert.equal(unaccentedHungarian("matematika", "Hány különböző jelet használ?"), false);
+  assert.equal(unaccentedHungarian("matematika", "270 + 30 = ?"), false, "rövid / számos tétel nem érintett");
+  assert.equal(unaccentedHungarian("angol", "What is the capital city of England"), false);
+  const rows = [...many(SPARSE_LIMIT, { prompt: "Hany kulonbozo jelet hasznal a romai szamiras?" }).map((r, i) => ({ ...r, fingerprint: `u${i}` })),
+    row({ fingerprint: "zz", prompt: "Hány különböző jelet használ a római számírás?" }), row({ fingerprint: "k1", topicArea: "hőtan" })];
+  const text = buildSubjectSkill("fizika", rows, [], "d").text;
+  assert.doesNotMatch(text, /Hany kulonbozo/);
+  assert.match(text, /Hány különböző jelet/);
+  assert.equal((text.match(/7\. évf\.: [Hh]őtan/g) ?? []).length, 1, "„Hőtan” és „hőtan” egy témakör");
+});

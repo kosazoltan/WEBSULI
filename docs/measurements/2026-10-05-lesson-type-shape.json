@@ -1,0 +1,104 @@
+{
+ "day": "2026-10-05",
+ "source": "files",
+ "types": {
+  "fogalomtanito": {
+   "lessons": 110,
+   "items": 13643,
+   "kinds": {
+    "section": 2111,
+    "open_task": 2579,
+    "quiz": 7203,
+    "short_answer": 1407,
+    "method": 343
+   },
+   "share": {
+    "quiz": 52.8,
+    "open_task": 18.9,
+    "section": 15.5,
+    "short_answer": 10.3,
+    "method": 2.5
+   }
+  },
+  "gyakorlati-projekt": {
+   "lessons": 6,
+   "items": 173,
+   "kinds": {
+    "section": 153,
+    "quiz": 20
+   },
+   "share": {
+    "section": 88.4,
+    "quiz": 11.6
+   }
+  },
+  "gyakorlo-feladatlap": {
+   "lessons": 17,
+   "items": 895,
+   "kinds": {
+    "short_answer": 149,
+    "section": 117,
+    "open_task": 200,
+    "quiz": 347,
+    "method": 82
+   },
+   "share": {
+    "quiz": 38.8,
+    "open_task": 22.3,
+    "short_answer": 16.6,
+    "section": 13.1,
+    "method": 9.2
+   }
+  },
+  "irodalmi-mu": {
+   "lessons": 8,
+   "items": 720,
+   "kinds": {
+    "short_answer": 161,
+    "quiz": 427,
+    "section": 132
+   },
+   "share": {
+    "quiz": 59.3,
+    "short_answer": 22.4,
+    "section": 18.3
+   }
+  },
+  "szokincs-nyelvi": {
+   "lessons": 19,
+   "items": 2458,
+   "kinds": {
+    "quiz": 1273,
+    "section": 215,
+    "short_answer": 595,
+    "vocab": 123,
+    "open_task": 252
+   },
+   "share": {
+    "quiz": 51.8,
+    "short_answer": 24.2,
+    "open_task": 10.3,
+    "section": 8.7,
+    "vocab": 5
+   }
+  },
+  "temazaro-felkeszito": {
+   "lessons": 37,
+   "items": 4334,
+   "kinds": {
+    "open_task": 735,
+    "quiz": 2350,
+    "section": 650,
+    "short_answer": 505,
+    "method": 94
+   },
+   "share": {
+    "quiz": 54.2,
+    "open_task": 17,
+    "section": 15,
+    "short_answer": 11.7,
+    "method": 2.2
+   }
+  }
+ }
+}

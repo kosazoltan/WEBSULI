@@ -1,0 +1,131 @@
+{
+ "measuredAt": "2026-10-05T09:16:36.775Z",
+ "day": "2026-10-05",
+ "mode": "dry-run",
+ "lessons": 201,
+ "classifiedLessons": 201,
+ "missingClassification": 0,
+ "lessonStatus": {
+  "agreed": 194,
+  "review": 6,
+  "unclassified": 1
+ },
+ "adminDecisions": 0,
+ "items": 23854,
+ "bankRows": 23208,
+ "totals": {
+  "active": 22223,
+  "flagged": 80,
+  "review": 905
+ },
+ "banks": {
+  "biologia": {
+   "total": 842,
+   "active": 842,
+   "flagged": 0,
+   "review": 0
+  },
+  "fizika": {
+   "total": 794,
+   "active": 794,
+   "flagged": 0,
+   "review": 0
+  },
+  "matematika": {
+   "total": 5426,
+   "active": 5259,
+   "flagged": 34,
+   "review": 133
+  },
+  "angol": {
+   "total": 4104,
+   "active": 4102,
+   "flagged": 2,
+   "review": 0
+  },
+  "francia": {
+   "total": 191,
+   "active": 190,
+   "flagged": 1,
+   "review": 0
+  },
+  "magyar-irodalom": {
+   "total": 887,
+   "active": 887,
+   "flagged": 0,
+   "review": 0
+  },
+  "hit-es-erkolcstan": {
+   "total": 181,
+   "active": 181,
+   "flagged": 0,
+   "review": 0
+  },
+  "tortenelem": {
+   "total": 2529,
+   "active": 2529,
+   "flagged": 0,
+   "review": 0
+  },
+  "magyar-nyelvtan": {
+   "total": 2450,
+   "active": 2274,
+   "flagged": 43,
+   "review": 133
+  },
+  "foldrajz": {
+   "total": 386,
+   "active": 386,
+   "flagged": 0,
+   "review": 0
+  },
+  "kornyezetismeret": {
+   "total": 1873,
+   "active": 1612,
+   "flagged": 0,
+   "review": 261
+  },
+  "kemia": {
+   "total": 324,
+   "active": 324,
+   "flagged": 0,
+   "review": 0
+  },
+  "termeszetismeret": {
+   "total": 1713,
+   "active": 1504,
+   "flagged": 0,
+   "review": 209
+  },
+  "_besorolatlan": {
+   "total": 169,
+   "active": 0,
+   "flagged": 0,
+   "review": 169
+  },
+  "informatika": {
+   "total": 952,
+   "active": 952,
+   "flagged": 0,
+   "review": 0
+  },
+  "enek-zene": {
+   "total": 163,
+   "active": 163,
+   "flagged": 0,
+   "review": 0
+  },
+  "technika": {
+   "total": 13,
+   "active": 13,
+   "flagged": 0,
+   "review": 0
+  },
+  "tarsadalmi-ismeretek": {
+   "total": 211,
+   "active": 211,
+   "flagged": 0,
+   "review": 0
+  }
+ }
+}

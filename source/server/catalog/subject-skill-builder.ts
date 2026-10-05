@@ -7,13 +7,25 @@ import type { BankRow } from "./bank-rows";
  * nélkül). Azonos bemenet → bájtra azonos szöveg (stabil verzió-hash). Minta CSAK egyező besorolású, aktív, szülő-ellenőrzött
  * tétel lehet; a jelölt és az átnézendő tétel soha.
  */
-export const SUBJECT_SKILL_GENERATOR = "subject-skill-builder v1";
+export const SUBJECT_SKILL_GENERATOR = "subject-skill-builder v2";
 export const SPARSE_LIMIT = 30;
 const SAMPLES_PER_AREA = 2;
 const MAX_SAMPLES = 40;
 const MAX_AREAS = 40;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+/**
+ * v2 (a valós korpuszon mérve): néhány régi lecke ékezet nélkül íródott („Hany kulonbozo jelet hasznal…”) — mintának rossz
+ * helyesírást tanítana. Magyar nyelvű bankban a 4+ szavas, egyetlen ékezetes betűt sem tartalmazó tétel nem minta (a bankban marad).
+ */
+const FOREIGN_LANGUAGE_BANKS: ReadonlySet<string> = new Set(["angol", "nemet", "francia"]);
+export function unaccentedHungarian(subject: string, text: string): boolean {
+  if (FOREIGN_LANGUAGE_BANKS.has(subject)) return false;
+  const words = text.match(/\p{L}{2,}/gu) ?? [];
+  return words.length >= 4 && !/[áéíóöőúüű]/iu.test(text);
+}
+/** v2: a témakör-kulcs kis-/nagybetűtől független („kivonás” = „Kivonás”); a megjelenített név a változatok közül a legkisebb (determinisztikus). */
+const areaKey = (area: string) => area.trim().toLocaleLowerCase("hu");
 const KIND_LABEL: Record<string, string> = { quiz: "kvíz", short_answer: "rövid válasz", open_task: "nyílt feladat", method: "módszer", section: "magyarázó fejezet", vocab: "szókincs-pár", quiz_unkeyed: "kulcs nélküli kvíz" };
 
 /** Visszatérő csapda (lektor-jegyzet vagy gépi lelet) tantárgyanként összesítve. */
@@ -51,8 +63,9 @@ export function buildSubjectSkill(subject: CatalogSubject, allRows: readonly Ban
   const areas = new Map<string, { grade: number | null; area: string; items: number; lessons: Set<string> }>();
   for (const r of rows) {
     const area = r.topicArea ?? "(témakör nélkül)";
-    const key = `${String(r.grade ?? 99).padStart(2, "0")}\u0001${area}`;
+    const key = `${String(r.grade ?? 99).padStart(2, "0")}\u0001${areaKey(area)}`;
     const a = areas.get(key) ?? { grade: r.grade, area, items: 0, lessons: new Set<string>() };
+    if (area.localeCompare(a.area, "hu") < 0) a.area = area;
     a.items++;
     for (const p of r.provenances) a.lessons.add(p);
     areas.set(key, a);
@@ -74,7 +87,8 @@ export function buildSubjectSkill(subject: CatalogSubject, allRows: readonly Ban
     let taken = 0;
     for (const a of areaList) {
       if (taken >= MAX_SAMPLES) break;
-      const pool = rows.filter((r) => r.trust === "parent_verified" && r.kind !== "section" && (r.topicArea ?? "(témakör nélkül)") === a.area && r.grade === a.grade)
+      const pool = rows.filter((r) => r.trust === "parent_verified" && r.kind !== "section" && areaKey(r.topicArea ?? "(témakör nélkül)") === areaKey(a.area) && r.grade === a.grade
+        && !unaccentedHungarian(subject, `${r.prompt} ${(r.options ?? []).join(" ")}`))
         .sort((x, y) => x.fingerprint.localeCompare(y.fingerprint)).slice(0, Math.min(SAMPLES_PER_AREA, MAX_SAMPLES - taken));
       if (!pool.length) continue;
       out.push(`### ${a.grade ? `${a.grade}. évf. — ` : ""}${clip(a.area, 80)}`);
