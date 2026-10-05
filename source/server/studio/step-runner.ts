@@ -79,6 +79,7 @@ import type { ZodError } from "zod";
 import { LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, isFusionMethodVersion } from "../../shared/lesson-experience";
 import { OPEN_ANSWER_RULES_HU } from "../../shared/lesson-experience-score";
 import { repairFlaggedBankItems } from "./gate-item-repair";
+import { hasTranscriptMarks, stripTranscriptMarks } from "../../shared/transcript-marks";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { roleSkillBlock, roleSkillVersion, skilledPromptLookup, withRoleSkill } from "./role-skills";
@@ -1563,6 +1564,11 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   const reviewed = lessonSchema.safeParse(rawLesson);
   if (!reviewed.success) {
     return fail(store, job, `A lecke alakilag hibás a kapunál: ${zodIssues(reviewed.error)}`);
+  }
+  // Spec 2026-10-05-s11: az OCR-átirat jelölői („⟦?⟧”, „[KERET…]”) a gyereknek szóló leckébe nem kerülhetnek — publikálás előtt ki.
+  if (hasTranscriptMarks(JSON.stringify(reviewed.data))) {
+    reviewed.data = stripTranscriptMarks(reviewed.data);
+    logger.warn(`[STUDIO/GATE] Átirat-jelölő a leckében (${job.id}) — eltávolítva a publikálás előtt.`);
   }
   const gateFlags = [...(Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : []), ...openBankFindingFlags(reviewed.data, job.output?.bankOpenFindings)];
   let choiceGate = resolveChoiceGate(reviewed.data, gateFlags);

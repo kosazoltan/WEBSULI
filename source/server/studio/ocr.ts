@@ -190,6 +190,29 @@ export function adjudicationStaysInDispute(first: string, adjudicated: string, d
   });
 }
 
+/**
+ * Spec 2026-10-05-s11 (mért: Mezopotámia-füzet, „Kesia, Föld - Felt.” ↔ a valós „Ázsia, Közel-Kelet”): a döntő olvasás után a
+ * vita nyoma eddig elveszett, a téves olvasat tényként került a térképbe. Az ÉRDEMI eltérés (a két olvasat > 2 szerkesztésre
+ * különbözik) szakasza a döntő átiratban „⟦?⟧” jelet kap — a rá épülő fogalom nem lesz tény (pending).
+ */
+export const UNCERTAIN_MARK = "⟦?⟧";
+export function markUnresolvedDisputes(decided: string, disputes: OcrDisagreement[]): string {
+  let out = decided;
+  for (const d of disputes) {
+    const a = ocrTokens(d.first).map(tokenKey).join(" "), b = ocrTokens(d.second).map(tokenKey).join(" ");
+    if (!a || !b || editDistance(a, b) <= 2) continue;
+    // a döntő átiratban a választott olvasat (bármelyik), az első előfordulás, ha még nincs jelölve
+    for (const span of [d.first, d.second].map((s) => s.trim()).filter(Boolean)) {
+      const at = out.indexOf(span);
+      if (at < 0) continue;
+      const end = at + span.length;
+      if (!out.startsWith(UNCERTAIN_MARK, end)) out = `${out.slice(0, end)}${UNCERTAIN_MARK}${out.slice(end)}`;
+      break;
+    }
+  }
+  return out;
+}
+
 export type OcrAdjudicator = (file: ExtractorFile, first: string, disputes: OcrDisagreement[]) => Promise<string>;
 
 /** Dual-read OCR for images; PDFs and failures fall back to the first read (fail-open, as before). */
@@ -215,7 +238,7 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     logger.info(`[STUDIO/OCR] ${file.name}: a két olvasat ${disputes.length} helyen eltér — döntő olvasás a képpel.`);
     try {
       const decided = (await adjudicate(file, a.value, disputes)).trim();
-      if (decided && adjudicationStaysInDispute(a.value, decided, disputes)) return decided;
+      if (decided && adjudicationStaysInDispute(a.value, decided, disputes)) return markUnresolvedDisputes(decided, disputes);
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasat a vitatott helyeken kívül is változtatott — az első olvasat marad.`);
     } catch (error) {
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasás hibázott (${error instanceof Error ? error.message : String(error)}) — az első olvasat marad.`);
@@ -230,6 +253,7 @@ export const OCR_ADJUDICATION_PROMPT = withRoleSkill("ocr", [
   "Two independent transcriptions of the same photographed Hungarian school page disagree in the listed places.",
   "Look at the image again and return the FIRST transcription unchanged EXCEPT at the listed disagreements, where you write what is actually on the page.",
   "At a disagreement, choose the reading that matches the handwriting; use the context only to decide between letter shapes (e.g. k/b, h/f), never to add or reword content.",
+  "If the handwriting still does not decide a disagreement, write the more likely reading followed by the mark ⟦?⟧ — never a confident-looking guess.",
   "Output plain text only — the full corrected transcription.",
 ].join(" "));
 

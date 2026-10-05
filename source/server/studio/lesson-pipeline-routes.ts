@@ -41,6 +41,7 @@ import {
   type OneStepRun,
 } from "./one-step-progress";
 import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
+import { UNCERTAIN_MARK } from "./ocr";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
 import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
@@ -537,7 +538,8 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
         await tx.update(kmConcepts).set({
           ...(fix.term !== undefined ? { term: fix.term } : {}),
           ...(fix.definition !== undefined ? { definition: fix.definition } : {}),
-          ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}),
+          // Spec 2026-10-05-s11: a tanár helyesbítése a bizonytalan („⟦?⟧”) olvasat miatt függő fogalmat is rendezi → tanítható.
+          ...(row.reviewState === "kept" || (row.reviewState === "pending" && row.quote.includes(UNCERTAIN_MARK)) ? { reviewState: "edited" } : {}),
           verbatimReason: correctionReasonCode(fix),
           updatedAt: new Date(),
         }).where(eq(kmConcepts.id, row.id));
@@ -586,6 +588,7 @@ export async function autoCurateKnowledgeMap(
       sourceRef: kmConcepts.sourceRef,
       examWeight: kmConcepts.examWeight,
       verbatimOk: kmConcepts.verbatimOk,
+      verbatimReason: kmConcepts.verbatimReason,
       reviewState: kmConcepts.reviewState,
     })
     .from(kmConcepts)
@@ -613,6 +616,8 @@ export async function autoCurateKnowledgeMap(
     const decision = autoReviewDecision({
       examWeight: c.examWeight as "core" | "supporting",
       verbatimOk: c.verbatimOk,
+      // Spec 2026-10-05-s11: bizonytalan OCR-olvasatra épülő fogalom nem tény (a tanári helyesbítés rendezheti).
+      uncertainQuote: c.quote.includes(UNCERTAIN_MARK) && !String(c.verbatimReason ?? "").startsWith("corrected:"),
     });
     if (decision === c.reviewState) continue;
     c.reviewState = decision;
