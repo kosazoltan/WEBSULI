@@ -33,3 +33,12 @@ Munkakönyvtár: `source/`. A `tests/explanatory-visuals.spec.ts` NEM módosul.
 6. Zöld futás: `$env:CYCLE_PROBE_PORT=5190; npx playwright test -c playwright.cycle-labels.config.ts`
    → mindkét spec (3 + 3 teszt) PASS.
 7. Kapuk: `npx tsc --noEmit`, `npm run lint` → 0-s kilépési kód. A képernyőképeket megnézni (1280 és 360).
+
+## Review #199 (2026-10-05)
+8. `explanatory-visuals.tsx` / `layoutCycle`: (a) `measure` → `{ hit, stray }` mennyiségi mérték;
+   (b) lépcsők: `exact` (hit = 0 és stray = 0, gyűrűvel, majd nélküle) → `drift` (hit = 0, legkisebb stray,
+   a sugarak közül a legkisebb összes stray) → `overlap` (R_MAX, lexikografikus minimum); `CycleLayout.fit`;
+   (c) sugárlista: `R > n·(node + 8)/π`.
+9. Új `tests/cycle-layout.test.ts` (E7–E9 + a mérőlecke három esete). Futtatás:
+   `node --import tsx --test tests/cycle-layout.test.ts`, majd `npm run check`, `npm run check:test`,
+   `npm run lint`, `npm test`, `npx playwright test -c playwright.cycle-labels.config.ts --reporter=line`.

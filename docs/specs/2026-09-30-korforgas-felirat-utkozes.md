@@ -69,3 +69,34 @@ nyilas gyűrű), akkor eltolódik: először kifelé és a kör körül elfordul
   megmarad).
 - **E5** Az új spec a javítás előtti kódon SHALL bukni (E1-re), utána zöld.
 - **E6** `npx tsc --noEmit`, `npm run lint` hibátlan.
+
+## Finomítás — review #199 (2026-10-05, dokumentált spec-változás)
+Három igazolt P2-lelet a `layoutCycle`-ben; a fenti döntések ezekkel pontosulnak:
+1. **Mennyiségi átfedés-mérték (6. döntés 3. lépcsője).** A „legkisebb átfedés” eddig az első, a
+   *legkevesebb feltételt* sértő jelölt volt. Most mennyiség: `hit` = behatolási mélységek összege
+   egységben (kilógás a rajzterületből + `kör/jelvény r + 2 − távolság` + feliratdobozok behatolása
+   (2 egység réssel) + gyűrű-feltételnél `R + 4 − távolság`). `hit = 0` ⇔ minden kemény feltétel teljesül.
+   A tartalék feliratonként a legkisebb `hit`-ű jelöltet adja (törhetetlen, ≤ 40 karakteres szónál számít).
+2. **Saját kör a legközelebbi (E3 a kemény feltételek között).** `stray` = feliratsoronként (sor közepe:
+   `top + k·24 + 11`) Σ max(0, d(saját kör) + 2 − d(másik kör)). Pontos elfogadás: `hit = 0` ÉS `stray = 0`.
+   Ha így semmilyen sugáron nincs hely, egy **`drift`** lépcső jön a 3. lépcső előtt: csak `hit = 0`
+   jelölt, feliratonként a legkisebb `stray`, a gyűrűsugarak (gyűrű-feltétellel, majd nélküle) közül a
+   legkisebb összes `stray`. Ok: a takarás/levágás rosszabb, mint az elcsúszás. A 3. lépcső (`overlap`)
+   lexikografikusan a legkisebb (`hit`, `stray`) jelöltet adja. Az eredmény `fit` mezője:
+   `"exact" | "drift" | "overlap"`. Mért eset (review): 8 fázis, center „Középpont”, hét „A” és a 6. helyen
+   „Párolgás a tengerből” — a jelöltrácsban nincs elcsúszás-mentes hely (a folytonos keresés szerint is csak
+   R = 76–84-en, a szélhez ≤ 2 egységre és a kör + 8 margónál közelebb volna), ezért `drift`: R = 88, egy
+   sor csúszik (a régi kód R = 104-en mindkét sort a szomszéd kör mellé tette és pontosnak fogadta el).
+3. **Nyílhézag-korlát a gyűrűsugárra.** A nyíl mindkét végén `(node + 8)/R` szöghézag van; ha a kettő
+   eléri a `2π/n` fázisközt, az ív visszafelé fordul. Ezért a 6. döntés sugárlistájába csak
+   `R > n·(node + 8)/π` kerülhet (12 fázisnál ≈ 99,3; 8 fázisnál ≈ 76,4); `R_MAX = 104` minden n ≤ 12-re
+   megfelel. Mért régi hiba: 8 fázis/R = 76 (ív −0,3) és 9 fázis/R = 64 (ív −7,3 egység).
+
+### Elfogadás (kiegészítés)
+- **E7** WHEN `layoutCycle` bármely 3–12 fázisú bemenetre fut, THEN `R·2π/n − 2·(node + 8)` SHALL > 0.
+- **E8** WHEN `fit = "exact"`, THEN minden feliratsor közepe SHALL a saját fázis-köréhez legközelebb esni;
+  WHEN `fit ∈ {exact, drift}`, THEN nincs kilógás, kör-/jelvény- és feliratátfedés.
+- **E9** WHEN `fit = "overlap"`, THEN minden felirat `hit`-je SHALL ≤ bármely spec-jelöltjéé (4. döntés
+  rácsa, a korábban elhelyezett feliratokkal).
+- Ellenőrzés: `tests/cycle-layout.test.ts` (unit, a spec geometriájából függetlenül újraszámolva; a régi
+  kódon bukik) + a változatlan `tests/cycle-labels.spec.ts` és `tests/explanatory-visuals.spec.ts`.

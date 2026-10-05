@@ -75,9 +75,16 @@ const BADGE_R = 13;
 type Box = { l: number; t: number; r: number; b: number };
 type Circle = { x: number; y: number; r: number };
 export type CycleLabelLayout = { lines: string[]; x: number; top: number };
-export type CycleLayout = { R: number; node: number; labels: CycleLabelLayout[] };
+/**
+ * Az elrendezés minősége (review #199): `exact` — minden kemény feltétel teljesül (E3 is); `drift` — nincs
+ * átfedés/levágás, de egy feliratsor közelebb esik egy szomszéd körhöz (a legkisebb elcsúszással); `overlap`
+ * — a 6. döntés harmadik lépcsője, a legkisebb átfedés-mértékű jelöltekkel.
+ */
+export type CycleFit = "exact" | "drift" | "overlap";
+export type CycleLayout = { R: number; node: number; fit: CycleFit; labels: CycleLabelLayout[] };
 
-const boxesHit = (a: Box, b: Box) => a.l < b.r + GAP && b.l < a.r + GAP && a.t < b.b + GAP && b.t < a.b + GAP;
+/** Két doboz behatolási mélysége (GAP-pel bővítve); 0, ha nem érnek össze. */
+const boxDepth = (a: Box, b: Box) => Math.max(0, Math.min(a.r + GAP - b.l, b.r + GAP - a.l, a.b + GAP - b.t, b.b + GAP - a.t));
 const boxCircleHit = (b: Box, c: Circle) =>
   Math.hypot(Math.max(b.l, Math.min(c.x, b.r)) - c.x, Math.max(b.t, Math.min(c.y, b.b)) - c.y) < c.r + GAP;
 /** A doboz legközelebbi pontjának távolsága a középponttól. */
@@ -125,39 +132,71 @@ export function layoutCycle(labels: string[], center: string | undefined, hasMoo
     return cs.every((ci) => mid.boxes.every((b) => !boxCircleHit(b, ci)) && mid.circles.every((m) => Math.hypot(m.x - ci.x, m.y - ci.y) >= m.r + ci.r + GAP));
   };
 
-  const place = (R: number, ring: boolean, bestEffort: boolean): CycleLabelLayout[] | null => {
+  // Review #199: mennyiségi mérték (egységben, behatolási mélységek összege) két részre bontva:
+  // `hit` = kilógás a rajzterületből + kör/jelvény/középfelirat/másik felirat/nyilas gyűrű átfedése;
+  // `stray` = mennyivel van egy feliratsor közepe közelebb egy MÁSIK fázis-körhöz, mint a sajátjához (E3).
+  // `exact`: az első jelölt, ahol mindkettő 0. `drift`: a hit = 0 jelöltek közül a legkisebb stray (és a
+  // gyűrűsugarak közül a legkisebb összes stray-t adó).
+  // `overlap` (végső tartalék): lexikografikusan a legkisebb (hit, stray) — nem az első, legkevesebb
+  // feltételt sértő jelölt. A sorrend oka: takarás/levágás rosszabb, mint az elcsúszás.
+  const place = (R: number, ring: boolean, fit: CycleFit): { labels: CycleLabelLayout[]; stray: number } | null => {
     const circles = [...circlesAt(R), ...mid.circles];
+    const nodes = texts.map((t) => ({ x: cx + R * Math.cos(t.a), y: c + R * Math.sin(t.a) }));
     const placed: Box[] = [...mid.boxes];
     const out: CycleLabelLayout[] = [];
+    let strayTotal = 0;
+    const measure = (box: Box, i: number, lineCount: number) => {
+      let hit = Math.max(0, EDGE - box.l) + Math.max(0, EDGE - box.t)
+        + Math.max(0, box.r - (CYCLE_W - EDGE)) + Math.max(0, box.b - (CYCLE_H - EDGE));
+      for (const ci of circles) hit += Math.max(0, ci.r + GAP - boxDist(box, ci.x, ci.y));
+      for (const pb of placed) hit += boxDepth(box, pb);
+      if (ring) hit += Math.max(0, R + 4 - boxDist(box, cx, c));
+      let stray = 0;
+      const mx = (box.l + box.r) / 2;
+      for (let k = 0; k < lineCount; k++) {
+        const my = box.t + k * LINE_H + (ASCENT + DESCENT) / 2;
+        const own = Math.hypot(nodes[i].x - mx, nodes[i].y - my);
+        for (const [j, o] of nodes.entries()) if (j !== i) stray += Math.max(0, own + GAP - Math.hypot(o.x - mx, o.y - my));
+      }
+      return { hit, stray };
+    };
     for (const [i, t] of texts.entries()) {
-      const nx = cx + R * Math.cos(t.a), ny = c + R * Math.sin(t.a);
-      let chosen: { box: Box; bad: number; k: number } | null = null;
-      for (const [k, tr] of tries.entries()) {
+      const { x: nx, y: ny } = nodes[i];
+      let chosen: { box: Box; hit: number; stray: number } | null = null;
+      for (const tr of tries) {
         const th = t.a + (tr.off * Math.PI) / 180, ux = Math.cos(th), uy = Math.sin(th);
         const s = Math.abs(ux) * t.w / 2 + Math.abs(uy) * t.h / 2, d = node + 8 + tr.extra + s;
         const bx = nx + ux * d, by = ny + uy * d;
         const box = { l: bx - t.w / 2, r: bx + t.w / 2, t: by - t.h / 2, b: by + t.h / 2 };
-        const bad = (box.l < EDGE || box.t < EDGE || box.r > CYCLE_W - EDGE || box.b > CYCLE_H - EDGE ? 1 : 0)
-          + circles.filter((ci) => boxCircleHit(box, ci)).length
-          + placed.filter((pb) => boxesHit(box, pb)).length
-          + (ring && boxDist(box, cx, c) < R + 4 ? 1 : 0);
-        if (bad === 0) { chosen = { box, bad, k }; break; }
-        if (bestEffort && (!chosen || bad < chosen.bad)) chosen = { box, bad, k };
+        const m = measure(box, i, t.lines.length);
+        if (m.hit === 0 && m.stray === 0) { chosen = { box, ...m }; break; }
+        if (fit === "exact" || (fit === "drift" && m.hit > 0)) continue;
+        if (!chosen || m.hit < chosen.hit || (m.hit === chosen.hit && m.stray < chosen.stray)) chosen = { box, ...m };
       }
-      if (!chosen || (chosen.bad > 0 && !bestEffort)) return null;
+      if (!chosen) return null;
+      strayTotal += chosen.stray;
       placed.push(chosen.box);
       out[i] = { lines: t.lines, x: (chosen.box.l + chosen.box.r) / 2, top: chosen.box.t };
     }
-    return out;
+    return { labels: out, stray: strayTotal };
   };
 
+  // Review #199: a nyíl mindkét végén (node + 8)/R szöghézag van; ha a kettő eléri a fázisok közti
+  // 2π/n szöget, a nyíl visszafelé fordul. Ezért R > n·(node + 8)/π (12 fázisnál ≈ 99,3; R_MAX ennél nagyobb).
+  const arrowMinR = (n * (node + 8)) / Math.PI;
   const radii: number[] = [];
-  for (let R = CYCLE_R_MAX; R >= CYCLE_R_MIN; R -= 4) if (R === CYCLE_R_MAX || ringOk(R)) radii.push(R);
+  for (let R = CYCLE_R_MAX; R >= CYCLE_R_MIN; R -= 4) if (R === CYCLE_R_MAX || (R > arrowMinR && ringOk(R))) radii.push(R);
   for (const ring of [true, false]) for (const R of radii) {
-    const got = place(R, ring, false);
-    if (got) return { R, node, labels: got };
+    const got = place(R, ring, "exact");
+    if (got) return { R, node, fit: "exact", labels: got.labels };
   }
-  return { R: CYCLE_R_MAX, node, labels: place(CYCLE_R_MAX, false, true)! };
+  let drift: { R: number; labels: CycleLabelLayout[]; stray: number } | null = null;
+  for (const ring of [true, false]) for (const R of radii) {
+    const got = place(R, ring, "drift");
+    if (got && (!drift || got.stray < drift.stray)) drift = { R, ...got };
+  }
+  if (drift) return { R: drift.R, node, fit: "drift", labels: drift.labels };
+  return { R: CYCLE_R_MAX, node, fit: "overlap", labels: place(CYCLE_R_MAX, false, "overlap")!.labels };
 }
 
 export function CycleAnim({ params, caption }: AnimProps) {
