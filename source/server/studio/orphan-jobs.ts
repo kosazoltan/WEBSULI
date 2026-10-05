@@ -35,3 +35,34 @@ export function markOrphanedJobs(rows: OrphanJobRow[]): Array<{ id: string; erro
     .filter((r) => !TERMINAL_STATUSES.has(r.status))
     .map((r) => ({ id: r.id, error: ORPHAN_JOB_ERROR }));
 }
+
+/**
+ * Spec 2026-10-05-s10-adatvesztes-mentesseg (2. szelet, a független terv-ellenőrzés javításaival): szerver-újraindulás után a
+ * félbemaradt futás NEM hibára zárul, hanem a mentett részeredményekből magától folytatódik — kézi „Újra” nélkül.
+ *  - Aktív lízing: egy élő folyamat hajtja (pl. deploykor a régi példány, vagy helyi próba ugyanazon a DB-n) → érintetlen.
+ *  - Lejárt lízing + futó workflow + kevesebb mint AUTO_RESUME_MAX_EXECUTIONS végrehajtás → folytatás (a `executions` a claim alatt
+ *    nő és mentődik — összeomló futás nem pöröghet végtelenül; a 4-es kemény korlát alatt egy kézi próba marad).
+ *  - Workflow-futás nélküli árva job → a régi lezárás, de CSAK induláskor (futás közben az ilyen jobot élő folyamat hajthatja).
+ */
+export const AUTO_RESUME_MAX_EXECUTIONS = 3;
+
+export type SweepRow = {
+  id: string;
+  status: string;
+  runId: string | null;
+  owner: string | null;
+  runState: string | null;
+  leaseUntil: Date | null;
+  executions: number;
+};
+
+export type SweepDecision = "leave" | "resume" | "close";
+
+export function sweepDecision(row: SweepRow, now: number, boot: boolean): SweepDecision {
+  if (TERMINAL_STATUSES.has(row.status)) return "leave";
+  if (row.leaseUntil && row.leaseUntil.getTime() > now) return "leave";
+  if (row.runId && row.owner && row.runState === "running" && row.executions < AUTO_RESUME_MAX_EXECUTIONS) return "resume";
+  // Nem folytatható (nincs futás, megállt, elfogyott a keret): induláskor a régi lezárás (különben a #183-as örök poll
+  // visszatérne); futás közben nem nyúlunk hozzá — élő folyamat hajthatja.
+  return boot ? "close" : "leave";
+}

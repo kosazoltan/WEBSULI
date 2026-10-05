@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from "express";
-import { and, asc, desc, eq, isNotNull, ne, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
@@ -40,7 +40,7 @@ import {
   type OneStepPhase,
   type OneStepRun,
 } from "./one-step-progress";
-import { markOrphanedJobs } from "./orphan-jobs";
+import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
 import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
@@ -135,20 +135,56 @@ export async function closeOrphanedOneStepRuns(): Promise<number> {
  * végtelenségig. A #168-as söprés csak a one_step_runs táblát fedte le.
  */
 export async function closeOrphanedStudioJobs(): Promise<number> {
-  const open = await db
-    .select({ id: studioJobs.id, status: studioJobs.status })
-    .from(studioJobs);
-  const orphans = markOrphanedJobs(open);
-  for (const o of orphans) {
-    await db
-      .update(studioJobs)
-      .set({ status: "error", step: "error", error: o.error, finishedAt: new Date() })
-      .where(eq(studioJobs.id, o.id));
+  return sweepStudioJobs(true);
+}
+
+/**
+ * Spec 2026-10-05-s10-adatvesztes-mentesseg (2. szelet): a nyitott jobok söprése a `sweepDecision` szerint — folytatás a mentett
+ * részeredményekből (kézi „Újra” nélkül), érintetlenül hagyás (élő lízing), vagy a régi lezárás (csak induláskor).
+ * Indításkor ÉS utána STUDIO_SWEEP_INTERVAL_MS-onként fut: deploykor a régi példány még tartja a lízinget, annak lejárta után
+ * a futás itt folytatódik (a terv-ellenőrzés blokkoló lelete).
+ */
+export async function sweepStudioJobs(boot: boolean): Promise<number> {
+  const { rows } = await db.execute(sql`
+    SELECT j.id, j.status, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
+           COALESCE((r.snapshot->>'executions')::int, 0) AS executions
+    FROM studio_jobs j
+    LEFT JOIN LATERAL (
+      SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
+      WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+    ) r ON true
+    WHERE j.status NOT IN ('ok', 'error')`);
+  const now = Date.now();
+  let acted = 0;
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    const row: SweepRow = {
+      id: String(raw.id), status: String(raw.status), runId: (raw.run_id as string | null) ?? null, owner: (raw.owner_id as string | null) ?? null,
+      runState: (raw.run_state as string | null) ?? null, leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, executions: Number(raw.executions ?? 0),
+    };
+    const decision = sweepDecision(row, now, boot);
+    if (decision === "leave") continue;
+    acted++;
+    if (decision === "close") {
+      await db.update(studioJobs).set({ status: "error", step: "error", error: ORPHAN_JOB_ERROR, finishedAt: new Date() }).where(eq(studioJobs.id, row.id));
+      logger.warn(`[STUDIO] Árva lecke-job hibára zárva (${row.id}) — nincs folytatható futás.`);
+      continue;
+    }
+    logger.warn(`[STUDIO] Félbemaradt futás automatikus folytatása (${row.id}, ${row.executions + 1}. végrehajtás) a mentett részeredményekből.`);
+    void driveTracked(row.id, row.owner!, false).catch((error) => {
+      // Lízing-ütközés: egy másik élő folyamat hajtja (pl. ugyanazon a DB-n futó másik példány) — nem zárjuk hibára.
+      if (error instanceof WorkflowConflict) { logger.warn(`[STUDIO] Automatikus folytatás kihagyva (${row.id}): ${error.message}`); return; }
+      logger.error(`[STUDIO] Az automatikus folytatás elbukott (${row.id})`, error);
+      void db.update(studioJobs).set({ status: "error", step: "error", error: ORPHAN_JOB_ERROR, finishedAt: new Date() }).where(and(eq(studioJobs.id, row.id), ne(studioJobs.status, "ok")))
+        .catch(() => logger.error("[STUDIO] A megállás státuszát sem sikerült menteni."));
+    });
   }
-  if (orphans.length > 0) {
-    logger.warn(`[STUDIO] ${orphans.length} árva lecke-job hibára zárva (szerver-újraindulás).`);
-  }
-  return orphans.length;
+  return acted;
+}
+
+export const STUDIO_SWEEP_INTERVAL_MS = 100_000;
+/** Időszakos söprés (a lejárt lízingű futások folytatása); a folyamat leállását nem tartja fel. */
+export function startStudioJobSweeper(): void {
+  setInterval(() => { void sweepStudioJobs(false).catch((error) => logger.warn(`[STUDIO] Időszakos söprés hibája: ${error instanceof Error ? error.message : String(error)}`)); }, STUDIO_SWEEP_INTERVAL_MS).unref();
 }
 import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
@@ -796,6 +832,9 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
 
   res.status(201).json({ jobId: started.jobId });
   void driveTracked(started.jobId, req.user!.id, true).catch(error => {
+    // Spec 2026-10-05-s10 (terv-ellenőrzés 2.): lízingvesztésnél (WorkflowConflict) egy MÁSIK vezérlő viszi tovább a futást —
+    // a régi folyamat nem írhatja felül hibával az új vezérlő eredményét.
+    if (error instanceof WorkflowConflict) { logger.warn(`[STUDIO] Követett készítés átadva (${started.jobId}): ${error.message}`); return; }
     logger.error("[STUDIO] Követett készítés megállt", error);
     void db.update(studioJobs).set({ status: "error", error: "A követett készítés megállt. Ellenőrizd a Futások naplóját.", finishedAt: new Date() }).where(eq(studioJobs.id, started.jobId))
       .catch(() => logger.error("[STUDIO] A megállás státuszát sem sikerült menteni."));

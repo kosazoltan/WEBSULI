@@ -515,11 +515,13 @@ app.use((req, res, next) => {
     // #183 — ugyanez a studio_jobs sorokra: a JobMonitor a 'running' státuszt
     // 2 másodpercenként pollozza, így egy árva sor örök pollt hajtott.
     try {
-      const { closeOrphanedOneStepRuns, closeOrphanedStudioJobs } = await import(
+      const { closeOrphanedOneStepRuns, closeOrphanedStudioJobs, startStudioJobSweeper } = await import(
         "./studio/lesson-pipeline-routes"
       );
       await closeOrphanedOneStepRuns();
       await closeOrphanedStudioJobs();
+      // Spec 2026-10-05-s10: deploykor a régi példány még tartja a lízinget — annak lejárta után a futás magától folytatódik.
+      startStudioJobSweeper();
     } catch (sweepError) {
       logger.error("[STARTUP] Az árva futások/jobok zárása nem sikerült:", sweepError);
       // Nem végzetes: a poll 404-et ad az ismeretlen futásra.
