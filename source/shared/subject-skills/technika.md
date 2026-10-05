@@ -7,7 +7,7 @@
 - Szó szerint csak azonos témájú és évfolyamú tételt vegyél át; egyébként csak sablonként használd.
 
 ## Témakörök évfolyamonként
-- 8. évf.: Élelmiszerkészítés / konyhatechnika — 13 tétel, 1 lecke
+- 8. évf.: Élelmiszerkészítés / konyhai gyakorlat — 13 tétel, 1 lecke
 
 ## Tételtípus-arány a bank leckéiben
 - magyarázó fejezet 100%

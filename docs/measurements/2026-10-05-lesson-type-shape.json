@@ -3,51 +3,53 @@
  "source": "files",
  "types": {
   "fogalomtanito": {
-   "lessons": 110,
-   "items": 13698,
+   "lessons": 113,
+   "items": 13500,
    "kinds": {
-    "section": 2116,
-    "open_task": 2579,
-    "quiz": 7253,
-    "short_answer": 1407,
-    "method": 343
+    "section": 2102,
+    "open_task": 2664,
+    "quiz": 7155,
+    "short_answer": 1238,
+    "method": 341
    },
    "share": {
-    "quiz": 52.9,
-    "open_task": 18.8,
-    "section": 15.4,
-    "short_answer": 10.3,
+    "quiz": 53,
+    "open_task": 19.7,
+    "section": 15.6,
+    "short_answer": 9.2,
     "method": 2.5
    }
   },
   "gyakorlati-projekt": {
-   "lessons": 6,
-   "items": 173,
+   "lessons": 5,
+   "items": 240,
    "kinds": {
-    "section": 153,
-    "quiz": 20
+    "section": 120,
+    "open_task": 45,
+    "quiz": 75
    },
    "share": {
-    "section": 88.4,
-    "quiz": 11.6
+    "section": 50,
+    "quiz": 31.3,
+    "open_task": 18.8
    }
   },
   "gyakorlo-feladatlap": {
-   "lessons": 17,
-   "items": 895,
+   "lessons": 16,
+   "items": 634,
    "kinds": {
     "short_answer": 149,
-    "section": 117,
-    "open_task": 200,
-    "quiz": 347,
-    "method": 82
+    "section": 107,
+    "quiz": 262,
+    "open_task": 89,
+    "method": 27
    },
    "share": {
-    "quiz": 38.8,
-    "open_task": 22.3,
-    "short_answer": 16.6,
-    "section": 13.1,
-    "method": 9.2
+    "quiz": 41.3,
+    "short_answer": 23.5,
+    "section": 16.9,
+    "open_task": 14,
+    "method": 4.3
    }
   },
   "irodalmi-mu": {
@@ -65,39 +67,41 @@
    }
   },
   "szokincs-nyelvi": {
-   "lessons": 18,
-   "items": 2403,
+   "lessons": 14,
+   "items": 2369,
    "kinds": {
-    "section": 210,
-    "short_answer": 595,
-    "quiz": 1223,
-    "vocab": 123,
-    "open_task": 252
+    "short_answer": 745,
+    "quiz": 1237,
+    "section": 199,
+    "vocab": 53,
+    "open_task": 135
    },
    "share": {
-    "quiz": 50.9,
-    "short_answer": 24.8,
-    "open_task": 10.5,
-    "section": 8.7,
-    "vocab": 5.1
+    "quiz": 52.2,
+    "short_answer": 31.4,
+    "section": 8.4,
+    "open_task": 5.7,
+    "vocab": 2.2
    }
   },
   "temazaro-felkeszito": {
-   "lessons": 37,
-   "items": 4334,
+   "lessons": 44,
+   "items": 5073,
    "kinds": {
-    "open_task": 735,
-    "quiz": 2350,
-    "section": 650,
-    "short_answer": 505,
-    "method": 94
+    "open_task": 951,
+    "quiz": 2661,
+    "section": 795,
+    "short_answer": 445,
+    "vocab": 70,
+    "method": 151
    },
    "share": {
-    "quiz": 54.2,
-    "open_task": 17,
-    "section": 15,
-    "short_answer": 11.7,
-    "method": 2.2
+    "quiz": 52.5,
+    "open_task": 18.7,
+    "section": 15.7,
+    "short_answer": 8.8,
+    "method": 3,
+    "vocab": 1.4
    }
   }
  }

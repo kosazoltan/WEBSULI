@@ -8,7 +8,7 @@
 
 ## Témakörök évfolyamonként
 - 5. évf.: Bibliaismeret — 54 tétel, 1 lecke
-- 8. évf.: család és nemzeti identitás — 127 tétel, 1 lecke
+- 8. évf.: Család és nemzeti identitás — 127 tétel, 1 lecke
 
 ## Tételtípus-arány a bank leckéiben
 - kvíz 67% · magyarázó fejezet 33%
@@ -17,7 +17,7 @@
 ### 5. évf. — Bibliaismeret
 - [kvíz] Melyik NEM evangélium? — a) Máté; b) Pál; c) Márk; d) János (helyes: b)
 - [kvíz] Mit jelent a Biblia szó? — a) Szent könyv; b) Könyvek; c) Isten szava; d) Régi iratok (helyes: b)
-### 8. évf. — család és nemzeti identitás
+### 8. évf. — Család és nemzeti identitás
 - [kvíz] Mit jelent a nevelő funkció? — a) Értékek átadása; b) Pénz keresése; c) Főzés; d) Takarítás (helyes: a)
 - [kvíz] Miért nem szabad sztereotípiákban gondolkodni? — a) Szabad; b) Téves, igazságtalan megítéléshez vezet; c) Jó dolog; d) Nincs jelentősége (helyes: b)
 

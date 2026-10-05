@@ -1,29 +1,30 @@
 {
- "measuredAt": "2026-10-05T09:16:36.775Z",
+ "measuredAt": "2026-10-05T14:26:09.461Z",
  "day": "2026-10-05",
  "mode": "dry-run",
  "lessons": 201,
+ "removedLessons": 0,
  "classifiedLessons": 201,
  "missingClassification": 0,
  "lessonStatus": {
-  "agreed": 194,
-  "review": 6,
-  "unclassified": 1
+  "agreed": 197,
+  "review": 4,
+  "unclassified": 0
  },
  "adminDecisions": 0,
  "items": 23854,
- "bankRows": 23208,
+ "bankRows": 23209,
  "totals": {
-  "active": 22223,
-  "flagged": 80,
-  "review": 905
+  "active": 22536,
+  "review": 583,
+  "flagged": 90
  },
  "banks": {
   "biologia": {
-   "total": 842,
-   "active": 842,
+   "total": 1265,
+   "active": 1056,
    "flagged": 0,
-   "review": 0
+   "review": 209
   },
   "fizika": {
    "total": 794,
@@ -32,16 +33,16 @@
    "review": 0
   },
   "matematika": {
-   "total": 5426,
-   "active": 5259,
+   "total": 5293,
+   "active": 5138,
    "flagged": 34,
-   "review": 133
+   "review": 121
   },
   "angol": {
    "total": 4104,
-   "active": 4102,
+   "active": 4040,
    "flagged": 2,
-   "review": 0
+   "review": 62
   },
   "francia": {
    "total": 191,
@@ -50,8 +51,8 @@
    "review": 0
   },
   "magyar-irodalom": {
-   "total": 887,
-   "active": 887,
+   "total": 1020,
+   "active": 1020,
    "flagged": 0,
    "review": 0
   },
@@ -68,22 +69,22 @@
    "review": 0
   },
   "magyar-nyelvtan": {
-   "total": 2450,
-   "active": 2274,
-   "flagged": 43,
-   "review": 133
+   "total": 2451,
+   "active": 2216,
+   "flagged": 44,
+   "review": 191
   },
   "foldrajz": {
-   "total": 386,
-   "active": 386,
+   "total": 429,
+   "active": 429,
    "flagged": 0,
    "review": 0
   },
   "kornyezetismeret": {
-   "total": 1873,
-   "active": 1612,
+   "total": 1830,
+   "active": 1830,
    "flagged": 0,
-   "review": 261
+   "review": 0
   },
   "kemia": {
    "total": 324,
@@ -92,16 +93,10 @@
    "review": 0
   },
   "termeszetismeret": {
-   "total": 1713,
-   "active": 1504,
-   "flagged": 0,
-   "review": 209
-  },
-  "_besorolatlan": {
-   "total": 169,
-   "active": 0,
-   "flagged": 0,
-   "review": 169
+   "total": 1459,
+   "active": 1450,
+   "flagged": 9,
+   "review": 0
   },
   "informatika": {
    "total": 952,

@@ -7,14 +7,14 @@
 - Szó szerint csak azonos témájú és évfolyamú tételt vegyél át; egyébként csak sablonként használd.
 
 ## Témakörök évfolyamonként
-- 8. évf.: hangszeres gyakorlat — 21 tétel, 1 lecke
-- 8. évf.: Magyar népzene — 142 tétel, 1 lecke
+- 8. évf.: Gitár alapok — 21 tétel, 1 lecke
+- 8. évf.: zenei műveltség / népzene — 142 tétel, 1 lecke
 
 ## Tételtípus-arány a bank leckéiben
 - kvíz 46% · nyílt feladat 28% · magyarázó fejezet 26%
 
 ## Mintatételek (szülő-ellenőrzött)
-### 8. évf. — Magyar népzene
+### 8. évf. — zenei műveltség / népzene
 - [nyílt] Miért fontos a hegedű a magyar népi zenében? — kulcsszavak: prím, dallam, vezető, zenekar
 - [kvíz] Hol működik a Téka együttes? — a) Moldva; b) Magyarország; c) Szlovákia; d) Románia (helyes: b)
 

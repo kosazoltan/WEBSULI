@@ -7,7 +7,7 @@
 - Szó szerint csak azonos témájú és évfolyamú tételt vegyél át; egyébként csak sablonként használd.
 
 ## Témakörök évfolyamonként
-- 7. évf.: Család és nemzeti identitás — 211 tétel, 1 lecke
+- 7. évf.: család és nemzeti identitás — 211 tétel, 1 lecke
 
 ## Tételtípus-arány a bank leckéiben
 - kvíz 53% · nyílt feladat 27% · módszer 14% · magyarázó fejezet 6%
