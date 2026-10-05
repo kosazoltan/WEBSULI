@@ -26,7 +26,8 @@ test("S11/5→S11/7: az erős olvasók (sol, opus) a kézírásos lapokon a gyen
 
 /* Spec 2026-10-05-s11/7: a forrás-OCR eredménye a két erős olvasó (A = gpt-6.1-sol high, B = claude-opus-5-5 medium) fúziója. */
 type FusionBlock = { readerA: { model: string; effort: string; transcripts: Record<string, string>; measured: number }; transcripts: Record<string, string>; measured: number };
-const fusion = (JSON.parse(readFileSync(new URL("./fixtures/ocr-handwriting-history.json", import.meta.url), "utf8")) as { fusion?: FusionBlock }).fusion;
+// Review #197: a már beolvasott fixture (egy forrás) — nincs második beolvasás.
+const fusion = (fx as Fixture & { fusion?: FusionBlock }).fusion;
 const meanOf = (t: Record<string, string>) => Object.keys(fx.pages).reduce((s, p) => s + keyTokenRecall(t[p] ?? "", fx.pages[p].keyTokens).recall, 0) / Object.keys(fx.pages).length;
 
 test("S11/7: a fúzió és az A-olvasata rögzített pontszáma megegyezik az újraszámolttal", () => {

@@ -862,7 +862,10 @@ export function fuseOcrReadings(a: string, b: string, choices: readonly OcrFusio
       const markOnly = replacement === UNCERTAIN_MARK;
       if (aStart < ta.length) {
         const pos = ta[aStart].start;
-        out += a.slice(cursor, pos) + replacement + (markOnly ? " " : it.sepAfter);
+        // Review #197 (P2): a B tördelése a beszúrás ELŐTT is érvényes (új sor ne olvadjon az előzőbe).
+        let head = a.slice(cursor, pos);
+        if (!markOnly && head.trim() !== "" && it.sepBefore.includes("\n")) head = head.replace(/\s*$/, "") + it.sepBefore;
+        out += head + replacement + (markOnly ? " " : it.sepAfter);
         cursor = pos;
       } else {
         const pos = ta.length ? ta[ta.length - 1].end : 0;

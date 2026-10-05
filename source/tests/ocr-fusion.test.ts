@@ -194,3 +194,10 @@ test("S11/7: createCachedSourceOcr — a fúzió az első ág, ha mindkét olvas
   assert.match(body, /createHash\("sha256"\)\.update\(OCR_FUSION_DECIDER_PROMPT\)/, "a döntő prompt hash-e a kulcsban");
   assert.match(body, /withOcrCache\(fused, fusionKey, store, \(file\) => !fused\.degraded\(file\)\)/, "degraded nem kerül cache-be");
 });
+
+test("review #197: a B középső beszúrásánál a B tördelése az ELŐZŐ sor felé is megmarad", async () => {
+  const { locateOcrDisagreements } = await import("../server/studio/ocr");
+  const a = "cím vége", b = "cím\núj sor\nvége";
+  assert.ok(locateOcrDisagreements(a, b).length >= 1);
+  assert.equal(fuseOcrReadings(a, b, [{ n: 1, pick: "B" }]).text, "cím\núj sor\nvége");
+});
