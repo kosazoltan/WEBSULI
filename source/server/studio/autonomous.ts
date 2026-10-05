@@ -46,6 +46,8 @@ export type AutonomousReason =
   | "instruction_gaps"
   /** U4 (H50): a tervező vázlatának mezőit a program a korláton vágta/elhagyta — jelölt állapot, nem néma. */
   | "outline_clamped"
+  /** Spec 2026-10-05-s9 (S9/3): a kapunál maradt hibás banktétel orkesztrált újraírással javítva, a független ellenőr igazolta. */
+  | "gate_item_repaired"
   /** U5 (H49): a lektor önálló megoldásainak egy része a kereten túl volt — részleges lektorálás. */
   | "lektor_partial"
   /** Spec 2026-10-01-limit-csomag-lazitas: a limiten a hibás nyílt feladat kivétele után a fejezet csomagja lazított. */
@@ -85,6 +87,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   instruction_missing: "A tanári kérés egy vagy több pontja a javítás után is hiányzik — a lecke elkészült, a pontok a job kimenetében.",
   instruction_gaps: "A tanári kérés egy vagy több pontját a forrás nem igazolja — a lecke ezeket nem tanítja, a pontok a job kimenetében és a panelen.",
   outline_clamped: "A tervező vázlatának egyes mezői a korláton túl voltak: a program vágta vagy elhagyta őket — a részletek a job kimenetében.",
+  gate_item_repaired: "A kapunál maradt hibás banktétel(ek) orkesztrált újraírással javítva; a független bank-ellenőr újraellenőrizte — a tételek a job kimenetében.",
   lektor_partial: "A lektor önálló megoldásainak egy része a kereten túl volt — a lektorálás részleges, nem teljes igazolás.",
   bank_trimmed: "A limiten egy hibás nyílt feladat vagy módszer kikerült, a fejezet gyakorlócsomagja ezért kisebb (a fogalmankénti kvízpár megmaradt) — a fejezetek a job kimenetében.",
   figure_check: "Egy vagy több ábra felirata nem a fejezet tanításából való — az ábra-kapu figyelmeztetése (mérés nélkül nem buktat).",

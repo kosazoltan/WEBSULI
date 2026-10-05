@@ -1,0 +1,64 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { repairFlaggedBankItems, GATE_REPAIR_MAX_ITEMS, type GateRepairDeps } from "../server/studio/gate-item-repair";
+import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
+import type { IAIProvider } from "../server/ai/AIProvider";
+import type { Lesson } from "../shared/lesson-schema";
+
+/* Spec 2026-10-05-s9 (S9/3) — a kapunál maradt hibás banktétel orkesztrált újraírása; csak a teljes bank determinisztikus
+   ellenőrzése ÉS a független bank-ellenőr ítélete után kerül vissza. Mért: job c1f9d12a (élő próba, Mezopotámia). */
+
+const orchestratorReply = JSON.stringify({ rootCause: "A két opció ugyanazt állítja fordított szórendben.", diagnosis: "A disztraktor nem hamis, csak átrendezett.", correctivePrompt: "A disztraktorok legyenek tartalmilag hamisak (más folyó, más gazdálkodás), ne a helyes válasz átrendezései; pontosan egy opció helyes." });
+const orchestratorFactory = (): IAIProvider => ({ name: "stub", model: "o", chat: async () => ({ content: orchestratorReply }), streamChat: async function* () { /* nincs */ }, isAvailable: async () => true }) as IAIProvider;
+
+function setup(overrides: Partial<GateRepairDeps> = {}) {
+  const lesson = standardFusionFixture() as Lesson;
+  const quiz0 = lesson.experience!.quiz[0] as Record<string, unknown>;
+  const fixed = { ...quiz0, question: `${String(quiz0.question)} (javítva)` };
+  const deps: GateRepairDeps = {
+    providerFactory: orchestratorFactory, keyConfigured: () => true, bankModel: "gpt-5.6-luna", bankSystem: "BANK SKILL",
+    callBank: async () => fixed,
+    verify: async () => [],
+    ...overrides,
+  };
+  return { lesson, quiz0, fixed, deps };
+}
+const flag = { path: "experience.quiz[0]", message: "Bank-ellenőr: Egyválasztós tétel: 2 helyes opció a független ítélet szerint" };
+
+test("javítás: az újraírt tétel a determinisztikus ellenőrzés és a független ellenőr után visszakerül", async () => {
+  const { lesson, deps } = setup();
+  let verifiedPath = "";
+  const res = await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, deps: { ...deps, verify: async (_l, p) => { verifiedPath = p; return []; } } });
+  assert.ok(res);
+  assert.deepEqual(res.repaired, ["experience.quiz[0]"]);
+  assert.match(String((res.lesson.experience!.quiz[0] as { question: string }).question), /\(javítva\)$/);
+  assert.equal(verifiedPath, "experience.quiz[0]", "a független ellenőr csak ezt az útvonalat nézi");
+  assert.notEqual(res.lesson, lesson, "az eredeti lecke nem módosul helyben");
+});
+
+test("a független ellenőr ítélete nélkül / hibával NEM kerül vissza (a régi hibaút)", async () => {
+  const { lesson, deps } = setup({ verify: async () => ["Egyválasztós tétel: 2 helyes opció"] });
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, deps }), null);
+});
+
+test("a kötés (id, fejezet, fogalmak, szándék) nem változhat — más tétel nem csempészhető be", async () => {
+  const { lesson, quiz0, deps } = setup();
+  const swapped = setup({ callBank: async () => ({ ...quiz0, id: "uj-azonosito" }) });
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, deps: swapped.deps }), null);
+  const moved = setup({ callBank: async () => ({ ...quiz0, sectionIndex: 99 }) });
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, deps: moved.deps }), null);
+  assert.ok(deps);
+});
+
+test("sémát sértő vagy két azonos opciójú tétel elutasítva", async () => {
+  const { lesson, quiz0 } = setup();
+  const bad = setup({ callBank: async () => ({ ...quiz0, options: ["a", "a", "b"] }) });
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, deps: bad.deps }), null);
+});
+
+test(`legfeljebb ${GATE_REPAIR_MAX_ITEMS} tétel; nem banktétel-útvonal nem javítható`, async () => {
+  const { lesson, deps } = setup();
+  const many = Array.from({ length: GATE_REPAIR_MAX_ITEMS + 1 }, (_, i) => ({ path: `experience.quiz[${i}]`, message: "x" }));
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: many, round: 3, deps }), null);
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: [{ path: "sections[0].blocks[1]", message: "x" }], round: 3, deps }), null);
+});

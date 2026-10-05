@@ -89,3 +89,16 @@ Szeletenként célzott teszt → teljes unit, tsc, lint. Az élő futás alatt n
 - A régi vezérlő lízingvesztéskor (`WorkflowConflict`) NEM írja a jobot hibára (`lesson-pipeline-routes.ts:800`).
 - Feltöltési út (`one_step_runs`): a jobra épülő fázis a job folytatásával megy tovább; a job előtti fázisok (OCR/térkép)
   ebben a szeletben hatókörön kívül — dokumentálva.
+
+## S9/3 — kapu: orkesztrált tétel-javítás (tulajdonosi döntés 2026-10-05, az élő próba után)
+Mért (élő próba, job c1f9d12a): a kapu megállt — `quiz[23]` két helyes opciója a körlimit után maradt, a kivétel a kvótát sértené
+(`resolveChoiceGate` → `fail`, `step-runner.ts` ~1497). A kapunál nem volt javító út.
+1. `server/studio/gate-item-repair.ts` `repairFlaggedBankItems`: a kapu-jelzéses banktételek (≤ 5) egyenként `orchestratedRetry`
+   (pont: `gate:<kör>:<útvonal>`): a bankmodell a tételt újraírja (bank szerep-skill + az orkesztrátor javító utasítása).
+2. Elfogadás CSAK, ha: a tétel sémája (quiz/tasks/methods) érvényes; az id, sectionIndex, coversConceptIds (és quiz intent)
+   változatlan; a teljes bank `experienceProblems` + `verifyLessonSkillBank` hibátlan; a determinisztikus egy-helyes-válasz
+   ellenőrzés tiszta; és a FÜGGETLEN bank-ellenőr (`runBankVerifier`, csak ez az útvonal) nem talál hibát és ítéletet ad.
+3. Utána a kapu a javított leckén UGYANAZZAL a `resolveChoiceGate`-tel számol (a javított útvonal jelzése megszűnik); minőségi
+   jegyzet `gate_item_repaired`; a job leckéje frissül (újrafuttatva idempotens). Bármely bukás → a régi hibaút.
+4. Szerző-keret 48k (tulajdonosi döntés): mindkét új szerzőmodell 24k fölött írt → az első hívás kárba ment.
+Bizonyítás: olcsó visszajátszás a mentett jobon (csak a kapu), utána teljes élő futás ugyanazon a képen.

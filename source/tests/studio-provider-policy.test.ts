@@ -1,6 +1,6 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { createStudioStepProvider, STREAM_CEILING_FACTOR, STUDIO_STEP_POLICY, studioConnection } from "../server/ai/studio-provider";
+import { AUTHOR_MAX_TOKENS, createStudioStepProvider, STREAM_CEILING_FACTOR, STUDIO_STEP_POLICY, studioConnection } from "../server/ai/studio-provider";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
 import { callStepModel, stepDeadlineMs, jsonFailureShape, parseModelJson } from "../server/studio/run-step";
@@ -209,4 +209,13 @@ test("studioConnection: az anthropic vendor a saját kulcsát kéri", () => {
   const c = studioConnection("claude-opus-5", { AI_INTEGRATIONS_ANTHROPIC_API_KEY: "k" });
   assert.equal(c.vendor, "anthropic");
   assert.equal(c.model, "claude-opus-5");
+});
+
+// Tulajdonosi döntés 2026-10-05 (élő próba, job c1f9d12a): a szerző 48k kerettel indul; külső teljes határideje továbbra sincs.
+test("a szerző kimeneti alapkerete 48 000 token (mért: mindkét új szerzőmodell 24k fölött írt)", t => {
+  withEnv(t, { AI_INTEGRATIONS_ANTHROPIC_API_KEY: "test-placeholder" });
+  assert.equal(AUTHOR_MAX_TOKENS, 48_000);
+  const provider = createStudioStepProvider("claude-opus-5-5", "author");
+  assert.equal(provider.maxOutputTokens, 48_000);
+  assert.equal(stepDeadlineMs("author"), undefined);
 });
