@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-10-05T07:33:15.692Z",
+  "measuredAt": "2026-10-05T08:05:37.517Z",
   "lessons": {
     "legacy": 177,
     "fusion": 24
@@ -11,9 +11,9 @@
     "ratio": 0.991
   },
   "totals": {
-    "legacy.section": 3213,
+    "legacy.section": 3339,
     "legacy.open_task": 2898,
-    "legacy.quiz": 10574,
+    "legacy.quiz": 10573,
     "legacy.short_answer": 3032,
     "legacy.quiz_unkeyed": 9,
     "legacy.vocab": 156,
@@ -35,7 +35,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 57
+        "section": 58
       },
       "keyedEstimate": 0
     },
@@ -69,7 +69,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 86,
-        "section": 32
+        "section": 35
       },
       "keyedEstimate": 86
     },
@@ -101,7 +101,7 @@
       "kinds": {
         "short_answer": 15,
         "quiz": 25,
-        "section": 11
+        "section": 13
       },
       "keyedEstimate": 25
     },
@@ -135,7 +135,7 @@
       "kinds": {
         "short_answer": 15,
         "quiz": 25,
-        "section": 12
+        "section": 13
       },
       "keyedEstimate": 25
     },
@@ -150,7 +150,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 21
+        "section": 22
       },
       "keyedEstimate": 0
     },
@@ -183,7 +183,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 25,
-        "section": 28
+        "section": 29
       },
       "keyedEstimate": 25
     },
@@ -198,7 +198,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 12
+        "section": 14
       },
       "keyedEstimate": 0
     },
@@ -232,7 +232,7 @@
       "kinds": {
         "short_answer": 75,
         "quiz": 124,
-        "section": 20
+        "section": 21
       },
       "keyedEstimate": 125
     },
@@ -247,7 +247,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 28
+        "section": 30
       },
       "keyedEstimate": 0
     },
@@ -262,7 +262,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 15
+        "section": 16
       },
       "keyedEstimate": 0
     },
@@ -295,7 +295,7 @@
       "kinds": {
         "short_answer": 15,
         "quiz": 25,
-        "section": 24
+        "section": 25
       },
       "keyedEstimate": 25
     },
@@ -311,7 +311,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 25,
-        "section": 19
+        "section": 20
       },
       "keyedEstimate": 25
     },
@@ -359,7 +359,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 15
+        "section": 17
       },
       "keyedEstimate": 0
     },
@@ -376,7 +376,7 @@
       "kinds": {
         "short_answer": 75,
         "quiz": 60,
-        "section": 21
+        "section": 22
       },
       "keyedEstimate": 60
     },
@@ -408,7 +408,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 12
+        "section": 14
       },
       "keyedEstimate": 0
     },
@@ -457,7 +457,7 @@
       "kinds": {
         "open_task": 15,
         "quiz": 25,
-        "section": 15
+        "section": 16
       },
       "keyedEstimate": 25
     },
@@ -474,7 +474,7 @@
       "kinds": {
         "short_answer": 15,
         "quiz": 25,
-        "section": 23
+        "section": 24
       },
       "keyedEstimate": 25
     },
@@ -491,7 +491,7 @@
       "kinds": {
         "quiz": 60,
         "short_answer": 49,
-        "section": 16
+        "section": 17
       },
       "keyedEstimate": 0
     },
@@ -523,7 +523,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 200,
-        "section": 13
+        "section": 14
       },
       "keyedEstimate": 200
     },
@@ -539,7 +539,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 50,
-        "section": 18
+        "section": 19
       },
       "keyedEstimate": 50
     },
@@ -555,7 +555,7 @@
       "duplicates": 1,
       "kinds": {
         "quiz": 58,
-        "section": 9
+        "section": 10
       },
       "keyedEstimate": 59
     },
@@ -589,7 +589,7 @@
       "kinds": {
         "quiz": 91,
         "quiz_unkeyed": 9,
-        "section": 68
+        "section": 69
       },
       "keyedEstimate": 0
     },
@@ -604,7 +604,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 16
+        "section": 17
       },
       "keyedEstimate": 0
     },
@@ -621,7 +621,7 @@
       "kinds": {
         "short_answer": 100,
         "quiz": 95,
-        "section": 17
+        "section": 19
       },
       "keyedEstimate": 0
     },
@@ -651,7 +651,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 37
+        "section": 39
       },
       "keyedEstimate": 0
     },
@@ -668,7 +668,7 @@
       "kinds": {
         "short_answer": 105,
         "quiz": 97,
-        "section": 12
+        "section": 13
       },
       "keyedEstimate": 97
     },
@@ -700,7 +700,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 96,
-        "section": 13
+        "section": 14
       },
       "keyedEstimate": 96
     },
@@ -732,7 +732,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 120,
-        "section": 4
+        "section": 6
       },
       "keyedEstimate": 120
     },
@@ -764,7 +764,7 @@
       "kinds": {
         "short_answer": 99,
         "quiz": 98,
-        "section": 20
+        "section": 22
       },
       "keyedEstimate": 0
     },
@@ -781,7 +781,7 @@
       "kinds": {
         "short_answer": 100,
         "quiz": 96,
-        "section": 12
+        "section": 13
       },
       "keyedEstimate": 96
     },
@@ -881,7 +881,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 95,
-        "section": 17
+        "section": 18
       },
       "keyedEstimate": 0
     },
@@ -915,7 +915,7 @@
       "kinds": {
         "short_answer": 50,
         "quiz": 50,
-        "section": 17
+        "section": 18
       },
       "keyedEstimate": 50
     },
@@ -932,7 +932,7 @@
       "kinds": {
         "short_answer": 100,
         "quiz": 105,
-        "section": 17
+        "section": 18
       },
       "keyedEstimate": 130
     },
@@ -949,7 +949,7 @@
       "kinds": {
         "short_answer": 98,
         "quiz": 97,
-        "section": 18
+        "section": 19
       },
       "keyedEstimate": 97
     },
@@ -966,7 +966,7 @@
       "kinds": {
         "short_answer": 50,
         "quiz": 25,
-        "section": 10
+        "section": 12
       },
       "keyedEstimate": 25
     },
@@ -982,7 +982,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 20,
-        "section": 19
+        "section": 20
       },
       "keyedEstimate": 20
     },
@@ -998,7 +998,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 20,
-        "section": 18
+        "section": 19
       },
       "keyedEstimate": 20
     },
@@ -1030,7 +1030,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 30,
-        "section": 30
+        "section": 31
       },
       "keyedEstimate": 30
     },
@@ -1063,7 +1063,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 20,
-        "section": 18
+        "section": 19
       },
       "keyedEstimate": 20
     },
@@ -1111,7 +1111,7 @@
       "duplicates": 17,
       "kinds": {
         "quiz": 26,
-        "section": 31
+        "section": 33
       },
       "keyedEstimate": 43
     },
@@ -1128,7 +1128,7 @@
       "kinds": {
         "quiz": 15,
         "open_task": 10,
-        "section": 17
+        "section": 18
       },
       "keyedEstimate": 15
     },
@@ -1161,7 +1161,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 95,
-        "section": 14
+        "section": 15
       },
       "keyedEstimate": 95
     },
@@ -1193,7 +1193,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 99,
-        "section": 27
+        "section": 29
       },
       "keyedEstimate": 99
     },
@@ -1228,7 +1228,7 @@
         "vocab": 20,
         "short_answer": 98,
         "quiz": 97,
-        "section": 7
+        "section": 8
       },
       "keyedEstimate": 0
     },
@@ -1244,7 +1244,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 75,
-        "section": 14
+        "section": 16
       },
       "keyedEstimate": 75
     },
@@ -1261,7 +1261,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 13
+        "section": 14
       },
       "keyedEstimate": 75
     },
@@ -1278,7 +1278,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 20
+        "section": 22
       },
       "keyedEstimate": 75
     },
@@ -1363,7 +1363,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 16
+        "section": 18
       },
       "keyedEstimate": 75
     },
@@ -1431,7 +1431,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 15
+        "section": 16
       },
       "keyedEstimate": 75
     },
@@ -1465,7 +1465,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 18
+        "section": 19
       },
       "keyedEstimate": 75
     },
@@ -1482,7 +1482,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 15
+        "section": 16
       },
       "keyedEstimate": 75
     },
@@ -1533,7 +1533,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 6
+        "section": 7
       },
       "keyedEstimate": 75
     },
@@ -1615,7 +1615,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 12
+        "section": 13
       },
       "keyedEstimate": 0
     },
@@ -1666,7 +1666,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 12
+        "section": 14
       },
       "keyedEstimate": 75
     },
@@ -1700,7 +1700,7 @@
       "kinds": {
         "open_task": 65,
         "quiz": 100,
-        "section": 23
+        "section": 25
       },
       "keyedEstimate": 100
     },
@@ -1717,7 +1717,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 15
+        "section": 19
       },
       "keyedEstimate": 71
     },
@@ -1733,7 +1733,7 @@
       "duplicates": 0,
       "kinds": {
         "quiz": 75,
-        "section": 9
+        "section": 10
       },
       "keyedEstimate": 75
     },
@@ -1783,7 +1783,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 74,
-        "section": 22
+        "section": 23
       },
       "keyedEstimate": 74
     },
@@ -1800,7 +1800,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 75,
-        "section": 28
+        "section": 29
       },
       "keyedEstimate": 75
     },
@@ -1817,7 +1817,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 20
+        "section": 23
       },
       "keyedEstimate": 75
     },
@@ -1834,7 +1834,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 75,
-        "section": 17
+        "section": 21
       },
       "keyedEstimate": 0
     },
@@ -1851,7 +1851,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 74,
-        "section": 34
+        "section": 35
       },
       "keyedEstimate": 74
     },
@@ -1868,7 +1868,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 71,
-        "section": 10
+        "section": 11
       },
       "keyedEstimate": 71
     },
@@ -1898,7 +1898,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 6
+        "section": 7
       },
       "keyedEstimate": 0
     },
@@ -1915,7 +1915,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 75,
-        "section": 14
+        "section": 15
       },
       "keyedEstimate": 75
     },
@@ -1930,7 +1930,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 6
+        "section": 7
       },
       "keyedEstimate": 0
     },
@@ -1942,12 +1942,12 @@
       "scripts": 1,
       "scriptErrors": 0,
       "literalObjects": 118,
-      "classified": 117,
+      "classified": 116,
       "duplicates": 0,
       "kinds": {
         "short_answer": 45,
-        "quiz": 72,
-        "section": 18
+        "quiz": 71,
+        "section": 19
       },
       "keyedEstimate": 71
     },
@@ -1962,7 +1962,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 5
+        "section": 7
       },
       "keyedEstimate": 0
     },
@@ -1979,7 +1979,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 74,
-        "section": 27
+        "section": 28
       },
       "keyedEstimate": 74
     },
@@ -1994,7 +1994,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 19
+        "section": 21
       },
       "keyedEstimate": 0
     },
@@ -2026,7 +2026,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 75,
-        "section": 12
+        "section": 14
       },
       "keyedEstimate": 75
     },
@@ -2041,7 +2041,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 7
+        "section": 8
       },
       "keyedEstimate": 0
     },
@@ -2056,7 +2056,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 6
+        "section": 8
       },
       "keyedEstimate": 0
     },
@@ -2086,7 +2086,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 12
+        "section": 13
       },
       "keyedEstimate": 0
     },
@@ -2118,7 +2118,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 4
+        "section": 5
       },
       "keyedEstimate": 0
     },
@@ -2133,7 +2133,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 6
+        "section": 7
       },
       "keyedEstimate": 0
     },
@@ -2148,7 +2148,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 1
+        "section": 2
       },
       "keyedEstimate": 0
     },
@@ -2165,7 +2165,7 @@
       "kinds": {
         "short_answer": 49,
         "quiz": 75,
-        "section": 15
+        "section": 17
       },
       "keyedEstimate": 75
     },
@@ -2182,7 +2182,7 @@
       "kinds": {
         "short_answer": 45,
         "quiz": 75,
-        "section": 6
+        "section": 7
       },
       "keyedEstimate": 75
     },
@@ -2199,7 +2199,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 16
+        "section": 17
       },
       "keyedEstimate": 0
     },
@@ -2284,7 +2284,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 13
+        "section": 14
       },
       "keyedEstimate": 0
     },
@@ -2318,7 +2318,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 76,
-        "section": 22
+        "section": 23
       },
       "keyedEstimate": 76
     },
@@ -2335,7 +2335,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 35
+        "section": 36
       },
       "keyedEstimate": 0
     },
@@ -2405,7 +2405,7 @@
       "kinds": {
         "short_answer": 4,
         "quiz": 75,
-        "section": 41
+        "section": 42
       },
       "keyedEstimate": 0
     },
@@ -2489,7 +2489,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 27
+        "section": 29
       },
       "keyedEstimate": 0
     },
@@ -2621,7 +2621,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 1
+        "section": 2
       },
       "keyedEstimate": 0
     },
@@ -2655,7 +2655,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 33
+        "section": 34
       },
       "keyedEstimate": 0
     },
@@ -2672,7 +2672,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 38
+        "section": 40
       },
       "keyedEstimate": 75
     },
@@ -2706,7 +2706,7 @@
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 32
+        "section": 33
       },
       "keyedEstimate": 0
     },
@@ -2754,7 +2754,7 @@
       "duplicates": 0,
       "kinds": {
         "open_task": 40,
-        "section": 24
+        "section": 25
       },
       "keyedEstimate": 0
     },
@@ -2884,7 +2884,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 10
+        "section": 11
       },
       "keyedEstimate": 0
     },
@@ -2916,7 +2916,7 @@
       "classified": 0,
       "duplicates": 0,
       "kinds": {
-        "section": 8
+        "section": 9
       },
       "keyedEstimate": 0
     },

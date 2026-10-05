@@ -77,3 +77,14 @@ test("fúziós lecke: a kinyert kvíz/feladat/módszer darab egyezik a lecke ban
   assert.equal(items.filter((i) => i.kind === "method" && i.steps?.length).length > 0, withSteps > 0);
   assert.ok(items.filter((i) => i.kind === "quiz").every((i) => typeof i.correctIndex === "number"));
 });
+
+test("S3-lelet (2026-10-05): a bank-szöveg entitás-dekódolt és címkementes; a relációjel nem címke", () => {
+  const quiz = classifyLiteral({ q: "K = 2 &middot; 13 = ?", o: ["<b>26</b>", "15", "2 &times; 13"], a: 0 });
+  assert.equal(quiz?.prompt, "K = 2 · 13 = ?");
+  assert.deepEqual(quiz?.options, ["26", "15", "2 × 13"]);
+  assert.equal(quiz?.correctIndex, 0);
+  assert.equal(classifyLiteral({ q: "Igaz-e: 3 < 5 és 7 > 2?", o: ["igaz", "hamis"], c: "igaz" })?.prompt, "Igaz-e: 3 < 5 és 7 > 2?");
+  assert.equal(classifyLiteral({ q: "Mennyi 9&nbsp;+&nbsp;3?", o: ["12", "&minus;6"], c: "&minus;6" })?.correctIndex, 1, "a kulcs-szöveg is dekódolva illeszkedik");
+  const [section] = textSections("<h2>Kerület</h2><p>Kerülete: K = 2 &middot; (8 + 5) = 2 &middot; 13 = 26 cm, a T = 9&times;9 = 81 m&sup2;.</p>");
+  assert.match(section.text, /2 · 13 = 26 cm.*9×9 = 81 m²/);
+});

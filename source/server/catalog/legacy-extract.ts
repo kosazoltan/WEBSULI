@@ -1,4 +1,5 @@
 import { parse } from "acorn";
+import { decodeHTML } from "entities";
 import { itemFingerprint, type CatalogItemDraft } from "./catalog-item";
 
 /**
@@ -68,8 +69,15 @@ function* walkObjects(node: unknown): Generator<Node> {
   for (const [k, v] of Object.entries(n)) if (k !== "loc" && k !== "range" && v && typeof v === "object") yield* walkObjects(v);
 }
 
-const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
-const strs = (v: unknown): string[] | null => (Array.isArray(v) && v.length && v.every((x) => typeof x === "string" && x.trim()) ? (v as string[]).map((x) => x.trim()) : null);
+/**
+ * A bankba kerülő SZÖVEG: HTML-entitás dekódolva (teljes HTML5-táblával), címkék nélkül. Mérve (S3 ellenőrző a szülő-ellenőrzött
+ * korpuszon): a régi leckék literál-szövegei innerHTML-be kerülnek, ezért `&middot;`, `&times;`, `&minus;`, `<b>` maradt bennük —
+ * a „K = 2 &middot; 13 = 26” számítás így értelmezhetetlen volt. Csak valódi címkét vágunk („3 < 5 és 7 > 2” megmarad).
+ */
+const TAG = /<\/?[a-z][^>]*>/gi;
+export const textOf = (html: string) => decodeHTML(html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|li|div|h\d|tr)>/gi, "\n").replace(TAG, " ")).replace(/[^\S\n]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+const str = (v: unknown): string | null => (typeof v === "string" && textOf(v) ? textOf(v) : null);
+const strs = (v: unknown): string[] | null => (Array.isArray(v) && v.length && v.every((x) => typeof x === "string" && textOf(x)) ? (v as string[]).map(textOf) : null);
 const first = (o: Record<string, unknown>, keys: string[]) => keys.map((k) => o[k]).find((v) => v !== undefined);
 
 /** A helyes kulcs indexre: szám, egyelemű tömb (`[1]`), betű („a”–„e”), vagy maga az opció szövege. Több elemű tömb = több
@@ -78,7 +86,7 @@ function keyIndex(raw: unknown, options: string[]): number | undefined {
   if (Array.isArray(raw)) return raw.length === 1 ? keyIndex(raw[0], options) : undefined;
   if (typeof raw === "number" && Number.isInteger(raw) && raw >= 0 && raw < options.length) return raw;
   if (typeof raw === "string") {
-    const t = raw.trim();
+    const t = textOf(raw);
     if (/^[a-eA-E]$/.test(t) && options.length >= 2) { const i = t.toLowerCase().charCodeAt(0) - 97; return i < options.length ? i : undefined; }
     if (/^\d+$/.test(t)) { const i = Number(t); return i < options.length ? i : undefined; }
     const i = options.findIndex((o) => o.trim().toLocaleLowerCase("hu") === t.toLocaleLowerCase("hu"));
@@ -128,9 +136,7 @@ export function classifyLiteral(o: Record<string, unknown>): Draft | null {
   return null;
 }
 
-const ENTITIES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", ndash: "–", mdash: "—", hellip: "…" };
-const decode = (s: string) => s.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e: string) => (e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENTITIES[e.toLowerCase()] ?? m));
-const plain = (html: string) => decode(html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|li|div|h\d|tr)>/gi, "\n").replace(/<[^>]+>/g, " ")).replace(/[^\S\n]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+const plain = textOf;
 
 /** A tanítás szövege h1–h3 szerinti szakaszokban (≥ 40 karakter), script/style/nav nélkül. */
 export function textSections(html: string): Array<{ heading: string; text: string }> {
