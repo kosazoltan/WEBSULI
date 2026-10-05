@@ -24,11 +24,20 @@ test("a pedagógus a közvetlen Anthropic API-n fut: claude-opus-5, adaptív gon
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
     assert.equal(String(url), "https://api.anthropic.com/v1/messages");
     captured = JSON.parse(String(init?.body));
-    return new Response(JSON.stringify({
-      id: "msg_1", type: "message", role: "assistant", model: "claude-opus-5", stop_reason: "end_turn", stop_sequence: null,
-      content: [{ type: "thinking", thinking: "…", signature: "sig" }, { type: "text", text: '{"sections":[]}' }],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    }), { headers: { "Content-Type": "application/json" } });
+    // Spec 2026-10-05-s10 (dokumentált változás): a pedagógus streamelve fut — Anthropic-SSE, gondolkodás- majd szöveg-blokk.
+    const ev = (type: string, data: object) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+    return new Response([
+      ev("message_start", { message: { id: "msg_1", type: "message", role: "assistant", model: "claude-opus-5", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } }),
+      ev("content_block_start", { index: 0, content_block: { type: "thinking", thinking: "", signature: "" } }),
+      ev("content_block_delta", { index: 0, delta: { type: "thinking_delta", thinking: "…" } }),
+      ev("content_block_delta", { index: 0, delta: { type: "signature_delta", signature: "sig" } }),
+      ev("content_block_stop", { index: 0 }),
+      ev("content_block_start", { index: 1, content_block: { type: "text", text: "" } }),
+      ev("content_block_delta", { index: 1, delta: { type: "text_delta", text: '{"sections":[]}' } }),
+      ev("content_block_stop", { index: 1 }),
+      ev("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 5 } }),
+      ev("message_stop", {}),
+    ].join(""), { headers: { "Content-Type": "text/event-stream" } });
   });
   const provider = createStudioStepProvider("claude-opus-5", "pedagogue");
   assert.ok(provider instanceof ClaudeProvider);
@@ -41,6 +50,7 @@ test("a pedagógus a közvetlen Anthropic API-n fut: claude-opus-5, adaptív gon
   assert.equal(STUDIO_STEP_POLICY.pedagogue.maxTokens, 16_000);
   assert.equal(captured?.system, "Terv");
   assert.ok(!("budget_tokens" in ((captured?.thinking as object) ?? {})), "budget_tokens tilos Opus 5-ön");
+  assert.equal(captured?.stream, true, "spec 2026-10-05-s10: streamelt kérés");
 });
 
 test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async t => {

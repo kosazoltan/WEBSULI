@@ -12,6 +12,7 @@ import {
   AIProviderAuthError,
   type ChatCallOptions,
 } from './AIProvider';
+import { collectStream, idleAbortSignal, type StreamEvent } from './stream-collect';
 
 export class ClaudeProvider implements IAIProvider {
   readonly name = 'Claude';
@@ -22,6 +23,8 @@ export class ClaudeProvider implements IAIProvider {
   /** Spec 2026-09-19: adaptive thinking + `output_config.effort` (Opus 5 planner runs at medium). */
   private reasoningEffort?: AIProviderConfig['reasoningEffort'];
   get maxOutputTokens(): number { return this.maxTokens; }
+  /** Spec 2026-10-05-s10 (3. szelet): a szerző (Claude Opus 5.5) hosszú kimenete streamelve, tétlenségi őrrel. */
+  readonly supportsStreamingChat = true;
 
   constructor(config: AIProviderConfig) {
     this.model = config.model;
@@ -52,22 +55,21 @@ export class ClaudeProvider implements IAIProvider {
           ]
         : systemText;
 
-      const response = await this.client.messages.create(
-        {
-          model: this.model,
-          max_tokens: options?.maxTokens ?? this.maxTokens,
-          system,
-          messages: conversationMessages.map(msg => ({
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content,
-          })),
-          // Spec 2026-09-19: Claude 4.6+/5 — adaptive thinking, depth via output_config.effort.
-          ...(this.reasoningEffort
-            ? { thinking: { type: 'adaptive' as const }, output_config: { effort: this.reasoningEffort } }
-            : {}),
-        },
-        { signal }
-      );
+      const params = {
+        model: this.model,
+        max_tokens: options?.maxTokens ?? this.maxTokens,
+        system,
+        messages: conversationMessages.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        })),
+        // Spec 2026-09-19: Claude 4.6+/5 — adaptive thinking, depth via output_config.effort.
+        ...(this.reasoningEffort
+          ? { thinking: { type: 'adaptive' as const }, output_config: { effort: this.reasoningEffort } }
+          : {}),
+      };
+      if (options?.stream) return await this.chatStreamed(params, signal, options.stream.idleMs);
+      const response = await this.client.messages.create(params, { signal });
 
       // With thinking on, the first block may be a thinking block — take the text block.
       const content = response.content.find(block => block.type === 'text');
@@ -88,6 +90,41 @@ export class ClaudeProvider implements IAIProvider {
       };
     } catch (error: unknown) {
       throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Spec 2026-10-05-s10-adatvesztes-mentesseg (3. szelet): ugyanaz a kérés `messages.stream`-mel; a szöveg-delta szöveg, a
+   * gondolkodás-delta aktivitás (a tétlenségi őrt újraindítja); a pontos használat és a `stop_reason` a stream végén a
+   * `finalMessage()`-ből. Megszakadáskor a hiba a beérkezett szöveget hordozza.
+   */
+  private async chatStreamed(params: Anthropic.MessageCreateParamsNonStreaming, signal: AbortSignal | undefined, idleMs: number): Promise<AIResponse> {
+    const idle = idleAbortSignal(signal);
+    let partial = '';
+    const provider = this.name;
+    try {
+      const stream = this.client.messages.stream(params, { signal: idle.signal });
+      const events = (async function* (): AsyncGenerator<StreamEvent> {
+        for await (const ev of stream) {
+          if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') { partial += ev.delta.text; yield { text: ev.delta.text }; continue; }
+          yield { activity: true };
+        }
+        const msg = await stream.finalMessage();
+        const u = msg.usage;
+        const input = u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+        yield {
+          ...(msg.stop_reason ? { finishReason: msg.stop_reason } : {}),
+          usage: { promptTokens: input, completionTokens: u.output_tokens, totalTokens: input + u.output_tokens,
+            ...(u.cache_read_input_tokens ? { cachedTokens: u.cache_read_input_tokens } : {}),
+            ...(u.cache_creation_input_tokens ? { cacheWriteTokens: u.cache_creation_input_tokens } : {}) },
+        };
+      })();
+      return await collectStream(events, { idleMs, abort: idle.abort, provider });
+    } catch (error: unknown) {
+      if (error instanceof AIProviderError && error.name === 'AIProviderIdleTimeoutError') throw error;
+      const mapped = error instanceof AIProviderError ? error : this.handleError(error);
+      mapped.partialContent = (error as { partialContent?: string })?.partialContent ?? partial;
+      throw mapped;
     }
   }
 
