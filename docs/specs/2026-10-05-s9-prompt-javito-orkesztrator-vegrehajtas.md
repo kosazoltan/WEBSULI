@@ -57,3 +57,35 @@ gyengültek (a lecke a meglévő kapukon ment át).
 
 ## Kapuk
 Szeletenként célzott teszt → teljes unit, tsc, lint. Az élő futás alatt nincs merge/deploy (a Render boot-söprés lezárná).
+
+## Adverzariális terv-ellenőrzés (2026-10-05) — PASS-WITH-FIXES; a kötelező javítások beépítve
+1. **Rögzítő szelet (0.)** — a tulajdonosi sorrend szerint: minden bukott kísérlet (lépés, kör, hiba-fajta, okok, kimenet-
+   kivonat hash-e) a pillanatképbe (`view.failures`, ≤ 50) — ebből mér az ingyenes diagnózis-próba és az A/B.
+2. **Saját keret** (nem a `workflowEnsureRepairBudget`, az lépés-látogatást számol és a valódi javító kört enné):
+   `view.orchestrator = { calls, byPoint }`; pontonként ≤ 2, futásonként ≤ 8 hívás; bankcsomagnál fejezetenként számolva.
+3. **Ellenőrzőpont-kulcs:** `workflowCheckpoint("orchestrator", { step, round, point, n, outputHash, reasons })` — más hiba más
+   kulcs; szolgáltatói hibaszöveg nincs a kulcsban.
+4. **Prompt-hash kulcs:** a javított hívás `…#orch<n>` kulccsal (nincs hamis „megváltozott” figyelmeztetés folytatáskor).
+5. **Csak a kapu/validálás bukásán indul** (invalid_json, empty, length, schema, coverage, gate, lektor_blockers, bank_packet);
+   szolgáltatói hiba és időtúllépés NEM (azt a modell-lánc és az S10 kezeli).
+6. **Bankcsomag:** fejezetenkénti saját `system` (a párhuzamos csomagok közös promptja nem szennyeződik); a javító blokk a
+   MEGLÉVŐ 2. és 3. kísérletre kerül (nem új kísérlet → `bankModelForAttempt` és a mentő-/salvage-szemantika változatlan);
+   pontonként ≤ 2 orkesztrált kör (a 2. és a 3. kísérlet előtt egy-egy).
+7. **Injekció:** a bemeneti blokkok adatként jelölve (kész); a javító prompt átvizsgálása: ha a bukott kimenet/forrás ≥ 200
+   karakteres szó szerinti darabját tartalmazza, elvetve (a régi út folytatódik).
+8. **Orkesztrátor-hívás saját szabályzattal** (`orchestrator`: 120 s, 4k token, JSON-mód, stream) és `workflowUsage`-szel
+   (a költség mérhető); NEM a `callStepModel`-en át (a JSON-hibái ne torzítsák a `skillFindings`-et / S0-mérést).
+9. **Mérhető elfogadás:** „kapukerülés 0” = a javított jelölt UGYANAZON kapukon megy át, és a lefedett fogalmak / tételszám
+   nem kevesebb, mint a bukott jelölté. A +25 pp az A/B-n mintanagysággal együtt riportolva (n ≥ 20 bukott pont).
+10. **Adatkezelés:** az orkesztrátor (DeepSeek az OpenRouteren át) ugyanazt a forrás-tartalmat látja, mint a már ott futó
+   bank-/besoroló modellek — új adatfeldolgozó nincs; a napló csak a rootCause-t írja (≤ 200 kar.), forrásszöveget nem.
+
+## S10/2 — a terv-ellenőrzés blokkolója miatt átdolgozva
+- Egyetlen döntő függvény a söprésre: aktív lízing → érintetlen; lejárt lízing + workflow-futás + `executions < 3` → folytatás;
+  különben a régi lezárás. A futás és gazdája: `lesson_workflow_runs` (`id = job OR snapshot->>'resourceId' = job`).
+- Nem csak induláskor: a söprés induláskor ÉS utána 100 s-onként fut (a deploykor a régi példány még tartja a lízinget —
+  lejárta után a futás folytatódik); folytatás csak sikeres `claim` után.
+- A `/resume` útvonallal azonos `beforeDrive` (lektor-időtúllépés / bank-újraépítés), `retry: true`.
+- A régi vezérlő lízingvesztéskor (`WorkflowConflict`) NEM írja a jobot hibára (`lesson-pipeline-routes.ts:800`).
+- Feltöltési út (`one_step_runs`): a jobra épülő fázis a job folytatásával megy tovább; a job előtti fázisok (OCR/térkép)
+  ebben a szeletben hatókörön kívül — dokumentálva.
