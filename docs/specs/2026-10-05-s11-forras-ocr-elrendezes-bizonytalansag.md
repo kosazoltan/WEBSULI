@@ -118,9 +118,12 @@ eltért, mindkettő súlyosan félreolvasott („Kesia”/„Hesia”, „Legnag
 ⟦?⟧ → 14-ből 7 igazolt fogalom → „túl bizonytalan” megállás. A jelölés helyes volt — az olvasók gyengék.
 
 ### Szabály
-1. Elsődleges OLVASÓ és döntő olvasó: gpt-6.1-sol (`DEFAULT_MODELS.ocr`), ha a kulcsa be van állítva; különben a régi lánc.
-2. Független második olvasó: a mért legjobb gyenge olvasó (qwen3-vl-32b, `FALLBACK_MODELS.ocr`) — vitánál a meglévő döntő olvasás,
-   jelölés és szótár-őr változatlan. A 2-a-3-ból harmadik szavazó elmarad (az erős olvasó már az első).
+1. A studió FORRÁS-OCR-jében (`createCachedSourceOcr`) az elsődleges olvasó és a döntő olvasó a gpt-6.1-sol (`OCR_THIRD_READER_MODEL`),
+   ha a kulcsa be van állítva; különben a régi lánc. A `DEFAULT_MODELS.ocr` (qwen) és a `FALLBACK_MODELS.ocr` (glm) NEM változik
+   (lásd a lenti tulajdonosi döntést).
+2. Független második olvasó: a konfigurált OCR-modell (qwen); az erős olvasó kiesésekor a `FALLBACK_MODELS.ocr` (glm) lép a helyére
+   (review #195 — mindig két olvasat). A 2-a-3-ból harmadik szavazó elmarad. Sikeres döntő olvasásnál a harmadik alakot az ADOTT
+   vita olvasataihoz mérjük (review #195).
 3. OCR-skill: a lap nyomtatott márka-/gyártó-feliratát (pl. füzetcég neve) nem írja át.
 4. Előfeltétel (mérés, az #190 reprodukálható mérőjén): a gpt-6.1-sol a 3 kézírásos matek-lapon (`tests/fixtures/ocr-handwriting.json`)
    nem rosszabb a qwen-nél; a nyers átiratai a fixture-be kerülnek, és a meglévő „a beállított OCR-modell a mért mezőny legjobbja”

@@ -325,7 +325,9 @@ export async function createCachedSourceOcr(ocrModel: string) {
     // Spec 2026-10-05-s11/5 (tulajdonosi döntés a 8. élő futás után): a forrás-OCR-ben az erős olvasó olvas ELSŐKÉNT és dönt
     // vitában; a konfigurált (mért) OCR-modell a független második; a 2-a-3-ból harmadik szavazó elmarad.
     const strong = withOcrCache((file) => callOcrModel(file, thirdModel), thirdModel, store);
-    const dualStrong = dualReadOcr(strong, first, (file, text, disputes) => callOcrAdjudicator(file, thirdModel, text, disputes), undefined, guard, { adjudicatorDecides: true });
+    // Review #195: ha az erős olvasó kiesik, a független második olvasó (FALLBACK) lép a helyére — mindig két olvasat.
+    const substitute = secondModel && secondModel !== ocrModel && secondModel !== thirdModel && studioModelReady(secondModel) ? withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store) : undefined;
+    const dualStrong = dualReadOcr(strong, first, (file, text, disputes) => callOcrAdjudicator(file, thirdModel, text, disputes), undefined, guard, { adjudicatorDecides: true, substitute });
     return withOcrCache(dualStrong, `${thirdModel}|${ocrModel}|dual-strong-adj|${promptHash}`, store, (file) => !dualStrong.degraded(file));
   }
   if (!secondModel || secondModel === ocrModel || !studioModelReady(secondModel)) {
