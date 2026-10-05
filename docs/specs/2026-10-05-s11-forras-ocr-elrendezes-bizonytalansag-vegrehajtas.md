@@ -31,3 +31,17 @@
    szótárral egy integrációs teszt (Kesia/Lepesztető jelölt, Ázsia/zikkurat nem). Teljes unit, tsc, lint.
 6. Mérés: a Mezopotámia-fotó OCR-je (csak OCR + célzott erős olvasás, néhány cent) — a „Kesia, Föld - Felt.” sor nem marad
    jelöletlen nem-szó.
+
+## S11/5 — erős elsődleges olvasó (ügynöknek)
+1. Mérés: a 3 kézírásos lap képei a sol-lal (`callOcrModel`, a jelenlegi OCR-skill) → a NYERS átiratok a fixture
+   `transcripts["gpt-6.1-sol"]` alá, a `measured` pontszám a `keyTokenRecall` átlagából. Ha < qwen: STOP.
+2. `server/ai/models.ts`: `DEFAULT_MODELS.ocr = "gpt-6.1-sol"` (a mérés-kommentbe az új sor), `FALLBACK_MODELS.ocr = qwen3-vl-32b`.
+   `OCR_THIRD_READER_MODEL` marad (szótár-őr célzott újraolvasása).
+3. `run-extraction.ts` `createCachedSourceOcr`: a harmadik szavazó csak akkor, ha különbözik az elsőtől (`third` = undefined, ha
+   `thirdModel === ocrModel`).
+4. `role-skills.ts` OCR-skill: márka-/gyártó-felirat kihagyása (egy mondat).
+5. Tesztek: a meglévő recall-teszt (változatlan) igazolja; új: a harmadik szavazó elmarad, ha azonos az elsővel. Teljes unit, tsc, lint.
+6. Élő futás a Mezopotámia-fotón (engedélyezett, 2026-10-05).
+**Módosítva a tulajdonosi döntés szerint:** az 1–2. lépés elmarad (a `DEFAULT_MODELS.ocr` és a `FALLBACK_MODELS.ocr` változatlan); a
+3. lépés helyett `createCachedSourceOcr`: első olvasó és döntő = `OCR_THIRD_READER_MODEL`, ha kész; második = a konfigurált OCR-modell;
+nincs harmadik szavazó. Ha a sol nincs beállítva: a régi lánc változatlanul.

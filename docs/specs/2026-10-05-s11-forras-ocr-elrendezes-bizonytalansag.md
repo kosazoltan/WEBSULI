@@ -109,3 +109,32 @@ szót; átengedi az Ázsia, Közel-Kelet, zikkurat, folyóköz, öntözéses, to
 Mérés (2026-10-05, csak OCR + célzott erős olvasás): a szótár 3 sort jelzett (Kesia, Felt, sumérok, határak). A „Kesia, Föld - Felt.”
 sor ⟦?⟧-t kapott (nem lesz belőle tény); „papok és határak” → „papok és katonák” (a fotóval egyező, a tanári helyesbítés szerint);
 a „sumérok” megerősítve, jel nélkül.
+
+## S11/5 — az erős olvasó az elsődleges (tulajdonosi döntés 2026-10-05, a 8. élő futás után)
+Mért (8. futás, map 6f9a30bd, a gyorsítótárazott nyers olvasatokból, ingyenes visszajátszással): a két alap-olvasó (qwen, glm) 13 helyen
+eltért, mindkettő súlyosan félreolvasott („Kesia”/„Hesia”, „Legnagyobb”/„lepkézetlen tornyotemplom”, „papsági alakok”, „határak”,
+„Alapjai”); az erős olvasó (gpt-6.1-sol) önmagában szinte hibátlan volt („Ázsia, Közel - Kelet térsége”, „lépcsőzetes toronytemplom”,
+„papkirályok”, „papok és katonák”, sorszámozott keret). A 2-a-3-ból szavazás csak szó szerinti egyezésnél dönt → 3/7 feloldás, a maradék
+⟦?⟧ → 14-ből 7 igazolt fogalom → „túl bizonytalan” megállás. A jelölés helyes volt — az olvasók gyengék.
+
+### Szabály
+1. Elsődleges OLVASÓ és döntő olvasó: gpt-6.1-sol (`DEFAULT_MODELS.ocr`), ha a kulcsa be van állítva; különben a régi lánc.
+2. Független második olvasó: a mért legjobb gyenge olvasó (qwen3-vl-32b, `FALLBACK_MODELS.ocr`) — vitánál a meglévő döntő olvasás,
+   jelölés és szótár-őr változatlan. A 2-a-3-ból harmadik szavazó elmarad (az erős olvasó már az első).
+3. OCR-skill: a lap nyomtatott márka-/gyártó-feliratát (pl. füzetcég neve) nem írja át.
+4. Előfeltétel (mérés, az #190 reprodukálható mérőjén): a gpt-6.1-sol a 3 kézírásos matek-lapon (`tests/fixtures/ocr-handwriting.json`)
+   nem rosszabb a qwen-nél; a nyers átiratai a fixture-be kerülnek, és a meglévő „a beállított OCR-modell a mért mezőny legjobbja”
+   teszt igazolja. Ha rosszabb: STOP, a tulajdonos dönt.
+
+### Elfogadás (EARS)
+- HA a mérés szerint a sol ≥ qwen a kézírásos lapokon, AKKOR a sol az elsődleges, és a recall-teszt (változatlanul) zöld.
+- A Mezopotámia-fotón (új élő futás) a térkép gépi jóváhagyása átmegy, és nincs „Föld keleti térsége” / „határak” / „Legnagyobb”.
+
+**Tulajdonosi döntés (2026-10-05, a mérés-előfeltétel után):** a #190-es 3 kézírásos lap képei nincsenek meg, ezért a konfigurált
+OCR-modell (`DEFAULT_MODELS.ocr` = qwen, a mért bajnok, a recall-teszt őrzi) NEM változik. A sol csak a studió FORRÁS-OCR-jében
+(`createCachedSourceOcr`, a térkép-építés) olvas elsőként és dönt vitában; a qwen a független második; a 2-a-3-ból harmadik szavazó
+elmarad. A kézírásos mérés pótolandó, ha a képek meglesznek.
+**Tulajdonosi döntés (2026-10-05, ingyenes visszajátszás után):** az erős elsődleges olvasónál a sikeres döntő olvasás DÖNT; ⟦?⟧ csak a
+döntő olvasó saját bizonytalanságánál, a harmadik (egyik olvasattal sem egyező) alaknál és a szótár-őrnél. A döntő olvasás elvetésekor
+a régi, vita-alapú jelölés marad. Mért (cache-elt olvasatok): a régi szabály a helyes „Közel - Kelet”, „lépcsőzetes”, „katonák” sorokat
+is jelölte (a gyenge qwen létező, de rossz szavai miatt); az új szabály mellett jel nélküliek.

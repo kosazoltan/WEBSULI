@@ -78,6 +78,7 @@ A cél: azt írod le, amit a leíró LEÍRNI AKART (a betűk szándékolt alakj�
 ## Tilalmak
 - Kép leírása, kiegészítés, átfogalmazás, átrendezés, fordítás; a leíró tartalmi/helyesírási hibájának „kijavítása”.
 - Nem létező szó leírása ott, ahol egy betűalakban közeli, a témába illő létező szó áll a lapon.
+- A lap nyomtatott márka-, gyártó- vagy füzetcég-feliratának átírása (nem a tananyag része).
 - Bármilyen JSON, markdown, kommentár.
 ## Önellenőrzés a válasz előtt
 Minden látható szövegrész átkerült? A számok és képletek egyeznek a képpel? Kézírásnál: van-e a szövegben nem létező magyar szó vagy a témába nem illő kifejezés? Ha igen, nézd meg újra a betűalakot (3–5. pont).`,
