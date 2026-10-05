@@ -60,3 +60,40 @@ elmarad (az erős olvasat már az egyik). Ha az erős olvasó is kiesik: a régi
 - Jelölt a Cél 2 szerint a döntő átirat minden olyan változtatása is, amely egyik vitatott olvasattal sem egyezik (harmadik alak),
   betűnyi vitánál is; és az egyoldalú (beszúrás/törlés) érdemi vita, ha a nem üres olvasat a döntő átiratban megvan.
 - S11/2 egyoldalú vitánál: a nem üres olvasat harmadik olvasatbeli megléte dönt (benne van → marad jel nélkül; nincs → kikerül).
+
+## S11/4 — egyező félreolvasás: szótár-őr + erős olvasó (tulajdonosi döntés 2026-10-05, a 7. élő futás után)
+Mért (map b6647e0c, lesson a894e033): a két alap-olvasó UGYANAZT a zagyva sort adta („Kesia, Föld - Felt. térsége”,
+„Lepesztető toronytemplom”) → nem volt vita, jel, harmadik olvasat; a szerző a nem-szavakból hihető mondatot rakott össze
+(„Ázsia a Föld keleti térsége” — a füzetben „Ázsia, Közel-Kelet térsége”) → téves tény publikálódott.
+Előzetes próba (hunspell-asm 4.0.2 + dictionary-hu 3.0.0, MIT / MPL-1.1, 116 ms betöltés): jelzi a Kesia, Felt, Lepesztető, bódex
+szót; átengedi az Ázsia, Közel-Kelet, zikkurat, folyóköz, öntözéses, toronytemplom, kézművesek szót; tévesen jelzi a „sumérok”,
+„Hammurapi”, „Kr” alakot (ezért a szótár egyedül nem dönt).
+
+### Szabály
+1. A döntő (jelölt) átirat minden szavát a magyar helyesírási szótár ellenőrzi (szám, ⟦?⟧, [KERET…], rövidítés-lista kivételével).
+2. A nem-szót tartalmazó SOROKAT az erős olvasó (OCR_THIRD_READER_MODEL) a képpel FÜGGETLENÜL újraolvassa (csak ezeket a sorokat
+   kapja, sorszámmal; a két alap-olvasat nem kerül a promptjába — nem horgonyozzuk).
+3. Döntés soronként:
+   - az erős olvasat a kérdéses szavakban egyezik az alap-olvasattal (3 olvasó egyezik) → marad, jel nélkül (a szótár nem ismeri);
+   - eltér, és az erős olvasat minden szava átmegy a szótáron → az erős olvasat lép a helyére (napló: régi → új);
+   - eltér, és az erős olvasatban is van nem-szó, vagy az erős olvasó hibázik/hiányzik → a kérdéses szó után ⟦?⟧ (S11 szerint:
+     a rá épülő fogalom pending, a szerző nem tanítja).
+4. Szerző-skill: a forrásszöveg értelmetlen, nem létező szavaiból (OCR-zaj) tényt kikövetkeztetni tilos; ⟦?⟧-es részt nem tanít.
+5. Fail-safe: szótár-betöltési hiba → nincs csere, a régi viselkedés, de napló „degraded”.
+
+### Nem-cél
+Új OCR-modell; képfeldolgozás; a tanári helyesbítés útja; az S11/2 2-a-3-ból szavazás módosítása.
+
+### Edge case-ek
+- Tiszta nyomtatott kép: nincs nem-szó → nincs plusz hívás (költség 0).
+- Tulajdonnév / szakszó, amit a szótár nem ismer („sumérok”): az erős olvasó megerősíti → marad.
+- Rövidítés („Kr. e.”, „pl.”, „stb.”): kivétel-lista.
+- Idegen nyelvű forrás (angol lecke): a szótár-őr csak magyar tantárgynál / magyar szövegnél fut (a nem-szók aránya > 40% → kihagyva).
+- Az erős olvasó egész sort ad vissza: csak a sor cserélődik, a többi szöveg változatlan.
+
+### Elfogadás (EARS)
+- HA mindkét alap-olvasó ugyanazt a nem-szót olvassa, AKKOR az erős olvasó újraolvassa a sort; szótár-helyes eltérő olvasat → csere;
+  különben ⟦?⟧ — és a „Kesia, Föld - Felt.” sorból NEM lesz „a Föld keleti térsége” tény (mérés: a Mezopotámia-fotó OCR-je, csak OCR).
+- A szótár által nem ismert, de az erős olvasó által megerősített szó jel nélkül marad (teszt: „sumérok”).
+- Tiszta szövegnél nincs plusz modellhívás (teszt).
+- Teljes unit, tsc, lint zöld; a meglévő OCR-tesztek változatlanok.
