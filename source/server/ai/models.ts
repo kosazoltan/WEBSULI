@@ -102,6 +102,22 @@ export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
  */
 export const OCR_THIRD_READER_MODEL = "gpt-6.1-sol";
 
+/** Az OCR-olvasó gondolkodási mélysége (OpenAI: `reasoning_effort`, OpenRouter: `reasoning`, Anthropic: `output_config.effort`). */
+export type OcrEffort = "low" | "medium" | "high";
+export type OcrReaderSpec = { readonly model: string; readonly effort: OcrEffort };
+
+/**
+ * Spec 2026-10-05-s11/7 (tulajdonosi döntés a friss 4-lapos futás után, map d344e889): a studió forrás-OCR-je KÉT ERŐS, független
+ * olvasóval fut (A = gpt-6.1-sol high, B = claude-opus-5-5 medium), a döntő a fúziójuk. Az A az összerakás alapja.
+ */
+export const OCR_FUSION_READERS = [
+  { model: "gpt-6.1-sol", effort: "high" },
+  { model: "claude-opus-5-5", effort: "medium" },
+] as const satisfies readonly [OcrReaderSpec, OcrReaderSpec];
+
+/** Spec S11/7: a fúziós lépés (csak választ vitánként: A | B | own) — a végső szöveget a kód rakja össze. */
+export const OCR_FUSION_DECIDER: OcrReaderSpec = { model: "gpt-6.1-sol", effort: "high" };
+
 /**
  * Spec 2026-09-30 (U6, C11): modellenkénti kimeneti plafon a hosszkorlát utáni EGYSZERI nagyobb kerethez. Forrás: az
  * OpenRouter /models lista `top_provider.max_completion_tokens` mezője, 2026-09-30-án lekérve

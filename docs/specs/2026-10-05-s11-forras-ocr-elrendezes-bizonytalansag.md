@@ -202,3 +202,17 @@ igazolt fogalom → „túl bizonytalan” megállás. Tulajdonosi döntés: az 
 - HA a fúzió a vitán kívül írna, AKKOR ez szerkezetileg lehetetlen (teszt).
 - Új élő futás a 4 történelem-lapon: a térkép gépi jóváhagyása átmegy, a lecke publikál, és tartalmazza az elsődleges/másodlagos
   forrásokat; nincs benne „Nílus áradási”, „Negroid”, „ezerév”.
+### Pontosítás (implementáció, 2026-10-05)
+- **Vita:** az A↔B szó-szintű LCS-eltérés; a csak-írásjel/nyíl/szóköz eltérés (S11/6) NEM megy a döntő elé — ott az A marad. A vitatott
+  szakasz széléről a szó nélküli tokenek (nyíl, kötőjel) az A-nál maradnak (a B választása nem viheti el az A nyilát/soremelését).
+- **Összerakás:** A → az A szakasza; B → a B szakasza a B saját tördelésével; `own` → a döntő szövege, minden egyik olvasatban sem szereplő
+  szava ⟦?⟧ (ha nincs ilyen, a szakasz vége kap jelet; az egyik olvasattal szó szerint egyező `own` = az az olvasat, jel nélkül); hiányzó,
+  érvénytelen vagy ütköző döntés → az A szakasza, a B-ben nem szereplő szavai ⟦?⟧-lel (üres A-oldalnál önálló ⟦?⟧ a vita helyén).
+  Legfeljebb 150 vita megy egy döntő hívásba (fölötte: döntés nélkül → jel).
+- **Hibák:** a döntő hívás hibája / nem JSON válasza → az A olvasat a viták jelölésével, „degraded” (nem kerül cache-be). Nem kép (PDF):
+  az A olvas, kiesésekor a B („degraded”).
+- **Gyorsítótár:** az olvasók saját kulcsa a modell + effort (`gpt-6.1-sol|high`, `claude-opus-5-5|medium` — a régi low-effortú sol-átirat
+  nem keveredik); a fúzió kulcsa `fusion-2-strong|<A>|<B>|<döntő>|<a döntő és a sor-újraolvasó prompt hash-e>`.
+- **Mérés-rögzítés:** a fixture `transcripts`/`measured` blokkja az ÖNÁLLÓ olvasóké (+ `claude-opus-5-5`); a fúzió nem olvasó, ezért a
+  saját `fusion` blokkjába kerül (a fúzió A-olvasata — sol high — is ott). A meglévő „a forrás-OCR elsődleges olvasója a legjobb
+  (önálló) olvasó” teszt változatlan; új teszt őrzi, hogy a fúzió ≥ minden önálló olvasó és ≥ a saját A-olvasata.
