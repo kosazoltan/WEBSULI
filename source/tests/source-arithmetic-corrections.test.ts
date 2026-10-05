@@ -108,5 +108,7 @@ test("forrás-ellenőrzés: a lecke-indítás kérés és fotó nélkül is lefu
   const schema = readFileSync(new URL("../shared/lesson-repair.ts", import.meta.url), "utf8");
   assert.ok(schema.includes('z.enum(["owner", "transcription", "arithmetic"])') && schema.includes("studentError:"), "review #181: a javítási séma ismeri az arithmetic alapot");
   const runner = readFileSync(new URL("../server/studio/step-runner.ts", import.meta.url), "utf8");
-  assert.equal((runner.match(/verifierConceptsOf\(map, job\)/g) ?? []).length, 3, "bank-ellenőr indítás + két cleared-kontextus");
+  // Spec-változás 2026-10-05-s9 (S9/3, docs/specs/2026-10-05-s9-prompt-javito-orkesztrator-vegrehajtas.md): a kapu tétel-javítása
+  // negyedik bank-ellenőr-indítás — ez is a helyesbített fogalmakat adja át (a teszt által őrzött tulajdonság).
+  assert.equal((runner.match(/verifierConceptsOf\(map, job\)/g) ?? []).length, 4, "bank-ellenőr indítás + két cleared-kontextus + a kapu tétel-javítása");
 });

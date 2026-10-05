@@ -43,7 +43,7 @@ Kizárólag JSON: { "title": string, "concepts": [{ "id", "term", "definition", 
 3. Add meg a term-et a forrás szóhasználatával, a definition-t a quote-ból tömörítve, saját tudás hozzáadása nélkül.
 4. Súlyozz: core = a felelet gerince (a forrás kiemeli, definiálja, gyakoroltatja); supporting = kiegészítő; extra = érdekesség.
 5. sourceRef.file a kapott fájlnév pontosan; page csak PDF-nél, 1-től induló egész.
-6. Átírási hiba ≠ forráshiba: képforrásnál az átirat gépi olvasat. Ha egy szó az átiratban értelmetlen, de a képen egyértelműen más (bódex → kódex), a quote az ÁTIRAT betűhű szövege marad (a program karakterre ellenőrzi), a term és a definition viszont a képen olvasható, szándékolt alakot írja. A leíró saját tartalmi hibáját nem javítod.
+6. Átírási hiba ≠ forráshiba: képforrásnál az átirat gépi olvasat. Ha egy szó az átiratban értelmetlen, de a képen egyértelműen más (bódex → kódex), a quote az ÁTIRAT betűhű szövege marad (a program karakterre ellenőrzi), a term és a definition viszont a képen olvasható, szándékolt alakot írja. A leíró saját tartalmi hibáját nem javítod. A „⟦?⟧” jelű rész BIZONYTALAN olvasat: a definícióban nem értelmezed át, nem pótolod (mért: „Kesia, Föld - Felt.” → „a Föld keleti térsége” hamis tény lett); a „[KERET: …]” és a sorszám a lap elrendezése — a sorrendet hordozza, a definíció ezt követheti.
 7. A forrást az első fájltól az utolsóig, oldalanként bejárod; a végén megszámolod, hogy minden oldal számonkérhető állítása bekerült-e.
 ## Tilalmak
 - Saját tudásból kiegészíteni, a forrás tartalmi hibáját „kijavítani", számot/mértékegységet/feltételt átírni.
@@ -72,9 +72,9 @@ A cél: azt írod le, amit a leíró LEÍRNI AKART (a betűk szándékolt alakj�
 3. Tipikus magyar kézírásos tévesztések, ezeket mindig mérlegeld: k↔b↔h↔l (felső hurok), f↔h↔t, a↔o↔d, u↔n↔ü, m↔n↔w, r↔v↔n, e↔c↔i, s↔r, cs/sz/zs/gy/ny/ty/ly kétjegyűek (ne bontsd szét és ne vond össze), kettőzött mássalhangzó (ll, tt, ss).
 4. Ékezetek: a magyarban jelentést hordoznak (kor/kór/kör, ör/őr). Rövid/hosszú (ö/ő, ü/ű, o/ó, u/ú, e/é, a/á, i/í) közül a szövegkörnyezetben helyes szót válaszd; a pont, vessző, vonás a betű fölött ékezet, nem írásjel.
 5. Tulajdonnevek, helynevek, idegen szavak (Stonehenge, Vértesszőlős, Homo sapiens): a betűalakhoz legközelebbi LÉTEZŐ, a témához illő nevet írd; ha nem ismersz rá biztosan, a betűhű olvasatot hagyd.
-6. Rövidítések és jelek betűhűen: i. e., Kr. e., kb., pl., v. (vagy), →, =, ↓, „/”. A nyilas vázlatot sorrendben, a nyilakkal együtt írd le; táblázatot soronként.
+6. Rövidítések és jelek betűhűen: i. e., Kr. e., kb., pl., v. (vagy), →, =, ↓, „/”. A nyilas vázlatot sorrendben, a nyilakkal együtt írd le; táblázatot soronként. Elrendezés: bekeretezett rész → „[KERET: <a keret felirata>]” sor, a tartalma, majd „[KERET VÉGE]”; ha a keretben/listában a bejegyzések egymás alatt sorrendet mutatnak (pl. „élén:” kezdetű lista), fentről lefelé „1.”, „2.”, … sorszámmal írod (mért: a „társadalom” keret rangsora sima sorokként elveszett).
 7. Számok: évszám, dátum, mértékegység karakterre; 1↔7, 4↔9, 5↔6, 0↔6 tévesztésnél a szöveg (évszázad, sorrend) dönt.
-8. Ha egy szó a fentiek után is eldönthetetlen: „[olvashatatlan]”; kitalált szót soha nem írsz. Áthúzott szöveget nem írsz le.
+8. Ha egy szó a fentiek után is kétséges: a legjobb olvasatot írod, utána „⟦?⟧” jellel (pl. „Kesia⟦?⟧”); teljesen olvashatatlan rész: „[olvashatatlan]”. Hihető, de nem biztos szót jel nélkül soha nem írsz; kitalált szót soha. Áthúzott szöveget nem írsz le.
 ## Tilalmak
 - Kép leírása, kiegészítés, átfogalmazás, átrendezés, fordítás; a leíró tartalmi/helyesírási hibájának „kijavítása”.
 - Nem létező szó leírása ott, ahol egy betűalakban közeli, a témába illő létező szó áll a lapon.

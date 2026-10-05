@@ -56,6 +56,8 @@ export function targetedRepairSections(
   for (const note of notes) {
     if (note.subkind === "book_probably_wrong") continue;
     if (note.blockPath && /^experience/.test(note.blockPath)) continue;
+    // Spec 2026-10-05-s9 (S9/6): a tévhit-listára mutató jegyzet a foltban javítható (`misconceptions` tömb) — nem kényszerít teljes újraírást.
+    if (note.blockPath && /^misconceptions(?:[.[]|$)/.test(note.blockPath)) continue;
     const section = sectionIndexOfPath(note.blockPath);
     if (section === null || section < 0 || section >= previous.sections.length) return null;
     targets.add(section);
@@ -96,8 +98,14 @@ export function parseSectionPatch(json: unknown): Map<number, unknown> | null {
   return out;
 }
 
-/** Replace only the allowed sections; everything else (incl. misconceptions) is the previous lesson byte for byte. */
-export function mergeSectionPatches(previous: Lesson, patch: Map<number, unknown>, allowed: ReadonlyArray<number>): Lesson {
+/** Spec 2026-10-05-s9 (S9/6): a folt opcionális teljes, javított tévhit-listája (`misconceptions` tömb), ha a szerző küldte. */
+export function parseMisconceptionsPatch(json: unknown): unknown[] | null {
+  return isObj(json) && Array.isArray(json.misconceptions) ? json.misconceptions : null;
+}
+
+/** Replace only the allowed sections; everything else is the previous lesson byte for byte — the misconceptions too, unless the patch
+ *  sends a corrected list (S9/6; the result is re-validated by the lesson schema). */
+export function mergeSectionPatches(previous: Lesson, patch: Map<number, unknown>, allowed: ReadonlyArray<number>, misconceptions?: unknown[] | null): Lesson {
   const allowedSet = new Set(allowed);
   const sections = structuredClone(previous.sections) as unknown[];
   for (const [index, section] of patch) {
@@ -105,5 +113,5 @@ export function mergeSectionPatches(previous: Lesson, patch: Map<number, unknown
     if (index < 0 || index >= sections.length) throw new Error(`A(z) ${index + 1}. fejezet nem létezik.`);
     sections[index] = section;
   }
-  return { ...structuredClone(previous), sections: sections as Lesson["sections"] };
+  return { ...structuredClone(previous), sections: sections as Lesson["sections"], ...(misconceptions ? { misconceptions: misconceptions as Lesson["misconceptions"] } : {}) };
 }

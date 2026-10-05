@@ -41,6 +41,7 @@ import {
   type OneStepRun,
 } from "./one-step-progress";
 import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
+import { UNCERTAIN_MARK } from "./ocr";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
 import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
@@ -520,7 +521,13 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     : { corrections: [] as SourceCorrection[], rejected: [] as string[] };
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
-  const corrections = mergeCorrections(arithmetic, result.corrections);
+  // Review #192: az új (pl. csak definíciós) helyesbítés nem ejtheti el ugyanannak a fogalomnak a MÁR érvényes másik mezőjét.
+  const proposed = withPersistedFields(mergeCorrections(arithmetic, result.corrections), persistedCorrections(rows));
+  // Review #181 javítása (mért élesben, job e9fac201): újraindításkor a térkép már helyesbített, a modell nem javasol semmit — a
+  // MÁR ÉRVÉNYES tanári/átírási helyesbítést a DB-ből kell visszaadni, különben a job nélküle fut, és a független bank-ellenőr a
+  // nyers átirathoz („bérművesek”) méri a helyes („kézművesek”) tételeket. Az aritmetikai kör determinisztikusan úgyis újrafut.
+  // A már érvényes sort a `pending` szűrő magától kihagyja (nincs újraírás), de a lista része — minden kijáraton visszajön.
+  const corrections = [...proposed, ...persistedCorrections(rows).filter((p) => !proposed.some((c) => c.localId === p.localId))];
   // The full audit goes to the log and the job output (sourceCorrections); the column holds only a code.
   for (const fix of corrections) logger.info(`[STUDIO/1STEP] ${fix.localId}: ${correctionAuditText(fix)}`);
   if (!corrections.length) return [];
@@ -537,7 +544,8 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
         await tx.update(kmConcepts).set({
           ...(fix.term !== undefined ? { term: fix.term } : {}),
           ...(fix.definition !== undefined ? { definition: fix.definition } : {}),
-          ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}),
+          // Spec 2026-10-05-s11: a tanár helyesbítése a bizonytalan („⟦?⟧”) olvasat miatt függő fogalmat is rendezi → tanítható.
+          ...(row.reviewState === "kept" || (row.reviewState === "pending" && row.quote.includes(UNCERTAIN_MARK)) ? { reviewState: "edited" } : {}),
           verbatimReason: correctionReasonCode(fix),
           updatedAt: new Date(),
         }).where(eq(kmConcepts.id, row.id));
@@ -548,6 +556,27 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     return [];
   }
   return corrections;
+}
+
+/** Review #192: mezőnkénti összefésülés — az új helyesbítés mezője nyer, a hiányzó mező a már érvényes helyesbítésből jön. */
+export function withPersistedFields(proposed: SourceCorrection[], persisted: SourceCorrection[]): SourceCorrection[] {
+  return proposed.map((c) => {
+    const p = persisted.find((x) => x.localId === c.localId);
+    if (!p) return c;
+    return {
+      ...c,
+      ...(c.term === undefined && p.term !== undefined ? { term: p.term } : {}),
+      ...(c.definition === undefined && p.definition !== undefined ? { definition: p.definition } : {}),
+    };
+  });
+}
+
+/** A térképen MÁR érvényes tanári/átírási helyesbítés (verbatimReason = corrected:<alap>), a korábbi alak nélkül (review #181). */
+export function persistedCorrections(rows: Array<{ localId: string; term: string; definition: string; verbatimReason?: string | null }>): SourceCorrection[] {
+  return rows.flatMap((r) => {
+    const basis = String(r.verbatimReason ?? "").match(/^corrected:(owner|transcription)$/)?.[1] as SourceCorrection["basis"] | undefined;
+    return basis ? [{ localId: r.localId, basis, term: r.term, definition: r.definition, reason: "Már érvényes helyesbítés (a forrás-idézet az eredeti átirat).", from: {} }] : [];
+  });
 }
 
 /**
@@ -586,6 +615,7 @@ export async function autoCurateKnowledgeMap(
       sourceRef: kmConcepts.sourceRef,
       examWeight: kmConcepts.examWeight,
       verbatimOk: kmConcepts.verbatimOk,
+      verbatimReason: kmConcepts.verbatimReason,
       reviewState: kmConcepts.reviewState,
     })
     .from(kmConcepts)
@@ -613,6 +643,8 @@ export async function autoCurateKnowledgeMap(
     const decision = autoReviewDecision({
       examWeight: c.examWeight as "core" | "supporting",
       verbatimOk: c.verbatimOk,
+      // Spec 2026-10-05-s11: bizonytalan OCR-olvasatra épülő fogalom nem tény (a tanári helyesbítés rendezheti).
+      uncertainQuote: c.quote.includes(UNCERTAIN_MARK) && !String(c.verbatimReason ?? "").startsWith("corrected:"),
     });
     if (decision === c.reviewState) continue;
     c.reviewState = decision;

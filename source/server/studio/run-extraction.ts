@@ -5,7 +5,7 @@ import { db } from "../db";
 import { knowledgeMaps, kmConcepts, systemPrompts } from "../../shared/schema";
 import { and, eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
-import { FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../ai/models";
+import { FALLBACK_MODELS, OCR_THIRD_READER_MODEL, providerForModel, resolveStudioModel } from "../ai/models";
 import { createPromptStore } from "../lib/prompt-store";
 import {
   emptyExtractionReason,
@@ -315,6 +315,9 @@ export async function createCachedSourceOcr(ocrModel: string) {
   const secondModel = FALLBACK_MODELS.ocr;
   if (!secondModel || secondModel === ocrModel || !studioModelReady(secondModel)) return first;
   const second = withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store);
-  const dual = dualReadOcr(first, second, (file, text, disputes) => callOcrAdjudicator(file, ocrModel, text, disputes));
-  return withOcrCache(dual, `${ocrModel}|${secondModel}|dual-1|${createHash("sha256").update(OCR_ADJUDICATION_PROMPT).digest("hex").slice(0, 12)}`, store, (file) => !dual.degraded(file));
+  // Spec 2026-10-05-s11/2 (tulajdonosi döntés): a jelölt vitákat egy erős, független harmadik olvasat dönti el (2 a 3-ból).
+  const thirdModel = OCR_THIRD_READER_MODEL;
+  const third = studioModelReady(thirdModel) ? withOcrCache((file) => callOcrModel(file, thirdModel), thirdModel, store) : undefined;
+  const dual = dualReadOcr(first, second, (file, text, disputes) => callOcrAdjudicator(file, ocrModel, text, disputes), third);
+  return withOcrCache(dual, `${ocrModel}|${secondModel}|dual-2|${third ? thirdModel : "-"}|${createHash("sha256").update(OCR_ADJUDICATION_PROMPT).digest("hex").slice(0, 12)}`, store, (file) => !dual.degraded(file));
 }

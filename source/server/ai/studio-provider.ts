@@ -159,6 +159,8 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
  * out.” a lektornál, a teljes-válasz határidő a lassan, de folyamatosan generáló modellt is megölte. A rövid döntések
  * (topicFocus) maradnak a régi, rövid határidőn.
  */
+/** Tulajdonosi döntés 2026-10-05: a szerző kimeneti alapkerete (mért: Opus 5.5 és Qwen 3.8 is 24k fölött írt). */
+export const AUTHOR_MAX_TOKENS = 48_000;
 export const STREAM_IDLE_MS = 120_000;
 /** Streamelt módban a teljes határidő csak felső plafon: a régi érték kétszerese. */
 export const STREAM_CEILING_FACTOR = 2;
@@ -183,6 +185,9 @@ export function createStudioStepProvider(model: string, step?: string) {
     });
   }
   const policy = step ? STUDIO_STEP_POLICY[step] : undefined;
+  // Tulajdonosi döntés 2026-10-05 (élő próba, job c1f9d12a): mindkét szerzőmodell (Opus 5.5, Qwen 3.8) 24k fölött írt — az első hívás
+  // kárba ment, utána 48k-s újrapróba jött. A szerző ezért rögtön 48k kerettel indul (csak a ténylegesen használt token fizetendő).
+  if (step === "author") return createStudioProvider(model, undefined, AUTHOR_MAX_TOKENS, MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {});
   if (!policy) return createStudioProvider(model, undefined, undefined, MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {});
   return createStudioProvider(model, policy.timeoutMs, policy.maxTokens, {
     reasoningEffort: policy.reasoningEffort,

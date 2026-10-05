@@ -20,10 +20,15 @@
 
 import type { ExamWeight, ReviewState } from "../../shared/knowledge-map-schema";
 
-export type AutoReviewInput = { examWeight: ExamWeight; verbatimOk: boolean };
+/**
+ * Spec 2026-10-05-s11: `uncertainQuote` — az idézet bizonytalan OCR-olvasatot („⟦?⟧”) tartalmaz, és tanári helyesbítés még nem
+ * rendezte. Mért: „Kesia, Föld - Felt.” → „a Föld keleti térsége” hamis tényként publikálódott. Az ilyen fogalom nem tanítható.
+ */
+export type AutoReviewInput = { examWeight: ExamWeight; verbatimOk: boolean; uncertainQuote?: boolean };
 
 /** Egy fogalom gépi döntése. */
 export function autoReviewDecision(c: AutoReviewInput): Extract<ReviewState, "kept" | "pending"> {
+  if (c.uncertainQuote) return "pending";
   if (c.verbatimOk) return "kept";
   return c.examWeight === "core" ? "pending" : "kept";
 }

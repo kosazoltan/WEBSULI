@@ -2917,3 +2917,41 @@ test("S9: kapcsoló KI → a gyártás viselkedése változatlan (érvénytelen 
   assert.equal(outcome.ok, false);
   assert.equal(deps.calls.filter((c) => c.model.startsWith("deepseek/")).length, 0);
 });
+
+/* Spec 2026-10-05-s9 (S9/4, tulajdonosi kérdés): a lektor TANÍTÁSRA vonatkozó blokkoló jegyzeteit az orkesztrátor elemzi, és a
+ * szerző javító köre a jegyzetek mellett fejezetre szabott javító utasítást kap; a banktételre mutató jegyzet nem ide tartozik. */
+test("S9/4: lektori blokkoló → az orkesztrátor elemzi, a szerző javító köre a javító utasítással fut (kapcsoló BE)", async (t) => {
+  process.env.WORKFLOW_ORCHESTRATOR = "1";
+  t.after(() => { delete process.env.WORKFLOW_ORCHESTRATOR; });
+  const base = makeDeps(CANNED_AUTHOR);
+  const calls: Array<{ model: string; system: string; user: string }> = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub", model,
+    chat: async (messages: Array<{ role: string; content: string }>) => {
+      calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
+      if (model.startsWith("deepseek/")) return { content: JSON.stringify({ rootCause: "A szerző a forrás szerinti folyóköz-definíciót kihagyta.", diagnosis: "A fejezet állítása ellentmond a forrásnak.", correctivePrompt: "Az első fejezetben a definíciót szó szerint a forrás idézetéből vedd át, és ne állíts olyat, ami a forrásban nincs." }), finishReason: "stop" };
+      return { content: CANNED_AUTHOR, finishReason: "stop", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  const teachingNote = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "0.0", message: "Az első fejezet definíciója ellentmond a forrásnak." };
+  const bankNote = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "experience.quiz[0]", message: "BANKTÉTEL-JEGYZET" };
+  base.store.seed({ id: "lektor-orch", mapId: "m1", step: "author", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON, report: { notes: [teachingNote, bankNote] }, reportRound: 0 } });
+  await runPipelineStep("lektor-orch", { ...base, providerFactory });
+  const orch = calls.filter((c) => c.model.startsWith("deepseek/"));
+  assert.equal(orch.length, 1, "egy elemzés a blokkolókról");
+  assert.match(orch[0].user, /Az első fejezet definíciója ellentmond a forrásnak/);
+  assert.doesNotMatch(orch[0].user.split("<<<SYSTEM")[0], /BANKTÉTEL-JEGYZET/, "a banktételre mutató jegyzet nem a szerzői elemzés hibája");
+  const author = calls.find((c) => !c.model.startsWith("deepseek/"))!;
+  assert.match(author.system, /=== ORKESZTRÁTOR JAVÍTÓ UTASÍTÁS[\s\S]*definíciót szó szerint a forrás idézetéből/);
+});
+
+test("S9/4: kapcsoló KI → a szerző javító köre változatlan (nincs orkesztrátor-hívás, nincs javító blokk)", async () => {
+  delete process.env.WORKFLOW_ORCHESTRATOR;
+  const deps = makeDeps(CANNED_AUTHOR);
+  const note = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "0.0", message: "Ellentmondás." };
+  deps.store.seed({ id: "lektor-off", mapId: "m1", step: "author", round: 1, output: { approvedOutline: GOOD_OUTLINE, lesson: GOOD_LESSON, report: { notes: [note] }, reportRound: 0 } });
+  await runPipelineStep("lektor-off", deps);
+  assert.ok(deps.calls.every((c) => !c.model.startsWith("deepseek/")));
+  assert.ok(deps.calls.every((c) => !c.system.includes("ORKESZTRÁTOR JAVÍTÓ UTASÍTÁS")));
+});

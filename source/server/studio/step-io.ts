@@ -505,6 +505,8 @@ export function buildAuthorPrompt(
           `CÉLZOTT JAVÍTÁS: kizárólag a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet írd újra (0-tól számozott index: ${repair.targetSections.join(", ")}). A többi fejezetet a program változatlanul megőrzi — azokat NE küldd vissza, és a javított fejezetben is csak a kifogásolt részt változtasd.`,
           "A válasz CSAK JSON legyen, ebben az alakban (a kulcs a fejezet 0-tól számozott indexe):",
           '{ "sections": { "<index>": { "heading": string, "probaEnabled": true, "blocks": [...] } } }',
+          // Spec 2026-10-05-s9 (S9/6): a tévhit-lista hibája is javítható a foltban.
+          'Ha a lektor a tévhit-listát (misconceptions) kifogásolja, a folt mellé a TELJES javított listát is add vissza: "misconceptions": [{ "conceptId": string, "text": string }] — csak a forrásból igazolható tévhit maradhat.',
         ]
       : [
           "A válasz CSAK JSON legyen, a Lesson sémának megfelelően:",

@@ -89,3 +89,39 @@ Szeletenként célzott teszt → teljes unit, tsc, lint. Az élő futás alatt n
 - A régi vezérlő lízingvesztéskor (`WorkflowConflict`) NEM írja a jobot hibára (`lesson-pipeline-routes.ts:800`).
 - Feltöltési út (`one_step_runs`): a jobra épülő fázis a job folytatásával megy tovább; a job előtti fázisok (OCR/térkép)
   ebben a szeletben hatókörön kívül — dokumentálva.
+
+## S9/3 — kapu: orkesztrált tétel-javítás (tulajdonosi döntés 2026-10-05, az élő próba után)
+Mért (élő próba, job c1f9d12a): a kapu megállt — `quiz[23]` két helyes opciója a körlimit után maradt, a kivétel a kvótát sértené
+(`resolveChoiceGate` → `fail`, `step-runner.ts` ~1497). A kapunál nem volt javító út.
+1. `server/studio/gate-item-repair.ts` `repairFlaggedBankItems`: a kapu-jelzéses banktételek (≤ 5) egyenként `orchestratedRetry`
+   (pont: `gate:<kör>:<útvonal>`): a bankmodell a tételt újraírja (bank szerep-skill + az orkesztrátor javító utasítása).
+2. Elfogadás CSAK, ha: a tétel sémája (quiz/tasks/methods) érvényes; az id, sectionIndex, coversConceptIds (és quiz intent)
+   változatlan; a teljes bank `experienceProblems` + `verifyLessonSkillBank` hibátlan; a determinisztikus egy-helyes-válasz
+   ellenőrzés tiszta; és a FÜGGETLEN bank-ellenőr (`runBankVerifier`, csak ez az útvonal) nem talál hibát és ítéletet ad.
+3. Utána a kapu a javított leckén UGYANAZZAL a `resolveChoiceGate`-tel számol (a javított útvonal jelzése megszűnik); minőségi
+   jegyzet `gate_item_repaired`; a job leckéje frissül (újrafuttatva idempotens). Bármely bukás → a régi hibaút.
+4. Szerző-keret 48k (tulajdonosi döntés): mindkét új szerzőmodell 24k fölött írt → az első hívás kárba ment.
+Bizonyítás: olcsó visszajátszás a mentett jobon (csak a kapu), utána teljes élő futás ugyanazon a képen.
+
+## S9/4 — lektor-blokkolók az orkesztrátornak; kapu-javítás modell-eszkalációval (tulajdonosi kérdés + visszajátszás, 2026-10-05)
+Tulajdonosi kérdés: „A lektor blokkoló jegyzeteit az orkesztrátor nem olvassa, nem javítja?” Mért: a szerző javító körében a
+blokkoló jegyzetek nyersen mennek a promptba (`step-runner.ts` szerző-ág, `reviewNotes`); a futásban 2 blokkoló a körlimitig
+megmaradt. A kapu-visszajátszás (job c1f9d12a) 2. futásában a bankmodell kétszer VÁLTOZATLANUL adta vissza a tételt.
+1. Szerző javító köre blokkolóval: az orkesztrátor (`point: author:<kör>:lektor`) a blokkoló jegyzetekből és az érintett fejezetek
+   előző szövegéből gyökérokot + fejezetre szabott javító utasítást ír; ez a rendszerprompt végére kerül (a jegyzetek mellett).
+   Ellenőrzőpontból (folytatáskor nincs új hívás, a lépés-hash stabil). Hiba/keret esetén a régi viselkedés.
+2. Kapu-tételjavítás: változatlan tétel → azonnali determinisztikus elutasítás („a javítás nem történt meg”) a független ellenőr
+   előtt; a 2. kör a mentőmodellen (`BANK_RESCUE_MODEL`) fut.
+
+## S9/5 — téves útvonalú jelzés (tulajdonosi döntés 2026-10-05, a 3. visszajátszás után)
+Mért (job c1f9d12a): a lektor-jegyzet útvonala `tasks[6]`, de a kötött üzenete „Mi hamis: tasks[28] … tasks[6] javítva” — a jelzett
+tétel már helyes (a modellek jogosan adták vissza változatlanul), a valódi hiba a jelzés nélküli tasks[28]-ban.
+Szabály: ha a kötött „Mi hamis:” mező MÁS tételt nevez meg, a jelzett tétel változatlanul a független bank-ellenőr elé kerül (csak
+hibátlan ítéletnél szűnik meg a jelzése, különben javító út), a megnevezett tétel javító utat kap. Szabad szöveg nem számít.
+
+## S9/6 — tévhit-lista: folt + kivétel a körlimiten (tulajdonosi döntés 2026-10-05, az 5. élő futás után)
+Mért (job b3a7ecad): a `misconceptions[1]` ténybeli lektori blokkolója a körlimitig maradt — a célzott (fejezet-folt) javítás a
+tévhit-listát nem érinthette (az orkesztrátor diagnózisa: „a sections-en kívüli blokkolókat … nem érintette”), a limit-ág pedig a
+`misconceptions[i]` útvonalat nem ismerte → megállás. Szabály: (1) a célzott folt `misconceptions` tömböt (a teljes javított listát) is
+hozhat, a szerző erre utasítást kap; (2) a körlimiten a tévhit-elemre mutató blokkoló KIVEHETŐ (a „Gyakori hibák” kártya kisebb lesz,
+a tanítás nem sérül) — ugyanúgy, mint a hibás banktétel; a 7.4 végkapu a kivett elemre mutató blokkolót megoldottnak veszi.
