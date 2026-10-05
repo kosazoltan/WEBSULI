@@ -134,7 +134,9 @@ export type Scene3dParams = z.infer<typeof scene3dParamsSchema>;
 export function visualParamProblems(kind: string, params: unknown): string[] {
   if (kind === "illustration") {
     const check = sanitizeIllustration((params as { svg?: unknown } | null)?.svg);
-    return (check.ok ? illustrationLayoutProblems(check.svg) : check.problems).map((p) => `illustration.svg: ${p}`);
+    // Spec 2026-10-05: a kliens a hibás szám-attribútumot elhagyja, de új modellkimenetet a kapu visszaküld javításra.
+    const attrProblems = check.ok && check.attrFixes.length ? [`érvénytelen szám-attribútum (a böngésző nem rajzolja): ${check.attrFixes.join(", ").slice(0, 160)}`] : [];
+    return (check.ok ? [...attrProblems, ...illustrationLayoutProblems(check.svg)] : check.problems).map((p) => `illustration.svg: ${p}`);
   }
   const schema = (VISUAL_PARAM_SCHEMAS as Record<string, z.ZodTypeAny>)[kind];
   if (!schema) return [];
