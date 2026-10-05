@@ -56,3 +56,21 @@ nincs harmadik szavazó. Ha a sol nincs beállítva: a régi lánc változatlanu
 4. `verifyNonWords` / döntő függvény: ha az erős sor a kérdéses szót ≤ 2 szerkesztéssel módosítja → az eredeti marad, jel nélkül.
 5. Tesztek a mért esetekre; teljes unit, tsc (app + tests), lint. Visszajátszás: a mentett olvasatokon (`ocr_transcripts`) és a
    job/map adatain — modellhívás nélkül, ahol lehet.
+
+## S11/7 — két erős olvasó fúziója (ügynöknek)
+1. `server/ai/models.ts`: `OCR_FUSION_READERS = [{ model: "gpt-6.1-sol", effort: "high" }, { model: "claude-opus-5-5", effort: "medium" }]`,
+   `OCR_FUSION_DECIDER = { model: "gpt-6.1-sol", effort: "high" }`.
+2. `server/studio/ocr.ts`:
+   - `callOcrModel(file, model, effort?)`: az effort a kérésbe (OpenAI: `reasoning_effort`, OpenRouter: `reasoning`); high-nál nagyobb
+     `max_completion_tokens` (a gondolkodás ne csonkítsa).
+   - `callClaudeOcr(file, model, effort)`: `@anthropic-ai/sdk` `messages.create` (vagy `.stream()` + `finalMessage()`), system = OCR-skill,
+     kép: `{ type: "image", source: { type: "base64", media_type, data } }` (PDF: `document` blokk), `output_config: { effort }`,
+     a szövegblokk(ok) visszaadva; `stop_reason !== "end_turn"` → hiba (csonka).
+   - `fuseOcrReadings` / `fusionOcr(a, b, decide, guard)`: viták (`locateOcrDisagreements`), döntés JSON `{ choices: [{ n, pick: "A"|"B"|"own",
+     text? }] }`, DETERMINISZTIKUS összerakás az A-ból (csak a vitás szakaszok cserélődnek), `own`/hiányzó → jel. Kiesés → a másik + szótár-őr,
+     degraded. A szótár-őr a végén.
+3. `run-extraction.ts` `createCachedSourceOcr`: ha mindkét olvasó és a döntő kulcsa kész → `fusionOcr`, saját gyorsítótár-kulcs
+   (`fusion-2-strong`, a promptok hash-ével); különben a régi lánc.
+4. Tesztek: a fúzió a vitán kívül nem változtathat (a döntő „szándékosan” mást küld → nincs hatása); own → jel; kiesés → degraded;
+   a Claude-kérés alakja (image blokk, output_config.effort) mockolt klienssel. Teljes unit, tsc (app + tests), lint.
+5. Mérés: `scripts/ocr-measure-history.local.mts` bővítése az opus-szal és a fúzióval (néhány cent), a fixture frissítése.
