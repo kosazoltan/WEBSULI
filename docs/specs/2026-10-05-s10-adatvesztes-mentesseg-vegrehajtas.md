@@ -32,6 +32,9 @@ A lektor (grok-4.6, xAI) a Responses API-n fut — a mért időtúllépés ott t
 meglévő folytatási úton (`driveTracked(..., start=false)`, `/jobs/:id/resume` logikája) indul újra a futás gazdájával
 (`lesson_workflow_runs.owner_id`), futásonként legfeljebb 2 automatikus folytatással (számláló a pillanatképben); efölött a
 régi hibaüzenet. Teszt: tiszta döntő függvény (folytat / lezár) + a számláló.
+Review #191 (spec-változás, ld. a spec „Spec-változás” szakaszát): lejárt lízing + futó workflow + elfogyott keret → `close`
+AZ IDŐSZAKOS söpréskor is (nem `leave`); a lezáró UPDATE `ne(studioJobs.status, "ok")` őrrel. Teszt: `tests/orphan-sweep.test.ts`
+(a korábbi `leave` állítás `close`-ra változik + új teszt az esetre).
 
 ## 3. szelet — Anthropic stream (`messages.stream().finalMessage()`), ugyanazzal az őrrel.
 

@@ -2890,6 +2890,25 @@ test("S9: szolgáltatói hiba a teljes láncon → NINCS orkesztrátor, a régi 
   assert.equal(deps.calls.filter((c) => c.model.startsWith("deepseek/")).length, 0);
 });
 
+test("review #191: vegyes lánc (elsődleges érvénytelen JSON, tartalékok szolgáltatói hibával) → NINCS orkesztrátor (kapcsoló BE)", async (t) => {
+  process.env.WORKFLOW_ORCHESTRATOR = "1";
+  t.after(() => { delete process.env.WORKFLOW_ORCHESTRATOR; });
+  const deps = makeOrchestratorDeps({});
+  const primary = resolveStudioModel("pedagogue");
+  const inner = deps.providerFactory;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    if (model === primary || model.startsWith("deepseek/") || model.startsWith("z-ai/")) return provider;
+    return { ...provider, chat: async () => { deps.calls.push({ model, corrected: false }); throw new Error("[OpenRouter] Rate limit exceeded"); } } as IAIProvider;
+  };
+  deps.store.seed({ id: "orch-mixed", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("orch-mixed", { ...deps, providerFactory });
+  assert.equal(outcome.ok, false, JSON.stringify(outcome));
+  assert.equal(deps.calls[0]?.model, primary, "az elsődleges modell futott először (érvénytelen JSON)");
+  assert.ok(deps.calls.some((c) => c.model !== primary && !c.model.startsWith("deepseek/")), "a tartalék modell is futott (429)");
+  assert.equal(deps.calls.filter((c) => c.model.startsWith("deepseek/") || c.model.startsWith("z-ai/")).length, 0, "az utolsó bukás szolgáltatói → nincs elemzés");
+});
+
 test("S9: kapcsoló KI → a gyártás viselkedése változatlan (érvénytelen JSON-lánc = hiba, nincs orkesztrátor-hívás)", async () => {
   delete process.env.WORKFLOW_ORCHESTRATOR;
   const deps = makeOrchestratorDeps({});

@@ -48,24 +48,42 @@ type Base = { role: string; step: string; model: string; system: string; user: s
 type Failure = { kind: FailureKind; reasons: string[]; rawOutput?: string };
 const hash = (s: string | undefined) => (s ? createHash("sha256").update(s).digest("hex").slice(0, 16) : undefined);
 
-async function analyse(base: Base, failure: Failure, n: number, previousDiagnoses: string[], deps: OrchestrationDeps): Promise<OrchestratorResult | null> {
-  if (!await workflowOrchestratorAllow(base.point)) {
-    logger.warn(`[ORKESZTRÁTOR] ${base.point}: a keret elfogyott — a régi hibaút folytatódik.`);
-    return null;
+/**
+ * Review #191: a keret-ellenőrzés a checkpoint `work` ágában fut — folytatáskor a gyorsítótár-találat nem fogyaszt keretet,
+ * így a mentett javító prompt nem vész el. Elutasításkor dobunk (nem `null`-t adunk vissza), hogy a `null` ne kerüljön a
+ * checkpointba: egy későbbi futás (új keret) újra elemezhessen.
+ */
+export class OrchestratorBudgetExhausted extends Error {
+  constructor(readonly point: string) {
+    super(`Az orkesztrátor-keret elfogyott (${point}).`);
+    this.name = "OrchestratorBudgetExhausted";
   }
+}
+
+async function analyse(base: Base, failure: Failure, n: number, previousDiagnoses: string[], deps: OrchestrationDeps): Promise<OrchestratorResult | null> {
   const input: OrchestratorInput = { role: base.role, step: base.step, model: base.model, system: base.system, user: base.user, failure, previousDiagnoses, ...(base.subject ? { subject: base.subject } : {}) };
   const models = ORCHESTRATOR_MODELS.filter((m) => deps.keyConfigured(m));
   // Terv-ellenőrzés 3.: a kulcs a hibát azonosítja (más hiba → új elemzés); szolgáltatói szöveg nincs benne.
   const key = { step: base.step, round: base.round, point: base.point, n, kind: failure.kind, outputHash: hash(failure.rawOutput), reasons: failure.reasons.slice(0, 20) };
-  const result = await workflowCheckpoint("orchestrator", key, () => orchestrate(input, async (model, system, user) => {
-    const provider = deps.providerFactory(model, "orchestrator");
-    const idleMs = stepStreamIdleMs("orchestrator");
-    // A skill a hívási ponton is kötelező (idempotens: a már skill-elt prompt nem duplázódik).
-    const res = await provider.chat([{ role: "system", content: withSupportSkill("orchestrator", system) }, { role: "user", content: user }], AbortSignal.timeout(120_000),
-      provider.supportsStreamingChat && idleMs ? { stream: { idleMs } } : undefined);
-    await workflowUsage(res.usage);
-    return { json: JSON.parse(stripJsonFences(res.content ?? "").trim()) };
-  }, models));
+  let result: OrchestratorResult | null;
+  try {
+    result = await workflowCheckpoint("orchestrator", key, async () => {
+      if (!await workflowOrchestratorAllow(base.point)) throw new OrchestratorBudgetExhausted(base.point);
+      return orchestrate(input, async (model, system, user) => {
+        const provider = deps.providerFactory(model, "orchestrator");
+        const idleMs = stepStreamIdleMs("orchestrator");
+        // A skill a hívási ponton is kötelező (idempotens: a már skill-elt prompt nem duplázódik).
+        const res = await provider.chat([{ role: "system", content: withSupportSkill("orchestrator", system) }, { role: "user", content: user }], AbortSignal.timeout(120_000),
+          provider.supportsStreamingChat && idleMs ? { stream: { idleMs } } : undefined);
+        await workflowUsage(res.usage);
+        return { json: JSON.parse(stripJsonFences(res.content ?? "").trim()) };
+      }, models);
+    });
+  } catch (error) {
+    if (!(error instanceof OrchestratorBudgetExhausted)) throw error;
+    logger.warn(`[ORKESZTRÁTOR] ${base.point}: a keret elfogyott — a régi hibaút folytatódik.`);
+    return null;
+  }
   if (!result) return null;
   if (echoesInput(result.correctivePrompt, [failure.rawOutput, base.user])) {
     logger.warn(`[ORKESZTRÁTOR] ${base.point}: a javító prompt a bemenetet/kimenetet másolná — elvetve.`);

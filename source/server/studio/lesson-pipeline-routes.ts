@@ -165,7 +165,7 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
     if (decision === "leave") continue;
     acted++;
     if (decision === "close") {
-      await db.update(studioJobs).set({ status: "error", step: "error", error: ORPHAN_JOB_ERROR, finishedAt: new Date() }).where(eq(studioJobs.id, row.id));
+      await db.update(studioJobs).set({ status: "error", step: "error", error: ORPHAN_JOB_ERROR, finishedAt: new Date() }).where(and(eq(studioJobs.id, row.id), ne(studioJobs.status, "ok")));
       logger.warn(`[STUDIO] Árva lecke-job hibára zárva (${row.id}) — nincs folytatható futás.`);
       continue;
     }

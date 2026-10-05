@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { echoesInput, failureKindOf, orchestratedRetry, orchestratorEnabled, OrchestrationValidationError } from "../server/studio/orchestrated-retry";
+import { correctedSystemFor, echoesInput, failureKindOf, orchestratedRetry, orchestratorEnabled, OrchestrationValidationError } from "../server/studio/orchestrated-retry";
+import { executeWorkflow, workflowOrchestratorAllow } from "../server/workflows/engine";
+import { memoryWorkflows } from "./helpers/workflow-store";
 import { StepModelError } from "../server/studio/run-step";
 import type { IAIProvider } from "../server/ai/AIProvider";
 
@@ -77,4 +79,35 @@ test("injekció-szűrés: a bukott kimenet szó szerinti továbbítása elvetve"
   assert.equal(echoesInput("Rövid, saját javító utasítás.", [leak]), false);
   const echo = providerReturning([JSON.stringify({ rootCause: "Gyökérok: hosszú.", diagnosis: "Elemzés szövege itt.", correctivePrompt: `Tedd ezt: ${leak.slice(0, 300)}` })]);
   assert.equal(await orchestratedRetry(base, { ...first, rawOutput: leak }, async () => "nem futhat", { providerFactory: echo.factory, keyConfigured: () => true }), null);
+});
+
+test("review #191: folytatáskor a mentett elemzés (checkpoint-találat) NEM fogyaszt keretet — a 3. végrehajtás is megkapja a javító promptot", async () => {
+  const { store, records } = memoryWorkflows();
+  const { factory, seen } = providerReturning([good(1)]);
+  const results: Array<string | null> = [];
+  for (let execution = 1; execution <= 3; execution++) {
+    await assert.rejects(executeWorkflow(store, { id: "orch-resume", owner: "o", mode: "studio", retry: true, continuation: true }, async () => {
+      const res = await correctedSystemFor(base, first, 1, [], { providerFactory: factory, keyConfigured: () => true });
+      results.push(res?.system ?? null);
+      throw new Error("megszakadt");
+    }), /megszakadt/);
+  }
+  assert.equal(seen.length, 1, "egyetlen fizetett orkesztrátor-hívás");
+  assert.equal(results.length, 3);
+  for (const system of results) assert.match(system ?? "", /Javító utasítás 1/, "a mentett javító prompt minden folytatáskor megvan");
+  assert.equal(records.get("orch-resume")?.view.orchestrator?.byPoint[base.point], 1, "csak a valódi elemzés fogyasztott keretet");
+});
+
+test("review #191: elfogyott keretnél null, és a null NEM kerül a checkpointba", async () => {
+  const { store, records } = memoryWorkflows();
+  const { factory, seen } = providerReturning([good(1)]);
+  await assert.rejects(executeWorkflow(store, { id: "orch-budget", owner: "o", mode: "studio" }, async () => {
+    assert.ok(await workflowOrchestratorAllow(base.point));
+    assert.ok(await workflowOrchestratorAllow(base.point));
+    assert.equal(await correctedSystemFor(base, first, 1, [], { providerFactory: factory, keyConfigured: () => true }), null);
+    throw new Error("vég");
+  }), /vég/);
+  assert.equal(seen.length, 0, "nincs orkesztrátor-hívás keret nélkül");
+  const checkpoints = records.get("orch-budget")?.checkpoints ?? {};
+  assert.deepEqual(Object.keys(checkpoints).filter((k) => k !== "requestHash"), [], "a keret-elutasítás nem mentődik eredményként");
 });

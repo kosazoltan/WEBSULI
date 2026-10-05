@@ -42,6 +42,7 @@ export function markOrphanedJobs(rows: OrphanJobRow[]): Array<{ id: string; erro
  *  - Aktív lízing: egy élő folyamat hajtja (pl. deploykor a régi példány, vagy helyi próba ugyanazon a DB-n) → érintetlen.
  *  - Lejárt lízing + futó workflow + kevesebb mint AUTO_RESUME_MAX_EXECUTIONS végrehajtás → folytatás (a `executions` a claim alatt
  *    nő és mentődik — összeomló futás nem pöröghet végtelenül; a 4-es kemény korlát alatt egy kézi próba marad).
+ *  - Lejárt lízing + futó workflow + elfogyott keret → lezárás induláskor ÉS futás közben is (review #191).
  *  - Workflow-futás nélküli árva job → a régi lezárás, de CSAK induláskor (futás közben az ilyen jobot élő folyamat hajthatja).
  */
 export const AUTO_RESUME_MAX_EXECUTIONS = 3;
@@ -62,7 +63,10 @@ export function sweepDecision(row: SweepRow, now: number, boot: boolean): SweepD
   if (TERMINAL_STATUSES.has(row.status)) return "leave";
   if (row.leaseUntil && row.leaseUntil.getTime() > now) return "leave";
   if (row.runId && row.owner && row.runState === "running" && row.executions < AUTO_RESUME_MAX_EXECUTIONS) return "resume";
-  // Nem folytatható (nincs futás, megállt, elfogyott a keret): induláskor a régi lezárás (különben a #183-as örök poll
+  // Review #191 (spec-változás): lejárt lízing + futó workflow + elfogyott keret → senki nem hajtja (a heartbeat halott),
+  // ezért futás közben is lezárjuk — különben a job örökre `running` maradna.
+  if (row.runId && row.runState === "running" && row.executions >= AUTO_RESUME_MAX_EXECUTIONS) return "close";
+  // Nem folytatható (nincs futás, megállt, várakozik): induláskor a régi lezárás (különben a #183-as örök poll
   // visszatérne); futás közben nem nyúlunk hozzá — élő folyamat hajthatja.
   return boot ? "close" : "leave";
 }

@@ -734,7 +734,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       system: sys,
       user: "Válaszolj kizárólag a kért JSON-nal.",
     }).catch((error: unknown) => {
-      if (error instanceof StepModelError && failureKindOf(error)) lastModelFailure = error;
+      // Review #191: mindig felülírjuk — vegyes láncban (elsődleges érvénytelen JSON, tartalék 429) a régi validálási bukás
+      // nem maradhat meg, különben az orkesztrátor szolgáltatói hibára futna (a szerződés szerint csak validálási bukásra).
+      lastModelFailure = error instanceof StepModelError && failureKindOf(error) ? error : undefined;
       throw error;
     });
   // Spec 2026-09-24 (bank-ellenőr): a lektor-hívással párhuzamosan indul, az eredményágban várjuk be.

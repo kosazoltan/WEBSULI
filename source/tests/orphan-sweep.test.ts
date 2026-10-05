@@ -20,9 +20,9 @@ test("élő lízing (deploykor a régi példány, vagy helyi próba ugyanazon a 
   assert.equal(sweepDecision(row({ leaseUntil: new Date(now + 30_000) }), now, false), "leave");
 });
 
-test("crash-loop ellen: a végrehajtás-keret elfogyott → nincs folytatás (indításkor a régi lezárás, futás közben érintetlen)", () => {
+test("crash-loop ellen: a végrehajtás-keret elfogyott → nincs folytatás, lezárás induláskor ÉS futás közben (review #191 spec-változás)", () => {
   assert.equal(sweepDecision(row({ executions: AUTO_RESUME_MAX_EXECUTIONS }), now, true), "close");
-  assert.equal(sweepDecision(row({ executions: AUTO_RESUME_MAX_EXECUTIONS }), now, false), "leave");
+  assert.equal(sweepDecision(row({ executions: AUTO_RESUME_MAX_EXECUTIONS }), now, false), "close");
   assert.ok(AUTO_RESUME_MAX_EXECUTIONS < 4, "a 4-es kemény korlát alatt egy kézi próba marad");
 });
 
@@ -31,6 +31,16 @@ test("nem folytatható (nincs futás / megállt / várakozik) → indításkor a
     assert.equal(sweepDecision(row(d), now, true), "close", JSON.stringify(d));
     assert.equal(sweepDecision(row(d), now, false), "leave", JSON.stringify(d));
   }
+});
+
+test("review #191: lejárt lízing + futó workflow + elfogyott keret → az időszakos söprés lezárja (nincs örök running); élő lízing mellett érintetlen", () => {
+  for (const executions of [AUTO_RESUME_MAX_EXECUTIONS, AUTO_RESUME_MAX_EXECUTIONS + 5]) {
+    assert.equal(sweepDecision(row({ executions }), now, false), "close", String(executions));
+    assert.equal(sweepDecision(row({ executions, owner: null }), now, false), "close", "gazda nélkül is");
+    assert.equal(sweepDecision(row({ executions, leaseUntil: new Date(now + 30_000) }), now, false), "leave", "élő lízing");
+  }
+  const routes = readFileSync(new URL("../server/studio/lesson-pipeline-routes.ts", import.meta.url), "utf8");
+  assert.match(routes, /if \(decision === "close"\) \{\s*await db\.update\(studioJobs\)[^\n]*\.where\(and\(eq\(studioJobs\.id, row\.id\), ne\(studioJobs\.status, "ok"\)\)\)/, "a lezárás nem írja felül a kész jobot");
 });
 
 test("lezárt job → mindig érintetlen", () => {
