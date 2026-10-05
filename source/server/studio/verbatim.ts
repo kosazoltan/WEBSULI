@@ -182,9 +182,11 @@ export function relocateQuote(quote: string, sourceText: string): string | null 
  * a `normalizeForCompare` szóközként kezeli. A bizonytalanság (`uncertainQuote`) továbbra is a NYERS idézetből számít (S11).
  */
 const LAYOUT_MARKS = /⟦\?⟧|\[KERET(?::[^\]\n]*)?\]|\[KERET VÉGE\]/gu;
-const LAYOUT_ARROWS = /[→↙↘↓↗←↳|]/gu;
+const LAYOUT_ARROWS = /[→↙↘↓↗←↳]/gu;
+// Review #196 (P1): a `|` csak ÖNÁLLÓ elrendezési jelként esik ki — a matematikai |x| abszolútérték-jel megmarad.
+const LAYOUT_PIPE = /(^|\s)\|(?=\s|$)/gmu;
 export function withoutLayoutMarks(text: string): string {
-  return text.replace(LAYOUT_MARKS, "").replace(LAYOUT_ARROWS, " ");
+  return text.replace(LAYOUT_MARKS, "").replace(LAYOUT_ARROWS, " ").replace(LAYOUT_PIPE, "$1 ");
 }
 
 /** True when `quote` occurs in `sourceText` once formatting noise is folded away. */

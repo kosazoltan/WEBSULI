@@ -45,3 +45,16 @@ test("mért (job 5b33202a): a csak rövidítésből álló fogalom („Kr. u. / 
   assert.equal(checkGrounding("Krisztus előtt történt minden ilyen esemény a régi korban.", c), false);
   assert.equal(checkGrounding("Az u betű és az i betű magánhangzó a szavakban.", { localId: "x", term: "u", examWeight: "core" } as never), false);
 });
+
+test("review #196: szám csak pontos egyezéssel — „300 év” nem lesz a „30 év” ragozott alakja", () => {
+  const t = task({ required: [["30 év"]], sample: "Egy emberöltő körülbelül 300 év.", minWords: 3 });
+  assert.equal(alignTaskToSample(t), false);
+  assert.deepEqual((t as { required: string[][] }).required, [["30 év"]]);
+});
+
+test("review #196: a matematikai |x| megmarad a szó szerinti ellenőrzésben, az önálló „|” elrendezési jel kiesik", async () => {
+  const { checkVerbatim } = await import("../server/studio/verbatim");
+  assert.equal(checkVerbatim("Az |x| értéke 3", "Az x értéke 3").ok, false);
+  assert.equal(checkVerbatim("|5| = 5", "5 = 5").ok, false);
+  assert.equal(checkVerbatim("tárgyak írott emlékek", "tárgyak | írott emlékek").ok, true);
+});

@@ -18,8 +18,13 @@ const tokens = (s: string) => normalizeAnswer(s).split(/\s+/).filter(Boolean);
 /** Ugyanannak a szónak ragozott alakja-e (a csoport-szó a minta-szó töve, vagy legalább 4 betűs közös eleje van a rövidebbik végéig ≤ 3 eltéréssel). */
 function sameWord(sampleWord: string, groupWord: string): boolean {
   if (sampleWord === groupWord) return true;
+  // Review #196 (P1): számnál csak a pontos szám egyezik („30” ≠ „300”); ragozás csak a szám UTÁN („30-at” ↔ „30”).
+  if (/\d/.test(sampleWord) || /\d/.test(groupWord)) {
+    const num = (w: string) => /^[\d.,]+/.exec(w)?.[0];
+    return /^[\d.,]+$/.test(groupWord) && num(sampleWord) === groupWord;
+  }
   const [short, long] = sampleWord.length <= groupWord.length ? [sampleWord, groupWord] : [groupWord, sampleWord];
-  if (short.length >= 2 && long.startsWith(short) && (short.length >= 4 || /\d/.test(short) || long.length - short.length <= 4)) return true;
+  if (short.length >= 2 && long.startsWith(short) && (short.length >= 4 || long.length - short.length <= 4)) return true;
   let p = 0;
   while (p < short.length && short[p] === long[p]) p++;
   return p >= 4 && short.length - p <= 2 && long.length - p <= 4;
