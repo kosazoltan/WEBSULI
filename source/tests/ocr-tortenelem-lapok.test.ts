@@ -80,3 +80,13 @@ test("(4) szótár-őr: ≤ 2 betűs „javítás” nem cserél és nem jelöl 
   const far = "Kesia térsége";
   assert.equal(decideNonWordLines(far, nonWordLines(far, isWord), new Map([[1, "Mongolid térsége"]]), isWord).text, "Mongolid térsége");
 });
+
+test("S11/6 5. pont: a vitatott szakasz minden vitatott szava jelölt; a jelet elhagyó idézet is bizonytalan", async () => {
+  const { locateOcrDisagreements, markUnresolvedDisputes } = await import("../server/studio/ocr");
+  const { quoteTouchesUncertain } = await import("../shared/transcript-marks");
+  const first = "Egyiptom: a Nílus áradási éveinek őskori kezdetétől", second = "Egyiptom: a fáraók uralkodási évének őskori kezdetétől";
+  const marked = markUnresolvedDisputes(first, locateOcrDisagreements(first, second), first);
+  assert.equal(marked, "Egyiptom: a Nílus⟦?⟧ áradási⟦?⟧ éveinek⟦?⟧ őskori kezdetétől");
+  assert.equal(quoteTouchesUncertain("a Nílus áradási", marked), true, "a jelet elhagyó idézet sem tény");
+  assert.equal(quoteTouchesUncertain("őskori kezdetétől", marked), false, "a közös, biztos rész tanítható");
+});

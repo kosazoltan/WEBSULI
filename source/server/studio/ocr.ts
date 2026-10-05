@@ -284,8 +284,13 @@ export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreeme
     cursor = s + keys.length;
     spans.push({ s, e: s + keys.length, r: [d.first, d.second] });
     if (opts.thirdFormOnly || !isSubstantive(d)) continue;
-    const end = lastEnd(...decidedRange(s, s + keys.length));
-    if (end >= 0) ends.push(end);
+    // Spec S11/6 (biztonság): a vitatott szakasz MINDEN vitatott szava jelet kap (nem csak a vége) — a két olvasatban közös szó nem.
+    const [rs, re] = decidedRange(s, s + keys.length);
+    const second = new Set(ocrTokens(d.second).map(tokenKey));
+    const common = new Set(keys.filter((k) => second.has(k)));
+    let marked = false;
+    for (let k = rs; k < re; k++) if (c[k].key && !common.has(c[k].key)) { ends.push(c[k].end); marked = true; }
+    if (!marked) { const end = lastEnd(rs, re); if (end >= 0) ends.push(end); }
   }
   // harmadik alak: a döntő átirat változtatása, amely egyik vitatott olvasat (szóhatáros) része sem
   const readings = disputes.flatMap((d) => [d.first, d.second]).map((r) => ` ${keyedOf(r)} `);

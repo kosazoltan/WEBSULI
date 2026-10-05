@@ -174,3 +174,9 @@ Mért (job 8953db4b, map d70d8f67, a tulajdonos 4 füzetlapja; publikálás nem 
 - **4. szótár-őr:** „a kontextus megerősít” = az erős sor ugyanannyi ellenőrzött szóból áll, a nem kérdéses szavak egyeznek, a
   kérdéses szavak ≤ 2 szerkesztéssel térnek el. Csak a csere-ágban érvényes (szótár-helyes erős sor); ha az erős sor is nem-szó,
   a S11/4 szerinti ⟦?⟧ marad. A „Kesia, Föld - Felt.” → „Ázsia, Közel-Kelet” sor szószáma eltér → csere (változatlan).
+5. **Spec-változás (biztonság, a 4 lap visszajátszása után):** az S11/6 2. pontja (a szó szerinti ellenőrzés a jelölőket figyelmen kívül
+   hagyja) mellett a régi szakaszvégi jel nem elég: a 2. lapon a „a Nílus áradási éveinek⟦?⟧” sorból egy jelet elhagyó idézet („a Nílus
+   áradási”) tanított tény lett volna. Ezért (a) a vitatott szakasz MINDEN vitatott szava jelet kap (a két olvasatban közös szó nem; ha
+   nincs ilyen szó, a régi szakaszvégi jel), és (b) az idézet akkor is bizonytalan (`pending`), ha a forrásban jelölt (≥ 3 betűs) szót
+   idéz jel nélkül (`quoteTouchesUncertain`). A `tests/ocr-uncertainty-layout.test.ts` „review #192/5” esete ennek megfelelően a
+   szakasz vitatott szavát („Ázsia,”) is jelöltnek várja.

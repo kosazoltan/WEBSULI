@@ -16,3 +16,16 @@ export function stripTranscriptMarks<T>(value: T): T {
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stripTranscriptMarks(v)])) as T;
   return value;
 }
+
+const wordKey = (w: string) => w.toLocaleLowerCase("hu").replace(/[^\p{L}\p{N}]/gu, "");
+/**
+ * Spec S11/6 (biztonság): az idézet akkor is bizonytalan, ha a modell a jelet elhagyta, de a FORRÁSBAN jelölt („szó⟦?⟧”) szót idéz —
+ * különben a jelölőket figyelmen kívül hagyó szó szerinti ellenőrzés mellett a bizonytalan olvasat tanított ténnyé válhatna.
+ * Konzervatív: a jelölt szó (≥ 3 betű) bárhol előfordulva bizonytalanná teszi az idézetet.
+ */
+export function quoteTouchesUncertain(quote: string, sourceText: string): boolean {
+  if (quote.includes("⟦?⟧")) return true;
+  const marked = new Set([...sourceText.matchAll(/(\S+?)\s*⟦\?⟧/gu)].map((m) => wordKey(m[1])).filter((k) => k.length >= 3));
+  if (!marked.size) return false;
+  return quote.split(/\s+/).some((w) => marked.has(wordKey(w)));
+}
