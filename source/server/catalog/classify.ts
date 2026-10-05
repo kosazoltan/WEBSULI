@@ -27,7 +27,7 @@ const keyOf = (v: unknown) => (typeof v === "string" ? v.trim().toLowerCase().no
 const clip = (max: number) => z.preprocess((v) => (typeof v === "string" ? v.trim().slice(0, max) : v), z.string().min(2).max(max));
 export const classificationSchema = z.object({
   subject: z.preprocess(keyOf, z.enum(CATALOG_SUBJECTS)),
-  secondarySubjects: z.preprocess((v) => (Array.isArray(v) ? v.map(keyOf).filter((x) => (CATALOG_SUBJECTS as readonly unknown[]).includes(x)) : v), z.array(z.enum(CATALOG_SUBJECTS)).max(3).default([])),
+  secondarySubjects: z.preprocess((v) => (Array.isArray(v) ? v.map(keyOf).filter((x) => (CATALOG_SUBJECTS as readonly unknown[]).includes(x)) : v), z.array(z.enum(CATALOG_SUBJECTS)).transform((a) => [...new Set(a)].slice(0, 3)).default([])),
   grade: z.number().int().min(1).max(12).nullable(),
   topicArea: clip(80),
   topic: clip(80),
@@ -54,8 +54,10 @@ export function classificationInput(items: Array<CatalogItemDraft & { lessonTitl
   const sections = items.filter((i) => i.kind === "section");
   const others = items.filter((i) => i.kind !== "section");
   // a minta a lecke elejéből, közepéből és végéből (nem csak az elejéről — „lost in the middle” ellen)
-  const step = Math.max(1, Math.floor(others.length / SAMPLE_ITEMS));
-  const sampleItems = others.filter((_, i) => i % step === 0).slice(0, SAMPLE_ITEMS).map((i) => `${i.kind}: ${i.prompt.slice(0, 160)}${i.options ? ` [${i.options.slice(0, 4).join(" | ").slice(0, 160)}]` : ""}`);
+  // Review #189: egyenletes indexelés az első ÉS az utolsó tétellel (a lecke végén álló módszer-tételek is bekerülnek).
+  const n = Math.min(SAMPLE_ITEMS, others.length);
+  const picked = n <= 1 ? others.slice(0, n) : Array.from({ length: n }, (_, k) => others[Math.round((k * (others.length - 1)) / (n - 1))]);
+  const sampleItems = picked.map((i) => `${i.kind}: ${i.prompt.slice(0, 160)}${i.options ? ` [${i.options.slice(0, 4).join(" | ").slice(0, 160)}]` : ""}`);
   let teachingText = "";
   for (const s of sections) { if (teachingText.length >= TEXT_BUDGET) break; teachingText += `${s.prompt}: ${s.body ?? ""}\n`; }
   return {
@@ -145,9 +147,18 @@ export async function classifyWithConsensus(input: ClassificationInput, models: 
   }
   if (got.length === 0) return { status: "unclassified", reason: reasons.join(" | "), usage };
   if (got.length === 1) return { status: "review", candidates: got, reason: `csak egy modell adott érvényes választ — ${reasons.join(" | ")}`, usage };
-  const [a, b] = got;
+  let [a, b] = got;
   if (a.classification.subject !== b.classification.subject) {
-    return { status: "review", candidates: got, reason: `eltérő tantárgy: ${a.classification.subject} / ${b.classification.subject}`, usage };
+    // Review #189 (spec S2, 2 a 3-ból): eltérő tantárgynál a még nem használt modell dönt; csak ha az egyikkel egyezik, agreed.
+    for (const model of [...new Set(models)].filter((m) => !got.some((g) => g.model === m))) {
+      const r = await classifyLesson(input, [model], call);
+      usage.promptTokens += r.usage.promptTokens; usage.completionTokens += r.usage.completionTokens;
+      if (!r.ok) { reasons.push(r.reason); continue; }
+      const pair = got.find((g) => g.classification.subject === r.classification.subject);
+      if (pair) { [a, b] = [pair, { model, classification: r.classification }]; break; }
+      return { status: "review", candidates: [...got, { model, classification: r.classification }], reason: `eltérő tantárgy mindhárom modellnél: ${[...got.map((g) => g.classification.subject), r.classification.subject].join(" / ")}`, usage };
+    }
+    if (a.classification.subject !== b.classification.subject) return { status: "review", candidates: got, reason: `eltérő tantárgy: ${a.classification.subject} / ${b.classification.subject}`, usage };
   }
   return { status: "agreed", classification: { ...a.classification, ...(a.classification.lessonType !== b.classification.lessonType ? { confidence: "low" as const } : {}) }, models: [a.model, b.model], usage };
 }

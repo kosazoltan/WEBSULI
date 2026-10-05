@@ -222,7 +222,7 @@ Kizárólag a prompt szerinti JSON; a subject és a lessonType PONTOSAN a felsor
 2. A tantárgyat a tanított tudás határozza meg: pl. sejtek, szervek → biologia; anyagok, reakciók → kemia; erő, energia, hő → fizika; tájak, éghajlat → foldrajz; 5–6. évfolyamos integrált természettudomány → termeszetismeret; 1–4. évfolyam → kornyezetismeret.
 3. A magyar nyelvtan (szófajok, mondatrészek, helyesírás) és a magyar irodalom (művek, költők, szövegértés) külön kulcs.
 4. Idegen nyelvi leckénél a CÉLNYELV a tantárgy (angol, nemet, francia), akkor is, ha a magyarázat magyar.
-5. Vegyes leckénél a fő tantárgy a subject, a többi a secondarySubjects; a típus temazaro-felkeszito, ha több témakört kever.
+5. Vegyes leckénél a fő tantárgy a subject, a többi a secondarySubjects; a típus temazaro-felkeszito, ha több témakört kever. Egyetlen témakör (pl. csak hőtan) magyarázattal és gyakorló tételekkel NEM témazáró: fogalomtanito (ha a magyarázat a fő rész) vagy gyakorlo-feladatlap (ha a feladatok).
 6. Megadott évfolyamot adsz vissza; csak hiányzónál becsülsz a tartalomból, bizonytalanul null.
 7. Az evidence a tartalomból idéz rövid jelet (fejezetcím, kifejezés), nem a címből.
 ## Tilalmak

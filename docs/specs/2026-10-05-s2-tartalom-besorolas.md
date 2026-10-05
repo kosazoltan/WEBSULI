@@ -37,3 +37,18 @@ Fejezetenkénti tantárgy-szétválogatás; DB-tárolás; a katalógus felhaszn�
   egyezik; a mért tokenköltségből a teljes futás (201 lecke) költsége kiszámolható.
 - HA a modell nem a taxonómia elemét adja, AKKOR a tartalék modell próbál; ha az sem, a lecke `unclassified` (nem kitalált).
 - A szerep és a skill regisztrálva (forrás-ellenőrző teszt); tsc, lint, teljes unit zöld.
+
+## Review #189 javítások (2026-10-05, a küszöb lazítása NÉLKÜL)
+Mért eltérés: az első pilot a küszöb alatt maradt (tantárgy 8/10, típus 7/10; 2 lecke `review`), és egy lecke a melléktantárgy-korlát
+miatt `unclassified` lett. Javítások (kód, nem a mérce):
+- **2 a 3-ból:** ha a két első érvényes ítélet tantárgya eltér, a még nem használt modell dönt; ha valamelyikkel egyezik → `agreed`
+  (a két egyező modell), különben `review` mindhárom jelölttel. Két modell mellett a régi viselkedés változatlan.
+- **Melléktantárgy:** a 4+ érvényes melléktantárgy nem dobja el a leckét — sorrendben az első három marad (duplikátum nélkül).
+- **Tétel-minta:** egyenletes indexelés az első ÉS az utolsó tétellel (a lecke végi módszer-tételek is bekerülnek). A régi teszt
+  részszöveg-próbája („Kérdés 5”) a lecke utolsó tíz tételét is tiltotta, ellentmondva a teszt címének („vége”) — dokumentált
+  javítás: a próba szigorúbb lett (első és utolsó tétel pontos egyezése).
+- **Skill:** egyetlen témakör magyarázattal + gyakorlással nem `temazaro-felkeszito`.
+- **Mérés:** az egyezés a 10 kézi mércéjű pilot-leckére vonatkozik → a mezők neve `pilotSubjectAgreement` / `pilotTypeAgreement`.
+Újramérés: pilot 10/10 érvényes, tantárgy 10/10, típus 9/10 (`docs/measurements/2026-10-05-classify-pilot.json`).
+Teljes újramérés (201 lecke, párhuzamosan 6 szálon): 197 agreed, 4 review, 0 unclassified (korábban 194 / 6 / 1);
+1,28 M bemenő + 0,12 M kimenő token (`docs/measurements/2026-10-05-classify-all.json`).

@@ -40,13 +40,15 @@ let tokensIn = 0, tokensOut = 0;
 const partialPath = resolve(here, "../../.catalog", `${day}-classify-${mode}.partial.jsonl`);
 const done = new Map<string, Record<string, unknown>>();
 if (existsSync(partialPath)) for (const line of readFileSync(partialPath, "utf8").split(/\r?\n/)) if (line.trim()) { const r = JSON.parse(line) as Record<string, unknown>; done.set(String(r.provenance), r); }
-for (const provenance of targets) {
+// A teljes futás (201 lecke) sorosan > 3 óra — leckénként független hívások, ezért korlátozott párhuzamossággal; a sorrend a célok sorrendje.
+const CONCURRENCY = Number(process.env.CLASSIFY_CONCURRENCY ?? 6);
+async function classifyOne(provenance: string, at: number): Promise<void> {
   const saved = done.get(provenance);
   if (saved) {
-    results.push(saved);
+    results[at] = saved;
     const u = saved.usage as { promptTokens?: number; completionTokens?: number } | undefined;
     tokensIn += u?.promptTokens ?? 0; tokensOut += u?.completionTokens ?? 0;
-    continue;
+    return;
   }
   const input = classificationInput(byLesson.get(provenance)!);
   const started = Date.now();
@@ -62,22 +64,25 @@ for (const provenance of targets) {
     Object.assign(row, { reason: res.reason, candidates: res.candidates });
     if (exp) Object.assign(row, { expectedAmongCandidates: res.candidates.some((c) => exp.subject.includes(c.classification.subject)) });
   } else Object.assign(row, { reason: res.reason });
-  results.push(row);
+  results[at] = row;
   appendFileSync(partialPath, JSON.stringify(row) + "\n");
   const label = res.status === "agreed" ? `${res.classification.subject} / ${res.classification.lessonType} / ${res.classification.grade} / ${res.classification.topic}` : res.reason.slice(0, 140);
   console.log(`${res.status === "agreed" ? "✓" : res.status === "review" ? "?" : "✗"} ${input.title.slice(0, 50).padEnd(50)} → ${label}${exp && res.status === "agreed" ? `  [tantárgy ${row.subjectOk ? "OK" : "ELTÉR"}, típus ${row.typeOk ? "OK" : "ELTÉR"}]` : ""}`);
 }
+let next = 0;
+await Promise.all(Array.from({ length: Math.max(1, CONCURRENCY) }, async () => { while (next < targets.length) { const at = next++; await classifyOne(targets[at], at); } }));
 const graded = results.filter((r) => r.subjectOk !== undefined);
 const summary = {
   measuredAt: new Date().toISOString(), mode, models, lessons: results.length,
   agreed: results.filter((r) => r.status === "agreed").length,
   review: results.filter((r) => r.status === "review").length,
   unclassified: results.filter((r) => r.status === "unclassified").length,
-  subjectAgreement: `${graded.filter((r) => r.subjectOk).length}/${expected.lessons.length}`,
-  typeAgreement: `${graded.filter((r) => r.typeOk).length}/${expected.lessons.length}`,
+  // Review #189: az egyezés a KÉZI mércéjű 10 pilot-leckére vonatkozik (a teljes futásban is) — a név ezt mondja ki.
+  pilotSubjectAgreement: `${graded.filter((r) => r.subjectOk).length}/${expected.lessons.length}`,
+  pilotTypeAgreement: `${graded.filter((r) => r.typeOk).length}/${expected.lessons.length}`,
   tokens: { in: tokensIn, out: tokensOut, perLessonIn: Math.round(tokensIn / Math.max(1, results.length)), perLessonOut: Math.round(tokensOut / Math.max(1, results.length)) },
   results,
 };
 mkdirSync(resolve(repoRoot, "docs/measurements"), { recursive: true });
 writeFileSync(resolve(repoRoot, "docs/measurements", `${day}-classify-${mode}.json`), JSON.stringify(summary, null, 2) + "\n");
-console.log(JSON.stringify({ agreed: summary.agreed, review: summary.review, unclassified: summary.unclassified, subjectAgreement: summary.subjectAgreement, typeAgreement: summary.typeAgreement, tokens: summary.tokens }));
+console.log(JSON.stringify({ agreed: summary.agreed, review: summary.review, unclassified: summary.unclassified, pilotSubjectAgreement: summary.pilotSubjectAgreement, pilotTypeAgreement: summary.pilotTypeAgreement, tokens: summary.tokens }));

@@ -77,10 +77,33 @@ test("bemenet: a tétel-minta a lecke egészéből (eleje, közepe, vége), a fe
   const ci = classificationInput(items);
   assert.deepEqual(ci.headings, ["Fejezet 0", "Fejezet 1"]);
   assert.equal(ci.sampleItems.length, 12);
-  assert.ok(ci.sampleItems.at(-1)!.includes("Kérdés 5") === false, "nem csak az elejéről");
+  // Review #189 (dokumentált spec-javítás): a régi részszöveg-próba („Kérdés 5”) a lecke utolsó 10 tételét (Kérdés 50–59) is tiltotta,
+  // ellentmondva a teszt címének („vége”); a szigorúbb próba: az első és az UTOLSÓ tétel is a mintában.
+  assert.equal(ci.sampleItems[0], "quiz: Kérdés 5");
+  assert.equal(ci.sampleItems.at(-1), "quiz: Kérdés 59", "nem csak az elejéről — a lecke vége is");
 });
 
 test("a szerep és a skill regisztrálva (nincs skill nélküli új szerep)", () => {
   assert.ok((PROMPT_ROLES as readonly string[]).includes("catalog-classifier"));
   assert.ok("catalog-classifier" in SUPPORT_SKILLS);
+});
+
+test("review #189: eltérő tantárgynál a harmadik modell dönt (2 a 3-ból); három különböző → review mindhárom jelölttel", async () => {
+  const fixed = (by: Record<string, unknown>) => async (model: string) => ({ json: by[model] });
+  const tie = await classifyWithConsensus(input, ["a", "b", "c"], fixed({ a: { ...good, subject: "tortenelem" }, b: good, c: good }));
+  assert.ok(tie.status === "agreed" && tie.classification.subject === "fizika" && tie.models.join(",") === "b,c");
+  const split = await classifyWithConsensus(input, ["a", "b", "c"], fixed({ a: { ...good, subject: "tortenelem" }, b: good, c: { ...good, subject: "kemia" } }));
+  assert.ok(split.status === "review" && split.candidates.length === 3 && /eltérő tantárgy/.test(split.reason));
+});
+
+test("review #189: négy+ érvényes melléktantárgy nem dobja el a leckét — sorrendben az első három marad", () => {
+  const c = parseClassification({ ...good, secondarySubjects: ["kemia", "biologia", "foldrajz", "matematika"] }, input);
+  assert.deepEqual(c.secondarySubjects, ["kemia", "biologia", "foldrajz"]);
+});
+
+test("review #189: a tétel-minta az első ÉS az utolsó tételt is tartalmazza (a lecke végi módszer-tételek)", () => {
+  const items = Array.from({ length: 131 }, (_, i) => ({ kind: "quiz", prompt: `Kérdés ${i}`, body: "", provenance: "p", fingerprint: String(i), lessonTitle: "T", classroom: 5 })) as Array<CatalogItemDraft & { lessonTitle: string; classroom: number | null }>;
+  const ci = classificationInput(items);
+  assert.equal(ci.sampleItems.length, 12);
+  assert.ok(ci.sampleItems[0].includes("Kérdés 0") && ci.sampleItems.at(-1)!.includes("Kérdés 130"));
 });
