@@ -112,3 +112,9 @@ megmaradt. A kapu-visszajátszás (job c1f9d12a) 2. futásában a bankmodell ké
    Ellenőrzőpontból (folytatáskor nincs új hívás, a lépés-hash stabil). Hiba/keret esetén a régi viselkedés.
 2. Kapu-tételjavítás: változatlan tétel → azonnali determinisztikus elutasítás („a javítás nem történt meg”) a független ellenőr
    előtt; a 2. kör a mentőmodellen (`BANK_RESCUE_MODEL`) fut.
+
+## S9/5 — téves útvonalú jelzés (tulajdonosi döntés 2026-10-05, a 3. visszajátszás után)
+Mért (job c1f9d12a): a lektor-jegyzet útvonala `tasks[6]`, de a kötött üzenete „Mi hamis: tasks[28] … tasks[6] javítva” — a jelzett
+tétel már helyes (a modellek jogosan adták vissza változatlanul), a valódi hiba a jelzés nélküli tasks[28]-ban.
+Szabály: ha a kötött „Mi hamis:” mező MÁS tételt nevez meg, a jelzett tétel változatlanul a független bank-ellenőr elé kerül (csak
+hibátlan ítéletnél szűnik meg a jelzése, különben javító út), a megnevezett tétel javító utat kap. Szabad szöveg nem számít.

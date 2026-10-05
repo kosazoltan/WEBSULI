@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { experienceQuizSchema, methodSchema, openTaskSchema } from "../../shared/lesson-experience";
 import type { Lesson } from "../../shared/lesson-schema";
-import { bankItemRef, type BankItemRef } from "../../shared/bank-item-ref";
+import { bankItemPath, bankItemRef, type BankItemRef } from "../../shared/bank-item-ref";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { singleChoiceProblems } from "../../shared/single-choice-check";
@@ -29,6 +29,20 @@ export type GateRepairDeps = OrchestrationDeps & {
 };
 
 type Flag = { path: string; message: string };
+
+/**
+ * Spec 2026-10-05-s9 (S9/5, tulajdonosi döntés; mért: job c1f9d12a): a lektor / bank-ellenőr KÖTÖTT formátumú üzenete („Mi hamis:
+ * <tétel> | Bizonyíték: … | Javítás iránya: …” — a skill írja elő) a hibás tételt nevezi meg. Ha ez MÁS tétel, mint a jelzés
+ * útvonala, a jelzés téves útvonalú (mért: útvonal tasks[6], szöveg „Mi hamis: tasks[28] … tasks[6] javítva”).
+ */
+const NAMED_ITEM = /Mi hamis:\s*(?:experience\.)?(quiz|methods|tasks)\s*(?:\[\s*(\d+)\s*\]|\.(\d+))/u;
+export function namedItemRef(message: string): BankItemRef | null {
+  const m = NAMED_ITEM.exec(message);
+  if (!m) return null;
+  const index = Number(m[2] ?? m[3]);
+  return Number.isSafeInteger(index) ? { bank: m[1] as BankItemRef["bank"], index } : null;
+}
+const sameItem = (a: BankItemRef, b: BankItemRef) => a.bank === b.bank && a.index === b.index;
 
 function itemOf(lesson: Lesson, ref: BankItemRef): Record<string, unknown> | undefined {
   return lesson.experience?.[ref.bank]?.[ref.index] as Record<string, unknown> | undefined;
@@ -59,9 +73,29 @@ export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag
   const { deps } = args;
   let lesson = args.lesson;
   const repaired: string[] = [];
-  const targets = args.flags.map((f) => ({ ...f, ref: bankItemRef(f.path) })).filter((f): f is Flag & { ref: BankItemRef } => !!f.ref && !!itemOf(args.lesson, f.ref));
+  const flagged = args.flags.map((f) => ({ ...f, ref: bankItemRef(f.path) })).filter((f): f is Flag & { ref: BankItemRef } => !!f.ref && !!itemOf(args.lesson, f.ref));
+  // Téves útvonalú jelzés: a jelzett tétel csak ellenőrzést kap (a független ellenőr dönt), a megnevezett tétel javítást.
+  const checkOnly = new Set<string>();
+  const targets: Array<Flag & { ref: BankItemRef }> = [];
+  for (const f of flagged) {
+    const named = namedItemRef(f.message);
+    if (named && !sameItem(named, f.ref) && itemOf(args.lesson, named)) {
+      checkOnly.add(bankItemPath(f.ref));
+      if (!targets.some((x) => sameItem(x.ref, named)) && !flagged.some((x) => sameItem(x.ref, named))) targets.push({ path: bankItemPath(named), message: f.message, ref: named });
+    }
+    if (!targets.some((x) => sameItem(x.ref, f.ref))) targets.push(f);
+  }
   if (!targets.length || targets.length > GATE_REPAIR_MAX_ITEMS) return null;
   for (const t of targets) {
+    // Téves útvonal: a tétel változatlanul a független ellenőr elé kerül; csak hibátlan ítéletnél szűnik meg a jelzése.
+    if (checkOnly.has(bankItemPath(t.ref))) {
+      const verdict = await deps.verify(lesson, t.path);
+      if (!verdict.length) {
+        logger.info(`[ORKESZTRÁTOR] kapu: ${t.path} jelzése téves útvonalú (az üzenet más tételt nevez meg) — a független ellenőr hibátlannak ítélte.`);
+        repaired.push(t.path);
+        continue;
+      }
+    }
     const before = itemOf(lesson, t.ref)!;
     const section = lesson.sections[Number(before.sectionIndex)];
     const user = JSON.stringify({

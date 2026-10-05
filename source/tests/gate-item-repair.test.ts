@@ -75,3 +75,39 @@ test("S9/4: változatlanul visszaadott tétel → azonnali elutasítás a függe
   assert.equal(verified, 1, "a változatlan tételre nem hívtuk a független ellenőrt");
   assert.match(String((res!.lesson.experience!.quiz[0] as { question: string }).question), /\(2\. kör\)$/);
 });
+
+test("S9/5 (mért: job c1f9d12a): téves útvonalú jelzés — a jelzett tételt a független ellenőr ítéli meg, a megnevezett tétel javítást kap", async () => {
+  const { namedItemRef } = await import("../server/studio/gate-item-repair");
+  assert.deepEqual(namedItemRef("Mi hamis: tasks[28] továbbra is csak Tigrist fogad el; tasks[6] javítva. | Bizonyíték: …"), { bank: "tasks", index: 28 });
+  assert.deepEqual(namedItemRef("Mi hamis: experience.quiz.3 két helyes opció"), { bank: "quiz", index: 3 });
+  assert.equal(namedItemRef("Szabad szöveg tasks[28] említéssel, kötött mező nélkül"), null, "csak a kötött „Mi hamis:” mező számít");
+
+  const { lesson } = setup();
+  const t1 = lesson.experience!.tasks[1] as Record<string, unknown>;
+  const misFlag = { path: "experience.tasks[0]", message: "Mi hamis: tasks[1] túl szigorú rubrika; tasks[0] javítva. | Bizonyíték: … | Javítás iránya: …" };
+  const verified: string[] = [];
+  const called: string[] = [];
+  const res = await repairFlaggedBankItems({ lesson, flags: [misFlag], round: 3, deps: setup({
+    verify: async (_l, p) => { verified.push(p); return []; },
+    callBank: async (_s, user) => { called.push(JSON.parse(user).tetel.id); return { ...t1, q: `${String(t1.q)} (javítva)` }; },
+  }).deps });
+  assert.ok(res);
+  assert.deepEqual(res.repaired.sort(), ["experience.tasks[0]", "experience.tasks[1]"]);
+  assert.deepEqual(called, [t1.id], "a modell csak a megnevezett (valódi) tételt írja újra");
+  assert.ok(verified.includes("experience.tasks[0]"), "a jelzett tételt a független ellenőr ítélte meg");
+});
+
+test("S9/5: téves útvonalnál is, ha a független ellenőr a jelzett tételt hibásnak ítéli, az is javító utat kap (nem szűnik meg ellenőrizetlenül)", async () => {
+  const { lesson } = setup();
+  const t0 = lesson.experience!.tasks[0] as Record<string, unknown>;
+  const t1 = lesson.experience!.tasks[1] as Record<string, unknown>;
+  const misFlag = { path: "experience.tasks[0]", message: "Mi hamis: tasks[1] hiba. | Bizonyíték: …" };
+  const called: string[] = [];
+  let first = true;
+  const res = await repairFlaggedBankItems({ lesson, flags: [misFlag], round: 3, deps: setup({
+    verify: async (_l, p) => { if (p === "experience.tasks[0]" && first) { first = false; return ["valóban hibás"]; } return []; },
+    callBank: async (_s, user) => { const id = JSON.parse(user).tetel.id; called.push(id); const src = id === t0.id ? t0 : t1; return { ...src, q: `${String(src.q)} (javítva)` }; },
+  }).deps });
+  assert.ok(res);
+  assert.deepEqual(new Set(called), new Set([t0.id, t1.id]));
+});
