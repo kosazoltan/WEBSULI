@@ -160,6 +160,8 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
 export const STREAM_IDLE_MS = 120_000;
 /** Streamelt módban a teljes határidő csak felső plafon: a régi érték kétszerese. */
 export const STREAM_CEILING_FACTOR = 2;
+/** Review #190: szabályzati határidő nélküli streamelt lépés (szerző) felső plafonja. */
+export const STREAM_DEFAULT_CEILING_MS = 30 * 60_000;
 const STREAMED_STEPS: ReadonlySet<string> = new Set(["lektor", "author", "pedagogue", "animator", "bank", "visuals", "visualDesigner", "textFix", "instructionCheck", "gateHelper", "quizPolish"]);
 export function stepStreamIdleMs(step: string): number | undefined {
   return STREAMED_STEPS.has(step) ? STREAM_IDLE_MS : undefined;

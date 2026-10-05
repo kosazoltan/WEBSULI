@@ -1,7 +1,8 @@
 import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
-import { LEKTOR_TIMEOUT_MS, STREAM_CEILING_FACTOR, STUDIO_STEP_POLICY, stepStreamIdleMs } from "../ai/studio-provider";
+import { createHash } from "node:crypto";
+import { LEKTOR_TIMEOUT_MS, STREAM_CEILING_FACTOR, STREAM_DEFAULT_CEILING_MS, STUDIO_STEP_POLICY, stepStreamIdleMs } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 
 /**
@@ -192,7 +193,8 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
   const streamIdleMs = stepStreamIdleMs(input.policy ?? input.step);
   const streamed = streamIdleMs !== undefined && provider.supportsStreamingChat === true;
   const baseDeadlineMs = stepDeadlineMs(input.policy ?? input.step);
-  const deadlineMs = streamed && baseDeadlineMs ? baseDeadlineMs * STREAM_CEILING_FACTOR : baseDeadlineMs;
+  // Review #190: szabályzati határidő nélküli streamelt lépésnek (szerző) is van felső plafonja.
+  const deadlineMs = streamed ? (baseDeadlineMs ? baseDeadlineMs * STREAM_CEILING_FACTOR : STREAM_DEFAULT_CEILING_MS) : baseDeadlineMs;
   /** Kérésenkénti jel: a szabályzat határideje minden kérésre újraindul, a külső megszakítás megmarad. */
   const requestSignal = () => {
     const deadline = deadlineMs ? AbortSignal.timeout(deadlineMs) : undefined;
@@ -229,7 +231,8 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
   } catch (error) {
     // Spec 2026-10-05-s10: a megszakadt streamből már beérkezett (kifizetett) szöveg nem vész el szó nélkül.
     const partial = (error as { partialContent?: string } | undefined)?.partialContent;
-    if (partial) logger.warn(`[STUDIO] A(z) "${input.step}" streamje megszakadt (${input.model}); ${partial.length} karakter érkezett be: ${partial.slice(0, 300).replace(/\s+/g, " ")}`);
+    // Review #190 (P1): a részleges kimenet (forrásból átvett személyes adat is lehet) NEM kerül a naplóba — csak hossz és lenyomat.
+    if (partial) logger.warn(`[STUDIO] A(z) "${input.step}" streamje megszakadt (${input.model}); ${partial.length} karakter érkezett be (sha256: ${createHash("sha256").update(partial).digest("hex").slice(0, 12)}).`);
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
     // Spec 2026-09-30 (témafókusz-késleltetés): the label must name the deadline that actually fired — the
     // policy's, not the step's (topicFocus runs as step "pedagogue": 60 s cut, but the log said 300000ms).

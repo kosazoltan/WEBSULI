@@ -45,10 +45,27 @@ export function clipMiddle(text: string, max: number): string {
 
 /** Titok-szerű minta soha nem kerül az orkesztrátor promptjába (kulcs, token, jelszó). */
 export function redactSecrets(text: string): string {
+  // Review #190: a JSON-os/idézőjeles kulcs-érték és a szabványos „Authorization: Bearer …” is; nincs literál „$1”.
   return text
     .replace(/\b(sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
     .replace(/\bxai-[A-Za-z0-9]{12,}\b/g, "[REDACTED]")
-    .replace(/\b(?:Bearer|token|api[_-]?key|password|jelszó)\s*[:=]\s*\S+/giu, "$1: [REDACTED]");
+    .replace(/\bBearer\s*[:=]?\s*[A-Za-z0-9._~+/-]{8,}=*/g, "Bearer [REDACTED]")
+    .replace(/(["']?(?:api[_-]?key|access[_-]?token|token|password|secret|jelszó)["']?\s*[:=]\s*)(["']?)[^\s"',}]+/giu, "$1$2[REDACTED]");
+}
+
+/**
+ * Review #190 + terv-ellenőrzés 7.: a javító prompt nem lehet a bukott kimenet / bemenet szó szerinti továbbítása (≥ 200 karakteres
+ * egyező darab) — különben nem megbízható adat válna rendszerutasítássá. Az orkesztrátor-mag maga veti el (és a következő modellel próbál).
+ */
+export function echoesInput(corrective: string, sources: Array<string | undefined>): boolean {
+  for (const src of sources) {
+    if (!src || src.length < 200 || corrective.length < 200) continue;
+    for (let i = 0; i + 200 <= src.length; i++) {
+      if (!corrective.includes(src.slice(i, i + 24))) continue;
+      if (corrective.includes(src.slice(i, i + 200))) return true;
+    }
+  }
+  return false;
 }
 
 export function buildOrchestratorPrompt(input: OrchestratorInput): { system: string; user: string } {
@@ -91,7 +108,9 @@ export async function orchestrate(input: OrchestratorInput, call: OrchestratorCa
   for (const model of models) {
     try {
       const res = await call(model, system, user);
-      return { ...parseOrchestratorResult(res.json), model };
+      const parsed = parseOrchestratorResult(res.json);
+      if (echoesInput(parsed.correctivePrompt, [input.failure.rawOutput, input.user])) continue;
+      return { ...parsed, model };
     } catch {
       // következő modell; a végső null-t a hívó naplózza a régi hibaúttal együtt
     }

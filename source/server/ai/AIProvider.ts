@@ -79,7 +79,8 @@ export interface IAIProvider {
   readonly supportsStreamingChat?: boolean;
   
   /**
-   * Non-streaming chat completion
+   * Chat completion. Alapból pufferelt; `options.stream` esetén (és ha `supportsStreamingChat`) a szolgáltató BELÜL streamel,
+   * tétlenségi őrrel — megszakadáskor a hiba `partialContent`-ben hordozza a beérkezett szöveget (spec 2026-10-05-s10).
    */
   /**
    * `options.responseFormat` (spec 2026-09-30, U2/C8): hívásonkénti szigorú JSON-séma a szolgáltatónak (`json_schema`,

@@ -13,7 +13,7 @@ import {
   isQuotaExhausted,
   type ChatCallOptions,
 } from './AIProvider';
-import { collectStream, idleAbortSignal, type StreamEvent } from './stream-collect';
+import { collectStream, idleAbortSignal, withIdleStart, type StreamEvent } from './stream-collect';
 
 export class OpenAIProvider implements IAIProvider {
   readonly name: string;
@@ -107,11 +107,11 @@ export class OpenAIProvider implements IAIProvider {
     try {
       let events: AsyncGenerator<StreamEvent>;
       if (this.apiMode === 'responses') {
-        const stream = await this.client.responses.create({
+        const stream = await withIdleStart(this.client.responses.create({
           model: this.model, input: messages, store: false, stream: true,
           ...(outputBudget ? { max_output_tokens: outputBudget } : {}),
           ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
-        }, { signal: idle.signal });
+        }, { signal: idle.signal }), idleMs, idle.abort, provider);
         events = (async function* () {
           for await (const ev of stream) {
             if (ev.type === 'response.output_text.delta') { partial += ev.delta; yield { text: ev.delta }; continue; }
@@ -122,11 +122,12 @@ export class OpenAIProvider implements IAIProvider {
               continue;
             }
             if (ev.type === 'response.failed' || ev.type === 'error') throw new AIProviderError(provider, 'A szolgáltató a stream közben hibát jelzett.');
-            yield { activity: true };
+            // Review #190: csak a gondolkodás-delta haladás; egyéb (állapot-, metaadat-) esemény nem indítja újra az őrt.
+            yield ev.type === 'response.reasoning_text.delta' || ev.type === 'response.reasoning_summary_text.delta' ? { activity: true } : {};
           }
         })();
       } else {
-        const stream = await this.client.chat.completions.create(
+        const stream = await withIdleStart(this.client.chat.completions.create(
           {
             model: this.model,
             messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
@@ -136,7 +137,7 @@ export class OpenAIProvider implements IAIProvider {
             stream_options: { include_usage: true },
           },
           { signal: idle.signal }
-        );
+        ), idleMs, idle.abort, provider);
         events = (async function* () {
           for await (const chunk of stream) {
             const choice = chunk.choices?.[0];
@@ -144,7 +145,6 @@ export class OpenAIProvider implements IAIProvider {
             if (text) partial += text;
             yield {
               ...(text ? { text } : {}),
-              activity: true,
               ...(choice?.finish_reason ? { finishReason: choice.finish_reason } : {}),
               ...(chunk.usage ? { usage: { promptTokens: chunk.usage.prompt_tokens, completionTokens: chunk.usage.completion_tokens, totalTokens: chunk.usage.total_tokens,
                 ...(chunk.usage.prompt_tokens_details?.cached_tokens ? { cachedTokens: chunk.usage.prompt_tokens_details.cached_tokens } : {}) } } : {}),

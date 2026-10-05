@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, FALLBACK_MODELS, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
-import { createStudioProvider, createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
+import { effortFor, FALLBACK_MODELS, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { createStudioProvider, createStudioStepProvider, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
@@ -312,17 +312,22 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       { role: "system", content: authorSystem },
       { role: "user", content: authorUser },
     ];
+    // Review #190: a webes szerző-út is streamel (tétlenségi őrrel), és a modellenkénti effortot kapja (Qwen-tartalék: high).
+    const webAuthorCall = (m: string) => {
+      const provider = createStudioProvider(m, PHASE_TIMEOUT_MS, MAX_TOKENS, MODEL_REASONING_EFFORT[m] ? { reasoningEffort: MODEL_REASONING_EFFORT[m] } : {});
+      return provider.chat(authorMessages, controller.signal, provider.supportsStreamingChat ? { stream: { idleMs: STREAM_IDLE_MS } } : undefined);
+    };
     html = await workflowCheckpoint("web-author-html", { input, method: LESSON_METHOD_VERSION, contract: "web-author-html-1", conceptIds }, async () => {
       let attempts = 0;
       for (;;) {
         let response: Awaited<ReturnType<ReturnType<typeof createStudioProvider>["chat"]>>;
         const model = webAuthorModelForAttempt(attempts, authorModel, authorFallback);
         try {
-          response = await createStudioProvider(model, PHASE_TIMEOUT_MS, MAX_TOKENS).chat(authorMessages, controller.signal);
+          response = await webAuthorCall(model);
         } catch (error) {
           // The primary's provider failed (not its content): the same attempt runs once on the fallback.
           if (controller.signal.aborted || model !== authorModel || !authorFallback || authorFallback === authorModel) throw error;
-          response = await createStudioProvider(authorFallback, PHASE_TIMEOUT_MS, MAX_TOKENS).chat(authorMessages, controller.signal);
+          response = await webAuthorCall(authorFallback);
         }
         await workflowUsage({ promptTokens: response.usage?.promptTokens, completionTokens: response.usage?.completionTokens });
         if (response.finishReason === "length" || response.finishReason === "max_tokens") {

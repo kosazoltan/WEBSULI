@@ -89,6 +89,8 @@ export class ClaudeProvider implements IAIProvider {
         },
       };
     } catch (error: unknown) {
+      // Review #190 (P1): a streamelt ág már leképezett hibája (tétlenség, részleges szöveg) változatlanul megy tovább.
+      if (error instanceof AIProviderError) throw error;
       throw this.handleError(error);
     }
   }
@@ -107,7 +109,8 @@ export class ClaudeProvider implements IAIProvider {
       const events = (async function* (): AsyncGenerator<StreamEvent> {
         for await (const ev of stream) {
           if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') { partial += ev.delta.text; yield { text: ev.delta.text }; continue; }
-          yield { activity: true };
+          // Review #190: csak a gondolkodás-delta haladás.
+          yield ev.type === 'content_block_delta' && ev.delta.type === 'thinking_delta' ? { activity: true } : {};
         }
         const msg = await stream.finalMessage();
         const u = msg.usage;

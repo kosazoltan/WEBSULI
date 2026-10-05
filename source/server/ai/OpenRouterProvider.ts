@@ -14,7 +14,7 @@ import {
 
   type ChatCallOptions,
 } from './AIProvider';
-import { collectStream, idleAbortSignal, type StreamEvent } from './stream-collect';
+import { collectStream, idleAbortSignal, withIdleStart, type StreamEvent } from './stream-collect';
 
 /**
  * OpenRouter provider (LS-0d).
@@ -151,7 +151,7 @@ export class OpenRouterProvider implements IAIProvider {
     const idle = idleAbortSignal(signal);
     let partial = '';
     try {
-      const stream = await this.client.chat.completions.create(
+      const stream = await withIdleStart(this.client.chat.completions.create(
         {
           model: this.model,
           messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
@@ -163,16 +163,17 @@ export class OpenRouterProvider implements IAIProvider {
           stream_options: { include_usage: true },
         },
         { signal: idle.signal }
-      );
+      ), idleMs, idle.abort, this.name);
       async function* events(): AsyncGenerator<StreamEvent> {
         for await (const chunk of stream) {
           const choice = chunk.choices?.[0];
           const delta = choice?.delta as { content?: string | null; reasoning?: string | null; reasoning_details?: unknown[] } | undefined;
           if (choice?.finish_reason === ('error' as string)) throw new AIProviderError('OpenRouter', 'A szolgáltató a stream közben hibát jelzett.');
           if (delta?.content) partial += delta.content;
+          // Review #190: csak valódi haladás (szöveg vagy gondolkodás-delta) indítja újra az őrt.
           yield {
             ...(delta?.content ? { text: delta.content } : {}),
-            activity: true,
+            ...(delta?.reasoning || delta?.reasoning_details?.length ? { activity: true } : {}),
             ...(choice?.finish_reason ? { finishReason: choice.finish_reason } : {}),
             ...(chunk.usage ? { usage: {
               promptTokens: chunk.usage.prompt_tokens, completionTokens: chunk.usage.completion_tokens, totalTokens: chunk.usage.total_tokens,

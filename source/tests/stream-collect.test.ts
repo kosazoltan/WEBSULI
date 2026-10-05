@@ -34,7 +34,8 @@ test("tétlenség: megszakít, és a hiba a már beérkezett szöveget hordozza"
 });
 
 test("a csak-gondolkodás (aktivitás) darab újraindítja az őrt — a lassú, de élő modell nem bukik", async () => {
-  const res = await collectStream(gen([{ activity: true }, 40, { activity: true }, 40, { activity: true }, 40, { text: "kész" }]), { idleMs: 70, abort: () => undefined, provider: "t" });
+  // Review #190 (dokumentált változás): befejezési jelzés nélküli stream csonka — a záró eseményben finishReason.
+  const res = await collectStream(gen([{ activity: true }, 40, { activity: true }, 40, { activity: true }, 40, { text: "kész", finishReason: "stop" }]), { idleMs: 70, abort: () => undefined, provider: "t" });
   assert.equal(res.content, "kész");
 });
 
