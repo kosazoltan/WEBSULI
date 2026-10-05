@@ -145,3 +145,38 @@ is jelölte (a gyenge qwen létező, de rossz szavai miatt); az új szabály mel
 gpt-6.1-sol 99,4% · qwen3-vl-32b 87,1% · glm-5.3-flash 85,3% (kulcs-token recall, a #190-es mérővel; a kulcsok a futtatás előtt
 rögzítve). A `tests/ocr-handwriting-history.test.ts` hálózat nélkül újraszámol, és őrzi, hogy a forrás-OCR elsődleges olvasója a legjobb.
 A #190-es 3 kézírásos MATEK-lap továbbra is méretlen a sol-lal → a `DEFAULT_MODELS.ocr` nem változik.
+
+## S11/6 + S9/7 — a 4 történelem-lap futásának 4 hibája (tulajdonosi döntés 2026-10-05: mind a 4 javítása, utána új futás)
+Mért (job 8953db4b, map d70d8f67, a tulajdonos 4 füzetlapja; publikálás nem történt):
+1. **Kapu:** 6 körlimiten maradt hibás banktétel; a kapu-javítás (S9/3) `GATE_REPAIR_MAX_ITEMS = 5` fölött NÉMÁN kihagyott → a kivétel
+   a bank-padló alá vitt → megállás. Szabály: a kapu-javítás legfeljebb 5-ös ADAGOKBAN dolgozik (adagonként a meglévő ellenőrzés), az
+   összes cél után teljes validálás; a kihagyás/bukás oka naplózva. A teljes futásonkénti keret: 2 adag (≤ 10 tétel).
+2. **13 kimaradt fogalom:** az idézet nem volt igazolható, mert a nyíl/írásjel-viták is ⟦?⟧-et kaptak („↙⟦?⟧ elsődleges / források”), és
+   az idézet a jelen/soremelésen átível. Szabály: (a) csak-írásjel/nyíl/szóköz eltérés NEM vita (nem jelölt); (b) a szó szerinti
+   idézet-ellenőrzés a jelölőket (⟦?⟧, [KERET…]) és a sor eleji nyilakat figyelmen kívül hagyja, a soremelést szóközként kezeli —
+   a jelölt szót tartalmazó idézet továbbra is `pending` (S11, változatlan).
+3. **A döntő olvasás új szövege:** „a Nílus áradási éveinek⟦?⟧” (a füzetben „a fáraók uralkodási évének”) — a harmadik-alak jel csak a
+   változtatott szakasz VÉGÉRE került. Szabály: a harmadik alak MINDEN, egyik olvasatban sem szereplő szava jelet kap.
+4. **Szótár-őr csere:** „Negrid” → „Negroid” (a szótár a tankönyvi „negrid” alakot nem ismeri; az erős olvasat 1 betűs „javítás”). Szabály:
+   ha az erős olvasat a kérdéses szót csak ≤ 2 betűvel módosítja, és az eredeti alakot mindkét alap-olvasó így olvasta / az erős olvasó
+   kontextusa megerősíti → NINCS csere, NINCS jel (az eredeti marad); csere csak érdemi (> 2 betűs) eltérésnél.
+### Elfogadás (EARS)
+- Ingyenes visszajátszás a mentett adatokon: (1) a job 8953db4b kapuja 6 tétellel két adagban fut (napló); (2) a d70d8f67 térkép 13
+  kimaradt fogalmából a jel nélküli idézetűek igazolhatók; (3)–(4) egységtesztek a mért esetekre („Nílus áradási”, „Negrid”).
+- Új élő futás a 4 lapon: publikál, és a lecke nem tartalmazza a „Nílus áradási” / „Negroid” / „ezerév” alakot.
+### Pontosítás (implementáció, 2026-10-05)
+- **1. kapu:** `GATE_REPAIR_MAX_ITEMS = 5` az ADAG mérete, `GATE_REPAIR_MAX_BATCHES = 2` → futásonként ≤ 10 cél; fölötte a kihagyás
+  naplózva (modellhívás nélkül). Részleges eredmény nincs (bármely bukás → a régi hibaút). A `tests/gate-item-repair.test.ts`
+  „legfeljebb 5 tétel” esete e spec-változás szerint „legfeljebb 2 × 5 tétel” (11 cél → kimarad).
+- **2. vita / idézet:** a „szó-kulcs” a tokenek betűi és számjegyei; ha a két olvasat (vagy a változtatott szakasz és az első olvasat)
+  szó-kulcsa egyezik / ≤ 2 szerkesztésre tér el, nincs jel. A szó szerinti ellenőrzés a jelölőket és a nyilakat MINDKÉT oldalról
+  (idézet, forrás) eltávolítja, a nyilakat bárhol a sorban (nem csak a sor elején) — a soremelés eddig is szóköz volt.
+- **4. szótár-őr:** „a kontextus megerősít” = az erős sor ugyanannyi ellenőrzött szóból áll, a nem kérdéses szavak egyeznek, a
+  kérdéses szavak ≤ 2 szerkesztéssel térnek el. Csak a csere-ágban érvényes (szótár-helyes erős sor); ha az erős sor is nem-szó,
+  a S11/4 szerinti ⟦?⟧ marad. A „Kesia, Föld - Felt.” → „Ázsia, Közel-Kelet” sor szószáma eltér → csere (változatlan).
+5. **Spec-változás (biztonság, a 4 lap visszajátszása után):** az S11/6 2. pontja (a szó szerinti ellenőrzés a jelölőket figyelmen kívül
+   hagyja) mellett a régi szakaszvégi jel nem elég: a 2. lapon a „a Nílus áradási éveinek⟦?⟧” sorból egy jelet elhagyó idézet („a Nílus
+   áradási”) tanított tény lett volna. Ezért (a) a vitatott szakasz MINDEN vitatott szava jelet kap (a két olvasatban közös szó nem; ha
+   nincs ilyen szó, a régi szakaszvégi jel), és (b) az idézet akkor is bizonytalan (`pending`), ha a forrásban jelölt (≥ 3 betűs) szót
+   idéz jel nélkül (`quoteTouchesUncertain`). A `tests/ocr-uncertainty-layout.test.ts` „review #192/5” esete ennek megfelelően a
+   szakasz vitatott szavát („Ázsia,”) is jelöltnek várja.

@@ -122,7 +122,7 @@ test("review #192/4: a jel a vita SAJÁT helyére kerül, nem az azonos szó kor
 test("review #192/5: a döntő olvasat harmadik alakja (egyik olvasat sem) jelölt — érdemi és betűnyi vitánál is", async () => {
   const { locateOcrDisagreements } = await import("../server/studio/ocr");
   const first = "Kesia, Föld - Felt. térsége", second = "Ázsia, Közel-Kelet térsége";
-  assert.equal(markUnresolvedDisputes("Ázsia, Közel-Felet térsége", locateOcrDisagreements(first, second), first), "Ázsia, Közel-Felet⟦?⟧ térsége");
+  assert.equal(markUnresolvedDisputes("Ázsia, Közel-Felet térsége", locateOcrDisagreements(first, second), first), "Ázsia,⟦?⟧ Közel-Felet⟦?⟧ térsége"); // S11/6 5. pont: a vitatott szakasz minden szava
   const f2 = "Parasztok és bézművesek", s2 = "Parasztok és kézművesek";
   assert.equal(markUnresolvedDisputes("Parasztok és kézmívesek", locateOcrDisagreements(f2, s2), f2), "Parasztok és kézmívesek⟦?⟧");
   assert.equal(markUnresolvedDisputes(s2, locateOcrDisagreements(f2, s2), f2), s2, "a vitatott olvasat választása betűnyi vitánál nem jelölt");

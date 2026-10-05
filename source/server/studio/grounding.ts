@@ -67,7 +67,13 @@ export function checkGrounding(blockText: string, concept: MapConcept): boolean 
   // → nem megalapozott (változatlan).
   const formula = formulaOf(concept.term ?? "");
   // Review #184 (Codex): a képlet-ágat a KÉPLET megléte választja, nem a szószám („500+480” számai ≥3 karakteresek).
-  if (words.length === 0 && !formula) return false;
+  // Spec 2026-10-05-bank-determinisztikus-normalizalas (mért: job 5b33202a, a kapu 4 hamis lelettel állt meg): a csak RÖVIDÍTÉSBŐL álló
+  // fogalom („Kr. u. / i. sz.”) érdemi szólistája üres — a blokk szó szerinti „Kr. u. / i. sz.” szövege mellett is bukott. Ilyenkor a
+  // teljes kifejezés szóhatáros előfordulása dönt (legalább két rövid szóból, hogy egy magányos betű ne igazoljon).
+  if (words.length === 0 && !formula) {
+    const phrase = normalizeText(concept.term ?? "").trim();
+    return phrase.split(" ").length >= 2 && ` ${normalizeText(blockText)} `.includes(` ${phrase} `);
+  }
 
   // Képlet-fogalomnál CSAK az előjel-pontos képlet dönt: az idézet-számok tartaléka előjel-vak („9-(+6)=+3” számai a „9-(-6)=+3”
   // fogalmat is „megalapoznák”), a testvér-fogalmak definíciói pedig szinte szó szerint azonosak. Spec 2026-10-04-kepletbiztos-

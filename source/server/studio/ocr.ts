@@ -200,8 +200,14 @@ export function adjudicationStaysInDispute(first: string, adjudicated: string, d
 
 export const UNCERTAIN_MARK = "⟦?⟧";
 const keyedOf = (s: string) => ocrTokens(s).map(tokenKey).filter(Boolean).join(" ");
-/** Érdemi vita: a két olvasat > 2 szerkesztésre tér el — az egyoldalú (beszúrás/törlés) vita is, ha a nem üres oldal > 2 betű. */
-const isSubstantive = (d: OcrDisagreement) => editDistance(keyedOf(d.first), keyedOf(d.second)) > 2;
+/**
+ * Spec S11/6 + S9/7 (mért: map d70d8f67, „↙⟦?⟧ elsődleges” — a nyíl-vita is jelet kapott, 13 fogalom kimaradt): a szó-kulcs csak a
+ * betűket és számjegyeket tartja meg — a csak-írásjel/nyíl/szóköz eltérés NEM vita.
+ */
+const wordsOf = (s: string) => ocrTokens(s).map((t) => tokenKey(t).replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+const wordKeyedOf = (s: string) => wordsOf(s).join(" ");
+/** Érdemi vita: a két olvasat SZAVAI > 2 szerkesztésre térnek el — az egyoldalú (beszúrás/törlés) vita is, ha a nem üres oldal > 2 betű. */
+const isSubstantive = (d: OcrDisagreement) => editDistance(wordKeyedOf(d.first), wordKeyedOf(d.second)) > 2;
 const MARK_AHEAD = /^[ \t]*⟦\?⟧/;
 const insertMarks = (text: string, ends: Iterable<number>) => {
   let out = text;
@@ -278,8 +284,13 @@ export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreeme
     cursor = s + keys.length;
     spans.push({ s, e: s + keys.length, r: [d.first, d.second] });
     if (opts.thirdFormOnly || !isSubstantive(d)) continue;
-    const end = lastEnd(...decidedRange(s, s + keys.length));
-    if (end >= 0) ends.push(end);
+    // Spec S11/6 (biztonság): a vitatott szakasz MINDEN vitatott szava jelet kap (nem csak a vége) — a két olvasatban közös szó nem.
+    const [rs, re] = decidedRange(s, s + keys.length);
+    const second = new Set(ocrTokens(d.second).map(tokenKey));
+    const common = new Set(keys.filter((k) => second.has(k)));
+    let marked = false;
+    for (let k = rs; k < re; k++) if (c[k].key && !common.has(c[k].key)) { ends.push(c[k].end); marked = true; }
+    if (!marked) { const end = lastEnd(rs, re); if (end >= 0) ends.push(end); }
   }
   // harmadik alak: a döntő átirat változtatása, amely egyik vitatott olvasat (szóhatáros) része sem
   const readings = disputes.flatMap((d) => [d.first, d.second]).map((r) => ` ${keyedOf(r)} `);
@@ -292,9 +303,14 @@ export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreeme
     const was = a.slice(i, ni).map((t) => t.key).filter(Boolean).join(" ");
     // Review #195: erős elsődlegesnél az ADOTT hely vitájának olvasataihoz mérünk (más vita olvasata itt harmadik alak).
     const pool = opts.thirdFormOnly ? spans.filter((x) => x.s <= ni && x.e >= i).flatMap((x) => x.r).map((r) => ` ${keyedOf(r)} `) : readings;
-    if (changed && changed !== was && !pool.some((r) => r.includes(` ${changed} `))) {
-      const end = lastEnd(j, nj);
-      if (end >= 0) ends.push(end);
+    // Spec S11/6 + S9/7: csak-írásjel/nyíl változtatás nem harmadik alak; a harmadik alak MINDEN új (egyik olvasatban sem
+    // szereplő) szava jelet kap (mért: „a Nílus áradási éveinek⟦?⟧” — eddig csak a szakasz végére került jel).
+    if (changed && changed !== was && !pool.some((r) => r.includes(` ${changed} `)) && wordKeyedOf(changed) !== wordKeyedOf(was)) {
+      const known = new Set([was, ...pool].flatMap(wordsOf));
+      for (let k = j; k < nj; k++) {
+        const word = c[k].key.replace(/[^\p{L}\p{N}]/gu, "");
+        if (word && !known.has(word)) ends.push(c[k].end);
+      }
     }
     i = ni + 1; j = nj + 1;
   }
@@ -364,9 +380,10 @@ function markWords(line: string, words: string[]): string {
  * - eltér, és az erős sor minden szava létező (és a sor nem tévedt el: a jó szavaiból legalább egy közös) → az erős sor lép a helyére;
  * - különben (nem-szó az erős sorban is, hiba, hiány) → a sor minden kérdéses szava után ⟦?⟧.
  */
-export function decideNonWordLines(text: string, lines: NonWordLine[], strong: Map<number, string>, isWord: IsWord): { text: string; replaced: { from: string; to: string }[] } {
+export function decideNonWordLines(text: string, lines: NonWordLine[], strong: Map<number, string>, isWord: IsWord): { text: string; replaced: { from: string; to: string }[]; kept: { from: string; to: string }[] } {
   const rows = text.split("\n");
   const replaced: { from: string; to: string }[] = [];
+  const kept: { from: string; to: string }[] = [];
   for (const { line, words } of lines) {
     const raw = rows[line - 1];
     if (raw === undefined) continue;
@@ -380,6 +397,12 @@ export function decideNonWordLines(text: string, lines: NonWordLine[], strong: M
     const aligned = anchors.length === 0 || anchors.some((w) => strongWords.has(w));
     // review #194: az erős sor szavai közvetlenül a szótáron (az idegen-szöveg kihagyás itt nem érvényes — a hosszú, zagyva erős sor nem nyerhet)
     if (reading && aligned && lexiconWordsOf(reading).every((t) => passesLexicon(t.word, isWord))) {
+      // Spec S11/6 + S9/7 (mért: „Negrid” → „Negroid” — a szótár a tankönyvi alakot nem ismeri): ha az erős olvasat a kérdéses
+      // szót csak ≤ 2 betűvel módosítja, a sor többi szavát pedig megerősíti → NINCS csere, NINCS jel (az eredeti marad).
+      if (isMinorRevision(current, reading, words)) {
+        kept.push({ from: current, to: reading });
+        continue;
+      }
       replaced.push({ from: current, to: reading });
       rows[line - 1] = `${reading}${cr}`;
       continue;
@@ -387,7 +410,19 @@ export function decideNonWordLines(text: string, lines: NonWordLine[], strong: M
     // az eltérő sor minden kérdéses szava bizonytalan (a részben egyező „Felt.” is a zagyva sor része)
     rows[line - 1] = `${markWords(current, words)}${cr}`;
   }
-  return { text: rows.join("\n"), replaced };
+  return { text: rows.join("\n"), replaced, kept };
+}
+
+/**
+ * Spec S11/6 + S9/7: az erős sor csak betűnyi „javítás” — ugyanannyi (ellenőrzött) szó, a nem kérdéses szavak egyeznek (a kontextus
+ * megerősít), a kérdéses szavak ≤ 2 szerkesztéssel térnek el. A „Kesia, Föld - Felt.” → „Ázsia, Közel-Kelet” sor NEM ilyen.
+ */
+function isMinorRevision(current: string, reading: string, questioned: string[]): boolean {
+  const cur = lexiconWordsOf(current).map((t) => t.word), str = lexiconWordsOf(reading).map((t) => t.word);
+  if (cur.length === 0 || cur.length !== str.length) return false;
+  // Review #196: a kérdésesség normalizált kulccsal (kis-/nagybetű, írásjel) — nem nyers szöveg-egyezéssel.
+  const asked = new Set(questioned.map(wordKey));
+  return cur.every((w, n) => wordKey(w) === wordKey(str[n]) || (asked.has(wordKey(w)) && editDistance(wordKey(w), wordKey(str[n])) <= 2));
 }
 
 /**
@@ -416,6 +451,7 @@ export async function verifyNonWords(text: string, file: ExtractorFile, strongLi
   }
   const decided = decideNonWordLines(text, lines, strong, isWord);
   for (const r of decided.replaced) logger.info(`[STUDIO/OCR] ${file.name}: szótár-őr csere „${r.from.slice(0, 120)}” → „${r.to.slice(0, 120)}”.`);
+  for (const r of decided.kept) logger.info(`[STUDIO/OCR] ${file.name}: szótár-őr — az erős olvasat csak ≤ 2 betűvel tér el („${r.to.slice(0, 120)}”), az eredeti marad: „${r.from.slice(0, 120)}”.`);
   return decided.text;
 }
 

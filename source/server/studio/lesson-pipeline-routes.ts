@@ -42,6 +42,7 @@ import {
 } from "./one-step-progress";
 import { ORPHAN_JOB_ERROR, sweepDecision, type SweepRow } from "./orphan-jobs";
 import { UNCERTAIN_MARK } from "./ocr";
+import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
 import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
@@ -644,7 +645,8 @@ export async function autoCurateKnowledgeMap(
       examWeight: c.examWeight as "core" | "supporting",
       verbatimOk: c.verbatimOk,
       // Spec 2026-10-05-s11: bizonytalan OCR-olvasatra épülő fogalom nem tény (a tanári helyesbítés rendezheti).
-      uncertainQuote: c.quote.includes(UNCERTAIN_MARK) && !String(c.verbatimReason ?? "").startsWith("corrected:"),
+      // Spec S11/6: a forrásban jelölt szót idéző (a jelet elhagyó) idézet is bizonytalan.
+      uncertainQuote: quoteTouchesUncertain(c.quote, sourceTextForReference(map.sourceFiles, map.sourceText, c.sourceRef?.file)) && !String(c.verbatimReason ?? "").startsWith("corrected:"),
     });
     if (decision === c.reviewState) continue;
     c.reviewState = decision;

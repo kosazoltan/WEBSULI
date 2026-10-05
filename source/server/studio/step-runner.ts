@@ -1535,7 +1535,12 @@ async function repairGateItems(store: PipelineStore, job: JobView, lesson: Lesso
   const map = focusedMapOf(await store.loadMap(job.mapId), job);
   const concepts = map ? verifierConceptsOf(map, job) : [];
   const bankModel = resolveStudioModel("bank");
-  if (!models.keyConfigured(bankModel) || !models.keyConfigured(BANK_VERIFIER_MODEL)) return null;
+  const missingKey = !models.keyConfigured(bankModel) ? bankModel : !models.keyConfigured(BANK_VERIFIER_MODEL) ? BANK_VERIFIER_MODEL : null;
+  if (missingKey) {
+    // Spec S11/6 + S9/7: nincs néma kihagyás.
+    logger.warn(`[ORKESZTRÁTOR] kapu (${job.id}): a kapu-javítás kimarad — nincs kulcs (${missingKey}).`);
+    return null;
+  }
   const sameRef = (a: string | undefined, b: string) => { const x = bankItemRef(a), y = bankItemRef(b); return !!x && !!y && x.bank === y.bank && x.index === y.index; };
   return repairFlaggedBankItems({
     lesson, flags: flags.map((f) => ({ path: f.path, message: String(f.message ?? "") })), round: job.round, subject: lesson.subject,
@@ -1607,7 +1612,9 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
           gateRepairs: repaired.repaired,
           qualityNotes: appendQualityNote(job.output?.qualityNotes, { reason: "gate_item_repaired", note: `A kapunál maradt hibás banktétel(ek) orkesztrált újraírással javítva, a független bank-ellenőr újraellenőrizte: ${repaired.repaired.join(", ")}.`, round: job.round }) };
         await store.upsertLesson(job.lessonId, job.mapId, repaired.lesson);
-        logger.info(`[ORKESZTRÁTOR] kapu (${job.id}): ${repaired.repaired.length} banktétel javítva és újraellenőrizve — a kapu folytatódik.`);
+        logger.info(`[ORKESZTRÁTOR] kapu (${job.id}): ${repaired.repaired.length} banktétel javítva (${repaired.batches} adagban) és újraellenőrizve — a kapu folytatódik.`);
+      } else {
+        logger.warn(`[ORKESZTRÁTOR] kapu (${job.id}): a javítás után is bukik a kapu (${retried.error.slice(0, 300)}) — a régi hibaút.`);
       }
     }
   }

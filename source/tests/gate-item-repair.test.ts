@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { repairFlaggedBankItems, GATE_REPAIR_MAX_ITEMS, type GateRepairDeps } from "../server/studio/gate-item-repair";
+import { repairFlaggedBankItems, GATE_REPAIR_MAX_ITEMS, GATE_REPAIR_MAX_BATCHES, gateRepairBatches, type GateRepairDeps } from "../server/studio/gate-item-repair";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import type { IAIProvider } from "../server/ai/AIProvider";
 import type { Lesson } from "../shared/lesson-schema";
@@ -56,10 +56,13 @@ test("sémát sértő vagy két azonos opciójú tétel elutasítva", async () =
   assert.equal(await repairFlaggedBankItems({ lesson, flags: [flag], round: 3, deps: bad.deps }), null);
 });
 
-test(`legfeljebb ${GATE_REPAIR_MAX_ITEMS} tétel; nem banktétel-útvonal nem javítható`, async () => {
+// Spec S11/6 + S9/7 (dokumentált spec-változás, mért: job 8953db4b): a keret ${GATE_REPAIR_MAX_ITEMS} tételes ADAG × ${GATE_REPAIR_MAX_BATCHES} adag.
+test(`legfeljebb ${GATE_REPAIR_MAX_BATCHES} × ${GATE_REPAIR_MAX_ITEMS} tétel; nem banktétel-útvonal nem javítható`, async () => {
   const { lesson, deps } = setup();
-  const many = Array.from({ length: GATE_REPAIR_MAX_ITEMS + 1 }, (_, i) => ({ path: `experience.quiz[${i}]`, message: "x" }));
-  assert.equal(await repairFlaggedBankItems({ lesson, flags: many, round: 3, deps }), null);
+  const many = Array.from({ length: GATE_REPAIR_MAX_ITEMS * GATE_REPAIR_MAX_BATCHES + 1 }, (_, i) => ({ path: `experience.quiz[${i}]`, message: "x" }));
+  let calls = 0;
+  assert.equal(await repairFlaggedBankItems({ lesson, flags: many, round: 3, deps: { ...deps, callBank: async () => { calls++; return {}; } } }), null);
+  assert.equal(calls, 0, "a keret fölött modellhívás nélkül, naplózva marad ki");
   assert.equal(await repairFlaggedBankItems({ lesson, flags: [{ path: "sections[0].blocks[1]", message: "x" }], round: 3, deps }), null);
 });
 
@@ -150,4 +153,24 @@ test("review #192/8: két egyszerre hibás tétel — az első javítását a m�
     callBank: async (_s, user) => { const id = JSON.parse(user).tetel.id; return id === good0.id ? { ...good0, q: `${String(good0.q)} (javítva)` } : { ...(broken.experience!.tasks[1] as Record<string, unknown>), q: "még mindig rossz" }; },
   }).deps });
   assert.equal(half, null);
+});
+
+test("S11/6 + S9/7 (mért: job 8953db4b, 6 cél NÉMÁN kimaradt): 6 cél → 2 adag (5 + 1), mind javítva; a 2. adag bukása → nincs részleges eredmény", async () => {
+  assert.deepEqual(gateRepairBatches([1, 2, 3, 4, 5, 6])?.map((b) => b.length), [5, 1]);
+  assert.equal(gateRepairBatches(Array.from({ length: 11 }, (_, i) => i)), null);
+  const { lesson } = setup();
+  const byId = new Map((lesson.experience!.quiz as Array<Record<string, unknown>>).map((q) => [String(q.id), q]));
+  const flags = Array.from({ length: 6 }, (_, i) => ({ path: `experience.quiz[${i}]`, message: "Egyválasztós tétel: 2 helyes opció" }));
+  const fix = (id: string) => { const q = byId.get(id)!; return { ...q, question: `${String(q.question)} (javítva)` }; };
+  const res = await repairFlaggedBankItems({ lesson, flags, round: 3, deps: setup({ callBank: async (_s, user) => fix(JSON.parse(user).tetel.id) }).deps });
+  assert.ok(res, "6 cél két adagban javítható");
+  assert.equal(res.batches, 2);
+  assert.deepEqual(res.repaired, flags.map((f) => f.path));
+  for (let i = 0; i < 6; i++) assert.match(String((res.lesson.experience!.quiz[i] as { question: string }).question), /\(javítva\)$/);
+  const sixth = String((lesson.experience!.quiz[5] as { id: string }).id);
+  const failing = await repairFlaggedBankItems({ lesson, flags, round: 3, deps: setup({
+    callBank: async (_s, user) => fix(JSON.parse(user).tetel.id),
+    verify: async (_l, p) => (p === "experience.quiz[5]" ? [`${sixth}: még mindig két helyes opció`] : []),
+  }).deps });
+  assert.equal(failing, null, "a 2. adag bukása a régi hibaút (az 1. adag javítása sem kerül vissza)");
 });

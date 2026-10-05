@@ -45,3 +45,14 @@
 **Módosítva a tulajdonosi döntés szerint:** az 1–2. lépés elmarad (a `DEFAULT_MODELS.ocr` és a `FALLBACK_MODELS.ocr` változatlan); a
 3. lépés helyett `createCachedSourceOcr`: első olvasó és döntő = `OCR_THIRD_READER_MODEL`, ha kész; második = a konfigurált OCR-modell;
 nincs harmadik szavazó. Ha a sol nincs beállítva: a régi lánc változatlanul.
+
+## S11/6 + S9/7 (ügynöknek)
+1. `server/studio/gate-item-repair.ts` + a `repairGateItems` hívó (`step-runner.ts` ~1534/1595): a célok 5-ös adagokban (legfeljebb 2 adag),
+   minden adag után a meglévő ellenőrzés; az összes után teljes validálás; minden kihagyás/bukás `logger.warn` okkal. Teszt: 6 cél → 2 adag.
+2. `ocr.ts`: `isSubstantive` és a harmadik-alak ág csak-írásjel/nyíl/szóköz eltérésnél nem jelöl (a `keyedOf` üres vagy egyező → nincs
+   vita). A szó szerinti ellenőrzés (`server/studio/verbatim.ts` vagy ahol az idézetet a forráshoz méri): normalizálás előtt a jelölők és
+   a nyilak (→ ↙ ↘ ↓ ↗ ← ↳ |) eltávolítása, soremelés → szóköz; az `uncertainQuote` állapot változatlan (a ⟦?⟧ a NYERS idézetből számít).
+3. `markUnresolvedDisputes` harmadik-alak ága: a változtatott szakasz minden új (egyik olvasatban sem szereplő) szava után jel.
+4. `verifyNonWords` / döntő függvény: ha az erős sor a kérdéses szót ≤ 2 szerkesztéssel módosítja → az eredeti marad, jel nélkül.
+5. Tesztek a mért esetekre; teljes unit, tsc (app + tests), lint. Visszajátszás: a mentett olvasatokon (`ocr_transcripts`) és a
+   job/map adatain — modellhívás nélkül, ahol lehet.

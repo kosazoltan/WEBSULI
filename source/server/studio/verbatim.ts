@@ -176,12 +176,25 @@ export function relocateQuote(quote: string, sourceText: string): string | null 
   return original.slice(map[best.start], map[best.end - 1] + 1).trim();
 }
 
+/**
+ * Spec S11/6 + S9/7 (mért: map d70d8f67, 13 kimaradt fogalom): az OCR-átirat jelölői („⟦?⟧”, „[KERET: …]”, „[KERET VÉGE]”) és az
+ * elrendezés nyilai (→ ↙ ↘ ↓ ↗ ← ↳ |) nem a forrás szövegének részei — a szó szerinti összevetés előtt mindkét oldalról ki. A soremelést
+ * a `normalizeForCompare` szóközként kezeli. A bizonytalanság (`uncertainQuote`) továbbra is a NYERS idézetből számít (S11).
+ */
+const LAYOUT_MARKS = /⟦\?⟧|\[KERET(?::[^\]\n]*)?\]|\[KERET VÉGE\]/gu;
+const LAYOUT_ARROWS = /[→↙↘↓↗←↳]/gu;
+// Review #196 (P1): a `|` csak ÖNÁLLÓ elrendezési jelként esik ki — a matematikai |x| abszolútérték-jel megmarad.
+const LAYOUT_PIPE = /(^|\s)\|(?=\s|$)/gmu;
+export function withoutLayoutMarks(text: string): string {
+  return text.replace(LAYOUT_MARKS, "").replace(LAYOUT_ARROWS, " ").replace(LAYOUT_PIPE, "$1 ");
+}
+
 /** True when `quote` occurs in `sourceText` once formatting noise is folded away. */
 export function checkVerbatim(quote: string, sourceText: string): VerbatimResult {
-  const needle = normalizeForCompare(quote ?? "");
+  const needle = normalizeForCompare(withoutLayoutMarks(quote ?? ""));
   if (!needle) return { ok: false, reason: "empty" };
 
-  const haystack = normalizeForCompare(sourceText ?? "");
+  const haystack = normalizeForCompare(withoutLayoutMarks(sourceText ?? ""));
   if (!haystack) return { ok: false, reason: "no_source" };
 
   if (haystack.includes(needle)) return { ok: true };
