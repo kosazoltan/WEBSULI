@@ -214,8 +214,9 @@ flowchart TD
 | **S6 Bekötés a gyártásba** | lekérés a tervezőnek/szerzőnek; a bank-gyártó ELŐSZÖR katalógus-tételt igazít, csak a hiányt generálja; a lektor a katalógus-tételt igazolt forrásként kezeli | futásonként kevesebb token | A/B: a fedett témákon a bank-hibák és a bank-körök ≥50%-kal csökkennek; sikeresség mérve |
 | **S7 Workflow-rendbetétel** | H, I, J, K, B′ workflow alá; a webes út (C) egy futásban; OCR/topic-focus skill; a támogató szerepek saját lelet-kódjai | 0 modell | nincs lecke-módosító útvonal workflow nélkül (forrás-ellenőrző teszt) |
 | **S8 Tanulói eredményesség** | a `lesson_attempts`/`concept_results` bekötése a leckelejátszóba → tételenkénti eredmény visszaírása a katalógusba (`outcome`) | 0 modell | tételenkénti helyes-arány a katalógusban |
+| **S9 Hiba-elemző orkesztrátor** (tulajdonosi felvetés 2026-10-05) | a determinisztikus vezérlő (`server/workflows/engine.ts`) marad; hibánál ma a futás megáll (`engine.ts:244`). Új: hiba-elemző hívás (DeepSeek v4.1 flash + glm-5.3-flash egyeztetés) ZÁRT akciólistából választ — újrapróbálás / visszalépés megnevezett fázishoz / javító skill / tartalékmodell / admin —, a kód keret- és jogosultság-ellenőrzés után hajtja végre; eltérő ítélet → admin | hibánként ~2 olcsó hívás | ingyenes visszajátszás az 52 bukott futáson: a választott akció egyezik a kézi diagnózissal ≥ 80%-ban, rossz akció (tudásvesztés, végtelen kör) 0 — csak ezután élesben |
 
-Sorrend-javaslat: **S0 → S1 → S2 → S3 → S4 → S6 (A/B) → S5 → S7 → S8.** Az S7 (workflow-rendbetétel) párhuzamosan is mehet,
+Sorrend-javaslat: **S0 → S1 → S2 → S3 → S4 → S6 (A/B) → S5 → S9 → S7 → S8.** (S9: a katalógus előbb csökkenti a hibákat, a maradékot elemzi az orkesztrátor.) Az S7 (workflow-rendbetétel) párhuzamosan is mehet,
 mert független; a tanulói mérés (S8) a katalógus „eredményessége” miatt kell, de a gyártási minőséget nem blokkolja.
 
 ## 6. Mérési protokoll (pénzégetés nélkül)
