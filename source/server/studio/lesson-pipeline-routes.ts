@@ -521,7 +521,12 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     : { corrections: [] as SourceCorrection[], rejected: [] as string[] };
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
-  const corrections = mergeCorrections(arithmetic, result.corrections);
+  const proposed = mergeCorrections(arithmetic, result.corrections);
+  // Review #181 javítása (mért élesben, job e9fac201): újraindításkor a térkép már helyesbített, a modell nem javasol semmit — a
+  // MÁR ÉRVÉNYES tanári/átírási helyesbítést a DB-ből kell visszaadni, különben a job nélküle fut, és a független bank-ellenőr a
+  // nyers átirathoz („bérművesek”) méri a helyes („kézművesek”) tételeket. Az aritmetikai kör determinisztikusan úgyis újrafut.
+  // A már érvényes sort a `pending` szűrő magától kihagyja (nincs újraírás), de a lista része — minden kijáraton visszajön.
+  const corrections = [...proposed, ...persistedCorrections(rows).filter((p) => !proposed.some((c) => c.localId === p.localId))];
   // The full audit goes to the log and the job output (sourceCorrections); the column holds only a code.
   for (const fix of corrections) logger.info(`[STUDIO/1STEP] ${fix.localId}: ${correctionAuditText(fix)}`);
   if (!corrections.length) return [];
@@ -550,6 +555,14 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     return [];
   }
   return corrections;
+}
+
+/** A térképen MÁR érvényes tanári/átírási helyesbítés (verbatimReason = corrected:<alap>), a korábbi alak nélkül (review #181). */
+export function persistedCorrections(rows: Array<{ localId: string; term: string; definition: string; verbatimReason?: string | null }>): SourceCorrection[] {
+  return rows.flatMap((r) => {
+    const basis = String(r.verbatimReason ?? "").match(/^corrected:(owner|transcription)$/)?.[1] as SourceCorrection["basis"] | undefined;
+    return basis ? [{ localId: r.localId, basis, term: r.term, definition: r.definition, reason: "Már érvényes helyesbítés (a forrás-idézet az eredeti átirat).", from: {} }] : [];
+  });
 }
 
 /**
