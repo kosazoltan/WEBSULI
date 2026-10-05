@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { gateQuestionProblems, hasFigureReference, questionKey, scoringVersionFor } from "../../shared/lesson-experience";
+import { normalizeBankPacket } from "./bank-normalize";
+import { logger } from "../lib/logger";
 import { z } from "zod";
 import { LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, bankPacketContract, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
 import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, normalizeAnswer } from "../../shared/lesson-experience-score";
@@ -325,6 +327,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     });
     type Packet = z.infer<typeof packetSchema>;
     const validate = (packet: Packet): string[] => {
+      // Spec 2026-10-05-bank-determinisztikus-normalizalas: a gépies hibák (rubrika↔minta, ismétlődés) javítása modellhívás NÉLKÜL.
+      const normalized = normalizeBankPacket(packet, { tasks: before.tasks.map((t) => t.q), quiz: before.quiz.map((q) => q.question) }, { tasks: taskCount, quiz: quizCount }, questionKey);
+      if (normalized.length) logger.info(`[STUDIO] Bankcsomag gépi normalizálás (${unit.sectionIndex + 1}. fejezet): ${normalized.slice(0, 12).join("; ")}`);
       const local = experiencePacketSchema.safeParse({ version: LESSON_METHOD_VERSION, theme: "ocean", ...packet, scoringVersion: scoringVersionFor(packet.tasks), bankPlan: { units: [unit], taskRound: Math.min(plan.taskRound, packet.tasks.length), quizRound: Math.min(plan.quizRound, packet.quiz.length) }, language });
       const problems = local.success ? [] : local.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       problems.push(...gateQuestionProblems([...before.methods, ...packet.methods]));

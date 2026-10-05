@@ -265,8 +265,8 @@ test("élő mérés 2026-09-24 (run 9c0169b7): az ismétlődő kérdés hibája 
     const named = user.includes(`Ismétlődő kérdés egy korábbi csomaggal: ${e.quiz[0].id} („`);
     return named ? { quiz: [{ ...packetFor(1, " (B)").quiz[0], question: e.quiz[0].question + " (új változat)" }] } : packetFor(1, " (B)");
   } });
-  assert.ok(prompts[1].includes(`Ismétlődő kérdés egy korábbi csomaggal: ${e.quiz[0].id} („`), "a hiba megnevezi az ismétlődő tételt");
-  assert.equal(prompts.length, 2, "egy célzott javítás elég");
+  // Spec 2026-10-05-bank-determinisztikus-normalizalas: a tartalékon belüli ismétlődést a kód veszi ki — nincs javítókör.
+  assert.equal(prompts.length, 1, "nincs modell-javítókör");
   assert.equal(new Set(result.quiz.map(q => q.question)).size, result.quiz.length, "nincs ismétlődő kérdés");
 });
 
@@ -398,14 +398,28 @@ test("rubric repair names the exact missing short-word group and preserves the g
   let calls = 0;
   const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
     if (++calls === 1) return { methods: e.methods, tasks: [task, ...e.tasks.slice(1)], quiz: e.quiz, glossary: [] };
+    return { tasks: [corrected] };
+  } });
+  // Spec 2026-10-05-bank-determinisztikus-normalizalas: a ragozott „magra” alakot a kód pótolja — nincs modell-javítókör.
+  assert.equal(calls, 1); assert.equal(evaluateOpenAnswer(task.sample, result.tasks[0]).score, 1);
+  assert.equal(evaluateOpenAnswer("gyökér", result.tasks[0]).score, 0);
+  assert.equal(evaluateOpenAnswer(task.sample, task).score, 0.5);
+  assert.deepEqual(experienceProblems(lesson, result), []);
+});
+
+test("spec 2026-10-05: ha a minta a fogalmat valóban nem tartalmazza, a javítókör a hiányzó csoportot nevezi meg", async () => {
+  const lesson = standardFusionFixture(), e = lesson.experience!;
+  const task = { ...e.tasks[0], required: [["gyökér"], ["mag"]], bonus: [], minWords: 2, needsSentence: false,
+    sample: "A növény gyökérre és levelekre tagolódik." };
+  const corrected = { ...task, sample: "A növény gyökérre és magra tagolódik.", required: [["gyökér"], ["mag", "magra"]] };
+  let calls = 0;
+  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+    if (++calls === 1) return { methods: e.methods, tasks: [task, ...e.tasks.slice(1)], quiz: e.quiz, glossary: [] };
     assert.match(user, /fel nem ismert kötelező szinonimacsoportok: \[\["mag"\]\]/);
     assert.match(user, /ne töröld a hiányzó fogalmat/);
     return { tasks: [corrected] };
   } });
-  assert.equal(calls, 2); assert.equal(evaluateOpenAnswer(task.sample, result.tasks[0]).score, 1);
-  assert.equal(evaluateOpenAnswer("gyökér", result.tasks[0]).score, 0);
-  assert.equal(evaluateOpenAnswer(task.sample, task).score, 0.5);
-  assert.deepEqual(experienceProblems(lesson, result), []);
+  assert.equal(calls, 2); assert.equal(evaluateOpenAnswer(result.tasks[0].sample, result.tasks[0]).score, 1);
 });
 
 test("a partial repair still fails closed on invalid concept, answer or unchanged sample", async () => {
