@@ -1,0 +1,3248 @@
+{
+  "measuredAt": "2026-10-05T08:05:37.517Z",
+  "lessons": {
+    "legacy": 177,
+    "fusion": 24
+  },
+  "legacyScriptParseOk": "171/177",
+  "keyedQuizCoverage": {
+    "regexEstimate": 7760,
+    "extractedWithinEstimate": 7691,
+    "ratio": 0.991
+  },
+  "totals": {
+    "legacy.section": 3339,
+    "legacy.open_task": 2898,
+    "legacy.quiz": 10573,
+    "legacy.short_answer": 3032,
+    "legacy.quiz_unkeyed": 9,
+    "legacy.vocab": 156,
+    "fusion.section": 240,
+    "fusion.quiz": 1966,
+    "fusion.open_task": 1122,
+    "fusion.method": 519
+  },
+  "emptyLegacyLessons": [],
+  "perLesson": [
+    {
+      "source": "legacy",
+      "id": "aa3cf1e0-6815-4af4-a836-a4fd80b02161",
+      "title": "8.osztály  anyagforgalom jelentősége és az előbél felépítése",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 1,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 58
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "b7861b2e-b3cc-4e79-abff-58f88cf69071",
+      "title": "8. osztályos hőtan",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 132,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 15
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "6e3331f4-e1ef-4d21-902f-c6e6c0cfffeb",
+      "title": "Harmadik osztályos matek angol-magyar",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 142,
+      "classified": 131,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 86,
+        "section": 35
+      },
+      "keyedEstimate": 86
+    },
+    {
+      "source": "legacy",
+      "id": "a07288fb-0c15-4e5e-8ba7-1f9ee6d4be76",
+      "title": "3. Osztály matek szorzás",
+      "classroom": 3,
+      "scripts": 2,
+      "scriptErrors": 1,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 20
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "d2cfe174-6951-4862-b0a0-7abc41d93dd2",
+      "title": "4. Osztály Angol Nyelvtan - Témazáró Felkészítő",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 41,
+      "classified": 40,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 15,
+        "quiz": 25,
+        "section": 13
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "c41a24f3-2ac5-49a4-9ba0-3772632b6957",
+      "title": "4. Osztály Telling the Time  Az óra kifejezése",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 423,
+      "classified": 400,
+      "duplicates": 1,
+      "kinds": {
+        "short_answer": 150,
+        "quiz": 249,
+        "section": 28
+      },
+      "keyedEstimate": 250
+    },
+    {
+      "source": "legacy",
+      "id": "56e3a4a0-3d03-4770-9026-1d4a9a96d997",
+      "title": "8. Osztály Francia október",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 42,
+      "classified": 40,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 15,
+        "quiz": 25,
+        "section": 13
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "bfd097b3-0214-4345-a163-bdc01b0307bd",
+      "title": "8. Osztály Ady endre tananyag teljes",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 1,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 22
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "8d4635eb-6918-4871-b667-6bdc9f09a666",
+      "title": "8. Osztály Az ember testfelépítése és mozgása",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 211,
+      "classified": 200,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 75,
+        "quiz": 125,
+        "section": 31
+      },
+      "keyedEstimate": 125
+    },
+    {
+      "source": "legacy",
+      "id": "f08fdfb8-2d9f-4206-93bd-f7cde6459a96",
+      "title": "5. Osztály Bibliaismeret a biblia könyvei",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 40,
+      "classified": 25,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 25,
+        "section": 29
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "67d3d5a7-0e02-4b11-b2e4-56c5fa958035",
+      "title": "Az emberré válás folyamata - 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 4,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 14
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "52cb0c2e-9ecf-4628-8316-a06348e3904c",
+      "title": "8. Osztály TESZT Az anyagforgalom jelentősége és az előbél felépítése",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 169,
+      "classified": 154,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 46,
+        "quiz": 108,
+        "section": 46
+      },
+      "keyedEstimate": 108
+    },
+    {
+      "source": "legacy",
+      "id": "7ad8a89c-272b-4e06-94f7-ad9b6a2e43b6",
+      "title": "4. osztály Cselekvés, Történés, Igék - Témazáró Felkészítő",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 206,
+      "classified": 200,
+      "duplicates": 1,
+      "kinds": {
+        "short_answer": 75,
+        "quiz": 124,
+        "section": 21
+      },
+      "keyedEstimate": 125
+    },
+    {
+      "source": "legacy",
+      "id": "13bd959b-c3f1-4743-a440-26d5515ee756",
+      "title": "5. Osztály kommunikáció tananyag teljes",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 2,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 30
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "aa823d25-6b08-48ef-9439-ab8312dc5d68",
+      "title": "5. Osztály Történelem görögország",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 4,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 16
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "e03c2f74-5e65-4dac-aacc-87e0ab239c15",
+      "title": "8. Osztály földrajz Magyarország gazdasága",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 28,
+      "classified": 25,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 25,
+        "section": 22
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "bfa1bf47-7cde-402e-a85d-12104648f223",
+      "title": "8. Osztály Green war novell",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 42,
+      "classified": 40,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 15,
+        "quiz": 25,
+        "section": 25
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "c0fac1db-088f-43dc-9e0a-ce7a95c5cf86",
+      "title": "5. Osztály Arany János családi kör teljes tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 27,
+      "classified": 25,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 25,
+        "section": 20
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "71631735-1c78-4930-9e3c-2063c6019ad0",
+      "title": "8. Osztály Energia és energiaváltozások",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 28,
+      "classified": 25,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 25,
+        "section": 21
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "2403df64-621f-4fec-afb3-5d21dcd90566",
+      "title": "4 osztályos környezetismeret Budapest, barangolás, Alföld",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 42,
+      "classified": 40,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 15,
+        "quiz": 25,
+        "section": 27
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "dd99029c-8eae-4768-b3e3-2e3511d09537",
+      "title": "8. Osztály Az emberré válás folyamata és a történelem forrásai",
+      "classroom": 8,
+      "scripts": 0,
+      "scriptErrors": 0,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 17
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "6f879cf8-d9d7-431f-a029-8e3270fd28d1",
+      "title": "8. osztály algebra",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 137,
+      "classified": 135,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 75,
+        "quiz": 60,
+        "section": 22
+      },
+      "keyedEstimate": 60
+    },
+    {
+      "source": "legacy",
+      "id": "37c4179d-0adc-4c2f-a438-997aee7604f3",
+      "title": "5 osztály Magyar Irodalom Jókai Mór",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 180,
+      "classified": 174,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 75,
+        "quiz": 99,
+        "section": 17
+      },
+      "keyedEstimate": 99
+    },
+    {
+      "source": "legacy",
+      "id": "e35a6b68-5db2-4dcd-8601-89e457564a07",
+      "title": "5. osztály hívatlan látogató természettan",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 1,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 14
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "ba94fbf9-7b0e-424d-a7b8-d7571234ea11",
+      "title": "4. Osztály all about me english",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 76,
+      "classified": 50,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 50,
+        "section": 21
+      },
+      "keyedEstimate": 50
+    },
+    {
+      "source": "legacy",
+      "id": "474c2dc1-cc23-4db7-9f63-b8f2340ec5cc",
+      "title": "4. Osztály all about me",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 76,
+      "classified": 50,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 50,
+        "section": 21
+      },
+      "keyedEstimate": 50
+    },
+    {
+      "source": "legacy",
+      "id": "9052ec2f-a16c-4f6b-a713-fc8efefea75a",
+      "title": "4. Osztály Alpokalja Dunántúl",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 42,
+      "classified": 40,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 15,
+        "quiz": 25,
+        "section": 16
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "0d147ecd-5c5f-46e7-879f-7b74f843a136",
+      "title": "8 osztályos tananyag Savak és savmaradékok",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 42,
+      "classified": 40,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 15,
+        "quiz": 25,
+        "section": 24
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "41556a7d-2539-47e1-bfb4-e9833a925566",
+      "title": "8. osztály nyelvtan határozók",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 113,
+      "classified": 109,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 60,
+        "short_answer": 49,
+        "section": 17
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "6db199e7-815c-4929-9996-de196172ccf4",
+      "title": "3. osztályos matek űrkaland alapműveletek",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 166,
+      "classified": 150,
+      "duplicates": 1,
+      "kinds": {
+        "short_answer": 149,
+        "section": 2
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "83ceef73-70c4-4226-9870-3985753a1ace",
+      "title": "5. Osztály növények testfelépítése",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 206,
+      "classified": 200,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 200,
+        "section": 14
+      },
+      "keyedEstimate": 200
+    },
+    {
+      "source": "legacy",
+      "id": "d1cbfb26-577a-4681-a828-86831a5f9886",
+      "title": "8. Osztály Abigél",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 53,
+      "classified": 50,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 50,
+        "section": 19
+      },
+      "keyedEstimate": 50
+    },
+    {
+      "source": "legacy",
+      "id": "1d905a9f-0045-45c8-89d1-bef9365c345f",
+      "title": "4. osztály - Igekötők és igék",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 111,
+      "classified": 59,
+      "duplicates": 1,
+      "kinds": {
+        "quiz": 58,
+        "section": 10
+      },
+      "keyedEstimate": 59
+    },
+    {
+      "source": "legacy",
+      "id": "14bcedea-ed4e-4842-b594-0e09ec058efc",
+      "title": "5. osztály törtek Egyszerűsítése és bővítése",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 200,
+      "classified": 195,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 99,
+        "short_answer": 96,
+        "section": 11
+      },
+      "keyedEstimate": 99
+    },
+    {
+      "source": "legacy",
+      "id": "c6b4656c-c292-45ea-8471-39273802188b",
+      "title": "8. osztály - Bolyai Természettudományi Felkészítő",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 102,
+      "classified": 100,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 91,
+        "quiz_unkeyed": 9,
+        "section": 69
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "ba65a525-9330-42d5-a175-ef5ed7ee9252",
+      "title": "5. osztály - ĐURAĐ (GYÖRGY) BRANKOVIĆ",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 1,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 17
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "CGZZrsPlmLsZD_eog31OV",
+      "title": "Határozók A, Á - 8. osztályos nyelvtan",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 207,
+      "classified": 200,
+      "duplicates": 5,
+      "kinds": {
+        "short_answer": 100,
+        "quiz": 95,
+        "section": 19
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "p0zzBVSIV-xty-XWGB2ZC",
+      "title": "Programozási alapismeretek - GitHub Kezdőknek",
+      "classroom": 0,
+      "scripts": 0,
+      "scriptErrors": 0,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 25
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "tltJ7T26DZi1Yy_Xftv0D",
+      "title": "Programozási alapismeretek - Windows Fejlesztői Környezet",
+      "classroom": 0,
+      "scripts": 0,
+      "scriptErrors": 0,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 39
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "fiCtktjV2STlyXpEBDtTn",
+      "title": "3. osztály - Daily Routines - Napi Rutinok Angolul",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 206,
+      "classified": 202,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 105,
+        "quiz": 97,
+        "section": 13
+      },
+      "keyedEstimate": 97
+    },
+    {
+      "source": "legacy",
+      "id": "vkgBtZ7CbozDWwRVVQvGX",
+      "title": "A család és a nemzeti identitás - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 152,
+      "classified": 97,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 97,
+        "section": 30
+      },
+      "keyedEstimate": 97
+    },
+    {
+      "source": "legacy",
+      "id": "Wp_Ly5eQhePlDu8TQ85FM",
+      "title": "Az Ókori Kelet Civilizációi - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 99,
+      "classified": 96,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 96,
+        "section": 14
+      },
+      "keyedEstimate": 96
+    },
+    {
+      "source": "legacy",
+      "id": "02sEhHTX6yvjQgrgAkg_6",
+      "title": "5. osztály - Arany János: Családi kör - Interaktív Tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 99,
+      "classified": 97,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 97,
+        "section": 14
+      },
+      "keyedEstimate": 97
+    },
+    {
+      "source": "legacy",
+      "id": "WxCKg-Oss4ndgQmeH7gUB",
+      "title": "4. osztály - Halloween Poems - Angol Nyelv Lecke",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 299,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 120,
+        "section": 6
+      },
+      "keyedEstimate": 120
+    },
+    {
+      "source": "legacy",
+      "id": "3j1DnOnG1Lts-YPCic70R",
+      "title": "Programozási alapismeretek - VS Code & GitHub Fejlesztői Útmutató - Claude Code-dal",
+      "classroom": 0,
+      "scripts": 0,
+      "scriptErrors": 0,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 36
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "gcZE8I5cVw-U7L-ajAuPB",
+      "title": "3. osztály - Szorzás és maradékos osztás - Interaktív tananyag",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 200,
+      "classified": 198,
+      "duplicates": 1,
+      "kinds": {
+        "short_answer": 99,
+        "quiz": 98,
+        "section": 22
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "EdM2-2jaU6oVroGfRCcoL",
+      "title": "5. osztály - A mézelő méh - Interaktív tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 198,
+      "classified": 196,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 100,
+        "quiz": 96,
+        "section": 13
+      },
+      "keyedEstimate": 96
+    },
+    {
+      "source": "legacy",
+      "id": "lVFj6JdHWSCQSmY_xfPBE",
+      "title": "5. osztály - Hagyomány szerinti és egyszerűsítő írásmód",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 199,
+      "classified": 196,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 100,
+        "quiz": 96,
+        "section": 10
+      },
+      "keyedEstimate": 96
+    },
+    {
+      "source": "legacy",
+      "id": "kLYcLIze0rKZRPK86-lyS",
+      "title": "A testek elektromos állapota - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 195,
+      "classified": 192,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 95,
+        "quiz": 97,
+        "section": 15
+      },
+      "keyedEstimate": 97
+    },
+    {
+      "source": "legacy",
+      "id": "p4GQxbW0R3cEj9JOv2G6m",
+      "title": "Ókori Keleti Civilizációk 2 - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 102,
+      "classified": 99,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 99,
+        "section": 11
+      },
+      "keyedEstimate": 99
+    },
+    {
+      "source": "legacy",
+      "id": "vwXrkXLZkbpWd8R58KcIX",
+      "title": "5. osztály - Magyar Népmesék - Fehérlófia és Tündérszép Ilona",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 112,
+      "classified": 105,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 50,
+        "quiz": 55,
+        "section": 20
+      },
+      "keyedEstimate": 55
+    },
+    {
+      "source": "legacy",
+      "id": "57ba5c4b-9fd6-4bcb-b43a-c5adfc41623f",
+      "title": "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 204,
+      "classified": 200,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 100,
+        "quiz": 100,
+        "section": 5
+      },
+      "keyedEstimate": 100
+    },
+    {
+      "source": "legacy",
+      "id": "ca6c41d8-0a4c-4602-898d-c33afb1a3932",
+      "title": "8. osztályos Matematika - Szöveges Feladatok",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 124,
+      "classified": 95,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 95,
+        "section": 18
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "57a51632-018a-4b45-ab5f-413d87ee5ee3",
+      "title": "5. osztály - Magyar Népmesék: Fehérlófia és Tündérszép Ilona",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 204,
+      "classified": 200,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 100,
+        "quiz": 100,
+        "section": 5
+      },
+      "keyedEstimate": 100
+    },
+    {
+      "source": "legacy",
+      "id": "8d3fc600-4689-4bf9-a212-60c4b5c2295f",
+      "title": "Molekulák, ionok és vegyületek - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 104,
+      "classified": 100,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 50,
+        "quiz": 50,
+        "section": 18
+      },
+      "keyedEstimate": 50
+    },
+    {
+      "source": "legacy",
+      "id": "e3629394-f978-45a7-b8df-7285fb61ed7a",
+      "title": "Jobs - Foglalkozások 🎨 | 3. osztály Angol - Teljes Tananyag",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 264,
+      "classified": 260,
+      "duplicates": 55,
+      "kinds": {
+        "short_answer": 100,
+        "quiz": 105,
+        "section": 18
+      },
+      "keyedEstimate": 130
+    },
+    {
+      "source": "legacy",
+      "id": "6fe62692-7d0c-4fd2-9c71-318fd0e68fa5",
+      "title": "Peru / Life in Peru - 3. osztályos Angol Tananyag",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 202,
+      "classified": 195,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 98,
+        "quiz": 97,
+        "section": 19
+      },
+      "keyedEstimate": 97
+    },
+    {
+      "source": "legacy",
+      "id": "b73046b3-f681-43b9-ace6-b24b058ceebe",
+      "title": "5. osztály Angol - My Cousin Danny",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 82,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 50,
+        "quiz": 25,
+        "section": 12
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "2f7fd2f0-a963-4b2b-91cd-654c59464ea5",
+      "title": "Replit AI - Professzionális Fejlesztés",
+      "classroom": 0,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 21,
+      "classified": 20,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 20,
+        "section": 20
+      },
+      "keyedEstimate": 20
+    },
+    {
+      "source": "legacy",
+      "id": "3b26ab36-9765-4ab5-9bd6-b6c0ef0fcad8",
+      "title": "Modern Authentikációs Rendszerek",
+      "classroom": 0,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 21,
+      "classified": 20,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 20,
+        "section": 19
+      },
+      "keyedEstimate": 20
+    },
+    {
+      "source": "legacy",
+      "id": "93ef3230-c4ca-4364-ab01-a79d0d52a162",
+      "title": "Informatika - ChatGPT Használata Kezdőknek",
+      "classroom": 0,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 14,
+      "classified": 13,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 13,
+        "section": 25
+      },
+      "keyedEstimate": 13
+    },
+    {
+      "source": "legacy",
+      "id": "8c971f9e-5fc0-4911-be65-a29cad213dc4",
+      "title": "Informatika - ChatGPT 2 PRO Tananyag",
+      "classroom": 0,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 31,
+      "classified": 30,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 30,
+        "section": 31
+      },
+      "keyedEstimate": 30
+    },
+    {
+      "source": "legacy",
+      "id": "945c11c2-2024-4747-89a5-1c8cc5aacc0d",
+      "title": "ChatGPT 3 – Mester Tananyag | Professzionális AI Promptolás",
+      "classroom": 0,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 208,
+      "classified": 201,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 102,
+        "quiz": 99,
+        "section": 25
+      },
+      "keyedEstimate": 99
+    },
+    {
+      "source": "legacy",
+      "id": "fec9e07c-6993-44b2-99ad-e64589da2b0e",
+      "title": "Informatika - Replit Fiók Létrehozása",
+      "classroom": 0,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 21,
+      "classified": 20,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 20,
+        "section": 19
+      },
+      "keyedEstimate": 20
+    },
+    {
+      "source": "legacy",
+      "id": "00f45374-883b-4ff5-9346-bc9dac7dbd0b",
+      "title": "4. osztály - Írásbeli műveletek és szöveges feladatok",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 33,
+      "classified": 25,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 25,
+        "section": 12
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "f8ebcfc5-87db-48be-a16f-cd818d604eea",
+      "title": "Matematika - Közönséges és Vegyes Törtek (5. osztály) - Racing Edition",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 109,
+      "classified": 94,
+      "duplicates": 24,
+      "kinds": {
+        "quiz": 70,
+        "section": 21
+      },
+      "keyedEstimate": 94
+    },
+    {
+      "source": "legacy",
+      "id": "b3df99c2-8631-4e32-9c65-063afcc18e8e",
+      "title": "8. osztály - 🫁 Légzőrendszer - Interaktív Tananyag",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 45,
+      "classified": 43,
+      "duplicates": 17,
+      "kinds": {
+        "quiz": 26,
+        "section": 33
+      },
+      "keyedEstimate": 43
+    },
+    {
+      "source": "legacy",
+      "id": "4fc1a3c8-b888-4358-8119-1194d1a0a2a0",
+      "title": "🏔️ Dunántúli-középhegység - Földrajz 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 32,
+      "classified": 25,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 15,
+        "open_task": 10,
+        "section": 18
+      },
+      "keyedEstimate": 15
+    },
+    {
+      "source": "legacy",
+      "id": "57f1f035-8161-46c6-bd88-1e30fc1ee640",
+      "title": "Life in Peru - 3. osztályos Angol Tananyag",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 204,
+      "classified": 196,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 98,
+        "quiz": 98,
+        "section": 12
+      },
+      "keyedEstimate": 98
+    },
+    {
+      "source": "legacy",
+      "id": "da617ee3-1738-4c05-84b1-f69d6d30fa73",
+      "title": "Modern Magyar Líra | 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 103,
+      "classified": 95,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 95,
+        "section": 15
+      },
+      "keyedEstimate": 95
+    },
+    {
+      "source": "legacy",
+      "id": "e000275f-0ea7-4603-9209-23bc69bbf12e",
+      "title": "Have Got - Angol 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 33,
+      "classified": 25,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 25,
+        "section": 10
+      },
+      "keyedEstimate": 25
+    },
+    {
+      "source": "legacy",
+      "id": "1c39fbb6-5a10-4f00-9d4c-415e6f5f5fe5",
+      "title": "8. osztály - Fizika 8. - Elektromos áram",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 102,
+      "classified": 99,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 99,
+        "section": 29
+      },
+      "keyedEstimate": 99
+    },
+    {
+      "source": "legacy",
+      "id": "daf8cd1d-6822-4f49-a2e8-29afeb7b0502",
+      "title": "🏎️ Elválasztás és Betűrend Verseny - 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 130,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 12
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "f512f7f9-148f-4ac7-9076-fa9c36385132",
+      "title": "4. osztály - Polish Christmas - 4th Grade English",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 215,
+      "classified": 215,
+      "duplicates": 0,
+      "kinds": {
+        "vocab": 20,
+        "short_answer": 98,
+        "quiz": 97,
+        "section": 8
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "2eaadef7-8de9-4ae4-8de6-efa193e0de16",
+      "title": "8. osztály - Nyugat költői - Tananyag",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 125,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "section": 16
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "a26c14c0-e9e8-42a9-9cc5-c9e2294e9169",
+      "title": "I Built a Little Snowman - Angol 3. osztály",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 14
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "c7ef61d6-ca4f-4bd5-8057-12af768fc051",
+      "title": "Magyar Népzene - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 22
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "48d3a2a2-2591-4983-9b19-64847d29c50a",
+      "title": "4. osztály - 🎄✨ Christmas in Poland - 4th Grade English ✨🎄",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 141,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 20
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "56eb4480-71a1-4b39-8f77-9432c74e3604",
+      "title": "🖥️ Tömbök és Véletlen Számok - Digitális Kultúra 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 19
+      },
+      "keyedEstimate": 72
+    },
+    {
+      "source": "legacy",
+      "id": "35de9a61-652f-4eed-b07d-e78a6afb5c17",
+      "title": "3. osztály - 🏎️ Számoló Verseny - 1000-es számkör",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 12
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "10194d9e-c4f9-4c67-9abb-5f49464f3fcd",
+      "title": "🦋 Maradékos osztás és szorzás - 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 133,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 75,
+        "section": 17
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "ee0ac8cd-d1c4-47be-8050-ee6fa7784ea9",
+      "title": "🇫🇷 8. Osztályos Francia Témazáró",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 125,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 18
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "9896c34f-c9f6-4f2f-8efe-296461ceaeee",
+      "title": "8. Osztályos Matematika Témazáró | Interaktív Tananyag",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 187,
+      "classified": 175,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 100,
+        "quiz": 75,
+        "section": 23
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "2b4e9607-a548-4612-8c71-329ae09367cd",
+      "title": "5. osztályos kompetenciamérés felkészítő",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 132,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 14
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "430a770a-26dc-48f2-9b81-a68bed6656da",
+      "title": "5. Osztályos Komplex Kompetenciamérés Felkészítő",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 13
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "e379309a-2d2d-4678-af7e-088847aa3a0f",
+      "title": "Elektromosságtan - Fizika 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 135,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 16
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "b766e520-5176-4284-93ed-dd17336c421e",
+      "title": "🏔️ Északi-középhegység 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 130,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 19
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "5e61dd64-f1bb-4e33-bb4b-82c450496d97",
+      "title": "🫁 Légzőrendszer - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 126,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 19
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "bb12adc8-bece-4700-8237-52b463ad3844",
+      "title": "Egyszerű mondat elemzése – 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 16
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "ec4b3dcd-de74-4e91-9bcb-1b79ad018c98",
+      "title": "A kereszténység és az iszlám - Témazáró tananyag 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 128,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 12
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "2ae90d2b-ab77-401b-bd9e-65e2ed94b8a9",
+      "title": "🎵 Suno AI - Zenekészítés mesterséges intelligenciával",
+      "classroom": 0,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 126,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 11
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "b94ddfdc-61ca-41d9-b485-b5362dbd1ac7",
+      "title": "10-es átlépéses kivonás - 3. osztály",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 7
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "5b13de69-acd6-4f15-919a-d6d01a8cab34",
+      "title": "4. osztály - Who's vs Whose - Bilingual Interactive Lesson",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 204,
+      "classified": 197,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 99,
+        "quiz": 98,
+        "section": 4
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "c4067907-bd19-4f46-84b1-d87d62825d21",
+      "title": "Hossz mértékegységei - 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 131,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "section": 13
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "fa1bff1c-932b-4aec-b79f-93ff7dbe10c4",
+      "title": "8. osztály - Reakciótípusok - Kémia Kaland",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 126,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 22
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "e3ca72fc-7837-4315-a942-6ed22a3aad37",
+      "title": "3. Osztályos Angol Témazáró - Decemberi Felkészítő",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 128,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 19
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "8dbfb925-c7c3-4bf9-a56e-dfa3a51ebb2f",
+      "title": "8. osztály - Csokis Muffin Készítés - Kezdőknek",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 1,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 13
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "96725668-9f7b-4c38-bc66-9a331db7076f",
+      "title": "8. osztály - Anyagforgalom és Légzés - Interaktív Tananyag",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 128,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 21
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "9386e36c-3cc6-46f7-9d50-5e4ca4ce74c1",
+      "title": "3. osztály - Kivonás tízesátlépéssel - Autós Matek Kaland",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 11
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "225c9ec5-13f6-4b4b-876e-35f767a29d84",
+      "title": "⚽ Törtek - Focis matek 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 14
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "615c043f-6cbf-4376-9f29-a1a1e23cc12c",
+      "title": "🎄 3. Osztályos Angol Témazáró - Decemberi Felkészítő",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 128,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 18
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "72b51bad-1ad9-4b5a-bb4b-60985fcdf15f",
+      "title": "⚗️ Pitagorasz és a Koordináták Titkai - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 171,
+      "classified": 165,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 65,
+        "quiz": 100,
+        "section": 25
+      },
+      "keyedEstimate": 100
+    },
+    {
+      "source": "legacy",
+      "id": "0242c170-71a0-43ce-8bb0-8e2de0cdc4cf",
+      "title": "Tömbök, ciklusok, feltételek - 8. osztály | MATRIX",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 126,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 19
+      },
+      "keyedEstimate": 71
+    },
+    {
+      "source": "legacy",
+      "id": "14ede195-8bfb-4f85-86b5-8f6c7794d3e4",
+      "title": "Kivonás 10-es átlépéssel - 3. osztály",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "section": 10
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "08333651-2304-412a-ba12-4ee653330342",
+      "title": "There are - Focis tananyag 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 131,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "section": 16
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "df4e8be3-304e-4c5b-9ca2-e27cd3c2ef30",
+      "title": "Több fogyasztó az áramkörben | 8. osztály Fizika",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 131,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 75,
+        "section": 22
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "2511d97c-f71b-403c-a768-7bc1a3e4d5c6",
+      "title": "Az Alpok térsége: Ausztria és Svájc - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 119,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 74,
+        "section": 23
+      },
+      "keyedEstimate": 74
+    },
+    {
+      "source": "legacy",
+      "id": "02d9aecf-65cc-4b73-af57-6f1009211736",
+      "title": "Az Erdő - Környezetismeret 4. osztály 🦊",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 75,
+        "section": 29
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "614b4bd8-7f40-4ba0-8850-3e5b6438769f",
+      "title": "Az ókori Hellász - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 133,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 23
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "2454abf0-b849-43ee-8ee5-d2e9d5107c9b",
+      "title": "4. Osztály Angol - Interactive Learning",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 75,
+        "section": 21
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "52adc0dc-3fd7-4222-94d6-d4498bbf75c5",
+      "title": "Full Blast 1 - Angol 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 126,
+      "classified": 119,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 74,
+        "section": 35
+      },
+      "keyedEstimate": 74
+    },
+    {
+      "source": "legacy",
+      "id": "79a15f31-ca31-4552-bf87-64726336e7ca",
+      "title": "Az ókori Hellász II - 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 123,
+      "classified": 116,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 71,
+        "section": 11
+      },
+      "keyedEstimate": 71
+    },
+    {
+      "source": "legacy",
+      "id": "f95ed828-8f6b-4aa8-9b94-70daf710af68",
+      "title": "3. osztály - 🎮 Matek Küldetés - Összeadás és Kivonás",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 9,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 10
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "15d4b54d-a256-4d6a-b42f-fa8e1e28c8f9",
+      "title": "3. osztály - 🎮 Matek Aréna - 10-es Átlépés Mester",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 108,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 7
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "7f9083e5-b1f9-4fe0-8c94-376ed61d228c",
+      "title": "A főnév - Magyar nyelvtan 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 131,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 75,
+        "section": 15
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "a3332443-5452-47ca-9a17-a9a51b9247cd",
+      "title": "3. osztály - 🏎️ Matek Verseny - Turbo Számolás",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 61,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 7
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "7954fc51-883e-4fdb-a069-a58ff3f1fad7",
+      "title": "8. osztály - Hozzárendelések",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 118,
+      "classified": 116,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 71,
+        "section": 19
+      },
+      "keyedEstimate": 71
+    },
+    {
+      "source": "legacy",
+      "id": "ad44bdfd-f5e7-44ba-aab1-743d4fd3c756",
+      "title": "3. osztály - 🥷 Ninja Matek Dojo - Kivonás Mester",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 58,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 7
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "dd9410c6-b249-4cfa-a094-3178d502508e",
+      "title": "4. osztály - 🦋 A mező és rét csodálatos világa 🌸",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 119,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 74,
+        "section": 28
+      },
+      "keyedEstimate": 74
+    },
+    {
+      "source": "legacy",
+      "id": "f64f5d9c-6760-4af6-b6c0-96969e1df935",
+      "title": "8. osztály - 🎸 Gitár Alapok - Balkezes Útmutató",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 29,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 21
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "e83e84c6-ab70-4945-9dbb-2fda3c2b85d2",
+      "title": "3. osztály - 🚀 Galaktikus Matek Ultra - Vegyes Kivonás",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 8,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 6
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "370b369c-55ae-4cc0-bf10-3e61c785c482",
+      "title": "Űrmértékek - 4. osztály - Matematika",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 135,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 75,
+        "section": 14
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "35636417-c4ea-4121-ae6b-cfe92a861e05",
+      "title": "3. osztály - 🎮 Írásbeli Összeadás Mester",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 9,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 8
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "9bbf97b9-e04a-4d3e-8f0e-50104c51f3ee",
+      "title": "🎮 4. Osztály - Osztás Mester",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 8,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 8
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "622fd794-8fa7-40cc-bfc6-f8ce6c9570c8",
+      "title": "4. osztály - 📚 Írásbeli Osztás Mestere - Teljes Levezetés",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 9,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 15
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "fceb8af8-91bc-4e62-9b4f-cb3bd55f8aa5",
+      "title": "4. osztály - 🍎 Osztás Varázslat - Tanuljunk együtt!",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 9,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 13
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "ef7617cb-f00a-4eda-92ab-3d62003e180f",
+      "title": "4. osztály - 🌊 A víz, vízpart – Élet a vízben 🐸",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 132,
+      "classified": 119,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 32,
+        "quiz": 87,
+        "section": 22
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "333a9d72-7a0c-4f75-83fd-421689354800",
+      "title": "3. osztály - ⚡ Kivonás Mester - 1000-es számkör",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 8,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 5
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "3264c955-ab3b-4257-b368-a42ae79125ab",
+      "title": "3. osztály - 🎯 Becslés Mester - 1000-es számkör",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 8,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 7
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "af0d6508-fbb6-46ed-a149-d6e46efed5ed",
+      "title": "3. osztály - 🎬 Bandi bácsi Matek Órája",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 22,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 2
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "471a8929-9b7f-4b10-9b38-13a37d018a6a",
+      "title": "4. osztály angol present_continuous",
+      "classroom": 4,
+      "scripts": 3,
+      "scriptErrors": 0,
+      "literalObjects": 132,
+      "classified": 124,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 49,
+        "quiz": 75,
+        "section": 17
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "79175e69-4a3a-4bb1-a24c-f5b9372a5ea3",
+      "title": "Kert és Park – 4. osztály Környezetismeret",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 45,
+        "quiz": 75,
+        "section": 7
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "b5923814-3411-4c1e-988f-843908918a24",
+      "title": "There are – Angol 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 126,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 17
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "baf280be-54ea-4707-84e4-048b9f089faa",
+      "title": "English Grammar with Pictures - 4th Grade",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 253,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "section": 5
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "a6e17518-e60f-433a-b793-96fab6500c52",
+      "title": "4. osztály - Where I Live - Module 4 - English Tananyag",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 198,
+      "classified": 190,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "vocab": 70,
+        "section": 27
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "36ee76f3-2f29-4433-9343-aa41999eff6a",
+      "title": "🎮 Főnevek és Tulajdonnevek – 3. osztály",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 137,
+      "classified": 118,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 73,
+        "section": 4
+      },
+      "keyedEstimate": 73
+    },
+    {
+      "source": "legacy",
+      "id": "9370eb25-8496-4641-9782-d9c452bccd60",
+      "title": "4. osztály - Testrészek, érzékszervek",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 138,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 20
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "64163549-aaf6-4c55-bff7-2b20026d4624",
+      "title": "5. osztály - Az égés tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 140,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 14
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "2d118899-28af-4f28-9e67-88acc4669fe5",
+      "title": "🌸 Magyar Nyelvtan – 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 132,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 46
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "a185344e-c083-4a74-9f56-c3ac66d64dd1",
+      "title": "4. osztály - 🌸 Helyesírás – Kiejtéstől eltérően írjuk",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 132,
+      "classified": 121,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 76,
+        "section": 23
+      },
+      "keyedEstimate": 76
+    },
+    {
+      "source": "legacy",
+      "id": "6307b5ed-2aae-4694-b140-bad3e44e60c9",
+      "title": "5. osztály - Honfoglalás ötödik osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 128,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 36
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "26a62a74-ddab-4609-ba05-6d045fe877f2",
+      "title": "3. osztály - RÖVID VEGETABLES & FRUITS",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 160,
+      "classified": 153,
+      "duplicates": 0,
+      "kinds": {
+        "vocab": 33,
+        "open_task": 45,
+        "quiz": 75,
+        "section": 1
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "40309069-2cfe-467d-aad8-c6ca3737c60d",
+      "title": "4. osztály - Bővített Az emberi test – Testrészek, érzékszervek, mozgás szervrendszere",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 181,
+      "classified": 163,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 64,
+        "quiz": 99,
+        "section": 25
+      },
+      "keyedEstimate": 99
+    },
+    {
+      "source": "legacy",
+      "id": "d9f323b5-e4b6-4ddf-9752-18796f5a946f",
+      "title": "3. osztály - VEGETABLES & FRUITS",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 160,
+      "classified": 153,
+      "duplicates": 0,
+      "kinds": {
+        "vocab": 33,
+        "open_task": 45,
+        "quiz": 75,
+        "section": 1
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "6bd4408c-0cb7-498f-a4d7-5454df7c2a2f",
+      "title": "4. osztály - Matematika, Alakzatok Tananyag.",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 130,
+      "classified": 79,
+      "duplicates": 0,
+      "kinds": {
+        "short_answer": 4,
+        "quiz": 75,
+        "section": 42
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "59f1ce9a-92e5-4908-82fa-1027d82583bf",
+      "title": "4. osztály - Tulajdonságot kifejező szavak",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "open_task": 45,
+        "section": 10
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "b89e3bfc-0d63-4c87-8844-2039785210ce",
+      "title": "Csehország · Lengyelország · Románia – Földrajz 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 69,
+      "classified": 45,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "section": 5
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "22974d3e-8930-463f-8410-31a6f9f539fe",
+      "title": "5. osztály - My daily routine tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 121,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 76,
+        "section": 2
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "a665bb96-c2ab-4cf8-bcc6-64d6f8a66432",
+      "title": "Felszín és Térfogat – 5. osztály",
+      "classroom": 5,
+      "scripts": 3,
+      "scriptErrors": 0,
+      "literalObjects": 129,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 16
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "34cba9d2-78d9-42cd-9ddb-02a3c5ffd472",
+      "title": "Geometriai Transzformációk – 8. osztály",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 146,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 29
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "31090536-ad32-4883-98b0-1eb97712677a",
+      "title": "Összetett szavak – 8. osztály | Magyar Nyelv",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 137,
+      "classified": 116,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 71,
+        "section": 23
+      },
+      "keyedEstimate": 71
+    },
+    {
+      "source": "legacy",
+      "id": "e75c3d52-2562-4f7a-b22d-6e432d20432e",
+      "title": "4. osztály - A légzés szervrendszere",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 133,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "section": 4
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "55a5f92c-7faf-4405-a113-dd43c795b8e9",
+      "title": "4. osztály - A táplálkozás és légzés szervrendszere",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 133,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 27
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "0f9a96d4-280d-434c-aa2e-5b94a4007742",
+      "title": "5. osztály - Környezetünk anyagai - 5. osztály tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 134,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 32
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "a06b350d-b10d-41ea-b8b4-8653a25a760b",
+      "title": "5. osztály - Árpád-kori királyok: I. László, Könyves Kálmán, II. András",
+      "classroom": 5,
+      "scripts": 2,
+      "scriptErrors": 0,
+      "literalObjects": 175,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 25
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "d2051adf-3489-40f1-996d-f4c188b06d34",
+      "title": "5. osztály - A Pál utcai fiúk - Interaktív tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 136,
+      "classified": 75,
+      "duplicates": 0,
+      "kinds": {
+        "quiz": 75,
+        "section": 29
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "1370a217-b5a1-4fed-9022-d54be147c85f",
+      "title": "A számot, mennyiséget kifejező szavak – 4. osztály",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 137,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 38
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "50786309-7ca8-48a0-8028-280ecd2a634e",
+      "title": "3. osztály - ⚡ CYBER KIVONÁS – 100 küldetés",
+      "classroom": 3,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 2,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 2
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "0f7311f5-a612-42a4-bc32-f9d30425840d",
+      "title": "Nagy-Britannia és Franciaország – 8. osztályos földrajz",
+      "classroom": 8,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 131,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 27
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "bdf4ab7c-579c-4206-a6de-5890db774701",
+      "title": "Sorozatok és koordináta-rendszer | 5. osztály - Cyber Mission",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 140,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 34
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "6f3541f9-9b75-42e6-bfb7-9722311da03d",
+      "title": "4. osztály - 💖 Az emberi test - Egészségünk 💖",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 133,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 40
+      },
+      "keyedEstimate": 75
+    },
+    {
+      "source": "legacy",
+      "id": "31d692de-ea60-4f03-ae77-7e727c567d47",
+      "title": "5. osztály - ⚖️ A tömeg mérése, mértékegységei – Interaktív Tananyag",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 127,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 16
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "695cc63c-5a15-4c05-a61c-0fe102e88b99",
+      "title": "26. Ismerj meg, fogadj el! - 4. osztály természetismeret",
+      "classroom": 4,
+      "scripts": 2,
+      "scriptErrors": 0,
+      "literalObjects": 136,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 33
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "06c25019-9c71-4e62-b3ff-85c5092f975d",
+      "title": "4. osztály - 25. Betegség, gyógyulás - 4. osztály tananyag",
+      "classroom": 4,
+      "scripts": 2,
+      "scriptErrors": 0,
+      "literalObjects": 125,
+      "classified": 120,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 75,
+        "section": 22
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "35f47c72-af3a-4019-85ef-2baa46496893",
+      "title": "4. osztály - Tört részek és mértékek.",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 33,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 18
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "91c07347-e02a-4a5e-ab47-2f0416576ae5",
+      "title": "4. osztály - Angol nyelvtan - Countable & Uncountable nouns",
+      "classroom": 4,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 50,
+      "classified": 40,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 40,
+        "section": 25
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "378f394a-f124-4573-8117-773790b62e0a",
+      "title": "5. osztály - A számírás fejlődése - Római számok",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 167,
+      "classified": 158,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 43,
+        "quiz": 115,
+        "section": 33
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "0a2ed750-6d59-45e1-898c-4ff969ea5c90",
+      "title": "Számolás római számokkal - 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 165,
+      "classified": 157,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 112,
+        "section": 23
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "af8ef8c4-41b8-466c-8acc-d008551c00de",
+      "title": "Angol gyakorlás",
+      "classroom": 4,
+      "scripts": 2,
+      "scriptErrors": 1,
+      "literalObjects": 15,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 13
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "b1ba2127-76e3-48fe-bde3-797179f77d9f",
+      "title": "Odysseus",
+      "classroom": 5,
+      "scripts": 2,
+      "scriptErrors": 1,
+      "literalObjects": 10,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 9
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "496282b7-371f-4be8-b16e-d8e08aa00b98",
+      "title": "A virágos növények - 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 163,
+      "classified": 154,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 43,
+        "quiz": 111,
+        "section": 28
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "414aa52f-1711-4a19-893f-1e2e4b609961",
+      "title": "Műveleti sorrend - 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 142,
+      "classified": 135,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 45,
+        "quiz": 90,
+        "section": 21
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "36070bc6-6113-4c2c-9dbc-89931cf30741",
+      "title": "Melyik szervét fogyasztjuk zöldségféléinknek? - 5. osztály",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 134,
+      "classified": 117,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 42,
+        "quiz": 75,
+        "section": 33
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "551bb3f7-2713-49dc-b1f2-61f3a1faf553",
+      "title": "természetismeret — 5. osztály",
+      "classroom": 5,
+      "scripts": 2,
+      "scriptErrors": 1,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 11
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "345a84d9-9d3a-4f4c-9e7b-622e53a7d01d",
+      "title": "Present Simple és az időhasználat - 6. osztály angol",
+      "classroom": 6,
+      "scripts": 1,
+      "scriptErrors": 0,
+      "literalObjects": 138,
+      "classified": 119,
+      "duplicates": 0,
+      "kinds": {
+        "open_task": 44,
+        "quiz": 75,
+        "section": 29
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "537ea443-ab98-4d86-9260-98acc95fc765",
+      "title": "A víz körforgása a természetben",
+      "classroom": 5,
+      "scripts": 1,
+      "scriptErrors": 1,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 9
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "legacy",
+      "id": "22a38c0a-e43c-4cbf-b05c-39b694caf9d9",
+      "title": "Első károly magyar király",
+      "classroom": 6,
+      "scripts": 1,
+      "scriptErrors": 1,
+      "literalObjects": 0,
+      "classified": 0,
+      "duplicates": 0,
+      "kinds": {
+        "section": 9
+      },
+      "keyedEstimate": 0
+    },
+    {
+      "source": "fusion",
+      "id": "2dc12886-d023-4243-953d-ddcd29aa5df9",
+      "title": "Kristóf Matek – Összefoglaló lecke",
+      "classroom": 4,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 6
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "fa50cc1b-24f0-4a25-8ca1-0a7eb08c352f",
+      "title": "A Föld kering a Nap körül",
+      "classroom": 4,
+      "subject": "Természetismeret",
+      "kinds": {
+        "section": 1,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 11
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "4faf19b6-2a77-4f27-8e10-7c5704acadee",
+      "title": "A talaj kialakulása, összetevői és termékenysége",
+      "classroom": 5,
+      "subject": "Természetismeret",
+      "kinds": {
+        "section": 4,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 11
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "9d982753-5be7-4033-91cd-7fa6e245cd7b",
+      "title": "A talaj: kialakulása, összetétele és védelme",
+      "classroom": 5,
+      "subject": "Természetismeret",
+      "kinds": {
+        "section": 7,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 14
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "57d894d9-ed9b-428b-ab59-0e42a6e969ed",
+      "title": "Család és nemzeti identitás",
+      "classroom": 7,
+      "subject": "Történelem és társadalmi ismeretek",
+      "kinds": {
+        "section": 12,
+        "quiz": 112,
+        "open_task": 57,
+        "method": 30
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "73bcdab7-6109-4dd9-acd9-c04d117e9826",
+      "title": "Műveleti sorrend tanulása",
+      "classroom": 5,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 9,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 19
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "a82fb9d8-e518-4868-b51d-64c5d0f777c2",
+      "title": "Zöldségek növényi szervei és fejlődése",
+      "classroom": 5,
+      "subject": "Természetismeret",
+      "kinds": {
+        "section": 12,
+        "quiz": 118,
+        "open_task": 60,
+        "method": 30
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "dcce4dbe-cb41-41b3-923e-ea034f8fd4b5",
+      "title": "A talaj",
+      "classroom": 5,
+      "subject": "Természetismeret",
+      "kinds": {
+        "section": 12,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 24
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "01638ae9-41bd-4658-ba31-46f0ab9369e5",
+      "title": "Az időszámítás és az emberiség kezdetei",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 6,
+        "quiz": 80,
+        "open_task": 48,
+        "method": 14
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "d2043ac4-ef09-4de4-bac6-46c5e7ff6bbb",
+      "title": "6. évfolyam matematika feladatlap – megoldási stratégiák",
+      "classroom": 6,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 12,
+        "quiz": 122,
+        "open_task": 65,
+        "method": 31
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "2c0825a5-4762-4331-a41f-096bb47ee6d3",
+      "title": "6. osztályos matematika gyakorló feladatlap",
+      "classroom": 6,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 12,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 27
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "38b1238d-f41f-42e5-9784-4bf60f73af94",
+      "title": "6. osztályos matematika gyakorló feladatlap",
+      "classroom": 6,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 12,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 24
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "fb9bb986-d5bb-4f02-bcd9-5bc495befdde",
+      "title": "Törtek, százalék, arányosság, szögek, téglalap, átlag és egész számok",
+      "classroom": 6,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 12,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 24
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "91b53ef1-8230-459f-8b40-171b8fae76b6",
+      "title": "Törtek, százalékok, sebesség, arányok és számolási stratégiák",
+      "classroom": 6,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 7,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 14
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "716fd49c-1b34-477a-a4b8-bb5382e2e364",
+      "title": "Oszthatóság 3-mal és 9-cel",
+      "classroom": 6,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 12,
+        "quiz": 84,
+        "open_task": 45,
+        "method": 26
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "d63d15d1-c060-453d-b133-90235d7a80c3",
+      "title": "Hunyadi János, a kormányzó",
+      "classroom": 6,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 12,
+        "quiz": 75,
+        "open_task": 45,
+        "method": 24
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "bdcddf67-b234-4d24-b444-e241c2705780",
+      "title": "Mezopotámia",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 12,
+        "quiz": 126,
+        "open_task": 64,
+        "method": 28
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "522ec56f-ae3c-47db-bf55-23127a0a7981",
+      "title": "Az ókori Egyiptom",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 12,
+        "quiz": 80,
+        "open_task": 48,
+        "method": 26
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "5a91d36f-f2fe-4d8a-be7e-cb7767a2a759",
+      "title": "Az ókori Egyiptom",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 11,
+        "quiz": 79,
+        "open_task": 46,
+        "method": 22
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "7c6c5216-90f5-4b54-97e4-d02733fed9f0",
+      "title": "Az ókori Egyiptom",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 12,
+        "quiz": 80,
+        "open_task": 48,
+        "method": 26
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "68e0ae13-0545-46c3-aa4f-835d26b64110",
+      "title": "Az ókori Egyiptom",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 11,
+        "quiz": 80,
+        "open_task": 48,
+        "method": 22
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "e9b0d96f-e246-419e-87fa-2cf0d1653091",
+      "title": "Az ókori Egyiptom",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 12,
+        "quiz": 80,
+        "open_task": 48,
+        "method": 24
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "ba8669b2-057a-45e6-8ec1-085539b7a25e",
+      "title": "Az ókori Egyiptom",
+      "classroom": 5,
+      "subject": "Történelem",
+      "kinds": {
+        "section": 12,
+        "quiz": 98,
+        "open_task": 49,
+        "method": 26
+      }
+    },
+    {
+      "source": "fusion",
+      "id": "0414c274-8c43-44f9-9639-d1c151cc680a",
+      "title": "Negatív számok kivonása",
+      "classroom": 7,
+      "subject": "Matematika",
+      "kinds": {
+        "section": 10,
+        "quiz": 77,
+        "open_task": 46,
+        "method": 22
+      }
+    }
+  ]
+}
