@@ -46,3 +46,11 @@ test("skill-konvenció: az OCR keretet és sorrendet jelöl, bizonytalan szóná
   assert.match(ROLE_SKILLS.ocr, /„⟦\?⟧” jellel/);
   assert.match(ROLE_SKILLS.extract, /„⟦\?⟧” jelű rész BIZONYTALAN olvasat/);
 });
+
+test("mért (S11 OCR-mérés): ha a döntő olvasatot a program elveti, az első olvasat megtartásakor is jelölt az érdemi eltérés", async () => {
+  const file = { name: "fuzet.jpg", kind: "image", content: "data:image/jpeg;base64,AA" } as ExtractorFile;
+  const rejected = dualReadOcr(async () => "Előkelők: papok és határak", async () => "Előkelők: papok és katonák", async () => "Teljesen más szöveg a vitán kívül is");
+  assert.match(await rejected(file), /határak⟦\?⟧/);
+  const failing = dualReadOcr(async () => "Előkelők: papok és határak", async () => "Előkelők: papok és katonák", async () => { throw new Error("időtúllépés"); });
+  assert.match(await failing(file), /határak⟦\?⟧/);
+});

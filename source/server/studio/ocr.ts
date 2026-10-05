@@ -244,7 +244,9 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasás hibázott (${error instanceof Error ? error.message : String(error)}) — az első olvasat marad.`);
     }
     degradedFiles.add(file);
-    return a.value;
+    // Spec 2026-10-05-s11 (mérve: a döntő olvasat elvetése után a vita nyoma elveszett — „Kesia, Föld - Felt.”, „határak” jel nélkül):
+    // az első olvasat megtartásakor is jelölt az érdemi eltérés.
+    return markUnresolvedDisputes(a.value, disputes);
   };
   return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
 }
