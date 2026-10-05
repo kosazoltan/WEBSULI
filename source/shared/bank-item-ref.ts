@@ -22,6 +22,19 @@ export function bankItemPath(ref: BankItemRef): string {
   return `experience.${ref.bank}[${ref.index}]`;
 }
 
+/** Spec 2026-10-05-s9 (S9/6): a tévhit-lista elemére mutató útvonal (`misconceptions[1]`, `misconceptions.1`, al-útvonallal is). */
+const MISCONCEPTION_PATH = /^misconceptions(?:\[(\d+)\]|\.(\d+))(?:[.[].*)?$/;
+export function misconceptionRef(path: string | null | undefined): number | null {
+  if (typeof path !== "string") return null;
+  const m = path.match(MISCONCEPTION_PATH);
+  if (!m) return null;
+  const index = Number(m[1] ?? m[2]);
+  return Number.isSafeInteger(index) ? index : null;
+}
+export function misconceptionPath(index: number): string {
+  return `misconceptions[${index}]`;
+}
+
 /**
  * Spec 2026-09-29-limit-check-kivetel (1. döntés): a lecke egy blokkjára mutató útvonal (`sections[10].blocks[3]`,
  * `sections.10.blocks.3`, al-útvonallal is). Hogy a blokk `check`-e, a hívó dönti el a leckéből.

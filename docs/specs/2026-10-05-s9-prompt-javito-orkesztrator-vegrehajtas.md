@@ -118,3 +118,10 @@ Mért (job c1f9d12a): a lektor-jegyzet útvonala `tasks[6]`, de a kötött üzen
 tétel már helyes (a modellek jogosan adták vissza változatlanul), a valódi hiba a jelzés nélküli tasks[28]-ban.
 Szabály: ha a kötött „Mi hamis:” mező MÁS tételt nevez meg, a jelzett tétel változatlanul a független bank-ellenőr elé kerül (csak
 hibátlan ítéletnél szűnik meg a jelzése, különben javító út), a megnevezett tétel javító utat kap. Szabad szöveg nem számít.
+
+## S9/6 — tévhit-lista: folt + kivétel a körlimiten (tulajdonosi döntés 2026-10-05, az 5. élő futás után)
+Mért (job b3a7ecad): a `misconceptions[1]` ténybeli lektori blokkolója a körlimitig maradt — a célzott (fejezet-folt) javítás a
+tévhit-listát nem érinthette (az orkesztrátor diagnózisa: „a sections-en kívüli blokkolókat … nem érintette”), a limit-ág pedig a
+`misconceptions[i]` útvonalat nem ismerte → megállás. Szabály: (1) a célzott folt `misconceptions` tömböt (a teljes javított listát) is
+hozhat, a szerző erre utasítást kap; (2) a körlimiten a tévhit-elemre mutató blokkoló KIVEHETŐ (a „Gyakori hibák” kártya kisebb lesz,
+a tanítás nem sérül) — ugyanúgy, mint a hibás banktétel; a 7.4 végkapu a kivett elemre mutató blokkolót megoldottnak veszi.

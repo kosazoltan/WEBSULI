@@ -1,5 +1,5 @@
 import type { Lesson } from "../../shared/lesson-schema";
-import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef } from "../../shared/bank-item-ref";
+import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, misconceptionPath, misconceptionRef } from "../../shared/bank-item-ref";
 import { applyLektorConvergence, classifyNotes, type LektorNote, type RawNote } from "./lektor";
 import type { ChoiceFlag } from "./bank-verifier";
 import { computeCoverage, type CoverageGateResult, type MapConcept } from "./coverage";
@@ -54,6 +54,9 @@ export function splitLimitBlockers(lesson: Lesson | undefined, blocking: LektorN
 export function removablePath(lesson: Lesson, blockPath: string | null | undefined): string | null {
   const bank = bankItemRef(blockPath);
   if (bank) return lesson.experience && bank.index < lesson.experience[bank.bank].length ? bankItemPath(bank) : null;
+  // Spec 2026-10-05-s9 (S9/6): a tévhit-lista eleme is kivehető (a „Gyakori hibák” kártya kisebb lesz, a tanítás nem sérül).
+  const misconception = misconceptionRef(blockPath);
+  if (misconception !== null) return misconception < lesson.misconceptions.length ? misconceptionPath(misconception) : null;
   const ref = checkBlockRef(blockPath);
   const kind = ref ? lesson.sections[ref.section]?.blocks[ref.block]?.kind : undefined;
   return ref && (kind === "check" || kind === "animate") ? checkBlockPath(ref) : null;

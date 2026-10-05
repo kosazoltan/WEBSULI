@@ -85,12 +85,12 @@ import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBank
 import { roleSkillBlock, roleSkillVersion, skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { supportSkillVersion, withSupportSkill } from "./support-skills";
 import { FIGURE_CHECK_VERSION, figureCheck } from "./figure-check";
-import { targetedRepairSections, parseSectionPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
+import { targetedRepairSections, parseSectionPatch, parseMisconceptionsPatch, mergeSectionPatches, type GateFeedbackLike } from "./section-patch";
 import { canReuseLessonVisuals } from "./visual-reuse";
 import { workflowPhase, workflowFence, workflowSkillVersion, workflowFinding, workflowValidationFailure, redactWorkflowError, workflowPinnedPrompt, workflowNotePromptHash } from "../workflows/engine";
 import { lektorSkillCodes } from "../workflows/learning";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
-import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, type BankItemRef } from "../../shared/bank-item-ref";
+import { bankItemPath, bankItemRef, checkBlockPath, checkBlockRef, misconceptionPath, misconceptionRef, type BankItemRef } from "../../shared/bank-item-ref";
 
 /**
  * LS-2c — the runner that finally pays model calls for pedagogue/author/lektor.
@@ -921,7 +921,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         // Review #162: a folt MINDEN kijelölt fejezetet tartalmazza — az üres vagy részleges folt a javítást csendben elhagyná.
         const missing = authorRepair!.targetSections.filter((i) => !patch.has(i));
         if (missing.length) return { ok: false, reason: `A folt nem tartalmazza a kijelölt fejezet(ek)et: ${missing.map((i) => i + 1).join(", ")}. — minden kijelölt fejezetet vissza kell adni.` };
-        try { return { ok: true, json: mergeSectionPatches(authorRepair!.previous, patch, authorRepair!.targetSections) }; }
+        try { return { ok: true, json: mergeSectionPatches(authorRepair!.previous, patch, authorRepair!.targetSections, parseMisconceptionsPatch(candidate)) }; }
         catch (error) { return { ok: false, reason: `A célzott javítás nem egyesíthető: ${error instanceof Error ? error.message : String(error)}` }; }
       };
       // Spec 2026-10-05-s9 (tulajdonosi tervezés): a szerző VÉGSŐ validálási bukása (séma a javító kör után, ismeretlen fogalom-
@@ -1474,11 +1474,19 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
   // Spec 2026-09-29-limit-banktetel-kivetel: normalizált hivatkozás (zárójeles, pontozott, al-útvonal), a tasks bank is.
   const byBank: Record<BankItemRef["bank"], Set<number>> = { quiz: new Set(), methods: new Set(), tasks: new Set() };
   const checkBlocks = new Map<number, Set<number>>();
+  const removedMisconceptions = new Set<number>();
   const removed = new Map<string, string>();
   const blocking: string[] = [];
   for (const [path, message] of flags) {
     const ref = bankItemRef(path);
     const check = checkBlockRef(path);
+    const misconception = misconceptionRef(path);
+    // Spec 2026-10-05-s9 (S9/6): a körlimiten maradt ténybeli hiba a tévhit-lista elemén → az elem kikerül (mint a hibás banktétel).
+    if (misconception !== null && limitOrigin.has(path) && misconception < lesson.misconceptions.length) {
+      removedMisconceptions.add(misconception);
+      removed.set(misconceptionPath(misconception), message);
+      continue;
+    }
     if (ref && lesson.experience && ref.index < lesson.experience[ref.bank].length) {
       byBank[ref.bank].add(ref.index);
       removed.set(bankItemPath(ref), message);
@@ -1495,6 +1503,7 @@ export function resolveChoiceGate(lesson: Lesson, rawFlags: unknown): { lesson: 
   if (blocking.length) return { error: `Egyválasztós hiba maradt a leckében, nem publikálható (pontosan egy helyes opció kell): ${blocking.join("; ")}` };
   const experience = lesson.experience!;
   let reduced: Lesson = { ...lesson,
+    misconceptions: removedMisconceptions.size ? lesson.misconceptions.filter((_, i) => !removedMisconceptions.has(i)) : lesson.misconceptions,
     sections: checkBlocks.size
       ? lesson.sections.map((section, i) => (checkBlocks.has(i) ? { ...section, blocks: section.blocks.filter((_, j) => !checkBlocks.get(i)!.has(j)) } : section))
       : lesson.sections,
@@ -1837,6 +1846,9 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
       if (!note.blocking) return false;
       const ref = bankItemRef(note.blockPath);
       if (ref) return !removedItems.has(bankItemPath(ref)) && !repairedItems.has(bankItemPath(ref));
+      // S9/6: a kivett tévhit-elemre mutató blokkoló megoldott.
+      const misconception = misconceptionRef(note.blockPath);
+      if (misconception !== null) return !removedItems.has(misconceptionPath(misconception));
       const check = checkBlockRef(note.blockPath);
       return !check || !removedItems.has(checkBlockPath(check));
     };
