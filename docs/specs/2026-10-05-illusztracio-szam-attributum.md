@@ -50,6 +50,13 @@ A renderer nem számol y-t; a hibás érték a modell kimenetéből jön.
   - `font-size`: hossz vagy CSS kulcsszó (`xx-small … xx-large`, `smaller`, `larger`);
   - `offset`, `opacity`, `fill-opacity`, `stroke-opacity`, `stop-opacity`: szám vagy százalék.
 - `width`/`height` a gyökéren eleve törlődik — ott nincs mit jelenteni.
+- **Pontosítás (review #198):**
+  - A gyökér `<svg>` elem többi ellenőrzött attribútuma (pl. `x`, `y`) is mérődik — `<svg x="+">` elmarad és jelentve
+    `svg.x="+"`; csak a gyökér `width`/`height`-je kimarad a mérésből (úgyis törlődik).
+  - Nem-negatív értéket váró attribútumok (SVG 2: negatív érték hiba): `width height r rx ry stroke-width markerWidth
+    markerHeight font-size` — negatív érték (pl. `r="-10"`, `width="-1"`) érvénytelen: elhagyva, `attrFixes`-ben jelentve,
+    így a kapu is problémának veszi. Helyzet-/eltolás-attribútumok (`x y x1 y1 x2 y2 cx cy fx fy dx dy refX refY`)
+    továbbra is lehetnek negatívak.
 - Idempotencia: `sanitize(sanitize(x)).svg === sanitize(x).svg`, a második körben `attrFixes` üres.
 
 ## Edge case-ek
@@ -57,11 +64,16 @@ A renderer nem számol y-t; a hibás érték a modell kimenetéből jön.
 - `y="+"`, `y=""`, `y="NaN"`, `width="auto"` → elhagyva, jelentve.
 - `dy="10%"`, `x="10 20 30"` (text), `y="-1.5e2"`, `font-size="large"`, `offset="50%"` → érvényes.
 - `x="10 20"` `rect`-en → érvénytelen (lista csak text/tspan esetén).
+- `<svg x="+">` (gyökér) → elhagyva, `svg.x="+"` jelentve (review #198).
+- `r="-10"`, `width="-1"`, `rx="-2"`, `stroke-width="-1"`, `font-size="-12"` → elhagyva, jelentve; `r="+5"`, `rx="0"` érvényes;
+  `x="-5"`, `cx="-1"`, `dy="-1em"` érvényes (review #198).
 
 ## Elfogadás (EARS)
 
 - HA a modell SVG-jében egy ellenőrzött attribútum értéke nem felel meg a nyelvtannak, AKKOR a tisztító
   kimenetéből az attribútum hiányzik, és az `attrFixes` tartalmazza `elem.attr="érték"` formában.
+- HA a gyökér `<svg>` egy ellenőrzött attribútuma (a `width`/`height` kivételével) érvénytelen, VAGY egy nem-negatív
+  attribútum értéke negatív, AKKOR az attribútum hiányzik a kimenetből, és az `attrFixes` jelenti (review #198).
 - HA `attrFixes` nem üres, AKKOR `visualParamProblems("illustration", …)` legalább egy problémát ad.
 - AMIKOR a Mezopotámia-lecke a javított klienssel (helyi build, éles API) jelenik meg, a böngésző konzoljában
   nincs `Expected length` hiba, és az 1. fejezet illusztrációja látszik.

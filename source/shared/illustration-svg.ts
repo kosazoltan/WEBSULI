@@ -35,32 +35,40 @@ export type IllustrationCheck = { ok: true; svg: string; labels: string[]; contr
  * a böngésző konzolhibát adott („Expected length”). A számot/hosszt váró attribútumokat az SVG nyelvtana szerint
  * mérjük; a hibás érték elmarad (a böngésző is az alapértékkel rajzolna), és `elem.attr="érték"` alakban jelentjük.
  */
-const NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
-const LENGTH = String.raw`${NUM}(?:px|em|ex|%|pt|pc|cm|mm|in)?`;
+const UNUM = String.raw`(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
+const NUM = String.raw`[-+]?${UNUM}`;
+/** Review #198: méret, sugár, vonalvastagság, betűméret nem lehet negatív (SVG 2: hibás érték). */
+const NON_NEG_NUM = String.raw`\+?${UNUM}`;
+const UNIT = "(?:px|em|ex|%|pt|pc|cm|mm|in)?";
+const LENGTH = `${NUM}${UNIT}`;
+const NON_NEG_LENGTH = `${NON_NEG_NUM}${UNIT}`;
 const one = (alt: string) => new RegExp(String.raw`^\s*(?:${alt})\s*$`, "i");
 const LENGTH_RE = one(LENGTH);
+const NON_NEG_LENGTH_RE = one(NON_NEG_LENGTH);
 const LENGTH_LIST_RE = one(String.raw`${LENGTH}(?:(?:\s*,\s*|\s+)${LENGTH})*`);
 const NUM_OR_PCT_RE = one(`${NUM}%?`);
-const RADIUS_RE = one(`${LENGTH}|auto`);
+const RADIUS_RE = one(`${NON_NEG_LENGTH}|auto`);
 const REF_RE = one(`${LENGTH}|left|center|right|top|bottom`);
-const FONT_SIZE_RE = one(`${LENGTH}|xx-small|x-small|small|medium|large|x-large|xx-large|smaller|larger`);
+const FONT_SIZE_RE = one(`${NON_NEG_LENGTH}|xx-small|x-small|small|medium|large|x-large|xx-large|smaller|larger`);
 const NUMERIC_ATTRS: Record<string, RegExp> = {
   x: LENGTH_RE, y: LENGTH_RE, x1: LENGTH_RE, y1: LENGTH_RE, x2: LENGTH_RE, y2: LENGTH_RE, cx: LENGTH_RE, cy: LENGTH_RE,
-  r: LENGTH_RE, fx: LENGTH_RE, fy: LENGTH_RE, width: LENGTH_RE, height: LENGTH_RE, "stroke-width": LENGTH_RE,
-  markerWidth: LENGTH_RE, markerHeight: LENGTH_RE, dx: LENGTH_RE, dy: LENGTH_RE,
+  r: NON_NEG_LENGTH_RE, fx: LENGTH_RE, fy: LENGTH_RE, width: NON_NEG_LENGTH_RE, height: NON_NEG_LENGTH_RE, "stroke-width": NON_NEG_LENGTH_RE,
+  markerWidth: NON_NEG_LENGTH_RE, markerHeight: NON_NEG_LENGTH_RE, dx: LENGTH_RE, dy: LENGTH_RE,
   rx: RADIUS_RE, ry: RADIUS_RE, refX: REF_RE, refY: REF_RE, "font-size": FONT_SIZE_RE,
   offset: NUM_OR_PCT_RE, opacity: NUM_OR_PCT_RE, "fill-opacity": NUM_OR_PCT_RE, "stroke-opacity": NUM_OR_PCT_RE, "stop-opacity": NUM_OR_PCT_RE,
 };
 /** A `text`/`tspan` x, y, dx, dy attribútuma hosszlista lehet (betűnkénti elhelyezés). */
 const TEXT_LIST_ATTRS = new Set(["x", "y", "dx", "dy"]);
+/** A gyökér width/height-je a tisztításkor úgyis törlődik — ott nincs mit mérni és jelenteni. */
+const ROOT_DROPPED_ATTRS = new Set(["width", "height"]);
 
-function dropInvalidNumbers(elements: Element[]): string[] {
+function dropInvalidNumbers(root: Element, elements: Element[]): string[] {
   const fixes: string[] = [];
-  for (const el of elements) {
+  for (const el of [root, ...elements]) {
     const tag = el.tagName.toLowerCase();
     for (const attr of Array.from(el.attributes)) {
       const rule = NUMERIC_ATTRS[attr.name];
-      if (!rule) continue;
+      if (!rule || (el === root && ROOT_DROPPED_ATTRS.has(attr.name))) continue;
       const ok = (tag === "text" || tag === "tspan") && TEXT_LIST_ATTRS.has(attr.name) ? LENGTH_LIST_RE : rule;
       if (ok.test(attr.value)) continue;
       el.removeAttribute(attr.name);
@@ -138,8 +146,8 @@ export function sanitizeIllustration(raw: unknown): IllustrationCheck {
   const labels = Array.from(root.querySelectorAll("text")).map((t) => (t.textContent ?? "").replace(/\s+/g, " ").trim()).filter(Boolean);
   if (!labels.length) problems.push("nincs felirat — az illusztráció nem nevezi meg, mit mutat");
   if (problems.length) return { ok: false, problems };
-  // A gyökér width/height-je alább úgyis elmarad — csak a rajzelemeket mérjük.
-  const attrFixes = dropInvalidNumbers(elements);
+  // Review #198: a gyökér is mérődik (pl. `<svg x="+">`); csak a width/height-je marad ki, mert alább úgyis elmarad.
+  const attrFixes = dropInvalidNumbers(root, elements);
   // Rugalmas méretezés: a befoglaló elem szélessége dönt, az arányt a viewBox adja.
   root.removeAttribute("width");
   root.removeAttribute("height");

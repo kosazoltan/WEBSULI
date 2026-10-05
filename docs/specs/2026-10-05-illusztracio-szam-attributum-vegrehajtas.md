@@ -33,3 +33,12 @@ ok esetén `[...attrFixes problémaként, ...illustrationLayoutProblems]`, szöv
 - `npm.cmd run check` → 0 hiba.
 - `npm.cmd test` → teljes suite PASS.
 - Böngésző: helyi kliens (vite) az éles API-val vagy a lecke JSON-jával; a Mezopotámia-lecke 1. fejezete; `read_console_messages` → nincs `Expected length`.
+
+## 5. Review #198 pontosítás
+
+- Teszt (előbb, bukjon): `<svg x="+">` → `attrFixes` tartalmazza `svg.x="+"`; `r="-10"`, `width="-1"`, `rx="-2"`,
+  `stroke-width="-1"`, `font-size="-12"` → elhagyva, jelentve; `x="-5"`, `cx="-1"`, `dy="-1em"`, `r="+5"`, `rx="0"` megmarad;
+  a kapu a negatív `r`-t problémának veszi.
+- Tisztító: előjel nélküli szám-alap (`UNUM`), ebből `NUM` (előjeles) és `NON_NEG_NUM` (csak `+`); a nem-negatív
+  attribútumok (`width height r rx ry stroke-width markerWidth markerHeight font-size`) a nem-negatív változatot kapják.
+  `dropInvalidNumbers(root, elements)`: a gyökeret is méri, a gyökér `width`/`height`-jét kihagyja.
