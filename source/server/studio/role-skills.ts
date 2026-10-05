@@ -125,6 +125,7 @@ Kizárólag JSON, a Lesson séma szerint: title, subject, classroom, mapId, sour
 10. A TANÍTÁSI SZERZŐDÉS (rendszerutasítás) a mérce: a címke csak azt a fogalmat állíthatja, amelynek szavai a blokk szövegében állnak (nem-explain blokknál elég, ha a fejezet explainje már megalapozta); a hosszkorlátok a séma számai; a gyereknek szóló szöveg nem hivatkozik forrásra/füzetre; title/subject/classroom/mapId a program értéke — nem találsz ki újat. Célzott javításban CSAK a kijelölt fejezetek folt-alakját adod ({ "sections": { "<index>": {…} } }); teljes lecke ott hiba.
 ## Tilalmak
 - Térképen kívüli tény, szám, példa; a forrás „kijavítása"; nem létező conceptId; olyan címke, amit a blokk szövege nem tanít.
+- A forrásszöveg értelmetlen, nem létező szavaiból (OCR-zaj) tényt kikövetkeztetni tilos; „⟦?⟧” jelű (bizonytalan) részt nem tanítasz.
 - Fejezet átnevezése/összevonása/elhagyása; angol vagy vegyes nyelv; az experience/bank kiírása.
 - Próza a JSON körül; kitalált blokk-kind.
 ## Önellenőrzés a válasz előtt
@@ -158,17 +159,17 @@ EGY fejezet EGY csomagjához módszereket, nyílt feladatokat és kvízt írsz k
 ## Bemenet
 sectionIndex, allowedConceptIds, a fejezet blokkjai ÁBRA NÉLKÜL, a fogalmak (term/definition/quote), a darabszámok, a korábbi csomagok kérdései; javításnál a hibalista, a JAVÍTÁSI JOGOSULTSÁG és az előző csomag.
 ## Kimenet
-Kizárólag JSON: { "methods": [], "tasks": [], "quiz": [], "glossary": [] } a prompt mezőivel.
+Kizárólag JSON: {"methods":[],"tasks":[],"quiz":[],"glossary":[]} a prompt mezőivel.
 ## Lépések
 0. Előbb olvasd el a fejezet explain/example blokkjait; a feladatok megoldása, lépéssorrendje és iránya (pl. balról jobbra) SZÓ SZERINT a fejezet példáját követi — nem fogalmazod újra, nem „javítod", nem általánosítod.
-1. Darabszám = a kért cél, se több, se kevesebb. Minden tétel coversConceptIds-e az allowedConceptIds-ből; kvíznél pontosan egy id; fogalmanként egy recall és egy apply kvíz és legalább egy nyílt feladat. EBBEN a csomagban legalább egy mode:"oral" és egy mode:"written" feladat.
+1. Darabszám = pontosan a kért cél. Minden tétel coversConceptIds-e az allowedConceptIds-ből; kvíznél pontosan egy id; fogalmanként egy recall és egy apply kvíz és legalább egy nyílt feladat. EBBEN a csomagban legalább egy mode:"oral" és egy mode:"written" feladat.
 2. Rubrika: a required ÉS-csoportok a kérdés KÉRDEZETT tartalmát mérik; csoporton belül VAGY-szinonimák: a fogalom alapalakja ÉS a sample ragozott alakja (["szorzás","szorzást"]). minWords = a LEGRÖVIDEBB teljes helyes válasz szószáma; needsSentence csak valódi mondatfeladatnál. A sample teljes pontot érjen a saját rubrikán.
 3. Számolós feladatnál typedAnswers részfeladatonként {part, kind, value, unit?, form?} SORRENDBEN; az értéket a kérdés adataiból kétszer számold ki; a végeredmény NEM required-csoport. „N példát” kérő feladatnál requiredDistinct: kategóriánként from (egy szinonimacsoport = EGY elem) és count.
 4. Kvíz és választós módszer (gate/myth/popup): 3–4 különböző opció, PONTOSAN egy igaz (mindet számold ki), minden opcióhoz magyarázat. A correctIndex azt az opciót jelölje, amelynek értékét a magyarázat helyesnek mondja. A hibás opció magyarázata is számol: megnevezi a téves lépést, és minden leírt számot újraszámolva ír le; bizonytalan számnál csak a lépést nevezd meg. recall és apply ne csak számcserében térjen el.
 5. Módszerek: a kért kindek; sorting/causeEffect/timeline → steps helyes sorrendben; párosításnál egy bal oldalhoz pontosan egy jobb oldal (ismétlődő oldal = többértelmű).
-6. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételeit és mezőit cseréld, eredeti id-val, minden mezővel; csoportot vagy alakot törölni, csoportokat összevonni tilos; más tétel = elutasított kísérlet.
+6. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételeit és mezőit cseréld, eredeti id-val, minden mezővel; csoportot/alakot törölni, csoportokat összevonni tilos; más tétel = elutasított kísérlet.
 ## Tilalmak
-- Csomagon kívüli fogalom; korábbi csomag kérdésének vagy kapukérdésének ismétlése („8 : 2” ≠ „8 · 2”); a tanításban nem szereplő tény; hibás érték bármely mezőben.
+- Csomagon kívüli fogalom; korábbi csomag kérdésének vagy kapukérdésének ismétlése („8 : 2” ≠ „8 · 2”); a tanításban nem szereplő vagy OCR-zajból kikövetkeztetett tény; hibás érték bármely mezőben.
 - Hivatkozás ábrára (nem látod), forrásra, füzetre: a tartalmat közvetlenül állítsd.
 - Ellentétes jelentés egy szinonimacsoportban; egész mondat szinonimaként; „bármely N példa" önkényes mintával; új id, tétel törlése, próza a JSON körül.
 ## Önellenőrzés a válasz előtt
