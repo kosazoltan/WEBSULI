@@ -47,3 +47,10 @@ szavazás dönt (a harmadik olvasat tokenre egyezik az egyik vitatott olvasattal
 A harmadik olvasó NEM írhat új szöveget (csak a két meglévő olvasat közül választ). Hibánál/hiánynál a jelölt átirat marad (fail-safe).
 Elfogadás: a Mezopotámia-fotón a jelölt helyek többsége feloldódik, a térkép gépi jóváhagyása átmegy, és a „Közel-Kelet” sor nem válik
 hamis ténnyé (vagy helyes, vagy jelölt marad).
+
+## S11/3 — olvasó-kiesés: az erős olvasó lép a helyére (tulajdonosi döntés 2026-10-05, a 6. élő futás után)
+Mért (map 59c174d8, lesson 25a11aba): a második olvasó NÉMÁN kiesett (`dualReadOcr`: hibás/üres második olvasatnál napló nélkül az első
+olvasat ment tovább) → nem volt vita, jelölés, harmadik olvasat; a „Kesia, Föld - Felt.” ellenőrizetlenül „a Föld keleti térsége” tény
+lett és publikálódott. Szabály: bármelyik alap-olvasó kiesésekor (hiba vagy üres válasz) a kiesés és oka naplózva; az erős olvasó
+(OCR_THIRD_READER_MODEL) olvasata lép a helyére — két független olvasat, a meglévő döntő olvasás és jelölés; a 2 a 3-ból szavazás ilyenkor
+elmarad (az erős olvasat már az egyik). Ha az erős olvasó is kiesik: a régi viselkedés, de NAPLÓZVA és „degraded”.

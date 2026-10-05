@@ -77,3 +77,27 @@ test("S11/2: a dualReadOcr a jelölt vitánál meghívja a harmadik olvasót; hi
   await clean(file);
   assert.equal(thirdCalls, 1, "vita nélkül nincs harmadik olvasás");
 });
+
+test("S11/3 (mért: map 59c174d8): a második olvasó kiesésekor az erős olvasó lép a helyére — vita, jelölés, döntés fut; nem néma egyetlen olvasat", async () => {
+  const file = { name: "fuzet.jpg", kind: "image", content: "data:image/jpeg;base64,AA" } as ExtractorFile;
+  let adjudicated = 0;
+  const ocr = dualReadOcr(
+    async () => "Kesia, Föld - Felt. térsége",
+    async () => { throw new Error("429 rate limit"); },
+    async (_f, first) => { adjudicated++; return first; },
+    async () => "Ázsia, Közel-Kelet térsége",
+  );
+  const out = await ocr(file);
+  assert.equal(adjudicated, 1, "a két független olvasat (gyenge + erős) eltérését a döntő olvasás látja");
+  assert.match(out, /⟦\?⟧/, "a vitatott szakasz jelölt — nem megy tovább ellenőrizetlenül");
+  assert.equal(ocr.degraded(file), false);
+});
+
+test("S11/3: az első olvasó kiesésekor is az erős olvasó lép a helyére; ha az is kiesik, a megmaradt olvasat megy, de leromlottként (nem cache-elve)", async () => {
+  const file = { name: "fuzet.jpg", kind: "image", content: "data:image/jpeg;base64,AA" } as ExtractorFile;
+  const agree = dualReadOcr(async () => { throw new Error("hiba"); }, async () => "Előkelők: papok és katonák", async (_f, first) => first, async () => "Előkelők: papok és katonák");
+  assert.equal(await agree(file), "Előkelők: papok és katonák");
+  const bothDown = dualReadOcr(async () => "egyetlen olvasat", async () => "", async (_f, first) => first, async () => { throw new Error("erős is kiesett"); });
+  assert.equal(await bothDown(file), "egyetlen olvasat");
+  assert.equal(bothDown.degraded(file), true);
+});

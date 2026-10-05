@@ -252,10 +252,11 @@ export type DualReadOcr = OcrFn & { degraded(file: ExtractorFile): boolean };
 export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator, third?: OcrFn): DualReadOcr {
   const degradedFiles = new WeakSet<ExtractorFile>();
   // Spec 2026-10-05-s11/2: ha jelölt vita maradt, a független harmadik olvasat dönt (2 a 3-ból); hibánál a jelölt átirat marad.
-  const settle = async (file: ExtractorFile, marked: string, disputes: OcrDisagreement[]): Promise<string> => {
-    if (!third || !marked.includes(UNCERTAIN_MARK)) return marked;
+  // `voter: null` = nincs független szavazó (a helyettesítő erős olvasat már az egyik olvasat) — NEM az alapértelmezett harmadik olvasó.
+  const settle = async (file: ExtractorFile, marked: string, disputes: OcrDisagreement[], voter: OcrFn | null): Promise<string> => {
+    if (!voter || !marked.includes(UNCERTAIN_MARK)) return marked;
     try {
-      const resolved = resolveByThirdReading(marked, disputes, await third(file));
+      const resolved = resolveByThirdReading(marked, disputes, await voter(file));
       const left = resolved.split(UNCERTAIN_MARK).length - 1, before = marked.split(UNCERTAIN_MARK).length - 1;
       logger.info(`[STUDIO/OCR] ${file.name}: harmadik olvasat — ${before - left}/${before} vitatott hely feloldva (2 a 3-ból).`);
       return resolved;
@@ -268,17 +269,35 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     degradedFiles.delete(file);
     if (file.kind !== "image") return first(file);
     const [a, b] = await Promise.allSettled([first(file), second(file)]);
-    if (a.status === "rejected") {
-      if (b.status === "fulfilled" && b.value.trim()) { degradedFiles.add(file); return b.value; }
-      throw a.reason;
+    const usable = (r: PromiseSettledResult<string>) => (r.status === "fulfilled" && r.value.trim() ? r.value : null);
+    let primary = usable(a), other = usable(b);
+    let voter: OcrFn | null = third ?? null;
+    // Spec 2026-10-05-s11/3 (mért: a második olvasó NÉMÁN kiesett → ellenőrizetlen egyetlen olvasat → „a Föld keleti térsége” tény lett):
+    // a kiesés naplózva, és az erős olvasó lép a helyére — mindig két független olvasat.
+    if (!primary || !other) {
+      const failed = !primary ? a : b;
+      const reason = failed.status === "rejected" ? (failed.reason instanceof Error ? failed.reason.message : String(failed.reason)) : "üres válasz";
+      logger.warn(`[STUDIO/OCR] ${file.name}: ${!primary ? "az első" : "a második"} olvasó kiesett (${reason.slice(0, 200)})${third ? " — az erős olvasó lép a helyére." : "."}`);
+      if (third) {
+        try {
+          const substitute = (await third(file)).trim();
+          if (substitute) { if (!primary) primary = substitute; else other = substitute; voter = null; }
+        } catch (error) {
+          logger.warn(`[STUDIO/OCR] ${file.name}: az erős olvasó is kiesett (${error instanceof Error ? error.message : String(error)}).`);
+        }
+      }
+      if (!primary || !other) {
+        degradedFiles.add(file);
+        if (primary || other) return (primary ?? other)!;
+        throw a.status === "rejected" ? a.reason : new Error("Az OCR egyik olvasója sem adott szöveget.");
+      }
     }
-    if (b.status === "rejected" || !b.value.trim()) { degradedFiles.add(file); return a.value; }
-    const disputes = ocrDisagreements(a.value, b.value);
-    if (disputes.length === 0) return a.value;
+    const disputes = ocrDisagreements(primary, other);
+    if (disputes.length === 0) return primary;
     logger.info(`[STUDIO/OCR] ${file.name}: a két olvasat ${disputes.length} helyen eltér — döntő olvasás a képpel.`);
     try {
-      const decided = (await adjudicate(file, a.value, disputes)).trim();
-      if (decided && adjudicationStaysInDispute(a.value, decided, disputes)) return settle(file, markUnresolvedDisputes(decided, disputes), disputes);
+      const decided = (await adjudicate(file, primary, disputes)).trim();
+      if (decided && adjudicationStaysInDispute(primary, decided, disputes)) return settle(file, markUnresolvedDisputes(decided, disputes), disputes, voter);
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasat a vitatott helyeken kívül is változtatott — az első olvasat marad.`);
     } catch (error) {
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasás hibázott (${error instanceof Error ? error.message : String(error)}) — az első olvasat marad.`);
@@ -286,7 +305,7 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     degradedFiles.add(file);
     // Spec 2026-10-05-s11 (mérve: a döntő olvasat elvetése után a vita nyoma elveszett — „Kesia, Föld - Felt.”, „határak” jel nélkül):
     // az első olvasat megtartásakor is jelölt az érdemi eltérés.
-    return settle(file, markUnresolvedDisputes(a.value, disputes), disputes);
+    return settle(file, markUnresolvedDisputes(primary, disputes), disputes, voter);
   };
   return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
 }
