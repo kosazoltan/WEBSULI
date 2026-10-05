@@ -1,7 +1,7 @@
 import { OpenAIProvider } from "./OpenAIProvider";
 import { OpenRouterProvider } from "./OpenRouterProvider";
 import { ClaudeProvider } from "./ClaudeProvider";
-import { AI_KEY_NAMES, aiKeyStatus, keyNameForModel, providerForModel } from "./models";
+import { AI_KEY_NAMES, aiKeyStatus, keyNameForModel, providerForModel, MODEL_REASONING_EFFORT } from "./models";
 import { AIProviderQuotaError, isQuotaExhausted, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type ChatCallOptions, type IAIProvider } from "./AIProvider";
 import { logger } from "../lib/logger";
 
@@ -174,11 +174,12 @@ export function createStudioStepProvider(model: string, step?: string) {
       // gondolkodást igényel — medium. A kimenet (önálló megoldások + jegyzetek) és a gondolkodás ugyanabból a
       // LEKTOR_MAX_TOKENS keretből fogy; a 12k élesben csonkult (spec 2026-09-29-lektor-tokenkeret). Csak a ténylegesen
       // használt token kerül pénzbe, így a nagyobb keret a kis leckéknél nem drágít.
-      ...(providerForModel(model) === "xai" ? { apiMode: "responses", reasoningEffort: "medium" } : {}),
+      // Tulajdonosi döntés 2026-10-05: a lektor OpenAI-n (gpt-6.1-sol / gpt-5.6-terra) is a Responses API-n fut, medium efforttal.
+      ...(providerForModel(model) === "xai" || providerForModel(model) === "openai" ? { apiMode: "responses", reasoningEffort: "medium" } : {}),
     });
   }
   const policy = step ? STUDIO_STEP_POLICY[step] : undefined;
-  if (!policy) return createStudioProvider(model);
+  if (!policy) return createStudioProvider(model, undefined, undefined, MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {});
   return createStudioProvider(model, policy.timeoutMs, policy.maxTokens, {
     reasoningEffort: policy.reasoningEffort,
     ...(policy.jsonMode ? { jsonMode: true } : {}),
