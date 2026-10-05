@@ -37,7 +37,20 @@ export function falseArithmeticClaims(text: string): string[] {
     // Egy műveleti jel csak akkor jelent kifejezés-közepet, ha előtte szám vagy zárójel áll — a „Nem:”
     // címke kettőspontja nem osztás (a section-patch teszt „Nem: 12 · 2 = 48 téves” esete).
     const beforeLead = prefix.slice(0, -1).trimEnd().slice(-1);
-    if (lead === "(" || lead === ")" || (new RegExp(`[${OPS}=]`).test(lead) && /[\d)]/.test(beforeLead))) continue;
+    if (/^[()[\]]$/.test(lead) ||(new RegExp(`[${OPS}=]`).test(lead) && /[\d)\]]/.test(beforeLead))) continue;
+    // Gyök/hatvány/abszolútérték jel a lánc előtt („√25 = 5”, „|−3| = 3”): a jel nem része a kiértékelt kifejezésnek — nem ítéljük meg.
+    if (/[√∛∜|^]$/u.test(prefix)) continue;
+    // Spec 2026-10-05-s3-katalogus-bank (mérve a szülő-ellenőrzött korpuszon): ismeretlenes egyenlet — „x + 5 = 12”,
+    // „3x + 2 = 11”, „__ × 5 = 15” — a lánc az ismeretlen UTÁN indult („5 = 12”), és helyes egyenletet hamisnak vett (a bank-
+    // csomag ellenőrzésében is). Ha a műveleti jel előtt egybetűs ismeretlen (nem szó része, nem szóközös mértékegység),
+    // együttható+betű („3x”) vagy kitöltendő hely (_ ? □ …) áll, a kifejezés közepéről indult: nem ítéljük meg.
+    if (new RegExp(`[${OPS}=]`).test(lead)) {
+      const beforeOp = prefix.slice(0, -1).trimEnd();
+      const unknownLead = /(?:^|[^\p{L}\d\s])\s*\p{L}$/u.test(beforeOp) || /(?:^|\s)\p{L}$/u.test(beforeOp) && !/\d\s+\p{L}$/u.test(beforeOp);
+      const coefficientLead = /\d\p{L}$/u.test(beforeOp);
+      const placeholderLead = /(?:_+|\?|[□☐▢⬜◻]|…|\.{3})$/u.test(beforeOp);
+      if (unknownLead || coefficientLead || placeholderLead) continue;
+    }
     const segments = `${m[1]}${m[2]}`.split("=").map((seg) => seg.trim());
     // 3. élő futás (run e79ab9da): „980 Ft : 2 = 490 Ft” — a mértékegység töri meg a kifejezést, a
     // minta a „2 = 490”-től indult. Szám + mértékegység + műveleti jel előtt: ha az a szám maga nem
@@ -54,8 +67,43 @@ export function falseArithmeticClaims(text: string): string[] {
     }
     // „1/15 = 4 km” (a teljes út 1/15-e 4 km): hányad = mennyiség jelölés, nem számolási állítás.
     const after = text.slice(m.index! + m[0].length);
+    // Spec 2026-10-05-s3-katalogus-bank (mérve: „= 6,3T”, „= 168(2,8 − m)”, „= 48π”, „= 3(x + 8)”): ha a lánc utolsó száma
+    // KÖZVETLENÜL betűhöz/ismeretlenhez/zárójelhez tapad, az implicit szorzás vagy ismeretlen — nem tisztán számértékű állítás.
+    if (/^[\p{L}(]/u.test(after)) continue;
+    // A lánc után műveleti jel folytatja a kifejezést, de nem kiértékelhetően („16/24 = 2/?”, „= 3 · _”): nem állítás.
+    // A betűhöz tapadó kötőjel magyar toldalék („= 48-at”), nem kivonás — az ilyen állítást megítéljük.
+    if (new RegExp(`^\\s*[${OPS}]`).test(after) && !/^-\p{L}/u.test(after)) continue;
+    // Helyiérték-bontás („30 = 3 tízes”, „43 = 4 tízes + 3 egyes”): a jobb oldal nem szám, hanem darab-helyiérték.
+    if (/^\s*(?:tízes|egyes|százas|ezres|tízezres|tized|század|ezred)(?!\p{L})/u.test(after)) continue;
+    // Időpont („11:45 → 12:45 = 1 óra”): a szóköz nélküli ó:pp nem osztás.
+    if (/^\d{1,2}:\d{2}$/.test(m[1].trim()) && /^\s*(?:óra|perc|h\b|min)/u.test(after)) continue;
+    // Szóközzel elválasztott szám után indult lánc („2 2 = 1 félidő” — egymás alá írt tört kinyert maradéka): töredék, nem állítás.
+    if (/\d\s+$/.test(text.slice(0, m.index!))) continue;
     if (segments.length === 2 && /^\d+\s*\/\s*\d+$/.test(segments[0]) && /^\d+(?:[.,]\d+)?$/.test(segments[1]) && /^\s*[a-záéíóöőúüű%]/i.test(after)) continue;
-    const values = segments.map((seg) => evaluateExpression(seg));
+    // Spec 2026-10-05-s3-katalogus-bank (mérve a szülő-ellenőrzött korpuszon): maradékos osztás — „13 ÷ 4 = 3 maradék 1” helyes;
+    // tört eredményként („3.25”) hamisnak látszott. Itt a = b·q + r, 0 ≤ r < b a szabály.
+    // Írásmódok (mérve): „= 3 maradék 1”, „= 3 (maradék 9)”, „= 21 (m: 1)”, „= 3, és 2 marad”.
+    const remainder = after.match(/^\s*[,(]?\s*(?:maradék|marad|m\.?)\s*:?\s*(\d+)/iu) ?? after.match(/^\s*,?\s*és\s+(\d+)\s+(?:a\s+)?marad/iu);
+    if (remainder && segments.length === 2) {
+      const div = segments[0].match(/^(\d+)\s*[:÷/]\s*(\d+)$/u);
+      if (div && /^\d+$/.test(segments[1])) {
+        const a = Number(div[1]), b = Number(div[2]), q = Number(segments[1]), r = Number(remainder[1]);
+        if (!(b > 0 && r < b && a === b * q + r)) problems.push(`${segments[0].replace(/\s+/g, " ")} = ${q} maradék ${r} (helyesen: ${b > 0 ? `${Math.floor(a / b)} maradék ${a % b}` : "nem értelmezett"})`);
+        continue;
+      }
+    }
+    // Tört-bővítés/-egyszerűsítés jelölése („8÷4 / 12÷4 = 2/3”: számláló és nevező külön osztva) — nem balról jobbra értékelendő.
+    const fractionOp = (seg: string) => /\s\/\s/.test(seg) && /[÷:]/.test(seg);
+    const values = segments.map((seg) => fractionOp(seg) ? null : evaluateExpression(seg));
+    // Sorszám + ezres tagolás kétértelműsége („3 133 + 126 = 259” = a 3. lépés): ha a vezető csoport elhagyásával az állítás igaz,
+    // nem ítéljük hamisnak (a valódi ezres tagolású hamis állítás így sem marad rejtve, ha a rövidebb olvasat is hamis).
+    const leadGroup = segments[0].match(/^\d{1,3}\s+(?=\d{3}(?!\d))/);
+    if (leadGroup && values[0] !== null && values[1] != null && Math.abs(values[0] - values[1]) > 1e-6) {
+      const alt = evaluateExpression(segments[0].slice(leadGroup[0].length));
+      if (alt !== null && Math.abs(alt - values[1]) < 1e-6) continue;
+    }
+    // „1/2 = 0,5 = 50%”: a százalékjellel záruló utolsó tag a század része.
+    if (/^\s*%/.test(after) && values.at(-1) != null) values[values.length - 1] = values.at(-1)! / 100;
     for (let i = 1; i < segments.length; i++) {
       const a = values[i - 1], b = values[i];
       if (a === null || b === null) continue;

@@ -38,13 +38,21 @@ function numberOf(option: string): number | null {
 const listed = (options: readonly string[], indexes: number[]) => indexes.map((i) => `„${options[i].trim()}”`).join(", ");
 
 /** Ahol a kérdés a szám ALAKJÁRÓL szól (egyszerűsítés, bővítés, írásmód), az egyenlő értékű opciók jogosak. */
-const ABOUT_FORM = /egyszerűs|bővít|alak|formá|írásmód|felír|tizedes tört|közönséges tört|vegyes tört/u;
+const ABOUT_FORM = /egyszerűs|bővít|alak|formá|írásmód|felír|tizedes tört|közönséges tört|vegyes tört|vegyes szám/u;
+/** Spec 2026-10-05-s3-katalogus-bank (mérve a szülő-ellenőrzött korpuszon): „Melyik NEM egyenlő 1/2-vel?” — itt az egyenértékű
+ *  disztraktorok (2/4, 3/6, 4/8) SZÁNDÉKOSAK; az érték-egyezés nem hiba (a szó szerinti ismétlődés továbbra is az). */
+const NEGATED_EQUALITY = /(?<!\p{L})nem\s+(?:egyenlő|egyenértékű|ugyanannyi|ugyanakkora|azonos értékű)/u;
+/** Spec 2026-10-05-s3-katalogus-bank (mérve: „24/36 = ?” → 4/6 | 2/3 | 12/18 | „Mind helyes”): ha van gyűjtő-opció, az egyenértékű
+ *  alakok SZÁNDÉKOSAK (épp az a kérdés, hogy mindegyik helyes-e). */
+// Review #193 (7): az „Egyik sem” NEM gyűjtő-opció — nem teszi szándékossá a másik opciók érték-egyezését; számértéke nincs,
+// ezért az érték-összehasonlításból magától kimarad, a többi opció összehasonlítása marad.
+const AGGREGATE_OPTION = /^(?:mind(?:egyik|en|három|kettő|négy)?\s+(?:helyes|igaz|jó)|mindegyik|mindhárom|mindkettő)/u;
 
 function duplicateProblems(prompt: string, options: readonly string[]): string[] {
   const problems: string[] = [];
   const byText = new Map<string, number>();
   const byValue = new Map<number, number>();
-  const compareValues = !ABOUT_FORM.test(norm(prompt));
+  const compareValues = !ABOUT_FORM.test(norm(prompt)) && !NEGATED_EQUALITY.test(norm(prompt)) && !options.some((o) => AGGREGATE_OPTION.test(norm(o)));
   options.forEach((option, i) => {
     const key = textKey(option);
     const value = compareValues ? numberOf(option) : null;
