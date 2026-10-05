@@ -916,3 +916,75 @@ export const conceptResults = pgTable(
 export type ConceptResultRow = typeof conceptResults.$inferSelect;
 export type InsertConceptResultRow = typeof conceptResults.$inferInsert;
 
+
+/**
+ * Spec 2026-10-05-s3-katalogus-bank — a régi (szülő-ellenőrzött) és a fúziós leckék tartalom alapú besorolása (S2).
+ * `admin_subject`: az admin döntése az eltérő/hiányzó besorolású leckéről (az import ezt követi).
+ */
+export const catalogLessons = pgTable(
+  "catalog_lessons",
+  {
+    provenance: varchar("provenance", { length: 96 }).primaryKey(),
+    title: text("title").notNull(),
+    classroom: integer("classroom"),
+    subject: varchar("subject", { length: 32 }),
+    secondarySubjects: jsonb("secondary_subjects").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    topicArea: text("topic_area"),
+    topic: text("topic"),
+    lessonType: varchar("lesson_type", { length: 32 }),
+    /** agreed | review | unclassified */
+    classificationStatus: varchar("classification_status", { length: 16 }).notNull(),
+    candidates: jsonb("candidates").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
+    models: jsonb("models").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    reason: text("reason"),
+    classifiedAt: timestamp("classified_at", { withTimezone: true }).notNull().defaultNow(),
+    adminSubject: varchar("admin_subject", { length: 32 }),
+    adminDecidedBy: varchar("admin_decided_by").references(() => users.id, { onDelete: "set null" }),
+    adminDecidedAt: timestamp("admin_decided_at", { withTimezone: true }),
+  },
+  (table) => ({ statusIdx: index("catalog_lessons_status_idx").on(table.classificationStatus) }),
+);
+
+/**
+ * Tantárgyi katalógus-bank tétele: a `subject` a bank (minden tantárgy és ág külön). `status`: active | flagged (gépi lelet,
+ * admin-átnézésig szó szerint nem vehető át) | review (a lecke besorolása nem egyező) | rejected (admin). Az admin által
+ * beállított státuszt (`status_by_admin`) az újraimport nem írja felül.
+ */
+export const catalogItems = pgTable(
+  "catalog_items",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    subject: varchar("subject", { length: 32 }).notNull(),
+    grade: integer("grade"),
+    topicArea: text("topic_area"),
+    topic: text("topic"),
+    lessonType: varchar("lesson_type", { length: 32 }),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    prompt: text("prompt").notNull(),
+    body: text("body"),
+    options: jsonb("options").$type<string[]>(),
+    correctIndex: integer("correct_index"),
+    accepted: jsonb("accepted").$type<string[]>(),
+    keywordGroups: jsonb("keyword_groups").$type<string[][]>(),
+    steps: jsonb("steps").$type<string[]>(),
+    pair: jsonb("pair").$type<{ source: string; target: string; sourceLang: string; targetLang: string }>(),
+    conceptIds: jsonb("concept_ids").$type<string[]>(),
+    provenances: jsonb("provenances").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** parent_verified | pipeline_verified */
+    trust: varchar("trust", { length: 24 }).notNull(),
+    status: varchar("status", { length: 12 }).notNull(),
+    statusByAdmin: boolean("status_by_admin").notNull().default(false),
+    checks: jsonb("checks").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    fingerprint: varchar("fingerprint", { length: 32 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    subjectFingerprintIdx: uniqueIndex("catalog_items_subject_fingerprint_idx").on(table.subject, table.fingerprint),
+    subjectStatusIdx: index("catalog_items_subject_status_idx").on(table.subject, table.status),
+    subjectTopicIdx: index("catalog_items_subject_topic_idx").on(table.subject, table.grade, table.topicArea),
+  }),
+);
+
+export type CatalogLessonRow = typeof catalogLessons.$inferSelect;
+export type CatalogItemRow = typeof catalogItems.$inferSelect;

@@ -41,6 +41,7 @@ import { applyTrackedImprovement } from "./workflows/apply";
 import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { cachedSystem } from "./ai/prompt-cache";
 import { lessonPublicRouter } from "./studio/lesson-routes";
+import { catalogAdminRouter } from "./catalog/admin-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
 import { prependWebLessonQualityNotice, webLessonQualityNotice } from "./lib/web-lesson-quality-notice";
@@ -813,6 +814,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LS-2: a lecke olvasó oldala PUBLIKUS (ezt tölti a gyerek böngészője), és csak
   // publikált, sémára újraellenőrzött leckét ad ki.
   app.use("/api/lessons", lessonPublicRouter);
+
+  // Spec 2026-10-05-s3-katalogus-bank: a tantárgyi katalógus-bankok csak olvasó admin-nézete.
+  app.use("/api/admin/catalog", catalogAdminRouter);
 
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
