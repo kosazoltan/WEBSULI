@@ -24,6 +24,8 @@ import { logger } from "../lib/logger";
 import type { ExtractorFile } from "./extractor";
 import { lexiconWordsOf, nonWordLines, passesLexicon, type IsWord, type NonWordLine } from "./ocr-lexicon";
 import { withRoleSkill } from "./role-skills";
+import Anthropic from "@anthropic-ai/sdk";
+import { providerForModel, type OcrEffort } from "../ai/models";
 
 export type OcrResult = { name: string; text: string };
 
@@ -144,30 +146,39 @@ export function ocrDisagreements(first: string, second: string): OcrDisagreement
   return locateOcrDisagreements(first, second).map(({ first: f, second: s }) => ({ first: f, second: s }));
 }
 
-/** Same diff, with each span's start token index in the first read (`at`). */
-export function locateOcrDisagreements(first: string, second: string): LocatedOcrDisagreement[] {
-  const a = ocrTokens(first);
-  const b = ocrTokens(second);
-  if (a.length * b.length > 4_000_000) return a.join(" ") === b.join(" ") ? [] : [{ first, second, at: 0 }];
+/** A differing span as token index ranges in both reads (`[aStart, aEnd)` in the first, `[bStart, bEnd)` in the second). */
+type TokenSpan = { aStart: number; aEnd: number; bStart: number; bEnd: number };
+
+/** Word-level LCS diff on token keys; null when too large to align. */
+function diffTokenSpans(a: string[], b: string[]): TokenSpan[] | null {
+  if (a.length * b.length > 4_000_000) return null;
   const dp: Uint16Array[] = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {
       dp[i][j] = tokenKey(a[i]) === tokenKey(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
-  const out: LocatedOcrDisagreement[] = [];
-  let i = 0, j = 0, spanA: string[] = [], spanB: string[] = [];
+  const out: TokenSpan[] = [];
+  let i = 0, j = 0, startA = 0, startB = 0;
   const flush = () => {
-    if (spanA.length || spanB.length) out.push({ first: spanA.join(" "), second: spanB.join(" "), at: i - spanA.length });
-    spanA = []; spanB = [];
+    if (i > startA || j > startB) out.push({ aStart: startA, aEnd: i, bStart: startB, bEnd: j });
   };
   while (i < a.length || j < b.length) {
-    if (i < a.length && j < b.length && tokenKey(a[i]) === tokenKey(b[j])) { flush(); i++; j++; }
-    else if (j >= b.length || (i < a.length && dp[i + 1][j] >= dp[i][j + 1])) spanA.push(a[i++]);
-    else spanB.push(b[j++]);
+    if (i < a.length && j < b.length && tokenKey(a[i]) === tokenKey(b[j])) { flush(); i++; j++; startA = i; startB = j; }
+    else if (j >= b.length || (i < a.length && dp[i + 1][j] >= dp[i][j + 1])) i++;
+    else j++;
   }
   flush();
   return out;
+}
+
+/** Same diff, with each span's start token index in the first read (`at`). */
+export function locateOcrDisagreements(first: string, second: string): LocatedOcrDisagreement[] {
+  const a = ocrTokens(first);
+  const b = ocrTokens(second);
+  const spans = diffTokenSpans(a, b);
+  if (!spans) return a.join(" ") === b.join(" ") ? [] : [{ first, second, at: 0 }];
+  return spans.map((s) => ({ first: a.slice(s.aStart, s.aEnd).join(" "), second: b.slice(s.bStart, s.bEnd).join(" "), at: s.aStart }));
 }
 
 function editDistance(a: string, b: string): number {
@@ -652,7 +663,15 @@ export const OCR_SYSTEM_PROMPT = withRoleSkill("ocr", [
  * pin-elve: a glm-flash osztálynál a reasoning kötelező és keretet fogyaszt,
  * ezért effort:low + bő completion-keret (a 4096 az átiratnak kell).
  */
-export function ocrRequestParams(model: string, imageDataUrl: string) {
+/**
+ * Spec 2026-10-05-s11/7: a kimeneti keret az efforthoz igazodik — a gondolkodás is ebből fogy, a high-effortú erős olvasót a 6000-es
+ * keret csonkolná (a low változatlan).
+ */
+export const OCR_COMPLETION_BUDGET: Readonly<Record<OcrEffort, number>> = { low: 6000, medium: 16_000, high: 32_000 };
+/** A kérés határideje effort szerint (a high gondolkodás tovább tart; a low változatlan). */
+const OCR_TIMEOUT_MS: Readonly<Record<OcrEffort, number>> = { low: 120_000, medium: 240_000, high: 300_000 };
+
+export function ocrRequestParams(model: string, imageDataUrl: string, effort: OcrEffort = "low") {
   return {
     model,
     messages: [
@@ -662,8 +681,8 @@ export function ocrRequestParams(model: string, imageDataUrl: string) {
         content: [{ type: "image_url" as const, image_url: { url: imageDataUrl, detail: "high" as const } }],
       },
     ],
-    max_completion_tokens: 6000,
-    reasoning: { effort: "low" as const },
+    max_completion_tokens: OCR_COMPLETION_BUDGET[effort],
+    reasoning: { effort },
   };
 }
 
@@ -671,21 +690,21 @@ export function ocrRequestParams(model: string, imageDataUrl: string) {
  * Vendor-specific reasoning control: OpenRouter takes `reasoning`, the direct OpenAI API (GPT-5.6 Luna)
  * takes `reasoning_effort` — without it the default effort can spend the completion budget on thinking.
  */
-export function ocrVendorRequest<T extends { reasoning?: unknown }>(vendor: string, params: T) {
+export function ocrVendorRequest<T extends { reasoning?: { effort: OcrEffort } }>(vendor: string, params: T) {
   if (vendor === "openrouter") return params;
-  const { reasoning: _reasoning, ...rest } = params;
-  return vendor === "openai" ? { ...rest, reasoning_effort: "low" as const } : rest;
+  const { reasoning, ...rest } = params;
+  return vendor === "openai" ? { ...rest, reasoning_effort: reasoning?.effort ?? ("low" as const) } : rest;
 }
 
-/** The default OCR callable: one cheap vision call per image. */
-export async function callOcrModel(file: ExtractorFile, model: string): Promise<string> {
+/** The default OCR callable: one cheap vision call per image. `effort` (spec S11/7): az erős olvasó high efforttal, nagyobb kerettel. */
+export async function callOcrModel(file: ExtractorFile, model: string, effort: OcrEffort = "low"): Promise<string> {
   const OpenAI = (await import("openai")).default;
   // Spec 2026-10-01-gyokerok-egyben (2.3): kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át.
   return withQuotaFailover(studioConnection(model), async (connection) => {
-  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
+  const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: OCR_TIMEOUT_MS[effort], maxRetries: 1 });
 
-  const imageParams = ocrRequestParams(connection.model, file.content);
-  const params = file.kind === "pdf" ? { ...imageParams, max_completion_tokens: 24000,
+  const imageParams = ocrRequestParams(connection.model, file.content, effort);
+  const params = file.kind === "pdf" ? { ...imageParams, max_completion_tokens: Math.max(24000, imageParams.max_completion_tokens),
     messages: [
       { role: "system", content: OCR_SYSTEM_PROMPT + " Transcribe every PDF page and label its page number. Preserve formulas and units. Mark unreadable text explicitly." },
       { role: "user", content: [{ type: "file", file: { filename: file.name, file_data: file.content } }] },
@@ -701,4 +720,308 @@ export async function callOcrModel(file: ExtractorFile, model: string): Promise<
   }
   return "";
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Spec 2026-10-05-s11/7 — KÉT ERŐS OLVASÓ FÚZIÓJA (tulajdonosi döntés a friss 4-lapos futás után).
+ * Mért (map d344e889): az erős+gyenge módszer döntő olvasója a vitán KÍVÜL is átírt („A világ [olvashatatlan] 1260” →
+ * „II. világháború 1939”), így a döntés elveszett, és minden vita jelet kapott → „túl bizonytalan” megállás.
+ * Itt a döntő CSAK választ vitánként (A | B | own); a végső szöveget a kód rakja össze az A-ból — a vitákon kívül semmi nem
+ * változhat (szerkezetileg). `own` → a saját alak minden új szava ⟦?⟧; hiányzó/érvénytelen döntés → az A alakja ⟦?⟧-lel.
+ * ------------------------------------------------------------------ */
+
+export type OcrFusionPick = "A" | "B" | "own";
+export type OcrFusionChoice = { n: number; pick: OcrFusionPick; text?: string };
+/** A döntőnek küldött, sorszámozott vita: a két olvasat szakasza és az A-beli sor (hely-kontextus). */
+export type OcrFusionDispute = { n: number; a: string; b: string; line: string };
+export type OcrFusionDecider = (file: ExtractorFile, a: string, b: string, disputes: OcrFusionDispute[]) => Promise<OcrFusionChoice[]>;
+export type OcrFusionStats = { A: number; B: number; own: number; missing: number };
+
+/** Egy döntő hívásban legfeljebb ennyi vita (fölötte: hiányzó döntés → az A alakja jellel). */
+export const MAX_FUSION_DISPUTES = 150;
+
+type OffsetToken = { text: string; start: number; end: number };
+const offsetTokens = (text: string): OffsetToken[] =>
+  [...text.matchAll(/\S+/g)].map((m) => ({ text: m[0], start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
+const bareWordOf = (token: string) => tokenKey(token.split(UNCERTAIN_MARK).join("")).replace(/[^\p{L}\p{N}]/gu, "");
+
+/** ⟦?⟧ minden olyan szó után, amely nincs a `known` szavak közt (a már jelölt / ismert token változatlan). */
+function markUnknownWords(text: string, known: ReadonlySet<string>): { text: string; marks: number } {
+  let marks = 0;
+  const out = text.replace(/\S+/g, (token) => {
+    const word = bareWordOf(token);
+    if (!word || known.has(word)) return token;
+    marks++;
+    return `${token.split(UNCERTAIN_MARK).join("")}${UNCERTAIN_MARK}`;
+  });
+  return { text: out, marks };
+}
+const withTrailingMark = (text: string) => (text.trimEnd().endsWith(UNCERTAIN_MARK) ? text.trimEnd() : `${text.trimEnd()}${UNCERTAIN_MARK}`);
+
+type FusionItem = { span: TokenSpan; aText: string; bText: string; n: number | null; sepAfter: string; sepBefore: string };
+
+/** A két olvasat eltérései szó-szinten; `n` csak a szó-szintű vitáé (a csak-írásjel/nyíl/szóköz eltérés S11/6 szerint nem vita → A). */
+function fusionPlan(a: string, b: string): { items: FusionItem[]; ta: OffsetToken[]; disputes: OcrFusionDispute[] } {
+  const ta = offsetTokens(a), tb = offsetTokens(b);
+  const spans = diffTokenSpans(ta.map((t) => t.text), tb.map((t) => t.text))
+    ?? (ta.map((t) => t.text).join(" ") === tb.map((t) => t.text).join(" ") ? [] : [{ aStart: 0, aEnd: ta.length, bStart: 0, bEnd: tb.length }]);
+  const slice = (text: string, toks: OffsetToken[], s: number, e: number) => (s < e ? text.slice(toks[s].start, toks[e - 1].end) : "");
+  const gap = (text: string, toks: OffsetToken[], k: number) => (k > 0 && k < toks.length ? text.slice(toks[k - 1].end, toks[k].start) : "");
+  const lineAt = (offset: number) => {
+    const from = offset > 0 ? a.lastIndexOf("\n", offset - 1) + 1 : 0;
+    const to = a.indexOf("\n", offset);
+    return a.slice(from, to === -1 ? a.length : to).trim().slice(0, 200);
+  };
+  const disputes: OcrFusionDispute[] = [];
+  // A szakasz széléről a szó nélküli (írásjel/nyíl) tokenek az A-nál maradnak — különben a B választása az A nyilát/soremelését is
+  // elvinné („határak\n→” ↔ „katonák”); S11/6: a csak-írásjel eltérés nem vita.
+  const wordless = (t: OffsetToken) => wordsOf(t.text).length === 0;
+  const trim = (toks: OffsetToken[], s: number, e: number): [number, number] => {
+    while (e > s && wordless(toks[e - 1])) e--;
+    while (s < e && wordless(toks[s])) s++;
+    return [s, e];
+  };
+  const items = spans.map((raw): FusionItem => {
+    const [aStart, aEnd] = trim(ta, raw.aStart, raw.aEnd), [bStart, bEnd] = trim(tb, raw.bStart, raw.bEnd);
+    const span = { aStart, aEnd, bStart, bEnd };
+    const aText = slice(a, ta, span.aStart, span.aEnd), bText = slice(b, tb, span.bStart, span.bEnd);
+    let n: number | null = null;
+    if (wordKeyedOf(aText) !== wordKeyedOf(bText)) {
+      n = disputes.length + 1;
+      const at = span.aStart < ta.length ? ta[span.aStart].start : a.length;
+      disputes.push({ n, a: aText, b: bText, line: lineAt(at) });
+    }
+    return { span, aText, bText, n, sepAfter: /\n/.test(gap(b, tb, span.bEnd)) ? "\n" : " ", sepBefore: /\n/.test(gap(b, tb, span.bStart)) ? "\n" : " " };
+  });
+  return { items, ta, disputes };
+}
+
+/** A döntőnek küldendő, sorszámozott viták (ugyanaz a determinisztikus terv, mint az összerakásé). */
+export function ocrFusionDisputes(a: string, b: string): OcrFusionDispute[] {
+  return fusionPlan(a, b).disputes;
+}
+
+/** Érvényes döntések sorszám szerint; ütköző ismétlés vagy hibás bejegyzés → nincs döntés (az A alakja jellel). */
+function validChoices(choices: readonly OcrFusionChoice[], count: number): Map<number, OcrFusionChoice> {
+  const out = new Map<number, OcrFusionChoice>();
+  const bad = new Set<number>();
+  for (const c of choices) {
+    if (!c || !Number.isInteger(c.n) || c.n < 1 || c.n > count) continue;
+    const ok = c.pick === "A" || c.pick === "B" || (c.pick === "own" && typeof c.text === "string" && c.text.trim() !== "");
+    const prev = out.get(c.n);
+    if (!ok || (prev && (prev.pick !== c.pick || prev.text !== c.text))) { bad.add(c.n); continue; }
+    out.set(c.n, c);
+  }
+  for (const n of bad) out.delete(n);
+  return out;
+}
+
+/**
+ * Spec S11/7 — DETERMINISZTIKUS összerakás az A olvasatból: csak a szó-szintű viták szakaszai cserélődnek (A | B | own), minden más
+ * bájtra az A marad. `own` → minden, egyik olvasatban sem szereplő szava ⟦?⟧ (ha nincs ilyen, a szakasz vége); hiányzó/érvénytelen
+ * döntés → az A alakja, a B-ben nem szereplő szavai ⟦?⟧-lel (üres A-oldalnál önálló ⟦?⟧ a vita helyén).
+ */
+export function fuseOcrReadings(a: string, b: string, choices: readonly OcrFusionChoice[]): { text: string; stats: OcrFusionStats } {
+  const { items, ta, disputes } = fusionPlan(a, b);
+  const decided = validChoices(choices, Math.min(disputes.length, MAX_FUSION_DISPUTES));
+  const stats: OcrFusionStats = { A: 0, B: 0, own: 0, missing: 0 };
+  const resolve = (it: FusionItem): string => {
+    if (it.n === null) return it.aText;
+    const choice = decided.get(it.n);
+    if (choice?.pick === "A") { stats.A++; return it.aText; }
+    if (choice?.pick === "B") { stats.B++; return it.bText; }
+    if (choice?.pick === "own" && choice.text) {
+      stats.own++;
+      const own = choice.text.replace(/\s+/g, " ").trim();
+      const bare = own.split(UNCERTAIN_MARK).join("").replace(/\s+/g, " ").trim();
+      const selfMarked = own.includes(UNCERTAIN_MARK);
+      if (!selfMarked && wordKeyedOf(bare) === wordKeyedOf(it.aText)) return it.aText;
+      if (!selfMarked && wordKeyedOf(bare) === wordKeyedOf(it.bText)) return it.bText;
+      const marked = markUnknownWords(bare, new Set([...wordsOf(it.aText), ...wordsOf(it.bText)]));
+      return marked.marks > 0 ? marked.text : withTrailingMark(marked.text);
+    }
+    stats.missing++;
+    if (!it.aText) return UNCERTAIN_MARK;
+    const marked = markUnknownWords(it.aText, new Set(wordsOf(it.bText)));
+    return marked.marks > 0 ? marked.text : withTrailingMark(marked.text);
+  };
+  let out = "", cursor = 0;
+  for (const it of items) {
+    const replacement = resolve(it);
+    const { aStart, aEnd } = it.span;
+    if (aEnd > aStart) {
+      const start = ta[aStart].start, end = ta[aEnd - 1].end;
+      let head = a.slice(cursor, start);
+      cursor = end;
+      if (replacement === "") {
+        head = head.replace(/[ \t]+$/, "");
+        if (head === "" || head.endsWith("\n")) cursor += (/^[ \t]*/.exec(a.slice(end))?.[0].length ?? 0);
+      }
+      out += head + replacement;
+    } else if (replacement !== "") {
+      const markOnly = replacement === UNCERTAIN_MARK;
+      if (aStart < ta.length) {
+        const pos = ta[aStart].start;
+        // Review #197 (P2): a B tördelése a beszúrás ELŐTT is érvényes (új sor ne olvadjon az előzőbe).
+        let head = a.slice(cursor, pos);
+        if (!markOnly && head.trim() !== "" && it.sepBefore.includes("\n")) head = head.replace(/\s*$/, "") + it.sepBefore;
+        out += head + replacement + (markOnly ? " " : it.sepAfter);
+        cursor = pos;
+      } else {
+        const pos = ta.length ? ta[ta.length - 1].end : 0;
+        out += a.slice(cursor, pos) + (pos > 0 ? (markOnly ? " " : it.sepBefore) : "") + replacement;
+        cursor = pos;
+      }
+    }
+  }
+  return { text: out + a.slice(cursor), stats };
+}
+
+/**
+ * Spec S11/7: két erős, független olvasó (párhuzamosan) + fúziós döntés + szótár-őr a végén.
+ * Kiesés: a másik olvasó egyedül (+ szótár-őr), naplózva, „degraded” (nem kerül cache-be); mindkettő kiesik → hiba.
+ * A döntő hívás hibája → az A olvasat a viták jelölésével, „degraded” (a következő futás újrapróbálja).
+ * Nem kép (PDF): az A olvas; kiesésekor a B, „degraded”.
+ */
+export function fusionOcr(readerA: OcrFn, readerB: OcrFn, decide: OcrFusionDecider, guard?: OcrLexiconGuard): DualReadOcr {
+  const degradedFiles = new WeakSet<ExtractorFile>();
+  const reasonOf = (r: PromiseSettledResult<string>) =>
+    (r.status === "rejected" ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : "üres válasz").slice(0, 200);
+  const usable = (r: PromiseSettledResult<string>) => (r.status === "fulfilled" && r.value.trim() ? r.value : null);
+  const readCore = async (file: ExtractorFile): Promise<string> => {
+    if (file.kind !== "image") {
+      const [ra] = await Promise.allSettled([readerA(file)]);
+      const a = usable(ra);
+      if (a) return a;
+      degradedFiles.add(file);
+      logger.warn(`[STUDIO/OCR] ${file.name}: degraded — az A olvasó kiesett (${reasonOf(ra)}) — a B olvasó olvas.`);
+      return readerB(file);
+    }
+    const [ra, rb] = await Promise.allSettled([readerA(file), readerB(file)]);
+    const a = usable(ra), b = usable(rb);
+    if (!a || !b) {
+      if (!a && !b) {
+        logger.warn(`[STUDIO/OCR] ${file.name}: mindkét erős olvasó kiesett (A: ${reasonOf(ra)}; B: ${reasonOf(rb)}).`);
+        throw ra.status === "rejected" ? ra.reason : rb.status === "rejected" ? rb.reason : new Error("Az OCR egyik olvasója sem adott szöveget.");
+      }
+      degradedFiles.add(file);
+      logger.warn(`[STUDIO/OCR] ${file.name}: degraded — ${!a ? `az A olvasó kiesett (${reasonOf(ra)})` : `a B olvasó kiesett (${reasonOf(rb)})`} — a másik olvasat egyedül megy tovább (szótár-őrrel).`);
+      return (a ?? b) as string;
+    }
+    const disputes = ocrFusionDisputes(a, b);
+    if (disputes.length === 0) return a;
+    logger.info(`[STUDIO/OCR] ${file.name}: a két erős olvasat ${disputes.length} helyen tér el — fúziós döntés a képpel.`);
+    let choices: OcrFusionChoice[] = [];
+    try {
+      choices = await decide(file, a, b, disputes.slice(0, MAX_FUSION_DISPUTES));
+    } catch (error) {
+      degradedFiles.add(file);
+      logger.warn(`[STUDIO/OCR] ${file.name}: degraded — a fúziós döntés hibázott (${error instanceof Error ? error.message : String(error)}) — az A olvasat, a viták jelölve.`);
+    }
+    const fused = fuseOcrReadings(a, b, choices);
+    logger.info(`[STUDIO/OCR] ${file.name}: fúzió — A: ${fused.stats.A}, B: ${fused.stats.B}, saját: ${fused.stats.own}, döntés nélkül (jelölve): ${fused.stats.missing}.`);
+    return fused.text;
+  };
+  const read = async (file: ExtractorFile): Promise<string> => {
+    degradedFiles.delete(file);
+    const text = await readCore(file);
+    return applyLexiconGuard(file, text, guard, () => degradedFiles.add(file));
+  };
+  return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
+}
+
+export const OCR_FUSION_DECIDER_PROMPT = withRoleSkill("ocr", [
+  "Two strong, independent transcriptions (A and B) of the same photographed Hungarian school page differ in the numbered places listed by the user.",
+  "Look at the image and decide EACH numbered place on its own: \"A\" if reading A is what is written there, \"B\" if reading B is, or \"own\" with your reading in \"text\" when neither matches the handwriting.",
+  "Decide by the letters on the page; use the context only to resolve letter shapes (e.g. k/b, h/f), never to reword, complete or correct the writer's content.",
+  "If the handwriting still does not decide a place, choose \"own\" and end the doubtful word with ⟦?⟧ — never a confident-looking guess.",
+  "Nothing outside the numbered places can be changed; do not rewrite the page.",
+  "Output format for THIS call overrides the skill's plain-text rule: only JSON {\"choices\":[{\"n\":<number>,\"pick\":\"A\"|\"B\"|\"own\",\"text\":\"<only with own>\"}]}, exactly one entry per numbered place.",
+].join(" "));
+
+/** Tolerant parse of the fusion decider's JSON (code fence / prose around it allowed); structurally invalid entries are dropped. */
+export function parseFusionChoices(raw: string): OcrFusionChoice[] {
+  const start = raw.indexOf("{"), end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("A fúziós döntés válasza nem JSON.");
+  const parsed = JSON.parse(raw.slice(start, end + 1)) as { choices?: unknown };
+  if (!Array.isArray(parsed.choices)) throw new Error("A fúziós döntés válaszából hiányzik a choices lista.");
+  return (parsed.choices as { n?: unknown; pick?: unknown; text?: unknown }[]).flatMap((c): OcrFusionChoice[] =>
+    typeof c?.n === "number" && (c.pick === "A" || c.pick === "B" || c.pick === "own")
+      ? [{ n: c.n, pick: c.pick, ...(typeof c.text === "string" ? { text: c.text } : {}) }]
+      : []);
+}
+
+/** A döntő hívás szövege: a két teljes olvasat és a sorszámozott viták. */
+export function fusionDeciderText(a: string, b: string, disputes: OcrFusionDispute[]): string {
+  const q = (s: string) => (s ? `„${s}”` : "(nincs ilyen szöveg)");
+  return `A olvasat:\n<<<\n${a}\n>>>\nB olvasat:\n<<<\n${b}\n>>>\nVitatott helyek (sorszám. A ↔ B; a hely sora az A olvasatból):\n${disputes.map((d) =>
+    `${d.n}. A: ${q(d.a)} ↔ B: ${q(d.b)} — sor: „${d.line}”`).join("\n")}`;
+}
+
+/** The fusion decision call: the image + both readings + the numbered disputes → JSON choices (never the final text). */
+export async function callOcrFusionDecider(file: ExtractorFile, model: string, effort: OcrEffort, a: string, b: string, disputes: OcrFusionDispute[]): Promise<OcrFusionChoice[]> {
+  const text = fusionDeciderText(a, b, disputes);
+  if (providerForModel(model) === "anthropic") return parseFusionChoices(await callClaudeVision(file, model, effort, OCR_FUSION_DECIDER_PROMPT, text));
+  const OpenAI = (await import("openai")).default;
+  return withQuotaFailover(studioConnection(model), async (connection) => {
+    const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: OCR_TIMEOUT_MS[effort], maxRetries: 0 });
+    const base = ocrRequestParams(connection.model, file.content, effort);
+    const params = { ...base, response_format: { type: "json_object" as const }, messages: [
+      { role: "system" as const, content: OCR_FUSION_DECIDER_PROMPT },
+      { role: "user" as const, content: [{ type: "text" as const, text }, ...base.messages[1].content] },
+    ] };
+    const request = ocrVendorRequest(connection.vendor, params);
+    const response = await client.chat.completions.create(request as unknown as Parameters<typeof client.chat.completions.create>[0]);
+    if (!("choices" in response)) throw new Error("A fúziós döntés nem adott választ.");
+    if (response.choices[0]?.finish_reason !== "stop") throw new Error("A fúziós döntés válasza csonkolt.");
+    return parseFusionChoices(response.choices[0]?.message?.content ?? "");
+  });
+}
+
+/* ---- Spec S11/7: a Claude-olvasó (Anthropic SDK, adaptive thinking, `output_config.effort`) ---- */
+
+/** A Claude-olvasó kimeneti kerete (a gondolkodás is ebből fogy; streamelve, így a hosszú kérés nem fut időtúllépésbe). */
+export const CLAUDE_OCR_MAX_TOKENS = 32_000;
+const CLAUDE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+type ClaudeImageType = (typeof CLAUDE_IMAGE_TYPES)[number];
+/** A teszt mockolt klienst ad; élesben az SDK kliense. */
+export type ClaudeMessagesClient = { messages: { stream(params: Anthropic.MessageStreamParams): { finalMessage(): Promise<Anthropic.Message> } } };
+
+/** A forrásfájl Claude-tartalomblokkja: kép → `image`, PDF → `document` (base64). */
+export function claudeSourceBlock(file: ExtractorFile): Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam {
+  const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(file.content);
+  if (!m) throw new Error(`A(z) ${file.name} tartalma nem base64 data URL — a Claude-olvasó nem kapja meg.`);
+  const [, mediaType, data] = m;
+  if (file.kind === "pdf" || mediaType === "application/pdf") return { type: "document", source: { type: "base64", media_type: "application/pdf", data } };
+  if (!(CLAUDE_IMAGE_TYPES as readonly string[]).includes(mediaType)) throw new Error(`A Claude-olvasó nem támogatja a(z) ${mediaType} formátumot.`);
+  return { type: "image", source: { type: "base64", media_type: mediaType as ClaudeImageType, data } };
+}
+
+async function callClaudeVision(file: ExtractorFile, model: string, effort: OcrEffort, system: string, text: string | null, client?: ClaudeMessagesClient): Promise<string> {
+  const connection = studioConnection(model);
+  const anthropic: ClaudeMessagesClient = client ?? new Anthropic({ apiKey: connection.apiKey, baseURL: connection.baseURL, timeout: OCR_TIMEOUT_MS[effort], maxRetries: 1 });
+  const content: Anthropic.ContentBlockParam[] = [claudeSourceBlock(file), ...(text ? [{ type: "text" as const, text }] : [])];
+  // Claude Opus 5.5: a gondolkodás adaptív (budget_tokens nincs), a mélységet az `output_config.effort` adja.
+  const message = await anthropic.messages.stream({
+    model: connection.model,
+    max_tokens: CLAUDE_OCR_MAX_TOKENS,
+    system,
+    thinking: { type: "adaptive" },
+    output_config: { effort },
+    messages: [{ role: "user", content }],
+  }).finalMessage();
+  if (message.stop_reason !== "end_turn") throw new Error(`A Claude-olvasó válasza nem teljes (stop_reason: ${message.stop_reason ?? "?"}).`);
+  // A gondolkodás-blokk(ok) előbb jöhetnek — csak a szövegblokkok számítanak.
+  return message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("").trim();
+}
+
+/** Spec S11/7: a B olvasó (claude-opus-5-5, medium) — ugyanaz az OCR-skill, mint az A-é. */
+export function callClaudeOcr(file: ExtractorFile, model: string, effort: OcrEffort, client?: ClaudeMessagesClient): Promise<string> {
+  const system = file.kind === "pdf" ? `${OCR_SYSTEM_PROMPT} Transcribe every PDF page and label its page number. Preserve formulas and units. Mark unreadable text explicitly.` : OCR_SYSTEM_PROMPT;
+  return callClaudeVision(file, model, effort, system, null, client);
+}
+
+/** Olvasó a gyártó szerint: Anthropic-modell → `callClaudeOcr`, minden más → `callOcrModel` (effort-tal). */
+export function callOcrReader(file: ExtractorFile, model: string, effort: OcrEffort): Promise<string> {
+  return providerForModel(model) === "anthropic" ? callClaudeOcr(file, model, effort) : callOcrModel(file, model, effort);
 }

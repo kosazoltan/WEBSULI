@@ -180,3 +180,44 @@ Mért (job 8953db4b, map d70d8f67, a tulajdonos 4 füzetlapja; publikálás nem 
    nincs ilyen szó, a régi szakaszvégi jel), és (b) az idézet akkor is bizonytalan (`pending`), ha a forrásban jelölt (≥ 3 betűs) szót
    idéz jel nélkül (`quoteTouchesUncertain`). A `tests/ocr-uncertainty-layout.test.ts` „review #192/5” esete ennek megfelelően a
    szakasz vitatott szavát („Ázsia,”) is jelöltnek várja.
+
+## S11/7 — két erős olvasó fúziója (tulajdonosi döntés 2026-10-05, a friss 4-lapos futás után)
+Mért (map d344e889): az erős+gyenge olvasó módszer a 2. és 4. lapon ismét a döntő olvasás elvetésére futott (a döntő olvasó a vitán
+KÍVÜL is átírt: „A világ [olvashatatlan] 1260” → „II. világháború 1939”), ezért minden gyenge-olvasós vita jelet kapott → 35-ből 19
+igazolt fogalom → „túl bizonytalan” megállás. Tulajdonosi döntés: az erős/gyenge módszer helyett KÉT ERŐS olvasó, a döntő a fúziójuk.
+
+### Szabály
+1. Olvasók (párhuzamosan, függetlenül): **A = gpt-6.1-sol, high effort**; **B = claude-opus-5-5, medium effort** (Anthropic SDK,
+   adaptive thinking, `output_config.effort`). Mindkettő ugyanazt az OCR-skillt kapja.
+2. **Fúzió:** az egyező szakasz szó szerint marad. Csak az A↔B eltéréseknél dönt a fúziós lépés (gpt-6.1-sol, high): a kép, mindkét
+   olvasat és a SORSZÁMOZOTT viták alapján vitánként CSAK választhat — `A`, `B`, vagy `own` (saját alak). A végső szöveget a KÓD rakja
+   össze (a vitákon kívül a fúzió semmit nem írhat át → nincs „vitán kívüli változtatás”). `own` → a saját alak minden új szava ⟦?⟧;
+   hiányzó/érvénytelen döntés → az A alakja ⟦?⟧-lel (konzervatív).
+3. Olvasó-kiesés: a másik olvasó egyedül + szótár-őr, naplózva, „degraded” (nem kerül gyorsítótárba).
+4. A szótár-őr (S11/4, S11/6) változatlanul a végső szövegen fut.
+5. A gyenge olvasó (qwen) és a 2-a-3-ból szavazó a forrás-OCR-ből kikerül; a `DEFAULT_MODELS.ocr` (más OCR-utak) nem változik.
+
+### Elfogadás (EARS)
+- Mérés (csak OCR, néhány cent): a tulajdonos 5 füzetlapján a B (opus) recall-ja a fixture-be kerül; a fúzió eredménye ≥ az A-é.
+- HA a fúzió a vitán kívül írna, AKKOR ez szerkezetileg lehetetlen (teszt).
+- Új élő futás a 4 történelem-lapon: a térkép gépi jóváhagyása átmegy, a lecke publikál, és tartalmazza az elsődleges/másodlagos
+  forrásokat; nincs benne „Nílus áradási”, „Negroid”, „ezerév”.
+### Pontosítás (implementáció, 2026-10-05)
+- **Vita:** az A↔B szó-szintű LCS-eltérés; a csak-írásjel/nyíl/szóköz eltérés (S11/6) NEM megy a döntő elé — ott az A marad. A vitatott
+  szakasz széléről a szó nélküli tokenek (nyíl, kötőjel) az A-nál maradnak (a B választása nem viheti el az A nyilát/soremelését).
+- **Összerakás:** A → az A szakasza; B → a B szakasza a B saját tördelésével; `own` → a döntő szövege, minden egyik olvasatban sem szereplő
+  szava ⟦?⟧ (ha nincs ilyen, a szakasz vége kap jelet; az egyik olvasattal szó szerint egyező `own` = az az olvasat, jel nélkül); hiányzó,
+  érvénytelen vagy ütköző döntés → az A szakasza, a B-ben nem szereplő szavai ⟦?⟧-lel (üres A-oldalnál önálló ⟦?⟧ a vita helyén).
+  Legfeljebb 150 vita megy egy döntő hívásba (fölötte: döntés nélkül → jel).
+- **Hibák:** a döntő hívás hibája / nem JSON válasza → az A olvasat a viták jelölésével, „degraded” (nem kerül cache-be). Nem kép (PDF):
+  az A olvas, kiesésekor a B („degraded”).
+- **Gyorsítótár:** az olvasók saját kulcsa a modell + effort (`gpt-6.1-sol|high`, `claude-opus-5-5|medium` — a régi low-effortú sol-átirat
+  nem keveredik); a fúzió kulcsa `fusion-2-strong|<A>|<B>|<döntő>|<a döntő és a sor-újraolvasó prompt hash-e>`.
+- **Mérés-rögzítés:** a fixture `transcripts`/`measured` blokkja az ÖNÁLLÓ olvasóké (+ `claude-opus-5-5`); a fúzió nem olvasó, ezért a
+  saját `fusion` blokkjába kerül (a fúzió A-olvasata — sol high — is ott). A meglévő „a forrás-OCR elsődleges olvasója a legjobb
+  (önálló) olvasó” teszt változatlan; új teszt őrzi, hogy a fúzió ≥ minden önálló olvasó és ≥ a saját A-olvasata.
+**Mérés és spec-változás (S11/7, 2026-10-05):** a tulajdonos 5 füzetlapján: claude-opus-5-5 (medium) 100%, gpt-6.1-sol (high) 99,4%,
+fúzió 99,4%, qwen 87,1%, glm 85,3%. Az egyetlen eltérés a 2. lap „1900” kulcsa (a kézírás kétértelmű; az opus maga is „1900⟦?⟧”-et olvasott,
+a többi olvasó „2900”-at) — a kulcs utólag NEM módosul. Mivel a forrás-OCR eredménye mostantól a FÚZIÓ (nem egyetlen olvasó), a
+`tests/ocr-handwriting-history.test.ts` S11/5-ös „a forrás-OCR elsődleges olvasója a mezőny legjobbja” állítása a spec elfogadási
+feltételére cserélődik: a fúzió ≥ a saját A-olvasata, ≥ a gyenge olvasók (qwen, glm) és ≥ 95%.

@@ -5,7 +5,7 @@ import { db } from "../db";
 import { knowledgeMaps, kmConcepts, systemPrompts } from "../../shared/schema";
 import { and, eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
-import { FALLBACK_MODELS, OCR_THIRD_READER_MODEL, providerForModel, resolveStudioModel } from "../ai/models";
+import { FALLBACK_MODELS, OCR_FUSION_DECIDER, OCR_FUSION_READERS, OCR_THIRD_READER_MODEL, providerForModel, resolveStudioModel } from "../ai/models";
 import { createPromptStore } from "../lib/prompt-store";
 import {
   emptyExtractionReason,
@@ -18,7 +18,7 @@ import {
   type RawExtraction,
   type ExtractionRepair,
 } from "./extractor";
-import { callOcrAdjudicator, callOcrModel, callOcrStrongLines, dualReadOcr, lexiconGuardedOcr, ocrTextsOf, withOcrCache, OCR_ADJUDICATION_PROMPT, OCR_LINE_REREAD_PROMPT, OCR_SYSTEM_PROMPT } from "./ocr";
+import { callOcrAdjudicator, callOcrFusionDecider, callOcrModel, callOcrReader, callOcrStrongLines, dualReadOcr, fusionOcr, lexiconGuardedOcr, ocrTextsOf, withOcrCache, OCR_ADJUDICATION_PROMPT, OCR_FUSION_DECIDER_PROMPT, OCR_LINE_REREAD_PROMPT, OCR_SYSTEM_PROMPT } from "./ocr";
 import { loadHungarianLexicon } from "./ocr-lexicon";
 import { attachSourceTranscripts, repairSourceQuotes, TRANSCRIPT_CONTRACT } from "./source-transcript";
 import { scopeContentParts } from "./one-step";
@@ -321,6 +321,19 @@ export async function createCachedSourceOcr(ocrModel: string) {
   const guard = { lexicon: loadHungarianLexicon, strongLines: strongReady ? (file: Parameters<typeof callOcrStrongLines>[0], lines: Parameters<typeof callOcrStrongLines>[2]) => callOcrStrongLines(file, thirdModel, lines) : undefined };
   const rereadHash = createHash("sha256").update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
   const promptHash = createHash("sha256").update(OCR_ADJUDICATION_PROMPT).update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
+  // Spec 2026-10-05-s11/7 (tulajdonosi döntés, map d344e889): KÉT ERŐS olvasó (A = gpt-6.1-sol high, B = claude-opus-5-5 medium),
+  // a döntő a fúziójuk — a fúziós lépés vitánként csak választ (A | B | own), a szöveget a kód rakja össze; a szótár-őr a végén.
+  // Ha bármelyik olvasó vagy a döntő kulcsa hiányzik: a régi lánc változatlanul.
+  const [readerA, readerB] = OCR_FUSION_READERS;
+  const decider = OCR_FUSION_DECIDER;
+  if ([readerA.model, readerB.model, decider.model].every((m) => studioModelReady(m))) {
+    const a = withOcrCache((file) => callOcrReader(file, readerA.model, readerA.effort), `${readerA.model}|${readerA.effort}`, store);
+    const b = withOcrCache((file) => callOcrReader(file, readerB.model, readerB.effort), `${readerB.model}|${readerB.effort}`, store);
+    const fused = fusionOcr(a, b, (file, ra, rb, disputes) => callOcrFusionDecider(file, decider.model, decider.effort, ra, rb, disputes), guard);
+    const fusionHash = createHash("sha256").update(OCR_FUSION_DECIDER_PROMPT).update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
+    const fusionKey = `fusion-2-strong|${readerA.model}:${readerA.effort}|${readerB.model}:${readerB.effort}|${decider.model}:${decider.effort}|${fusionHash}`;
+    return withOcrCache(fused, fusionKey, store, (file) => !fused.degraded(file));
+  }
   if (strongReady && thirdModel !== ocrModel) {
     // Spec 2026-10-05-s11/5 (tulajdonosi döntés a 8. élő futás után): a forrás-OCR-ben az erős olvasó olvas ELSŐKÉNT és dönt
     // vitában; a konfigurált (mért) OCR-modell a független második; a 2-a-3-ból harmadik szavazó elmarad.
