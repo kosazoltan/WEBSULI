@@ -132,25 +132,32 @@ export function withOcrCache(ocr: OcrFn, model: string, store: OcrCacheStore, sh
  * ------------------------------------------------------------------ */
 
 export type OcrDisagreement = { first: string; second: string };
+/** Review #192: a vita helye — az első olvasat tokenjei közt a vitatott szakasz kezdő indexe (azonos szó máshol ne vigye el a jelet). */
+export type LocatedOcrDisagreement = OcrDisagreement & { at: number };
 
 const ocrTokens = (text: string) => text.split(/\s+/).filter(Boolean);
 const tokenKey = (t: string) => t.toLowerCase().normalize("NFC").replace(/[.,;:!?()„”"'«»]/g, "");
 
 /** Word-level LCS diff; returns the differing spans (first-read side, second-read side). */
 export function ocrDisagreements(first: string, second: string): OcrDisagreement[] {
+  return locateOcrDisagreements(first, second).map(({ first: f, second: s }) => ({ first: f, second: s }));
+}
+
+/** Same diff, with each span's start token index in the first read (`at`). */
+export function locateOcrDisagreements(first: string, second: string): LocatedOcrDisagreement[] {
   const a = ocrTokens(first);
   const b = ocrTokens(second);
-  if (a.length * b.length > 4_000_000) return a.join(" ") === b.join(" ") ? [] : [{ first, second }];
+  if (a.length * b.length > 4_000_000) return a.join(" ") === b.join(" ") ? [] : [{ first, second, at: 0 }];
   const dp: Uint16Array[] = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {
       dp[i][j] = tokenKey(a[i]) === tokenKey(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
-  const out: OcrDisagreement[] = [];
+  const out: LocatedOcrDisagreement[] = [];
   let i = 0, j = 0, spanA: string[] = [], spanB: string[] = [];
   const flush = () => {
-    if (spanA.length || spanB.length) out.push({ first: spanA.join(" "), second: spanB.join(" ") });
+    if (spanA.length || spanB.length) out.push({ first: spanA.join(" "), second: spanB.join(" "), at: i - spanA.length });
     spanA = []; spanB = [];
   };
   while (i < a.length || j < b.length) {
@@ -190,27 +197,102 @@ export function adjudicationStaysInDispute(first: string, adjudicated: string, d
   });
 }
 
+export const UNCERTAIN_MARK = "⟦?⟧";
+const keyedOf = (s: string) => ocrTokens(s).map(tokenKey).filter(Boolean).join(" ");
+/** Érdemi vita: a két olvasat > 2 szerkesztésre tér el — az egyoldalú (beszúrás/törlés) vita is, ha a nem üres oldal > 2 betű. */
+const isSubstantive = (d: OcrDisagreement) => editDistance(keyedOf(d.first), keyedOf(d.second)) > 2;
+const MARK_AHEAD = /^[ \t]*⟦\?⟧/;
+const insertMarks = (text: string, ends: Iterable<number>) => {
+  let out = text;
+  for (const end of [...new Set(ends)].sort((x, y) => y - x)) if (!MARK_AHEAD.test(out.slice(end))) out = `${out.slice(0, end)}${UNCERTAIN_MARK}${out.slice(end)}`;
+  return out;
+};
+/** Tokens with their end offset (a trailing ⟦?⟧ excluded); indices match `ocrTokens`, the key ignores the mark. */
+function positionedTokens(text: string): { key: string; end: number }[] {
+  return [...text.matchAll(/\S+/g)].map((m) => {
+    let raw = m[0];
+    while (raw.endsWith(UNCERTAIN_MARK)) raw = raw.slice(0, -UNCERTAIN_MARK.length);
+    return { key: tokenKey(raw.split(UNCERTAIN_MARK).join("")), end: (m.index ?? 0) + raw.length };
+  });
+}
+/** LCS alignment: for each token of `a` the matched index in `b`, or -1; null when too large. */
+function alignTokens(a: string[], b: string[]): Int32Array | null {
+  if (a.length * b.length > 4_000_000) return null;
+  const dp: Uint16Array[] = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const map = new Int32Array(a.length).fill(-1);
+  let i = 0, j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { map[i] = j; i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
+  }
+  return map;
+}
+
+/** Legacy path (no first read): string search with a position-preserving cursor. */
+function markByCursor(decided: string, disputes: OcrDisagreement[]): string {
+  let out = decided, from = 0;
+  for (const d of disputes) {
+    if (!isSubstantive(d)) continue;
+    const hits = [d.first, d.second].map((s) => s.trim()).filter(Boolean).map((span) => ({ span, at: out.indexOf(span, from) })).filter((h) => h.at >= 0);
+    if (!hits.length) continue;
+    const { span, at } = hits.reduce((x, y) => (y.at < x.at ? y : x));
+    const end = at + span.length;
+    out = insertMarks(out, [end]);
+    from = end + UNCERTAIN_MARK.length;
+  }
+  return out;
+}
+
 /**
  * Spec 2026-10-05-s11 (mért: Mezopotámia-füzet, „Kesia, Föld - Felt.” ↔ a valós „Ázsia, Közel-Kelet”): a döntő olvasás után a
  * vita nyoma eddig elveszett, a téves olvasat tényként került a térképbe. Az ÉRDEMI eltérés (a két olvasat > 2 szerkesztésre
  * különbözik) szakasza a döntő átiratban „⟦?⟧” jelet kap — a rá épülő fogalom nem lesz tény (pending).
+ * Review #192: a jel a vita SAJÁT helyére kerül (az első olvasathoz igazítva, nem az azonos szó első előfordulására); jelölt minden
+ * érdemi vita (az egyoldalú is, ha a döntő átiratban megvan a nem üres olvasat), és a döntő átirat minden olyan változtatása, amely
+ * egyik vitatott olvasattal sem egyezik (harmadik alak). `first` nélkül a régi, szövegkereséses út fut (sorrendtartó kurzorral).
  */
-export const UNCERTAIN_MARK = "⟦?⟧";
-export function markUnresolvedDisputes(decided: string, disputes: OcrDisagreement[]): string {
-  let out = decided;
+export function markUnresolvedDisputes(decided: string, disputes: (OcrDisagreement & { at?: number })[], first?: string): string {
+  if (first === undefined) return markByCursor(decided, disputes);
+  const a = positionedTokens(first), c = positionedTokens(decided);
+  const map = alignTokens(a.map((t) => t.key), c.map((t) => t.key));
+  if (!map) return markByCursor(decided, disputes);
+  const ends: number[] = [];
+  const lastEnd = (from: number, to: number) => { for (let k = to - 1; k >= from; k--) if (c[k].key) return c[k].end; return -1; };
+  const decidedRange = (s: number, e: number): [number, number] => {
+    let prev = -1, next = c.length;
+    for (let k = s - 1; k >= 0; k--) if (map[k] >= 0) { prev = map[k]; break; }
+    for (let k = e; k < a.length; k++) if (map[k] >= 0) { next = map[k]; break; }
+    return [prev + 1, next];
+  };
+  let cursor = 0;
   for (const d of disputes) {
-    const a = ocrTokens(d.first).map(tokenKey).join(" "), b = ocrTokens(d.second).map(tokenKey).join(" ");
-    if (!a || !b || editDistance(a, b) <= 2) continue;
-    // a döntő átiratban a választott olvasat (bármelyik), az első előfordulás, ha még nincs jelölve
-    for (const span of [d.first, d.second].map((s) => s.trim()).filter(Boolean)) {
-      const at = out.indexOf(span);
-      if (at < 0) continue;
-      const end = at + span.length;
-      if (!out.startsWith(UNCERTAIN_MARK, end)) out = `${out.slice(0, end)}${UNCERTAIN_MARK}${out.slice(end)}`;
-      break;
+    const keys = ocrTokens(d.first).map(tokenKey);
+    let s = d.at ?? -1;
+    if (s < 0 && keys.length) {
+      for (let k = cursor; k + keys.length <= a.length; k++) if (keys.every((key, n) => a[k + n].key === key)) { s = k; break; }
     }
+    if (s < 0) continue;
+    cursor = s + keys.length;
+    if (!isSubstantive(d)) continue;
+    const end = lastEnd(...decidedRange(s, s + keys.length));
+    if (end >= 0) ends.push(end);
   }
-  return out;
+  // harmadik alak: a döntő átirat változtatása, amely egyik vitatott olvasat (szóhatáros) része sem
+  const readings = disputes.flatMap((d) => [d.first, d.second]).map((r) => ` ${keyedOf(r)} `);
+  let i = 0, j = 0;
+  while (i <= a.length) {
+    let ni = i;
+    while (ni < a.length && map[ni] < 0) ni++;
+    const nj = ni < a.length ? map[ni] : c.length;
+    const changed = c.slice(j, nj).map((t) => t.key).filter(Boolean).join(" ");
+    const was = a.slice(i, ni).map((t) => t.key).filter(Boolean).join(" ");
+    if (changed && changed !== was && !readings.some((r) => r.includes(` ${changed} `))) {
+      const end = lastEnd(j, nj);
+      if (end >= 0) ends.push(end);
+    }
+    i = ni + 1; j = nj + 1;
+  }
+  return insertMarks(decided, ends);
 }
 
 /**
@@ -218,24 +300,33 @@ export function markUnresolvedDisputes(decided: string, disputes: OcrDisagreemen
  * ha a harmadik olvasat (tokenre, szóhatáron) PONTOSAN az egyik vitatott olvasatot tartalmazza, az nyer, és a jel lekerül; egyezés
  * nélkül a jel marad. A harmadik olvasó nem ír új szöveget, csak választ a két meglévő közül. Mért: gpt-6.1-sol és Opus 5.5 a
  * Mezopotámia-füzetet szinte hibátlanul olvasta (a két alap-olvasó 11 helyen eltért).
+ * Review #192: a keresés sorrendtartó (kurzor); egyoldalú vitánál (az egyik olvasat üres) a nem üres olvasat harmadik olvasatbeli
+ * megléte dönt — benne van: marad (jel nélkül), nincs benne: az üres olvasat nyer (a szakasz kikerül).
  */
 export function resolveByThirdReading(marked: string, disputes: OcrDisagreement[], third: string): string {
   const keyed = (s: string) => ` ${ocrTokens(s).map(tokenKey).filter(Boolean).join(" ")} `;
   const t3 = keyed(third);
-  let out = marked;
+  let out = marked, from = 0;
   for (const d of disputes) {
     const a = keyed(d.first), b = keyed(d.second);
-    if (a.trim() === "" || b.trim() === "") continue;
-    const hasA = t3.includes(a), hasB = t3.includes(b);
-    if (hasA === hasB) continue;
-    const winner = hasA ? d.first.trim() : d.second.trim();
-    for (const span of [d.first, d.second].map((s) => s.trim()).filter(Boolean)) {
-      const markedSpan = `${span}${UNCERTAIN_MARK}`;
-      const at = out.indexOf(markedSpan);
-      if (at < 0) continue;
-      out = `${out.slice(0, at)}${winner}${out.slice(at + markedSpan.length)}`;
-      break;
+    if (a.trim() === "" && b.trim() === "") continue;
+    // a vita jelölt helye (sorrendtartó kurzor) — eldöntetlen vitánál is továbblép, hogy a következő vita ne az ő jelét vigye el
+    const hits = [d.first, d.second].map((s) => s.trim()).filter(Boolean)
+      .map((span) => ({ span: `${span}${UNCERTAIN_MARK}`, at: out.indexOf(`${span}${UNCERTAIN_MARK}`, from) })).filter((h) => h.at >= 0);
+    if (!hits.length) continue;
+    const hit = hits.reduce((x, y) => (y.at < x.at ? y : x));
+    let hasA: boolean;
+    if (a.trim() === "") hasA = !t3.includes(b);
+    else if (b.trim() === "") hasA = t3.includes(a);
+    else {
+      hasA = t3.includes(a);
+      if (hasA === t3.includes(b)) { from = hit.at + hit.span.length; continue; }
     }
+    const winner = hasA ? d.first.trim() : d.second.trim();
+    // az üres olvasat nyer: a szakasz az előtte álló egy szóközzel együtt kikerül
+    const start = winner === "" && hit.at > 0 && /[ \t]/.test(out[hit.at - 1]) ? hit.at - 1 : hit.at;
+    out = `${out.slice(0, start)}${winner}${out.slice(hit.at + hit.span.length)}`;
+    from = start + winner.length;
   }
   return out;
 }
@@ -292,12 +383,13 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
         throw a.status === "rejected" ? a.reason : new Error("Az OCR egyik olvasója sem adott szöveget.");
       }
     }
-    const disputes = ocrDisagreements(primary, other);
+    const located = locateOcrDisagreements(primary, other);
+    const disputes: OcrDisagreement[] = located.map(({ first: f, second: s2 }) => ({ first: f, second: s2 }));
     if (disputes.length === 0) return primary;
     logger.info(`[STUDIO/OCR] ${file.name}: a két olvasat ${disputes.length} helyen eltér — döntő olvasás a képpel.`);
     try {
       const decided = (await adjudicate(file, primary, disputes)).trim();
-      if (decided && adjudicationStaysInDispute(primary, decided, disputes)) return settle(file, markUnresolvedDisputes(decided, disputes), disputes, voter);
+      if (decided && adjudicationStaysInDispute(primary, decided, disputes)) return settle(file, markUnresolvedDisputes(decided, located, primary), disputes, voter);
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasat a vitatott helyeken kívül is változtatott — az első olvasat marad.`);
     } catch (error) {
       logger.warn(`[STUDIO/OCR] ${file.name}: a döntő olvasás hibázott (${error instanceof Error ? error.message : String(error)}) — az első olvasat marad.`);
@@ -305,7 +397,7 @@ export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudica
     degradedFiles.add(file);
     // Spec 2026-10-05-s11 (mérve: a döntő olvasat elvetése után a vita nyoma elveszett — „Kesia, Föld - Felt.”, „határak” jel nélkül):
     // az első olvasat megtartásakor is jelölt az érdemi eltérés.
-    return settle(file, markUnresolvedDisputes(primary, disputes), disputes, voter);
+    return settle(file, markUnresolvedDisputes(primary, located, primary), disputes, voter);
   };
   return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
 }

@@ -340,3 +340,35 @@ test("fusion jobs never publish missing banks even at the autonomous round limit
   assert.equal(store.published.length, 0);
   assert.match((await store.loadJob("fusion-missing"))?.error ?? "", /fúziós módszer/);
 });
+
+test("review #192/6: az átirat-jelölő a TÁROLT leckéből is kikerül (a nyilvános végpont a tárolt leckét adja), publikálás előtt", async () => {
+  const store = new MemoryStore();
+  store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
+  const lesson = lessonCovering(["c1", "c2", "s1"]);
+  (lesson.sections[0].blocks[0] as { text: string }).text = "[KERET: társadalom] Magyarázat: c1 ⟦?⟧ [KERET VÉGE]";
+  store.lessons.set("lesson-1", { id: "lesson-1", mapId: "m1", json: lesson });
+  store.seed({ id: "job-1", mapId: "m1", step: "gate", lessonId: "lesson-1", output: { lesson } });
+
+  const outcome = await runPipelineStep("job-1", deps(store));
+
+  assert.equal(outcome.ok, true);
+  assert.equal(store.published.length, 1);
+  const stored = JSON.stringify(store.lessons.get("lesson-1")?.json);
+  assert.doesNotMatch(stored, /⟦\?⟧|\[KERET/, "a tárolt lecke jelölőmentes");
+  assert.match(stored, /Magyarázat: c1/);
+});
+
+test("review #192/6: ha a jelölők eltávolítása után a lecke sémahibás, a kapu NEM publikál", async () => {
+  const store = new MemoryStore();
+  store.maps.set("m1", { meta: MAP_META, concepts: MAP_CONCEPTS });
+  const lesson = lessonCovering(["c1", "c2", "s1"]);
+  (lesson.sections[0].blocks[0] as { text: string }).text = "⟦?⟧";
+  store.lessons.set("lesson-1", { id: "lesson-1", mapId: "m1", json: lesson });
+  store.seed({ id: "job-1", mapId: "m1", step: "gate", lessonId: "lesson-1", output: { lesson } });
+
+  const outcome = await runPipelineStep("job-1", deps(store));
+
+  assert.equal(outcome.ok, false);
+  assert.equal(store.published.length, 0);
+  assert.match(String((await store.loadJob("job-1"))?.error), /jelölők eltávolítása után/);
+});

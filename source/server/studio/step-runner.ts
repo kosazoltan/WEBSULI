@@ -1576,8 +1576,15 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
   }
   // Spec 2026-10-05-s11: az OCR-átirat jelölői („⟦?⟧”, „[KERET…]”) a gyereknek szóló leckébe nem kerülhetnek — publikálás előtt ki.
   if (hasTranscriptMarks(JSON.stringify(reviewed.data))) {
-    reviewed.data = stripTranscriptMarks(reviewed.data);
-    logger.warn(`[STUDIO/GATE] Átirat-jelölő a leckében (${job.id}) — eltávolítva a publikálás előtt.`);
+    // Review #192: a tisztított lecke újra séma-ellenőrzött, és a TÁROLT leckébe (lessons.json) is visszaíródik — a nyilvános
+    // GET /by-file/:id a tárolt leckét szolgálja ki, a publikálás pedig nem írja újra.
+    const cleaned = lessonSchema.safeParse(stripTranscriptMarks(reviewed.data));
+    if (!cleaned.success) {
+      return fail(store, job, `Az átirat-jelölők eltávolítása után a lecke alakilag hibás: ${zodIssues(cleaned.error)}`);
+    }
+    reviewed.data = cleaned.data;
+    await store.upsertLesson(job.lessonId, job.mapId, cleaned.data);
+    logger.warn(`[STUDIO/GATE] Átirat-jelölő a leckében (${job.id}) — eltávolítva a publikálás előtt, a tárolt lecke frissítve.`);
   }
   const gateFlags = [...(Array.isArray(job.output?.choiceFlags) ? job.output!.choiceFlags as ChoiceFlag[] : []), ...openBankFindingFlags(reviewed.data, job.output?.bankOpenFindings)];
   let choiceGate = resolveChoiceGate(reviewed.data, gateFlags);

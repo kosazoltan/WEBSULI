@@ -33,3 +33,21 @@ test("bekötés: a már érvényes helyesbítés a corrections listába kerül, 
   assert.ok(fn.includes("const corrections = [...proposed, ...persistedCorrections(rows)"), "a lista része");
   assert.ok(fn.includes("if (!pending.length) return corrections;"), "a review #181 kijárata változatlan");
 });
+
+test("review #192/9: más mezőt érintő új helyesbítés mellett a már érvényes másik mező megmarad (mezőnkénti összefésülés, az új nyer)", async () => {
+  const { withPersistedFields } = await import("../server/studio/lesson-pipeline-routes");
+  const persisted = persistedCorrections(rows);
+  const proposed = [
+    { localId: "parasztok-bermuvesek", definition: "A társadalom legnépesebb csoportja.", basis: "owner" as const, reason: "tanári kérés", from: { definition: "A társadalom egyik csoportja." } },
+    { localId: "azsia", term: "Ázsia (Közel-Kelet)", basis: "transcription" as const, reason: "átírás", from: { term: "Ázsia" } },
+    { localId: "sumerek", term: "Sumerek", basis: "owner" as const, reason: "x", from: { term: "Sumérok" } },
+  ];
+  const out = withPersistedFields(proposed, persisted);
+  assert.equal(out[0].term, "Parasztok és kézművesek", "a már érvényes term nem vész el");
+  assert.equal(out[0].definition, "A társadalom legnépesebb csoportja.", "az új definíció nyer");
+  assert.equal(out[1].term, "Ázsia (Közel-Kelet)", "az új term nyer");
+  assert.equal(out[1].definition, "Közel-Kelet térsége.");
+  assert.deepEqual(out[2], proposed[2], "helyesbítetlen sornál nincs mit hozzáfűzni");
+  const code = readFileSync(new URL("../server/studio/lesson-pipeline-routes.ts", import.meta.url), "utf8");
+  assert.ok(code.includes("const proposed = withPersistedFields(mergeCorrections(arithmetic, result.corrections), persistedCorrections(rows));"), "bekötve");
+});

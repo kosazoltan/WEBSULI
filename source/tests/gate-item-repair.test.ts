@@ -111,3 +111,43 @@ test("S9/5: téves útvonalnál is, ha a független ellenőr a jelzett tételt h
   assert.ok(res);
   assert.deepEqual(new Set(called), new Set([t0.id, t1.id]));
 });
+
+test("review #192/7: téves útvonalnál a jelzett tétel javítása a független ellenőr ÍTÉLETÉT kapja, nem a más tételt megnevező üzenetet", async () => {
+  const { lesson } = setup();
+  const t0 = lesson.experience!.tasks[0] as Record<string, unknown>;
+  const t1 = lesson.experience!.tasks[1] as Record<string, unknown>;
+  const misFlag = { path: "experience.tasks[0]", message: "Mi hamis: tasks[1] hiba. | Bizonyíték: …" };
+  const hibaById = new Map<string, string>();
+  let first = true;
+  const res = await repairFlaggedBankItems({ lesson, flags: [misFlag], round: 3, deps: setup({
+    verify: async (_l, p) => { if (p === "experience.tasks[0]" && first) { first = false; return ["a mintaválasz ellentmond a rubrikának"]; } return []; },
+    callBank: async (_s, user) => { const u = JSON.parse(user); hibaById.set(u.tetel.id, u.hiba); const src = u.tetel.id === t0.id ? t0 : t1; return { ...src, q: `${String(src.q)} (javítva)` }; },
+  }).deps });
+  assert.ok(res);
+  assert.equal(hibaById.get(String(t0.id)), "a mintaválasz ellentmond a rubrikának");
+  assert.equal(hibaById.get(String(t1.id)), misFlag.message, "a megnevezett tétel az eredeti üzenetet kapja");
+});
+
+test("review #192/8: két egyszerre hibás tétel — az első javítását a második (még javítatlan) hibája nem buktatja; mindkettő javul", async () => {
+  const { experienceProblems } = await import("../shared/lesson-experience-validation");
+  const { lesson } = setup();
+  const good0 = lesson.experience!.tasks[0] as Record<string, unknown>;
+  const good1 = lesson.experience!.tasks[1] as Record<string, unknown>;
+  assert.deepEqual(experienceProblems(lesson), [], "a fixture bankja hibátlan");
+  const broken = structuredClone(lesson);
+  (broken.experience!.tasks[0] as Record<string, unknown>).sample = "zzz";
+  (broken.experience!.tasks[1] as Record<string, unknown>).sample = "zzz";
+  assert.equal(experienceProblems(broken).length, 2, "mindkét tétel saját mintaválasza hibás");
+  const flags = [{ path: "experience.tasks[0]", message: "mintaválasz hibás" }, { path: "experience.tasks[1]", message: "mintaválasz hibás" }];
+  const res = await repairFlaggedBankItems({ lesson: broken, flags, round: 3, deps: setup({
+    callBank: async (_s, user) => { const id = JSON.parse(user).tetel.id; const src = id === good0.id ? good0 : good1; return { ...src, q: `${String(src.q)} (javítva)` }; },
+  }).deps });
+  assert.ok(res, "mindkét tétel javítható");
+  assert.deepEqual(res.repaired, ["experience.tasks[0]", "experience.tasks[1]"]);
+  assert.deepEqual(experienceProblems(res.lesson), []);
+  // a végső teljes ellenőrzés: ha a második javítás nem sikerül, nincs részleges eredmény
+  const half = await repairFlaggedBankItems({ lesson: broken, flags, round: 3, deps: setup({
+    callBank: async (_s, user) => { const id = JSON.parse(user).tetel.id; return id === good0.id ? { ...good0, q: `${String(good0.q)} (javítva)` } : { ...(broken.experience!.tasks[1] as Record<string, unknown>), q: "még mindig rossz" }; },
+  }).deps });
+  assert.equal(half, null);
+});

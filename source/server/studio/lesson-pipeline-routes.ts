@@ -521,7 +521,8 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     : { corrections: [] as SourceCorrection[], rejected: [] as string[] };
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
-  const proposed = mergeCorrections(arithmetic, result.corrections);
+  // Review #192: az új (pl. csak definíciós) helyesbítés nem ejtheti el ugyanannak a fogalomnak a MÁR érvényes másik mezőjét.
+  const proposed = withPersistedFields(mergeCorrections(arithmetic, result.corrections), persistedCorrections(rows));
   // Review #181 javítása (mért élesben, job e9fac201): újraindításkor a térkép már helyesbített, a modell nem javasol semmit — a
   // MÁR ÉRVÉNYES tanári/átírási helyesbítést a DB-ből kell visszaadni, különben a job nélküle fut, és a független bank-ellenőr a
   // nyers átirathoz („bérművesek”) méri a helyes („kézművesek”) tételeket. Az aritmetikai kör determinisztikusan úgyis újrafut.
@@ -555,6 +556,19 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     return [];
   }
   return corrections;
+}
+
+/** Review #192: mezőnkénti összefésülés — az új helyesbítés mezője nyer, a hiányzó mező a már érvényes helyesbítésből jön. */
+export function withPersistedFields(proposed: SourceCorrection[], persisted: SourceCorrection[]): SourceCorrection[] {
+  return proposed.map((c) => {
+    const p = persisted.find((x) => x.localId === c.localId);
+    if (!p) return c;
+    return {
+      ...c,
+      ...(c.term === undefined && p.term !== undefined ? { term: p.term } : {}),
+      ...(c.definition === undefined && p.definition !== undefined ? { definition: p.definition } : {}),
+    };
+  });
 }
 
 /** A térképen MÁR érvényes tanári/átírási helyesbítés (verbatimReason = corrected:<alap>), a korábbi alak nélkül (review #181). */

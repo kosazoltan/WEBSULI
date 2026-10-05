@@ -101,3 +101,48 @@ test("S11/3: az első olvasó kiesésekor is az erős olvasó lép a helyére; h
   assert.equal(await bothDown(file), "egyetlen olvasat");
   assert.equal(bothDown.degraded(file), true);
 });
+
+/* Review #192 — 4. és 5. lelet. */
+
+test("review #192/4: a jel a vita SAJÁT helyére kerül, nem az azonos szó korábbi előfordulására", async () => {
+  const { locateOcrDisagreements, resolveByThirdReading } = await import("../server/studio/ocr");
+  const first = "határak földje: papok és határak";
+  const located = locateOcrDisagreements(first, "határak földje: papok és katonák");
+  assert.deepEqual(located, [{ first: "határak", second: "katonák", at: 4 }]);
+  assert.equal(markUnresolvedDisputes(first, located, first), "határak földje: papok és határak⟦?⟧");
+  const file = { name: "fuzet.jpg", kind: "image", content: "data:image/jpeg;base64,AA" } as ExtractorFile;
+  const ocr = dualReadOcr(async () => first, async () => "határak földje: papok és katonák", async (_f, f) => f);
+  assert.equal(await ocr(file), "határak földje: papok és határak⟦?⟧");
+  // a harmadik olvasat: az eldöntetlen első vita jelét a második vita döntése nem viheti el
+  const disputes = [{ first: "határak", second: "katonák" }, { first: "határak", second: "papok" }];
+  const out = resolveByThirdReading("A: határak⟦?⟧ B: határak⟦?⟧", disputes, "A: kertészek B: papok");
+  assert.equal(out, "A: határak⟦?⟧ B: papok");
+});
+
+test("review #192/5: a döntő olvasat harmadik alakja (egyik olvasat sem) jelölt — érdemi és betűnyi vitánál is", async () => {
+  const { locateOcrDisagreements } = await import("../server/studio/ocr");
+  const first = "Kesia, Föld - Felt. térsége", second = "Ázsia, Közel-Kelet térsége";
+  assert.equal(markUnresolvedDisputes("Ázsia, Közel-Felet térsége", locateOcrDisagreements(first, second), first), "Ázsia, Közel-Felet⟦?⟧ térsége");
+  const f2 = "Parasztok és bézművesek", s2 = "Parasztok és kézművesek";
+  assert.equal(markUnresolvedDisputes("Parasztok és kézmívesek", locateOcrDisagreements(f2, s2), f2), "Parasztok és kézmívesek⟦?⟧");
+  assert.equal(markUnresolvedDisputes(s2, locateOcrDisagreements(f2, s2), f2), s2, "a vitatott olvasat választása betűnyi vitánál nem jelölt");
+  const file = { name: "fuzet.jpg", kind: "image", content: "data:image/jpeg;base64,AA" } as ExtractorFile;
+  const ocr = dualReadOcr(async () => f2, async () => s2, async () => "Parasztok és kézmívesek");
+  assert.equal(await ocr(file), "Parasztok és kézmívesek⟦?⟧");
+});
+
+test("review #192/5: egyoldalú (beszúrás/törlés) vita — a nem üres olvasat jelölt, ha a döntő átiratban megvan; a harmadik olvasat megléte dönt", async () => {
+  const { locateOcrDisagreements, resolveByThirdReading } = await import("../server/studio/ocr");
+  const first = "papok és katonák", second = "papok és katonák írnokok";
+  const located = locateOcrDisagreements(first, second);
+  assert.deepEqual(located, [{ first: "", second: "írnokok", at: 3 }]);
+  assert.equal(markUnresolvedDisputes(second, located, first), "papok és katonák írnokok⟦?⟧");
+  assert.equal(markUnresolvedDisputes(first, located, first), first, "a döntő átiratban nincs meg a nem üres olvasat → nincs mit jelölni");
+  const reversed = locateOcrDisagreements(second, first);
+  assert.equal(markUnresolvedDisputes(second, reversed, second), "papok és katonák írnokok⟦?⟧");
+  const short = locateOcrDisagreements("papok és a katonák", first);
+  assert.equal(markUnresolvedDisputes("papok és a katonák", short, "papok és a katonák"), "papok és a katonák", "≤ 2 betűs egyoldalú eltérés nem érdemi");
+  const marked = "papok és katonák írnokok⟦?⟧";
+  assert.equal(resolveByThirdReading(marked, located, "papok és katonák írnokok"), "papok és katonák írnokok");
+  assert.equal(resolveByThirdReading(marked, located, "papok és katonák"), "papok és katonák");
+});

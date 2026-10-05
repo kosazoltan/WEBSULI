@@ -54,3 +54,9 @@ olvasat ment tovább) → nem volt vita, jelölés, harmadik olvasat; a „Kesia
 lett és publikálódott. Szabály: bármelyik alap-olvasó kiesésekor (hiba vagy üres válasz) a kiesés és oka naplózva; az erős olvasó
 (OCR_THIRD_READER_MODEL) olvasata lép a helyére — két független olvasat, a meglévő döntő olvasás és jelölés; a 2 a 3-ból szavazás ilyenkor
 elmarad (az erős olvasat már az egyik). Ha az erős olvasó is kiesik: a régi viselkedés, de NAPLÓZVA és „degraded”.
+
+## Review #192 — jelölés pontosítása (2026-10-05)
+- A `⟦?⟧` a vita SAJÁT helyére kerül (a döntő átirat az első olvasathoz igazítva), nem az azonos szó első előfordulására.
+- Jelölt a Cél 2 szerint a döntő átirat minden olyan változtatása is, amely egyik vitatott olvasattal sem egyezik (harmadik alak),
+  betűnyi vitánál is; és az egyoldalú (beszúrás/törlés) érdemi vita, ha a nem üres olvasat a döntő átiratban megvan.
+- S11/2 egyoldalú vitánál: a nem üres olvasat harmadik olvasatbeli megléte dönt (benne van → marad jel nélkül; nincs → kikerül).

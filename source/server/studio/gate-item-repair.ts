@@ -69,6 +69,13 @@ function choiceProblems(ref: BankItemRef, item: Record<string, unknown>, lessonT
   return [];
 }
 
+const bankProblems = (lesson: Lesson) => [...experienceProblems(lesson), ...verifyLessonSkillBank(lesson.experience, lesson.subject, lesson.sections).problems];
+/** A probléma ezt a tételt nevezi meg (id-előtag vagy `bank.index` / `bank[index]` útvonal). */
+function mentionsItem(problem: string, ref: BankItemRef, id: unknown): boolean {
+  if (typeof id === "string" && id && (problem.startsWith(`${id}:`) || problem.includes(` ${id}:`))) return true;
+  return new RegExp(`(^|[^\\w])${ref.bank}(\\.|\\[)${ref.index}(?!\\d)`, "u").test(problem);
+}
+
 export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag[]; round: number; subject?: string; deps: GateRepairDeps }): Promise<{ lesson: Lesson; repaired: string[] } | null> {
   const { deps } = args;
   let lesson = args.lesson;
@@ -87,6 +94,7 @@ export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag
   }
   if (!targets.length || targets.length > GATE_REPAIR_MAX_ITEMS) return null;
   for (const t of targets) {
+    let message = t.message;
     // Téves útvonal: a tétel változatlanul a független ellenőr elé kerül; csak hibátlan ítéletnél szűnik meg a jelzése.
     if (checkOnly.has(bankItemPath(t.ref))) {
       const verdict = await deps.verify(lesson, t.path);
@@ -95,16 +103,21 @@ export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag
         repaired.push(t.path);
         continue;
       }
+      // Review #192: a javítás a független ellenőr ítéletét kapja (az eredeti üzenet MÁS tételt nevez meg).
+      message = verdict.join(" | ");
     }
     const before = itemOf(lesson, t.ref)!;
+    // Review #192: a többi (még javítatlan) jelzett tétel hibája nem buktathatja ezt a javítást — tételenként csak az ÚJ, vagy
+    // EZT a tételt megnevező bankhiba számít; a végén egy teljes ellenőrzés.
+    const baseline = new Set(bankProblems(lesson));
     const section = lesson.sections[Number(before.sectionIndex)];
     const user = JSON.stringify({
       feladat: "Írd újra EZT az egy banktételt úgy, hogy a megnevezett hiba megszűnjön. Csak a javított tétel JSON-ját add vissza, ugyanazokkal az id, sectionIndex, coversConceptIds (és kvíznél intent) mezőkkel.",
-      hiba: t.message, bank: t.ref.bank, tetel: before, fejezetTanitasa: section ? JSON.stringify(section).slice(0, 6000) : null,
+      hiba: message, bank: t.ref.bank, tetel: before, fejezetTanitasa: section ? JSON.stringify(section).slice(0, 6000) : null,
     });
     const result = await orchestratedRetry(
       { role: "bank", step: "bank", model: deps.bankModel, system: deps.bankSystem, user, point: `gate:${args.round}:${t.path}`, round: args.round, ...(args.subject ? { subject: args.subject } : {}) },
-      { kind: "gate", reasons: [t.message], rawOutput: JSON.stringify(before) },
+      { kind: "gate", reasons: [message], rawOutput: JSON.stringify(before) },
       async (corrected, n) => {
         const raw = await deps.callBank(corrected, user, n);
         const candidate = (raw && typeof raw === "object" && !Array.isArray(raw) && "tetel" in raw ? (raw as { tetel: unknown }).tetel : raw) as Record<string, unknown>;
@@ -118,7 +131,7 @@ export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag
         }
         const problems = [...bindingProblems(before, item), ...choiceProblems(t.ref, item, lesson.title)];
         const next = withItem(lesson, t.ref, item);
-        problems.push(...experienceProblems(next), ...verifyLessonSkillBank(next.experience, next.subject, next.sections).problems);
+        problems.push(...bankProblems(next).filter((p) => !baseline.has(p) || mentionsItem(p, t.ref, before.id)));
         if (problems.length) throw new OrchestrationValidationError("gate", problems, JSON.stringify(item).slice(0, 6000));
         // A független bank-ellenőr ítélete (ugyanaz a mérce, mint a lektor-körben) — csak ezen az útvonalon.
         const verdict = await deps.verify(next, t.path);
@@ -130,6 +143,10 @@ export async function repairFlaggedBankItems(args: { lesson: Lesson; flags: Flag
     if (!result) { logger.warn(`[ORKESZTRÁTOR] kapu: ${t.path} nem javítható — a régi hibaút.`); return null; }
     lesson = result.value;
     repaired.push(t.path);
+  }
+  if (lesson !== args.lesson) {
+    const remaining = bankProblems(lesson);
+    if (remaining.length) { logger.warn(`[ORKESZTRÁTOR] kapu: a javított bank teljes ellenőrzése bukott (${remaining.slice(0, 3).join(" | ")}) — a régi hibaút.`); return null; }
   }
   return { lesson, repaired };
 }
