@@ -2,7 +2,7 @@
 // Futtatás: npx tsx scripts/catalog/classify.mts --pilot   (a 10 előre rögzített lecke; tulajdonosi engedéllyel, fizetős)
 //           npx tsx scripts/catalog/classify.mts --all     (mind a 201 lecke — külön engedéllyel)
 import "dotenv/config";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CLASSIFIER_MODELS, classificationInput, classifyWithConsensus, type ClassifyCall } from "../../server/catalog/classify";
@@ -35,7 +35,19 @@ const call: ClassifyCall = async (model, system, user) => {
 const models = [...CLASSIFIER_MODELS];
 const results: Array<Record<string, unknown>> = [];
 let tokensIn = 0, tokensOut = 0;
+// Mért (2026-10-05): a teljes futás a háttér-időkorláton megszakadt, és a csak a végén írt eredmény elveszett. Leckénként
+// hozzáfűzött ellenőrzőpont: újraindításkor a kész lecke nem fut (és nem kerül) újra.
+const partialPath = resolve(here, "../../.catalog", `${day}-classify-${mode}.partial.jsonl`);
+const done = new Map<string, Record<string, unknown>>();
+if (existsSync(partialPath)) for (const line of readFileSync(partialPath, "utf8").split(/\r?\n/)) if (line.trim()) { const r = JSON.parse(line) as Record<string, unknown>; done.set(String(r.provenance), r); }
 for (const provenance of targets) {
+  const saved = done.get(provenance);
+  if (saved) {
+    results.push(saved);
+    const u = saved.usage as { promptTokens?: number; completionTokens?: number } | undefined;
+    tokensIn += u?.promptTokens ?? 0; tokensOut += u?.completionTokens ?? 0;
+    continue;
+  }
   const input = classificationInput(byLesson.get(provenance)!);
   const started = Date.now();
   // Self-consistency: két független modell; eltérésnél admin-átnézés (S3), nem csendes döntés.
@@ -51,6 +63,7 @@ for (const provenance of targets) {
     if (exp) Object.assign(row, { expectedAmongCandidates: res.candidates.some((c) => exp.subject.includes(c.classification.subject)) });
   } else Object.assign(row, { reason: res.reason });
   results.push(row);
+  appendFileSync(partialPath, JSON.stringify(row) + "\n");
   const label = res.status === "agreed" ? `${res.classification.subject} / ${res.classification.lessonType} / ${res.classification.grade} / ${res.classification.topic}` : res.reason.slice(0, 140);
   console.log(`${res.status === "agreed" ? "✓" : res.status === "review" ? "?" : "✗"} ${input.title.slice(0, 50).padEnd(50)} → ${label}${exp && res.status === "agreed" ? `  [tantárgy ${row.subjectOk ? "OK" : "ELTÉR"}, típus ${row.typeOk ? "OK" : "ELTÉR"}]` : ""}`);
 }
