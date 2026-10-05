@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-10-05T07:28:34.396Z",
+  "measuredAt": "2026-10-05T07:33:15.692Z",
   "lessons": {
     "legacy": 177,
     "fusion": 24
@@ -11,7 +11,7 @@
     "ratio": 0.991
   },
   "totals": {
-    "legacy.section": 3139,
+    "legacy.section": 3213,
     "legacy.open_task": 2898,
     "legacy.quiz": 10574,
     "legacy.short_answer": 3032,
@@ -65,11 +65,11 @@
       "scriptErrors": 0,
       "literalObjects": 142,
       "classified": 131,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "open_task": 45,
         "quiz": 86,
-        "section": 31
+        "section": 32
       },
       "keyedEstimate": 86
     },
@@ -82,9 +82,9 @@
       "scriptErrors": 1,
       "literalObjects": 0,
       "classified": 0,
-      "duplicates": 2,
+      "duplicates": 0,
       "kinds": {
-        "section": 18
+        "section": 20
       },
       "keyedEstimate": 0
     },
@@ -228,11 +228,11 @@
       "scriptErrors": 0,
       "literalObjects": 206,
       "classified": 200,
-      "duplicates": 14,
+      "duplicates": 1,
       "kinds": {
         "short_answer": 75,
         "quiz": 124,
-        "section": 7
+        "section": 20
       },
       "keyedEstimate": 125
     },
@@ -421,10 +421,10 @@
       "scriptErrors": 0,
       "literalObjects": 76,
       "classified": 50,
-      "duplicates": 6,
+      "duplicates": 0,
       "kinds": {
         "quiz": 50,
-        "section": 15
+        "section": 21
       },
       "keyedEstimate": 50
     },
@@ -437,10 +437,10 @@
       "scriptErrors": 0,
       "literalObjects": 76,
       "classified": 50,
-      "duplicates": 6,
+      "duplicates": 0,
       "kinds": {
         "quiz": 50,
-        "section": 15
+        "section": 21
       },
       "keyedEstimate": 50
     },
@@ -470,11 +470,11 @@
       "scriptErrors": 0,
       "literalObjects": 42,
       "classified": 40,
-      "duplicates": 6,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 15,
         "quiz": 25,
-        "section": 17
+        "section": 23
       },
       "keyedEstimate": 25
     },
@@ -520,10 +520,10 @@
       "scriptErrors": 0,
       "literalObjects": 206,
       "classified": 200,
-      "duplicates": 5,
+      "duplicates": 0,
       "kinds": {
         "quiz": 200,
-        "section": 8
+        "section": 13
       },
       "keyedEstimate": 200
     },
@@ -536,10 +536,10 @@
       "scriptErrors": 0,
       "literalObjects": 53,
       "classified": 50,
-      "duplicates": 2,
+      "duplicates": 0,
       "kinds": {
         "quiz": 50,
-        "section": 16
+        "section": 18
       },
       "keyedEstimate": 50
     },
@@ -649,9 +649,9 @@
       "scriptErrors": 0,
       "literalObjects": 0,
       "classified": 0,
-      "duplicates": 2,
+      "duplicates": 0,
       "kinds": {
-        "section": 35
+        "section": 37
       },
       "keyedEstimate": 0
     },
@@ -681,10 +681,10 @@
       "scriptErrors": 0,
       "literalObjects": 152,
       "classified": 97,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "quiz": 97,
-        "section": 29
+        "section": 30
       },
       "keyedEstimate": 97
     },
@@ -760,11 +760,11 @@
       "scriptErrors": 0,
       "literalObjects": 200,
       "classified": 198,
-      "duplicates": 2,
+      "duplicates": 1,
       "kinds": {
         "short_answer": 99,
         "quiz": 98,
-        "section": 19
+        "section": 20
       },
       "keyedEstimate": 0
     },
@@ -844,11 +844,11 @@
       "scriptErrors": 0,
       "literalObjects": 112,
       "classified": 105,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 50,
         "quiz": 55,
-        "section": 19
+        "section": 20
       },
       "keyedEstimate": 55
     },
@@ -911,11 +911,11 @@
       "scriptErrors": 0,
       "literalObjects": 104,
       "classified": 100,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 50,
         "quiz": 50,
-        "section": 16
+        "section": 17
       },
       "keyedEstimate": 50
     },
@@ -945,11 +945,11 @@
       "scriptErrors": 0,
       "literalObjects": 202,
       "classified": 195,
-      "duplicates": 3,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 98,
         "quiz": 97,
-        "section": 15
+        "section": 18
       },
       "keyedEstimate": 97
     },
@@ -1076,10 +1076,10 @@
       "scriptErrors": 0,
       "literalObjects": 33,
       "classified": 25,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "quiz": 25,
-        "section": 11
+        "section": 12
       },
       "keyedEstimate": 25
     },
@@ -1241,10 +1241,10 @@
       "scriptErrors": 0,
       "literalObjects": 125,
       "classified": 75,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "quiz": 75,
-        "section": 13
+        "section": 14
       },
       "keyedEstimate": 75
     },
@@ -1291,11 +1291,11 @@
       "scriptErrors": 0,
       "literalObjects": 141,
       "classified": 120,
-      "duplicates": 4,
+      "duplicates": 0,
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 16
+        "section": 20
       },
       "keyedEstimate": 75
     },
@@ -1342,11 +1342,11 @@
       "scriptErrors": 0,
       "literalObjects": 133,
       "classified": 120,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 45,
         "quiz": 75,
-        "section": 16
+        "section": 17
       },
       "keyedEstimate": 75
     },
@@ -1376,11 +1376,11 @@
       "scriptErrors": 0,
       "literalObjects": 187,
       "classified": 175,
-      "duplicates": 2,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 100,
         "quiz": 75,
-        "section": 21
+        "section": 23
       },
       "keyedEstimate": 75
     },
@@ -1529,11 +1529,11 @@
       "scriptErrors": 0,
       "literalObjects": 127,
       "classified": 120,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 5
+        "section": 6
       },
       "keyedEstimate": 75
     },
@@ -1579,11 +1579,11 @@
       "scriptErrors": 0,
       "literalObjects": 126,
       "classified": 120,
-      "duplicates": 3,
+      "duplicates": 0,
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 19
+        "section": 22
       },
       "keyedEstimate": 75
     },
@@ -1746,10 +1746,10 @@
       "scriptErrors": 0,
       "literalObjects": 131,
       "classified": 75,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "quiz": 75,
-        "section": 15
+        "section": 16
       },
       "keyedEstimate": 75
     },
@@ -1779,11 +1779,11 @@
       "scriptErrors": 0,
       "literalObjects": 127,
       "classified": 119,
-      "duplicates": 2,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 45,
         "quiz": 74,
-        "section": 20
+        "section": 22
       },
       "keyedEstimate": 74
     },
@@ -2161,11 +2161,11 @@
       "scriptErrors": 0,
       "literalObjects": 132,
       "classified": 124,
-      "duplicates": 2,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 49,
         "quiz": 75,
-        "section": 13
+        "section": 15
       },
       "keyedEstimate": 75
     },
@@ -2401,11 +2401,11 @@
       "scriptErrors": 0,
       "literalObjects": 130,
       "classified": 79,
-      "duplicates": 1,
+      "duplicates": 0,
       "kinds": {
         "short_answer": 4,
         "quiz": 75,
-        "section": 40
+        "section": 41
       },
       "keyedEstimate": 0
     },
@@ -2602,11 +2602,11 @@
       "scriptErrors": 0,
       "literalObjects": 137,
       "classified": 120,
-      "duplicates": 3,
+      "duplicates": 0,
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 35
+        "section": 38
       },
       "keyedEstimate": 0
     },
@@ -2634,11 +2634,11 @@
       "scriptErrors": 0,
       "literalObjects": 131,
       "classified": 120,
-      "duplicates": 2,
+      "duplicates": 0,
       "kinds": {
         "open_task": 45,
         "quiz": 75,
-        "section": 25
+        "section": 27
       },
       "keyedEstimate": 75
     },

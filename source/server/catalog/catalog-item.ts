@@ -28,6 +28,8 @@ export type CatalogItemDraft = {
   keywordGroups?: string[][];
   /** Szókincs-pár. */
   pair?: { source: string; target: string; sourceLang: string; targetLang: string };
+  /** Sorrend-lépések (fúziós sorba rendező / ok-okozat / idővonal módszer) — review #188. */
+  steps?: string[];
   /** Fúziós tétel kötése (ha van). */
   conceptIds?: string[];
   /** Az eredeti objektum-kulcsai (formátum-statisztikához). */
@@ -37,9 +39,11 @@ export type CatalogItemDraft = {
 
 const norm = (s: string) => s.normalize("NFC").toLocaleLowerCase("hu").replace(/\s+/g, " ").trim();
 
-/** Duplikátum-szűrés: fajta + normalizált szöveg + opciók/válaszok. */
+/** Duplikátum-szűrés: MINDEN tudást hordozó mező (review #188: a szöveg, a kulcsszó-csoportok és a lépések is — különben két azonos
+ *  című, de más tartalmú fejezet/feladat összevonódna és tudás veszne el). */
 export function itemFingerprint(item: Omit<CatalogItemDraft, "fingerprint" | "provenance">): string {
-  const parts = [item.kind, norm(item.prompt), ...(item.options ?? []).map(norm), String(item.correctIndex ?? ""), ...(item.accepted ?? []).map(norm),
+  const parts = [item.kind, norm(item.prompt), norm(item.body ?? ""), ...(item.options ?? []).map(norm), String(item.correctIndex ?? ""), ...(item.accepted ?? []).map(norm),
+    ...(item.keywordGroups ?? []).map((g) => g.map(norm).join("|")), ...(item.steps ?? []).map(norm),
     ...(item.pair ? [norm(item.pair.source), norm(item.pair.target)] : [])];
   return createHash("sha1").update(parts.join("\u0001")).digest("hex").slice(0, 16);
 }

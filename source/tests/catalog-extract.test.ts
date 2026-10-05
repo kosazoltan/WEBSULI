@@ -55,6 +55,11 @@ test("duplikátum-szűrés lenyomattal és a szöveg-szakaszok (≥ 40 karakter,
   assert.equal(r.items.filter((i) => i.kind === "quiz").length, 1);
   assert.equal(r.stats.duplicates, 1);
   assert.deepEqual(textSections("<h3>Rövid</h3><p>túl rövid</p><style>.x{}</style>"), []);
+  // review #188: azonos cím, más tartalom → két tétel (nem duplikátum); azonos kérdés, más kulcsszavak → két tétel
+  const twin = extractLegacyLesson("<h2>Összefoglalás</h2><p>Az első fejezet összefoglalása hosszabb szöveggel, mint negyven karakter.</p><h2>Összefoglalás</h2><p>A második fejezet összefoglalása egészen más tartalommal, hosszabban.</p>"
+    + `<script>var t=[{q:"Írd le!",keywords:["alma"]},{q:"Írd le!",keywords:["körte"]}];</script>`, "legacy_html:t3");
+  assert.equal(twin.items.filter((i) => i.kind === "section").length, 2);
+  assert.equal(twin.items.filter((i) => i.kind === "open_task").length, 2);
 });
 
 test("fúziós lecke: a kinyert kvíz/feladat/módszer darab egyezik a lecke bankjával", () => {
@@ -65,5 +70,8 @@ test("fúziós lecke: a kinyert kvíz/feladat/módszer darab egyezik a lecke ban
   assert.equal(count("quiz"), uniq(lesson.experience!.quiz, (q) => q.question + q.options.join("|") + q.correctIndex));
   assert.equal(count("open_task"), uniq(lesson.experience!.tasks, (t) => t.q));
   assert.ok(count("method") > 0 && count("section") > 0);
+  // review #188: a sorrend-lépések megmaradnak
+  const withSteps = lesson.experience!.methods.filter((m) => m.steps?.length).length;
+  assert.equal(items.filter((i) => i.kind === "method" && i.steps?.length).length > 0, withSteps > 0);
   assert.ok(items.filter((i) => i.kind === "quiz").every((i) => typeof i.correctIndex === "number"));
 });

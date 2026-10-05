@@ -29,6 +29,6 @@ export function extractFusionLesson(lesson: Lesson, provenance: string): Catalog
   if (!ex) return items;
   for (const q of ex.quiz) push({ kind: "quiz", prompt: q.question, options: q.options, correctIndex: q.correctIndex, conceptIds: q.coversConceptIds, shape: "fusion.quiz" });
   for (const t of ex.tasks) push({ kind: "open_task", prompt: t.q, keywordGroups: t.required, body: t.sample, conceptIds: t.coversConceptIds, shape: "fusion.task" });
-  for (const m of ex.methods) push({ kind: "method", prompt: m.prompt, body: m.answer, ...(m.options ? { options: m.options } : {}), ...(m.correctIndex !== undefined ? { correctIndex: m.correctIndex } : {}), conceptIds: m.coversConceptIds, shape: `fusion.method.${m.kind}` });
+  for (const m of ex.methods) push({ kind: "method", prompt: m.prompt, body: m.answer, ...(m.options ? { options: m.options } : {}), ...(m.correctIndex !== undefined ? { correctIndex: m.correctIndex } : {}), ...(m.steps ? { steps: m.steps } : {}), conceptIds: m.coversConceptIds, shape: `fusion.method.${m.kind}` });
   return items;
 }
