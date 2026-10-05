@@ -689,3 +689,12 @@ ezt nézi. **#155:** a tanári kérés forrásból betűhíven igazolt (≤ 300 
 azonosító a célfejezet vázlatába is bekerül (a szerző engedélyezett címkéi közé), publikáláskor `extra` súllyal tartósan a térképre
 kerül (NOT EXISTS beszúrás), a mérés-hash a forrást és sémaverziót is tartalmazza. Unit 1785/1785, CI zöld, merge e082bbe, élesítve.
 Élő próba: új Egyiptom-gyártás (3) indítva a merge után.
+
+## 2026-10-05 — tudásbank S1–S4, orkesztrátor + streamelés, forrás-OCR fúzió, determinisztikus bank-normalizálás (#188–#199)
+**Kiadva:** S2 besorolás (#189; pilot tantárgy 10/10, típus 9/10), S3/S4 bankok + 17 tantárgyi skill (#193; éles import 23 209 sor),
+S10/S9 streamelés, orkesztrátor, automatikus folytatás (#190–#192), S11 OCR-bizonytalanság, szótár-őr, két erős olvasó fúziója
+(#192, #194, #195, #197), bank-normalizálás + kapu-javítás adagolva (#196), SVG szám-attribútum (#198), körforgás-felirat (#199).
+**Mérés:** 5 kézírásos lap kulcs-token recall: opus-5.5 100%, sol 99,4%, fúzió 99,4%, qwen 87,1%, glm 85,3%. **Élő:** a tulajdonos
+4 történelem-lapjából megállás nélkül publikált lecke 13f2102b (1441 s); Mezopotámia-lecke 76197093 helyes tényekkel.
+**Tanulság:** a 3 napos foltozás után a bukások kategóriákra bontása mutatta meg, hogy a zöm gépies hiba → determinisztikus kód;
+a forrás-hibák a gyenge OCR-olvasó cseréjével szűntek meg. Éles revízió: Render 37a4b8a, Vercel success.
