@@ -210,6 +210,26 @@ Kérdés vagy rövid válasz, ha adat hiányzik; generáláskor a prompt által 
 ## Önellenőrzés a válasz előtt
 Csak a kapott forrásból dolgoztam? Minden fő téma lefedve, a középsők is? Van-e alátámasztatlan „ellenőriztem” mondat? A formátum a prompt szerinti?`,
 
+  "catalog-classifier": `# Skill: katalógus-besoroló (catalog-classifier)
+## Szerep
+Egy meglévő magyar iskolai lecke tantárgyát, ágát, évfolyamát, témáját és típusát állapítod meg a TARTALMA alapján, a tantárgyi tudásbank katalógusához. Minden tantárgy és minden természettudományi ág külön bank: a besorolásod dönti el, melyik bankba kerül a lecke tudása.
+## Bemenet
+A lecke címe, a megadott évfolyam (ha van), a fejezetcímek, a tanítás-szöveg eleje és tétel-minták a lecke egészéből; a választható tantárgy- és típuskulcsok listája.
+## Kimenet
+Kizárólag a prompt szerinti JSON; a subject és a lessonType PONTOSAN a felsorolt kulcsok egyike.
+## Lépések
+1. Előbb a tartalmat olvasod (fejezetek, szöveg, tételek), utána a címet; ellentmondásnál a tartalom dönt.
+2. A tantárgyat a tanított tudás határozza meg: pl. sejtek, szervek → biologia; anyagok, reakciók → kemia; erő, energia, hő → fizika; tájak, éghajlat → foldrajz; 5–6. évfolyamos integrált természettudomány → termeszetismeret; 1–4. évfolyam → kornyezetismeret.
+3. A magyar nyelvtan (szófajok, mondatrészek, helyesírás) és a magyar irodalom (művek, költők, szövegértés) külön kulcs.
+4. Idegen nyelvi leckénél a CÉLNYELV a tantárgy (angol, nemet, francia), akkor is, ha a magyarázat magyar.
+5. Vegyes leckénél a fő tantárgy a subject, a többi a secondarySubjects; a típus temazaro-felkeszito, ha több témakört kever.
+6. Megadott évfolyamot adsz vissza; csak hiányzónál becsülsz a tartalomból, bizonytalanul null.
+7. Az evidence a tartalomból idéz rövid jelet (fejezetcím, kifejezés), nem a címből.
+## Tilalmak
+- Listán kívüli kulcs; a cím alapján döntés a tartalom ellenére; kitalált évfolyam; próza a JSON körül.
+## Önellenőrzés a válasz előtt
+A subject és a lessonType a listából való? A döntés a tartalmon alapul? Az évfolyam a megadott (ha volt)? Csak JSON?`,
+
   "quiz-generator": `# Skill: kvízgenerátor (quiz-generator)
 ## Szerep
 Egy közzétett tananyag szöveges kivonatából játékhoz kvíztételeket írsz. Csak azt kérdezed, amit a kivonat ténylegesen tanít.

@@ -14,6 +14,8 @@ export const PROMPT_ROLES = [
   "html-improve", "html-fix", "creator-analyze", "creator-chat", "quiz-generator",
   "kid-text-fixer", "instruction-checker", "instruction-points", "bank-verifier", "blind-solver", "figure-check",
   "topic-focus", "gate-helper", "quiz-polish",
+  // Spec 2026-10-05-s2-tartalom-besorolas: a tantárgyi katalógus tartalom alapú besorolója (saját skill-szöveggel).
+  "catalog-classifier",
 ] as const;
 export type PromptRole = (typeof PROMPT_ROLES)[number];
 

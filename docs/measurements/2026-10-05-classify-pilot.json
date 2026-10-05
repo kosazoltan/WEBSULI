@@ -1,0 +1,304 @@
+{
+  "measuredAt": "2026-10-05T07:53:17.745Z",
+  "mode": "pilot",
+  "models": [
+    "z-ai/glm-5.3-flash",
+    "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4-flash"
+  ],
+  "lessons": 10,
+  "agreed": 8,
+  "review": 2,
+  "unclassified": 0,
+  "subjectAgreement": "8/10",
+  "typeAgreement": "7/10",
+  "tokens": {
+    "in": 59983,
+    "out": 6766,
+    "perLessonIn": 5998,
+    "perLessonOut": 677
+  },
+  "results": [
+    {
+      "provenance": "legacy_html:b7861b2e-b3cc-4e79-abff-58f88cf69071",
+      "title": "8. osztályos hőtan",
+      "ms": 22573,
+      "usage": {
+        "promptTokens": 6441,
+        "completionTokens": 1409
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "fizika",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Hőtan",
+      "topic": "Hőjelenségek: halmazállapotok, hőátadás",
+      "lessonType": "temazaro-felkeszito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Halmazállapot-változások', 'Hőtágulás', 'Belső energia', 'Hőátadás módjai'; képletek, mintapélda, 15 feladat + 25 kérdéses kvíz – teljes témakör összefoglaló felkészítő.",
+      "subjectOk": true,
+      "typeOk": false
+    },
+    {
+      "provenance": "legacy_html:c7ef61d6-ca4f-4bd5-8057-12af768fc051",
+      "title": "Magyar Népzene - 8. osztály",
+      "ms": 9234,
+      "usage": {
+        "promptTokens": 6435,
+        "completionTokens": 395
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "enek-zene",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "zenei kultúra",
+      "topic": "Magyar népzene: hangsorok, tájegységek, gyűjtés, táncház",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A pentaton hangsor', 'Magyar népi hangszerek', 'Tájegységek zenéje', 'A népzenegyűjtés története', 'A táncházmozgalom'; kvíz és szöveges feladatok.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:2b4e9607-a548-4612-8c71-329ae09367cd",
+      "title": "5. osztályos kompetenciamérés felkészítő",
+      "ms": 30121,
+      "usage": {
+        "promptTokens": 6110,
+        "completionTokens": 1138
+      },
+      "status": "review",
+      "reason": "eltérő tantárgy: matematika / magyar-nyelvtan",
+      "candidates": [
+        {
+          "model": "z-ai/glm-5.3-flash",
+          "classification": {
+            "subject": "matematika",
+            "secondarySubjects": [
+              "magyar-nyelvtan",
+              "angol"
+            ],
+            "grade": 5,
+            "topicArea": "kompetenciamérés-felkészítés",
+            "topic": "5. osztályos kompetenciamérés felkészítő",
+            "lessonType": "temazaro-felkeszito",
+            "confidence": "high",
+            "evidence": "Több témakört kever: 'Alapműveletek', 'Törtek és tizedesek', 'Nyelvtan alapok', 'Helyesírás', 'To be ige'; cél: 'Felkészülés az országos mérésre'."
+          }
+        },
+        {
+          "model": "deepseek/deepseek-v4.1-flash",
+          "classification": {
+            "subject": "magyar-nyelvtan",
+            "secondarySubjects": [
+              "matematika",
+              "angol",
+              "magyar-irodalom"
+            ],
+            "grade": 5,
+            "topicArea": "5. osztályos kompetenciamérésre felkészítés",
+            "topic": "Vegyes kompetenciafelkészítő: szövegértés, nyelvtan, matek, angol",
+            "lessonType": "temazaro-felkeszito",
+            "confidence": "medium",
+            "evidence": "Fejezetcímek: 'Szövegértés', 'Nyelvtan alapok', 'Helyesírás' (magyar nyelvtan/irodalom), 'Alapműveletek', 'Törtek és tizedesek' (matematika), 'Alapvető szókincs', 'To be ige' (angol); cél 'Felkészülés az országos mérésre', több témakört kever."
+          }
+        }
+      ],
+      "expectedAmongCandidates": true
+    },
+    {
+      "provenance": "legacy_html:c41a24f3-2ac5-49a4-9ba0-3772632b6957",
+      "title": "4. Osztály Telling the Time  Az óra kifejezése",
+      "ms": 4742,
+      "usage": {
+        "promptTokens": 6477,
+        "completionTokens": 411
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "idő kifejezése",
+      "topic": "Az óra kifejezése angolul (telling the time)",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Alapszókincs és kifejezések táblázat (What time is it?, half past, quarter to), kiejtés- és szóbeli gyakorlás, páros párbeszéd, sok rövid kvíz-kérdés a célnyelvi kifejezésekről.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:e3629394-f978-45a7-b8df-7285fb61ed7a",
+      "title": "Jobs - Foglalkozások 🎨 | 3. osztály Angol - Teljes Tananyag",
+      "ms": 4944,
+      "usage": {
+        "promptTokens": 5961,
+        "completionTokens": 396
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "angol",
+      "secondarySubjects": [],
+      "grade": 3,
+      "topicArea": "szókincs és nyelvi szerkezetek",
+      "topic": "Foglalkozások, a 'be' ige és munkahelyek",
+      "lessonType": "szokincs-nyelvi",
+      "confidence": "high",
+      "evidence": "Szókincstár foglalkozásokkal (teacher, doctor, nurse), 'be' ige használata, work + workplace mondatszerkezetek, kérdés-válasz párbeszéd, sok rövid gyakorló feladat és kvíz.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:67d3d5a7-0e02-4b11-b2e4-56c5fa958035",
+      "title": "Az emberré válás folyamata - 5. osztály",
+      "ms": 20571,
+      "usage": {
+        "promptTokens": 5621,
+        "completionTokens": 1280
+      },
+      "status": "review",
+      "reason": "eltérő tantárgy: tortenelem / termeszetismeret",
+      "candidates": [
+        {
+          "model": "z-ai/glm-5.3-flash",
+          "classification": {
+            "subject": "tortenelem",
+            "secondarySubjects": [
+              "biologia"
+            ],
+            "grade": 5,
+            "topicArea": "Őskor, emberiség története",
+            "topic": "Az emberré válás folyamata és főbb szakaszai",
+            "lessonType": "fogalomtanito",
+            "confidence": "medium",
+            "evidence": "A fejlődés főbb szakaszai (Dryopithecus…Homo sapiens), eszközhasználat, barlangrajzok, Föld benépesülése, kultúra kialakulása – 5. osztályos történelem őskor téma, evolúciós-biológiai elemekkel."
+          }
+        },
+        {
+          "model": "deepseek/deepseek-v4.1-flash",
+          "classification": {
+            "subject": "termeszetismeret",
+            "secondarySubjects": [],
+            "grade": 5,
+            "topicArea": "Emberré válás",
+            "topic": "Az emberré válás folyamata",
+            "lessonType": "fogalomtanito",
+            "confidence": "high",
+            "evidence": "Az ember eredetének kutatása, régészet, antropológia és őslénytan; a fejlődés szakaszai Dryopithecustól a Homo sapiensig; felegyenesedés és agyfejlődés."
+          }
+        }
+      ],
+      "expectedAmongCandidates": true
+    },
+    {
+      "provenance": "legacy_html:14bcedea-ed4e-4842-b594-0e09ec058efc",
+      "title": "5. osztály törtek Egyszerűsítése és bővítése",
+      "ms": 4371,
+      "usage": {
+        "promptTokens": 6289,
+        "completionTokens": 412
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "matematika",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "törtek",
+      "topic": "törtek egyszerűsítése és bővítése",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: „Mi az a tört?\", „Hogyan egyszerűsítünk törteket?\", „Mi az a tört bővítése?\"; magyarázatok számláló, nevező, LNKO fogalmakkal, lépésről lépésre példák, ellenőrző kérdések.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:8d4635eb-6918-4871-b667-6bdc9f09a666",
+      "title": "8. Osztály Az ember testfelépítése és mozgása",
+      "ms": 7050,
+      "usage": {
+        "promptTokens": 6152,
+        "completionTokens": 451
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "biologia",
+      "secondarySubjects": [],
+      "grade": 8,
+      "topicArea": "Emberi test, mozgásrendszer",
+      "topic": "Testfelépítés, bőr, csontváz és izmok",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'A csontváz feladatai', 'Az izomszövet fajtái', 'A bőr rétegei'; kvízkérdések: 'Hol termelődnek a vérsejtek? [Csontvelőben]' – biológiai tartalom, fejezetes magyarázó felépítés.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "legacy_html:lVFj6JdHWSCQSmY_xfPBE",
+      "title": "5. osztály - Hagyomány szerinti és egyszerűsítő írásmód",
+      "ms": 10898,
+      "usage": {
+        "promptTokens": 6107,
+        "completionTokens": 441
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "magyar-nyelvtan",
+      "secondarySubjects": [],
+      "grade": 5,
+      "topicArea": "helyesírás",
+      "topic": "Hagyomány szerinti és egyszerűsítő írásmód",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "Fejezetek: 'Mi a hagyomány szerinti és egyszerűsítő írásmód?', 'Hogyan döntsük el, melyik szabályt használjuk?'; szöveg magyarázza a hasonulást és a hagyományos írásmódot példákkal (tegnap, házszám), helyesírási gyakorló feladatokkal.",
+      "subjectOk": true,
+      "typeOk": true
+    },
+    {
+      "provenance": "lesson:fa50cc1b-24f0-4a25-8ca1-0a7eb08c352f",
+      "title": "A Föld kering a Nap körül",
+      "ms": 16848,
+      "usage": {
+        "promptTokens": 4390,
+        "completionTokens": 433
+      },
+      "status": "agreed",
+      "models": [
+        "z-ai/glm-5.3-flash",
+        "deepseek/deepseek-v4.1-flash"
+      ],
+      "subject": "kornyezetismeret",
+      "secondarySubjects": [],
+      "grade": 4,
+      "topicArea": "Föld mozgása",
+      "topic": "A Föld kering a Nap körül",
+      "lessonType": "fogalomtanito",
+      "confidence": "high",
+      "evidence": "A lecke egy pontos természetismereti állítást tanít: 'A Föld kering a Nap körül.' Fejezetek, magyarázat, ellenőrző kérdések (quiz, open_task) jellemzik. 4. évfolyamos kornyezetismeret.",
+      "subjectOk": true,
+      "typeOk": true
+    }
+  ]
+}
