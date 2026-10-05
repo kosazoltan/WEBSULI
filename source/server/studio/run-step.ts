@@ -1,7 +1,7 @@
 import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { AIProviderTimeoutError, type AIResponse, type IAIProvider } from "../ai/AIProvider";
 import type { StudioStep } from "./pipeline";
-import { LEKTOR_TIMEOUT_MS, STUDIO_STEP_POLICY } from "../ai/studio-provider";
+import { LEKTOR_TIMEOUT_MS, STREAM_CEILING_FACTOR, STUDIO_STEP_POLICY, stepStreamIdleMs } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 
 /**
@@ -181,7 +181,12 @@ export const LONG_CONTEXT_PRICE_BAND = 200_000;
 
 async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput, outer?: AbortSignal): Promise<StepCallResult> {
   let response: AIResponse;
-  const deadlineMs = stepDeadlineMs(input.policy ?? input.step);
+  // Spec 2026-10-05-s10-adatvesztes-mentesseg: a hosszú lépés streamelve fut tétlenségi őrrel (ha a szolgáltató tudja);
+  // ilyenkor a teljes határidő csak felső plafon (a régi kétszerese). Egyébként a kérés bájtra a régi.
+  const streamIdleMs = stepStreamIdleMs(input.policy ?? input.step);
+  const streamed = streamIdleMs !== undefined && provider.supportsStreamingChat === true;
+  const baseDeadlineMs = stepDeadlineMs(input.policy ?? input.step);
+  const deadlineMs = streamed && baseDeadlineMs ? baseDeadlineMs * STREAM_CEILING_FACTOR : baseDeadlineMs;
   /** Kérésenkénti jel: a szabályzat határideje minden kérésre újraindul, a külső megszakítás megmarad. */
   const requestSignal = () => {
     const deadline = deadlineMs ? AbortSignal.timeout(deadlineMs) : undefined;
@@ -195,6 +200,7 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
   const baseOptions = {
     ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
     ...(stablePrefixChars(input.system) > 0 ? { cachePrefixChars: stablePrefixChars(input.system) } : {}),
+    ...(streamed ? { stream: { idleMs: streamIdleMs! } } : {}),
   };
   try {
     response = await provider.chat(messages, signal, Object.keys(baseOptions).length ? baseOptions : undefined);
@@ -215,6 +221,9 @@ async function callUncachedStepModel(provider: IAIProvider, input: StepCallInput
       logger.warn(`[STUDIO] Hosszú kontextus (${response.usage!.promptTokens} bemeneti token ≥ ${LONG_CONTEXT_PRICE_BAND}) — drágább ársáv (${input.step}, ${input.model}).`);
     }
   } catch (error) {
+    // Spec 2026-10-05-s10: a megszakadt streamből már beérkezett (kifizetett) szöveg nem vész el szó nélkül.
+    const partial = (error as { partialContent?: string } | undefined)?.partialContent;
+    if (partial) logger.warn(`[STUDIO] A(z) "${input.step}" streamje megszakadt (${input.model}); ${partial.length} karakter érkezett be: ${partial.slice(0, 300).replace(/\s+/g, " ")}`);
     await workflowValidationFailure("A modell szolgáltatója hibát jelzett.");
     // Spec 2026-09-30 (témafókusz-késleltetés): the label must name the deadline that actually fired — the
     // policy's, not the step's (topicFocus runs as step "pedagogue": 60 s cut, but the log said 300000ms).

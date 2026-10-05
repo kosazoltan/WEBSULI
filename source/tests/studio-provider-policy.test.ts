@@ -1,6 +1,6 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { createStudioStepProvider, STUDIO_STEP_POLICY, studioConnection } from "../server/ai/studio-provider";
+import { createStudioStepProvider, STREAM_CEILING_FACTOR, STUDIO_STEP_POLICY, studioConnection } from "../server/ai/studio-provider";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
 import { callStepModel, stepDeadlineMs, jsonFailureShape, parseModelJson } from "../server/studio/run-step";
@@ -49,8 +49,10 @@ test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
     assert.equal(String(url), "https://openrouter.ai/api/v1/chat/completions");
     bodies.push(JSON.parse(String(init?.body)));
-    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: '{"ok":true}' }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }),
-      { headers: { "Content-Type": "application/json" } });
+    // Spec 2026-10-05-s10 (dokumentált változás): a bank/animátor streamelve fut — SSE-válasz, záró használattal.
+    const chunk = (o: object) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "z-ai/glm-5.3-flash", ...o })}\n\n`;
+    return new Response(chunk({ choices: [{ index: 0, delta: { content: '{"ok":true}' }, finish_reason: "stop" }] }) + chunk({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }) + "data: [DONE]\n\n",
+      { headers: { "Content-Type": "text/event-stream" } });
   });
   for (const step of ["bank", "animator"] as const) {
     const provider = createStudioStepProvider("z-ai/glm-5.3-flash", step);
@@ -65,6 +67,8 @@ test("a bank és az ábra lépés OpenRouteren fut, reasoning.effort=low", async
     // Spec §7o (mérve): a glm-válaszok ~1/8-a szintaktikailag törött JSON volt (nem csonka) — a
     // szolgáltatói JSON-mód ezt a hibaosztályt megszünteti, a tartalmat nem érinti.
     assert.deepEqual(body.response_format, { type: "json_object" }, "a bank/animátor kérés JSON-módban megy");
+    assert.equal(body.stream, true, "spec 2026-10-05-s10: streamelt kérés");
+    assert.deepEqual(body.stream_options, { include_usage: true });
   }
 });
 
@@ -146,7 +150,9 @@ test("a bank/animátor kérés külső határidőt kap, amely a törzs olvasás�
   const provider = createStudioStepProvider("z-ai/glm-5.3-flash", "animator");
   await assert.rejects(callStepModel(provider, { step: "animator", role: "animator", model: provider.model, system: "S", user: "U" }),
     (error: unknown) => error instanceof Error && error.cause instanceof AIProviderTimeoutError);
-  assert.equal(timeoutMs, 240_000);
+  // Spec 2026-10-05-s10 (dokumentált változás): streamelt módban a tétlenségi őr (120 s) a fő korlát, a teljes határidő felső
+  // plafon — a régi érték STREAM_CEILING_FACTOR-szorosa; a törzs olvasását továbbra is megszakítja.
+  assert.equal(timeoutMs, 240_000 * STREAM_CEILING_FACTOR);
 });
 
 // Spec 2026-09-30 (témafókusz-késleltetés, mérve élesben és helyben): a témafókusz `step: "pedagogue"`, `policy:

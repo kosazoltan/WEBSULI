@@ -14,6 +14,7 @@ import {
 
   type ChatCallOptions,
 } from './AIProvider';
+import { collectStream, idleAbortSignal, type StreamEvent } from './stream-collect';
 
 /**
  * OpenRouter provider (LS-0d).
@@ -99,9 +100,11 @@ export class OpenRouterProvider implements IAIProvider {
 
   /** Spec 2026-09-30 (U6): a beállított kimeneti keret; a szigorú séma (`responseFormat`) ezen az úton szándékosan nem megy. */
   get maxOutputTokens(): number | undefined { return this.maxTokens; }
+  readonly supportsStreamingChat = true;
 
   async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
     this.assertConfigured();
+    if (options?.stream) return this.chatStreamed(messages, signal, options, options.stream.idleMs);
     try {
       const outputBudget = options?.maxTokens ?? this.maxTokens;
       const response = await this.client.chat.completions.create(
@@ -135,6 +138,55 @@ export class OpenRouterProvider implements IAIProvider {
       };
     } catch (error: unknown) {
       throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Spec 2026-10-05-s10-adatvesztes-mentesseg: ugyanaz a kérés, mint a `chat`-é, streamelve, tétlenségi őrrel. A záró
+   * használat-darab (OpenRouter: egy üres delta; OpenAI: üres `choices`) mindkét alakja kezelve; a gondolkodás-delta
+   * (`reasoning` / `reasoning_details`) aktivitásnak számít. Stream közbeni `finish_reason: "error"` → hiba a részleges szöveggel.
+   */
+  private async chatStreamed(messages: AIMessage[], signal: AbortSignal | undefined, options: ChatCallOptions, idleMs: number): Promise<AIResponse> {
+    const outputBudget = options.maxTokens ?? this.maxTokens;
+    const idle = idleAbortSignal(signal);
+    let partial = '';
+    try {
+      const stream = await this.client.chat.completions.create(
+        {
+          model: this.model,
+          messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
+          ...(outputBudget ? { max_completion_tokens: outputBudget } : {}),
+          ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
+          ...(this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+          temperature: 0.7,
+          stream: true,
+          stream_options: { include_usage: true },
+        },
+        { signal: idle.signal }
+      );
+      async function* events(): AsyncGenerator<StreamEvent> {
+        for await (const chunk of stream) {
+          const choice = chunk.choices?.[0];
+          const delta = choice?.delta as { content?: string | null; reasoning?: string | null; reasoning_details?: unknown[] } | undefined;
+          if (choice?.finish_reason === ('error' as string)) throw new AIProviderError('OpenRouter', 'A szolgáltató a stream közben hibát jelzett.');
+          if (delta?.content) partial += delta.content;
+          yield {
+            ...(delta?.content ? { text: delta.content } : {}),
+            activity: true,
+            ...(choice?.finish_reason ? { finishReason: choice.finish_reason } : {}),
+            ...(chunk.usage ? { usage: {
+              promptTokens: chunk.usage.prompt_tokens, completionTokens: chunk.usage.completion_tokens, totalTokens: chunk.usage.total_tokens,
+              ...(chunk.usage.prompt_tokens_details?.cached_tokens ? { cachedTokens: chunk.usage.prompt_tokens_details.cached_tokens } : {}),
+            } } : {}),
+          };
+        }
+      }
+      return await collectStream(events(), { idleMs, abort: idle.abort, provider: this.name });
+    } catch (error: unknown) {
+      if (error instanceof AIProviderError && error.name === 'AIProviderIdleTimeoutError') throw error;
+      const mapped = error instanceof AIProviderError ? error : this.handleError(error);
+      mapped.partialContent = (error as { partialContent?: string })?.partialContent ?? partial;
+      throw mapped;
     }
   }
 

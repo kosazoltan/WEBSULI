@@ -19,9 +19,10 @@ test("a valódi Studio lektorkérés Responses medium, teljes bemenet, nincs sze
     assert.equal(body.store, false);
     assert.deepEqual(body.input, [{ role: "system", content: "Teljes lecke és forrás" }, { role: "user", content: "Csak hibajegyek" }]);
     assert.ok(init?.signal);
-    return new Response(JSON.stringify({ object: "response", status: "completed", output: [
-      { type: "message", content: [{ type: "output_text", text: '{"notes":[]}', annotations: [] }] },
-    ] }), { headers: { "Content-Type": "application/json" } });
+    // Spec 2026-10-05-s10-adatvesztes-mentesseg (dokumentált változás): a lektor streamelve fut (tétlenségi őrrel) — a mért
+    // „[xAI] Request timed out.” ellen; a válasz SSE-ként érkezik, a fenti kérés-tulajdonságok változatlanok.
+    assert.equal(body.stream, true);
+    return new Response(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", sequence_number: 1, item_id: "m", output_index: 0, content_index: 0, delta: '{"notes":[]}', logprobs: [] })}\n\nevent: response.completed\ndata: ${JSON.stringify({ type: "response.completed", sequence_number: 2, response: { id: "r", object: "response", status: "completed", output: [] } })}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
   });
   const provider = createStudioStepProvider("grok-4.6", "lektor");
   const result = await callStepModel(provider, { step: "lektor", role: "lektor", model: provider.model, system: "Teljes lecke és forrás", user: "Csak hibajegyek" });

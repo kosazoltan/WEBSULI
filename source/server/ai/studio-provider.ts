@@ -78,6 +78,8 @@ export class QuotaFailoverProvider implements IAIProvider {
     this.model = primary.model;
   }
   get maxOutputTokens(): number | undefined { return this.primary.maxOutputTokens; }
+  /** Spec 2026-10-05-s10: a tartalék (OpenRouter) is streamel, így a képesség az elsődlegesé. */
+  get supportsStreamingChat(): boolean | undefined { return this.primary.supportsStreamingChat; }
   private route(): IAIProvider { return (this.fallback ??= this.makeFallback()); }
   /**
    * Review #160: a hívásonkénti beállítás (szigorú `responseFormat`, U2/C8) az ELSŐDLEGES (közvetlen OpenAI) útra megy
@@ -148,6 +150,20 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   topicFocus: { timeoutMs: 60_000, maxTokens: 8_000, reasoningEffort: "low", jsonMode: true },
   quizPolish: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
 };
+
+/**
+ * Spec 2026-10-05-s10-adatvesztes-mentesseg: a hosszú kimenetű lépések streamelve futnak, tétlenségi őrrel — ha 120 s-ig nem
+ * jön új darab (szöveg vagy gondolkodás), a hívás megszakad, a beérkezett szöveg naplózódik. Mért ok: „[xAI] Request timed
+ * out.” a lektornál, a teljes-válasz határidő a lassan, de folyamatosan generáló modellt is megölte. A rövid döntések
+ * (topicFocus) maradnak a régi, rövid határidőn.
+ */
+export const STREAM_IDLE_MS = 120_000;
+/** Streamelt módban a teljes határidő csak felső plafon: a régi érték kétszerese. */
+export const STREAM_CEILING_FACTOR = 2;
+const STREAMED_STEPS: ReadonlySet<string> = new Set(["lektor", "author", "pedagogue", "animator", "bank", "visuals", "visualDesigner", "textFix", "instructionCheck", "gateHelper", "quizPolish"]);
+export function stepStreamIdleMs(step: string): number | undefined {
+  return STREAMED_STEPS.has(step) ? STREAM_IDLE_MS : undefined;
+}
 
 /** Review gets its own bounded request, not three hidden 180-second attempts. */
 export function createStudioStepProvider(model: string, step?: string) {
