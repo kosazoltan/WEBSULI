@@ -36,3 +36,12 @@ JSON-mód streameléssel, megszakítás (`AbortSignal`) — hivatalos dokumentá
 - HA a szerver futás közben újraindul, AKKOR a futás induláskor magától folytatódik a legutolsó ellenőrzőponttól, a kész
   hívások nem ismétlődnek (token-napló igazolja).
 - A streamelt és nem streamelt válasz ugyanarra a bemenetre ugyanúgy validálódik (teszt rögzített streamből).
+- HA egy futó workflow lízinge lejárt ÉS az automatikus folytatás kerete elfogyott, AKKOR a job hibára zárul az indulási ÉS az
+  időszakos söpréskor is (nincs örökké `running` job, amit senki nem hajt); a már `ok` jobot a lezárás nem írja felül.
+
+## Spec-változás (review #191, 2026-10-05)
+A 2. szelet korábban az elfogyott keretű, lejárt lízingű futó workflow-t az időszakos söpréskor érintetlenül hagyta (`leave`).
+Indok (review #191): a lízing lejárt, a heartbeat halott, a keret elfogyott — senki nem hajtja tovább, így a job örökre
+`running` maradna (a #183-as örök poll visszatérne). Új szabály: ebben az esetben a döntés `close` induláskor ÉS futás közben
+is. A többi nem folytatható eset (nincs futás / `waiting` / `error`) futás közben változatlanul `leave`. A lezáró UPDATE
+`status <> 'ok'` feltétellel fut.

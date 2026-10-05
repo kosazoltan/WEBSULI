@@ -131,6 +131,28 @@ export async function workflowValidationFailure(error: unknown) {
   }
   await persist(ctx);
 }
+/**
+ * Spec 2026-10-05-s9 (terv-ellenőrzés 2. javítás): az orkesztrátor SAJÁT kerete — pontonként ≤ perPoint, futásonként ≤ perRun
+ * hívás. Nem a `workflowEnsureRepairBudget` (az lépés-látogatást ad, és a valódi javító kört enné). Futáson kívül: engedélyez
+ * (a hívó saját körkorlátja — ORCHESTRATOR_MAX_ROUNDS — ott is érvényes).
+ */
+export async function workflowOrchestratorAllow(point: string, perPoint = 2, perRun = 8): Promise<boolean> {
+  const ctx = context.getStore();
+  if (!ctx) return true;
+  const o = (ctx.record.view.orchestrator ??= { calls: 0, byPoint: {} });
+  if (o.calls >= perRun || (o.byPoint[point] ?? 0) >= perPoint) return false;
+  o.calls++;
+  o.byPoint[point] = (o.byPoint[point] ?? 0) + 1;
+  await persist(ctx);
+  return true;
+}
+/** Spec 2026-10-05-s9 (rögzítő szelet): egy bukott kísérlet kivonata a pillanatképbe (az utolsó 50 marad). */
+export async function workflowRecordFailure(entry: NonNullable<WorkflowView["failures"]>[number]): Promise<void> {
+  const ctx = context.getStore();
+  if (!ctx) return;
+  ctx.record.view.failures = [...(ctx.record.view.failures ?? []), entry].slice(-50);
+  await persist(ctx);
+}
 /** Call before domain writes and immediately before returning from their transaction.
  * The row lock prevents takeover until commit; the final wall-clock check rejects an expired writer.
  * No workflowPhase/persist call may occur between these fences (it uses another connection).

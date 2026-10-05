@@ -6,6 +6,7 @@ import { FALLBACK_MODELS, SECOND_FALLBACK_MODELS, keyNameForModel, resolveStudio
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
+import { correctedSystemFor, failureKindOf, OrchestrationValidationError, orchestratedRetry, orchestratorEnabled } from "./orchestrated-retry";
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { applyLektorConvergence, classifyNotes, type RawNote } from "./lektor";
@@ -722,14 +723,21 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   // Az animátor lépés kozmetika (#169): ha a MODELLHÍVÁS hal meg (pl. OpenRouter 429),
   // az eredeti lecke megy tovább a lektorra — a gyártás nem áll meg.
   let animatorModelFailure: string | null = null;
-  const attempt = (m: string) =>
+  // Spec 2026-10-05-s9: az utolsó VALIDÁLÁSI bukás (nem szolgáltatói) a nyers kimenettel — az orkesztrátor ebből elemez.
+  let lastModelFailure: StepModelError | undefined;
+  const attempt = (m: string, sys: string = system) =>
     callStepModel(providerFactory(m, job.step === "animator" ? "visuals" : job.step), {
       step: job.step,
       role: requireRoleForStep(job.step),
       ...(job.step === "animator" ? { policy: "visuals" } : {}),
       model: m,
-      system,
+      system: sys,
       user: "Válaszolj kizárólag a kért JSON-nal.",
+    }).catch((error: unknown) => {
+      // Review #191: mindig felülírjuk — vegyes láncban (elsődleges érvénytelen JSON, tartalék 429) a régi validálási bukás
+      // nem maradhat meg, különben az orkesztrátor szolgáltatói hibára futna (a szerződés szerint csak validálási bukásra).
+      lastModelFailure = error instanceof StepModelError && failureKindOf(error) ? error : undefined;
+      throw error;
     });
   // Spec 2026-09-24 (bank-ellenőr): a lektor-hívással párhuzamosan indul, az eredményágban várjuk be.
   const bankCheck = job.step === "lektor" ? startBankVerifier(job, lektorBlind, providerFactory, keyConfigured, verifierConceptsOf(map, job)) : undefined;
@@ -831,7 +839,19 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       animatorModelFailure = reason;
       json = null;
     } else {
-      return fail(store, job, reason);
+      // Spec 2026-10-05-s9 (tulajdonosi tervezés): a modell-lánc validálási bukása után (érvénytelen JSON, üres, hosszkorlát) az
+      // orkesztrátor elemez és javító promptot ír; az elsődleges modell azzal fut újra. Szolgáltatói hibára nem indul.
+      const kind = orchestratorEnabled() && lastModelFailure ? failureKindOf(lastModelFailure) : null;
+      const orchestrated = kind ? await orchestratedRetry(
+        { role: requireRoleForStep(job.step), step: job.step, model: primaryModel, system, user: "Válaszolj kizárólag a kért JSON-nal.", point: `${job.step}:${job.round}:model`, round: job.round, subject: map.meta.subject },
+        { kind, reasons: [reason], ...(lastModelFailure?.rawOutput ? { rawOutput: lastModelFailure.rawOutput } : {}) },
+        (corrected) => attempt(primaryModel, corrected),
+        { providerFactory, keyConfigured },
+      ) : null;
+      if (!orchestrated) return fail(store, job, reason);
+      json = orchestrated.value.json;
+      usage = orchestrated.value.usage ?? null;
+      model = primaryModel;
     }
   }
 
@@ -886,6 +906,25 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         if (missing.length) return { ok: false, reason: `A folt nem tartalmazza a kijelölt fejezet(ek)et: ${missing.map((i) => i + 1).join(", ")}. — minden kijelölt fejezetet vissza kell adni.` };
         try { return { ok: true, json: mergeSectionPatches(authorRepair!.previous, patch, authorRepair!.targetSections) }; }
         catch (error) { return { ok: false, reason: `A célzott javítás nem egyesíthető: ${error instanceof Error ? error.message : String(error)}` }; }
+      };
+      // Spec 2026-10-05-s9 (tulajdonosi tervezés): a szerző VÉGSŐ validálási bukása (séma a javító kör után, ismeretlen fogalom-
+      // azonosító) → orkesztrált újrafuttatás teljes-lecke módban; a javított jelölt ugyanazon a sémán és azonosító-ellenőrzésen megy át.
+      const orchestrateAuthor = async (reasonText: string, candidate: unknown) => {
+        if (!orchestratorEnabled() || authorRepair) return null;
+        const res = await orchestratedRetry(
+          { role: "author", step: job.step, model, system, user: "Válaszolj kizárólag a kért JSON-nal.", point: `author:${job.round}:validation`, round: job.round, subject: map.meta.subject },
+          { kind: "schema", reasons: [reasonText], rawOutput: JSON.stringify(candidate ?? null).slice(0, 12_000) },
+          async (corrected) => {
+            const r = await callStepModel(providerFactory(model), { step: job.step, role: "author", model, system: corrected, user: "Válaszolj kizárólag a kért JSON-nal." });
+            const p = lessonSchema.safeParse(r.json);
+            if (!p.success) throw new OrchestrationValidationError("schema", [zodIssues(p.error)], JSON.stringify(r.json).slice(0, 12_000));
+            const unknown = lessonIdsSubsetOfMap(p.data, map.concepts);
+            if (unknown.length) throw new OrchestrationValidationError("schema", [`A forrásjegyzékben nem szereplő fogalomazonosítók: ${unknown.join(", ")}.`], JSON.stringify(r.json).slice(0, 12_000));
+            return { json: r.json, parsed: p };
+          },
+          { providerFactory, keyConfigured },
+        );
+        return res?.value ?? null;
       };
       let patchProblem: string | null = null;
       if (authorRepair) {
@@ -944,16 +983,20 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         }
         parsed = lessonSchema.safeParse(json);
         if (!parsed.success) {
-          return fail(store, job, `A lecke a javító kör után is alakilag hibás: ${zodIssues(parsed.error)}`);
+          const reasonText = `A lecke a javító kör után is alakilag hibás: ${zodIssues(parsed.error)}`;
+          const rescued = await orchestrateAuthor(reasonText, json);
+          if (!rescued) return fail(store, job, reasonText);
+          json = rescued.json;
+          parsed = rescued.parsed;
         }
       }
       const unknownIds = lessonIdsSubsetOfMap(parsed.data, map.concepts);
       if (unknownIds.length > 0) {
-        return fail(
-          store,
-          job,
-          `A lecke olyan fogalomra hivatkozik, ami nem szerepel a térképen: ${unknownIds.join(", ")}.`,
-        );
+        const reasonText = `A lecke olyan fogalomra hivatkozik, ami nem szerepel a térképen: ${unknownIds.join(", ")}.`;
+        const rescued = await orchestrateAuthor(reasonText, json);
+        if (!rescued) return fail(store, job, reasonText);
+        // a javított jelölt a sémán ÉS az azonosító-ellenőrzésen már átment (orchestrateAuthor)
+        parsed = rescued.parsed;
       }
 
       // Scope was inferred from the source before authoring; generated metadata cannot override it.
@@ -1088,6 +1131,18 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
             reviewFeedback: bankReview?.feedback,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
             onAttemptFailure: (sectionIndex, attempt, reason) => logger.warn(`[STUDIO] Bankcsomag bukott kísérlet (${job.id}) ${sectionIndex + 1}. fejezet, ${attempt + 1}. kísérlet: ${reason.slice(0, 600)}`),
+            // Spec 2026-10-05-s9 (tulajdonosi tervezés): a tartalék és a mentő kísérlet előtt az orkesztrátor elemez és javító
+            // utasítást ír a fejezet bankcsomagjához (pontonként ≤ 2 kör, saját keret).
+            ...(orchestratorEnabled() ? {
+              orchestrate: async ({ sectionIndex, attempt, system: bankSystem, prompt, errors, previous, diagnoses }: { sectionIndex: number; attempt: number; system: string; prompt: string; errors: string; previous: unknown; diagnoses: string[] }) => {
+                const res = await correctedSystemFor(
+                  { role: "bank", step: "bank", model: bankModelForAttempt(attempt), system: bankSystem, user: prompt, point: `bank:${job.round}:s${sectionIndex}`, round: job.round, subject: map.meta.subject },
+                  { kind: "bank_packet", reasons: errors.split("; ").filter(Boolean).slice(0, 30), rawOutput: JSON.stringify(previous ?? null).slice(0, 12_000) },
+                  diagnoses.length + 1, diagnoses, { providerFactory, keyConfigured },
+                );
+                return res ? { system: res.system, diagnosis: `${res.rootCause} — ${res.diagnosis}` } : null;
+              },
+            } : {}),
             concurrency: PACKET_CONCURRENCY,
             call: async (bankSystem, user, attempt, extra) => {
               // Spec 2026-09-19 / 2026-09-25: bank model per attempt (primary → fallback → rescue), shared with the web path.

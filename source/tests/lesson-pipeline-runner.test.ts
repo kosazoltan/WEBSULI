@@ -2841,3 +2841,79 @@ test("review #177 (2.2b): ha a vak megoldó újrakérése hibázik, a részleges
   await run();
   assert.equal(blindCalls, 2, "hibás újrakérés után nincs újabb fizetett próba");
 });
+
+/* Spec 2026-10-05-s9-prompt-javito-orkesztrator (tulajdonosi tervezés): a modell-lánc validálási bukása után (mind a három modell
+ * érvénytelen JSON-t adott) az orkesztrátor elemez, javító promptot ír, és az elsődleges modell azzal ELKÉSZÍTI a lépést —
+ * megállás helyett. Szolgáltatói hibánál és kikapcsolt kapcsolónál a régi viselkedés (hiba). */
+function makeOrchestratorDeps(opts: { providerError?: boolean }) {
+  const base = makeDeps(CANNED_PEDAGOGUE);
+  const calls: Array<{ model: string; corrected: boolean }> = [];
+  const providerFactory = (model: string): IAIProvider => ({
+    name: "stub", model,
+    chat: async (messages: Array<{ role: string; content: string }>) => {
+      const system = messages[0]?.content ?? "";
+      const corrected = system.includes("ORKESZTRÁTOR JAVÍTÓ UTASÍTÁS");
+      calls.push({ model, corrected });
+      if (model.startsWith("deepseek/") || model.startsWith("z-ai/")) {
+        return { content: JSON.stringify({ rootCause: "A tervező a JSON-t félbehagyta: túl hosszú bevezetőt írt a vázlat elé.", diagnosis: "A válasz próza + csonka JSON volt.", correctivePrompt: "Kizárólag a vázlat JSON-ját add vissza, bevezető és magyarázat nélkül; minden fejezet legfeljebb három mondatos összefoglalóval." }), finishReason: "stop" };
+      }
+      if (opts.providerError) throw new Error("[OpenRouter] Rate limit exceeded");
+      return { content: corrected ? CANNED_PEDAGOGUE : 'Íme a terv: {"sections": [', finishReason: "stop", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+    },
+    isAvailable: async () => true,
+  } as unknown as IAIProvider);
+  return { ...base, providerFactory, calls };
+}
+
+test("S9: érvénytelen JSON a teljes modell-láncon → orkesztrált javítás, a lépés elkészül (kapcsoló BE)", async (t) => {
+  process.env.WORKFLOW_ORCHESTRATOR = "1";
+  t.after(() => { delete process.env.WORKFLOW_ORCHESTRATOR; });
+  const deps = makeOrchestratorDeps({});
+  deps.store.seed({ id: "orch-1", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("orch-1", deps);
+  assert.equal(outcome.ok, true, JSON.stringify(outcome));
+  const orchestratorCalls = deps.calls.filter((c) => c.model.startsWith("deepseek/"));
+  assert.equal(orchestratorCalls.length, 1, "egy elemzés");
+  const last = deps.calls.at(-1)!;
+  assert.equal(last.model, resolveStudioModel("pedagogue"), "az elsődleges modell fut újra");
+  assert.ok(last.corrected, "a javító utasítással");
+  assert.equal((await deps.store.loadJob("orch-1"))?.status, "ok");
+});
+
+test("S9: szolgáltatói hiba a teljes láncon → NINCS orkesztrátor, a régi hibaút (kapcsoló BE)", async (t) => {
+  process.env.WORKFLOW_ORCHESTRATOR = "1";
+  t.after(() => { delete process.env.WORKFLOW_ORCHESTRATOR; });
+  const deps = makeOrchestratorDeps({ providerError: true });
+  deps.store.seed({ id: "orch-2", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("orch-2", deps);
+  assert.equal(outcome.ok, false);
+  assert.equal(deps.calls.filter((c) => c.model.startsWith("deepseek/")).length, 0);
+});
+
+test("review #191: vegyes lánc (elsődleges érvénytelen JSON, tartalékok szolgáltatói hibával) → NINCS orkesztrátor (kapcsoló BE)", async (t) => {
+  process.env.WORKFLOW_ORCHESTRATOR = "1";
+  t.after(() => { delete process.env.WORKFLOW_ORCHESTRATOR; });
+  const deps = makeOrchestratorDeps({});
+  const primary = resolveStudioModel("pedagogue");
+  const inner = deps.providerFactory;
+  const providerFactory = (model: string): IAIProvider => {
+    const provider = inner(model);
+    if (model === primary || model.startsWith("deepseek/") || model.startsWith("z-ai/")) return provider;
+    return { ...provider, chat: async () => { deps.calls.push({ model, corrected: false }); throw new Error("[OpenRouter] Rate limit exceeded"); } } as IAIProvider;
+  };
+  deps.store.seed({ id: "orch-mixed", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("orch-mixed", { ...deps, providerFactory });
+  assert.equal(outcome.ok, false, JSON.stringify(outcome));
+  assert.equal(deps.calls[0]?.model, primary, "az elsődleges modell futott először (érvénytelen JSON)");
+  assert.ok(deps.calls.some((c) => c.model !== primary && !c.model.startsWith("deepseek/")), "a tartalék modell is futott (429)");
+  assert.equal(deps.calls.filter((c) => c.model.startsWith("deepseek/") || c.model.startsWith("z-ai/")).length, 0, "az utolsó bukás szolgáltatói → nincs elemzés");
+});
+
+test("S9: kapcsoló KI → a gyártás viselkedése változatlan (érvénytelen JSON-lánc = hiba, nincs orkesztrátor-hívás)", async () => {
+  delete process.env.WORKFLOW_ORCHESTRATOR;
+  const deps = makeOrchestratorDeps({});
+  deps.store.seed({ id: "orch-3", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("orch-3", deps);
+  assert.equal(outcome.ok, false);
+  assert.equal(deps.calls.filter((c) => c.model.startsWith("deepseek/")).length, 0);
+});
