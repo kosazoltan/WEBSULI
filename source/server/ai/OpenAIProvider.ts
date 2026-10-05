@@ -13,6 +13,7 @@ import {
   isQuotaExhausted,
   type ChatCallOptions,
 } from './AIProvider';
+import { collectStream, idleAbortSignal, withIdleStart, type StreamEvent } from './stream-collect';
 
 export class OpenAIProvider implements IAIProvider {
   readonly name: string;
@@ -24,6 +25,7 @@ export class OpenAIProvider implements IAIProvider {
   private reasoningEffort?: AIProviderConfig['reasoningEffort'];
   private jsonMode?: boolean;
   get maxOutputTokens(): number | undefined { return this.maxTokens; }
+  readonly supportsStreamingChat = true;
 
   constructor(config: AIProviderConfig, vendor: "openai" | "xai" = "openai") {
     this.name = vendor === "xai" ? "xAI" : "OpenAI";
@@ -42,6 +44,7 @@ export class OpenAIProvider implements IAIProvider {
   }
 
   async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
+    if (options?.stream) return this.chatStreamed(messages, signal, options, options.stream.idleMs);
     try {
       if (this.apiMode === 'responses') {
         const outputBudget = options?.maxTokens ?? this.maxTokens;
@@ -87,6 +90,74 @@ export class OpenAIProvider implements IAIProvider {
       };
     } catch (error: unknown) {
       throw this.handleError(error);
+    }
+  }
+
+  /**
+   * Spec 2026-10-05-s10-adatvesztes-mentesseg: a `chat`-tel azonos kérés streamelve, tétlenségi őrrel — a Responses-módon is
+   * (a mért lektor-időtúllépés, „[xAI] Request timed out.”, ott történt). Responses: a szöveg `response.output_text.delta`, a
+   * gondolkodás-delta aktivitás, a zárás `response.completed` (stop) / `response.incomplete` (length); `response.failed` és
+   * `error` → hiba a részleges szöveggel.
+   */
+  private async chatStreamed(messages: AIMessage[], signal: AbortSignal | undefined, options: ChatCallOptions, idleMs: number): Promise<AIResponse> {
+    const outputBudget = options.maxTokens ?? this.maxTokens;
+    const idle = idleAbortSignal(signal);
+    let partial = '';
+    const provider = this.name;
+    try {
+      let events: AsyncGenerator<StreamEvent>;
+      if (this.apiMode === 'responses') {
+        const stream = await withIdleStart(this.client.responses.create({
+          model: this.model, input: messages, store: false, stream: true,
+          ...(outputBudget ? { max_output_tokens: outputBudget } : {}),
+          ...(this.reasoningEffort ? { reasoning: { effort: this.reasoningEffort } } : {}),
+        }, { signal: idle.signal }), idleMs, idle.abort, provider);
+        events = (async function* () {
+          for await (const ev of stream) {
+            if (ev.type === 'response.output_text.delta') { partial += ev.delta; yield { text: ev.delta }; continue; }
+            if (ev.type === 'response.completed' || ev.type === 'response.incomplete') {
+              const u = ev.response.usage;
+              yield { finishReason: ev.type === 'response.completed' ? 'stop' : 'length', ...(u ? { usage: { promptTokens: u.input_tokens, completionTokens: u.output_tokens, totalTokens: u.total_tokens,
+                ...(u.input_tokens_details?.cached_tokens ? { cachedTokens: u.input_tokens_details.cached_tokens } : {}) } } : {}) };
+              continue;
+            }
+            if (ev.type === 'response.failed' || ev.type === 'error') throw new AIProviderError(provider, 'A szolgáltató a stream közben hibát jelzett.');
+            // Review #190: csak a gondolkodás-delta haladás; egyéb (állapot-, metaadat-) esemény nem indítja újra az őrt.
+            yield ev.type === 'response.reasoning_text.delta' || ev.type === 'response.reasoning_summary_text.delta' ? { activity: true } : {};
+          }
+        })();
+      } else {
+        const stream = await withIdleStart(this.client.chat.completions.create(
+          {
+            model: this.model,
+            messages: messages.map(msg => ({ role: msg.role, content: msg.content })),
+            ...(outputBudget ? { max_completion_tokens: outputBudget } : {}),
+            ...(options.responseFormat ? { response_format: options.responseFormat as never } : this.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+            stream: true,
+            stream_options: { include_usage: true },
+          },
+          { signal: idle.signal }
+        ), idleMs, idle.abort, provider);
+        events = (async function* () {
+          for await (const chunk of stream) {
+            const choice = chunk.choices?.[0];
+            const text = choice?.delta?.content ?? '';
+            if (text) partial += text;
+            yield {
+              ...(text ? { text } : {}),
+              ...(choice?.finish_reason ? { finishReason: choice.finish_reason } : {}),
+              ...(chunk.usage ? { usage: { promptTokens: chunk.usage.prompt_tokens, completionTokens: chunk.usage.completion_tokens, totalTokens: chunk.usage.total_tokens,
+                ...(chunk.usage.prompt_tokens_details?.cached_tokens ? { cachedTokens: chunk.usage.prompt_tokens_details.cached_tokens } : {}) } } : {}),
+            };
+          }
+        })();
+      }
+      return await collectStream(events, { idleMs, abort: idle.abort, provider });
+    } catch (error: unknown) {
+      if (error instanceof AIProviderError && error.name === 'AIProviderIdleTimeoutError') throw error;
+      const mapped = error instanceof AIProviderError ? error : this.handleError(error);
+      mapped.partialContent = (error as { partialContent?: string })?.partialContent ?? partial;
+      throw mapped;
     }
   }
 

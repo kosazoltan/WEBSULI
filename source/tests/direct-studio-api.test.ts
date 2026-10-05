@@ -64,15 +64,15 @@ test("spec 2026-09-19: cheap OpenRouter helpers, no GLM in the legacy routes, in
   // The OCR measurement (#190) still rules GLM out of the legacy/admin routes.
   assert.doesNotMatch(JSON.stringify(LEGACY_MODELS), /glm/i);
   assert.equal(map.ocr, "qwen/qwen3-vl-32b-instruct");
-  // Spec-változás 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md): a szerzőnek van tartaléka, de
-  // az a saját családjában marad, és a lektor egyik modelljével sem eshet egy családba.
-  assert.equal(modelFamily(FALLBACK_MODELS.author!), modelFamily(map.author));
-  assert.notEqual(modelFamily(FALLBACK_MODELS.author!), modelFamily(map.lektor));
-  assert.notEqual(modelFamily(FALLBACK_MODELS.author!), modelFamily(FALLBACK_MODELS.lektor!));
-  // Spec 2026-09-19: the review stays independent — the lektor's fallback exists (the
-  // grok-4.6 timeout killed runs in production) but must live in another family than
-  // the author, so a failover can never collapse writer and reviewer onto one vendor.
-  assert.equal(modelFamily(FALLBACK_MODELS.lektor!), "anthropic");
-  assert.notEqual(modelFamily(FALLBACK_MODELS.lektor!), modelFamily(map.author));
+  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md, tulajdonosi döntés): szerző Claude Opus 5.5, tartaléka Qwen 3.8 max-prime; lektor
+  // GPT-6.1 Sol, tartaléka GPT-5.6 Terra. A cél változatlan: a szerző egyik modellje sem eshet a lektor egyik modelljének
+  // családjába (D1-független lektor).
+  assert.equal(map.author, "claude-opus-5-5");
+  assert.equal(FALLBACK_MODELS.author, "qwen/qwen3.8-max-prime");
+  assert.equal(map.lektor, "gpt-6.1-sol");
+  assert.equal(FALLBACK_MODELS.lektor, "gpt-5.6-terra");
+  for (const a of [map.author, FALLBACK_MODELS.author!]) for (const l of [map.lektor, FALLBACK_MODELS.lektor!]) {
+    assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l}`);
+  }
   assert.doesNotThrow(() => assertDistinctFamilies({}));
 });

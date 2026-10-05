@@ -29,10 +29,12 @@ test("every studio step has a default model", () => {
     assert.ok(model && model.length > 0, `no default for step ${step}`);
     // Spec 2026-09-19 (modellmátrix): vendor per step.
     const expected: Record<string, string> = {
-      extract: "openai", ocr: "openrouter", pedagogue: "anthropic", author: "openai",
+      // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md, tulajdonosi döntés): szerző Claude Opus 5.5
+      // (anthropic), lektor GPT-6.1 Sol (openai).
+      extract: "openai", ocr: "openrouter", pedagogue: "anthropic", author: "anthropic",
       // Spec-változás 2026-09-24 (tulajdonosi döntés, docs/specs/2026-09-24-magyarazo-abrak.md): ábrák Claude Opus 5.5-ön.
       // Spec-változás 2026-09-24 (docs/specs/2026-09-24-bankmodell-valasztas.md): a bank gpt-5.6-luna → openai.
-      animator: "anthropic", bank: "openai", lektor: "xai", gateHelper: "openrouter", quizPolish: "openrouter",
+      animator: "anthropic", bank: "openai", lektor: "openai", gateHelper: "openrouter", quizPolish: "openrouter",
     };
     assert.equal(providerForModel(model), expected[step], step);
   }
@@ -138,8 +140,9 @@ test("the legacy route models are declared centrally", () => {
  * fallbackja nem eshet a lektor primary családjára (különben ugyanaz a modell lektorálja magát). */
 test("assertDistinctFamilies: a shipped FALLBACK_MODELS minden author×lektor párja különböző család", () => {
   assert.doesNotThrow(() => assertDistinctFamilies({}));
-  const authorCandidates = ["openai/gpt-5.6-terra", FALLBACK_MODELS.author].filter(Boolean) as string[];
-  const lektorCandidates = ["x-ai/grok-4.6", FALLBACK_MODELS.lektor].filter(Boolean) as string[];
+  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a beégetett régi nevek helyett a ténylegesen szállított modellek.
+  const authorCandidates = [resolveStudioModel("author", {}), FALLBACK_MODELS.author].filter(Boolean) as string[];
+  const lektorCandidates = [resolveStudioModel("lektor", {}), FALLBACK_MODELS.lektor].filter(Boolean) as string[];
   for (const a of authorCandidates) for (const l of lektorCandidates) {
     assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l} azonos család`);
   }
@@ -153,7 +156,8 @@ test("assertDistinctFamilies dob, ha az author FALLBACK-ja a lektor primary csal
 });
 
 test("spec 2026-09-19: a lektornak van más családú tartalék-modellje, és az őr a tartalékkal is átmegy", () => {
-  assert.equal(FALLBACK_MODELS.lektor, "anthropic/claude-sonnet-5");
+  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a lektor tartaléka GPT-5.6 Terra (más család, mint a szerzőé).
+  assert.equal(FALLBACK_MODELS.lektor, "gpt-5.6-terra");
   assert.notEqual(modelFamily(FALLBACK_MODELS.lektor!), modelFamily(resolveStudioModel("author")));
   assert.doesNotThrow(() => assertDistinctFamilies({}));
 });

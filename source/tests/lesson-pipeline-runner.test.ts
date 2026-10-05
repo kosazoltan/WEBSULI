@@ -1321,7 +1321,7 @@ test("(q) fromMapBody: az üres törzs érvényes (a scope opcionális), a hián
  * 2026-09-09 — éles hiba: az animátor OpenRouter 429-en (rate limit) végleg elhalt,
  * pedig a FALLBACK_MODELS csak dokumentálva volt, a runner nem használta.
  * ------------------------------------------------------------------ */
-import { FALLBACK_MODELS, SECOND_FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../server/ai/models";
+import { FALLBACK_MODELS, SECOND_FALLBACK_MODELS, modelFamily, providerForModel, resolveStudioModel } from "../server/ai/models";
 import { lektorReportSchema } from "../server/studio/step-io";
 
 function makeFailoverDeps(opts: { failModels: Set<string>; cannedResponse: string }) {
@@ -1366,7 +1366,9 @@ test("(m2) modellhiba: ha az elsődleges és a tartalék is hibázik, a második
   const last = SECOND_FALLBACK_MODELS.pedagogue;
   assert.ok(new Set([primary, fallback, last]).size === 3);
   assert.equal((SECOND_FALLBACK_MODELS as Record<string, string>).author, undefined, "a szerzőnek nincs idegen családú második tartaléka (tulajdonosi döntés 2026-09-29)");
-  assert.notEqual(providerForModel(SECOND_FALLBACK_MODELS.lektor), providerForModel(resolveStudioModel("author")), "a lektor független a szerzőtől");
+  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a lektor lánca gpt-6.1-sol → gpt-5.6-terra; a második tartalék (claude-opus-5-5) a
+  // szerző (anthropic) családjába esne, ezért megszűnt.
+  assert.equal((SECOND_FALLBACK_MODELS as Record<string, string>).lektor, undefined, "a lektornak nincs a szerző családjába eső második tartaléka");
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({ failModels: new Set([primary, fallback]), cannedResponse: CANNED_PEDAGOGUE });
   store.seed({ id: "job-2", mapId: "m1", step: "pedagogue", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
   const outcome = await runPipelineStep("job-2", { store, providerFactory, keyConfigured, promptLookup });
@@ -1509,7 +1511,9 @@ test("(o) author hiba esetén nincs külső modellre visszaesés", async () => {
   const primary = resolveStudioModel("author");
   const fallback = FALLBACK_MODELS.author!;
   assert.ok(fallback, "a szerzőnek van tartaléka");
-  assert.equal(providerForModel(fallback), providerForModel(primary), "a tartalék a szerző saját családjában marad");
+  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a szerző tartaléka Qwen 3.8 (más család, mint a szerzőé) — a 2026-09-29-es szabály célja,
+  // a lektor függetlensége, változatlanul áll: a tartalék nem esik a lektor családjába.
+  assert.notEqual(modelFamily(fallback), modelFamily(resolveStudioModel("lektor")), "a szerző tartaléka nem a lektor családja");
   const { store, calls, providerFactory, keyConfigured, promptLookup } = makeFailoverDeps({
     failModels: new Set([primary, fallback]),
     cannedResponse: CANNED_AUTHOR,
@@ -2129,8 +2133,9 @@ test("review R4: telepítés előtti (skill-7.4-review-1) lektor-bizonyítékkal
  * modellje GPT-6 Luna, tartaléka GPT-5.6 Terra. Élesben mérve: egyetlen érvénytelen szerzői JSON az egész
  * gyártást leállította, mert a szerzőnek nem volt tartaléka. */
 test("spec 2026-09-29: author — GPT-6 Luna elsődleges; érvénytelen JSON után a GPT-5.6 Terra tartalék írja meg", async () => {
-  assert.equal(resolveStudioModel("author", {}), "gpt-6-luna");
-  assert.equal(FALLBACK_MODELS.author, "gpt-5.6-terra");
+  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): szerző Claude Opus 5.5, tartaléka Qwen 3.8 max-prime — a tartalék-viselkedés mércéje változatlan.
+  assert.equal(resolveStudioModel("author", {}), "claude-opus-5-5");
+  assert.equal(FALLBACK_MODELS.author, "qwen/qwen3.8-max-prime");
   const base = makeDeps(CANNED_AUTHOR);
   const calls: string[] = [];
   const providerFactory = (model: string): IAIProvider => ({
@@ -2138,7 +2143,7 @@ test("spec 2026-09-29: author — GPT-6 Luna elsődleges; érvénytelen JSON ut�
     model,
     chat: async () => {
       calls.push(model);
-      const content = model === "gpt-6-luna" ? '{"title": "Oszthatóság", "sections": [' : CANNED_AUTHOR;
+      const content = model === "claude-opus-5-5" ? '{"title": "Oszthatóság", "sections": [' : CANNED_AUTHOR;
       return { content, finishReason: "stop", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
     },
     isAvailable: async () => true,
@@ -2148,9 +2153,9 @@ test("spec 2026-09-29: author — GPT-6 Luna elsődleges; érvénytelen JSON ut�
   const outcome = await runPipelineStep("author-fallback", { ...base, providerFactory });
 
   assert.equal(outcome.ok, true, JSON.stringify(outcome));
-  assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-terra"], "előbb GPT-6 Luna, érvénytelen JSON után a tartalék");
+  assert.deepEqual(calls, ["claude-opus-5-5", "qwen/qwen3.8-max-prime"], "előbb a szerző, érvénytelen JSON után a tartalék");
   const job = await base.store.loadJob("author-fallback");
-  assert.equal((job as { model?: string | null })?.model, "gpt-5.6-terra", "a job a ténylegesen használt modellt rögzíti");
+  assert.equal((job as { model?: string | null })?.model, "qwen/qwen3.8-max-prime", "a job a ténylegesen használt modellt rögzíti");
 });
 
 /* Spec 2026-09-29 (docs/specs/2026-09-29-tanari-temafokusz.md): a fókuszált job a kéréshez nem tartozó

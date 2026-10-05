@@ -43,6 +43,12 @@ export type ChatCallOptions = {
    * az ezt támogató szolgáltató (Anthropic) `cache_control`-lal jelöli; a többi figyelmen kívül hagyja.
    */
   cachePrefixChars?: number;
+  /**
+   * Spec 2026-10-05-s10-adatvesztes-mentesseg: streamelt hívás tétlenségi őrrel — ha `idleMs` ideig nem jön új darab (szöveg
+   * vagy gondolkodás), a hívás megszakad, és a hiba a már beérkezett szöveget is hordozza. Csak a `supportsStreamingChat`
+   * szolgáltató használja; a többi figyelmen kívül hagyja.
+   */
+  stream?: { idleMs: number };
 };
 
 export interface AIProviderConfig {
@@ -69,9 +75,12 @@ export interface IAIProvider {
   readonly model: string;
   /** Spec 2026-09-30 (U6, C11): a szolgáltató beállított kimeneti kerete (ha ismert) — a hosszkorlát-újrapróba ebből nő. */
   readonly maxOutputTokens?: number;
+  /** Spec 2026-10-05-s10: a `chat` hívás `options.stream` esetén streamel (tétlenségi őrrel). */
+  readonly supportsStreamingChat?: boolean;
   
   /**
-   * Non-streaming chat completion
+   * Chat completion. Alapból pufferelt; `options.stream` esetén (és ha `supportsStreamingChat`) a szolgáltató BELÜL streamel,
+   * tétlenségi őrrel — megszakadáskor a hiba `partialContent`-ben hordozza a beérkezett szöveget (spec 2026-10-05-s10).
    */
   /**
    * `options.responseFormat` (spec 2026-09-30, U2/C8): hívásonkénti szigorú JSON-séma a szolgáltatónak (`json_schema`,
@@ -103,6 +112,17 @@ export class AIProviderError extends Error {
   ) {
     super(`[${provider}] ${message}`);
     this.name = 'AIProviderError';
+  }
+  /** Spec 2026-10-05-s10: streamelt hívás megszakadásakor a már beérkezett (kifizetett) szöveg — naplózásra, elemzésre. */
+  partialContent?: string;
+}
+
+/** Spec 2026-10-05-s10: a stream `idleMs` ideig nem hozott új darabot — megszakítva, a részleges szöveggel. */
+export class AIProviderIdleTimeoutError extends AIProviderError {
+  constructor(provider: string, public idleMs: number, partialContent: string) {
+    super(provider, `No stream data for ${idleMs}ms (idle timeout)`, true);
+    this.name = 'AIProviderIdleTimeoutError';
+    this.partialContent = partialContent;
   }
 }
 

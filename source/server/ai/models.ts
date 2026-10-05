@@ -65,7 +65,9 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // Tulajdonosi döntés 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md): GPT-6 Luna, tartaléka
   // GPT-5.6 Terra. Mérve ugyanazon a webes jobon: Luna 2/2 érvényes, sémát teljesítő lecke (84 s, 96 s);
   // a Terra élesben egyszer érvénytelen JSON-t adott, és tartalék híján az egész gyártás leállt.
-  author: "gpt-6-luna", // long structured Hungarian output
+  // Tulajdonosi döntés 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a szerző Claude Opus 5.5 (a lektor
+  // OpenAI-ra került, a D1-független lektor szabálya így marad teljesítve); tartaléka Qwen 3.8 max-prime (OpenRouter, high).
+  author: "claude-opus-5-5", // long structured Hungarian output
   // Spec 2026-09-19 (mérve, két 46–49 fogalmas futás): az animátor+bank a lecke költségének
   // 3/4-e volt Terrán (~3 USD). A glm-5.3-flash 6,3 s alatt, 0 gondolkodó tokennel, érvényes
   // magyar bankcsomag-JSON-t adott (0,09/0,30 USD/M); a rubrikát determinisztikus kód ellenőrzi.
@@ -81,7 +83,9 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   // 2026-09-09 (tulajdonosi döntés): a `qwen/qwen3.8-max` id eltűnt az OpenRouter nyilvános
   // /models listájából (csak `qwen3.8-max-0902` maradt), ezért a lektor Grok 4.6-ra vált.
   // x-ai és openai külön család; a szerző tartaléka is openai (spec 2026-09-29), így a lektor független marad.
-  lektor: "grok-4.6", // MUST differ in family from author
+  // Tulajdonosi döntés 2026-10-05: a grok-4.6 helyett GPT-6.1 Sol — „képes hosszú futásokra, nem akad el” (mérve élesben:
+  // „[xAI] Request timed out.”, és üres grok-válasz a Mezopotámia-futáson). Responses API, medium effort, streamelve.
+  lektor: "gpt-6.1-sol", // MUST differ in family from author
   gateHelper: "deepseek/deepseek-v4-flash", // cheap classification (0,04/0,08 USD/M)
   quizPolish: "deepseek/deepseek-v4-flash",
 };
@@ -101,6 +105,7 @@ export const BANK_RESCUE_MODEL = "gpt-5.6-terra";
 const MAX_OUTPUT_BY_MODEL: Record<string, number> = {
   "gpt-6-luna": 128_000, "gpt-6-astra": 128_000, "gpt-5-6-terra": 128_000, "gpt-6-1-sol": 128_000,
   "claude-opus-5-5": 128_000, "claude-opus-5": 128_000, "claude-sonnet-5": 128_000,
+  "qwen3-8-max-prime": 131_072,
   "glm-5-3-flash": 943_717, "grok-4-6": 450_000, "deepseek-v4-flash": 384_000, "qwen3-vl-32b-instruct": 32_768,
 };
 export function maxOutputForModel(modelId: string): number | undefined {
@@ -115,7 +120,8 @@ export function maxOutputForModel(modelId: string): number | undefined {
  */
 export const SECOND_FALLBACK_MODELS = {
   pedagogue: "gpt-5.6-terra",
-  lektor: "claude-opus-5-5",
+  // Tulajdonosi döntés 2026-10-05: a lektor lánca gpt-6.1-sol → gpt-5.6-terra; a korábbi második tartalék (claude-opus-5-5)
+  // a szerző (anthropic) családjába esne, ezért megszűnt.
 } as const satisfies Partial<Record<StudioStep, string>>;
 
 export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
@@ -124,9 +130,9 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   // független olvasója a GLM 5.3 Flash (mért 89.1%, más család; a Luna átfogalmazott, 87.3%).
   ocr: "z-ai/glm-5.3-flash",
   pedagogue: "grok-4.6",
-  // The author's fallback stays in the author's own (openai) family, so the reviewer remains independent
-  // (lektor: xai, its fallback: anthropic) — spec 2026-09-29: one invalid author JSON no longer ends the run.
-  author: "gpt-5.6-terra",
+  // Tulajdonosi döntés 2026-10-05: a szerző tartaléka a Sonnet helyett Qwen 3.8 (OpenRouter), maximális efforttal — más család,
+  // mint a lektoré (openai), így a D1-független lektor szabálya a tartalékra is teljesül.
+  author: "qwen/qwen3.8-max-prime",
   // Spec 2026-09-24: más család, erős modell (a szerzőé) — nem olcsó szövegmodellre esik vissza.
   animator: "gpt-5.6-terra",
   // Mérve 2026-09-20 (5 tartalék-hívás négy futásban): a deepseek-v4-flash bankcsomagja 4/5-ször a
@@ -140,7 +146,16 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
   // az „anthropic" család különbözik a szerző „openai" családjától, így az
   // `assertDistinctFamilies` őr a tartalékra is teljesül. Létezése és válasza az
   // OpenRouter /models listán és egy valódi hívással ellenőrizve (2026-09-19).
-  lektor: "anthropic/claude-sonnet-5",
+  // Tulajdonosi döntés 2026-10-05: a lektor tartaléka GPT-5.6 Terra (a kért „GPT-6 Terra” nem létezik az OpenAI-nál).
+  lektor: "gpt-5.6-terra",
+};
+
+/**
+ * Tulajdonosi döntés 2026-10-05: modellenkénti gondolkodási effort, ha a lépés szabályzata nem ad meg (a szerző-tartalék Qwen
+ * „maximum efforttal”; a `high` a konfigurációs típus és az OpenRouter dokumentált felső foka).
+ */
+export const MODEL_REASONING_EFFORT: Readonly<Record<string, "low" | "medium" | "high">> = {
+  "qwen/qwen3.8-max-prime": "high",
 };
 
 /**
