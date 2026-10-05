@@ -61,15 +61,154 @@ function Moon({ cx, cy, r, lit, waxing }: { cx: number; cy: number; r: number; l
   );
 }
 
+/*
+ * Spec 2026-09-30 (docs/specs/2026-09-30-korforgas-felirat-utkozes.md): a fázisfelirat elrendezése.
+ * Mért hiba (Mezopotámia, 1280 px): a rögzített helyű, szélen befelé tolt kétsoros felirat a számozott
+ * körre csúszott. Most a felirat a kör külső oldalára kerül (kör sugara + margó, a sugár irányában), és
+ * ütközésnél (szél, kör, jelvény, középfelirat, másik felirat, nyilas gyűrű) elfordul / kijjebb megy;
+ * ha így sem fér el, a gyűrű sugara csökken.
+ */
+const CYCLE_W = 400, CYCLE_H = 400, CYCLE_R_MAX = 104, CYCLE_R_MIN = 60;
+const LINE_H = 24, ASCENT = 17, DESCENT = 5, CHAR_EM = 0.62, EDGE = 2, GAP = 2;
+const BADGE_R = 13;
+
+type Box = { l: number; t: number; r: number; b: number };
+type Circle = { x: number; y: number; r: number };
+export type CycleLabelLayout = { lines: string[]; x: number; top: number };
+/**
+ * Az elrendezés minősége (review #199): `exact` — minden kemény feltétel teljesül (E3 is); `drift` — nincs
+ * átfedés/levágás, de egy feliratsor közelebb esik egy szomszéd körhöz (a legkisebb elcsúszással); `overlap`
+ * — a 6. döntés harmadik lépcsője, a legkisebb átfedés-mértékű jelöltekkel.
+ */
+export type CycleFit = "exact" | "drift" | "overlap";
+export type CycleLayout = { R: number; node: number; fit: CycleFit; labels: CycleLabelLayout[] };
+
+/** Két doboz behatolási mélysége (GAP-pel bővítve); 0, ha nem érnek össze. */
+const boxDepth = (a: Box, b: Box) => Math.max(0, Math.min(a.r + GAP - b.l, b.r + GAP - a.l, a.b + GAP - b.t, b.b + GAP - a.t));
+const boxCircleHit = (b: Box, c: Circle) =>
+  Math.hypot(Math.max(b.l, Math.min(c.x, b.r)) - c.x, Math.max(b.t, Math.min(c.y, b.b)) - c.y) < c.r + GAP;
+/** A doboz legközelebbi pontjának távolsága a középponttól. */
+const boxDist = (b: Box, x: number, y: number) => Math.hypot(Math.max(b.l, Math.min(x, b.r)) - x, Math.max(b.t, Math.min(y, b.b)) - y);
+
+/** A középső felirat (és holdábránál a Föld-kör) — a rajzolással azonos geometria. */
+function cycleCenter(center: string | undefined, hasMoon: boolean): { boxes: Box[]; circles: Circle[] } {
+  const cx = CYCLE_W / 2, c = CYCLE_H / 2;
+  if (!center) return { boxes: [], circles: [] };
+  const lines = twoLines(center, 16);
+  const size = hasMoon ? 16 : 17;
+  const w = Math.max(...lines.map((l) => l.length)) * size * CHAR_EM;
+  const first = hasMoon ? c + 52 - (lines.length - 1) * 10 : c + 6 - (lines.length - 1) * 11;
+  const last = first + (lines.length - 1) * (hasMoon ? 21 : 22);
+  return {
+    boxes: [{ l: cx - w / 2, r: cx + w / 2, t: first - size - 1, b: last + DESCENT + 1 }],
+    circles: hasMoon ? [{ x: cx, y: c, r: 30 }] : [],
+  };
+}
+
+const PHASE_ANGLE = (i: number, n: number) => (i / n) * 2 * Math.PI - Math.PI / 2;
+
+/** Tiszta elrendező: gyűrűsugár és feliratdobozok. Sosem dob, sosem hagy ki feliratot. */
+export function layoutCycle(labels: string[], center: string | undefined, hasMoon: boolean): CycleLayout {
+  const n = labels.length, node = n > 8 ? 18 : 22, cx = CYCLE_W / 2, c = CYCLE_H / 2;
+  const mid = cycleCenter(center, hasMoon);
+  const texts = labels.map((label, i) => {
+    const a = PHASE_ANGLE(i, n);
+    const lines = twoLines(label, Math.abs(Math.cos(a)) < 0.3 ? 9 : 6);
+    return { a, lines, w: Math.max(...lines.map((l) => l.length)) * 16 * CHAR_EM, h: (lines.length - 1) * LINE_H + ASCENT + DESCENT };
+  });
+  const offsets = [0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90];
+  const tries = offsets.flatMap((off) => [0, 6, 12].map((extra) => ({ off, extra, cost: Math.abs(off) / 15 + extra / 6 })))
+    .sort((p, q) => p.cost - q.cost);
+
+  const circlesAt = (R: number): Circle[] => labels.flatMap((_, i) => {
+    const a = PHASE_ANGLE(i, n), x = cx + R * Math.cos(a), y = c + R * Math.sin(a);
+    return [{ x, y, r: node }, { x: x + node * 0.72, y: y - node * 0.72, r: BADGE_R }];
+  });
+  // A gyűrű használható, ha a körök nem érnek egymáshoz és a középfelirathoz.
+  const ringOk = (R: number) => {
+    const cs = circlesAt(R);
+    const nodes = cs.filter((_, k) => k % 2 === 0);
+    if (nodes.length > 1 && Math.hypot(nodes[0].x - nodes[1].x, nodes[0].y - nodes[1].y) < 2 * node + 6) return false;
+    return cs.every((ci) => mid.boxes.every((b) => !boxCircleHit(b, ci)) && mid.circles.every((m) => Math.hypot(m.x - ci.x, m.y - ci.y) >= m.r + ci.r + GAP));
+  };
+
+  // Review #199: mennyiségi mérték (egységben, behatolási mélységek összege) két részre bontva:
+  // `hit` = kilógás a rajzterületből + kör/jelvény/középfelirat/másik felirat/nyilas gyűrű átfedése;
+  // `stray` = mennyivel van egy feliratsor közepe közelebb egy MÁSIK fázis-körhöz, mint a sajátjához (E3).
+  // `exact`: az első jelölt, ahol mindkettő 0. `drift`: a hit = 0 jelöltek közül a legkisebb stray (és a
+  // gyűrűsugarak közül a legkisebb összes stray-t adó).
+  // `overlap` (végső tartalék): lexikografikusan a legkisebb (hit, stray) — nem az első, legkevesebb
+  // feltételt sértő jelölt. A sorrend oka: takarás/levágás rosszabb, mint az elcsúszás.
+  const place = (R: number, ring: boolean, fit: CycleFit): { labels: CycleLabelLayout[]; stray: number } | null => {
+    const circles = [...circlesAt(R), ...mid.circles];
+    const nodes = texts.map((t) => ({ x: cx + R * Math.cos(t.a), y: c + R * Math.sin(t.a) }));
+    const placed: Box[] = [...mid.boxes];
+    const out: CycleLabelLayout[] = [];
+    let strayTotal = 0;
+    const measure = (box: Box, i: number, lineCount: number) => {
+      let hit = Math.max(0, EDGE - box.l) + Math.max(0, EDGE - box.t)
+        + Math.max(0, box.r - (CYCLE_W - EDGE)) + Math.max(0, box.b - (CYCLE_H - EDGE));
+      for (const ci of circles) hit += Math.max(0, ci.r + GAP - boxDist(box, ci.x, ci.y));
+      for (const pb of placed) hit += boxDepth(box, pb);
+      if (ring) hit += Math.max(0, R + 4 - boxDist(box, cx, c));
+      let stray = 0;
+      const mx = (box.l + box.r) / 2;
+      for (let k = 0; k < lineCount; k++) {
+        const my = box.t + k * LINE_H + (ASCENT + DESCENT) / 2;
+        const own = Math.hypot(nodes[i].x - mx, nodes[i].y - my);
+        for (const [j, o] of nodes.entries()) if (j !== i) stray += Math.max(0, own + GAP - Math.hypot(o.x - mx, o.y - my));
+      }
+      return { hit, stray };
+    };
+    for (const [i, t] of texts.entries()) {
+      const { x: nx, y: ny } = nodes[i];
+      let chosen: { box: Box; hit: number; stray: number } | null = null;
+      for (const tr of tries) {
+        const th = t.a + (tr.off * Math.PI) / 180, ux = Math.cos(th), uy = Math.sin(th);
+        const s = Math.abs(ux) * t.w / 2 + Math.abs(uy) * t.h / 2, d = node + 8 + tr.extra + s;
+        const bx = nx + ux * d, by = ny + uy * d;
+        const box = { l: bx - t.w / 2, r: bx + t.w / 2, t: by - t.h / 2, b: by + t.h / 2 };
+        const m = measure(box, i, t.lines.length);
+        if (m.hit === 0 && m.stray === 0) { chosen = { box, ...m }; break; }
+        if (fit === "exact" || (fit === "drift" && m.hit > 0)) continue;
+        if (!chosen || m.hit < chosen.hit || (m.hit === chosen.hit && m.stray < chosen.stray)) chosen = { box, ...m };
+      }
+      if (!chosen) return null;
+      strayTotal += chosen.stray;
+      placed.push(chosen.box);
+      out[i] = { lines: t.lines, x: (chosen.box.l + chosen.box.r) / 2, top: chosen.box.t };
+    }
+    return { labels: out, stray: strayTotal };
+  };
+
+  // Review #199: a nyíl mindkét végén (node + 8)/R szöghézag van; ha a kettő eléri a fázisok közti
+  // 2π/n szöget, a nyíl visszafelé fordul. Ezért R > n·(node + 8)/π (12 fázisnál ≈ 99,3; R_MAX ennél nagyobb).
+  const arrowMinR = (n * (node + 8)) / Math.PI;
+  const radii: number[] = [];
+  for (let R = CYCLE_R_MAX; R >= CYCLE_R_MIN; R -= 4) if (R === CYCLE_R_MAX || (R > arrowMinR && ringOk(R))) radii.push(R);
+  for (const ring of [true, false]) for (const R of radii) {
+    const got = place(R, ring, "exact");
+    if (got) return { R, node, fit: "exact", labels: got.labels };
+  }
+  let drift: { R: number; labels: CycleLabelLayout[]; stray: number } | null = null;
+  for (const ring of [true, false]) for (const R of radii) {
+    const got = place(R, ring, "drift");
+    if (got && (!drift || got.stray < drift.stray)) drift = { R, ...got };
+  }
+  if (drift) return { R: drift.R, node, fit: "drift", labels: drift.labels };
+  return { R: CYCLE_R_MAX, node, fit: "overlap", labels: place(CYCLE_R_MAX, false, "overlap")!.labels };
+}
+
 export function CycleAnim({ params, caption }: AnimProps) {
-  const p = parseVisualParams("cycle", params) as CycleParams | null;
-  if (!p) return null;
+  const p = useMemo(() => parseVisualParams("cycle", params) as CycleParams | null, [params]);
+  const hasMoon = !!p?.phases.some((ph) => ph.moon !== undefined);
+  const layout = useMemo(() => (p ? layoutCycle(p.phases.map((ph) => ph.label), p.center, hasMoon) : null), [p, hasMoon]);
+  if (!p || !layout) return null;
   const n = p.phases.length;
   // 400×400 rajzterület: 375 px-es telefonon (≈ 0,77-es skála) a 16-os betű ≈ 12 px marad (böngészőben mérve).
-  const W = 400, H = 400, cx = W / 2, c = H / 2, R = 104, node = n > 8 ? 18 : 22;
-  const hasMoon = p.phases.some((ph) => ph.moon !== undefined);
+  const W = CYCLE_W, H = CYCLE_H, cx = W / 2, c = H / 2, { R, node } = layout;
   const at = (i: number) => {
-    const a = (i / n) * 2 * Math.PI - Math.PI / 2;
+    const a = PHASE_ANGLE(i, n);
     return { x: cx + R * Math.cos(a), y: c + R * Math.sin(a), a };
   };
   return (
@@ -103,28 +242,19 @@ export function CycleAnim({ params, caption }: AnimProps) {
           )
         )}
         {p.phases.map((phase, i) => {
-          const { x, y, a } = at(i);
-          const ly = c + (R + node + 16) * Math.sin(a);
-          const anchor = Math.abs(Math.cos(a)) < 0.3 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
-          // Élő mérés (375 px, 8 fázis): a 45°-os „Növő hold” kilógott. Oldalt rövidebb sorok, és ha a becsült
-          // szélesség (félkövér ≈ 0,62 em/betű) így sem fér ki, a felirat beljebb csúszik.
-          const lines = twoLines(phase.label, anchor === "middle" ? 9 : 6);
-          const widest = Math.max(...lines.map((line) => line.length * 16 * 0.62));
-          let lx = cx + (R + node + 14) * Math.cos(a);
-          if (anchor === "start") lx = Math.min(lx, W - 4 - widest);
-          else if (anchor === "end") lx = Math.max(lx, 4 + widest);
-          else lx = Math.min(W - 4 - widest / 2, Math.max(4 + widest / 2, lx));
+          const { x, y } = at(i);
+          const label = layout.labels[i];
           const color = PALETTE[i % PALETTE.length];
           return (
-            <g key={i}>
+            <g key={i} data-phase={i}>
               {phase.moon !== undefined
                 ? <Moon cx={x} cy={y} r={node} lit={phase.moon} waxing={phase.waxing ?? true} />
                 : <circle cx={x} cy={y} r={node} fill={color} fillOpacity="0.9" />}
               {/* Témától független jelvény (mérve: a --card a lecke témájától eltérhet, 1,2:1 kontraszt). */}
               <circle cx={x + node * 0.72} cy={y - node * 0.72} r={13} fill="#ffffff" stroke={color} strokeWidth="2.5" />
               <text x={x + node * 0.72} y={y - node * 0.72 + 5.5} textAnchor="middle" fontSize="16" fontWeight="700" fill="#1e293b">{i + 1}</text>
-              {lines.map((line, k) => (
-                <text key={k} x={lx} y={ly + 5 + (k - (lines.length - 1) / 2) * 24} textAnchor={anchor} fontSize="16" fontWeight="600" fill="currentColor">{line}</text>
+              {label.lines.map((line, k) => (
+                <text key={k} x={label.x} y={label.top + ASCENT + k * LINE_H} textAnchor="middle" fontSize="16" fontWeight="600" fill="currentColor">{line}</text>
               ))}
             </g>
           );

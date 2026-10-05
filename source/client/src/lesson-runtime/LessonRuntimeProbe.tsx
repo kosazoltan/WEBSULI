@@ -167,10 +167,35 @@ const SCENE3D_LESSON: Lesson = {
   ],
 };
 
+/**
+ * Spec 2026-09-30 (körforgás-felirat ütközés): `?cycle-long=1` — hosszú, kétsoros fázisfeliratok. Mért hiba
+ * (Mezopotámia-lecke, 1280 px): a felirat a számozott körre csúszott. Külön paraméter, mert a `?visuals=1`
+ * öt ábráját a `tests/explanatory-visuals.spec.ts` pontosan rögzíti.
+ */
+const CYCLE_LONG_LESSON: Lesson = {
+  ...PROBE_LESSON,
+  title: "Hosszú körforgás-feliratok próbája",
+  misconceptions: [],
+  sections: [
+    visualSection("Mezopotámia öntözése", "A folyók áradását előre kellett jelezni, hogy a vizet tavakba és csatornákba vezessék a száraz időszakra.", "cycle", {
+      center: "Mezopotámia",
+      phases: [{ label: "Áradás előrejelzése" }, { label: "Tavaszi áradás" }, { label: "Száraz időszak" }, { label: "Tavak és csatornák" }],
+    }, "Az öntözéses földművelés éves körforgása."),
+    visualSection("A víz körforgása", "A tenger vize elpárolog, felhővé sűrűsödik, csapadékként hull le, majd a talajon és a folyókon át visszajut a tengerbe.", "cycle", {
+      center: "Víz",
+      phases: [
+        { label: "Párolgás a tengerből" }, { label: "Felhőképződés" }, { label: "Csapadékhullás" },
+        { label: "Beszivárgás a talajba" }, { label: "Felszíni lefolyás" }, { label: "Visszatérés a tengerbe" },
+      ],
+    }, "A víz körforgásának hat lépése."),
+  ],
+};
+
 function probeLesson(search: string): Lesson {
   const q = new URLSearchParams(search);
   if (q.has("scene3d")) return SCENE3D_LESSON;
   if (q.has("visuals")) return VISUALS_LESSON;
+  if (q.has("cycle-long")) return CYCLE_LONG_LESSON;
   if (q.has("fusion")) {
     const lesson = fusionFixture();
     const theme = EXPERIENCE_THEMES.find(t => t === q.get("theme"));
