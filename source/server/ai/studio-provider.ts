@@ -149,6 +149,8 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   // bank óta használt). A kimenet néhány azonosító, a gondolkodással együtt 8k bőven elég.
   topicFocus: { timeoutMs: 60_000, maxTokens: 8_000, reasoningEffort: "low", jsonMode: true },
   quizPolish: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
+  // Spec 2026-10-05-s9 (terv-ellenőrzés): az orkesztrátor saját szabálya — rövid elemzés + javító prompt, JSON-mód, stream.
+  orchestrator: { timeoutMs: 120_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true },
 };
 
 /**
@@ -162,7 +164,7 @@ export const STREAM_IDLE_MS = 120_000;
 export const STREAM_CEILING_FACTOR = 2;
 /** Review #190: szabályzati határidő nélküli streamelt lépés (szerző) felső plafonja. */
 export const STREAM_DEFAULT_CEILING_MS = 30 * 60_000;
-const STREAMED_STEPS: ReadonlySet<string> = new Set(["lektor", "author", "pedagogue", "animator", "bank", "visuals", "visualDesigner", "textFix", "instructionCheck", "gateHelper", "quizPolish"]);
+const STREAMED_STEPS: ReadonlySet<string> = new Set(["lektor", "author", "pedagogue", "animator", "bank", "visuals", "visualDesigner", "textFix", "instructionCheck", "gateHelper", "quizPolish", "orchestrator"]);
 export function stepStreamIdleMs(step: string): number | undefined {
   return STREAMED_STEPS.has(step) ? STREAM_IDLE_MS : undefined;
 }

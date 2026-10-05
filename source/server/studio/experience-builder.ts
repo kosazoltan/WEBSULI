@@ -49,6 +49,11 @@ export type ExperienceBuildDeps = {
   /** Mérve (4. mérés): a bukott bankkísérlet oka eddig csak ujjlenyomatként maradt — a hívó naplózza. */
   onAttemptFailure?(sectionIndex: number, attempt: number, reason: string): void;
   /**
+   * Spec 2026-10-05-s9 (tulajdonosi tervezés): a 3. és 4. kísérlet ELŐTT (tartalék, mentő) az orkesztrátor elemzi a csomag
+   * hibáit és a bukott jelöltet, és a FEJEZET rendszerpromptjának végére javító utasítást tesz. null → változatlan prompt.
+   */
+  orchestrate?(input: { sectionIndex: number; attempt: number; system: string; prompt: string; errors: string; previous: unknown; diagnoses: string[] }): Promise<{ system: string; diagnosis: string } | null>;
+  /**
    * Spec 2026-09-30 (U2, H52): az utolsó (mentő) kísérlet CSAK aritmetikai leletével elfogadott csomag tétele NYITOTT lelet
    * marad (nem néma figyelmeztetés): a hívó a kapunak adja át kivehető tételként (limit-tábla), amíg cáfolat vagy javítás
    * le nem zárja. Az `itemId` a végleges (hash-alapú) tétel-azonosító.
@@ -374,6 +379,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     let repairAllowed: ReadonlyMap<string, string[] | "*"> | undefined = allowedReviewIds ? new Map([...allowedReviewIds].map(id => [id, "*"] as const)) : undefined;
     let lastError: unknown;
     let errors = reviewBase ? "A lektor konkrét hibáit javítsd az eredeti tételazonosítókon." : "";
+    // Spec 2026-10-05-s9 (terv-ellenőrzés 9.): fejezetenkénti saját rendszerprompt — a párhuzamos csomagok közös promptja nem
+    // kapja meg más fejezet javító utasítását.
+    let unitSystem = system;
+    const diagnoses: string[] = [];
     // Spec 2026-09-19: three attempts per packet — on 36–48 concept maps a second miss
     // on one packet killed whole runs (studio_jobs 41a94054, 222202f1, 4f853db8).
     for (let attempt = 0; !packet && attempt < PACKET_ATTEMPTS + PACKET_RESCUE_ATTEMPTS; attempt++) {
@@ -398,7 +407,12 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       let response: unknown;
       // Spec 2026-09-30 (U2/C8): szigorú séma a szolgáltatónak (a hívó dönt, hogy az adott út támogatja-e); a null-ok visszaalakítva.
       const responseFormat = bankResponseFormat({ methodMin: methodKinds.length, taskCount, taskTarget, taskMax: Math.max(taskTarget, 45), quizCount, quizTarget, quizMax: Math.max(quizTarget, 75), language: Boolean(language) }, Boolean(repairBase));
-      try { response = normalizeStrictPacket(await deps.call(system, prompt, attempt, { responseFormat })); }
+      // A meglévő 3. és 4. kísérlet előtt (nem új kísérlet: a modell-sorrend és a mentő-/salvage-szemantika változatlan).
+      if (deps.orchestrate && errors && attempt >= PACKET_ATTEMPTS - 1) {
+        const corrected = await deps.orchestrate({ sectionIndex: unit.sectionIndex, attempt, system, prompt, errors, previous, diagnoses });
+        if (corrected) { unitSystem = corrected.system; diagnoses.push(corrected.diagnosis.slice(0, 600)); }
+      }
+      try { response = normalizeStrictPacket(await deps.call(unitSystem, prompt, attempt, { responseFormat })); }
       catch (error) {
         if (!(error instanceof RetryableBankCallError)) throw error;
         errors = `A modellhívás hibázott: ${error.message}`;
