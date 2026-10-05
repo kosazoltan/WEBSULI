@@ -164,3 +164,13 @@ Mért (job 8953db4b, map d70d8f67, a tulajdonos 4 füzetlapja; publikálás nem 
 - Ingyenes visszajátszás a mentett adatokon: (1) a job 8953db4b kapuja 6 tétellel két adagban fut (napló); (2) a d70d8f67 térkép 13
   kimaradt fogalmából a jel nélküli idézetűek igazolhatók; (3)–(4) egységtesztek a mért esetekre („Nílus áradási”, „Negrid”).
 - Új élő futás a 4 lapon: publikál, és a lecke nem tartalmazza a „Nílus áradási” / „Negroid” / „ezerév” alakot.
+### Pontosítás (implementáció, 2026-10-05)
+- **1. kapu:** `GATE_REPAIR_MAX_ITEMS = 5` az ADAG mérete, `GATE_REPAIR_MAX_BATCHES = 2` → futásonként ≤ 10 cél; fölötte a kihagyás
+  naplózva (modellhívás nélkül). Részleges eredmény nincs (bármely bukás → a régi hibaút). A `tests/gate-item-repair.test.ts`
+  „legfeljebb 5 tétel” esete e spec-változás szerint „legfeljebb 2 × 5 tétel” (11 cél → kimarad).
+- **2. vita / idézet:** a „szó-kulcs” a tokenek betűi és számjegyei; ha a két olvasat (vagy a változtatott szakasz és az első olvasat)
+  szó-kulcsa egyezik / ≤ 2 szerkesztésre tér el, nincs jel. A szó szerinti ellenőrzés a jelölőket és a nyilakat MINDKÉT oldalról
+  (idézet, forrás) eltávolítja, a nyilakat bárhol a sorban (nem csak a sor elején) — a soremelés eddig is szóköz volt.
+- **4. szótár-őr:** „a kontextus megerősít” = az erős sor ugyanannyi ellenőrzött szóból áll, a nem kérdéses szavak egyeznek, a
+  kérdéses szavak ≤ 2 szerkesztéssel térnek el. Csak a csere-ágban érvényes (szótár-helyes erős sor); ha az erős sor is nem-szó,
+  a S11/4 szerinti ⟦?⟧ marad. A „Kesia, Föld - Felt.” → „Ázsia, Közel-Kelet” sor szószáma eltér → csere (változatlan).
