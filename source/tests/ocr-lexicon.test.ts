@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideNonWordLines, dualReadOcr, parseStrongLines, verifyNonWords, UNCERTAIN_MARK, type StrongLineRequest } from "../server/studio/ocr";
+import { decideNonWordLines, dualReadOcr, lexiconGuardedOcr, parseStrongLines, verifyNonWords, withOcrCache, UNCERTAIN_MARK, type StrongLineRequest } from "../server/studio/ocr";
 import { loadHungarianLexicon, nonWordLines } from "../server/studio/ocr-lexicon";
 import { ROLE_SKILLS } from "../server/studio/role-skills";
 import type { ExtractorFile } from "../server/studio/extractor";
@@ -116,4 +116,55 @@ test("integráció, valódi magyar szótár: Kesia/Lepesztető jelölt, Ázsia/z
   for (const w of ["Kesia", "Felt", "Lepesztető"]) assert.ok(flagged.includes(w), `${w} jelölt: ${flagged.join(",")}`);
   for (const w of ["Ázsia", "Közel-Kelet", "zikkurat", "toronytemplom", "öntözéses", "kézművesek"]) assert.ok(!flagged.includes(w), `${w} nem jelölt`);
   assert.equal(await loadHungarianLexicon(), lexicon, "egyszer betöltött (singleton)");
+});
+
+/* Review #194 — szótár-őr pontosítások. */
+
+test("review #194: az ismétlődő kérdéses szó MINDEN előfordulása jelölt („Kesia Kesia”)", () => {
+  const text = "Kesia Kesia, Föld - Felt. térsége";
+  const out = decideNonWordLines(text, nonWordLines(text, isWord), new Map(), isWord);
+  assert.equal(out.text, `Kesia${UNCERTAIN_MARK} Kesia${UNCERTAIN_MARK}, Föld - Felt${UNCERTAIN_MARK}. térsége`);
+});
+
+test("review #194: hosszú (≥ 8 szó), > 40 %-ban nem-szó erős sor NEM lép a helyére (nincs idegen-szöveg kihagyás) → ⟦?⟧", () => {
+  const text = "Kesia, Föld - Felt. térsége";
+  const strong = "Föld térsége Qwerty Asdfgh Zxcvbn Poiuyt Lkjhgf Mnbvcx";
+  const out = decideNonWordLines(text, nonWordLines(text, isWord), new Map([[1, strong]]), isWord);
+  assert.equal(out.replaced.length, 0);
+  assert.match(out.text, new RegExp(`Kesia${mark}`));
+  assert.doesNotMatch(out.text, /Qwerty/);
+});
+
+test("review #194: a célzott erős olvasás hibája → ⟦?⟧ ÉS degraded, a jelölt átirat nem kerül cache-be", async () => {
+  const ocr = dualReadOcr(async () => MEASURED, async () => MEASURED, async () => { throw new Error("nem hívható"); }, undefined, {
+    lexicon: async () => isWord,
+    strongLines: async () => { throw new Error("429"); },
+  });
+  const puts: string[] = [];
+  const cached = withOcrCache(ocr, "m", { get: async () => null, put: async (_k, t) => { puts.push(t); } }, (f) => !ocr.degraded(f));
+  assert.match(await cached(file), new RegExp(`Kesia${mark}`));
+  assert.equal(ocr.degraded(file), true);
+  assert.deepEqual(puts, [], "átmeneti hiba nem mérgezi a cache-t");
+  const noStrong = dualReadOcr(async () => MEASURED, async () => MEASURED, async () => { throw new Error("nem hívható"); }, undefined, { lexicon: async () => isWord });
+  assert.match(await noStrong(file), new RegExp(`Kesia${mark}`));
+  assert.equal(noStrong.degraded(file), false, "a hiányzó erős olvasó konfiguráció (a cache-kulcsban), nem átmeneti hiba");
+});
+
+test("review #194: egyolvasós út (nincs második olvasó) — a végső átirat is szótár-őrön megy át", async () => {
+  let strongCalls = 0;
+  const single = lexiconGuardedOcr(async () => MEASURED, {
+    lexicon: async () => isWord,
+    strongLines: async () => { strongCalls++; return new Map([[2, "Ázsia, Közel-Kelet térsége"]]); },
+  });
+  const out = await single(file);
+  assert.equal(strongCalls, 1);
+  assert.match(out, /Ázsia, Közel-Kelet térsége/);
+  assert.match(out, new RegExp(`Lepesztető${mark}`));
+  assert.equal(single.degraded(file), false);
+  const failing = lexiconGuardedOcr(async () => MEASURED, { lexicon: async () => isWord, strongLines: async () => { throw new Error("időtúllépés"); } });
+  assert.match(await failing(file), new RegExp(`Kesia${mark}`));
+  assert.equal(failing.degraded(file), true);
+  const noLexicon = lexiconGuardedOcr(async () => MEASURED, { lexicon: async () => null });
+  assert.equal(await noLexicon(file), MEASURED);
+  assert.equal(noLexicon.degraded(file), true);
 });

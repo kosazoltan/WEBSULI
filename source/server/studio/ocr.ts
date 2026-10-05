@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 
 import { logger } from "../lib/logger";
 import type { ExtractorFile } from "./extractor";
-import { lexiconWordsOf, nonWordLines, type IsWord, type NonWordLine } from "./ocr-lexicon";
+import { lexiconWordsOf, nonWordLines, passesLexicon, type IsWord, type NonWordLine } from "./ocr-lexicon";
 import { withRoleSkill } from "./role-skills";
 
 export type OcrResult = { name: string; text: string };
@@ -345,12 +345,11 @@ export type OcrLexiconGuard = { lexicon: () => Promise<IsWord | null>; strongLin
 
 const wordKey = (w: string) => w.normalize("NFC").toLowerCase();
 
-/** A kérdéses szavak után ⟦?⟧ (soronként az első jelöletlen előfordulás). */
+/** A kérdéses szavak MINDEN előfordulása után ⟦?⟧ (review #194: az ismétlődő „Kesia Kesia” mindkét tagja jelölt). */
 function markWords(line: string, words: string[]): string {
-  const ends = lexiconWordsOf(line).filter((t) => words.some((w) => wordKey(w) === wordKey(t.word)));
-  const firstEnds = words.map((w) => ends.find((t) => wordKey(t.word) === wordKey(w))?.end).filter((e): e is number => e !== undefined);
+  const ends = lexiconWordsOf(line).filter((t) => words.some((w) => wordKey(w) === wordKey(t.word))).map((t) => t.end);
   let out = line;
-  for (const end of [...new Set(firstEnds)].sort((x, y) => y - x)) if (!out.startsWith(UNCERTAIN_MARK, end)) out = `${out.slice(0, end)}${UNCERTAIN_MARK}${out.slice(end)}`;
+  for (const end of [...new Set(ends)].sort((x, y) => y - x)) if (!out.startsWith(UNCERTAIN_MARK, end)) out = `${out.slice(0, end)}${UNCERTAIN_MARK}${out.slice(end)}`;
   return out;
 }
 
@@ -374,7 +373,8 @@ export function decideNonWordLines(text: string, lines: NonWordLine[], strong: M
     if (reading && unconfirmed.length === 0) continue;
     const anchors = lexiconWordsOf(current).map((t) => t.word).filter((w) => !words.includes(w)).map(wordKey);
     const aligned = anchors.length === 0 || anchors.some((w) => strongWords.has(w));
-    if (reading && aligned && nonWordLines(reading, isWord).length === 0) {
+    // review #194: az erős sor szavai közvetlenül a szótáron (az idegen-szöveg kihagyás itt nem érvényes — a hosszú, zagyva erős sor nem nyerhet)
+    if (reading && aligned && lexiconWordsOf(reading).every((t) => passesLexicon(t.word, isWord))) {
       replaced.push({ from: current, to: reading });
       rows[line - 1] = `${reading}${cr}`;
       continue;
@@ -388,8 +388,10 @@ export function decideNonWordLines(text: string, lines: NonWordLine[], strong: M
 /**
  * Szótár-őr: a nem-szót tartalmazó sorokat az erős olvasó a képpel FÜGGETLENÜL újraolvassa (a kérdéses olvasatot nem kapja meg),
  * majd soronként `decideNonWordLines` dönt. Nincs nem-szó → nincs hívás. Az erős olvasó hibája/hiánya → ⟦?⟧ (fail-safe).
+ * Review #194: a célzott olvasás HIBÁJA átmeneti → `onTransientFailure` (a hívó „degraded”-nek jelöli, a jelölt átirat nem kerül cache-be);
+ * a hiányzó erős olvasó konfigurációs állapot (a cache-kulcsban benne van) → nem degraded.
  */
-export async function verifyNonWords(text: string, file: ExtractorFile, strongLines: StrongLinesFn | undefined, isWord: IsWord): Promise<string> {
+export async function verifyNonWords(text: string, file: ExtractorFile, strongLines: StrongLinesFn | undefined, isWord: IsWord, onTransientFailure?: () => void): Promise<string> {
   const lines = nonWordLines(text, isWord);
   if (lines.length === 0) return text;
   const rows = text.split("\n").map((r) => r.replace(/\r$/, ""));
@@ -403,7 +405,8 @@ export async function verifyNonWords(text: string, file: ExtractorFile, strongLi
     try {
       strong = await strongLines(file, requests);
     } catch (error) {
-      logger.warn(`[STUDIO/OCR] ${file.name}: az erős olvasó célzott olvasása hibázott (${error instanceof Error ? error.message : String(error)}) — a kérdéses szavak ⟦?⟧ jelet kapnak.`);
+      onTransientFailure?.();
+      logger.warn(`[STUDIO/OCR] ${file.name}: degraded — az erős olvasó célzott olvasása hibázott (${error instanceof Error ? error.message : String(error)}) — a kérdéses szavak ⟦?⟧ jelet kapnak.`);
     }
   }
   const decided = decideNonWordLines(text, lines, strong, isWord);
@@ -460,25 +463,40 @@ export type OcrAdjudicator = (file: ExtractorFile, first: string, disputes: OcrD
  */
 export type DualReadOcr = OcrFn & { degraded(file: ExtractorFile): boolean };
 
+/**
+ * Spec 2026-10-05-s11/4: a végső képátirat szótár-őrön megy át; szótár-hiba / célzott olvasás hibája → `degrade()` (nem cache-elhető).
+ */
+async function applyLexiconGuard(file: ExtractorFile, text: string, guard: OcrLexiconGuard | undefined, degrade: () => void): Promise<string> {
+  if (!guard || file.kind !== "image" || !text.trim()) return text;
+  const isWord = await guard.lexicon();
+  if (!isWord) {
+    degrade();
+    logger.warn(`[STUDIO/OCR] ${file.name}: degraded — szótár nélkül, a szótár-őr kimaradt.`);
+    return text;
+  }
+  try {
+    return await verifyNonWords(text, file, guard.strongLines, isWord, degrade);
+  } catch (error) {
+    degrade();
+    logger.warn(`[STUDIO/OCR] ${file.name}: degraded — a szótár-őr hibázott (${error instanceof Error ? error.message : String(error)}).`);
+    return text;
+  }
+}
+
+/** Review #194: az egyolvasós út (nincs második olvasó) is szótár-őrön megy át — a végső átirat mindig ellenőrzött. */
+export function lexiconGuardedOcr(ocr: OcrFn, guard: OcrLexiconGuard): DualReadOcr {
+  const degradedFiles = new WeakSet<ExtractorFile>();
+  const read = async (file: ExtractorFile): Promise<string> => {
+    degradedFiles.delete(file);
+    return applyLexiconGuard(file, await ocr(file), guard, () => degradedFiles.add(file));
+  };
+  return Object.assign(read, { degraded: (file: ExtractorFile) => degradedFiles.has(file) });
+}
+
 export function dualReadOcr(first: OcrFn, second: OcrFn, adjudicate: OcrAdjudicator, third?: OcrFn, guard?: OcrLexiconGuard): DualReadOcr {
   const degradedFiles = new WeakSet<ExtractorFile>();
   // Spec 2026-10-05-s11/4: a végső (settle utáni) képátirat szótár-őrön megy át; szótár-hiba → változatlan szöveg, „degraded”.
-  const guarded = async (file: ExtractorFile, text: string): Promise<string> => {
-    if (!guard || file.kind !== "image" || !text.trim()) return text;
-    const isWord = await guard.lexicon();
-    if (!isWord) {
-      degradedFiles.add(file);
-      logger.warn(`[STUDIO/OCR] ${file.name}: degraded — szótár nélkül, a szótár-őr kimaradt.`);
-      return text;
-    }
-    try {
-      return await verifyNonWords(text, file, guard.strongLines, isWord);
-    } catch (error) {
-      degradedFiles.add(file);
-      logger.warn(`[STUDIO/OCR] ${file.name}: degraded — a szótár-őr hibázott (${error instanceof Error ? error.message : String(error)}).`);
-      return text;
-    }
-  };
+  const guarded = (file: ExtractorFile, text: string): Promise<string> => applyLexiconGuard(file, text, guard, () => degradedFiles.add(file));
   // Spec 2026-10-05-s11/2: ha jelölt vita maradt, a független harmadik olvasat dönt (2 a 3-ból); hibánál a jelölt átirat marad.
   // `voter: null` = nincs független szavazó (a helyettesítő erős olvasat már az egyik olvasat) — NEM az alapértelmezett harmadik olvasó.
   const settle = async (file: ExtractorFile, marked: string, disputes: OcrDisagreement[], voter: OcrFn | null): Promise<string> => {

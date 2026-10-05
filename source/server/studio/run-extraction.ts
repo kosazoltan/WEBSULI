@@ -18,7 +18,7 @@ import {
   type RawExtraction,
   type ExtractionRepair,
 } from "./extractor";
-import { callOcrAdjudicator, callOcrModel, callOcrStrongLines, dualReadOcr, ocrTextsOf, withOcrCache, OCR_ADJUDICATION_PROMPT, OCR_LINE_REREAD_PROMPT, OCR_SYSTEM_PROMPT } from "./ocr";
+import { callOcrAdjudicator, callOcrModel, callOcrStrongLines, dualReadOcr, lexiconGuardedOcr, ocrTextsOf, withOcrCache, OCR_ADJUDICATION_PROMPT, OCR_LINE_REREAD_PROMPT, OCR_SYSTEM_PROMPT } from "./ocr";
 import { loadHungarianLexicon } from "./ocr-lexicon";
 import { attachSourceTranscripts, repairSourceQuotes, TRANSCRIPT_CONTRACT } from "./source-transcript";
 import { scopeContentParts } from "./one-step";
@@ -314,13 +314,19 @@ export async function createCachedSourceOcr(ocrModel: string) {
   // Spec 2026-09-23: a second, independent model family reads every image; disputes are adjudicated by the
   // PRIMARY — the measured best reader (qwen 95.4% vs glm 89.1% on the #190 pages, 2026-09-23).
   const secondModel = FALLBACK_MODELS.ocr;
-  if (!secondModel || secondModel === ocrModel || !studioModelReady(secondModel)) return first;
-  const second = withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store);
   // Spec 2026-10-05-s11/2 (tulajdonosi döntés): a jelölt vitákat egy erős, független harmadik olvasat dönti el (2 a 3-ból).
   const thirdModel = OCR_THIRD_READER_MODEL;
-  const third = studioModelReady(thirdModel) ? withOcrCache((file) => callOcrModel(file, thirdModel), thirdModel, store) : undefined;
+  const strongReady = studioModelReady(thirdModel);
   // Spec 2026-10-05-s11/4: szótár-őr a végső átiraton — a nem-szós sorokat az erős olvasó célzottan újraolvassa (nélküle: ⟦?⟧).
-  const guard = { lexicon: loadHungarianLexicon, strongLines: third ? (file: Parameters<typeof callOcrStrongLines>[0], lines: Parameters<typeof callOcrStrongLines>[2]) => callOcrStrongLines(file, thirdModel, lines) : undefined };
+  const guard = { lexicon: loadHungarianLexicon, strongLines: strongReady ? (file: Parameters<typeof callOcrStrongLines>[0], lines: Parameters<typeof callOcrStrongLines>[2]) => callOcrStrongLines(file, thirdModel, lines) : undefined };
+  const rereadHash = createHash("sha256").update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
+  if (!secondModel || secondModel === ocrModel || !studioModelReady(secondModel)) {
+    // Review #194: az egyolvasós út is szótár-őrön megy át (a végső átirat mindig ellenőrzött); a degraded eredmény nem kerül cache-be.
+    const single = lexiconGuardedOcr(first, guard);
+    return withOcrCache(single, `${ocrModel}|single-lex|${strongReady ? thirdModel : "-"}|${rereadHash}`, store, (file) => !single.degraded(file));
+  }
+  const second = withOcrCache((file) => callOcrModel(file, secondModel), secondModel, store);
+  const third = strongReady ? withOcrCache((file) => callOcrModel(file, thirdModel), thirdModel, store) : undefined;
   const dual = dualReadOcr(first, second, (file, text, disputes) => callOcrAdjudicator(file, ocrModel, text, disputes), third, guard);
   const promptHash = createHash("sha256").update(OCR_ADJUDICATION_PROMPT).update(OCR_LINE_REREAD_PROMPT).digest("hex").slice(0, 12);
   return withOcrCache(dual, `${ocrModel}|${secondModel}|dual-3-lex|${third ? thirdModel : "-"}|${promptHash}`, store, (file) => !dual.degraded(file));

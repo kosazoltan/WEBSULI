@@ -81,6 +81,15 @@ szót; átengedi az Ázsia, Közel-Kelet, zikkurat, folyóköz, öntözéses, to
 4. Szerző-skill: a forrásszöveg értelmetlen, nem létező szavaiból (OCR-zaj) tényt kikövetkeztetni tilos; ⟦?⟧-es részt nem tanít.
 5. Fail-safe: szótár-betöltési hiba → nincs csere, a régi viselkedés, de napló „degraded”.
 
+### Review #194 — pontosítás (2026-10-05)
+- A kérdéses szó MINDEN előfordulása után ⟦?⟧ (az ismétlődő „Kesia Kesia” mindkét tagja).
+- Az erős sor csak akkor lép a helyére, ha MINDEN szava átmegy a szótáron — az idegen-szöveg kihagyás (> 40 %) az erős sorra nem érvényes.
+- A szótár-őr az egyolvasós úton (nincs/azonos második olvasó) is fut: a végső átirat mindig ellenőrzött.
+- A célzott erős olvasás HIBÁJA → ⟦?⟧ és „degraded” (nem kerül cache-be; a következő futás újrapróbálja). Eltérés az S11/2-től
+  tudatosan: ott a harmadik olvasat hibájánál a jelölt átirat cache-elhető (a vita nyoma megmarad, a jel nem vész el); itt a hiba
+  átmeneti (429 / időtúllépés), és a cache-elt ⟦?⟧ véglegesen pending-be tenné a rá épülő fogalmat. A HIÁNYZÓ erős olvasó nem hiba,
+  hanem konfiguráció (a cache-kulcsban benne van) → nem „degraded”.
+
 ### Nem-cél
 Új OCR-modell; képfeldolgozás; a tanári helyesbítés útja; az S11/2 2-a-3-ból szavazás módosítása.
 
