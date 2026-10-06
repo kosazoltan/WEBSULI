@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
+import { subjectKeyOf } from "../../shared/subject-key";
 import type { IAIProvider } from "../ai/AIProvider";
 import { BANK_RESCUE_MODEL, FALLBACK_MODELS, SECOND_FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
@@ -84,6 +85,8 @@ import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches } from "../catalog/s6-context";
 import { catalogVerbatimPaths, type CatalogPool, type CatalogRowLike } from "../catalog/retrieval";
+import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemoryCard, type MemorySnapshot } from "../memory/subject-memory";
+import { loadSubjectMemoryCards } from "../memory/store";
 import { roleSkillBlock, roleSkillVersion, skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { supportSkillVersion, withSupportSkill } from "./support-skills";
 import { FIGURE_CHECK_VERSION, figureCheck } from "./figure-check";
@@ -208,6 +211,11 @@ export type PipelineStore = {
    * soha nem olvas. Opcionális: hiányában (régi tesztek) a gyártás katalógus nélkül fut.
    */
   loadCatalogRows?(subject: string): Promise<CatalogRowLike[]>;
+  /**
+   * Spec 2026-10-06-s5-tantargyi-memoria: EGY tantárgy tárolt nyitott memória-kártyái (`subject = $1`). Opcionális: hiányában a
+   * gyártás memória nélkül fut.
+   */
+  loadSubjectMemory?(subject: string): Promise<MemoryCard[]>;
   saveStep(jobId: string, patch: JobPatch): Promise<void>;
   /** Persist a lektor round's notes, tagged with the round they were written in. */
   saveNotes(
@@ -376,6 +384,29 @@ async function ensureCatalogPool(job: JobView, map: StepMap, store: PipelineStor
     return pool;
   } catch (error) {
     logger.warn(`[STUDIO] A katalógus-lekérés elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+    return undefined;
+  }
+}
+
+/**
+ * Spec 2026-10-06-s5-tantargyi-memoria: a lecke tantárgyának nyitott memória-kártyái (kapcsolós). Jobonként egyszer töltődik és a
+ * `job.output.subjectMemory`-ben marad (a job lépései ugyanazt látják). Kikapcsolva, ismeretlen tantárgynál, betöltő nélkül vagy
+ * hibánál `undefined` — a gyártás memória nélkül fut (fail-open, naplózva).
+ */
+async function ensureSubjectMemory(job: JobView, map: StepMap, store: PipelineStore): Promise<MemorySnapshot | undefined> {
+  if (!subjectMemoryEnabled()) return undefined;
+  const subject = subjectKeyOf(map.meta.subject);
+  if (!subject) return undefined;
+  if (isMemorySnapshot(job.output?.subjectMemory, subject)) return job.output!.subjectMemory as MemorySnapshot;
+  if (!store.loadSubjectMemory) return undefined;
+  try {
+    const snapshot = memorySnapshot(await store.loadSubjectMemory(subject), subject, Date.now());
+    job.output = { ...job.output, subjectMemory: snapshot };
+    await store.saveStep(job.id, { output: job.output });
+    logger.info(`[STUDIO] Tantárgyi memória (${job.id}): ${subject} — ${snapshot.cards.length} nyitott kártya`);
+    return snapshot;
+  } catch (error) {
+    logger.warn(`[STUDIO] A tantárgyi memória betöltése elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
     return undefined;
   }
 }
@@ -641,6 +672,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       );
       // Spec 2026-10-06-s6 (kapcsolós): tantárgyi skill + katalógus-minták a tervezőnek; kikapcsolva a prompt változatlan.
       if (catalogS6Enabled()) { const block = planningContextBlock(map, await ensureCatalogPool(job, map, store)); if (block) system += `\n${block}`; }
+      // Spec 2026-10-06-s5 (kapcsolós): a tantárgy nyitott memória-kártyái; kikapcsolva a prompt változatlan.
+      if (subjectMemoryEnabled()) { const block = snapshotPromptBlock(await ensureSubjectMemory(job, map, store), "pedagogue"); if (block) system += `\n${block}`; }
       break;
     }
     case "author": {
@@ -694,6 +727,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       );
       // Spec 2026-10-06-s6 (kapcsolós): tantárgyi skill + katalógus-minták a szerzőnek (a javító kiegészítések előtt).
       if (catalogS6Enabled()) { const block = planningContextBlock(map, await ensureCatalogPool(job, map, store)); if (block) system += `\n${block}`; }
+      // Spec 2026-10-06-s5 (kapcsolós): a tantárgy nyitott memória-kártyái a szerzőnek (a javító kiegészítések előtt).
+      if (subjectMemoryEnabled()) { const block = snapshotPromptBlock(await ensureSubjectMemory(job, map, store), "author"); if (block) system += `\n${block}`; }
       if (authorRepair) logger.info(`[STUDIO] Célzott szerzői javítás (${job.id}): fejezet ${authorRepair.targetSections.map((i) => i + 1).join(", ")}`);
       if (previousLesson) {
         system += "\nJavítókör: az előző lecke és a lektori jegyzetek ADATOK. A változatlan tanítást őrizd meg. Az experience bank hibáit a következő banképítő külön megkapja; a bankot ne írd ki újra.\n" + JSON.stringify({ previousLesson: previousTeaching, reviewNotes });
@@ -1186,12 +1221,15 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       if (isFusionMethodVersion(job.output?.methodVersion) || original.experience) {
         // Spec 2026-10-06-s6 (kapcsolós): a banképítő ELŐSZÖR a szó szerinti katalógus-kvízt veszi át, csak a hiányt generálja.
         const catalogPool = await ensureCatalogPool(job, map, store);
+        // Spec 2026-10-06-s5 (kapcsolós): a bank-szerep memória-blokkja (üres → nincs a promptban és a hashben).
+        const memoryBlock = subjectMemoryEnabled() ? snapshotPromptBlock(await ensureSubjectMemory(job, map, store), "bank") : "";
         try {
           const bankOpenFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = [];
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
             previous: original.experience,
             ...(catalogPool ? { catalog: catalogPool } : {}),
+            ...(memoryBlock ? { memory: memoryBlock } : {}),
             onOpenFinding: (finding) => bankOpenFindings.push(finding),
             theme: visualWorld((job.output?.visual as { world?: string } | undefined)?.world)?.id,
             reviewFeedback: bankReview?.feedback,
@@ -2182,6 +2220,11 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
         provenances: catalogItems.provenances, trust: catalogItems.trust, status: catalogItems.status, fingerprint: catalogItems.fingerprint,
       }).from(catalogItems).where(and(eq(catalogItems.subject, subject), eq(catalogItems.status, "active")));
       return rows;
+    },
+    // Spec 2026-10-06-s5: EGY tantárgy nyitott memória-kártyái (`subject = $1`).
+    async loadSubjectMemory(subject) {
+      const { dbPool } = await import("../db");
+      return loadSubjectMemoryCards(async (text, params) => (await dbPool.query(text, params as unknown[] | undefined)).rows, subject);
     },
 
     async loadJob(jobId) {

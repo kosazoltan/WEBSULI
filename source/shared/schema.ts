@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1002,3 +1002,41 @@ export const catalogItemOutcomes = pgTable("catalog_item_outcomes", {
 
 export type CatalogLessonRow = typeof catalogLessons.$inferSelect;
 export type CatalogItemRow = typeof catalogItems.$inferSelect;
+
+/**
+ * Spec 2026-10-06-s5-tantargyi-memoria (migráció 0024): tantárgyi memória-kártya = egy tantárgy visszatérő hibaosztálya egy
+ * lépésen (dedup-kulcs: tantárgy + lépés + kód lenyomata). Szabad szöveg csak a titok-redaktált javító összefoglaló.
+ */
+export const subjectMemoryCards = pgTable(
+  "subject_memory_cards",
+  {
+    fingerprint: varchar("fingerprint", { length: 32 }).primaryKey(),
+    subject: varchar("subject", { length: 32 }).notNull(),
+    step: varchar("step", { length: 32 }).notNull(),
+    code: varchar("code", { length: 64 }).notNull(),
+    occurrences: integer("occurrences").notNull().default(0),
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
+    /** open | watch | closed — az írás pillanatáé; olvasáskor újraszámolva (statusAt). */
+    status: varchar("status", { length: 8 }).notNull(),
+    evidence: jsonb("evidence").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    correctiveSummary: text("corrective_summary"),
+    correctiveAt: timestamp("corrective_at", { withTimezone: true }),
+    correctiveCount: integer("corrective_count").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ subjectStatusIdx: index("subject_memory_cards_subject_status_idx").on(table.subject, table.status) }),
+);
+
+/** Egy bizonyíték (futás / lektorált job) egy kártyán egyszer számol — az idempotencia alapja. */
+export const subjectMemoryEvents = pgTable(
+  "subject_memory_events",
+  {
+    cardFingerprint: varchar("card_fingerprint", { length: 32 }).notNull().references(() => subjectMemoryCards.fingerprint, { onDelete: "cascade" }),
+    evidenceKey: varchar("evidence_key", { length: 160 }).notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull(),
+  },
+  (table) => ({ pk: primaryKey({ columns: [table.cardFingerprint, table.evidenceKey] }) }),
+);
+
+export type SubjectMemoryCardRow = typeof subjectMemoryCards.$inferSelect;

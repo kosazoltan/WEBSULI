@@ -1,0 +1,537 @@
+{
+  "spec": "docs/specs/2026-10-06-s5-tantargyi-memoria.md",
+  "generatedAt": "2026-10-06T03:51:08.524Z",
+  "mode": "dry-run",
+  "sources": {
+    "runs": 142,
+    "blockerNotes": 1007,
+    "lektoredJobs": 51
+  },
+  "skipped": {
+    "runsWithoutStudioJob": 80,
+    "runsUnknownSubject": 0,
+    "noteJobsUnknownSubject": 0
+  },
+  "totals": {
+    "evidence": 1445,
+    "events": 449,
+    "cards": 101,
+    "open": 62,
+    "watch": 39,
+    "closed": 0
+  },
+  "bySubject": {
+    "foldrajz": {
+      "cards": 11,
+      "open": 0,
+      "watch": 11,
+      "closed": 0,
+      "injectable": 10,
+      "withCorrective": 0,
+      "top": [
+        {
+          "code": "coverage",
+          "step": "knowledge",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "pedagogue",
+            "author"
+          ]
+        },
+        {
+          "code": "coverage",
+          "step": "gate",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "pedagogue",
+            "author"
+          ]
+        },
+        {
+          "code": "coverage",
+          "step": "lektor",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "pedagogue",
+            "author"
+          ]
+        },
+        {
+          "code": "duplicate_question",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "lektor_coverage_gap",
+          "step": "author",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "pedagogue",
+            "author"
+          ]
+        },
+        {
+          "code": "lektor_source_conflict",
+          "step": "author",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "author"
+          ]
+        },
+        {
+          "code": "lektor_source_conflict",
+          "step": "bank",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "oral_written",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "sample_score",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "source_fidelity",
+          "step": "lektor",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "author",
+            "bank"
+          ]
+        }
+      ]
+    },
+    "informatika": {
+      "cards": 10,
+      "open": 0,
+      "watch": 10,
+      "closed": 0,
+      "injectable": 6,
+      "withCorrective": 0,
+      "top": [
+        {
+          "code": "bank_cardinality",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "coverage",
+          "step": "knowledge",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "pedagogue",
+            "author"
+          ]
+        },
+        {
+          "code": "duplicate_question",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "infrastructure",
+          "step": "lektor",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": []
+        },
+        {
+          "code": "oral_written",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "sample_score",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "schema",
+          "step": "knowledge",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "pedagogue",
+            "author",
+            "bank"
+          ]
+        },
+        {
+          "code": "unknown",
+          "step": "gate",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": []
+        },
+        {
+          "code": "unknown",
+          "step": "author",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": []
+        },
+        {
+          "code": "unknown",
+          "step": "animator",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": []
+        }
+      ]
+    },
+    "kornyezetismeret": {
+      "cards": 1,
+      "open": 0,
+      "watch": 1,
+      "closed": 0,
+      "injectable": 1,
+      "withCorrective": 0,
+      "top": [
+        {
+          "code": "lektor_concept_binding",
+          "step": "author",
+          "occurrences": 1,
+          "status": "watch",
+          "promptRoles": [
+            "author"
+          ]
+        }
+      ]
+    },
+    "matematika": {
+      "cards": 25,
+      "open": 22,
+      "watch": 3,
+      "closed": 0,
+      "injectable": 21,
+      "withCorrective": 0,
+      "top": [
+        {
+          "code": "unknown",
+          "step": "animator",
+          "occurrences": 22,
+          "status": "open",
+          "promptRoles": []
+        },
+        {
+          "code": "lektor_source_conflict",
+          "step": "bank",
+          "occurrences": 21,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "source_fidelity",
+          "step": "lektor",
+          "occurrences": 20,
+          "status": "open",
+          "promptRoles": [
+            "author",
+            "bank"
+          ]
+        },
+        {
+          "code": "sample_score",
+          "step": "animator",
+          "occurrences": 18,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "bank_cardinality",
+          "step": "animator",
+          "occurrences": 17,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "duplicate_question",
+          "step": "animator",
+          "occurrences": 13,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "infrastructure",
+          "step": "animator",
+          "occurrences": 11,
+          "status": "open",
+          "promptRoles": []
+        },
+        {
+          "code": "schema",
+          "step": "animator",
+          "occurrences": 11,
+          "status": "open",
+          "promptRoles": [
+            "pedagogue",
+            "author",
+            "bank"
+          ]
+        },
+        {
+          "code": "oral_written",
+          "step": "animator",
+          "occurrences": 10,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "unknown",
+          "step": "gate",
+          "occurrences": 10,
+          "status": "open",
+          "promptRoles": []
+        }
+      ]
+    },
+    "termeszetismeret": {
+      "cards": 24,
+      "open": 16,
+      "watch": 8,
+      "closed": 0,
+      "injectable": 17,
+      "withCorrective": 0,
+      "top": [
+        {
+          "code": "lektor_source_conflict",
+          "step": "bank",
+          "occurrences": 8,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "sample_score",
+          "step": "animator",
+          "occurrences": 8,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "source_fidelity",
+          "step": "lektor",
+          "occurrences": 6,
+          "status": "open",
+          "promptRoles": [
+            "author",
+            "bank"
+          ]
+        },
+        {
+          "code": "unknown",
+          "step": "gate",
+          "occurrences": 5,
+          "status": "open",
+          "promptRoles": []
+        },
+        {
+          "code": "coverage",
+          "step": "lektor",
+          "occurrences": 4,
+          "status": "open",
+          "promptRoles": [
+            "pedagogue",
+            "author"
+          ]
+        },
+        {
+          "code": "infrastructure",
+          "step": "animator",
+          "occurrences": 4,
+          "status": "open",
+          "promptRoles": []
+        },
+        {
+          "code": "lektor_source_conflict",
+          "step": "author",
+          "occurrences": 4,
+          "status": "open",
+          "promptRoles": [
+            "author"
+          ]
+        },
+        {
+          "code": "bank_cardinality",
+          "step": "animator",
+          "occurrences": 3,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "infrastructure",
+          "step": "pedagogue",
+          "occurrences": 3,
+          "status": "open",
+          "promptRoles": []
+        },
+        {
+          "code": "oral_written",
+          "step": "animator",
+          "occurrences": 3,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        }
+      ]
+    },
+    "tortenelem": {
+      "cards": 30,
+      "open": 24,
+      "watch": 6,
+      "closed": 0,
+      "injectable": 23,
+      "withCorrective": 0,
+      "top": [
+        {
+          "code": "sample_score",
+          "step": "animator",
+          "occurrences": 17,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "lektor_source_conflict",
+          "step": "bank",
+          "occurrences": 15,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "duplicate_question",
+          "step": "animator",
+          "occurrences": 14,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "source_fidelity",
+          "step": "lektor",
+          "occurrences": 13,
+          "status": "open",
+          "promptRoles": [
+            "author",
+            "bank"
+          ]
+        },
+        {
+          "code": "coverage",
+          "step": "knowledge",
+          "occurrences": 9,
+          "status": "open",
+          "promptRoles": [
+            "pedagogue",
+            "author"
+          ]
+        },
+        {
+          "code": "schema",
+          "step": "author",
+          "occurrences": 9,
+          "status": "open",
+          "promptRoles": [
+            "pedagogue",
+            "author",
+            "bank"
+          ]
+        },
+        {
+          "code": "unknown",
+          "step": "animator",
+          "occurrences": 8,
+          "status": "open",
+          "promptRoles": []
+        },
+        {
+          "code": "lektor_not_in_map",
+          "step": "author",
+          "occurrences": 6,
+          "status": "open",
+          "promptRoles": [
+            "author"
+          ]
+        },
+        {
+          "code": "repair_scope",
+          "step": "animator",
+          "occurrences": 6,
+          "status": "open",
+          "promptRoles": [
+            "bank"
+          ]
+        },
+        {
+          "code": "unknown",
+          "step": "gate",
+          "occurrences": 6,
+          "status": "open",
+          "promptRoles": []
+        }
+      ]
+    }
+  }
+}

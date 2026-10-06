@@ -3,6 +3,7 @@ import { SKILL_METHOD_VERSION, SKILL_RULES, skillForMode, type SkillLesson, type
 import type { WorkflowMode } from "../../shared/lesson-workflow";
 import type { WorkflowRecord } from "./engine";
 import { auditWorkflow, skillSnapshot } from "./learning";
+import { recordSubjectMemory } from "../memory/store";
 
 /** Called in the SAME transaction as the terminal snapshot; conflict means already learned. */
 export async function saveSkillAudit(client: PoolClient, record: WorkflowRecord) {
@@ -18,6 +19,8 @@ export async function saveSkillAudit(client: PoolClient, record: WorkflowRecord)
       last_run=EXCLUDED.last_run,step=EXCLUDED.step,updated_at=now()`, [record.owner, skillForMode(record.view.definition.mode), audit.version,
       finding.fingerprint, finding.code, finding.step, state, audit.outcome === "passed" ? 1 : 0, record.view.id]);
   }
+  // Spec 2026-10-06-s5-tantargyi-memoria: a tanulási hurok tantárgy-dimenziója (mentési pontban — hibája nem bontja a hurkot).
+  await recordSubjectMemory(client, record);
 }
 
 export function createSkillStore(getPool: () => Promise<Pool>) {

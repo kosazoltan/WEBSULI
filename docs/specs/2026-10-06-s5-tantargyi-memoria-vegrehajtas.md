@@ -37,7 +37,7 @@ Teszt: `source/tests/subject-memory.test.ts`.
 - `type Query = <R>(sql: string, params?: unknown[]) => Promise<R[]>`.
 - `applyEvidence(query, evidence, now)`: üres → `{ newEvents: 0, cards: 0 }`; `SELECT pg_advisory_xact_lock(hashtext('subject_memory'))`; meglévő kártyák (`fingerprint = ANY($1)`) és események
   (`card_fingerprint = ANY($1) AND evidence_key = ANY($2)`) betöltése; `foldEvidence`; kártya-upsert (`ON CONFLICT (fingerprint) DO UPDATE SET` minden mező = EXCLUDED), esemény-insert (`ON CONFLICT DO NOTHING`).
-- `recordSubjectMemory(client, record)`: `to_regclass('public.subject_memory_cards')` null → kilép; `resourceId` nélkül kilép; tantárgy a `studio_jobs ⋈ knowledge_maps`-ből;
+- `recordSubjectMemory(client, record)`: `to_regclass('public.subject_memory_cards')` null → kilép; job-azonosító = `resourceId ?? view.id` (a `sweepStudioJobs` kötése); tantárgy a `studio_jobs ⋈ knowledge_maps`-ből (nincs sor → kilép);
   lektor-jegyzetek a jobra; `SAVEPOINT subject_memory` → `applyEvidence` → `RELEASE`; hiba → `ROLLBACK TO SAVEPOINT`, `logger.warn`.
 - `loadSubjectMemoryCards(query, subject)`: `WHERE subject = $1 AND status = 'open' ORDER BY occurrences DESC, last_seen DESC LIMIT 200`.
 

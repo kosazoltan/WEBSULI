@@ -11,9 +11,9 @@ tantárgyi memóriába (S5)”). Ág: `feat/s5-tantargyi-memoria`, az S6-ra (`fe
   **tantárgy-dimenzió nincs**. A lelet csak karbantartott kód (`SKILL_RULES` kulcsai, `unknown`, `infrastructure`), lépés és
   lenyomat; hibaszöveg nem kerül tárolásra (`shared/lesson-skill.ts`: „Only maintained instructions may enter a system prompt.
   Error/source text never does.”).
-- A futás tantárgya: `lesson_workflow_runs.snapshot->>'resourceId'` = `studio_jobs.id` → `knowledge_maps.subject` →
-  `subjectKeyOf` (S3/S4). Éles DB: 142 futás, ebből 62-nek van studio-jobja (a többi web/javító mód vagy régi futás → nincs
-  tantárgy → kimarad).
+- A futás tantárgya: `COALESCE(snapshot->>'resourceId', run.id)` = `studio_jobs.id` (a `sweepStudioJobs` kötése,
+  `lesson-pipeline-routes.ts`) → `knowledge_maps.subject` → `subjectKeyOf` (S3/S4). Éles DB: 142 futás, ebből 62-nek van
+  studio-jobja (a többi web/javító mód, a job előtt bukott vagy törölt jobú futás → nincs tantárgy → kimarad).
 - Lektori leletek: `lektor_notes` (`kind`, `subkind`, `severity`, `block_path`, `job_id`); éles: 975 `source_conflict /
   contradicts_source` blokkoló, 16 `not_in_map`, 14 `coverage_gap/core`, 2 `missing_coversConceptIds`.
 - Az orkesztrátor (S9) a bukott kísérleteket a `snapshot.failures` listába írja (`step`, `point`, `kind`, `reasons`,
@@ -163,6 +163,25 @@ helye (új nézet + útvonal + teszt = külön szelet); az API JSON-ja közvetle
 - A backfill alapból csak olvas; `--write` nélkül nem ír (kód + futtatott dry-run).
 - A dry-run eredménye: `docs/measurements/2026-10-06-s5-backfill-dryrun.json` (tantárgyankénti kártyaszám, top kódok).
 - Teljes unit, `npm run check`, `tsc -p tsconfig.test.json`, lint zöld.
+
+## Mért eredmény (2026-10-06, ingyenes dry-run backfill, csak olvasó DB)
+Forrás: `docs/measurements/2026-10-06-s5-backfill-dryrun.json` (`npx tsx scripts/memory/backfill.mts`, írás nélkül).
+A futás → job kötés a `sweepStudioJobs` szabálya szerint: `COALESCE(resourceId, run.id) = studio_jobs.id` (élő hook ugyanígy).
+- Bemenet: 142 workflow-futás, 1 007 lektori blokkoló jegyzet 51 jobon. Kihagyva 80 futás job/tantárgy nélkül (mérve:
+  upload/done 27 — a `resourceId` törölt jobra mutat; web 18, upload/error 13, apply 6, repair 7, upload/egyéb 8, html 1).
+- Eredmény: 1 445 bizonyíték → 449 egyedi esemény → **101 kártya** (62 `open`, 39 `watch`, 0 `closed`).
+
+| Tantárgy | Kártya | open | watch | promptba vihető | top visszatérő kódok (előfordulás) |
+|---|---|---|---|---|---|
+| matematika | 25 | 22 | 3 | 21 | unknown@animator 22 (nem vihető), lektor_source_conflict@bank 21, source_fidelity@lektor 20, sample_score@animator 18, bank_cardinality@animator 17 |
+| történelem | 30 | 24 | 6 | 23 | sample_score@animator 17, lektor_source_conflict@bank 15, duplicate_question@animator 14, source_fidelity@lektor 13, coverage@knowledge 9 |
+| természetismeret | 24 | 16 | 8 | 17 | lektor_source_conflict@bank 8, sample_score@animator 8, source_fidelity@lektor 6, unknown@gate 5, coverage@lektor 4 |
+| földrajz | 11 | 0 | 11 | 10 | mind 1× (watch) |
+| informatika | 10 | 0 | 10 | 6 | mind 1× (watch) |
+| környezetismeret | 1 | 0 | 1 | 1 | lektor_concept_binding@author 1 |
+
+- Javító összefoglaló: **0** — az egyetlen `failures`-t tartalmazó futás (`d6246a58…`, upload, `resourceId` nélkül, azonos
+  azonosítójú job nincs) nem köthető tantárgyhoz. Az S9 kapcsoló (`WORKFLOW_ORCHESTRATOR`) élesben KI, ezért az élő adat is ritka.
 
 ## Döntési opciók a tulajdonosnak (a szelet után)
 1. Migráció telepítése (deploykor automatikus) + backfill `--write` (engedéllyel) → a kártyák élesben.
