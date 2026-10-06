@@ -1,6 +1,6 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { LESSON_SKILL_CHECK_RUNBOOK } from "./lesson-skill-checks";
-import { RUNTIME_KNOWLEDGE_VERSION, SKILL_RULES, skillMarkdown, type SkillSnapshot, type SkillLesson } from "./lesson-skill";
+import { RUNTIME_KNOWLEDGE_VERSION, SKILL_RULES, skillForMode, skillMarkdown, type SkillSnapshot, type SkillLesson } from "./lesson-skill";
 import { WORKFLOW_MODES, workflowDefinition, type WorkflowMode } from "./lesson-workflow";
 import { bundleRunbook } from "./instruction-bundles";
 import { isFrozenBundle, type PromptRole } from "./instruction-bundles/roles";
@@ -29,8 +29,8 @@ export function runtimePrompt(snapshot: SkillSnapshot, mode: WorkflowMode, role?
 
 /** QMD/Cogni are internal projections, not connections to similarly named external products. */
 export function runtimeKnowledge(snapshot: SkillSnapshot, lessons: SkillLesson[], query = "") {
-  const modes = WORKFLOW_MODES.filter(mode => snapshot.skill === "tananyag-keszito"
-    ? ["upload", "studio", "web"].includes(mode) : ["repair", "concept", "html", "apply"].includes(mode));
+  // Spec 2026-10-06-s7: a skill módjai a hozzárendelésből (az új módok láncai is a runbookba kerülnek).
+  const modes = WORKFLOW_MODES.filter(mode => skillForMode(mode) === snapshot.skill);
   const terms = query.slice(0, 200).toLocaleLowerCase("hu").split(/\s+/).filter(Boolean);
   const index = Object.entries(SKILL_RULES).map(([code, [title, instruction]]) => ({
     code, title, instruction, active: snapshot.rules.includes(code as keyof typeof SKILL_RULES),

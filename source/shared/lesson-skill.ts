@@ -29,7 +29,8 @@ export const SKILL_RULES = {
 } as const;
 export type SkillCode = keyof typeof SKILL_RULES;
 export type LessonSkill = "tananyag-keszito" | "tananyag-javito";
-export const skillForMode = (mode: WorkflowMode): LessonSkill => ["repair", "html", "concept", "apply"].includes(mode) ? "tananyag-javito" : "tananyag-keszito";
+// Spec 2026-10-06-s7: a régi HTML javítási javaslata (htmlAssist) javító; a többi új mód (segéd, kvíz, tudástár, webes Studio) készítő.
+export const skillForMode = (mode: WorkflowMode): LessonSkill => ["repair", "html", "concept", "apply", "htmlAssist"].includes(mode) ? "tananyag-javito" : "tananyag-keszito";
 export type SkillSnapshot = { skill: LessonSkill; version: string; rules: SkillCode[]; runtimeVersion?: string; methodVersion?: string };
 export type SkillFinding = { code: SkillCode | "unknown" | "infrastructure"; step: string; steps?: string[]; fingerprint: string };
 export type SkillAudit = {

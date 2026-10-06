@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
+import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_RESULT_KIND, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
 import { auditWorkflow, findingsFromError, knownFinding, mergeFindings, unknownSample } from "./learning";
 import { runtimePrompt } from "../../shared/runtime-knowledge";
@@ -298,7 +298,7 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
       await persist(ctx);
       const result = await work();
       if (!result?.id || ctx.record.view.visits.at(-1)?.step !== "readback") throw new Error("Nincs visszaolvasott eredmény; a futás nem jelölhető késznek.");
-      const expectedKind = ["repair", "html"].includes(input.mode) ? "candidate" : "material";
+      const expectedKind = WORKFLOW_RESULT_KIND[input.mode];
       if (result.kind !== expectedKind) throw new Error("A kapott eredmény nem felel meg a készítési módnak.");
       const last = ctx.record.view.visits.at(-1)!;
       last.state = "done"; last.finishedAt = Date.now();

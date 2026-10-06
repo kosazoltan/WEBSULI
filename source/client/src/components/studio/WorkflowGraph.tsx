@@ -79,6 +79,8 @@ export function WorkflowGraph({ run }: { run: WorkflowView }) {
     {run.history?.map((attempt, i) => <details key={i} className="mt-3 rounded-lg border p-3 text-sm"><summary className="min-h-11 cursor-pointer">Korábbi végrehajtás {i + 1}: {WORKFLOW_STATE_LABELS[attempt.state]}</summary><ol className="space-y-2">{attempt.visits.map((v, n) => <li key={n} className="break-words">{run.definition.steps.find(s => s.id === v.step)?.label} · {visitLabel[v.state]} · {elapsed(v)}{v.error && ` · ${v.error}`}</li>)}</ol></details>)}
     {run.result?.kind === "material" && <a className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white" href={`/preview/${encodeURIComponent(run.result.id)}`}>Tananyag megnyitása<ArrowRight className="h-4 w-4" /></a>}
     {run.result?.kind === "candidate" && <p className="mt-3 text-sm">A jelölt az Okosítás fülön nézhető át és alkalmazható.</p>}
+    {run.result?.kind === "proposal" && <p className="mt-3 text-sm">A javaslat a kérő felületen jelent meg; tárolt tananyag nem változott.</p>}
+    {run.result?.kind === "map" && <p className="mt-3 text-sm">Tudástár: {run.result.id}</p>}
     <details className="mt-4 min-w-0 rounded-xl border bg-white p-3 text-sm dark:bg-slate-900" data-testid="workflow-learning">
       <summary className="min-h-11 cursor-pointer font-semibold">Önellenőrzés és tanult tapasztalatok</summary>
       <p className="mt-2">{run.skillAudit ? run.skillAudit.outcome === "passed" ? "A kötelező folyamatlépések és az eredmény visszaolvasása igazolt." : "A teljes befejezés nem igazolt; a futás megállását és tapasztalatait rögzítettük." : "Ehhez a futáshoz még nincs mentett utóellenőrzés."}</p>

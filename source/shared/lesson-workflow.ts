@@ -1,7 +1,9 @@
 import type { SkillSnapshot, SkillFinding, SkillAudit } from "./lesson-skill";
 /** One versioned definition drives execution guards and the administrator's diagram. */
 export const WORKFLOW_VERSION = "lesson-flow-2";
-export type WorkflowMode = "upload" | "studio" | "web" | "repair" | "concept" | "html" | "apply";
+export type WorkflowMode = "upload" | "studio" | "web" | "repair" | "concept" | "html" | "apply"
+  // Spec 2026-10-06-s7-workflow-rendbetetel: a korábban workflow nélküli utak saját módjai (a fenti hét lánc változatlan).
+  | "htmlAssist" | "creator" | "quiz" | "map" | "mapCheck" | "webStudio";
 export type WorkflowStep = { id: string; label: string; after: string[]; maxVisits: number };
 export type WorkflowDefinition = { version: string; mode: WorkflowMode; label: string; steps: WorkflowStep[] };
 const labels: Record<string, string> = {
@@ -19,23 +21,36 @@ const chains: Record<WorkflowMode, { label: string; ids: string[] }> = {
   concept: { label: "Célzott fogalomjavítás", ids: ["source", "author", "banks", "lektor", "gate", "save", "apply", "readback"] },
   html: { label: "HTML-okosítás", ids: ["source", "author", "gate", "save", "readback"] },
   apply: { label: "Javítás alkalmazása", ids: ["source", "gate", "apply", "readback"] },
+  htmlAssist: { label: "Régi HTML javítási javaslata", ids: ["source", "author", "gate", "readback"] },
+  creator: { label: "Anyagkészítő segéd", ids: ["source", "author", "gate", "readback"] },
+  quiz: { label: "Játék-kvízgenerálás", ids: ["source", "author", "gate", "save", "readback"] },
+  map: { label: "Tudástár-kivonatolás", ids: ["source", "scope", "knowledge", "gate", "readback"] },
+  mapCheck: { label: "Tudástár-ellenőrzés", ids: ["source", "gate", "save", "readback"] },
+  webStudio: { label: "Internetes készítés (Studio)", ids: ["generate", "source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator", "lektor", "gate", "readback"] },
+};
+/** Spec 2026-10-06-s7: a gyártó körszabályai (szerző/vázlat/ábra/lektor/kapu visszalépés és keret) ezekben a módokban élnek. */
+const PRODUCTION_MODES: readonly WorkflowMode[] = ["upload", "studio", "webStudio"];
+/** Spec 2026-10-06-s7: a futás eredményének elvárt fajtája módonként (a motor ezt ellenőrzi a kész futáson). */
+export const WORKFLOW_RESULT_KIND: Record<WorkflowMode, NonNullable<WorkflowView["result"]>["kind"]> = {
+  upload: "material", studio: "material", web: "material", repair: "candidate", concept: "material", html: "candidate", apply: "material",
+  htmlAssist: "proposal", creator: "proposal", quiz: "material", map: "map", mapCheck: "map", webStudio: "material",
 };
 export const WORKFLOW_MODES = Object.keys(chains) as WorkflowMode[];
 export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
   const chain = chains[mode];
   return { version: WORKFLOW_VERSION, mode, label: chain.label, steps: chain.ids.map((id, i) => ({
-    id, label: id === "gate" && (mode === "upload" || mode === "studio") ? "Ellenőrzések és közzététel" : labels[id],
+    id, label: id === "gate" && PRODUCTION_MODES.includes(mode) ? "Ellenőrzések és közzététel" : labels[id],
     after: i ? [chain.ids[i - 1]] : ["start"],
     maxVisits: 1,
-  })).map(step => step.id === "author" && ["upload", "studio"].includes(mode)
+  })).map(step => step.id === "author" && PRODUCTION_MODES.includes(mode)
     ? { ...step, after: [...step.after, "lektor", "gate", "pedagogue"], maxVisits: 3 }
     : mode === "web" && ["knowledge", "author"].includes(step.id)
       ? { ...step, maxVisits: 3 }
     // Spec 2026-09-19: one bank-only repair round after the author limit — the animator may
     // follow the lektor directly, so animator/lektor/gate get a fourth visit.
-    : ["upload", "studio"].includes(mode) && ["animator", "lektor", "gate"].includes(step.id)
+    : PRODUCTION_MODES.includes(mode) && ["animator", "lektor", "gate"].includes(step.id)
       ? { ...step, after: step.id === "animator" ? [...step.after, "lektor"] : step.after, maxVisits: 4 }
-    : ["upload", "studio"].includes(mode) && step.id === "pedagogue"
+    : PRODUCTION_MODES.includes(mode) && step.id === "pedagogue"
       ? { ...step, after: [...step.after, "pedagogue"], maxVisits: 3 }
       : step) };
 }
@@ -48,7 +63,8 @@ export type WorkflowVisit = {
 export type WorkflowView = {
   id: string; definition: WorkflowDefinition; state: "running" | "waiting" | "ready" | "done" | "error" | "interrupted";
   createdAt: number; updatedAt: number; visits: WorkflowVisit[]; error?: string;
-  result?: { kind: "candidate" | "material"; id: string }; revision: number;
+  /** Spec 2026-10-06-s7: `proposal` = a kérő felületnek adott, nem tárolt javaslat; `map` = tudástár-azonosító. */
+  result?: { kind: "candidate" | "material" | "proposal" | "map"; id: string }; revision: number;
   executions?: number;
   resourceId?: string;
   skill?: SkillSnapshot;
