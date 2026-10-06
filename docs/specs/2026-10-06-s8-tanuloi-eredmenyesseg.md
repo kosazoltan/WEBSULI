@@ -18,6 +18,11 @@ Előzmény: S1 (`itemFingerprint`), S3 (`catalog_items`, migráció 0022).
 | A katalógus admin-API-ja szerződés szerint csak olvasó (a teszt tiltja a `post/put/patch/delete`-et és a DB-írást az `admin-routes.ts`-ben) | `source/server/catalog/admin-routes.ts:12-47`, `source/tests/catalog-bank.test.ts:68-74` |
 | A katalógus a publikált leckék MINDEN verzióját kinyeri (`lesson:<lessons.id>` provenance) | `source/scripts/catalog/extract-all.mts:18,40` |
 
+Élő mérés (csak olvasó tranzakció, 2026-10-06 03:11 UTC; `refresh-outcomes.mts` dry-run → `docs/measurements/2026-10-06-catalog-outcomes.json`):
+`lesson_attempts` 3 sor, ebből `completed` **0**; `concept_results` 0; `catalog_items` 23 209, ebből fúziós (`lesson:`) kvíz 1 965;
+publikált lecke 21; `catalog_item_outcomes` tábla még nincs. → Az összesítés jelenleg 0 tételre ad eredményt; a mérés a lezárt
+körökkel indul.
+
 Következmény: új tanulói végpont NEM kell; a nyers adat (tételenkénti első válasz) már megvan a `lesson_attempts`-ben. Hiányzik:
 (1) a kör-kérdés → katalógus-lenyomat leképezés, (2) a tételenkénti összesítés tárolása, (3) az admin-olvasó mező.
 

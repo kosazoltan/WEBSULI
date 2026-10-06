@@ -51,6 +51,11 @@ try {
   const skillMigration = await readFile(new URL("../migrations/0020_lesson_skill_learning.sql", import.meta.url), "utf8");
   await pool.query(skillMigration);
   await pool.query(skillMigration);
+  // S8: the outcome table from the migration file itself (not the schema export), twice.
+  await pool.query("DROP TABLE catalog_item_outcomes");
+  const outcomeMigration = await readFile(new URL("../migrations/0023_catalog_item_outcomes.sql", import.meta.url), "utf8");
+  await pool.query(outcomeMigration);
+  await pool.query(outcomeMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {

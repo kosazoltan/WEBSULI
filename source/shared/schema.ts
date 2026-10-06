@@ -986,5 +986,19 @@ export const catalogItems = pgTable(
   }),
 );
 
+/**
+ * Spec 2026-10-06-s8-tanuloi-eredmenyesseg — tételenkénti tanulói eredményesség, a katalógus-tétel tartalmi lenyomatára
+ * (`catalog_items.fingerprint`) kulcsolva. Csak összesített darabszám; nincs felhasználó- vagy lecke-azonosító.
+ */
+export const catalogItemOutcomes = pgTable("catalog_item_outcomes", {
+  fingerprint: varchar("fingerprint", { length: 32 }).primaryKey(),
+  attempts: integer("attempts").notNull().default(0),
+  correct: integer("correct").notNull().default(0),
+  /** Helyes ÉS segítség nélkül. */
+  independentCorrect: integer("independent_correct").notNull().default(0),
+  rate: real("rate").generatedAlwaysAs(sql`CASE WHEN attempts > 0 THEN correct::real / attempts END`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type CatalogLessonRow = typeof catalogLessons.$inferSelect;
 export type CatalogItemRow = typeof catalogItems.$inferSelect;
