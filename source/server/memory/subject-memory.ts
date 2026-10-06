@@ -38,6 +38,9 @@ const SKILL_ROLES: Record<SkillCode, readonly MemoryRole[]> = {
   bank_cardinality: BANK, sample_score: BANK, duplicate_question: BANK, oral_written: BANK, repair_scope: BANK,
   coverage: ["pedagogue", "author"], teaching_depth: ["pedagogue", "author"], typography: ["author"],
   review_evidence: [], html_complete: [], citations: [],
+  // S7 (PR #203): a támogató szerepek saját lelet-kódjai — kártya keletkezik (admin látja), de gyártó szerep promptjába nem kerül.
+  scope_classification: [], source_correction: [], topic_focus: [], blind_solver: [], bank_verifier: [],
+  instruction_points: [], instruction_check: [], ocr_uncertain: [],
 };
 const OWN_CODES: Record<string, CodeEntry> = {
   lektor_source_conflict: { title: "Lektori forrásellentmondás", roles: "byStep",
