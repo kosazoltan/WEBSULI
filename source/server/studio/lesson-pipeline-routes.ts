@@ -595,6 +595,8 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
   // then made from the uncorrected map, exactly as before corrections existed) — the docstring's promise.
   try {
     await db.transaction(async (tx) => {
+      // Review #203: lízing-zár a tranzakció elején és végén (a kivonatolás mintájára) — lejárt lízingű végrehajtó nem írhat.
+      await workflowFence(tx);
       for (const fix of pending) {
         const row = rows.find((r) => r.localId === fix.localId);
         if (!row) continue;
@@ -607,8 +609,10 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
           updatedAt: new Date(),
         }).where(eq(kmConcepts.id, row.id));
       }
+      await workflowFence(tx);
     });
   } catch (error) {
+    if (error instanceof WorkflowConflict) throw error; // a zár-ütközés nem nyelhető el
     logger.warn(`[STUDIO/1STEP] A forrás-helyesbítés mentése elmaradt (${error instanceof Error ? error.message : String(error)}) — helyesbítés nélkül folytatjuk.`);
     return [];
   }

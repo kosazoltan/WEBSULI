@@ -91,3 +91,12 @@ test("review #203: a runExtraction tudástár-tranzakciója az elején és a vé
   visit(source);
   assert.equal(checked, 1);
 });
+
+test("review #203: a tanári helyesbítés km_concepts-írása lízing-zár alatt, és a zár-ütközés nem nyelődik el", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/lesson-pipeline-routes.ts", import.meta.url), "utf8");
+  const body = src.slice(src.indexOf("export async function correctMapFromOwner"), src.indexOf("
+export ", src.indexOf("export async function correctMapFromOwner") + 10));
+  assert.equal((body.match(/await workflowFence\(tx\)/g) ?? []).length, 2, "zár a tranzakció elején és végén");
+  assert.match(body, /if \(error instanceof WorkflowConflict\) throw error;/);
+});
