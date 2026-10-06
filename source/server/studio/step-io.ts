@@ -556,7 +556,7 @@ export function buildLektorGradingEvidence(lesson: Lesson): string {
     "A program pontozási mérése (adat):\n" + JSON.stringify(evidence);
 }
 
-export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext, blind?: BlindSolutions, verifiedPaths?: ReadonlySet<string>): string {
+export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext, blind?: BlindSolutions, verifiedPaths?: ReadonlySet<string>, catalogPaths?: ReadonlySet<string>): string {
   return [
     // U5 (C5/H8): a szerző mérhető szerződése EGYSZER (a minőségi szerződést a runbook adja; a közös módszer-szerződés itt nem ismétlődik).
     TEACHING_CONTRACT,
@@ -608,7 +608,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "- Csak konkrét eltéréseket jelents, rövid indokkal és javítási céllal. Helyes tételekről ne írj egyenként beszámolót. Ne ismételd meg a leckét, a forrást vagy az ellenőrzési utasítást. Minden valódi hibát őrizz meg; a tömörség nem jelenthet kevesebb ellenőrzést.",
     "",
     // U5 (C5/H8): kiírt útvonalas, tömör nézet — az SVG-törzs nem a lektor bemenete; az igazolt tételek jelöltek.
-    lektorLessonView(lesson, { verifiedPaths }),
+    lektorLessonView(lesson, { verifiedPaths, catalogPaths }),
     "",
     "Concept map:",
     mapJson(map),

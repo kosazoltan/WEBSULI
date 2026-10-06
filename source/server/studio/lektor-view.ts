@@ -52,7 +52,7 @@ function blockLine(block: Record<string, unknown>): string {
   }
 }
 
-export function lektorLessonView(lesson: Lesson, options: { verifiedPaths?: ReadonlySet<string> } = {}): string {
+export function lektorLessonView(lesson: Lesson, options: { verifiedPaths?: ReadonlySet<string>; catalogPaths?: ReadonlySet<string> } = {}): string {
   const lines: string[] = [
     "LECKE — kiírt útvonalakkal (a blockPath-ot pontosan így add vissza; a tétel útvonala a sor eleje):",
     `title: ${lesson.title} | subject: ${lesson.subject} | classroom: ${lesson.classroom}`,
@@ -71,6 +71,9 @@ export function lektorLessonView(lesson: Lesson, options: { verifiedPaths?: Read
     if (e.glossary?.length) lines.push(`glossary: ${e.glossary.map((g) => `${g.word} — ${g.translation} (${g.partOfSpeech}; „${cut(g.example, 200)}”)`).join(" | ")}`);
   }
   const verified = [...(options.verifiedPaths ?? [])].sort();
+  // Spec 2026-10-06-s6 (kapcsolós): szó szerint átvett, szülő által ellenőrzött katalógus-kvíz — üres halmaznál nincs sor (a prompt változatlan).
+  const catalog = [...(options.catalogPaths ?? [])].sort();
+  if (catalog.length) lines.push(`KATALÓGUS-TÉTELEK (a lecke tantárgyi bankjából szó szerint átvett, szülő által ellenőrzött kvíz — IGAZOLT FORRÁS: a kérdés, az opciók és a helyes kulcs ellenőrzött; forráseltérést rájuk csak a lecke tanításával való bizonyított ellentmondásra írj; az opciónkénti visszajelzést a modell írta, azt ugyanúgy ellenőrizd): ${catalog.join(", ")}`);
   if (verified.length) lines.push(`IGAZOLT TÉTELEK (a bank-ellenőr korábbi körben tételenként hibátlannak találta, a tartalom azóta változatlan — ne járd be újra, blokkolót rájuk csak új, bizonyított tényhibára írj): ${verified.join(", ")}`);
   return lines.join("\n");
 }

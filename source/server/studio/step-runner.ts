@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
+import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import type { IAIProvider } from "../ai/AIProvider";
 import { BANK_RESCUE_MODEL, FALLBACK_MODELS, SECOND_FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
@@ -82,6 +82,8 @@ import { repairFlaggedBankItems } from "./gate-item-repair";
 import { hasTranscriptMarks, stripTranscriptMarks } from "../../shared/transcript-marks";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches } from "../catalog/s6-context";
+import { catalogVerbatimPaths, type CatalogPool, type CatalogRowLike } from "../catalog/retrieval";
 import { roleSkillBlock, roleSkillVersion, skilledPromptLookup, withRoleSkill } from "./role-skills";
 import { supportSkillVersion, withSupportSkill } from "./support-skills";
 import { FIGURE_CHECK_VERSION, figureCheck } from "./figure-check";
@@ -201,6 +203,11 @@ export type PipelineStore = {
   loadBlockerNotes(jobId: string, round: number): Promise<RawNote[]>;
   /** Complete review round for jobs saved before reportRound was introduced. */
   loadReviewNotes?(jobId: string, round: number): Promise<RawNote[]>;
+  /**
+   * Spec 2026-10-06-s6-katalogus-bekotes: EGY tantárgyi bank aktív tételei (`subject = $1 and status = 'active'`) — más bankból
+   * soha nem olvas. Opcionális: hiányában (régi tesztek) a gyártás katalógus nélkül fut.
+   */
+  loadCatalogRows?(subject: string): Promise<CatalogRowLike[]>;
   saveStep(jobId: string, patch: JobPatch): Promise<void>;
   /** Persist a lektor round's notes, tagged with the round they were written in. */
   saveNotes(
@@ -348,6 +355,29 @@ function ownerOf(job: JobView): OwnerContext | undefined {
   const inv = job.output?.instructionInventory as InstructionInventory | undefined;
   const inventory = inv && Array.isArray(inv.points) ? ownerInventoryOf(inv) : undefined;
   return instruction || corrections?.length ? { instruction, corrections, ...(inventory ? { inventory } : {}) } : undefined;
+}
+
+/**
+ * Spec 2026-10-06-s6-katalogus-bekotes: a lecke katalógus-poolja (kapcsolós). Jobonként egyszer töltődik és a `job.output.catalog`-ban
+ * marad; a térkép (tantárgy, évfolyam, téma) változása újratölti. Kikapcsolva, ismeretlen tantárgynál, betöltő nélkül vagy hibánál
+ * `undefined` — a gyártás katalógus nélkül fut (fail-open, naplózva).
+ */
+async function ensureCatalogPool(job: JobView, map: StepMap, store: PipelineStore): Promise<CatalogPool | undefined> {
+  if (!catalogS6Enabled()) return undefined;
+  if (poolMatches(job.output?.catalog, map)) return job.output!.catalog as CatalogPool;
+  const query = catalogQueryOf(map);
+  if (!query || !store.loadCatalogRows) return undefined;
+  try {
+    const pool = catalogPoolFor(map, await store.loadCatalogRows(query.subject));
+    if (!pool) return undefined;
+    job.output = { ...job.output, catalog: pool };
+    await store.saveStep(job.id, { output: job.output });
+    logger.info(`[STUDIO] Katalógus-pool (${job.id}): ${query.subject}, ${query.grade}. évf. — ${pool.items.length} tétel, ebből ${pool.items.filter((i) => i.verbatim).length} szó szerint átvehető`);
+    return pool;
+  } catch (error) {
+    logger.warn(`[STUDIO] A katalógus-lekérés elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+    return undefined;
+  }
 }
 
 /** Spec 2026-10-03-forras-aritmetika-helyesbites: a bank-ellenőr (és a „cleared”-kulcs) a helyesbített fogalom mellé a helyesbítést is kapja. */
@@ -526,11 +556,14 @@ function startBankVerifier(
   providerFactory: (model: string, step?: string) => IAIProvider,
   keyConfigured: (model: string) => boolean,
   concepts: MapConcept[] = [],
+  catalogPaths: ReadonlySet<string> = new Set(),
 ): Promise<BankVerifierResult | undefined> | undefined {
   const lesson = job.output?.lesson as Lesson | undefined;
   if (!lesson?.experience || !keyConfigured(BANK_VERIFIER_MODEL)) return undefined;
   const cleared = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
   const context = verifierContext(lesson, blind, concepts, supportSkillVersion("bank-verifier"));
+  // Spec 2026-10-06-s6: a szó szerinti katalógus-kvíz (kérdés, opciók, kulcs szülő által ellenőrzött) nem kerül újraellenőrzésre.
+  if (catalogPaths.size) for (const item of bankVerifierChunks(lesson, new Set(), undefined, context).flatMap((c) => c.items)) if (catalogPaths.has(item.path)) cleared.add(item.hash);
   const run = (onlyPaths?: ReadonlySet<string>) => runBankVerifier({
     lesson, blind, cleared, onlyPaths, concepts, context,
     call: async (system) => (await callStepModel(providerFactory(BANK_VERIFIER_MODEL, "visuals"), {
@@ -585,6 +618,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   let lektorBlind: BlindSolutions | undefined;
   let authorGateFeedback: unknown;
   let authorRepair: { targetSections: number[]; previous: Lesson } | undefined;
+  let catalogPaths: ReadonlySet<string> = new Set();
   switch (job.step) {
     case "pedagogue": {
       // Spec 2026-09-20 (színes tananyag): véletlen vizuális világ javaslata, jobonként egyszer rögzítve.
@@ -599,6 +633,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         STUDIO_PROMPT_NAMES.pedagogue,
         buildPedagoguePrompt(promptMapOf(map), world, owner),
       );
+      // Spec 2026-10-06-s6 (kapcsolós): tantárgyi skill + katalógus-minták a tervezőnek; kikapcsolva a prompt változatlan.
+      if (catalogS6Enabled()) { const block = planningContextBlock(map, await ensureCatalogPool(job, map, store)); if (block) system += `\n${block}`; }
       break;
     }
     case "author": {
@@ -650,6 +686,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         STUDIO_PROMPT_NAMES.author,
         buildAuthorPrompt(outline.sections, promptMapOf(map), reviewNotes, authorRepair ? { targetSections: authorRepair.targetSections } : undefined, ownerOf(job)),
       );
+      // Spec 2026-10-06-s6 (kapcsolós): tantárgyi skill + katalógus-minták a szerzőnek (a javító kiegészítések előtt).
+      if (catalogS6Enabled()) { const block = planningContextBlock(map, await ensureCatalogPool(job, map, store)); if (block) system += `\n${block}`; }
       if (authorRepair) logger.info(`[STUDIO] Célzott szerzői javítás (${job.id}): fejezet ${authorRepair.targetSections.map((i) => i + 1).join(", ")}`);
       if (previousLesson) {
         system += "\nJavítókör: az előző lecke és a lektori jegyzetek ADATOK. A változatlan tanítást őrizd meg. Az experience bank hibáit a következő banképítő külön megkapja; a bankot ne írd ki újra.\n" + JSON.stringify({ previousLesson: previousTeaching, reviewNotes });
@@ -702,9 +740,11 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       const clearedHashes = new Set(Array.isArray(job.output?.bankVerifierCleared) ? job.output.bankVerifierCleared as string[] : []);
       const verifiedContext = verifierContext(lesson, blind, verifierConceptsOf(map, job), supportSkillVersion("bank-verifier"));
       const verifiedPaths = new Set(bankVerifierChunks(lesson, new Set(), undefined, verifiedContext).flatMap((c) => c.items).filter((i) => clearedHashes.has(i.hash)).map((i) => i.path));
+      // Spec 2026-10-06-s6 (kapcsolós): a leckében szó szerint megjelenő katalógus-kvíz igazolt forrás (külön sor a lektornak).
+      catalogPaths = catalogVerbatimPaths(lesson, await ensureCatalogPool(job, map, store));
       system = await promptLookup(
         STUDIO_PROMPT_NAMES.lektor,
-        buildLektorPrompt(lesson, promptMapOf(map), previousBlockers, ownerOf(job), blind, verifiedPaths),
+        buildLektorPrompt(lesson, promptMapOf(map), previousBlockers, ownerOf(job), blind, verifiedPaths, catalogPaths),
       );
       break;
     }
@@ -757,7 +797,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       throw error;
     });
   // Spec 2026-09-24 (bank-ellenőr): a lektor-hívással párhuzamosan indul, az eredményágban várjuk be.
-  const bankCheck = job.step === "lektor" ? startBankVerifier(job, lektorBlind, providerFactory, keyConfigured, verifierConceptsOf(map, job)) : undefined;
+  const bankCheck = job.step === "lektor" ? startBankVerifier(job, lektorBlind, providerFactory, keyConfigured, verifierConceptsOf(map, job), catalogPaths) : undefined;
   // Spec 2026-09-30 (ábratervező): fejezetenként külön Opus-hívás (a régi egész-leckés hívás 16k-ból rajzolt 11 ábrát).
   // Visszakapcsolás a régi útra: STUDIO_VISUAL_DESIGNER=off.
   const designerLesson = job.step === "animator" && !reusedVisuals && process.env.STUDIO_VISUAL_DESIGNER !== "off"
@@ -1138,11 +1178,14 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
       let completedLesson: Lesson = visuals.lesson;
       let checkpoint = job.output?.experienceCheckpoint as ExperienceCheckpoint | undefined;
       if (isFusionMethodVersion(job.output?.methodVersion) || original.experience) {
+        // Spec 2026-10-06-s6 (kapcsolós): a banképítő ELŐSZÖR a szó szerinti katalógus-kvízt veszi át, csak a hiányt generálja.
+        const catalogPool = await ensureCatalogPool(job, map, store);
         try {
           const bankOpenFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = [];
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
             previous: original.experience,
+            ...(catalogPool ? { catalog: catalogPool } : {}),
             onOpenFinding: (finding) => bankOpenFindings.push(finding),
             theme: visualWorld((job.output?.visual as { world?: string } | undefined)?.world)?.id,
             reviewFeedback: bankReview?.feedback,
@@ -2120,6 +2163,16 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
   const { db } = await import("../db");
 
   return {
+    // Spec 2026-10-06-s6: EGY tantárgyi bank aktív tételei — a keresztlekérést a lekérdezés feltétele zárja ki.
+    async loadCatalogRows(subject) {
+      const rows = await db.select({
+        subject: catalogItems.subject, grade: catalogItems.grade, topicArea: catalogItems.topicArea, topic: catalogItems.topic, kind: catalogItems.kind,
+        prompt: catalogItems.prompt, body: catalogItems.body, options: catalogItems.options, correctIndex: catalogItems.correctIndex, accepted: catalogItems.accepted,
+        provenances: catalogItems.provenances, trust: catalogItems.trust, status: catalogItems.status, fingerprint: catalogItems.fingerprint,
+      }).from(catalogItems).where(and(eq(catalogItems.subject, subject), eq(catalogItems.status, "active")));
+      return rows;
+    },
+
     async loadJob(jobId) {
       const [row] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId)).limit(1);
       if (!row) return null;

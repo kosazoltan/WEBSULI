@@ -66,7 +66,10 @@ test("betöltő: lecketípus-skill minden típushoz; ismeretlen tantárgy és t�
   assert.notEqual(subjectSkillVersion(null, "gyakorlo-feladatlap"), subjectSkillVersion(null, "fogalomtanito"));
 });
 
-test("S6 előtt a gyártás nem kapja meg: egyetlen gyártási modul sem importálja a tantárgyi skillt (promptok és lépés-hashek változatlanok)", () => {
+// Dokumentált spec-változás (docs/specs/2026-10-06-s6-katalogus-bekotes.md): az S6 a skillt a gyártásba köti, de KIZÁRÓLAG a kapcsolós
+// server/catalog/s6-context.ts modulon át; az őr ereje változatlan (közvetlen import továbbra sincs), csak a cím követi a valóságot.
+// A kikapcsolt kapcsoló melletti változatlan promptot a tests/catalog-s6.test.ts őrzi.
+test("S6: a gyártási modulok a tantárgyi skillt csak a kapcsolós katalógus-modulon át kapják — közvetlen import nincs", () => {
   const dirs = ["../server/studio", "../server/workflows", "../server/improve"];
   for (const dir of dirs) for (const f of readdirSync(new URL(dir, import.meta.url))) {
     if (!f.endsWith(".ts") || f === "subject-skills.ts") continue;
