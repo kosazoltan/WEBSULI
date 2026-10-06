@@ -45,6 +45,7 @@ import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { cachedSystem } from "./ai/prompt-cache";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
+import { subjectMemoryAdminRouter } from "./memory/admin-routes";
 import { ViewDedup } from "./lib/view-dedup";
 import { getMaterialOrigin } from "./utils/config";
 import { prependWebLessonQualityNotice, webLessonQualityNotice } from "./lib/web-lesson-quality-notice";
@@ -820,6 +821,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Spec 2026-10-05-s3-katalogus-bank: a tantárgyi katalógus-bankok csak olvasó admin-nézete.
   app.use("/api/admin/catalog", catalogAdminRouter);
+  // Spec 2026-10-06-s5-tantargyi-memoria: a tantárgyi memória-kártyák csak olvasó admin API-ja.
+  app.use("/api/admin/subject-memory", subjectMemoryAdminRouter);
 
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
