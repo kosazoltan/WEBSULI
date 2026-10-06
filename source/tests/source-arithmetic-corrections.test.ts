@@ -101,7 +101,11 @@ test("forrás-ellenőrzés: a lecke-indítás kérés és fotó nélkül is lefu
   const fn = routes.slice(routes.indexOf("export async function correctMapFromOwner("));
   assert.ok(!/^\s*if \(!instruction && !transcript\) return \[\];/m.test(fn.slice(0, 400)), "nincs korai visszatérés az aritmetikai kör előtt");
   assert.ok(fn.includes("arithmeticSourceCorrections(concepts)") && fn.includes("mergeCorrections(arithmetic, result.corrections)"));
-  assert.ok(routes.includes('const corrections = await correctMapFromOwner(req.params.mapId, undefined, false);'), "a térképről (újra)indított lecke is helyesbített");
+  // Spec-változás 2026-10-06-s7 (§4/6, docs/specs/2026-10-06-s7-workflow-rendbetetel.md): a térképről indított lecke helyesbítése
+  // saját mapCheck futásban megy — a védett tulajdonság (kérés és fotó nélküli aritmetikai kör) ugyanaz, a hívás egy szinttel lejjebb.
+  assert.ok(routes.includes("const corrections = await correctMapInWorkflow(req.params.mapId, req.user!.id)"), "a térképről (újra)indított lecke is helyesbített");
+  const inWorkflow = routes.slice(routes.indexOf("async function correctMapInWorkflow("), routes.indexOf("export async function correctMapFromOwner("));
+  assert.ok(inWorkflow.includes("const corrections = await correctMapFromOwner(mapId, undefined, false);"), "a mapCheck futás kérés és fotó nélkül helyesbít");
   const improve = readFileSync(new URL("../server/studio/structured-improvement.ts", import.meta.url), "utf8");
   assert.ok(improve.includes("mergeCorrections(arithmeticSourceCorrections(source.concepts), proposal.corrections)"));
   assert.ok(fn.includes("if (!pending.length) return corrections;") && fn.includes("for (const fix of pending) {"), "review #181: a már érvényben lévő helyesbítés nem íródik újra, de visszaadott");

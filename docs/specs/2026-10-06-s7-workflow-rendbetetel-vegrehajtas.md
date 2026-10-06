@@ -61,11 +61,13 @@ Ellenőrzés: `node --import tsx --test tests/studio-one-step.test.ts tests/stud
 - `shared/lesson-workflow.ts` már tartalmazza a `webStudio` láncot (1. szelet).
 - `server/studio/one-step-progress.ts` `createRun(persist?, id?)`: opcionális rögzített azonosító.
 - `server/studio/lesson-pipeline-routes.ts`:
-  - `export function beginOneStepProgress(id: string): string` (createRun a megadott azonosítóval);
-  - `export async function runOneStepInWorkflow(runId, data, userId)` = `runOneStepCore` (a hívó workflow-jában, readback nélkül);
+  - `export async function runOneStepInWorkflow(runId, data, userId)`: `createRun(runId)` (a haladásjelző a webes job azonosítójával),
+    majd `runOneStepCore` a hívó workflow-jában, readback nélkül. Ha ugyanennek a futásnak egy korábbi végrehajtása már közzétette a
+    leckét (haladásjelző `done` + publikált lecke), a lecke újrahasznosul: a lépések modellhívás nélkül látogatásként rögzülnek
+    (a feltöltéses út kész-lecke ágával azonos módon), új lecke nem készül;
   - `driveTracked`: `webStudio` módban a haladásjelző frissítése az `upload`-dal azonos; kész jobnál `finishWebStudio(id, owner, lessonId)`
     (a `completeWebStudioJob`-ot hívja a `researchJobStore`-ral) — ez végzi a `readback`-et.
-- `server/studio/web-studio-handoff.ts`: `WebStudioDeps` = `{ gather, begin(runId), manufacture(runId, data, userId), read, sleep?, pollMs? }`;
+- `server/studio/web-studio-handoff.ts`: `WebStudioDeps` = `{ gather, manufacture(runId, data, userId), read, sleep?, pollMs? }`;
   nincs `outsideWorkflow`, nincs `start`. A `gather` `workflowCheckpoint("web-sources", { input, method })`-ban; a `runId` = `observer.jobId`;
   a gyártás alatt `read`-del követi a haladást (státusz-események), a végén `done` → artefaktum, `error`/`parked` → `WebResearchFailure`.
 - `server/studio/web-research-runner.ts` `ResearchObserver`: `jobId?: string`.
@@ -78,10 +80,12 @@ Ellenőrzés: `node --import tsx --test tests/studio-one-step.test.ts tests/stud
   - `read`: ha a nyomon követett workflow módja ≠ a beállított mód → `canResume = false`.
   - `publish`: nyomon követés nélküli jobnál, ha van workflow-tároló → `WebResearchFailure` (régi, napló nélküli futás).
 - `server/studio/web-research-routes.ts`: Studio-út: `createResearchJobs(researchJobStore, generate, workflowStore, { mode: "webStudio" })`,
-  a `generate` deps-e: `{ gather: gatherWebSources, begin: beginOneStepProgress, manufacture: runOneStepInWorkflow, read: oneStepRunView }`;
+  a `generate` deps-e: `{ gather: gatherWebSources, manufacture: runOneStepInWorkflow, read: oneStepRunView }`;
   `WEB_RESEARCH_PIPELINE=html` esetén `mode: "web"` és a régi HTML-generátor.
 - Tesztek (spec-változás, §4/7): `tests/web-studio-handoff.test.ts` és `tests/web-research-jobs.test.ts` Studio-átadás esetei az új
   deps-alakra; új elvárás: `workflowMode()` a gyártáson belül `"webStudio"`, a lépéssor a valódi sorrend, nincs második futás.
+  A 120 perces követési határidő megszűnik (a gyártás ugyanabban a futásban megy, nem követett külön futás).
+- `server/workflows/engine.ts`: az `outsideWorkflow` export törlése (nincs több hívója; a forrás-ellenőrző teszt tiltja).
 Ellenőrzés: `node --import tsx --test tests/web-studio-handoff.test.ts tests/web-research-jobs.test.ts tests/web-research-completion.test.ts` → pass.
 
 ## 5. szelet — skill-szöveg és támogató lelet-kódok

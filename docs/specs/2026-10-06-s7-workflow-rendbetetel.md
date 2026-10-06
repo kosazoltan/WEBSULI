@@ -78,7 +78,9 @@ témafókusz) hibái csak a közös regex-osztályozón át (`learning.ts:9` `de
    `outsideWorkflow`, nincs külön upload-futás. A haladásjelző (one-step progress) futásazonosítója = a webes job azonosítója.
    A Studio-panelről vagy a söprőből érkező folytatás (`driveTracked`, a `resourceId` révén ugyanaz a workflow) `webStudio` módban a
    webes jobot is kész állapotba zárja (`completeWebStudioJob`). A régi, `web` módú, kettévágott futás (van `studioRunId`, a
-   workflow módja `web`) nem folytatható: `canResume=false`, új készítés kell (spec-változás).
+   workflow módja `web`) nem folytatható: `canResume=false`, új készítés kell (spec-változás). Ha ugyanennek a futásnak egy korábbi
+   végrehajtása már közzétette a leckét (csak a lezárás bukott el), az újrafuttatás nem készít második leckét: a kész lecke
+   újrahasznosul, a gyártás lépései modellhívás nélkül látogatásként rögzülnek (a feltöltéses út kész-lecke ágával azonos módon).
 8. **Skill-szöveg**: `SUPPORT_SKILLS["topic-focus"]` (kötelező szakaszokkal), a `decideTopicFocus` hívás `withSupportSkill`-lel.
 9. **Támogató lelet-kódok** (`shared/lesson-skill.ts` `SKILL_RULES`, szabályszöveggel és `RULE_ROLES` szerep-leképezéssel):
    `scope_classification` (scope), `source_correction` (corrector), `topic_focus` (topic-focus), `blind_solver` (blind-solver),
