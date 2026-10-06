@@ -13,13 +13,15 @@
  *    specifikus szűréshez használják (pl. Speed Quiz Math csak `math`)
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
 import { resolveLegacyModel } from "./ai/models";
 import { withSupportSkill } from "./studio/support-skills";
 import { cachedSystem } from "./ai/prompt-cache";
 import { validateGeneratedQuizItems } from "./gameQuizValidation";
+import { runToolWorkflow } from "./workflows/tool-run";
+import { workflowFence, workflowPhase } from "./workflows/engine";
 
 const ANTHROPIC_API_KEY = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
 const ANTHROPIC_BASE_URL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
@@ -60,10 +62,12 @@ Pontos formátum (példa):
 /**
  * Egy adott tananyagból `count` darab kvíz-tételt generál és beilleszt.
  * Visszaadja a sikeres + skipped + hiba-számot.
+ * Spec 2026-10-06-s7 (J): a generálás `quiz` workflow-ban fut (forrás → szerző → kapu → mentés → visszaolvasás).
  */
 export async function generateMaterialQuiz(
   materialId: string,
-  count = 10,
+  count: number,
+  owner: string,
 ): Promise<QuizGenerationResult> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error("Anthropic API kulcs nincs konfigurálva (AI_INTEGRATIONS_ANTHROPIC_API_KEY hiányzik).");
@@ -73,7 +77,9 @@ export async function generateMaterialQuiz(
   // csonkolta a JSON-t (parse-hiba, 0 insert). ~300 token / tétel + buffer.
   const maxTokens = Math.min(8192, 1024 + safeCount * 350);
 
+  return runToolWorkflow({ mode: "quiz", owner, request: { materialId, count: safeCount } }, async () => {
   // 1. Tananyag betöltése
+  await workflowPhase("source");
   const [material] = await db
     .select({ id: htmlFiles.id, title: htmlFiles.title, content: htmlFiles.content, classroom: htmlFiles.classroom })
     .from(htmlFiles)
@@ -97,6 +103,7 @@ export async function generateMaterialQuiz(
   const truncated = stripped.length > 14000 ? stripped.slice(0, 14000) : stripped;
 
   // 3. Claude hívás
+  await workflowPhase("author");
   const client = new Anthropic({
     apiKey: ANTHROPIC_API_KEY,
     baseURL: ANTHROPIC_BASE_URL || undefined,
@@ -117,6 +124,7 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
     messages: [{ role: "user", content: userPrompt }],
   });
 
+  await workflowPhase("gate");
   const block = response.content[0];
   if (!block || block.type !== "text") {
     throw new Error("Claude nem adott szöveges választ.");
@@ -162,14 +170,14 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
 
   // AUDIT 2026-09-01: ha egyetlen generált tétel sem érvényes, NEM deaktiváljuk a régi
   // kvízeket — különben a tananyag teljes kérdéskészlete hiba nélkül eltűnne.
+  await workflowPhase("save");
   if (validItems.length === 0) {
     result.errors.push("Nincs érvényes generált tétel — a meglévő kvízek változatlanok maradtak.");
-    return result;
-  }
-
+  } else {
   // Tranzakció: deaktivál + beilleszt atomikusan.
   // Ha bármelyik tx.insert dob, az egész rollbackel.
   await db.transaction(async (tx) => {
+    await workflowFence(tx);
     await tx
       .update(gameQuizItems)
       .set({ isActive: false })
@@ -189,7 +197,17 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
       });
       result.inserted++;
     }
+    await workflowFence(tx);
   });
+  }
 
-  return result;
+  // Visszaolvasás: mentés után pontosan a beillesztett tételek aktívak a tananyaghoz.
+  await workflowPhase("readback");
+  if (result.inserted > 0) {
+    const active = await db.select({ id: gameQuizItems.id }).from(gameQuizItems)
+      .where(and(eq(gameQuizItems.sourceMaterialId, materialId), eq(gameQuizItems.isActive, true)));
+    if (active.length !== result.inserted) throw new Error("A mentett kvíztételek visszaolvasása eltér.");
+  }
+  return { value: result, result: { kind: "material" as const, id: materialId } };
+  });
 }

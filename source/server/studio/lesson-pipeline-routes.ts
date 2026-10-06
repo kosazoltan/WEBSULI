@@ -47,6 +47,7 @@ import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
 import { executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
+import { runToolWorkflow } from "../workflows/tool-run";
 import { htmlFiles } from "../../shared/schema";
 import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
@@ -506,6 +507,24 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
 }
 
 /**
+ * Spec 2026-10-06-s7 (B): a térképről indított lecke determinisztikus forrás-helyesbítése (modellhívás nélkül) saját
+ * `mapCheck` futásban: forrás → kapu → mentés → visszaolvasás. A viselkedés változatlan: hibánál helyesbítés nélkül megy tovább.
+ */
+async function correctMapInWorkflow(mapId: string, owner: string): Promise<SourceCorrection[]> {
+  return runToolWorkflow({ mode: "mapCheck", owner, request: { mapId, kind: "source-corrections" } }, async () => {
+    await workflowPhase("source");
+    await workflowPhase("gate");
+    await workflowPhase("save");
+    const corrections = await correctMapFromOwner(mapId, undefined, false);
+    await workflowPhase("readback");
+    const rows = await db.select().from(kmConcepts).where(eq(kmConcepts.mapId, mapId));
+    const missing = corrections.filter((fix) => { const row = rows.find((r) => r.localId === fix.localId); return !row || !correctionApplied(fix, row); });
+    if (missing.length) throw new Error(`A forrás-helyesbítés nem olvasható vissza: ${missing.map((m) => m.localId).join(", ").slice(0, 200)}`);
+    return { value: corrections, result: { kind: "map" as const, id: mapId } };
+  });
+}
+
+/**
  * Spec 2026-09-23 — the teacher's request and photo misreads become DOCUMENTED curation on the map rows
  * (term/definition only; the quote stays the transcript evidence). Never throws: no correction on failure.
  */
@@ -809,12 +828,8 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
   const previous = await workflowStore.read(id, owner);
   if (!start && !previous) {
     if (await workflowStore.exists(jobId)) throw new WorkflowConflict("A futás másik készítőhöz tartozik.");
-    // Pre-release jobs have no invented workflow history.
-    await beforeDrive?.();
-    const store = await createDrizzlePipelineStore();
-    if ((await store.loadJob(jobId))?.step === "done") return;
-    onAccepted?.();
-    return guardedDrive(jobId);
+    // Spec 2026-10-06-s7 (B′): workflow-napló nélküli (kiadás előtti) job nem folytatható — lecke-írás csak workflow alatt.
+    throw new WorkflowConflict("Ehhez a készítéshez nincs workflow-napló (kiadás előtti futás); folytatás helyett indíts új készítést a térképről.");
   }
   let drove = false;
   try {
@@ -864,7 +879,11 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
   const scope = parsed.data && "subject" in parsed.data ? parsed.data : undefined;
   // Spec 2026-10-03-forras-aritmetika-helyesbites: a meglévő térképről indított (újraindított) lecke is a determinisztikus
   // helyesbítésen megy át (kérés/fotó nélkül nincs modellhívás) — különben a hamis forrás-egyenlőség újra tényként tanítódna.
-  const corrections = await correctMapFromOwner(req.params.mapId, undefined, false);
+  // A helyesbítés hibája (a futás sem igazolja) sosem állítja meg a készítést — helyesbítés nélkül megy tovább, mint eddig.
+  const corrections = await correctMapInWorkflow(req.params.mapId, req.user!.id).catch((error: unknown) => {
+    logger.warn(`[STUDIO] A térkép forrás-helyesbítése elmaradt (${req.params.mapId}): ${error instanceof Error ? error.message : String(error)}`);
+    return [] as SourceCorrection[];
+  });
   const started = await startJobFromMap(req.params.mapId, scope, {}, corrections.length ? { corrections } : undefined);
   if (!started.ok) return res.status(409).json({ message: started.reason });
 

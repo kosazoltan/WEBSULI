@@ -5,8 +5,8 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { knowledgeMaps, kmConcepts } from "../../shared/schema";
 import { isAuthenticatedAdmin } from "../auth";
-import { withPreparationSkill } from "../workflows/engine";
-import { skillStore } from "../workflows/learning-store";
+import { workflowFence, workflowFinding, workflowPhase } from "../workflows/engine";
+import { runToolWorkflow } from "../workflows/tool-run";
 import { logger } from "../lib/logger";
 import { practiceReport } from "../rewards/lesson-attempts";
 import {
@@ -52,6 +52,11 @@ import {
  */
 
 export const studioRouter = express.Router();
+
+/** Spec 2026-10-06-s7 (K): a besorolás sikertelensége a futásban lelet, a kliens a korábbi 422-es választ kapja. */
+class ScopeNotRecognized extends Error {
+  constructor() { super("A forrásból nem sikerült felismerni a tantárgyat és az osztályt."); }
+}
 
 studioRouter.use(isAuthenticatedAdmin);
 studioRouter.get("/lessons/:lessonId/learning-report", async (req: Request, res: Response) => {
@@ -214,10 +219,17 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
   }
 
   try {
-  const snapshot = await skillStore.load(req.user!.id, "upload");
-  return await withPreparationSkill(snapshot, async () => {
+  // Spec 2026-10-06-s7 (K): a kézi kivonatolás `map` workflow-ban fut (forrás → besorolás → tudástár → kapu → visszaolvasás);
+  // a futás pillanatképe adja a skillt (korábban: withPreparationSkill, tanulás nélkül).
+  const outcome = await runToolWorkflow({ mode: "map", owner: req.user!.id, request: { files: parsed.data.files.map((f) => [f.name, f.kind, f.content.length]), title: parsed.data.title ?? null } }, async () => {
+  await workflowPhase("source");
+  await workflowPhase("scope");
   const inferred=await inferOneStepScope(parsed.data,files=>callScopeModel(files,resolveStudioModel("ocr")));
-  if(!inferred.ok)return res.status(422).json({message:"A forrásból nem sikerült felismerni a tantárgyat és az osztályt. Próbáld újra olvashatóbb forrással."});
+  if(!inferred.ok){
+    await workflowFinding("scope_classification");
+    throw new ScopeNotRecognized();
+  }
+  await workflowPhase("knowledge");
   const { files } = parsed.data;
   const scope=inferred.scope;
   const title=parsed.data.title ?? inferred.title;
@@ -231,12 +243,12 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
     .where(eq(knowledgeMaps.inputHash, inputHash))
     .limit(1);
 
+  let mapId: string;
   if (existing) {
     logger.info(`[STUDIO] Kivonatolás gyorsítótárból: ${existing.id}`);
-    return res.json({ mapId: existing.id, cached: true });
-  }
-
-    const mapId = await runExtraction({
+    mapId = existing.id;
+  } else {
+    mapId = await runExtraction({
       files: files as ExtractorFile[],
       scope,
       title,
@@ -244,9 +256,16 @@ studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
       config,
       userId: (req.user as { id?: string } | undefined)?.id,
     });
-    res.status(201).json({ mapId, cached: false });
+  }
+  await workflowPhase("gate");
+  await workflowPhase("readback");
+  const [saved] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps).where(eq(knowledgeMaps.id, mapId)).limit(1);
+  if (!saved) throw new Error("A tudástár nem olvasható vissza.");
+  return { value: { mapId, cached: !!existing }, result: { kind: "map" as const, id: mapId } };
   });
+  return outcome.cached ? res.json(outcome) : res.status(201).json(outcome);
   } catch (error) {
+    if (error instanceof ScopeNotRecognized) return res.status(422).json({ message: "A forrásból nem sikerült felismerni a tantárgyat és az osztályt. Próbáld újra olvashatóbb forrással." });
     logger.error(
       `[STUDIO] Kivonatolás hiba: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -356,30 +375,44 @@ studioRouter.post("/maps/:id/recheck", async (req: Request, res: Response) => {
 
   if (!map) return res.status(404).json({ message: "A térkép nem található." });
 
+  // Spec 2026-10-06-s7 (K): a D1-újraellenőrzés `mapCheck` workflow-ban (forrás → kapu → mentés → visszaolvasás), lízing-kapus írással.
+  try {
+  const counts = await runToolWorkflow({ mode: "mapCheck", owner: req.user!.id, request: { mapId: map.id } }, async () => {
+  await workflowPhase("source");
   const concepts = await db.select().from(kmConcepts).where(eq(kmConcepts.mapId, map.id));
 
+  await workflowPhase("gate");
   const checked = concepts.flatMap(c => applyVerbatimChecks(
     [{ id: c.id, quote: c.quote, examWeight: c.examWeight as (typeof EXAM_WEIGHTS)[number] }],
     sourceTextForReference(map.sourceFiles, map.sourceText, c.sourceRef.file),
   ));
 
-  await Promise.all(
-    checked.map((c) =>
-      db
+  await workflowPhase("save");
+  await db.transaction(async (tx) => {
+    await workflowFence(tx);
+    for (const c of checked) {
+      await tx
         .update(kmConcepts)
         .set({
           verbatimOk: c.verbatimOk,
           verbatimReason: c.verbatimOk ? null : (c.verbatimReason ?? null),
           updatedAt: new Date(),
         })
-        .where(eq(kmConcepts.id, c.id)),
-    ),
-  );
-
-  res.json({
-    checked: checked.length,
-    failing: checked.filter((c) => !c.verbatimOk).length,
+        .where(eq(kmConcepts.id, c.id));
+    }
+    await workflowFence(tx);
   });
+
+  await workflowPhase("readback");
+  const saved = await db.select({ id: kmConcepts.id, verbatimOk: kmConcepts.verbatimOk }).from(kmConcepts).where(eq(kmConcepts.mapId, map.id));
+  if (checked.some((c) => saved.find((s) => s.id === c.id)?.verbatimOk !== c.verbatimOk)) throw new Error("Az újraellenőrzés eredménye nem olvasható vissza.");
+  return { value: { checked: checked.length, failing: checked.filter((c) => !c.verbatimOk).length }, result: { kind: "map" as const, id: map.id } };
+  });
+  res.json(counts);
+  } catch (error) {
+    logger.error(`[STUDIO] Térkép-újraellenőrzés hiba: ${error instanceof Error ? error.message : String(error)}`);
+    res.status(500).json({ message: "Az újraellenőrzés nem sikerült. Próbáld újra." });
+  }
 });
 
 /** DELETE /api/studio/maps/:id — drafts only; concepts cascade. */

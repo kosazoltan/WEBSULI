@@ -1041,7 +1041,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         countRaw = n;
       }
-      const result = await generateMaterialQuiz(id, countRaw);
+      const result = await generateMaterialQuiz(id, countRaw, req.user!.id);
       return res.json(result);
     } catch (e) {
       logger.error("[GAMES] generate-quiz", e);
