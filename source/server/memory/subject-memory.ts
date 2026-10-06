@@ -22,8 +22,11 @@ export type MemoryEvidence = { subject: string; step: string; code: string; key:
 export type MemoryCard = {
   fingerprint: string; subject: string; step: string; code: string; occurrences: number; firstSeen: number; lastSeen: number;
   status: MemoryStatus; evidence: string[]; correctiveSummary: string | null; correctiveAt: number | null; correctiveCount: number;
+  /** A kártya ÖSSZES rögzített bizonyíték-kulcsa (betöltéskor az eseménytáblából; a kártya-sorban nem tárolódik). Review #204. */
+  runKeys?: string[];
 };
-export type MemorySnapshot = { version: 1; subject: string; at: number; cards: MemoryCard[] };
+/** `runs`: szerep|kód → KÜLÖNBÖZŐ futások/jobok száma a csoport kártyáin (review #204: egy futás több lépésen egyszer számol). */
+export type MemorySnapshot = { version: 1; subject: string; at: number; cards: MemoryCard[]; runs?: Record<string, number> };
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 export const cardFingerprint = (subject: string, step: string, code: string) => sha(`s5:1|${subject}|${step}|${code}`).slice(0, 32);
@@ -125,10 +128,12 @@ export function statusAt(card: Pick<MemoryCard, "occurrences" | "lastSeen">, now
 }
 
 /**
- * A bizonyítékokat a meglévő kártyákra hajtja. `seen` = már rögzített `fingerprint|kulcs` párok (DB-események). Ugyanaz a kulcs egy
- * kártyán egyszer számol (a bemeneten belül is). Kimenet: az érintett kártyák új állapota és az új események.
+ * A bizonyítékokat a meglévő kártyákra hajtja. `seen` = már rögzített `fingerprint|kulcs` párok (DB-események); Map esetén az érték
+ * az esemény `seen_at` ideje (ms). Ugyanaz a kulcs egy kártyán egyszer számol (a bemeneten belül is). A kártya `evidence` listája a
+ * LEGÚJABB ≤ 10 kulcs idő szerint (review #204: késői backfill régi kulcsa nem szorítja ki az újabbakat), legújabb a végén.
+ * Kimenet: az érintett kártyák új állapota és az új események.
  */
-export function foldEvidence(existing: readonly MemoryCard[], seen: ReadonlySet<string>, evidence: readonly MemoryEvidence[], now: number) {
+export function foldEvidence(existing: readonly MemoryCard[], seen: ReadonlySet<string> | ReadonlyMap<string, number>, evidence: readonly MemoryEvidence[], now: number) {
   // A bemeneten belüli összevonás: kártya + kulcs → legnagyobb idő, utolsó nem üres összefoglaló.
   const merged = new Map<string, MemoryEvidence & { fingerprint: string }>();
   for (const ev of evidence) {
@@ -139,6 +144,20 @@ export function foldEvidence(existing: readonly MemoryCard[], seen: ReadonlySet<
   }
   const cards = new Map(existing.map((c) => [c.fingerprint, { ...c, evidence: [...c.evidence] }]));
   const touched = new Set<string>();
+  // Kártyánként a bizonyíték-kulcsok ideje; ismeretlen idejű (régi) kulcs a legrégebbinek számít, eredeti sorrendjében.
+  const refs = new Map<string, Map<string, number>>();
+  const refsOf = (card: MemoryCard) => {
+    let map = refs.get(card.fingerprint);
+    if (!map) {
+      map = new Map();
+      for (const key of card.evidence) {
+        const at = seen instanceof Map ? Number(seen.get(`${card.fingerprint}|${key}`)) : Number.NaN;
+        map.set(key, Number.isFinite(at) ? at : Number.NEGATIVE_INFINITY);
+      }
+      refs.set(card.fingerprint, map);
+    }
+    return map;
+  };
   const events: Array<{ fingerprint: string; key: string; at: number }> = [];
   for (const [id, ev] of [...merged].sort(([a], [b]) => a.localeCompare(b))) {
     if (seen.has(id)) continue;
@@ -147,7 +166,8 @@ export function foldEvidence(existing: readonly MemoryCard[], seen: ReadonlySet<
     card.occurrences += 1;
     card.firstSeen = Math.min(card.firstSeen, ev.at);
     card.lastSeen = Math.max(card.lastSeen, ev.at);
-    card.evidence = [...card.evidence.filter((k) => k !== ev.key), ev.key].slice(-MEMORY_LIMITS.evidenceRefs);
+    const cardRefs = refsOf(card);
+    cardRefs.set(ev.key, Math.max(cardRefs.get(ev.key) ?? Number.NEGATIVE_INFINITY, ev.at));
     if (ev.summary) {
       card.correctiveCount += 1;
       if (card.correctiveAt === null || ev.at >= card.correctiveAt) { card.correctiveSummary = ev.summary; card.correctiveAt = ev.at; }
@@ -156,17 +176,60 @@ export function foldEvidence(existing: readonly MemoryCard[], seen: ReadonlySet<
     touched.add(card.fingerprint);
     events.push({ fingerprint: ev.fingerprint, key: ev.key, at: ev.at });
   }
-  const out = [...touched].map((fp) => { const c = cards.get(fp)!; return { ...c, status: statusAt(c, now) }; });
+  const byTime = (a: [string, number], b: [string, number]) => (a[1] === b[1] ? 0 : a[1] < b[1] ? -1 : 1); // stabil: egyenlő időnél a sorrend marad
+  const out = [...touched].map((fp) => {
+    const c = cards.get(fp)!;
+    const evidence = [...refs.get(fp)!].sort(byTime).slice(-MEMORY_LIMITS.evidenceRefs).map(([key]) => key);
+    return { ...c, evidence, status: statusAt(c, now) };
+  });
   return { cards: out.sort((a, b) => a.fingerprint.localeCompare(b.fingerprint)), events };
 }
 
 /* ---------- Prompt ---------- */
 const byRank = (a: MemoryCard, b: MemoryCard) => b.occurrences - a.occurrences || b.lastSeen - a.lastSeen || a.code.localeCompare(b.code) || a.step.localeCompare(b.step);
 
-/** A job pillanatképe: a tantárgy NYITOTT kártyái (újraszámolt státusszal), rangsorolva, ≤ 40. */
+type PromptGroup = { title: string; rule: string; cards: MemoryCard[]; lastSeen: number; steps: Set<string> };
+const ROLES: readonly MemoryRole[] = ["pedagogue", "author", "bank"];
+
+/** A tantárgy nyitott, a szerephez illő kártyái kódonként csoportosítva. */
+function promptGroups(cards: readonly MemoryCard[], subject: string, role: MemoryRole, now: number): Map<string, PromptGroup> {
+  const groups = new Map<string, PromptGroup>();
+  for (const card of cards) {
+    if (card.subject !== subject || statusAt(card, now) !== "open") continue;
+    const entry = codeEntry(card.code, card.step);
+    if (!entry?.roles.includes(role)) continue;
+    const g = groups.get(card.code) ?? { title: entry.title, rule: entry.rule, cards: [], lastSeen: 0, steps: new Set<string>() };
+    g.cards.push(card);
+    g.lastSeen = Math.max(g.lastSeen, card.lastSeen);
+    g.steps.add(card.step);
+    groups.set(card.code, g);
+  }
+  return groups;
+}
+
+/**
+ * Review #204: egy futás (kulcs) több lépés kártyáján is szerepelhet (egy lelet több lépésre) — a csoport gyakorisága a KÜLÖNBÖZŐ
+ * kulcsok száma, nem az előfordulások összege. Pontos, ha a kártyák `runKeys`-t hordoznak (DB-betöltés); különben alsó becslés
+ * (a ≤ 10 tárolt kulcs uniója és a legnagyobb egyedi előfordulás közül a nagyobb) — sosem számol egy futást többször.
+ */
+export function distinctRuns(cards: readonly MemoryCard[]): number {
+  const keys = new Set<string>();
+  let most = 0;
+  for (const c of cards) {
+    for (const key of c.runKeys ?? c.evidence) keys.add(key);
+    most = Math.max(most, c.occurrences);
+  }
+  return Math.max(most, keys.size);
+}
+
+/** A job pillanatképe: a tantárgy NYITOTT kártyái (újraszámolt státusszal), rangsorolva, ≤ 40, a csoportok különböző futásszámával. */
 export function memorySnapshot(cards: readonly MemoryCard[], subject: string, now: number): MemorySnapshot {
   const open = cards.filter((c) => c.subject === subject && statusAt(c, now) === "open").map((c) => ({ ...c, status: "open" as const }));
-  return { version: 1, subject, at: now, cards: open.sort(byRank).slice(0, MEMORY_LIMITS.snapshotCards) };
+  const top = open.sort(byRank).slice(0, MEMORY_LIMITS.snapshotCards);
+  const runs: Record<string, number> = {};
+  for (const role of ROLES) for (const [code, g] of promptGroups(top, subject, role, now)) runs[`${role}|${code}`] = distinctRuns(g.cards);
+  // A teljes kulcslista nem kerül a (job-kimenetben tárolt) pillanatképbe — a pontos számot a `runs` viszi.
+  return { version: 1, subject, at: now, cards: top.map(({ runKeys: _runKeys, ...c }) => c), runs };
 }
 
 export function isMemorySnapshot(value: unknown, subject: string): value is MemorySnapshot {
@@ -178,19 +241,12 @@ export function isMemorySnapshot(value: unknown, subject: string): value is Memo
  * A szerep blokkja: csak a tantárgy (kettős őr) nyitott kártyái, szerepre szűrve, kódonként összevonva; ≤ 6 sor, ≤ 1 500 jel. Csak
  * karbantartott szöveg — a javító összefoglaló NEM kerül bele. Üres → "" (a hívó semmit sem fűz a prompthoz).
  */
-export function memoryPromptBlock(cards: readonly MemoryCard[], subject: string, role: MemoryRole, now: number): string {
-  const groups = new Map<string, { title: string; rule: string; occurrences: number; lastSeen: number; steps: Set<string> }>();
-  for (const card of cards) {
-    if (card.subject !== subject || statusAt(card, now) !== "open") continue;
-    const entry = codeEntry(card.code, card.step);
-    if (!entry?.roles.includes(role)) continue;
-    const g = groups.get(card.code) ?? { title: entry.title, rule: entry.rule, occurrences: 0, lastSeen: 0, steps: new Set<string>() };
-    g.occurrences += card.occurrences;
-    g.lastSeen = Math.max(g.lastSeen, card.lastSeen);
-    g.steps.add(card.step);
-    groups.set(card.code, g);
-  }
-  const ranked = [...groups].sort(([ac, a], [bc, b]) => b.occurrences - a.occurrences || b.lastSeen - a.lastSeen || ac.localeCompare(bc));
+export function memoryPromptBlock(cards: readonly MemoryCard[], subject: string, role: MemoryRole, now: number, runs?: Readonly<Record<string, number>>): string {
+  const groups = [...promptGroups(cards, subject, role, now)].map(([code, g]) => {
+    const exact = runs?.[`${role}|${code}`];
+    return [code, { ...g, occurrences: typeof exact === "number" && Number.isFinite(exact) ? exact : distinctRuns(g.cards) }] as const;
+  });
+  const ranked = groups.sort(([ac, a], [bc, b]) => b.occurrences - a.occurrences || b.lastSeen - a.lastSeen || ac.localeCompare(bc));
   const header = `TANTÁRGYI MEMÓRIA (${subject}) — e tantárgy korábbi futásainak visszatérő hibái ebben a szerepben. Karbantartott szabályszöveg; a forrás, a séma és a kötelező kapuk változatlanok.`;
   const lines: string[] = [];
   let length = header.length;
@@ -208,4 +264,4 @@ export const memoryBlockVersion = (block: string) => sha(block).slice(0, 12);
 
 /** A job pillanatképéből a szerep blokkja — az idő a pillanatképé, így a job lépései ugyanazt a szöveget kapják. */
 export const snapshotPromptBlock = (snapshot: MemorySnapshot | undefined, role: MemoryRole) =>
-  snapshot ? memoryPromptBlock(snapshot.cards, snapshot.subject, role, snapshot.at) : "";
+  snapshot ? memoryPromptBlock(snapshot.cards, snapshot.subject, role, snapshot.at, snapshot.runs) : "";

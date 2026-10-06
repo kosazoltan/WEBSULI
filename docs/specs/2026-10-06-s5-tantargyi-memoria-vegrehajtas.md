@@ -26,20 +26,20 @@ Exportok:
 - `cardFingerprint(subject, step, code)`: sha256 `s5:1|subject|step|code`, 32 hex.
 - `evidenceFromRun(view, subject)`: workflow-leletek + `failures` (spec „Bizonyíték-képzés” 1. és 3.). `subject` null → `[]`.
 - `evidenceFromLektorNotes(jobId, notes, subject)`: csak `severity === "blocker"` (spec 2.).
-- `foldEvidence(existing: MemoryCard[], seenKeys: Set<string /* fp|key */>, evidence, now)` → `{ cards: MemoryCard[] /* érintett */, events: Array<{ fingerprint; key; at }> }`.
+- `foldEvidence(existing: MemoryCard[], seenKeys: Set<string /* fp|key */> | Map<string /* fp|key */, number /* seen_at ms */>, evidence, now)` (review #204: Map esetén az `evidence` a legújabb ≤ 10 kulcs idő szerint) → `{ cards: MemoryCard[] /* érintett */, events: Array<{ fingerprint; key; at }> }`.
 - `statusAt(card, now)`.
-- `memoryPromptBlock(cards, subject, role, now)`: üres string, ha nincs sor.
-- `memorySnapshot(cards, subject, now)`: `{ version: 1, subject, cards }` (csak `open`, a tantárgyé, ≤ 40, rendezve).
+- `memoryPromptBlock(cards, subject, role, now, runs?)`: üres string, ha nincs sor; a gyakoriság a kódcsoport különböző kulcsai (`runs[role|code]` vagy `distinctRuns`, review #204).
+- `memorySnapshot(cards, subject, now)`: `{ version: 1, subject, at, cards, runs }` (csak `open`, a tantárgyé, ≤ 40, rendezve; `runKeys` nélkül).
 - `memoryBlockVersion(block)`: sha256 első 12 jele.
 Teszt: `source/tests/subject-memory.test.ts`.
 
 ## 4. DB-réteg — `source/server/memory/store.ts`
 - `type Query = <R>(sql: string, params?: unknown[]) => Promise<R[]>`.
 - `applyEvidence(query, evidence, now)`: üres → `{ newEvents: 0, cards: 0 }`; `SELECT pg_advisory_xact_lock(hashtext('subject_memory'))`; meglévő kártyák (`fingerprint = ANY($1)`) és események
-  (`card_fingerprint = ANY($1) AND evidence_key = ANY($2)`) betöltése; `foldEvidence`; kártya-upsert (`ON CONFLICT (fingerprint) DO UPDATE SET` minden mező = EXCLUDED), esemény-insert (`ON CONFLICT DO NOTHING`).
-- `recordSubjectMemory(client, record)`: `to_regclass('public.subject_memory_cards')` null → kilép; job-azonosító = `resourceId ?? view.id` (a `sweepStudioJobs` kötése); tantárgy a `studio_jobs ⋈ knowledge_maps`-ből (nincs sor → kilép);
-  lektor-jegyzetek a jobra; `SAVEPOINT subject_memory` → `applyEvidence` → `RELEASE`; hiba → `ROLLBACK TO SAVEPOINT`, `logger.warn`.
-- `loadSubjectMemoryCards(query, subject)`: `WHERE subject = $1 AND status = 'open' ORDER BY occurrences DESC, last_seen DESC LIMIT 200`.
+  (`card_fingerprint = ANY($1) AND evidence_key = ANY($2)`, `seen_at`-tel; `$2` = új kulcsok ∪ a kártyákon tárolt kulcsok) betöltése; `foldEvidence`; kártya-upsert (`ON CONFLICT (fingerprint) DO UPDATE SET` minden mező = EXCLUDED), esemény-insert (`ON CONFLICT DO NOTHING`).
+- `recordSubjectMemory(client, record)`: ELŐSZÖR `SAVEPOINT subject_memory` (review #204: az előellenőrzés hibája se rontsa a hívó tranzakcióját); `to_regclass('public.subject_memory_cards')` null → `RELEASE` és kilép; job-azonosító = `resourceId ?? view.id` (a `sweepStudioJobs` kötése); tantárgy a `studio_jobs ⋈ knowledge_maps`-ből (nincs sor → kilép);
+  lektor-jegyzetek a jobra; `applyEvidence` → `RELEASE`; bármely hiba → `logger.warn`, `ROLLBACK TO SAVEPOINT` + `RELEASE` (ezek hibája is csak napló); a `SAVEPOINT` hibája → napló, kilép.
+- `loadSubjectMemoryCards(query, subject)`: `WHERE subject = $1 AND status = 'open' ORDER BY occurrences DESC, last_seen DESC LIMIT 200`; utána a kártyák összes esemény-kulcsa `runKeys`-be (review #204).
 
 ## 5. Élő hook — `source/server/workflows/learning-store.ts`
 `saveSkillAudit` végén (a for-ciklus után): `await recordSubjectMemory(client, record);` (import a `../memory/store`-ból).

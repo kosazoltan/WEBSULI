@@ -72,7 +72,7 @@ tantárgyi memóriába (S5)”). Ág: `feat/s5-tantargyi-memoria`, az S6-ra (`fe
 | `occurrences` | a kártyához tartozó **különböző bizonyítékok** száma (futás / lektorált job) |
 | `first_seen`, `last_seen` | a legkorábbi / legkésőbbi bizonyíték ideje |
 | `status` | `watch` (1 bizonyíték), `open` (≥ 2), `closed` (lecsengett) — a tárolt érték az írás pillanatáé; olvasáskor újraszámoljuk (`statusAt`) |
-| `evidence` | az utolsó ≤ 10 bizonyíték-kulcs (`run:<id>:<execution>`, `job:<id>`) — belső azonosítók, szöveg nélkül |
+| `evidence` | a **legújabb** ≤ 10 bizonyíték-kulcs az esemény ideje (`seen_at`) szerint (`run:<id>:<execution>`, `job:<id>`) — belső azonosítók, szöveg nélkül; késői backfill régi kulcsa nem szorítja ki az újabbakat (review #204) |
 | `corrective_summary`, `corrective_at`, `corrective_count` | az utolsó sikeres (outcome `ok`) orkesztrátor-javítás oka (`rootCause`, titok-redaktálva, ≤ 300 jel), ideje, a sikeres javítások száma |
 | `updated_at` | utolsó írás |
 
@@ -119,6 +119,10 @@ alapja**: ugyanaz a bizonyíték kétszer soha nem számol (élő hook ismétlé
   - <cím> (<n> futásban; lépés: <lépések>): <szabály>
   ```
 - Korlát: szerepenként ≤ **6** sor, a blokk ≤ **1 500** karakter; sorrend: előfordulás ↓, `last_seen` ↓, kód ↑.
+- Pontosítás (review #204): a sor `<n>`-je és a rangsor a kódcsoport **különböző** bizonyíték-kulcsainak száma (egy futás, amelynek
+  lelete több lépésre szól, egyszer számol), nem a lépés-kártyák előfordulásainak összege. A betöltő a kártyákhoz az összes
+  esemény-kulcsot csatolja, a pillanatkép a `runs` (szerep|kód → szám) mezőben viszi a pontos számot; kulcsok nélkül alsó becslés
+  (max(legnagyobb előfordulás, a tárolt ≤ 10 kulcs uniója)).
 - Pillanatkép: jobonként egyszer (`job.output.subjectMemory = { version: 1, subject, cards }`, ≤ 40 nyitott kártya, a tantárgyra
   szűrve) — a job lépései ugyanazt a memóriát látják, a bank-csomag hash egy jobon belül stabil.
 - Banképítő: a blokk a csomag rendszerpromptjába (a katalógus-blokk után) és a csomag-hashbe (`teaching.memory.version`) kerül,
@@ -127,8 +131,8 @@ alapja**: ugyanaz a bizonyíték kétszer soha nem számol (élő hook ismétlé
 ### Kapcsoló
 `STUDIO_SUBJECT_MEMORY=1` → be; minden más érték → ki. Kikapcsolva: nincs DB-lekérés, nincs `job.output.subjectMemory`, a
 tervező/szerző/bank prompt és a csomag-hash bájtra változatlan. Az **élő rögzítés** (írás a két új táblába) a kapcsolótól
-független: additív, mentési pontban (`SAVEPOINT`) fut, és ha a tábla még nincs (`to_regclass` null) vagy hiba van, a tanulási
-hurok tranzakciója változatlanul lefut (naplózva).
+független: additív, mentési pontban (`SAVEPOINT`) fut — a `to_regclass` előellenőrzés is (review #204) —, és ha a tábla még nincs
+(`to_regclass` null) vagy bármely hiba van, a tanulási hurok tranzakciója változatlanul lefut (naplózva).
 
 ### Adatvédelem
 Források: `lesson_workflow_runs` (gyártási napló), `lektor_notes` (tartalmi lektorálás), orkesztrátor-kivonat — egyik sem

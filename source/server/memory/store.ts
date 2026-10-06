@@ -28,11 +28,12 @@ export async function applyEvidence(query: Query, evidence: readonly MemoryEvide
   await query("SELECT pg_advisory_xact_lock(hashtext('subject_memory'))");
   const { cards: probe } = foldEvidence([], new Set(), evidence, now);
   const fps = probe.map((c) => c.fingerprint);
-  const keys = [...new Set(evidence.map((e) => e.key))];
   const existing = (await query<CardRow>(`SELECT ${CARD_COLUMNS} FROM subject_memory_cards WHERE fingerprint = ANY($1)`, [fps])).map(cardFromRow);
-  const seen = new Set((await query<{ card_fingerprint: string; evidence_key: string }>(
-    "SELECT card_fingerprint, evidence_key FROM subject_memory_events WHERE card_fingerprint = ANY($1) AND evidence_key = ANY($2)", [fps, keys],
-  )).map((r) => `${r.card_fingerprint}|${r.evidence_key}`));
+  // Az új kulcsok ÉS a kártyákon tárolt kulcsok eseményei: az előbbi a dedupot, az utóbbi ideje a „legújabb ≤ 10” listát adja (review #204).
+  const keys = [...new Set([...evidence.map((e) => e.key), ...existing.flatMap((c) => c.evidence)])];
+  const seen = new Map((await query<{ card_fingerprint: string; evidence_key: string; seen_at?: Date | string | null }>(
+    "SELECT card_fingerprint, evidence_key, seen_at FROM subject_memory_events WHERE card_fingerprint = ANY($1) AND evidence_key = ANY($2)", [fps, keys],
+  )).map((r) => [`${r.card_fingerprint}|${r.evidence_key}`, r.seen_at == null ? Number.NaN : new Date(r.seen_at).getTime()] as const));
   const { cards, events } = foldEvidence(existing, seen, evidence, now);
   for (const c of cards) {
     await query(`INSERT INTO subject_memory_cards (${CARD_COLUMNS},updated_at)
@@ -50,18 +51,27 @@ export async function applyEvidence(query: Query, evidence: readonly MemoryEvide
 
 /**
  * Élő hook (a tanulási hurok `saveSkillAudit`-ja után, UGYANABBAN a tranzakcióban): a futás tantárgyát a studio-jobból veszi,
- * a futás leleteit, orkesztrátor-kimeneteit és a job lektori blokkoló jegyzeteit rögzíti. Mentési pontban fut: hiba vagy hiányzó
- * tábla (régi DB) esetén a hurok tranzakciója változatlanul folytatódik.
+ * a futás leleteit, orkesztrátor-kimeneteit és a job lektori blokkoló jegyzeteit rögzíti. MINDEN lekérdezés (a tábla-előellenőrzés is,
+ * review #204) mentési pontban fut: hiba vagy hiányzó tábla (régi DB) esetén a hurok tranzakciója változatlanul folytatódik (fail-open).
  */
 export async function recordSubjectMemory(client: Pick<PoolClient, "query">, record: { view: WorkflowView }): Promise<void> {
   // A studio-futás azonosítója a job-azonosító, vagy a job a `resourceId`-ben van (sweepStudioJobs ugyanígy köti össze).
   const jobId = record.view.resourceId ?? record.view.id;
   if (!jobId) return;
   const query: Query = async (sql, params) => (await client.query(sql, params as unknown[] | undefined)).rows;
-  const [{ tbl } = { tbl: null }] = await query<{ tbl: string | null }>("SELECT to_regclass('public.subject_memory_cards')::text AS tbl");
-  if (!tbl) return;
-  await client.query("SAVEPOINT subject_memory");
+  const warn = (error: unknown) => logger.warn(`[MEMÓRIA] A tantárgyi memória rögzítése kimaradt (${record.view.id}): ${error instanceof Error ? error.message : String(error)}`);
   try {
+    await client.query("SAVEPOINT subject_memory");
+  } catch (error) {
+    warn(error); // a hívó tranzakciója már hibás — nincs mit elszigetelni, de nem dobunk
+    return;
+  }
+  try {
+    const [{ tbl } = { tbl: null }] = await query<{ tbl: string | null }>("SELECT to_regclass('public.subject_memory_cards')::text AS tbl");
+    if (!tbl) {
+      await client.query("RELEASE SAVEPOINT subject_memory");
+      return;
+    }
     const [job] = await query<{ subject: string }>("SELECT m.subject FROM studio_jobs j JOIN knowledge_maps m ON m.id = j.map_id WHERE j.id = $1", [jobId]);
     const subject = subjectKeyOf(job?.subject);
     if (subject) {
@@ -74,13 +84,28 @@ export async function recordSubjectMemory(client: Pick<PoolClient, "query">, rec
     }
     await client.query("RELEASE SAVEPOINT subject_memory");
   } catch (error) {
-    await client.query("ROLLBACK TO SAVEPOINT subject_memory");
-    logger.warn(`[MEMÓRIA] A tantárgyi memória rögzítése kimaradt (${record.view.id}): ${error instanceof Error ? error.message : String(error)}`);
+    warn(error);
+    try {
+      await client.query("ROLLBACK TO SAVEPOINT subject_memory");
+      await client.query("RELEASE SAVEPOINT subject_memory");
+    } catch (rollbackError) {
+      warn(rollbackError);
+    }
   }
 }
 
-/** A tantárgy tárolt `open` kártyái (a prompt-pillanatkép újraszámolja a lecsengést). Csak `subject = $1` — más bankból soha. */
+/**
+ * A tantárgy tárolt `open` kártyái (a prompt-pillanatkép újraszámolja a lecsengést). Csak `subject = $1` — más bankból soha.
+ * Minden kártya megkapja az összes esemény-kulcsát (`runKeys`), hogy a kódonkénti csoport a KÜLÖNBÖZŐ futásokat számolja (review #204).
+ */
 export async function loadSubjectMemoryCards(query: Query, subject: string): Promise<MemoryCard[]> {
-  return (await query<CardRow>(`SELECT ${CARD_COLUMNS} FROM subject_memory_cards WHERE subject = $1 AND status = 'open'
+  const cards = (await query<CardRow>(`SELECT ${CARD_COLUMNS} FROM subject_memory_cards WHERE subject = $1 AND status = 'open'
     ORDER BY occurrences DESC, last_seen DESC, fingerprint LIMIT 200`, [subject])).map(cardFromRow);
+  if (!cards.length) return cards;
+  const keys = new Map<string, string[]>();
+  for (const r of await query<{ card_fingerprint: string; evidence_key: string }>(
+    "SELECT card_fingerprint, evidence_key FROM subject_memory_events WHERE card_fingerprint = ANY($1) ORDER BY seen_at, evidence_key", [cards.map((c) => c.fingerprint)])) {
+    keys.set(r.card_fingerprint, [...(keys.get(r.card_fingerprint) ?? []), r.evidence_key]);
+  }
+  return cards.map((c) => ({ ...c, runKeys: keys.get(c.fingerprint) ?? c.evidence }));
 }

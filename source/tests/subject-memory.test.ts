@@ -199,7 +199,8 @@ test("élő hook: hiányzó tábla → nincs írás; ismeretlen tantárgy → ni
   } }) as never;
   const view = { id: "j1", skillAudit: { execution: 1, at: NOW, findings: [{ code: "schema", step: "author", fingerprint: "f" }] } } as unknown as WorkflowView;
   await recordSubjectMemory(client(null, "Matematika"), { view });
-  assert.deepEqual(calls, ["SELECT to_regclass('public.subject_memory_cards')::text"]);
+  // Spec-pontosítás (review #204): az előellenőrzés is mentési pontban fut, hiányzó táblánál a pont felszabadul.
+  assert.deepEqual(calls, ["SAVEPOINT subject_memory", "SELECT to_regclass('public.subject_memory_cards')::text", "RELEASE SAVEPOINT"]);
   calls.length = 0;
   await recordSubjectMemory(client("subject_memory_cards", "magyar nyelv és irodalom"), { view });
   assert.ok(!calls.some((c) => c.startsWith("INSERT")), "kétértelmű tantárgy: nincs írás");
