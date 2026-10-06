@@ -120,5 +120,47 @@ a tantárgy `catalog_items` sorai.
 Korlát (UNVERIFIED feltevés): a helyettesített tétel hibátlan (a szülő-ellenőrzés ~99%-os); a modell által írt visszajelzés
 hibája és a helyettesítés másodlagos hatása (kevesebb generált tétel → kevesebb új hiba) nincs modellezve.
 
-## Mért eredmény
-Lásd „Mért eredmény (2026-10-06)” — a visszajátszás után kitöltve.
+## Mért eredmény (2026-10-06, ingyenes visszajátszás)
+Forrás: `docs/measurements/2026-10-06-s6-ab-replay.json` (`npx tsx scripts/catalog/ab-replay.mts`). 78 lezárt job; kihagyva 23
+(nincs bankja — a bank előtt bukott) és 4 (ismeretlen/kétértelmű tantárgy, pl. „magyar nyelv és irodalom”, „Informatika” bank nélkül).
+A 51 visszajátszott leckéből **11 fedett** (van szó szerint átvehető tétel).
+
+| Kör | Leckék | Bank-hiba | → katalógussal | Csökkenés | Bank-kör | → katalógussal | Csökkenés | Kvíz-plafon* |
+|---|---|---|---|---|---|---|---|---|
+| Összes | 51 | 964 | 961,5 | **0,3%** | 112 | 109,5 | **2,2%** | 34% |
+| Fedett | 11 | 19 | 16,5 | **13,2%** | 13 | 10,5 | **19,2%** | 42% |
+| Matematika, fedett | 5 / 22 | 8 | 7 | 12,5% | 6 | 5 | 16,7% | 63% |
+| Természetismeret, fedett | 5 / 10 | 11 | 9,5 | 13,6% | 7 | 5,5 | 21,4% | 27% |
+| Történelem, fedett | 1 / 18 | 0 | 0 | — | 0 | 0 | — | — |
+| Földrajz | 0 / 1 | 2 | 2 | 0% | 1 | 1 | 0% | 50% |
+
+\* Kvíz-plafon: a bank-hibák csökkenése, ha a lecke MINDEN kvíz-jegyzetének tétele helyettesítődne (elméleti felső korlát a
+mostani szabállyal, mert nyílt feladat és módszer nem szó szerinti). Optimista változat (p = 1, ha az egység+fogalomhoz van
+legalább egy szó szerinti tétel): fedetten 15,8% hiba-csökkenés.
+
+**Ítélet: a ≥ 50%-os S6-cél az ingyenes visszajátszásban NEM teljesül** — fedett témán ~13% (hiba) / ~19% (kör), összesen ~0%.
+Okok (mérve):
+1. **Fedettség:** a szülő-ellenőrzött kvíz-anyagban a matematikában csak 3–5. évfolyam van (6–7. évf. 0), a történelemben 5.
+   évfolyamon csak középkor/világvallások (az ókor 0) — a sokat bukó témák (6–7. évf. matek, ókori Egyiptom/Mezopotámia,
+   időszámítás) a tulajdonosi „azonos téma + évfolyam” szabállyal nem fedettek. A gépi (pipeline_verified) Egyiptom-tételek
+   ugyanezekből a futásokból valók (szivárgás-szűrő kizárja, és szó szerint amúgy sem vehetők át).
+2. **Hiba-összetétel:** a 964 bank-jegyzetből csak 330 (34%) kvízen van; a többi nyílt feladaton/módszeren, amely a mostani
+   szabállyal csak minta — a kvíz-csak szó szerinti átvétel még teljes fedettség mellett sem érhetné el az 50%-ot.
+3. Számolós matek-kvíz („Mennyi 9 + 3 · 2 ?”) szavak nélkül nem köthető fogalomhoz → nem kerül egységbe (pontosság a
+   felidézés előtt; a téma-tévesztés kockázata a terv §2 (a) pontja).
+A visszajátszás NEM méri a minták és a tantárgyi skill hatását a generált tételek hibáira — ehhez élő (fizetős) A/B kell.
+
+### Döntési opciók a tulajdonosnak
+1. **Kapcsoló marad KI**, a kód élesben ártalmatlan; a fedettséget a katalógus bővítése (6–8. évf. matek, ókor) növeli.
+2. **Fizetős élő A/B** (engedéllyel) a minta + skill hatására: lásd lent.
+3. **Szabálybővítés** (új tulajdonosi döntés kell): szülő-ellenőrzött rövid válasz / nyílt feladat szó szerinti átvétele
+   determinisztikusan épített rubrikával, illetve számolós kvíz egységhez kötése a fejezet tanításában szereplő műveleti jel
+   alapján. Előbb ingyenes visszajátszással mérendő.
+
+### Fizetős élő A/B — ha engedélyezed (NEM futott)
+Párok (kapcsoló KI vs BE, ugyanaz a térkép, ugyanaz a tanári kérés): fedett témák — „Műveleti sorrend tanulása” (matek 5.),
+„A virágos növények testfelépítése és a virág, termés” (természetismeret 5.), „Zöldségek növényi szervei és fejlődése”
+(természetismeret 5.); nem fedett, sok bank-hibás kontroll — „Az ókori Egyiptom” (történelem 5.), „Negatív számok kivonása”
+(matek 7.). 5 téma × 2 ág = 10 futás. Költség: **UNKNOWN** — a futásonkénti teljes tokenszám nincs rögzítve (`studio_jobs.tokens_*`
+csak az utolsó lépésé; mért átlag 54–66 ezer bemenő / 6–13 ezer kimenő token az UTOLSÓ lépésre). Javaslat: 1 párral kezdeni,
+a szolgáltatói számlán mért költséggel becsülni a többit, determinisztikus bukásnál azonnal leállítani (terv §6.2).
