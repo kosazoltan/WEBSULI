@@ -45,7 +45,7 @@ import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { htmlFiles } from "../../shared/schema";
 import { respondToResume, guardResumedDrive } from "./resume-response";
@@ -378,6 +378,8 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
       callScopeModel(f, resolveStudioModel("ocr")),
     );
     if (!inferred.ok) {
+      // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+      await workflowFinding("scope_classification");
       await workflowValidationFailure(inferred.reason);
       updateRun(runId, {
         phase: "error",
@@ -521,6 +523,8 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     concepts, { instruction, transcript })
     : { corrections: [] as SourceCorrection[], rejected: [] as string[] };
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
+  // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+  if (result.rejected.length) await workflowFinding("source_correction");
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
   // Review #192: az új (pl. csak definíciós) helyesbítés nem ejtheti el ugyanannak a fogalomnak a MÁR érvényes másik mezőjét.
   const proposed = withPersistedFields(mergeCorrections(arithmetic, result.corrections), persistedCorrections(rows));

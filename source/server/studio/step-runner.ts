@@ -390,12 +390,15 @@ async function ensureInstructionInventory(
     const added = inventoryConcepts(inventory).filter((c) => !known.has(c.localId));
     for (const c of added) map.concepts.push(c);
     const gaps = gapPoints(inventory);
+    // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+    if (inventory.truncated) await workflowFinding("instruction_points");
     logger.info(`[STUDIO] Pontjegyzék (${job.id}): ${inventory.points.length} pont (${passes[0].length}+${passes[1].length} jelölt), igazolt ${inventory.points.filter((p) => p.content === "pending").length}, hiány ${gaps.length}, kizárt ${inventory.excluded.length}${inventory.truncated ? ", CSONKA kérés" : ""}`);
     job.output = { ...job.output, instructionInventory: inventory, gaps, ...(added.length ? { instructionConcepts: [...previousExtra, ...added] } : {}) };
     await store.saveStep(job.id, { output: job.output });
     return inventory;
   } catch (error) {
     logger.warn(`[STUDIO] A pontjegyzék elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+    await workflowFinding("instruction_points");
     return undefined;
   }
 }
@@ -503,6 +506,8 @@ async function ensureBlindSolutions(
 ${sourceText.slice(0, 60_000)}`,
     });
     const answer = parseBlindSolverAnswer(result.json);
+    // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+    if (answer.partial) await workflowFinding("blind_solver");
     const blind: BlindSolutions = { sourceHash, model: BLIND_SOLVER_MODEL, solutions: answer.solutions, ...(answer.notEnough.length ? { notEnough: answer.notEnough } : {}), ...(answer.partial ? { partial: true } : {}), ...(retried ? { retried: true } : {}) };
     logger.info(`[STUDIO] Vak megoldó (${job.id}): ${blind.solutions.length} megoldott feladatrész, ${answer.notEnough.length} „nincs elég adat”${answer.partial ? ", RÉSZLEGES lista (hibás alakú elem kimaradt)" : ""}`);
     job.output = { ...job.output, blindSolutions: blind };
@@ -510,6 +515,7 @@ ${sourceText.slice(0, 60_000)}`,
     return blind;
   } catch (error) {
     logger.warn(`[STUDIO] A vak megoldó elmaradt (${job.id}): ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`);
+    await workflowFinding("blind_solver");
     return retried && cached ? { ...cached, retried: true } : undefined;
   }
 }
@@ -1291,6 +1297,8 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           bankVerifier: { round: job.round, checked: bankChecked.checked, errors: bankChecked.notes.length, failedChunks: bankChecked.failedChunks },
           ...(choiceFlags.length ? { choiceFlags } : {}),
         };
+        // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+        if (bankChecked.failedChunks || choiceFlags.length) await workflowFinding("bank_verifier");
         if (choiceFlags.length) logger.warn(`[STUDIO] Bank-ellenőr (${job.id}, ${job.round}. kör): ${choiceFlags.length} nyitott egyválasztós jelzés a kapunak: ${choiceFlags.map((f) => f.path).join(", ").slice(0, 400)}`);
         logger.info(`[STUDIO] Bank-ellenőr (${job.id}, ${job.round}. kör): ${bankChecked.checked} tétel, ${bankChecked.notes.length} hiba`
           + (bankChecked.notes.length && !bankRepairPossible ? " (figyelmeztetésként: csak-bank kör már nem jár)" : "")
@@ -1793,6 +1801,8 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
         if (inventory) {
           const check = parseInventoryCheck(result.json, parsed.data, map.meta.sourceText, inventory);
           points = check.points;
+          // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+          if (!check.complete) await workflowFinding("instruction_check");
           if (!check.complete) logger.warn(`[STUDIO/GATE] Tanári kérés (${job.id}): RÉSZLEGES ellenőrző-jelentés, nem jelentett azonosítók: ${check.missingIds.join(", ")}`);
           job.output = { ...job.output, instructionCheck: { hash, points, complete: check.complete, missingIds: check.missingIds, ...(checkRetried ? { retried: true } : {}) } satisfies InstructionCheck };
         } else {
@@ -1803,6 +1813,7 @@ async function runGate(store: PipelineStore, job: JobView, policy: RewardPolicy 
     } catch (error) {
       const partial = job.output?.instructionCheck as InstructionCheck | undefined;
       points = partial?.retried && partial.points?.length ? partial.points : undefined;
+      await workflowFinding("instruction_check");
       logger.warn(`[STUDIO/GATE] A tanári kérés mérése elmaradt (${job.id})${points ? " — a korábbi részleges jelentés marad" : ""}: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
     }
     if (points) {

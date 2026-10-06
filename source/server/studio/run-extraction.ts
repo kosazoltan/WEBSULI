@@ -18,7 +18,7 @@ import {
   type RawExtraction,
   type ExtractionRepair,
 } from "./extractor";
-import { callOcrAdjudicator, callOcrFusionDecider, callOcrModel, callOcrReader, callOcrStrongLines, dualReadOcr, fusionOcr, lexiconGuardedOcr, ocrTextsOf, withOcrCache, OCR_ADJUDICATION_PROMPT, OCR_FUSION_DECIDER_PROMPT, OCR_LINE_REREAD_PROMPT, OCR_SYSTEM_PROMPT } from "./ocr";
+import { callOcrAdjudicator, callOcrFusionDecider, callOcrModel, callOcrReader, callOcrStrongLines, dualReadOcr, fusionOcr, lexiconGuardedOcr, ocrTextsOf, withOcrCache, UNCERTAIN_MARK, OCR_ADJUDICATION_PROMPT, OCR_FUSION_DECIDER_PROMPT, OCR_LINE_REREAD_PROMPT, OCR_SYSTEM_PROMPT } from "./ocr";
 import { loadHungarianLexicon } from "./ocr-lexicon";
 import { attachSourceTranscripts, repairSourceQuotes, TRANSCRIPT_CONTRACT } from "./source-transcript";
 import { scopeContentParts } from "./one-step";
@@ -207,6 +207,8 @@ export async function runExtraction(input: RunInput): Promise<string> {
     input.onPhase?.("ocr", `Kép átírása: ${done}/${total}`),
   );
   const files = attachSourceTranscripts(normalized, ocrResults);
+  // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+  if (ocrResults.some((r) => r.text.includes(UNCERTAIN_MARK))) await workflowFinding("ocr_uncertain");
 
   input.onPhase?.("extract", null);
   const raw = await callExtractorModel(files, input.scope, systemPrompt, model);

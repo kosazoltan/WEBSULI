@@ -1,5 +1,6 @@
 import type { MapConcept } from "./coverage";
-import { WorkflowConflict, WorkflowWaiting } from "../workflows/engine";
+import { WorkflowConflict, WorkflowWaiting, workflowFinding } from "../workflows/engine";
+import { withSupportSkill } from "./support-skills";
 import { logger } from "../lib/logger";
 import { FALLBACK_MODELS, resolveStudioModel } from "../ai/models";
 
@@ -102,7 +103,8 @@ export async function decideTopicFocus(
   const user = topicFocusUserMessage(instruction, concepts);
   for (const [index, call] of callers.entries()) {
     try {
-      const raw = await call(TOPIC_FOCUS_SYSTEM, user);
+      // Spec 2026-10-06-s7 (§4/8): a témafókusz saját támogató skillel indul (a rendszerutasítás elején).
+      const raw = await call(withSupportSkill("topic-focus", TOPIC_FOCUS_SYSTEM), user);
       // An explicit "not a subtopic request" is a decision, not a failure: no fallback is asked.
       if ((raw as { narrow?: unknown } | null)?.narrow === false) {
         logger.info("[STUDIO] Témafókusz: a kérés nem résztéma-kérés, a teljes térkép marad.");
@@ -111,10 +113,12 @@ export async function decideTopicFocus(
       const focus = validateTopicFocus(concepts, raw);
       if (focus) return focus;
       logger.warn(`[STUDIO] Témafókusz: a(z) ${index + 1}. modell válasza nem használható (nincs kulcsfogalom vagy mindent kijelölt).`);
+      await workflowFinding("topic_focus");
     } catch (error) {
       // PR #132 review: a lost lease or a waiting workflow is not a model failure — it must reach the engine.
       if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
       logger.warn(`[STUDIO] Témafókusz: a(z) ${index + 1}. modell hívása hibázott: ${describe(error)}`);
+      await workflowFinding("topic_focus");
     }
   }
   logger.warn("[STUDIO] Témafókusz nem készült, a teljes térképpel megy tovább.");
