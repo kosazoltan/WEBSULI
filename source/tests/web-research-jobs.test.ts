@@ -5,9 +5,9 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import { verifyLessonMethodHtml } from "../server/improve/verify-lesson-method";
-import { createResearchJobs, checkedResearchArtifact, publicResearchJob, webLessonTitleFromHtml, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
+import { createResearchJobs, checkedResearchArtifact, completeWebStudioJob, publicResearchJob, webLessonTitleFromHtml, type ResearchJobStore, type StoredResearchJob } from "../server/studio/web-research-jobs";
 import { WebResearchFailure, webResearchTurnKey } from "../server/studio/web-research-runner";
-import { workflowCheckpoint, workflowMode } from "../server/workflows/engine";
+import { workflowCheckpoint, workflowMode, workflowPhase } from "../server/workflows/engine";
 import { generateWebStudioLesson } from "../server/studio/web-studio-handoff";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
@@ -280,73 +280,88 @@ test("spec 2026-09-25: a háttér-folytatás a bérlet után azonnal visszatér,
   assert.deepEqual(resumedWith, saved); assert.equal(calls, 2); assert.equal(m.materials.size, 1);
 });
 
-/* Spec 2026-09-25 (docs/specs/2026-09-25-webes-studio-atadas.md) — a webes út a letöltött forrásokat a Studio-gyártásnak adja át. */
-test("spec 2026-09-25: Studio-átadás — kész lecke html_files-írás nélkül, visszaolvasva; a futás a webes workflow-n kívül indul", async () => {
-  const m = memoryStore(); const workflows = memoryWorkflows();
-  const lessonsRead: string[] = []; let startedInside: string | undefined = "not-called";
-  m.store.readStudioLesson = async (htmlFileId, lessonId) => { lessonsRead.push(`${htmlFileId}/${lessonId}`); return { title: "Eger ostroma 1552", classroom: 5 }; };
-  const views = [{ phase: "author", detail: null, error: null, lessonId: null, htmlFileId: null }, { phase: "done", detail: null, error: null, lessonId: "lesson-9", htmlFileId: "html-9" }];
-  const generate = (i: typeof input, observer: Parameters<Parameters<typeof createResearchJobs>[1]>[1]) => generateWebStudioLesson(i, observer, {
-    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
-    start: () => { startedInside = workflowMode(); return "run-9"; },
-    read: async () => views.length > 1 ? views.shift()! : views[0],
+/* Spec 2026-09-25 (docs/specs/2026-09-25-webes-studio-atadas.md) — a webes út a letöltött forrásokat a Studio-gyártásnak adja át.
+ * Spec-változás 2026-10-06-s7 (docs/specs/2026-10-06-s7-workflow-rendbetetel.md §4/7): a gyártás a webes job SAJÁT `webStudio`
+ * futásában megy, valódi lépésekkel — nincs külön upload-futás és nincs utólag kitöltött lépés. A korábbi elvárás („a futás a
+ * webes workflow-n kívül indul”, lépéssor generate→knowledge→author→gate→publish→readback) ezért szigorúbbra cserélődött. */
+const STUDIO_STEPS = ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator", "lektor", "gate"];
+const eger = [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }];
+/** A fake one-step manufacture: visits the real chain in the caller's workflow and publishes into the progress view. */
+function fakeStudio(lesson: { lessonId: string; htmlFileId: string }, opts: { failFirst?: boolean } = {}) {
+  const views = new Map<string, { phase: string; detail: string | null; error: string | null; lessonId: string | null; htmlFileId: string | null }>();
+  const calls = { gather: 0, manufacture: 0, modes: [] as Array<string | undefined> };
+  const deps = {
+    gather: async () => { calls.gather++; return { downloaded: eger }; },
+    manufacture: async (runId: string) => {
+      calls.manufacture++;
+      calls.modes.push(workflowMode());
+      views.set(runId, { phase: "pedagogue", detail: null, error: null, lessonId: null, htmlFileId: null });
+      for (const step of STUDIO_STEPS) {
+        await workflowPhase(step);
+        if (opts.failFirst && calls.manufacture === 1 && step === "lektor") throw new Error("Synthetic lektor outage");
+      }
+      views.set(runId, { phase: "done", detail: null, error: null, ...lesson });
+    },
+    read: async (runId: string) => views.get(runId) ?? null,
     sleep: async () => undefined,
-  });
-  const jobs = createResearchJobs(m.store, generate, workflows.store);
-  await jobs.start("studio-web", "owner", input);
+  };
+  return { deps, calls, views };
+}
+const studioJobs = (m: ReturnType<typeof memoryStore>, workflows: ReturnType<typeof memoryWorkflows>, deps: ReturnType<typeof fakeStudio>["deps"]) =>
+  createResearchJobs(m.store, (i, o) => generateWebStudioLesson(i, o, deps), workflows.store, { mode: "webStudio" });
+
+test("spec s7: Studio-átadás — egy webStudio futás valódi lépésekkel, a gyártás a webes workflow-ban, html_files-írás nélkül", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows();
+  const lessonsRead: string[] = [];
+  m.store.readStudioLesson = async (htmlFileId, lessonId) => { lessonsRead.push(`${htmlFileId}/${lessonId}`); return { title: "Eger ostroma 1552", classroom: 5 }; };
+  const studio = fakeStudio({ lessonId: "lesson-9", htmlFileId: "html-9" });
+  await studioJobs(m, workflows, studio.deps).start("studio-web", "owner", input);
   await until(() => ["done", "error"].includes(m.rows.get("studio-web")?.state ?? ""));
   const job = m.rows.get("studio-web")!;
   assert.equal(job.state, "done", job.error);
-  assert.equal(job.materialId, "html-9"); assert.equal(job.lessonId, "lesson-9"); assert.equal(job.studioRunId, "run-9");
+  assert.equal(job.materialId, "html-9"); assert.equal(job.lessonId, "lesson-9");
+  assert.equal(job.studioRunId, "studio-web", "a haladásjelző a webes job azonosítóját használja");
   assert.equal(job.title, "Eger ostroma 1552"); assert.equal(job.classroom, 5);
   assert.equal(m.materials.size, 0, "a Studio már közzétette — nincs html_files-írás");
   assert.deepEqual(lessonsRead, ["html-9/lesson-9"]);
-  assert.equal(startedInside, undefined, "a Studio-futás saját workflow-ként, a webes környezeten kívül indul");
+  assert.deepEqual(studio.calls.modes, ["webStudio"], "a gyártás a webes futás workflow-jában fut");
+  assert.equal(workflows.records.size, 1, "egyetlen futás, nincs külön upload-futás");
   assert.equal(publicResearchJob(job).output, "studio");
   const view = workflows.records.get("studio-web")!.view;
+  assert.equal(view.definition.mode, "webStudio");
   assert.equal(view.state, "done"); assert.deepEqual(view.result, { kind: "material", id: "html-9" });
-  assert.deepEqual(view.visits.map(v => v.step), ["generate", "knowledge", "author", "gate", "publish", "readback"]);
+  assert.deepEqual(view.visits.map(v => v.step), ["generate", ...STUDIO_STEPS, "readback"]);
+  assert.equal(view.skillAudit?.outcome, "passed");
 });
-test("spec 2026-09-25: Studio-átadás — megszakadt követés folytatható, és a mentett Studio-futást követi, újat nem indít", async () => {
-  const m = memoryStore(); const workflows = memoryWorkflows(); let starts = 0; let broken = true;
+test("spec s7: Studio-átadás — megszakadt gyártás folytatható; a letöltés a futás checkpointjából jön, új keresés nélkül", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows();
   m.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
-  const generate = (i: typeof input, observer: Parameters<Parameters<typeof createResearchJobs>[1]>[1]) => generateWebStudioLesson(i, observer, {
-    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
-    start: () => { starts++; return "run-7"; },
-    read: async () => { if (broken) throw new Error("Synthetic DB outage while following"); return { phase: "done", detail: null, error: null, lessonId: "lesson-7", htmlFileId: "html-7" }; },
-    sleep: async () => undefined,
-  });
-  const jobs = createResearchJobs(m.store, generate, workflows.store);
+  const studio = fakeStudio({ lessonId: "lesson-7", htmlFileId: "html-7" }, { failFirst: true });
+  const jobs = studioJobs(m, workflows, studio.deps);
   await jobs.start("studio-resume", "owner", input);
   await until(() => workflows.records.get("studio-resume")?.view.state === "error");
+  assert.equal(workflows.records.get("studio-resume")!.view.visits.at(-1)!.step, "lektor", "a megállás a valódi lépésnél látszik");
   const failed = await jobs.read("studio-resume", "owner");
-  assert.equal(failed!.studioRunId, "run-7"); assert.equal(failed!.canResume, true);
-  broken = false;
+  assert.equal(failed!.studioRunId, "studio-resume"); assert.equal(failed!.canResume, true);
   await jobs.publish("studio-resume", "owner");
   assert.equal(m.rows.get("studio-resume")!.state, "done"); assert.equal(m.rows.get("studio-resume")!.materialId, "html-7");
-  assert.equal(starts, 1, "a folytatás a mentett futást követte");
+  assert.equal(studio.calls.gather, 1, "a folytatás nem keresett újra");
+  assert.equal(studio.calls.manufacture, 2);
+  assert.equal(workflows.records.size, 1);
 });
-test("spec 2026-09-25: Studio-átadás — a közzététel visszaolvasásának hibája nem ad kész jelzést", async () => {
+test("spec s7: Studio-átadás — a közzététel visszaolvasásának hibája nem ad kész jelzést", async () => {
   const m = memoryStore(); const workflows = memoryWorkflows();
   m.store.readStudioLesson = async () => null;
-  const generate = (i: typeof input, observer: Parameters<Parameters<typeof createResearchJobs>[1]>[1]) => generateWebStudioLesson(i, observer, {
-    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
-    start: () => "run-5", read: async () => ({ phase: "done", detail: null, error: null, lessonId: "lesson-5", htmlFileId: "html-5" }), sleep: async () => undefined,
-  });
-  await createResearchJobs(m.store, generate, workflows.store).start("studio-unverified", "owner", input);
+  await studioJobs(m, workflows, fakeStudio({ lessonId: "lesson-5", htmlFileId: "html-5" }).deps).start("studio-unverified", "owner", input);
   await until(() => workflows.records.get("studio-unverified")?.view.state === "error");
   assert.equal(m.rows.get("studio-unverified")!.state, "error");
   assert.match(m.rows.get("studio-unverified")!.error!, /nem igazolható vissza/);
 });
 test("Codex (PR #128): a Studio-átadás kész jelzését bérletkapus írás menti; elvesztett bérletnél nincs kész jelzés", async () => {
-  const deps = () => ({
-    gather: async () => ({ downloaded: [{ url: "https://pelda.hu/eger", title: "Eger", text: "Dobó István 1552-ben megvédte Egert." }] }),
-    start: () => "run-3", read: async () => ({ phase: "done", detail: null, error: null, lessonId: "lesson-3", htmlFileId: "html-3" }), sleep: async () => undefined,
-  });
   const fenced = memoryStore(); const workflows = memoryWorkflows(); const writes: string[] = [];
   fenced.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
   fenced.store.completeStudioLesson = async job => { writes.push(job.state); fenced.rows.set(job.id, structuredClone(job)); };
-  await createResearchJobs(fenced.store, (i, o) => generateWebStudioLesson(i, o, deps()), workflows.store).start("studio-fenced", "owner", input);
+  await studioJobs(fenced, workflows, fakeStudio({ lessonId: "lesson-3", htmlFileId: "html-3" }).deps).start("studio-fenced", "owner", input);
   await until(() => ["done", "error"].includes(workflows.records.get("studio-fenced")?.view.state ?? ""));
   assert.deepEqual(writes, ["done"]); assert.equal(fenced.rows.get("studio-fenced")!.state, "done");
   assert.equal(workflows.records.get("studio-fenced")!.view.state, "done");
@@ -354,7 +369,48 @@ test("Codex (PR #128): a Studio-átadás kész jelzését bérletkapus írás me
   const lost = memoryStore(); const lostWorkflows = memoryWorkflows();
   lost.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
   lost.store.completeStudioLesson = async () => { throw new Error("Elavult vagy lejárt végrehajtó nem menthet tananyagot."); };
-  await createResearchJobs(lost.store, (i, o) => generateWebStudioLesson(i, o, deps()), lostWorkflows.store).start("studio-lost", "owner", input);
+  await studioJobs(lost, lostWorkflows, fakeStudio({ lessonId: "lesson-3", htmlFileId: "html-3" }).deps).start("studio-lost", "owner", input);
   await until(() => lostWorkflows.records.get("studio-lost")?.view.state === "error");
   assert.notEqual(lost.rows.get("studio-lost")!.state, "done");
+});
+test("spec s7: a régi, kettévágott (web módú) Studio-futás nem kínál folytatást; napló nélküli job nem publikálható workflow-tárolóval", async () => {
+  const m = memoryStore(); const workflows = memoryWorkflows();
+  m.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
+  // An old split hand-off: a `web` run that ended in error with a saved studio run id.
+  const legacy = createResearchJobs(m.store, async () => { throw new WebResearchFailure("Régi hiba"); }, workflows.store);
+  await legacy.start("legacy-split", "owner", input);
+  await until(() => workflows.records.get("legacy-split")?.view.state === "error");
+  const row = m.rows.get("legacy-split")!; row.studioRunId = "run-old"; m.rows.set("legacy-split", row);
+  const jobs = studioJobs(m, workflows, fakeStudio({ lessonId: "l", htmlFileId: "h" }).deps);
+  assert.equal((await jobs.read("legacy-split", "owner"))!.canResume, false);
+  await m.store.create({ id: "untracked", userId: "owner", input, state: "ready", stage: "", title: "", message: input.message, content: "", sources: [], diagnostics: [], createdAt: Date.now(), html: "<html></html>" });
+  await assert.rejects(jobs.publish("untracked", "owner"), /nincs workflow-napló/);
+  assert.equal(m.materials.size, 0);
+});
+test("spec s7: completeWebStudioJob — a hibán álló jobot újranyitja, kész jelzés után visszaolvas (Studio-panel/söprő folytatása)", async () => {
+  const m = memoryStore();
+  m.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
+  await m.store.create({ id: "reopen", userId: "owner", input, state: "error", stage: "", title: "", message: input.message, content: "", sources: [], diagnostics: [], createdAt: Date.now(), error: "régi" });
+  const job = (await m.store.read("reopen", "owner"))!;
+  const result = await completeWebStudioJob(m.store, job, { kind: "studio", runId: "reopen", lessonId: "lesson-1", htmlFileId: "html-1", sources: [] });
+  assert.deepEqual(result, { kind: "material", id: "html-1" });
+  assert.equal(m.rows.get("reopen")!.state, "done"); assert.equal(m.rows.get("reopen")!.materialId, "html-1");
+});
+test("review #203: a kész jelzés után csak a visszaolvasás bukott — az újrapróba nem ír újra, visszaolvasással zár", async () => {
+  const m = memoryStore();
+  m.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
+  // The real fenced write only updates `running` rows: a second done write on a done job throws.
+  let completions = 0;
+  m.store.completeStudioLesson = async () => { completions++; throw new WebResearchFailure("A futás állapota közben megváltozott; a kész jelzés nem menthető."); };
+  await m.store.create({ id: "done-before", userId: "owner", input, state: "done", stage: "", title: "Eger", message: input.message, content: "", sources: [], diagnostics: [], createdAt: Date.now(), materialId: "html-9", lessonId: "lesson-9", output: "studio" });
+  const job = (await m.store.read("done-before", "owner"))!;
+  const result = await completeWebStudioJob(m.store, job, { kind: "studio", runId: "done-before", lessonId: "lesson-9", htmlFileId: "html-9", sources: [] });
+  assert.deepEqual(result, { kind: "material", id: "html-9" });
+  assert.equal(completions, 0);
+  assert.equal(m.rows.get("done-before")!.state, "done");
+  // A done job pointing at ANOTHER material is not silently accepted: the fenced write still decides (and refuses).
+  await m.store.create({ id: "done-other", userId: "owner", input, state: "done", stage: "", title: "Eger", message: input.message, content: "", sources: [], diagnostics: [], createdAt: Date.now(), materialId: "html-old" });
+  const other = (await m.store.read("done-other", "owner"))!;
+  await assert.rejects(completeWebStudioJob(m.store, other, { kind: "studio", runId: "done-other", lessonId: "lesson-9", htmlFileId: "html-9", sources: [] }), /nem menthető/);
+  assert.equal(completions, 1);
 });

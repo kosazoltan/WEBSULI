@@ -3,6 +3,7 @@ import { registerLessonFontAssets } from "./lesson-font-assets";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import express from "express";
+import { randomUUID } from "node:crypto";
 import { csrfSync } from "csrf-sync";
 import { storage } from "./storage";
 import { insertHtmlFileSchema, insertMaterialCommentSchema, type User, type HtmlFile } from "@shared/schema";
@@ -19,7 +20,7 @@ import { sanitizeText, sanitizeHtml, sanitizeEmail } from "./utils/sanitize";
 import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
 import * as gameScoreService from "./gameScoreService";
 import * as gameQuizBankService from "./gameQuizBankService";
-import { generateMaterialQuiz } from "./gameQuizGeneratorService";
+import { generateMaterialQuiz, QuizMaterialNotFound } from "./gameQuizGeneratorService";
 // checkIsAdmin import removed
 
 import { db } from "./db";
@@ -38,6 +39,8 @@ import { lessonPipelineRouter } from "./studio/lesson-pipeline-routes";
 import { webResearchRouter } from "./studio/web-research-routes";
 import { workflowRouter } from "./workflows/routes";
 import { applyTrackedImprovement } from "./workflows/apply";
+import { failOnSchemaInvalid, runToolWorkflow } from "./workflows/tool-run";
+import { workflowFence, workflowPhase } from "./workflows/engine";
 import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { cachedSystem } from "./ai/prompt-cache";
 import { lessonPublicRouter } from "./studio/lesson-routes";
@@ -1038,9 +1041,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         countRaw = n;
       }
-      const result = await generateMaterialQuiz(id, countRaw);
+      const result = await generateMaterialQuiz(id, countRaw, req.user!.id);
       return res.json(result);
     } catch (e) {
+      if (e instanceof QuizMaterialNotFound) return res.status(404).json({ message: e.message });
       logger.error("[GAMES] generate-quiz", e);
       const msg = e instanceof Error ? e.message : "Ismeretlen hiba.";
       return res.status(500).json({ message: msg });
@@ -1232,6 +1236,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Fájl nem található" });
       }
 
+      // Spec 2026-10-06-s7 (H): a javaslat workflow-ban fut (htmlAssist: forrás → szerző → kapu → visszaolvasás).
+      await runToolWorkflow({ mode: "htmlAssist", owner: req.user!.id, request: { tool: "errors", fileId, customPrompt: customPrompt ?? null } }, async () => {
+      await workflowPhase("source");
       // Use Claude (Anthropic) to analyze and fix HTML errors
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
@@ -1268,6 +1275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       systemPrompt = withSupportSkill("html-fix", systemPrompt);
+      await workflowPhase("author");
       const message = await withAIProvider((signal) => anthropic.messages.create({
         model: resolveLegacyModel("htmlFix"),
         output_config: { effort: effortFor("htmlFix") },
@@ -1288,17 +1296,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Remove markdown code fences if Claude wrapped JSON in ```json ... ```
       responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
 
+      await workflowPhase("gate");
       const jsonResult = JSON.parse(responseText);
+      // Review #203: a hiányzó javított HTML séma-hiba — lelet (tanul), majd a futás megáll (500).
+      await failOnSchemaInvalid(typeof jsonResult.fixedHtml !== "string" || !jsonResult.fixedHtml.trim(), "A modell válaszából hiányzik a javított HTML.");
 
+      await workflowPhase("readback");
       res.json({
         originalHtml: file.content,
         fixedHtml: jsonResult.fixedHtml,
         errors: jsonResult.errors,
         success: true
       });
+      return { value: undefined, result: { kind: "proposal" as const, id: fileId } };
+      });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('HTML fix error:', error);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat (pl. lízingvesztés) — elküldött válaszra nem írunk újra.
+      if (res.headersSent) return;
       res.status(500).json({ message: 'Hiba történt az elemzés során', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
     }
   });
@@ -1319,6 +1335,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Fájl nem található" });
       }
 
+      // Spec 2026-10-06-s7 (H): a javaslat workflow-ban fut (htmlAssist).
+      await runToolWorkflow({ mode: "htmlAssist", owner: req.user!.id, request: { tool: "theme", fileId, customPrompt: customPrompt ?? null } }, async () => {
+      await workflowPhase("source");
       // Use Claude (Anthropic) to apply theme colors
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
@@ -1365,6 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }`;
 
       systemPrompt = withSupportSkill("html-fix", systemPrompt);
+      await workflowPhase("author");
       const message = await withAIProvider((signal) => anthropic.messages.create({
         model: resolveLegacyModel("htmlTheme"),
         output_config: { effort: effortFor("htmlTheme") },
@@ -1385,17 +1405,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Remove markdown code fences if Claude wrapped JSON in ```json ... ```
       responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
 
+      await workflowPhase("gate");
       const jsonResult = JSON.parse(responseText);
+      await failOnSchemaInvalid(typeof jsonResult.themedHtml !== "string" || !jsonResult.themedHtml.trim(), "A modell válaszából hiányzik az átszínezett HTML.");
 
+      await workflowPhase("readback");
       res.json({
         originalHtml: file.content,
         themedHtml: jsonResult.themedHtml,
         changes: jsonResult.changes,
         success: true
       });
+      return { value: undefined, result: { kind: "proposal" as const, id: fileId } };
+      });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('Theme fix error:', error);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat (pl. lízingvesztés) — elküldött válaszra nem írunk újra.
+      if (res.headersSent) return;
       res.status(500).json({ message: 'Hiba történt a színséma alkalmazása során', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
     }
   });
@@ -1415,6 +1442,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!file) {
         return res.status(404).json({ message: "Fájl nem található" });
       }
+
+      // Spec 2026-10-06-s7 (H): a beszélgetős javaslat is workflow-ban fut (htmlAssist); a hiba a lenti catch-ben megy ki SSE-ként.
+      await runToolWorkflow({ mode: "htmlAssist", owner: req.user!.id, request: { tool: "chat", fixType, fileId, customPrompt: customPrompt ?? null } }, async () => {
+      await workflowPhase("source");
 
       // Setup SSE (Server-Sent Events) for streaming
       res.setHeader('Content-Type', 'text/event-stream');
@@ -1530,6 +1561,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       // Phase 2: Structured JSON call with response_format
 
       // PHASE 1: Streaming explanation
+      await workflowPhase("author");
       const explanationPrompt = `${systemPrompt}\n\nElemezd ezt a HTML fájlt és magyarázd el, mit fogsz javítani (csak magyarázat, ne JSON):\n\n${file.content.substring(0, 3000)}...`;
 
       const explanationStream = await openai.chat.completions.create({
@@ -1571,7 +1603,8 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       });
 
       // Extract and validate JSON from response
-      let validatedResult: FixResult | null = null;
+      await workflowPhase("gate");
+      let validatedResult: FixResult | null;
       let rawJsonResponse = '';
 
       try {
@@ -1611,20 +1644,19 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
         logger.error('[AI FIX] ❌ JSON parsing/validation failed:', parseErrorTyped.message);
         logger.error('[AI FIX] Raw JSON response:', rawJsonResponse.substring(0, 500));
 
-        // Fallback: send raw response with detailed error
-        res.write(`data: ${JSON.stringify({
-          type: 'complete',
-          message: '⚠️ Claude befejezte, de a JSON validálás sikertelen',
-          fullResponse: explanationText + '\n\n' + rawJsonResponse,
-          parseError: parseErrorTyped.message,
-          validatedJson: null
-        })}\n\n`);
+        // Review #203 (spec §5): a séma-hibás modellválasz lelet (tanul), majd a futás megáll; a meglévő catch SSE error-t küld.
+        await failOnSchemaInvalid(true, `A modell JSON-válasza nem felel meg a sémának: ${parseErrorTyped.message}`);
       }
 
+      await workflowPhase("readback");
       res.end();
+      return { value: undefined, result: { kind: "proposal" as const, id: fileId } };
+      });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('HTML fix chat error:', error);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat (pl. lízingvesztés) — elküldött válaszra nem írunk újra.
+      if (res.writableEnded) return;
       res.write(`data: ${JSON.stringify({
         type: 'error',
         message: err.message || 'Hiba történt az elemzés során'
@@ -1649,12 +1681,27 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
         return res.status(404).json({ message: "Fájl nem található" });
       }
 
-      // Update file content directly in database (bypass updateHtmlFile as it doesn't support content updates)
-
-      await db
-        .update(htmlFiles)
-        .set({ content: fixedHtml })
-        .where(eq(htmlFiles.id, fileId));
+      // Spec 2026-10-06-s7 (H): a javaslat alkalmazása az `apply` workflow-ban (forrás → kapu → alkalmazás → visszaolvasás),
+      // lízing-kapus írással; a válasz alakja változatlan.
+      await runToolWorkflow({ mode: "apply", id: `html-fix-apply:${randomUUID()}`, owner: req.user!.id, request: { fileId, length: fixedHtml.length } }, async () => {
+        await workflowPhase("source");
+        await workflowPhase("gate");
+        if (!fixedHtml) throw new Error("Üres HTML nem alkalmazható.");
+        await workflowPhase("apply");
+        // Update file content directly in database (bypass updateHtmlFile as it doesn't support content updates)
+        await db.transaction(async (tx) => {
+          await workflowFence(tx);
+          await tx
+            .update(htmlFiles)
+            .set({ content: fixedHtml })
+            .where(eq(htmlFiles.id, fileId));
+          await workflowFence(tx);
+        });
+        await workflowPhase("readback");
+        const saved = await storage.getHtmlFile(fileId);
+        if (saved?.content !== fixedHtml) throw new Error("Az alkalmazott HTML visszaolvasása eltér.");
+        return { value: undefined, result: { kind: "material" as const, id: fileId } };
+      });
 
       res.json({
         message: "A javított HTML sikeresen alkalmazva",
@@ -1681,6 +1728,11 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
+      // Spec 2026-10-06-s7 (I): a segéd-kérés workflow-ban fut (creator: forrás → szerző → kapu → visszaolvasás);
+      // a hiba a lenti catch-ben megy ki, mint eddig.
+      const creatorRun = `creator:${randomUUID()}`;
+      await runToolWorkflow({ mode: "creator", id: creatorRun, owner: req.user!.id, request: { tool: "material-creator-chat", message, title: title ?? null, classroom: classroom ?? null, turns: Array.isArray(conversationHistory) ? conversationHistory.length : 0 } }, async () => {
+      await workflowPhase("source");
       // Using Claude (Anthropic) API
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
@@ -1762,6 +1814,7 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
       })}\n\n`);
 
       // Stream Claude's response
+      await workflowPhase("author");
       const stream = anthropic.messages.stream({
         model: resolveLegacyModel("claudeChat"),
         output_config: { effort: effortFor("claudeChat") },
@@ -1802,6 +1855,7 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
         }
       }
 
+      await workflowPhase("gate");
       logger.info(`[MATERIAL CREATOR] Stream complete. Full content length: ${fullContent.length}, HTML content length: ${htmlContent.length}, isCollectingHtml: ${isCollectingHtml}`);
 
       // If HTML was generated, send it separately
@@ -1825,6 +1879,7 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
       }
 
       // Send completion
+      await workflowPhase("readback");
       res.write(`data: ${JSON.stringify({
         type: 'complete',
         message: '✅ Claude befejezte'
@@ -1832,9 +1887,13 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
 
       res.write('data: [DONE]\n\n');
       res.end();
+      return { value: undefined, result: { kind: "proposal" as const, id: creatorRun } };
+      });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('Material creator chat error:', error);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat — lezárt válaszra nem írunk.
+      if (res.writableEnded) return;
       res.write(`data: ${JSON.stringify({
         type: 'error',
         message: err.message || 'Hiba történt a beszélgetés során'
@@ -1867,6 +1926,11 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
         }
       }
 
+      // Spec 2026-10-06-s7 (I): a segéd-kérés workflow-ban fut (creator: forrás → szerző → kapu → visszaolvasás);
+      // a hiba a lenti catch-ben megy ki, mint eddig.
+      const creatorRun = `creator:${randomUUID()}`;
+      await runToolWorkflow({ mode: "creator", id: creatorRun, owner: req.user!.id, request: { tool: "analyze-files", count: files.length } }, async () => {
+      await workflowPhase("source");
       const OpenAI = (await import('openai')).default;
 
       const openai = new OpenAI({
@@ -1878,6 +1942,7 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
 
       logger.info(`[FILE ANALYSIS] Analyzing ${files.length} files`);
 
+      await workflowPhase("author");
       // Build content array with all images
       const content: Array<{type: "text"; text: string} | {type: "image_url"; image_url: {url: string; detail: "auto" | "low" | "high"}}> = [
         {
@@ -1976,18 +2041,25 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         max_completion_tokens: 8192 // Increased for multiple files
       });
 
+      await workflowPhase("gate");
       const result = JSON.parse(response.choices[0].message.content || '{}');
+      await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${files.length} files processed, ${result.topics?.length || 0} topics found`);
 
+      await workflowPhase("readback");
       res.json({
         success: true,
         analysis: result
+      });
+      return { value: undefined, result: { kind: "proposal" as const, id: creatorRun } };
       });
 
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[FILE ANALYSIS] Error:', error);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat — lezárt válaszra nem írunk.
+      if (res.headersSent) return;
       res.status(500).json({
         message: err.message || 'Hiba történt a fájlok elemzése során'
       });
@@ -2012,6 +2084,11 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         });
       }
 
+      // Spec 2026-10-06-s7 (I): a segéd-kérés workflow-ban fut (creator: forrás → szerző → kapu → visszaolvasás);
+      // a hiba a lenti catch-ben megy ki, mint eddig.
+      const creatorRun = `creator:${randomUUID()}`;
+      await runToolWorkflow({ mode: "creator", id: creatorRun, owner: req.user!.id, request: { tool: "analyze-file", fileType, fileName: fileName ?? null } }, async () => {
+      await workflowPhase("source");
       const OpenAI = (await import('openai')).default;
 
       const openai = new OpenAI({
@@ -2023,6 +2100,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 
       logger.info(`[FILE ANALYSIS] Analyzing ${fileType} file: ${fileName || 'unknown'}`);
 
+      await workflowPhase("author");
       // OpenAI Vision API: send image as base64 data URL
       // For PDFs: frontend converts first page to PNG before sending
       const content: Array<{type: "text"; text: string} | {type: "image_url"; image_url: {url: string; detail: "auto" | "low" | "high"}}> = [
@@ -2092,18 +2170,25 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         max_completion_tokens: 4096
       });
 
+      await workflowPhase("gate");
       const result = JSON.parse(response.choices[0].message.content || '{}');
+      await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${result.topics?.length || 0} topics found`);
 
+      await workflowPhase("readback");
       res.json({
         success: true,
         analysis: result
+      });
+      return { value: undefined, result: { kind: "proposal" as const, id: creatorRun } };
       });
 
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[FILE ANALYSIS] Error:', error);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat — lezárt válaszra nem írunk.
+      if (res.headersSent) return;
       res.status(500).json({
         message: err.message || 'Hiba történt a fájl elemzése során'
       });
@@ -2132,6 +2217,11 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
+      // Spec 2026-10-06-s7 (I): a segéd-kérés workflow-ban fut (creator: forrás → szerző → kapu → visszaolvasás);
+      // a hiba a lenti catch-ben megy ki, mint eddig.
+      const creatorRun = `creator:${randomUUID()}`;
+      await runToolWorkflow({ mode: "creator", id: creatorRun, owner: req.user!.id, request: { tool: "chatgpt-chat", message, turns: Array.isArray(conversationHistory) ? conversationHistory.length : 0 } }, async () => {
+      await workflowPhase("source");
       const OpenAI = (await import('openai')).default;
       const openai = new OpenAI({
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -2200,6 +2290,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         content: message
       });
 
+      await workflowPhase("author");
       logger.info(`[CHATGPT CHAT] Streaming response...`);
 
       const stream = await openai.chat.completions.create({
@@ -2238,16 +2329,24 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         }
       }
 
+      await workflowPhase("gate");
+      // Review #203: az üres modellválasz séma-hiba — lelet (tanul), majd a futás megáll (SSE error).
+      await failOnSchemaInvalid(!totalChunks, "A modell üres választ adott.");
       logger.info(`[CHATGPT] ✅ Stream complete (${totalChunks} chunks)`);
 
+      await workflowPhase("readback");
       res.write(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
       clearTimeout(timeout);
+      return { value: undefined, result: { kind: "proposal" as const, id: creatorRun } };
+      });
 
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       clearTimeout(timeout);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat — lezárt válaszra nem írunk.
+      if (res.writableEnded) { logger.error('[CHATGPT CHAT] A futás lezárása a válasz után hibázott:', error); return; }
 
       // Handle abort errors
       if (err.name === 'AbortError' || controller.signal.aborted) {
@@ -2314,6 +2413,11 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
+      // Spec 2026-10-06-s7 (I): a segéd-kérés workflow-ban fut (creator: forrás → szerző → kapu → visszaolvasás);
+      // a hiba a lenti catch-ben megy ki, mint eddig.
+      const creatorRun = `creator:${randomUUID()}`;
+      await runToolWorkflow({ mode: "creator", id: creatorRun, owner: req.user!.id, request: { tool: "claude-chat", message, title: metadata?.title ?? null, turns: Array.isArray(conversationHistory) ? conversationHistory.length : 0 } }, async () => {
+      await workflowPhase("source");
       // Using Claude (Anthropic) API
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({
@@ -2364,6 +2468,7 @@ ${metadata?.title ? `Cím: ${metadata.title}` : ''}
 ${metadata?.description ? `Leírás: ${metadata.description}` : ''}
 ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; a végleges évfolyamot a tartalomból állapítsd meg.` : ''}`;
 
+      await workflowPhase("author");
       logger.info(`[CLAUDE HTML] Streaming HTML generation...`);
       logger.info(`[CLAUDE HTML] System prompt length: ${systemPrompt.length + dynamicPrompt.length}`);
       logger.info(`[CLAUDE HTML] Messages count: ${messages.length}`);
@@ -2430,6 +2535,7 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
         }
       }
 
+      await workflowPhase("gate");
       logger.info(`[CLAUDE] ✅ Stream complete (${totalEvents} events, full: ${fullContent.length} chars, HTML: ${htmlContent.length} chars, isCollectingHtml: ${isCollectingHtml})`);
 
       // Send HTML if generated
@@ -2451,16 +2557,21 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
         logger.warn(`[CLAUDE] ⚠️ No HTML generated (isCollectingHtml: ${isCollectingHtml}, htmlContent.length: ${htmlContent.length})`);
       }
 
+      await workflowPhase("readback");
       res.write(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
       clearTimeout(timeout);
         if (claudeIdle) clearTimeout(claudeIdle);
+      return { value: undefined, result: { kind: "proposal" as const, id: creatorRun } };
+      });
 
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       clearTimeout(timeout);
         if (claudeIdle) clearTimeout(claudeIdle);
+      // Spec 2026-10-06-s7: a futás lezárása a válasz után is hibázhat — lezárt válaszra nem írunk.
+      if (res.writableEnded) { logger.error('[CLAUDE HTML] A futás lezárása a válasz után hibázott:', error); return; }
 
       // Handle abort errors
       if (err.name === 'AbortError' || controller.signal.aborted) {

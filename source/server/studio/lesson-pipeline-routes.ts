@@ -45,12 +45,13 @@ import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { executeWorkflow, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
+import { runToolWorkflow } from "../workflows/tool-run";
 import { htmlFiles } from "../../shared/schema";
 import { respondToResume, guardResumedDrive } from "./resume-response";
 import { normalizeOwnerInstruction } from "../../shared/owner-instruction";
-import { arithmeticSourceCorrections, correctionApplied, correctionAuditText, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
+import { arithmeticSourceCorrections, correctionApplied, correctionAuditText, correctionFindingNeeded, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
 import { callStepModel } from "./run-step";
 import { decideTopicFocus, topicFocusModels, type TopicFocus } from "./topic-focus";
 import { createStudioStepProvider } from "../ai/studio-provider";
@@ -104,7 +105,7 @@ async function loadRun(id: string): Promise<OneStepRun | null> {
   };
 }
 
-const createRun = () => createRunBase(persistRun);
+const createRun = (id?: string) => createRunBase(persistRun, id);
 const updateRun = (id: string, patch: Parameters<typeof updateRunBase>[1]) =>
   updateRunBase(id, patch, persistRun);
 const getRun = (id: string) => getRunBase(id, loadRun);
@@ -351,6 +352,38 @@ export async function runOneStep(
   });
 }
 
+/**
+ * Spec 2026-10-06-s7 (C egy futásban): a feltöltéses gyártás magja a HÍVÓ workflow-jában (`webStudio`), saját futás és
+ * visszaolvasás nélkül — a webes futás lépései így a valódi végrehajtást rögzítik. A haladásjelző azonosítója a hívóé.
+ * Ha ugyanennek a futásnak egy korábbi végrehajtása már közzétette a leckét (pl. csak a lezárás bukott el), a kész lecke
+ * újrahasznosul: a lépések modellhívás nélkül, látogatásként rögzülnek (mint a feltöltéses út kész-lecke ágánál), új lecke nem készül.
+ */
+export async function runOneStepInWorkflow(runId: string, data: OneStepRequest, userId: string): Promise<void> {
+  const previous = await getRun(runId);
+  if (previous?.phase === "done" && previous.lessonId) {
+    const [published] = await db.select({ id: lessons.id }).from(lessons)
+      .where(and(eq(lessons.id, previous.lessonId), isNotNull(lessons.publishedAt))).limit(1);
+    if (published) {
+      for (const phase of ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator", "lektor", "gate"]) await workflowPhase(phase);
+      logger.info(`[STUDIO/WEB] A futás korábbi végrehajtásának kész leckéje újrahasznosítva (${runId} → ${published.id}).`);
+      return;
+    }
+  }
+  createRun(runId);
+  await runOneStepCore(runId, data, userId);
+}
+
+/** Spec 2026-10-06-s7: a Studio-panelről / söprőből folytatott webes futás lezárása (a webes job kész jelzése + visszaolvasás). */
+async function finishWebStudio(webJobId: string, owner: string, lessonId: string) {
+  const [row] = await db.select({ htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, lessonId)).limit(1);
+  if (!row?.htmlFileId) throw new Error("A közzétett tananyag nem olvasható vissza.");
+  const { researchJobStore } = await import("./web-research-job-store");
+  const { completeWebStudioJob } = await import("./web-research-jobs");
+  const job = await researchJobStore.read(webJobId, owner);
+  if (!job) throw new Error("A webes készítés nem található.");
+  return completeWebStudioJob(researchJobStore, job, { kind: "studio", runId: webJobId, lessonId, htmlFileId: row.htmlFileId, sources: [] });
+}
+
 async function readPublishedLesson(lessonId: string) {
   await workflowPhase("readback");
   const [row] = await db.select({ id: htmlFiles.id, content: lessons.json, publishedAt: lessons.publishedAt })
@@ -378,6 +411,8 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
       callScopeModel(f, resolveStudioModel("ocr")),
     );
     if (!inferred.ok) {
+      // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).
+      await workflowFinding("scope_classification");
       await workflowValidationFailure(inferred.reason);
       updateRun(runId, {
         phase: "error",
@@ -504,6 +539,24 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
 }
 
 /**
+ * Spec 2026-10-06-s7 (B): a térképről indított lecke determinisztikus forrás-helyesbítése (modellhívás nélkül) saját
+ * `mapCheck` futásban: forrás → kapu → mentés → visszaolvasás. A viselkedés változatlan: hibánál helyesbítés nélkül megy tovább.
+ */
+async function correctMapInWorkflow(mapId: string, owner: string): Promise<SourceCorrection[]> {
+  return runToolWorkflow({ mode: "mapCheck", owner, request: { mapId, kind: "source-corrections" } }, async () => {
+    await workflowPhase("source");
+    await workflowPhase("gate");
+    await workflowPhase("save");
+    const corrections = await correctMapFromOwner(mapId, undefined, false);
+    await workflowPhase("readback");
+    const rows = await db.select().from(kmConcepts).where(eq(kmConcepts.mapId, mapId));
+    const missing = corrections.filter((fix) => { const row = rows.find((r) => r.localId === fix.localId); return !row || !correctionApplied(fix, row); });
+    if (missing.length) throw new Error(`A forrás-helyesbítés nem olvasható vissza: ${missing.map((m) => m.localId).join(", ").slice(0, 200)}`);
+    return { value: corrections, result: { kind: "map" as const, id: mapId } };
+  });
+}
+
+/**
  * Spec 2026-09-23 — the teacher's request and photo misreads become DOCUMENTED curation on the map rows
  * (term/definition only; the quote stays the transcript evidence). Never throws: no correction on failure.
  */
@@ -521,6 +574,9 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
     concepts, { instruction, transcript })
     : { corrections: [] as SourceCorrection[], rejected: [] as string[] };
   if (result.warning) logger.warn(`[STUDIO/1STEP] ${result.warning}`);
+  // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg) — review #203: a modell-/parse-hiba
+  // (warning) is lelet, nem csak az elvetett javaslat.
+  if (correctionFindingNeeded(result)) await workflowFinding("source_correction");
   if (result.rejected.length) logger.info(`[STUDIO/1STEP] Elvetett helyesbítés-javaslatok: ${result.rejected.join(" | ").slice(0, 1500)}`);
   // Review #192: az új (pl. csak definíciós) helyesbítés nem ejtheti el ugyanannak a fogalomnak a MÁR érvényes másik mezőjét.
   const proposed = withPersistedFields(mergeCorrections(arithmetic, result.corrections), persistedCorrections(rows));
@@ -539,6 +595,8 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
   // then made from the uncorrected map, exactly as before corrections existed) — the docstring's promise.
   try {
     await db.transaction(async (tx) => {
+      // Review #203: lízing-zár a tranzakció elején és végén (a kivonatolás mintájára) — lejárt lízingű végrehajtó nem írhat.
+      await workflowFence(tx);
       for (const fix of pending) {
         const row = rows.find((r) => r.localId === fix.localId);
         if (!row) continue;
@@ -551,8 +609,10 @@ export async function correctMapFromOwner(mapId: string, instruction: string | u
           updatedAt: new Date(),
         }).where(eq(kmConcepts.id, row.id));
       }
+      await workflowFence(tx);
     });
   } catch (error) {
+    if (error instanceof WorkflowConflict) throw error; // a zár-ütközés nem nyelhető el
     logger.warn(`[STUDIO/1STEP] A forrás-helyesbítés mentése elmaradt (${error instanceof Error ? error.message : String(error)}) — helyesbítés nélkül folytatjuk.`);
     return [];
   }
@@ -800,17 +860,16 @@ async function guardedDrive(jobId: string) {
   }, () => drive(jobId));
 }
 
+/** A haladásjelző (one-step progress) azonosítója a workflow-é: a feltöltéses és (spec s7) a webes Studio-futásnál. */
+const tracksProgress = (mode: string | undefined) => mode === "upload" || mode === "webStudio";
+
 async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void) {
   const id = (await workflowStore.related(jobId, owner)) ?? jobId;
   const previous = await workflowStore.read(id, owner);
   if (!start && !previous) {
     if (await workflowStore.exists(jobId)) throw new WorkflowConflict("A futás másik készítőhöz tartozik.");
-    // Pre-release jobs have no invented workflow history.
-    await beforeDrive?.();
-    const store = await createDrizzlePipelineStore();
-    if ((await store.loadJob(jobId))?.step === "done") return;
-    onAccepted?.();
-    return guardedDrive(jobId);
+    // Spec 2026-10-06-s7 (B′): workflow-napló nélküli (kiadás előtti) job nem folytatható — lecke-írás csak workflow alatt.
+    throw new WorkflowConflict("Ehhez a készítéshez nincs workflow-napló (kiadás előtti futás); folytatás helyett indíts új készítést a térképről.");
   }
   let drove = false;
   try {
@@ -820,7 +879,7 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
         await beforeDrive(current?.view.visits.at(-1));
       }
       drove = true;
-      if (onAccepted && previous?.view.definition.mode === "upload") {
+      if (onAccepted && tracksProgress(previous?.view.definition.mode)) {
         const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
         await getRun(id);
         updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
@@ -828,18 +887,18 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
       onAccepted?.();
       await guardedDrive(jobId);
       const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
-      if (job?.step === "done" && job.lessonId) return readPublishedLesson(job.lessonId);
+      if (job?.step === "done" && job.lessonId) return previous?.view.definition.mode === "webStudio" ? finishWebStudio(id, owner, job.lessonId) : readPublishedLesson(job.lessonId);
       if (!job || job.step === "error" || job.status === "error") throw new Error(job?.error ?? "A készítés megállt.");
       throw new WorkflowWaiting("A tanulási terv jóváhagyására vár.", true);
     });
-    if (completed.state === "done" && previous?.view.definition.mode === "upload") {
+    if (completed.state === "done" && tracksProgress(previous?.view.definition.mode)) {
       const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
       await getRun(id);
       updateRun(id, { phase: "done", lessonId: job.lessonId, error: null, detail: "A tananyag ellenőrizve, közzétéve és visszaolvasva." });
     }
   } catch (error) {
     if (!(error instanceof WorkflowWaiting)) {
-      if (drove && previous?.view.definition.mode === "upload") {
+      if (drove && tracksProgress(previous?.view.definition.mode)) {
         await getRun(id);
         updateRun(id, { phase: "error", error: error instanceof Error ? error.message : "A folytatás megállt." });
       }
@@ -860,7 +919,11 @@ lessonPipelineRouter.post("/lessons/from-map/:mapId", async (req: Request, res: 
   const scope = parsed.data && "subject" in parsed.data ? parsed.data : undefined;
   // Spec 2026-10-03-forras-aritmetika-helyesbites: a meglévő térképről indított (újraindított) lecke is a determinisztikus
   // helyesbítésen megy át (kérés/fotó nélkül nincs modellhívás) — különben a hamis forrás-egyenlőség újra tényként tanítódna.
-  const corrections = await correctMapFromOwner(req.params.mapId, undefined, false);
+  // A helyesbítés hibája (a futás sem igazolja) sosem állítja meg a készítést — helyesbítés nélkül megy tovább, mint eddig.
+  const corrections = await correctMapInWorkflow(req.params.mapId, req.user!.id).catch((error: unknown) => {
+    logger.warn(`[STUDIO] A térkép forrás-helyesbítése elmaradt (${req.params.mapId}): ${error instanceof Error ? error.message : String(error)}`);
+    return [] as SourceCorrection[];
+  });
   const started = await startJobFromMap(req.params.mapId, scope, {}, corrections.length ? { corrections } : undefined);
   if (!started.ok) return res.status(409).json({ message: started.reason });
 

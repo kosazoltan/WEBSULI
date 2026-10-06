@@ -8,6 +8,7 @@ import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { logger } from "../lib/logger";
 import { assertTeachingReviewEvidence, type TeachingReviewEvidence } from "./web-teaching-review";
 import { executeWorkflow, workflowPhase, workflowCheckpoint, workflowUsage, savedWorkflowResult, type WorkflowStore } from "../workflows/engine";
+import type { WorkflowMode } from "../../shared/lesson-workflow";
 import type { ExperienceCheckpoint } from "./experience-builder";
 import { isStudioArtifact, type StudioResearchArtifact } from "./web-studio-handoff";
 
@@ -65,8 +66,46 @@ export function checkedResearchArtifact(artifact: ResearchArtifact) {
   return readHtmlLessonData(artifact.html);
 }
 
+/**
+ * Spec 2026-10-06-s7 (C egy futásban): a webes Studio-lecke lezárása — a közzétett lecke ellenőrzése a kapu-látogatás alatt,
+ * a webes job lízing-kapus kész jelzése, majd a `readback` lépés visszaolvasása. A webes worker és a Studio-panelről / söprőből
+ * folytatott futás (`driveTracked`) is ezt hívja. Nincs html_files-írás: a Studio a saját kapuján át már közzétette a leckét.
+ */
+export async function completeWebStudioJob(store: ResearchJobStore, job: StoredResearchJob, artifact: StudioResearchArtifact) {
+  const lesson = store.readStudioLesson ? await store.readStudioLesson(artifact.htmlFileId, artifact.lessonId) : null;
+  if (!lesson) throw new WebResearchFailure("A Studio-lecke közzététele nem igazolható vissza.");
+  // A resumed hand-off keeps the job's saved source list: its artifact may carry no sources.
+  if (artifact.sources.length) job.sources = artifact.sources;
+  job.studioRunId = artifact.runId;
+  job.lessonId = artifact.lessonId;
+  job.output = "studio";
+  job.title = job.input.title?.trim() || lesson.title;
+  job.classroom = lesson.classroom;
+  job.materialId = artifact.htmlFileId;
+  job.error = undefined;
+  job.stage = "A tananyag elkészült és közzétéve (Studio-lecke).";
+  // A job that an earlier execution left in `error` is reopened first: the done write is fenced on `running`.
+  const stored = await store.read(job.id, job.userId);
+  // Review #203: an earlier execution already committed the done write for THIS material (only its readback/final save
+  // failed) — the done write (fenced on `running`) is not repeated; the readback below closes the run.
+  const alreadyDone = stored?.state === "done" && stored.materialId === artifact.htmlFileId;
+  if (stored && stored.state !== "running" && stored.state !== "done") await store.update({ ...stored, state: "running", error: undefined }, stored.state);
+  job.state = "done";
+  // A worker that lost its lease must not mark the job done (the HTML path's publish is fenced the same way).
+  if (!alreadyDone) {
+    if (store.completeStudioLesson) await store.completeStudioLesson(job);
+    else await store.update(job, "running");
+  }
+  await workflowPhase("readback");
+  const saved = await store.read(job.id, job.userId);
+  if (saved?.state !== "done" || saved.materialId !== artifact.htmlFileId) throw new WebResearchFailure("A mentett tananyag visszaolvasása nem igazolta a kész eredményt.");
+  return { kind: "material" as const, id: artifact.htmlFileId };
+}
+
 /** DB owns idempotency, so multiple requests/processes cannot start the same AI call. */
-export function createResearchJobs(store: ResearchJobStore, generate: (input: WebResearchChatRequest, observer: ResearchObserver) => Promise<ResearchArtifact | StudioResearchArtifact>, workflows?: WorkflowStore) {
+export function createResearchJobs(store: ResearchJobStore, generate: (input: WebResearchChatRequest, observer: ResearchObserver) => Promise<ResearchArtifact | StudioResearchArtifact>, workflows?: WorkflowStore, options: { mode?: Extract<WorkflowMode, "web" | "webStudio"> } = {}) {
+  /** Spec 2026-10-06-s7: `webStudio` = a Studio-gyártás ugyanebben a futásban; `web` = a HTML-út (visszaállítás). */
+  const mode = options.mode ?? "web";
   async function runWork(job: StoredResearchJob, onStarted?: () => void) {
     let checkpoint = Promise.resolve();
     onStarted?.();
@@ -79,33 +118,43 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       // The final await still reports failure; avoid an unhandled rejection mid-stream.
       void checkpoint.catch(() => undefined);
     };
+    const observer: ResearchObserver = {
+      userId: job.userId,
+      jobId: job.id,
+      studioRunId: job.studioRunId,
+      async onStudioRun(runId) { job.studioRunId = runId; job.output = "studio"; persist(); await checkpoint; },
+      bankCheckpoint: job.bankCheckpoint,
+      async onBankCheckpoint(next) { job.bankCheckpoint = structuredClone(next); persist(); },
+      onEvent(event) {
+        if (event.type === "status") { job.stage = event.message; persist(); }
+        if (event.type === "sources") { job.sources = [...event.sources]; persist(); }
+        if (event.type === "content_replace") job.content = event.content;
+        if (event.type === "content_delta") job.content += event.content;
+      },
+      async onCandidate(content, diagnostic) {
+        job.candidate = content;
+        job.diagnostics.push(diagnostic);
+        await workflowUsage({ input_tokens: diagnostic.inputTokens, output_tokens: diagnostic.outputTokens });
+        persist();
+        await checkpoint;
+      },
+    };
     try {
       await workflowPhase("generate");
+      if (mode === "webStudio") {
+        // Spec 2026-10-06-s7: the manufacture's own steps (source … gate) are real visits of THIS run; no back-fill.
+        const studio = await generate(job.input, observer);
+        if (!isStudioArtifact(studio)) throw new WebResearchFailure("A webes Studio-út nem Studio-leckét adott.");
+        await checkpoint;
+        return await completeWebStudioJob(store, job, studio);
+      }
       const artifact = await workflowCheckpoint("web-result", { input: job.input, method: LESSON_METHOD_VERSION }, () => ["ready", "done"].includes(job.state) && job.html
-        ? Promise.resolve({ html: job.html, sources: job.sources, reviewEvidence: job.reviewEvidence }) : generate(job.input, {
-        userId: job.userId,
-        studioRunId: job.studioRunId,
-        async onStudioRun(runId) { job.studioRunId = runId; job.output = "studio"; persist(); await checkpoint; },
-        bankCheckpoint: job.bankCheckpoint,
-        async onBankCheckpoint(next) { job.bankCheckpoint = structuredClone(next); persist(); },
-        onEvent(event) {
-          if (event.type === "status") { job.stage = event.message; persist(); }
-          if (event.type === "sources") { job.sources = [...event.sources]; persist(); }
-          if (event.type === "content_replace") job.content = event.content;
-          if (event.type === "content_delta") job.content += event.content;
-        },
-        async onCandidate(content, diagnostic) {
-          job.candidate = content;
-          job.diagnostics.push(diagnostic);
-          await workflowUsage({ input_tokens: diagnostic.inputTokens, output_tokens: diagnostic.outputTokens });
-          persist();
-          await checkpoint;
-        },
-      }));
+        ? Promise.resolve({ html: job.html, sources: job.sources, reviewEvidence: job.reviewEvidence }) : generate(job.input, observer));
       await workflowPhase("knowledge");
       await workflowPhase("author");
       await workflowPhase("gate");
-      if (isStudioArtifact(artifact)) return await finishStudioLesson(job, artifact, () => checkpoint);
+      // Spec 2026-10-06-s7: the split hand-off (a separate upload run under a `web` run) no longer exists.
+      if (isStudioArtifact(artifact)) throw new WebResearchFailure("A Studio-lecke csak a webes Studio-futásban (webStudio) zárható le.");
       const data = checkedResearchArtifact(artifact);
       await checkpoint;
       job.html = artifact.html;
@@ -136,36 +185,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       if (workflows) throw error;
     }
   }
-  /**
-   * Spec 2026-09-25 (webes Studio-átadás): the one-step run already passed its own gate and published the
-   * lesson — no html_files write here; the readback proves the published lesson behind the material.
-   */
-  async function finishStudioLesson(job: StoredResearchJob, artifact: StudioResearchArtifact, pending: () => Promise<void>) {
-    await pending();
-    // A resumed hand-off follows its saved run without a new search: its artifact carries no sources then.
-    if (artifact.sources.length) job.sources = artifact.sources;
-    job.studioRunId = artifact.runId;
-    job.lessonId = artifact.lessonId;
-    job.output = "studio";
-    await workflowPhase("publish");
-    const lesson = store.readStudioLesson ? await store.readStudioLesson(artifact.htmlFileId, artifact.lessonId) : null;
-    if (!lesson) throw new WebResearchFailure("A Studio-lecke közzététele nem igazolható vissza.");
-    job.title = job.input.title?.trim() || lesson.title;
-    job.classroom = lesson.classroom;
-    job.materialId = artifact.htmlFileId;
-    job.state = "done";
-    job.error = undefined;
-    job.stage = "A tananyag elkészült és közzétéve (Studio-lecke).";
-    // A worker that lost its lease must not mark the job done (the HTML path's publish is fenced the same way).
-    if (store.completeStudioLesson) await store.completeStudioLesson(job);
-    else await store.update(job, "running");
-    await workflowPhase("readback");
-    const saved = await store.read(job.id, job.userId);
-    if (saved?.state !== "done" || saved.materialId !== artifact.htmlFileId) throw new WebResearchFailure("A mentett tananyag visszaolvasása nem igazolta a kész eredményt.");
-    return { kind: "material" as const, id: artifact.htmlFileId };
-  }
   async function run(job: StoredResearchJob, retry = false, onStarted?: () => void) {
-    return workflows ? executeWorkflow(workflows, { id: job.id, owner: job.userId, mode: "web", retry, request: job.input }, async () => {
+    return workflows ? executeWorkflow(workflows, { id: job.id, owner: job.userId, mode, retry, request: job.input }, async () => {
       // Change the domain state only after acquiring the workflow's exclusive lease.
       if (job.state === "error") { job.state = "running"; job.error = undefined; job.canResume = false; job.stage = "Folytatás a mentett részeredményekből…"; await store.update(job, "error"); }
       return runWork(job, onStarted);
@@ -190,7 +211,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       const tracked = await workflows.read(id, userId);
       const artifact = tracked && savedWorkflowResult<ResearchArtifact | StudioResearchArtifact>(tracked, "web-result", { input: job.input, method: LESSON_METHOD_VERSION });
       job.canResume = false;
-      if (tracked && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
+      // Spec 2026-10-06-s7: a run of the other mode (the old split hand-off ran as `web`) is not resumed by this path.
+      if (tracked && tracked.view.definition.mode === mode && ["error", "interrupted"].includes(tracked.view.state) && (tracked.view.executions ?? 0) < 4) {
         if (isStudioArtifact(artifact)) job.canResume = true;
         else if (artifact) {
           try { checkedResearchArtifact(artifact); job.canResume = true; }
@@ -223,6 +245,8 @@ export function createResearchJobs(store: ResearchJobStore, generate: (input: We
       await run(job, true);
       return (await store.read(id, userId))!;
     }
+    // Spec 2026-10-06-s7: with a workflow store, a job without a run (pre-release) is never published outside a workflow.
+    if (workflows) throw new WebResearchFailure("Ehhez a készítéshez nincs workflow-napló; új készítés szükséges.");
     return store.publish(id, userId);
   }
   return {

@@ -26,10 +26,20 @@ export const SKILL_RULES = {
   citations: ["Felhasznált források", "A ténylegesen feldolgozott internetes forrás kattintható hivatkozása a tananyagban is jelenjen meg; a találati lista nem pótolja a tanítást."],
   typography: ["Magyar megjelenítés", "Őrizd meg a magyar ékezeteket minden látható szövegben. Kizárólag a helyi Nunito, Source Sans 3, Source Serif 4 és /fonts/lesson-fonts.css használható."],
   repair_scope: ["Javítás hatóköre", "A célzott javítás csak az érintett tételazonosítókat változtathatja. A jó tanítást és az érintetlen kérdéseket őrizd meg; ne törölj követelményt a hiba elfedésére."],
+  // Spec 2026-10-06-s7 (§4/9): a támogató szerepek saját lelet-kódjai — a hibájuk nem csak a közös osztályozón át tanul.
+  scope_classification: ["Besorolás", "Tantárgyat és évfolyamot a forrás minden fájljából dönts; bizonytalanul évfolyam-tartományt adj."],
+  source_correction: ["Forrás-helyesbítés", "Csak a tanár szavával vagy egyértelmű átírási betűhibával javasolj; saját tudásból ne javíts."],
+  topic_focus: ["Témafókusz", "Döntsd el, résztémát kér-e a tanár; csak a kapott azonosítókból válassz, előfeltételekkel."],
+  blind_solver: ["Vak megoldás", "Minden feladatrészt sorban oldj meg; adathiányt jelölj, értéket ne találj ki."],
+  bank_verifier: ["Bank-ellenőrzés", "Minden kapott tételre adj ítéletet; az ítélet nélküli tétel nem igazolt."],
+  instruction_points: ["Pontjegyzék", "A tanár kérését teljesen, sorban bontsd pontokra, forrásbeli alátámasztással."],
+  instruction_check: ["Kérés-ellenőrzés", "Minden pontazonosítóra pontosan egy ítéletet adj, a megnevezett fejezetből."],
+  ocr_uncertain: ["Bizonytalan átírás", "A „⟦?⟧” olvasatot ne értelmezd át és ne pótold; igazolásig nem tanítható tény."],
 } as const;
 export type SkillCode = keyof typeof SKILL_RULES;
 export type LessonSkill = "tananyag-keszito" | "tananyag-javito";
-export const skillForMode = (mode: WorkflowMode): LessonSkill => ["repair", "html", "concept", "apply"].includes(mode) ? "tananyag-javito" : "tananyag-keszito";
+// Spec 2026-10-06-s7: a régi HTML javítási javaslata (htmlAssist) javító; a többi új mód (segéd, kvíz, tudástár, webes Studio) készítő.
+export const skillForMode = (mode: WorkflowMode): LessonSkill => ["repair", "html", "concept", "apply", "htmlAssist"].includes(mode) ? "tananyag-javito" : "tananyag-keszito";
 export type SkillSnapshot = { skill: LessonSkill; version: string; rules: SkillCode[]; runtimeVersion?: string; methodVersion?: string };
 export type SkillFinding = { code: SkillCode | "unknown" | "infrastructure"; step: string; steps?: string[]; fingerprint: string };
 export type SkillAudit = {

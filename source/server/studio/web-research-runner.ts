@@ -46,6 +46,8 @@ export type ResearchObserver = {
   userId?: string;
   studioRunId?: string;
   onStudioRun?: (runId: string) => Promise<void>;
+  /** Spec 2026-10-06-s7: the web job (and its `webStudio` workflow) id — also the manufacture's progress record id. */
+  jobId?: string;
 };
 const MAX_TOKENS = 64_000;
 const MAX_CONTINUATIONS = 5;

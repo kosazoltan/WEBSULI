@@ -75,6 +75,15 @@ export const RULE_ROLES: Record<string, readonly PromptRole[]> = {
   citations: ["web-author", "web-research"],
   typography: ["web-author", "html-improve", "html-fix"],
   repair_scope: ["author", "repair", "web-repair", "bank"],
+  // Spec 2026-10-06-s7 (§4/9): a támogató szerepek saját kódjai csak az elkövető szerephez mennek.
+  scope_classification: ["scope"],
+  source_correction: ["corrector"],
+  topic_focus: ["topic-focus"],
+  blind_solver: ["blind-solver"],
+  bank_verifier: ["bank-verifier"],
+  instruction_points: ["instruction-points"],
+  instruction_check: ["instruction-checker"],
+  ocr_uncertain: ["ocr", "extract"],
 };
 export const ruleAppliesToRole = (code: string, role: PromptRole): boolean => (RULE_ROLES[code] ?? ALL).includes(role);
 

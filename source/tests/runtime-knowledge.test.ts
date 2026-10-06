@@ -5,7 +5,7 @@ import { skillSnapshot, findingsFromError, auditWorkflow, lektorSkillCodes } fro
 import { executeWorkflow, workflowPhase, workflowSkillPrompt, withPreparationSkill, workflowSkillVersion } from "../server/workflows/engine";
 import { scopeRequestParams } from "../server/studio/one-step";
 import { skillRuleText, type SkillLesson } from "../shared/lesson-skill";
-import { WORKFLOW_MODES, workflowDefinition } from "../shared/lesson-workflow";
+import { WORKFLOW_MODES, WORKFLOW_RESULT_KIND, workflowDefinition } from "../shared/lesson-workflow";
 import { memoryWorkflows } from "./helpers/workflow-store";
 
 test("üres runtime is rendelkezik saját dokumentumokkal és mód szerinti tényleges utasítással", async () => {
@@ -25,7 +25,8 @@ test("üres runtime is rendelkezik saját dokumentumokkal és mód szerinti tén
         assert.ok(prompt.includes(step.label));
         await workflowPhase(step.id);
       }
-      return { kind: ["html", "repair"].includes(mode) ? "candidate" as const : "material" as const, id: "result" };
+      // Spec 2026-10-06-s7 §4/2: az elvárt eredményfajta módonként (proposal/map az új módoknál).
+      return { kind: WORKFLOW_RESULT_KIND[mode], id: "result" };
     });
   }
 });
