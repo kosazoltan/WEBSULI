@@ -94,11 +94,12 @@ test("B4: a bank rendszerutasítása a generált BANKCSOMAG-SZERZŐDÉST és a p
   assert.ok(system.includes(OPEN_ANSWER_RULES_HU.split("\n")[0]), "A NYÍLT FELADAT PONTOZÓJA a rendszerutasításban");
   assert.match(system, /3\. EBBEN a csomagban legalább egy mode="oral" és egy mode="written"/);
   assert.match(system, /8\. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG/);
-  assert.match(user, /Darabszám \(a BANKCSOMAG-SZERZŐDÉS 1\. pontja\): \d+–20 módszer; PONTOSAN \d+ nyílt feladat \(a program \d+ alatt elutasít\); PONTOSAN \d+ kvíz/);
+  // Spec 2026-10-04-bank-tartalek-es-elojel: a tartalék kötelező — a prompt a célt mondja és a kevesebb elutasítását.
+  assert.match(user, /Darabszám \(a BANKCSOMAG-SZERZŐDÉS 1\. pontja\): \d+–20 módszer; PONTOSAN \d+ nyílt feladat; PONTOSAN \d+ kvíz \(a program ennél kevesebbet elutasít — a tartalék kötelező\)/);
   assert.match(user, /Ebben a csomagban legalább egy mode="oral" és egy mode="written" feladat/);
   assert.match(user, /typedAnswers:\[\{part,kind,value,unit\?,form\?\}\]/);
   const c = bankPacketContract({ sectionIndex: 3, conceptIds: ["a", "b"], methodKinds: ["gate", "myth"], taskCount: 2, taskTarget: 5, quizCount: 4, quizTarget: 10 });
-  assert.match(c, /methods legalább 2 \(kindek: gate, myth\), legfeljebb 20; tasks PONTOSAN 5 \(a program 2 alatt elutasít\); quiz PONTOSAN 10 \(4 alatt elutasít\); glossary: \[\]/);
+  assert.match(c, /methods legalább 2 \(kindek: gate, myth\), legfeljebb 20; tasks PONTOSAN 5, quiz PONTOSAN 10 \(a program ennél kevesebbet elutasít — a tartalék kötelező; csak a mentő kivétel mehet 2\/4-ig\); glossary: \[\]/);
   assert.match(c, /sectionIndex=3, coversConceptIds csak ebből: \["a","b"\]/);
   assert.match(bankPacketContract({ sectionIndex: 0, conceptIds: ["a"], methodKinds: ["gate"], taskCount: 1, taskTarget: 1, quizCount: 2, quizTarget: 2, language: "en-GB" }), /glossary: legalább 1 elem \(en-GB\)/);
 });

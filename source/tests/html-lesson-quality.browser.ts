@@ -60,7 +60,8 @@ for (const width of [320, 390, 844, 1366]) test(`full 7.4 HTML banks and age pre
     backgrounds.push(await page.locator("body").evaluate(el => getComputedStyle(el).backgroundColor));
     await mkdir("../tmp/quality-browser", { recursive: true });
     await page.screenshot({ path: `../tmp/quality-browser/age-${classroom}-${width}.png` });
-    for (const [tab, count, bankSize] of [["tasks", 15, 45], ["quiz", 25, 75]] as const) {
+    // Spec 2026-10-04-bank-tartalek-es-elojel: a teljes bank a tartalékot is mutatja — a méret a tesztadatból, nem rögzített 45/75.
+    for (const [tab, count, bankSize] of [["tasks", 15, data.experience!.tasks.length], ["quiz", 25, data.experience!.quiz.length]] as const) {
       await page.locator(`[data-lesson-tab="${tab}"]`).click();
       const panel = page.locator(`[data-lesson-panel="${tab}"]`);
       const seen = new Set<string>();

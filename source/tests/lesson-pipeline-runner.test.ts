@@ -26,6 +26,7 @@ import type { MapConcept } from "../server/studio/coverage";
 import { lessonSchema, type Block, type Lesson } from "../shared/lesson-schema";
 import { experienceProblems } from "../shared/lesson-experience-validation";
 import { planLessonBank } from "../shared/lesson-bank-plan";
+import { LESSON_BANK_SIZES } from "../shared/lesson-experience";
 import { reconcileBankWithTeaching } from "../server/studio/limit-policy";
 import { verifyLessonSkillBank } from "../shared/lesson-skill-checks";
 import { classifyNotes, type LektorNote } from "../server/studio/lektor";
@@ -1924,6 +1925,9 @@ async function bankVerifierSetup(id: string, extraOutput: Record<string, unknown
   lesson.subject = MAP_META.subject; lesson.classroom = MAP_META.classroom; lesson.mapId = "m1";
   let checkpoint: ExperienceCheckpoint | undefined;
   lesson.experience = await buildLessonExperience(lesson, concepts, { call: async () => packet, save: async cp => { checkpoint = structuredClone(cp); } });
+  // Spec 2026-10-04-bank-tartalek-es-elojel: a banképítő ma tartalékkal épít (48/80); ezek a kapu-tesztek a tartalék NÉLKÜLI
+  // (45/75-ös — a szabály előtt vagy mentő kivétellel épült) bankot mérik, a tartalékot a `limitSetup` `spare` paramétere adja.
+  lesson.experience = { ...lesson.experience!, tasks: lesson.experience!.tasks.slice(0, LESSON_BANK_SIZES.tasks), quiz: lesson.experience!.quiz.slice(0, LESSON_BANK_SIZES.quiz) };
   const sourceText = "1. Számold ki: 24 + 15!";
   const base = makeDeps("");
   base.store.maps.set("m1", { meta: { ...MAP_META, sourceText }, concepts });

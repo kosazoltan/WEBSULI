@@ -48,8 +48,8 @@ export type BankPacketCounts = {
   methodMin: number;
   /**
    * Feladat és kvíz: a szigorú séma PONTOSAN a célt (target) kéri (review #160: a minimum–maximum sáv nem a szerződés
-   * „PONTOSAN target” ígérete volt); a helyi (tartalék úti) séma a Count alatt elutasít, a Max fölött nem fogad —
-   * a tartalék modell tűrése szándékos, a szerződés ezt így is mondja („a program Count alatt elutasít”).
+   * „PONTOSAN target” ígérete volt); a helyi (tartalék úti) séma a Target alatt elutasít (spec 2026-10-04: a tartalék
+   * kötelező), a Max fölött nem fogad; csak a mentő kivétel mehet a Count-ig — a szerződés ezt így is mondja.
    */
   taskCount: number; taskTarget: number; taskMax: number; quizCount: number; quizTarget: number; quizMax: number;
   /** Nyelvi leckénél kötelező a szószedet. */

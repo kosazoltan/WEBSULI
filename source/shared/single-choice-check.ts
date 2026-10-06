@@ -1,4 +1,4 @@
-import { ATOM, EXPR, SIGN, evaluateExpression } from "./arithmetic-expression";
+import { ATOM, EXPR, SIGN, evaluateExpression, normalizeSignedParens } from "./arithmetic-expression";
 
 /**
  * Spec 2026-09-29 (docs/specs/2026-09-29-egy-helyes-valasz.md), döntés 1: determinisztikus egy-helyes-válasz őr.
@@ -35,6 +35,18 @@ function numberOf(option: string): number | null {
   return evaluateExpression(t);
 }
 
+/**
+ * Spec 2026-10-04-bank-tartalek-es-elojel (mért: „-8-6=-14” és „-8-(+6)=-14” egy kvíz két opciója): IGAZ egyenlőség-opció
+ * értéke — pontosan egy `=`, mindkét oldal kiértékelhető (előjeles zárójel összevonva; a jobb oldal vezető `+` jele
+ * eredmény-jelölés), és a két oldal egyenlő. Hamis vagy nem kiértékelhető egyenlőség → `null` (a hamis disztraktor jogos).
+ */
+function trueEqualityValue(option: string): number | null {
+  const sides = option.normalize("NFC").trim().replace(/[.!]+$/u, "").split("=");
+  if (sides.length !== 2 || !sides.every((side) => /\d/.test(side) && /^[\d\s+\-−–·×*:÷/().,]+$/.test(side))) return null;
+  const [left, right] = sides.map((side) => evaluateExpression(normalizeSignedParens(side).replace(/^\s*\+\s*/, "")));
+  return left !== null && right !== null && Math.abs(left - right) < 1e-6 ? left : null;
+}
+
 const listed = (options: readonly string[], indexes: number[]) => indexes.map((i) => `„${options[i].trim()}”`).join(", ");
 
 /** Ahol a kérdés a szám ALAKJÁRÓL szól (egyszerűsítés, bővítés, írásmód), az egyenlő értékű opciók jogosak. */
@@ -52,14 +64,17 @@ function duplicateProblems(prompt: string, options: readonly string[]): string[]
   const problems: string[] = [];
   const byText = new Map<string, number>();
   const byValue = new Map<number, number>();
+  const byEquality = new Map<number, number>();
   const compareValues = !ABOUT_FORM.test(norm(prompt)) && !NEGATED_EQUALITY.test(norm(prompt)) && !options.some((o) => AGGREGATE_OPTION.test(norm(o)));
   options.forEach((option, i) => {
     const key = textKey(option);
     const value = compareValues ? numberOf(option) : null;
-    const twin = byText.get(key) ?? (value === null ? undefined : byValue.get(value));
+    const equality = compareValues && value === null ? trueEqualityValue(option) : null;
+    const twin = byText.get(key) ?? (value === null ? undefined : byValue.get(value)) ?? (equality === null ? undefined : byEquality.get(equality));
     if (twin !== undefined) problems.push(`a(z) ${listed(options, [twin, i])} opció ugyanazt jelenti — az opciók legyenek különbözők.`);
     if (!byText.has(key)) byText.set(key, i);
     if (value !== null && !byValue.has(value)) byValue.set(value, i);
+    if (equality !== null && !byEquality.has(equality)) byEquality.set(equality, i);
   });
   return problems;
 }

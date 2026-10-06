@@ -129,8 +129,9 @@ test("builder uses one coverage packet for a small source, retains evidence and 
   const parts = [{ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }];
   const concepts = [{ localId: "area", term: "Terület", definition: "A szorzat fele", quote: "T = a · m / 2", examWeight: "core" as const }];
   const actual = await buildLessonExperience(lesson, concepts, { call: async (system) => { assert.ok(system.includes(concepts[0].quote)); assert.ok(system.includes(concepts[0].definition)); return parts[calls++]; }, save: async cp => { checkpoint = structuredClone(cp); } });
-  assert.equal(calls, 1); assert.equal(actual.tasks.length, 45);
-  assert.equal(actual.quiz.length, 75); assert.equal(actual.quiz[1].options.length, 4);
+  // Spec 2026-10-04-bank-tartalek-es-elojel: a csomag a tartalékos darabszámmal (45+3 / 75+5) fogadható el.
+  assert.equal(calls, 1); assert.equal(actual.tasks.length, 48);
+  assert.equal(actual.quiz.length, 80); assert.equal(actual.quiz[1].options.length, 4);
   await buildLessonExperience(lesson, concepts, { checkpoint, call: async () => { throw new Error("cache miss"); } });
   const reused = await buildLessonExperience(lesson, concepts, { previous: actual, call: async () => { throw new Error("unchanged packet rewritten"); } });
   assert.deepEqual(reused.quiz, actual.quiz);

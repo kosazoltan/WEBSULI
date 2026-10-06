@@ -698,3 +698,15 @@ S10/S9 streamelés, orkesztrátor, automatikus folytatás (#190–#192), S11 OCR
 4 történelem-lapjából megállás nélkül publikált lecke 13f2102b (1441 s); Mezopotámia-lecke 76197093 helyes tényekkel.
 **Tanulság:** a 3 napos foltozás után a bukások kategóriákra bontása mutatta meg, hogy a zöm gépies hiba → determinisztikus kód;
 a forrás-hibák a gyenge OCR-olvasó cseréjével szűntek meg. Éles revízió: Render 37a4b8a, Vercel success.
+
+## 2026-10-04 — kötelező banktartalék + előjel-szabályok (Claude Code, felhő-munkamenet)
+**Mért (admin-képernyő, a 10-03-i „Negatív számok kivonása” újraindítása):** lektor 5 kör után a kapu megállt: „Hibás banktétel
+maradt a limiten, és a kivétel után a bank nem felelne meg” — 5 előjelhibás tétel (két egyenértékű helyes opció
+„-8-6=-14”/„-8-(+6)=-14”, required `["-13","13"]`, hamis lépésszámú disztraktor-magyarázatok). Gyökér: a csomag a minimum-
+darabszámmal (45/75) is elfogadható volt, így a kivétel a 45/75 alá vitte; a bankprompt nem ismert előjel-szabályt, és a gépi
+őrök nem látták az egyenértékű egyenlőség-opciót és az előjel-kétértelmű rubrikát.
+**Javítás:** csomag-elfogadás a tartalékos célon (+3/+5), a mentő kivétel külön a minimumig; matematika + negatív szám →
+`SIGNED_NUMBER_RULES_HU` a bankpromptban; egy-helyes őr: két igaz, azonos értékű egyenlőség-opció (előjeles zárójel
+összevonva) = „ugyanazt jelenti”; rubrika-őr: egy VAGY-csoportban szám és ellentettje → tételhiba (javító mód: rubrika).
+Spec: `docs/specs/2026-10-04-bank-tartalek-es-elojel(.md, -vegrehajtas.md)`. Unit 1914/1914, check/check:test/lint 0, build 0.
+NOT RUN: éles újraindítás (a felhőből az éles szerver nem érhető el) — a megállt leckét újra kell indítani.
