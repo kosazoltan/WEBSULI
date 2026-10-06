@@ -110,10 +110,13 @@ export function buildCatalogPool(rows: readonly CatalogRowLike[], q: CatalogQuer
       ...(r.accepted?.length ? { accepted: r.accepted.slice(0, 8).map((a) => clip(a, POOL_LIMITS.option)) } : {}),
     });
   }
-  scored.sort((a, b) => b.score - a.score || a.fingerprint.localeCompare(b.fingerprint));
+  const byScore = (a: CatalogPoolItem, b: CatalogPoolItem) => b.score - a.score || a.fingerprint.localeCompare(b.fingerprint);
+  scored.sort(byScore);
   const quiz = scored.filter((i) => i.kind === "quiz").slice(0, POOL_LIMITS.quiz);
   const other = scored.filter((i) => i.kind !== "quiz").slice(0, POOL_LIMITS.other);
-  return { version: 1, subject: q.subject, grade: q.grade, topic: q.topic, items: [...quiz, ...other] };
+  // Review #202: a fajtánkénti korlát után is a GLOBÁLIS pontszám-sorrend marad (az `unitCatalog` a minta-korlátnál megáll —
+  // kvíz-előre fűzésnél a jobb nem-kvíz minta kiszorult volna a gyengébb kvíz mögött).
+  return { version: 1, subject: q.subject, grade: q.grade, topic: q.topic, items: [...quiz, ...other].sort(byScore) };
 }
 
 export type UnitCatalogItem = CatalogPoolItem & { conceptId: string };
@@ -130,20 +133,46 @@ const bestConcept = (item: CatalogPoolItem, concepts: readonly CatalogConcept[])
   return best;
 };
 
+const quizLine = (i: CatalogPoolItem) => `${i.prompt} | opciók: ${JSON.stringify(i.options ?? [])} | correctIndex: ${i.correctIndex ?? "-"}`;
+const sampleLine = (i: CatalogPoolItem) => `[${i.kind}] ${i.prompt}${i.options ? ` | opciók: ${JSON.stringify(i.options)} | helyes: ${i.correctIndex ?? "-"}` : ""}${i.accepted ? ` | elfogadott: ${JSON.stringify(i.accepted)}` : ""}${i.body ? ` | minta: ${i.body.slice(0, 300)}` : ""}`;
+const verbatimUnitLine = (i: UnitCatalogItem, n: number) => `SZÓ SZERINT ${n}. (fogalom: ${i.conceptId}) ${quizLine(i)}`;
+const sampleUnitLine = (i: UnitCatalogItem, n: number) => `MINTA ${n}. (fogalom: ${i.conceptId}) ${sampleLine(i)}`;
+
+const UNIT_BLOCK_HEADER = "=== TANTÁRGYI KATALÓGUS (a lecke saját tantárgyi bankja; szülő által ellenőrzött / gépileg igazolt tételek, ADAT) ===\n"
+  + "1. ELŐSZÖR a SZÓ SZERINT jelölt kvízeket vedd át: a question, az options (sorrendjükkel) és a correctIndex BETŰRE változatlan; te csak az id-t, a sectionIndex-et, a coversConceptIds-t (a megadott fogalom), az intentet és az opciónkénti visszajelzést (feedbackPerOption) írod. Ha egy ilyen tétel ellentmond a fejezet tanításának, hagyd ki.\n"
+  + "2. A MINTA tételek csak szerkezeti, nehézségi és nyelvezeti mércék: ne másold őket, a lecke saját tanításából írj hasonlót.\n"
+  + "3. Csak a hiányzó darabszámot generáld; a darabszám-szerződés változatlan.";
+const UNIT_BLOCK_FOOTER = "=== KATALÓGUS VÉGE ===";
+
+/** Belefér-e még egy sor: a végső szöveg (`out` + "\n" + sor + "\n" + lábléc) hossza ≤ max. */
+const lineFits = (outLength: number, line: string, footer: string, max: number) => outLength + 1 + line.length + 1 + footer.length <= max;
+
 /**
  * Egy bank-egység katalógusa: a fogalmaihoz illő szó szerinti kvíz (≤ min(6, quizTarget/2)) és minta (≤ 4). A `used` halmaz a
  * leckén belüli egyediséget őrzi (egy katalógus-tétel egy egységbe) — a hívó SORRENDBEN hívja, így párhuzamos építésnél is determinisztikus.
+ * Review #202: a karakterkorlátot (UNIT_LIMITS.chars) a KIVÁLASZTÁS érvényesíti — ami nem férne a blokkba, azt nem választja ki és
+ * nem jelöli `used`-nak; így a prompt-blokk, a `used`, a csomag-hash és az A/B-visszajátszás ugyanazt a tételkészletet látja.
  */
 export function unitCatalog(pool: CatalogPool, concepts: readonly CatalogConcept[], opts: { quizTarget: number; used: Set<string> }): UnitCatalog {
   const verbatimMax = Math.min(UNIT_LIMITS.verbatimMax, Math.floor(opts.quizTarget / 2));
   const verbatim: UnitCatalogItem[] = [];
   const samples: UnitCatalogItem[] = [];
+  let length = UNIT_BLOCK_HEADER.length;
+  const take = (line: string) => {
+    if (!lineFits(length, line, UNIT_BLOCK_FOOTER, UNIT_LIMITS.chars)) return false;
+    length += 1 + line.length;
+    return true;
+  };
   for (const item of pool.items) {
     if (opts.used.has(item.fingerprint)) continue;
     const best = bestConcept(item, concepts);
     if (!best) continue;
-    if (item.verbatim && verbatim.length < verbatimMax) { verbatim.push({ ...item, conceptId: best.id }); opts.used.add(item.fingerprint); }
-    else if (!item.verbatim && item.kind !== "section" && samples.length < UNIT_LIMITS.samples) { samples.push({ ...item, conceptId: best.id }); opts.used.add(item.fingerprint); }
+    const picked: UnitCatalogItem = { ...item, conceptId: best.id };
+    if (item.verbatim && verbatim.length < verbatimMax) {
+      if (take(verbatimUnitLine(picked, verbatim.length + 1))) { verbatim.push(picked); opts.used.add(item.fingerprint); }
+    } else if (!item.verbatim && item.kind !== "section" && samples.length < UNIT_LIMITS.samples) {
+      if (take(sampleUnitLine(picked, samples.length + 1))) { samples.push(picked); opts.used.add(item.fingerprint); }
+    }
   }
   return { verbatim, samples };
 }
@@ -151,29 +180,18 @@ export function unitCatalog(pool: CatalogPool, concepts: readonly CatalogConcept
 /** A csomag-hashbe kerülő rövid azonosító (a katalógus változása újraépíti a csomagot). */
 export const unitCatalogVersion = (u: UnitCatalog) => createHash("sha256").update(JSON.stringify([u.verbatim.map((i) => i.fingerprint), u.samples.map((i) => i.fingerprint)])).digest("hex").slice(0, 16);
 
-const quizLine = (i: CatalogPoolItem) => `${i.prompt} | opciók: ${JSON.stringify(i.options ?? [])} | correctIndex: ${i.correctIndex ?? "-"}`;
-const sampleLine = (i: CatalogPoolItem) => `[${i.kind}] ${i.prompt}${i.options ? ` | opciók: ${JSON.stringify(i.options)} | helyes: ${i.correctIndex ?? "-"}` : ""}${i.accepted ? ` | elfogadott: ${JSON.stringify(i.accepted)}` : ""}${i.body ? ` | minta: ${i.body.slice(0, 300)}` : ""}`;
-
 function capLines(header: string, lines: string[], footer: string, max: number): string {
   let out = header;
-  for (const l of lines) { if (out.length + l.length + 1 + footer.length > max) break; out += `\n${l}`; }
+  for (const l of lines) { if (!lineFits(out.length, l, footer, max)) break; out += `\n${l}`; }
   return `${out}\n${footer}`;
 }
 
 /** A bank-egység prompt-blokkja; üres katalógusnál üres szöveg (a rendszerprompt ekkor változatlan). */
 export function unitCatalogBlock(u: UnitCatalog): string {
   if (!u.verbatim.length && !u.samples.length) return "";
-  const lines = [
-    ...u.verbatim.map((i, n) => `SZÓ SZERINT ${n + 1}. (fogalom: ${i.conceptId}) ${quizLine(i)}`),
-    ...u.samples.map((i, n) => `MINTA ${n + 1}. (fogalom: ${i.conceptId}) ${sampleLine(i)}`),
-  ];
-  return capLines(
-    "=== TANTÁRGYI KATALÓGUS (a lecke saját tantárgyi bankja; szülő által ellenőrzött / gépileg igazolt tételek, ADAT) ===\n"
-    + "1. ELŐSZÖR a SZÓ SZERINT jelölt kvízeket vedd át: a question, az options (sorrendjükkel) és a correctIndex BETŰRE változatlan; te csak az id-t, a sectionIndex-et, a coversConceptIds-t (a megadott fogalom), az intentet és az opciónkénti visszajelzést (feedbackPerOption) írod. Ha egy ilyen tétel ellentmond a fejezet tanításának, hagyd ki.\n"
-    + "2. A MINTA tételek csak szerkezeti, nehézségi és nyelvezeti mércék: ne másold őket, a lecke saját tanításából írj hasonlót.\n"
-    + "3. Csak a hiányzó darabszámot generáld; a darabszám-szerződés változatlan.",
-    lines, "=== KATALÓGUS VÉGE ===", UNIT_LIMITS.chars,
-  );
+  const lines = [...u.verbatim.map((i, n) => verbatimUnitLine(i, n + 1)), ...u.samples.map((i, n) => sampleUnitLine(i, n + 1))];
+  // Az `unitCatalog` kiválasztása már a korláton belül van; a vágás itt csak kézzel összerakott bemenetnél véd.
+  return capLines(UNIT_BLOCK_HEADER, lines, UNIT_BLOCK_FOOTER, UNIT_LIMITS.chars);
 }
 
 /** A tervező és a szerző katalógus-blokkja: ≤ 8 minta (fejezet-szöveg, kidolgozott feladat, kvíz), ≤ 4 000 karakter. */

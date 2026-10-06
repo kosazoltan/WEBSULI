@@ -9,6 +9,7 @@ import { withReadOnlyDb } from "../lib/read-only-db";
 import { subjectKeyOf } from "../../shared/subject-key";
 import { bankUnitQuota } from "../../shared/lesson-bank-plan";
 import { buildCatalogPool, lessonTopicText, unitCatalog, type CatalogRowLike, type CatalogConcept } from "../../server/catalog/retrieval";
+import { replayLessonStats, type ReplayGroup, type ReplayNote } from "./ab-replay-model";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const out = process.argv[2] ?? resolve(repoRoot, "docs/measurements/2026-10-06-s6-ab-replay.json");
@@ -26,11 +27,24 @@ export type LessonReplay = {
   notesQuizCeiling: number; roundsQuizCeiling: number;
 };
 
-const { lessons, skipped } = await withReadOnlyDb(async (q) => {
+// Review #202: a gyártási `loadMap` (createDrizzlePipelineStore) csak a tanított fogalmakat adja (TAUGHT_REVIEW_STATES = kept | edited) —
+// a visszajátszás ugyanígy szűr (a pending/rejected fogalom nem kerülhet a téma-szövegbe és az egység-illesztésbe).
+const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
+
+const { lessons, skipped, inputSnapshotAt } = await withReadOnlyDb(async (q) => {
   const jobs = await q<JobRow>(`select j.id, j.map_id, j.step, j.output->'lesson' as lesson, m.subject, m.classroom, m.title
-    from studio_jobs j join knowledge_maps m on m.id = j.map_id where j.step in ('done','error') order by j.created_at`);
-  const notes = await q<NoteRow>(`select job_id, block_path, item_id, round, severity from lektor_notes where block_path like 'experience%'`);
-  const concepts = await q<{ map_id: string; local_id: string; term: string | null; definition: string | null }>(`select map_id, local_id, term, definition from km_concepts`);
+    from studio_jobs j join knowledge_maps m on m.id = j.map_id where j.step in ('done','error') order by j.created_at, j.id`);
+  const notes = await q<NoteRow>(`select job_id, block_path, item_id, round, severity from lektor_notes where block_path like 'experience%'
+    order by job_id, round, block_path, item_id, id`);
+  const concepts = await q<{ map_id: string; local_id: string; term: string | null; definition: string | null }>(`select map_id, local_id, term, definition
+    from km_concepts where review_state = any($1::text[]) order by map_id, order_index, local_id`, [[...TAUGHT_REVIEW_STATES]]);
+  // Review #202: reprodukálható kimenet — futási idő helyett a bemenet pillanatképének ideje (a legfrissebb bemeneti sor időbélyege).
+  const [snapshot] = await q<{ at: string | null }>(`select to_char(greatest(
+      (select max(coalesce(finished_at, created_at)) from studio_jobs where step in ('done','error')),
+      (select max(created_at) from lektor_notes),
+      (select max(created_at) from km_concepts),
+      (select max(updated_at) at time zone 'UTC' from catalog_items)
+    ), 'YYYY-MM-DD"T"HH24:MI:SS.MS') as at`);
   const mapLessons = await q<{ map_id: string; id: string }>(`select map_id, id from lessons`);
   const rowsBySubject = new Map<string, CatalogRowLike[]>();
   const skipped: Record<string, number> = { unmappedSubject: 0, noBank: 0 };
@@ -42,7 +56,7 @@ const { lessons, skipped } = await withReadOnlyDb(async (q) => {
     if (!exp?.bankPlan?.units?.length) { skipped.noBank++; continue; }
     if (!rowsBySubject.has(subject)) {
       rowsBySubject.set(subject, await q<CatalogRowLike>(`select subject, grade, topic_area as "topicArea", topic, kind, prompt, body, options, correct_index as "correctIndex",
-        accepted, provenances, trust, status, fingerprint from catalog_items where subject = $1 and status = 'active'`, [subject]));
+        accepted, provenances, trust, status, fingerprint from catalog_items where subject = $1 and status = 'active' order by fingerprint`, [subject]));
     }
     const mapConcepts: CatalogConcept[] = concepts.filter((c) => c.map_id === job.map_id).map((c) => ({ localId: c.local_id, term: c.term ?? undefined, definition: c.definition ?? undefined }));
     // Szivárgás ellen: ugyanennek a térképnek a (fúziós, gépi) leckéi nem lehetnek a saját katalógusuk.
@@ -50,7 +64,7 @@ const { lessons, skipped } = await withReadOnlyDb(async (q) => {
     const pool = buildCatalogPool(rowsBySubject.get(subject)!, { subject, grade: job.classroom, topic: lessonTopicText(job.title, mapConcepts), concepts: mapConcepts, excludeProvenances });
     const plan = exp.bankPlan;
     const used = new Set<string>();
-    const verbatim = new Map<string, number>(); // `${unitIndex}|${conceptId}` → szó szerinti tételek száma
+    const verbatim = new Map<string, number>(); // `${unitIndex}|${conceptId}` → szó szerint BESZÚRT tételek száma (a kiválasztás a blokk-korláton belül)
     plan.units.forEach((unit, unitIndex) => {
       let quizTarget: number;
       try { quizTarget = bankUnitQuota(plan as never, unitIndex).quizTarget; } catch { quizTarget = exp.quiz.filter((i) => i.sourceHash && i.sourceHash === unit.sourceHash).length; }
@@ -62,43 +76,31 @@ const { lessons, skipped } = await withReadOnlyDb(async (q) => {
       if (byHash >= 0) return byHash;
       return plan.units.findIndex((u) => u.sectionIndex === item.sectionIndex && (item.coversConceptIds ?? []).some((c) => u.conceptIds.includes(c)));
     };
-    const quizCount = new Map<string, number>();
-    for (const item of exp.quiz) { const k = `${unitOf(item)}|${item.coversConceptIds?.[0] ?? ""}`; quizCount.set(k, (quizCount.get(k) ?? 0) + 1); }
-    const byId = new Map<string, { bank: string; item: Item }>();
-    for (const bank of ["quiz", "tasks", "methods"] as const) for (const item of exp[bank] ?? []) byId.set(item.id, { bank, item });
+    const groupOf = (item: Item) => `${unitOf(item)}|${item.coversConceptIds?.[0] ?? ""}`;
+    const groups = new Map<string, ReplayGroup>();
+    for (const item of exp.quiz) { const k = groupOf(item); const g = groups.get(k) ?? { verbatim: verbatim.get(k) ?? 0, quizzes: 0 }; g.quizzes++; groups.set(k, g); }
+    const byId = new Map<string, { bank: string; index: number }>();
+    for (const bank of ["quiz", "tasks", "methods"] as const) (exp[bank] ?? []).forEach((item, index) => byId.set(item.id, { bank, index }));
     const jobNotes = notes.filter((n) => n.job_id === job.id);
-    let unresolved = 0, quizNotes = 0;
-    const perRound = new Map<number, Array<{ p: number; any: boolean; quiz: boolean }>>();
-    for (const n of jobNotes) {
+    const replayNotes: ReplayNote[] = jobNotes.map((n) => {
       let found = n.item_id ? byId.get(n.item_id) : undefined;
       const m = n.block_path.match(/^experience\.(quiz|tasks|methods)(?:\[(\d+)\]|\.(\d+))/);
-      if (!found && m) { const item = (exp[m[1] as "quiz"] ?? [])[Number(m[2] ?? m[3])]; if (item) found = { bank: m[1], item }; }
-      let p = 0, any = false, quiz = false;
-      if (!found) unresolved++;
-      else if (found.bank === "quiz") {
-        quizNotes++; quiz = true;
-        const k = `${unitOf(found.item)}|${found.item.coversConceptIds?.[0] ?? ""}`;
-        const v = verbatim.get(k) ?? 0, qn = quizCount.get(k) ?? 0;
-        p = v && qn ? Math.min(1, v / qn) : 0;
-        any = v > 0;
-      }
-      const list = perRound.get(n.round) ?? [];
-      list.push({ p, any, quiz });
-      perRound.set(n.round, list);
-    }
-    const sum = (f: (x: { p: number; any: boolean; quiz: boolean }) => number) => [...perRound.values()].flat().reduce((a, x) => a + f(x), 0);
-    const rounds = perRound.size;
-    const roundsWithCatalog = [...perRound.values()].reduce((a, list) => a + (1 - list.reduce((prod, x) => prod * x.p, 1)), 0);
-    const roundsOptimistic = [...perRound.values()].filter((list) => !list.every((x) => x.any)).length;
+      if (!found && m && (exp[m[1] as "quiz"] ?? [])[Number(m[2] ?? m[3])]) found = { bank: m[1], index: Number(m[2] ?? m[3]) };
+      if (!found) return { round: n.round };
+      // Ugyanazon tétel több jegyzete egy esemény: a tétel kulcsa a bank + index.
+      const item = `${found.bank}[${found.index}]`;
+      return found.bank === "quiz" ? { round: n.round, item, group: groupOf(exp.quiz[found.index]) } : { round: n.round, item };
+    });
+    const stats = replayLessonStats(replayNotes, groups);
     const slots = [...verbatim.values()].reduce((a, b) => a + b, 0);
     lessons.push({
       jobId: job.id, subject, outcome: job.step, covered: slots > 0, verbatimSlots: slots,
-      notes: jobNotes.length, quizNotes, notesWithCatalog: round2(sum((x) => 1 - x.p)), notesOptimistic: sum((x) => (x.any ? 0 : 1)),
-      rounds, roundsWithCatalog: round2(roundsWithCatalog), roundsOptimistic, unresolvedNotes: unresolved,
-      notesQuizCeiling: jobNotes.length - quizNotes, roundsQuizCeiling: [...perRound.values()].filter((list) => !list.every((x) => x.quiz)).length,
+      notes: stats.notes, quizNotes: stats.quizNotes, notesWithCatalog: round2(stats.notesWithCatalog), notesOptimistic: stats.notesOptimistic,
+      rounds: stats.rounds, roundsWithCatalog: round2(stats.roundsWithCatalog), roundsOptimistic: stats.roundsOptimistic, unresolvedNotes: stats.unresolvedNotes,
+      notesQuizCeiling: stats.notesQuizCeiling, roundsQuizCeiling: stats.roundsQuizCeiling,
     });
   }
-  return { lessons, skipped };
+  return { lessons, skipped, inputSnapshotAt: snapshot?.at ? `${snapshot.at}Z` : null };
 });
 
 function round2(x: number) { return Math.round(x * 100) / 100; }
@@ -114,8 +116,8 @@ function aggregate(list: LessonReplay[]) {
 }
 const subjects = [...new Set(lessons.map((l) => l.subject))].sort();
 const result = {
-  measuredAt: new Date().toISOString(),
-  method: "docs/specs/2026-10-06-s6-katalogus-bekotes.md — Ingyenes A/B-visszajátszás (p = min(1, V/Q); optimista: p = 1, ha V > 0)",
+  inputSnapshotAt,
+  method: "docs/specs/2026-10-06-s6-katalogus-bekotes.md — Ingyenes A/B-visszajátszás (jegyzet: p = min(V, Q)/Q; kör: hipergeometrikus, tétel-egyedi; optimista: csoportonként a legjobb min(V, Q) tétel)",
   skipped,
   overall: { all: aggregate(lessons), covered: aggregate(lessons.filter((l) => l.covered)) },
   bySubject: Object.fromEntries(subjects.map((s) => [s, { all: aggregate(lessons.filter((l) => l.subject === s)), covered: aggregate(lessons.filter((l) => l.subject === s && l.covered)) }])),

@@ -4,7 +4,8 @@ import {
   buildCatalogPool, catalogVerbatimPaths, conceptMatches, lessonTopicText, planningCatalogBlock, quizKey, stems, topicMatch, unitCatalog,
   unitCatalogBlock, verbatimEligible, PLANNING_LIMITS, UNIT_LIMITS, type CatalogPool, type CatalogRowLike,
 } from "../server/catalog/retrieval";
-import { catalogS6Enabled, planningContextBlock, poolMatches } from "../server/catalog/s6-context";
+import { catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches } from "../server/catalog/s6-context";
+import { allReplacedProbability, replayLessonStats } from "../scripts/catalog/ab-replay-model";
 import { lektorLessonView } from "../server/studio/lektor-view";
 import { buildLessonExperience } from "../server/studio/experience-builder";
 import { runPipelineStep, PIPELINE_PROMPT_VERSION, type JobPatch, type JobView, type MapMeta, type PipelineStore } from "../server/studio/step-runner";
@@ -198,5 +199,98 @@ test("lépés-futtató: bekapcsolva a tervező a saját bank skilljét és mint�
     assert.match(on.system, /TANTÁRGYI KATALÓGUS — MINTÁK \(matematika, 5\. évf\./);
     const pool = on.job.output?.catalog as CatalogPool;
     assert.deepEqual(pool.items.map((i) => i.fingerprint), ["m1"]);
+  } finally { if (saved === undefined) delete process.env.STUDIO_CATALOG_S6; else process.env.STUDIO_CATALOG_S6 = saved; }
+});
+
+/* Review #202 */
+
+test("review #202: a pool a fajtánkénti korlát után is globális pontszám-sorrendű — a jobb nem-kvíz minta nem szorul ki", () => {
+  // Gyengébb (más évfolyam, gépi) kvízek és egy erősebb (azonos évfolyam, szülő-ellenőrzött) rövid válasz.
+  const rows = Array.from({ length: 5 }, (_, n) => row({ fingerprint: `q${n}`, grade: 6, trust: "pipeline_verified", prompt: `Műveleti sorrend ${n}. kérdés: mit végzünk el először?` }));
+  rows.push(row({ fingerprint: "sa", kind: "short_answer", options: null, correctIndex: null, accepted: ["a szorzást"] }));
+  const pool = buildCatalogPool(rows, query);
+  const scores = pool.items.map((i) => i.score);
+  assert.deepEqual(scores, [...scores].sort((a, b) => b - a), "csökkenő pontszám");
+  assert.equal(pool.items[0].fingerprint, "sa");
+  const unit = unitCatalog(pool, concepts, { quizTarget: 8, used: new Set() });
+  assert.equal(unit.samples.length, UNIT_LIMITS.samples);
+  assert.ok(unit.samples.some((i) => i.fingerprint === "sa"), "a legjobb minta bekerül");
+});
+
+test("review #202: a karakterkorlát a KIVÁLASZTÁSBAN érvényesül — ami kiválasztott (és used), az mind a blokkban van", () => {
+  const long = (n: number) => `Műveleti sorrend ${n}. kérdés: mit végzünk el először? ${"hosszú szöveg ".repeat(26)}`.slice(0, 399);
+  const rows = Array.from({ length: 12 }, (_, n) => row({ fingerprint: `L${String(n).padStart(2, "0")}`, prompt: long(n), options: [`a szorzást ${"x".repeat(180)}`, `az összeadást ${"y".repeat(180)}`, `a kivonást ${"z".repeat(180)}`] }));
+  rows.push(...Array.from({ length: 6 }, (_, n) => row({ fingerprint: `S${n}`, trust: "pipeline_verified", prompt: long(100 + n) })));
+  const pool = buildCatalogPool(rows, query);
+  const used = new Set<string>();
+  const unit = unitCatalog(pool, concepts, { quizTarget: 100, used });
+  const block = unitCatalogBlock(unit);
+  assert.ok(block.length <= UNIT_LIMITS.chars, `blokk ${block.length} ≤ ${UNIT_LIMITS.chars}`);
+  const selected = [...unit.verbatim, ...unit.samples];
+  assert.ok(selected.length > 0);
+  assert.ok(unit.verbatim.length < UNIT_LIMITS.verbatimMax, "a korlát valóban szűkít (különben a teszt nem mér)");
+  for (const i of selected) assert.ok(block.includes(i.prompt), `a kiválasztott ${i.fingerprint} a blokkban van`);
+  assert.deepEqual([...used].sort(), selected.map((i) => i.fingerprint).sort(), "used = a ténylegesen beszúrt tételek");
+  // A kimaradt tétel a következő egységben még elérhető.
+  assert.ok(unitCatalog(pool, concepts, { quizTarget: 100, used }).verbatim.length > 0);
+});
+
+test("review #202: visszajátszás — visszatevés nélküli (hipergeometrikus) kör-valószínűség, ugyanazon tétel több jegyzete egy esemény", () => {
+  assert.equal(allReplacedProbability(0, 0, 5), 1);
+  assert.equal(allReplacedProbability(1, 2, 4), 0.5);
+  assert.equal(allReplacedProbability(2, 2, 4), (2 / 4) * (1 / 3), "C(2,0)/C(4,2) = 1/6, nem (1/2)² = 1/4");
+  assert.equal(allReplacedProbability(3, 2, 4), 0, "több hibás tétel, mint kiváltható");
+  assert.equal(allReplacedProbability(2, 9, 4), 1, "V > Q → minden tétel kiváltva");
+  const groups = new Map([["0|a", { verbatim: 2, quizzes: 4 }], ["1|b", { verbatim: 1, quizzes: 1 }]]);
+  // 1. kör: két különböző tétel ugyanabban a csoportban (az egyik két jegyzettel); 2. kör: egy tétel kétszer; 3. kör: nyílt feladat + feloldatlan.
+  const stats = replayLessonStats([
+    { round: 0, item: "quiz[0]", group: "0|a" }, { round: 0, item: "quiz[1]", group: "0|a" }, { round: 0, item: "quiz[1]", group: "0|a" },
+    { round: 1, item: "quiz[5]", group: "1|b" }, { round: 1, item: "quiz[5]", group: "1|b" },
+    { round: 2, item: "tasks[0]" }, { round: 2 },
+  ], groups);
+  assert.equal(stats.notes, 7);
+  assert.equal(stats.quizNotes, 5);
+  assert.equal(stats.unresolvedNotes, 1);
+  assert.equal(stats.rounds, 3);
+  assert.ok(Math.abs(stats.roundsWithCatalog - ((1 - 1 / 6) + 0 + 1)) < 1e-9, `kör: ${stats.roundsWithCatalog}`);
+  assert.ok(Math.abs(stats.notesWithCatalog - (3 * 0.5 + 0 + 2)) < 1e-9, `jegyzet: ${stats.notesWithCatalog}`);
+  assert.equal(stats.roundsOptimistic, 1, "legjobb esetben csak a nyílt feladatos kör marad");
+  assert.equal(stats.notesOptimistic, 2, "csoportonként a min(V, Q) legtöbb jegyzetű tétel");
+  assert.equal(stats.notesQuizCeiling, 2);
+  assert.equal(stats.roundsQuizCeiling, 1);
+});
+
+test("review #202: lépés-futtató — a szó szerinti katalógus-kvíz hash-e a helyi cleared-be kerül, a bank-ellenőr kihagyja; a csomag többi tétele ellenőrzött", async () => {
+  const saved = process.env.STUDIO_CATALOG_S6;
+  process.env.STUDIO_CATALOG_S6 = "1";
+  try {
+    const lesson = standardFusionFixture();
+    const q0 = lesson.experience!.quiz[0];
+    const catalogQuery = catalogQueryOf({ meta: MAP_META, concepts: MAP_CONCEPTS })!;
+    const pool: CatalogPool = { version: 1, subject: catalogQuery.subject, grade: catalogQuery.grade, topic: catalogQuery.topic, items: [{
+      fingerprint: "cat-q0", grade: catalogQuery.grade, topic: "Geometria / háromszög", kind: "quiz", trust: "parent_verified",
+      prompt: q0.question, options: [...q0.options].reverse(), correctIndex: q0.options.length - 1 - q0.correctIndex, verbatim: true, score: 9,
+    }] };
+    const { store, jobs } = fakeStore(false);
+    jobs.set("job-1", { id: "job-1", lessonId: null, mapId: "m1", step: "lektor", status: "pending", round: 0, inputHash: "", output: { lesson, catalog: pool }, error: null });
+    const verifierSystems: string[] = [];
+    let release!: () => void;
+    const verifierCalled = new Promise<void>((r) => { release = r; });
+    const providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+      chat: async (messages: Array<{ content: string }>) => {
+        const system = messages[0]?.content ?? "";
+        if (system.includes("TÁMOGATÓ SKILL: bank-verifier")) {
+          verifierSystems.push(system); release();
+          return { content: JSON.stringify({ errors: [], choices: [], verified: [] }), usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+        }
+        await Promise.race([verifierCalled, new Promise((r) => setTimeout(r, 2_000))]);
+        return { content: "{}", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+      } } as unknown as IAIProvider);
+    await runPipelineStep("job-1", { store, providerFactory, keyConfigured: () => true, promptLookup: async (_n, fallback) => fallback });
+    assert.ok(verifierSystems.length > 0, "a bank-ellenőr lefutott");
+    const all = verifierSystems.join("\n");
+    assert.doesNotMatch(all, /"path":"experience\.quiz\[0\]"/, "a szó szerinti katalógus-kvíz nem kerül újraellenőrzésre");
+    assert.match(all, /"path":"experience\.quiz\[1\]"/, "ugyanannak a csomagnak a többi kvíze ellenőrzött");
+    assert.match(all, /"path":"experience\.tasks\[0\]"/, "a nyílt feladat is ellenőrzött");
   } finally { if (saved === undefined) delete process.env.STUDIO_CATALOG_S6; else process.env.STUDIO_CATALOG_S6 = saved; }
 });

@@ -107,16 +107,22 @@ csak a teszt címe változik a valóságnak megfelelőre, és új teszt őrzi, h
 
 ## Ingyenes A/B-visszajátszás — protokoll
 Bemenet (csak olvasó tranzakció): a lezárt jobok (`studio_jobs.step in ('done','error')`), a job `output.lesson.experience`
-bankja és `bankPlan`-je, a térkép fogalmai (`km_concepts`), a `lektor_notes` bank-jegyzetei (`block_path like 'experience%'`),
-a tantárgy `catalog_items` sorai.
+bankja és `bankPlan`-je, a térkép TANÍTOTT fogalmai (`km_concepts`, `review_state in ('kept','edited')` — ugyanaz a szűrés, mint
+a gyártási `loadMap`-ben; review #202), a `lektor_notes` bank-jegyzetei (`block_path like 'experience%'`), a tantárgy `catalog_items` sorai.
 1. A lecke a GYÁRTÁSI függvényekkel (`buildCatalogPool`, `unitCatalog`) kapja a poolt és egységenként a szó szerinti tételeket.
-   Szivárgás ellen a pool-ból kimarad minden tétel, amelynek forrása ugyanennek a térképnek bármely leckéje.
+   Szivárgás ellen a pool-ból kimarad minden tétel, amelynek forrása ugyanennek a térképnek bármely leckéje. A V csak a
+   ténylegesen a prompt-blokkba BESZÚRT tételeket számolja (a karakterkorlátot maga a kiválasztás érvényesíti; review #202).
 2. Bank-hiba = egy lektori bank-jegyzet. Egy kvíz-jegyzet tételét (útvonal → a lecke tétele → egység + fogalom) a katalógus
-   `p = min(1, V/Q)` valószínűséggel helyettesíti, ahol V = az egység azon szó szerinti tételei, amelyek legjobb fogalma ugyanez,
+   `p = min(V, Q)/Q` peremvalószínűséggel helyettesíti, ahol V = az egység azon szó szerinti tételei, amelyek legjobb fogalma ugyanez,
    Q = a lecke ugyanezen egység+fogalom kvízeinek száma. Nyílt feladat és módszer jegyzete: `p = 0` (nem-cél: nincs szó szerinti).
-3. Bank-hiba „katalógussal” = `Σ(1 − p)`. Bank-javító kör = a lektori kör, amelyben volt bank-jegyzet; „katalógussal” a kör
-   várható száma `Σ_kör (1 − Π p)` (a kör csak akkor marad el, ha minden jegyzete helyettesítődik).
+3. Bank-hiba „katalógussal” = `Σ(1 − p)` (a linearitás miatt pontos várható érték). Bank-javító kör = a lektori kör, amelyben volt
+   bank-jegyzet; a kör csak akkor marad el, ha minden jegyzetének tétele helyettesítődik. Review #202 pontosítás: egy csoportban a
+   Q kvízből PONTOSAN V-t vált ki a katalógus (visszatevés nélkül), ezért a kör várható száma
+   `Σ_kör (1 − Π_csoport C(Q − m, V − m) / C(Q, V))`, ahol m = a kör csoportbeli KÜLÖNBÖZŐ jegyzetelt tételeinek száma (ugyanazon
+   tétel több jegyzete egy esemény). Optimista változat: csoportonként a legtöbb jegyzetű min(V, Q) tétel helyettesítődik.
 4. Fedett lecke = legalább egy egységében van szó szerinti tétel.
+5. Reprodukálhatóság: a JSON a futás ideje helyett a bemenet pillanatképének idejét (`inputSnapshotAt` = a legfrissebb bemeneti
+   sor időbélyege) írja, minden lekérdezés rendezett — azonos bemenetre bájtra azonos kimenet (mérve: két futás `cmp`-azonos).
 Korlát (UNVERIFIED feltevés): a helyettesített tétel hibátlan (a szülő-ellenőrzés ~99%-os); a modell által írt visszajelzés
 hibája és a helyettesítés másodlagos hatása (kevesebb generált tétel → kevesebb új hiba) nincs modellezve.
 
@@ -124,6 +130,12 @@ hibája és a helyettesítés másodlagos hatása (kevesebb generált tétel →
 Forrás: `docs/measurements/2026-10-06-s6-ab-replay.json` (`npx tsx scripts/catalog/ab-replay.mts`). 78 lezárt job; kihagyva 23
 (nincs bankja — a bank előtt bukott) és 4 (ismeretlen/kétértelmű tantárgy, pl. „magyar nyelv és irodalom”, „Informatika” bank nélkül).
 A 51 visszajátszott leckéből **11 fedett** (van szó szerint átvehető tétel).
+
+Review #202 újramérés (javított visszajátszás: tanított fogalmak, globális pontszám-sorrend, korlátot tartó kiválasztás,
+hipergeometrikus kör-modell, tétel-egyedi jegyzetek; `inputSnapshotAt` 2026-10-06T03:19:42.031Z): **minden szám változatlan**
+(lent). Ok (mérve): a kizárt 43 nem tanított fogalom (16 pending 2 térképen, 27 rejected 5 térképen) nem változtatott a fedettségen; a
+fedett leckék kevés kvíz-jegyzetén (8 db) a hipergeometrikus és a független modell ugyanazt a körszámot adja; a szó szerinti
+helyek száma a karakterkorlátot tartó kiválasztással is változatlan (279).
 
 | Kör | Leckék | Bank-hiba | → katalógussal | Csökkenés | Bank-kör | → katalógussal | Csökkenés | Kvíz-plafon* |
 |---|---|---|---|---|---|---|---|---|
