@@ -221,6 +221,14 @@ export function buildCorrectionPrompt(concepts: MapConcept[], instruction: strin
   ].join("\n"));
 }
 
+/**
+ * Review #203 (spec §4/9): a helyesbítő szerep megfigyelése a futásban `source_correction` lelet — az elvetett javaslat ÉS a
+ * modell-/feldolgozási hiba (warning) is; a futást egyik sem állítja meg.
+ */
+export function correctionFindingNeeded(result: CorrectionResult): boolean {
+  return result.rejected.length > 0 || Boolean(result.warning);
+}
+
 /** One model call + deterministic filter. Never throws: a failed proposal means no correction. */
 export async function proposeSourceCorrections(
   call: (system: string, user: string) => Promise<unknown>,

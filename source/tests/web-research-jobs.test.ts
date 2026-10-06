@@ -396,3 +396,21 @@ test("spec s7: completeWebStudioJob — a hibán álló jobot újranyitja, kész
   assert.deepEqual(result, { kind: "material", id: "html-1" });
   assert.equal(m.rows.get("reopen")!.state, "done"); assert.equal(m.rows.get("reopen")!.materialId, "html-1");
 });
+test("review #203: a kész jelzés után csak a visszaolvasás bukott — az újrapróba nem ír újra, visszaolvasással zár", async () => {
+  const m = memoryStore();
+  m.store.readStudioLesson = async () => ({ title: "Eger", classroom: 5 });
+  // The real fenced write only updates `running` rows: a second done write on a done job throws.
+  let completions = 0;
+  m.store.completeStudioLesson = async () => { completions++; throw new WebResearchFailure("A futás állapota közben megváltozott; a kész jelzés nem menthető."); };
+  await m.store.create({ id: "done-before", userId: "owner", input, state: "done", stage: "", title: "Eger", message: input.message, content: "", sources: [], diagnostics: [], createdAt: Date.now(), materialId: "html-9", lessonId: "lesson-9", output: "studio" });
+  const job = (await m.store.read("done-before", "owner"))!;
+  const result = await completeWebStudioJob(m.store, job, { kind: "studio", runId: "done-before", lessonId: "lesson-9", htmlFileId: "html-9", sources: [] });
+  assert.deepEqual(result, { kind: "material", id: "html-9" });
+  assert.equal(completions, 0);
+  assert.equal(m.rows.get("done-before")!.state, "done");
+  // A done job pointing at ANOTHER material is not silently accepted: the fenced write still decides (and refuses).
+  await m.store.create({ id: "done-other", userId: "owner", input, state: "done", stage: "", title: "Eger", message: input.message, content: "", sources: [], diagnostics: [], createdAt: Date.now(), materialId: "html-old" });
+  const other = (await m.store.read("done-other", "owner"))!;
+  await assert.rejects(completeWebStudioJob(m.store, other, { kind: "studio", runId: "done-other", lessonId: "lesson-9", htmlFileId: "html-9", sources: [] }), /nem menthető/);
+  assert.equal(completions, 1);
+});

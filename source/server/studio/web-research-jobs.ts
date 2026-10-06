@@ -86,11 +86,16 @@ export async function completeWebStudioJob(store: ResearchJobStore, job: StoredR
   job.stage = "A tananyag elkészült és közzétéve (Studio-lecke).";
   // A job that an earlier execution left in `error` is reopened first: the done write is fenced on `running`.
   const stored = await store.read(job.id, job.userId);
+  // Review #203: an earlier execution already committed the done write for THIS material (only its readback/final save
+  // failed) — the done write (fenced on `running`) is not repeated; the readback below closes the run.
+  const alreadyDone = stored?.state === "done" && stored.materialId === artifact.htmlFileId;
   if (stored && stored.state !== "running" && stored.state !== "done") await store.update({ ...stored, state: "running", error: undefined }, stored.state);
   job.state = "done";
   // A worker that lost its lease must not mark the job done (the HTML path's publish is fenced the same way).
-  if (store.completeStudioLesson) await store.completeStudioLesson(job);
-  else await store.update(job, "running");
+  if (!alreadyDone) {
+    if (store.completeStudioLesson) await store.completeStudioLesson(job);
+    else await store.update(job, "running");
+  }
   await workflowPhase("readback");
   const saved = await store.read(job.id, job.userId);
   if (saved?.state !== "done" || saved.materialId !== artifact.htmlFileId) throw new WebResearchFailure("A mentett tananyag visszaolvasása nem igazolta a kész eredményt.");

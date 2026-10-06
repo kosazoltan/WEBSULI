@@ -140,3 +140,14 @@ témafókusz) hibái csak a közös regex-osztályozón át (`learning.ts:9` `de
 - Visszavonás: commitonként revertálható; a webes útnál `WEB_RESEARCH_PIPELINE=html` a korábbi HTML-útra vált kódtelepítés nélkül.
 - Statikus szkenner korlátja: név-alapú hivatkozáskövetés (típusellenőrző nélkül); metódus-értéket csak `kulcs: obj.metódus`
   alakban követ. A korlát a teszt fejlécében dokumentált; a hamis riasztás az engedélylistán indokolandó, nem némítható.
+
+## 9. Pontosítások (review #203)
+
+- Séma-hibás modellválasz (H/I: hiányzó `fixedHtml`/`themedHtml`/`extractedText`, üres stream, a `/html-fix/chat` Zod-hibája):
+  előbb `schema` lelet, majd a futás `error` (`failOnSchemaInvalid`); a kliens 500-at / SSE `error` eseményt kap. A `/html-fix/chat`
+  korábbi „complete + nyers válasz” tartaléka megszűnt (a §5 szerint a modellhiba SSE error).
+- J: az anyag létezése a `quiz` futás ELŐTT ellenőrzött (`QuizMaterialNotFound` → 404, futás nem jön létre).
+- K: a `runExtraction` tudástár-tranzakciója elején és végén `workflowFence`.
+- B: a helyesbítő modell-/parse-hibája (warning) is `source_correction` lelet, nem csak az elvetett javaslat.
+- C: ha a webes job már `done` ugyanarra az anyagra (csak a visszaolvasás/lezárás bukott), az újrapróba nem ismétli a kész-írást,
+  csak visszaolvas.

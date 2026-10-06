@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WorkflowMode, WorkflowView } from "../../shared/lesson-workflow";
-import { executeWorkflow, type WorkflowStore } from "./engine";
+import { executeWorkflow, workflowFinding, type WorkflowStore } from "./engine";
 
 /**
  * Spec 2026-10-06-s7-workflow-rendbetetel (§4/4): a korábban workflow nélküli segéd-, kvíz- és tudástár-utak közös futtatója.
@@ -20,4 +20,16 @@ export async function runToolWorkflow<T>(
     return done.result;
   });
   return value as T;
+}
+
+/** Review #203: the model's answer does not match the expected schema — a failed run, not a successful proposal. */
+export class ModelSchemaError extends Error {}
+/**
+ * Review #203 (spec §5: modellhiba/JSON-hiba → a futás `error`, a lelet `schema`): a séma-hibás modellválasz előbb leletként
+ * rögzül (tanul), majd a futás megáll — a hívó `catch`-e adja a meglévő hibaválaszt (500 / SSE error).
+ */
+export async function failOnSchemaInvalid(invalid: boolean, message: string): Promise<void> {
+  if (!invalid) return;
+  await workflowFinding("schema");
+  throw new ModelSchemaError(message);
 }

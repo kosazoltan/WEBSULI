@@ -20,7 +20,7 @@ import { sanitizeText, sanitizeHtml, sanitizeEmail } from "./utils/sanitize";
 import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
 import * as gameScoreService from "./gameScoreService";
 import * as gameQuizBankService from "./gameQuizBankService";
-import { generateMaterialQuiz } from "./gameQuizGeneratorService";
+import { generateMaterialQuiz, QuizMaterialNotFound } from "./gameQuizGeneratorService";
 // checkIsAdmin import removed
 
 import { db } from "./db";
@@ -39,8 +39,8 @@ import { lessonPipelineRouter } from "./studio/lesson-pipeline-routes";
 import { webResearchRouter } from "./studio/web-research-routes";
 import { workflowRouter } from "./workflows/routes";
 import { applyTrackedImprovement } from "./workflows/apply";
-import { runToolWorkflow } from "./workflows/tool-run";
-import { workflowFence, workflowFinding, workflowPhase } from "./workflows/engine";
+import { failOnSchemaInvalid, runToolWorkflow } from "./workflows/tool-run";
+import { workflowFence, workflowPhase } from "./workflows/engine";
 import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { cachedSystem } from "./ai/prompt-cache";
 import { lessonPublicRouter } from "./studio/lesson-routes";
@@ -1044,6 +1044,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await generateMaterialQuiz(id, countRaw, req.user!.id);
       return res.json(result);
     } catch (e) {
+      if (e instanceof QuizMaterialNotFound) return res.status(404).json({ message: e.message });
       logger.error("[GAMES] generate-quiz", e);
       const msg = e instanceof Error ? e.message : "Ismeretlen hiba.";
       return res.status(500).json({ message: msg });
@@ -1297,8 +1298,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await workflowPhase("gate");
       const jsonResult = JSON.parse(responseText);
-      // A hiányzó javított HTML lelet (tanul), a válasz alakja a korábbi marad.
-      if (typeof jsonResult.fixedHtml !== "string" || !jsonResult.fixedHtml.trim()) await workflowFinding("schema");
+      // Review #203: a hiányzó javított HTML séma-hiba — lelet (tanul), majd a futás megáll (500).
+      await failOnSchemaInvalid(typeof jsonResult.fixedHtml !== "string" || !jsonResult.fixedHtml.trim(), "A modell válaszából hiányzik a javított HTML.");
 
       await workflowPhase("readback");
       res.json({
@@ -1406,7 +1407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await workflowPhase("gate");
       const jsonResult = JSON.parse(responseText);
-      if (typeof jsonResult.themedHtml !== "string" || !jsonResult.themedHtml.trim()) await workflowFinding("schema");
+      await failOnSchemaInvalid(typeof jsonResult.themedHtml !== "string" || !jsonResult.themedHtml.trim(), "A modell válaszából hiányzik az átszínezett HTML.");
 
       await workflowPhase("readback");
       res.json({
@@ -1643,16 +1644,8 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
         logger.error('[AI FIX] ❌ JSON parsing/validation failed:', parseErrorTyped.message);
         logger.error('[AI FIX] Raw JSON response:', rawJsonResponse.substring(0, 500));
 
-        // Fallback: send raw response with detailed error
-        res.write(`data: ${JSON.stringify({
-          type: 'complete',
-          message: '⚠️ Claude befejezte, de a JSON validálás sikertelen',
-          fullResponse: explanationText + '\n\n' + rawJsonResponse,
-          parseError: parseErrorTyped.message,
-          validatedJson: null
-        })}\n\n`);
-        // A séma-hiba lelet (tanul); a kliens a nyers választ kapja, mint eddig.
-        await workflowFinding("schema");
+        // Review #203 (spec §5): a séma-hibás modellválasz lelet (tanul), majd a futás megáll; a meglévő catch SSE error-t küld.
+        await failOnSchemaInvalid(true, `A modell JSON-válasza nem felel meg a sémának: ${parseErrorTyped.message}`);
       }
 
       await workflowPhase("readback");
@@ -2050,7 +2043,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 
       await workflowPhase("gate");
       const result = JSON.parse(response.choices[0].message.content || '{}');
-      if (typeof result.extractedText !== "string") await workflowFinding("schema");
+      await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${files.length} files processed, ${result.topics?.length || 0} topics found`);
 
@@ -2179,7 +2172,7 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 
       await workflowPhase("gate");
       const result = JSON.parse(response.choices[0].message.content || '{}');
-      if (typeof result.extractedText !== "string") await workflowFinding("schema");
+      await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${result.topics?.length || 0} topics found`);
 
@@ -2337,8 +2330,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       }
 
       await workflowPhase("gate");
-      // Üres válasz lelet (tanul); a kliens válasza változatlan.
-      if (!totalChunks) await workflowFinding("schema");
+      // Review #203: az üres modellválasz séma-hiba — lelet (tanul), majd a futás megáll (SSE error).
+      await failOnSchemaInvalid(!totalChunks, "A modell üres választ adott.");
       logger.info(`[CHATGPT] ✅ Stream complete (${totalChunks} chunks)`);
 
       await workflowPhase("readback");

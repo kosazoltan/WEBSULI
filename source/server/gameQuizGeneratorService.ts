@@ -64,11 +64,23 @@ Pontos formátum (példa):
  * Visszaadja a sikeres + skipped + hiba-számot.
  * Spec 2026-10-06-s7 (J): a generálás `quiz` workflow-ban fut (forrás → szerző → kapu → mentés → visszaolvasás).
  */
+/** Review #203: unknown/deleted material — the route answers 404 and no `quiz` run is created (spec §4/4: 400/404 before the run). */
+export class QuizMaterialNotFound extends Error {}
+async function materialExists(materialId: string): Promise<boolean> {
+  const [row] = await db.select({ id: htmlFiles.id }).from(htmlFiles).where(eq(htmlFiles.id, materialId)).limit(1);
+  return Boolean(row);
+}
+
 export async function generateMaterialQuiz(
   materialId: string,
   count: number,
   owner: string,
+  deps: { materialExists?: (materialId: string) => Promise<boolean> } = {},
 ): Promise<QuizGenerationResult> {
+  // Input check BEFORE the workflow: an invalid request must not leave a failed run behind.
+  if (!await (deps.materialExists ?? materialExists)(materialId)) {
+    throw new QuizMaterialNotFound(`Tananyag nem található: ${materialId}`);
+  }
   if (!ANTHROPIC_API_KEY) {
     throw new Error("Anthropic API kulcs nincs konfigurálva (AI_INTEGRATIONS_ANTHROPIC_API_KEY hiányzik).");
   }

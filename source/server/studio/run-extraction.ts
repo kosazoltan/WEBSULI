@@ -1,6 +1,6 @@
 import { studioConnection, studioModelReady, withQuotaFailover } from "../ai/studio-provider";
 import { createHash } from "node:crypto";
-import { workflowSkillPrompt, workflowFinding } from "../workflows/engine";
+import { workflowSkillPrompt, workflowFinding, workflowFence } from "../workflows/engine";
 import { db } from "../db";
 import { knowledgeMaps, kmConcepts, systemPrompts } from "../../shared/schema";
 import { and, eq } from "drizzle-orm";
@@ -247,7 +247,10 @@ export async function runExtraction(input: RunInput): Promise<string> {
   if (emptyReason) throw new Error(emptyReason);
 
   // Map + concepts in ONE transaction: a failed concept insert leaves no orphan map row.
+  // Review #203: the long OCR/model phase may outlive the lease — a stale executor must not write the knowledge base
+  // (fences at the start and right before commit; no-op outside a workflow).
   const mapId = await db.transaction(async (tx) => {
+    await workflowFence(tx);
     const [map] = await tx
       .insert(knowledgeMaps)
       .values({
@@ -284,6 +287,7 @@ export async function runExtraction(input: RunInput): Promise<string> {
         orderIndex: index,
       })),
     );
+    await workflowFence(tx);
     return map.id;
   });
 
