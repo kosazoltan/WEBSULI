@@ -9,6 +9,8 @@ import { canonicalLessonQuiz } from "../studio/canonical-quiz-bank";
 import { computeCoupon } from "../../shared/reward-policy";
 import { loadRewardPolicy } from "./store";
 import { expiryFor, SECTION_REWARD_COOLDOWN_MS } from "./coupons";
+import { recordRoundOutcomes } from "../catalog/outcomes";
+import { logger } from "../lib/logger";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Attempt = typeof lessonAttempts.$inferSelect;
@@ -135,6 +137,9 @@ export async function finishPractice(userId: string, id: string, now = new Date(
     }
     const concepts = [...new Set(row.questions.flatMap(q => q.coversConceptIds))];
     if (concepts.length) await tx.insert(conceptResults).values(concepts.map(conceptId => ({ userId, lessonId: row.lessonId, conceptId, sectionIdx: -1, correct: !weakConceptIds.includes(conceptId), createdAt: now })));
+    // S8: tételenkénti eredmény a katalógushoz, SAVEPOINT-ban — a hibája (pl. még nem futott migráció) nem buktatja a kör lezárását.
+    try { await tx.transaction(sp => recordRoundOutcomes(sp, row)); }
+    catch (error) { logger.warn(`[PRACTICE] A katalógus-eredmény számlálója nem frissült (a kör lezárása sikeres): ${error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)}`); }
     const [saved] = await tx.update(lessonAttempts).set({ status: "completed", result, finishedAt: now }).where(eq(lessonAttempts.id, id)).returning();
     return viewOf(saved);
   });

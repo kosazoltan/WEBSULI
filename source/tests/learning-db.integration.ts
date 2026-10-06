@@ -237,3 +237,45 @@ test("real DB: replacing the current bank changes affected IDs and stale exports
     assert.deepEqual((await listGameQuizBank(COUPON_GAME_IDS[0])).filter(q => q.sourceMaterialId === "fusion"), []);
   } finally { await db.update(lessons).set({ json: original }).where(eq(lessons.id, "current")); }
 });
+
+/* Spec 2026-10-06-s8-tanuloi-eredmenyesseg: a lezárt kör tételenként a katalógus-lenyomatra számol; a növelő út = a teljes újraszámolás. */
+test("real DB: finishing a round adds per-item outcomes once; incremental table equals full recount; a missing table never blocks finishing", async () => {
+  const { attemptQuestionFingerprint, addOutcomes, outcomeRecords, roundOutcomes } = await import("../server/catalog/outcomes");
+  const outcomes = async () => new Map((await dbPool.query("SELECT fingerprint, attempts, correct, independent_correct, rate FROM catalog_item_outcomes")).rows.map(r => [r.fingerprint as string, r]));
+  await db.insert(users).values([{ id: "learner-outcome" }, { id: "learner-outcome-2" }]);
+  await db.insert(lessons).values({ id: "outcome-lesson", mapId: "map", json: fusionFixture(), version: 1, publishedAt: new Date() });
+  const before = await outcomes();
+  const round = await beginPractice("learner-outcome", "outcome-lesson");
+  const bank = fusionFixture().experience!.quiz;
+  const [first, second, hinted] = round.questions;
+  const keyOf = (questionId: string) => bank.find(item => item.id === questionId)!.correctIndex;
+  await answerPractice("learner-outcome", round.id, first.id, keyOf(first.questionId), false);
+  await answerPractice("learner-outcome", round.id, second.id, (keyOf(second.questionId) + 1) % second.options.length, false);
+  await markPracticeHint("learner-outcome", round.id, hinted.id);
+  await answerPractice("learner-outcome", round.id, hinted.id, keyOf(hinted.questionId), false);
+  await Promise.all(Array.from({ length: 4 }, () => finishPractice("learner-outcome", round.id)));
+  const after = await outcomes();
+  const delta = (q: typeof first) => {
+    const fp = attemptQuestionFingerprint({ prompt: q.prompt, options: q.options, correctIndex: keyOf(q.questionId) });
+    const a = after.get(fp), b = before.get(fp);
+    return { attempts: (a?.attempts ?? 0) - (b?.attempts ?? 0), correct: (a?.correct ?? 0) - (b?.correct ?? 0), independent: (a?.independent_correct ?? 0) - (b?.independent_correct ?? 0) };
+  };
+  assert.deepEqual(delta(first), { attempts: 1, correct: 1, independent: 1 });
+  assert.deepEqual(delta(second), { attempts: 1, correct: 0, independent: 0 });
+  assert.deepEqual(delta(hinted), { attempts: 1, correct: 1, independent: 0 });
+  for (const q of round.questions.slice(3)) assert.deepEqual(delta(q), { attempts: 0, correct: 0, independent: 0 }, "unanswered question is not counted");
+  const firstRow = after.get(attemptQuestionFingerprint({ prompt: first.prompt, options: first.options, correctIndex: keyOf(first.questionId) }))!;
+  assert.equal(firstRow.rate, firstRow.correct / firstRow.attempts);
+
+  const recount = new Map();
+  for (const row of (await dbPool.query("SELECT questions, answers, hints FROM lesson_attempts WHERE status = 'completed'")).rows) addOutcomes(recount, roundOutcomes(row));
+  assert.deepEqual(outcomeRecords(recount), [...after.values()].map(r => ({ fingerprint: r.fingerprint, attempts: r.attempts, correct: r.correct, independent_correct: r.independent_correct })).sort((a, b) => (a.fingerprint < b.fingerprint ? -1 : 1)));
+
+  await dbPool.query("ALTER TABLE catalog_item_outcomes RENAME TO catalog_item_outcomes_hidden");
+  try {
+    const next = await beginPractice("learner-outcome-2", "outcome-lesson");
+    await answerPractice("learner-outcome-2", next.id, next.questions[0].id, 0, false);
+    const finished = await finishPractice("learner-outcome-2", next.id);
+    assert.ok(finished.result && finished.finishedAt, "the round closes although the outcome table is missing");
+  } finally { await dbPool.query("ALTER TABLE catalog_item_outcomes_hidden RENAME TO catalog_item_outcomes"); }
+});
