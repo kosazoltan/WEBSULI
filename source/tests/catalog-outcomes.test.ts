@@ -91,7 +91,7 @@ test("migráció 0023: additív, idempotens; lenyomat a kulcs; nincs felhasznál
 test("bekötés: a kör lezárása savepointban rögzíti az eredményt, és a hibája nem buktatja a lezárást", () => {
   const src = read("../server/rewards/lesson-attempts.ts");
   const finish = src.slice(src.indexOf("export async function finishPractice"), src.indexOf("export async function practiceReport"));
-  assert.match(finish, /try \{ await tx\.transaction\(sp => recordRoundOutcomes\(sp, row\)\); \}\s*catch \{ logger\.warn\(/);
+  assert.match(finish, /try \{ await tx\.transaction\(sp => recordRoundOutcomes\(sp, row\)\); \}\s*catch \(error\) \{ logger\.warn\([^\n]*error\.message/, "review #201: a hiba oka naplózva");
   assert.ok(finish.indexOf("if (row.result) return viewOf(row)") < finish.indexOf("recordRoundOutcomes"), "egyszer lezárt kör nem számol újra");
   assert.ok(finish.indexOf("recordRoundOutcomes") < finish.indexOf('status: "completed"'));
 });
