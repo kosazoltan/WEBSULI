@@ -5,26 +5,31 @@ import { WebResearchFailure, type ResearchObserver } from "../server/studio/web-
 import type { OneStepRequest } from "../server/studio/one-step";
 import type { WebResearchEvent } from "../server/studio/web-research-agent";
 
-/* Spec 2026-09-25 (docs/specs/2026-09-25-webes-studio-atadas.md): the internet path hands its downloaded pages to the one-step Studio manufacture. */
+/* Spec 2026-09-25 (docs/specs/2026-09-25-webes-studio-atadas.md): the internet path hands its downloaded pages to the one-step Studio manufacture.
+ * Spec-változás 2026-10-06-s7 (§4/7): a gyártás a hívó (webes) workflow-jában fut (`manufacture`), a haladásjelző a webes job
+ * azonosítóját használja; nincs külön indított futás és nincs 120 perces követési határidő (a gyártás ugyanabban a futásban megy). */
 
 const page = (n: number, text = `Egervár ostroma ${n}. forrásrész: a vár védői 1552-ben kitartottak.`) =>
   ({ url: `https://pelda.hu/egervar/${n}`, title: `Egervár ${n}`, text });
 const input = { message: "Készíts tananyagot Eger 1552-es ostromáról 5. osztályosoknak", classroom: 5, title: "Eger ostroma" };
 
+/** `views`: what the progress record shows while manufacturing (polled) and after it (the last element). */
 function harness(views: Array<StudioRunView | null>, over: Partial<WebStudioDeps> = {}) {
-  const started: Array<{ data: OneStepRequest; userId: string }> = [];
+  const manufactured: Array<{ runId: string; data: OneStepRequest; userId: string }> = [];
   const events: WebResearchEvent[] = [];
   const reads: string[] = [];
   const saved: string[] = [];
+  let released = false;
   const deps: WebStudioDeps = {
     gather: async () => ({ downloaded: [page(1), page(2)] }),
-    start: (data, userId) => { started.push({ data, userId }); return "run-1"; },
-    read: async (runId) => { reads.push(runId); return views.length > 1 ? views.shift()! : views[0]; },
-    sleep: async () => undefined,
+    // The manufacture finishes after the progress record has been polled through the running views.
+    manufacture: async (runId, data, userId) => { manufactured.push({ runId, data, userId }); while (!released) await new Promise((r) => setTimeout(r, 1)); },
+    read: async (runId) => { reads.push(runId); if (views.length <= 1) released = true; return views.length > 1 ? views.shift()! : views[0]; },
+    sleep: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
     ...over,
   };
-  const observer: ResearchObserver = { userId: "teacher", onEvent: e => events.push(e), async onStudioRun(runId) { saved.push(runId); } };
-  return { deps, observer, started, events, reads, saved };
+  const observer: ResearchObserver = { userId: "teacher", jobId: "job-1", onEvent: e => events.push(e), async onStudioRun(runId) { saved.push(runId); } };
+  return { deps, observer, manufactured, events, reads, saved };
 }
 const running = (phase: string, detail: string | null = null): StudioRunView => ({ phase, detail, error: null, lessonId: null, htmlFileId: null });
 const done: StudioRunView = { phase: "done", detail: null, error: null, lessonId: "lesson-1", htmlFileId: "html-1" };
@@ -56,54 +61,46 @@ test("a letöltött oldalak URL-fejléccel, mérethatáron belül, szöveges for
   assert.ok(tight.sources.some(s => s.url === page(22).url), "a keretbe teljesen beleférő rövid oldal bekerül");
 });
 
-test("új futás: a tanár kérése és a források a Studio-gyártáshoz kerülnek; a kész lecke az eredmény", async () => {
+test("új futás: a tanár kérése és a források a hívó futásában futó Studio-gyártáshoz kerülnek; a kész lecke az eredmény", async () => {
   const h = harness([running("ocr", "Tantárgy és osztály felismerése…"), running("lektor"), done]);
   const artifact = await generateWebStudioLesson(input, h.observer, h.deps);
-  assert.deepEqual(artifact, { kind: "studio", runId: "run-1", lessonId: "lesson-1", htmlFileId: "html-1", sources: [page(1), page(2)].map(({ url, title }) => ({ url, title })) });
-  assert.equal(h.started.length, 1);
-  assert.equal(h.started[0].userId, "teacher");
-  assert.equal(h.started[0].data.instructions, input.message);
-  assert.equal(h.started[0].data.title, "Eger ostroma");
-  assert.equal(h.started[0].data.files.length, 2);
-  assert.deepEqual(h.saved, ["run-1"]);
+  assert.deepEqual(artifact, { kind: "studio", runId: "job-1", lessonId: "lesson-1", htmlFileId: "html-1", sources: [page(1), page(2)].map(({ url, title }) => ({ url, title })) });
+  assert.equal(h.manufactured.length, 1);
+  assert.equal(h.manufactured[0].runId, "job-1", "a haladásjelző a webes job azonosítója");
+  assert.equal(h.manufactured[0].userId, "teacher");
+  assert.equal(h.manufactured[0].data.instructions, input.message);
+  assert.equal(h.manufactured[0].data.title, "Eger ostroma");
+  assert.equal(h.manufactured[0].data.files.length, 2);
+  assert.deepEqual(h.saved, ["job-1"]);
+  assert.ok(h.reads.every(id => id === "job-1"));
   const statuses = h.events.filter(e => e.type === "status").map(e => (e as { message: string }).message);
   assert.ok(statuses.some(s => s.includes("tantárgy és évfolyam felismerése — Tantárgy és osztály felismerése…")));
   assert.ok(statuses.some(s => s.includes("tartalmi lektorálás")));
 });
 
-test("a Studio hibája és parkolása a webes futás érthető hibája", async () => {
+test("a Studio hibája, parkolása és a gyártás kivétele a webes futás érthető hibája", async () => {
   const failed = harness([running("author"), { phase: "error", detail: null, error: "A kivonatolás nem sikerült.", lessonId: null, htmlFileId: null }]);
   await assert.rejects(generateWebStudioLesson(input, failed.observer, failed.deps), (e: unknown) => e instanceof WebResearchFailure && /hibával megállt: A kivonatolás nem sikerült/.test(e.message));
   const parked = harness([{ phase: "parked", detail: "Forrásellenőrzés szükséges.", error: null, lessonId: null, htmlFileId: null }]);
   await assert.rejects(generateWebStudioLesson(input, parked.observer, parked.deps), /forrásellenőrzésre vár: Forrásellenőrzés szükséges/);
   const lost = harness([null]);
   await assert.rejects(generateWebStudioLesson(input, lost.observer, lost.deps), /nem olvasható vissza/);
-  const slow = harness([running("author")], { maxWaitMs: -1 });
-  await assert.rejects(generateWebStudioLesson(input, slow.observer, slow.deps), /120 percen belül/);
+  const thrown = harness([running("author")], { manufacture: async () => { throw new Error("Elavult vagy lejárt végrehajtó nem menthet tananyagot."); } });
+  await assert.rejects(generateWebStudioLesson(input, thrown.observer, thrown.deps), /Elavult vagy lejárt végrehajtó/, "a gyártás kivétele (pl. lízingvesztés) változatlanul továbbmegy");
+  const unfinished = harness([running("gate")], { manufacture: async () => undefined });
+  await assert.rejects(generateWebStudioLesson(input, unfinished.observer, unfinished.deps), /nem adott közzétett leckét/);
 });
 
-test("folytatás: élő vagy kész mentett futást követ, újat nem indít; hibás helyett újat indít", async () => {
-  // Sourcery (PR #128): following a saved run must not depend on a new web gather succeeding.
-  let gathers = 0;
-  const alive = harness([running("animator"), done], { gather: async () => { gathers++; throw new Error("Synthetic search outage"); } });
-  alive.observer.studioRunId = "run-0";
-  const followed = await generateWebStudioLesson(input, alive.observer, alive.deps);
-  assert.equal(followed.runId, "run-0");
-  assert.deepEqual(followed.sources, [], "a mentett forráslista a job-sorban marad");
-  assert.equal(gathers, 0, "mentett élő futásnál nincs új keresés");
-  assert.equal(alive.started.length, 0);
-  assert.ok(alive.reads.every(id => id === "run-0"));
-  const failedBefore = harness([{ phase: "error", detail: null, error: "régi hiba", lessonId: null, htmlFileId: null }, done]);
-  failedBefore.observer.studioRunId = "run-0";
-  assert.equal((await generateWebStudioLesson(input, failedBefore.observer, failedBefore.deps)).runId, "run-1");
-  assert.equal(failedBefore.started.length, 1);
-});
-
-test("üres letöltés vagy hitelesítetlen készítő esetén nem indul Studio-futás", async () => {
+test("üres letöltés, hitelesítetlen készítő vagy hiányzó futásazonosító esetén nincs gyártás", async () => {
   const empty = harness([done], { gather: async () => ({ downloaded: [page(1, " ")] }) });
   await assert.rejects(generateWebStudioLesson(input, empty.observer, empty.deps), /nem maradt feldolgozható szöveg/);
-  const anonymous = harness([done]);
+  let gathered = 0;
+  const anonymous = harness([done], { gather: async () => { gathered++; return { downloaded: [page(1)] }; } });
   anonymous.observer.userId = undefined;
   await assert.rejects(generateWebStudioLesson(input, anonymous.observer, anonymous.deps), /hitelesített készítő/);
-  assert.equal(empty.started.length + anonymous.started.length, 0);
+  assert.equal(gathered, 0, "hitelesítetlen kérésre fizetős keresés sem indul");
+  const noJob = harness([done]);
+  noJob.observer.jobId = undefined;
+  await assert.rejects(generateWebStudioLesson(input, noJob.observer, noJob.deps), /futás azonosítója/);
+  assert.equal(empty.manufactured.length + anonymous.manufactured.length + noJob.manufactured.length, 0);
 });

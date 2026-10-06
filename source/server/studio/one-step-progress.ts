@@ -58,9 +58,9 @@ function persistQuietly(run: OneStepRun, persist?: PersistRunFn): void {
   });
 }
 
-export function createRun(persist?: PersistRunFn): string {
+/** Spec 2026-10-06-s7: a webes Studio-út a saját job-azonosítóját adja (a haladás és a workflow ugyanazzal az azonosítóval követhető). */
+export function createRun(persist?: PersistRunFn, id: string = randomUUID()): string {
   pruneRuns();
-  const id = randomUUID();
   const now = Date.now();
   const run: OneStepRun = {
     id,

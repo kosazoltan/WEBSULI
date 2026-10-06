@@ -105,7 +105,7 @@ async function loadRun(id: string): Promise<OneStepRun | null> {
   };
 }
 
-const createRun = () => createRunBase(persistRun);
+const createRun = (id?: string) => createRunBase(persistRun, id);
 const updateRun = (id: string, patch: Parameters<typeof updateRunBase>[1]) =>
   updateRunBase(id, patch, persistRun);
 const getRun = (id: string) => getRunBase(id, loadRun);
@@ -350,6 +350,38 @@ export async function runOneStep(
     if (run?.phase !== "done" || !run.lessonId) throw new Error(run?.error ?? "A készítés nem adott vissza teljes leckét.");
     return readPublishedLesson(run.lessonId);
   });
+}
+
+/**
+ * Spec 2026-10-06-s7 (C egy futásban): a feltöltéses gyártás magja a HÍVÓ workflow-jában (`webStudio`), saját futás és
+ * visszaolvasás nélkül — a webes futás lépései így a valódi végrehajtást rögzítik. A haladásjelző azonosítója a hívóé.
+ * Ha ugyanennek a futásnak egy korábbi végrehajtása már közzétette a leckét (pl. csak a lezárás bukott el), a kész lecke
+ * újrahasznosul: a lépések modellhívás nélkül, látogatásként rögzülnek (mint a feltöltéses út kész-lecke ágánál), új lecke nem készül.
+ */
+export async function runOneStepInWorkflow(runId: string, data: OneStepRequest, userId: string): Promise<void> {
+  const previous = await getRun(runId);
+  if (previous?.phase === "done" && previous.lessonId) {
+    const [published] = await db.select({ id: lessons.id }).from(lessons)
+      .where(and(eq(lessons.id, previous.lessonId), isNotNull(lessons.publishedAt))).limit(1);
+    if (published) {
+      for (const phase of ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator", "lektor", "gate"]) await workflowPhase(phase);
+      logger.info(`[STUDIO/WEB] A futás korábbi végrehajtásának kész leckéje újrahasznosítva (${runId} → ${published.id}).`);
+      return;
+    }
+  }
+  createRun(runId);
+  await runOneStepCore(runId, data, userId);
+}
+
+/** Spec 2026-10-06-s7: a Studio-panelről / söprőből folytatott webes futás lezárása (a webes job kész jelzése + visszaolvasás). */
+async function finishWebStudio(webJobId: string, owner: string, lessonId: string) {
+  const [row] = await db.select({ htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, lessonId)).limit(1);
+  if (!row?.htmlFileId) throw new Error("A közzétett tananyag nem olvasható vissza.");
+  const { researchJobStore } = await import("./web-research-job-store");
+  const { completeWebStudioJob } = await import("./web-research-jobs");
+  const job = await researchJobStore.read(webJobId, owner);
+  if (!job) throw new Error("A webes készítés nem található.");
+  return completeWebStudioJob(researchJobStore, job, { kind: "studio", runId: webJobId, lessonId, htmlFileId: row.htmlFileId, sources: [] });
 }
 
 async function readPublishedLesson(lessonId: string) {
@@ -823,6 +855,9 @@ async function guardedDrive(jobId: string) {
   }, () => drive(jobId));
 }
 
+/** A haladásjelző (one-step progress) azonosítója a workflow-é: a feltöltéses és (spec s7) a webes Studio-futásnál. */
+const tracksProgress = (mode: string | undefined) => mode === "upload" || mode === "webStudio";
+
 async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void) {
   const id = (await workflowStore.related(jobId, owner)) ?? jobId;
   const previous = await workflowStore.read(id, owner);
@@ -839,7 +874,7 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
         await beforeDrive(current?.view.visits.at(-1));
       }
       drove = true;
-      if (onAccepted && previous?.view.definition.mode === "upload") {
+      if (onAccepted && tracksProgress(previous?.view.definition.mode)) {
         const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
         await getRun(id);
         updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
@@ -847,18 +882,18 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
       onAccepted?.();
       await guardedDrive(jobId);
       const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
-      if (job?.step === "done" && job.lessonId) return readPublishedLesson(job.lessonId);
+      if (job?.step === "done" && job.lessonId) return previous?.view.definition.mode === "webStudio" ? finishWebStudio(id, owner, job.lessonId) : readPublishedLesson(job.lessonId);
       if (!job || job.step === "error" || job.status === "error") throw new Error(job?.error ?? "A készítés megállt.");
       throw new WorkflowWaiting("A tanulási terv jóváhagyására vár.", true);
     });
-    if (completed.state === "done" && previous?.view.definition.mode === "upload") {
+    if (completed.state === "done" && tracksProgress(previous?.view.definition.mode)) {
       const [job] = await db.select().from(studioJobs).where(eq(studioJobs.id, jobId));
       await getRun(id);
       updateRun(id, { phase: "done", lessonId: job.lessonId, error: null, detail: "A tananyag ellenőrizve, közzétéve és visszaolvasva." });
     }
   } catch (error) {
     if (!(error instanceof WorkflowWaiting)) {
-      if (drove && previous?.view.definition.mode === "upload") {
+      if (drove && tracksProgress(previous?.view.definition.mode)) {
         await getRun(id);
         updateRun(id, { phase: "error", error: error instanceof Error ? error.message : "A folytatás megállt." });
       }
