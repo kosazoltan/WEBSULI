@@ -2,7 +2,7 @@
 // Anyagok Profiknak Platform
 // Version: 4.0.0 - SVG background implementation - FORCE UPDATE
 
-const CACHE_VERSION = '4.2.0'; // FORCE UPDATE - clear stale cache after Apply
+const CACHE_VERSION = '4.3.0'; // FORCE UPDATE - robot app icons (2026-10-13)
 const CACHE_NAME = `anyagok-profiknak-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
@@ -11,7 +11,9 @@ const STATIC_ASSETS = [
   '/offline.html',
   '/manifest.json',
   '/favicon.svg',
-  '/favicon.png'
+  '/favicon.png',
+  '/favicon.ico',
+  '/icon-192.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -148,7 +150,7 @@ self.addEventListener('push', (event) => {
   let notificationData = {
     title: 'Új értesítés',
     body: 'Anyagok Profiknak',
-    icon: '/favicon.ico',
+    icon: '/icon-192.png',
     badge: '/favicon.ico',
     data: {
       url: '/'
