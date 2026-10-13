@@ -17,22 +17,12 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service Worker installing - clearing ALL caches...');
+  console.log('[SW] Service Worker installing - populating', CACHE_NAME);
+  // Populate ONLY the new versioned cache; old caches are removed in `activate`.
+  // If any asset fails here, install aborts and the previous worker keeps its
+  // cache (incl. /offline.html) intact.
   event.waitUntil(
-    // First, delete ALL existing caches
-    caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            console.log('[SW] Deleting cache:', cacheName);
-            return caches.delete(cacheName);
-          })
-        );
-      })
-      .then(() => {
-        // Then create new cache with minimal assets
-        return caches.open(CACHE_NAME);
-      })
+    caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('[SW] Caching minimal static assets');
         return cache.addAll(STATIC_ASSETS);
