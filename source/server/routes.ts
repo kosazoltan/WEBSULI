@@ -3842,7 +3842,8 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
           createdAt: emailLogs.createdAt,
         })
         .from(emailLogs)
-        .orderBy(desc(emailLogs.createdAt))
+        // id as tie-breaker: the panel's failure alert reads the newest rows in order
+        .orderBy(desc(emailLogs.createdAt), desc(emailLogs.id))
         .limit(30);
 
       // Recent uploads with email-stats (max 10)

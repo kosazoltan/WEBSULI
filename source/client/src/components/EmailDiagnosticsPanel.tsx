@@ -74,6 +74,10 @@ export default function EmailDiagnosticsPanel() {
     refetchOnWindowFocus: false,
   });
 
+  // recentLogs arrive newest-first; ≥3 consecutive failures at the head means delivery is broken.
+  const recentWindow = data?.recentLogs.slice(0, 5) ?? [];
+  const allRecentFailed = recentWindow.length >= 3 && recentWindow.every((l) => l.status === "failed");
+
   return (
     <div className="space-y-4">
       <Card>
@@ -154,13 +158,31 @@ export default function EmailDiagnosticsPanel() {
                     {data.resend.reason && <p className="text-sm">{data.resend.reason}</p>}
                     <p className="text-xs text-muted-foreground mt-1">
                       Render → Environment-ben állítsd be: <code>RESEND_API_KEY</code> +{" "}
-                      <code>RESEND_FROM_EMAIL</code>.
+                      <code>RESEND_FROM_EMAIL</code> hitelesített domainnel, pl.{" "}
+                      <code>WEBSULI &lt;noreply@websuli.vip&gt;</code> (a <code>resend.dev</code> teszt-feladó nem jó).
                     </p>
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Silent-failure alert: the newest sends all failed (any cause) */}
+          {allRecentFailed && (
+            <Card className="border-destructive" data-testid="alert-recent-failures">
+              <CardContent className="py-4 flex items-start gap-2 text-destructive">
+                <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-semibold">
+                    Az utolsó {recentWindow.length} email-küldés mind sikertelen
+                  </p>
+                  {recentWindow[0]?.error && (
+                    <p className="text-sm break-words">Legutóbbi hiba: {recentWindow[0].error}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Per-classroom breakdown */}
           <Card>

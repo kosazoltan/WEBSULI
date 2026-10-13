@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { storage } from './storage';
 import { sanitizeText } from './utils/sanitize';
 import { logger } from "./lib/logger";
+import { checkResendSender } from "./lib/resend-sender";
 
 let resendClient: Resend | null = null;
 let fromEmail: string = '';
@@ -39,6 +40,12 @@ export function isResendConfigured(): { ok: boolean; reason?: string; fromEmail?
     };
   }
 
+  // The resend.dev sandbox sender only delivers to the account owner — treat it as misconfigured.
+  const sender = checkResendSender(configuredFrom);
+  if (!sender.ok) {
+    return { ok: false, reason: sender.reason };
+  }
+
   return { ok: true, fromEmail: configuredFrom };
 }
 
@@ -53,14 +60,20 @@ function getResendClient() {
     throw new Error('RESEND_API_KEY environment variable is not set');
   }
 
-  resendClient = new Resend(apiKey);
-  
   // Explicit "from" address is required so production deliveries are reliable.
-  fromEmail = (process.env.RESEND_FROM_EMAIL || '').trim();
-  if (!fromEmail) {
+  const configuredFrom = (process.env.RESEND_FROM_EMAIL || '').trim();
+  if (!configuredFrom) {
     throw new Error('RESEND_FROM_EMAIL environment variable is not set');
   }
-  
+  const sender = checkResendSender(configuredFrom);
+  if (!sender.ok) {
+    throw new Error(sender.reason);
+  }
+
+  // Cache the client only after the config validated, so a bad config is never memoized.
+  fromEmail = configuredFrom;
+  resendClient = new Resend(apiKey);
+
   logger.info('[RESEND] Client initialized, from:', fromEmail);
   
   return { client: resendClient, fromEmail };
@@ -161,14 +174,19 @@ export async function sendNewMaterialNotification(
 
     logger.info('[RESEND] Email sikeresen elküldve:', recipientEmail, 'result:', result);
     
-    // Log successful email to database
-    await storage.createEmailLog({
-      htmlFileId: fileId,
-      recipientEmail,
-      status: 'sent',
-      resendId: result.data?.id,
-    });
-    
+    // Log successful email to database. Resend already accepted the mail, so a log-write
+    // failure must not fall into the catch below and be recorded as a failed delivery.
+    try {
+      await storage.createEmailLog({
+        htmlFileId: fileId,
+        recipientEmail,
+        status: 'sent',
+        resendId: result.data?.id,
+      });
+    } catch (logError) {
+      logger.error('[RESEND] Email log mentési hiba (a levél elküldve):', logError);
+    }
+
     return result;
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
@@ -200,14 +218,24 @@ export async function sendAdminNotification(
   htmlBody: string,
   adminEmail?: string
 ) {
+  const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'admin@websuli.org';
+  // Admin mails (daily view summary, material results) are logged too, so the diagnostics
+  // panel's failure alert sees them. A log-write error never changes the send outcome.
+  const logOutcome = async (entry: { status: 'sent' | 'failed'; resendId?: string; error?: string }) => {
+    try {
+      await storage.createEmailLog({ htmlFileId: null, recipientEmail, ...entry });
+    } catch (logError) {
+      logger.error('[RESEND] Admin email log mentési hiba:', logError);
+    }
+  };
+
+  let result: Awaited<ReturnType<Resend['emails']['send']>>;
   try {
     const { client, fromEmail } = getResendClient();
-    
-    const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'admin@websuli.org';
-    
+
     logger.info(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
-    
-    const result = await client.emails.send({
+
+    result = await client.emails.send({
       from: fromEmail,
       to: [recipientEmail],
       subject: subject,
@@ -217,11 +245,14 @@ export async function sendAdminNotification(
     if (result && 'error' in result && result.error) {
       throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
     }
-
-    logger.info(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
-    return result;
   } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     logger.error('[RESEND] Admin értesítés küldési hiba:', error);
+    await logOutcome({ status: 'failed', error: `admin: ${message}` });
     throw error;
   }
+
+  logger.info(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
+  await logOutcome({ status: 'sent', resendId: result.data?.id });
+  return result;
 }
