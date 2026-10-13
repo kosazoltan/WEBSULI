@@ -65,7 +65,7 @@ export async function sendPushToAll(payload: PushNotificationPayload): Promise<{
     const notificationPayload = JSON.stringify({
       title: payload.title,
       body: payload.body,
-      icon: payload.icon || '/favicon.ico',
+      icon: payload.icon || '/icon-192.png',
       badge: payload.badge || '/favicon.ico',
       tag: payload.tag || 'anyagok-profiknak',
       requireInteraction: payload.requireInteraction || false,
@@ -141,7 +141,7 @@ export async function sendPushToUser(userId: string, payload: PushNotificationPa
     const notificationPayload = JSON.stringify({
       title: payload.title,
       body: payload.body,
-      icon: payload.icon || '/favicon.ico',
+      icon: payload.icon || '/icon-192.png',
       badge: payload.badge || '/favicon.ico',
       tag: payload.tag || 'anyagok-profiknak',
       requireInteraction: payload.requireInteraction || false,
