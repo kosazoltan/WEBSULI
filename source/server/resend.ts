@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { storage } from './storage';
 import { sanitizeText } from './utils/sanitize';
 import { logger } from "./lib/logger";
+import { checkResendSender } from "./lib/resend-sender";
 
 let resendClient: Resend | null = null;
 let fromEmail: string = '';
@@ -39,6 +40,12 @@ export function isResendConfigured(): { ok: boolean; reason?: string; fromEmail?
     };
   }
 
+  // The resend.dev sandbox sender only delivers to the account owner — treat it as misconfigured.
+  const sender = checkResendSender(configuredFrom);
+  if (!sender.ok) {
+    return { ok: false, reason: sender.reason };
+  }
+
   return { ok: true, fromEmail: configuredFrom };
 }
 
@@ -53,14 +60,20 @@ function getResendClient() {
     throw new Error('RESEND_API_KEY environment variable is not set');
   }
 
-  resendClient = new Resend(apiKey);
-  
   // Explicit "from" address is required so production deliveries are reliable.
-  fromEmail = (process.env.RESEND_FROM_EMAIL || '').trim();
-  if (!fromEmail) {
+  const configuredFrom = (process.env.RESEND_FROM_EMAIL || '').trim();
+  if (!configuredFrom) {
     throw new Error('RESEND_FROM_EMAIL environment variable is not set');
   }
-  
+  const sender = checkResendSender(configuredFrom);
+  if (!sender.ok) {
+    throw new Error(sender.reason);
+  }
+
+  // Cache the client only after the config validated, so a bad config is never memoized.
+  fromEmail = configuredFrom;
+  resendClient = new Resend(apiKey);
+
   logger.info('[RESEND] Client initialized, from:', fromEmail);
   
   return { client: resendClient, fromEmail };
