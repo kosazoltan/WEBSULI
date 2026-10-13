@@ -710,3 +710,15 @@ darabszámmal (45/75) is elfogadható volt, így a kivétel a 45/75 alá vitte; 
 összevonva) = „ugyanazt jelenti”; rubrika-őr: egy VAGY-csoportban szám és ellentettje → tételhiba (javító mód: rubrika).
 Spec: `docs/specs/2026-10-04-bank-tartalek-es-elojel(.md, -vegrehajtas.md)`. Unit 1914/1914, check/check:test/lint 0, build 0.
 NOT RUN: éles újraindítás (a felhőből az éles szerver nem érhető el) — a megállt leckét újra kell indítani.
+
+## 2026-10-13 — e-mail küldés helyreállítása + sandbox-feladó őr (Claude Code)
+**Mért (éles DB):** `email_logs` utolsó `sent` 2026-02-21; 2026-09 óta minden sor `failed`: Resend 403 „You can only send
+testing emails to your own email address”. Gyökér: Render `RESEND_FROM_EMAIL` = `WebSuli <onboarding@resend.dev>` (a 09-02-i
+helyi próba sandbox-feladója került élesbe). A `websuli.vip` domain a Resendben verified.
+**Javítás (env):** Render `RESEND_FROM_EMAIL` = `WEBSULI <noreply@websuli.vip>`, deploy dep-db76itss728c73dk56h0 live; A/B: régi
+feladó → 403, új → 200; éles POST /api/material-result → 200 delivered:1; a 10-12/10-13-i 3 tananyag 9 elmaradt értesítője
+újraküldve (szerver saját `sendNewMaterialNotification`, websuli.vip linkek) — Resend: 9/9 delivered.
+**Javítás (kód):** `checkResendSender` — resend.dev feladó = „nincs konfigurálva”; diagnosztika panel piros sáv, ha a
+legutóbbi ≥3 küldés mind failed. Spec: `docs/specs/2026-10-13-resend-sandbox-or(.md, -vegrehajtas.md)`.
+Unit 2203/2203, check/check:test/eslint 0, build OK, Playwright render 390/1366.
+
