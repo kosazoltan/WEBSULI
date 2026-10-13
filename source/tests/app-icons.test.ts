@@ -9,10 +9,28 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const PUBLIC = path.join(root, "client", "public");
 const pub = (p: string) => path.join(PUBLIC, p.replace(/^\//, ""));
 
-function pngSize(file: string): { w: number; h: number } {
-  const b = fs.readFileSync(file);
-  assert.equal(b.subarray(1, 4).toString("ascii"), "PNG", `${file} is not a PNG`);
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/** Walks every chunk: signature, IHDR first, at least one IDAT, IEND last, no truncation. */
+function pngInfo(b: Buffer, label: string): { w: number; h: number } {
+  assert.ok(b.subarray(0, 8).equals(PNG_SIGNATURE), `${label}: bad PNG signature`);
+  const types: string[] = [];
+  let pos = 8;
+  while (pos < b.length) {
+    assert.ok(pos + 12 <= b.length, `${label}: truncated chunk header`);
+    const len = b.readUInt32BE(pos);
+    types.push(b.subarray(pos + 4, pos + 8).toString("ascii"));
+    pos += 12 + len;
+    assert.ok(pos <= b.length, `${label}: truncated chunk data`);
+  }
+  assert.equal(types[0], "IHDR", `${label}: IHDR must come first`);
+  assert.ok(types.includes("IDAT"), `${label}: no image data`);
+  assert.equal(types[types.length - 1], "IEND", `${label}: missing IEND`);
   return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+}
+
+function pngSize(file: string): { w: number; h: number } {
+  return pngInfo(fs.readFileSync(file), file);
 }
 
 test("PNG icons exist with the size their role requires", () => {
@@ -33,8 +51,18 @@ test("favicon.ico is a real ICO with 16/32/48 entries", () => {
   assert.deepEqual([...b.subarray(0, 4)], [0, 0, 1, 0]);
   const count = b.readUInt16LE(4);
   assert.equal(count, 3);
-  const sizes = Array.from({ length: count }, (_, i) => b[6 + i * 16]).sort((a, c) => a - c);
-  assert.deepEqual(sizes, [16, 32, 48]);
+  const sizes: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const e = 6 + i * 16;
+    const size = b[e];
+    const bytes = b.readUInt32LE(e + 8);
+    const offset = b.readUInt32LE(e + 12);
+    assert.ok(offset + bytes <= b.length, `ico entry ${i}: payload out of bounds`);
+    // each entry embeds a complete PNG whose real size matches the directory entry
+    assert.deepEqual(pngInfo(b.subarray(offset, offset + bytes), `ico entry ${i}`), { w: size, h: size });
+    sizes.push(size);
+  }
+  assert.deepEqual(sizes.sort((a, c) => a - c), [16, 32, 48]);
 });
 
 test("manifest icons point at existing files with truthful sizes and both purposes", () => {

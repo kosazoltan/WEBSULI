@@ -1,6 +1,7 @@
 // Generates every WebSuli app icon from the approved robot artwork.
 // Spec: docs/specs/2026-10-13-robot-ikon.md
 // Usage (from source/): node scripts/generate-app-icons.mjs
+// Needs Playwright's Chromium once per machine: npx playwright install chromium
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
