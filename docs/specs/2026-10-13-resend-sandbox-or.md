@@ -51,3 +51,11 @@
 - `npm test` célzott tesztje zöld; `tsc --noEmit` 0 hiba; eslint az érintett fájlokra 0 hiba.
 - Böngészős render-próba: a panel helyes állapotban jelenik meg (OK feladó, figyelmeztetés a régi hibasorokra nem
   jelenik meg, mert már vannak `sent` sorok).
+
+## Review-kör (#205, 2026-10-13) — elfogadott leletek
+1. A feladó-értéket TELJESEN kell illeszteni: `cím` vagy `[név] <cím>`, a záró `>` után semmi; domain-címkék `[a-z0-9]`,
+   belül kötőjel, nem kezdődhet/végződhet kötőjellel. Új tesztesetek: utótagos, kettős, lezáratlan, hibás címkéjű érték.
+2. `sendAdminNotification` (napi összesítő, eredményküldés) is ír `email_logs` sort (`htmlFileId: null`, hiba `admin: …`),
+   különben a panel figyelmeztetése nem látná az admin-levelek bukását. A napló-írás hibája nem változtat a küldés eredményén.
+3. `sendNewMaterialNotification`: a `sent` napló-írás hibája nem kerülhet a catch-ágba (nem lehet elküldött levélből `failed` sor).
+4. A diagnosztika `recentLogs` lekérdezése `createdAt DESC, id DESC` — determinisztikus ablak holtversenynél.
