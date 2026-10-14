@@ -13,9 +13,9 @@ import { buildAuthorPrompt, buildLektorPrompt, canonicalJson, lektorReportSchema
 import { classifyNotes } from "./lektor";
 import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, type ExperienceCheckpoint } from "./experience-builder";
-import { callStepModel } from "./run-step";
-import { createStudioStepProvider } from "../ai/studio-provider";
-import { providerForModel, resolveStudioModel } from "../ai/models";
+import { callStepModel, callStepModelWithFallback, StepModelError } from "./run-step";
+import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
+import { lektorChainFor, providerForModel, resolveStudioModel } from "../ai/models";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 import { conceptIdResolver, exportQuizItemsForPublish } from "./quiz-export";
 import { workflowPhase, workflowMode, workflowFence, workflowValidationFailure, workflowFinding } from "../workflows/engine";
@@ -75,12 +75,27 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const [material] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, fileId));
   if (!material) throw new Error("Az eredeti tananyag metaadatai nem találhatók.");
   const source = await loadSource(row.mapId);
+  // Spec 2026-10-14-tartalek-b-szelet: a szerző/tervező ellentétes családú tartalékkal; a javítás TÉNYLEGES szerzői gyűlnek, és a
+  // lektor a szerzők családján kívüli láncon fut (D1) — a lánc első működő tagja ítél.
+  const authors = new Set<string>();
   const call = async (step: RepairStep, system: string, user: string, role: PromptRole = requireRoleForStep(step), extra?: { responseFormat?: ResponseFormatJsonSchema }) => {
-    const model = resolveStudioModel(step);
-    const provider = createStudioStepProvider(model, step);
     // Review #160 (U2/C8): szigorú séma csak a közvetlen OpenAI-úton; tartalék úton JSON-mód + helyi validálás.
-    const responseFormat = extra?.responseFormat && providerForModel(model) === "openai" ? extra.responseFormat : undefined;
-    return (await callStepModel(provider, { step, role, model, system, user, ...(responseFormat ? { responseFormat } : {}) })).json;
+    const formatFor = (model: string) => extra?.responseFormat && providerForModel(model) === "openai" ? { responseFormat: extra.responseFormat } : {};
+    if (step === "lektor") {
+      const chain = lektorChainFor(authors.size ? [...authors] : undefined).filter((m) => studioModelReady(m));
+      for (const [index, model] of chain.entries()) {
+        try {
+          return (await callStepModel(createStudioStepProvider(model, step), { step, role, model, system, user, ...formatFor(model) })).json;
+        } catch (error) {
+          if (!(error instanceof StepModelError) || index + 1 === chain.length) throw error;
+        }
+      }
+      throw new Error("A lektor-lánc egyik modelljéhez sincs kulcs.");
+    }
+    const model = resolveStudioModel(step);
+    const result = await callStepModelWithFallback({ step, role, model, system, user, ...formatFor(model) }, { providerFactory: createStudioStepProvider, providerStep: step });
+    if (step === "author") authors.add(result.model);
+    return result.json;
   };
   const ownerInstruction = normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;

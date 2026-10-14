@@ -179,7 +179,9 @@ export function stepStreamIdleMs(step: string): number | undefined {
  * függetlenül; az OpenAI chat-úton is ténylegesen elküldve (`chatReasoningEffort`). Csak az ellentétes családú tartalékmodellre.
  */
 export function crossFamilyFallbackOptions(model: string, fallback: boolean | undefined): Pick<AIProviderConfig, "reasoningEffort" | "chatReasoningEffort"> {
-  if (!fallback || !isCrossFamilyFallbackModel(model)) return {};
+  if (!fallback) return {};
+  // Spec 2026-10-14-tartalek-b-szelet: a harmadik családú tartalék (Qwen 0902) a saját effortján (high) fut, nem a lépés szabályzatán.
+  if (!isCrossFamilyFallbackModel(model)) return MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {};
   return { reasoningEffort: CROSS_FAMILY_FALLBACK_EFFORT, ...(providerForModel(model) === "openai" ? { chatReasoningEffort: true } : {}) };
 }
 

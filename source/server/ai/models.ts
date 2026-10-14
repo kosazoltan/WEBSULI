@@ -192,6 +192,19 @@ export function fallbackModelFor(
 }
 
 /**
+ * Spec 2026-10-14-tartalek-b-szelet (tulajdonosi döntés): egy hívás ellentétes családú tartaléka; ELLENŐRZŐ szerepnél
+ * (`checkedModels` = az ellenőrzött tartalom modelljei) ha a tartalék azok családjába esne, a harmadik család (Qwen 0902) —
+ * a lektorral azonos elv. Ha az is ütközik, nincs tartalék.
+ */
+export function independentFallbackFor(model: string, checkedModels: readonly string[] = []): string | undefined {
+  const fallback = crossFamilyFallback(model);
+  if (!fallback) return undefined;
+  const checked = new Set(checkedModels.map(modelFamily));
+  if (!checked.has(modelFamily(fallback))) return fallback;
+  return checked.has(modelFamily(LEKTOR_THIRD_FAMILY_MODEL)) ? undefined : LEKTOR_THIRD_FAMILY_MODEL;
+}
+
+/**
  * Tulajdonosi döntés 2026-10-14: ha a leckébe GPT (a szerző tartaléka) írt, a lektor harmadik családra vált — Qwen 3.8 Max 0902,
  * OpenRouteren, high efforttal (`MODEL_REASONING_EFFORT`). Az OpenRouter /models listáján ellenőrizve 2026-10-14.
  */
