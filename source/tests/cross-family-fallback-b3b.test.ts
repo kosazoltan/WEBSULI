@@ -70,3 +70,44 @@ test("routes.ts: mind a 9 adminisztrációs hívás tartalékkal; streamnél csa
   // A HTML-teljesség a tartalékon is ellenőrzött.
   assert.equal((src.match(/if \(!finished \|\| !verification\.ok\)/g) ?? []).length, 2);
 });
+
+// Review #220: az ellenirányú ág (htmlFixStream, chatgptChat, analyzeFiles): GPT → Claude, a kérés Anthropic-alakja a HTTP-határon.
+test("crossFamilyComplete: a GPT-hiba után Opus 5.5 — output_config medium, külön system, end_turn = teljes", async t => {
+  withEnv(t, { AI_INTEGRATIONS_ANTHROPIC_API_KEY: "test-placeholder" });
+  let body: Record<string, unknown> | undefined;
+  t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
+    assert.match(String(url), /api\.anthropic\.com/);
+    body = JSON.parse(String(init?.body));
+    const ev = (type: string, data: object) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+    return new Response([
+      ev("message_start", { message: { id: "m", type: "message", role: "assistant", model: "claude-opus-5-5", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } }),
+      ev("content_block_start", { index: 0, content_block: { type: "text", text: "" } }),
+      ev("content_block_delta", { index: 0, delta: { type: "text_delta", text: "Magyarázat." } }),
+      ev("content_block_stop", { index: 0 }),
+      ev("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 3 } }),
+      ev("message_stop", {}),
+    ].join(""), { headers: { "Content-Type": "text/event-stream" } });
+  });
+  const result = await crossFamilyComplete("gpt-6.1-sol", new Error("[OpenAI] 500"), {
+    system: "Rendszer", messages: [{ role: "user", content: "Elemezd" }], maxTokens: 2048, timeoutMs: 60_000, json: true, label: "TEST",
+  });
+  assert.equal(result.model, "claude-opus-5-5");
+  assert.equal(result.text, "Magyarázat.");
+  assert.equal(isCompleteFinish(result.finishReason), true);
+  assert.deepEqual(body?.output_config, { effort: "medium" });
+  assert.ok(JSON.stringify(body?.system).includes("Rendszer"), "a system külön mezőben megy");
+  assert.deepEqual((body?.messages as Array<{ role: string }>).map((m) => m.role), ["user"]);
+  assert.equal(body?.response_format, undefined, "Claude-nak nincs JSON-mód mező");
+});
+
+test("parseFileAnalysis: minden kötelező mező típusa ellenőrzött; analyzeFallbackBudget a kliens 180 s-os keretéből", async () => {
+  const { parseFileAnalysis, analyzeFallbackBudget } = await import("../server/ai/legacy-fallback");
+  const good = { extractedText: "szöveg", suggestedTitle: "Cím", suggestedDescription: "Leírás", suggestedClassroom: 6, topics: ["tört"] };
+  assert.deepEqual(parseFileAnalysis("```json\n" + JSON.stringify(good) + "\n```"), good);
+  for (const bad of [{ ...good, topics: "tört" }, { ...good, suggestedTitle: undefined }, { ...good, suggestedClassroom: "6" }, { ...good, topics: [1] }]) {
+    assert.throws(() => parseFileAnalysis(JSON.stringify(bad)), /kötelező mező/);
+  }
+  assert.throws(() => parseFileAnalysis('{"extractedText":"csonka'), /nem érvényes JSON/);
+  assert.equal(analyzeFallbackBudget(0, 10_000), 160_000);
+  assert.equal(analyzeFallbackBudget(0, 150_000), undefined, "30 s alatt nem indul tartalék");
+});

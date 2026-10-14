@@ -33,7 +33,7 @@ import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
 import { assertDistinctFamilies, effortFor, resolveLegacyModel } from "./ai/models";
-import { isOpenRouterConfigured, stripJsonFences } from "./ai/OpenRouterProvider";
+import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { callClaudeParts } from "./studio/claude-vision";
 import { studioRouter } from "./studio/routes";
 import { lessonPipelineRouter } from "./studio/lesson-pipeline-routes";
@@ -44,7 +44,7 @@ import { failOnSchemaInvalid, runToolWorkflow } from "./workflows/tool-run";
 import { workflowFence, workflowPhase } from "./workflows/engine";
 import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { cachedSystem } from "./ai/prompt-cache";
-import { crossFamilyComplete, isCompleteFinish, legacyFallbackFor } from "./ai/legacy-fallback";
+import { abortOnClientClose, analyzeFallbackBudget, crossFamilyComplete, isCompleteFinish, legacyFallbackFor, parseFileAnalysis, type FileAnalysis } from "./ai/legacy-fallback";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
@@ -2053,7 +2053,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 
       // Spec 2026-10-14-tartalek-b-szelet (B3b): a GPT-elemzés hibájánál egyszer az ellentétes családú tartalék (Opus 5.5, medium)
       // ugyanazokkal a fájlrészekkel (kép/szöveg Claude-blokkként); a szigorú séma helyett a kulcsok a promptban, a JSON a szövegből.
-      let analysisText: string;
+      let result: FileAnalysis;
+      const analyzeStartedAt = Date.now();
       try {
         const response = await openai.chat.completions.create({
           model: resolveLegacyModel("analyzeFiles"),
@@ -2105,16 +2106,17 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
           },
           max_completion_tokens: 8192 // Increased for multiple files
         });
-        analysisText = response.choices[0].message.content || '{}';
+        // Review #220: a teljes séma a tartalék-határon belül — hibás elsődleges kimenet is tartalékot indít.
+        result = parseFileAnalysis(response.choices[0].message.content || '{}');
       } catch (error) {
         const fallback = legacyFallbackFor(resolveLegacyModel("analyzeFiles"));
-        if (!fallback) throw error;
+        const budgetMs = analyzeFallbackBudget(analyzeStartedAt);
+        if (!fallback || !budgetMs) throw error;
         logger.warn(`[ANALYZE] ${resolveLegacyModel("analyzeFiles")} hibázott — ${(error instanceof Error ? error.message : String(error)).slice(0, 200)} → tartalék: ${fallback}`);
-        analysisText = await callClaudeParts({ model: fallback, system: `${withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumokat és adj vissza strukturált információt JSON formátumban.`)}\n\nVálaszolj KIZÁRÓLAG egy JSON-objektummal, pontosan ezekkel a kulcsokkal: extractedText (string), suggestedTitle (string), suggestedDescription (string), suggestedClassroom (szám, 0–12; 0 = programozási alapismeretek), topics (string-tömb).`, parts: content, maxTokens: 16_000, timeoutMs: 300_000 });
+        result = parseFileAnalysis(await callClaudeParts({ model: fallback, system: `${withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumokat és adj vissza strukturált információt JSON formátumban.`)}\n\nVálaszolj KIZÁRÓLAG egy JSON-objektummal, pontosan ezekkel a kulcsokkal: extractedText (string), suggestedTitle (string), suggestedDescription (string), suggestedClassroom (szám, 0–12; 0 = programozási alapismeretek), topics (string-tömb).`, parts: content, maxTokens: 16_000, timeoutMs: budgetMs, signal: abortOnClientClose(res) }));
       }
 
       await workflowPhase("gate");
-      const result = JSON.parse(stripJsonFences(analysisText) || '{}');
       await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${files.length} files processed, ${result.topics?.length || 0} topics found`);
@@ -2193,7 +2195,8 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
 
       // Spec 2026-10-14-tartalek-b-szelet (B3b): a GPT-elemzés hibájánál egyszer az ellentétes családú tartalék (Opus 5.5, medium)
       // ugyanazokkal a fájlrészekkel (kép/szöveg Claude-blokkként); a szigorú séma helyett a kulcsok a promptban, a JSON a szövegből.
-      let analysisText: string;
+      let result: FileAnalysis;
+      const analyzeStartedAt = Date.now();
       try {
         const response = await openai.chat.completions.create({
           model: resolveLegacyModel("analyzeFiles"),
@@ -2245,16 +2248,17 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
           },
           max_completion_tokens: 4096
         });
-        analysisText = response.choices[0].message.content || '{}';
+        // Review #220: a teljes séma a tartalék-határon belül — hibás elsődleges kimenet is tartalékot indít.
+        result = parseFileAnalysis(response.choices[0].message.content || '{}');
       } catch (error) {
         const fallback = legacyFallbackFor(resolveLegacyModel("analyzeFiles"));
-        if (!fallback) throw error;
+        const budgetMs = analyzeFallbackBudget(analyzeStartedAt);
+        if (!fallback || !budgetMs) throw error;
         logger.warn(`[ANALYZE] ${resolveLegacyModel("analyzeFiles")} hibázott — ${(error instanceof Error ? error.message : String(error)).slice(0, 200)} → tartalék: ${fallback}`);
-        analysisText = await callClaudeParts({ model: fallback, system: `${withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumot és adj vissza strukturált információt JSON formátumban.`)}\n\nVálaszolj KIZÁRÓLAG egy JSON-objektummal, pontosan ezekkel a kulcsokkal: extractedText (string), suggestedTitle (string), suggestedDescription (string), suggestedClassroom (szám, 0–12; 0 = programozási alapismeretek), topics (string-tömb).`, parts: content, maxTokens: 16_000, timeoutMs: 300_000 });
+        result = parseFileAnalysis(await callClaudeParts({ model: fallback, system: `${withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumot és adj vissza strukturált információt JSON formátumban.`)}\n\nVálaszolj KIZÁRÓLAG egy JSON-objektummal, pontosan ezekkel a kulcsokkal: extractedText (string), suggestedTitle (string), suggestedDescription (string), suggestedClassroom (szám, 0–12; 0 = programozási alapismeretek), topics (string-tömb).`, parts: content, maxTokens: 16_000, timeoutMs: budgetMs, signal: abortOnClientClose(res) }));
       }
 
       await workflowPhase("gate");
-      const result = JSON.parse(stripJsonFences(analysisText) || '{}');
       await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${result.topics?.length || 0} topics found`);

@@ -43,3 +43,32 @@ export async function crossFamilyComplete(
   const response = await provider.chat(messages, opts.signal, provider.supportsStreamingChat ? { stream: { idleMs: STREAM_IDLE_MS } } : undefined);
   return { text: response.content ?? "", finishReason: response.finishReason, model: fallback };
 }
+
+/** Review #220: a fájlelemzés teljes sémája (a kliens `topics.length`-et és a többi mezőt is használja). */
+export type FileAnalysis = { extractedText: string; suggestedTitle: string; suggestedDescription: string; suggestedClassroom: number; topics: string[] };
+export function parseFileAnalysis(text: string): FileAnalysis {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+  let parsed: Record<string, unknown>;
+  try { parsed = JSON.parse(cleaned || "{}"); } catch (error) { throw new Error("A fájlelemzés válasza nem érvényes JSON.", { cause: error }); }
+  const ok = typeof parsed.extractedText === "string" && typeof parsed.suggestedTitle === "string" && typeof parsed.suggestedDescription === "string"
+    && typeof parsed.suggestedClassroom === "number" && Number.isFinite(parsed.suggestedClassroom)
+    && Array.isArray(parsed.topics) && parsed.topics.every((topic) => typeof topic === "string");
+  if (!ok) throw new Error("A fájlelemzés válaszából hiányzik vagy hibás egy kötelező mező (extractedText, suggestedTitle, suggestedDescription, suggestedClassroom, topics).");
+  return parsed as FileAnalysis;
+}
+
+/**
+ * Review #220: az EnhancedMaterialCreator a fájlelemzést 180 s-nál megszakítja — a tartalék csak a maradék keretből futhat
+ * (legalább 30 s kell), és a kliens lezárásakor megszakad (kézbesíthetetlen, fizetős hívás ne fusson végig).
+ */
+export const ANALYZE_CLIENT_BUDGET_MS = 170_000;
+export const ANALYZE_MIN_FALLBACK_MS = 30_000;
+export function analyzeFallbackBudget(startedAt: number, now = Date.now()): number | undefined {
+  const remaining = ANALYZE_CLIENT_BUDGET_MS - (now - startedAt);
+  return remaining >= ANALYZE_MIN_FALLBACK_MS ? remaining : undefined;
+}
+export function abortOnClientClose(res: { on(event: "close", listener: () => void): unknown; writableEnded: boolean }): AbortSignal {
+  const controller = new AbortController();
+  res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+  return controller.signal;
+}
