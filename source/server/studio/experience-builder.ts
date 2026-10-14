@@ -92,10 +92,11 @@ const packetPatchSchema = z.object({
 type PacketContent = z.infer<typeof packetPatchSchema> & { glossary: z.infer<typeof glossaryEntrySchema>[] };
 const BANKS = ["methods", "tasks", "quiz"] as const;
 /**
- * A bank call failure that is the MODEL's output (length limit, empty, not JSON) — worth another
- * attempt on the next model. Provider outages (timeout, 429, 5xx) are NOT wrapped in this: they
- * propagate unchanged, the job fails once with its cause and the saved teaching, and the
- * explicit bank resume path takes over (tests: "bank provider failure preserves its cause").
+ * A bank call failure worth another attempt on the next model: the MODEL's output (length limit, empty,
+ * not JSON), a timeout, or (spec 2026-10-14-folytatas-mentett-reszekbol) a transient provider 5xx
+ * (`callBankPacketModel`). Other provider failures (429, quota, key, status-less) are NOT wrapped in this:
+ * they propagate unchanged, the job fails once with its cause and the saved teaching, and the explicit
+ * bank resume path takes over (tests: "bank provider failure preserves its cause").
  */
 export class RetryableBankCallError extends Error {
   override readonly name = "RetryableBankCallError";
@@ -465,7 +466,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // Mért éles hiba (2026-09-19, run 45233b4b): a glm-5.3-flash egy csomagválasza elérte a
       // kimeneti korlátot, és a hiba kivételként kilépett a ciklusból — a futás meghalt 3 kész
       // csomag után. A modell-kimeneti hiba (hossz, üres, nem JSON) BUKOTT KÍSÉRLET: a következő
-      // kísérlet (tartalék, majd mentőmodell) kapja meg. Szolgáltatói hiba változatlanul kilép.
+      // kísérlet (tartalék, majd mentőmodell) kapja meg. Ugyanígy az időtúllépés és (spec 2026-10-14) a szolgáltatói 5xx;
+      // a többi szolgáltatói hiba (429, keret, kulcs, státusz nélküli) változatlanul kilép a folytatási útra.
       let response: unknown;
       // Spec 2026-09-30 (U2/C8): szigorú séma a szolgáltatónak (a hívó dönt, hogy az adott út támogatja-e); a null-ok visszaalakítva.
       const responseFormat = bankResponseFormat({ methodMin: methodKinds.length, taskCount, taskTarget, taskMax, quizCount, quizTarget, quizMax, language: Boolean(language) }, Boolean(repairBase));
