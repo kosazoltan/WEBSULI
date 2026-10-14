@@ -104,11 +104,16 @@ export type LessonMetrics = {
   sourceInLessonPct: number | null;
   nonSourcePct: number | null;
   repetitionPct: number;
+  /**
+   * A KÖTELEZŐ (nem `extra`) fogalmak szótöveiből (term + definition + quote) hány van a Tananyag lapon. Témafókusznál ez a
+   * tisztességes lefedettség: a fókuszon kívüli forrásrész szándékosan marad ki, a teljes-forrás arány ott félrevezet.
+   */
+  requiredConceptTermsPct: number | null;
 };
 
 export function measureLesson(
   lesson: Pick<Lesson, "sections">,
-  context: { sourceText: string; concepts: ReadonlyArray<{ term: string; definition?: string | null; quote?: string | null }> },
+  context: { sourceText: string; concepts: ReadonlyArray<{ term: string; definition?: string | null; quote?: string | null; examWeight?: string | null }> },
 ): LessonMetrics {
   const visible = lessonVisibleText(lesson);
   const visibleWords = words(visible).length;
@@ -127,5 +132,9 @@ export function measureLesson(
     sourceInLessonPct: termCoverage(context.sourceText, visible).pct,
     nonSourcePct: nonSourceShare(context.sourceText, visible),
     repetitionPct: repetitionShare(visible),
+    requiredConceptTermsPct: termCoverage(
+      context.concepts.filter((c) => c.examWeight !== "extra").map((c) => [c.term, c.definition ?? "", c.quote ?? ""].join(" ")).join("\n"),
+      visible,
+    ).pct,
   };
 }
