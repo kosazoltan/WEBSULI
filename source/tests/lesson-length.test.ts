@@ -57,5 +57,8 @@ test("szerző: tömör és teljes, a keret a promptban; a „ne rövidítsd váz
   // mérve (Hunyadi): a mindig-true minta a tömör fejezetekben elérhetetlen Próbát → ív-hibát → hosszító javítókört adott
   assert.match(prompt, /PRÓBA: a fejezet probaEnabled értéke CSAK akkor true, ha a fejezetben legalább 5 check/);
   assert.match(prompt, /"probaEnabled": boolean/);
+  // mérve (S2c): a tömörítés az ív- (check előtt example) és a megalapozási (fogalomnév szó szerint) szabályt sértette
+  assert.match(prompt, /A TÖMÖRÍTÉS NEM BONT KAPUT: minden check előtt marad egy example/);
+  assert.match(prompt, /fogalom NEVÉT \(term\) a blokk szövege pontosan, szó szerint tartalmazza/);
   assert.doesNotMatch(prompt, /Ne rövidítsd vázlattá/);
 });

@@ -497,6 +497,9 @@ export function buildAuthorPrompt(
     // Mérve (próbaharness, Hunyadi): a minta `"probaEnabled": true`-ja miatt a tömör (1 kérdéses) fejezetek Próbája elérhetetlen
     // lett → ív-hiba → szerzői javítókör, amely a kérdések pótlásával a leckét újra hosszítja. Az ív-szerződés választást enged.
     `PRÓBA: a fejezet probaEnabled értéke CSAK akkor true, ha a fejezetben legalább ${DEFAULT_REWARD_POLICY.minCorrectForCoupon} check blokk van; tömör, kevés kérdéses fejezetnél false. Kérdést nem a Próba kedvéért adsz hozzá.`,
+    // Mérve (próbaharness S2c): a tömörítés két meglévő kapu-szabályt sértett — Mezopotámia: „leggyakoribb hibák” fejezetben
+    // check előtte example nélkül (ív); Időszámítás: a „Kr. e. / i.e.” fogalom neve nem állt szó szerint a blokkban (megalapozás).
+    "A TÖMÖRÍTÉS NEM BONT KAPUT: minden check előtt marad egy example ugyanabban a fejezetben (a „leggyakoribb hibák” fejezetben is); a coversConceptIds-ben megnevezett fogalom NEVÉT (term) a blokk szövege pontosan, szó szerint tartalmazza — rövidítés vagy átfogalmazás helyett.",
     "TÉNYVÉDELEM: a rövidítés CSAK töltelékre és ismétlésre vonatkozik — minden kötelező fogalom definíciójának és idézetének minden tényét (név, szám, évszám, ok, lépés) kimondod a lecke látható szövegében; ha a keret szűk, a magyarázat lesz rövidebb, nem a tény marad ki.",
     "",
   ];
