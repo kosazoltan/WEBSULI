@@ -1,5 +1,7 @@
-import { withQuotaFailover, studioConnection } from "../ai/studio-provider";
-import { SCOPE_EFFORT, type OcrEffort } from "../ai/models";
+import { withQuotaFailover, studioConnection, studioModelReady } from "../ai/studio-provider";
+import { CROSS_FAMILY_FALLBACK_EFFORT, crossFamilyFallback, providerForModel, SCOPE_EFFORT, type OcrEffort } from "../ai/models";
+import { callClaudeParts } from "./claude-vision";
+import { logger } from "../lib/logger";
 import { ocrVendorRequest } from "./ocr";
 import { withSupportSkill } from "./support-skills";
 import { workflowSkillPrompt } from "../workflows/engine";
@@ -195,10 +197,29 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[], eff
   };
 }
 
-/** Default scope model call: one vision call over all sources (the `scope` step model, spec 2026-10-14). */
+/**
+ * Default scope model call: one vision call over all sources (the `scope` step model, spec 2026-10-14). Spec 2026-10-14-tartalek-b-szelet
+ * (B2): az elsődleges hibájánál egyszer az ellentétes családú tartalék (OpenAI → Opus 5.5 Claude-képolvasással; Anthropic →
+ * GPT-6.1 Sol), medium efforttal — ugyanazokkal a forrásrészekkel.
+ */
 export async function callScopeModel(files: ExtractorFile[], model: string, effort: OcrEffort = SCOPE_EFFORT): Promise<string> {
-  const OpenAI = (await import("openai")).default;
   const parts = await scopeContentParts(files);
+  try {
+    return await callScopeVendor(parts, model, effort);
+  } catch (error) {
+    const fallback = crossFamilyFallback(model);
+    if (!fallback || !studioModelReady(fallback)) throw error;
+    logger.warn(`[STUDIO] Tantárgy-felismerés (${model}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
+    return callScopeVendor(parts, fallback, CROSS_FAMILY_FALLBACK_EFFORT);
+  }
+}
+
+async function callScopeVendor(parts: ScopeContentPart[], model: string, effort: OcrEffort): Promise<string> {
+  if (providerForModel(model) === "anthropic") {
+    const system = withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt("scope");
+    return callClaudeParts({ model, system, parts, maxTokens: 16_000, timeoutMs: 120_000, effort });
+  }
+  const OpenAI = (await import("openai")).default;
   // Spec 2026-10-01-gyokerok-egyben (2.3): kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át.
   return withQuotaFailover(studioConnection(model), async (connection) => {
     // high effortnál a mért p95 19 s, max 28 s — a 120 s-os határ marad.

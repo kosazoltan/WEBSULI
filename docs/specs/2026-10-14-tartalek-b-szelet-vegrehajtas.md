@@ -28,6 +28,17 @@ Spec: `docs/specs/2026-10-14-tartalek-b-szelet.md`. Parancsok a `source/` mappá
 ## V4 — kapuk
 - `npm.cmd run check`, `check:test`, `lint`, `test`, `build`.
 
+## B2 — tantárgy-felismerés és kivonatoló (külön PR)
+- `server/studio/claude-vision.ts`: `openAiPartsToClaude` (szöveg / `image_url` / `file` data URL → Claude-blokk a meglévő
+  `claudeSourceBlock`-kal; nem data URL → hiba) és `callClaudeParts` (adaptív gondolkodás, `output_config.effort`, csonka → hiba).
+- `one-step.ts` `callScopeModel`: elsődleges út változatlan; hibánál `crossFamilyFallback` — Anthropic tartalék a Claude-úton
+  (16k keret), OpenAI tartalék a meglévő úton medium efforttal.
+- `run-extraction.ts` `callExtractorModel`: ugyanígy; Claude-tartalék JSON-mód nélkül (`stripJsonFences` + `JSON.parse`), az
+  OpenAI-tartalék `reasoning_effort: "medium"`-mal.
+- `web-research-runner.ts` webes kivonatoló: szöveges hívás, hibánál a tartalék `crossFamilyFallbackOptions`-szal.
+- Teszt: `tests/cross-family-fallback-b2.test.ts` — átalakítás (szöveg/kép/PDF, nem data URL → hiba); scope: luna 500 → Opus a
+  képpel, medium.
+
 ## B3a — HTML-modernizálás és kvízgenerátor (külön PR)
 - `models.ts` `LEGACY_MODELS.improve`: `["claude-opus-5", "gpt-6.1-sol"]` (volt Terra); `improveAsync.ts` a tartalék-fokon
   `crossFamilyFallbackOptions(model, true)`; `OpenAIProvider.streamChat` a `chatReasoningEffort` mellett `reasoning_effort`-ot küld.
