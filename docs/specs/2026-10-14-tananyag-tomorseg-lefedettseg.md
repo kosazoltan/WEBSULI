@@ -111,6 +111,27 @@ listája az adminnak).
 - **E5** Olvashatóság nem romlik: átlagos mondathossz ≤ évfolyamsáv-szabály, ismétlés ≤ 5%.
 - **E6** `check`, `check:test`, `lint`, `test`, `build` zöld; élő próbagyártás 2 forráson tulajdonosi jóváhagyással.
 
+## Végrehajtási napló (2026-10-14)
+Jóváhagyva a tulajdonos által. **S1 kész** (`lesson-metrics.ts`, mérő, próbaharness). **S2 kész, részben teljesült.**
+
+Próbaharness, ugyanaz a 6 térkép, valódi tervező+szerző prompt, aktív tanult szabályok, DB-írás nélkül. Új mérőszám:
+kötelező-fogalom lefedettség (a nem-`extra` fogalmak term+definíció+idézet szótövei a leckében) — témafókusznál ez a
+tisztességes mérce (a teljes-forrás arány ott szándékosan alacsony).
+
+| térkép | alapvonal szó / kötelező% | S2 (45–90 szó/fogalom) | S2b (70–130 szó/fogalom + TÉNYVÉDELEM) |
+| --- | --- | --- | --- |
+| Mezopotámia (46 szó) | 2756 / 94% | 573 / 80% | **763 / 94%** (−72%) |
+| Zöldségek (1352) | 5485 / 93% | 2163 / 84% (kapu bukott) | **3284 / 93%** (−40%), kapu OK |
+| Oszthatóság (1607, fókusz 9) | 5661 / 89% | 613 / 77% | 1171 / **80%** (−79%, −9 pont) |
+| Hunyadi (8194) | alapvonal 2× bukott | 2258 / 69% | 2721 / 77%, ív bukott |
+| Egyiptom (6470, fókusz 33) | 5738 / 94% (kapu bukott) | 1573 / 78% | szerző-időtúllépés |
+| Időszámítás (239) | alapvonal bukott | 2158 / 89% | szerző-időtúllépés |
+
+Értékelés: E1 (rövidülés) teljesül; leíró tárgynál a kötelező-fogalom lefedettség nem romlik (Mezopotámia, Zöldségek);
+matematikai eljárásnál (Oszthatóság) −9 pont — NEM teljesül. A kalibráció kétszer futott; a harmadik iteráció tulajdonosi döntés
+(AGENTS.md oszcilláció-szabály). A szerző-fázis 3 friss futása `AIProviderIdleTimeoutError` (120 s csendes gondolkodás) miatt
+bukott — ez élesben is elakadást okozhat; külön javítási feladat. A mérések: `tmp/trial-2026-10-14/` (gitignore-olt).
+
 ## Kockázatok
 - A rövidebb tanítás ronthatja a bank minőségét (a bank a tanításból épül) → S2-ben a bank-ellenőr hibaszámát is mérjük.
 - A forrásszöveg a promptban növeli a bemeneti tokent (nagy forrásnál ~+40–50K) → témafókusz utáni szeletelés és keret.

@@ -97,3 +97,17 @@ test("measureLesson: szószám, olvasási idő, blokkok fajtánként, forrás→
   assert.equal(m.sourceInLessonPct, 57, "a lecke 4 kulcsot tart: + feküdt");
   assert.equal(m.repetitionPct, 0);
 });
+
+test("kötelező-fogalom lefedettség: az `extra` (fókuszon kívüli) fogalom nem számít", () => {
+  const m = measureLesson(lesson, {
+    sourceText: "x",
+    concepts: [
+      { term: "Mezopotámia", definition: "Tigris és Eufrátesz", quote: "", examWeight: "core" },
+      { term: "Piramisok", definition: "Egyiptomi sírépítmények", quote: "", examWeight: "extra" },
+    ],
+  });
+  // kötelező kulcsok: mezopo, tigris, eufrát → mind a leckében
+  assert.equal(m.requiredConceptTermsPct, 100);
+  const withExtra = measureLesson(lesson, { sourceText: "x", concepts: [{ term: "Piramisok", definition: "Egyiptomi sírépítmények", quote: "", examWeight: "core" }] });
+  assert.equal(withExtra.requiredConceptTermsPct, 0, "ha a piramis kötelező, a lecke nem fedi");
+});
