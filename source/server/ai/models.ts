@@ -17,6 +17,8 @@
 export const STUDIO_STEPS = [
   "extract",
   "ocr",
+  // Spec 2026-10-14-forras-besorolo-openai-luna: a tantárgy/évfolyam-felismerés saját lépés (korábban az `ocr` modelljén futott).
+  "scope",
   "pedagogue",
   "author",
   "animator",
@@ -59,6 +61,11 @@ const DEFAULT_MODELS: Record<StudioStep, string> = {
   //   deepseek-v4.1-flash     0.0%  (hibrid gondolkodás: az effort=low-t figyelmen kívül hagyja, a 6000
   //                                  tokenes keretből 5998 gondolkodás, minden válasz csonkolt)
   ocr: "qwen/qwen3-vl-32b-instruct",
+  // Tulajdonosi döntés 2026-10-14 (docs/specs/2026-10-14-forras-besorolo-openai-luna.md): a qwen3-vl-32b-t az OpenRouter
+  // 2026-10-09-én kivezette (404), és a tantárgy/évfolyam-felismerés ezen állt meg (4 élő futás). Saját OpenAI-kulcs, GPT-6 Luna
+  // („GPT-6.1 Luna” nem létezik: /v1/models + 404). Mérve high efforttal 56 jóváhagyott forráson: tantárgy 102/112, évfolyam
+  // ±1-en belül 93/112; a 10 leckés kézi pilot-besoroláson 20/20; 0,001 USD/hívás.
+  scope: "gpt-6-luna",
   // Spec 2026-09-19 (tulajdonosi döntés): a tervkészítő a közvetlen Anthropic API-n futó
   // Opus 5, medium efforttal — a terv minősége dönti el a további körök számát.
   pedagogue: "claude-opus-5",
@@ -104,6 +111,12 @@ export const OCR_THIRD_READER_MODEL = "gpt-6.1-sol";
 
 /** Az OCR-olvasó gondolkodási mélysége (OpenAI: `reasoning_effort`, OpenRouter: `reasoning`, Anthropic: `output_config.effort`). */
 export type OcrEffort = "low" | "medium" | "high";
+
+/**
+ * Spec 2026-10-14-forras-besorolo-openai-luna: a `scope` lépés gondolkodási mélysége — ezzel mérve (gpt-6-luna). A kimenet
+ * high mellett p95 1475, max 2448 token; a kérés kerete ehhez igazodik (`scopeRequestParams`).
+ */
+export const SCOPE_EFFORT: OcrEffort = "high";
 export type OcrReaderSpec = { readonly model: string; readonly effort: OcrEffort };
 
 /**

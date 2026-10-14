@@ -407,8 +407,9 @@ async function runOneStepCore(runId: string, data: OneStepRequest, userId: strin
   {
     await workflowPhase("scope");
     updateRun(runId, { phase: "ocr", detail: "Tantárgy és osztály felismerése…" });
+    // Spec 2026-10-14: saját `scope` lépés (gpt-6-luna, közvetlen OpenAI) — az `ocr` modellje (qwen, OpenRouter) 404-et adott.
     const inferred = await inferOneStepScope({ ...data, files }, (f) =>
-      callScopeModel(f, resolveStudioModel("ocr")),
+      callScopeModel(f, resolveStudioModel("scope")),
     );
     if (!inferred.ok) {
       // Spec 2026-10-06-s7 (§4/9): a támogató szerep saját lelet-kódja (a futást nem állítja meg).

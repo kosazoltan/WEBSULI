@@ -69,7 +69,9 @@ test("konszenzus (pilot-lelet: futásonként eltérő tantárgy): egyező → ag
 test("pilot-lelet: a `{\"answer\": {...}}` burok determinisztikusan kibontva; a modell-lista a v4.1-flash-sel", () => {
   assert.equal(parseClassification({ answer: good }, input).subject, "fizika");
   assert.throws(() => parseClassification({ answer: good, extra: 1 }, input), "csak egykulcsos burok bontható ki");
-  assert.deepEqual([...CLASSIFIER_MODELS], ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash"]);
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-forras-besorolo-openai-luna.md, tulajdonosi döntés): OpenRouter helyett
+  // közvetlen OpenAI — Luna az első, a 6.1 Sol a független második vélemény, a 6 Sol a döntő. A három modell továbbra is különböző.
+  assert.deepEqual([...CLASSIFIER_MODELS], ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-sol"]);
 });
 
 test("bemenet: a tétel-minta a lecke egészéből (eleje, közepe, vége), a fejezetcímek egyediek", () => {
