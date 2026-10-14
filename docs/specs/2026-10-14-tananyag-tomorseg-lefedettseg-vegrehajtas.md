@@ -2,7 +2,7 @@
 
 Spec: `docs/specs/2026-10-14-tananyag-tomorseg-lefedettseg.md` (tulajdonosi jóváhagyás 2026-10-14). A háromfázisú munkarend
 (`docs/agent-haromfazisu-munka.md:9,31`) végrehajtási dokumentuma. Minden parancs a `source/` mappából fut.
-Állapot: **S1 kész (ez a PR). S2 külön draft PR — a saját elfogadását nem teljesítette, nem élesíthető.**
+Állapot: **S1 kész (#210, mergelve). S2 kész — a végső mérés szerint igazolt javítás (lásd lent és a spec végrehajtási naplóját).**
 
 ## S1 — mérőeszköz és próbaharness (viselkedésváltozás nélkül)
 
@@ -36,11 +36,28 @@ Spec: `docs/specs/2026-10-14-tananyag-tomorseg-lefedettseg.md` (tulajdonosi jóv
 ### T4 — kapuk
 - `npm.cmd run check`, `check:test`, `lint`, `test`, `build` → exit 0.
 
-## S2 — terjedelmi keret (külön draft PR, NEM élesítve)
-Mért eredmény (próbaharness, 6 térkép, kötelező-fogalom lefedettség): Mezopotámia 2756→763 szó, 94%→94%; Zöldségek 5485→3284,
-93%→93%; Oszthatóság 5661→1171, **89%→80%**. Az E2 (lefedettség nem romlik) matematikai eljárásnál nem teljesül; két
-kalibráció után a harmadik tulajdonosi döntés. A szerző 3 friss futása `AIProviderIdleTimeoutError` (120 s) miatt bukott —
-ennek javítása (külön feladat) előfeltétele a további megbízható mérésnek.
+## S2 — terjedelmi keret
+
+### T5 — terjedelmi keret
+- Fájl: `source/shared/lesson-length.ts` — `lessonLengthBudget({classroom, concepts})`: fejezetszám `clamp(ceil(kötelező/3), 2, 12)`,
+  szókeret 70/90/110/130 szó/fogalom (1–4. / 5–6. / 7–8. / 9+), plafon 1600/2600/3200/3800, alsó határ 250, tűrés 1,2×.
+- Teszt: `tests/lesson-length.test.ts`. Parancs: `node --import tsx --test tests/lesson-length.test.ts` → `ℹ fail 0`.
+
+### T6 — tervező és szerző prompt
+- Fájlok: `source/server/studio/step-io.ts` (TERJEDELMI KERET; feltételes sablon-fejezetek; TÖMÖR ÉS TELJES; PRÓBA csak ≥ 5 checknél,
+  `"probaEnabled": boolean` minta; A TÖMÖRÍTÉS NEM BONT KAPUT; TÉNYVÉDELEM), `source/server/studio/role-skills.ts` (tervező 2. lépés,
+  szerző 5–5b. lépés), `source/shared/lesson-experience.ts` (a METHOD szerződés 1. pontja: „mély” → „tömör, érthető”).
+
+### T7 — tényszintű mérés
+- Fájl: `source/server/studio/lesson-metrics.ts` — `requiredConceptTermsPct`, `factKeys`, `requiredFactsPct` (számok, fogalomnév,
+  tulajdonnevek; tankönyvi ábra-/kép-/oldalszám nélkül). Teszt: `tests/lesson-metrics.test.ts`.
+
+### T8 — végső mérés
+- Parancs: `npx tsx scripts/measure/lesson-trial.mts <címke> <mappa> <6 térkép>` mindkét ágon, majd
+  `npx tsx scripts/measure/rescore-trials.mts <mappa> fbase,fs2`.
+- Eredmény: `docs/measurements/2026-10-14-s2-final-trial.json` — Mezopotámia 2530→792 (−69%), Oszthatóság 3891→954 (−75%),
+  Egyiptom 4259→3395 (−20%), Zöldségek 3771→3154 (−16%); a kötelező tények minden párosított térképen változatlanok
+  (100/100/98/100%); kapu nem romlott (Zöldségek BUK→OK).
 
 ## S3–S4
 Nincs elkezdve (forrásszöveg a szerzőnek; darabolt kinyerés).

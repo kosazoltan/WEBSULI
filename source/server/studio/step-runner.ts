@@ -16,6 +16,8 @@ import { rewriteSourceReferences, sourceReferenceFindings, stripSourceReferences
 import { requireRoleForStep } from "../../shared/instruction-bundles/roles";
 import { buildInstructionCheckPrompt, INSTRUCTION_CHECK_MODEL, instructionCheckHash, instructionConceptId, instructionConceptsFrom, missingPoints, parseInstructionCheck, parseInventoryCheck, type InstructionCheck, type InstructionPoint } from "./instruction-check";
 import { appendQualityNote, autonomousDecision } from "./autonomous";
+import { lessonLengthBudget } from "../../shared/lesson-length";
+import { lessonVisibleText, words } from "./lesson-metrics";
 import { buildInstructionPointsPrompt, buildInventory, gapPoints, INSTRUCTION_POINTS_MODEL, inventoryConcepts, inventoryHash, ownerInventoryOf, parseInstructionPointCandidates, type InstructionInventory } from "./instruction-points";
 
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
@@ -974,7 +976,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // Spec 2026-09-30 (U4, H50): a korláton túli vázlatmező jelölt állapot (qualityNotes), a vágott kulcskifejezés nem kötelező kiemelés.
       const clamps = outlineClamps(json);
       // Eszköz (2026-09-19): formai tisztítás kódból, hogy ne kelljen új tervkészítő-hívás.
-      const autofix = autofixOutline(json, map.concepts);
+      // Review #213: a terjedelmi keret fejezetszáma a vázlat-autofixben is érvényes (a túllépő fejezet az utolsóba olvad),
+      // nem csak a promptban — a 12-es abszolút plafon helyett a tanítandó fogalmakból számolt keret.
+      const autofix = autofixOutline(json, map.concepts, lessonLengthBudget(promptMapOf(map)).maxSections);
       if (autofix.fixes.length) { logger.info(`[STUDIO] Vázlat eszközzel tisztítva (${job.id}): ${autofix.fixes.join("; ").slice(0, 400)}`); json = autofix.outline; }
       const parsed = outlineSchema.safeParse(json);
       if (!parsed.success) return fail(store, job, `A vázlat alakilag hibás: ${zodIssues(parsed.error)}`);
@@ -1133,9 +1137,17 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         }
       }
       const lessonId = await store.upsertLesson(job.lessonId, job.mapId, cleaned);
+      // Review #213: a szókeretet a program MÉRI (a prompt ezt állítja) — túllépésnél minőségi jelzés, nem buktatás (egy hosszító
+      // javítókör épp a tartalmat vághatná). Mérve a próbaharnessben: Egyiptom 3395 szó a 3120-as felső határ fölött.
+      const lengthBudget = lessonLengthBudget(promptMapOf(map));
+      const visibleWords = words(lessonVisibleText(cleaned)).length;
+      const lengthNotes = visibleWords > lengthBudget.maxWords
+        ? appendQualityNote(job.output?.qualityNotes, { reason: "length_over_budget", note: `A Tananyag lap ${visibleWords} látható szó — a terjedelmi keret legfeljebb ${lengthBudget.maxWords} (cél ${lengthBudget.targetWords}, ${lengthBudget.requiredConcepts} tanítandó fogalom).`, round: job.round })
+        : undefined;
+      if (lengthNotes) logger.warn(`[STUDIO] Terjedelmi keret túllépve (${job.id}): ${visibleWords} > ${lengthBudget.maxWords} látható szó`);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: cleaned, bankReview }, { lessonId }),
+        successPatch({ ...job.output, lesson: cleaned, bankReview, ...(lengthNotes ? { qualityNotes: lengthNotes } : {}) }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }

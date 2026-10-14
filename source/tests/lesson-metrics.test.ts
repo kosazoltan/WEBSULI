@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { Lesson } from "../shared/lesson-schema";
 import {
+  factKeys,
   lessonVisibleText,
   measureLesson,
   nonSourceShare,
@@ -96,4 +97,50 @@ test("measureLesson: szószám, olvasási idő, blokkok fajtánként, forrás→
   assert.equal(m.sourceInMapPct, 43, "a térkép 3 kulcsot tart: mezopo, tigris, eufrát");
   assert.equal(m.sourceInLessonPct, 57, "a lecke 4 kulcsot tart: + feküdt");
   assert.equal(m.repetitionPct, 0);
+});
+
+test("tény-kulcsok: számok, a fogalom neve, tulajdonnevek — kötőszó és mondatkezdő szó nem", () => {
+  const keys = factKeys({ term: "Hunyadi János", definition: "Kormányzó 1446-tól. A nándorfehérvári diadal után Szilágyi Mihály segítette.", quote: "tovább látjuk, amilyen 3,5" });
+  // Review #213 (spec-javítás): a fogalomnév MINDEN szava kulcs, a rövid is — fogalomnév: hunyad, jános; számok: 1446, 3.5;
+  // tulajdonnév (nem mondatkezdő): szilág, mihály
+  assert.deepEqual([...keys].sort(), ["1446", "3.5", "hunyad", "jános", "mihály", "szilág"]);
+});
+
+test("review #213: a rövid nevű fogalom („gumó”, „sejt”) teljes hiánya csökkenti a tényszintű lefedettséget", () => {
+  const concepts = [
+    { term: "gumó", definition: "Föld alatti szár.", quote: "", examWeight: "core" },
+    { term: "sejt", definition: "Az élőlények egysége.", quote: "", examWeight: "core" },
+  ];
+  const only = (text: string) => ({ sections: [{ heading: "x", probaEnabled: false, blocks: [{ kind: "explain", text, depth: "what", readAloud: true, coversConceptIds: ["c1"] }] }] }) as unknown as Pick<Lesson, "sections">;
+  const both = measureLesson(only("A gumó föld alatti szár. A sejt az élőlények egysége."), { sourceText: "x", concepts });
+  const noGumo = measureLesson(only("A sejt az élőlények egysége."), { sourceText: "x", concepts });
+  assert.ok((noGumo.requiredFactsPct ?? 100) < (both.requiredFactsPct ?? 0), `a gumó hiánya nem látszott: ${noGumo.requiredFactsPct} vs ${both.requiredFactsPct}`);
+});
+
+test("tény-kulcsok: a tankönyvi ábra-/kép-/oldalszám nem tény (mért Zöldségek-eset), a valódi szám igen", () => {
+  const keys = factKeys({ term: "gumó", definition: "Föld alatti szár.", quote: "A gumóját fogyasztjuk (4. ábra). Lásd a 12. oldalt és a 3. képen. Kb. 2 kg terem." });
+  assert.ok(!keys.has("4") && !keys.has("12") && !keys.has("3"), "ábra-, oldal-, képszám nem tény");
+  assert.ok(keys.has("2"), "a valódi adat (2 kg) tény");
+});
+
+test("tényszintű lefedettség: a kötőszavak hiánya nem tényhiány (mért Oszthatóság-eset)", () => {
+  const concept = { term: "Oszthatóság 3-mal", definition: "Egy szám osztható 3-mal, ha számjegyeinek összege osztható 3-mal.", quote: "8232: 8+2+3+2=15, tovább látjuk, hogy osztható.", examWeight: "core" };
+  const short = { sections: [{ heading: "3-mal", probaEnabled: false, blocks: [{ kind: "explain", text: "Oszthatóság 3-mal: a 8232 számjegyeinek összege 8+2+3+2=15, ez osztható 3-mal.", depth: "what", readAloud: true, coversConceptIds: ["c1"] }] }] } as unknown as Pick<Lesson, "sections">;
+  const m = measureLesson(short, { sourceText: "x", concepts: [concept] });
+  assert.equal(m.requiredFactsPct, 100, "minden szám és a fogalom neve megvan");
+  assert.ok((m.requiredConceptTermsPct ?? 0) < 100, "a szótő-mérő a hiányzó kötőszavakat („tovább”, „látjuk”) hiánynak veszi");
+});
+
+test("kötelező-fogalom lefedettség: az `extra` (fókuszon kívüli) fogalom nem számít", () => {
+  const m = measureLesson(lesson, {
+    sourceText: "x",
+    concepts: [
+      { term: "Mezopotámia", definition: "Tigris és Eufrátesz", quote: "", examWeight: "core" },
+      { term: "Piramisok", definition: "Egyiptomi sírépítmények", quote: "", examWeight: "extra" },
+    ],
+  });
+  // kötelező kulcsok: mezopo, tigris, eufrát → mind a leckében
+  assert.equal(m.requiredConceptTermsPct, 100);
+  const withExtra = measureLesson(lesson, { sourceText: "x", concepts: [{ term: "Piramisok", definition: "Egyiptomi sírépítmények", quote: "", examWeight: "core" }] });
+  assert.equal(withExtra.requiredConceptTermsPct, 0, "ha a piramis kötelező, a lecke nem fedi");
 });
