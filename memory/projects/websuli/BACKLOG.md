@@ -19,10 +19,8 @@ project: websuli
   tiszta, de a history nem. Rotálás után csak a `.env`-be írni.
 - [x] QA-javítások commitolva + rebase + push (8702e2b) + auto-deploy VERIFIED (Vercel bundle marker, Render health 200).
   a `main` ága eleve "ahead 1" állapotban van — rendezni a remote-tal).
-- [ ] **Titok-rotáció (2026-10-14, session-szivárgás)** — egy redaktálási hiba miatt a munkamenet naplójába került: `valuta-backup`
-  kulcspár, Scaleway kulcs, Juniorebc alkalmazásjelszó, két jelszó, SignMyCode token (a naplóból kitörölve, rotálni kell).
-  A helyi `.env`-ekben és a `Névtelen_1.txt`-ben lévő Anthropic-kulcs visszavont (401); a működő a Windows felhasználói
-  `ANTHROPIC_API_KEY`-ben és a Renderen van. Kanban: WEBSULI #9.
+- [ ] **Titok-rotáció (2026-10-14)** — egy munkamenet-naplóba titkok szivárogtak (a naplóból törölve); a részletek a
+  tulajdonosnál, nem a repóban (AGENTS.md: titok-metaadat nem kerül trackelt fájlba). Kanban: WEBSULI #9.
 
 ## Lecke-gyártás (2026-10-14)
 

@@ -43,8 +43,8 @@ tantárgy/évfolyam címkével, a valódi scope-prompttal (`scopeRequestParams` 
   forrás / 0”-nak, a Hunyadit 10. évfolyamnak; egy pilot-leckénél nem adott évfolyamot. Azonos listaár mellett ~1,4–1,9×
   több tokent használt. **Döntés: a gpt-6-luna marad** — pontosabb és olcsóbb. Közös gyengeség: több 5. évfolyamos
   Mezopotámia-forrást mindkét modell 9. évfolyamnak sorolt (a scope-prompt évfolyam-horgonyai lehetséges javítási pont).
-  A működő Anthropic-kulcs a Windows felhasználói `ANTHROPIC_API_KEY` változóban volt; a repók `.env`-jeiben lévő példány
-  visszavont (401).
+  A mérés egy érvényes Anthropic-kulccsal futott; a repók helyi `.env`-jeiben lévő példány visszavont (401) — a kulcsok helye
+  nem kerül trackelt fájlba (AGENTS.md).
 - Hivatalos árak (Standard, rövid kontextus, per M token): gpt-6-luna 0,10 / 0,50 $; gpt-6.1-sol és gpt-6-sol 2 / 10 $;
   claude-haiku-5-5 0,10 / 0,50 $ (≤100K prompt).
 
