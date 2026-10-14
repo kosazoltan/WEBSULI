@@ -32,21 +32,23 @@ export function verifyImprovedHtml(html: string): HtmlVerification {
 
   // 2. Minden script-blokk szintaktikailag ép JS — egy SyntaxError az IIFE-ben
   //    minden window.* exportot megöl, az összes gomb halott lesz.
-  const scripts = trimmed.match(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi) ?? [];
+  let debugFound = false;
+  const scripts = trimmed.match(/<script(?![^>]*\ssrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi) ?? [];
   for (const block of scripts) {
     if (/type\s*=\s*["'](?:application\/(?:ld\+)?json|importmap)["']/i.test(block.slice(0, block.indexOf(">") + 1))) continue;
     const js = block.replace(/<\/?script[^>]*>/gi, "");
     if (js.trim().length < 10) continue;
     try {
       // Parse-only check: never executed.
-      parse(js, { ecmaVersion: "latest", sourceType: /type\s*=\s*["']module["']/i.test(block) ? "module" : "script", allowReturnOutsideFunction: true });
+      const ast = parse(js, { ecmaVersion: "latest", sourceType: /type\s*=\s*["']module["']/i.test(block) ? "module" : "script", allowReturnOutsideFunction: true });
+      if (hasDebugCode(ast)) debugFound = true;
     } catch (e) {
       problems.push(`JavaScript szintaktikai hiba a tananyagban: ${(e as Error).message} — a vezérlőgombok nem működnének.`);
       break;
     }
   }
   // Nyitott <script> záró nélkül = csonka.
-  const openScripts = (trimmed.match(/<script(?![^>]*\bsrc=)[^>]*>/gi) ?? []).length;
+  const openScripts = (trimmed.match(/<script(?![^>]*\ssrc\s*=)[^>]*>/gi) ?? []).length;
   const closeScripts = (trimmed.match(/<\/script>/gi) ?? []).length;
   if (openScripts > closeScripts) {
     problems.push("Lezáratlan <script> blokk — a kimenet csonka.");
@@ -72,13 +74,10 @@ export function verifyImprovedHtml(html: string): HtmlVerification {
     problems.push("Natív alert()/confirm()/prompt() maradt a kódban — HTML modal kötelező.");
   }
 
-  // 5. Debug-kód tilos (v7.5, tulajdonosi utasítás 2026-10-14): console.* és debugger
-  //    csak a futtatható script-blokkokban számít — <pre> kódpélda vagy string-literál nem.
-  const runnableJs = scripts
-    .filter((block) => !/type\s*=\s*["'](?:application\/(?:ld\+)?json|importmap)["']/i.test(block.slice(0, block.indexOf(">") + 1)))
-    .map((block) => stripStrings(block.replace(/<\/?script[^>]*>/gi, "")))
-    .join("\n");
-  if (/\bconsole\s*\.\s*[A-Za-z_$]/.test(runnableJs) || /\bdebugger\b/.test(runnableJs)) {
+  // 5. Debug-kód tilos (v7.5, tulajdonosi utasítás 2026-10-14): console.* és debugger.
+  //    AST-alapú (a 2. pont parse-eredményéből): string, komment, regex-literál vagy
+  //    <pre> kódpélda nem számít; console.x, console["x"], console?.x és debugger igen.
+  if (debugFound) {
     problems.push("Debug-kód (console.* / debugger) maradt a tananyag JavaScriptjében — a kiadott HTML-ben tilos (v7.5).");
   }
 
@@ -93,4 +92,29 @@ function stripStrings(src: string): string {
     .replace(/'(?:[^'\\]|\\.)*'/g, "''")
     .replace(/"(?:[^"\\]|\\.)*"/g, '""')
     .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+}
+
+/** Futtatható debug-kód az AST-ben: debugger utasítás vagy bármilyen console-tagelérés. */
+function hasDebugCode(root: unknown): boolean {
+  const stack: unknown[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    if (Array.isArray(node)) {
+      for (const child of node) stack.push(child);
+      continue;
+    }
+    const n = node as { type?: unknown; object?: { type?: unknown; name?: unknown; property?: { name?: unknown } } };
+    if (n.type === "DebuggerStatement") return true;
+    if (n.type === "MemberExpression" && n.object) {
+      if (n.object.type === "Identifier" && n.object.name === "console") return true;
+      if (n.object.type === "MemberExpression" && n.object.property?.name === "console") return true;
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "loc" || key === "range") continue;
+      const v = (node as Record<string, unknown>)[key];
+      if (v && typeof v === "object") stack.push(v);
+    }
+  }
+  return false;
 }

@@ -45,7 +45,7 @@ JS_OVER = '''() => {
 }'''
 
 JS_TOUCH = '''() => { const s = [];
-  document.querySelectorAll('[role=tabpanel] button, [role=tabpanel] a[href], [role=tabpanel] [role=button], [role=tablist] button').forEach(e => {
+  document.querySelectorAll('[role=tabpanel] button, [role=tabpanel] a[href], [role=tabpanel] [role=button], [role=tablist] button, [role=tab]').forEach(e => {
     if (e.closest('[role=tabpanel]') && getComputedStyle(e.closest('[role=tabpanel]')).display === 'none') return;
     const r = e.getBoundingClientRect(); if (!r.width) return;
     if (r.width < 43.5 || r.height < 43.5) s.push((e.textContent || '').trim().slice(0, 18) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); });
@@ -53,12 +53,16 @@ JS_TOUCH = '''() => { const s = [];
 
 JS_DESK = '''() => { const W = document.documentElement.clientWidth;
   const p = Array.from(document.querySelectorAll('[role=tabpanel]')).find(x => getComputedStyle(x).display !== 'none');
-  const pr = p.getBoundingClientRect(); const lefts = new Set(); let maxP = 0;
-  p.querySelectorAll('p, li, [class$="-task"], [class*="-task "], [class$="-q"], [class*="-q "], nav').forEach(e => {
+  const els = []; let maxP = 0;
+  p.querySelectorAll('p, li, h2, h3, textarea, [class$="-card"], [class*="-card "], [class$="-task"], [class*="-task "], [class$="-q"], [class*="-q "], nav').forEach(e => {
     const r = e.getBoundingClientRect(); if (r.width < 120 || r.height < 8) return;
-    lefts.add(Math.round(r.left / 40));
+    els.push(r);
     if (e.tagName === 'P') { Array.from(e.getClientRects()).forEach(q => { maxP = Math.max(maxP, q.width); }); } });
-  return {ratio: pr.width / W, cols: lefts.size, maxP: Math.round(maxP)}; }'''
+  if (!els.length) return {ratio: 0, cols: 0, maxP: 0};
+  const L = Math.min(...els.map(r => r.left)), R = Math.max(...els.map(r => r.right)), CW = Math.max(1, R - L);
+  // oszlop = a tartalom-szelesseg negyedeire kerekitett bal-kezdopont; behuzas (li) nem uj oszlop
+  const buckets = new Set(els.map(r => Math.round((r.left - L) / (CW / 4))));
+  return {ratio: CW / W, cols: buckets.size, maxP: Math.round(maxP)}; }'''
 
 
 async def main():
@@ -81,6 +85,11 @@ async def main():
             line = []
             for ti, tb in enumerate(tabs):
                 await tb.click(); await pg.wait_for_timeout(120)
+                act = await tb.evaluate('''t => { const id = t.getAttribute('aria-controls'); const pn = id && document.getElementById(id);
+                  return {sel: t.getAttribute('aria-selected') === 'true', vis: !!pn && getComputedStyle(pn).display !== 'none'}; }''')
+                if not (act['sel'] and act['vis']):
+                    fails.append('%dpx tab%d kattintas utan nem aktiv (aria-selected=%s, panel lathato=%s)' % (w, ti + 1, act['sel'], act['vis']))
+                    continue
                 ov = await pg.evaluate(JS_OVER)
                 if ov['scroll'] > 0 or ov['bad']:
                     fails.append('%dpx tab%d tulcsordulas %s' % (w, ti + 1, ov))
