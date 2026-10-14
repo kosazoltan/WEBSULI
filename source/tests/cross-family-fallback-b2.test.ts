@@ -92,3 +92,10 @@ test("review #218: scopeAnswerUsable — csak tantárgy + szám osztály JSON ha
   assert.equal(scopeAnswerUsable("nincs json"), false);
   assert.equal(scopeAnswerUsable('{"subject":"Bio'), false);
 });
+
+test("kivonatoló-tartalék: kimerült OpenAI-keretnél (OpenRouter) a `reasoning.effort`, közvetlen OpenAI-n a `reasoning_effort` megy", async () => {
+  // A kivonatoló belső függvénye (callExtractorModel) nincs exportálva — a meglévő R1-minta szerint forrás-szinten rögzítve.
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/run-extraction.ts", import.meta.url), "utf8");
+  assert.match(src, /\.\.\.\(effort \? \(connection\.vendor === "openrouter" \? \{ reasoning: \{ effort \} \} : \{ reasoning_effort: effort \}\) : \{\}\)/);
+});

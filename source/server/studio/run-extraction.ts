@@ -177,7 +177,9 @@ async function callExtractorModel(
       ],
       response_format: { type: "json_object" },
       max_completion_tokens: maxTokens,
-      ...(effort ? { reasoning_effort: effort } : {}),
+      // Review #220: kimerült OpenAI-keretnél (OpenRouter-átállás) az OpenRouter saját alakja megy (`reasoning.effort`), nem a közvetlen
+      // OpenAI `reasoning_effort` mezője — ugyanaz a szétválasztás, mint az `ocrVendorRequest`-ben.
+      ...(effort ? (connection.vendor === "openrouter" ? { reasoning: { effort } } : { reasoning_effort: effort }) : {}),
     })));
     return response.choices[0]?.message?.content ?? "{}";
   };
