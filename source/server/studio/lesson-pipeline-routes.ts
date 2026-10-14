@@ -295,10 +295,25 @@ export function startOneStepRun(data: OneStepRequest, userId: string | undefined
   return runId;
 }
 
+/** Spec 2026-10-14-folytatas-mentett-reszekbol: a megállt gyártás mentett piszkozata (csak darabszámok, tartalom nem). */
+export type OneStepDraft = { teachingSections: number; savedBankPackets: number };
+
 export type OneStepRunView = {
   phase: OneStepPhase; detail: string | null; error: string | null;
   mapId: string | null; jobId: string | null; lessonId: string | null; htmlFileId: string | null;
+  draft?: OneStepDraft;
 };
+
+/**
+ * A job eredményéből: van-e nem publikált, mentett tananyag, és hány bankcsomag kész belőle. Review #215: a publikálás a
+ * `lessons` sort előbb commitolja, mint a job-output `htmlFileId`-ját — a hívó a lecke `publishedAt`-ját is átadja.
+ */
+export function draftSummaryOf(output: unknown, lessonPublished = false): OneStepDraft | null {
+  const o = (output ?? {}) as { lesson?: { sections?: unknown }; htmlFileId?: unknown; experienceCheckpoint?: { parts?: unknown } };
+  if (lessonPublished || !o.lesson || !Array.isArray(o.lesson.sections) || o.htmlFileId) return null;
+  const parts = o.experienceCheckpoint?.parts;
+  return { teachingSections: o.lesson.sections.length, savedBankPackets: parts && typeof parts === "object" ? Object.keys(parts).length : 0 };
+}
 
 /** The progress poll's view of a run, or null when it is unknown or expired. */
 export async function oneStepRunView(runId: string): Promise<OneStepRunView | null> {
@@ -315,7 +330,13 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
       .limit(1);
     htmlFileId = lesson?.htmlFileId ?? null;
   }
-  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId };
+  let draft: OneStepDraft | null = null;
+  if (run.phase === "error" && run.jobId) {
+    const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt }).from(studioJobs)
+      .leftJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, run.jobId)).limit(1);
+    draft = draftSummaryOf(job?.output, !!job?.publishedAt);
+  }
+  return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}) };
 }
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */
