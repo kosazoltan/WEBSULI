@@ -74,7 +74,10 @@ await withPreparationSkill(snapshot, async () => {
         step: "author", role: "author", model: authModel, user: "Válaszolj kizárólag a kért JSON-nal.",
         system: buildAuthorPrompt(outline.data.sections, promptMap, []),
       });
-      const parsed = lessonSchema.safeParse(auth.json);
+      // A programmezők (title/subject/classroom/mapId) élesben a program értékei; ha a szerző üresen hagyja, az éles út javító kört
+      // indít (step-runner.ts:1033–1047) — a harness javító kör nélkül fut, ezért a program értékét írja be, a tanítás változatlan.
+      const raw = auth.json && typeof auth.json === "object" ? auth.json as Record<string, unknown> : {};
+      const parsed = lessonSchema.safeParse({ ...raw, mapId, title: raw.title || map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, sourceOnly: true });
       writeFileSync(`${outDir}/${label}-${mapId}.json`, JSON.stringify({ outline: outline.data, lesson: auth.json }, null, 2));
       if (!parsed.success) throw new Error(`a lecke sémahibás: ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
       const gate = checkCoverageGate(parsed.data, map.concepts);
@@ -86,7 +89,13 @@ await withPreparationSkill(snapshot, async () => {
         tokens: { pedagogue: ped.usage, author: auth.usage },
       });
     } catch (error) {
-      row.error = error instanceof Error ? error.message.slice(0, 500) : String(error);
+      // az ok-lánc (állapotkód, típus, üzenet) — az általános „a szolgáltató hibát jelzett” önmagában nem diagnosztizálható
+      const chain: string[] = [];
+      for (let e: unknown = error, depth = 0; e && depth < 4; e = (e as { cause?: unknown }).cause, depth++) {
+        const x = e as { name?: string; status?: number; message?: string };
+        chain.push([x.name, x.status, x.message?.slice(0, 300)].filter(Boolean).join(" "));
+      }
+      row.error = chain.join(" ← ").replace(/sk-[A-Za-z0-9_-]{10,}/g, "<redaktálva>");
     }
     row.seconds = Math.round((Date.now() - started) / 1000);
     results.push(row);
