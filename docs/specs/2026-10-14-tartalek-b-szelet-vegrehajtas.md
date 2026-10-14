@@ -38,3 +38,13 @@ Spec: `docs/specs/2026-10-14-tartalek-b-szelet.md`. Parancsok a `source/` mappá
 - `web-research-runner.ts` webes kivonatoló: szöveges hívás, hibánál a tartalék `crossFamilyFallbackOptions`-szal.
 - Teszt: `tests/cross-family-fallback-b2.test.ts` — átalakítás (szöveg/kép/PDF, nem data URL → hiba); scope: luna 500 → Opus a
   képpel, medium.
+
+## B3b — adminisztrációs útvonalak (külön PR, a B2-re épül)
+- `server/ai/legacy-fallback.ts`: `legacyFallbackFor`, `isCompleteFinish`, `crossFamilyComplete` (a teljes választ egyben, tétlenségi
+  őrös streammel kéri; medium effort; OpenAI-tartaléknál JSON-mód).
+- `routes.ts`: htmlFix, htmlTheme (Claude → Sol, a `withAIProvider` újrapróbái után); htmlFixStream (magyarázó fázis csak az első
+  darab előtt, JSON-fázis); claudeChat, claudeHtml (közös `onText`; a tartalék egyben; a HTML-teljesség a lezárás okából; a
+  Claude-tétlenségi őr a tartalék előtt leáll); chatgptChat (Opus, csak az első darab előtt); analyzeFiles ×2 (Opus a
+  `claude-vision` képolvasóval, a séma kulcsai a promptban).
+- Teszt: `tests/cross-family-fallback-b3b.test.ts` (segéd: effort, JSON-mód, szerepek, megszakítás/kulcs nélkül nincs tartalék;
+  forrás-szint: mind a 9 hívás, „csak az első darab előtt” őrök, teljesség-ellenőrzés).

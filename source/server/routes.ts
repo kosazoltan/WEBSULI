@@ -33,7 +33,8 @@ import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import { normalizeMaterialResult, resolveAdminRecipients, buildMaterialResultEmail } from "./lib/material-result";
 import { assertDistinctFamilies, effortFor, resolveLegacyModel } from "./ai/models";
-import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
+import { isOpenRouterConfigured, stripJsonFences } from "./ai/OpenRouterProvider";
+import { callClaudeParts } from "./studio/claude-vision";
 import { studioRouter } from "./studio/routes";
 import { lessonPipelineRouter } from "./studio/lesson-pipeline-routes";
 import { webResearchRouter } from "./studio/web-research-routes";
@@ -43,6 +44,7 @@ import { failOnSchemaInvalid, runToolWorkflow } from "./workflows/tool-run";
 import { workflowFence, workflowPhase } from "./workflows/engine";
 import { lessonHtmlSpecParts } from "./ai/lesson-html-spec";
 import { cachedSystem } from "./ai/prompt-cache";
+import { crossFamilyComplete, isCompleteFinish, legacyFallbackFor } from "./ai/legacy-fallback";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
@@ -1279,22 +1281,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       systemPrompt = withSupportSkill("html-fix", systemPrompt);
       await workflowPhase("author");
-      const message = await withAIProvider((signal) => anthropic.messages.create({
-        model: resolveLegacyModel("htmlFix"),
-        output_config: { effort: effortFor("htmlFix") },
-        max_tokens: 4096,
-        system: cachedSystem(systemPrompt, customInstructions),
-        messages: [
-          {
-            role: "user",
-            content: `Javítsd ki ezt a HTML fájlt és add vissza JSON formátumban:\n\n${file.content}`
-          }
-        ]
-      }, { signal }));
-
-      // AUDIT 2026-09-01: üres content tömbnél (pl. max_tokens) content[0] TypeError-t dobott
-      const firstBlock = message.content[0];
-      let responseText = firstBlock?.type === 'text' ? firstBlock.text : '{}';
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): a Claude-hívás (és a saját újrapróbái) után egyszer az ellentétes családú
+      // tartalék (GPT-6.1 Sol, medium, JSON-mód) ugyanazzal a prompttal; a válasz feldolgozása közös.
+      let responseText: string;
+      try {
+        const message = await withAIProvider((signal) => anthropic.messages.create({
+          model: resolveLegacyModel("htmlFix"),
+          output_config: { effort: effortFor("htmlFix") },
+          max_tokens: 4096,
+          system: cachedSystem(systemPrompt, customInstructions),
+          messages: [
+            {
+              role: "user",
+              content: `Javítsd ki ezt a HTML fájlt és add vissza JSON formátumban:\n\n${file.content}`
+            }
+          ]
+        }, { signal }));
+        // AUDIT 2026-09-01: üres content tömbnél (pl. max_tokens) content[0] TypeError-t dobott
+        const firstBlock = message.content[0];
+        responseText = firstBlock?.type === 'text' ? firstBlock.text : '{}';
+      } catch (error) {
+        const fallback = await crossFamilyComplete(resolveLegacyModel("htmlFix"), error, {
+          system: [systemPrompt, customInstructions].filter((part) => part?.trim()).join("\n\n"),
+          messages: [{ role: "user", content: `Javítsd ki ezt a HTML fájlt és add vissza JSON formátumban:\n\n${file.content}` }],
+          maxTokens: 4096, timeoutMs: 180_000, json: true, label: "HTML-FIX",
+        });
+        responseText = fallback.text || '{}';
+      }
 
       // Remove markdown code fences if Claude wrapped JSON in ```json ... ```
       responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
@@ -1388,22 +1401,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       systemPrompt = withSupportSkill("html-fix", systemPrompt);
       await workflowPhase("author");
-      const message = await withAIProvider((signal) => anthropic.messages.create({
-        model: resolveLegacyModel("htmlTheme"),
-        output_config: { effort: effortFor("htmlTheme") },
-        max_tokens: 4096,
-        system: cachedSystem(systemPrompt, customInstructions),
-        messages: [
-          {
-            role: "user",
-            content: `Alakítsd át ezt a HTML fájlt a megadott színsémára és add vissza JSON formátumban:\n\n${file.content}`
-          }
-        ]
-      }, { signal }));
-
-      // AUDIT 2026-09-01: üres content tömbnél (pl. max_tokens) content[0] TypeError-t dobott
-      const firstBlock = message.content[0];
-      let responseText = firstBlock?.type === 'text' ? firstBlock.text : '{}';
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): a Claude-hívás (és a saját újrapróbái) után egyszer az ellentétes családú
+      // tartalék (GPT-6.1 Sol, medium, JSON-mód) ugyanazzal a prompttal; a válasz feldolgozása közös.
+      let responseText: string;
+      try {
+        const message = await withAIProvider((signal) => anthropic.messages.create({
+          model: resolveLegacyModel("htmlTheme"),
+          output_config: { effort: effortFor("htmlTheme") },
+          max_tokens: 4096,
+          system: cachedSystem(systemPrompt, customInstructions),
+          messages: [
+            {
+              role: "user",
+              content: `Alakítsd át ezt a HTML fájlt a megadott színsémára és add vissza JSON formátumban:\n\n${file.content}`
+            }
+          ]
+        }, { signal }));
+        // AUDIT 2026-09-01: üres content tömbnél (pl. max_tokens) content[0] TypeError-t dobott
+        const firstBlock = message.content[0];
+        responseText = firstBlock?.type === 'text' ? firstBlock.text : '{}';
+      } catch (error) {
+        const fallback = await crossFamilyComplete(resolveLegacyModel("htmlTheme"), error, {
+          system: [systemPrompt, customInstructions].filter((part) => part?.trim()).join("\n\n"),
+          messages: [{ role: "user", content: `Alakítsd át ezt a HTML fájlt a megadott színsémára és add vissza JSON formátumban:\n\n${file.content}` }],
+          maxTokens: 4096, timeoutMs: 180_000, json: true, label: "HTML-THEME",
+        });
+        responseText = fallback.text || '{}';
+      }
 
       // Remove markdown code fences if Claude wrapped JSON in ```json ... ```
       responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
@@ -1567,25 +1591,34 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       await workflowPhase("author");
       const explanationPrompt = `${systemPrompt}\n\nElemezd ezt a HTML fájlt és magyarázd el, mit fogsz javítani (csak magyarázat, ne JSON):\n\n${file.content.substring(0, 3000)}...`;
 
-      const explanationStream = await openai.chat.completions.create({
-        model: resolveLegacyModel("htmlFixStream"),
-        reasoning_effort: effortFor("htmlFixStream"),
-        messages: [{ role: "user", content: explanationPrompt }],
-        max_completion_tokens: 2048,
-        stream: true,
-      });
-
       let explanationText = '';
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): tartalék CSAK az első kiküldött darab előtt — a magyarázat egyben érkezik.
+      try {
+        const explanationStream = await openai.chat.completions.create({
+          model: resolveLegacyModel("htmlFixStream"),
+          reasoning_effort: effortFor("htmlFixStream"),
+          messages: [{ role: "user", content: explanationPrompt }],
+          max_completion_tokens: 2048,
+          stream: true,
+        });
 
-      for await (const chunk of explanationStream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          explanationText += content;
-          res.write(`data: ${JSON.stringify({
-            type: 'content',
-            text: content
-          })}\n\n`);
+        for await (const chunk of explanationStream) {
+          const content = chunk.choices[0]?.delta?.content;
+          if (content) {
+            explanationText += content;
+            res.write(`data: ${JSON.stringify({
+              type: 'content',
+              text: content
+            })}\n\n`);
+          }
         }
+      } catch (error) {
+        if (explanationText) throw error;
+        const fallback = await crossFamilyComplete(resolveLegacyModel("htmlFixStream"), error, {
+          system: "", messages: [{ role: "user", content: explanationPrompt }], maxTokens: 2048, timeoutMs: 180_000, label: "HTML-FIX-STREAM",
+        });
+        explanationText = fallback.text;
+        if (explanationText) res.write(`data: ${JSON.stringify({ type: 'content', text: explanationText })}\n\n`);
       }
 
       // Send intermediate message
@@ -1597,13 +1630,23 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       // PHASE 2: Structured JSON call with response_format
       const structuredPrompt = `${systemPrompt}\n\nJavítsd ki ezt a HTML fájlt és add vissza JSON formátumban:\n\n${file.content}`;
 
-      const structuredResponse = await openai.chat.completions.create({
-        model: resolveLegacyModel("htmlFixStream"),
-        reasoning_effort: effortFor("htmlFixStream"),
-        messages: [{ role: "user", content: structuredPrompt }],
-        max_completion_tokens: 4096,
-        response_format: { type: "json_object" }
-      });
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): a JSON-fázis hibájánál egyszer az ellentétes családú tartalék (Opus 5.5, medium);
+      // a lenti JSON-kinyerés (kerítés, kapcsos zárójelek) a Claude-válaszra is érvényes.
+      let structuredText: string;
+      try {
+        const structuredResponse = await openai.chat.completions.create({
+          model: resolveLegacyModel("htmlFixStream"),
+          reasoning_effort: effortFor("htmlFixStream"),
+          messages: [{ role: "user", content: structuredPrompt }],
+          max_completion_tokens: 4096,
+          response_format: { type: "json_object" }
+        });
+        structuredText = structuredResponse.choices[0]?.message?.content || '{}';
+      } catch (error) {
+        structuredText = (await crossFamilyComplete(resolveLegacyModel("htmlFixStream"), error, {
+          system: "", messages: [{ role: "user", content: structuredPrompt }], maxTokens: 4096, timeoutMs: 180_000, json: true, label: "HTML-FIX-STREAM",
+        })).text || '{}';
+      }
 
       // Extract and validate JSON from response
       await workflowPhase("gate");
@@ -1611,7 +1654,7 @@ Csak a magyarázatot írd, a JSON automatikusan a végére kerül.`;
       let rawJsonResponse = '';
 
       try {
-        const responseText = structuredResponse.choices[0]?.message?.content || '{}';
+        const responseText = structuredText;
         rawJsonResponse = responseText;
 
         // Try to extract JSON with multiple strategies
@@ -1818,25 +1861,12 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
 
       // Stream Claude's response
       await workflowPhase("author");
-      const stream = anthropic.messages.stream({
-        model: resolveLegacyModel("claudeChat"),
-        output_config: { effort: effortFor("claudeChat") },
-        max_tokens: 64000, // Full four-page method, including both banks.
-        system: cachedSystem(systemPrompt, dynamicPrompt),
-        messages: messages,
-        // Spec 2026-10-03-gpt61-sol-kv-cache: a többkörös beszélgetés előzménye is a gyorsítótárból jön.
-        cache_control: { type: "ephemeral" },
-      });
-
       let fullContent = '';
       let htmlContent = '';
       let isCollectingHtml = false;
-
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-          const text = event.delta.text;
-          if (!text) continue;
-
+      let streamedText = false;
+      const onText = (text: string) => {
+          streamedText = true;
           fullContent += text;
 
           // Check if HTML generation started
@@ -1855,7 +1885,35 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
             type: 'content_delta',
             content: text
           })}\n\n`);
+      };
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): az első kiküldött darab ELŐTTI hibánál egyszer az ellentétes családú tartalék
+      // (GPT-6.1 Sol, medium) — a válasz egyben érkezik, a teljesség a lezárás okából ellenőrizhető.
+      let completed: () => Promise<boolean>;
+      try {
+        const stream = anthropic.messages.stream({
+          model: resolveLegacyModel("claudeChat"),
+          output_config: { effort: effortFor("claudeChat") },
+          max_tokens: 64000, // Full four-page method, including both banks.
+          system: cachedSystem(systemPrompt, dynamicPrompt),
+          messages: messages,
+          // Spec 2026-10-03-gpt61-sol-kv-cache: a többkörös beszélgetés előzménye is a gyorsítótárból jön.
+          cache_control: { type: "ephemeral" },
+        });
+        for await (const event of stream) {
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            const text = event.delta.text;
+            if (!text) continue;
+            onText(text);
+          }
         }
+        completed = async () => (await stream.finalMessage()).stop_reason === 'end_turn';
+      } catch (error) {
+        if (streamedText) throw error;
+        const fallback = await crossFamilyComplete(resolveLegacyModel("claudeChat"), error, {
+          system: `${systemPrompt}\n\n${dynamicPrompt}`, messages, maxTokens: 64000, timeoutMs: 900_000, label: "MATERIAL-CREATOR",
+        });
+        if (fallback.text) onText(fallback.text);
+        completed = async () => isCompleteFinish(fallback.finishReason);
       }
 
       await workflowPhase("gate");
@@ -1866,9 +1924,9 @@ ${classroom ? `- Keresési korosztály-támpont: ${classroom}. osztály; a végl
         // Clean HTML (remove the marker)
         const cleanHtml = htmlContent.replace('<!-- HTML_START -->', '').trim();
         const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
-        const final = await stream.finalMessage();
+        const finished = await completed();
         const verification = verifyLessonMethodHtml(cleanHtml);
-        if (final.stop_reason !== 'end_turn' || !verification.ok) {
+        if (!finished || !verification.ok) {
           throw new Error(`A tananyag nem menthető: ${verification.problems.join('; ') || 'A generálás nem fejeződött be.'}`);
         }
 
@@ -1993,59 +2051,70 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         }
       }
 
-      const response = await openai.chat.completions.create({
-        model: resolveLegacyModel("analyzeFiles"),
-        reasoning_effort: effortFor("analyzeFiles"),
-        messages: [
-          {
-            role: "system",
-            content: withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumokat és adj vissza strukturált információt JSON formátumban.`)
-          },
-          {
-            role: "user",
-            content
-          }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "file_analysis",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                extractedText: {
-                  type: "string",
-                  description: "Az összes dokumentumból kinyert teljes szöveg tartalom"
-                },
-                suggestedTitle: {
-                  type: "string",
-                  description: "Javasolt tananyag cím az összes tartalom alapján"
-                },
-                suggestedDescription: {
-                  type: "string",
-                  description: "Javasolt leírás, ami összefoglalja az összes fájl tartalmát"
-                },
-                suggestedClassroom: {
-                  type: "number",
-                  description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) az összesített tartalom nehézsége alapján"
-                },
-                topics: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "Fő témák listája az összes dokumentumból"
-                }
-              },
-              required: ["extractedText", "suggestedTitle", "suggestedDescription", "suggestedClassroom", "topics"],
-              additionalProperties: false
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): a GPT-elemzés hibájánál egyszer az ellentétes családú tartalék (Opus 5.5, medium)
+      // ugyanazokkal a fájlrészekkel (kép/szöveg Claude-blokkként); a szigorú séma helyett a kulcsok a promptban, a JSON a szövegből.
+      let analysisText: string;
+      try {
+        const response = await openai.chat.completions.create({
+          model: resolveLegacyModel("analyzeFiles"),
+          reasoning_effort: effortFor("analyzeFiles"),
+          messages: [
+            {
+              role: "system",
+              content: withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumokat és adj vissza strukturált információt JSON formátumban.`)
+            },
+            {
+              role: "user",
+              content
             }
-          }
-        },
-        max_completion_tokens: 8192 // Increased for multiple files
-      });
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "file_analysis",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  extractedText: {
+                    type: "string",
+                    description: "Az összes dokumentumból kinyert teljes szöveg tartalom"
+                  },
+                  suggestedTitle: {
+                    type: "string",
+                    description: "Javasolt tananyag cím az összes tartalom alapján"
+                  },
+                  suggestedDescription: {
+                    type: "string",
+                    description: "Javasolt leírás, ami összefoglalja az összes fájl tartalmát"
+                  },
+                  suggestedClassroom: {
+                    type: "number",
+                    description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) az összesített tartalom nehézsége alapján"
+                  },
+                  topics: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Fő témák listája az összes dokumentumból"
+                  }
+                },
+                required: ["extractedText", "suggestedTitle", "suggestedDescription", "suggestedClassroom", "topics"],
+                additionalProperties: false
+              }
+            }
+          },
+          max_completion_tokens: 8192 // Increased for multiple files
+        });
+        analysisText = response.choices[0].message.content || '{}';
+      } catch (error) {
+        const fallback = legacyFallbackFor(resolveLegacyModel("analyzeFiles"));
+        if (!fallback) throw error;
+        logger.warn(`[ANALYZE] ${resolveLegacyModel("analyzeFiles")} hibázott — ${(error instanceof Error ? error.message : String(error)).slice(0, 200)} → tartalék: ${fallback}`);
+        analysisText = await callClaudeParts({ model: fallback, system: `${withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumokat és adj vissza strukturált információt JSON formátumban.`)}\n\nVálaszolj KIZÁRÓLAG egy JSON-objektummal, pontosan ezekkel a kulcsokkal: extractedText (string), suggestedTitle (string), suggestedDescription (string), suggestedClassroom (szám, 0–12; 0 = programozási alapismeretek), topics (string-tömb).`, parts: content, maxTokens: 16_000, timeoutMs: 300_000 });
+      }
 
       await workflowPhase("gate");
-      const result = JSON.parse(response.choices[0].message.content || '{}');
+      const result = JSON.parse(stripJsonFences(analysisText) || '{}');
       await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${files.length} files processed, ${result.topics?.length || 0} topics found`);
@@ -2122,59 +2191,70 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
         }
       ];
 
-      const response = await openai.chat.completions.create({
-        model: resolveLegacyModel("analyzeFiles"),
-        reasoning_effort: effortFor("analyzeFiles"),
-        messages: [
-          {
-            role: "system",
-            content: withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumot és adj vissza strukturált információt JSON formátumban.`)
-          },
-          {
-            role: "user",
-            content
-          }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "file_analysis",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                extractedText: {
-                  type: "string",
-                  description: "A dokumentumból kinyert teljes szöveg tartalom"
-                },
-                suggestedTitle: {
-                  type: "string",
-                  description: "Javasolt tananyag cím a tartalom alapján"
-                },
-                suggestedDescription: {
-                  type: "string",
-                  description: "Javasolt leírás, ami összefoglalja a tartalmat"
-                },
-                suggestedClassroom: {
-                  type: "number",
-                  description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) a tartalom nehézsége alapján"
-                },
-                topics: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "Fő témák listája a dokumentumban"
-                }
-              },
-              required: ["extractedText", "suggestedTitle", "suggestedDescription", "suggestedClassroom", "topics"],
-              additionalProperties: false
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): a GPT-elemzés hibájánál egyszer az ellentétes családú tartalék (Opus 5.5, medium)
+      // ugyanazokkal a fájlrészekkel (kép/szöveg Claude-blokkként); a szigorú séma helyett a kulcsok a promptban, a JSON a szövegből.
+      let analysisText: string;
+      try {
+        const response = await openai.chat.completions.create({
+          model: resolveLegacyModel("analyzeFiles"),
+          reasoning_effort: effortFor("analyzeFiles"),
+          messages: [
+            {
+              role: "system",
+              content: withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumot és adj vissza strukturált információt JSON formátumban.`)
+            },
+            {
+              role: "user",
+              content
             }
-          }
-        },
-        max_completion_tokens: 4096
-      });
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "file_analysis",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  extractedText: {
+                    type: "string",
+                    description: "A dokumentumból kinyert teljes szöveg tartalom"
+                  },
+                  suggestedTitle: {
+                    type: "string",
+                    description: "Javasolt tananyag cím a tartalom alapján"
+                  },
+                  suggestedDescription: {
+                    type: "string",
+                    description: "Javasolt leírás, ami összefoglalja a tartalmat"
+                  },
+                  suggestedClassroom: {
+                    type: "number",
+                    description: "Javasolt osztály (0-12; 0 = programozási alapismeretek) a tartalom nehézsége alapján"
+                  },
+                  topics: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Fő témák listája a dokumentumban"
+                  }
+                },
+                required: ["extractedText", "suggestedTitle", "suggestedDescription", "suggestedClassroom", "topics"],
+                additionalProperties: false
+              }
+            }
+          },
+          max_completion_tokens: 4096
+        });
+        analysisText = response.choices[0].message.content || '{}';
+      } catch (error) {
+        const fallback = legacyFallbackFor(resolveLegacyModel("analyzeFiles"));
+        if (!fallback) throw error;
+        logger.warn(`[ANALYZE] ${resolveLegacyModel("analyzeFiles")} hibázott — ${(error instanceof Error ? error.message : String(error)).slice(0, 200)} → tartalék: ${fallback}`);
+        analysisText = await callClaudeParts({ model: fallback, system: `${withSupportSkill("creator-analyze", `Te egy oktatási anyag elemző szakértő vagy. Elemezd a dokumentumot és adj vissza strukturált információt JSON formátumban.`)}\n\nVálaszolj KIZÁRÓLAG egy JSON-objektummal, pontosan ezekkel a kulcsokkal: extractedText (string), suggestedTitle (string), suggestedDescription (string), suggestedClassroom (szám, 0–12; 0 = programozási alapismeretek), topics (string-tömb).`, parts: content, maxTokens: 16_000, timeoutMs: 300_000 });
+      }
 
       await workflowPhase("gate");
-      const result = JSON.parse(response.choices[0].message.content || '{}');
+      const result = JSON.parse(stripJsonFences(analysisText) || '{}');
       await failOnSchemaInvalid(typeof result.extractedText !== "string", "A modell válaszából hiányzik a kinyert szöveg.");
 
       logger.info(`[FILE ANALYSIS] ✅ Analysis complete: ${result.topics?.length || 0} topics found`);
@@ -2296,16 +2376,6 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       await workflowPhase("author");
       logger.info(`[CHATGPT CHAT] Streaming response...`);
 
-      const stream = await openai.chat.completions.create({
-        model: resolveLegacyModel("chatgptChat"),
-        reasoning_effort: effortFor("chatgptChat"),
-        messages,
-        stream: true,
-        max_completion_tokens: 4096
-      }, {
-        signal: controller.signal
-      });
-
       // Handle abort on client disconnect
       req.on('close', () => {
         controller.abort();
@@ -2314,21 +2384,46 @@ VÁLASZOLJ JSON formátumban a következő struktúrával:
       });
 
       let totalChunks = 0;
-      for await (const chunk of stream) {
-        // Validate chunk structure
-        if (!chunk.choices || !Array.isArray(chunk.choices) || chunk.choices.length === 0) {
-          logger.warn('[CHATGPT] Invalid chunk structure:', chunk);
-          continue;
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): az első kiküldött darab ELŐTTI hibánál egyszer az ellentétes családú tartalék
+      // (Opus 5.5, medium) — a válasz egyben érkezik.
+      try {
+        const stream = await openai.chat.completions.create({
+          model: resolveLegacyModel("chatgptChat"),
+          reasoning_effort: effortFor("chatgptChat"),
+          messages,
+          stream: true,
+          max_completion_tokens: 4096
+        }, {
+          signal: controller.signal
+        });
+
+        for await (const chunk of stream) {
+          // Validate chunk structure
+          if (!chunk.choices || !Array.isArray(chunk.choices) || chunk.choices.length === 0) {
+            logger.warn('[CHATGPT] Invalid chunk structure:', chunk);
+            continue;
+          }
+
+          const content = chunk.choices[0]?.delta?.content;
+
+          if (content) {
+            totalChunks++;
+            res.write(`data: ${JSON.stringify({
+              type: 'content_delta',
+              content
+            })}\n\n`);
+          }
         }
-
-        const content = chunk.choices[0]?.delta?.content;
-
-        if (content) {
+      } catch (error) {
+        if (totalChunks > 0 || controller.signal.aborted) throw error;
+        const fallback = await crossFamilyComplete(resolveLegacyModel("chatgptChat"), error, {
+          system: messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n"),
+          messages: messages.filter((m): m is { role: "user" | "assistant"; content: string } => m.role !== "system"),
+          maxTokens: 4096, timeoutMs: 180_000, signal: controller.signal, label: "CHATGPT-CHAT",
+        });
+        if (fallback.text) {
           totalChunks++;
-          res.write(`data: ${JSON.stringify({
-            type: 'content_delta',
-            content
-          })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: 'content_delta', content: fallback.text })}\n\n`);
         }
       }
 
@@ -2476,18 +2571,6 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
       logger.info(`[CLAUDE HTML] System prompt length: ${systemPrompt.length + dynamicPrompt.length}`);
       logger.info(`[CLAUDE HTML] Messages count: ${messages.length}`);
 
-      const stream = await anthropic.messages.stream({
-        model: resolveLegacyModel("claudeHtml"),
-        output_config: { effort: effortFor("claudeHtml") },
-        max_tokens: 64000, // v7.4: a teljes spec szerinti anyag 32K-nál is csonkult (mért, 2026-09-09); streamelve 64K
-        system: cachedSystem(systemPrompt, dynamicPrompt),
-        messages,
-        // Spec 2026-10-03-gpt61-sol-kv-cache: a többkörös beszélgetés előzménye is a gyorsítótárból jön.
-        cache_control: { type: "ephemeral" },
-      }, {
-        signal: controller.signal
-      });
-
       // Handle abort on client disconnect
       req.on('close', () => {
         controller.abort();
@@ -2500,23 +2583,7 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
       let htmlContent = '';
       let isCollectingHtml = false;
       let totalEvents = 0;
-
-      for await (const event of stream) {
-        touchClaude();
-        // Validate event structure
-        if (!event || typeof event !== 'object') {
-          logger.warn('[CLAUDE] Invalid event structure:', event);
-          continue;
-        }
-
-        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-          const text = event.delta.text;
-
-          if (!text || typeof text !== 'string') {
-            logger.warn('[CLAUDE] Invalid text delta:', event.delta);
-            continue;
-          }
-
+      const onText = (text: string) => {
           totalEvents++;
           fullContent += text;
 
@@ -2535,7 +2602,50 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
             type: 'content_delta',
             content: text
           })}\n\n`);
+      };
+      // Spec 2026-10-14-tartalek-b-szelet (B3b): az első kiküldött darab ELŐTTI hibánál egyszer az ellentétes családú tartalék
+      // (GPT-6.1 Sol, medium); a Claude-tétlenségi őr leáll (a tartalék saját tétlenségi őrrel fut).
+      let completed: () => Promise<boolean>;
+      try {
+        const stream = await anthropic.messages.stream({
+          model: resolveLegacyModel("claudeHtml"),
+          output_config: { effort: effortFor("claudeHtml") },
+          max_tokens: 64000, // v7.4: a teljes spec szerinti anyag 32K-nál is csonkult (mért, 2026-09-09); streamelve 64K
+          system: cachedSystem(systemPrompt, dynamicPrompt),
+          messages,
+          // Spec 2026-10-03-gpt61-sol-kv-cache: a többkörös beszélgetés előzménye is a gyorsítótárból jön.
+          cache_control: { type: "ephemeral" },
+        }, {
+          signal: controller.signal
+        });
+
+        for await (const event of stream) {
+          touchClaude();
+          // Validate event structure
+          if (!event || typeof event !== 'object') {
+            logger.warn('[CLAUDE] Invalid event structure:', event);
+            continue;
+          }
+
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            const text = event.delta.text;
+
+            if (!text || typeof text !== 'string') {
+              logger.warn('[CLAUDE] Invalid text delta:', event.delta);
+              continue;
+            }
+            onText(text);
+          }
         }
+        completed = async () => (await stream.finalMessage()).stop_reason === 'end_turn';
+      } catch (error) {
+        if (totalEvents > 0 || controller.signal.aborted) throw error;
+        if (claudeIdle) clearTimeout(claudeIdle);
+        const fallback = await crossFamilyComplete(resolveLegacyModel("claudeHtml"), error, {
+          system: `${systemPrompt}\n\n${dynamicPrompt}`, messages, maxTokens: 64000, timeoutMs: 900_000, signal: controller.signal, label: "CLAUDE-HTML",
+        });
+        if (fallback.text) onText(fallback.text);
+        completed = async () => isCompleteFinish(fallback.finishReason);
       }
 
       await workflowPhase("gate");
@@ -2545,9 +2655,9 @@ ${metadata?.classroom ? `Korosztály-támpont: ${metadata.classroom}. osztály; 
       if (isCollectingHtml && htmlContent.length > 100) {
         const cleanHtml = htmlContent.replace('<!-- HTML_START -->', '').trim();
         const { verifyLessonMethodHtml } = await import('./improve/verify-lesson-method');
-        const final = await stream.finalMessage();
+        const finished = await completed();
         const verification = verifyLessonMethodHtml(cleanHtml);
-        if (final.stop_reason !== 'end_turn' || !verification.ok) {
+        if (!finished || !verification.ok) {
           throw new Error(`A tananyag nem menthető: ${verification.problems.join('; ') || 'A generálás nem fejeződött be.'}`);
         }
 
