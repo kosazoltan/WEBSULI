@@ -30,8 +30,21 @@ tantárgy/évfolyam címkével, a valódi scope-prompttal (`scopeRequestParams` 
   „Nagy-Britannia földrajza” → „Angol”. Az évfolyam-eltérések nagy része címke-zaj: ugyanaz a Mezopotámia-forrás 5. és 6.
   évfolyammal is jóvá lett hagyva.
 - Kimeneti tokenek (scope, high): p50 476, p95 1475, **max 2448** → a mostani 2000-es keret csonkítana.
-- **Claude Haiku 5.5: NEM mérve.** A WEBSULI helyi és a valutavalto-program `.env` mind a négy Anthropic-kulcsa 401-et
-  adott; tulajdonosi döntés: Haiku nélkül, gpt-6-luna.
+- **Claude Haiku 5.5 (pótmérés 2026-10-14, ugyanaz a készlet, pontozó és high effort):**
+
+  | feladat | modell | tantárgy | évfolyam pontos | ±1 | $/hívás | medián idő |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | scope (112) | gpt-6-luna | **102** | **67** | **93** | **0,00106** | 7,0 s |
+  | scope (112) | claude-haiku-5-5 | 94 | 55 | 91 | 0,00152 | 5,5 s |
+  | besorolás (20) | gpt-6-luna | 20 | **19** | **20** | **0,00047** | 5,1 s |
+  | besorolás (20) | claude-haiku-5-5 | 20 | 18 | 18 | 0,00088 | 5,3 s |
+
+  A Haiku jellemző hibái: a 5. évfolyamos természetismeretet 7× „Biológia”-nak sorolta (Luna: 1×), egy forrást „nem tantárgyi
+  forrás / 0”-nak, a Hunyadit 10. évfolyamnak; egy pilot-leckénél nem adott évfolyamot. Azonos listaár mellett ~1,4–1,9×
+  több tokent használt. **Döntés: a gpt-6-luna marad** — pontosabb és olcsóbb. Közös gyengeség: több 5. évfolyamos
+  Mezopotámia-forrást mindkét modell 9. évfolyamnak sorolt (a scope-prompt évfolyam-horgonyai lehetséges javítási pont).
+  A működő Anthropic-kulcs a Windows felhasználói `ANTHROPIC_API_KEY` változóban volt; a repók `.env`-jeiben lévő példány
+  visszavont (401).
 - Hivatalos árak (Standard, rövid kontextus, per M token): gpt-6-luna 0,10 / 0,50 $; gpt-6.1-sol és gpt-6-sol 2 / 10 $;
   claude-haiku-5-5 0,10 / 0,50 $ (≤100K prompt).
 
