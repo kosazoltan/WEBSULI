@@ -1,7 +1,7 @@
 // Spec 2026-10-14-tananyag-tomorseg-lefedettseg: a mentett próbaleckék újrapontozása (modellhívás nélkül) a lesson-metrics
 // aktuális mérőszámaival. A térképet a harness szabályai szerint tölti; csak-olvasó tranzakció, ellenőrzött TLS (review #210).
 // Futtatás (source/ mappából): npx tsx scripts/measure/rescore-trials.mts <mappa> <címke,címke,...>
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { withReadOnlyDb } from "../lib/read-only-db";
 import { measureLesson } from "../../server/studio/lesson-metrics";
 import { applyTopicFocus, type TopicFocus } from "../../server/studio/topic-focus";
@@ -29,3 +29,6 @@ const rows = await withReadOnlyDb(async (query) => {
 });
 rows.sort((a, b) => a.térkép.localeCompare(b.térkép) || a.címke.localeCompare(b.címke));
 console.table(rows);
+// review #213: az újrapontozott értékek (mindkét ágra) fájlba is — a mérési adathalmaz minden állítást alátámaszt
+const jsonOut = process.argv[4];
+if (jsonOut) writeFileSync(jsonOut, JSON.stringify(rows, null, 2));

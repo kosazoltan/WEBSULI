@@ -55,7 +55,9 @@ export type AutonomousReason =
   /** U5 (ábra-kapu): az ábra felirata nem a fejezet tanításából való — figyelmeztetés a mérés (§C-V/12) nélkül. */
   | "figure_check"
   /** U6 (§C-L): a lektor önálló megoldása eltér a leckétől, de nem adott blokkolót — eldöntetlen, nem igazolás. */
-  | "solution_mismatch";
+  | "solution_mismatch"
+  /** Spec 2026-10-14-tananyag-tomorseg-lefedettseg (review #213): a Tananyag lap túllépte a mért terjedelmi keretet — jelzés, nem buktat. */
+  | "length_over_budget";
 
 export type AutonomousInput = {
   reason: AutonomousReason;
@@ -92,6 +94,7 @@ const ACCEPT_NOTES: Record<Exclude<AutonomousReason, "step_error">, string> = {
   bank_trimmed: "A limiten egy hibás nyílt feladat vagy módszer kikerült, a fejezet gyakorlócsomagja ezért kisebb (a fogalmankénti kvízpár megmaradt) — a fejezetek a job kimenetében.",
   figure_check: "Egy vagy több ábra felirata nem a fejezet tanításából való — az ábra-kapu figyelmeztetése (mérés nélkül nem buktat).",
   solution_mismatch: "A lektor önálló megoldása eltér a leckétől, de nem jelzett hibát — eldöntetlen eltérés (nem publikálási igazolás).",
+  length_over_budget: "A Tananyag lap hosszabb a mért terjedelmi keretnél (fogalmanként és évfolyamonként számolt felső határ) — a lecke elkészült, a szószám a job kimenetében.",
 };
 
 /**

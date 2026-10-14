@@ -425,7 +425,7 @@ export function buildSchemaRetryUser(zodIssues: string, repair?: { targetSection
     "",
     // U4 (C4/H5): célzott módban az újrakérés is folt-alakot kér — a „teljes leckét” kérés ↔ folt-egyesítés ellentmondás megszűnt.
     repair
-      ? `Írd újra CSAK a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet FOLT-ALAKBAN: { "sections": { "<0-tól számozott index>": { "heading": string, "probaEnabled": true, "blocks": [...] } } } (index: ${repair.targetSections.join(", ")}). Más fejezetet, title/subject mezőt NE küldj — teljes lecke itt hiba. Válaszolj CSAK JSON-nal.`
+      ? `Írd újra CSAK a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet FOLT-ALAKBAN: { "sections": { "<0-tól számozott index>": { "heading": string, "probaEnabled": boolean, "blocks": [...] } } } (index: ${repair.targetSections.join(", ")}). Más fejezetet, title/subject mezőt NE küldj — teljes lecke itt hiba. Válaszolj CSAK JSON-nal.`
       : "Írd újra a TELJES leckét úgy, hogy minden blokk a fenti hat kind egyike legyen. Válaszolj CSAK JSON-nal.",
   ].join("\n");
 }
@@ -452,7 +452,7 @@ export const TEACHING_CONTRACT = [
 function terjedelmiKeretLines(map: Pick<PromptMap, "classroom" | "concepts">): string[] {
   const b = lessonLengthBudget(map);
   return [
-    `TERJEDELMI KERET (a program méri): ${b.requiredConcepts} tanítandó fogalom → legfeljebb ${b.maxSections} fejezet (kb. 3 fogalom fejezetenként); a teljes Tananyag lap kb. ${b.targetWords} látható szó (legfeljebb ${b.maxWords}).`,
+    `TERJEDELMI KERET (a program a fejezetszámot kikényszeríti — a túllépő fejezet az utolsóba olvad —, a szókeret túllépését minőségi jelzésként rögzíti): ${b.requiredConcepts} tanítandó fogalom → legfeljebb ${b.maxSections} fejezet (kb. 3 fogalom fejezetenként); a teljes Tananyag lap kb. ${b.targetWords} látható szó (legfeljebb ${b.maxWords}).`,
     "Rövid forrásból rövid lecke: ami nincs a térképen, azt nem bővíted általános tudással, érdekességgel vagy ismétléssel.",
   ];
 }
@@ -492,7 +492,7 @@ export function buildAuthorPrompt(
     // Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S2): a korábbi „Ne rövidítsd vázlattá a bankok kedvéért” a hosszítás felé
     // tolt (mérve: medián 2210 látható szó); a tömörség és a teljesség együtt a mérce.
     "Most kizárólag a Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Az experience bankokat külön lépés gyártja; ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",
-    `TÖMÖR ÉS TELJES (a program méri): a teljes Tananyag lap kb. ${lessonLengthBudget(map).targetWords} látható szó (legfeljebb ${lessonLengthBudget(map).maxWords}). Minden kötelező fogalmat EGYSZER tanítasz meg, a legrövidebb érthető magyarázattal és egy kidolgozott példával; amit egy blokk már elmondott, azt a következő nem ismétli; a recap 2–3 pont; kitöltő általánosság és forráson kívüli érdekesség nem kell. A tömörség nem vázlatosság: a hogyan és a miért lépései megmaradnak.`,
+    `TÖMÖR ÉS TELJES (a program méri, túllépésnél jelzést rögzít): a teljes Tananyag lap kb. ${lessonLengthBudget(map).targetWords} látható szó (legfeljebb ${lessonLengthBudget(map).maxWords}). Minden kötelező fogalmat EGYSZER tanítasz meg, a legrövidebb érthető magyarázattal és egy kidolgozott példával; amit egy blokk már elmondott, azt a következő nem ismétli; a recap 2–3 pont; kitöltő általánosság és forráson kívüli érdekesség nem kell. A tömörség nem vázlatosság: a hogyan és a miért lépései megmaradnak.`,
     // Kalibrálva (próbaharness 2026-10-14): tényvédelem nélkül a rövidítés a kötelező fogalmak tartalmát is vágta (−9…−17 pont).
     // Mérve (próbaharness, Hunyadi): a minta `"probaEnabled": true`-ja miatt a tömör (1 kérdéses) fejezetek Próbája elérhetetlen
     // lett → ív-hiba → szerzői javítókör, amely a kérdések pótlásával a leckét újra hosszítja. Az ív-szerződés választást enged.
@@ -534,7 +534,7 @@ export function buildAuthorPrompt(
           // Spec 2026-09-19 §6 (mérve: a teljes újraírás után a bank szinte teljesen újraépült).
           `CÉLZOTT JAVÍTÁS: kizárólag a(z) ${repair.targetSections.map((i) => i + 1).join(", ")}. fejezetet írd újra (0-tól számozott index: ${repair.targetSections.join(", ")}). A többi fejezetet a program változatlanul megőrzi — azokat NE küldd vissza, és a javított fejezetben is csak a kifogásolt részt változtasd.`,
           "A válasz CSAK JSON legyen, ebben az alakban (a kulcs a fejezet 0-tól számozott indexe):",
-          '{ "sections": { "<index>": { "heading": string, "probaEnabled": true, "blocks": [...] } } }',
+          '{ "sections": { "<index>": { "heading": string, "probaEnabled": boolean, "blocks": [...] } } }',
           // Spec 2026-10-05-s9 (S9/6): a tévhit-lista hibája is javítható a foltban.
           'Ha a lektor a tévhit-listát (misconceptions) kifogásolja, a folt mellé a TELJES javított listát is add vissza: "misconceptions": [{ "conceptId": string, "text": string }] — csak a forrásból igazolható tévhit maradhat.',
         ]

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { MapConcept } from "../server/studio/coverage";
-import { buildAuthorPrompt, buildPedagoguePrompt, OUTLINE_MAX_SECTIONS } from "../server/studio/step-io";
+import { readFileSync } from "node:fs";
+import { buildAuthorPrompt, buildPedagoguePrompt, buildSchemaRetryUser, OUTLINE_MAX_SECTIONS } from "../server/studio/step-io";
 import { lessonLengthBudget } from "../shared/lesson-length";
 
 /**
@@ -57,8 +58,21 @@ test("szerző: tömör és teljes, a keret a promptban; a „ne rövidítsd váz
   // mérve (Hunyadi): a mindig-true minta a tömör fejezetekben elérhetetlen Próbát → ív-hibát → hosszító javítókört adott
   assert.match(prompt, /PRÓBA: a fejezet probaEnabled értéke CSAK akkor true, ha a fejezetben legalább 5 check/);
   assert.match(prompt, /"probaEnabled": boolean/);
+  // review #213: a célzott javítókör mintája is boolean — különben a javításban a modell újra elérhetetlen Próbát kapcsolhat
+  const repairPrompt = buildAuthorPrompt([{ heading: "A két folyó", conceptIds: ["c1"], plannedBlocks: ["explain", "check"], animationSuggestions: [] }] as never, map, [], { targetSections: [0] });
+  assert.match(repairPrompt, /"probaEnabled": boolean/);
+  assert.doesNotMatch(repairPrompt, /"probaEnabled": true/);
+  assert.doesNotMatch(buildSchemaRetryUser("x", { targetSections: [0] }), /"probaEnabled": true/);
   // mérve (S2c): a tömörítés az ív- (check előtt example) és a megalapozási (fogalomnév szó szerint) szabályt sértette
   assert.match(prompt, /A TÖMÖRÍTÉS NEM BONT KAPUT: minden check előtt marad egy example/);
   assert.match(prompt, /fogalom NEVÉT \(term\) a blokk szövege pontosan, szó szerint tartalmazza/);
   assert.doesNotMatch(prompt, /Ne rövidítsd vázlattá/);
+});
+
+test("review #213: a keret az éles úton is érvényes — a vázlat-autofix a számolt fejezetkeretet kapja, a szókeret túllépése jelzés", () => {
+  const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const runner = strip(readFileSync(new URL("../server/studio/step-runner.ts", import.meta.url), "utf8"));
+  assert.match(runner, /autofixOutline\(json,\s*map\.concepts,\s*lessonLengthBudget\(promptMapOf\(map\)\)\.maxSections\)/);
+  assert.match(runner, /reason:\s*"length_over_budget"/);
+  assert.match(runner, /visibleWords > lengthBudget\.maxWords/);
 });

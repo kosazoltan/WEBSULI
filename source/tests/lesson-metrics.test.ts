@@ -101,8 +101,20 @@ test("measureLesson: szószám, olvasási idő, blokkok fajtánként, forrás→
 
 test("tény-kulcsok: számok, a fogalom neve, tulajdonnevek — kötőszó és mondatkezdő szó nem", () => {
   const keys = factKeys({ term: "Hunyadi János", definition: "Kormányzó 1446-tól. A nándorfehérvári diadal után Szilágyi Mihály segítette.", quote: "tovább látjuk, amilyen 3,5" });
-  // fogalomnév: hunyad, (jános < 6 betű → termKeys nem), számok: 1446, 3.5; tulajdonnév (nem mondatkezdő): szilág, mihály
-  assert.deepEqual([...keys].sort(), ["1446", "3.5", "hunyad", "mihály", "szilág"]);
+  // Review #213 (spec-javítás): a fogalomnév MINDEN szava kulcs, a rövid is — fogalomnév: hunyad, jános; számok: 1446, 3.5;
+  // tulajdonnév (nem mondatkezdő): szilág, mihály
+  assert.deepEqual([...keys].sort(), ["1446", "3.5", "hunyad", "jános", "mihály", "szilág"]);
+});
+
+test("review #213: a rövid nevű fogalom („gumó”, „sejt”) teljes hiánya csökkenti a tényszintű lefedettséget", () => {
+  const concepts = [
+    { term: "gumó", definition: "Föld alatti szár.", quote: "", examWeight: "core" },
+    { term: "sejt", definition: "Az élőlények egysége.", quote: "", examWeight: "core" },
+  ];
+  const only = (text: string) => ({ sections: [{ heading: "x", probaEnabled: false, blocks: [{ kind: "explain", text, depth: "what", readAloud: true, coversConceptIds: ["c1"] }] }] }) as unknown as Pick<Lesson, "sections">;
+  const both = measureLesson(only("A gumó föld alatti szár. A sejt az élőlények egysége."), { sourceText: "x", concepts });
+  const noGumo = measureLesson(only("A sejt az élőlények egysége."), { sourceText: "x", concepts });
+  assert.ok((noGumo.requiredFactsPct ?? 100) < (both.requiredFactsPct ?? 0), `a gumó hiánya nem látszott: ${noGumo.requiredFactsPct} vs ${both.requiredFactsPct}`);
 });
 
 test("tény-kulcsok: a tankönyvi ábra-/kép-/oldalszám nem tény (mért Zöldségek-eset), a valódi szám igen", () => {

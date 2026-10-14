@@ -100,7 +100,9 @@ export function factKeys(concept: { term: string; definition?: string | null; qu
   const withoutRefs = (s: string) => s.replace(/\(?\b\d+\.\s*(ábr\p{L}*|kép\p{L}*|oldal\p{L}*|old\.|o\.|táblázat\p{L}*|feladat\p{L}*)\)?/giu, " ");
   const body = withoutRefs(`${concept.definition ?? ""} ${concept.quote ?? ""}`);
   for (const n of `${withoutRefs(concept.term)} ${body}`.match(/\d+(?:[.,]\d+)?/g) ?? []) keys.add(n.replace(",", "."));
-  for (const k of termKeys(concept.term)) keys.add(k);
+  // Review #213: a fogalom NEVÉNEK minden szava kulcs, a hosszától függetlenül (≥ 3 betű, nem töltelékszó) — a `termKeys` a
+  // 6 betűnél rövidebbet eldobná, így a „gumó” vagy „sejt” fogalom teljes hiánya nem csökkentené a mérést.
+  for (const k of nameKeys(concept.term)) keys.add(k);
   // tulajdonnév: nagybetűs, legalább 4 betűs szó, amely nem mondat elején áll
   const tokens = body.split(/\s+/).filter(Boolean);
   tokens.forEach((token, i) => {
@@ -111,11 +113,17 @@ export function factKeys(concept: { term: string; definition?: string | null; qu
   return keys;
 }
 
-/** A szöveg tény-kulcsai: számok és szótövek (a factKeys-szel összevethető alakban). */
+/** Név-kulcsok: minden ≥ 3 betűs, nem töltelék, nem szám szó első (legfeljebb) 6 betűje — a ragozott alak is ugyanide esik. */
+function nameKeys(text: string): Set<string> {
+  const keys = new Set<string>();
+  for (const w of words(text)) if (w.length >= 3 && !STOPWORDS.has(w) && !/^\d/.test(w)) keys.add(w.slice(0, TERM_KEY_LENGTH));
+  return keys;
+}
+
+/** A szöveg tény-kulcsai: számok és név-kulcsok (a factKeys-szel összevethető alakban). */
 function textFactKeys(text: string): Set<string> {
-  const keys = termKeys(text);
+  const keys = nameKeys(text);
   for (const n of text.match(/\d+(?:[.,]\d+)?/g) ?? []) keys.add(n.replace(",", "."));
-  for (const w of words(text)) if (w.length >= 4) keys.add(w.slice(0, TERM_KEY_LENGTH));
   return keys;
 }
 

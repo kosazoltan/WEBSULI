@@ -1,5 +1,5 @@
 {
-  "note": "Spec 2026-10-14-tananyag-tomorseg-lefedettseg: végső próbaharness (éles prompt-feloldás, szerep-skill, a térkép tulajdonosának szabályai), 6 térkép, alapvonal (#210 commit, régi promptok, javítatlan Claude-stream) vs S2. Azonosítók nélkül.",
+  "note": "Spec 2026-10-14-tananyag-tomorseg-lefedettseg: végső próbaharness (éles prompt-feloldás, szerep-skill, a térkép tulajdonosának szabályai), 6 térkép, alapvonal (#210 commit, régi promptok, javítatlan Claude-stream) vs S2. Azonosítók nélkül. A requiredFactsPct/requiredConceptTermsPct MINDKÉT ágra ugyanazzal a (review #213 utáni) mérővel újrapontozva: scripts/measure/rescore-trials.mts.",
   "rows": [
     {
       "topic": "Az időszámítás és az emberiség kezdetei",
@@ -22,7 +22,10 @@
       "coverageGateOk": true,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 203
+      "seconds": 203,
+      "requiredFactsPct": 100,
+      "requiredConceptTermsPct": 97,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Zöldségek növényi szervei és fejlődése",
@@ -36,7 +39,10 @@
       "coverageGateOk": false,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 306
+      "seconds": 306,
+      "requiredFactsPct": 100,
+      "requiredConceptTermsPct": 93,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Oszthatóság 3-mal és 9-cel",
@@ -50,7 +56,10 @@
       "coverageGateOk": true,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 229
+      "seconds": 229,
+      "requiredFactsPct": 100,
+      "requiredConceptTermsPct": 91,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Hunyadi János, a kormányzó",
@@ -73,7 +82,10 @@
       "coverageGateOk": false,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 466
+      "seconds": 466,
+      "requiredFactsPct": 98,
+      "requiredConceptTermsPct": 89,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Az időszámítás és az emberiség kezdetei",
@@ -89,7 +101,8 @@
       "coverageGateOk": true,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 347
+      "seconds": 347,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Mezopotámia: folyóvölgyi civilizáció",
@@ -105,7 +118,8 @@
       "coverageGateOk": true,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 92
+      "seconds": 92,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Zöldségek növényi szervei és fejlődése",
@@ -121,7 +135,8 @@
       "coverageGateOk": true,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 367
+      "seconds": 367,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Oszthatóság 3-mal és 9-cel",
@@ -137,7 +152,8 @@
       "coverageGateOk": true,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 97
+      "seconds": 97,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     },
     {
       "topic": "Hunyadi János, a kormányzó",
@@ -162,7 +178,8 @@
       "coverageGateOk": false,
       "arcOk": true,
       "authorRoleSkill": true,
-      "seconds": 286
+      "seconds": 286,
+      "rescoredWith": "lesson-metrics review #213 (rövid fogalomnevek is kulcsok)"
     }
   ]
 }
