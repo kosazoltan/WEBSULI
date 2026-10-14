@@ -34,9 +34,30 @@ test("a HTML-modernizálás láncának tartaléka GPT-6.1 Sol, és a régi strea
   assert.match(improve, /createStudioProvider\(model, 900000, 64000, crossFamilyFallbackOptions\(model, modelIndex > 0\)\)/);
 });
 
-test("a kvízgenerátor a Claude-hiba után a GPT-6.1 Sol tartalékon, ugyanazzal a prompttal fut", () => {
-  // A szolgáltatás adatbázist ér el — a meglévő R1-minta szerint forrás-szinten rögzítve.
-  const src = readFileSync(new URL("../server/gameQuizGeneratorService.ts", import.meta.url), "utf8");
-  assert.match(src, /const fallback = crossFamilyFallback\(ANTHROPIC_MODEL\);/);
-  assert.match(src, /createStudioProvider\(fallback, 90_000, maxTokens, crossFamilyFallbackOptions\(fallback, true\)\)\.chat\(\[\s*\{ role: "system", content: withSupportSkill\("quiz-generator", SYSTEM_PROMPT\) \},\s*\{ role: "user", content: userPrompt \},/);
+// Review #219: futtatott teszt (nem forrás-minta) — a tartalék-határon belül a szolgáltatói ÉS a kimeneti hiba is.
+test("quizItemsWithFallback: szolgáltatói hiba, hibás JSON, nem tömb és üres tömb is a tartalékot indítja; tartalék nélkül az eredeti hiba", async () => {
+  const { quizItemsWithFallback } = await import("../server/gameQuizGeneratorService");
+  const good = async () => '```json\n[{"q":"Mennyi 2+2?"}]\n```';
+  for (const primary of [
+    async () => { throw new Error("[Claude] 529 overloaded"); },
+    async () => '[{"q":"csonka',
+    async () => '{"q":"nem tömb"}',
+    async () => "[]",
+  ]) {
+    let fallbacks = 0;
+    const items = await quizItemsWithFallback(primary, async () => { fallbacks++; return good(); }, () => undefined);
+    assert.deepEqual(items, [{ q: "Mennyi 2+2?" }]);
+    assert.equal(fallbacks, 1);
+  }
+  let fallbacks = 0;
+  assert.deepEqual(await quizItemsWithFallback(good, async () => { fallbacks++; return "[]"; }), [{ q: "Mennyi 2+2?" }]);
+  assert.equal(fallbacks, 0, "sikeres elsődlegesnél nincs tartalék");
+  await assert.rejects(quizItemsWithFallback(async () => "nem json", undefined), /JSON-parse/);
+  await assert.rejects(quizItemsWithFallback(async () => "nem json", async () => "[]"), /üres tömb/, "a tartalék hibája is látszik");
+});
+
+test("a HTML-modernizálás minden nem-túlterheléses szolgáltatói hibánál is a tartalékra vált (megszakítás után nem)", () => {
+  // Az improve-folyamat adatbázist ér el — a meglévő R1-minta szerint forrás-szinten rögzítve.
+  const improve = readFileSync(new URL("../server/improveAsync.ts", import.meta.url), "utf8");
+  assert.match(improve, /if \(!controller\.signal\.aborted && currentModelIndex < MODEL_CHAIN\.length - 1 && attempt < MAX_ATTEMPTS\) \{\s*currentModelIndex\+\+;\s*improveProvider = createProvider\(currentModelIndex\);/);
 });

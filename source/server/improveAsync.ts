@@ -264,6 +264,15 @@ ${originalFile.content}
           continue; // One more try with fallback
         }
         
+        // Review #219 (tulajdonosi döntés: tartalék minden szolgáltatói hibára): a nem túlterheléses hiba (időtúllépés, más 5xx,
+        // stream-hiba) is AZONNAL a lánc ellentétes családú tartalékára vált, ha még nem azon fut (megszakítás után nem).
+        if (!controller.signal.aborted && currentModelIndex < MODEL_CHAIN.length - 1 && attempt < MAX_ATTEMPTS) {
+          currentModelIndex++;
+          improveProvider = createProvider(currentModelIndex);
+          logger.warn(`[IMPROVE] Record ${dbRecordId}: ${retryErrorTyped.message.slice(0, 200)} — ⚡ tartalék: ${MODEL_CHAIN[currentModelIndex]}`);
+          continue;
+        }
+
         // Not retryable or out of retries - re-throw
         throw retryError;
       }
