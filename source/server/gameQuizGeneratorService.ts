@@ -16,7 +16,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
-import { resolveLegacyModel } from "./ai/models";
+import { crossFamilyFallback, resolveLegacyModel } from "./ai/models";
+import { logger } from "./lib/logger";
+import { createStudioProvider, crossFamilyFallbackOptions, studioModelReady } from "./ai/studio-provider";
 import { withSupportSkill } from "./studio/support-skills";
 import { cachedSystem } from "./ai/prompt-cache";
 import { validateGeneratedQuizItems } from "./gameQuizValidation";
@@ -129,19 +131,33 @@ ${truncated}
 
 Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb tudásmagjából. Csak a JSON tömböt add vissza.`;
 
-  const response = await client.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: maxTokens,
-    system: cachedSystem(withSupportSkill("quiz-generator", SYSTEM_PROMPT)), // Spec 2026-10-03-gpt61-sol-kv-cache
-    messages: [{ role: "user", content: userPrompt }],
-  });
+  // Spec 2026-10-14-tartalek-b-szelet (B3): a Claude-hívás hibájánál egyszer az ellentétes családú tartalék (GPT-6.1 Sol, medium),
+  // ugyanazzal a rendszer- és felhasználói prompttal; a válasz feldolgozása (fence, tömb-kivágás, validálás) közös.
+  let text: string;
+  try {
+    const response = await client.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: maxTokens,
+      system: cachedSystem(withSupportSkill("quiz-generator", SYSTEM_PROMPT)), // Spec 2026-10-03-gpt61-sol-kv-cache
+      messages: [{ role: "user", content: userPrompt }],
+    });
+    const block = response.content[0];
+    if (!block || block.type !== "text") throw new Error("Claude nem adott szöveges választ.");
+    text = block.text;
+  } catch (error) {
+    const fallback = crossFamilyFallback(ANTHROPIC_MODEL);
+    if (!fallback || !studioModelReady(fallback)) throw error;
+    logger.warn(`[QUIZ-GEN] ${ANTHROPIC_MODEL} hibázott (${error instanceof Error ? error.message.slice(0, 200) : String(error)}) → tartalék: ${fallback}`);
+    const response = await createStudioProvider(fallback, 90_000, maxTokens, crossFamilyFallbackOptions(fallback, true)).chat([
+      { role: "system", content: withSupportSkill("quiz-generator", SYSTEM_PROMPT) },
+      { role: "user", content: userPrompt },
+    ]);
+    if (response.finishReason === "length") throw new Error("A tartalék modell válasza elérte a hosszkorlátot.", { cause: error });
+    text = response.content ?? "";
+  }
 
   await workflowPhase("gate");
-  const block = response.content[0];
-  if (!block || block.type !== "text") {
-    throw new Error("Claude nem adott szöveges választ.");
-  }
-  let raw = block.text.trim();
+  let raw = text.trim();
   // Markdown code-fence eltávolítása ha van
   raw = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   // Az első '[' és utolsó ']' közötti rész kiszedése (extra tartalom esetére)

@@ -27,3 +27,11 @@ Spec: `docs/specs/2026-10-14-tartalek-b-szelet.md`. Parancsok a `source/` mappá
 
 ## V4 — kapuk
 - `npm.cmd run check`, `check:test`, `lint`, `test`, `build`.
+
+## B3a — HTML-modernizálás és kvízgenerátor (külön PR)
+- `models.ts` `LEGACY_MODELS.improve`: `["claude-opus-5", "gpt-6.1-sol"]` (volt Terra); `improveAsync.ts` a tartalék-fokon
+  `crossFamilyFallbackOptions(model, true)`; `OpenAIProvider.streamChat` a `chatReasoningEffort` mellett `reasoning_effort`-ot küld.
+- `gameQuizGeneratorService.ts`: Claude-hiba után egyszer GPT-6.1 Sol (medium), ugyanazzal a rendszer- és felhasználói prompttal.
+- Teszt: `tests/cross-family-fallback-b3.test.ts`; dokumentált változás: `ai-model-routing-complete.test.ts` improve-tartalék Terra → Sol.
+- **B3b** (következő PR): a `routes.ts` 9 adminisztrációs hívása (htmlFix, htmlTheme, htmlFixStream ×2, claudeChat,
+  analyzeFiles ×2, chatgptChat, claudeHtml) közös, gyártófüggetlen stream-segéddel; a váltás csak az első kiküldött darab előtt.

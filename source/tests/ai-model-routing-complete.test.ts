@@ -105,7 +105,9 @@ test("az okosítás tartalék modellje MÁS szolgáltatónál van", () => {
     "a tartaléknak másik szolgáltatót kell hívnia",
   );
   assert.equal(providerForModel(fallback), "openai");
-  assert.equal(fallback, "gpt-5.6-terra");
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-tartalek-b-szelet.md, B3, tulajdonosi döntés): az ellentétes családú tartalék
+  // GPT-6.1 Sol (medium) a korábbi Terra helyett; a „más szolgáltató” szabály változatlan.
+  assert.equal(fallback, "gpt-6.1-sol");
 });
 
 test("nincs elavult modell-generáció a routingban", () => {
