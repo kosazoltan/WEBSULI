@@ -19,6 +19,20 @@ project: websuli
   tiszta, de a history nem. Rotálás után csak a `.env`-be írni.
 - [x] QA-javítások commitolva + rebase + push (8702e2b) + auto-deploy VERIFIED (Vercel bundle marker, Render health 200).
   a `main` ága eleve "ahead 1" állapotban van — rendezni a remote-tal).
+- [ ] **Titok-rotáció (2026-10-14, session-szivárgás)** — egy redaktálási hiba miatt a munkamenet naplójába került: `valuta-backup`
+  kulcspár, Scaleway kulcs, Juniorebc alkalmazásjelszó, két jelszó, SignMyCode token (a naplóból kitörölve, rotálni kell).
+  A helyi `.env`-ekben és a `Névtelen_1.txt`-ben lévő Anthropic-kulcs visszavont (401); a működő a Windows felhasználói
+  `ANTHROPIC_API_KEY`-ben és a Renderen van. Kanban: WEBSULI #9.
+
+## Lecke-gyártás (2026-10-14)
+
+- [ ] **S3:** forrásszöveg a tervezőnek és a szerzőnek — nagy forrásnál a lefedettség 16,5% (kanban #6).
+- [ ] **S4:** darabolt kinyerés nagy forrásnál + kihagyott témarészek riportja (kanban #7).
+- [ ] **`ocr` lépés:** a `qwen/qwen3-vl-32b-instruct` kivezetve (404); a `gpt-6-luna` kézírásos mérése kell a cseréhez —
+  `tests/studio-ocr-recall.test.ts` a mért mezőny legjobbját követeli (kanban #8).
+- [ ] Kimerült OpenAI-keretnél a `withQuotaFailover` még OpenRouterre esik — tulajdonosi döntés (kanban #10).
+- [ ] `/maps/extract`: `inputHash`-alapú térkép-keresés más felhasználó térképét is visszaadhatja (review #209; kanban #11).
+- [x] RUNBOOK 9.2: a `kanban.mjs` útvonala és táblája beírva (2026-10-14).
 
 ## Verifikáció / QA folytatás
 

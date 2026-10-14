@@ -259,7 +259,8 @@ npm run build        # vite + szerver build
 
 ### 9.2 Egy szelet életciklusa
 
-1. Kanban-elem **először** (`kanban.mjs add` + `start`), utána ág:
+1. Kanban-elem **először** (`kanban.mjs add` + `start`; az eszköz a Hermes repóban:
+   `D:/repo/Hermes-agent/skills/software-development/hermes-kanban-workflow/scripts/kanban.mjs`, tábla: `%LOCALAPPDATA%/hermes/kanban.db`), utána ág:
    `git switch -c fix/<szám>-<név>`.
 2. RED tesztek a specből nevezve; futtasd, és **lásd bukni** a várt helyen.
 3. Implementáció → kapuk zöldre.
