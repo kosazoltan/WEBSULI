@@ -181,12 +181,14 @@ export function SourceUploadForm({
     detail: string | null;
     error: string | null;
     mapId: string | null;
+    jobId?: string | null;
     lessonId: string | null;
     htmlFileId?: string | null;
+    draft?: { teachingSections: number; savedBankPackets: number };
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; lessonId: string | null; htmlFileId?: string | null }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number } }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
@@ -217,6 +219,25 @@ export function SourceUploadForm({
     }
     prevFinished.current = runFinished;
   }, [runFinished, run.data, queryClient, onCreated, toast]);
+
+  // Spec 2026-10-14-folytatas-mentett-reszekbol: a megállt gyártás a mentett részekből folytatódik (lecke, kész
+  // bankcsomagok, modellhívás-napló) — a szerver dönti el, folytatható-e; elutasításkor az üzenetét mutatjuk.
+  // Szinkron zár: az `isPending` csak a következő renderben frissül — a gyors dupla kattintás két folytatást indítana (mért, e2e).
+  const resumeLock = useRef(false);
+  const resume = useMutation({
+    mutationFn: (jobId: string) => apiRequest("POST", `/api/studio/jobs/${jobId}/resume`),
+    onSuccess: async () => {
+      toast({ title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább." });
+      await run.refetch();
+    },
+    onError: (e: Error) => toast({ title: "Nem sikerült folytatni", description: e.message, variant: "destructive" }),
+    onSettled: () => { resumeLock.current = false; },
+  });
+  const startResume = (jobId: string) => {
+    if (resumeLock.current) return;
+    resumeLock.current = true;
+    resume.mutate(jobId);
+  };
 
   const blocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
   const oneStepBlocked = oneStepSubmitDisabledReason("", Number.NaN, files.length);
@@ -357,11 +378,24 @@ export function SourceUploadForm({
                     : "Tananyag készül…"}
             </p>
             <CreationProgress run={run.data} />
+            {run.data.phase === "error" && run.data.draft && (
+              <p className="text-sm text-muted-foreground" data-testid="one-step-draft">
+                Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag
+                {run.data.draft.savedBankPackets > 0 ? `, ${run.data.draft.savedBankPackets} kész gyakorlócsomag` : ""}.
+                {run.data.jobId ? " A folytatás innen halad tovább, a kész részeket nem gyártja újra." : ""}
+              </p>
+            )}
             {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 {run.data.phase === "done" && run.data.htmlFileId && (
                   <Button asChild size="sm" data-testid="one-step-open-lesson">
                     <a href={`/preview/${run.data.htmlFileId}`}>Lecke megnyitása</a>
+                  </Button>
+                )}
+                {run.data.phase === "error" && run.data.jobId && (
+                  <Button size="sm" className="min-h-11" data-testid="one-step-resume" disabled={resume.isPending}
+                    onClick={() => startResume(run.data!.jobId!)}>
+                    {resume.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a mentett részekből"}
                   </Button>
                 )}
                 {(run.data.phase === "parked" || run.data.phase === "error") && run.data.mapId && onReview && <Button variant="outline" size="sm" data-testid="one-step-review-source" onClick={() => onReview(run.data!.mapId!)}>

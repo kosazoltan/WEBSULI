@@ -44,6 +44,38 @@ test("a hibával leállt futás meglévő forrásjegyzéke is megnyitható",asyn
   await expect(page.getByTestId("one-step-review-source")).toBeVisible();
 });
 
+// Spec 2026-10-14-folytatas-mentett-reszekbol: a megállt gyártás a mentett részekből folytatható, nem kell elölről kezdeni.
+test("a hibával megállt gyártás a mentett részekből folytatható, egyetlen kéréssel",async({page})=>{
+  const errors:string[]=[];
+  page.on("pageerror",error=>errors.push(error.message));
+  await page.addInitScript(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","stopped-run"));
+  let resumed=0;
+  await page.route("**/api/csrf-token",route=>route.fulfill({json:{csrfToken:"test"}}));
+  await page.route("**/api/studio/maps",route=>route.fulfill({json:{maps:[]}}));
+  await page.route("**/api/studio/jobs/job-7/resume",async route=>{resumed++;await new Promise(r=>setTimeout(r,300));await route.fulfill({status:202,json:{jobId:"job-7"}});});
+  await page.route("**/api/studio/lessons/one-step/stopped-run",route=>route.fulfill({json:resumed
+    ?{phase:"animator",error:null,detail:"Folytatás a mentett részeredményekből.",mapId:"plant",jobId:"job-7",lessonId:"draft"}
+    :{phase:"error",error:'A(z) "animator" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([OpenAI] 500)',detail:null,mapId:"plant",jobId:"job-7",lessonId:"draft",draft:{teachingSections:12,savedBankPackets:3}}}));
+  await page.goto("/__studio-panel-probe");
+  await expect(page.getByTestId("one-step-progress")).toContainText("A gyártás megállt hibával");
+  await expect(page.getByTestId("one-step-draft")).toContainText("Mentett piszkozat: 12 fejezetnyi tananyag, 3 kész gyakorlócsomag");
+  const button=page.getByTestId("one-step-resume");
+  for (const size of [{width:360,height:800},{width:844,height:390},{width:1280,height:900}]) {
+    await page.setViewportSize(size);
+    await expect(button).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    expect(await button.evaluate(el=>el.scrollWidth>el.clientWidth+1)).toBe(false);
+    await page.screenshot({path:`tests/screenshots/generation-resume-${size.width}.png`,fullPage:true});
+  }
+  await button.click();
+  await button.click({force:true}).catch(()=>undefined);
+  await expect(page.getByTestId("one-step-progress")).toContainText("Tananyag készül");
+  expect(resumed).toBe(1);
+  await expect(page.getByTestId("one-step-resume")).toHaveCount(0);
+  await expect(page.getByTestId("one-step-draft")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test("csak a közzétett lecke kész; hálózati hiba újraellenőrizhető, újratöltés után megnyitható",async({page})=>{
   await page.addInitScript(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","finished-run"));
   let published=false;

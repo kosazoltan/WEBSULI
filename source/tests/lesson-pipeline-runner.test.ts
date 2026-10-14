@@ -15,13 +15,13 @@ import {
   type MapMeta,
   type PipelineStore,
 } from "../server/studio/step-runner";
-import { recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
+import { draftSummaryOf, recordOneStepFailure } from "../server/studio/lesson-pipeline-routes";
 import { computeStepHash, MAX_AUTHOR_ROUNDS, MAX_BANK_ONLY_ROUNDS } from "../server/studio/pipeline";
 import { buildLektorPrompt, buildPedagoguePrompt } from "../server/studio/step-io";
 import { withRoleSkill } from "../server/studio/role-skills";
 import { visualWorld } from "../shared/lesson-visuals";
 import { fromMapBody } from "../server/studio/from-map-body";
-import { AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
+import { AIProviderError, AIProviderTimeoutError, type AIMessage, type IAIProvider } from "../server/ai/AIProvider";
 import type { MapConcept } from "../server/studio/coverage";
 import { lessonSchema, type Block, type Lesson } from "../shared/lesson-schema";
 import { experienceProblems } from "../shared/lesson-experience-validation";
@@ -144,6 +144,51 @@ test("bank provider failure preserves its cause and the saved teaching without p
   assert.match(deps.store.jobs.get("bank-provider-failure")!.error!, /Request timed out after 180000ms/);
   assert.deepEqual(deps.store.jobs.get("bank-provider-failure")!.output, saved);
   assert.equal(publications, 0);
+});
+
+// Spec 2026-10-14-folytatas-mentett-reszekbol (élő hiba: job 416ad01d, [OpenAI] 500): a szolgáltatói 5xx bukott kísérlet,
+// a következő kísérlet fut — a futás nem áll meg egyetlen átmeneti szerverhibán.
+test("bank 5xx is a failed attempt: the next attempt builds the packet and the step succeeds", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture(); lesson.mapId = "m1";
+  const e = lesson.experience!;
+  deps.store.seed({ id: "bank-5xx", mapId: "m1", step: "animator", status: "pending", output: { lesson: { ...lesson, experience: undefined }, methodVersion: "fusion-7.4-4" } });
+  const models: string[] = [];
+  deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
+    chat: async () => {
+      models.push(model);
+      if (models.length === 1) throw new AIProviderError("OpenAI", "500 The server had an error processing your request.", true, Object.assign(new Error("server error"), { status: 500 }));
+      return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
+    },
+  } as unknown as IAIProvider);
+  const result = await runPipelineStep("bank-5xx", deps);
+  assert.equal(result.ok, true, JSON.stringify(deps.store.jobs.get("bank-5xx")!.error));
+  assert.equal(models.length, 2, "az 5xx után egy új kísérlet");
+  assert.ok((deps.store.jobs.get("bank-5xx")!.output as { lesson: { experience?: unknown } }).lesson.experience, "a bank elkészült");
+});
+
+test("bank resume accepts a saved, unpublished lesson stopped by an animator provider failure", async () => {
+  const deps = makeDeps("{}");
+  const error = 'A(z) "animator" lépés modellhívása hibára futott: a szolgáltató hibát jelzett ([OpenAI] 500 The server had an error processing your request.)';
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { hash: "fusion-7.4-4", parts: { done: { preserved: true } } } };
+  const visit = { step: "animator", state: "error", error: redactWorkflowError(new Error(error)) };
+  deps.store.seed({ id: "anim-provider", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 1, error, output: structuredClone(output) });
+  await retryFailedBankBuild("anim-provider", visit, deps);
+  const job = deps.store.jobs.get("anim-provider")!;
+  assert.equal(job.step, "animator"); assert.equal(job.status, "pending"); assert.equal(job.round, 1);
+  assert.deepEqual(job.output, { ...output, previousBankError: error, bankRecoveryAttempt: 1 });
+  assert.equal(deps.calls.length, 0, "a folytatás előkészítése nem hív modellt");
+  deps.store.seed({ id: "anim-published", mapId: "m1", lessonId: "draft", step: "error", status: "error", error, output: { ...structuredClone(output), htmlFileId: "published" } });
+  await assert.rejects(retryFailedBankBuild("anim-published", visit, deps), /nem publikált/);
+});
+
+test("one-step draft summary: saved unpublished teaching with its finished bank packets, nothing once published", () => {
+  const lesson = standardFusionFixture();
+  assert.deepEqual(draftSummaryOf({ lesson, experienceCheckpoint: { hash: "h", parts: { a: {}, b: {} } } }), { teachingSections: lesson.sections.length, savedBankPackets: 2 });
+  assert.deepEqual(draftSummaryOf({ lesson }), { teachingSections: lesson.sections.length, savedBankPackets: 0 });
+  assert.equal(draftSummaryOf({ lesson, htmlFileId: "published" }), null);
+  assert.equal(draftSummaryOf({ outline: {} }), null);
+  assert.equal(draftSummaryOf(null), null);
 });
 
 // Spec §7o (mérve, 4. mérés): a bank-hívás időtúllépése a modell lassúsága → a következő kísérlet/modell

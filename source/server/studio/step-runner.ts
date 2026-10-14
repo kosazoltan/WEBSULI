@@ -299,7 +299,10 @@ export async function retryFailedBankBuild(jobId: string, visit: { step: string;
   if (visit?.step !== "animator" || visit.state !== "error" || visit.error !== redactWorkflowError(new Error(job.error ?? ""))
     || job.status !== "error" || !job.lessonId || !job.output?.lesson || job.output.htmlFileId
     || !(/^A \d+\. fejezet bankcsomagja a javító kör után sem megfelelő:/.test(job.error ?? "")
-      || job.error?.startsWith('A(z) "author" lépés modellhívása hibára futott:'))) {
+      || job.error?.startsWith('A(z) "author" lépés modellhívása hibára futott:')
+      // Spec 2026-10-14-folytatas-mentett-reszekbol (élő: [OpenAI] 500 a bankon): az ábra/bank lépés szolgáltatói hibája is
+      // folytatható — a mentett lecke, a kész bankcsomagok (experienceCheckpoint) és a modellhívás-napló megmarad.
+      || job.error?.startsWith('A(z) "animator" lépés modellhívása hibára futott:'))) {
     throw new Error("Csak naplóval igazolt, mentett és még nem publikált bankgyártási hiba folytatható.");
   }
   const priorAttempt = job.output.bankRecoveryAttempt;
