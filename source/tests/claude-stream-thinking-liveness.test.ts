@@ -71,6 +71,26 @@ test("A4: a valódi elakadás védett — gondolkodás-kezdet után csak ping (a
   });
 });
 
+test("review #212: ismételt ÜRES szövegblokk-kezdet/-vég (nem gondolkodás) nem tartja életben az elakadt streamet", async (t) => {
+  // 10 × 30 ms üres blokk ≈ 300 ms: ha a blokk-vég életjel volna, a hiba csak ezután (+80 ms) jönne; helyesen ~80 ms után jön.
+  const emptyText = (i: number) => [30, ev("content_block_start", { index: i, content_block: { type: "text", text: "" } }), ev("content_block_stop", { index: i })];
+  mockClaude(t, [start, ...Array.from({ length: 10 }, (_, i) => emptyText(i)).flat()], { stall: true });
+  const p = new ClaudeProvider({ apiKey: "test-placeholder", model: "claude-opus-5-5", maxTokens: 1000 });
+  const t0 = Date.now();
+  await assert.rejects(p.chat(msgs, undefined, { stream: { idleMs: 80 } }), (e: unknown) => e instanceof AIProviderIdleTimeoutError);
+  assert.ok(Date.now() - t0 < 250, `a nem-gondolkodási blokk-vég nem életjel (eltelt: ${Date.now() - t0} ms)`);
+});
+
+test("review #212: a Haiku 5.5 és a Mythos 5 effort nélkül is summarized gondolkodást kér", async (t) => {
+  for (const model of ["claude-haiku-5-5", "claude-mythos-5-1"]) {
+    const bodies = mockClaude(t, [start, ...textTail]);
+    const p = new ClaudeProvider({ apiKey: "test-placeholder", model, maxTokens: 1000 });
+    await p.chat(msgs, undefined, { stream: { idleMs: 500 } });
+    assert.deepEqual(bodies.at(-1)?.thinking, { type: "adaptive", display: "summarized" }, model);
+    t.mock.restoreAll();
+  }
+});
+
 test("A4: teljesen néma stream a kezdés után → tétlenségi hiba", async (t) => {
   mockClaude(t, [start], { stall: true });
   const p = new ClaudeProvider({ apiKey: "test-placeholder", model: "claude-opus-5-5", maxTokens: 1000 });

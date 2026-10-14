@@ -5,7 +5,9 @@ Dátum: 2026-10-14 · Hatókör: `source/server/ai/ClaudeProvider.ts` (streamelt
 ## Mért hiba
 
 Offline próbafuttatás (`source/scripts/measure/lesson-trial.mts`, élő Anthropic API, 2026-10-14): a szerző lépés
-(`claude-opus-5-5`, streamelve) kétszer bukott ~170 s után:
+(`claude-opus-5-5`, streamelve) 169–195 s után bukott — review #212 szerint pontosítva, a próbaharness ok-láncot naplózó
+futásaiból: két próbafutásban négy hívás (baseline2: Időszámítás 169 s, Hunyadi 171 s; s2b: Időszámítás 195 s, Egyiptom 187 s),
+mindegyik `AIProviderIdleTimeoutError … 120000ms` (egy korábbi futás négy bukása ok-lánc nélkül, ezért abból nem állítunk okot):
 
 ```
 StepModelError "author" ... a szolgáltató hibát jelzett ← AIProviderIdleTimeoutError [Claude] No stream data for 120000ms (idle timeout)
