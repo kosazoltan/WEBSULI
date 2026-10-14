@@ -204,13 +204,32 @@ export function scopeRequestParams(model: string, parts: ScopeContentPart[], eff
  */
 export async function callScopeModel(files: ExtractorFile[], model: string, effort: OcrEffort = SCOPE_EFFORT): Promise<string> {
   const parts = await scopeContentParts(files);
+  // Review #218: a kimeneti hiba (csonka, JSON nélküli, tantárgy/osztály nélküli válasz) is a tartalék-határon BELÜL — különben a
+  // tartalék el sem indulna, és az `inferScope` utólag utasítaná el a választ.
+  const attempt = async (m: string, e: OcrEffort) => {
+    const answer = await callScopeVendor(parts, m, e);
+    if (!scopeAnswerUsable(answer)) throw new Error(`A(z) ${m} tantárgy-felismerési válasza nem használható (nincs tantárgy/osztály JSON).`);
+    return answer;
+  };
   try {
-    return await callScopeVendor(parts, model, effort);
+    return await attempt(model, effort);
   } catch (error) {
     const fallback = crossFamilyFallback(model);
     if (!fallback || !studioModelReady(fallback)) throw error;
     logger.warn(`[STUDIO] Tantárgy-felismerés (${model}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
-    return callScopeVendor(parts, fallback, CROSS_FAMILY_FALLBACK_EFFORT);
+    return attempt(fallback, CROSS_FAMILY_FALLBACK_EFFORT);
+  }
+}
+
+/** Review #218: ugyanaz a minimum, amit az `inferScope` megkövetel — JSON, nem üres tantárgy, szám osztály. */
+export function scopeAnswerUsable(answer: string): boolean {
+  const match = answer.match(/\{[\s\S]*\}/);
+  if (!match) return false;
+  try {
+    const parsed = JSON.parse(match[0]) as { subject?: unknown; classroom?: unknown };
+    return typeof parsed.subject === "string" && parsed.subject.trim() !== "" && typeof parsed.classroom === "number" && Number.isFinite(parsed.classroom);
+  } catch {
+    return false;
   }
 }
 
@@ -230,7 +249,9 @@ async function callScopeVendor(parts: ScopeContentPart[], model: string, effort:
     const response = await client.chat.completions.create(
       request as unknown as Parameters<typeof client.chat.completions.create>[0],
     );
-    if ("choices" in response) return response.choices[0]?.message?.content ?? "";
-    return "";
+    if (!("choices" in response)) return "";
+    // Review #218: a csonka válasz kimeneti hiba (a tartalék-határon belül kezelve).
+    if (response.choices[0]?.finish_reason === "length") throw new Error(`A(z) ${model} tantárgy-felismerési válasza elérte a hosszkorlátot.`);
+    return response.choices[0]?.message?.content ?? "";
   });
 }

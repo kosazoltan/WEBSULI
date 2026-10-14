@@ -293,23 +293,30 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         { role: "user" as const, content: user },
       ];
       const chatOptions = cachePrefixChars > 0 ? { cachePrefixChars } : undefined;
-      // Spec 2026-10-14-tartalek-b-szelet (B2): az elsődleges szolgáltatói hibájánál egyszer az ellentétes családú tartalék (medium).
-      let response: Awaited<ReturnType<ReturnType<typeof createStudioProvider>["chat"]>>;
+      // Spec 2026-10-14-tartalek-b-szelet (B2) + review #218: próbálkozásonként a hosszkorlát, a JSON és a minimális alak (cím,
+      // fogalomlista) is ellenőrzött — a szolgáltatói ÉS a kimeneti hiba is egyszer az ellentétes családú tartalékot indítja (medium).
+      const attempt = async (m: string, options: Parameters<typeof createStudioProvider>[3] = {}) => {
+        const response = await createStudioProvider(m, 180_000, 12_000, options).chat(messages, controller.signal, chatOptions);
+        await workflowUsage(response.usage);
+        if (response.finishReason === "length" || response.finishReason === "max_tokens") {
+          throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
+        }
+        let parsed: { title?: unknown; concepts?: unknown };
+        try { parsed = JSON.parse(stripJsonFences(response.content ?? "").trim()); }
+        catch { throw new WebResearchFailure("A forrásjegyzék nem érvényes JSON. A tananyag nem írható."); }
+        if (typeof parsed?.title !== "string" || !parsed.title || !Array.isArray(parsed.concepts)) {
+          throw new WebResearchFailure("A forrásjegyzékből hiányzik a cím vagy a fogalomlista. A tananyag nem írható.");
+        }
+        return parsed as unknown;
+      };
       try {
-        response = await createStudioProvider(extractModel, 180_000, 12_000).chat(messages, controller.signal, chatOptions);
+        return await attempt(extractModel);
       } catch (error) {
         const fallback = crossFamilyFallback(extractModel);
         if (controller.signal.aborted || !fallback || !studioModelReady(fallback)) throw error;
         logger.warn(`[WEB-RESEARCH] A kivonatoló (${extractModel}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
-        response = await createStudioProvider(fallback, 180_000, 12_000, crossFamilyFallbackOptions(fallback, true)).chat(messages, controller.signal, chatOptions);
+        return attempt(fallback, crossFamilyFallbackOptions(fallback, true));
       }
-      await workflowUsage(response.usage);
-      if (response.finishReason === "length" || response.finishReason === "max_tokens") {
-        throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
-      }
-      const text = stripJsonFences(response.content ?? "").trim();
-      try { return JSON.parse(text) as unknown; }
-      catch { throw new WebResearchFailure("A forrásjegyzék nem érvényes JSON. A tananyag nem írható."); }
     }));
     const taught = teachableConcepts(extraction.concepts);
     if (!taught.length) throw new WebResearchFailure("A letöltött szövegekből nem készült idézetellenőrzött fogalomjegyzék. A tananyag nem írható.");

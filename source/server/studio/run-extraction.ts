@@ -186,17 +186,22 @@ async function callExtractorModel(
   const callVendor = (m: string, effort?: "medium") => providerForModel(m) === "anthropic"
     ? callClaudeParts({ model: m, system: systemPrompt, parts: content, maxTokens: EXTRACTION_TOKEN_BUDGETS[1] + 8_192, timeoutMs: 300_000, ...(effort ? { effort } : {}) })
     : callOpenAi(m, effort);
-  let text: string;
+  // Review #218: a parse és az alakellenőrzés próbálkozásonként, a tartalék-határon BELÜL — hibás JSON vagy fogalomlista nélküli
+  // elsődleges válasz is tartalékot indít.
+  const attempt = async (m: string, effort?: "medium") => {
+    const result = JSON.parse(stripJsonFences(await callVendor(m, effort)) || "{}") as { title?: unknown; concepts?: unknown };
+    if (!Array.isArray(result.concepts)) throw new Error("A forrásfeldolgozás nem adott fogalomlistát.");
+    return result as { title?: unknown; concepts: unknown[] };
+  };
+  let parsed: { title?: unknown; concepts: unknown[] };
   try {
-    text = await callVendor(model);
+    parsed = await attempt(model);
   } catch (error) {
     const fallback = crossFamilyFallback(model);
     if (!fallback || !studioModelReady(fallback)) throw error;
     logger.warn(`[STUDIO] Kivonatoló (${model}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
-    text = await callVendor(fallback, CROSS_FAMILY_FALLBACK_EFFORT);
+    parsed = await attempt(fallback, CROSS_FAMILY_FALLBACK_EFFORT);
   }
-  const parsed = JSON.parse(stripJsonFences(text) || "{}");
-  if (!Array.isArray(parsed.concepts)) throw new Error("A forrásfeldolgozás nem adott fogalomlistát.");
   return {
     title: typeof parsed.title === "string" ? parsed.title : "",
     concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [],

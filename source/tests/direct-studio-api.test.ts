@@ -11,13 +11,16 @@ test("OCR and scope use the selected vendor even when router credentials exist",
   const calls: { url: string; body: Record<string, unknown> }[] = [];
   t.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
-    return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "ok" } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    // Spec-változás 2026-10-14 (review #218): a scope-válasznak használhatónak kell lennie (tantárgy + osztály JSON) — a stub a
+    // scope-hívásra (xAI) valódi alakú választ ad; a teszt mércéje, a gyártó szerinti útválasztás, változatlan.
+    const content = new URL(String(url)).hostname === "api.x.ai" ? '{"subject":"Matematika","classroom":5}' : "ok";
+    return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
   });
   try {
     for (const name of names) process.env[name] = "test-placeholder";
     const file = { kind: "image" as const, name: "test.png", content: "data:image/png;base64,AA==" };
     assert.equal(await callOcrModel(file, "openai/gpt-5.6-terra"), "ok");
-    assert.equal(await callScopeModel([file], "x-ai/grok-4.6"), "ok");
+    assert.equal(await callScopeModel([file], "x-ai/grok-4.6"), '{"subject":"Matematika","classroom":5}');
     assert.equal(new URL(calls[0].url).hostname, "api.openai.com");
     assert.equal(new URL(calls[1].url).hostname, "api.x.ai");
     assert.equal(calls[0].body.model, "gpt-5.6-terra");

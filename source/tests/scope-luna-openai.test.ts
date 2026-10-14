@@ -26,7 +26,9 @@ test("E1/E2: a scope-kérés közvetlen OpenAI, high effort, ≥ 8000 keret, Ope
   const calls: { url: string; body: Record<string, unknown> }[] = [];
   t.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
-    return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "{}" } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    // Spec-változás 2026-10-14 (review #218): a scope-válasz használhatósága a tartalék-határon belül ellenőrzött — a stub valódi
+    // alakú választ ad (a teszt mércéje, a kérés alakja, változatlan).
+    return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: '{"subject":"Matematika","classroom":6}' } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
   });
   try {
     process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "test-placeholder";
