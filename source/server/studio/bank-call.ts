@@ -1,5 +1,5 @@
 import { AIProviderError, AIProviderTimeoutError, type IAIProvider, type ResponseFormatJsonSchema } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, FALLBACK_MODELS, providerForModel, resolveStudioModel } from "../ai/models";
+import { BANK_RESCUE_MODEL, fallbackModelFor, providerForModel, resolveStudioModel } from "../ai/models";
 import { PACKET_ATTEMPTS, RetryableBankCallError } from "./experience-builder";
 import { callStepModel, StepModelError, type StepCallResult } from "./run-step";
 
@@ -15,7 +15,7 @@ import { callStepModel, StepModelError, type StepCallResult } from "./run-step";
  */
 export function bankModelForAttempt(attempt: number): string {
   return attempt >= PACKET_ATTEMPTS ? BANK_RESCUE_MODEL
-    : attempt === PACKET_ATTEMPTS - 1 ? (FALLBACK_MODELS.bank ?? resolveStudioModel("bank"))
+    : attempt === PACKET_ATTEMPTS - 1 ? (fallbackModelFor("bank") ?? resolveStudioModel("bank"))
     : resolveStudioModel("bank");
 }
 

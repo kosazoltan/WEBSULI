@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, FALLBACK_MODELS, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, createStudioStepProvider, crossFamilyFallbackOptions, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
@@ -252,7 +252,9 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     throw new WebResearchFailure("A Studio kivonatoló vagy szerző modell API-kulcsa nincs beállítva.");
   }
   // Spec 2026-09-29 (PR #131 review, R1): the rollback HTML path also uses the author's fallback when its key is set.
-  const authorFallback = FALLBACK_MODELS.author && studioModelReady(FALLBACK_MODELS.author) ? FALLBACK_MODELS.author : undefined;
+  // Review #216: a tartalék a tényleges (env-vel felülírható) szerző-elsődlegesből képzett ellentétes család.
+  const webAuthorFallback = fallbackModelFor("author");
+  const authorFallback = webAuthorFallback && studioModelReady(webAuthorFallback) ? webAuthorFallback : undefined;
   // Spec 2026-09-25: the bank runs on the bank role — a missing key is reported before any paid call.
   const bankModel = resolveStudioModel("bank");
   if (!studioModelReady(bankModel)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(bankModel)}).`);
@@ -371,8 +373,9 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       }
     });
     html = authored.html;
-    // A tartalmi javító (`callTeachingRepair`) a szerző elsődleges modelljén foltoz — ő is szerzőnek számít a lektor-láncban.
-    const webAuthorModels = [...new Set([authored.authorModel, resolveStudioModel("author")])];
+    // Review #216: kezdetben csak a HTML szerzője; a tartalmi javító (`callTeachingRepair`) csak TÉNYLEGESEN alkalmazott folt
+    // után számít szerzőnek (`reviewAndRepairWebTeaching` bővíti a listát).
+    const webAuthorModels = [authored.authorModel];
     await onCandidate?.(html, { stopReason: "end_turn", elapsedMs: Date.now() - startedAt });
 
     restartPhaseTimer();

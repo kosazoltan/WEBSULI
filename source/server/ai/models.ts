@@ -179,6 +179,19 @@ export function isCrossFamilyFallbackModel(model: string): boolean {
   return Object.values(CROSS_FAMILY_FALLBACK).includes(model);
 }
 /**
+ * Review #216: a lépés TÉNYLEGES (env-vel felülírható) elsődlegeséből képzett tartalék — OpenAI/Anthropic elsődlegesnél az
+ * ellentétes család, más családnál a `FALLBACK_MODELS` tábla (a korábbi útvonal). Így `STUDIO_MODEL_PEDAGOGUE=gpt-6-luna`
+ * mellett a tartalék Opus 5.5, nem ugyanaz a család.
+ */
+export function fallbackModelFor(
+  step: StudioStep,
+  env: EnvLike = process.env,
+  table: Partial<Record<StudioStep, string>> = FALLBACK_MODELS,
+): string | undefined {
+  return crossFamilyFallback(resolveStudioModel(step, env)) ?? table[step];
+}
+
+/**
  * Tulajdonosi döntés 2026-10-14: ha a leckébe GPT (a szerző tartaléka) írt, a lektor harmadik családra vált — Qwen 3.8 Max 0902,
  * OpenRouteren, high efforttal (`MODEL_REASONING_EFFORT`). Az OpenRouter /models listáján ellenőrizve 2026-10-14.
  */
@@ -439,9 +452,10 @@ export function lektorChainFor(
   const authors = authorModels?.length ? authorModels : [resolveStudioModel("author", env)];
   const authorFamilies = new Set(authors.map(modelFamily));
   const primary = resolveStudioModel("lektor", env);
+  const fallback = fallbackModelFor("lektor", env, fallbacks);
   const ordered = authorFamilies.has("openai")
-    ? [LEKTOR_THIRD_FAMILY_MODEL, primary, fallbacks.lektor]
-    : [primary, fallbacks.lektor, LEKTOR_THIRD_FAMILY_MODEL];
+    ? [LEKTOR_THIRD_FAMILY_MODEL, primary, fallback]
+    : [primary, fallback, LEKTOR_THIRD_FAMILY_MODEL];
   return [...new Set(ordered.filter((m): m is string => !!m && !authorFamilies.has(modelFamily(m))))];
 }
 
@@ -468,7 +482,7 @@ export function assertDistinctFamilies(
         `Set STUDIO_MODEL_LEKTOR or STUDIO_MODEL_AUTHOR to fix.`,
     );
   }
-  const candidates = [author, fallbacks.author].filter((m): m is string => !!m);
+  const candidates = [author, fallbackModelFor("author", env, fallbacks)].filter((m): m is string => !!m);
   for (const authors of [[author], ...(candidates.length > 1 ? [[candidates[1]], candidates] : [])]) {
     if (lektorChainFor(authors, env, fallbacks).length === 0) {
       throw new Error(

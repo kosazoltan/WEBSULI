@@ -2184,6 +2184,26 @@ test("review R4: telepítés előtti (skill-7.4-review-1) lektor-bizonyítékkal
 /* Spec 2026-09-29 (docs/specs/2026-09-29-szerzomodell-gpt6-luna.md, tulajdonosi döntés): a szerző elsődleges
  * modellje GPT-6 Luna, tartaléka GPT-5.6 Terra. Élesben mérve: egyetlen érvénytelen szerzői JSON az egész
  * gyártást leállította, mert a szerzőnek nem volt tartaléka. */
+// Review #216: ha a tartalék válaszolt, a lépés további (séma-javító) újrakérése is tartalékhívás — medium effort.
+test("review #216: a szerző-tartalék séma-javító újrakérése is { fallback: true }-val megy", async () => {
+  const base = makeDeps(CANNED_AUTHOR);
+  const seen: Array<[string, boolean | undefined]> = [];
+  let solCalls = 0;
+  const providerFactory = (model: string, _step?: string, opts?: { fallback?: boolean }): IAIProvider => ({
+    name: "stub", model, isAvailable: async () => true,
+    chat: async () => {
+      seen.push([model, opts?.fallback]);
+      if (model === "claude-opus-5-5") throw new Error("[Claude] 529 overloaded");
+      solCalls += 1;
+      return { content: solCalls === 1 ? '{"title":"csak cím"}' : CANNED_AUTHOR, finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+    },
+  } as unknown as IAIProvider);
+  base.store.seed({ id: "author-fallback-retry", mapId: "m1", step: "author", status: "running", output: { approvedOutline: GOOD_OUTLINE } });
+  const outcome = await runPipelineStep("author-fallback-retry", { ...base, providerFactory });
+  assert.equal(outcome.ok, true, JSON.stringify(outcome));
+  assert.deepEqual(seen, [["claude-opus-5-5", undefined], ["gpt-6.1-sol", true], ["gpt-6.1-sol", true]]);
+});
+
 test("spec 2026-09-29: author — GPT-6 Luna elsődleges; érvénytelen JSON után a GPT-5.6 Terra tartalék írja meg", async () => {
   // Spec-változás 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md): szerző Claude Opus 5.5, tartaléka GPT-6.1 Sol (medium,
   // `{ fallback: true }`) — a tartalék-viselkedés mércéje változatlan; a lecke tényleges szerzője a jobban marad (authorModels).

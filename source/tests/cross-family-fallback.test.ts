@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createStudioStepProvider, crossFamilyFallbackOptions } from "../server/ai/studio-provider";
 import { ClaudeProvider } from "../server/ai/ClaudeProvider";
 import { OpenRouterProvider } from "../server/ai/OpenRouterProvider";
-import { CROSS_FAMILY_FALLBACK, crossFamilyFallback, FALLBACK_MODELS, LEKTOR_THIRD_FAMILY_MODEL, MODEL_REASONING_EFFORT, maxOutputForModel } from "../server/ai/models";
+import { CROSS_FAMILY_FALLBACK, crossFamilyFallback, FALLBACK_MODELS, fallbackModelFor, LEKTOR_THIRD_FAMILY_MODEL, lektorChainFor, MODEL_REASONING_EFFORT, maxOutputForModel } from "../server/ai/models";
 import { callStepModel } from "../server/studio/run-step";
 
 /*
@@ -115,4 +115,13 @@ test("webes lektor-lánc: Claude-szerzőnél Sol → (500) → Qwen; vegyes (Cla
   assert.deepEqual(await callTeachingReviewer("S", "U", undefined, ["gpt-6.1-sol", "claude-opus-5-5"]), { checks: [] });
   assert.equal(urls.length, 1, "vegyes szerzőségnél csak a harmadik család lektorál");
   assert.match(urls[0], /openrouter\.ai/);
+});
+
+test("review #216: a tartalék a TÉNYLEGES (env-vel felülírt) elsődlegesből képződik; más családnál a tábla marad", () => {
+  assert.equal(fallbackModelFor("pedagogue", {}), "gpt-6.1-sol");
+  assert.equal(fallbackModelFor("pedagogue", { STUDIO_MODEL_PEDAGOGUE: "gpt-6-luna" }), "claude-opus-5-5");
+  assert.equal(fallbackModelFor("bank", { STUDIO_MODEL_BANK: "claude-opus-5" }), "gpt-6.1-sol");
+  assert.equal(fallbackModelFor("gateHelper", {}), FALLBACK_MODELS.gateHelper, "deepseek elsődleges: a korábbi útvonal");
+  // Claude-ra felülírt lektor: a tartaléka GPT; GPT-szerzőnél a lánc kiszűri.
+  assert.deepEqual(lektorChainFor(["gpt-6.1-sol"], { STUDIO_MODEL_LEKTOR: "claude-opus-5" }), ["qwen/qwen3.8-max-0902", "claude-opus-5"]);
 });

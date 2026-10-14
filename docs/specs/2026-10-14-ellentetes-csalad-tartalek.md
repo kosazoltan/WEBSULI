@@ -88,3 +88,12 @@ Végrehajtás: `docs/specs/2026-10-14-ellentetes-csalad-tartalek-vegrehajtas.md`
   spec-változás szerint frissülnek (lista a végrehajtási dokumentumban).
 - **E5** Élő próbahívás (kis, csak olvasó, nem éles adat): `gpt-6.1-sol` chat úton `reasoning_effort: "medium"` + JSON-mód →
   200; `qwen/qwen3.8-max-0902` `reasoning.effort: "high"` → 200.
+  - Állapot (2026-10-14): `gpt-6.1-sol` medium + JSON → 200 (3,7 s); `claude-opus-5-5` bank-tartalék és lektor medium → 200.
+    **A Qwen-próba NYITOTT (NOT RUN):** a fejlesztőgépen nincs OpenRouter-kulcs (a Renderen van). A modell az OpenRouter
+    `/models` és `/endpoints` listáján igazolt. Teljesítése a tulajdonos döntése: Render-oldali próba, vagy a feltétel módosítása.
+
+## Review #216 javítások
+- A tartalék a lépés TÉNYLEGES (env-vel felülírt) elsődlegeséből képződik (`fallbackModelFor`); más családnál a tábla marad.
+- A tartalékállapot a lépés minden további újrakérésére (séma-, folt-, orkesztrált javítás) érvényes (`fallbackOpts`).
+- A forrás-hivatkozást átíró szövegjavító (`TEXT_FIX_MODEL`) elfogadott átírása után ő is szerző (`authorModels`).
+- Webes út: a tartalmi javító (`callTeachingRepair`) csak TÉNYLEGESEN alkalmazott folt után számít szerzőnek.
