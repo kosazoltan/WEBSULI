@@ -215,7 +215,7 @@ Minden forrásfeladatot magam oldottam meg? Bejártam mindent, a középsőket i
  */
 export const TOOL_SKILLS = {
   "outline-autofix": `### Eszköz: outline-autofix (a tervkészítő válasza után, kódból)
-Mit javít: ismeretlen/ismétlődő fogalom-azonosító elhagyása; csak-ismeretlen fejezet törlése; ismétlődő cím egyértelműsítése „(2)"-vel; ábra-javaslat 120 karakterre vágva; 12 feletti fejezetek az utolsóba olvasztva; ismeretlen fogalmú tévhit elhagyva.
+Mit javít: ismeretlen/ismétlődő fogalom-azonosító elhagyása; csak-ismeretlen fejezet törlése; ismétlődő cím egyértelműsítése „(2)"-vel; ábra-javaslat 120 karakterre vágva; a terjedelmi keret fejezetszáma feletti fejezetek (kb. 3 tanítandó fogalom / fejezet, legfeljebb 12 — shared/lesson-length.ts) az utolsóba olvasztva; ismeretlen fogalmú tévhit elhagyva.
 Mit NEM javít: hiányzó core-fogalom (fedettségi hiba → új terv kell), üres terv, rossz tanítási sorrend.
 Futtatás: automatikus a pedagógus lépésben; kézzel \`npm run studio:tool -- outline-autofix <vazlat.json> <terkep.json>\`.`,
   "bank-packet-autofix": `### Eszköz: bank-packet-autofix (minden bankcsomag-válasz után, a séma előtt, kódból)
