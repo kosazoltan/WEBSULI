@@ -61,3 +61,25 @@ test("verify: a problémalista magyarul nevezi meg az összes hibát", () => {
   assert.equal(out.ok, false);
   assert.ok(out.problems.length >= 2, "several problems named");
 });
+
+test("verify (v7.5): console.log a scriptben elutasítva", () => {
+  const out = verifyImprovedHtml(GOOD.replace("window.fo_showTab=", "console.log('debug');window.fo_showTab="));
+  assert.equal(out.ok, false);
+  assert.match(out.problems.join("; "), /console/);
+});
+
+test("verify (v7.5): debugger utasítás elutasítva", () => {
+  const out = verifyImprovedHtml(GOOD.replace("window.fo_showTab=", "debugger;window.fo_showTab="));
+  assert.equal(out.ok, false);
+  assert.match(out.problems.join("; "), /debugger/);
+});
+
+test("verify (v7.5): console szó string-literálban nem álpozitív", () => {
+  const out = verifyImprovedHtml(GOOD.replace("window.fo_showTab=", "var s='console.log mintapelda';window.fo_showTab="));
+  assert.equal(out.ok, true, out.problems.join("; "));
+});
+
+test("verify (v7.5): <pre> kódpélda a szövegben nem álpozitív", () => {
+  const out = verifyImprovedHtml(GOOD.replace("<textarea></textarea>", "<pre>console.log(1)</pre><textarea></textarea>"));
+  assert.equal(out.ok, true, out.problems.join("; "));
+});

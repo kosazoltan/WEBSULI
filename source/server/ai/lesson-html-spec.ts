@@ -443,8 +443,9 @@ A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" con
 - IIFE wrapper: (function(){ 'use strict'; ... })(); az onclick-ből hívott függvények window-ra exportálva (window.PREFIX_showTab = function(id){...}).
 - ES5-kompatibilis JS (var, hagyományos függvények, nincs arrow function / template literal a kritikus utakon).
 - CSS prefix minden osztálynéven, kivétel nélkül. Reset: * { box-sizing:border-box; margin:0; padding:0 }.
-- Reszponzív 320–2560px: clamp() betűméret, @media 480px és 1400px, 0 vízszintes túlcsordulás. Sticky tab-nav (position:sticky; top:0; z-index:100), min. 44px magas gombok.
-- TILOS: alert()/confirm()/prompt() (csak HTML modal, callback-mintával); inline JSON onclick-ben (globális változó + addEventListener); rejtett kötelező tanítás; smart/tipográfiai idézőjel („") és cirill karakter a JS-ben; emoji-képkártya tartalomként.
+- Reszponzív 320–2560px: clamp() betűméret, 0 vízszintes túlcsordulás. Sticky tab-nav (position:sticky; top:0; z-index:100), min. 44px magas gombok.
+- ASZTALI ELRENDEZÉS KÖTELEZŐ (v7.5) — széles monitoron TILOS a keskeny mobil-oszlop: fő konténer max-width ≥ 1800px, oldalmargó clamp(16px,2.6vw,72px); bekezdés max-width:90ch; ábra max-width kb. 920px. ≥1200px: a Tananyag lapon bal oldali sticky tartalomjegyzék + tartalom (grid), a Módszerek kártyái, a Feladatok és a Kvíz kártyái 2 oszlopban (grid minmax(0,1fr)). ≥1500px: a Tananyag fejezetkártyái column-count:2, a címek/ábrák/rácsok/összefoglalók column-span:all, a bekezdések break-inside:avoid. ≥2000px: Módszerek/Feladatok/Kvíz 3 oszlop. ≤520px: egysoros tabsáv, teljes szélességű gombok.
+- TILOS: console.* hívás és debugger a kiadott HTML-ben (nulla darab); alert()/confirm()/prompt() (csak HTML modal, callback-mintával); inline JSON onclick-ben (globális változó + addEventListener); rejtett kötelező tanítás; smart/tipográfiai idézőjel („") és cirill karakter a JS-ben; emoji-képkártya tartalomként.
 - Konfirmációs HTML modal minden kiértékelés és újragenerálás előtt.
 
 ## KIMENET-TAKARÉKOSSÁG (a teljes anyag egy válaszban elférjen)
@@ -461,7 +462,7 @@ A <head> elején: <meta charset="utf-8"> és <meta http-equiv="Content-Type" con
 
 ## ÖNELLENŐRZÉS A HTML LEZÁRÁSA ELŐTT
 - 4 oldal, témához illő kognitív elemek, dragdrop touch + ujjkövetés, feladatok az 1. oldalból, háromrétegű motor + háromállapotú kimenet + mintaválasz gomb, Újragenerálás TETEJÉN / Kiértékelés ALJÁN, fél pontok, fogalomfedő kvízbank és bankPlan szerinti kör.
-- Nincs alert/confirm/prompt, a tanítás teljes áttekintése elérhető, minden interaktív elem 44px, prefix mindenhol, IIFE + 'use strict'.
+- Nincs alert/confirm/prompt, nincs console.*/debugger, asztalon (≥1200px) többoszlopos, nem keskeny az elrendezés, a tanítás teljes áttekintése elérhető, minden interaktív elem 44px, prefix mindenhol, IIFE + 'use strict'.
 - Kizárólag a három engedélyezett, helyben kiszolgált font, UTF-8 és lang="hu"; tényleges ő/Ő/ű/Ű renderpróba.
 - A dokumentum <!DOCTYPE html>-lel kezdődik és </html>-lel zárul, a <script> blokkok lezártak.`;
 

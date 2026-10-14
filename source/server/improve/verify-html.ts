@@ -72,6 +72,16 @@ export function verifyImprovedHtml(html: string): HtmlVerification {
     problems.push("Natív alert()/confirm()/prompt() maradt a kódban — HTML modal kötelező.");
   }
 
+  // 5. Debug-kód tilos (v7.5, tulajdonosi utasítás 2026-10-14): console.* és debugger
+  //    csak a futtatható script-blokkokban számít — <pre> kódpélda vagy string-literál nem.
+  const runnableJs = scripts
+    .filter((block) => !/type\s*=\s*["'](?:application\/(?:ld\+)?json|importmap)["']/i.test(block.slice(0, block.indexOf(">") + 1)))
+    .map((block) => stripStrings(block.replace(/<\/?script[^>]*>/gi, "")))
+    .join("\n");
+  if (/\bconsole\s*\.\s*[A-Za-z_$]/.test(runnableJs) || /\bdebugger\b/.test(runnableJs)) {
+    problems.push("Debug-kód (console.* / debugger) maradt a tananyag JavaScriptjében — a kiadott HTML-ben tilos (v7.5).");
+  }
+
   return { ok: problems.length === 0, problems };
 }
 
