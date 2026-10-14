@@ -1,4 +1,6 @@
 import { withQuotaFailover, studioConnection } from "../ai/studio-provider";
+import { SCOPE_EFFORT, type OcrEffort } from "../ai/models";
+import { ocrVendorRequest } from "./ocr";
 import { withSupportSkill } from "./support-skills";
 import { workflowSkillPrompt } from "../workflows/engine";
 /**
@@ -179,29 +181,31 @@ export async function scopeContentParts(
  * pontosan itt volt: a glm-flash osztálynál a reasoning kötelező, és a szűk
  * (300) token-keretet teljesen elette (finish=length, content=null). Mérve:
  * effort:low + 2000 keret mellett a válasz stabilan megjön.
+ * Spec 2026-10-14 (gpt-6-luna, high): a kimenet max 2448 token volt, ezért a low-nál mélyebb effort 8000-es keretet kap.
  */
-export function scopeRequestParams(model: string, parts: ScopeContentPart[]) {
+export function scopeRequestParams(model: string, parts: ScopeContentPart[], effort: OcrEffort = "low") {
   return {
     model,
     messages: [
       { role: "system" as const, content: withSupportSkill("scope", SCOPE_PROMPT) + workflowSkillPrompt("scope") },
       { role: "user" as const, content: parts },
     ],
-    max_completion_tokens: 2000,
-    reasoning: { effort: "low" as const },
+    max_completion_tokens: effort === "low" ? 2000 : 8000,
+    reasoning: { effort },
   };
 }
 
-/** Default scope model call: one cheap vision call over all sources. */
-export async function callScopeModel(files: ExtractorFile[], model: string): Promise<string> {
+/** Default scope model call: one vision call over all sources (the `scope` step model, spec 2026-10-14). */
+export async function callScopeModel(files: ExtractorFile[], model: string, effort: OcrEffort = SCOPE_EFFORT): Promise<string> {
   const OpenAI = (await import("openai")).default;
   const parts = await scopeContentParts(files);
   // Spec 2026-10-01-gyokerok-egyben (2.3): kimerült OpenAI-keretnél ugyanaz a modell az OpenRouteren át.
   return withQuotaFailover(studioConnection(model), async (connection) => {
+    // high effortnál a mért p95 19 s, max 28 s — a 120 s-os határ marad.
     const client = new OpenAI({ baseURL: connection.baseURL, apiKey: connection.apiKey, timeout: 120000, maxRetries: 1 });
-    const params = scopeRequestParams(connection.model, parts);
-    const request = connection.vendor === "openrouter" ? params : (({ reasoning: _reasoning, ...rest }) => rest)(params);
-    // The reasoning extension is only sent to OpenRouter.
+    const params = scopeRequestParams(connection.model, parts, effort);
+    // OpenRouter: `reasoning`; közvetlen OpenAI: `reasoning_effort` (nélküle az alap effort viszi a keretet); más: egyik sem.
+    const request = ocrVendorRequest(connection.vendor, params);
     const response = await client.chat.completions.create(
       request as unknown as Parameters<typeof client.chat.completions.create>[0],
     );

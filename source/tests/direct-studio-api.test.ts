@@ -64,6 +64,8 @@ test("spec 2026-09-19: cheap OpenRouter helpers, no GLM in the legacy routes, in
   // The OCR measurement (#190) still rules GLM out of the legacy/admin routes.
   assert.doesNotMatch(JSON.stringify(LEGACY_MODELS), /glm/i);
   assert.equal(map.ocr, "qwen/qwen3-vl-32b-instruct");
+  // Spec 2026-10-14-forras-besorolo-openai-luna: a tantárgy/évfolyam-felismerés saját lépés, közvetlen OpenAI.
+  assert.equal(map.scope, "gpt-6-luna");
   // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md, tulajdonosi döntés): szerző Claude Opus 5.5, tartaléka Qwen 3.8 max-prime; lektor
   // GPT-6.1 Sol, tartaléka GPT-5.6 Terra. A cél változatlan: a szerző egyik modellje sem eshet a lektor egyik modelljének
   // családjába (D1-független lektor).

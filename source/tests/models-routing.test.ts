@@ -35,6 +35,8 @@ test("every studio step has a default model", () => {
       // Spec-változás 2026-09-24 (tulajdonosi döntés, docs/specs/2026-09-24-magyarazo-abrak.md): ábrák Claude Opus 5.5-ön.
       // Spec-változás 2026-09-24 (docs/specs/2026-09-24-bankmodell-valasztas.md): a bank gpt-5.6-luna → openai.
       animator: "anthropic", bank: "openai", lektor: "openai", gateHelper: "openrouter", quizPolish: "openrouter",
+      // Spec 2026-10-14-forras-besorolo-openai-luna (új lépés, tulajdonosi döntés): tantárgy/évfolyam-felismerés gpt-6-luna, közvetlen OpenAI.
+      scope: "openai",
     };
     assert.equal(providerForModel(model), expected[step], step);
   }

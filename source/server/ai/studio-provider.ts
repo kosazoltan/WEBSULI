@@ -149,6 +149,9 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   // bank óta használt). A kimenet néhány azonosító, a gondolkodással együtt 8k bőven elég.
   topicFocus: { timeoutMs: 60_000, maxTokens: 8_000, reasoningEffort: "low", jsonMode: true },
   quizPolish: { timeoutMs: 180_000, maxTokens: 24_000, reasoningEffort: "low" },
+  // Spec 2026-10-14-forras-besorolo-openai-luna (review #209): a katalógus-besoroló a MÉRT beállításon fut — gpt-6-luna high
+  // effort, 20 hívás: medián 5,1 s, p95 12,2 s, max 751 kimeneti token. Korábban a topicFocus (low) szabályzatot kapta.
+  catalogClassify: { timeoutMs: 120_000, maxTokens: 8_000, reasoningEffort: "high", jsonMode: true },
   // Spec 2026-10-05-s9 (terv-ellenőrzés): az orkesztrátor saját szabálya — rövid elemzés + javító prompt, JSON-mód, stream.
   orchestrator: { timeoutMs: 120_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true },
 };
