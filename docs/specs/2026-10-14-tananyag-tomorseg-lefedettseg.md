@@ -1,6 +1,7 @@
 # Tananyag tömörsége és forrás-lefedettsége: mérés, v7.5-összevetés, javítási terv (2026-10-14)
 
-Állapot: **TERV — tulajdonosi jóváhagyásra vár.** Kód- és promptmódosítás csak jóváhagyás után.
+Állapot: **JÓVÁHAGYVA (tulajdonos, 2026-10-14). S1 kész (#210); S2 külön PR, mérés alatt.** Végrehajtás:
+`docs/specs/2026-10-14-tananyag-tomorseg-lefedettseg-vegrehajtas.md`.
 
 ## Kérés
 Tulajdonos (2026-10-14): a szülők szerint a pipeline leckéi túl hosszúak, és az adott témában nem tartalmaznak mindent a
@@ -8,26 +9,27 @@ feltöltött anyagból. Vesd össze a Tananyag Készítő 7.5 skill tudásával 
 hogy igaz-e vagy szubjektív, és a mérések alapján tervezz javítást a pipeline promptjaira.
 
 ## Mérés 1 — a tárolt pipeline-leckék (élő DB, csak olvasás)
-Eszköz: `source/scripts/measure/lesson-length-coverage.cjs` (determinisztikus, modellhívás nélkül).
-Adat: `docs/measurements/2026-10-14-lesson-length-coverage.json` — 43 lecke (térképenként a legutolsó verzió),
-ebből 36 valós (próba/teszt/QA kiszűrve). Hossz = a diák által LÁTOTT mezők (`LessonRuntime.tsx`: explain szöveg, example
-feladat+lépések+válasz, check kérdés+opciók, recap pontok, ábra-felirat); a válasz utáni visszajelzés külön.
+Eszköz: `source/scripts/measure/lesson-length-coverage.mts` (determinisztikus, modellhívás nélkül, ellenőrzött TLS).
+Adat: `docs/measurements/2026-10-14-lesson-length-coverage.json` — 43 lecke (térképenként a legutolsó verzió, anonim
+azonosítóval), ebből 36 valós (próba/teszt/QA kiszűrve). Hossz = a diák által LÁTOTT szöveg (a megalapozási kapu `blockText`
+mezői: explain, example, check kérdés+opciók, az ábra és a `try` feladat renderelt szövege, recap pontok); a válasz utáni
+visszajelzésből csak a kiválasztott (helyes) opcióé, külön. Medián: páros elemszámnál a két középső átlaga (review #210).
 
 | forrásméret | db | forrás szó (medián) | tanítórész szó | arány | szakasz | forrás→térkép | forrás→tanítás | nem-forrás szó |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| kicsi (<300) | 11 | 46 | **2476** | **47×** | 10 | 96% | 92% | **92%** |
-| közepes (300–2000) | 13 | 1341 | 2142 | 1,6× | 12 | 65% | 63% | 62% |
-| nagy (>2000) | 12 | 5027 | 2210 | 0,42× | 12 | **34%** | **17%** | 50% |
+| kicsi (<300) | 11 | 46 | **2657** | **49×** | 10 | 96% | 92% | **92%** |
+| közepes (300–2000) | 13 | 1341 | 2425 | 1,8× | 12 | 65% | 64% | 62% |
+| nagy (>2000) | 12 | 4753 | 2304 | 0,40× | 12 | **33,5%** | **16,5%** | 47,5% |
 
-- Teljes medián: tanítórész **~2200 szó ≈ 18 perc olvasás** (120 szó/perc), + ~330 szó a válaszok után; 12 fejezet,
-  fejezetenként 5 blokk, 10 check. A bank külön lapon: 80 kvíz + 48 feladat + 24 módszer (≈ 9000 szó; körönként 25/15 látszik).
-- **A hossz nem függ a forrástól**: forrásszó ~ tanítórész-szó Pearson r = −0,10 (log: −0,23). A leckék fele a 12-es plafonon.
+- Teljes medián: tanítórész **2394,5 szó ≈ 20 perc olvasás** (120 szó/perc); 11,5 fejezet. A bank külön lapon:
+  80 kvíz + 48 feladat + 24 módszer (körönként 25/15 látszik).
+- **A hossz nem függ a forrástól**: forrásszó ~ tanítórész-szó Pearson r = −0,09. A leckék fele (18/36) a 12-es plafonon.
 - **A lefedettség a forrás méretével omlik**: forrásszó ~ forrás→tanítás% r = −0,77. A veszteség két lépcsős: kinyerés
-  (nagy forrásnál a térkép a forrás-szótövek 34%-át tartja meg) és szerzés (17%).
+  (nagy forrásnál a térkép a forrás-szótövek 33,5%-át tartja meg) és szerzés (16,5%).
 - Olvashatóság nem a gond: átlagos mondathossz 7–10 szó, >20 szavas mondat 0–6%.
 
-**Ítélet:** a panasz **mérhetően igaz**, két ellentétes módon: kis forrásnál a lecke felfújt (47×, 92% nem forrásból jövő
-szótő), nagy forrásnál hiányos (17%-os forrás→tanítás lefedettség). A hossz egy fix sablon terméke, nem a forrásé.
+**Ítélet:** a panasz **mérhetően igaz**, két ellentétes módon: kis forrásnál a lecke felfújt (49×, 92% nem forrásból jövő
+szótő), nagy forrásnál hiányos (16,5%-os forrás→tanítás lefedettség). A hossz egy fix sablon terméke, nem a forrásé.
 
 Mérési korlátok (kontra): a lefedettség lexikális (6 betűs szótövek); a „nem-forrás” arányba pedagógiai keretszavak is
 esnek (feladat, gondold, példa); nagy forrásnál a témafókusz szándékosan szűkíthet (`topic-focus.ts`, „extra” súly) — ezért

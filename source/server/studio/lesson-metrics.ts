@@ -1,4 +1,5 @@
 import type { Block, Lesson } from "../../shared/lesson-schema";
+import { blockText } from "./grounding";
 
 /**
  * Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S1): a lecke hossz- és lefedettség-mérése EGY helyen — a mérőszkript, a
@@ -36,19 +37,15 @@ export function termKeys(text: string | null | undefined): Set<string> {
 }
 
 /**
- * A blokk diák által LÁTOTT szövege (client/src/lesson-runtime/LessonRuntime.tsx szerint). `afterAnswer`: csak a válasz után
- * megjelenő rész (check-visszajelzés, tipp) — külön mérjük, mert nem része az elolvasandó tananyagnak.
+ * A blokk diák által LÁTOTT szövege. Review #210: ugyanazt a mezőkészletet méri, amit a megalapozási kapu (`grounding.ts`
+ * `blockText`): explain/example/check szövege, az ábra RENDERELT szövege (idővonal-események, folyamatlépések, címkék) és a
+ * `try` feladat látható része (hiányos szöveg, rendezendő elemek, párok); a recap pontjai külön. `afterAnswer`: a válasz után
+ * megjelenő rész — a kliens CSAK a kiválasztott opció visszajelzését mutatja, ezért egy (a helyes válaszé) számít.
  */
 export function blockVisibleText(block: Block, afterAnswer = false): string {
-  if (afterAnswer) return block.kind === "check" ? [...block.feedbackPerOption, block.hint ?? ""].filter(Boolean).join("\n") : "";
-  switch (block.kind) {
-    case "explain": return block.text;
-    case "example": return [block.problem, ...block.steps, block.answer].join("\n");
-    case "check": return [block.question, ...block.options].join("\n");
-    case "recap": return block.bullets.join("\n");
-    case "animate": return block.caption;
-    default: return "";
-  }
+  if (afterAnswer) return block.kind === "check" ? block.feedbackPerOption[block.correctIndex] ?? "" : "";
+  if (block.kind === "recap") return block.bullets.join("\n");
+  return blockText(block as unknown as Record<string, unknown>);
 }
 
 /** A Tananyag lap látható szövege: fejezetcímek + blokkok (a gyakorlóbank külön lapon van, nem része). */

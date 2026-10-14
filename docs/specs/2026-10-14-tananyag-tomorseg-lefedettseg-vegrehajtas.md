@@ -17,7 +17,9 @@ Spec: `docs/specs/2026-10-14-tananyag-tomorseg-lefedettseg.md` (tulajdonosi jóv
 ### T2 — tárolt leckék mérése
 - Fájl: `source/scripts/measure/lesson-length-coverage.mts` (csak olvasás, modellhívás nélkül).
 - Parancs: `npx tsx scripts/measure/lesson-length-coverage.mts ../docs/measurements/2026-10-14-lesson-length-coverage.json`
-- Elvárt kimenet (2026-10-14): `leckék: 43, valós: 36`; valós medián `láthatóSzó: 2210`, `olvasásPerc: 18.4`, `szakasz: 12`.
+- Elvárt kimenet (2026-10-14, review #210 után: ellenőrzött TLS, renderelt try/ábra-szöveg, átlagolt medián):
+  `leckék: 43, valós: 36`; valós medián `láthatóSzó: 2394.5`, `olvasásPerc: 20`, `szakasz: 11.5`. A kimenet anonim
+  (`lesson: m-<hash>`, `testRun`), belső azonosító és leckecím nélkül.
 
 ### T3 — próbaharness
 - Fájl: `source/scripts/measure/lesson-trial.mts`
@@ -26,7 +28,10 @@ Spec: `docs/specs/2026-10-14-tananyag-tomorseg-lefedettseg.md` (tulajdonosi jóv
   (`checkCoverageGate`, `checkLessonArc`) és a T1 mérés; a programmezők (mapId/title/subject/classroom) a program értéke;
   hibánál a teljes ok-lánc.
 - Parancs: `npx tsx scripts/measure/lesson-trial.mts <címke> <mappa> <mapId,...>` (fizetős modellhívás).
-- Elvárt kimenet (füstpróba, Mezopotámia e705a936…): `2756 szó, 7 fejezet, forrás→lecke 100%, nem-forrás 93%, kapu OK, ív OK`.
+- Review #210: a VALÓDI éles prompt-feloldást használja (`skilledPromptLookup` + `studioPromptStore`, mint
+  `step-runner.ts:264-285` — a szerep-skill is a promptban), a TÉRKÉP tulajdonosának aktív tanult szabályait, ellenőrzött
+  TLS-t; ha bármely térkép hibázik, nem-nulla kilépési kód.
+- Elvárt kimenet: soronként `<szó> szó, <n> fejezet, forrás→lecke <p>%, nem-forrás <p>%, kapu OK|BUKOTT, ív OK|BUKOTT`.
 
 ### T4 — kapuk
 - `npm.cmd run check`, `check:test`, `lint`, `test`, `build` → exit 0.

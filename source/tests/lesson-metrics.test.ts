@@ -36,8 +36,25 @@ test("a látható szöveg minden diák által látott mezőt számol, a válasz 
   }
   assert.ok(!visible.includes("Igen, helyes"), "a visszajelzés csak válasz után látszik");
   const after = lessonVisibleText(lesson, true);
-  assert.ok(after.includes("Igen, helyes") && after.includes("Két folyó."), "a válasz utáni rész külön mérve");
+  // Review #210 (spec-javítás): a kliens CSAK a kiválasztott opció visszajelzését mutatja → egy (a helyes válaszé) számít, nem mind.
+  assert.ok(after.includes("Igen, helyes"), "a helyes válasz visszajelzése a válasz utáni rész");
+  assert.ok(!after.includes("Nem, az Egyiptom."), "a többi opció visszajelzése nem jelenik meg egyszerre");
   assert.ok(!after.includes("Folyóvölgyi"), "a fejezetcím nem válasz utáni szöveg");
+});
+
+test("review #210: a try- és ábrablokk RENDERELT szövege is látható szöveg (a megalapozási kapuval azonos mezők)", () => {
+  const interactive = {
+    sections: [{
+      heading: "Gyakorlás",
+      probaEnabled: false,
+      blocks: [
+        { kind: "try", tryKind: "fillBlank", spec: { text: "A Nílus áradása termékeny iszapot hozott.", blanks: ["iszapot"] }, coversConceptIds: ["c1"] },
+        { kind: "try", tryKind: "dragSort", spec: { items: ["vetés", "aratás"] }, coversConceptIds: ["c1"] },
+      ],
+    }],
+  } as unknown as Pick<Lesson, "sections">;
+  const visible = lessonVisibleText(interactive);
+  for (const part of ["Nílus áradása termékeny iszapot", "vetés", "aratás"]) assert.ok(visible.includes(part), `hiányzik: ${part}`);
 });
 
 test("szótő-kulcs: ragozott alakok egy kulcsra, töltelékszó és rövid szó kimarad, évszám egészben", () => {
