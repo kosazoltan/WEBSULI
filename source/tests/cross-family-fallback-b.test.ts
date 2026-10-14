@@ -73,3 +73,16 @@ test("a Qwen tartalék a saját effortján (high) fut, nem a lépés szabályzat
   await createStudioStepProvider("qwen/qwen3.8-max-0902", "visuals", { fallback: true }).chat([{ role: "user", content: "x" }]);
   assert.deepEqual(body?.reasoning, { effort: "high" });
 });
+
+// Review #217: a szerzőség csak az ELFOGADOTT tanítás modellje; a fogalomjavítás bankja a javítás tényleges szerzőjén épül.
+// (Mindkét függvény adatbázist ér el — a meglévő R1-minta szerint forrás-szinten rögzítve.)
+test("review #217: szerkezett javításnál a legutóbbi tanítás-író hívás a szerző; fogalomjavításnál a bank a tényleges szerzőn", async () => {
+  const { readFileSync } = await import("node:fs");
+  const si = readFileSync(new URL("../server/studio/structured-improvement.ts", import.meta.url), "utf8");
+  assert.match(si, /if \(step === "author" && role === "repair"\) teachingAuthor = result\.model;/, "csak a tanítás-író hívás, felülírva (nem gyűjtve)");
+  assert.match(si, /lektorChainFor\(teachingAuthor \? \[teachingAuthor\] : undefined\)/);
+  assert.doesNotMatch(si, /authors\.add\(/, "elutasított kör nem marad szerző");
+  const sr = readFileSync(new URL("../server/studio/step-runner.ts", import.meta.url), "utf8");
+  assert.match(sr, /const bankAuthor = fixAuthor \?\? model;\s*const bankProvider = bankAuthor === model \? provider : providerFactory\(bankAuthor, undefined, \{ fallback: true \}\);/);
+  assert.match(sr, /callBankPacketModel\(bankProvider, bankAuthor,/);
+});

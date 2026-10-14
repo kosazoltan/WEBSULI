@@ -75,14 +75,16 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const [material] = await db.select().from(htmlFiles).where(eq(htmlFiles.id, fileId));
   if (!material) throw new Error("Az eredeti tananyag metaadatai nem találhatók.");
   const source = await loadSource(row.mapId);
-  // Spec 2026-10-14-tartalek-b-szelet: a szerző/tervező ellentétes családú tartalékkal; a javítás TÉNYLEGES szerzői gyűlnek, és a
-  // lektor a szerzők családján kívüli láncon fut (D1) — a lánc első működő tagja ítél.
-  const authors = new Set<string>();
+  // Spec 2026-10-14-tartalek-b-szelet: a szerző/tervező ellentétes családú tartalékkal; a lektor a tanítás TÉNYLEGES szerzőjének
+  // családján kívüli láncon fut (D1). Review #217: minden javítókör a TELJES tanítást írja újra, és mindig a legutóbbi kör kimenete
+  // kerül ellenőrzésre/elfogadásra — ezért a szerző a legutóbbi tanítás-író („repair”) hívás modellje; az elutasított korábbi kör és
+  // a bankhívás (a fő gyártásban sem) nem szerző.
+  let teachingAuthor: string | undefined;
   const call = async (step: RepairStep, system: string, user: string, role: PromptRole = requireRoleForStep(step), extra?: { responseFormat?: ResponseFormatJsonSchema }) => {
     // Review #160 (U2/C8): szigorú séma csak a közvetlen OpenAI-úton; tartalék úton JSON-mód + helyi validálás.
     const formatFor = (model: string) => extra?.responseFormat && providerForModel(model) === "openai" ? { responseFormat: extra.responseFormat } : {};
     if (step === "lektor") {
-      const chain = lektorChainFor(authors.size ? [...authors] : undefined).filter((m) => studioModelReady(m));
+      const chain = lektorChainFor(teachingAuthor ? [teachingAuthor] : undefined).filter((m) => studioModelReady(m));
       for (const [index, model] of chain.entries()) {
         try {
           return (await callStepModel(createStudioStepProvider(model, step), { step, role, model, system, user, ...formatFor(model) })).json;
@@ -94,7 +96,7 @@ export async function generateStructuredImprovement(fileId: string, instruction?
     }
     const model = resolveStudioModel(step);
     const result = await callStepModelWithFallback({ step, role, model, system, user, ...formatFor(model) }, { providerFactory: createStudioStepProvider, providerStep: step });
-    if (step === "author") authors.add(result.model);
+    if (step === "author" && role === "repair") teachingAuthor = result.model;
     return result.json;
   };
   const ownerInstruction = normalizeOwnerInstruction(instruction);

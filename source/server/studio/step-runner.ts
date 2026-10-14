@@ -2597,7 +2597,10 @@ export async function fixConceptOnLesson(
     const candidate = parsed.data;
     await workflowPhase("banks");
     // Review #160: a szigorú séma (U2/C8) ezen a bankúton is eljut a közvetlen OpenAI-szolgáltatóhoz (a közös bankhívó dönt az útról).
-    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user, _attempt, extra) => (await callBankPacketModel(provider, model, system, user, undefined, extra)).json });
+    // Review #217: a bankot a javítás TÉNYLEGES szerzője építi — tartós elsődleges hibánál a tartalék (medium), nem a kiesett elsődleges.
+    const bankAuthor = fixAuthor ?? model;
+    const bankProvider = bankAuthor === model ? provider : providerFactory(bankAuthor, undefined, { fallback: true });
+    candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: async (system, user, _attempt, extra) => (await callBankPacketModel(bankProvider, bankAuthor, system, user, undefined, extra)).json });
     const { assertRepairCandidate, repairHash, materialHash, applyStructuredImprovement } = await import("./structured-improvement");
     assertRepairCandidate(original, candidate, source);
     await workflowPhase("lektor");
