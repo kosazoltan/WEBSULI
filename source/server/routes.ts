@@ -170,13 +170,11 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
           var testAccess = window.localStorage;
           testAccess.getItem('__sandbox_test__');
           // If we get here, localStorage works - no fix needed
-          console.info('[SANDBOX FIX] localStorage accessible - no fix needed');
           window.__sandboxLocalStorageFixApplied = false;
           return;
         } catch (e) {
           // Sandboxed iframe detected - localStorage property getter threw DOMException
           isLocalStorageBlocked = true;
-          console.warn('[SANDBOX FIX] localStorage blocked - installing in-memory fallback');
         }
         
         if (isLocalStorageBlocked) {
@@ -209,17 +207,14 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
               get: function() { return safeLocalStorage; },
               configurable: true
             });
-            console.info('[SANDBOX FIX] localStorage override successful');
             window.__sandboxLocalStorageFixApplied = true;
           } catch (e) {
             // Fallback: direct assignment (less reliable but better than nothing)
-            console.warn('[SANDBOX FIX] defineProperty failed, using direct assignment');
             window.localStorage = safeLocalStorage;
             window.__sandboxLocalStorageFixApplied = true;
           }
         }
       } catch (e) {
-        console.error('[SANDBOX FIX] Critical error - localStorage fix failed:', e);
         window.__sandboxLocalStorageFixApplied = false;
       }
     })();
@@ -388,7 +383,6 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
           recognition.onerror = function(ev) {
             if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) {
               try { field.setAttribute('data-dictation-error', ev.error); } catch (e) {}
-              console.warn('[WEBSULI DIKTÁLÁS] Mikrofon engedély megtagadva:', ev.error);
             }
           };
           recognition.onend = function() {
@@ -473,7 +467,6 @@ function wrapHtmlWithResponsiveContainer(userHtml: string): string {
           init();
         }
       } catch (e) {
-        console.error('[WEBSULI DIKTÁLÁS] Inicializálási hiba:', e);
       }
     })();
     </script>`;

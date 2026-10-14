@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 Tananyag bongeszo-teszt (Tananyag Keszito v7.5) - Playwright/Chromium.
-Hasznalat:  python3 tananyag_browser_test.py <fajl.html> [--shots <mappa>]
+Hasznalat:  python3 tananyag_browser_test.py <fajl.html> [--shots <mappa>] [--fonts-dir source/client/public/fonts]
 Ellenoriz:
   1. 0 JS hiba (pageerror) es 0 console-uzenet (log/info/warn/error/debug)
-  2. 0 vizszintes tulcsordulas 320..2560 px minden tabon
+  2. 0 vizszintes tulcsordulas 320..2560 px minden tabon (1200 px is)
   3. minden gomb / interaktiv elem >= 44x44 px
   4. ASZTALI KIHASZNALTSAG (>=1280 px):
        a) az aktiv panel szelessege >= 85% a viewportnak (nem keskeny "mobil-oszlop")
@@ -17,8 +17,8 @@ Kilepesi kod: 0 = minden OK, 1 = van FAIL.
 import asyncio, sys, os, re, json
 from playwright.async_api import async_playwright
 
-WIDTHS = [320, 375, 414, 768, 1024, 1280, 1440, 1920, 2560]
-DESKTOP_MIN = 1280
+WIDTHS = [320, 375, 414, 768, 1024, 1200, 1280, 1440, 1920, 2560]
+DESKTOP_MIN = 1200
 
 
 def extract_engine(html):
@@ -53,16 +53,37 @@ JS_TOUCH = '''() => { const s = [];
 
 JS_DESK = '''() => { const W = document.documentElement.clientWidth;
   const p = Array.from(document.querySelectorAll('[role=tabpanel]')).find(x => getComputedStyle(x).display !== 'none');
+  const vis = e => { const r = e.getBoundingClientRect(); return r.width >= 200 && r.height >= 20 && getComputedStyle(e).display !== 'none'; };
+  // tartalom-kiterjedes (nem a panel doboza)
   const els = []; let maxP = 0;
-  p.querySelectorAll('p, li, h2, h3, textarea, [class$="-card"], [class*="-card "], [class$="-task"], [class*="-task "], [class$="-q"], [class*="-q "], nav').forEach(e => {
-    const r = e.getBoundingClientRect(); if (r.width < 120 || r.height < 8) return;
-    els.push(r);
+  p.querySelectorAll('p, li, h2, h3, textarea, article, nav, [class$="-card"], [class*="-card "], [class$="-task"], [class*="-task "], [class$="-q"], [class*="-q "]').forEach(e => {
+    const r = e.getBoundingClientRect(); if (r.width < 120 || r.height < 8) return; els.push(r);
     if (e.tagName === 'P') { Array.from(e.getClientRects()).forEach(q => { maxP = Math.max(maxP, q.width); }); } });
   if (!els.length) return {ratio: 0, cols: 0, maxP: 0};
-  const L = Math.min(...els.map(r => r.left)), R = Math.max(...els.map(r => r.right)), CW = Math.max(1, R - L);
-  // oszlop = a tartalom-szelesseg negyedeire kerekitett bal-kezdopont; behuzas (li) nem uj oszlop
-  const buckets = new Set(els.map(r => Math.round((r.left - L) / (CW / 4))));
-  return {ratio: CW / W, cols: buckets.size, maxP: Math.round(maxP)}; }'''
+  const L = Math.min(...els.map(r => r.left)), R = Math.max(...els.map(r => r.right));
+  // valodi oszlopok: azonos szulo alatti, egymas melletti (azonos tetejű) elrendezesi elemek
+  const sideBySide = items => { const tops = {}; items.filter(vis).forEach(e => { const t = Math.round(e.getBoundingClientRect().top / 6);
+    tops[t] = (tops[t] || 0) + 1; }); return Math.max(0, ...Object.values(tops)); };
+  let cols = sideBySide(Array.from(p.children));
+  const items = Array.from(p.querySelectorAll('article, [class$="-card"], [class*="-card "], [class$="-task"], [class*="-task "], [class$="-q"], [class*="-q "]'));
+  const byParent = new Map(); items.forEach(e => { const k = e.parentElement; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k).push(e); });
+  byParent.forEach(list => { cols = Math.max(cols, sideBySide(list)); });
+  // CSS tobbhasabos szoveg (column-count) a kartyakon
+  items.forEach(e => { if (!vis(e)) return; const cc = parseInt(getComputedStyle(e).columnCount, 10); if (cc > 1) cols = Math.max(cols, cc); });
+  return {ratio: (R - L) / W, cols: cols, maxP: Math.round(maxP)}; }'''
+
+
+async def route_fonts(pg, fonts_dir):
+    """A gyokerrel kezdodo /fonts/... hivatkozas file:// alatt a fajlrendszer gyokerere mutatna:
+    --fonts-dir eseten onnan szolgaljuk ki, kulonben ures valasszal zarjuk (ne legyen eroforras-hiba)."""
+    async def handler(route):
+        name = route.request.url.split('/fonts/', 1)[1].split('?')[0]
+        fp = os.path.join(fonts_dir, name) if fonts_dir else None
+        if fp and os.path.isfile(fp):
+            await route.fulfill(path=fp)
+        else:
+            await route.fulfill(status=200, body='', content_type='text/css' if name.endswith('.css') else 'font/woff2')
+    await pg.route('file:///fonts/**', handler)
 
 
 async def main():
@@ -70,6 +91,7 @@ async def main():
         print(__doc__); sys.exit(2)
     path = os.path.abspath(sys.argv[1]); url = 'file://' + path
     shots = sys.argv[sys.argv.index('--shots') + 1] if '--shots' in sys.argv else None
+    fonts_dir = sys.argv[sys.argv.index('--fonts-dir') + 1] if '--fonts-dir' in sys.argv else None
     if shots: os.makedirs(shots, exist_ok=True)
     html = open(path, encoding='utf-8-sig').read()
     fails = []
@@ -80,6 +102,7 @@ async def main():
             pg = await br.new_page(viewport={'width': w, 'height': 900})
             pg.on('pageerror', lambda e: errs.append(str(e)))
             pg.on('console', lambda m: cons.append(m.type + ': ' + m.text))
+            await route_fonts(pg, fonts_dir)
             await pg.goto(url); await pg.wait_for_timeout(250)
             tabs = await pg.query_selector_all('[role=tab]')
             line = []

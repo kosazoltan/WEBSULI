@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 Tananyag statikus ellenorzo (Tananyag Keszito v7.5).
-Hasznalat:  python3 tananyag_verify.py <fajl.html> [--prefix sm-]
+Hasznalat:  python3 tananyag_verify.py <fajl.html> [--prefix sm-] [--profile standalone|app]
+  standalone (alap): Google Fonts latin-ext kotelezo (Tananyag Keszito skill)
+  app: websuli alkalmazas - csak helyi /fonts/lesson-fonts.css, Google Fonts tilos
 Kilepesi kod: 0 = minden OK, 1 = van FAIL. Build csak 0 eseten adhato at!
 """
 import re, sys, json
@@ -45,6 +47,9 @@ def main():
     f = sys.argv[1]
     raw = open(f, 'rb').read()
     h = raw.decode('utf-8-sig')
+    profile = sys.argv[sys.argv.index('--profile') + 1] if '--profile' in sys.argv else 'standalone'
+    if profile not in ('standalone', 'app'):
+        print('--profile: standalone | app'); sys.exit(2)
     prefix = None
     if '--prefix' in sys.argv:
         prefix = sys.argv[sys.argv.index('--prefix') + 1]
@@ -76,7 +81,13 @@ def main():
     c('<meta charset> + http-equiv', '<meta charset="utf-8">' in h and 'http-equiv="Content-Type"' in h)
     c('<html lang="hu">', '<html lang="hu">' in h)
     c('viewport meta', 'name="viewport"' in h)
-    c('betuk: Google Fonts latin-ext VAGY helyi /fonts/lesson-fonts.css', 'subset=latin,latin-ext&display=swap' in h or '/fonts/lesson-fonts.css' in h)
+    if profile == 'app':
+        # websuli alkalmazas: kozos tipografiai szerzodes (docs/lesson-improvement.md) - csak helyi betuk
+        c('betuk (app): helyi /fonts/lesson-fonts.css', '/fonts/lesson-fonts.css' in h)
+        c('betuk (app): NINCS Google Fonts hivatkozas', 'fonts.googleapis.com' not in h and 'fonts.gstatic.com' not in h)
+    else:
+        # standalone tananyag (Tananyag Keszito skill v7.4+): Google Fonts latin-ext kotelezo
+        c('betuk (standalone): Google Fonts latin-ext subset', 'subset=latin,latin-ext&display=swap' in h)
     c('nincs system-ui / Segoe UI', 'system-ui' not in h and 'Segoe' not in h)
     c('glyph-warmup elem', bool(prefix) and ('class="%sgw' % prefix) in h)
     c('magyar o/u hosszu ekezet a szovegben', 'ő' in h and 'ű' in h)
