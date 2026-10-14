@@ -380,8 +380,7 @@ export function SourceUploadForm({
             <CreationProgress run={run.data} />
             {run.data.phase === "error" && run.data.draft && (
               <p className="text-sm text-muted-foreground" data-testid="one-step-draft">
-                Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag
-                {run.data.draft.savedBankPackets > 0 ? `, ${run.data.draft.savedBankPackets} kész gyakorlócsomag` : ""}.
+                Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag, {run.data.draft.savedBankPackets} kész gyakorlócsomag.
                 {run.data.jobId ? " A folytatás innen halad tovább, a kész részeket nem gyártja újra." : ""}
               </p>
             )}

@@ -187,6 +187,7 @@ test("one-step draft summary: saved unpublished teaching with its finished bank 
   assert.deepEqual(draftSummaryOf({ lesson, experienceCheckpoint: { hash: "h", parts: { a: {}, b: {} } } }), { teachingSections: lesson.sections.length, savedBankPackets: 2 });
   assert.deepEqual(draftSummaryOf({ lesson }), { teachingSections: lesson.sections.length, savedBankPackets: 0 });
   assert.equal(draftSummaryOf({ lesson, htmlFileId: "published" }), null);
+  assert.equal(draftSummaryOf({ lesson }, true), null, "a lessons-sor már publikált, a job-output még nem tudja");
   assert.equal(draftSummaryOf({ outline: {} }), null);
   assert.equal(draftSummaryOf(null), null);
 });

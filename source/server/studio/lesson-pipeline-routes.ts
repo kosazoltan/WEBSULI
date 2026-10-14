@@ -304,10 +304,13 @@ export type OneStepRunView = {
   draft?: OneStepDraft;
 };
 
-/** A job eredményéből: van-e nem publikált, mentett tananyag, és hány bankcsomag kész belőle. */
-export function draftSummaryOf(output: unknown): OneStepDraft | null {
+/**
+ * A job eredményéből: van-e nem publikált, mentett tananyag, és hány bankcsomag kész belőle. Review #215: a publikálás a
+ * `lessons` sort előbb commitolja, mint a job-output `htmlFileId`-ját — a hívó a lecke `publishedAt`-ját is átadja.
+ */
+export function draftSummaryOf(output: unknown, lessonPublished = false): OneStepDraft | null {
   const o = (output ?? {}) as { lesson?: { sections?: unknown }; htmlFileId?: unknown; experienceCheckpoint?: { parts?: unknown } };
-  if (!o.lesson || !Array.isArray(o.lesson.sections) || o.htmlFileId) return null;
+  if (lessonPublished || !o.lesson || !Array.isArray(o.lesson.sections) || o.htmlFileId) return null;
   const parts = o.experienceCheckpoint?.parts;
   return { teachingSections: o.lesson.sections.length, savedBankPackets: parts && typeof parts === "object" ? Object.keys(parts).length : 0 };
 }
@@ -329,8 +332,9 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
   }
   let draft: OneStepDraft | null = null;
   if (run.phase === "error" && run.jobId) {
-    const [job] = await db.select({ output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, run.jobId)).limit(1);
-    draft = draftSummaryOf(job?.output);
+    const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt }).from(studioJobs)
+      .leftJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, run.jobId)).limit(1);
+    draft = draftSummaryOf(job?.output, !!job?.publishedAt);
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}) };
 }

@@ -38,9 +38,11 @@ test("a megállt feltöltés visszatérés után is látható és a konkrét for
 
 test("a hibával leállt futás meglévő forrásjegyzéke is megnyitható",async({page})=>{
   await page.addInitScript(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","error-run"));
-  await page.route("**/api/studio/lessons/one-step/error-run",route=>route.fulfill({json:{phase:"error",error:"A szerzői lépés hibát jelzett",detail:null,mapId:"plant",lessonId:null}}));
+  await page.route("**/api/studio/lessons/one-step/error-run",route=>route.fulfill({json:{phase:"error",error:"A szerzői lépés hibát jelzett",detail:null,mapId:"plant",lessonId:null,draft:{teachingSections:12,savedBankPackets:0}}}));
   await page.goto("/__studio-panel-probe");
   await expect(page.getByTestId("one-step-progress")).toContainText("A szerzői lépés hibát jelzett");
+  // Review #215: a nulla kész csomag is látszik (az éles 416ad01d futás állapota).
+  await expect(page.getByTestId("one-step-draft")).toContainText("12 fejezetnyi tananyag, 0 kész gyakorlócsomag");
   await expect(page.getByTestId("one-step-review-source")).toBeVisible();
 });
 

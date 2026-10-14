@@ -1271,7 +1271,8 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
               if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[STUDIO] Bankcsomag ${attempt >= PACKET_ATTEMPTS ? "mentőkör" : "tartalék modell"}: ${bankModel} (${job.id}), ${attempt} bukott kísérlet után.`);
               // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
               if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
-              // Model-output failure / timeout → RetryableBankCallError (next attempt); other provider failures → resume path.
+              // Model-output failure / timeout / provider 5xx → RetryableBankCallError (next attempt); other provider failures
+              // (429, quota, key, status-less) → resume path.
               const result = await callBankPacketModel(providerFactory(bankModel, bankProviderStep(attempt)), bankModel, bankSystem, user, undefined, extra);
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
