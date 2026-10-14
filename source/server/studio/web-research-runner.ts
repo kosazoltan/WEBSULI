@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { effortFor, FALLBACK_MODELS, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
-import { createStudioProvider, createStudioStepProvider, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
+import { createStudioProvider, createStudioStepProvider, crossFamilyFallbackOptions, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
@@ -315,21 +315,25 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
       { role: "user", content: authorUser },
     ];
     // Review #190: a webes szerző-út is streamel (tétlenségi őrrel), és a modellenkénti effortot kapja (Qwen-tartalék: high).
+    // Tulajdonosi döntés 2026-10-14: a szerző ellentétes családú tartaléka (GPT-6.1 Sol) medium efforttal fut.
     const webAuthorCall = (m: string) => {
-      const provider = createStudioProvider(m, PHASE_TIMEOUT_MS, MAX_TOKENS, MODEL_REASONING_EFFORT[m] ? { reasoningEffort: MODEL_REASONING_EFFORT[m] } : {});
+      const provider = createStudioProvider(m, PHASE_TIMEOUT_MS, MAX_TOKENS, { ...(MODEL_REASONING_EFFORT[m] ? { reasoningEffort: MODEL_REASONING_EFFORT[m] } : {}), ...crossFamilyFallbackOptions(m, m !== authorModel) });
       return provider.chat(authorMessages, controller.signal, provider.supportsStreamingChat ? { stream: { idleMs: STREAM_IDLE_MS } } : undefined);
     };
-    html = await workflowCheckpoint("web-author-html", { input, method: LESSON_METHOD_VERSION, contract: "web-author-html-1", conceptIds }, async () => {
+    // Tulajdonosi döntés 2026-10-14 (ellentétes családú tartalék): a checkpoint a HTML-t író modellt is őrzi (`-2` szerződés) —
+    // a webes lektor-lánc a tényleges szerzőség szerint választ. A régi (`-1`) checkpoint nem használható újra (szerző nélküli).
+    const authored = await workflowCheckpoint("web-author-html", { input, method: LESSON_METHOD_VERSION, contract: "web-author-html-2", conceptIds }, async () => {
       let attempts = 0;
       for (;;) {
         let response: Awaited<ReturnType<ReturnType<typeof createStudioProvider>["chat"]>>;
-        const model = webAuthorModelForAttempt(attempts, authorModel, authorFallback);
+        let model = webAuthorModelForAttempt(attempts, authorModel, authorFallback);
         try {
           response = await webAuthorCall(model);
         } catch (error) {
           // The primary's provider failed (not its content): the same attempt runs once on the fallback.
           if (controller.signal.aborted || model !== authorModel || !authorFallback || authorFallback === authorModel) throw error;
           response = await webAuthorCall(authorFallback);
+          model = authorFallback;
         }
         await workflowUsage({ promptTokens: response.usage?.promptTokens, completionTokens: response.usage?.completionTokens });
         if (response.finishReason === "length" || response.finishReason === "max_tokens") {
@@ -350,7 +354,8 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
           // chapter visual is repaired now and not discovered after the bank is built.
           problems.push(...verifyTeachingVisuals(produced));
         }
-        if (!problems.length) return produced;
+        // Minden kör a TELJES HTML-t írja újra: a kész HTML szerzője a sikeres kör modellje.
+        if (!problems.length) return { html: produced, authorModel: model };
         const reason = problems.join("; ");
         if (attempts >= 2) throw new WebResearchFailure(`A tananyag az automatikus javítás után sem készült el: ${reason}`);
         attempts += 1;
@@ -365,6 +370,9 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         onEvent({ type: "status", message: `A tanítás javítása (${attempts}/2)…` });
       }
     });
+    html = authored.html;
+    // A tartalmi javító (`callTeachingRepair`) a szerző elsődleges modelljén foltoz — ő is szerzőnek számít a lektor-láncban.
+    const webAuthorModels = [...new Set([authored.authorModel, resolveStudioModel("author")])];
     await onCandidate?.(html, { stopReason: "end_turn", elapsedMs: Date.now() - startedAt });
 
     restartPhaseTimer();
@@ -395,7 +403,8 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         const model = bankModelForAttempt(attempt);
         if (!studioModelReady(model)) throw new WebResearchFailure(`A gyakorlóbank modelljének API-kulcsa nincs beállítva (${keyNameForModel(model)}).`);
         if (attempt >= PACKET_ATTEMPTS - 1) logger.warn(`[WEB-RESEARCH] Bankcsomag ${bankProviderStep(attempt) === "author" ? "mentőkör" : "tartalék modell"}: ${model}, ${attempt} bukott kísérlet után.`);
-        return (await callBankPacketModel(createStudioStepProvider(model, bankProviderStep(attempt)), model, system, user, controller.signal, extra)).json;
+        // Tulajdonosi döntés 2026-10-14: az első tartalék (PACKET_ATTEMPTS - 1) az ellentétes család, medium efforttal.
+        return (await callBankPacketModel(createStudioStepProvider(model, bankProviderStep(attempt), { fallback: attempt === PACKET_ATTEMPTS - 1 }), model, system, user, controller.signal, extra)).json;
       },
     }).catch((error: unknown) => {
       // An exhausted packet is a plain Error with the validator's reason — name it instead of "AI hiba".
@@ -423,7 +432,7 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     if (result.type === "ready") {
       onEvent({ type: "status", message: "A teljes tananyag összevetése a letöltött forrásokkal…" });
       const corrected = await reviewAndRepairWebTeaching(result.html, downloaded, {
-        signal: controller.signal, requestedTopic: input.message,
+        signal: controller.signal, requestedTopic: input.message, authorModels: webAuthorModels,
         onReview: (next, review) => onCandidate?.(next, { teachingReview: review }) ?? Promise.resolve(),
         async onProblem(problem, next) {
           await workflowValidationFailure(problem);

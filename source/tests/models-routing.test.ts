@@ -9,6 +9,8 @@ import {
   providerForModel,
   LEGACY_MODELS,
   FALLBACK_MODELS,
+  lektorChainFor,
+  LEKTOR_THIRD_FAMILY_MODEL,
 } from "../server/ai/models";
 
 /**
@@ -50,12 +52,13 @@ test("spec 2026-09-24: bank gpt-5.6-luna-n (mért bankmodell-választás), ábr�
   assert.equal(providerForModel("claude-opus-5-5"), "anthropic");
   assert.equal(resolveStudioModel("bank", {}), "gpt-5.6-luna");
   assert.equal(providerForModel("gpt-5.6-luna"), "openai");
-  assert.equal(FALLBACK_MODELS.animator, "gpt-5.6-terra");
-  // Spec §7o: a deepseek bank-tartalék 4/5-ször a mentőkörbe futott 2–10 perc után → egyből terra.
-  assert.equal(FALLBACK_MODELS.bank, "gpt-5.6-terra");
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md, tulajdonosi döntés): minden OpenAI/Anthropic
+  // elsődleges első tartaléka az ellentétes család — Anthropic → gpt-6.1-sol, OpenAI → claude-opus-5-5 (a mentőkör marad).
+  assert.equal(FALLBACK_MODELS.animator, "gpt-6.1-sol");
+  assert.equal(FALLBACK_MODELS.bank, "claude-opus-5-5");
   assert.equal(resolveStudioModel("pedagogue", {}), "claude-opus-5");
   assert.equal(providerForModel("claude-opus-5"), "anthropic");
-  assert.equal(FALLBACK_MODELS.pedagogue, "grok-4.6");
+  assert.equal(FALLBACK_MODELS.pedagogue, "gpt-6.1-sol");
   assert.equal(resolveStudioModel("gateHelper", {}), "deepseek/deepseek-v4-flash");
   assert.equal(resolveStudioModel("quizPolish", {}), "deepseek/deepseek-v4-flash");
 });
@@ -138,28 +141,37 @@ test("the legacy route models are declared centrally", () => {
   assert.equal(providerForModel(LEGACY_MODELS.analyzeFiles), "openai");
 });
 
-/* Audit 2026-09-05 (szelet D): a D1-garancia a FALLBACK-párokra is áll — az author
- * fallbackja nem eshet a lektor primary családjára (különben ugyanaz a modell lektorálja magát). */
-test("assertDistinctFamilies: a shipped FALLBACK_MODELS minden author×lektor párja különböző család", () => {
+/* Audit 2026-09-05 (szelet D): a D1-garancia a tartalékokra is áll — ugyanaz a modellcsalád nem lektorálhatja a saját leckéjét.
+ * Spec-változás 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md, tulajdonosi döntés): a szerző és a lektor is
+ * ellentétes családú tartalékot kap, ezért a garancia a TÉNYLEGES szerzőség szerinti lektor-láncon áll (`lektorChainFor`):
+ * a szerző-jelöltek minden részhalmazára (csak elsődleges, csak tartalék, mindkettő) a lánc egyik tagja sem szerzőcsalád. */
+test("assertDistinctFamilies: a shipped modellekkel minden lehetséges szerzőség mellett független a lektor-lánc", () => {
   assert.doesNotThrow(() => assertDistinctFamilies({}));
-  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a beégetett régi nevek helyett a ténylegesen szállított modellek.
-  const authorCandidates = [resolveStudioModel("author", {}), FALLBACK_MODELS.author].filter(Boolean) as string[];
-  const lektorCandidates = [resolveStudioModel("lektor", {}), FALLBACK_MODELS.lektor].filter(Boolean) as string[];
-  for (const a of authorCandidates) for (const l of lektorCandidates) {
-    assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l} azonos család`);
+  const author = resolveStudioModel("author", {}), fallback = FALLBACK_MODELS.author!;
+  for (const authors of [[author], [fallback], [author, fallback]]) {
+    const chain = lektorChainFor(authors, {});
+    assert.ok(chain.length > 0, `${authors.join("+")}: van lektor`);
+    for (const l of chain) for (const a of authors) assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l} azonos család`);
   }
 });
 
-test("assertDistinctFamilies dob, ha az author FALLBACK-ja a lektor primary családjába esik", () => {
+test("assertDistinctFamilies dob, ha nem marad lektor a szerzőcsaládokon kívül", () => {
+  // Spec-változás 2026-10-14: a szerző-tartalék a lektor-elsődleges családjában már NEM hiba (a lektor-lánc kikerüli);
+  // hiba az, ha a szerző-jelöltek mellett egyetlen lektor sem marad.
   assert.throws(
-    () => assertDistinctFamilies({ STUDIO_MODEL_AUTHOR: "openai/gpt-5.6-terra", STUDIO_MODEL_LEKTOR: "z-ai/glm-5.3" }, { author: "z-ai/glm-5.3-flash" }),
-    /same model family/i,
+    // Szerző-jelöltek: qwen (elsődleges) + z-ai (tartalék); lektor-jelöltek: z-ai, qwen, és a harmadik család is qwen → üres lánc.
+    () => assertDistinctFamilies({ STUDIO_MODEL_AUTHOR: "qwen/qwen3.8-max", STUDIO_MODEL_LEKTOR: "z-ai/glm-5.3" }, { author: "z-ai/glm-5.3-flash", lektor: "qwen/qwen3.8-flash" }),
+    /no lektor model outside the author families/i,
   );
 });
 
-test("spec 2026-09-19: a lektornak van más családú tartalék-modellje, és az őr a tartalékkal is átmegy", () => {
-  // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md): a lektor tartaléka GPT-5.6 Terra (más család, mint a szerzőé).
-  assert.equal(FALLBACK_MODELS.lektor, "gpt-5.6-terra");
-  assert.notEqual(modelFamily(FALLBACK_MODELS.lektor!), modelFamily(resolveStudioModel("author")));
+test("spec 2026-10-14: a lektor-lánc a tényleges szerzőség szerint — Claude → Sol, majd Qwen; GPT → Qwen, majd Opus; vegyes → Qwen", () => {
+  assert.equal(FALLBACK_MODELS.lektor, "claude-opus-5-5");
+  assert.equal(LEKTOR_THIRD_FAMILY_MODEL, "qwen/qwen3.8-max-0902");
+  assert.deepEqual(lektorChainFor(["claude-opus-5-5"], {}), ["gpt-6.1-sol", "qwen/qwen3.8-max-0902"]);
+  assert.deepEqual(lektorChainFor(["gpt-6.1-sol"], {}), ["qwen/qwen3.8-max-0902", "claude-opus-5-5"]);
+  assert.deepEqual(lektorChainFor(["claude-opus-5-5", "gpt-6.1-sol"], {}), ["qwen/qwen3.8-max-0902"]);
+  // A telepítés előtt írt job (nincs authorModels): a konfigurált szerző-elsődleges számít szerzőnek.
+  assert.deepEqual(lektorChainFor(undefined, {}), ["gpt-6.1-sol", "qwen/qwen3.8-max-0902"]);
   assert.doesNotThrow(() => assertDistinctFamilies({}));
 });

@@ -1,7 +1,7 @@
 import { OpenAIProvider } from "./OpenAIProvider";
 import { OpenRouterProvider } from "./OpenRouterProvider";
 import { ClaudeProvider } from "./ClaudeProvider";
-import { AI_KEY_NAMES, aiKeyStatus, keyNameForModel, providerForModel, MODEL_REASONING_EFFORT } from "./models";
+import { AI_KEY_NAMES, aiKeyStatus, CROSS_FAMILY_FALLBACK_EFFORT, isCrossFamilyFallbackModel, keyNameForModel, providerForModel, MODEL_REASONING_EFFORT } from "./models";
 import { AIProviderQuotaError, isQuotaExhausted, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type ChatCallOptions, type IAIProvider } from "./AIProvider";
 import { logger } from "../lib/logger";
 
@@ -47,7 +47,7 @@ export function studioModelReady(model: string) {
   return aiKeyStatus()[providerForModel(model)].configured;
 }
 
-export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort" | "maxRetries" | "jsonMode"> = {}, env: Record<string, string | undefined> = process.env): IAIProvider {
+export function createStudioProvider(model: string, timeout = 180000, maxTokens = 24000, options: Pick<AIProviderConfig, "apiMode" | "reasoningEffort" | "maxRetries" | "jsonMode" | "chatReasoningEffort"> = {}, env: Record<string, string | undefined> = process.env): IAIProvider {
   const connection = studioConnection(model, env);
   const config = { apiKey: connection.apiKey, model: connection.model, timeout, maxTokens, ...options };
   // Spec 2026-09-19: the planner (pedagogue) runs on the direct Anthropic API (Opus 5,
@@ -174,9 +174,19 @@ export function stepStreamIdleMs(step: string): number | undefined {
   return STREAMED_STEPS.has(step) ? STREAM_IDLE_MS : undefined;
 }
 
+/**
+ * Tulajdonosi döntés 2026-10-14 (ellentétes családú tartalék): a tartalékhívás effortja medium, a lépés szabályzatától
+ * függetlenül; az OpenAI chat-úton is ténylegesen elküldve (`chatReasoningEffort`). Csak az ellentétes családú tartalékmodellre.
+ */
+export function crossFamilyFallbackOptions(model: string, fallback: boolean | undefined): Pick<AIProviderConfig, "reasoningEffort" | "chatReasoningEffort"> {
+  if (!fallback || !isCrossFamilyFallbackModel(model)) return {};
+  return { reasoningEffort: CROSS_FAMILY_FALLBACK_EFFORT, ...(providerForModel(model) === "openai" ? { chatReasoningEffort: true } : {}) };
+}
+
 /** Review gets its own bounded request, not three hidden 180-second attempts. */
-export function createStudioStepProvider(model: string, step?: string) {
+export function createStudioStepProvider(model: string, step?: string, opts: { fallback?: boolean } = {}) {
   if (step === "lektor") {
+    const vendor = providerForModel(model);
     return createStudioProvider(model, LEKTOR_TIMEOUT_MS, LEKTOR_MAX_TOKENS, {
       maxRetries: 0,
       // 2026-09-20 (tulajdonosi utasítás, LLM-as-judge kutatás): az értelmező lektorálás
@@ -184,16 +194,21 @@ export function createStudioStepProvider(model: string, step?: string) {
       // LEKTOR_MAX_TOKENS keretből fogy; a 12k élesben csonkult (spec 2026-09-29-lektor-tokenkeret). Csak a ténylegesen
       // használt token kerül pénzbe, így a nagyobb keret a kis leckéknél nem drágít.
       // Tulajdonosi döntés 2026-10-05: a lektor OpenAI-n (gpt-6.1-sol / gpt-5.6-terra) is a Responses API-n fut, medium efforttal.
-      ...(providerForModel(model) === "xai" || providerForModel(model) === "openai" ? { apiMode: "responses", reasoningEffort: "medium" } : {}),
+      ...(vendor === "xai" || vendor === "openai" ? { apiMode: "responses", reasoningEffort: "medium" } : {}),
+      // Tulajdonosi döntés 2026-10-14: a lektor-lánc Anthropic tagja (Opus 5.5) medium, a harmadik családú Qwen high efforton.
+      ...(vendor === "anthropic" ? { reasoningEffort: CROSS_FAMILY_FALLBACK_EFFORT } : {}),
+      ...(vendor === "openrouter" && MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {}),
     });
   }
   const policy = step ? STUDIO_STEP_POLICY[step] : undefined;
+  const fallbackOptions = crossFamilyFallbackOptions(model, opts.fallback);
   // Tulajdonosi döntés 2026-10-05 (élő próba, job c1f9d12a): mindkét szerzőmodell (Opus 5.5, Qwen 3.8) 24k fölött írt — az első hívás
   // kárba ment, utána 48k-s újrapróba jött. A szerző ezért rögtön 48k kerettel indul (csak a ténylegesen használt token fizetendő).
-  if (step === "author") return createStudioProvider(model, undefined, AUTHOR_MAX_TOKENS, MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {});
-  if (!policy) return createStudioProvider(model, undefined, undefined, MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {});
+  if (step === "author") return createStudioProvider(model, undefined, AUTHOR_MAX_TOKENS, { ...(MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {}), ...fallbackOptions });
+  if (!policy) return createStudioProvider(model, undefined, undefined, { ...(MODEL_REASONING_EFFORT[model] ? { reasoningEffort: MODEL_REASONING_EFFORT[model] } : {}), ...fallbackOptions });
   return createStudioProvider(model, policy.timeoutMs, policy.maxTokens, {
     reasoningEffort: policy.reasoningEffort,
+    ...fallbackOptions,
     ...(policy.jsonMode ? { jsonMode: true } : {}),
     // Mérve (4. mérés, run a9a4f683 és a regressziós futások): a tartalék bankmodell hívása 364 / 558 / 602 s-ig
     // tartott — az SDK a 240 s-os időtúllépést alapból kétszer csendben újrapróbálta (3 × 240 s). A lépés

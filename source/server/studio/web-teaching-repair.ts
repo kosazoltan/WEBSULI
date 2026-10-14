@@ -1,7 +1,7 @@
 import { parse, parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { z } from "zod";
 import { applyWebBankPatch } from "./web-bank-repair";
-import { reviewWebTeaching, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
+import { callTeachingReviewer, reviewWebTeaching, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { readHtmlLessonData, HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { resolveStudioModel } from "../ai/models";
@@ -89,6 +89,8 @@ export const callTeachingRepair = async (system: string, user: string, signal?: 
 };
 export async function reviewAndRepairWebTeaching(html: string, sources: FetchedTeachingSource[], options: {
   requestedTopic?: string; signal?: AbortSignal; review?: typeof reviewWebTeaching; repair?: typeof callTeachingRepair;
+  /** Tulajdonosi döntés 2026-10-14: a HTML tényleges szerzői — a lektor-lánc ezek családját zárja ki (D1). */
+  authorModels?: readonly string[];
   onReview?: (html: string, review: TeachingReview) => Promise<void>;
   onProblem?: (problem: string, html: string) => Promise<void>;
   onCandidate?: (html: string) => Promise<void>;
@@ -109,7 +111,9 @@ export async function reviewAndRepairWebTeaching(html: string, sources: FetchedT
     // A rejected patch left the candidate untouched: retain its negative review, not a second verdict.
     if (!patchFailure) {
       // Spec 2026-09-19: a re-review sees the previous verdict so subjective criteria converge.
-      review = await (options.review ?? reviewWebTeaching)(html, sources, undefined, options.signal, options.requestedTopic ?? "", false, review);
+      const authorModels = options.authorModels;
+      const lektorCall = authorModels ? (system: string, user: string, signal?: AbortSignal) => callTeachingReviewer(system, user, signal, authorModels) : undefined;
+      review = await (options.review ?? reviewWebTeaching)(html, sources, lektorCall, options.signal, options.requestedTopic ?? "", false, review);
       options.signal?.throwIfAborted();
       await options.onReview?.(html, review);
       if (review.checks.some(c => !c.passed)) await options.onProblem?.(review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`).join("; "), html);

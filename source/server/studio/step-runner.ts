@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import { subjectKeyOf } from "../../shared/subject-key";
 import type { IAIProvider } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, FALLBACK_MODELS, SECOND_FALLBACK_MODELS, keyNameForModel, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { BANK_RESCUE_MODEL, FALLBACK_MODELS, SECOND_FALLBACK_MODELS, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -245,7 +245,7 @@ export type PipelineStore = {
 
 export type PipelineDeps = {
   store?: PipelineStore;
-  providerFactory?: (model: string, step?: string) => IAIProvider;
+  providerFactory?: (model: string, step?: string, opts?: { fallback?: boolean }) => IAIProvider;
   keyConfigured?: (model: string) => boolean;
   /** Prompt lookup by name with an inline fallback; defaults to studioPromptStore. */
   /** `callKey`: a hívás azonosítója a futáson belül (lépés:kör[:fejezet:változat]) — a prompt-lenyomat kulcsa (review #158 szándéka). */
@@ -335,6 +335,12 @@ function focusedMapOf<T extends { concepts: MapConcept[] }>(map: T | null, job: 
   const known = new Set(focused.concepts.map((c) => c.localId));
   const added = extra.filter((c) => c?.localId && !known.has(c.localId));
   return added.length ? { ...focused, concepts: [...focused.concepts, ...added] } : focused;
+}
+
+/** Tulajdonosi döntés 2026-10-14: a lecke tényleges szerző-modelljei (a telepítés előtt írt jobnál nincs → a konfigurált szerző számít). */
+function authorModelsOf(job: JobView): string[] | undefined {
+  const value = (job.output as { authorModels?: unknown } | null | undefined)?.authorModels;
+  return Array.isArray(value) ? value.filter((m): m is string => typeof m === "string" && m.length > 0) : undefined;
 }
 
 function normalizeStep(raw: string): StudioStep {
@@ -649,7 +655,13 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
     return fail(store, job, "A térkép nem tartalmaz fogalmat — a lépés nem futhat le.");
   }
 
-  if (!keyConfigured(resolveStudioModel(job.step as ModelStep))) return fail(store, job, NO_OPENROUTER_KEY_MESSAGE + " Hiányzó kulcs: " + keyNameForModel(resolveStudioModel(job.step as ModelStep)));
+  // Tulajdonosi döntés 2026-10-14 (ellentétes családú tartalék): a lektor a lecke tényleges szerzői szerinti láncon fut — egyik
+  // tagja sem lehet a szerzők családjában (D1); kulcs nélküli tag kimarad.
+  const lektorChain = job.step === "lektor" ? lektorChainFor(authorModelsOf(job)).filter((m) => keyConfigured(m)) : undefined;
+  if (lektorChain && lektorChain.length === 0) {
+    return fail(store, job, `${NO_OPENROUTER_KEY_MESSAGE} Hiányzó kulcs: a lektor-lánc egyik modelljéhez sincs kulcs (${lektorChainFor(authorModelsOf(job)).map(keyNameForModel).join(", ")}).`);
+  }
+  if (!lektorChain && !keyConfigured(resolveStudioModel(job.step as ModelStep))) return fail(store, job, NO_OPENROUTER_KEY_MESSAGE + " Hiányzó kulcs: " + keyNameForModel(resolveStudioModel(job.step as ModelStep)));
 
   let input: unknown;
   let system: string;
@@ -807,7 +819,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
 
   await store.saveStep(job.id, { status: "running", finishedAt: null, error: null });
 
-  const primaryModel = resolveStudioModel(job.step);
+  const primaryModel = lektorChain ? lektorChain[0] : resolveStudioModel(job.step);
   let model = primaryModel;
   // Mérve (5. mérés, run a0eb2bed): a csak-bank javító körben a szöveg már lektorált és változatlan, az
   // ábra-modellhívás mégis újra lefutott (glm 609 s + deepseek 113 s, mindkettő hosszkorlát) — semmit nem
@@ -825,8 +837,9 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
   let animatorModelFailure: string | null = null;
   // Spec 2026-10-05-s9: az utolsó VALIDÁLÁSI bukás (nem szolgáltatói) a nyers kimenettel — az orkesztrátor ebből elemez.
   let lastModelFailure: StepModelError | undefined;
-  const attempt = (m: string, sys: string = system) =>
-    callStepModel(providerFactory(m, job.step === "animator" ? "visuals" : job.step), {
+  // Tulajdonosi döntés 2026-10-14: a tartalékhívás (`fallback`) az ellentétes családú modellen medium efforttal fut.
+  const attempt = (m: string, sys: string = system, fallback = false) =>
+    callStepModel(providerFactory(m, job.step === "animator" ? "visuals" : job.step, ...(fallback ? [{ fallback: true }] as const : [])), {
       step: job.step,
       role: requireRoleForStep(job.step),
       ...(job.step === "animator" ? { policy: "visuals" } : {}),
@@ -850,7 +863,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       json = job.output?.lesson;
       usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     } else if (designerLesson) {
-      const designerCall = (m: string, sectionSystem: string, user: string) => callStepModel(providerFactory(m, "visualDesigner"), {
+      const designerCall = (m: string, sectionSystem: string, user: string, fallback = false) => callStepModel(providerFactory(m, "visualDesigner", ...(fallback ? [{ fallback: true }] as const : [])), {
         step: job.step, policy: "visualDesigner", role: "animator", model: m, system: sectionSystem, user,
       });
       const fallbackModel = FALLBACK_MODELS.animator;
@@ -867,7 +880,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
             // Csak modellhívás-hibára (nem séma-sértésre) egy próba a tartalék modellel, fejezetenként.
             if (!(error instanceof StepModelError) || !fallbackModel || fallbackModel === primaryModel) throw error;
             logger.warn(`[STUDIO] Ábratervező (${job.id}) ${sectionIndex + 1}. fejezet: ${primaryModel} hibázott — ${describeStepError(error)} → ${fallbackModel}`);
-            return designerCall(fallbackModel, sectionSystem, user);
+            return designerCall(fallbackModel, sectionSystem, user, true);
           }
         },
         log: (line) => logger.info(`[STUDIO] Ábratervező (${job.id}): ${line}`),
@@ -884,7 +897,7 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       // Éles hiba 2026-09-09: a `FALLBACK_MODELS` eddig csak dokumentálva volt, a runner
       // sosem használta — az animátor 429-en (rate limit) végleg elhalt. Egy próba a
       // lépés fallback-modelljével, csak modellhívás-hibára (nem séma-sértésre).
-      const fallbackModel = FALLBACK_MODELS[job.step];
+      const fallbackModel = lektorChain ? lektorChain[1] : FALLBACK_MODELS[job.step];
       if (!(primaryError instanceof StepModelError) || !fallbackModel || fallbackModel === primaryModel) {
         throw primaryError;
       }
@@ -892,13 +905,13 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
         `[STUDIO] ${job.step} (${job.id}): az elsődleges modell (${primaryModel}) hibázott — ${describeStepError(primaryError)} → fallback: ${fallbackModel}`,
       );
       try {
-        result = await attempt(fallbackModel);
+        result = await attempt(fallbackModel, system, true);
         model = fallbackModel;
       } catch (fallbackError) {
         // Spec 2026-09-30-nem-elakado-kozzetetel (4. szelet): élő bukás (2026-09-28) — a lektor elsődleges modellje üres
         // választ adott, a tartalék a hosszkorlátba ütközött, és a kész lecke elveszett. Egy harmadik, más családú modell
         // még megpróbálja (csak modellhívás-hibára, és csak ha a kulcsa be van állítva).
-        const lastModel = SECOND_FALLBACK_MODELS[job.step as keyof typeof SECOND_FALLBACK_MODELS];
+        const lastModel = lektorChain ? lektorChain[2] : SECOND_FALLBACK_MODELS[job.step as keyof typeof SECOND_FALLBACK_MODELS];
         const chain = `${describeStepError(primaryError)} [${primaryModel}]; fallback: ${describeStepError(fallbackError)} [${fallbackModel}]`;
         if (!(fallbackError instanceof StepModelError) || !lastModel || lastModel === primaryModel || lastModel === fallbackModel || !keyConfigured(lastModel)) {
           throw new StepModelError(job.step, chain);
@@ -1147,7 +1160,8 @@ export async function runPipelineStep(jobId: string, deps: PipelineDeps = {}): P
       if (lengthNotes) logger.warn(`[STUDIO] Terjedelmi keret túllépve (${job.id}): ${visibleWords} > ${lengthBudget.maxWords} látható szó`);
       await store.saveStep(
         job.id,
-        successPatch({ ...job.output, lesson: cleaned, bankReview, ...(lengthNotes ? { qualityNotes: lengthNotes } : {}) }, { lessonId }),
+        // Tulajdonosi döntés 2026-10-14: a lecke tényleges szerzői (körökön át halmozva) — a lektor-lánc ezek családját zárja ki.
+        successPatch({ ...job.output, lesson: cleaned, bankReview, authorModels: [...new Set([...(authorModelsOf(job) ?? []), model])], ...(lengthNotes ? { qualityNotes: lengthNotes } : {}) }, { lessonId }),
       );
       return { ok: true, next: nextStep({ step: job.step, ok: true, round: job.round }) };
     }
@@ -1269,7 +1283,9 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
               // Preserve valid packet hashes; only rejected/missing packets get a fresh model request.
               if (job.output?.bankRecoveryAttempt) user += `\nExplicit bankfolytatás: ${job.output.bankRecoveryAttempt}. Az aktuális csomagot minden felsorolt feltétellel újra ellenőrizd.`;
               // Model-output failure / timeout → RetryableBankCallError (next attempt); other provider failures → resume path.
-              const result = await callBankPacketModel(providerFactory(bankModel, bankProviderStep(attempt)), bankModel, bankSystem, user, undefined, extra);
+              // Tulajdonosi döntés 2026-10-14: az első tartalék (PACKET_ATTEMPTS - 1) az ellentétes család, medium efforttal.
+              const bankProvider = providerFactory(bankModel, bankProviderStep(attempt), ...(attempt === PACKET_ATTEMPTS - 1 ? [{ fallback: true }] as const : []));
+              const result = await callBankPacketModel(bankProvider, bankModel, bankSystem, user, undefined, extra);
               if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
               return result.json;
             },
