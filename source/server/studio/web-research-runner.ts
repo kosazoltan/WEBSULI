@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { crossFamilyFallback, effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, createStudioStepProvider, crossFamilyFallbackOptions, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
@@ -284,15 +284,25 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
     onEvent({ type: "status", message: "Forrásjegyzék készítése a letöltött szövegekből…" });
     const files = fetchedSourcesToExtractorFiles(downloaded);
     const extraction = await workflowCheckpoint("web-extract", { input, method: LESSON_METHOD_VERSION, contract: "web-extract-1", urls: downloaded.map(s => s.url) }, () => extractWebConcepts(files, { subject: input.title?.trim() || "tananyag", classroom: input.classroom }, async (system, user) => {
-      const provider = createStudioProvider(extractModel, 180_000, 12_000);
       // Review #164 (U6, C10): runtime-3-ban a runbook elöl és a stabil előtag gyorsítótár-jelölést kap, mint a
       // `callStepModel` útján; a befagyasztott futás a régi sorrendet és jelölés nélküli hívást kapja.
       const extractSystem = withRunbook(withSupportSkill(isFrozenBundle(workflowRuntimeVersion()) ? "web-research" : "web-extract", system), "web-extract");
       const cachePrefixChars = isFrozenBundle(workflowRuntimeVersion()) ? 0 : stablePrefixChars(extractSystem);
-      const response = await provider.chat([
-        { role: "system", content: extractSystem },
-        { role: "user", content: user },
-      ], controller.signal, cachePrefixChars > 0 ? { cachePrefixChars } : undefined);
+      const messages = [
+        { role: "system" as const, content: extractSystem },
+        { role: "user" as const, content: user },
+      ];
+      const chatOptions = cachePrefixChars > 0 ? { cachePrefixChars } : undefined;
+      // Spec 2026-10-14-tartalek-b-szelet (B2): az elsődleges szolgáltatói hibájánál egyszer az ellentétes családú tartalék (medium).
+      let response: Awaited<ReturnType<ReturnType<typeof createStudioProvider>["chat"]>>;
+      try {
+        response = await createStudioProvider(extractModel, 180_000, 12_000).chat(messages, controller.signal, chatOptions);
+      } catch (error) {
+        const fallback = crossFamilyFallback(extractModel);
+        if (controller.signal.aborted || !fallback || !studioModelReady(fallback)) throw error;
+        logger.warn(`[WEB-RESEARCH] A kivonatoló (${extractModel}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
+        response = await createStudioProvider(fallback, 180_000, 12_000, crossFamilyFallbackOptions(fallback, true)).chat(messages, controller.signal, chatOptions);
+      }
       await workflowUsage(response.usage);
       if (response.finishReason === "length" || response.finishReason === "max_tokens") {
         throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
