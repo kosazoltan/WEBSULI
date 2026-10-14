@@ -5,8 +5,8 @@ import { callTeachingReviewer, reviewWebTeaching, type FetchedTeachingSource, ty
 import { readHtmlLessonData, HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { resolveStudioModel } from "../ai/models";
-import { createStudioProvider } from "../ai/studio-provider";
-import { callStepModel } from "./run-step";
+import { createStudioProvider, crossFamilyFallbackOptions } from "../ai/studio-provider";
+import { callStepModelWithFallback } from "./run-step";
 import { withSupportSkill } from "./support-skills";
 
 type Node = DefaultTreeAdapterMap["node"];
@@ -83,9 +83,15 @@ export function applyTeachingPatch(html: string, raw: unknown, allowedSections?:
   return html;
 }
 
-export const callTeachingRepair = async (system: string, user: string, signal?: AbortSignal) => {
+/** Spec 2026-10-14-tartalek-b-szelet: ellentétes családú tartalékkal; a TÉNYLEGES modellt az `onModel` kapja (szerzőség, D1). */
+export const callTeachingRepair = async (system: string, user: string, signal?: AbortSignal, onModel?: (model: string) => void) => {
   const model = resolveStudioModel("author"), deadline = AbortSignal.timeout(240_000);
-  return (await callStepModel(createStudioProvider(model, 240_000, 16_000), { step: "author", role: "web-repair", model, system: withSupportSkill("web-repair", system), user }, signal ? AbortSignal.any([signal, deadline]) : deadline)).json;
+  const result = await callStepModelWithFallback({ step: "author", role: "web-repair", model, system: withSupportSkill("web-repair", system), user }, {
+    providerFactory: (m, _step, o) => createStudioProvider(m, 240_000, 16_000, crossFamilyFallbackOptions(m, o?.fallback)),
+    signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+  });
+  onModel?.(result.model);
+  return result.json;
 };
 export async function reviewAndRepairWebTeaching(html: string, sources: FetchedTeachingSource[], options: {
   requestedTopic?: string; signal?: AbortSignal; review?: typeof reviewWebTeaching; repair?: typeof callTeachingRepair;
@@ -108,7 +114,9 @@ export async function reviewAndRepairWebTeaching(html: string, sources: FetchedT
   let review: TeachingReview | undefined;
   // Review #216: a szerzőlista a ténylegesen alkalmazott javítófolt után bővül a javító modelljével (D1-lánc).
   let authors = options.authorModels ? [...options.authorModels] : undefined;
-  const repairWrote = () => { if (authors) authors = [...new Set([...authors, options.repairModel ?? resolveStudioModel("author")])]; };
+  // Review #216 / B1: a javító TÉNYLEGES modellje (tartalékon is) — a felülírt `repair` esetén a megadott vagy a szerző-elsődleges.
+  let usedRepairModel: string | undefined;
+  const repairWrote = () => { if (authors) authors = [...new Set([...authors, usedRepairModel ?? options.repairModel ?? resolveStudioModel("author")])]; };
   for (let attempt = 0; attempt <= REVIEW_REPAIR_ATTEMPTS; attempt++) {
     options.signal?.throwIfAborted();
     const gate = verifyLessonMethodHtml(html);
@@ -132,6 +140,7 @@ export async function reviewAndRepairWebTeaching(html: string, sources: FetchedT
 Hiányzó hogyan/miért magyarázatnál vagy pedagógiai többletnél ne csak szót cserélj: a fejezet egy meglévő mondatát bővítsd ugyanabban a cserében 2–4 új, a forrásból igazolható mondattal (after = a meglévő mondat + az új mondatok), hogy a lépések, okok és egy konkrét, korosztályhoz illő példa is szerepeljen.
 Kimenet JSON: {"edits":[{"sectionIndex":0,"before":"pontos meglévő HTML szövegrész","after":"teljes javított részlet"}],"bank":{"methods":[],"tasks":[],"quiz":[]}}. Egy edit csak egy meglévő data-teaching-section belsejében egyszer előforduló, egyetlen DOM-szövegcsomóponton belüli részletet cserélhet. A before ne tartalmazzon HTML taget! Formázott mondatot több rövid cserével javíts. Ne módosítsd a fejezet attribútumait, scripteket, stílust, navigációt, évfolyamot, banktervet vagy forráslistát. Rövid szövegcserét válassz, teljes fejezetet ne. Az after szövegében csak egyszerű, attribútum nélküli p,b,strong,em,i,span,br,ul,ol,li,small,sup,sub tagek engedettek. Bank opcionális: csak az allowedBankItems listában megnevezett meglévő tétel teljes objektuma ugyanazzal az ID-val és sectionIndex-szel. Törlés vagy új tétel nincs. A bank minden válasza a javított tanításból következzen.\n${HTML_LESSON_DATA_CONTRACT}`,
       JSON.stringify({ lessonHtml: html, sources, requestedTopic: options.requestedTopic, review, allowedSectionIndices: [...allowedSections], allowedBankItems: [...allowedBankItems], patchFailure, previousPatch, previousBankRejection }), options.signal,
+      (m) => { usedRepairModel = m; },
     );
     options.signal?.throwIfAborted();
     try { html = applyTeachingPatch(html, patch, allowedSections, allowedBankItems); repairWrote(); patchFailure = ""; previousPatch = undefined; previousBankRejection = ""; }

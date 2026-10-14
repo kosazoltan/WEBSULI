@@ -2899,11 +2899,13 @@ test("review #177 (2.2b): ha a vak megoldó újrakérése hibázik, a részleges
   delete (job.output as Record<string, unknown>).blindSolutions;
   const inner = deps.providerFactory;
   let blindCalls = 0;
+  const blindModels: string[] = [];
   const providerFactory = (model: string): IAIProvider => {
     const provider = inner(model);
     return { ...provider, chat: async (...args: Parameters<IAIProvider["chat"]>) => {
       if ((args[0][0]?.content ?? "").includes("TÁMOGATÓ SKILL: blind-solver")) {
         blindCalls++;
+        blindModels.push(model);
         if (blindCalls === 1) return { content: JSON.stringify({ solutions: "nem tömb" }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
         throw new Error("szolgáltatói hiba az újrakérésnél");
       }
@@ -2912,12 +2914,15 @@ test("review #177 (2.2b): ha a vak megoldó újrakérése hibázik, a részleges
   };
   const run = async () => { job.step = "lektor"; job.status = "running"; await runPipelineStep("blind-retry-fail", { ...deps, providerFactory }); };
   await run(); await run();
-  assert.equal(blindCalls, 2, "részleges → egy újrakérés (ami hibázik)");
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-tartalek-b-szelet.md): az egyetlen újrakérés az elsődlegesen, majd hibájánál
+  // a független tartalékon (a bank családján kívül: Qwen) fut — ez EGY próbálkozás két hívással.
+  assert.equal(blindCalls, 3, "részleges → egy újrakérés (ami az elsődlegesen és a tartalékon is hibázik)");
+  assert.deepEqual(blindModels, ["claude-opus-5-5", "claude-opus-5-5", "qwen/qwen3.8-max-0902"]);
   const cached = job.output?.blindSolutions as { partial?: boolean; retried?: boolean };
   assert.equal(cached.partial, true, "a részleges eredmény megmarad");
   assert.equal(cached.retried, true, "a próbálkozás ténye tartós");
   await run();
-  assert.equal(blindCalls, 2, "hibás újrakérés után nincs újabb fizetett próba");
+  assert.equal(blindCalls, 3, "hibás újrakérés után nincs újabb fizetett próba");
 });
 
 /* Spec 2026-10-05-s9-prompt-javito-orkesztrator (tulajdonosi tervezés): a modell-lánc validálási bukása után (mind a három modell
