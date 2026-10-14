@@ -135,8 +135,8 @@ export async function completeWithinBudget<R extends { choices: Array<{ finish_r
   throw new Error("A forrásfeldolgozás válasza nem teljes; csonkolt jegyzék nem menthető.");
 }
 
-/** Ask the extractor model for a structured reading of the uploaded sources. */
-async function callExtractorModel(
+/** Ask the extractor model for a structured reading of the uploaded sources. Review #221: exportálva a tartalék-teszthez. */
+export async function callExtractorModel(
   files: ExtractorFile[],
   scope: ExtractorScope,
   systemPrompt: string,

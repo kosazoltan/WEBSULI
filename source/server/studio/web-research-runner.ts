@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { crossFamilyFallback, effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, createStudioStepProvider, crossFamilyFallbackOptions, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
@@ -18,6 +18,7 @@ import { stripJsonFences } from "../ai/OpenRouterProvider";
 import { StepModelError, stablePrefixChars, withRunbook } from "./run-step";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, type ExperienceCheckpoint } from "./experience-builder";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
+import { chatJsonWithFallback } from "./fallback-attempt";
 import { withSupportSkill } from "./support-skills";
 import { cachedSystem } from "../ai/prompt-cache";
 import {
@@ -234,6 +235,20 @@ export async function gatherWebSources(input: WebResearchChatRequest, { signal, 
   }
 }
 
+/** Review #218/#221: a webes forrásjegyzék-válasz minimális ellenőrzése (hosszkorlát, JSON, cím, fogalomlista) — tisztán, tesztelhetően. */
+export function checkWebExtractionResponse(response: { content?: string | null; finishReason?: string }): unknown {
+  if (response.finishReason === "length" || response.finishReason === "max_tokens") {
+    throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
+  }
+  let parsed: { title?: unknown; concepts?: unknown };
+  try { parsed = JSON.parse(stripJsonFences(response.content ?? "").trim()); }
+  catch { throw new WebResearchFailure("A forrásjegyzék nem érvényes JSON. A tananyag nem írható."); }
+  if (typeof parsed?.title !== "string" || !parsed.title || !Array.isArray(parsed.concepts)) {
+    throw new WebResearchFailure("A forrásjegyzékből hiányzik a cím vagy a fogalomlista. A tananyag nem írható.");
+  }
+  return parsed;
+}
+
 /** Runs independently of HTTP; only the legacy stream supplies a client abort signal. */
 /**
  * Spec 2026-09-29 (PR #131 review, R1): the first author attempt uses the primary model; the repair rounds run on the
@@ -293,30 +308,17 @@ export async function generateWebResearchLesson(input: WebResearchChatRequest, {
         { role: "user" as const, content: user },
       ];
       const chatOptions = cachePrefixChars > 0 ? { cachePrefixChars } : undefined;
-      // Spec 2026-10-14-tartalek-b-szelet (B2) + review #218: próbálkozásonként a hosszkorlát, a JSON és a minimális alak (cím,
-      // fogalomlista) is ellenőrzött — a szolgáltatói ÉS a kimeneti hiba is egyszer az ellentétes családú tartalékot indítja (medium).
-      const attempt = async (m: string, options: Parameters<typeof createStudioProvider>[3] = {}) => {
-        const response = await createStudioProvider(m, 180_000, 12_000, options).chat(messages, controller.signal, chatOptions);
-        await workflowUsage(response.usage);
-        if (response.finishReason === "length" || response.finishReason === "max_tokens") {
-          throw new WebResearchFailure("A forrásjegyzék válasza elérte a hosszkorlátot. Csonka jegyzék nem menthető.");
-        }
-        let parsed: { title?: unknown; concepts?: unknown };
-        try { parsed = JSON.parse(stripJsonFences(response.content ?? "").trim()); }
-        catch { throw new WebResearchFailure("A forrásjegyzék nem érvényes JSON. A tananyag nem írható."); }
-        if (typeof parsed?.title !== "string" || !parsed.title || !Array.isArray(parsed.concepts)) {
-          throw new WebResearchFailure("A forrásjegyzékből hiányzik a cím vagy a fogalomlista. A tananyag nem írható.");
-        }
-        return parsed as unknown;
-      };
-      try {
-        return await attempt(extractModel);
-      } catch (error) {
-        const fallback = crossFamilyFallback(extractModel);
-        if (controller.signal.aborted || !fallback || !studioModelReady(fallback)) throw error;
-        logger.warn(`[WEB-RESEARCH] A kivonatoló (${extractModel}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`);
-        return attempt(fallback, crossFamilyFallbackOptions(fallback, true));
-      }
+      // Spec 2026-10-14-tartalek-b-szelet (B2) + review #218/#221: próbálkozásonként a hosszkorlát, a JSON és a minimális alak (cím,
+      // fogalomlista) is ellenőrzött — a szolgáltatói ÉS a kimeneti hiba is egyszer az ellentétes családú tartalékot indítja (medium);
+      // a felhasználás könyvelése a tartalék-határon KÍVÜL (persist-hiba nem indít fizetős tartalékot).
+      return chatJsonWithFallback({
+        primary: extractModel,
+        call: (m, fallback) => createStudioProvider(m, 180_000, 12_000, crossFamilyFallbackOptions(m, fallback)).chat(messages, controller.signal, chatOptions),
+        book: (usage) => workflowUsage(usage),
+        check: checkWebExtractionResponse,
+        signal: controller.signal,
+        onFallback: (fallback, error) => logger.warn(`[WEB-RESEARCH] A kivonatoló (${extractModel}) hibázott — ${error instanceof Error ? error.message.slice(0, 200) : String(error)} → tartalék: ${fallback}`),
+      });
     }));
     const taught = teachableConcepts(extraction.concepts);
     if (!taught.length) throw new WebResearchFailure("A letöltött szövegekből nem készült idézetellenőrzött fogalomjegyzék. A tananyag nem írható.");
