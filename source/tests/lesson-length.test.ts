@@ -54,5 +54,8 @@ test("szerző: tömör és teljes, a keret a promptban; a „ne rövidítsd váz
   assert.match(prompt, /TÖMÖR ÉS TELJES/);
   assert.match(prompt, /kb\. 900 látható szó \(legfeljebb 1080\)/);
   assert.match(prompt, /TÉNYVÉDELEM/, "a rövidítés nem vághat tényt (kalibráció 2026-10-14)");
+  // mérve (Hunyadi): a mindig-true minta a tömör fejezetekben elérhetetlen Próbát → ív-hibát → hosszító javítókört adott
+  assert.match(prompt, /PRÓBA: a fejezet probaEnabled értéke CSAK akkor true, ha a fejezetben legalább 5 check/);
+  assert.match(prompt, /"probaEnabled": boolean/);
   assert.doesNotMatch(prompt, /Ne rövidítsd vázlattá/);
 });

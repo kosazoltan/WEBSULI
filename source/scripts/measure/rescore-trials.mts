@@ -24,7 +24,7 @@ for (const label of labels.split(",")) {
     const focus = (await db.query("SELECT output->'topicFocus' AS f FROM studio_jobs WHERE map_id=$1 AND output ? 'topicFocus' ORDER BY created_at DESC LIMIT 1", [mapId])).rows[0]?.f as TopicFocus | undefined;
     const concepts = applyTopicFocus({ concepts: taught.map((c) => ({ localId: c.local_id, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.exam_weight }) as MapConcept) }, focus).concepts;
     const m = measureLesson(lesson, { sourceText: meta.source_text ?? "", concepts });
-    rows.push({ címke: label, térkép: String(meta.title).slice(0, 26), szó: m.visibleWords, fejezet: m.sections, "kötelező-fogalom%": m.requiredConceptTermsPct, "forrás→lecke%": m.sourceInLessonPct, "nem-forrás%": m.nonSourcePct });
+    rows.push({ címke: label, térkép: String(meta.title).slice(0, 26), szó: m.visibleWords, fejezet: m.sections, "kötelező-fogalom%": m.requiredConceptTermsPct, "kötelező-tény%": m.requiredFactsPct, "forrás→lecke%": m.sourceInLessonPct, "nem-forrás%": m.nonSourcePct });
   }
 }
 await db.end();

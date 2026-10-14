@@ -9,6 +9,7 @@ import { ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT
 import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { lessonLengthBudget } from "../../shared/lesson-length";
+import { DEFAULT_REWARD_POLICY } from "../../shared/reward-policy";
 import { bandRegisterForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
@@ -493,6 +494,9 @@ export function buildAuthorPrompt(
     "Most kizárólag a Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Az experience bankokat külön lépés gyártja; ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",
     `TÖMÖR ÉS TELJES (a program méri): a teljes Tananyag lap kb. ${lessonLengthBudget(map).targetWords} látható szó (legfeljebb ${lessonLengthBudget(map).maxWords}). Minden kötelező fogalmat EGYSZER tanítasz meg, a legrövidebb érthető magyarázattal és egy kidolgozott példával; amit egy blokk már elmondott, azt a következő nem ismétli; a recap 2–3 pont; kitöltő általánosság és forráson kívüli érdekesség nem kell. A tömörség nem vázlatosság: a hogyan és a miért lépései megmaradnak.`,
     // Kalibrálva (próbaharness 2026-10-14): tényvédelem nélkül a rövidítés a kötelező fogalmak tartalmát is vágta (−9…−17 pont).
+    // Mérve (próbaharness, Hunyadi): a minta `"probaEnabled": true`-ja miatt a tömör (1 kérdéses) fejezetek Próbája elérhetetlen
+    // lett → ív-hiba → szerzői javítókör, amely a kérdések pótlásával a leckét újra hosszítja. Az ív-szerződés választást enged.
+    `PRÓBA: a fejezet probaEnabled értéke CSAK akkor true, ha a fejezetben legalább ${DEFAULT_REWARD_POLICY.minCorrectForCoupon} check blokk van; tömör, kevés kérdéses fejezetnél false. Kérdést nem a Próba kedvéért adsz hozzá.`,
     "TÉNYVÉDELEM: a rövidítés CSAK töltelékre és ismétlésre vonatkozik — minden kötelező fogalom definíciójának és idézetének minden tényét (név, szám, évszám, ok, lépés) kimondod a lecke látható szövegében; ha a keret szűk, a magyarázat lesz rövidebb, nem a tény marad ki.",
     "",
   ];
@@ -533,7 +537,7 @@ export function buildAuthorPrompt(
         ]
       : [
           "A válasz CSAK JSON legyen, a Lesson sémának megfelelően:",
-          '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": true, "blocks": [...] }], "misconceptions": [{ "conceptId": string, "text": string }], "sourceOnly": true }',
+          '{ "title": string, "subject": string, "classroom": number, "mapId": string, "sections": [{ "heading": string, "probaEnabled": boolean, "blocks": [...] }], "misconceptions": [{ "conceptId": string, "text": string }], "sourceOnly": true }',
         ]),
     "",
     "Vázlat:",

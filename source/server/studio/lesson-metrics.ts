@@ -87,6 +87,38 @@ export function repetitionShare(text: string): number {
   return Math.round((100 * repeated) / total);
 }
 
+/**
+ * Tényszintű kulcsok egy fogalomhoz: minden szám (évszám, adat, példa-szám), a fogalom NEVÉNEK szótövei és a definíció/idézet
+ * tulajdonnevei (nagybetűs, nem mondatkezdő szó). Mérve (2026-10-14, Oszthatóság): a teljes szótő-lefedettség a rövidebb
+ * leckében kötőszavak és igealakok („tovább”, „látjuk”, „amilyen”) hiánya miatt 9 ponttal esett, miközben egyetlen szám vagy
+ * fogalomnév sem hiányzott — a „nem tartalmaz mindent” panasz a TÉNYEKRE vonatkozik.
+ */
+export function factKeys(concept: { term: string; definition?: string | null; quote?: string | null }): Set<string> {
+  const keys = new Set<string>();
+  // Tankönyvi hivatkozás nem tény („(4. ábra)”, „3. kép”, „12. oldal”): a lecke a TANÍTÁSI SZERZŐDÉS 4. pontja szerint a
+  // forrásra nem hivatkozhat — mérve (Zöldségek, 2026-10-14): a „hiányzó” számok mind ábraszámok voltak.
+  const withoutRefs = (s: string) => s.replace(/\(?\b\d+\.\s*(ábr\p{L}*|kép\p{L}*|oldal\p{L}*|old\.|o\.|táblázat\p{L}*|feladat\p{L}*)\)?/giu, " ");
+  const body = withoutRefs(`${concept.definition ?? ""} ${concept.quote ?? ""}`);
+  for (const n of `${withoutRefs(concept.term)} ${body}`.match(/\d+(?:[.,]\d+)?/g) ?? []) keys.add(n.replace(",", "."));
+  for (const k of termKeys(concept.term)) keys.add(k);
+  // tulajdonnév: nagybetűs, legalább 4 betűs szó, amely nem mondat elején áll
+  const tokens = body.split(/\s+/).filter(Boolean);
+  tokens.forEach((token, i) => {
+    const word = token.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, "");
+    const sentenceStart = i === 0 || /[.!?:]$/.test(tokens[i - 1]);
+    if (!sentenceStart && /^\p{Lu}\p{Ll}{3,}$/u.test(word) && !STOPWORDS.has(word.toLowerCase())) keys.add(word.toLowerCase().slice(0, TERM_KEY_LENGTH));
+  });
+  return keys;
+}
+
+/** A szöveg tény-kulcsai: számok és szótövek (a factKeys-szel összevethető alakban). */
+function textFactKeys(text: string): Set<string> {
+  const keys = termKeys(text);
+  for (const n of text.match(/\d+(?:[.,]\d+)?/g) ?? []) keys.add(n.replace(",", "."));
+  for (const w of words(text)) if (w.length >= 4) keys.add(w.slice(0, TERM_KEY_LENGTH));
+  return keys;
+}
+
 export type LessonMetrics = {
   sourceWords: number;
   visibleWords: number;
@@ -106,6 +138,8 @@ export type LessonMetrics = {
    * tisztességes lefedettség: a fókuszon kívüli forrásrész szándékosan marad ki, a teljes-forrás arány ott félrevezet.
    */
   requiredConceptTermsPct: number | null;
+  /** A kötelező fogalmak TÉNYEIBŐL (számok, fogalomnév, tulajdonnevek — `factKeys`) hány szerepel a Tananyag lapon. */
+  requiredFactsPct: number | null;
 };
 
 export function measureLesson(
@@ -133,5 +167,10 @@ export function measureLesson(
       context.concepts.filter((c) => c.examWeight !== "extra").map((c) => [c.term, c.definition ?? "", c.quote ?? ""].join(" ")).join("\n"),
       visible,
     ).pct,
+    requiredFactsPct: (() => {
+      const have = textFactKeys(visible);
+      const facts = new Set(context.concepts.filter((c) => c.examWeight !== "extra").flatMap((c) => [...factKeys(c)]));
+      return facts.size ? Math.round((100 * [...facts].filter((k) => have.has(k)).length) / facts.size) : null;
+    })(),
   };
 }
