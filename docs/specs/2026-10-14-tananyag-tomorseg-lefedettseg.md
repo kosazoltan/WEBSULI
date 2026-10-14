@@ -127,10 +127,25 @@ tisztességes mérce (a teljes-forrás arány ott szándékosan alacsony).
 | Egyiptom (6470, fókusz 33) | 5738 / 94% (kapu bukott) | 1573 / 78% | szerző-időtúllépés |
 | Időszámítás (239) | alapvonal bukott | 2158 / 89% | szerző-időtúllépés |
 
-Értékelés: E1 (rövidülés) teljesül; leíró tárgynál a kötelező-fogalom lefedettség nem romlik (Mezopotámia, Zöldségek);
-matematikai eljárásnál (Oszthatóság) −9 pont — NEM teljesül. A kalibráció kétszer futott; a harmadik iteráció tulajdonosi döntés
-(AGENTS.md oszcilláció-szabály). A szerző-fázis 3 friss futása `AIProviderIdleTimeoutError` (120 s csendes gondolkodás) miatt
-bukott — ez élesben is elakadást okozhat; külön javítási feladat. A mérések: `tmp/trial-2026-10-14/` (gitignore-olt).
+A fenti köztes mérés két hibát hordozott, mindkettő javítva: (1) a harness a szerep-skill nélkül futott (review #210 →
+éles prompt-feloldás); (2) az Oszthatóság „−9 pont” a szótő-mérő zaja volt (kötőszavak, tankönyvi ábraszámok) — a
+**tényszintű** mérőszám (`requiredFactsPct`: számok, fogalomnév, tulajdonnevek, ábra-/oldalszám nélkül) szerint egyetlen
+kötelező tény sem hiányzott. Közben két kapu-ütközés javítva: Próba csak ≥ 5 kérdésnél; a tömörítés nem bont ívet / fogalomnevet.
+
+### Végső mérés (éles prompt-feloldás, szerep-skill, a térkép tulajdonosának szabályai) — `docs/measurements/2026-10-14-s2-final-trial.json`
+| téma | alapvonal szó | S2 szó | változás | kötelező tény (alap → S2) | kapu/ív (alap → S2) |
+| --- | --- | --- | --- | --- | --- |
+| Mezopotámia (46 szó) | 2530 | **792** | **−69%** | 100% → 100% | OK/OK → OK/OK |
+| Oszthatóság (fókusz 9) | 3891 | **954** | **−75%** | 100% → 100% | OK/OK → OK/OK |
+| Egyiptom (fókusz 33) | 4259 | 3395 | −20% | 98% → 98% | BUK/OK → BUK/OK (változatlan) |
+| Zöldségek | 3771 | 3154 | −16% | 100% → 100% | **BUK/OK → OK/OK** |
+| Időszámítás | szerző-időtúllépés | 3056 | – | – → 100% | – → OK/OK |
+| Hunyadi | szerző-időtúllépés | érvénytelen JSON (modell) | – | – | – |
+
+**Értékelés:** a rövidülés minden párosított térképen megvan, kötelező tény nem veszett el, kapu nem romlott (Zöldségek javult)
+→ **igazolt javítás, élesíthető**. Nem teljesült: E1 közepes forrásnál ≥ 25% a Zöldségeken (−16%). E2 (lefedettség ≥ v7.5)
+a nagy forrásnál (Hunyadi, Egyiptom) nem igazolható — ez az S3–S4 (forrásszöveg a szerzőnek, darabolt kinyerés) feladata.
+A szerző-időtúllépést a #212 javította (élesben); az alapvonal még a javítatlan streamen futott, innen a két bukása.
 
 ## Kockázatok
 - A rövidebb tanítás ronthatja a bank minőségét (a bank a tanításból épül) → S2-ben a bank-ellenőr hibaszámát is mérjük.
