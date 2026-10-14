@@ -66,7 +66,7 @@ test("konszenzus (pilot-lelet: futásonként eltérő tantárgy): egyező → ag
   assert.ok(third.status === "agreed" && third.models.join(",") === "a,c");
 });
 
-test("pilot-lelet: a `{\"answer\": {...}}` burok determinisztikusan kibontva; a modell-lista a v4.1-flash-sel", () => {
+test("pilot-lelet: a `{\"answer\": {...}}` burok determinisztikusan kibontva; a modell-lista közvetlen OpenAI (Luna → 6.1 Sol → 6 Sol)", () => {
   assert.equal(parseClassification({ answer: good }, input).subject, "fizika");
   assert.throws(() => parseClassification({ answer: good, extra: 1 }, input), "csak egykulcsos burok bontható ki");
   // Spec-változás 2026-10-14 (docs/specs/2026-10-14-forras-besorolo-openai-luna.md, tulajdonosi döntés): OpenRouter helyett

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { providerForModel, resolveStudioModel, studioModelMap, STUDIO_STEPS } from "../server/ai/models";
+import { STUDIO_STEP_POLICY } from "../server/ai/studio-provider";
 import { CLASSIFIER_MODELS } from "../server/catalog/classify";
 import { callScopeModel } from "../server/studio/one-step";
 
@@ -59,4 +60,13 @@ test("E4: a besoroló gpt-6-lunával kezd, két különböző közvetlen OpenAI-
   assert.equal(new Set(CLASSIFIER_MODELS).size, CLASSIFIER_MODELS.length, "a konszenzushoz különböző modellek kellenek");
   assert.ok(CLASSIFIER_MODELS.length >= 3, "eltérő tantárgynál döntő kell (2 a 3-ból)");
   for (const m of CLASSIFIER_MODELS) assert.equal(providerForModel(m), "openai", `${m}: közvetlen OpenAI, nem OpenRouter`);
+});
+
+test("review #209: a katalógus-besoroló a MÉRT high effort szabályzaton fut, nem a topicFocus (low) szabályzaton", () => {
+  assert.equal(STUDIO_STEP_POLICY.catalogClassify?.reasoningEffort, "high");
+  const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const script = strip(readFileSync(new URL("../scripts/catalog/classify.mts", import.meta.url), "utf8"));
+  assert.match(script, /createStudioStepProvider\(model,\s*"catalogClassify"\)/);
+  assert.match(script, /policy:\s*"catalogClassify"/);
+  assert.doesNotMatch(script, /"topicFocus"/);
 });
