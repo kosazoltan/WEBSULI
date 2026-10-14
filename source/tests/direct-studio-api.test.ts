@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { studioConnection } from "../server/ai/studio-provider";
 import { callOcrModel } from "../server/studio/ocr";
 import { callScopeModel } from "../server/studio/one-step";
-import { aiKeyStatus, studioModelMap, FALLBACK_MODELS, LEGACY_MODELS, assertDistinctFamilies, modelFamily } from "../server/ai/models";
+import { aiKeyStatus, studioModelMap, FALLBACK_MODELS, LEGACY_MODELS, assertDistinctFamilies, lektorChainFor, modelFamily } from "../server/ai/models";
 
 test("OCR and scope use the selected vendor even when router credentials exist", async (t) => {
   const names = ["AI_INTEGRATIONS_OPENAI_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY"];
@@ -69,12 +69,14 @@ test("spec 2026-09-19: cheap OpenRouter helpers, no GLM in the legacy routes, in
   // Spec-változás 2026-10-05 (docs/specs/2026-10-05-lektor-szerzo-modellcsere.md, tulajdonosi döntés): szerző Claude Opus 5.5, tartaléka Qwen 3.8 max-prime; lektor
   // GPT-6.1 Sol, tartaléka GPT-5.6 Terra. A cél változatlan: a szerző egyik modellje sem eshet a lektor egyik modelljének
   // családjába (D1-független lektor).
+  // Spec-változás 2026-10-14 (docs/specs/2026-10-14-ellentetes-csalad-tartalek.md): ellentétes családú tartalékok (szerző → gpt-6.1-sol,
+  // lektor → claude-opus-5-5); a D1-független lektort a tényleges szerzőség szerinti lánc (`lektorChainFor`) garantálja.
   assert.equal(map.author, "claude-opus-5-5");
-  assert.equal(FALLBACK_MODELS.author, "qwen/qwen3.8-max-prime");
+  assert.equal(FALLBACK_MODELS.author, "gpt-6.1-sol");
   assert.equal(map.lektor, "gpt-6.1-sol");
-  assert.equal(FALLBACK_MODELS.lektor, "gpt-5.6-terra");
-  for (const a of [map.author, FALLBACK_MODELS.author!]) for (const l of [map.lektor, FALLBACK_MODELS.lektor!]) {
-    assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l}`);
+  assert.equal(FALLBACK_MODELS.lektor, "claude-opus-5-5");
+  for (const authors of [[map.author], [FALLBACK_MODELS.author!], [map.author, FALLBACK_MODELS.author!]]) {
+    for (const l of lektorChainFor(authors, {})) for (const a of authors) assert.notEqual(modelFamily(a), modelFamily(l), `${a} × ${l}`);
   }
   assert.doesNotThrow(() => assertDistinctFamilies({}));
 });

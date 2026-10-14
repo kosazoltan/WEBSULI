@@ -1,7 +1,7 @@
 import { parse, parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { z } from "zod";
 import { applyWebBankPatch } from "./web-bank-repair";
-import { reviewWebTeaching, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
+import { callTeachingReviewer, reviewWebTeaching, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { readHtmlLessonData, HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 import { verifyLessonMethodHtml } from "../improve/verify-lesson-method";
 import { resolveStudioModel } from "../ai/models";
@@ -89,6 +89,10 @@ export const callTeachingRepair = async (system: string, user: string, signal?: 
 };
 export async function reviewAndRepairWebTeaching(html: string, sources: FetchedTeachingSource[], options: {
   requestedTopic?: string; signal?: AbortSignal; review?: typeof reviewWebTeaching; repair?: typeof callTeachingRepair;
+  /** Tulajdonosi döntés 2026-10-14: a HTML tényleges szerzői — a lektor-lánc ezek családját zárja ki (D1). */
+  authorModels?: readonly string[];
+  /** Review #216: a tartalmi javító modellje — az első ténylegesen alkalmazott folt után szerzőnek számít. */
+  repairModel?: string;
   onReview?: (html: string, review: TeachingReview) => Promise<void>;
   onProblem?: (problem: string, html: string) => Promise<void>;
   onCandidate?: (html: string) => Promise<void>;
@@ -102,6 +106,9 @@ export async function reviewAndRepairWebTeaching(html: string, sources: FetchedT
   let previousBankRejection = "";
   let formatRetries = 0;
   let review: TeachingReview | undefined;
+  // Review #216: a szerzőlista a ténylegesen alkalmazott javítófolt után bővül a javító modelljével (D1-lánc).
+  let authors = options.authorModels ? [...options.authorModels] : undefined;
+  const repairWrote = () => { if (authors) authors = [...new Set([...authors, options.repairModel ?? resolveStudioModel("author")])]; };
   for (let attempt = 0; attempt <= REVIEW_REPAIR_ATTEMPTS; attempt++) {
     options.signal?.throwIfAborted();
     const gate = verifyLessonMethodHtml(html);
@@ -109,7 +116,9 @@ export async function reviewAndRepairWebTeaching(html: string, sources: FetchedT
     // A rejected patch left the candidate untouched: retain its negative review, not a second verdict.
     if (!patchFailure) {
       // Spec 2026-09-19: a re-review sees the previous verdict so subjective criteria converge.
-      review = await (options.review ?? reviewWebTeaching)(html, sources, undefined, options.signal, options.requestedTopic ?? "", false, review);
+      const authorModels = authors;
+      const lektorCall = authorModels ? (system: string, user: string, signal?: AbortSignal) => callTeachingReviewer(system, user, signal, authorModels) : undefined;
+      review = await (options.review ?? reviewWebTeaching)(html, sources, lektorCall, options.signal, options.requestedTopic ?? "", false, review);
       options.signal?.throwIfAborted();
       await options.onReview?.(html, review);
       if (review.checks.some(c => !c.passed)) await options.onProblem?.(review.checks.filter(c => !c.passed).map(c => `Tanítási minőség (${c.criterion}): ${c.evidence}`).join("; "), html);
@@ -125,12 +134,12 @@ Kimenet JSON: {"edits":[{"sectionIndex":0,"before":"pontos meglévő HTML szöve
       JSON.stringify({ lessonHtml: html, sources, requestedTopic: options.requestedTopic, review, allowedSectionIndices: [...allowedSections], allowedBankItems: [...allowedBankItems], patchFailure, previousPatch, previousBankRejection }), options.signal,
     );
     options.signal?.throwIfAborted();
-    try { html = applyTeachingPatch(html, patch, allowedSections, allowedBankItems); patchFailure = ""; previousPatch = undefined; previousBankRejection = ""; }
+    try { html = applyTeachingPatch(html, patch, allowedSections, allowedBankItems); repairWrote(); patchFailure = ""; previousPatch = undefined; previousBankRejection = ""; }
     catch (error) {
       const message = error instanceof Error ? error.message : "Hibás javítócsomag.";
       const salvaged = salvageTeachingEdits(html, patch, allowedSections, message);
       if (salvaged) {
-        html = salvaged.html; patchFailure = ""; previousPatch = undefined; previousBankRejection = salvaged.note;
+        html = salvaged.html; repairWrote(); patchFailure = ""; previousPatch = undefined; previousBankRejection = salvaged.note;
         await options.onProblem?.(`Bankjavítás elutasítva, a tanításjavítás alkalmazva: ${message}`, html);
       } else {
         previousPatch = patch; patchFailure = message; await options.onProblem?.(`Javítás hatóköre: ${patchFailure}`, html);

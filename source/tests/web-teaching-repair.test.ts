@@ -171,3 +171,30 @@ test("spec 2026-09-19: a második lektorálás megkapja az elsőt előző vélem
   assert.equal(previous[0], undefined);
   assert.deepEqual(previous[1], review(false));
 });
+
+// Review #216: a webes lektor-lánc szerzőlistája csak a TÉNYLEGESEN alkalmazott javítófolt után bővül a javító (Claude) modelljével.
+test("review #216: GPT-írta HTML → Qwen, majd Claude lektor; alkalmazott Claude-folt után már csak Qwen", async t => {
+  const keys = { AI_INTEGRATIONS_OPENAI_API_KEY: "test-placeholder", AI_INTEGRATIONS_ANTHROPIC_API_KEY: "test-placeholder", OPENROUTER_API_KEY: "test-placeholder" };
+  const saved = Object.fromEntries(Object.keys(keys).map(k => [k, process.env[k]]));
+  Object.assign(process.env, keys);
+  t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  const hosts: string[][] = [];
+  t.mock.method(globalThis, "fetch", async (url: unknown) => {
+    hosts.at(-1)!.push(new URL(String(url)).host);
+    return new Response(JSON.stringify({ error: { message: "server error" } }), { status: 500, headers: { "Content-Type": "application/json" } });
+  });
+  let reviews = 0;
+  await reviewAndRepairWebTeaching(html, [source], {
+    authorModels: ["gpt-6.1-sol"], repairModel: "claude-opus-5-5",
+    review: async (_candidate, _sources, call) => {
+      reviews++; hosts.push([]);
+      await call!("S", "U").catch(() => undefined);
+      return review(reviews === 2);
+    },
+    repair: async () => patch,
+  });
+  // Sorrend ismétlés nélkül: az SDK-szintű újrapróbák száma szolgáltatónként eltér, a lánc sorrendje a mérce.
+  const order = (list: string[]) => list.filter((h, i) => h !== list[i - 1]);
+  assert.deepEqual(order(hosts[0]), ["openrouter.ai", "api.anthropic.com"], "csak GPT írt: Qwen, majd a Claude-tartalék");
+  assert.deepEqual(order(hosts[1]), ["openrouter.ai"], "a Claude-javító folt után a Claude-család kiesik");
+});
