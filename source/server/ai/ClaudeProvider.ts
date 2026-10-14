@@ -14,6 +14,25 @@ import {
 } from './AIProvider';
 import { collectStream, idleAbortSignal, type StreamEvent } from './stream-collect';
 
+/**
+ * Spec 2026-10-14-claude-stream-gondolkodas-eletjel: a streamelt kérés látható gondolkodás-összefoglalót kér. Az 5-ös család
+ * alapértelmezése `display: "omitted"` — hosszú gondolkodás alatt egyetlen delta sem jön (a `ping`-et az SDK eldobja,
+ * `core/streaming.js`), és a tétlenségi őr az egészséges szerzőhívást is megölte. A `display` csak a láthatóságot állítja.
+ * Az 5-ös család `thinking` nélkül is adaptívan gondolkodik; régi modellnél nem küldünk `thinking`-et.
+ */
+function streamThinking(model: string, thinking: Anthropic.MessageCreateParamsNonStreaming['thinking']): Anthropic.ThinkingConfigParam | undefined {
+  if (thinking?.type === 'adaptive') return { ...thinking, display: 'summarized' };
+  if (!thinking && /^claude-(opus|sonnet|fable)-5/.test(model)) return { type: 'adaptive', display: 'summarized' };
+  return undefined;
+}
+
+/** A gondolkodás modell által kibocsátott állapotjelei (blokk-kezdet, összefoglaló, aláírás, blokk-vég) haladásnak számítanak. */
+function isThinkingProgress(ev: Anthropic.MessageStreamEvent): boolean {
+  if (ev.type === 'content_block_delta') return ev.delta.type === 'thinking_delta' || ev.delta.type === 'signature_delta';
+  if (ev.type === 'content_block_start') return ev.content_block.type === 'thinking' || ev.content_block.type === 'redacted_thinking';
+  return ev.type === 'content_block_stop';
+}
+
 export class ClaudeProvider implements IAIProvider {
   readonly name = 'Claude';
   readonly model: string;
@@ -104,13 +123,14 @@ export class ClaudeProvider implements IAIProvider {
     const idle = idleAbortSignal(signal);
     let partial = '';
     const provider = this.name;
+    const thinking = streamThinking(params.model, params.thinking);
     try {
-      const stream = this.client.messages.stream(params, { signal: idle.signal });
+      const stream = this.client.messages.stream(thinking ? { ...params, thinking } : params, { signal: idle.signal });
       const events = (async function* (): AsyncGenerator<StreamEvent> {
         for await (const ev of stream) {
           if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') { partial += ev.delta.text; yield { text: ev.delta.text }; continue; }
-          // Review #190: csak a gondolkodás-delta haladás.
-          yield ev.type === 'content_block_delta' && ev.delta.type === 'thinking_delta' ? { activity: true } : {};
+          // Review #190: metaadat nem haladás; spec 2026-10-14: a gondolkodás állapotjelei igen.
+          yield isThinkingProgress(ev) ? { activity: true } : {};
         }
         const msg = await stream.finalMessage();
         const u = msg.usage;
