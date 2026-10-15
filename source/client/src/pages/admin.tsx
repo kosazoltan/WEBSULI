@@ -68,6 +68,7 @@ import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
 import ParentDashboardPanel from "@/components/ParentDashboardPanel";
 import LessonStudioPanel from "@/components/studio/LessonStudioPanel";
+import DraftLessons from "@/components/studio/DraftLessons";
 import BackupManager from "@/components/BackupManager";
 import TagManager from "@/components/TagManager";
 import FileEditDialog from "@/components/FileEditDialog";
@@ -283,6 +284,8 @@ function AdminFilesTab() {
 
   return (
     <div className="space-y-6">
+      {/* docs/specs/2026-10-15-admin-tananyag-draft.md: a megszakadt gyártások piszkozatai a fájllista fölött (csak adminnak). */}
+      <DraftLessons />
       <Suspense fallback={<Card><CardContent className="pt-6"><Skeleton className="h-64" /></CardContent></Card>}>
         <AdminFileDashboard
           files={files}

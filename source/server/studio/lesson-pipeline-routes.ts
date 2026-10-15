@@ -446,31 +446,38 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     if (typeof instructionOfJob === "string" && instructionOfJob.trim()) ownerInstruction = instructionOfJob;
     // A piszkozat-választásnál a piszkozat jobjának saját workflow-ja számít (az új futásnak még nincs gyártási naplója).
     const { visits, executions } = run.phase === "draft" ? await workflowVisitsOfJob(run.jobId) : await workflowVisitsOf(runId);
-    const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
-    // Review #233/#234: a felület ugyanazzal a (régi mezőkből is visszafejtett) történettel tervez, mint a végrehajtás; a gomb csak akkor
-    // látszik, ha a következő fok a mentett részekből tényleg végrehajtható.
-    const remanufacturedAs = (job?.output as { remanufacturedAs?: unknown } | null)?.remanufacturedAs;
-    const plan = typeof remanufacturedAs === "string"
-      ? { strategy: "ask-owner" as const, reason: `új gyártás indult ugyanabból a forrásból (${remanufacturedAs.slice(0, 8)}) — a Tananyagkészítési futások között követhető`, cls: "other" as const, fingerprint: "" }
-      // Újraindulás utáni folytatás: nem a tervező lépcsője, hanem a megszakadt lépés folytatása (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md).
-      : job?.error === ORPHAN_JOB_ERROR ? { strategy: "restart" as const, reason: recoveryReason("restart"), cls: "other" as const, fingerprint: "" }
-      : job?.error ? planRecovery({ error: job.error, history: recoveryHistoryOf(job.output as never, job.error) }) : null;
-    const executable = !plan || !NOT_RESUMABLE_STRATEGIES.includes(plan.strategy);
-    const kind = job ? resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
-      htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) : null;
-    stop = {
-      // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
-      resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && kind !== null && executable,
-      stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
-      // A felület szövege a TÉNYLEGESEN végrehajtandó lépést mondja: kapuhibánál a tervező dönt (kapu / újraépítés), nem a régi számláló.
-      ...(kind ? { resumeKind: (kind === "gate" || kind === "rebuild") && plan ? (plan.strategy === "gate" ? "gate" : plan.strategy.startsWith("rebuild") ? "rebuild" : kind) : kind } : {}),
-      ...(plan ? { nextRecovery: { strategy: plan.strategy, reason: plan.reason } } : {}),
-    };
+    stop = job ? jobStopInfo(job, visits, executions) : { resumable: false, stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step };
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
     ...(draftRunId ? { draftRunId } : {}), ...(ownerInstruction ? { ownerInstruction } : {}),
     ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
       ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
+}
+
+/** A megállt job folytathatósága — EGY szabály a futásnézetnek és az admin piszkozatlistának (docs/specs/2026-10-15-admin-tananyag-draft.md). */
+export type JobStopInfo = { resumable: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } };
+function jobStopInfo(job: { output: unknown; publishedAt: Date | null; step: string; status: string; error: string | null; lessonId: string | null },
+  visits: Array<{ step: string; state: string; error?: string }>, executions: number): JobStopInfo {
+  const output = (job.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
+  // Review #233/#234: a felület ugyanazzal a (régi mezőkből is visszafejtett) történettel tervez, mint a végrehajtás; a gomb csak akkor
+  // látszik, ha a következő fok a mentett részekből tényleg végrehajtható.
+  const remanufacturedAs = (job.output as { remanufacturedAs?: unknown } | null)?.remanufacturedAs;
+  const plan = typeof remanufacturedAs === "string"
+    ? { strategy: "ask-owner" as const, reason: `új gyártás indult ugyanabból a forrásból (${remanufacturedAs.slice(0, 8)}) — a Tananyagkészítési futások között követhető`, cls: "other" as const, fingerprint: "" }
+    // Újraindulás utáni folytatás: nem a tervező lépcsője, hanem a megszakadt lépés folytatása (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md).
+    : job.error === ORPHAN_JOB_ERROR ? { strategy: "restart" as const, reason: recoveryReason("restart"), cls: "other" as const, fingerprint: "" }
+    : job.error ? planRecovery({ error: job.error, history: recoveryHistoryOf(job.output as never, job.error) }) : null;
+  const executable = !plan || !NOT_RESUMABLE_STRATEGIES.includes(plan.strategy);
+  const kind = resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
+    htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt });
+  return {
+    // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
+    resumable: executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && kind !== null && executable,
+    stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
+    // A felület szövege a TÉNYLEGESEN végrehajtandó lépést mondja: kapuhibánál a tervező dönt (kapu / újraépítés), nem a régi számláló.
+    ...(kind ? { resumeKind: (kind === "gate" || kind === "rebuild") && plan ? (plan.strategy === "gate" ? "gate" : plan.strategy.startsWith("rebuild") ? "rebuild" : kind) : kind } : {}),
+    ...(plan ? { nextRecovery: { strategy: plan.strategy, reason: plan.reason } } : {}),
+  };
 }
 
 /** A futás workflow-látogatásai és végrehajtásszáma (csak olvasás; workflow-napló nélküli futásnál üres / 0). */
@@ -487,6 +494,44 @@ async function workflowVisitsOfJob(jobId: string): Promise<{ visits: Array<{ ste
   const row = result.rows[0] as { id?: string } | undefined;
   return row?.id ? workflowVisitsOf(String(row.id)) : { visits: [], executions: 0 };
 }
+
+/** docs/specs/2026-10-15-admin-tananyag-draft.md: az admin „Tananyag draft” listájának egy tétele. */
+export type OwnerDraft = { jobId: string; title: string; subject: string; classroom: number; draft: OneStepDraft | null; running: boolean;
+  error: string | null; updatedAt: string } & JobStopInfo;
+
+/**
+ * A1/A2: a gazda megszakadt piszkozatai — mentett, nem publikált lecke; nem sikeres, nem félretett job; a gazdát a job workflow-ja adja.
+ * A folytathatóság ugyanaz a döntés, mint a futásnézeté (`jobStopInfo`). Csak olvas.
+ */
+export async function ownerDrafts(owner: string): Promise<OwnerDraft[]> {
+  const { rows } = await db.execute(sql`SELECT j.id, j.step, j.status, j.error, j.lesson_id, j.output, l.published_at, coalesce(j.finished_at, j.created_at) AS updated_at,
+      m.title AS map_title, m.subject, m.classroom
+    FROM studio_jobs j JOIN lessons l ON l.id = j.lesson_id JOIN knowledge_maps m ON m.id = j.map_id
+    WHERE j.output ? 'lesson' AND l.published_at IS NULL AND j.status <> 'ok'
+      AND coalesce(j.output->>'recoveryState', '') NOT IN ('superseded', 'remanufactured', 'remanufacturing')
+      AND EXISTS (SELECT 1 FROM lesson_workflow_runs w WHERE (w.id = j.id OR w.snapshot->>'resourceId' = j.id) AND w.owner_id = ${owner})
+    ORDER BY j.created_at DESC LIMIT 50`);
+  const out: OwnerDraft[] = [];
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    const job = { output: raw.output, publishedAt: null, step: String(raw.step), status: String(raw.status), error: (raw.error as string | null) ?? null,
+      lessonId: (raw.lesson_id as string | null) ?? null };
+    const running = job.status !== "error" && job.step !== "error";
+    const { visits, executions } = await workflowVisitsOfJob(String(raw.id));
+    const lessonTitle = (raw.output as { lesson?: { title?: unknown } } | null)?.lesson?.title;
+    out.push({
+      jobId: String(raw.id), title: typeof lessonTitle === "string" && lessonTitle.trim() ? lessonTitle : String(raw.map_title ?? "Névtelen tananyag"),
+      subject: String(raw.subject ?? ""), classroom: Number(raw.classroom ?? 0), draft: draftSummaryOf(raw.output), running,
+      error: running ? null : job.error, updatedAt: new Date(String(raw.updated_at)).toISOString(),
+      ...(running ? { resumable: false } : jobStopInfo(job, visits, executions)),
+    });
+  }
+  return out;
+}
+
+/** GET /api/studio/drafts — a belépett admin saját „Tananyag draft” listája (a router admin-védett). */
+lessonPipelineRouter.get("/drafts", async (req: Request, res: Response) => {
+  res.json({ drafts: await ownerDrafts(req.user!.id) });
+});
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */
 lessonPipelineRouter.get("/lessons/one-step/:runId", async (req: Request, res: Response) => {
