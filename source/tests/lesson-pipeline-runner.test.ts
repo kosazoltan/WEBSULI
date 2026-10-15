@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ANSWER_KEY_SYSTEM } from "../server/studio/answer-key-writer";
+import { QUIZ_BLIND_SYSTEM } from "../server/studio/quiz-blind-check";
 
 import {
   PIPELINE_PROMPT_VERSION,
@@ -274,7 +275,7 @@ test("mért hiba 2026-09-19 (run 45233b4b): hosszkorlátos bankválasz után a k
   const models: string[] = [];
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
     chat: async (messages: AIMessage[]) => {
-      if (isAnswerKeyCall(messages)) return { content: '{"items":[]}', finishReason: "stop" };
+      if (isAnswerKeyCall(messages)) return { content: '{"items":[],"choices":[]}', finishReason: "stop" };
       models.push(model);
       if (models.length === 1) return { content: '{"methods":[', finishReason: "length", usage: { promptTokens: 1, completionTokens: 24000, totalTokens: 24001 } };
       return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
@@ -318,7 +319,7 @@ test("bank 5xx is a failed attempt: the next attempt builds the packet and the s
   const models: string[] = [];
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
     chat: async (messages: AIMessage[]) => {
-      if (isAnswerKeyCall(messages)) return { content: '{"items":[]}', finishReason: "stop" };
+      if (isAnswerKeyCall(messages)) return { content: '{"items":[],"choices":[]}', finishReason: "stop" };
       models.push(model);
       if (models.length === 1) throw new AIProviderError("OpenAI", "500 The server had an error processing your request.", true, Object.assign(new Error("server error"), { status: 500 }));
       return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
@@ -439,7 +440,9 @@ test("teljes Studio futás: valós lépésvezérlő, jóváhagyás, bank, kapu �
   // válaszlista (és a 3 lépéshívás) a többi lépésé marad.
   let verifierCalls = 0;
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
-    chat: async (messages: AIMessage[]) => (messages[0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")
+    // Tételgyár T2.1 / T6.1: a bankgyártás támogató hívásai (tesztíró, kvíz-előszűrő) nem fogyasztják a sorrendi válaszlistát.
+    chat: async (messages: AIMessage[]) => isAnswerKeyCall(messages) ? { content: '{"items":[],"choices":[]}', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }
+      : (messages[0]?.content ?? "").includes("TÁMOGATÓ SKILL: bank-verifier")
       ? (verifierCalls++, { content: JSON.stringify({ errors: [], choices: keyedChoices(lesson), verified: openPaths(lesson) }), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } })
       : { content: JSON.stringify(answers[calls++]), usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } },
   } as unknown as IAIProvider);
@@ -718,7 +721,7 @@ function makeDeps(cannedResponse: string) {
     model,
     chat: async (messages: AIMessage[]) => {
       // Tételgyár T2.1: a válaszkulcs-tesztíró külön (dokumentált) olcsó hívás — külön rögzítve, a `calls` a pipeline-hívásokat számolja.
-      if (isAnswerKeyCall(messages)) { answerKeyCalls.push(model); return { content: '{"items":[]}', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }; }
+      if (isAnswerKeyCall(messages)) { answerKeyCalls.push(model); return { content: '{"items":[],"choices":[]}', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }; }
       calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
       // Review R1(c) (spec „Review-javítás 2026-09-29”): az ítélet nélküli egyválasztós tétel mindig kapu-jelzés, ezért
       // a bank-ellenőr hívására a stub a helyes modell viselkedését adja: a lektorált lecke kulcsa szerinti ítéletet.
@@ -736,8 +739,11 @@ function makeDeps(cannedResponse: string) {
   return { store, calls, answerKeyCalls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
 }
 
-/** Tételgyár T2.1: a válaszkulcs-tesztíró hívása (a rendszerprompt első sora alapján, mint a bank-ellenőrnél). */
-const isAnswerKeyCall = (messages: AIMessage[]) => (messages[0]?.content ?? "").includes(ANSWER_KEY_SYSTEM.split("\n")[0]);
+/**
+ * Tételgyár T2.1 / T6.1: a bankgyártás dokumentált, külön támogató hívásai — a válaszkulcs-tesztíró és a kvíz vak előszűrője (a rendszerprompt
+ * első sora alapján, mint a bank-ellenőrnél). A stub üres eredményt ad (nincs ítélet), és a hívás nem számít bank-hívásnak.
+ */
+const isAnswerKeyCall = (messages: AIMessage[]) => [ANSWER_KEY_SYSTEM, QUIZ_BLIND_SYSTEM].some((system) => (messages[0]?.content ?? "").includes(system.split("\n")[0]));
 
 for (const repair of ["valid", "unknown-id", "invalid-schema", "provider-error"] as const) {
   test(`author concept-id repair: ${repair}`, async () => {

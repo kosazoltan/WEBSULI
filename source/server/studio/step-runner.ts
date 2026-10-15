@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import { subjectKeyOf } from "../../shared/subject-key";
 import type { IAIProvider } from "../ai/AIProvider";
-import { ANSWER_KEY_MODEL, BANK_RESCUE_MODEL, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { ANSWER_KEY_MODEL, QUIZ_BLIND_MODEL, BANK_RESCUE_MODEL, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -36,6 +36,7 @@ import {
 import { callStepModel, callStepModelWithFallback, StepModelError } from "./run-step";
 import { applyTopicFocus, type TopicFocus } from "./topic-focus";
 import { answerKeyModels, answerKeysFor, answerKeyTestsEnabled, chainedAnswerKeyCaller, mergeAnswerKeyReport } from "./answer-key-writer";
+import { quizBlindProblems } from "./quiz-blind-check";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import {
   buildAnimatorPrompt,
@@ -87,7 +88,7 @@ import { OPEN_ANSWER_RULES_HU } from "../../shared/lesson-experience-score";
 import { repairFlaggedBankItems } from "./gate-item-repair";
 import { hasTranscriptMarks, stripTranscriptMarks } from "../../shared/transcript-marks";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
+import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, resolveBankReview, teachingTextOf, type BankReviewFeedback, type ExperienceCheckpoint } from "./experience-builder";
 import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock, poolMatches } from "../catalog/s6-context";
 import { catalogVerbatimPaths, type CatalogPool, type CatalogRowLike } from "../catalog/retrieval";
 import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemoryCard, type MemorySnapshot } from "../memory/subject-memory";
@@ -1528,6 +1529,18 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
                   }),
                 (w) => logger.warn(`[STUDIO] Válaszkulcs-teszt (${job.id}): ${w}`),
               ),
+            } : {}),
+            // Tételgyár T6.1 (vészfék: STUDIO_QUIZ_BLIND=0): a kvíz gyártáskori vak előszűrője — MiniMax M3, max efforttal.
+            ...(process.env.STUDIO_QUIZ_BLIND !== "0" && keyConfigured(QUIZ_BLIND_MODEL) ? {
+              quizBlind: (() => {
+                const cache = new Map<string, string | null>();
+                return (quiz: Array<{ id: string; question: string; options: string[]; correctIndex: number }>, sectionIndex: number) =>
+                  quizBlindProblems(quiz, teachingTextOf(completedLesson.sections[sectionIndex]), async (system, user) => {
+                    const result = await callStepModel(providerFactory(QUIZ_BLIND_MODEL, "quizBlind"), { step: "animator", policy: "quizBlind", role: "quiz-blind", model: QUIZ_BLIND_MODEL, system: withSupportSkill("quiz-blind", system), user });
+                    if (result.usage) usage = { promptTokens: (usage?.promptTokens ?? 0) + result.usage.promptTokens, completionTokens: (usage?.completionTokens ?? 0) + result.usage.completionTokens, totalTokens: (usage?.totalTokens ?? 0) + result.usage.totalTokens };
+                    return result.json;
+                  }, cache, (w) => logger.warn(`[STUDIO] Kvíz-előszűrő (${job.id}) ${sectionIndex + 1}. fejezet: ${w}`));
+              })(),
             } : {}),
             call: async (bankSystem, user, attempt, extra) => {
               // Spec 2026-09-19 / 2026-09-25: bank model per attempt (primary → fallback → rescue), shared with the web path.

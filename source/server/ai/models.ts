@@ -247,6 +247,8 @@ export const FALLBACK_MODELS: Partial<Record<StudioStep, string>> = {
  * elsődleges modellje a MiniMax M3, max (xhigh) efforttal — a GLM 5.3 Flash helyett.
  */
 export const ANSWER_KEY_MODEL = "minimax/minimax-m3";
+/** Tételgyár T6.1 (tulajdonosi döntés 2026-10-15): a kvíz gyártáskori vak előszűrője — ugyanaz a MiniMax M3, max efforttal (a T2.3 útválasztásával). */
+export const QUIZ_BLIND_MODEL = ANSWER_KEY_MODEL;
 
 /**
  * Modellenkénti OpenRouter-útválasztás (T2.3). Élő próba 2026-10-15: a MiniMax M3 a saját szolgáltatóján `reasoning: { effort: "xhigh",
