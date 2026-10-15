@@ -47,6 +47,7 @@ import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
+import { planRecovery, type RecoveryStep } from "./recovery-planner";
 import { WORKFLOW_EXPLICIT_RESUME_BUDGET, executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { runToolWorkflow } from "../workflows/tool-run";
@@ -306,6 +307,8 @@ export type OneStepRunView = {
   draft?: OneStepDraft;
   /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3, D5): csak hibánál — folytatható-e, és melyik workflow-lépésnél állt meg. */
   resumable?: boolean; stoppedAt?: string;
+  /** Elakadás-vezérlő V1: a program következő lépése (a döntési lépcső szerint). */
+  nextRecovery?: { strategy: string; reason: string };
 };
 
 /**
@@ -335,7 +338,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     htmlFileId = lesson?.htmlFileId ?? null;
   }
   let draft: OneStepDraft | null = null;
-  let stop: { resumable: boolean; stoppedAt?: string } | null = null;
+  let stop: { resumable: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string } } | null = null;
   if (run.phase === "error" && run.jobId) {
     const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt, step: studioJobs.step, status: studioJobs.status,
       error: studioJobs.error, lessonId: studioJobs.lessonId }).from(studioJobs)
@@ -348,10 +351,12 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
       resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
         htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) !== null,
       stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
+      ...(job?.error ? { nextRecovery: (({ strategy, reason }) => ({ strategy, reason }))(planRecovery({ error: job.error,
+        history: Array.isArray((job.output as { recovery?: unknown } | null)?.recovery) ? (job.output as { recovery: RecoveryStep[] }).recovery : [] })) } : {}),
     };
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
-    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}) } : {}) };
+    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
 }
 
 /** A futás workflow-látogatásai és végrehajtásszáma (csak olvasás; workflow-napló nélküli futásnál üres / 0). */

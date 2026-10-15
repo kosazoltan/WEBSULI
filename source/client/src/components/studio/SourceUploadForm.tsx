@@ -187,10 +187,11 @@ export function SourceUploadForm({
     draft?: { teachingSections: number; savedBankPackets: number };
     resumable?: boolean;
     stoppedAt?: string;
+    nextRecovery?: { strategy: string; reason: string };
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string } }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
@@ -387,6 +388,11 @@ export function SourceUploadForm({
                 Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag, {run.data.draft.savedBankPackets} kész gyakorlócsomag.
                 {run.data.jobId && run.data.resumable ? " A folytatás innen halad tovább, a kész részeket nem gyártja újra." : ""}
                 {run.data.jobId && !run.data.resumable ? " Ez a megállás a mentett részekből nem folytatható; a forrásellenőrzésből új készítés indítható." : ""}
+              </p>
+            )}
+            {run.data.phase === "error" && run.data.nextRecovery && (
+              <p className="text-sm text-muted-foreground" data-testid="one-step-next-recovery">
+                A program következő lépése: {run.data.nextRecovery.reason}.
               </p>
             )}
             {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
