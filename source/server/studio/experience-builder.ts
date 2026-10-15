@@ -292,6 +292,20 @@ export function salvagePacket<P extends { methods: Array<{ id: string }>; tasks:
 }
 
 
+/** Tételgyár T4′: a fejezet tanításának olvasható szövege (szöveges értékek; azonosító, típusnév, fogalomkötés és hash nélkül). */
+export function teachingTextOf(section: unknown): string {
+  const skip = new Set(["kind", "id", "coversConceptIds", "sourceHash", "conceptId", "icon", "theme"]);
+  const out: string[] = [];
+  const walk = (v: unknown, key?: string) => {
+    if (key && skip.has(key)) return;
+    if (typeof v === "string") out.push(v);
+    else if (Array.isArray(v)) v.forEach((x) => walk(x));
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(x, k);
+  };
+  walk(section);
+  return out.join(" ");
+}
+
 /** Spec 2026-09-30 (U2, H19): a bank tartalom-kulcsa és bemenete a fejezet ÁBRA NÉLKÜLI változata — ábracsere nem építi újra a csomagot. */
 function withoutFigures<S extends { blocks: Array<{ kind: string }> }>(section: S | undefined): S | undefined {
   return section ? { ...section, blocks: section.blocks.filter((b) => b.kind !== "animate") } : section;
@@ -486,8 +500,14 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         continue;
       }
       let candidate = response;
+      const autofixContext = { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds, teachingText: teachingTextOf(withoutFigures(lesson.sections[unit.sectionIndex])) };
       if (repairBase) {
-        try { candidate = applyBankPacketRepair(repairBase, response, allowedReviewIds, bindingRepairIds, repairAllowed); }
+        // Tételgyár T4′: a javítóválasz is megkapja a determinisztikus rubrika-bővítést az összefésülés ELŐTT — a korábbi körben
+        // az eszköz által hozzáadott alakot a modell nem ismeri; enélkül a szóalak-megőrző őr hamis „törlést” látna.
+        let patch: unknown;
+        // Az eszköz kivételénél a nyers válasz megy tovább; a hibát az összefésülés utáni autofix-lépés bukott kísérletként jelzi.
+        try { patch = (deps.autofix ?? autofixBankPacket)(response, autofixContext).packet; } catch { patch = response; }
+        try { candidate = applyBankPacketRepair(repairBase, patch as typeof response, allowedReviewIds, bindingRepairIds, repairAllowed); }
         catch (error) { errors = error instanceof Error ? error.message : "Érvénytelen csomagjavítás."; deps.onAttemptFailure?.(unit.sectionIndex, attempt, errors); await workflowValidationFailure(errors); continue; }
       }
       // Eszköz (2026-09-19): formai hibák kódból, a séma előtt — nem ér modell-kört.
@@ -495,7 +515,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // BUKOTT KÍSÉRLET (javító kör), nem a lépés halála (mért: `value.trim is not a function`, job 35370b32).
       let toolFailure: string | undefined;
       try {
-        const autofix = (deps.autofix ?? autofixBankPacket)(candidate, { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds });
+        const autofix = (deps.autofix ?? autofixBankPacket)(candidate, autofixContext);
         if (autofix.fixes.length) { candidate = autofix.packet; deps.onToolFix?.("bank-packet-autofix", autofix.fixes); }
       } catch (error) { toolFailure = `a csomag alakja hibás (az előfeldolgozó nem tudta értelmezni): ${error instanceof Error ? error.message : String(error)}`; }
       previous = candidate;
