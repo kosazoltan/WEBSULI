@@ -943,7 +943,8 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
         await beforeDrive(current?.view.visits.at(-1));
       }
       drove = true;
-      if (onAccepted && tracksProgress(previous?.view.definition.mode)) {
+      // Élő megfigyelés (job 416ad01d, 11:05): a vezérlő folytatásánál a fázis „error”-on maradt — a kézi gombhoz hasonlóan ott is frissül.
+      if ((onAccepted || recoveryResume) && tracksProgress(previous?.view.definition.mode)) {
         const [job] = await db.select({ step: studioJobs.step }).from(studioJobs).where(eq(studioJobs.id, jobId));
         await getRun(id);
         updateRun(id, { phase: job.step as OneStepPhase, error: null, detail: "Folytatás a mentett részeredményekből." });
