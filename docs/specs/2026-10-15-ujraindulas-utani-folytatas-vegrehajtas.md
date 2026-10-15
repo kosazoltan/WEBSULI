@@ -24,3 +24,6 @@ Ellenőrzés: célzott tesztek, `check`, `lint`, `check:test`, `build`, teljes `
   futás nem zárul le (szöveg: „a gyártás magától folytatódik a mentett részekből, nem kell újra feltölteni”), a job-söprés folytatja és a
   haladásjelzőt is frissíti. A vezérlő ugyanabból a forrásból csak a legújabb megszakadt jobot folytatja (`superseded` a régebbin).
 - Tulajdonosi javaslat (2026-10-15): külön gombok hiba esetén (folytatás / újragyártás / új tananyag) — külön szelet, e javítás után.
+- Dupla gyártás ellen (a deploy előtti önellenőrzésből): a job-szintű söprés (`sweepStudioJobs`) is csak akkor folytat, ha ugyanabból a
+  forrásból nincs újabb job; különben a régi, gazdátlan jobot lezárja (a vezérlő utána `superseded`-ként félreteszi). Mért eset: 84fe2219
+  (gazdátlan `running`) mellett 441866e2 az újabb — csak az utóbbi viheti tovább.

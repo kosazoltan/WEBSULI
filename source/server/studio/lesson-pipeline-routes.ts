@@ -174,7 +174,8 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
 export async function sweepStudioJobs(boot: boolean): Promise<number> {
   const { rows } = await db.execute(sql`
     SELECT j.id, j.status, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
-           COALESCE((r.snapshot->>'executions')::int, 0) AS executions
+           COALESCE((r.snapshot->>'executions')::int, 0) AS executions,
+           EXISTS (SELECT 1 FROM studio_jobs n WHERE n.map_id = j.map_id AND n.created_at > j.created_at) AS has_newer
     FROM studio_jobs j
     LEFT JOIN LATERAL (
       SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
@@ -188,7 +189,8 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
       id: String(raw.id), status: String(raw.status), runId: (raw.run_id as string | null) ?? null, owner: (raw.owner_id as string | null) ?? null,
       runState: (raw.run_state as string | null) ?? null, leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, executions: Number(raw.executions ?? 0),
     };
-    const decision = sweepDecision(row, now, boot);
+    // Ugyanabból a forrásból újabb gyártás van: a régi, gazdátlan job NEM folytatódik (dupla, fizetős gyártás ellen) — lezárul.
+    const decision = raw.has_newer === true && sweepDecision(row, now, boot) === "resume" ? "close" : sweepDecision(row, now, boot);
     if (decision === "leave") continue;
     acted++;
     if (decision === "close") {
