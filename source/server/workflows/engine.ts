@@ -211,7 +211,8 @@ export function redactWorkflowError(error: unknown): string {
   return (error instanceof Error ? error.message : "A művelet hibával megállt.")
     .replace(/https?:\/\/\S+/gi, "[hivatkozás]")
     .replace(/Minden javítandó címkézés[\s\S]*/i, "A részletes tartalmi eltérés a javítóellenőrzésben található.")
-    .replace(/(?:sk-|Bearer\s+)[\w.-]+/gi, "[titkos érték]").slice(0, 1600);
+    // Mért hiba 2026-10-15: a szó közepén is illeszkedett („t3-task-12” → „t3-ta[titkos érték]”) — csak szóelején (kulcs: sk-…, Bearer …).
+    .replace(/(?<![\w-])(?:sk-|Bearer\s+)[\w.-]+/gi, "[titkos érték]").slice(0, 1600);
 }
 /**
  * Spec 2026-09-19 (párhuzamos bankcsomagok): a mentés optimista revíziószámmal fut, ezért két

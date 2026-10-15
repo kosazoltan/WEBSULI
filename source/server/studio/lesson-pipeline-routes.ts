@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from "express";
-import { and, asc, desc, eq, isNotNull, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "../db";
@@ -27,6 +27,7 @@ import {
   retryFailedBankBuild,
   retryFailedGate,
   retryWithAuthorRepair,
+  retryAfterRestart,
   resumeKindOf,
   recoveryHistoryOf,
   startJobFromMap,
@@ -116,15 +117,32 @@ const updateRun = (id: string, patch: Parameters<typeof updateRunBase>[1]) =>
   updateRunBase(id, patch, persistRun);
 const getRun = (id: string) => getRunBase(id, loadRun);
 
+/** A haladásjelző szövege, amíg a job-söprés a megszakadt gyártást folytatja (a futás nem zárul hibára). */
+export const ONE_STEP_RESUMING_DETAIL = "A szerver újraindult — a gyártás magától folytatódik a mentett részekből (nem kell újra feltölteni).";
+
 /**
  * #168 — boot-sweep: a folyamat halálakor árván maradt futások explicit hibára
  * záródnak, hogy a kliens jelzője ne ragadjon be. Induláskor egyszer fut.
  */
 export async function closeOrphanedOneStepRuns(): Promise<number> {
   const open = await db
-    .select({ id: oneStepRuns.id, phase: oneStepRuns.phase })
+    .select({ id: oneStepRuns.id, phase: oneStepRuns.phase, jobId: oneStepRuns.jobId })
     .from(oneStepRuns);
-  const orphans = markOrphanedRuns(open);
+  // Mért hiba 2026-10-15 (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md): az „indítsd újra a feltöltést” üzenet új, elölről induló
+  // gyártásra terelte a tulajdonost, holott a piszkozat (tanítás, kész bankcsomagok) megvolt. Ha a futás jobja mentett, nem publikált
+  // leckével áll, a futás NEM zárul le: a job-söprés a megszakadt lépéstől folytatja, és ez a haladásjelzőt is frissíti.
+  const resumable = new Set<string>();
+  const jobIds = open.filter((r) => r.jobId).map((r) => r.jobId!);
+  if (jobIds.length) {
+    const rows = await db.select({ id: studioJobs.id, status: studioJobs.status, output: studioJobs.output, publishedAt: lessons.publishedAt })
+      .from(studioJobs).leftJoin(lessons, eq(lessons.id, studioJobs.lessonId)).where(inArray(studioJobs.id, jobIds));
+    for (const r of rows) if (r.status !== "ok" && !r.publishedAt && (r.output as { lesson?: unknown } | null)?.lesson) resumable.add(r.id);
+  }
+  const orphans = markOrphanedRuns(open.filter((r) => !(r.jobId && resumable.has(r.jobId))));
+  for (const r of open.filter((x) => x.jobId && resumable.has(x.jobId) && markOrphanedRuns([x]).length)) {
+    await db.update(oneStepRuns).set({ detail: ONE_STEP_RESUMING_DETAIL, error: null, updatedAt: new Date() }).where(eq(oneStepRuns.id, r.id));
+    logger.warn(`[STUDIO/1STEP] ${r.id}: szerver-újraindulás — a gyártás a mentett részekből folytatódik (job ${r.jobId}).`);
+  }
   for (const o of orphans) {
     await db
       .update(oneStepRuns)
@@ -156,7 +174,8 @@ export async function closeOrphanedStudioJobs(): Promise<number> {
 export async function sweepStudioJobs(boot: boolean): Promise<number> {
   const { rows } = await db.execute(sql`
     SELECT j.id, j.status, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
-           COALESCE((r.snapshot->>'executions')::int, 0) AS executions
+           COALESCE((r.snapshot->>'executions')::int, 0) AS executions,
+           EXISTS (SELECT 1 FROM studio_jobs n WHERE n.map_id = j.map_id AND n.created_at > j.created_at) AS has_newer
     FROM studio_jobs j
     LEFT JOIN LATERAL (
       SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
@@ -170,7 +189,8 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
       id: String(raw.id), status: String(raw.status), runId: (raw.run_id as string | null) ?? null, owner: (raw.owner_id as string | null) ?? null,
       runState: (raw.run_state as string | null) ?? null, leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, executions: Number(raw.executions ?? 0),
     };
-    const decision = sweepDecision(row, now, boot);
+    // Ugyanabból a forrásból újabb gyártás van: a régi, gazdátlan job NEM folytatódik (dupla, fizetős gyártás ellen) — lezárul.
+    const decision = raw.has_newer === true && sweepDecision(row, now, boot) === "resume" ? "close" : sweepDecision(row, now, boot);
     if (decision === "leave") continue;
     acted++;
     if (decision === "close") {
@@ -359,6 +379,8 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     const remanufacturedAs = (job?.output as { remanufacturedAs?: unknown } | null)?.remanufacturedAs;
     const plan = typeof remanufacturedAs === "string"
       ? { strategy: "ask-owner" as const, reason: `új gyártás indult ugyanabból a forrásból (${remanufacturedAs.slice(0, 8)}) — a Tananyagkészítési futások között követhető`, cls: "other" as const, fingerprint: "" }
+      // Újraindulás utáni folytatás: nem a tervező lépcsője, hanem a megszakadt lépés folytatása (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md).
+      : job?.error === ORPHAN_JOB_ERROR ? { strategy: "restart" as const, reason: recoveryReason("restart"), cls: "other" as const, fingerprint: "" }
       : job?.error ? planRecovery({ error: job.error, history: recoveryHistoryOf(job.output as never, job.error) }) : null;
     const executable = !plan || !NOT_RESUMABLE_STRATEGIES.includes(plan.strategy);
     const kind = job ? resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
@@ -1119,6 +1141,9 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
  * Kapuhibánál a stratégiát a tervező adja (`retryFailedGate` → `planRecovery`); bank/lektor ágon a meglévő célzott folytatás.
  */
 async function applyResume(jobId: string, visit: import("../../shared/lesson-workflow").WorkflowVisit | undefined): Promise<void> {
+  // Újraindulás utáni folytatás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E2): a megszakadt lépéstől, a mentett részekkel.
+  const [stopped] = await db.select({ error: studioJobs.error }).from(studioJobs).where(eq(studioJobs.id, jobId));
+  if (stopped?.error === ORPHAN_JOB_ERROR) return retryAfterRestart(jobId, visit);
   if (visit?.step !== "animator" && visit?.step !== "gate") return retryTimedOutLektor(jobId);
   const [draft] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs)
     .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, jobId));
@@ -1184,7 +1209,8 @@ export async function sweepFailedStudioJobs(now = Date.now()): Promise<number> {
   const { rows } = await db.execute(sql`
     SELECT j.id, j.status, j.step, j.error, j.finished_at, j.output ? 'lesson' AS has_lesson, (l.published_at IS NOT NULL) AS published,
            j.output->>'recoveryState' AS recovery_state, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
-           r.snapshot->'visits'->-1 AS last_visit, j.output->>'htmlFileId' AS html_file_id
+           r.snapshot->'visits'->-1 AS last_visit, j.output->>'htmlFileId' AS html_file_id,
+           EXISTS (SELECT 1 FROM studio_jobs n WHERE n.map_id = j.map_id AND n.created_at > j.created_at) AS has_newer
     FROM studio_jobs j
     LEFT JOIN lessons l ON l.id = j.lesson_id
     LEFT JOIN LATERAL (
@@ -1204,6 +1230,26 @@ export async function sweepFailedStudioJobs(now = Date.now()): Promise<number> {
     const [job] = await db.select({ output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, row.id));
     const history = recoveryHistoryOf(job?.output as never, row.error);
     const lastVisit = (raw.last_visit ?? undefined) as { step: string; state: string; error?: string } | undefined;
+    // Újraindulás utáni folytatás (E2): a tervező lépcsője helyett a megszakadt lépés folytatása — forrásonként csak a LEGÚJABB job (a régebbi
+    // duplikátum nem indít második gyártást), legfeljebb kétszer (crash-loop ellen).
+    if (row.error === ORPHAN_JOB_ERROR) {
+      if (raw.has_newer === true) {
+        await db.execute(sql`UPDATE studio_jobs SET output = coalesce(output, '{}'::jsonb) || '{"recoveryState":"superseded"}'::jsonb WHERE id = ${row.id} AND status = 'error'`);
+        logger.warn(`[VEZÉRLŐ] ${row.id}: ugyanabból a forrásból újabb gyártás van — ez a megszakadt job nem folytatódik.`);
+        continue;
+      }
+      const restarts = history.filter((h) => h.strategy === "restart").length;
+      if (restarts >= 2 || resumeKindOf({ step: row.step, status: row.status, error: row.error, hasLesson: row.hasLesson, htmlFileId: raw.html_file_id, published: row.published, visit: lastVisit }) !== "restart") continue;
+      const fp = failureFingerprint(row.error);
+      const nextHistory = JSON.stringify([...history, { strategy: "restart", fingerprint: fp.key, failing: fp.failing, at: now }]);
+      await db.execute(sql`UPDATE studio_jobs SET output = jsonb_set(coalesce(output, '{}'::jsonb), '{recovery}', ${nextHistory}::jsonb) WHERE id = ${row.id} AND status = 'error'`);
+      logger.warn(`[VEZÉRLŐ] ${row.id}: szerver-újraindulás után folytatás a megszakadt lépéstől (${lastVisit?.step}), a mentett részekkel.`);
+      void driveTracked(row.id, row.owner!, false, (visit) => applyResume(row.id, visit), undefined, false, true).catch((error) => {
+        if (error instanceof WorkflowConflict) { logger.warn(`[VEZÉRLŐ] ${row.id}: kihagyva — ${error.message}`); return; }
+        logger.error(`[VEZÉRLŐ] ${row.id}: az újraindulás utáni folytatás megállt`, error);
+      });
+      return 1;
+    }
     // Ugyanaz a jogosultsági szabály, mint a kézi gombé: nem folytatható hibát a vezérlő nem hajt (különben söprésenként újra bukna).
     const eligible = resumeKindOf({ step: row.step, status: row.status, error: row.error, hasLesson: row.hasLesson, htmlFileId: raw.html_file_id,
       published: row.published, visit: lastVisit, gateRecoveryAttempt: (job?.output as { gateRecoveryAttempt?: unknown } | null)?.gateRecoveryAttempt }) !== null;

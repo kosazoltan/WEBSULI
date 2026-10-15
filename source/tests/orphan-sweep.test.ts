@@ -54,3 +54,10 @@ test("bekötés: induláskor és időszakosan fut; a lízing-ütközés nem zár
   assert.match(routes, /if \(error instanceof WorkflowConflict\) \{ logger\.warn\(`\[STUDIO\] Automatikus folytatás kihagyva/);
   assert.match(routes, /if \(error instanceof WorkflowConflict\) \{ logger\.warn\(`\[STUDIO\] Követett készítés átadva/);
 });
+
+test("mért hiba 2026-10-15 (térkép 3f39ab9b): a halott folyamat `interrupted` futása is folytatódik — induláskor és később is; élő lízingnél érintetlen", () => {
+  assert.equal(sweepDecision(row({ runState: "interrupted" }), now, true), "resume", "induláskor nem zárul le");
+  assert.equal(sweepDecision(row({ runState: "interrupted" }), now, false), "resume", "a régi példány lízingjének lejárta után a söprés folytatja (nincs örök running)");
+  assert.equal(sweepDecision(row({ runState: "interrupted", leaseUntil: new Date(now + 30_000) }), now, false), "leave");
+  assert.equal(sweepDecision(row({ runState: "interrupted", executions: AUTO_RESUME_MAX_EXECUTIONS }), now, false), "close", "a crash-loop korlát marad");
+});

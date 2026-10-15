@@ -5,7 +5,9 @@
  * kétszer (a `retry-provider` legfeljebb kétszer), a lépcső véges; ha elfogy: tulajdonosi döntés pontos indoklással.
  */
 
-export type RecoveryStrategy = "retry-provider" | "review" | "gate" | "rebuild-targeted" | "rebuild-full" | "author-repair" | "remanufacture" | "ask-owner";
+export type RecoveryStrategy = "retry-provider" | "review" | "gate" | "rebuild-targeted" | "rebuild-full" | "author-repair" | "remanufacture" | "ask-owner"
+  /** Szerver-újraindulás utáni folytatás a megszakadt lépéstől (a tervező lépcsőjén kívül, docs/specs/2026-10-15-ujraindulas-utani-folytatas.md). */
+  | "restart";
 export type FailureClass = "provider" | "evidence" | "bank-floor" | "bank-packet" | "other";
 export type RecoveryStep = { strategy: RecoveryStrategy; fingerprint: string; failing: number; at: number };
 export type RecoveryPlan = { strategy: RecoveryStrategy; reason: string; fingerprint: string; cls: FailureClass };
@@ -53,6 +55,7 @@ const REASONS: Record<RecoveryStrategy, string> = {
   "author-repair": "a hibás fejezetek tanítása célzott szerzői javítást kap, utána a bank és az ellenőrzés",
   remanufacture: "a tananyag ugyanabból a forrásból teljesen újra készül (a mostani piszkozat megmarad)",
   "ask-owner": "a program minden saját megoldást kipróbált — tulajdonosi döntés szükséges",
+  restart: "a szerver újraindult — a gyártás a megszakadt lépéstől folytatódik, a kész részek megmaradnak",
 };
 export const recoveryReason = (strategy: RecoveryStrategy) => REASONS[strategy];
 

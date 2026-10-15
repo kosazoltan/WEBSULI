@@ -559,8 +559,13 @@ test("content review may fix the criticized rubric but cannot rewrite unrelated 
   const allowed = new Set([e.tasks[0].id]);
   const corrected = { ...e.tasks[0], q: "Egyértelmű kérdés", required: [["helyes"]] };
   assert.deepEqual(applyBankPacketRepair(e, { tasks: [corrected] }, allowed).tasks[0], corrected);
-  assert.throws(() => applyBankPacketRepair(e, { tasks: [{ ...e.tasks[1], q: "Nem kért átírás" }] }, allowed), /nem érintett/);
-  assert.throws(() => applyBankPacketRepair(e, { glossary: [{ word: "a", translation: "egy", partOfSpeech: "névelő", example: "A cat", exampleTranslation: "Egy macska" }] }, allowed), /szószedet/);
+  // Dokumentált szerződésváltozás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E5): a nem kért átírás figyelmen kívül marad
+  // (nem dobás) — a szándék változatlan: a nem érintett tétel és a szószedet nem íródik át.
+  const ignored: string[] = [];
+  assert.equal(applyBankPacketRepair(e, { tasks: [{ ...e.tasks[1], q: "Nem kért átírás" }] }, allowed, undefined, undefined, (m) => ignored.push(m)).tasks[1].q, e.tasks[1].q);
+  assert.match(ignored.join(), /nem érintett/);
+  assert.deepEqual(applyBankPacketRepair(e, { glossary: [{ word: "a", translation: "egy", partOfSpeech: "névelő", example: "A cat", exampleTranslation: "Egy macska" }] }, allowed, undefined, undefined, (m) => ignored.push(m)).glossary, e.glossary);
+  assert.match(ignored.join(), /szószedet/);
 });
 
 /* Spec 2026-09-19 — the connective heuristic cannot sink a packet whose sample is otherwise a full-mark answer. */

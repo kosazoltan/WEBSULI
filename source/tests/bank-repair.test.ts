@@ -43,20 +43,32 @@ test("C9: a javítás csak a jogosult tételt és annak engedélyezett mezőit c
   const perms = new Map<string, string[] | "*">([[t0.id, ["sample", "required"]]]);
   const ok = applyBankPacketRepair(original, { tasks: [{ ...t0, sample: `${t0.sample} Bővítve.` }] }, undefined, undefined, perms);
   assert.equal(ok.tasks[0].sample, `${t0.sample} Bővítve.`);
-  assert.throws(() => applyBankPacketRepair(original, { tasks: [{ ...t1, q: "Más kérdés?" }] }, undefined, undefined, perms), /jogosultságon kívüli tétel nem módosítható/);
-  assert.throws(() => applyBankPacketRepair(original, { tasks: [{ ...t0, q: "Más kérdés?" }] }, undefined, undefined, perms), /csak ezeket a mezőket cserélheti: sample, required \(megváltozott: q\)/);
+  // Dokumentált szerződésváltozás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E5): a jogosulatlan változás NEM érvényesül —
+  // eddig az egész javítást elvetette (dobás), most figyelmen kívül marad (a tétel az eredeti), és naplózódik.
+  const ignored: string[] = [];
+  const foreign = applyBankPacketRepair(original, { tasks: [{ ...t1, q: "Más kérdés?" }] }, undefined, undefined, perms, (m) => ignored.push(m));
+  assert.equal(foreign.tasks[1].q, t1.q, "az idegen tétel az eredeti");
+  assert.match(ignored[0], /jogosultságon kívüli tétel nem módosítható .*figyelmen kívül maradt/);
+  const extraField = applyBankPacketRepair(original, { tasks: [{ ...t0, q: "Más kérdés?" }] }, undefined, undefined, perms, (m) => ignored.push(m));
+  assert.equal(extraField.tasks[0].q, t0.q, "a nem engedélyezett mező nem változik");
+  assert.match(ignored[1], /csak ezeket a mezőket cserélheti: sample, required \(megváltozott: q\)/);
+  const mixed = applyBankPacketRepair(original, { tasks: [{ ...t0, sample: `${t0.sample} Bővítve.` }, { ...t1, q: "Más kérdés?" }] }, undefined, undefined, perms);
+  assert.equal(mixed.tasks[0].sample, `${t0.sample} Bővítve.`, "a jogos javítás a jogosulatlan mellékváltozás mellett is érvényes");
+  assert.equal(mixed.tasks[1].q, t1.q);
   assert.doesNotThrow(() => applyBankPacketRepair(original, { tasks: [t1, { ...t0, sample: `${t0.sample} Bővítve.` }] }, undefined, undefined, perms));
   assert.doesNotThrow(() => applyBankPacketRepair(original, { tasks: [{ ...t0, q: "Más kérdés?" }] }, undefined, undefined, new Map([[t0.id, "*" as const]])));
   // jogosultság nélkül (régi hívók, lektori kör) a viselkedés változatlan
   assert.doesNotThrow(() => applyBankPacketRepair(original, { tasks: [{ ...t1, q: "Más kérdés?" }] }));
 });
 
-test("javító kör a gyakorlatban: a prompt közli a jogosultságot, az idegen tétel cseréje elutasított kísérlet, a jogosult csere átmegy", async () => {
+// Dokumentált szerződésváltozás (E5): az idegen tétel cseréje figyelmen kívül marad (nem elutasított kísérlet) — a szándék változatlan: nem kerül be.
+test("javító kör a gyakorlatban: a prompt közli a jogosultságot, az idegen tétel cseréje figyelmen kívül marad, a jogosult csere átmegy", async () => {
   const lesson = standardFusionFixture(), e = lesson.experience!;
   const first = { methods: e.methods, tasks: structuredClone(e.tasks), quiz: e.quiz, glossary: [] };
   first.tasks[0].sample = "Az alap és a magasság szorzata.";
   const users: string[] = [];
-  const result = await buildLessonExperience(lesson, [], { call: async (_system, user) => {
+  const scope: string[] = [];
+  const result = await buildLessonExperience(lesson, [], { onToolFix: (tool, list) => { if (tool === "bank-repair-scope") scope.push(...list); }, call: async (_system, user) => {
     users.push(user);
     if (users.length === 1) return first;
     if (users.length === 2) return { tasks: [{ ...e.tasks[1], q: "Idegen átírás, amit senki nem kért?" }] };
@@ -64,8 +76,8 @@ test("javító kör a gyakorlatban: a prompt közli a jogosultságot, az idegen 
   } });
   assert.equal(users.length, 3);
   assert.match(users[1], /JAVÍTÁSI MÓD/);
-  assert.ok(users[1].includes(`JAVÍTÁSI JOGOSULTSÁG (hibakódból; a program kikényszeríti — más tétel vagy más mező változása = elutasított kísérlet): ${first.tasks[0].id}: q, required, bonus, sample`), users[1].slice(users[1].indexOf("JAVÍTÁSI JOGOSULTSÁG"), users[1].indexOf("JAVÍTÁSI JOGOSULTSÁG") + 200));
-  assert.match(users[2], /jogosultságon kívüli tétel nem módosítható/);
+  assert.ok(users[1].includes(`JAVÍTÁSI JOGOSULTSÁG (hibakódból; a program kikényszeríti — más tétel vagy más mező változása figyelmen kívül marad, az a tétel az eredeti): ${first.tasks[0].id}: q, required, bonus, sample`), users[1].slice(users[1].indexOf("JAVÍTÁSI JOGOSULTSÁG"), users[1].indexOf("JAVÍTÁSI JOGOSULTSÁG") + 200));
+  assert.match(scope.join(" "), /jogosultságon kívüli tétel nem módosítható .*figyelmen kívül maradt/);
   assert.match(users[2], /JAVÍTÁSI MÓD/, "a jogosultság megsértése után is a javító mód marad (a csomag megvan)");
   assert.equal(result.tasks.length, e.tasks.length);
   assert.deepEqual(result.tasks.map((t) => t.q), e.tasks.map((t) => t.q), "az idegen átírás nem került be");
