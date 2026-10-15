@@ -8,9 +8,12 @@ import type { OpenTask } from "../shared/lesson-experience";
 /* Tételgyár T4′ (tulajdonosi döntés D2). Mért (job 416ad01d): a tanítás „ásványianyag-” és „termőre” alakját a rubrika nem fogadta el;
    ellenpélda: a „testére” alak a „testéről” helyett is átment. */
 
-test("írásmód: a többszavas kifejezés egybeírt változata", () => {
-  assert.ok(spellingVariants("ásványi anyag").includes("asvanyianyag"));
-  assert.deepEqual(spellingVariants("termő"), []);
+test("írásmód: az egybeírt változat CSAK a tanításban igazolt alakkal, eredeti írásmóddal; tagadás nem írható egybe (élő hiba: „nemszabad”)", () => {
+  assert.deepEqual(spellingVariants("ásványi anyag", "A gyümölcs ásványianyag-tartalma magas."), ["ásványianyag"]);
+  assert.deepEqual(spellingVariants("ásványi anyag"), [], "tanítás nélkül nincs kitalált egybeírás");
+  assert.deepEqual(spellingVariants("ligeti szőlő", "A ligeti szőlő kúszik."), [], "a tanításban külön írt alak nem írható egybe");
+  assert.deepEqual(spellingVariants("nem szabad", "nemszabad"), [], "tagadás nem írható egybe");
+  assert.deepEqual(spellingVariants("termő", "termő"), []);
 });
 
 test("a tanítás közös tövű alakja: igen a „termőre”, nem a „termés”, nem az ellentétes irányrag", () => {

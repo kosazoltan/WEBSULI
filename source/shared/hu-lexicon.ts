@@ -20,15 +20,20 @@ export const HU_SYNONYM_GROUPS: ReadonlyArray<readonly string[]> = [
 /** Normalizált (kisbetűs, ékezet nélküli) szólista — ugyanaz a normalizálás, mint a pontozóé. */
 const words = (s: string) => normalizeAnswer(s).split(/\s+/).filter(Boolean);
 
-/** Írásmód-változatok: többszavas kifejezés egybeírva / kötőjel nélkül; az eredeti alak nem kerül a listába. */
-export function spellingVariants(term: string): string[] {
+/**
+ * Írásmód-változat: a többszavas kifejezés egybeírt alakja — CSAK ha a tanítás szövegében ténylegesen így szerepel, az eredeti (ékezetes)
+ * írásmóddal. Élő hiba (job 416ad01d, 2026-10-15 10:08): a tanítás nélküli egybeírás „nemszabad”, „ligetiszolo” alakokat tett a rubrikába.
+ * Tagadószót tartalmazó kifejezés nem írható egybe.
+ */
+export function spellingVariants(term: string, text?: string): string[] {
   const parts = words(term);
-  if (parts.length < 2) return [];
+  if (parts.length < 2 || !text || parts.some((p) => NEGATION_WORDS.has(p))) return [];
   const joined = parts.join("");
-  const spaced = parts.join(" ");
-  const original = normalizeAnswer(term);
-  return [...new Set([joined, spaced])].filter((v) => v !== original && v.length >= 5);
+  if (joined.length < 5) return [];
+  for (const raw of text.match(/[\p{L}\d]+/gu) ?? []) if (normalizeAnswer(raw) === joined) return [raw.toLocaleLowerCase("hu")];
+  return [];
 }
+const NEGATION_WORDS = new Set(["nem", "ne", "sem", "se"]);
 
 /** Irányragok (normalizált alak): honnan ↔ hová; a két irány egymás helyett nem fogadható el. */
 const DIRECTION_SUFFIXES: ReadonlyArray<[readonly string[], readonly string[]]> = [

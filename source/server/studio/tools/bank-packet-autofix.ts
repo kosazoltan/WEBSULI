@@ -78,7 +78,7 @@ function fixTask(task: Obj, fixes: string[], teachingText?: string): void {
     const added: string[] = [];
     const add = (v: string) => { const n = normalizeAnswer(v); if (n && !known.has(n)) { known.add(n); added.push(v); } };
     for (const term of [...group]) {
-      for (const v of spellingVariants(term)) { add(v); for (const f of inflectedForms(v, teachingText)) add(f); }
+      for (const v of spellingVariants(term, teachingText)) { add(v); for (const f of inflectedForms(v, teachingText)) add(f); }
       for (const f of inflectedForms(term, teachingText)) add(f);
       for (const s of synonymsOf(term)) add(s);
     }
