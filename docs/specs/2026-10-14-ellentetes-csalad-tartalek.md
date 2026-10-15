@@ -89,8 +89,9 @@ Végrehajtás: `docs/specs/2026-10-14-ellentetes-csalad-tartalek-vegrehajtas.md`
 - **E5** Élő próbahívás (kis, csak olvasó, nem éles adat): `gpt-6.1-sol` chat úton `reasoning_effort: "medium"` + JSON-mód →
   200; `qwen/qwen3.8-max-0902` `reasoning.effort: "high"` → 200.
   - Állapot (2026-10-14): `gpt-6.1-sol` medium + JSON → 200 (3,7 s); `claude-opus-5-5` bank-tartalék és lektor medium → 200.
-    **A Qwen-próba NYITOTT (NOT RUN):** a fejlesztőgépen nincs OpenRouter-kulcs (a Renderen van). A modell az OpenRouter
-    `/models` és `/endpoints` listáján igazolt. Teljesítése a tulajdonos döntése: Render-oldali próba, vagy a feltétel módosítása.
+    **A Qwen-próba TELJESÍTVE (2026-10-15):** a tulajdonos által megjelölt, működő OpenRouter-kulccsal (Hermes-mentésből, csak
+    a próba folyamatának környezetébe töltve; `/api/v1/key` → 200): `qwen/qwen3.8-max-0902` lektorként (`createStudioStepProvider`
+    + `callStepModel`, `reasoning.effort: high`) → 200, 6,7 s, érvényes JSON (113 be / 152 ki token).
 
 ## Review #216 javítások
 - A tartalék a lépés TÉNYLEGES (env-vel felülírt) elsődlegeséből képződik (`fallbackModelFor`); más családnál a tábla marad.
