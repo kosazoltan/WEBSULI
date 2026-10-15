@@ -29,10 +29,12 @@ export function bankUnitQuota(plan: LessonBankPlan, unitIndex: number) {
     const mins = minimums(kind);
     if (!withReserve) return mins[unitIndex];
     const sum = mins.reduce((a, b) => a + b, 0);
-    // Review #226 (P1): legalább egységnyi tartalék fejezetenként (sok kis fejezetnél a 30% kevesebb lehetne az egységszámnál).
+    // Review #226 (P1) + #229 (P1): minden fejezet ELŐBB egy tartalékot kap, a maradék oszlik a minimumok arányában (a súlyozott
+    // lefelé kerekítés különben eltérő szélességű fejezeteknél nullát adhat).
     const total = Math.max(LESSON_BANK_RESERVE[kind], Math.ceil(LESSON_BANK_RESERVE_RATIO * sum), mins.length);
-    const exact = mins.map(m => (total * m) / sum);
-    const shares = exact.map(Math.floor);
+    const rest = total - mins.length;
+    const exact = mins.map(m => (rest * m) / sum);
+    const shares = exact.map(e => Math.floor(e) + 1);
     const order = exact.map((e, i) => ({ i, r: e - Math.floor(e) })).sort((a, b) => b.r - a.r || a.i - b.i);
     const remainder = total - shares.reduce((a, b) => a + b, 0);
     for (let k = 0; k < remainder; k++) shares[order[k % order.length].i]++;

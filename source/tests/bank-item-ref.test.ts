@@ -83,3 +83,11 @@ test("review #226 (P2): a legnagyobb terv (80 egység × 6 fogalom) tartalékos 
   const tasks = quotas.reduce((n, q) => n + q.taskTarget, 0), quiz = quotas.reduce((n, q) => n + q.quizTarget, 0);
   assert.ok(tasks <= 640 && quiz <= 1280, `feladat ${tasks}, kvíz ${quiz}`);
 });
+
+test("review #229 (P1): eltérő szélességű fejezeteknél is minden fejezet kap tartalékot (79 × 2 + 1 × 6 fogalom)", () => {
+  const units = [...Array.from({ length: 79 }, (_, i) => ({ sectionIndex: i, conceptIds: ["a", "b"] })), { sectionIndex: 79, conceptIds: ["a", "b", "c", "d", "e", "f"] }];
+  const plan = { units, taskRound: 15, quizRound: 25 };
+  const quotas = plan.units.map((_, i) => bankUnitQuota(plan, i));
+  assert.ok(quotas.every((q) => q.taskTarget - q.taskCount >= 1 && q.quizTarget - q.quizCount >= 1));
+  assert.ok(quotas.reduce((n, q) => n + q.taskTarget, 0) <= 640 && quotas.reduce((n, q) => n + q.quizTarget, 0) <= 1280);
+});

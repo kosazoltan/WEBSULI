@@ -76,7 +76,7 @@ export const workflowExecutionBudget = (explicitResume?: boolean) => explicitRes
  * amikor a lektor-bizonyíték eltér) — a definíció a futásban mentődik és naplózódik, mint a dinamikus javítási keret. Csak folytatásban,
  * csak ha az utolsó látogatás a `from` lépés hibája; különben false (a hívó a régi szabály szerint dönt). Futáson kívül: true.
  */
-export async function workflowAllowResumeEdge(from: string, to: string, reason: string): Promise<boolean> {
+export async function workflowAllowResumeEdge(from: string, to: string, reason: string, alsoGrant: readonly string[] = []): Promise<boolean> {
   const ctx = context.getStore();
   if (!ctx) return true;
   const view = ctx.record.view;
@@ -85,9 +85,11 @@ export async function workflowAllowResumeEdge(from: string, to: string, reason: 
   if (!view.definition.steps.find((s) => s.id === to)?.after.includes(from)) {
     view.definition = { ...view.definition, steps: view.definition.steps.map((step) => step.id === to ? { ...step, after: [...step.after, from] } : step) };
   }
-  // Review #225 (P2): elfogyott látogatási keretnél a visszaél önmagában nem elég — a cél-lépés egyszeri +1 látogatást kap.
-  if (workflowVisitsLeft(view, to) <= 0) {
-    view.definition = { ...view.definition, steps: view.definition.steps.map((step) => step.id === to ? { ...step, maxVisits: step.maxVisits + 1 } : step) };
+  // Review #225 (P2) + #229 (P2): elfogyott látogatási keretnél a visszaél önmagában nem elég — a cél-lépés és a folytatás további lépései
+  // (pl. a visszatérő kapu) egyszeri +1 látogatást kapnak.
+  const exhausted = [to, ...alsoGrant].filter((id) => workflowVisitsLeft(view, id) <= 0);
+  if (exhausted.length) {
+    view.definition = { ...view.definition, steps: view.definition.steps.map((step) => exhausted.includes(step.id) ? { ...step, maxVisits: step.maxVisits + 1 } : step) };
   }
   view.resumeEdge = { from, to, reason, at: Date.now() };
   await persist(ctx);
