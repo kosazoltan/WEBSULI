@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lektorNotes, lessons, studioJobs } from "../../shared/schema";
 import { subjectKeyOf } from "../../shared/subject-key";
 import type { IAIProvider } from "../ai/AIProvider";
-import { BANK_RESCUE_MODEL, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
+import { BANK_RESCUE_MODEL, FALLBACK_MODELS, SECOND_FALLBACK_MODELS, fallbackModelFor, keyNameForModel, lektorChainFor, resolveStudioModel, type StudioStep as ModelStep } from "../ai/models";
 import { createStudioStepProvider, studioModelReady } from "../ai/studio-provider";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
@@ -35,6 +35,7 @@ import {
 } from "./pipeline";
 import { callStepModel, callStepModelWithFallback, StepModelError } from "./run-step";
 import { applyTopicFocus, type TopicFocus } from "./topic-focus";
+import { answerKeyModels, answerKeysFor, answerKeyTestsEnabled, chainedAnswerKeyCaller } from "./answer-key-writer";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import {
   buildAnimatorPrompt,
@@ -1512,6 +1513,15 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
               },
             } : {}),
             concurrency: PACKET_CONCURRENCY,
+            // Tételgyár T2.1: válaszkulcs-tesztek a csomag nyílt feladataira (olcsó modell; kulcs nélkül / hibánál nincs ítélet).
+            ...(answerKeyTestsEnabled() ? {
+              answerKeys: answerKeysFor(
+                { classroom: map.meta.classroom, concepts: map.concepts.map((c) => ({ id: c.localId, term: c.term, definition: (c as { definition?: string }).definition })) },
+                chainedAnswerKeyCaller(answerKeyModels(resolveStudioModel("gateHelper"), FALLBACK_MODELS.gateHelper).filter((m) => keyConfigured(m)),
+                  async (model, system, user) => (await callStepModel(providerFactory(model, "gateHelper"), { step: "animator", policy: "gateHelper", role: "blind-solver", model, system, user })).json),
+                (w) => logger.warn(`[STUDIO] Válaszkulcs-teszt (${job.id}): ${w}`),
+              ),
+            } : {}),
             call: async (bankSystem, user, attempt, extra) => {
               // Spec 2026-09-19 / 2026-09-25: bank model per attempt (primary → fallback → rescue), shared with the web path.
               const bankModel = bankModelForAttempt(attempt);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ANSWER_KEY_SYSTEM } from "../server/studio/answer-key-writer";
 
 import {
   PIPELINE_PROMPT_VERSION,
@@ -272,7 +273,8 @@ test("mért hiba 2026-09-19 (run 45233b4b): hosszkorlátos bankválasz után a k
   deps.store.seed({ id: "bank-length", mapId: "m1", step: "animator", status: "pending", output: { lesson: teaching, methodVersion: "fusion-7.4-4" } });
   const models: string[] = [];
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
-    chat: async () => {
+    chat: async (messages: AIMessage[]) => {
+      if (isAnswerKeyCall(messages)) return { content: '{"items":[]}', finishReason: "stop" };
       models.push(model);
       if (models.length === 1) return { content: '{"methods":[', finishReason: "length", usage: { promptTokens: 1, completionTokens: 24000, totalTokens: 24001 } };
       return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
@@ -315,7 +317,8 @@ test("bank 5xx is a failed attempt: the next attempt builds the packet and the s
   deps.store.seed({ id: "bank-5xx", mapId: "m1", step: "animator", status: "pending", output: { lesson: { ...lesson, experience: undefined }, methodVersion: "fusion-7.4-4" } });
   const models: string[] = [];
   deps.providerFactory = (model: string) => ({ name: "stub", model, isAvailable: async () => true,
-    chat: async () => {
+    chat: async (messages: AIMessage[]) => {
+      if (isAnswerKeyCall(messages)) return { content: '{"items":[]}', finishReason: "stop" };
       models.push(model);
       if (models.length === 1) throw new AIProviderError("OpenAI", "500 The server had an error processing your request.", true, Object.assign(new Error("server error"), { status: 500 }));
       return { content: JSON.stringify({ methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] }), finishReason: "stop" };
@@ -709,10 +712,13 @@ function makeDeps(cannedResponse: string) {
   };
 
   const calls: Array<{ model: string; system: string; user: string }> = [];
+  const answerKeyCalls: string[] = [];
   const providerFactory = (model: string): IAIProvider => ({
     name: "stub",
     model,
     chat: async (messages: AIMessage[]) => {
+      // Tételgyár T2.1: a válaszkulcs-tesztíró külön (dokumentált) olcsó hívás — külön rögzítve, a `calls` a pipeline-hívásokat számolja.
+      if (isAnswerKeyCall(messages)) { answerKeyCalls.push(model); return { content: '{"items":[]}', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } }; }
       calls.push({ model, system: messages[0]?.content ?? "", user: messages[1]?.content ?? "" });
       // Review R1(c) (spec „Review-javítás 2026-09-29”): az ítélet nélküli egyválasztós tétel mindig kapu-jelzés, ezért
       // a bank-ellenőr hívására a stub a helyes modell viselkedését adja: a lektorált lecke kulcsa szerinti ítéletet.
@@ -727,8 +733,11 @@ function makeDeps(cannedResponse: string) {
     isAvailable: async () => true,
   } as unknown as IAIProvider);
 
-  return { store, calls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
+  return { store, calls, answerKeyCalls, promptNames, promptLookup, providerFactory, keyConfigured: () => true };
 }
+
+/** Tételgyár T2.1: a válaszkulcs-tesztíró hívása (a rendszerprompt első sora alapján, mint a bank-ellenőrnél). */
+const isAnswerKeyCall = (messages: AIMessage[]) => (messages[0]?.content ?? "").includes(ANSWER_KEY_SYSTEM.split("\n")[0]);
 
 for (const repair of ["valid", "unknown-id", "invalid-schema", "provider-error"] as const) {
   test(`author concept-id repair: ${repair}`, async () => {

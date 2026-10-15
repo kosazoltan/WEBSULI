@@ -22,6 +22,8 @@ import { lessonSingleChoiceProblems } from "../../shared/single-choice-check";
 import { changedFields, describeRepairPermissions, repairPermissions, type RepairPermission } from "./bank-repair";
 import { unitCatalog, unitCatalogBlock, unitCatalogVersion, type CatalogPool, type UnitCatalog } from "../catalog/retrieval";
 import { memoryBlockVersion } from "../memory/subject-memory";
+import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-tests";
+import type { OpenTask } from "../../shared/lesson-experience";
 
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string> };
 export type BankReviewFeedback = { note: RawNote; conceptIds?: string[]; previousItem?: unknown };
@@ -83,7 +85,28 @@ export type ExperienceBuildDeps = {
    * üres → a csomag rendszerpromptjába (a katalógus után) és hash-ébe kerül; hiányában minden változatlan.
    */
   memory?: string;
+  /**
+   * Tételgyár T2.1 (docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md, kapcsolós): a csomag nyílt feladatainak
+   * válaszkulcs-tesztesetei (a hívó írja, olcsó modellel; hiba → üres térkép). Hiányában a csomag a T2 előtti szabályok szerint épül.
+   */
+  answerKeys?(tasks: OpenTask[], sectionIndex: number): Promise<Map<string, AnswerKeyCases>>;
 };
+
+/**
+ * Tételgyár T2.1: az utolsó kísérletnél a válaszkulcs-teszten bukott feladatok kivétele — legfeljebb a tartalékig (`min` feladat marad),
+ * a legtöbb bukott esetű feladat előbb. A csomag többi része változatlan; a determinisztikus ellenőrzésen a csomag már átment.
+ */
+export function trimAnswerKeyFailures<P extends { tasks: Array<{ id: string }> }>(packet: P, issues: readonly string[], min: number): { packet: P; removed: string[]; kept: string[] } {
+  const failures = new Map<string, number>();
+  for (const issue of issues) {
+    const id = issue.split(":")[0]?.trim();
+    if (id) failures.set(id, (failures.get(id) ?? 0) + 1);
+  }
+  const ranked = [...failures.entries()].filter(([id]) => packet.tasks.some((t) => t.id === id)).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  const room = Math.max(0, packet.tasks.length - min);
+  const removed = ranked.slice(0, room);
+  return { packet: { ...packet, tasks: packet.tasks.filter((t) => !removed.includes(t.id)) }, removed, kept: ranked.slice(room) };
+}
 
 const packetPatchSchema = z.object({
   methods: z.array(methodSchema).default([]), tasks: z.array(openTaskSchema).default([]),
@@ -530,6 +553,13 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       if (toolFailure || !parsed) issues = [toolFailure ?? "a csomag alakja hibás"];
       else if (!parsed?.success) issues = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       else { try { issues = validate(parsed!.data); } catch (error) { issues = [`a csomag ellenőrzése kivételt dobott (hibás alakú adat): ${error instanceof Error ? error.message : String(error)}`]; } }
+      // Tételgyár T2.1: a determinisztikusan tiszta csomag feladatain a válaszkulcs-tesztek (a valódi pontozó, előre megírt esetekkel).
+      let answerKeyOnly = false;
+      if (parsed?.success && !issues.length && deps.answerKeys) {
+        const keys = await deps.answerKeys(parsed.data.tasks, unit.sectionIndex);
+        issues = parsed.data.tasks.flatMap((t) => answerKeyProblems(t, keys.get(t.id) ?? null));
+        answerKeyOnly = issues.length > 0;
+      }
       // Biztonsági szelep (regressziós futás 94a5ccf9): az aritmetikai gyanú determinisztikus, de nem
       // tévedhetetlen; az utolsó (mentő) kísérletnél egyedül nem ölheti meg a csomagot — figyelmeztetéssel
       // átmegy, a lektor pedig úgyis a forráshoz méri.
@@ -542,9 +572,14 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         const quota = salvageSchema.safeParse(p);
         return quota.success ? validate(quota.data) : quota.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
       };
-      const salvaged = parsed?.success && lastAttempt && issues.length && !arithmeticOnly ? salvagePacket(parsed!.data, quotaAndValidate) : null;
+      const salvaged = parsed?.success && lastAttempt && issues.length && !arithmeticOnly && !answerKeyOnly ? salvagePacket(parsed!.data, quotaAndValidate) : null;
       if (salvaged) deps.onToolFix?.("bank-salvage", [`${unit.sectionIndex + 1}. fejezet: a mentő kísérlet után ${salvaged.removed.length} hibás tétel kivéve (${salvaged.removed.join(", ")}), a csomag többi része átvéve`]);
+      // Tételgyár T2.1: a T2 soha nem ront a korábbi állapoton — az utolsó kísérletnél a tesztbukott feladat csak a tartalék terhére
+      // kerül ki (a csomag a padlón marad); ami ezen felül bukik, figyelmeztetéssel bent marad (a lektor a tanítás alapján úgyis ítél).
+      const keyTrimmed = parsed?.success && lastAttempt && answerKeyOnly ? trimAnswerKeyFailures(parsed!.data, issues, taskCount) : null;
+      if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
       if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed!.data;
+      else if (keyTrimmed) packet = keyTrimmed.packet;
       else if (salvaged) packet = salvaged.packet;
       else {
         deps.onAttemptFailure?.(unit.sectionIndex, attempt, issues.join("; "));
