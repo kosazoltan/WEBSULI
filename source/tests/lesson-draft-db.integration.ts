@@ -8,7 +8,7 @@ assert.equal(url.hostname, "127.0.0.1");
 assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 const { dbPool } = await import("../server/db");
-const { resumableDraftFor, supersedeDraftsOf, oneStepRunView, closeOrphanedOneStepRuns, ONE_STEP_RESUMING_DETAIL } = await import("../server/studio/lesson-pipeline-routes");
+const { resumableDraftFor, supersedeDraftsOf, oneStepRunView, closeOrphanedOneStepRuns, ONE_STEP_RESUMING_DETAIL, ownerDrafts } = await import("../server/studio/lesson-pipeline-routes");
 
 let n = 0;
 async function mapWithJob(job: { status?: string; published?: boolean; output?: Record<string, unknown>; age?: string; owner?: string; map?: string }) {
@@ -101,4 +101,32 @@ test("review #247: újraindításkor csak a ténylegesen folytatódó job futás
   const run = async (id: string) => (await dbPool.query("SELECT phase, detail FROM one_step_runs WHERE id=$1", [id])).rows[0];
   assert.deepEqual(await run("boot-live"), { phase: "animator", detail: ONE_STEP_RESUMING_DETAIL });
   assert.equal((await run("boot-failed")).phase, "error", "nem folytatható job futása nem pollozhat örökké");
+});
+
+test("admin „Tananyag draft” (A1/A2): a saját megállt és futó piszkozat látszik, a publikált / félretett / sikeres / idegen nem", async () => {
+  await dbPool.query("DELETE FROM users WHERE id = 'draft-lister'");
+  await dbPool.query("INSERT INTO users(id,email,is_admin) VALUES ('draft-lister','lister@test.invalid',true)");
+  try {
+    const parts = { experienceCheckpoint: { parts: { a: {}, b: {} } } };
+    const stopped = await mapWithJob({ owner: "draft-lister", output: { lesson: { title: "Virágos növények", sections: [{}, {}, {}] }, ...parts } });
+    const running = await mapWithJob({ owner: "draft-lister", status: "running", output: { lesson: { sections: [{}] } } });
+    await mapWithJob({ owner: "draft-lister", published: true });
+    await mapWithJob({ owner: "draft-lister", status: "ok" });
+    await mapWithJob({ owner: "draft-lister", output: { lesson: {}, recoveryState: "superseded" } });
+    await mapWithJob({ owner: "draft-lister", output: { title: "nincs lecke" } });
+    await mapWithJob({ owner: "draft-other" });
+    const list = await ownerDrafts("draft-lister");
+    assert.deepEqual(list.map((d) => d.jobId).sort(), [stopped.id, running.id].sort());
+    const s = list.find((d) => d.jobId === stopped.id)!;
+    assert.equal(s.title, "Virágos növények");
+    assert.deepEqual(s.draft, { teachingSections: 3, savedBankPackets: 2 });
+    assert.equal(s.running, false);
+    assert.equal(typeof s.resumable, "boolean");
+    const r = list.find((d) => d.jobId === running.id)!;
+    assert.equal(r.running, true);
+    assert.equal(r.resumable, false, "futó jobnál nincs folytatás gomb");
+    assert.equal(r.title, "T", "lecke-cím nélkül a térkép címe");
+  } finally {
+    await dbPool.query("DELETE FROM users WHERE id = 'draft-lister'");
+  }
 });
