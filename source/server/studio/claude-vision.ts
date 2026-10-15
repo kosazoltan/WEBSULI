@@ -30,6 +30,8 @@ export async function callClaudeParts(opts: {
   maxTokens: number;
   timeoutMs: number;
   effort?: "low" | "medium" | "high";
+  /** Review #220: a hívó megszakítása (pl. a kliens lezárta a kapcsolatot). */
+  signal?: AbortSignal;
 }): Promise<string> {
   const connection = studioConnection(opts.model);
   const client = new Anthropic({ apiKey: connection.apiKey, baseURL: connection.baseURL, timeout: opts.timeoutMs, maxRetries: 1 });
@@ -40,7 +42,7 @@ export async function callClaudeParts(opts: {
     thinking: { type: "adaptive" },
     output_config: { effort: opts.effort ?? CROSS_FAMILY_FALLBACK_EFFORT },
     messages: [{ role: "user", content: openAiPartsToClaude(opts.parts) }],
-  }).finalMessage();
+  }, opts.signal ? { signal: opts.signal } : undefined).finalMessage();
   if (message.stop_reason !== "end_turn") throw new Error(`A Claude-tartalék válasza nem teljes (stop_reason: ${message.stop_reason ?? "?"}).`);
   return message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("").trim();
 }
