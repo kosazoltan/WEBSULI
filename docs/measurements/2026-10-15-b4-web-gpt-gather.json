@@ -1,0 +1,82 @@
+{
+  "measuredAt": "2026-10-15T01:40:03.141Z",
+  "model": "gpt-6.1-sol",
+  "reasoningEffort": "medium",
+  "tool": "web_search (high, HU)",
+  "results": [
+    {
+      "topic": "Törtek összeadása és kivonása",
+      "classroom": 5,
+      "ok": true,
+      "seconds": 88.9,
+      "candidates": 12,
+      "downloadFailures": 7,
+      "failureKinds": {
+        "getaddrinfo ENOTFOUND nat2012.nkp.hu": 2,
+        "read ECONNRESET": 5
+      },
+      "sources": 4,
+      "medianChars": 10564,
+      "minChars": 396,
+      "hosts": [
+        "www.matekmindenkinek.hu",
+        "matekotthon.blogspot.com",
+        "www.matweb.cz",
+        "oktatas.mnt.org.rs"
+      ],
+      "inputTokens": 30476,
+      "outputTokens": 1449
+    },
+    {
+      "topic": "A honfoglalás és a kalandozások kora",
+      "classroom": 6,
+      "ok": true,
+      "seconds": 63.6,
+      "candidates": 12,
+      "downloadFailures": 3,
+      "failureKinds": {
+        "read ECONNRESET": 2,
+        "self-signed certificate; if the root CA ": 1
+      },
+      "sources": 8,
+      "medianChars": 6329,
+      "minChars": 1040,
+      "hosts": [
+        "www.tortenelemmindenkinek.hu",
+        "www.tortenelemmindenkinek.hu",
+        "sites.google.com",
+        "szmtortenelem2014.blog.hu",
+        "digitori.blog.hu",
+        "zanza.tv",
+        "zanza.tv",
+        "www.scribd.com"
+      ],
+      "inputTokens": 47247,
+      "outputTokens": 1229
+    },
+    {
+      "topic": "A növények fotoszintézise",
+      "classroom": 7,
+      "ok": true,
+      "seconds": 48.5,
+      "candidates": 12,
+      "downloadFailures": 4,
+      "failureKinds": {
+        "Nem szöveges tartalom (application/pdf)": 1,
+        "HTTP 406": 1,
+        "read ECONNRESET": 2
+      },
+      "sources": 4,
+      "medianChars": 8034,
+      "minChars": 327,
+      "hosts": [
+        "www.mozaweb.hu",
+        "www.mozaweb.hu",
+        "bszm.elte.hu",
+        "bszm.elte.hu"
+      ],
+      "inputTokens": 28629,
+      "outputTokens": 925
+    }
+  ]
+}

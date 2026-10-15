@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isFrozenBundle } from "../../shared/instruction-bundles/roles";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import { effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
+import { crossFamilyFallback, effortFor, fallbackModelFor, MODEL_REASONING_EFFORT, keyNameForModel, resolveLegacyModel, resolveStudioModel, resolveWebResearchAuthorModel } from "../ai/models";
 import { createStudioProvider, createStudioStepProvider, crossFamilyFallbackOptions, STREAM_IDLE_MS, studioModelReady } from "../ai/studio-provider";
 import { logger } from "../lib/logger";
 import { AIProviderQuotaError } from "../ai/AIProvider";
@@ -19,6 +19,7 @@ import { StepModelError, stablePrefixChars, withRunbook } from "./run-step";
 import { buildLessonExperience, PACKET_ATTEMPTS, PACKET_CONCURRENCY, type ExperienceCheckpoint } from "./experience-builder";
 import { bankModelForAttempt, bankProviderStep, callBankPacketModel } from "./bank-call";
 import { chatJsonWithFallback } from "./fallback-attempt";
+import { gatherWebSourcesGpt } from "./web-gather-gpt";
 import { withSupportSkill } from "./support-skills";
 import { cachedSystem } from "../ai/prompt-cache";
 import {
@@ -86,7 +87,33 @@ function lessonMetaFromHtml(html: string, fallback: { title: string; subject: st
  * Spec 2026-09-25 (webes Studio-átadás): search + fetch only — shared by the standalone HTML path and the
  * Studio hand-off. Own abort controller and timers (20 min phase, 120 s idle); maps failures to WebResearchFailure.
  */
-export async function gatherWebSources(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
+/**
+ * Spec 2026-10-15-tartalek-b4-webgyujtes (C1, tulajdonosi döntés): a Claude-gyűjtés bármely hibájánál (szolgáltatói, kimeneti,
+ * nincs letöltött forrás) — külső megszakítás kivételével — egyszer a GPT-6.1 Sol tartalék gyűjt (webes keresés + védett
+ * szerveroldali letöltés). Ha az is bukik, mindkét ok látszik.
+ */
+export async function gatherWebSources(input: WebResearchChatRequest, observer: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
+  try {
+    return await gatherWebSourcesClaude(input, observer);
+  } catch (error) {
+    const primary = resolveLegacyModel("webResearch");
+    const fallback = crossFamilyFallback(primary);
+    if (observer.signal?.aborted || !fallback || !studioModelReady(fallback)) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn(`[WEB-RESEARCH] A forrásgyűjtés (${primary}) hibázott — ${reason.slice(0, 200)} → tartalék: ${fallback}`);
+    observer.onEvent({ type: "status", message: `A forrásgyűjtés elsődleges modellje hibázott — tartalék: ${fallback}…` });
+    try {
+      const downloaded = await gatherWebSourcesGpt(input, { model: fallback, signal: observer.signal, onEvent: observer.onEvent });
+      const firstUser = (input.conversationHistory ?? []).find((m) => m.role === "user" && typeof m.content === "string");
+      return { downloaded, topicSeed: (typeof firstUser?.content === "string" ? firstUser.content : input.message).slice(0, 200) };
+    } catch (fallbackError) {
+      if (observer.signal?.aborted) throw error;
+      throw new WebResearchFailure(`${reason} Tartalék (${fallback}): ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+    }
+  }
+}
+
+async function gatherWebSourcesClaude(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
   const controller = new AbortController();
