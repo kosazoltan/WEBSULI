@@ -27,6 +27,7 @@ import {
   retryFailedBankBuild,
   retryFailedGate,
   resumeKindOf,
+  recoveryHistoryOf,
   startJobFromMap,
 } from "./step-runner";
 import { COUPON_GAME_IDS, conceptIdResolver, exportQuizItemsFromChecks } from "./quiz-export";
@@ -47,7 +48,8 @@ import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { planRecovery, type RecoveryStep } from "./recovery-planner";
+import { failureFingerprint, planRecovery, recoveryReason, type RecoveryStep } from "./recovery-planner";
+import { recoveryCandidate, type RecoveryRow } from "./recovery-sweep";
 import { WORKFLOW_EXPLICIT_RESUME_BUDGET, executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { runToolWorkflow } from "../workflows/tool-run";
@@ -190,7 +192,10 @@ export async function sweepStudioJobs(boot: boolean): Promise<number> {
 export const STUDIO_SWEEP_INTERVAL_MS = 100_000;
 /** Időszakos söprés (a lejárt lízingű futások folytatása); a folyamat leállását nem tartja fel. */
 export function startStudioJobSweeper(): void {
-  setInterval(() => { void sweepStudioJobs(false).catch((error) => logger.warn(`[STUDIO] Időszakos söprés hibája: ${error instanceof Error ? error.message : String(error)}`)); }, STUDIO_SWEEP_INTERVAL_MS).unref();
+  setInterval(() => {
+    void sweepStudioJobs(false).catch((error) => logger.warn(`[STUDIO] Időszakos söprés hibája: ${error instanceof Error ? error.message : String(error)}`));
+    void sweepFailedStudioJobs().catch((error) => logger.warn(`[VEZÉRLŐ] Söprés hibája: ${error instanceof Error ? error.message : String(error)}`));
+  }, STUDIO_SWEEP_INTERVAL_MS).unref();
 }
 import { computeInputHash, extractionSignature, ExtractionShapeError, type ExtractorFile } from "./extractor";
 import { knowledgeMaps } from "../../shared/schema";
@@ -913,7 +918,7 @@ async function guardedDrive(jobId: string, onStep?: (step: string, round: number
 /** A haladásjelző (one-step progress) azonosítója a workflow-é: a feltöltéses és (spec s7) a webes Studio-futásnál. */
 const tracksProgress = (mode: string | undefined) => mode === "upload" || mode === "webStudio";
 
-async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void, explicitResume = false) {
+async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void, explicitResume = false, recoveryResume = false) {
   const id = (await workflowStore.related(jobId, owner)) ?? jobId;
   const previous = await workflowStore.read(id, owner);
   if (!start && !previous) {
@@ -923,7 +928,7 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
   }
   let drove = false;
   try {
-    const completed = await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start, ...(explicitResume ? { explicitResume: true } : {}) }, async () => {
+    const completed = await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start, ...(explicitResume ? { explicitResume: true } : {}), ...(recoveryResume ? { recoveryResume: true } : {}) }, async () => {
       if (beforeDrive) {
         const current = await workflowStore.read(id, owner);
         await beforeDrive(current?.view.visits.at(-1));
@@ -1079,16 +1084,83 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
   if (!exists) return res.status(404).json({ message: "A job nem található." });
 
   await respondToResume(res, req.params.id, accepted =>
-    driveTracked(req.params.id, req.user!.id, false, async visit => {
-      if (visit?.step !== "animator" && visit?.step !== "gate") return retryTimedOutLektor(req.params.id);
-      const [draft] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs)
-        .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, req.params.id));
-      if (!draft || draft.publishedAt) throw new WorkflowConflict("Csak meglévő, még nem publikált bankjelölt folytatható.");
-      // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D4): a kapu bank-eredetű megállása a kapu újrafuttatásával folytatható.
-      if (visit.step === "gate") await retryFailedGate(req.params.id, visit);
-      else await retryFailedBankBuild(req.params.id, visit);
-    }, accepted, true));
+    driveTracked(req.params.id, req.user!.id, false, (visit) => applyResume(req.params.id, visit), accepted, true));
 });
+
+/**
+ * Egy szabály (elakadás-vezérlő V3): a kézi „Folytatás” gomb és az automatikus vezérlő ugyanezt hívja a lízing alatt.
+ * Kapuhibánál a stratégiát a tervező adja (`retryFailedGate` → `planRecovery`); bank/lektor ágon a meglévő célzott folytatás.
+ */
+async function applyResume(jobId: string, visit: import("../../shared/lesson-workflow").WorkflowVisit | undefined): Promise<void> {
+  if (visit?.step !== "animator" && visit?.step !== "gate") return retryTimedOutLektor(jobId);
+  const [draft] = await db.select({ publishedAt: lessons.publishedAt }).from(studioJobs)
+    .innerJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, jobId));
+  if (!draft || draft.publishedAt) throw new WorkflowConflict("Csak meglévő, még nem publikált bankjelölt folytatható.");
+  // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D4): a kapu bank-eredetű megállása a kapu újrafuttatásával folytatható.
+  if (visit.step === "gate") await retryFailedGate(jobId, visit);
+  else await retryFailedBankBuild(jobId, visit);
+}
+
+/**
+ * Elakadás-vezérlő V3: a hibával megállt, mentett, nem publikált jobok automatikus továbbvitele a tervező lépcsője szerint — söprésenként
+ * legfeljebb egy. A végre nem hajtható fokot (V4: szerzői javítás, teljes újragyártás) kihagyottként naplózza, hogy a tervező továbblépjen;
+ * a lépcső végén `recoveryState = "ask-owner"` (a felület a pontos okot mutatja), további automatikus lépés nincs.
+ */
+export async function sweepFailedStudioJobs(now = Date.now()): Promise<number> {
+  const { rows } = await db.execute(sql`
+    SELECT j.id, j.status, j.step, j.error, j.finished_at, j.output ? 'lesson' AS has_lesson, (l.published_at IS NOT NULL) AS published,
+           j.output->>'recoveryState' AS recovery_state, r.id AS run_id, r.owner_id, r.state AS run_state, r.lease_until,
+           r.snapshot->'visits'->-1 AS last_visit, j.output->>'htmlFileId' AS html_file_id
+    FROM studio_jobs j
+    LEFT JOIN lessons l ON l.id = j.lesson_id
+    LEFT JOIN LATERAL (
+      SELECT w.id, w.owner_id, w.state, w.lease_until, w.snapshot FROM lesson_workflow_runs w
+      WHERE w.id = j.id OR w.snapshot->>'resourceId' = j.id ORDER BY w.created_at DESC LIMIT 1
+    ) r ON true
+    WHERE j.status = 'error' AND j.finished_at > now() - interval '7 days'
+    ORDER BY j.finished_at ASC LIMIT 50`);
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    const row: RecoveryRow = {
+      id: String(raw.id), status: String(raw.status), step: String(raw.step), error: (raw.error as string | null) ?? null,
+      finishedAt: raw.finished_at ? new Date(String(raw.finished_at)) : null, hasLesson: raw.has_lesson === true, published: raw.published === true,
+      runId: (raw.run_id as string | null) ?? null, owner: (raw.owner_id as string | null) ?? null, runState: (raw.run_state as string | null) ?? null,
+      leaseUntil: raw.lease_until ? new Date(String(raw.lease_until)) : null, recoveryState: (raw.recovery_state as string | null) ?? null,
+    };
+    if (recoveryCandidate(row, now) !== null) continue;
+    const [job] = await db.select({ output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, row.id));
+    const history = recoveryHistoryOf(job?.output as never);
+    const lastVisit = (raw.last_visit ?? undefined) as { step: string; state: string; error?: string } | undefined;
+    // Ugyanaz a jogosultsági szabály, mint a kézi gombé: nem folytatható hibát a vezérlő nem hajt (különben söprésenként újra bukna).
+    const eligible = resumeKindOf({ step: row.step, status: row.status, error: row.error, hasLesson: row.hasLesson, htmlFileId: raw.html_file_id,
+      published: row.published, visit: lastVisit, gateRecoveryAttempt: (job?.output as { gateRecoveryAttempt?: unknown } | null)?.gateRecoveryAttempt }) !== null;
+    const planned = planRecovery({ error: row.error!, history });
+    const plan = eligible ? planned : { ...planned, strategy: "ask-owner" as const, reason: `${recoveryReason("ask-owner")} — ez a megállás a mentett részekből nem folytatható` };
+    if (plan.strategy === "ask-owner" || plan.strategy === "author-repair" || plan.strategy === "remanufacture") {
+      // V4 előtt a két utolsó fok nem hajtható végre: naplózott kihagyás → a tervező továbblép; a végén tulajdonosi döntés.
+      const fp = failureFingerprint(row.error!);
+      const step: RecoveryStep = { strategy: plan.strategy, fingerprint: fp.key, failing: fp.failing, at: now };
+      const done = plan.strategy === "ask-owner" || planRecovery({ error: row.error!, history: [...history, step] }).strategy === "ask-owner";
+      const nextHistory = JSON.stringify([...history, step]);
+      await db.execute(sql`UPDATE studio_jobs SET output = jsonb_set(jsonb_set(output, '{recovery}', ${nextHistory}::jsonb),
+        '{recoveryState}', ${JSON.stringify(done ? "ask-owner" : "running")}::jsonb) WHERE id = ${row.id} AND status = 'error'`);
+      logger.warn(`[VEZÉRLŐ] ${row.id}: ${plan.strategy} — ${done ? "tulajdonosi döntés szükséges" : "a fok még nem végrehajtható (V4), továbblépés"}: ${plan.reason}`);
+      continue;
+    }
+    if (plan.strategy === "retry-provider") {
+      // A szolgáltatói újrapróba a végrehajtás ELŐTT a naplóba kerül (a tervező így legfeljebb kétszer választja ugyanarra a hibára).
+      const fp = failureFingerprint(row.error!);
+      const nextHistory = JSON.stringify([...history, { strategy: plan.strategy, fingerprint: fp.key, failing: fp.failing, at: now }]);
+      await db.execute(sql`UPDATE studio_jobs SET output = jsonb_set(output, '{recovery}', ${nextHistory}::jsonb) WHERE id = ${row.id} AND status = 'error'`);
+    }
+    logger.warn(`[VEZÉRLŐ] ${row.id}: automatikus folytatás — ${plan.strategy}: ${plan.reason}`);
+    void driveTracked(row.id, row.owner!, false, (visit) => applyResume(row.id, visit), undefined, false, true).catch((error) => {
+      if (error instanceof WorkflowConflict) { logger.warn(`[VEZÉRLŐ] ${row.id}: kihagyva — ${error.message}`); return; }
+      logger.error(`[VEZÉRLŐ] ${row.id}: az automatikus folytatás megállt`, error);
+    });
+    return 1; // söprésenként legfeljebb egy
+  }
+  return 0;
+}
 
 /* ------------------------------------------------------------------ *
  * LS-5 — feedback loop: concept stats, fix-concept, quiz export

@@ -83,7 +83,7 @@ export type WorkflowView = {
   /** Spec 2026-09-30 (B8, H11): az „unknown” osztályú hibák redaktált szövegmintája a FUTÁS naplójában (emberi átnézésre); a tanult skillbe nem kerül. */
   unknownFindingSamples?: Array<{ step: string; fingerprint: string; text: string }>;
   /** Spec 2026-10-05-s9: a prompt-javító orkesztrátor saját kerete (pontonként és futásonként; NEM a javító kör kerete). */
-  orchestrator?: { calls: number; byPoint: Record<string, number> };
+  orchestrator?: { calls: number; byPoint: Record<string, number>; execution?: number };
   /** Spec 2026-10-05-s9 (rögzítő szelet): a bukott kísérletek kivonata (≤ 50) — az ingyenes diagnózis-próba és az A/B mérés adata. */
   failures?: Array<{ at: number; step: string; point: string; kind: string; reasons: string[]; outputHash?: string; orchestrated?: { rootCause: string; outcome: "ok" | "failed" | "skipped" } }>;
   skillAudit?: SkillAudit;

@@ -70,7 +70,10 @@ export async function workflowEnsureRepairBudget(reason: string): Promise<boolea
  */
 export const WORKFLOW_EXECUTION_BUDGET = 4;
 export const WORKFLOW_EXPLICIT_RESUME_BUDGET = 6;
-export const workflowExecutionBudget = (explicitResume?: boolean) => explicitResume ? WORKFLOW_EXPLICIT_RESUME_BUDGET : WORKFLOW_EXECUTION_BUDGET;
+/** Elakadás-vezérlő V3: a vezérlő folytatásai a lépcső hosszáig (8 fok) mehetnek túl a kézi kereten — a valódi korlát a haladás-őr. */
+export const WORKFLOW_RECOVERY_BUDGET = WORKFLOW_EXPLICIT_RESUME_BUDGET + 8;
+export const workflowExecutionBudget = (explicitResume?: boolean, recoveryResume?: boolean) =>
+  recoveryResume ? WORKFLOW_RECOVERY_BUDGET : explicitResume ? WORKFLOW_EXPLICIT_RESUME_BUDGET : WORKFLOW_EXECUTION_BUDGET;
 /**
  * Spec 2026-10-15-tetelgyar T0.4: kifejezett folytatásnál a hibával megállt lépésből EGY visszaél engedélyezhető (pl. kapu → lektor,
  * amikor a lektor-bizonyíték eltér) — a definíció a futásban mentődik és naplózódik, mint a dinamikus javítási keret. Csak folytatásban,
@@ -168,7 +171,11 @@ export async function workflowValidationFailure(error: unknown) {
 export async function workflowOrchestratorAllow(point: string, perPoint = 2, perRun = 8): Promise<boolean> {
   const ctx = context.getStore();
   if (!ctx) return true;
-  const o = (ctx.record.view.orchestrator ??= { calls: 0, byPoint: {} });
+  // Elakadás-vezérlő V3 (mért: job 416ad01d — a folytatások és a bank-újraépítés után az új tételek a régi, elfogyott keretet örökölték):
+  // a keret VÉGREHAJTÁSONKÉNT; a végrehajtások számát a vezérlő haladás-alapú lépcsője korlátozza.
+  const execution = ctx.record.view.executions ?? 0;
+  if (ctx.record.view.orchestrator && ctx.record.view.orchestrator.execution !== execution) ctx.record.view.orchestrator = { calls: 0, byPoint: {}, execution };
+  const o = (ctx.record.view.orchestrator ??= { calls: 0, byPoint: {}, execution });
   if (o.calls >= perRun || (o.byPoint[point] ?? 0) >= perPoint) return false;
   o.calls++;
   o.byPoint[point] = (o.byPoint[point] ?? 0) + 1;
@@ -295,7 +302,7 @@ export async function workflowUsage(usage: { prompt_tokens?: number; completion_
 }
 
 export async function executeWorkflow<T extends WorkflowView["result"]>(
-  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean },
+  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean; recoveryResume?: boolean },
   work: () => Promise<T>,
 ): Promise<WorkflowView> {
   const now = Date.now();
@@ -307,7 +314,7 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
   if (!(input.continuation && input.request === undefined) && record.checkpoints.requestHash !== requestHash) throw new WorkflowConflict("Megváltozott bemenettel új futást kell indítani.");
   if (["done", "ready"].includes(record.view.state)) return record.view;
   if (["error", "interrupted", "waiting"].includes(record.view.state) && !input.retry) throw new WorkflowConflict("Ez a futás megállt; külön folytatási művelet szükséges.");
-  if ((record.view.executions ?? 0) >= workflowExecutionBudget(input.explicitResume)) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
+  if ((record.view.executions ?? 0) >= workflowExecutionBudget(input.explicitResume, input.recoveryResume)) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
   const token = randomUUID();
   if (!await store.claim(input.id, input.owner, token)) throw new WorkflowConflict("Ez a futás már folyamatban van.");
   const fresh = await store.read(input.id, input.owner);
