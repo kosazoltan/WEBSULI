@@ -138,3 +138,8 @@ Ajánlott sorrend: **T0 → T1 → T4 → T2 → T6 → T5 → T3** (a gyors, bi
   (`WORKFLOW_EXPLICIT_RESUME_BUDGET`, `server/workflows/engine.ts`), az automatikus újrapróbálásé **4** marad; a futásnézet `resumable`
   mezője ugyanezt a keretet nézi. Teszt: `tests/lesson-workflow.test.ts`.
 - **Módosított sorrend:** **T0 → T1 → T4′ → T8 → T2 → T7 → T6 → T5 → T3** (a nyelvi adatbank és a lektor-memória egymásra épül).
+
+## 8. Tulajdonosi döntések (2026-10-15, délután)
+- **T8:** mérés 4 mentett leckén (köztük 2 ismert tényhibás), legfeljebb 8 lektorhívás; élesítés csak ha a megfogalmazás/rubrika-eredetű
+  blokkolók ≥ 40%-kal csökkennek ÉS a valódi tényhibák továbbra is fennakadnak.
+- **A további szeletek sorrendje (hatás szerint):** T2 → T7 → T6 → T5 → T3, mindegyik külön PR, méréssel.
