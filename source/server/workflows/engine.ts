@@ -64,6 +64,14 @@ export async function workflowEnsureRepairBudget(reason: string): Promise<boolea
   return REPAIR_PATH.every((id) => workflowVisitsLeft(view, id) > 0);
 }
 /**
+ * Tulajdonosi döntés 2026-10-15 (job 416ad01d: az eredeti futás + 3 folytatás elfogyasztotta a 4-es keretet): a végrehajtási keret
+ * futásonként 4; a tulajdonos GOMBBAL indított, kifejezett folytatása (`POST /jobs/:id/resume`) legfeljebb 6-ig mehet — a költség emberi
+ * kattintáshoz kötött, az automatikus újrapróbálás kerete változatlan.
+ */
+export const WORKFLOW_EXECUTION_BUDGET = 4;
+export const WORKFLOW_EXPLICIT_RESUME_BUDGET = 6;
+export const workflowExecutionBudget = (explicitResume?: boolean) => explicitResume ? WORKFLOW_EXPLICIT_RESUME_BUDGET : WORKFLOW_EXECUTION_BUDGET;
+/**
  * Spec 2026-10-15-tetelgyar T0.4: kifejezett folytatásnál a hibával megállt lépésből EGY visszaél engedélyezhető (pl. kapu → lektor,
  * amikor a lektor-bizonyíték eltér) — a definíció a futásban mentődik és naplózódik, mint a dinamikus javítási keret. Csak folytatásban,
  * csak ha az utolsó látogatás a `from` lépés hibája; különben false (a hívó a régi szabály szerint dönt). Futáson kívül: true.
@@ -281,7 +289,7 @@ export async function workflowUsage(usage: { prompt_tokens?: number; completion_
 }
 
 export async function executeWorkflow<T extends WorkflowView["result"]>(
-  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown },
+  store: WorkflowStore, input: { id: string; owner: string; mode: WorkflowMode; retry?: boolean; continuation?: boolean; request?: unknown; explicitResume?: boolean },
   work: () => Promise<T>,
 ): Promise<WorkflowView> {
   const now = Date.now();
@@ -293,7 +301,7 @@ export async function executeWorkflow<T extends WorkflowView["result"]>(
   if (!(input.continuation && input.request === undefined) && record.checkpoints.requestHash !== requestHash) throw new WorkflowConflict("Megváltozott bemenettel új futást kell indítani.");
   if (["done", "ready"].includes(record.view.state)) return record.view;
   if (["error", "interrupted", "waiting"].includes(record.view.state) && !input.retry) throw new WorkflowConflict("Ez a futás megállt; külön folytatási művelet szükséges.");
-  if ((record.view.executions ?? 0) >= 4) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
+  if ((record.view.executions ?? 0) >= workflowExecutionBudget(input.explicitResume)) throw new WorkflowConflict("A futás folytatási kerete elfogyott. Ellenőrizd a hibát új készítés előtt.");
   const token = randomUUID();
   if (!await store.claim(input.id, input.owner, token)) throw new WorkflowConflict("Ez a futás már folyamatban van.");
   const fresh = await store.read(input.id, input.owner);

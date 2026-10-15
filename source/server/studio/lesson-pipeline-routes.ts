@@ -47,7 +47,7 @@ import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
+import { WORKFLOW_EXPLICIT_RESUME_BUDGET, executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
 import { runToolWorkflow } from "../workflows/tool-run";
 import { htmlFiles } from "../../shared/schema";
@@ -341,10 +341,11 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
       error: studioJobs.error, lessonId: studioJobs.lessonId }).from(studioJobs)
       .leftJoin(lessons, eq(studioJobs.lessonId, lessons.id)).where(eq(studioJobs.id, run.jobId)).limit(1);
     draft = draftSummaryOf(job?.output, !!job?.publishedAt);
-    const visits = await workflowVisitsOf(runId);
+    const { visits, executions } = await workflowVisitsOf(runId);
     const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown };
     stop = {
-      resumable: !!job && resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
+      // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
+      resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
         htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1) }) !== null,
       stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
     };
@@ -353,11 +354,12 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}) } : {}) };
 }
 
-/** A futás workflow-látogatásai (csak olvasás; workflow-napló nélküli futásnál üres). */
-async function workflowVisitsOf(runId: string): Promise<Array<{ step: string; state: string; error?: string }>> {
-  const result = await db.execute(sql`SELECT snapshot->'visits' AS visits FROM lesson_workflow_runs WHERE id = ${runId} LIMIT 1`);
-  const visits = (result.rows[0] as { visits?: unknown } | undefined)?.visits;
-  return Array.isArray(visits) ? visits.filter((v): v is { step: string; state: string; error?: string } => !!v && typeof v.step === "string" && typeof v.state === "string") : [];
+/** A futás workflow-látogatásai és végrehajtásszáma (csak olvasás; workflow-napló nélküli futásnál üres / 0). */
+async function workflowVisitsOf(runId: string): Promise<{ visits: Array<{ step: string; state: string; error?: string }>; executions: number }> {
+  const result = await db.execute(sql`SELECT snapshot->'visits' AS visits, snapshot->'executions' AS executions FROM lesson_workflow_runs WHERE id = ${runId} LIMIT 1`);
+  const row = result.rows[0] as { visits?: unknown; executions?: unknown } | undefined;
+  const visits = Array.isArray(row?.visits) ? row!.visits.filter((v): v is { step: string; state: string; error?: string } => !!v && typeof v.step === "string" && typeof v.state === "string") : [];
+  return { visits, executions: typeof row?.executions === "number" ? row.executions : 0 };
 }
 
 /** GET /api/studio/lessons/one-step/:runId — the progress poll. */
@@ -906,7 +908,7 @@ async function guardedDrive(jobId: string, onStep?: (step: string, round: number
 /** A haladásjelző (one-step progress) azonosítója a workflow-é: a feltöltéses és (spec s7) a webes Studio-futásnál. */
 const tracksProgress = (mode: string | undefined) => mode === "upload" || mode === "webStudio";
 
-async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void) {
+async function driveTracked(jobId: string, owner: string, start = false, beforeDrive?: (visit?: import("../../shared/lesson-workflow").WorkflowVisit) => Promise<void>, onAccepted?: () => void, explicitResume = false) {
   const id = (await workflowStore.related(jobId, owner)) ?? jobId;
   const previous = await workflowStore.read(id, owner);
   if (!start && !previous) {
@@ -916,7 +918,7 @@ async function driveTracked(jobId: string, owner: string, start = false, beforeD
   }
   let drove = false;
   try {
-    const completed = await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start }, async () => {
+    const completed = await executeWorkflow(workflowStore, { id, owner, mode: previous?.view.definition.mode ?? "studio", retry: !start, continuation: !start, ...(explicitResume ? { explicitResume: true } : {}) }, async () => {
       if (beforeDrive) {
         const current = await workflowStore.read(id, owner);
         await beforeDrive(current?.view.visits.at(-1));
@@ -1080,7 +1082,7 @@ lessonPipelineRouter.post("/jobs/:id/resume", async (req: Request, res: Response
       // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D4): a kapu bank-eredetű megállása a kapu újrafuttatásával folytatható.
       if (visit.step === "gate") await retryFailedGate(req.params.id, visit);
       else await retryFailedBankBuild(req.params.id, visit);
-    }, accepted));
+    }, accepted, true));
 });
 
 /* ------------------------------------------------------------------ *
