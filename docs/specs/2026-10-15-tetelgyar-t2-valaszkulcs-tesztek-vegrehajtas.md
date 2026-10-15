@@ -88,3 +88,8 @@ bukás NEM blokkol.
 - `step-runner.ts`: a jelentés a job kimenetébe kerül (`answerKeyReport`), összesítés a naplóba.
 - Tesztek: a T2.1 bekötési tesztje a túl megengedő rubrikára (javítókör, utolsó kísérletnél kivétel); új: a helyes-eset bukás nem indít javítókört,
   a jelentésbe kerül; a kalibrált rubrika a gyerek helyes válaszát teljes ponttal fogadja.
+
+## Kiegészítés (2026-10-15, a skill-szabály szerint)
+A tesztíró saját szerepet (`answer-key-writer`, `shared/instruction-bundles/roles.ts`) és támogató skillt kap (`server/studio/support-skills.ts`,
+`withSupportSkill("answer-key-writer", …)`) — a korábbi `blind-solver` szerep skillje a forrásfeladatok vak megoldásáról szól, nem illik ide
+(`docs/specs/2026-09-23-role-skills-everywhere.md`: minden szerepnek saját skillje van).

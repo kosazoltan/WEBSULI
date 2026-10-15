@@ -7,6 +7,7 @@ import { withReadOnlyDb } from "../lib/read-only-db";
 import { FALLBACK_MODELS, resolveStudioModel } from "../../server/ai/models";
 import { createStudioStepProvider } from "../../server/ai/studio-provider";
 import { callStepModel } from "../../server/studio/run-step";
+import { withSupportSkill } from "../../server/studio/support-skills";
 import { writeAnswerKeys } from "../../server/studio/answer-key-writer";
 import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-tests";
 import { calibrateRubric } from "../../shared/answer-key-calibrate";
@@ -45,7 +46,7 @@ const models = [...new Set([FALLBACK_MODELS.gateHelper, resolveStudioModel("gate
 const call = async (system: string, user: string) => {
   let last: unknown;
   for (const model of models) {
-    try { return (await callStepModel(createStudioStepProvider(model, "gateHelper"), { step: "animator", policy: "gateHelper", role: "blind-solver", model, system, user })).json; }
+    try { return (await callStepModel(createStudioStepProvider(model, "gateHelper"), { step: "animator", policy: "gateHelper", role: "answer-key-writer", model, system: withSupportSkill("answer-key-writer", system), user })).json; }
     catch (error) { last = error; console.warn(`[mérés] ${model} hibázott: ${(error instanceof Error ? error.message : String(error)).slice(0, 160)}`); }
   }
   throw last;
