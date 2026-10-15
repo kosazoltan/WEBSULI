@@ -10,6 +10,7 @@ import {
   retryTimedOutLektor,
   retryFailedBankBuild,
   retryFailedGate,
+  retryWithAuthorRepair,
   startJobFromMap,
   type JobPatch,
   type JobView,
@@ -167,6 +168,35 @@ test("review #234 (P1): kimerült lépcsőnél a kézi folytatás elutasít — 
   deps.store.seed({ id: "exhausted", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture(), recovery: used } });
   await assert.rejects(retryFailedGate("exhausted", { step: "gate", state: "error", error }, deps), /nem a mentett részekből indul: a program minden saját megoldást kipróbált/);
   assert.equal(deps.store.jobs.get("exhausted")!.step, "error", "a job érintetlen");
+});
+
+test("elakadás-vezérlő V4.1: célzott szerzői javítás — csak a hibás fejezetek, a kapu meglévő útján (targetedGate + output.gate)", async () => {
+  const deps = makeDeps("{}");
+  const lesson = standardFusionFixture();
+  const t0 = lesson.experience!.tasks[0] as { sectionIndex: number };
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[0]: Mi hamis: a rubrika nem ellenőrzi a sorrendet. (kivétel után: x)";
+  deps.store.seed({ id: "author-fix", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error,
+    output: { lesson, experienceCheckpoint: { hash: "h", parts: { p: {} } }, choiceFlags: [{ path: "experience.tasks[0]", message: "régi" }] } });
+  await retryWithAuthorRepair("author-fix", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("author-fix")!;
+  const out = job.output as Record<string, unknown> & { gate: { ok: boolean; arc: Array<{ sectionIdx: number }>; reasons: string[] } };
+  assert.equal(job.step, "author"); assert.equal(job.status, "pending"); assert.equal(job.round, 3, "a következő (javító) kör");
+  assert.equal(out.gate.ok, false);
+  assert.deepEqual(out.gate.arc, [{ sectionIdx: t0.sectionIndex }]);
+  assert.match(out.gate.reasons[0], /tanítása alapján a gyakorlóbank nem építhető fel hibátlanul: Mi hamis: a rubrika nem ellenőrzi a sorrendet\./);
+  assert.doesNotMatch(out.gate.reasons[0], /kivétel után/);
+  assert.ok((out.repairLedger as { targetedGate?: { used: number } }).targetedGate?.used === 1, "a javítás a kapu főkönyvéből");
+  assert.equal(out.experienceCheckpoint, undefined, "a bank úgyis újraépül");
+  assert.equal(out.choiceFlags, undefined);
+  assert.deepEqual((out.recovery as Array<{ strategy: string }>).map((h) => h.strategy), ["author-repair"]);
+  assert.equal(deps.calls.length, 0);
+});
+
+test("elakadás-vezérlő V4.1: fejezethez nem köthető hibánál a szerzői javítás elutasít", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: (kivétel után: Legalább 45 szöveges feladat és 75 kvízkérdés szükséges.)";
+  deps.store.seed({ id: "author-none", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture() } });
+  await assert.rejects(retryWithAuthorRepair("author-none", { step: "gate", state: "error", error }, deps), /nincs fejezethez köthető hiba/);
 });
 
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {

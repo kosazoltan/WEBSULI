@@ -1,0 +1,196 @@
+[
+  {
+    "variant": "alapvonal (lélek nélkül)",
+    "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 3,
+    "warnings": 0,
+    "byClass": {
+      "rubrika/nyelvi": 3
+    },
+    "seconds": 57,
+    "tokensIn": 68531,
+    "tokensOut": 2867,
+    "blockerMessages": [
+      "experience.tasks[7]: Mi hamis: a rubrika nem követeli a teljes, rendezett láncot. | Bizonyíték: a fordított mintalánc is teljesíti minden csoportját. | Javítás iránya: required:[[\"levél\"],[\"vessző\"],[\"gally\"],[\"ág\"],[\"törzs\"],[\"gyökér\"]], ragos alakokkal is; kizárólag ebben a sorrendben.",
+      "experience.tasks[34]: Mi hamis: a „100 évig” önálló elfogadott érték. | Bizonyíték: a térkép „több mint 100 évig él”, nem pontosan 100 évig. | Javítás iránya: az élettartam csoportja [[\"több mint 100 évig\",\"100 évnél tovább\",\"egy évszázadnál tovább\"]]; a többi kötelező csoport maradjon.",
+      "experience.tasks[49]: Mi hamis: a kért bogyójellemzők nélkül is teljes a rubrika. | Bizonyíték: mind csak bonus. | Javítás iránya: required:[[\"csemegeszőlő\"],[\"borszőlő\"],[\"étkezésre\"],[\"mustot\"],[\"nagy szemű\"],[\"ropogós húsú\"],[\"vékony héjú\"],[\"puha húsú\"]], a helyes ragozott alakokkal is."
+    ]
+  },
+  {
+    "variant": "alapvonal (lélek nélkül)",
+    "jobId": "e2facc3f-051e-412a-8ea9-fe97929e85f1",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 0,
+    "warnings": 0,
+    "byClass": {},
+    "seconds": 18,
+    "tokensIn": 39807,
+    "tokensOut": 867,
+    "blockerMessages": []
+  },
+  {
+    "variant": "alapvonal (lélek nélkül)",
+    "jobId": "b3a7ecad-e815-4b3d-aa96-2358397b126d",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 3,
+    "warnings": 0,
+    "byClass": {
+      "rubrika/nyelvi": 1,
+      "egyéb": 2
+    },
+    "seconds": 24,
+    "tokensIn": 48985,
+    "tokensOut": 1544,
+    "blockerMessages": [
+      "experience.tasks[43]: Mi hamis: az élén/élen csoport továbbra is indokolatlanul kötelező. | Bizonyíték: „A vezetők a papkirályok, utánuk az előkelők következtek.” teljes válasz a kérdésre. | Javítás iránya: required=[[\"papkirályok\",\"papkirály\"],[\"előkelők\",\"előkelő\"]].",
+      "sections[8].blocks[0]: Mi hamis: a misconceptions[1] továbbra is kizárja a piramis megnevezést: „A zikkurat piramis – valójában…”. | Bizonyíték: a térkép csak „Lépcsőzetes toronytemplom.” meghatározást ad. | Javítás iránya: kizárás nélkül: „A zikkurat lépcsőzetes toronytemplom.”",
+      "experience.methods[18]: Mi hamis: az önellenőrzés sorrendjéből továbbra is hiányzik az épület, a társadalmi csoportok külön lépéssé váltak. | Bizonyíték: az 5. lépés „Mit építettek? A zikkuratot.” | Javítás iránya: hely; sumérok; öntözéses gazdálkodás; papkirályok és alattuk a csoportok; zikkurat."
+    ]
+  },
+  {
+    "variant": "alapvonal (lélek nélkül)",
+    "jobId": "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 23,
+    "warnings": 8,
+    "byClass": {
+      "számolás": 7,
+      "rubrika/nyelvi": 15,
+      "egyéb": 1
+    },
+    "seconds": 100,
+    "tokensIn": 61248,
+    "tokensOut": 6266,
+    "blockerMessages": [
+      "experience.quiz[9]: Mi hamis: az 57 a százasok és tízesek számjegye lenne. | Bizonyíték: 5724 = 5000 + 700 + 20 + 4. | Javítás iránya: az 57 az ezresek és százasok számjegyeiből áll; a százasok és tízesek számjegyeiből 72 adódik.",
+      "experience.quiz[81]: Mi hamis: a 68 a százasok és tízesek számjegyeiből áll. | Bizonyíték: 6806 = 6000 + 800 + 6. | Javítás iránya: a 68 az ezresek és százasok számjegyeiből áll; a százasok és tízesek számjegyeiből 80 adódik.",
+      "experience.quiz[65]: Mi hamis: a 0. opció a helyes, és a 3. hibás. | Bizonyíték: 418 = 4·104 + 2; 419 = 4·104 + 3. | Javítás iránya: helyes index 3, „Egyik sem osztható 4-gyel”; a 0. visszajelzése hibásnak, a 3. helyesnek minősítse az opciót.",
+      "experience.tasks[12]: Mi hamis: a minta csak a 12-t azonosítja listatagként, a rubrika egyik eredményt sem követeli. | Bizonyíték: 08 = 8 = 4·2; 12 = 4·3. | Javítás iránya: required=[[\"08\"],[\"12\"],[\"mindkettő szerepel a négyes többszörösök listáján\"]]; a minta is mondja ki mindkettőt.",
+      "experience.tasks[13]: Mi hamis: a rubrika 52-t vagy pusztán „számot” fogad el, és nem követeli a végeredményt. | Bizonyíték: 9472 utolsó két jegye 72; 72 = 4·18. | Javítás iránya: required=[[\"utolsó két helyiérték\"],[\"72\"],[\"72 osztható 4-gyel\"],[\"9472 osztható 4-gyel\"]].",
+      "experience.tasks[11]: Mi hamis: a rubrika nem követel egyetlen felsorolt elemet sem, pedig a kérdés kéri őket. | Bizonyíték: c17 listája „0, 4, 8, 12, 16…”. | Javítás iránya: required=[[\"0\"],[\"4\"],[\"8\"],[\"12\"],[\"négyes ugrások\",\"négyesével\"]]; más helyes egymást követő elemeket is fogadjon el.",
+      "experience.tasks[17]: Mi hamis: a rubrika nem követeli a 300 és 125 oszthatóságának kimondását. | Bizonyíték: 300 = 25·12; 125 = 25·5; 934 = 25·37 + 9. | Javítás iránya: required=[[\"00\"],[\"25\"],[\"34\"],[\"300 osztható 25-tel\"],[\"125 osztható 25-tel\"],[\"934 nem osztható 25-tel\"]].",
+      "experience.tasks[19]: Mi hamis: a 1375-re való alkalmazás csak bónusz, a rubrika puszta szabálymondást is elfogad. | Bizonyíték: 1375 = 25·55. | Javítás iránya: required=[[\"utolsó két helyiérték\"],[\"osztható 25-tel\"],[\"1375\"],[\"75\"],[\"75 : 25 = 3\"],[\"1375 osztható 25-tel\"]].",
+      "experience.tasks[20]: Mi hamis: a rubrika nem követeli a 4800-ra kért döntést; a szám csak bónusz. | Bizonyíték: 4800 = 100·48. | Javítás iránya: required=[[\"két utolsó helyiértékén 0 áll\"],[\"4800 osztható 100-zal\"]].",
+      "experience.tasks[22]: Mi hamis: a rubrika nem követeli a 4312 vizsgálatát, a 312 és 4312 csak bónusz. | Bizonyíték: 312 = 8·39; 4312 = 8·539. | Javítás iránya: required=[[\"utolsó három helyiérték\"],[\"osztható 8-cal\"],[\"312\"],[\"312 : 8 = 39\"],[\"4312 osztható 8-cal\"]].",
+      "experience.tasks[23]: Mi hamis: a rubrika nem követeli a 3600-ra alkalmazást és az öt osztóhoz tartozó eredményt. | Bizonyíték: a hányadosok 900, 180, 144, 72, 36. | Javítás iránya: required=[[\"3600\"],[\"00\"],[\"4-gyel\"],[\"20-szal\"],[\"25-tel\"],[\"50-nel\"],[\"100-zal\"],[\"mind az öttel osztható\"]].",
+      "experience.tasks[24]: Mi hamis: a rubrika nem követeli sem a szabály oszthatósági feltételét, sem a végső döntést. | Bizonyíték: 2716 = 4·679. | Javítás iránya: required=[[\"utolsó két helyiérték\"],[\"akkor és csak akkor\"],[\"osztható 4-gyel\"],[\"16\"],[\"16 : 4 = 4\"],[\"2716 osztható 4-gyel\"]].",
+      "experience.tasks[25]: Mi hamis: a rubrika puszta számlistával is teljesíthető; nem követeli a két ellentétes eredményt. | Bizonyíték: 132 = 4·33; 133 = 4·33 + 1. | Javítás iránya: required=[[\"32\"],[\"33\"],[\"32 osztható 4-gyel\"],[\"33 nem osztható 4-gyel\"],[\"132 osztható 4-gyel\"],[\"133 nem osztható 4-g",
+      "experience.tasks[26]: Mi hamis: a rubrika nem követeli a párosságot és a 5832-re kért döntést. | Bizonyíték: 5832 = 2·2916. | Javítás iránya: required=[[\"egyesek helyén álló számjegy\"],[\"2\"],[\"páros\"],[\"5832 osztható 2-vel\"]].",
+      "experience.tasks[28]: Mi hamis: a rubrika a „nem osztható” alakot követeli, de a helyes pozitív döntést és a téves állítás cáfolatát nem. | Bizonyíték: 1+4+2+5=12; 1425=3·475. | Javítás iránya: required=[[\"számjegyek összege\"],[\"12\"],[\"12 osztható 3-mal\"],[\"1425 osztható 3-mal\"],[\"a tagadó állítás h",
+      "experience.tasks[37]: Mi hamis: a szükséges nemleges eredmény csak bónusz; a rubrika az ellenkező döntést sem zárja ki. | Bizonyíték: 86 = 4·21 + 2; 586 = 4·146 + 2. | Javítás iránya: required=[[\"utolsó két helyiérték\"],[\"86\"],[\"86 nem osztható 4-gyel\"],[\"586 nem osztható 4-gyel\"]].",
+      "experience.tasks[42]: Mi hamis: a rubrika kérdésként („osztható-e”) megfogalmazott, döntés nélküli választ is elfogad. | Bizonyíték: 16 = 4·4; 316 = 4·79. | Javítás iránya: required=[[\"utolsó két számjegy\"],[\"16\"],[\"16 osztható 4-gyel\"],[\"316 osztható 4-gyel\"]].",
+      "experience.tasks[43]: Mi hamis: a rubrika nem követeli a 4725-re kért döntést, az „osztható-e” is elegendő neki. | Bizonyíték: 25 : 25 = 1; 4725 = 25·189. | Javítás iránya: required=[[\"utolsó két számjegy\"],[\"25\"],[\"25 osztható 25-tel\"],[\"4725 osztható 25-tel\"]].",
+      "sections[7].blocks[0]: Mi hiányzik: a 8-as szabály csak a vizsgálandó részt nevezi meg, az eldöntés feltételét nem tanítja. | Bizonyíték: c9: „…háromjegyű szám osztható 8-cal”. | Javítás iránya: az eredeti szám akkor és csak akkor osztható 8-cal, ha az utolsó három jegyből kapott szám osztható 8-cal",
+      "sections[8].blocks[0]: Mi hiányzik: a 6-tal való oszthatóság teljes tanítása (c13). | Bizonyíték: „akkor és csak akkor osztható 6-tal, ha 2-vel is és 3-mal is osztható”. | Javítás iránya: a két feltétel együttes teljesülését és annak alkalmazását kell megtanítani.",
+      "sections[8].blocks[0]: Mi hiányzik: a 10-zel való oszthatóság (c26). | Bizonyíték: „akkor és csak akkor… ha 2-vel és 5-tel is osztható”. | Javítás iránya: a 10-zel oszthatóság egyenértékű a 2-vel és 5-tel való együttes oszthatósággal, illetve a 0-s utolsó számjeggyel.",
+      "sections[8].blocks[0]: Mi hiányzik: a páros és páratlan szám fogalmi meghatározása (c20, c22). | Bizonyíték: „A 2-vel osztható számokat… páros”; „a 2-vel nem osztható számok… páratlan”. | Javítás iránya: természetes szám páros, ha osztható 2-vel, páratlan, ha nem osztható 2-vel.",
+      "sections[8].blocks[0]: Mi hiányzik: a páratlanság utolsó számjegyre épülő szabálya (c24). | Bizonyíték: „akkor és csak akkor páratlan, ha az egyesek helyén álló számjegye páratlan”. | Javítás iránya: a természetes szám páratlanságát az egyesek helyén álló páratlan számjegy dönti el."
+    ]
+  },
+  {
+    "variant": "változat (lektor-lélek)",
+    "jobId": "416ad01d-271f-49ff-b860-3e32c6635dfb",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 6,
+    "warnings": 0,
+    "byClass": {
+      "rubrika/nyelvi": 6
+    },
+    "seconds": 52,
+    "tokensIn": 69010,
+    "tokensOut": 2994,
+    "blockerMessages": [
+      "experience.tasks[7]: Mi hamis: a rubrika továbbra sem ellenőrzi a sorrendet, és nem követeli mind a hat részt. | Bizonyíték: „Gyökér → törzs → ág → gally → vessző → levél” minden csoportot teljesít. | Javítás iránya: kizárólag levél → vessző → gally → ág → törzs → gyökér sorrendet fogadjon el, ragos",
+      "experience.tasks[6]: Mi hamis: a gyökér megnevezése nélkül is teljesül a rubrika. | Bizonyíték: „A szerteágazó levél felveszi a talajból a vizet és az ásványi anyagokat.” | Javítás iránya: required: [[\"szerteágazó\"],[\"főgyökérzet\"],[\"víz\",\"vizet\"],[\"ásványi anyag\"],[\"felveszi\",\"felvétel\"]].",
+      "experience.tasks[8]: Mi hamis: nem kötelező a szerves tápanyag megnevezése. | Bizonyíték: „Az almafa levele főeres és fűrészes szélű, benne szervetlen tápanyag képződik” teljesíti a csoportokat. | Javítás iránya: required: [[\"főeres\"],[\"fűrészes\"],[\"szerves\"],[\"tápanyag\"],[\"képződik\",\"képződnek\"]].",
+      "experience.tasks[34]: Mi hamis: a „100 évig” önmagában elfogadott élettartam. | Bizonyíték: c35: „több mint 100 évig él”; a rubrika a pontosan száz évet is elfogadja. | Javítás iránya: az élettartam csoportja [[\"több mint 100 évig\",\"100 évnél tovább\",\"egy évszázadnál tovább\"]] legyen.",
+      "experience.tasks[37]: Mi hamis: az olajos mag említése nem kötelező. | Bizonyíték: „A diónak a tápláló zöld burkát fogyasztjuk, nem az ehetetlen termésfalát” teljesíti a required csoportokat. | Javítás iránya: required: [[\"tápláló\"],[\"olajos\"],[\"mag\"],[\"fogyasztjuk\"],[\"ehetetlen termésfal\"],[\"nem\"]]",
+      "experience.tasks[49]: Mi hamis: a kért bogyójellemzők mind bónuszok, nélkülük is teljes pont járhat. | Bizonyíték: a required csak a két típust és felhasználásukat kéri. | Javítás iránya: külön kötelező csoport: csemegeszőlő, étkezés, nagy szemű, ropogós; borszőlő, must, vékony héjú, puha húsú, tömö"
+    ]
+  },
+  {
+    "variant": "változat (lektor-lélek)",
+    "jobId": "e2facc3f-051e-412a-8ea9-fe97929e85f1",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 1,
+    "warnings": 0,
+    "byClass": {
+      "rubrika/nyelvi": 1
+    },
+    "seconds": 22,
+    "tokensIn": 40286,
+    "tokensOut": 1170,
+    "blockerMessages": [
+      "experience.tasks[7]: Mi hibás: a „víz” még kötelező. | Bizonyíték: „A felhőből esőként lehullik” és „Patakba, majd folyóba folyik” két tanított példa nélküle. | Javítás iránya: required=[]; requiredDistinct=[{from:[[\"vízgőz\",\"gőz\"],[\"eső\",\"esőként\"],[\"folyó\",\"patak\"],[\"tenger\"]],count:2}]."
+    ]
+  },
+  {
+    "variant": "változat (lektor-lélek)",
+    "jobId": "b3a7ecad-e815-4b3d-aa96-2358397b126d",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 3,
+    "warnings": 0,
+    "byClass": {
+      "rubrika/nyelvi": 1,
+      "egyéb": 2
+    },
+    "seconds": 27,
+    "tokensIn": 49464,
+    "tokensOut": 1509,
+    "blockerMessages": [
+      "experience.tasks[43]: Mi hamis: az élén/élen csoport továbbra is indokolatlanul kötelező. | Bizonyíték: „A vezetők a papkirályok, utánuk az előkelők következtek.” teljes válasz a kérdésre. | Javítás iránya: required=[[\"papkirályok\",\"papkirály\"],[\"előkelők\",\"előkelő\"]].",
+      "sections[8].blocks[0]: Mi hamis: a misconceptions[1] továbbra is kizárja a piramisként való megnevezést: „A zikkurat piramis – valójában…”. | Bizonyíték: a térkép meghatározása csak „Lépcsőzetes toronytemplom.” | Javítás iránya: kizárás nélkül: „A zikkurat lépcsőzetes toronytemplom.”",
+      "experience.methods[18]: Mi hamis: az önellenőrzés sorrendjéből továbbra is kimarad az épület, helyette a társadalmi csoportok külön lépést kapnak. | Bizonyíték: a tanítás 5. lépése: „Mit építettek? A zikkuratot.” | Javítás iránya: hely; sumérok; öntözéses gazdálkodás; papkirályok és alattuk a csopor"
+    ]
+  },
+  {
+    "variant": "változat (lektor-lélek)",
+    "jobId": "d6f5d4bc-62f6-4f71-9900-3743e0d7f0c5",
+    "model": "gpt-6.1-sol",
+    "eltérés": "vak megoldás, igazolt útvonal, katalógus és DB-prompt nélkül",
+    "blockers": 23,
+    "warnings": 11,
+    "byClass": {
+      "minta↔rubrika": 1,
+      "rubrika/nyelvi": 10,
+      "számolás": 9,
+      "egyéb": 3
+    },
+    "seconds": 113,
+    "tokensIn": 61727,
+    "tokensOut": 6876,
+    "blockerMessages": [
+      "experience.tasks[12]: Mi hamis: a minta csak a 12-t sorolja a segédlistához. | Bizonyíték: a térkép listáján 8 és 12 is szerepel; 08 = 8. | Javítás iránya: a végződések 08 és 12, értékük 8 és 12; mindkettő szerepel a listán.",
+      "experience.tasks[13]: Mi hamis: a rubrika 52-t vagy a „számot” szót fogadja el a szükséges 72 helyett. | Bizonyíték: 9472 végződése 72; 72 : 4 = 18. | Javítás iránya: külön kötelező csoportok: [9472], [72], [72 osztható 4-gyel], [9472 osztható 4-gyel]; az 52 törlendő.",
+      "experience.quiz[65]: Mi hamis: a kijelölt 0. opció szerint 418 osztható 4-gyel. | Bizonyíték: 418 = 4·104 + 2; 419 = 4·104 + 3. | Javítás iránya: a helyes kulcs 3, „Egyik sem osztható 4-gyel”; a 0. és 3. visszajelzés is ezt tükrözze.",
+      "experience.quiz[9]: Mi hamis: a 0. visszajelzés az 57-et a százasok és tízesek számjegyeiből képezi. | Bizonyíték: 5724-ben ezek 7 és 2, tehát 72. | Javítás iránya: 57 az ezresek és százasok számjegyeiből áll; a keresett végződés 24.",
+      "experience.quiz[81]: Mi hamis: a 0. visszajelzés a 68-at a százasok és tízesek számjegyeinek nevezi. | Bizonyíték: 6806-ban ezek 8 és 0, tehát 80. | Javítás iránya: 68 az ezresek és százasok számjegyeiből áll; a keresett végződés 06.",
+      "experience.quiz[56]: Mi hamis: az 1. opciót tévesnek minősíti, pedig az utolsó két számjegyből is eldönthető a 2-vel oszthatóság. | Bizonyíték: 100 többszöröse páros. | Javítás iránya: csak az egyesek vizsgálatának elegendőségét kérdezze; a kétjegyű rész vizsgálatát ne nevezze hibásnak.",
+      "experience.quiz[78]: Mi hamis: a 2. visszajelzés szerint a 100-zal oszthatósághoz nem a 100-as osztót használjuk. | Bizonyíték: c15 szerint a végződés 100-zal oszthatóságát vizsgáljuk. | Javítás iránya: itt 25-tel kell ellenőrizni; a 100-as szabálynál 100-zal.",
+      "experience.tasks[12]: Mi hibás: a rubrika nem követeli meg a 08 és 12 leolvasását és mindkettő listatagságát; ezek csak bónuszok. | Bizonyíték: required csak általános fogalmakat tartalmaz. | Javítás iránya: külön csoportok [08, 8], [12], [mindkettő szerepel a listán] is kötelezők.",
+      "experience.tasks[19]: Mi hibás: a 1375-re alkalmazást nem követeli meg a rubrika; 75 és 1375 csak bónusz. | Bizonyíték: a kérdés „majd alkalmazd a 1375-re”. | Javítás iránya: a szabály mellett külön kötelező csoport legyen [75] és [1375 osztható 25-tel].",
+      "experience.tasks[20]: Mi hibás: a rubrika a 4800-ról szóló döntés nélkül is teljesíthető; 4800 csak bónusz. | Bizonyíték: a kérdés „döntsd el a 4800-ról”. | Javítás iránya: a szabály kötelező elemei mellett külön csoport legyen [4800 osztható 100-zal].",
+      "experience.tasks[22]: Mi hibás: a 4312 vizsgálata kimaradhat a teljes pontos válaszból; 312 és 4312 csak bónusz. | Bizonyíték: a kérdés alkalmazást is kér; 312 : 8 = 39. | Javítás iránya: külön kötelező csoportok [312], [312 osztható 8-cal], [4312 osztható 8-cal].",
+      "experience.tasks[23]: Mi hibás: az általános szabály leírása teljesíti a rubrikát a 3600 vizsgálata nélkül. | Bizonyíték: required nem követeli sem a 3600-at, sem a döntést. | Javítás iránya: kötelező [3600], [00], [3600 osztható 4-gyel, 20-szal, 25-tel, 50-nel és 100-zal].",
+      "experience.tasks[24]: Mi hibás: a rubrika csak a szabály nevét, a helyiértékeket és a 16-ot követeli, a szabályt és eredményt nem. | Bizonyíték: 16 : 4 = 4; 2716 osztható 4-gyel. | Javítás iránya: külön kötelező elem legyen a 4-es feltétel és [2716 osztható 4-gyel].",
+      "experience.tasks[25]: Mi hibás: a rubrika a 132, 32, 133, 33 felsorolását elfogadja a döntések nélkül. | Bizonyíték: minden required csoportban elegendő a puszta szám. | Javítás iránya: külön kötelező csoport [132 osztható 4-gyel] és [133 nem osztható 4-gyel].",
+      "experience.tasks[26]: Mi hibás: a rubrika nem követeli meg a párosságot vagy a végső döntést; a „2” önmagában elegendő. | Bizonyíték: a kérdés a 5832 oszthatóságának eldöntése. | Javítás iránya: külön kötelező csoportok [2 páros] és [5832 osztható 2-vel].",
+      "experience.tasks[28]: Mi hibás: a rubrika kötelezővé teszi a „nem osztható” alakot, de annak cáfolatát nem. | Bizonyíték: a téves „1425 nem osztható 3-mal” megfelelhet; 1+4+2+5=12. | Javítás iránya: külön kötelező [12 osztható 3-mal], [1425 osztható 3-mal], [a tagadó állítás hamis].",
+      "experience.tasks[37]: Mi hibás: a rubrika a helyes tagadó következtetést csak bónuszként kezeli, így az ellenkező döntést is elfogadhatja. | Bizonyíték: 86 = 4·21+2. | Javítás iránya: külön kötelező csoportok [86 nem osztható 4-gyel] és [586 nem osztható 4-gyel].",
+      "sections[7].blocks[0]: Mi hiányzik: a 8-as szabály döntési feltétele a tanításból. | Bizonyíték: csak „az utolsó három ... számot kell vizsgálni” szerepel; c9 oszthatósági feltételt ad. | Javítás iránya: az egész szám pontosan akkor osztható 8-cal, ha az utolsó három jegyből kapott szám osztható 8-c",
+      "sections[8].blocks[0]: Mi hiányzik: a 6-tal való oszthatóság szabályának tanítása. | Bizonyíték: c13 „ha 2-vel is és 3-mal is osztható”; a leckében nincs ilyen állítás. | Javítás iránya: egy szám akkor és csak akkor osztható 6-tal, ha 2-vel és 3-mal is osztható.",
+      "sections[8].blocks[0]: Mi hiányzik: a páros szám fogalmának meghatározása; a lecke csak használja a szót. | Bizonyíték: c20 „Párosnak nevezzük a 2-vel osztható számokat.” | Javítás iránya: páros szám az, amely 2-vel maradék nélkül osztható.",
+      "sections[8].blocks[0]: Mi hiányzik: a páratlan szám meghatározása. | Bizonyíték: c22 szerint a természetes számok közül a 2-vel nem oszthatók páratlanok; ezt a tanítás nem mondja ki. | Javítás iránya: páratlan természetes szám az, amely nem osztható 2-vel.",
+      "sections[8].blocks[0]: Mi hiányzik: a páratlanság utolsó számjegyre épülő szabálya. | Bizonyíték: c24 „akkor és csak akkor páratlan, ha az egyesek helyén álló számjegye páratlan”. | Javítás iránya: ezt a kétirányú feltételt is tanítani kell.",
+      "sections[8].blocks[0]: Mi hiányzik: a 10-zel való oszthatóság szabálya. | Bizonyíték: c26 „akkor és csak akkor ... ha 2-vel és 5-tel is osztható”. | Javítás iránya: 10-zel pontosan a 0-ra végződő számok oszthatók, egyenértékűen a 2-vel és 5-tel is oszthatók."
+    ]
+  }
+]
