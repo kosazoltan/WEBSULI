@@ -143,6 +143,9 @@ jobs:
       - name: Verify scored HTML banks and reload persistence
         run: npx playwright test --config playwright.html-persistence.config.ts
 
+      - name: Verify the open-answer arbiter in both lesson players (T7.2)
+        run: npx playwright test --config playwright.lesson-arbiter.config.ts
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
