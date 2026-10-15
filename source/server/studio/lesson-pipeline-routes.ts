@@ -306,6 +306,8 @@ export type OneStepRunView = {
   draft?: OneStepDraft;
   /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3, D5): csak hibánál — folytatható-e, és melyik workflow-lépésnél állt meg. */
   resumable?: boolean; stoppedAt?: string;
+  /** A folytatás fajtája (a felület szövege ehhez igazodik): bank | gate | review | rebuild | lektor. */
+  resumeKind?: string;
 };
 
 /**
@@ -335,7 +337,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     htmlFileId = lesson?.htmlFileId ?? null;
   }
   let draft: OneStepDraft | null = null;
-  let stop: { resumable: boolean; stoppedAt?: string } | null = null;
+  let stop: { resumable: boolean; stoppedAt?: string; resumeKind?: string } | null = null;
   if (run.phase === "error" && run.jobId) {
     const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt, step: studioJobs.step, status: studioJobs.status,
       error: studioJobs.error, lessonId: studioJobs.lessonId }).from(studioJobs)
@@ -343,15 +345,17 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     draft = draftSummaryOf(job?.output, !!job?.publishedAt);
     const { visits, executions } = await workflowVisitsOf(runId);
     const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
+    const kind = job ? resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
+      htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) : null;
     stop = {
       // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
-      resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
-        htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) !== null,
+      resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && kind !== null,
       stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
+      ...(kind ? { resumeKind: kind } : {}),
     };
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
-    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}) } : {}) };
+    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}) } : {}) };
 }
 
 /** A futás workflow-látogatásai és végrehajtásszáma (csak olvasás; workflow-napló nélküli futásnál üres / 0). */

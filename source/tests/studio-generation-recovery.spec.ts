@@ -104,6 +104,21 @@ test("nem folytatható megállásnál nincs Folytatás gomb, van magyarázat, é
   expect(errors).toEqual([]);
 });
 
+// Spec 2026-10-15-folytatas-szoveg (tulajdonosi képernyőkép, job 416ad01d): a szöveg a folytatás fajtáját mondja, nem általános ígéretet.
+test("bank-újraépítő folytatásnál a szöveg az újraépítést mondja, a gomb látszik",async({page})=>{
+  await page.addInitScript(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","rebuild-run"));
+  await page.route("**/api/studio/maps",route=>route.fulfill({json:{maps:[]}}));
+  await page.route("**/api/studio/lessons/one-step/rebuild-run",route=>route.fulfill({json:{phase:"error",error:"Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: x",detail:null,mapId:"plant",jobId:"job-416",lessonId:"draft",
+    draft:{teachingSections:12,savedBankPackets:27},resumable:true,stoppedAt:"gate",resumeKind:"rebuild"}}));
+  await page.goto("/__studio-panel-probe");
+  await expect(page.getByTestId("one-step-draft")).toContainText("a gyakorlóbankot új tartalékkal újraépíti");
+  await expect(page.getByTestId("one-step-draft")).not.toContainText("a kész részeket nem gyártja újra");
+  await expect(page.getByTestId("one-step-resume")).toBeVisible();
+  await page.setViewportSize({width:360,height:800});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({path:"tests/screenshots/generation-rebuild-360.png",fullPage:true});
+});
+
 test("csak a közzétett lecke kész; hálózati hiba újraellenőrizhető, újratöltés után megnyitható",async({page})=>{
   await page.addInitScript(()=>sessionStorage.setItem("websuli.studio.oneStepRunId","finished-run"));
   let published=false;
