@@ -8,6 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
+
+/** A folytatás fajtája szerinti, a valóságnak megfelelő tájékoztatás (spec 2026-10-15-folytatas-szoveg). */
+const RESUME_TEXT: Record<string, string> = {
+  bank: "A folytatás innen halad tovább, a kész részeket nem gyártja újra.",
+  gate: "A folytatás innen halad tovább, a kész részeket nem gyártja újra.",
+  review: "A folytatás a tananyagot megtartja, és a lektori ellenőrzést futtatja újra.",
+  rebuild: "A folytatás a tanítást megtartja, a gyakorlóbankot új tartalékkal újraépíti.",
+  lektor: "A folytatás a lektori ellenőrzést futtatja újra.",
+};
 import { useToast } from "@/hooks/use-toast";
 import {
   downscaleTargetOf,
@@ -187,11 +196,12 @@ export function SourceUploadForm({
     draft?: { teachingSections: number; savedBankPackets: number };
     resumable?: boolean;
     stoppedAt?: string;
+    resumeKind?: string;
     nextRecovery?: { strategy: string; reason: string };
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string } }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
@@ -386,7 +396,7 @@ export function SourceUploadForm({
             {run.data.phase === "error" && run.data.draft && (
               <p className="text-sm text-muted-foreground" data-testid="one-step-draft">
                 Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag, {run.data.draft.savedBankPackets} kész gyakorlócsomag.
-                {run.data.jobId && run.data.resumable ? " A folytatás innen halad tovább, a kész részeket nem gyártja újra." : ""}
+                {run.data.jobId && run.data.resumable ? ` ${RESUME_TEXT[run.data.resumeKind ?? ""] ?? RESUME_TEXT.bank}` : ""}
                 {run.data.jobId && !run.data.resumable ? " Ez a megállás a mentett részekből nem folytatható; a forrásellenőrzésből új készítés indítható." : ""}
               </p>
             )}

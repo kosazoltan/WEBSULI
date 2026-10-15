@@ -312,6 +312,8 @@ export type OneStepRunView = {
   draft?: OneStepDraft;
   /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3, D5): csak hibánál — folytatható-e, és melyik workflow-lépésnél állt meg. */
   resumable?: boolean; stoppedAt?: string;
+  /** A folytatás fajtája (a felület szövege ehhez igazodik): bank | gate | review | rebuild | lektor. */
+  resumeKind?: string;
   /** Elakadás-vezérlő V1: a program következő lépése (a döntési lépcső szerint). */
   nextRecovery?: { strategy: string; reason: string };
 };
@@ -343,7 +345,7 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     htmlFileId = lesson?.htmlFileId ?? null;
   }
   let draft: OneStepDraft | null = null;
-  let stop: { resumable: boolean; stoppedAt?: string; nextRecovery?: { strategy: string; reason: string } } | null = null;
+  let stop: { resumable: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string } } | null = null;
   if (run.phase === "error" && run.jobId) {
     const [job] = await db.select({ output: studioJobs.output, publishedAt: lessons.publishedAt, step: studioJobs.step, status: studioJobs.status,
       error: studioJobs.error, lessonId: studioJobs.lessonId }).from(studioJobs)
@@ -361,11 +363,14 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
       // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
       resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && kind !== null && executable,
       stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
+      // A felület szövege a TÉNYLEGESEN végrehajtandó lépést mondja: kapuhibánál a tervező dönt (kapu / újraépítés), nem a régi számláló.
+      ...(kind ? { resumeKind: (kind === "gate" || kind === "rebuild") && plan ? (plan.strategy === "gate" ? "gate" : plan.strategy.startsWith("rebuild") ? "rebuild" : kind) : kind } : {}),
       ...(plan ? { nextRecovery: { strategy: plan.strategy, reason: plan.reason } } : {}),
     };
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
-    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
+    ...(stop ? { resumable: stop.resumable, ...(stop.stoppedAt ? { stoppedAt: stop.stoppedAt } : {}), ...(stop.resumeKind ? { resumeKind: stop.resumeKind } : {}),
+      ...(stop.nextRecovery ? { nextRecovery: stop.nextRecovery } : {}) } : {}) };
 }
 
 /** A futás workflow-látogatásai és végrehajtásszáma (csak olvasás; workflow-napló nélküli futásnál üres / 0). */
