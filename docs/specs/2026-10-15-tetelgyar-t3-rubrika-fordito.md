@@ -72,3 +72,8 @@ ennek csak bizonyított igény esetén van értelme.
 - **A — a T3 lezárva, mért eredménnyel.** Nincs termékkód. A szemantikai parafrázist a T7 döntőbíró viszi.
 - Visszamérés 1–2 hét múlva: a döntőbíró élő hívásszáma (`arbiter_daily_usage`) és válaszideje. Ha drága vagy lassú, a B (kulcsgondolat-prompt mérése) indul.
 - A mérőeszköz (`source/scripts/measure/rubric-gap.mts`) a repóban marad, hogy a visszamérés megismételhető legyen.
+
+## Review #249 (2026-10-15)
+- A tesztesetek kulcsa `jobId:taskId` lett.
+- Az összetétel-szimuláció a dokumentált legalább 3 betűs folytatást követeli meg.
+- Újramérve: minden szám azonos, vagyis ebben az adatkészletben egyik hiba sem torzította az eredményt. A végrehajtási utasítás: `docs/specs/2026-10-15-tetelgyar-t3-rubrika-fordito-vegrehajtas.md`.
