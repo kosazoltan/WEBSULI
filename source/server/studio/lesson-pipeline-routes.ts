@@ -48,7 +48,7 @@ import { UNCERTAIN_MARK } from "./ocr";
 import { quoteTouchesUncertain } from "../../shared/transcript-marks";
 import { autonomousDecision } from "./autonomous";
 import { oneStepRuns } from "../../shared/schema";
-import { failureFingerprint, planRecovery, recoveryReason, type RecoveryStep } from "./recovery-planner";
+import { NOT_RESUMABLE_STRATEGIES, failureFingerprint, planRecovery, recoveryReason, type RecoveryStep } from "./recovery-planner";
 import { recoveryCandidate, type RecoveryRow } from "./recovery-sweep";
 import { WORKFLOW_EXPLICIT_RESUME_BUDGET, executeWorkflow, workflowFinding, workflowPhase, workflowResource, workflowValidationFailure, workflowFence, WorkflowWaiting, WorkflowConflict } from "../workflows/engine";
 import { workflowStore } from "../workflows/store";
@@ -351,13 +351,17 @@ export async function oneStepRunView(runId: string): Promise<OneStepRunView | nu
     draft = draftSummaryOf(job?.output, !!job?.publishedAt);
     const { visits, executions } = await workflowVisitsOf(runId);
     const output = (job?.output ?? {}) as { lesson?: unknown; htmlFileId?: unknown; gateRecoveryAttempt?: unknown };
+    // Review #233/#234: a felület ugyanazzal a (régi mezőkből is visszafejtett) történettel tervez, mint a végrehajtás; a gomb csak akkor
+    // látszik, ha a következő fok a mentett részekből tényleg végrehajtható.
+    const plan = job?.error ? planRecovery({ error: job.error, history: recoveryHistoryOf(job.output as never, job.error) }) : null;
+    const executable = !plan || !NOT_RESUMABLE_STRATEGIES.includes(plan.strategy);
+    const kind = job ? resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
+      htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) : null;
     stop = {
       // Tulajdonosi döntés 2026-10-15: a gomb a kifejezett folytatás végrehajtási keretét is nézi (a szerver ugyanezzel utasít el).
-      resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!output.lesson,
-        htmlFileId: output.htmlFileId, published: !!job.publishedAt, visit: visits.at(-1), gateRecoveryAttempt: output.gateRecoveryAttempt }) !== null,
+      resumable: !!job && executions < WORKFLOW_EXPLICIT_RESUME_BUDGET && kind !== null && executable,
       stoppedAt: visits.filter((v) => v.state === "error").at(-1)?.step,
-      ...(job?.error ? { nextRecovery: (({ strategy, reason }) => ({ strategy, reason }))(planRecovery({ error: job.error,
-        history: Array.isArray((job.output as { recovery?: unknown } | null)?.recovery) ? (job.output as { recovery: RecoveryStep[] }).recovery : [] })) } : {}),
+      ...(plan ? { nextRecovery: { strategy: plan.strategy, reason: plan.reason } } : {}),
     };
   }
   return { phase: run.phase, detail: run.detail, error: run.error, mapId: run.mapId, jobId: run.jobId, lessonId: run.lessonId, htmlFileId, ...(draft ? { draft } : {}),
@@ -1128,7 +1132,7 @@ export async function sweepFailedStudioJobs(now = Date.now()): Promise<number> {
     };
     if (recoveryCandidate(row, now) !== null) continue;
     const [job] = await db.select({ output: studioJobs.output }).from(studioJobs).where(eq(studioJobs.id, row.id));
-    const history = recoveryHistoryOf(job?.output as never);
+    const history = recoveryHistoryOf(job?.output as never, row.error);
     const lastVisit = (raw.last_visit ?? undefined) as { step: string; state: string; error?: string } | undefined;
     // Ugyanaz a jogosultsági szabály, mint a kézi gombé: nem folytatható hibát a vezérlő nem hajt (különben söprésenként újra bukna).
     const eligible = resumeKindOf({ step: row.step, status: row.status, error: row.error, hasLesson: row.hasLesson, htmlFileId: raw.html_file_id,

@@ -159,6 +159,16 @@ test("elakadás-vezérlő V2: a tervező a kapu után a CÉLZOTT újraépítést
   assert.deepEqual((out.recovery as Array<{ strategy: string }>).map((h) => h.strategy), ["gate", "rebuild-targeted"]);
 });
 
+test("review #234 (P1): kimerült lépcsőnél a kézi folytatás elutasít — nem alakítja át tulajdonosi döntést újraépítéssé", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[0]: x";
+  const key = "bank-floor|tasks[0]|";
+  const used = ["gate", "rebuild-targeted", "rebuild-full", "author-repair", "remanufacture"].map((strategy) => ({ strategy, fingerprint: key, failing: 1, at: 0 }));
+  deps.store.seed({ id: "exhausted", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: { lesson: standardFusionFixture(), recovery: used } });
+  await assert.rejects(retryFailedGate("exhausted", { step: "gate", state: "error", error }, deps), /nem a mentett részekből indul: a program minden saját megoldást kipróbált/);
+  assert.equal(deps.store.jobs.get("exhausted")!.step, "error", "a job érintetlen");
+});
+
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {
   const deps = makeDeps("{}");
   const error = 'A(z) "author" lépés modellhívása hibára futott: https://example.invalid/request ' + "provider detail ".repeat(200);
