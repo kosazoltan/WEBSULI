@@ -4,7 +4,7 @@ import { SIGNED_NUMBER_RULES_HU, buildLessonExperience, needsSignedNumberRules }
 import { arithmeticClaimProblems, signAmbiguousRubricProblems } from "../server/studio/tools/arithmetic-claims";
 import { repairPermissions } from "../server/studio/bank-repair";
 import { singleChoiceProblems } from "../shared/single-choice-check";
-import { LESSON_BANK_SIZES } from "../shared/lesson-experience";
+import { LESSON_BANK_RESERVE, LESSON_BANK_SIZES } from "../shared/lesson-experience";
 import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 import type { MapConcept } from "../server/studio/coverage";
 
@@ -71,7 +71,9 @@ test("kötelező tartalék: a minimum-darabszámú (45/75) csomag elutasított k
     onAttemptFailure: (_section, _attempt, reason) => failures.push(reason),
   });
   assert.equal(calls, 2, "a tartalék nélküli első válasz nem fogadható el");
-  assert.match(failures[0], /tasks: Array must contain at least 48 element\(s\); quiz: Array must contain at least 80 element\(s\)/);
-  assert.equal(built.tasks.length, 48);
-  assert.equal(built.quiz.length, 80);
+  // Tételgyár T1 (tulajdonosi döntés D1, dokumentált szerződésváltozás): a tartalék 130% — az érték a konstansból.
+  const taskTarget = LESSON_BANK_SIZES.tasks + LESSON_BANK_RESERVE.tasks, quizTarget = LESSON_BANK_SIZES.quiz + LESSON_BANK_RESERVE.quiz;
+  assert.ok(failures[0].includes(`tasks: Array must contain at least ${taskTarget} element(s); quiz: Array must contain at least ${quizTarget} element(s)`), failures[0]);
+  assert.equal(built.tasks.length, taskTarget);
+  assert.equal(built.quiz.length, quizTarget);
 });
