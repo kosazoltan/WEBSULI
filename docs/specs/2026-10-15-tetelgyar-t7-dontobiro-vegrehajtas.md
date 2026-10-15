@@ -52,3 +52,13 @@ Terv: `docs/specs/2026-10-15-tetelgyar-t7-dontobiro.md` (tulajdonosi döntések:
 ## Ellenőrzés
 Célzott tesztek, `check`, `lint`, `check:test`, `build`, teljes `npm test`; T7.1-nél a migráció eldobható Postgres-konténerben (kétszer futtatva
 — idempotens), a végpont élő próbája a deploy után (egy valódi feladat, egy helyes saját szavas válasz → döntőbíró `ok`; ugyanaz újra → gyorsítótár).
+
+## T7.2 — végrehajtási kiegészítés (2026-10-15, a T7.1 élesítése után)
+- A T7.1 élő próbája (dec7a71): saját szavas helyes válasz → `döntőbíró` / `ok` (5,6 s); ugyanaz újra → `gyorsítótár` (1,5 s); tartalmilag hibás
+  válasz → `fail` marad; idegen Origin → 403.
+- Kliens: `client/src/lesson-runtime/arbiter.ts` (`requestArbiter`, `bestVerdict`, `useArbiterVerdicts`, `htmlArbiterSource`); a helyi mentés CSAK
+  a valódi döntőbírói ítéletet őrzi (átmeneti hiba a következő megnyitáskor újrapróbálható). Bekötés: `LessonView` → `LessonRuntime`
+  (`arbiterSource` prop) → `LessonExperienceView`; `HtmlLessonTasks` a `/dev/:id` útvonalból. Előnézetben (próba, javító) nincs döntőbíró.
+- Böngészős próba: `tests/lesson-arbiter.browser.ts` (`playwright.lesson-arbiter.config.ts`, `serviceWorkers: "block"` — különben a service worker
+  megkerüli a mockot), 390 és 1366 px, mindkét lejátszó.
+- CI: a Playwright E2E job új lépése futtatja (`.github/workflows/ci.yml`, a HTML-perzisztencia lépés mintájára).
