@@ -63,7 +63,8 @@ test("spec limit-check (review): a lektor-jelentés a 32 karakternél hosszabb a
 // Tételgyár T1 (tulajdonosi döntés D1, 130%; mért: job e2facc3f — 0 tartalékú fejezet csomagja egyetlen hibás tételen bukott,
 // job 416ad01d — 48 − 4 = 44 < 45): a tartalék a TÉNYLEGES minimum fölé kerül, minden fejezetbe jut belőle.
 test("T1: a tartalék a tényleges minimum ≥ 30%-a, és minden fejezet kap tartalékot (nagy alapkvótánál is)", () => {
-  for (const size of [1, 2, 3, 5, 8, 12]) {
+  // Review #226 (P1): 15, 40 és 80 egységnél is (ott a 30% kevesebb lehetne az egységszámnál).
+  for (const size of [1, 2, 3, 5, 8, 12, 15, 40, 80]) {
     for (const width of [2, 4, 6]) {
       const plan = { units: Array.from({ length: size }, (_, sectionIndex) => ({ sectionIndex, conceptIds: Array.from({ length: width }, (_, k) => `c${k}`) })), taskRound: 15, quizRound: 25 };
       const quotas = plan.units.map((_, i) => bankUnitQuota(plan, i));
@@ -74,4 +75,11 @@ test("T1: a tartalék a tényleges minimum ≥ 30%-a, és minden fejezet kap tar
       assert.ok(quotas.every((q) => q.taskTarget - q.taskCount >= 1 && q.quizTarget - q.quizCount >= 1), `${label}: minden fejezetben van tartalék`);
     }
   }
+});
+
+test("review #226 (P2): a legnagyobb terv (80 egység × 6 fogalom) tartalékos célja a séma felső korlátján belül", () => {
+  const plan = { units: Array.from({ length: 80 }, (_, sectionIndex) => ({ sectionIndex, conceptIds: ["a", "b", "c", "d", "e", "f"] })), taskRound: 15, quizRound: 25 };
+  const quotas = plan.units.map((_, i) => bankUnitQuota(plan, i));
+  const tasks = quotas.reduce((n, q) => n + q.taskTarget, 0), quiz = quotas.reduce((n, q) => n + q.quizTarget, 0);
+  assert.ok(tasks <= 640 && quiz <= 1280, `feladat ${tasks}, kvíz ${quiz}`);
 });

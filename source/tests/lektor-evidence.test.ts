@@ -74,3 +74,21 @@ test("T0.4b: a kapu → lektor visszaél csak kifejezett folytatásban, a kapu h
   assert.equal(done.resumeEdge, undefined, "egyszer használatos");
   assert.equal(done.visits.filter((v) => v.step === "gate")[0].state, "error", "a hibás kapulátogatás hibaként marad");
 });
+
+test("review #225 (P2): elfogyott lektor-kerettel is működik a kapu → lektor visszaél (egyszeri +1 látogatás)", async () => {
+  const { store } = memoryWorkflows();
+  const input = { id: "edge-budget", owner: "o", mode: "upload" as const };
+  await assert.rejects(executeWorkflow(store, input, async () => {
+    for (const step of ["source", "scope", "knowledge", "sourceCheck", "pedagogue", "author", "animator"]) await workflowPhase(step);
+    for (let k = 0; k < 4; k++) { await workflowPhase("lektor"); if (k < 3) await workflowPhase("animator"); }
+    await workflowPhase("gate");
+    throw new Error("kapu hiba");
+  }), /kapu hiba/);
+  const done = await executeWorkflow(store, { ...input, retry: true, continuation: true }, async () => {
+    assert.equal(await workflowAllowResumeEdge("gate", "lektor", "teszt"), true);
+    await workflowPhase("lektor"); await workflowPhase("gate"); await workflowPhase("readback");
+    return { kind: "material" as const, id: "ok" };
+  });
+  assert.equal(done.state, "done");
+  assert.equal(done.visits.filter((v) => v.step === "lektor").length, 5);
+});

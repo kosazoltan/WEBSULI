@@ -85,6 +85,10 @@ export async function workflowAllowResumeEdge(from: string, to: string, reason: 
   if (!view.definition.steps.find((s) => s.id === to)?.after.includes(from)) {
     view.definition = { ...view.definition, steps: view.definition.steps.map((step) => step.id === to ? { ...step, after: [...step.after, from] } : step) };
   }
+  // Review #225 (P2): elfogyott látogatási keretnél a visszaél önmagában nem elég — a cél-lépés egyszeri +1 látogatást kap.
+  if (workflowVisitsLeft(view, to) <= 0) {
+    view.definition = { ...view.definition, steps: view.definition.steps.map((step) => step.id === to ? { ...step, maxVisits: step.maxVisits + 1 } : step) };
+  }
   view.resumeEdge = { from, to, reason, at: Date.now() };
   await persist(ctx);
   logger.warn(`[WORKFLOW] Folytatási visszaél (${view.id}): ${from} → ${to} — ${reason}`);
