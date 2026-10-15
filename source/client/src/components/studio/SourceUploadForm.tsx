@@ -277,6 +277,9 @@ export function SourceUploadForm({
     remakeLock.current = true;
     oneStep.mutate({ forceNew: true }, { onSettled: () => { remakeLock.current = false; } });
   };
+  // Review #251 (P2): a futás bármilyen váltása (Bezárás, Új tananyag, új futás) törli a függő újragyártást — egy későbbi, más célú
+  // fájlválasztás nem indíthat észrevétlenül forceNew gyártást.
+  useEffect(() => { remakeAfterPick.current = false; }, [runId]);
   // Review #250 (P2): a fájlválasztó megszakítása is törli a függő újragyártást.
   useEffect(() => {
     const el = fileInput.current;
