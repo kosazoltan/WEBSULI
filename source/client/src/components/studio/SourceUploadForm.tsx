@@ -185,10 +185,12 @@ export function SourceUploadForm({
     lessonId: string | null;
     htmlFileId?: string | null;
     draft?: { teachingSections: number; savedBankPackets: number };
+    resumable?: boolean;
+    stoppedAt?: string;
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number } }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
@@ -228,6 +230,8 @@ export function SourceUploadForm({
     mutationFn: (jobId: string) => apiRequest("POST", `/api/studio/jobs/${jobId}/resume`),
     onSuccess: async () => {
       toast({ title: "Folytatás elindult", description: "A gyártás a mentett részekből halad tovább." });
+      // Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D7): a hibánál leállt folyamatábra-lekérdezés újraindul.
+      void queryClient.invalidateQueries({ queryKey: ["/api/studio/workflows", runId] });
       await run.refetch();
     },
     onError: (e: Error) => toast({ title: "Nem sikerült folytatni", description: e.message, variant: "destructive" }),
@@ -381,7 +385,8 @@ export function SourceUploadForm({
             {run.data.phase === "error" && run.data.draft && (
               <p className="text-sm text-muted-foreground" data-testid="one-step-draft">
                 Mentett piszkozat: {run.data.draft.teachingSections} fejezetnyi tananyag, {run.data.draft.savedBankPackets} kész gyakorlócsomag.
-                {run.data.jobId ? " A folytatás innen halad tovább, a kész részeket nem gyártja újra." : ""}
+                {run.data.jobId && run.data.resumable ? " A folytatás innen halad tovább, a kész részeket nem gyártja újra." : ""}
+                {run.data.jobId && !run.data.resumable ? " Ez a megállás a mentett részekből nem folytatható; a forrásellenőrzésből új készítés indítható." : ""}
               </p>
             )}
             {(run.data.phase === "done" || run.data.phase === "error" || run.data.phase === "parked") && (
@@ -391,7 +396,7 @@ export function SourceUploadForm({
                     <a href={`/preview/${run.data.htmlFileId}`}>Lecke megnyitása</a>
                   </Button>
                 )}
-                {run.data.phase === "error" && run.data.jobId && (
+                {run.data.phase === "error" && run.data.jobId && run.data.resumable && (
                   <Button size="sm" className="min-h-11" data-testid="one-step-resume" disabled={resume.isPending}
                     onClick={() => startResume(run.data!.jobId!)}>
                     {resume.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Folytatás a mentett részekből"}

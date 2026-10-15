@@ -9,6 +9,7 @@ import {
   runPipelineStep,
   retryTimedOutLektor,
   retryFailedBankBuild,
+  retryFailedGate,
   startJobFromMap,
   type JobPatch,
   type JobView,
@@ -70,6 +71,37 @@ test("bank resume requires the exact failed workflow visit and retains checkpoin
   job.step = "done";
   await retryFailedBankBuild("bank-retry", visit, deps);
   assert.equal(job.step, "done");
+});
+
+test("spec 2026-10-15 (D4): a kapu bank-eredetű megállása a mentett leckéből a kapu újrafuttatásával folytatható", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: Mi hamis: a rubrika nem ellenőrzi a sorrendet.";
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { hash: "fusion-7.4-4", parts: { complete: { preserved: true } } } };
+  const seed = () => deps.store.seed({ id: "gate-retry", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  const visit = { step: "gate", state: "error", error };
+  for (const invalid of [undefined, { ...visit, step: "lektor" }, { ...visit, step: "animator" }, { ...visit, state: "running" }, { ...visit, error: "different" }]) {
+    seed();
+    await assert.rejects(retryFailedGate("gate-retry", invalid, deps), /kapuhiba folytatható/);
+    assert.equal(deps.store.jobs.get("gate-retry")!.step, "error");
+  }
+  seed();
+  deps.store.jobs.get("gate-retry")!.output!.htmlFileId = "published";
+  await assert.rejects(retryFailedGate("gate-retry", visit, deps), /nem publikált/);
+  seed();
+  const other = "A fúziós módszer kapuja elutasította a leckét: x";
+  deps.store.jobs.get("gate-retry")!.error = other;
+  await assert.rejects(retryFailedGate("gate-retry", { ...visit, error: other }, deps), /kapuhiba/);
+  seed();
+  await retryFailedGate("gate-retry", visit, deps);
+  const job = deps.store.jobs.get("gate-retry")!;
+  assert.equal(job.step, "gate"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  assert.deepEqual(job.output, { ...output, previousGateError: error, gateRecoveryAttempt: 1 }, "a lecke és a kész csomagok változatlanok");
+  job.step = "error"; job.status = "error"; job.error = error;
+  await retryFailedGate("gate-retry", visit, deps);
+  assert.equal(job.output!.gateRecoveryAttempt, 2);
+  assert.equal(deps.calls.length, 0, "a folytatás előkészítése modellhívás nélkül");
+  job.output!.gateRecoveryAttempt = -1; job.step = "error"; job.status = "error"; job.error = error;
+  await assert.rejects(retryFailedGate("gate-retry", visit, deps), /sorszám/);
 });
 
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {
