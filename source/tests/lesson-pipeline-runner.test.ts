@@ -116,6 +116,19 @@ test("spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor 
   assert.equal(deps.calls.length, 0);
 });
 
+test("Tételgyár T1b: az ismételt bank-eredetű kapuhiba a bankot újraépíti (animator/pending, a tanítás és a kör változatlan)", async () => {
+  const deps = makeDeps("{}");
+  const error = "Hibás banktétel maradt a limiten, és a kivétel után a bank nem felelne meg — nem publikálható: experience.tasks[7]: x (kivétel után: c4: hiányzó recall kvíz.)";
+  const output = { lesson: standardFusionFixture(), gateRecoveryAttempt: 1 };
+  deps.store.seed({ id: "rebuild", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 2, error, output: structuredClone(output) });
+  await retryFailedGate("rebuild", { step: "gate", state: "error", error }, deps);
+  const job = deps.store.jobs.get("rebuild")!;
+  assert.equal(job.step, "animator"); assert.equal(job.status, "pending"); assert.equal(job.round, 2);
+  assert.deepEqual(job.output, { ...output, previousGateError: error, gateRecoveryAttempt: 2, bankRebuild: true });
+  assert.deepEqual(job.output!.lesson, output.lesson, "a tanítás megmarad");
+  assert.equal(deps.calls.length, 0);
+});
+
 test("bank resume recognizes redacted long errors but rejects malformed retry state", async () => {
   const deps = makeDeps("{}");
   const error = 'A(z) "author" lépés modellhívása hibára futott: https://example.invalid/request ' + "provider detail ".repeat(200);

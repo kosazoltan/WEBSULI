@@ -49,3 +49,10 @@ test("T0.4: a lektor-bizonyíték eltérése → review (a lektor újrafut); má
   assert.equal(resumeKindOf({ ...base, error: open, visit: visit("gate", open) }), null);
   assert.equal(resumeKindOf({ ...base, error: evidence, visit: visit("lektor", evidence) }), null, "csak kapu-látogatásból");
 });
+
+test("T1b: az első bank-eredetű kapuhiba → gate, az ismételt → rebuild (a bank a T1 tartalékával újraépül)", () => {
+  assert.equal(resumeKindOf({ ...base, visit: visit("gate") }), "gate");
+  assert.equal(resumeKindOf({ ...base, visit: visit("gate"), gateRecoveryAttempt: 0 }), "gate");
+  assert.equal(resumeKindOf({ ...base, visit: visit("gate"), gateRecoveryAttempt: 1 }), "rebuild");
+  assert.equal(resumeKindOf({ ...base, visit: visit("gate"), gateRecoveryAttempt: "1" }), "gate", "érvénytelen sorszám nem eszkalál");
+});

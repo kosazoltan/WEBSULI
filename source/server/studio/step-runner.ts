@@ -340,7 +340,7 @@ const BANK_RESUMABLE_ERRORS = [
 ];
 /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3): a kapu bank-eredetű megállása a mentett leckéből a kapu újrafuttatásával folytatható. */
 export const GATE_RESUMABLE_ERRORS = [/^Hibás banktétel maradt a limiten/, /^Egyválasztós hiba maradt a bankban/];
-export type ResumeKind = "bank" | "lektor" | "gate" | "review";
+export type ResumeKind = "bank" | "lektor" | "gate" | "review" | "rebuild";
 /** Spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor újrafuttatásával (a mostani leckén) folytatható. */
 const REVIEW_EVIDENCE_ERROR = /^A 7\.4 végkapuhoz [\s\S]*a lektorált bemenet eltér a mostanitól/;
 
@@ -349,12 +349,18 @@ const REVIEW_EVIDENCE_ERROR = /^A 7\.4 végkapuhoz [\s\S]*a lektorált bemenet e
  * (`resumable`, a felület gombja) ugyanezt használja, így a gomb csak akkor látszik, ha a szerver el is fogadja.
  */
 export function resumeKindOf(input: { step: string; status: string; error: string | null | undefined; hasLesson: boolean; htmlFileId?: unknown; published?: boolean;
-  visit?: { step: string; state: string; error?: string } }): ResumeKind | null {
+  visit?: { step: string; state: string; error?: string }; gateRecoveryAttempt?: unknown }): ResumeKind | null {
   const { error, visit } = input;
   if (input.step !== "error" || input.status !== "error" || !input.hasLesson || input.htmlFileId || input.published || !error) return null;
   const visitMatches = !!visit && visit.state === "error" && visit.error === redactWorkflowError(new Error(error));
   if (visit?.step === "animator") return visitMatches && BANK_RESUMABLE_ERRORS.some((re) => re.test(error)) ? "bank" : null;
-  if (visit?.step === "gate") return !visitMatches ? null : GATE_RESUMABLE_ERRORS.some((re) => re.test(error)) ? "gate" : REVIEW_EVIDENCE_ERROR.test(error) ? "review" : null;
+  // Tételgyár T1b (mért: job 416ad01d): a kapu újrafuttatása ugyanazon a bankon nem konvergál — a második bank-eredetű kapuhibánál a bank
+  // újraépül (a T1 tartalékával), a tanítás megmarad.
+  if (visit?.step === "gate") {
+    if (!visitMatches) return null;
+    if (GATE_RESUMABLE_ERRORS.some((re) => re.test(error))) return typeof input.gateRecoveryAttempt === "number" && input.gateRecoveryAttempt >= 1 ? "rebuild" : "gate";
+    return REVIEW_EVIDENCE_ERROR.test(error) ? "review" : null;
+  }
   return error.startsWith('A(z) "lektor" lépés modellhívása hibára futott:') && /timed out|timeout/i.test(error) ? "lektor" : null;
 }
 
@@ -388,17 +394,22 @@ export async function retryFailedGate(jobId: string, visit: { step: string; stat
   const job = await store.loadJob(jobId);
   if (!job) throw new Error("A job nem található.");
   if (job.step !== "error") return;
-  const kind = resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!job.output?.lesson, htmlFileId: job.output?.htmlFileId, visit });
-  if (kind !== "gate" && kind !== "review") {
+  const kind = resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!job.output?.lesson, htmlFileId: job.output?.htmlFileId, visit,
+    gateRecoveryAttempt: job.output?.gateRecoveryAttempt });
+  if (kind !== "gate" && kind !== "review" && kind !== "rebuild") {
     throw new Error("Csak naplóval igazolt, mentett és még nem publikált kapuhiba folytatható.");
   }
   const attempt = recoveryAttempt(job.output?.gateRecoveryAttempt, "kapufolytatási");
   if (kind === "review" && !await workflowAllowResumeEdge("gate", "lektor", "kapu: a lektor-bizonyíték eltér — a lektor a mostani leckén újrafut")) {
     throw new Error("A lektor újrafuttatása csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
   }
-  // T0.4: bizonyíték-eltérésnél a lektor újrafut a mostani leckén (a kör nem nő); bank-eredetű kapuhibánál a kapu fut újra.
-  await store.saveStep(jobId, { step: kind === "review" ? "lektor" : "gate", status: "pending", error: null, finishedAt: null,
-    output: { ...job.output, previousGateError: job.error, gateRecoveryAttempt: attempt } });
+  if (kind === "rebuild" && !await workflowAllowResumeEdge("gate", "animator", "kapu: a bank a padló alá esne — újraépítés a T1 tartalékával", ["lektor", "gate"])) {
+    throw new Error("A bank újraépítése csak a kapunál megállt futás kifejezett folytatásaként engedélyezett.");
+  }
+  // T0.4: bizonyíték-eltérésnél a lektor újrafut a mostani leckén (a kör nem nő); bank-eredetű kapuhibánál a kapu fut újra;
+  // T1b: ismételt bank-eredetű kapuhibánál a bank újraépül (az animátor a T1 kvótáival; a régi csomagok lenyomata nem egyezik).
+  await store.saveStep(jobId, { step: kind === "review" ? "lektor" : kind === "rebuild" ? "animator" : "gate", status: "pending", error: null, finishedAt: null,
+    output: { ...job.output, previousGateError: job.error, gateRecoveryAttempt: attempt, ...(kind === "rebuild" ? { bankRebuild: true } : {}) } });
 }
 
 /** Called only by explicit resume inside the owner-checked workflow lease. */
