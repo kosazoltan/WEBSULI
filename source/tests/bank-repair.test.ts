@@ -55,6 +55,11 @@ test("C9: a javítás csak a jogosult tételt és annak engedélyezett mezőit c
   const mixed = applyBankPacketRepair(original, { tasks: [{ ...t0, sample: `${t0.sample} Bővítve.` }, { ...t1, q: "Más kérdés?" }] }, undefined, undefined, perms);
   assert.equal(mixed.tasks[0].sample, `${t0.sample} Bővítve.`, "a jogos javítás a jogosulatlan mellékváltozás mellett is érvényes");
   assert.equal(mixed.tasks[1].q, t1.q);
+  // Review #247 (P1): UGYANABBAN a tételben a jogos mező (sample) javítása megmarad, csak a jogosulatlan (q) áll vissza.
+  const sameItem = applyBankPacketRepair(original, { tasks: [{ ...t0, sample: `${t0.sample} Bővítve.`, q: "Más kérdés?" }] }, undefined, undefined, perms, (m) => ignored.push(m));
+  assert.equal(sameItem.tasks[0].sample, `${t0.sample} Bővítve.`, "a jogos mezőjavítás érvényes");
+  assert.equal(sameItem.tasks[0].q, t0.q, "a jogosulatlan mező az eredeti");
+  assert.match(ignored.at(-1)!, /megváltozott: q\) — ezek változása figyelmen kívül maradt, a jogos mezők javítása érvényes/);
   assert.doesNotThrow(() => applyBankPacketRepair(original, { tasks: [t1, { ...t0, sample: `${t0.sample} Bővítve.` }] }, undefined, undefined, perms));
   assert.doesNotThrow(() => applyBankPacketRepair(original, { tasks: [{ ...t0, q: "Más kérdés?" }] }, undefined, undefined, new Map([[t0.id, "*" as const]])));
   // jogosultság nélkül (régi hívók, lektori kör) a viselkedés változatlan

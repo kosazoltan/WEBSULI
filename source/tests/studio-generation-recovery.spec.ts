@@ -164,6 +164,8 @@ test("megszakadt piszkozatnál három külön gomb: folytatás, újragyártás, 
   await page.goto("/__studio-panel-probe");
   await expect(page.getByTestId("one-step-progress")).toContainText("Ebből a forrásból van megszakadt piszkozat");
   await expect(page.getByTestId("one-step-draft")).toContainText("9 fejezetnyi tananyag, 4 kész gyakorlócsomag");
+  // Review #248 (P2): újratöltés után nincs fájl — az újragyártás akkor is elérhető, a forrás újraválasztásával.
+  await expect(page.getByTestId("one-step-remake")).toHaveText("Újragyártás (a forrás újraválasztásával)");
   await page.getByTestId("extract-file-input").setInputFiles({name:"plants.txt",mimeType:"text/plain",buffer:Buffer.from("A szár szállítja a tápanyagokat.")});
   for (const id of ["one-step-resume","one-step-remake","one-step-new"]) await expect(page.getByTestId(id)).toBeVisible();
   for (const size of [{width:390,height:844},{width:1366,height:900}]) {
@@ -174,8 +176,11 @@ test("megszakadt piszkozatnál három külön gomb: folytatás, újragyártás, 
     await page.screenshot({path:`tests/screenshots/generation-draft-choice-${size.width}.png`,fullPage:true});
   }
   // Újragyártás: ugyanaz a kérés, kifejezett forceNew jelzővel.
-  await page.getByTestId("one-step-remake").click();
+  // Review #248 (P1): a dupla kattintás egyetlen újragyártási kérés.
+  await page.getByTestId("one-step-remake").dblclick();
   await expect.poll(()=>bodies.length).toBe(1);
+  await page.waitForTimeout(300);
+  expect(bodies.length).toBe(1);
   expect(bodies[0].forceNew).toBe(true);
   await expect(page.getByTestId("one-step-progress")).toContainText("Forrás feldolgozása");
   // Folytatás: a piszkozat jobja folytatódik, és a felület a piszkozat saját futását követi.
