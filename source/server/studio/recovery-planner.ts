@@ -75,6 +75,8 @@ export function planRecovery(input: { error: string; history: readonly RecoveryS
     const occurrences = ladder.filter((s) => s === strategy).length;
     const classLimit = strategy === "remanufacture" ? 1 : occurrences + 1;
     if (count(sameKey, strategy) >= occurrences || count(inClass, strategy) >= classLimit) continue;
+    // Review #237 (P1): a teljes újragyártás a TELJES láncra (az újragyártott job örökli a lépést) legfeljebb egyszer — osztálytól függetlenül.
+    if (strategy === "remanufacture" && count(input.history, strategy) >= 1) continue;
     const last = inClass.at(-1);
     const reason = last && last.strategy === strategy && fp.failing < last.failing
       ? `${REASONS[strategy]} (az előző lépés hatott: ${last.failing} → ${fp.failing} hibás tétel)` : REASONS[strategy];

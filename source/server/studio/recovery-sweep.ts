@@ -18,6 +18,7 @@ export function recoveryCandidate(row: RecoveryRow, now: number): string | null 
   if (row.runState !== "error") return "a workflow nem hibás állapotú";
   if (row.recoveryState === "ask-owner") return "tulajdonosi döntésre vár";
   if (row.recoveryState === "remanufactured") return "újragyártva (új job viszi tovább)";
+  if (row.recoveryState === "remanufacturing") return "újragyártás folyamatban";
   if (row.leaseUntil && row.leaseUntil.getTime() > now) return "élő lízing";
   if (!row.finishedAt || now - row.finishedAt.getTime() < RECOVERY_GRACE_MS) return "türelmi idő";
   if (!row.error) return "nincs hibaszöveg";
