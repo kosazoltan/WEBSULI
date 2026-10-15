@@ -1490,12 +1490,14 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
         const memoryBlock = subjectMemoryEnabled() ? snapshotPromptBlock(await ensureSubjectMemory(job, map, store), "bank") : "";
         try {
           const bankOpenFindings: Array<{ sectionIndex: number; itemId: string; message: string }> = [];
+          const answerKeyReport: Array<{ sectionIndex: number; itemId: string; calibration: string[]; correctFails: string[] }> = [];
           const experience = await buildLessonExperience(completedLesson, map.concepts, {
             checkpoint,
             previous: original.experience,
             ...(catalogPool ? { catalog: catalogPool } : {}),
             ...(memoryBlock ? { memory: memoryBlock } : {}),
             onOpenFinding: (finding) => bankOpenFindings.push(finding),
+            onAnswerKeyReport: (report) => answerKeyReport.push(report),
             theme: visualWorld((job.output?.visual as { world?: string } | undefined)?.world)?.id,
             reviewFeedback: bankReview?.feedback,
             onToolFix: (tool, fixes) => logger.info(`[STUDIO] ${tool} (${job.id}): ${fixes.join("; ").slice(0, 400)}`),
@@ -1545,7 +1547,9 @@ Válaszolj kizárólag a kért folt-JSON-nal.`,
           });
           completedLesson = { ...completedLesson, experience };
           // Spec 2026-09-30 (U2, H52): a nyitott aritmetikai leletek a jobban maradnak; a kapu kivehető tételként kapja őket.
-          job.output = { ...job.output, bankOpenFindings };
+          job.output = { ...job.output, bankOpenFindings, ...(answerKeyReport.length ? { answerKeyReport } : {}) };
+          // Tételgyár T2.1c: a kalibráció és a maradék (nem blokkoló) helyes-eset bukás összesítése.
+          if (answerKeyReport.length) logger.info(`[STUDIO] Válaszkulcs-teszt (${job.id}): ${answerKeyReport.filter((r) => r.calibration.length).length} feladat rubrikája kalibrálva, ${answerKeyReport.filter((r) => r.correctFails.length).length} feladatnál marad helyes-eset bukás (a T7 döntőbíró kezeli).`);
           if (bankOpenFindings.length) logger.warn(`[STUDIO] Nyitott aritmetikai lelet a kapunak (${job.id}): ${bankOpenFindings.map((f) => f.itemId).join(", ")}`);
         } catch (error) {
           return fail(store, job, describeStepError(error));

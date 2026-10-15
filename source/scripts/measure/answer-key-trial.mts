@@ -1,17 +1,21 @@
 // Tételgyár T2.0 (docs/specs/2026-10-15-tetelgyar-t2-valaszkulcs-tesztek-vegrehajtas.md): a válaszkulcs-tesztek mérése mentett jobok bankján,
 // DB-ÍRÁS NÉLKÜL. A T2.1 tesztírója (olcsó modell, a rubrikát nem látja) + a valódi pontozó; összevetés a lektor rubrika-blokkolóival.
-// Futtatás (source/ mappából): npx tsx scripts/measure/answer-key-trial.mts <kimeneti mappa> <jobId,jobId,...>
-import { mkdirSync, writeFileSync } from "node:fs";
+// Futtatás (source/ mappából): npx tsx scripts/measure/answer-key-trial.mts <kimeneti mappa> <jobId,jobId,...> [korábbi answer-key-trial.json ...]
+// A korábbi eredmény(ek) eseteit újrahasznosítja (modellhívás nélkül), és a T2.1b gépi kalibráció utáni állapotot is méri.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { withReadOnlyDb } from "../lib/read-only-db";
 import { FALLBACK_MODELS, resolveStudioModel } from "../../server/ai/models";
 import { createStudioStepProvider } from "../../server/ai/studio-provider";
 import { callStepModel } from "../../server/studio/run-step";
 import { writeAnswerKeys } from "../../server/studio/answer-key-writer";
 import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-tests";
+import { calibrateRubric } from "../../shared/answer-key-calibrate";
 import { isTypedTask } from "../../shared/lesson-experience-score";
 import type { OpenTask } from "../../shared/lesson-experience";
 
-const [outDir, jobArg] = process.argv.slice(2);
+const [outDir, jobArg, ...previousFiles] = process.argv.slice(2);
+const reused = new Map<string, AnswerKeyCases>();
+for (const f of previousFiles) for (const r of (JSON.parse(readFileSync(f, "utf8")) as { rows: Array<{ taskId: string; cases: AnswerKeyCases | null }> }).rows) if (r.cases) reused.set(r.taskId, r.cases);
 if (!outDir || !jobArg) throw new Error("Használat: answer-key-trial.mts <kimeneti mappa> <jobId,jobId,...>");
 const jobIds = jobArg.split(",").map((s) => s.trim()).filter(Boolean);
 if (jobIds.length > 4) throw new Error("Költségkorlát: legfeljebb 4 job.");
@@ -58,13 +62,15 @@ for (const input of inputs) {
   // Csomagonként (fejezet) egy hívás, legfeljebb 8 feladattal (korlátos kimenet).
   const bySection = new Map<number, OpenTask[]>();
   for (const t of open) bySection.set(t.sectionIndex, [...(bySection.get(t.sectionIndex) ?? []), t]);
-  for (const group of bySection.values()) {
+  for (const t of open) { const c = reused.get(t.id); if (c) keys.set(t.id, c); }
+  for (const group of [...bySection.values()].map((g) => g.filter((t) => !keys.has(t.id))).filter((g) => g.length)) {
     for (let i = 0; i < group.length; i += 8) {
       const got = await writeAnswerKeys(group.slice(i, i + 8), { classroom: input.classroom, concepts: input.concepts }, call, cache, (w) => warnings.push(w));
       for (const [id, c] of got) keys.set(id, c);
     }
   }
-  const s = { tasks: open.length, tested: 0, t2Fail: 0, correctFail: 0, wrongPass: 0, lektorRubric: 0, both: 0, onlyT2: 0, onlyLektor: 0 };
+  const s = { tasks: open.length, tested: 0, t2Fail: 0, correctFail: 0, wrongPass: 0, lektorRubric: 0, both: 0, onlyT2: 0, onlyLektor: 0,
+    calibrated: 0, afterFail: 0, afterCorrectFail: 0, afterWrongPass: 0, formAdds: 0, demoted: 0, sentenceOff: 0, minWordsLowered: 0, lektorAfterFail: 0 };
   input.tasks.forEach((task, index) => {
     if (isTypedTask(task)) return;
     const lektor = input.notes.filter((n) => (n.itemId ? n.itemId === task.id : n.blockPath?.startsWith(`experience.tasks[${index}]`)) && RUBRIC.test(n.message));
@@ -77,7 +83,21 @@ for (const input of inputs) {
     s.wrongPass += problems.filter((p) => /hibás \(/.test(p)).length;
     if (lektor.length) s.lektorRubric++;
     if (t2 && lektor.length) s.both++; else if (t2) s.onlyT2++; else if (lektor.length && cases) s.onlyLektor++;
-    if (t2 || lektor.length) rows.push({ jobId: input.id, taskId: task.id, q: task.q.slice(0, 200), required: task.required, problems, lektor: lektor.map((n) => n.message.slice(0, 300)), cases });
+    // Mérési változat: AK_DEMOTE=any (bármely helyes esetből hiányzik) | two (legalább kettőből) | alapból a többségi szabály.
+    const demote = process.env.AK_DEMOTE === "any" ? () => 1 : process.env.AK_DEMOTE === "two" ? () => 2 : undefined;
+    const cal = calibrateRubric(task, cases, demote ? { demoteWhenMissingIn: demote } : {});
+    const after = answerKeyProblems(cal.task, cases);
+    if (cal.changes.length) s.calibrated++;
+    if (after.length) s.afterFail++;
+    if (after.length && lektor.length) s.lektorAfterFail++;
+    s.afterCorrectFail += after.filter((p) => /helyes válasz/.test(p)).length;
+    s.afterWrongPass += after.filter((p) => /hibás \(/.test(p)).length;
+    s.formAdds += cal.changes.filter((c) => c.startsWith("alak")).length;
+    s.demoted += cal.changes.filter((c) => c.startsWith("bónuszba")).length;
+    s.sentenceOff += cal.changes.filter((c) => c.startsWith("mondat")).length;
+    s.minWordsLowered += cal.changes.filter((c) => c.startsWith("szóminimum")).length;
+    if (t2 || lektor.length) rows.push({ jobId: input.id, taskId: task.id, q: task.q.slice(0, 200), required: task.required, problems, lektor: lektor.map((n) => n.message.slice(0, 300)), cases,
+      calibration: cal.changes, calibratedRequired: cal.task.required, after });
   });
   summary[input.id] = s;
   console.log(JSON.stringify({ jobId: input.id, ...s, warnings: warnings.slice(0, 3) }));

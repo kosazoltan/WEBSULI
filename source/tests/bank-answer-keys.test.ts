@@ -20,23 +20,37 @@ const withExtra = () => {
   return e;
 };
 
-test("E1: a tesztbukott feladat javítókört indít (konkrét esettel), az utolsó kísérletnél a tartalék terhére kikerül", async () => {
+// Második tulajdonosi döntés (2026-10-15, T2.1c): blokkoló csak a túl megengedő rubrika; a helyes-eset bukás jelentés.
+test("E2: a túl megengedő rubrika (hibás válasz teljes pontot kap) javítókört indít, az utolsó kísérletnél a tartalék terhére kikerül", async () => {
   const prompts: string[] = [];
   const fixes: string[] = [];
-  let keyCalls = 0;
   const experience = await buildLessonExperience(lesson(), concepts, {
     call: async (_s, user) => { prompts.push(user); return withExtra(); },
-    answerKeys: async (tasks: OpenTask[]) => {
-      keyCalls++;
-      return new Map(tasks.filter((t) => t.q.endsWith("(tartalék)")).map((t) => [t.id, failing] as const));
-    },
+    // A minta maga a „hibás” eset: a rubrika szerint teljes pont → a rubrika nem különbözteti meg a hibás választ.
+    answerKeys: async (tasks: OpenTask[]) => new Map(tasks.filter((t) => t.q.endsWith("(tartalék)"))
+      .map((t) => [t.id, { ...failing, wrong: [{ kind: "tevhit", text: t.sample }, { kind: "temaidegen", text: "x" }] }] as const)),
     onToolFix: (tool, list) => { if (tool === "answer-key-tests") fixes.push(...list); },
   });
   assert.equal(prompts.length, 4, "három kísérlet + mentőkör");
-  assert.match(prompts[1], /válaszkulcs-teszt: a helyes válasz „teljesen más szavakkal írt válasz” nem kap teljes pontot/);
-  assert.ok(keyCalls >= 1);
-  assert.equal(experience.tasks.some((t) => t.q.endsWith("(tartalék)")), false, "a bukott feladat nem jut a gyerekhez");
+  assert.match(prompts[1], /válaszkulcs-teszt: a hibás \(tévhit\) válasz .* teljes pontot kap — a rubrika túl megengedő/);
+  assert.equal(experience.tasks.some((t) => t.q.endsWith("(tartalék)")), false, "a megkülönböztetni képtelen feladat nem jut a gyerekhez");
   assert.match(fixes.join(" "), /1 tesztbukott feladat kivéve a tartalék terhére/);
+});
+
+test("T2.1c: a helyes-eset bukás NEM indít javítókört — a jelentésbe kerül a végleges azonosítóval", async () => {
+  let calls = 0;
+  const reports: Array<{ itemId: string; correctFails: string[]; calibration: string[] }> = [];
+  const experience = await buildLessonExperience(lesson(), concepts, {
+    call: async () => { calls++; return withExtra(); },
+    answerKeys: async (tasks: OpenTask[]) => new Map(tasks.filter((t) => t.q.endsWith("(tartalék)")).map((t) => [t.id, failing] as const)),
+    onAnswerKeyReport: (r) => reports.push(r),
+  });
+  assert.equal(calls, 1, "nincs extra bankkísérlet");
+  const extra = experience.tasks.find((t) => t.q.endsWith("(tartalék)"));
+  assert.ok(extra, "a feladat bent marad");
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].itemId, extra!.id, "végleges (hash-alapú) azonosító");
+  assert.match(reports[0].correctFails[0], /válaszkulcs-teszt: a helyes válasz/);
 });
 
 test("E3: a tesztíró üres eredménye (hiba / nincs kulcs) nem állítja meg és nem lassítja a csomagot", async () => {

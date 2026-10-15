@@ -6797,5 +6797,42 @@
  "models": [
   "z-ai/glm-5.3-flash",
   "deepseek/deepseek-v4-flash"
- ]
+ ],
+ "calibration": {
+  "method": "T2.1b gépi kalibráció a T2.0 eseteivel, modellhívás nélkül (scripts/measure/answer-key-trial.mts, korábbi eredmény újrahasznosítva)",
+  "variants": {
+   "majority": {
+    "afterFail": 175,
+    "afterCorrectFail": 461,
+    "afterWrongPass": 18,
+    "demoted": 96
+   },
+   "atLeastTwo": {
+    "afterFail": 148,
+    "afterCorrectFail": 316,
+    "afterWrongPass": 18,
+    "demoted": 217
+   },
+   "any": {
+    "afterFail": 101,
+    "afterCorrectFail": 225,
+    "afterWrongPass": 18,
+    "demoted": 340
+   }
+  },
+  "chosen": "atLeastTwo (második tulajdonosi döntés)",
+  "final": {
+   "tested": 188,
+   "afterFail": 148,
+   "afterCorrectFail": 316,
+   "afterWrongPass": 18,
+   "demoted": 217,
+   "formAdds": 123,
+   "minWordsLowered": 12,
+   "sentenceOff": 0,
+   "calibrated": 143
+  },
+  "blockingTasksAfter": 16,
+  "note": "Élesben blokkoló csak a túl megengedő rubrika (hibás válasz teljes pontot kap); a maradék helyes-eset bukás jelentés (answerKeyReport), a gyerek válaszát a T7 ítéli."
+ }
 }

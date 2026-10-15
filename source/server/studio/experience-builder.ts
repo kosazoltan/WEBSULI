@@ -23,6 +23,7 @@ import { changedFields, describeRepairPermissions, repairPermissions, type Repai
 import { unitCatalog, unitCatalogBlock, unitCatalogVersion, type CatalogPool, type UnitCatalog } from "../catalog/retrieval";
 import { memoryBlockVersion } from "../memory/subject-memory";
 import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-tests";
+import { calibrateRubric } from "../../shared/answer-key-calibrate";
 import type { OpenTask } from "../../shared/lesson-experience";
 
 export type ExperienceCheckpoint = { hash: string; parts: Record<string, unknown>; reviewedHashes?: Record<string, string> };
@@ -90,6 +91,11 @@ export type ExperienceBuildDeps = {
    * válaszkulcs-tesztesetei (a hívó írja, olcsó modellel; hiba → üres térkép). Hiányában a csomag a T2 előtti szabályok szerint épül.
    */
   answerKeys?(tasks: OpenTask[], sectionIndex: number): Promise<Map<string, AnswerKeyCases>>;
+  /**
+   * Tételgyár T2.1c (második tulajdonosi döntés): a kalibráció változásai és a maradék (nem blokkoló) helyes-eset bukások a végleges
+   * tétel-azonosítóval — a hívó a job kimenetébe menti; a gyerek valódi válaszát a T7 döntőbíró ítéli meg.
+   */
+  onAnswerKeyReport?(report: { sectionIndex: number; itemId: string; calibration: string[]; correctFails: string[] }): void;
 };
 
 /**
@@ -485,6 +491,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // Spec 2026-09-30 (U2, C9): javítási jogosultság — lektori körben a kifogásolt tételek szabadon, különben a hibakód szerint.
     let repairAllowed: ReadonlyMap<string, string[] | "*"> | undefined = allowedReviewIds ? new Map([...allowedReviewIds].map(id => [id, "*"] as const)) : undefined;
     let lastError: unknown;
+    let answerKeyReport: Array<{ modelId: string; calibration: string[]; correctFails: string[] }> = [];
     let errors = reviewBase ? "A lektor konkrét hibáit javítsd az eredeti tételazonosítókon." : "";
     // Spec 2026-10-05-s9 (terv-ellenőrzés 9.): fejezetenkénti saját rendszerprompt — a párhuzamos csomagok közös promptja nem
     // kapja meg más fejezet javító utasítását.
@@ -555,9 +562,24 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       else { try { issues = validate(parsed!.data); } catch (error) { issues = [`a csomag ellenőrzése kivételt dobott (hibás alakú adat): ${error instanceof Error ? error.message : String(error)}`]; } }
       // Tételgyár T2.1: a determinisztikusan tiszta csomag feladatain a válaszkulcs-tesztek (a valódi pontozó, előre megírt esetekkel).
       let answerKeyOnly = false;
+      answerKeyReport = [];
       if (parsed?.success && !issues.length && deps.answerKeys) {
         const keys = await deps.answerKeys(parsed.data.tasks, unit.sectionIndex);
-        issues = parsed.data.tasks.flatMap((t) => answerKeyProblems(t, keys.get(t.id) ?? null));
+        // T2.1b: gépi kalibráció (modellhívás nélkül); a kalibrált csomag újra átmegy a teljes ellenőrzésen, különben visszavonódik.
+        const before = parsed.data.tasks;
+        const calibrated = before.map((t) => calibrateRubric(t, keys.get(t.id) ?? null));
+        let applied = calibrated.some((c) => c.changes.length > 0);
+        if (applied) {
+          parsed.data.tasks = calibrated.map((c) => c.task);
+          let recheck: string[];
+          try { recheck = validate(parsed.data); } catch (error) { recheck = [String(error)]; }
+          if (recheck.length) { parsed.data.tasks = before; applied = false; logger.warn(`[STUDIO] Rubrika-kalibráció visszavonva (${unit.sectionIndex + 1}. fejezet): ${recheck.slice(0, 3).join("; ")}`); }
+        }
+        // T2.1c: blokkoló csak a túl megengedő rubrika; a maradék helyes-eset bukás jelentés (nem javítókör).
+        const all = parsed.data.tasks.map((t) => ({ id: t.id, problems: answerKeyProblems(t, keys.get(t.id) ?? null) }));
+        issues = all.flatMap((r) => r.problems.filter((p) => p.includes("válaszkulcs-teszt: a hibás")));
+        answerKeyReport = all.map((r, i) => ({ modelId: r.id, calibration: applied ? calibrated[i].changes : [], correctFails: r.problems.filter((p) => p.includes("válaszkulcs-teszt: a helyes")) }))
+          .filter((r) => r.calibration.length || r.correctFails.length);
         answerKeyOnly = issues.length > 0;
       }
       // Biztonsági szelep (regressziós futás 94a5ccf9): az aritmetikai gyanú determinisztikus, de nem
@@ -606,6 +628,10 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
     packet.tasks = packet.tasks.map((i, n) => ({ ...i, id: `t-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     packet.quiz = packet.quiz.map((i, n) => ({ ...i, id: `q-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     packet.glossary = packet.glossary.map(i => ({ ...i, sourceHash: hash }));
+    for (const report of answerKeyReport) {
+      const n = originalIds.tasks.indexOf(report.modelId);
+      if (n >= 0) deps.onAnswerKeyReport?.({ sectionIndex: unit.sectionIndex, itemId: packet.tasks[n].id, calibration: report.calibration, correctFails: report.correctFails });
+    }
     for (const issue of openIssues) {
       const modelId = issue.split(":")[0]?.trim();
       for (const bank of BANKS) {
