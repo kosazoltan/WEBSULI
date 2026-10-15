@@ -107,7 +107,7 @@ function HeroSection({
             <Button
               asChild
               size="sm"
-              className="gap-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 text-xs px-3 min-h-11 min-w-11 rounded-full shadow-lg"
+              className="gap-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white border-0 text-xs px-3 min-h-[46px] min-w-[46px] rounded-full shadow-lg"
             >
               <a href="#gyakorlo-jatekok" data-testid="link-hero-games">
                 <Gamepad2 className="w-4 h-4 shrink-0" />
@@ -117,7 +117,7 @@ function HeroSection({
             <Button
               size="sm"
               onClick={scrollToContent}
-              className="gap-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 text-white border-0 text-xs px-3 min-h-11 min-w-11 rounded-full shadow-lg"
+              className="gap-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-600 text-white border-0 text-xs px-3 min-h-[46px] min-w-[46px] rounded-full shadow-lg"
               data-testid="button-hero-browse"
             >
               <span>Böngészés</span>
@@ -130,7 +130,7 @@ function HeroSection({
               <Link href="/admin">
                 <Button
                   size="sm"
-                  className="min-h-11 min-w-11 px-3 text-xs font-semibold gap-1 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white border border-rose-200/25 rounded-full shadow-lg"
+                  className="min-h-[46px] min-w-[46px] px-3 text-xs font-semibold gap-1 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white border border-rose-200/25 rounded-full shadow-lg"
                 >
                   <Shield className="w-4 h-4 shrink-0" />
                   <span>Admin</span>
@@ -138,7 +138,7 @@ function HeroSection({
               </Link>
             ) : !isAuthenticated ? (
               <Link href={`/login?returnTo=${encodeURIComponent("/")}`}>
-                <Button size="sm" variant="outline" className="min-h-11 min-w-11 px-3 text-xs gap-1 border-white/40 text-white hover:bg-white/20 rounded-full" data-testid="button-hero-login">
+                <Button size="sm" variant="outline" className="min-h-[46px] min-w-[46px] px-3 text-xs gap-1 border-white/40 text-white hover:bg-white/20 rounded-full" data-testid="button-hero-login">
                   <LogIn className="w-4 h-4 shrink-0" />
                   <span>Belépés</span>
                 </Button>
