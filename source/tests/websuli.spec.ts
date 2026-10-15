@@ -105,9 +105,13 @@ test.describe('WEBSULI Alkalmazás Tesztek', () => {
             await expect(cta).toBeVisible({ timeout: 15000 });
             const box = await cta.boundingBox();
             expect(box, 'a CTA-nak van elrendezési doboza').not.toBeNull();
-            // WCAG 2.5.5 / iOS HIG: min. 44x44 CSS px érintőfelület.
-            expect(box!.height).toBeGreaterThanOrEqual(44);
-            expect(box!.width).toBeGreaterThanOrEqual(44);
+            // WCAG 2.5.5 / iOS HIG: min. 44x44 CSS px érintőfelület. Mért CI-bukás (2026-10-15, run 38747068157): 43.999996 —
+            // a hero rugós `y`-animációja tört pozíción áll meg, és a getBoundingClientRect két tört koordinátájának különbsége
+            // lebegőpontos hibát hordoz. A Chrome 1/64 px-es egységben rendez (LayoutUnit), ezért arra kerekítünk: a 44 px-es
+            // követelmény változatlan, csak a mérési zaj tűnik el.
+            const layoutPx = (v: number) => Math.round(v * 64) / 64;
+            expect(layoutPx(box!.height)).toBeGreaterThanOrEqual(44);
+            expect(layoutPx(box!.width)).toBeGreaterThanOrEqual(44);
             // A felirat NEM lehet elrejtve: legyen nem üres, látható szöveg.
             const text = (await cta.innerText()).trim();
             expect(text.length).toBeGreaterThan(0);
