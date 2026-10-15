@@ -112,6 +112,7 @@ export function SourceUploadForm({
 
   const addFiles = async (list: FileList | null) => {
     if (!list) return;
+    let added = 0;
     for (const file of Array.from(list)) {
       try {
         const content = await readFileFor(file);
@@ -128,11 +129,14 @@ export function SourceUploadForm({
         const finalSource =
           source.kind === "image" ? { ...source, content: await downscaleImage(source.content) } : source;
         setFiles((prev) => [...prev.filter((f) => f.name !== finalSource.name), finalSource]);
+        added++;
       } catch (e) {
         toast({ title: "Beolvasási hiba", description: (e as Error).message, variant: "destructive" });
       }
     }
     if (fileInput.current) fileInput.current.value = "";
+    // Review #250 (P2): ha egy fájl sem olvasható be, a függő újragyártás megszűnik (egy későbbi sima választás nem indíthatja el).
+    if (!added) remakeAfterPick.current = false;
     setPicked((n) => n + 1);
   };
   // Review #248 (P2): oldalfrissítés után a fájlok nincsenek meg — az újragyártás a forrás újraválasztásával indul (a választás végén magától).
@@ -205,10 +209,11 @@ export function SourceUploadForm({
     resumeKind?: string;
     nextRecovery?: { strategy: string; reason: string };
     draftRunId?: string;
+    ownerInstruction?: string;
   }>({
     queryKey: ["/api/studio/lessons/one-step", runId],
     queryFn: async () => {
-      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string }; draftRunId?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
+      const result = await apiRequest<{ phase: string; detail: string | null; error: string | null; mapId: string | null; jobId?: string | null; lessonId: string | null; htmlFileId?: string | null; draft?: { teachingSections: number; savedBankPackets: number }; resumable?: boolean; stoppedAt?: string; resumeKind?: string; nextRecovery?: { strategy: string; reason: string }; draftRunId?: string; ownerInstruction?: string }>("GET", `/api/studio/lessons/one-step/${runId}`);
       if (result.phase === "done" && !result.htmlFileId) throw new Error("A futás lezárult, de nincs elérhető, közzétett tananyag. A készítést ellenőrizni kell.");
       return result;
     },
@@ -272,6 +277,22 @@ export function SourceUploadForm({
     remakeLock.current = true;
     oneStep.mutate({ forceNew: true }, { onSettled: () => { remakeLock.current = false; } });
   };
+  // Review #250 (P2): a fájlválasztó megszakítása is törli a függő újragyártást.
+  useEffect(() => {
+    const el = fileInput.current;
+    const onCancel = () => { remakeAfterPick.current = false; };
+    el?.addEventListener("cancel", onCancel);
+    return () => el?.removeEventListener("cancel", onCancel);
+  }, []);
+  // Review #250 (P1): oldalfrissítés után az űrlap üres — a megállt gyártás eredeti tanári kérése visszakerül (látható, javítható),
+  // így az újragyártás nem kérés nélkül indul, és a szerver ugyanazt a piszkozatot teszi félre.
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const owner = run.data?.ownerInstruction;
+    if (!runId || !owner || restoredFor.current === runId || (run.data?.phase !== "error" && run.data?.phase !== "draft")) return;
+    restoredFor.current = runId;
+    setInstructions((current) => (current.trim() === "" ? owner.slice(0, 2000) : current));
+  }, [runId, run.data?.ownerInstruction, run.data?.phase]);
   useEffect(() => {
     if (!remakeAfterPick.current || files.length === 0) return;
     remakeAfterPick.current = false;

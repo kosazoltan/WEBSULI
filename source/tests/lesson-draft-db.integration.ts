@@ -129,4 +129,8 @@ test("admin „Tananyag draft” (A1/A2): a saját megállt és futó piszkozat 
   } finally {
     await dbPool.query("DELETE FROM users WHERE id = 'draft-lister'");
   }
+test("review #250: a megállt futás nézete visszaadja az eredeti tanári kérést (oldalfrissítés utáni újragyártáshoz)", async () => {
+  const { map, id } = await mapWithJob({ output: { lesson: { sections: [{}] }, ownerInstruction: "csak a törtek" } });
+  await dbPool.query("INSERT INTO one_step_runs(id,phase,map_id,job_id,error) VALUES ('instr-run-1','error',$1,$2,'x')", [map, id]);
+  assert.equal((await oneStepRunView("instr-run-1"))?.ownerInstruction, "csak a törtek");
 });
