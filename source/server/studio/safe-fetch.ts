@@ -156,12 +156,23 @@ export async function fetchPublicPage(raw: string, opts: {
   timeoutMs?: number; maxBytes?: number; maxRedirects?: number; signal?: AbortSignal;
   lookup?: AddressLookup; request?: RawRequest;
 } = {}): Promise<PublicPage> {
+  // Review #222 (CI): rendes (ref-elt) időzítő, a végén mindig törölve — az `AbortSignal.timeout` unref-elt időzítője nem tartja
+  // életben a folyamatot, így egy függő DNS-ígéret mellett a határidő le sem járna.
+  const timeoutMs = opts.timeoutMs ?? 10_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`Időtúllépés (${timeoutMs} ms): ${raw}`)), timeoutMs);
+  try {
+    return await fetchWithinDeadline(raw, opts, opts.signal ? AbortSignal.any([opts.signal, controller.signal]) : controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPublicPage>[1] & object, signal: AbortSignal): Promise<PublicPage> {
   const timeoutMs = opts.timeoutMs ?? 10_000, maxBytes = opts.maxBytes ?? 2_000_000, maxRedirects = opts.maxRedirects ?? 3;
   const lookup = opts.lookup ?? defaultLookup, request = opts.request ?? defaultRequest;
   // Review #222: ABSZOLÚT határidő a teljes műveletre (DNS + minden átirányítás + törzsolvasás) — a socket-tétlenségi időkorlát
   // egy lassan csepegtető oldalnál nem véd; lejáratkor a várakozás és az aktív kérés is megszakad.
-  const deadline = AbortSignal.timeout(timeoutMs);
-  const signal = opts.signal ? AbortSignal.any([opts.signal, deadline]) : deadline;
   const abortable = <T>(promise: Promise<T>) => new Promise<T>((resolve, reject) => {
     if (signal.aborted) { reject(signal.reason ?? new Error("Megszakítva.")); return; }
     const onAbort = () => reject(signal.reason ?? new Error("Megszakítva."));
