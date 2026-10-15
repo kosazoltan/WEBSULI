@@ -114,7 +114,9 @@ export const LEKTOR_TIMEOUT_MS = 480_000;
  */
 export const LEKTOR_MAX_TOKENS = 32_000;
 
-type StepPolicy = { timeoutMs: number; maxTokens: number; reasoningEffort: NonNullable<AIProviderConfig["reasoningEffort"]>; jsonMode?: boolean };
+type StepPolicy = { timeoutMs: number; maxTokens: number; reasoningEffort: NonNullable<AIProviderConfig["reasoningEffort"]>; jsonMode?: boolean;
+  /** OpenAI chat-úton az effort csak kifejezett kérésre megy ki (`chatReasoningEffort`) — review #241: a döntőbírónak ténylegesen kell. */
+  chatEffort?: boolean };
 
 /**
  * Spec 2026-09-19 (modellmátrix): effort/timeout/maxTokens per pipeline step.
@@ -155,7 +157,7 @@ export const STUDIO_STEP_POLICY: Readonly<Record<string, StepPolicy>> = {
   // Spec 2026-10-05-s9 (terv-ellenőrzés): az orkesztrátor saját szabálya — rövid elemzés + javító prompt, JSON-mód, stream.
   orchestrator: { timeoutMs: 120_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true },
   // Tételgyár T7.1: a döntőbíró egy rövid ítélet a gyerek válaszáról — a gyerek vár rá, ezért rövid határidő; a gondolkodással együtt 4k elég.
-  arbiter: { timeoutMs: 25_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true },
+  arbiter: { timeoutMs: 25_000, maxTokens: 4_000, reasoningEffort: "low", jsonMode: true, chatEffort: true },
 };
 
 /**
@@ -214,6 +216,7 @@ export function createStudioStepProvider(model: string, step?: string, opts: { f
     reasoningEffort: policy.reasoningEffort,
     ...fallbackOptions,
     ...(policy.jsonMode ? { jsonMode: true } : {}),
+    ...(policy.chatEffort && providerForModel(model) === "openai" ? { chatReasoningEffort: true } : {}),
     // Mérve (4. mérés, run a9a4f683 és a regressziós futások): a tartalék bankmodell hívása 364 / 558 / 602 s-ig
     // tartott — az SDK a 240 s-os időtúllépést alapból kétszer csendben újrapróbálta (3 × 240 s). A lépés
     // időkorlátja EGY kérésre vonatkozik; az újrapróbálás a csomag-ciklus dolga (következő modell).

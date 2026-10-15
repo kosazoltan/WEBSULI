@@ -4,7 +4,7 @@
  */
 import { createHash } from "node:crypto";
 import type { OpenTask } from "../../shared/lesson-experience";
-import { normalizeAnswer, type AnswerScore } from "../../shared/lesson-experience-score";
+import { normalizeAnswerV2, type AnswerScore } from "../../shared/lesson-experience-score";
 
 export const ARBITER_VERSION = "arbiter-1";
 export const ARBITER_MODEL = "gpt-6.1-sol";
@@ -23,10 +23,13 @@ export function redactAnswer(text: string): string {
     .slice(0, ARBITER_ANSWER_MAX);
 }
 
-/** A feladat tartalmi lenyomata + a normalizált válasz: azonos feladatra azonos (normalizált) válasz → egy fizetett hívás. */
+/**
+ * A feladat tartalmi lenyomata + a normalizált válasz: azonos feladatra azonos (normalizált) válasz → egy fizetett hívás. Review #241: a
+ * műveleti jeleket és a törtvonalat megőrző (v2) normalizálás — a „8 + 2 = 10” és a „8 - 2 = 10” két különböző válasz.
+ */
 export function arbiterCacheKey(task: Pick<OpenTask, "q" | "sample" | "required" | "bonus" | "minWords">, answer: string): string {
   return createHash("sha256")
-    .update(JSON.stringify([ARBITER_VERSION, task.q, task.sample, task.required, task.bonus, task.minWords, normalizeAnswer(redactAnswer(answer))]))
+    .update(JSON.stringify([ARBITER_VERSION, task.q, task.sample, task.required, task.bonus, task.minWords, normalizeAnswerV2(redactAnswer(answer))]))
     .digest("hex");
 }
 

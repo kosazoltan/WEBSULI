@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
+import { createStudioStepProvider } from "../server/ai/studio-provider";
 import express from "express";
 import { ARBITER_SYSTEM, arbiterCacheKey, buildArbiterUserMessage, combineVerdicts, parseArbiterVerdict, redactAnswer, type ArbiterVerdict } from "../server/arbiter/arbiter";
 import { judgeOpenAnswer, type ArbiterDeps } from "../server/arbiter/service";
@@ -109,4 +110,37 @@ test("E6: a végpont — 400 hibás kérésre, 404 ismeretlen feladatra; a felad
   assert.equal(ok.status, 200);
   assert.deepEqual([ok.json.state, ok.json.source], ["ok", "döntőbíró"]);
   assert.deepEqual(seen.at(-1), { kind: "lesson", htmlFileId: "f" });
+});
+
+test("review #241: a cache-kulcs megőrzi a műveleti jeleket (8 + 2 ≠ 8 - 2)", () => {
+  assert.notEqual(arbiterCacheKey(task, "8 + 2 = 10"), arbiterCacheKey(task, "8 - 2 = 10"));
+  assert.notEqual(arbiterCacheKey(task, "1/2 rész"), arbiterCacheKey(task, "2/1 rész"));
+  assert.equal(arbiterCacheKey(task, "8 + 2 = 10"), arbiterCacheKey(task, " 8+2 = 10 "));
+});
+
+test("review #241: azonos párhuzamos kérések egy modellhívást és egy napi keretfoglalást osztanak", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  let modelCalls = 0;
+  const { d, reserved } = deps({ callModel: async () => { modelCalls++; await gate; return { state: "ok", reason: "jó" }; } });
+  const runs = [1, 2, 3].map(() => judgeOpenAnswer({ task, teaching: "", answer: ownWords }, d));
+  await new Promise((r) => setTimeout(r, 20));
+  release();
+  const results = await Promise.all(runs);
+  assert.deepEqual(results.map((r) => r.state), ["ok", "ok", "ok"]);
+  assert.equal(modelCalls, 1);
+  assert.equal(reserved(), 1);
+});
+
+test("review #241: a döntőbíró low effortja az OpenAI chat-úton ténylegesen kimegy", async (t: TestContext) => {
+  const before = { OPENAI_API_KEY: process.env.OPENAI_API_KEY, AI_INTEGRATIONS_OPENAI_API_KEY: process.env.AI_INTEGRATIONS_OPENAI_API_KEY, OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY };
+  process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "test-placeholder"; delete process.env.OPENROUTER_API_KEY;
+  t.after(() => { for (const [k, v] of Object.entries(before)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  let body: Record<string, unknown> | undefined;
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "{}" }, finish_reason: "stop" }] }), { headers: { "Content-Type": "application/json" } });
+  });
+  await createStudioStepProvider("gpt-6.1-sol", "arbiter").chat([{ role: "user", content: "x" }]);
+  assert.equal(body?.reasoning_effort, "low");
 });
