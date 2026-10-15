@@ -63,5 +63,9 @@ test("binding repair permission cannot weaken another rubric or widen reviewer s
   const packet = standardFusionFixture().experience!;
   const changed = { ...packet.tasks[1], required: [["different"]] };
   assert.throws(() => applyBankPacketRepair(packet, { tasks: [changed] }, undefined, new Set([packet.tasks[0].id])), /nem törölhet/);
-  assert.throws(() => applyBankPacketRepair(packet, { tasks: [changed] }, new Set([packet.tasks[0].id]), new Set([changed.id])), /nem érintett/);
+  // Dokumentált szerződésváltozás (E5): a lektor által nem érintett tétel változása figyelmen kívül marad (nem dobás) — a hatókör nem tágul.
+  const ignored: string[] = [];
+  const out = applyBankPacketRepair(packet, { tasks: [changed] }, new Set([packet.tasks[0].id]), new Set([changed.id]), undefined, (m) => ignored.push(m));
+  assert.deepEqual(out.tasks[1].required, packet.tasks[1].required);
+  assert.match(ignored.join(), /nem érintett/);
 });

@@ -23,6 +23,9 @@ import { buildInstructionPointsPrompt, buildInventory, gapPoints, INSTRUCTION_PO
 /** Spec 2026-09-19: review states whose concepts the pipeline is allowed to teach. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
 import { MAX_AUTHOR_ROUNDS } from "./pipeline";
+import { ORPHAN_JOB_ERROR } from "./orphan-jobs";
+/** A mentett leckéből újraindulás után folytatható lépések (a tanítás már megvan). */
+const RESTARTABLE_STEPS: readonly string[] = ["author", "animator", "lektor", "gate"];
 import { canSpendRepair, ensureRepairPath, repairPathAvailable, repairRemaining, repairSpentForRound, spendRepair } from "./repair-ledger";
 import { STUDIO_PROMPT_NAMES, studioPromptStore } from "./prompt";
 import {
@@ -343,7 +346,7 @@ const BANK_RESUMABLE_ERRORS = [
 ];
 /** Spec 2026-10-15-kapu-reszleges-javitas-folytatas (D3): a kapu bank-eredetű megállása a mentett leckéből a kapu újrafuttatásával folytatható. */
 export const GATE_RESUMABLE_ERRORS = [/^Hibás banktétel maradt a limiten/, /^Egyválasztós hiba maradt a bankban/];
-export type ResumeKind = "bank" | "lektor" | "gate" | "review" | "rebuild";
+export type ResumeKind = "bank" | "lektor" | "gate" | "review" | "rebuild" | "restart";
 /** Spec 2026-10-15-tetelgyar T0.4: a lektor-bizonyíték eltérése a lektor újrafuttatásával (a mostani leckén) folytatható. */
 const REVIEW_EVIDENCE_ERROR = /^A 7\.4 végkapuhoz [\s\S]*a lektorált bemenet eltér a mostanitól/;
 
@@ -355,6 +358,9 @@ export function resumeKindOf(input: { step: string; status: string; error: strin
   visit?: { step: string; state: string; error?: string }; gateRecoveryAttempt?: unknown }): ResumeKind | null {
   const { error, visit } = input;
   if (input.step !== "error" || input.status !== "error" || !input.hasLesson || input.htmlFileId || input.published || !error) return null;
+  // Mért hiba 2026-10-15 (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md): a szerver-újraindulás miatt lezárt job a megszakadt
+  // lépéstől folytatható (a mentett tanítás és a kész bankcsomagok megmaradnak).
+  if (error === ORPHAN_JOB_ERROR) return visit && RESTARTABLE_STEPS.includes(visit.step) ? "restart" : null;
   const visitMatches = !!visit && visit.state === "error" && visit.error === redactWorkflowError(new Error(error));
   if (visit?.step === "animator") return visitMatches && BANK_RESUMABLE_ERRORS.some((re) => re.test(error)) ? "bank" : null;
   // Tételgyár T1b (mért: job 416ad01d): a kapu újrafuttatása ugyanazon a bankon nem konvergál — a második bank-eredetű kapuhibánál a bank
@@ -372,6 +378,21 @@ function recoveryAttempt(value: unknown, label: string): number {
     throw new Error(`Érvénytelen ${label} sorszám.`);
   }
   return ((value as number | undefined) ?? 0) + 1;
+}
+
+/**
+ * Újraindulás utáni folytatás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E2): a job a megszakadt lépésre áll vissza `pending`-be;
+ * a kimenet (tanítás, bank-checkpoint) érintetlen, így a lépés a kész részeket nem gyártja újra.
+ */
+export async function retryAfterRestart(jobId: string, visit: { step: string; state: string; error?: string } | undefined, deps: PipelineDeps = {}): Promise<void> {
+  const { store } = await resolveDeps(deps);
+  const job = await store.loadJob(jobId);
+  if (!job) throw new Error("A job nem található.");
+  if (job.step !== "error") return;
+  if (resumeKindOf({ step: job.step, status: job.status, error: job.error, hasLesson: !!job.lessonId && !!job.output?.lesson, htmlFileId: job.output?.htmlFileId, visit }) !== "restart") {
+    throw new Error("Csak szerver-újraindulás miatt megállt, mentett és még nem publikált job folytatható a megszakadt lépéstől.");
+  }
+  await store.saveStep(jobId, { step: visit!.step as StudioStep, status: "pending", error: null, finishedAt: null });
 }
 
 /** The caller supplies a fresh owner-scoped visit only after claiming the workflow. */

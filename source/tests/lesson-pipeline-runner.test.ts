@@ -13,6 +13,7 @@ import {
   retryFailedBankBuild,
   retryFailedGate,
   retryWithAuthorRepair,
+  retryAfterRestart,
   startJobFromMap,
   type JobPatch,
   type JobView,
@@ -3212,4 +3213,19 @@ test("S9/4: kapcsoló KI → a szerző javító köre változatlan (nincs orkesz
   await runPipelineStep("lektor-off", deps);
   assert.ok(deps.calls.every((c) => !c.model.startsWith("deepseek/")));
   assert.ok(deps.calls.every((c) => !c.system.includes("ORKESZTRÁTOR JAVÍTÓ UTASÍTÁS")));
+});
+
+test("újraindulás utáni folytatás (docs/specs/2026-10-15-ujraindulas-utani-folytatas.md, E2): a megszakadt lépésre áll vissza, a mentett részek megmaradnak", async () => {
+  const deps = makeDeps("{}");
+  const { ORPHAN_JOB_ERROR } = await import("../server/studio/orphan-jobs");
+  const output = { lesson: standardFusionFixture(), experienceCheckpoint: { parts: { a: { methods: [], tasks: [], quiz: [], glossary: [] } }, reviewedHashes: {} } };
+  deps.store.seed({ id: "restart", mapId: "m1", lessonId: "draft", step: "error", status: "error", round: 1, error: ORPHAN_JOB_ERROR, output });
+  await retryAfterRestart("restart", { step: "animator", state: "error" }, deps);
+  const job = deps.store.jobs.get("restart")!;
+  assert.deepEqual([job.step, job.status, job.error, job.round], ["animator", "pending", null, 1]);
+  assert.deepEqual(job.output!.experienceCheckpoint, output.experienceCheckpoint, "a kész bankcsomagok megmaradnak");
+  assert.deepEqual(job.output!.lesson, output.lesson, "a tanítás megmarad");
+  assert.equal(deps.calls.length, 0);
+  job.step = "error"; job.status = "error"; job.error = "más hiba";
+  await assert.rejects(retryAfterRestart("restart", { step: "animator", state: "error" }, deps), /Csak szerver-újraindulás miatt/);
 });

@@ -16,6 +16,7 @@ const RESUME_TEXT: Record<string, string> = {
   review: "A folytatás a tananyagot megtartja, és a lektori ellenőrzést futtatja újra.",
   rebuild: "A folytatás a tanítást megtartja, a gyakorlóbankot új tartalékkal újraépíti.",
   lektor: "A folytatás a lektori ellenőrzést futtatja újra.",
+  restart: "A szerver újraindult; a folytatás a megszakadt lépéstől halad tovább, a kész részeket nem gyártja újra.",
 };
 import { useToast } from "@/hooks/use-toast";
 import {

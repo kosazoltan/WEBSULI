@@ -15,3 +15,12 @@ Terv: `docs/specs/2026-10-15-ujraindulas-utani-folytatas.md`. Ág: `fix/ujraindu
    tesztek a dokumentált szerződésváltozás szerint (dobás → figyelmen kívül hagyás) igazodnak.
 6. `redactWorkflowError`: `(?<![\w-])(?:sk-|Bearer\s+)` — csak szóelején.
 Ellenőrzés: célzott tesztek, `check`, `lint`, `check:test`, `build`, teljes `npm test`; deploy után élő megfigyelés (a következő deploy alatt futó gyártás folytatódik).
+
+## Megvalósítási pontosítás (a kód közben ellenőrzött tények alapján)
+- 3. pont: a mért futásokban a leállás alatt megszakadt lépés NEM hibaként, hanem `running` / `interrupted` állapotban maradt (a20403d4,
+  7c89c550, 84fe2219) — külön leállásjelző nem kell; a hibát az 1. pont (az `interrupted` futás folytatása) szünteti meg.
+- 4. pont: a gyökérok a feltöltéses futás induló söprése volt (`closeOrphanedOneStepRuns`): minden futást „indítsd újra a feltöltést”
+  üzenettel zárt — ez terelte a tulajdonost új, elölről induló gyártásra. Javítás: ha a futás jobja mentett, nem publikált leckével áll, a
+  futás nem zárul le (szöveg: „a gyártás magától folytatódik a mentett részekből, nem kell újra feltölteni”), a job-söprés folytatja és a
+  haladásjelzőt is frissíti. A vezérlő ugyanabból a forrásból csak a legújabb megszakadt jobot folytatja (`superseded` a régebbin).
+- Tulajdonosi javaslat (2026-10-15): külön gombok hiba esetén (folytatás / újragyártás / új tananyag) — külön szelet, e javítás után.
