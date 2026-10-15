@@ -27,7 +27,8 @@ export default function DraftLessons() {
     queryKey: DRAFTS_KEY,
     queryFn: () => apiRequest<{ drafts: OwnerDraft[] }>("GET", "/api/studio/drafts"),
     // Futó piszkozatnál a lista magától frissül (a folytatás haladása látszik); különben nem pollozunk.
-    refetchInterval: (query) => (query.state.data?.drafts.some((d) => d.running) ? 10_000 : false),
+    // Hibatűrő: váratlan alakú válasznál (pl. üres tömb) nincs kivétel és nincs pollozás.
+    refetchInterval: (query) => (Array.isArray(query.state.data?.drafts) && query.state.data.drafts.some((d) => d.running) ? 10_000 : false),
   });
   // A4: a dupla kattintás egyetlen folytatás (az `isPending` csak a következő renderben tiltana).
   const lock = useRef(false);
@@ -48,7 +49,7 @@ export default function DraftLessons() {
     resume.mutate(jobId);
   };
 
-  const list = drafts.data?.drafts ?? [];
+  const list = Array.isArray(drafts.data?.drafts) ? drafts.data.drafts : [];
   if (!list.length) return null;
   return (
     <Card data-testid="draft-lessons">

@@ -86,3 +86,18 @@ test("teljes újragyártásnál külön felirat és megerősítés, utána egyet
   await page.waitForTimeout(300);
   expect(resumed).toBe(1);
 });
+
+// CI-hiba (#251, workflow.spec mobilmenü): a minden végpontra `[]`-t adó mock mellett a `data.drafts.some` kivételt dobott → újrarenderelési
+// hurok, a menügomb „detached”. A váratlan alakú válasz nem törheti el az admin oldalt.
+test("váratlan alakú piszkozat-válasz mellett az admin oldal stabil (nincs kivétel, a mobilmenü kattintható)", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    await route.fulfill({ json: path === "/api/auth/user" ? { id: "fixture", isAdmin: true, firstName: "Teszt", classroom: 7, classrooms: [7] } : [] });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Anyagok menü megnyitása" }).click({ timeout: 10_000 });
+  await expect(page.getByTestId("draft-lessons")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
